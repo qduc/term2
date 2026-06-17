@@ -297,6 +297,92 @@ it('recordAbortedApproval synthesizes function_call_output type items', () => {
   expect((resultItem as any).role).toBe(undefined);
 });
 
+it('activeCallIdsForTurn returns empty array for a fresh ledger', () => {
+  const ledger = new ToolExecutionLedger();
+  expect(ledger.activeCallIdsForTurn()).toEqual([]);
+});
+
+it('activeCallIdsForTurn returns call IDs only for the current turn', () => {
+  const ledger = new ToolExecutionLedger();
+  ledger.beginTurn();
+  ledger.recordFunctionCall({
+    rawItem: { type: 'function_call', id: 'fc_1', callId: 'call-a', name: 'read_file', arguments: '{}' },
+  });
+  ledger.recordFunctionCall({
+    rawItem: { type: 'function_call', id: 'fc_2', callId: 'call-b', name: 'shell', arguments: '{}' },
+  });
+
+  expect(ledger.activeCallIdsForTurn()).toEqual(['call-a', 'call-b']);
+});
+
+it('activeCallIdsForTurn includes call IDs regardless of status', () => {
+  const ledger = new ToolExecutionLedger();
+  ledger.beginTurn();
+  // started
+  ledger.recordFunctionCall({
+    rawItem: { type: 'function_call', id: 'fc_1', callId: 'call-started', name: 'read_file', arguments: '{}' },
+  });
+  // completed
+  ledger.recordFunctionCall({
+    rawItem: { type: 'function_call', id: 'fc_2', callId: 'call-completed', name: 'shell', arguments: '{}' },
+  });
+  ledger.recordFunctionResult({
+    rawItem: {
+      type: 'function_call_result',
+      id: 'fcr_1',
+      callId: 'call-completed',
+      name: 'shell',
+      output: 'done',
+    },
+  });
+  // aborted
+  ledger.recordFunctionCall({
+    rawItem: { type: 'function_call', id: 'fc_3', callId: 'call-aborted', name: 'apply_patch', arguments: '{}' },
+  });
+  ledger.recordAbortedApproval('rejected');
+
+  const callIds = ledger.activeCallIdsForTurn();
+  expect(callIds).toEqual(['call-started', 'call-completed', 'call-aborted']);
+});
+
+it('activeCallIdsForTurn defaults to the current turn when no argument given', () => {
+  const ledger = new ToolExecutionLedger();
+  ledger.beginTurn();
+  ledger.recordFunctionCall({
+    rawItem: { type: 'function_call', id: 'fc_1', callId: 'call-current', name: 'read_file', arguments: '{}' },
+  });
+
+  expect(ledger.activeCallIdsForTurn()).toEqual(['call-current']);
+});
+
+it('activeCallIdsForTurn excludes entries from other turns', () => {
+  const ledger = new ToolExecutionLedger();
+  ledger.beginTurn();
+  ledger.recordFunctionCall({
+    rawItem: { type: 'function_call', id: 'fc_1', callId: 'call-prior', name: 'read_file', arguments: '{}' },
+  });
+  ledger.beginTurn();
+  ledger.recordFunctionCall({
+    rawItem: { type: 'function_call', id: 'fc_2', callId: 'call-now', name: 'shell', arguments: '{}' },
+  });
+
+  expect(ledger.activeCallIdsForTurn()).toEqual(['call-now']);
+  expect(ledger.activeCallIdsForTurn('turn-1')).toEqual(['call-prior']);
+});
+
+it('activeCallIdsForTurn includes aborted/rejected call IDs (regression: provider requires output for every call)', () => {
+  const ledger = new ToolExecutionLedger();
+  ledger.beginTurn();
+  ledger.recordFunctionCall({
+    rawItem: { type: 'function_call', id: 'fc_1', callId: 'call-rejected', name: 'apply_patch', arguments: '{}' },
+  });
+  ledger.recordAbortedApproval('user rejected', 'Tool execution was not approved.', 'call-rejected');
+
+  // The aborted call ID must be present so the chained-input filter keeps its
+  // synthetic output — provider APIs reject assistant turns missing a tool output.
+  expect(ledger.activeCallIdsForTurn()).toEqual(['call-rejected']);
+});
+
 it('reconcileHistoryWithToolLedger does NOT count started or approval_required entries as dropped', () => {
   const history = [{ role: 'user', type: 'message', content: 'continue' }];
   const ledger: SavedToolExecution[] = [

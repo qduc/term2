@@ -348,6 +348,7 @@ export function createConversationSessionComposition(
     recoveryExecutor,
     retryEventPresenter,
     resolveRetryLimit,
+    toolTracker,
   });
 
   const continuationDriver = new ContinuationDriver({
@@ -361,6 +362,7 @@ export function createConversationSessionComposition(
     planApplier,
     streamCycle: continuationStreamCycle,
     recoveryHandler: continuationRecoveryHandler,
+    toolTracker,
   });
 
   const initialTurnRunner = new InitialTurnRunner({

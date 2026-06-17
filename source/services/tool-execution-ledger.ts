@@ -342,6 +342,18 @@ export class ToolExecutionLedger {
     }
   }
 
+  /**
+   * Returns call IDs for every tool call recorded in the given (or current)
+   * turn, regardless of status. The chained-input filter requires the complete
+   * set because the provider API requires a tool output for every tool call in
+   * an assistant turn — including rejected calls, for which the SDK produces a
+   * synthetic output.
+   */
+  activeCallIdsForTurn(turnId?: string): string[] {
+    const target = turnId ?? this.#currentTurnId;
+    return this.#entries.filter((entry) => entry.turnId === target).map((entry) => entry.callId);
+  }
+
   getRecoverySummary(): ToolLedgerRecoverySummary | null {
     const currentTurnEntries = this.#entries.filter((entry) => entry.turnId === this.#currentTurnId);
     if (currentTurnEntries.length === 0) {

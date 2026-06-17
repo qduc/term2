@@ -34,6 +34,7 @@ it('returns terminated for unrecoverable error', async () => {
     recoveryExecutor: {} as any,
     retryEventPresenter: {} as any,
     resolveRetryLimit: () => 2,
+    toolTracker: { activeCallIdsForCurrentTurn: () => [] } as any,
   });
 
   const events: any[] = [];
@@ -63,6 +64,7 @@ it('returns stale when generation guard is not current after presentation', asyn
       present: () => ({ event: { type: 'retry_scheduled' }, logMessage: 'retry', logFields: {} }),
     } as any,
     resolveRetryLimit: () => 2,
+    toolTracker: { activeCallIdsForCurrentTurn: () => [] } as any,
   });
 
   const events: any[] = [];
@@ -97,6 +99,7 @@ it('returns fresh_start when recovery executor signals fresh start', async () =>
       present: () => ({ event: { type: 'retry_scheduled' }, logMessage: 'retry', logFields: {} }),
     } as any,
     resolveRetryLimit: () => 2,
+    toolTracker: { activeCallIdsForCurrentTurn: () => [] } as any,
   });
 
   const events: any[] = [];
@@ -136,6 +139,7 @@ it('returns resume when recovery executor signals resume', async () => {
       present: () => ({ event: { type: 'retry_scheduled' }, logMessage: 'retry', logFields: {} }),
     } as any,
     resolveRetryLimit: () => 2,
+    toolTracker: { activeCallIdsForCurrentTurn: () => ['call-1'] } as any,
   });
 
   const events: any[] = [];
@@ -151,5 +155,6 @@ it('returns resume when recovery executor signals resume', async () => {
   const value = next.value as any;
   expect(value.kind).toBe('resume');
   expect(state.currentState.id).toBe('run-2');
-  expect(state.currentCallIds).toEqual([]);
+  // After resume, currentCallIds is re-derived from the ledger rather than cleared.
+  expect(state.currentCallIds).toEqual(['call-1']);
 });

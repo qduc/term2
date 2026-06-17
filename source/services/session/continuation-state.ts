@@ -8,8 +8,6 @@ import type { RetryCounts } from '../retry/retry-contracts.js';
 import type { GenerationToken } from '../generation-guard.js';
 import type { PersistedAssistantTurnItem } from '../conversation/conversation-persistence-types.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
-import { TOOL_RESULT_ITEM_TYPES } from '../../lib/chained-input-filter.js';
-import { asRecord, getCallIdFromObject, getMethod } from '../interruption-info.js';
 
 export interface PreparedContinuation {
   state: RunState<any, any>;
@@ -60,9 +58,9 @@ export class ContinuationState {
     this.currentResumePreviousResponseId = undefined;
   }
 
-  initializeFrom(prepared: PreparedContinuation): void {
+  initializeFrom(prepared: PreparedContinuation, currentCallIds: string[]): void {
     this.currentState = prepared.state;
-    this.currentCallIds = getContinuationCallIds(prepared.state, prepared.interruption);
+    this.currentCallIds = currentCallIds;
     this.source = prepared.source;
     this.previouslyEmittedIds = prepared.previouslyEmittedCommandIds;
     this.inputMode = prepared.inputMode ?? 'delta';
@@ -74,13 +72,14 @@ export class ContinuationState {
 
   advanceFromPlan(
     nextState: RunState<any, any>,
-    nextInterruption: unknown,
+    _nextInterruption: unknown,
     nextInputMode: 'delta' | 'full_history' | undefined,
     mergedEmittedIds: Set<string>,
     ledgerSnapshot: SavedToolExecution[],
+    currentCallIds: string[],
   ): void {
     this.currentState = nextState;
-    this.currentCallIds = getContinuationCallIds(nextState, nextInterruption);
+    this.currentCallIds = currentCallIds;
     this.source = 'continueRunStream';
     this.previouslyEmittedIds = mergedEmittedIds;
     this.ledgerSnapshot = ledgerSnapshot;
@@ -114,44 +113,4 @@ export class ContinuationState {
   setLedgerSnapshot(snapshot: SavedToolExecution[]): void {
     this.ledgerSnapshot = snapshot;
   }
-}
-
-function getContinuationCallIds(state: unknown, interruption: unknown): string[] {
-  const callIds = new Set<string>();
-  const addCallId = (candidate: unknown) => {
-    const callId = getCallIdFromObject(candidate);
-    if (callId) {
-      callIds.add(callId);
-    }
-  };
-
-  addCallId(interruption);
-
-  const getInterruptions = getMethod<[], unknown>(state, 'getInterruptions');
-  const siblings = getInterruptions?.();
-  if (Array.isArray(siblings)) {
-    for (const sibling of siblings) {
-      addCallId(sibling);
-    }
-  }
-
-  // Some tool calls (e.g. auto-approved shell commands) are resolved without
-  // leaving a pending interruption in the run state. Their outputs still live
-  // in generatedItems and must be included, otherwise the chained input filter
-  // may drop their outputs while keeping manually-approved siblings, which the
-  // server rejects with "No tool output found for function call ...".
-  const generatedItems = asRecord(state)?.generatedItems;
-  if (Array.isArray(generatedItems)) {
-    for (const item of generatedItems) {
-      const record = asRecord(item);
-      const raw = asRecord(record?.rawItem);
-      const type =
-        typeof record?.type === 'string' ? record.type : typeof raw?.type === 'string' ? raw.type : undefined;
-      if (typeof type === 'string' && TOOL_RESULT_ITEM_TYPES.has(type)) {
-        addCallId(item);
-      }
-    }
-  }
-
-  return [...callIds];
 }

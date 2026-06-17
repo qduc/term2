@@ -72,6 +72,9 @@ function createDriver(deps: any) {
         return { kind: 'terminated' };
       },
     } as any,
+    toolTracker: {
+      activeCallIdsForCurrentTurn: () => [] as string[],
+    } as any,
     ...deps,
   });
 }
@@ -424,6 +427,62 @@ it('driver preserves the initial ledger snapshot and records a prompted approval
   expect(toolTracker.export().map((entry) => entry.callId)).toEqual(['existing-call', 'pending-call']);
 });
 
+// Regression (concern 2): function calls recorded by InitialStreamCycle before
+// the continuation driver runs must appear in currentCallIds. The ledger is
+// populated synchronously during stream iteration, which completes before
+// ContinuationDriver.drive() reads it, so a fresh read captures them.
+it('continuation derives currentCallIds from the ledger (calls recorded before the driver runs)', async () => {
+  const conversationStore = new ConversationStore();
+  const toolTracker = new SessionToolTracker(conversationStore);
+  // Simulate the prior stream cycle recording the tool calls for this turn.
+  toolTracker.beginTurn();
+  toolTracker.recordFunctionCall({
+    rawItem: { type: 'function_call', id: 'fc_1', callId: 'call-pre-1', name: 'read_file', arguments: '{}' },
+  });
+  toolTracker.recordFunctionCall({
+    rawItem: { type: 'function_call', id: 'fc_2', callId: 'call-pre-2', name: 'shell', arguments: '{}' },
+  });
+
+  let resumedCallIds: string[] | undefined;
+  const driver = createDriver({
+    toolTracker,
+    planApplier: {
+      prepareInit: (init: any) => ({
+        state: {},
+        interruption: { callId: 'call-pre-1' },
+        toolCallArgumentsById: new Map(),
+        previouslyEmittedCommandIds: new Set(),
+        removeInterceptor: () => {},
+        source: 'continueRunStream',
+        token: init.generation,
+        inputMode: 'delta',
+      }),
+      applyInitialSetup: async function* () {},
+      applyNextPlan: async function* () {},
+      recordPendingApproval: () => {},
+    } as any,
+    streamCycle: {
+      async *execute(state: any) {
+        resumedCallIds = [...state.currentCallIds];
+        return {
+          kind: 'completed',
+          outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
+          nextCumulativeMessages: [],
+          nextCumulativeTurnItems: [],
+          mergedEmittedIds: new Set(),
+        };
+      },
+    } as any,
+  });
+
+  const { result } = await collectResult(
+    driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, new ManualApprovalDecisionPolicy()),
+  );
+
+  expect(result.kind).toBe('response');
+  expect(resumedCallIds).toEqual(['call-pre-1', 'call-pre-2']);
+});
+
 // ── multiple auto-approved interruptions ─────────────────────
 
 it('multiple auto-approved interruptions followed by manual approval', async () => {
@@ -521,6 +580,11 @@ it('parallel approval batch is fully decided before the continuation stream resu
   let resumedCallIds: string[] = [];
 
   const driver = createDriver({
+    // The ledger is cumulative: every call decided for the turn appears in
+    // activeCallIdsForCurrentTurn. Mirror that by returning all decided calls.
+    toolTracker: {
+      activeCallIdsForCurrentTurn: () => [...decisions.keys()],
+    } as any,
     shellAutoApproval: {
       resolveAdvisoryForInterruption: async () => ({
         model: 'mock-model',
@@ -689,6 +753,102 @@ it('continuation from abort resolution drives stream and returns result', async 
   );
 
   expect(result.kind).toBe('response');
+});
+
+it('abort resolution derives currentCallIds from the aborted approval record, not the ledger', async () => {
+  // The ledger's current turn is empty for abort resolution (a new turn was
+  // begun), so the rejected call's ID must come from the abort record itself.
+  let resumedCallIds: string[] | undefined;
+  const driver = createDriver({
+    toolTracker: { activeCallIdsForCurrentTurn: () => [] } as any,
+    planApplier: {
+      prepareInit: (init: any) => ({
+        state: {},
+        interruption: init.abortedContext.interruption,
+        toolCallArgumentsById: new Map(),
+        previouslyEmittedCommandIds: new Set(),
+        removeInterceptor: () => {},
+        source: 'abortResolution',
+        token: init.generation,
+      }),
+      applyInitialSetup: async function* () {},
+    } as any,
+    streamCycle: {
+      async *execute(state: any) {
+        resumedCallIds = [...state.currentCallIds];
+        return {
+          kind: 'completed',
+          outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
+          nextCumulativeMessages: [],
+          nextCumulativeTurnItems: [],
+          mergedEmittedIds: new Set(),
+        };
+      },
+    } as any,
+  });
+
+  const { result } = await collectResult(
+    driver.drive({
+      kind: 'abort_resolution',
+      abortedContext: {
+        state: {},
+        interruption: { callId: 'call-abort' },
+        emittedCommandIds: new Set(),
+        toolCallArgumentsById: new Map(),
+      } as any,
+      userText: 'new input',
+      generation: 1,
+    }),
+  );
+
+  expect(result.kind).toBe('response');
+  expect(resumedCallIds).toEqual(['call-abort']);
+});
+
+it('abort resolution keeps sibling call IDs for a rejected tool in a parallel batch', async () => {
+  let resumedCallIds: string[] | undefined;
+  const interruptedTurn = {
+    getInterruptions: () => [{ name: 'shell', callId: 'call-rejected', arguments: { command: 'git status --short' } }],
+    _generatedItems: [{ type: 'function_call_output', callId: 'call-approved', output: 'working tree clean' }],
+  };
+
+  const driver = createDriver({
+    toolTracker: { activeCallIdsForCurrentTurn: () => [] } as any,
+    streamCycle: {
+      async *execute(state: any) {
+        resumedCallIds = [...state.currentCallIds];
+        return {
+          kind: 'completed',
+          outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
+          nextCumulativeMessages: [],
+          nextCumulativeTurnItems: [],
+          mergedEmittedIds: new Set(),
+        };
+      },
+    } as any,
+  });
+
+  const { result } = await collectResult(
+    driver.drive(
+      {
+        kind: 'abort_resolution',
+        abortedContext: {
+          state: interruptedTurn as any,
+          interruption: { callId: 'call-rejected' },
+          emittedCommandIds: new Set(),
+          toolCallArgumentsById: new Map(),
+          token: 1,
+          inputMode: 'delta',
+        } as any,
+        userText: 'new input',
+        generation: 1,
+      },
+      new ManualApprovalDecisionPolicy(),
+    ),
+  );
+
+  expect(result.kind).toBe('response');
+  expect(resumedCallIds?.sort()).toEqual(['call-approved', 'call-rejected']);
 });
 
 // ── fresh_start_required ─────────────────────────────────────

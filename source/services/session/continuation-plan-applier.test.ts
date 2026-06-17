@@ -9,6 +9,7 @@ function createMockToolTracker() {
     dedupeToolStarted: (event: any) => event,
     recordAbortedApproval: () => {},
     recordFunctionCall: () => {},
+    activeCallIdsForCurrentTurn: () => [] as string[],
   };
 }
 
@@ -215,12 +216,20 @@ it('applyNextPlan updates state for approved plan', async () => {
   const applier = new ContinuationPlanApplier(deps);
 
   const state = {
-    advanceFromPlan: (nextState: any, nextInterruption: any, nextInputMode: any, mergedIds: any, ledger: any) => {
+    advanceFromPlan: (
+      nextState: any,
+      nextInterruption: any,
+      nextInputMode: any,
+      mergedIds: any,
+      ledger: any,
+      currentCallIds: any,
+    ) => {
       expect(nextState.id).toBe('s2');
       expect(nextInterruption.callId).toBe('c2');
       expect(nextInputMode).toBe('full_history');
       expect(mergedIds).toEqual(new Set(['id1']));
       expect(ledger).toEqual([]);
+      expect(currentCallIds).toEqual([]);
     },
   } as any;
 
@@ -265,4 +274,42 @@ it('applyNextPlan records aborted approval for rejected plan', async () => {
   }
 
   expect(abortedCallId).toBe('c2');
+});
+
+it('applyNextPlan passes ledger-derived currentCallIds to advanceFromPlan', async () => {
+  const deps = createMockDeps();
+  deps.toolTracker.activeCallIdsForCurrentTurn = () => ['call-a', 'call-rejected'];
+  deps.toolTracker.export = () => [{ callId: 'call-a', status: 'completed' }] as any;
+
+  let receivedCallIds: string[] | undefined;
+  const applier = new ContinuationPlanApplier(deps);
+  const state = {
+    advanceFromPlan: (
+      _nextState: any,
+      _nextInterruption: any,
+      _nextInputMode: any,
+      _mergedIds: any,
+      _ledger: any,
+      currentCallIds: string[],
+    ) => {
+      receivedCallIds = currentCallIds;
+    },
+  } as any;
+
+  const nextPlan = {
+    pendingApprovalContext: {
+      state: { id: 's2' },
+      interruption: { callId: 'call-rejected' },
+      toolCallArgumentsById: new Map(),
+    },
+    toolStartedEvent: undefined,
+  } as any;
+
+  for await (const _ of applier.applyNextPlan(nextPlan, state, new Set(), false)) {
+    // no events
+  }
+
+  // Includes the aborted sibling (call-rejected) because the ledger has no
+  // status filter — provider APIs require an output for every tool call.
+  expect(receivedCallIds).toEqual(['call-a', 'call-rejected']);
 });

@@ -133,6 +133,7 @@ export class ContinuationPlanApplier {
       nextPlan.pendingApprovalContext.inputMode,
       mergedEmittedIds,
       this.deps.toolTracker.export(),
+      this.deps.toolTracker.activeCallIdsForCurrentTurn(),
     );
   }
 }

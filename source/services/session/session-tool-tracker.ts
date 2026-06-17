@@ -64,6 +64,17 @@ export class SessionToolTracker {
   }
 
   /**
+   * Returns call IDs for every tool call recorded in the current turn,
+   * regardless of status. The chained-input filter requires the complete set
+   * because the provider API requires a tool output for every tool call in an
+   * assistant turn — including rejected calls, for which the SDK produces a
+   * synthetic output.
+   */
+  activeCallIdsForCurrentTurn(): string[] {
+    return this.toolLedger.activeCallIdsForTurn();
+  }
+
+  /**
    * Export the current ledger state.
    */
   export(): SavedToolExecution[] {

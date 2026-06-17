@@ -218,3 +218,23 @@ it('filterChainedModelInput returns full input when deltaStart is 0', () => {
   const result = filterChainedModelInput(modelData);
   expect(result.input).toEqual(modelData.input);
 });
+
+// Delta-mode safety (concern 4): toolResultCallIds may include call IDs from
+// prior continuation cycles (a superset from the cumulative ledger). Call IDs
+// that have no matching item in the current modelData.input are silently
+// ignored — no duplication, no error. Re-sent outputs are idempotent for
+// providers using previousResponseId.
+it('filterChainedModelInput ignores toolResultCallIds without a matching item in input (multi-cycle superset)', () => {
+  const modelData = {
+    input: [
+      // Only cycle-2's output is present; cycle-1's output was already sent
+      // in a prior cycle and is not replayed by the SDK.
+      { type: 'function_call_output', callId: 'call-B', output: 'result-B' },
+    ],
+  };
+  // toolResultCallIds includes call-A (prior cycle) and call-B (current).
+  const result = filterChainedModelInput(modelData, { toolResultCallIds: ['call-A', 'call-B'] });
+  // call-A has no matching item in input, so it is silently ignored — no
+  // duplication and no synthetic item is fabricated.
+  expect(result.input).toEqual([{ type: 'function_call_output', callId: 'call-B', output: 'result-B' }]);
+});

@@ -7,6 +7,7 @@ import type { DefaultRecoveryExecutor } from '../retry/recovery-executor.js';
 import type { RetryEventPresenter } from '../retry/retry-event-presenter.js';
 import type { RetryCounts, RecoveryState } from '../retry/retry-contracts.js';
 import type { ContinuationState } from './continuation-state.js';
+import type { SessionToolTracker } from './session-tool-tracker.js';
 
 export type ContinuationRecoveryHandlerDeps = {
   logger: ILoggingService;
@@ -17,6 +18,7 @@ export type ContinuationRecoveryHandlerDeps = {
   recoveryExecutor: DefaultRecoveryExecutor;
   retryEventPresenter: RetryEventPresenter;
   resolveRetryLimit: () => number;
+  toolTracker: SessionToolTracker;
 };
 
 export type ContinuationRecoveryResult =
@@ -104,7 +106,7 @@ export class ContinuationRecoveryHandler {
         }
       }
       state.currentState = recoveryResult.instruction.resumeState;
-      state.currentCallIds = [];
+      state.currentCallIds = this.deps.toolTracker.activeCallIdsForCurrentTurn();
       state.setResumePreviousResponseId(recoveryResult.instruction.resumePreviousResponseId);
       return { kind: 'resume' };
     }

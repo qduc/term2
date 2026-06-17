@@ -49,7 +49,7 @@ After making code changes, you MUST run tests appropriate to the scope of the ta
 pnpm test              # Run all tests
 pnpm run test:verbose -- <source/*.test.ts>           # Run a single .ts source test
 pnpm run test:verbose -- dist/<path to compiled JS test file>  # Use for .tsx tests; dist paths omit the leading source/
-npx prettier --write <file1, file2, file3> # Fix formatting issues in files you changed
+pnpm exec prettier --write <file1, file2, file3> # Fix formatting issues in files you changed
 ```
 
 ### Unit Test Guidelines

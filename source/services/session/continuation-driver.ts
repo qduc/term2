@@ -23,6 +23,8 @@ import { createApprovalRequiredTerminal } from '../conversation/conversation-res
 import type { ContinuationPlanApplier } from './continuation-plan-applier.js';
 import type { ContinuationStreamCycle } from './continuation-stream-cycle.js';
 import type { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
+import type { SessionToolTracker } from './session-tool-tracker.js';
+import { callIdOf } from '../tool-execution-ledger.js';
 import { ContinuationState } from './continuation-state.js';
 
 export type ContinuationInit =
@@ -56,6 +58,7 @@ export interface ContinuationDriverDeps {
   planApplier: ContinuationPlanApplier;
   streamCycle: ContinuationStreamCycle;
   recoveryHandler: ContinuationRecoveryHandler;
+  toolTracker: SessionToolTracker;
 }
 
 export class ContinuationDriver {
@@ -73,7 +76,7 @@ export class ContinuationDriver {
 
     const prepared = this.deps.planApplier.prepareInit(init);
     const state = new ContinuationState(init.generation);
-    state.initializeFrom(prepared);
+    state.initializeFrom(prepared, this.#activeCallIdsForInit(init));
 
     try {
       yield* this.deps.planApplier.applyInitialSetup(prepared, state);
@@ -177,7 +180,6 @@ export class ContinuationDriver {
     { kind: 'ready' } | { kind: 'approval_required'; terminal: ConversationTerminal },
     void
   > {
-    const parallelCallIds = new Set(state.currentCallIds);
     const getInterruptions = getMethod<[], unknown>(state.currentState, 'getInterruptions');
     const siblings = getInterruptions?.();
     if (!Array.isArray(siblings) || siblings.length <= 1) {
@@ -236,12 +238,11 @@ export class ContinuationDriver {
       }
       yield* this.deps.planApplier.applyNextPlan(nextPlan, state, state.previouslyEmittedIds, decision === 'approve');
 
-      // Preserve the full parallel batch so the resumed continuation sends
-      // every output from the sibling tool calls, not just the most recent one.
-      for (const callId of state.currentCallIds) {
-        parallelCallIds.add(callId);
-      }
-      state.currentCallIds = [...parallelCallIds];
+      // Re-derive the complete in-flight set from the ledger after each sibling
+      // decision. The ledger is cumulative — it retains every entry for the
+      // turn, including previously-completed and newly-aborted calls — so a
+      // fresh read captures the full parallel batch regardless of order.
+      state.currentCallIds = this.deps.toolTracker.activeCallIdsForCurrentTurn();
     }
 
     return { kind: 'ready' };
@@ -357,6 +358,63 @@ export class ContinuationDriver {
     }
 
     return { action: 'loop', nextPlan, isApproved: answer === 'y' };
+  }
+
+  /**
+   * Resolves the in-flight call IDs whose tool outputs the upcoming
+   * continuation must send to the provider.
+   *
+   * For an approval decision within the same turn, the tool ledger is
+   * authoritative — it tracks every call recorded this turn, regardless of
+   * status (including aborted calls, whose synthetic outputs must be sent).
+   *
+   * For abort resolution, the continuation must replay the entire aborted
+   * assistant turn: sibling interruptions come from the run state and completed
+   * tool outputs come from the generated-items snapshot. The rejected call's
+   * interruption is included as a fallback so the abort record itself still
+   * anchors the replay when the state snapshot is sparse.
+   */
+  #activeCallIdsForInit(init: ContinuationInit): string[] {
+    if (init.kind === 'abort_resolution') {
+      return this.#activeCallIdsForAbortedContext(init.abortedContext);
+    }
+    return this.deps.toolTracker.activeCallIdsForCurrentTurn();
+  }
+
+  #activeCallIdsForAbortedContext(abortedContext: AbortedApprovalContext): string[] {
+    const callIds = new Set<string>();
+    const addCallId = (callId: unknown): void => {
+      if (typeof callId === 'string' && callId.length > 0) {
+        callIds.add(callId);
+      }
+    };
+
+    const interruptions = getMethod<[], unknown>(abortedContext.state, 'getInterruptions')?.();
+    if (Array.isArray(interruptions)) {
+      for (const interruption of interruptions) {
+        addCallId(getCallIdFromObject(interruption));
+      }
+    }
+
+    const generatedItems = asRecord(abortedContext.state)?._generatedItems;
+    if (Array.isArray(generatedItems)) {
+      for (const item of generatedItems) {
+        const raw = asRecord(item)?.rawItem;
+        const typeSource = asRecord(raw) ?? asRecord(item);
+        const type = typeof typeSource?.type === 'string' ? typeSource.type : '';
+        if (
+          type === 'function_call_result' ||
+          type === 'function_call_output' ||
+          type === 'function_call_output_result' ||
+          type === 'tool_call_output_item'
+        ) {
+          addCallId(callIdOf(item));
+        }
+      }
+    }
+
+    addCallId(getCallIdFromObject(abortedContext.interruption));
+    return [...callIds];
   }
 
   #recordSuccess(state: ContinuationState, previousInputForSurge?: unknown): void {

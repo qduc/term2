@@ -35,7 +35,7 @@ it('initializeFrom populates all fields from prepared continuation', () => {
     cumulativeTurnItems: [{ type: 'text' } as any],
   };
 
-  state.initializeFrom(prepared);
+  state.initializeFrom(prepared, ['call-1']);
 
   expect(state.token).toBe(7);
   expect(state.currentState).toBe(prepared.state);
@@ -48,7 +48,23 @@ it('initializeFrom populates all fields from prepared continuation', () => {
   expect(state.cumulativeTurnItems).toEqual(prepared.cumulativeTurnItems);
 });
 
-it('initializeFrom includes sibling interruption call IDs from the run state', () => {
+it('initializeFrom uses the passed-in currentCallIds verbatim', () => {
+  const state = new ContinuationState(5);
+  const prepared = {
+    state: { id: 'run-1' } as any,
+    interruption: { callId: 'call-1' },
+    toolCallArgumentsById: new Map(),
+    previouslyEmittedCommandIds: new Set<string>(),
+    removeInterceptor: () => {},
+    source: 'continueRunStream' as const,
+  };
+
+  state.initializeFrom(prepared, ['call-a', 'call-b', 'call-c']);
+
+  expect(state.currentCallIds).toEqual(['call-a', 'call-b', 'call-c']);
+});
+
+it('initializeFrom does not derive call IDs from the run state interruptions', () => {
   const state = new ContinuationState(5);
   const prepared = {
     state: {
@@ -61,9 +77,9 @@ it('initializeFrom includes sibling interruption call IDs from the run state', (
     source: 'continueRunStream' as const,
   };
 
-  state.initializeFrom(prepared);
+  state.initializeFrom(prepared, ['ledger-only']);
 
-  expect(state.currentCallIds).toEqual(['call-1', 'call-2']);
+  expect(state.currentCallIds).toEqual(['ledger-only']);
 });
 
 it('initializeFrom falls back to constructor token when prepared token is missing', () => {
@@ -77,27 +93,30 @@ it('initializeFrom falls back to constructor token when prepared token is missin
     source: 'continueRunStream' as const,
   };
 
-  state.initializeFrom(prepared);
+  state.initializeFrom(prepared, ['call-1']);
   expect(state.token).toBe(5);
 });
 
 it('advanceFromPlan updates state for next iteration', () => {
   const state = new ContinuationState(1);
-  state.initializeFrom({
-    state: { id: 'run-1' } as any,
-    interruption: { callId: 'call-1' },
-    toolCallArgumentsById: new Map(),
-    previouslyEmittedCommandIds: new Set(['id-1']),
-    removeInterceptor: () => {},
-    source: 'abortResolution' as const,
-  });
+  state.initializeFrom(
+    {
+      state: { id: 'run-1' } as any,
+      interruption: { callId: 'call-1' },
+      toolCallArgumentsById: new Map(),
+      previouslyEmittedCommandIds: new Set(['id-1']),
+      removeInterceptor: () => {},
+      source: 'abortResolution' as const,
+    },
+    ['call-1'],
+  );
 
   const nextState = { id: 'run-2' } as any;
   const nextInterruption = { callId: 'call-2' };
   const mergedIds = new Set(['id-1', 'id-2']);
   const snapshot = [{ callId: 'call-1', status: 'completed' } as any];
 
-  state.advanceFromPlan(nextState, nextInterruption, 'delta', mergedIds, snapshot);
+  state.advanceFromPlan(nextState, nextInterruption, 'delta', mergedIds, snapshot, ['call-2']);
 
   expect(state.currentState).toBe(nextState);
   expect(state.currentCallIds).toEqual(['call-2']);
@@ -107,103 +126,45 @@ it('advanceFromPlan updates state for next iteration', () => {
   expect(state.ledgerSnapshot).toEqual(snapshot);
 });
 
-it('advanceFromPlan includes sibling interruption call IDs from the next run state', () => {
+it('advanceFromPlan uses the passed-in currentCallIds (superset from ledger)', () => {
   const state = new ContinuationState(1);
-  state.initializeFrom({
-    state: { id: 'run-1' } as any,
-    interruption: { callId: 'call-1' },
-    toolCallArgumentsById: new Map(),
-    previouslyEmittedCommandIds: new Set<string>(),
-    removeInterceptor: () => {},
-    source: 'continueRunStream' as const,
-  });
+  state.initializeFrom(
+    {
+      state: { id: 'run-1' } as any,
+      interruption: { callId: 'call-1' },
+      toolCallArgumentsById: new Map(),
+      previouslyEmittedCommandIds: new Set<string>(),
+      removeInterceptor: () => {},
+      source: 'continueRunStream' as const,
+    },
+    ['call-1'],
+  );
 
   const nextState = {
     getInterruptions: () => [{ callId: 'call-2' }, { call_id: 'call-3' }],
   } as any;
 
-  state.advanceFromPlan(nextState, { callId: 'call-2' }, 'delta', new Set(), []);
+  // The ledger superset includes call-1 (prior cycle) plus call-2/call-3.
+  state.advanceFromPlan(nextState, { callId: 'call-2' }, 'delta', new Set(), [], ['call-1', 'call-2', 'call-3']);
 
-  expect(state.currentCallIds).toEqual(['call-2', 'call-3']);
+  expect(state.currentCallIds).toEqual(['call-1', 'call-2', 'call-3']);
 });
 
 it('advanceFromPlan preserves inputMode when nextInputMode is undefined', () => {
   const state = new ContinuationState(1);
-  state.initializeFrom({
-    state: { id: 'run-1' } as any,
-    interruption: { callId: 'call-1' },
-    toolCallArgumentsById: new Map(),
-    previouslyEmittedCommandIds: new Set<string>(),
-    removeInterceptor: () => {},
-    source: 'continueRunStream' as const,
-    inputMode: 'full_history',
-  });
+  state.initializeFrom(
+    {
+      state: { id: 'run-1' } as any,
+      interruption: { callId: 'call-1' },
+      toolCallArgumentsById: new Map(),
+      previouslyEmittedCommandIds: new Set<string>(),
+      removeInterceptor: () => {},
+      source: 'continueRunStream' as const,
+      inputMode: 'full_history',
+    },
+    ['call-1'],
+  );
 
-  state.advanceFromPlan({ id: 'run-2' } as any, { callId: 'call-2' }, undefined, new Set(), []);
+  state.advanceFromPlan({ id: 'run-2' } as any, { callId: 'call-2' }, undefined, new Set(), [], ['call-2']);
   expect(state.inputMode).toBe('full_history');
-});
-
-it('initializeFrom includes tool output call IDs from generatedItems', () => {
-  const state = new ContinuationState(5);
-  const prepared = {
-    state: {
-      getInterruptions: () => [{ callId: 'call-1' }],
-      generatedItems: [
-        { type: 'tool_call_output_item', rawItem: { callId: 'call-2' } },
-        { type: 'tool_call', rawItem: { callId: 'call-3' } },
-      ],
-    } as any,
-    interruption: { callId: 'call-1' },
-    toolCallArgumentsById: new Map(),
-    previouslyEmittedCommandIds: new Set<string>(),
-    removeInterceptor: () => {},
-    source: 'continueRunStream' as const,
-  };
-
-  state.initializeFrom(prepared);
-
-  expect(state.currentCallIds).toEqual(['call-1', 'call-2']);
-});
-
-it('initializeFrom includes generatedItems call IDs for all recognized tool result shapes', () => {
-  const state = new ContinuationState(5);
-  const prepared = {
-    state: {
-      generatedItems: [
-        { type: 'function_call_output', callId: 'call-2' },
-        { type: 'function_call_output_result', call_id: 'call-3' },
-        { type: 'tool_call_output_item', rawItem: { callId: 'call-4' } },
-      ],
-    } as any,
-    interruption: { callId: 'call-1' },
-    toolCallArgumentsById: new Map(),
-    previouslyEmittedCommandIds: new Set<string>(),
-    removeInterceptor: () => {},
-    source: 'continueRunStream' as const,
-  };
-
-  state.initializeFrom(prepared);
-
-  expect(state.currentCallIds).toEqual(['call-1', 'call-2', 'call-3', 'call-4']);
-});
-
-it('advanceFromPlan includes tool output call IDs from generatedItems', () => {
-  const state = new ContinuationState(1);
-  state.initializeFrom({
-    state: { id: 'run-1' } as any,
-    interruption: { callId: 'call-1' },
-    toolCallArgumentsById: new Map(),
-    previouslyEmittedCommandIds: new Set<string>(),
-    removeInterceptor: () => {},
-    source: 'continueRunStream' as const,
-  });
-
-  const nextState = {
-    getInterruptions: () => [{ callId: 'call-1' }],
-    generatedItems: [{ type: 'tool_call_output_item', rawItem: { callId: 'call-2' } }],
-  } as any;
-
-  state.advanceFromPlan(nextState, { callId: 'call-1' }, 'delta', new Set(), []);
-
-  expect(state.currentCallIds).toEqual(['call-1', 'call-2']);
 });

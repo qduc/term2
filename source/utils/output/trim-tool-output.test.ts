@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { trimToolOutput } from './trim-tool-output.js';
 
 it('trimToolOutput trims plain string output by characters', () => {

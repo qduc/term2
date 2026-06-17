@@ -1,6 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import React, { act, useEffect } from 'react';
 import { render } from 'ink-testing-library';
 import { useModeHandlers } from './use-mode-handlers.js';

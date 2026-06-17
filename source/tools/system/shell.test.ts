@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -233,7 +233,7 @@ it.sequential('shell execute does not install RTK for allowlisted commands in a 
     settingsService: createMockSettingsService({ 'shell.useRtkCompression': true }),
     rtkInstaller: async () => {
       installCalled = true;
-      return createFakeRtk(t);
+      return createFakeRtk();
     },
   });
 
@@ -258,7 +258,7 @@ it.sequential('shell execute does not install RTK for allowlisted commands redir
     settingsService: createMockSettingsService({ 'shell.useRtkCompression': true }),
     rtkInstaller: async () => {
       installCalled = true;
-      return createFakeRtk(t);
+      return createFakeRtk();
     },
   });
 
@@ -302,7 +302,7 @@ it.sequential('shell execute bypasses RTK for SSH commands', async () => {
     executionContext: new ExecutionContext(sshService, '/remote/workspace'),
     rtkInstaller: async () => {
       installCalled = true;
-      return createFakeRtk(t);
+      return createFakeRtk();
     },
   });
 

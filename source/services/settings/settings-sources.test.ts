@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { DEFAULT_SETTINGS, type SettingsData, type SettingSource } from './settings-schema.js';
 import { buildSettingsWithSources } from './settings-sources.js';
 

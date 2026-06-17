@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { getSearchViaShellAddendum } from './search-via-shell.js';
 
 function includesWord(text: string, word: string): boolean {

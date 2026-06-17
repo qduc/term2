@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { getPopupNavigationCursor } from './popup-key-navigation.js';
 
 it('left/right move cursor in popup mode when mode has no custom left/right handler', () => {

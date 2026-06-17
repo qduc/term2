@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { calculateInputWidth } from './input-width.js';
 
 it('calculateInputWidth uses default prompt width for normal mode', () => {

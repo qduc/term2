@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 

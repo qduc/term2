@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { PassThrough, Writable } from 'stream';
 import type { ChildProcess } from 'child_process';
 import { executeShellCommand } from './execute-shell.js';

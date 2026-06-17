@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { RetryEventPresenter } from './retry-event-presenter.js';
 import type { ClassifiedFailure } from './retry-contracts.js';
 

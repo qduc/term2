@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { formatResumeList } from './resume-list.js';
 
 // Strip ANSI escape codes to simplify string matching in assertions

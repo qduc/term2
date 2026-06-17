@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import fs from 'fs';
-import path from 'path';
 import { formatShellExecutionOutput } from './shell-output.js';
 
 it('formatShellExecutionOutput saves the full output when truncation occurs', async () => {

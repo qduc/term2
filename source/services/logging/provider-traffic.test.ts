@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -417,7 +417,7 @@ it('summarizeReceivedTraffic does not duplicate content from output_text.done af
   expect((summary.payload as any)?.choices?.[0]?.delta?.content).toBe('Hello! How can I help?');
 });
 
-it('ProviderTrafficArtifactStore writes per-day per-session request files and daily index', (t) => {
+it('ProviderTrafficArtifactStore writes per-day per-session request files and daily index', () => {
   const rootDir = makeTempDir();
   const store = new ProviderTrafficArtifactStore({ rootDir });
 

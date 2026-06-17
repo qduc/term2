@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { getAgentDefinition } from './agent.js';
 import { createMockSettingsService } from './services/settings/settings-service.mock.js';
 

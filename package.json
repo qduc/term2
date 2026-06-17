@@ -29,10 +29,18 @@
   "engines": {
     "node": ">=20"
   },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": ">=11.0.0"
+    }
+  },
+  "engineStrict": true,
   "scripts": {
     "start": "node dist/cli.js",
-    "build": "tsc && pnpm run post-build",
+    "build": "tsc --project tsconfig.build.json && pnpm run post-build",
     "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:verbose": "vitest run --reporter=verbose",
     "test:vitest": "vitest run",
@@ -44,7 +52,7 @@
     "prepublishOnly": "pnpm run build && pnpm test",
     "release": "./scripts/release.sh",
     "logs": "node tools/log_viewer/src/server.js",
-    "eval:auto-approval": "tsc && RUN_LIVE_EVAL=1 node dist/scripts/eval-auto-approval/runner.js",
+    "eval:auto-approval": "tsc --project tsconfig.build.json && RUN_LIVE_EVAL=1 node dist/scripts/eval-auto-approval/runner.js",
     "prepare": "husky"
   },
   "files": [

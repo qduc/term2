@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { analyzePathRisk } from './command-safety/path-analysis.js';
 import { SafetyStatus } from './command-safety/index.js';
 
@@ -196,7 +196,7 @@ it('JSON files - case insensitive matching (YELLOW)', () => {
   }
 });
 
-it('JSON files - suspicious files with paths (YELLOW)', (t) => {
+it('JSON files - suspicious files with paths (YELLOW)', () => {
   const pathsWithDirs = [
     './secrets.json',
     'config/credentials.json',

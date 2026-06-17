@@ -1,6 +1,6 @@
 // @ts-ignore
 global.IS_REACT_ACT_ENVIRONMENT = true;
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import React from 'react';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 import { Box, Text } from 'ink';

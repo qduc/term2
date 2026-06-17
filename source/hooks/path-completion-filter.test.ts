@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { isSubsequenceMatch, filterPathEntries } from './path-completion-filter.js';
 import type { PathEntry } from '../services/file-service.js';
 

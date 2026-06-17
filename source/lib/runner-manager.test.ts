@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { registerProvider, unregisterProvider, getProvider } from '../providers/registry.js';
 import { RunnerManager, type RunnerManagerDeps } from './runner-manager.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';

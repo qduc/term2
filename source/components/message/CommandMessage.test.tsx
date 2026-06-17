@@ -1,6 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeAll, afterAll } from 'vitest';
 import React, { act } from 'react';
 import { renderInAct, toVisibleText } from '../../test-helpers/ink-testing.js';
 import CommandMessage from './CommandMessage.js';

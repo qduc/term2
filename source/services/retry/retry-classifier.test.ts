@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { ModelBehaviorError } from '@openai/agents';
 import { OpenAICompatibleError } from '../../providers/common/provider-errors.js';
 import type { ClassificationContext } from './retry-contracts.js';

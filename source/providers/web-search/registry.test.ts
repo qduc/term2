@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach } from 'vitest';
 // Import directly from registry.js to avoid auto-registration of providers through index.js
 import {
   registerWebSearchProvider,

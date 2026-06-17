@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { installPlanModeInterceptor } from './plan-mode-interceptor.js';
 
 it('installPlanModeInterceptor rejects mutating tools when planMode is true', async () => {

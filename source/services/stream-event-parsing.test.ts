@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { extractReasoningDelta, extractTextDelta } from './stream-event-parsing.js';
 
 it('extractTextDelta: returns delta string for output_text events', () => {

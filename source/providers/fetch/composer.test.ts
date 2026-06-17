@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { composeFetch, FetchMiddleware } from './compose.js';
 import { createLoggingMiddleware, CreateLoggingMiddlewareOptions } from './logging-middleware.js';
 import { createProviderFetch } from './composer.js';

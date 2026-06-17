@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { LoggingService } from '../logging/logging-service.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
 import { ConversationStore } from '../conversation/conversation-store.js';

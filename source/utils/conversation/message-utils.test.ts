@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import type { CommandMessage } from '../../tools/types.js';
 import type { Message } from '../../types/message.js';
 import {
@@ -90,7 +90,7 @@ it('mergeCommandMessages keeps running messages when new command has same callId
   expect(commands[0].id).toBe('stale');
 });
 
-it('mergeCommandMessages removes stale running messages when a different new command arrives', (t) => {
+it('mergeCommandMessages removes stale running messages when a different new command arrives', () => {
   // Phase 2 removes stale running/pending messages from prev when a new
   // command with a different callId arrives, cleaning up orphaned streaming messages.
   const staleRunning: CommandMessage = { ...cmd('stale', 'call-1', 'running') };

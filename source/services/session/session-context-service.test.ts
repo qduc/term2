@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { SessionContextService } from './session-context-service.js';
 
 it('getContext returns null outside runWithContext', () => {

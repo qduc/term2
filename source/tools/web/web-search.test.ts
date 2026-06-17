@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { createWebSearchToolDefinition, formatResultsAsMarkdown, formatWebSearchCommandMessage } from './web-search.js';
 import type { WebSearchResponse } from '../../providers/web-search/index.js';
 

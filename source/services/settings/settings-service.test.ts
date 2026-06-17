@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SettingsService } from './settings-service.js';
-import { getProvider, getAllProviders, unregisterProvider } from '../../providers/index.js';
+import { getProvider, getAllProviders } from '../../providers/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEST_BASE_DIR = path.join(__dirname, '../../test-settings');

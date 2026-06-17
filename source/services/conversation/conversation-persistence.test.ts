@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -225,7 +225,7 @@ it.sequential('lock: collision throws LockConflictError', () => {
   w1.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
   const w2 = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
 
-  expect(() => w2.init({ id, createdAt: '2026-05-26T00:00:00.000Z' }), { instanceOf: LockConflictError }).toThrow();
+  expect(() => w2.init({ id, createdAt: '2026-05-26T00:00:00.000Z' })).toThrow(LockConflictError);
   void w1.close();
 });
 
@@ -971,7 +971,7 @@ it.sequential('replay: interrupted v2 logs without assistant_turn still recover 
 
 it.sequential(
   'session logging with auto-approved tool continuation writes only one assistant_turn containing all details',
-  async (t) => {
+  async () => {
     const id = persistenceModule.generateId();
     const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
     writer.init({

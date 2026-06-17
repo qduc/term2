@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents-core';
 import {
   FallbackResponsesModel,
@@ -963,7 +963,7 @@ it('Codex getStreamedResponse throws ChainingTransportDowngradeError when WS fai
   }
 
   expect(error instanceof ChainingTransportDowngradeError).toBe(true);
-  expect(error.message).toBe('Codex WS connection failed; cannot chain via HTTP');
+  expect((error as Error).message).toBe('Codex WS connection failed; cannot chain via HTTP');
   expect((error as any).cause).toBe(wsError);
   expect(wsCalled, 'should exhaust WS retries before throwing chaining error').toBe(expectedWsAttempts);
   expect(httpCalled, 'HTTP stream should not be called when chaining breaks').toBe(0);

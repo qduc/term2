@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { buildPersistedAssistantTurnItems, synthesizeHistoryFromAssistantTurn } from './conversation-turn-items.js';
 
 // Some providers (e.g. openai-compatible / deepseek via opencode) emit reasoning

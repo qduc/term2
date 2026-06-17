@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { GenerationGuard } from './generation-guard.js';
 import { createConversationSessionComposition } from './session/session-composition.js';
 import { TurnItemAccumulator } from './session/turn-item-accumulator.js';

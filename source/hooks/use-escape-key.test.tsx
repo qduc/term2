@@ -1,6 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import React, { act, useEffect, useState } from 'react';
 import { useEscapeKey } from './use-escape-key.js';
 import type { InputMode } from '../context/InputContext.js';
@@ -306,7 +306,7 @@ it.sequential('pressing ESC in settings_completion mode clears input and switche
 
 it.sequential(
   'pressing ESC in model_selection mode with settings-backed model setting restores settings menu',
-  async (t) => {
+  async () => {
     let settingsOpenArgs: { startIndex: number; initialSelectionKey: string } | null = null;
     let modelsClosed = false;
     let cursorOverrides: (number | null)[] = [];
@@ -389,7 +389,7 @@ it.sequential(
 
 it.sequential(
   'pressing ESC in non-settings settings_value_completion mode keeps trigger text and switches to text mode',
-  async (t) => {
+  async () => {
     let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
     const SettingsValueTestComponent = () => {
       const [value, onChange] = useState('/effort ');

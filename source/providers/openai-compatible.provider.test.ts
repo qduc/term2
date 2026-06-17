@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { setTracingDisabled, withTrace } from '@openai/agents-core';
 import {
   createCustomProviderModelProvider,
@@ -540,10 +540,7 @@ it('opencode.ai baseUrl adds x-opencode-session header', async () => {
 
   expect(captured.length).toBe(1);
   expect(captured[0].headers['x-opencode-session']).toBeTruthy();
-  expect(captured[0].headers['x-opencode-session']).toMatch(
-    /^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/,
-    'session ID should match ses_<12hex><14base62> format (30 chars)',
-  );
+  expect(captured[0].headers['x-opencode-session']).toMatch(/^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/);
   expect(captured[0].headers['x-opencode-session'].length, 'session ID should be exactly 30 characters').toBe(30);
 });
 

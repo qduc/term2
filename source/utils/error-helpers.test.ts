@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { describeError, isAbortLikeError } from './error-helpers.js';
 
 // Test isAbortLikeError with AbortError name

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach, afterEach } from 'vitest';
 import { buildConversationResult, toTerminalEvent } from './conversation-result-builder.js';
 import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import { ApprovalState } from '../approval/approval-state.js';

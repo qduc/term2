@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { buildAgent } from './agent-factory.js';
 import { clearModelCache, fetchModels } from '../services/model-service.js';
-import { getProvider, registerProvider, unregisterProvider, type ProviderDefinition } from '../providers/registry.js';
+import { registerProvider, type ProviderDefinition } from '../providers/registry.js';
 import type { AgentFactoryDeps } from './agent-factory.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { createEditorImpl } from './editor-impl.js';
@@ -74,8 +74,6 @@ const createDeps = (
     },
   };
 };
-
-const originalCodexProvider = getProvider('codex');
 
 it.sequential('buildAgent creates Agent with correct model name', () => {
   const { deps } = createDeps({ settingsValues: { 'agent.model': 'gpt-4o-mini' } });

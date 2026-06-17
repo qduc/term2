@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { trimOutput, setTrimConfig, getTrimConfig, DEFAULT_TRIM_CONFIG } from './output-trim.js';
 
 it('returns output unchanged when below both limits', () => {

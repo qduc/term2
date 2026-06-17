@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { AgentConfiguration, type AgentConfigurationDeps } from './agent-configuration.js';
 import { registerProvider } from '../providers/registry.js';
 import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';

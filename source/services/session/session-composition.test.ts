@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { createConversationSession, createConversationSessionComposition } from './session-composition.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 

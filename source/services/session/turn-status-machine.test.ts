@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { TurnStatusMachine } from './turn-status-machine.js';
 
 it('begins turn from idle', () => {
@@ -12,7 +12,7 @@ it('beginTurn from non-idle throws', () => {
   const machine = new TurnStatusMachine();
   machine.beginTurn();
 
-  expect(() => machine.beginTurn(), { message: /Invalid transition.*streaming.*streaming/ }).toThrow();
+  expect(() => machine.beginTurn()).toThrow(/Invalid transition.*streaming.*streaming/);
 });
 
 it('requestApproval from streaming succeeds', () => {
@@ -34,11 +34,11 @@ it('requestApproval from continuing succeeds', () => {
 it('requestApproval from idle or awaiting_approval throws', () => {
   const machine = new TurnStatusMachine();
 
-  expect(() => machine.requestApproval(), { message: /Cannot request approval from idle/ }).toThrow();
+  expect(() => machine.requestApproval()).toThrow(/Cannot request approval from idle/);
   machine.beginTurn();
   machine.requestApproval();
 
-  expect(() => machine.requestApproval(), { message: /Cannot request approval from awaiting_approval/ }).toThrow();
+  expect(() => machine.requestApproval()).toThrow(/Cannot request approval from awaiting_approval/);
 });
 
 it('beginContinuation from awaiting_approval succeeds', () => {
@@ -52,10 +52,10 @@ it('beginContinuation from awaiting_approval succeeds', () => {
 it('beginContinuation from non-awaiting_approval throws', () => {
   const machine = new TurnStatusMachine();
 
-  expect(() => machine.beginContinuation(), { message: /Invalid transition.*idle.*continuing/ }).toThrow();
+  expect(() => machine.beginContinuation()).toThrow(/Invalid transition.*idle.*continuing/);
   machine.beginTurn();
 
-  expect(() => machine.beginContinuation(), { message: /Invalid transition.*streaming.*continuing/ }).toThrow();
+  expect(() => machine.beginContinuation()).toThrow(/Invalid transition.*streaming.*continuing/);
 });
 
 it('complete from streaming returns to idle', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { mergeAssistantMessages, withMergedAssistantMessages } from './ai-sdk-message-normalizer.js';
 
 it('mergeAssistantMessages folds assistant reasoning into following assistant tool call', () => {

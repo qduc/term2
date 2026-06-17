@@ -1,6 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import React, { useEffect, useRef, act } from 'react';
 import { Box, Text } from 'ink';
 import InputBox, { getProviderWizardPromptLabel } from './InputBox.js';
@@ -154,7 +154,7 @@ const flushReactUpdates = async (iterations = 5) => {
   });
 };
 
-const renderAndFlush = async (element: React.ReactElement, context: Parameters<typeof renderInAct>[1]) => {
+const renderAndFlush = async (element: React.ReactElement, context?: Parameters<typeof renderInAct>[1]) => {
   const result = await renderInAct(element, context);
   await flushReactUpdates(10);
   return result;

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import type { RecoveryContext, RetryCounts } from './retry-contracts.js';
 import { DefaultConversationRecoveryPolicy } from './recovery-policy.js';
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { createFindFilesToolDefinition } from './file/find-files.js';
 import { createReadFileToolDefinition } from './file/read-file.js';
 import { createShellToolDefinition } from './system/shell.js';

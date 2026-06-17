@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -9,7 +9,7 @@ import { useModelSelection } from './use-model-selection.js';
 import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 import { Text } from 'ink';
 import { clearModelCache } from '../services/model-service.js';
-import { getProviderIds, registerProvider, unregisterProvider } from '../providers/index.js';
+import { getProviderIds, registerProvider } from '../providers/index.js';
 
 type TestComponentProps = {
   onResults: (results: any) => void;

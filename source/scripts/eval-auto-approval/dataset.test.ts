@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeAll, afterAll } from 'vitest';
 import { loadDataset, filterDataset } from './dataset.js';
 import { writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -47,7 +47,7 @@ it('loadDataset fails on invalid dataset', () => {
   ];
   writeFileSync(path, JSON.stringify(data));
 
-  expect(() => loadDataset(path), { message: /Validation failed for case "test-1"/ }).toThrow();
+  expect(() => loadDataset(path)).toThrow(/Validation failed for case "test-1"/);
 });
 
 it('filterDataset filters correctly', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import path from 'path';
 import os from 'node:os';
 import { writeFile, readFile, rm, mkdtemp } from 'fs/promises';
@@ -206,7 +206,7 @@ it('updateFile returns failed status for invalid diff', async () => {
 
 // ========== deleteFile tests ==========
 
-it('deleteFile deletes existing file', async (t) => {
+it('deleteFile deletes existing file', async () => {
   await withTempDir(async (dir) => {
     const logger = createMockLogger();
     const settings = createMockSettings({ 'tools.logFileOperations': true });

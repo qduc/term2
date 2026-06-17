@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { collectDuplicateToolCallResultPairs, collectInputSurgeStats, InputSurgeGuard } from './input-surge-guard.js';
 
 const toolCall = (callId: string, type = 'function_call') => ({

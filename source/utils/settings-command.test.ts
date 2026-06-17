@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { createSettingsCommand, formatSettingsSummary, parseSettingValue } from './settings-command.js';
-import { unregisterProvider, upsertProvider } from '../providers/index.js';
+import { upsertProvider } from '../providers/index.js';
 import type { SettingsWithSources } from '../services/settings/settings-schema.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 

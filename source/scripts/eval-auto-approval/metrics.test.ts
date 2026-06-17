@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { computeMetrics, ResultRecord } from './metrics.js';
 
 it('computeMetrics calculates basic stats correctly', () => {

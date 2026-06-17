@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { isOpencodeProvider } from './opencode.provider.js';
 import { createOpencodeSessionInjector, generateOpencodeSessionId } from './opencode-session.js';
 import { selectOpencodeModelTransport, shouldApplyOpencodeAnthropicPromptCaching } from './opencode-routing.js';

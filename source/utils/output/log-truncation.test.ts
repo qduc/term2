@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { sanitizeLogMetadata, truncateLogText } from './log-truncation.js';
 import type { LogMetadata, ImageContentPart } from './log-truncation.js';
 

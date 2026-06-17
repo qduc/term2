@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { createConversationEventHandler, type ConversationEventHandlerDeps } from './conversation-event-handler.js';
 import { createStreamingState } from './conversation-utils.js';
 import type { ConversationEvent } from '../../services/conversation/conversation-events.js';

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { patchStdoutForSynchronizedOutput, isSynchronizedOutputSupported } from './synchronized-output.js';
 import { Writable } from 'stream';
 

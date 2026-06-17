@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ModelBehaviorError } from '@openai/agents';
@@ -482,7 +482,7 @@ it.sequential('explorer shell tool executes GREEN commands and blocks YELLOW and
 
 it.sequential(
   'explorer shell tool blocks write-like shell commands without creating files in a temp workspace',
-  async (t) => {
+  async () => {
     const tmpDir = fs.mkdtempSync(path.join('/tmp', TEMP_WORKSPACE_PREFIX));
 
     // TODO: // TODO: t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true })) needs manual try/finally conversion;

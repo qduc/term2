@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import type { SearchReplaceFullOperation } from './search-replace.js';
 // @ts-ignore - TS module resolution for new tool file
 import { healSearchReplaceParams } from './edit-healing.js';

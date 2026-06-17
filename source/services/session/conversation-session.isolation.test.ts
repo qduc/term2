@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { createConversationSession } from './session-composition.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
 

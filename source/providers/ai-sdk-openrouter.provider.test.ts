@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { AiSdkOpenRouterProvider } from './ai-sdk-openrouter.provider.js';
 
 it('AiSdkOpenRouterProvider creates an AI SDK model with OpenRouter settings', () => {

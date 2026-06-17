@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach } from 'vitest';
 import { AgentClient } from './agent-client.js';
 import { registerProvider } from '../providers/registry.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
@@ -1084,7 +1084,7 @@ it.sequential('getAskUserAnswer returns undefined for unknown call ids', () => {
   expect(client.getAskUserAnswer()).toBeUndefined();
 });
 
-it.sequential('ask_user tool executes using the stored approval answer', async (t) => {
+it.sequential('ask_user tool executes using the stored approval answer', async () => {
   const settings = createMockSettings({
     'agent.provider': 'mock-main-mentor-refresh',
     'agent.model': 'mock-model',

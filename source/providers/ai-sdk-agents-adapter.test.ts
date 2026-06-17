@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { adaptAiSdkModelForAgents, withForwardedReasoningSettings } from './ai-sdk-agents-adapter.js';
 
 it('withForwardedReasoningSettings forwards reasoning into providerData for non-stream requests', async () => {

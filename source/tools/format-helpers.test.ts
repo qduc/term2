@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { pickPatchOutputItemText, formatPatchOutputItems } from './format-helpers.js';
 
 it('pickPatchOutputItemText: returns error when present', () => {

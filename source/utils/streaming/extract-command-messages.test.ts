@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach, afterEach } from 'vitest';
 import { clearApprovalRejectionMarkers, extractCommandMessages } from './extract-command-messages.js';
 import { clearToolFormatters, registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { formatApplyPatchCommandMessage } from '../../tools/file/apply-patch.js';

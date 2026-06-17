@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { ConversationStore } from '../conversation/conversation-store.js';
 import { type SavedToolExecution } from '../tool-execution-ledger.js';
 import type { RetryCounts, RecoveryState } from './retry-contracts.js';

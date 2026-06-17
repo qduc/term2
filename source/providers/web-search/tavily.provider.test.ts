@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { tavilyProvider, isTavilyConfigured } from './tavily.provider.js';
 
 // Helper to create a mock settings service

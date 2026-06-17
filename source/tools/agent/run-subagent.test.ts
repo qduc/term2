@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { createRunSubagentToolDefinition, getSubagentsRolesSection } from './run-subagent.js';
 import type { SubagentResult } from '../../services/subagents/types.js';
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod';
 import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
 

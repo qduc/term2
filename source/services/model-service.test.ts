@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach, afterEach } from 'vitest';
 import { fetchModels, clearModelCache, filterModels } from './model-service.js';
 import { createMockSettingsService } from './settings/settings-service.mock.js';
 

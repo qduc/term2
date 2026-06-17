@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 import { ApprovalState } from './approval-state.js';
 import { LoggingService } from '../logging/logging-service.js';
@@ -247,7 +247,7 @@ it('prepareContinuation rejection for nested subagent calls state.reject with th
   expect(rejectedOptions).toEqual({ message: "Tool execution was not approved. User's reason: do not run it" });
 });
 
-it('prepareContinuation rejection: nested subagent where state.reject is undefined — does not throw', (t) => {
+it('prepareContinuation rejection: nested subagent where state.reject is undefined — does not throw', () => {
   // state has no reject method — simulates SDK state that only has approve
   const state: any = {
     approve: () => undefined,

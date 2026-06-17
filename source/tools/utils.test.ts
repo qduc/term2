@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import * as path from 'path';
 import { homedir } from 'os';
 import { resolveWorkspacePath } from './utils.js';

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { SubagentSession } from './subagent-session.js';
 
 it('SubagentSession initializes with id and role', () => {

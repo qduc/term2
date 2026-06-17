@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
 import { LoggingService } from '../logging/logging-service.js';
 import { ConversationStore } from '../conversation/conversation-store.js';

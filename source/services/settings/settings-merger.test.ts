@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { DEFAULT_SETTINGS } from './settings-schema.js';
 import { flattenSettings, mergeSettings, trackSettingSources } from './settings-merger.js';
 

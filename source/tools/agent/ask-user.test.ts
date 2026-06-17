@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { createAskUserToolDefinition, formatAskUserCommandMessage } from './ask-user.js';
 import {
   ASK_USER_CUSTOM_ANSWER_LABEL,

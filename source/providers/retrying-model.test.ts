@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import type { Model, ModelRequest, StreamEvent } from '@openai/agents-core';
 import { RetryingModel } from './retrying-model.js';
 

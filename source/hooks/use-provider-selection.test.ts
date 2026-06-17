@@ -1,6 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import React, { act, useEffect } from 'react';
 import { render } from 'ink-testing-library';
 import { useProviderSelection } from './use-provider-selection.js';
@@ -145,7 +145,7 @@ it.sequential('useProviderSelection - selecting a custom provider opens edit_fie
 
 it.sequential(
   'useProviderSelection - selecting a built-in provider (except Codex) enters editing flow; Codex is a no-op',
-  async (t) => {
+  async () => {
     const settingsService = createMockSettingsService([], 'openai');
     let hook: ReturnType<typeof useProviderSelection> | undefined;
     let renderer: any;
@@ -722,7 +722,7 @@ it.sequential('useProviderSelection - back out of an unmodified wizard returns d
   });
 });
 
-it.sequential('useProviderSelection - saveDraft rejects duplicate names discovered after editing starts', async (t) => {
+it.sequential('useProviderSelection - saveDraft rejects duplicate names discovered after editing starts', async () => {
   const settingsService = createMockSettingsService([], 'openai');
   let hook: ReturnType<typeof useProviderSelection> | undefined;
   let renderer: any;

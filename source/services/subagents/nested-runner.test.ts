@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -11,7 +11,7 @@ import type { ILoggingService, ISettingsService } from '../service-interfaces.js
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { SupportedSubagentRole } from './types.js';
 import type { ExecutionContext } from '../execution-context.js';
-import { registerProvider, unregisterProvider } from '../../providers/registry.js';
+import { registerProvider } from '../../providers/registry.js';
 
 const createSessionContextService = () => ({
   runWithContext: <T>(_context: any, fn: () => T) => fn(),

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { getReasoningEfficiencyAddendum } from './reasoning-efficiency.js';
 
 it('getReasoningEfficiencyAddendum returns a non-empty string with guidance keywords', () => {

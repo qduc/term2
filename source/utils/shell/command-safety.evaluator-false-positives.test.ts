@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { classifyCommand, SafetyStatus } from './command-safety/index.js';
 import { analyzePathRisk } from './command-safety/path-analysis.js';
 

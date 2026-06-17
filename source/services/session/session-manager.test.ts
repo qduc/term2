@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { SessionManager } from './session-manager.js';
 
 it('getCurrentSnapshot reads previousResponseId from persisted state, not a state accessor', () => {

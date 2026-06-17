@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeAll } from 'vitest';
 import { AgentChatService } from './agent-chat-service.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 

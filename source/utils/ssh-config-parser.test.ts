@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { parseSSHConfig, resolveSSHHost } from './ssh-config-parser.js';
 
 it('parseSSHConfig parses simple host entry', () => {

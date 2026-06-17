@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { SessionLifecycle } from './session-lifecycle.js';
 
 const makeLifecycleHarness = () => {

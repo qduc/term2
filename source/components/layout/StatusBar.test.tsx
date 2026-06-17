@@ -1,6 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import React from 'react';
 import StatusBar from './StatusBar.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';

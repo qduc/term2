@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { composeFetch } from './fetch/compose.js';
 import { openRouterPreprocessingMiddleware } from './openrouter.provider.js';
 

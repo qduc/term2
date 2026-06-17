@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { generateDiff } from './diff.js';
 
 it('generateDiff should return correct diff for simple changes', () => {

@@ -1,6 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import React, { useMemo } from 'react';
 import { Text } from 'ink';
 import { useTriggerDetection } from './use-trigger-detection.js';

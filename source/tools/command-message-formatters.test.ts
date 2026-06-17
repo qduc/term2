@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach, afterEach } from 'vitest';
 import { clearToolFormatters, getToolFormatter, registerToolFormatters } from './command-message-formatters.js';
 import type { ToolDefinition } from './types.js';
 

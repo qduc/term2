@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { AssistantTurnJournal } from './assistant-turn-journal.js';
 import type { LogEvent } from './conversation-log-events.js';
 

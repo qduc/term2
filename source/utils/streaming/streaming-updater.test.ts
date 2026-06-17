@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { createStreamingUpdateCoordinator } from './streaming-updater.js';
 import type { ThrottleScheduler } from '../throttle.js';
 

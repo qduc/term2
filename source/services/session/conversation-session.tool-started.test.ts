@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { LogEvent } from '../logging/conversation-log-events.js';
 import { createConversationSession } from './session-composition.js';

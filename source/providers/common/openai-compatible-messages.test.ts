@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { buildMessagesFromRequest, addCacheControlToLastTwoMessages } from './openai-compatible-messages.js';
 
 it('buildMessagesFromRequest() preserves user text and image content', () => {

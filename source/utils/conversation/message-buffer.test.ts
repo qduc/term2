@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { appendMessagesCapped } from './message-buffer.js';
 
 const makeMessages = (count: number, prefix = 'm') =>

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { getSubagentDelegationAddendum } from './subagent-delegation.js';
 
 it('getSubagentDelegationAddendum returns non-empty delegation guidance', () => {

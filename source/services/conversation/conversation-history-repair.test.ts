@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { repairConversationHistory } from './conversation-history-repair.js';
 
 it('repairConversationHistory collapses repeated full-history tool replay into the latest transcript', () => {

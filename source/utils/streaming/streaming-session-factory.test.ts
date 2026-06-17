@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { createStreamingSession } from './streaming-session-factory.js';
 
 it('createStreamingSession wires state and logs final usage', () => {

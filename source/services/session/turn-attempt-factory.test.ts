@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import { TurnAttemptFactory } from './turn-attempt-factory.js';
 
 function setup(options: { pendingModeNotice?: string | null; lastUserMessage?: string } = {}) {

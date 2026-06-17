@@ -121,7 +121,7 @@ it('collectTerminalResult trusts the final run-cumulative usage and does not re-
 
   expect(result.type, 'response');
   if (result.type === 'response') {
-    expect(result.usage, {
+    expect(result.usage).toEqual({
       prompt_tokens: 6000,
       completion_tokens: 280,
       total_tokens: 6280,
@@ -130,7 +130,7 @@ it('collectTerminalResult trusts the final run-cumulative usage and does not re-
   }
 });
 
-it('collectTerminalResult lets a later final supersede an earlier one (auto-approved continuation)', async (t) => {
+it('collectTerminalResult lets a later final supersede an earlier one (auto-approved continuation)', async () => {
   // The auto-approve path emits a `final` for the first turn, then another
   // `final` after the continuation. Because the SDK accumulator keeps growing
   // on the same run state, the later `final` is the whole-run cumulative and
@@ -144,11 +144,11 @@ it('collectTerminalResult lets a later final supersede an earlier one (auto-appr
 
   expect(result.type, 'response');
   if (result.type === 'response') {
-    expect(result.usage, { prompt_tokens: 500, completion_tokens: 60, total_tokens: 560 });
+    expect(result.usage).toEqual({ prompt_tokens: 500, completion_tokens: 60, total_tokens: 560 });
   }
 });
 
-it('collectTerminalResult falls back to the latest streamed usage when no final usage is present', async (t) => {
+it('collectTerminalResult falls back to the latest streamed usage when no final usage is present', async () => {
   const result = await collectTerminalResult(
     asAsyncIterable([
       { type: 'usage_update', usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 } },
@@ -159,11 +159,11 @@ it('collectTerminalResult falls back to the latest streamed usage when no final 
 
   expect(result.type, 'response');
   if (result.type === 'response') {
-    expect(result.usage, { prompt_tokens: 175, completion_tokens: 18, total_tokens: 193 });
+    expect(result.usage).toEqual({ prompt_tokens: 175, completion_tokens: 18, total_tokens: 193 });
   }
 });
 
-it('collectTerminalResult accumulates streamed callbacks and returns final response payload', async (t) => {
+it('collectTerminalResult accumulates streamed callbacks and returns final response payload', async () => {
   const seenText: string[] = [];
   const seenReasoning: string[] = [];
   const seenCommands: string[] = [];

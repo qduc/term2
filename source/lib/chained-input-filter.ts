@@ -31,7 +31,16 @@ export const getToolResultCallId = (item: unknown): string | null => {
     return null;
   }
 
-  const raw = asRecord(record.rawItem) ?? record;
+  const topLevelCallId = record.callId ?? record.call_id ?? record.tool_call_id;
+  if (typeof topLevelCallId === 'string' && topLevelCallId) {
+    return topLevelCallId;
+  }
+
+  const raw = asRecord(record.rawItem);
+  if (!raw) {
+    return null;
+  }
+
   const callId = raw.callId ?? raw.call_id ?? raw.tool_call_id;
   return typeof callId === 'string' && callId ? callId : null;
 };

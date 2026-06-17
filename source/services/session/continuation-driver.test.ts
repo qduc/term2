@@ -526,6 +526,7 @@ test('parallel approval batch is fully decided before the continuation stream re
   };
   let pending = { state: runState, interruption: interruptions[0] } as any;
   let streamExecutions = 0;
+  let resumedCallIds: string[] = [];
 
   const driver = createDriver({
     shellAutoApproval: {
@@ -567,8 +568,9 @@ test('parallel approval batch is fully decided before the continuation stream re
       recordPendingApproval: () => {},
     } as any,
     streamCycle: {
-      async *execute() {
+      async *execute(state: any) {
         streamExecutions++;
+        resumedCallIds = [...state.currentCallIds];
         return {
           kind: 'completed',
           outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
@@ -592,6 +594,7 @@ test('parallel approval batch is fully decided before the continuation stream re
     ]),
   );
   t.is(streamExecutions, 1);
+  t.deepEqual(resumedCallIds, ['call-1', 'call-2', 'call-3']);
 });
 
 test('parallel approval batch prompts for unresolved siblings without resuming the stream', async (t) => {

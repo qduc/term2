@@ -177,6 +177,7 @@ export class ContinuationDriver {
     { kind: 'ready' } | { kind: 'approval_required'; terminal: ConversationTerminal },
     void
   > {
+    const parallelCallIds = new Set(state.currentCallIds);
     const getInterruptions = getMethod<[], unknown>(state.currentState, 'getInterruptions');
     const siblings = getInterruptions?.();
     if (!Array.isArray(siblings) || siblings.length <= 1) {
@@ -234,6 +235,13 @@ export class ContinuationDriver {
         throw new Error('Parallel approval batch lost its pending approval context');
       }
       yield* this.deps.planApplier.applyNextPlan(nextPlan, state, state.previouslyEmittedIds, decision === 'approve');
+
+      // Preserve the full parallel batch so the resumed continuation sends
+      // every output from the sibling tool calls, not just the most recent one.
+      for (const callId of state.currentCallIds) {
+        parallelCallIds.add(callId);
+      }
+      state.currentCallIds = [...parallelCallIds];
     }
 
     return { kind: 'ready' };

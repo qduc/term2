@@ -8,7 +8,8 @@ import type { RetryCounts } from '../retry/retry-contracts.js';
 import type { GenerationToken } from '../generation-guard.js';
 import type { PersistedAssistantTurnItem } from '../conversation/conversation-persistence-types.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
-import { getCallIdFromObject, getMethod } from '../interruption-info.js';
+import { TOOL_RESULT_ITEM_TYPES } from '../../lib/chained-input-filter.js';
+import { asRecord, getCallIdFromObject, getMethod } from '../interruption-info.js';
 
 export interface PreparedContinuation {
   state: RunState<any, any>;
@@ -131,6 +132,24 @@ function getContinuationCallIds(state: unknown, interruption: unknown): string[]
   if (Array.isArray(siblings)) {
     for (const sibling of siblings) {
       addCallId(sibling);
+    }
+  }
+
+  // Some tool calls (e.g. auto-approved shell commands) are resolved without
+  // leaving a pending interruption in the run state. Their outputs still live
+  // in generatedItems and must be included, otherwise the chained input filter
+  // may drop their outputs while keeping manually-approved siblings, which the
+  // server rejects with "No tool output found for function call ...".
+  const generatedItems = asRecord(state)?.generatedItems;
+  if (Array.isArray(generatedItems)) {
+    for (const item of generatedItems) {
+      const record = asRecord(item);
+      const raw = asRecord(record?.rawItem);
+      const type =
+        typeof record?.type === 'string' ? record.type : typeof raw?.type === 'string' ? raw.type : undefined;
+      if (typeof type === 'string' && TOOL_RESULT_ITEM_TYPES.has(type)) {
+        addCallId(item);
+      }
     }
   }
 

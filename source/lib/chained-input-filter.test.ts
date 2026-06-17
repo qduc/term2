@@ -80,6 +80,11 @@ test('getToolResultCallId extracts from rawItem when top-level has no callId', (
   t.is(getToolResultCallId(item), 'raw_001');
 });
 
+test('getToolResultCallId falls back to top-level call_id when rawItem lacks call ID', (t) => {
+  const item = { type: 'function_call_output', call_id: 'top_001', output: 'ok', rawItem: { output: 'ok' } };
+  t.is(getToolResultCallId(item), 'top_001');
+});
+
 test('getToolResultCallId returns null for non-tool-result items', (t) => {
   t.is(getToolResultCallId({ role: 'user', content: 'hi' }), null);
 });
@@ -144,6 +149,23 @@ test('filterChainedModelInput keeps only specified toolResultCallIds when provid
   const result = filterChainedModelInput(modelData, { toolResultCallIds: ['c1', 'c3'] });
   t.deepEqual(result.input, [
     { type: 'function_call_output', callId: 'c1', output: 'r1' },
+    { type: 'function_call_output', callId: 'c3', output: 'r3' },
+  ]);
+});
+
+test('filterChainedModelInput keeps outputs whose top-level call_id is recoverable even when rawItem lacks it', (t) => {
+  const modelData = {
+    input: [
+      { role: 'user', content: 'hi' },
+      { type: 'function_call_output', callId: 'c1', output: 'r1' },
+      { type: 'function_call_output', call_id: 'c2', output: 'r2', rawItem: { output: 'r2' } },
+      { type: 'function_call_output', callId: 'c3', output: 'r3' },
+    ],
+  };
+  const result = filterChainedModelInput(modelData, { toolResultCallIds: ['c1', 'c2', 'c3'] });
+  t.deepEqual(result.input, [
+    { type: 'function_call_output', callId: 'c1', output: 'r1' },
+    { type: 'function_call_output', call_id: 'c2', output: 'r2', rawItem: { output: 'r2' } },
     { type: 'function_call_output', callId: 'c3', output: 'r3' },
   ]);
 });

@@ -142,3 +142,68 @@ test('advanceFromPlan preserves inputMode when nextInputMode is undefined', (t) 
   state.advanceFromPlan({ id: 'run-2' } as any, { callId: 'call-2' }, undefined, new Set(), []);
   t.is(state.inputMode, 'full_history');
 });
+
+test('initializeFrom includes tool output call IDs from generatedItems', (t) => {
+  const state = new ContinuationState(5);
+  const prepared = {
+    state: {
+      getInterruptions: () => [{ callId: 'call-1' }],
+      generatedItems: [
+        { type: 'tool_call_output_item', rawItem: { callId: 'call-2' } },
+        { type: 'tool_call', rawItem: { callId: 'call-3' } },
+      ],
+    } as any,
+    interruption: { callId: 'call-1' },
+    toolCallArgumentsById: new Map(),
+    previouslyEmittedCommandIds: new Set<string>(),
+    removeInterceptor: () => {},
+    source: 'continueRunStream' as const,
+  };
+
+  state.initializeFrom(prepared);
+
+  t.deepEqual(state.currentCallIds, ['call-1', 'call-2']);
+});
+
+test('initializeFrom includes generatedItems call IDs for all recognized tool result shapes', (t) => {
+  const state = new ContinuationState(5);
+  const prepared = {
+    state: {
+      generatedItems: [
+        { type: 'function_call_output', callId: 'call-2' },
+        { type: 'function_call_output_result', call_id: 'call-3' },
+        { type: 'tool_call_output_item', rawItem: { callId: 'call-4' } },
+      ],
+    } as any,
+    interruption: { callId: 'call-1' },
+    toolCallArgumentsById: new Map(),
+    previouslyEmittedCommandIds: new Set<string>(),
+    removeInterceptor: () => {},
+    source: 'continueRunStream' as const,
+  };
+
+  state.initializeFrom(prepared);
+
+  t.deepEqual(state.currentCallIds, ['call-1', 'call-2', 'call-3', 'call-4']);
+});
+
+test('advanceFromPlan includes tool output call IDs from generatedItems', (t) => {
+  const state = new ContinuationState(1);
+  state.initializeFrom({
+    state: { id: 'run-1' } as any,
+    interruption: { callId: 'call-1' },
+    toolCallArgumentsById: new Map(),
+    previouslyEmittedCommandIds: new Set<string>(),
+    removeInterceptor: () => {},
+    source: 'continueRunStream' as const,
+  });
+
+  const nextState = {
+    getInterruptions: () => [{ callId: 'call-1' }],
+    generatedItems: [{ type: 'tool_call_output_item', rawItem: { callId: 'call-2' } }],
+  } as any;
+
+  state.advanceFromPlan(nextState, { callId: 'call-1' }, 'delta', new Set(), []);
+
+  t.deepEqual(state.currentCallIds, ['call-1', 'call-2']);
+});

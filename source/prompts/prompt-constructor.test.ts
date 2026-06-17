@@ -9,7 +9,7 @@ test('buildPromptSpec preserves mode precedence for base prompts', (t) => {
   );
   t.is(buildPromptSpec({ model: 'claude-3-sonnet', liteMode: false }).basePromptFile, 'anthropic.md');
   t.is(buildPromptSpec({ model: 'gpt-5.3-codex', liteMode: false }).basePromptFile, 'codex.md');
-  t.is(buildPromptSpec({ model: 'gpt-4o', liteMode: false }).basePromptFile, 'simple.md');
+  t.is(buildPromptSpec({ model: 'gpt-4o', liteMode: false }).basePromptFile, 'simple_v3.md');
 });
 
 test('buildPromptSpec includes ask_user guidance in all modes', (t) => {

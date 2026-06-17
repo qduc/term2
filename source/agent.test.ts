@@ -550,7 +550,7 @@ test('getAgentDefinition includes AGENTS.md and full envInfo for orchestrator mo
     runSubagent: async () => ({} as any),
   });
   t.true(definitionOrchestrator.instructions.includes('AGENTS.md contents:'));
-  t.true(definitionOrchestrator.instructions.includes('top-level:'));
+  t.true(definitionOrchestrator.instructions.includes('Project structure:'));
 
   // Test Plan Mode
   const settingsPlan = createMockSettingsService({
@@ -562,7 +562,7 @@ test('getAgentDefinition includes AGENTS.md and full envInfo for orchestrator mo
     loggingService: mockLogger,
   });
   t.true(definitionPlan.instructions.includes('AGENTS.md contents:'));
-  t.true(definitionPlan.instructions.includes('top-level:'));
+  t.true(definitionPlan.instructions.includes('Project structure:'));
 });
 
 test('getAgentDefinition includes worktree hygiene fragment in standard, mentor, plan, and orchestrator modes', (t) => {

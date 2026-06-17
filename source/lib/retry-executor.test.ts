@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { APIConnectionError, RateLimitError } from 'openai';
 import { OpenRouterError, OpenAICompatibleError } from '../providers/common/provider-errors.js';
 import { executeWithRetry } from './retry-executor.js';
@@ -7,7 +7,7 @@ function asInstanceOf<T extends object>(prototype: object, props: Partial<T>): T
   return Object.assign(Object.create(prototype), props) as T;
 }
 
-test('retries transient OpenAI errors with jitter backoff and logs payload', async (t) => {
+it('retries transient OpenAI errors with jitter backoff and logs payload', async () => {
   const warnLogs: Array<{ message: string; meta: Record<string, unknown> }> = [];
   const delays: number[] = [];
   let callbackCount = 0;
@@ -45,12 +45,12 @@ test('retries transient OpenAI errors with jitter backoff and logs payload', asy
     },
   });
 
-  t.is(result, 'ok');
-  t.is(attempts, 3);
-  t.is(callbackCount, 2);
-  t.is(warnLogs.length, 2);
-  t.deepEqual(delays, [3000, 24000]);
-  t.deepEqual(warnLogs[0], {
+  expect(result).toBe('ok');
+  expect(attempts).toBe(3);
+  expect(callbackCount).toBe(2);
+  expect(warnLogs.length).toBe(2);
+  expect(delays).toEqual([3000, 24000]);
+  expect(warnLogs[0]).toEqual({
     message: 'Agent operation retry',
     meta: {
       eventType: 'retry.upstream',
@@ -70,7 +70,7 @@ test('retries transient OpenAI errors with jitter backoff and logs payload', asy
   });
 });
 
-test('uses Retry-After header for rate limit errors', async (t) => {
+it('uses Retry-After header for rate limit errors', async () => {
   const delays: number[] = [];
   let attempts = 0;
   const error = asInstanceOf<RateLimitError>(RateLimitError.prototype, {
@@ -95,10 +95,10 @@ test('uses Retry-After header for rate limit errors', async (t) => {
     },
   });
 
-  t.deepEqual(delays, [7000]);
+  expect(delays).toEqual([7000]);
 });
 
-test('retries OpenRouter 5xx and includes status in log payload', async (t) => {
+it('retries OpenRouter 5xx and includes status in log payload', async () => {
   const logs: Record<string, unknown>[] = [];
   let attempts = 0;
 
@@ -122,11 +122,11 @@ test('retries OpenRouter 5xx and includes status in log payload', async (t) => {
     random: () => 0,
   });
 
-  t.is(logs.length, 1);
-  t.is(logs[0].status, 503);
+  expect(logs.length).toBe(1);
+  expect(logs[0].status).toBe(503);
 });
 
-test('retries OpenAI-compatible 429 and includes status in log payload', async (t) => {
+it('retries OpenAI-compatible 429 and includes status in log payload', async () => {
   const logs: Record<string, unknown>[] = [];
   let attempts = 0;
 
@@ -149,16 +149,16 @@ test('retries OpenAI-compatible 429 and includes status in log payload', async (
     sleep: async () => {},
   });
 
-  t.is(logs.length, 1);
-  t.is(logs[0].status, 429);
-  t.is(logs[0].delayMs, 1000);
+  expect(logs.length).toBe(1);
+  expect(logs[0].status).toBe(429);
+  expect(logs[0].delayMs).toBe(1000);
 });
 
-test('does not retry non-retryable errors', async (t) => {
+it('does not retry non-retryable errors', async () => {
   const error = new Error('bad input');
   let attempts = 0;
 
-  const thrown = await t.throwsAsync(async () =>
+  await expect(
     executeWithRetry({
       operation: async () => {
         attempts += 1;
@@ -170,17 +170,15 @@ test('does not retry non-retryable errors', async (t) => {
       logger: { warn: () => {} },
       sleep: async () => {},
     }),
-  );
-
-  t.is(thrown, error);
-  t.is(attempts, 1);
+  ).rejects.toBe(error);
+  expect(attempts).toBe(1);
 });
 
-test('does not retry retryable errors when retries are exhausted', async (t) => {
+it('does not retry retryable errors when retries are exhausted', async () => {
   const error = new OpenRouterError('unavailable', 503, {});
   let attempts = 0;
 
-  const thrown = await t.throwsAsync(async () =>
+  await expect(
     executeWithRetry({
       operation: async () => {
         attempts += 1;
@@ -192,13 +190,11 @@ test('does not retry retryable errors when retries are exhausted', async (t) => 
       logger: { warn: () => {} },
       sleep: async () => {},
     }),
-  );
-
-  t.is(thrown, error);
-  t.is(attempts, 1);
+  ).rejects.toBe(error);
+  expect(attempts).toBe(1);
 });
 
-test('retries generic errors with rate limit status or message', async (t) => {
+it('retries generic errors with rate limit status or message', async () => {
   let attempts = 0;
   const logs: Record<string, any>[] = [];
 
@@ -232,15 +228,15 @@ test('retries generic errors with rate limit status or message', async (t) => {
     sleep: async () => {},
   });
 
-  t.is(result, 'ok');
-  t.is(attempts, 4);
-  t.is(logs.length, 3);
-  t.is(logs[0].errorMessage, "We're currently processing too many requests — please try again later.");
-  t.is(logs[1].status, 429);
-  t.is(logs[2].status, 503);
+  expect(result).toBe('ok');
+  expect(attempts).toBe(4);
+  expect(logs.length).toBe(3);
+  expect(logs[0].errorMessage).toBe("We're currently processing too many requests — please try again later.");
+  expect(logs[1].status).toBe(429);
+  expect(logs[2].status).toBe(503);
 });
 
-test('uses case-insensitive retry-after header from generic errors', async (t) => {
+it('uses case-insensitive retry-after header from generic errors', async () => {
   let attempts = 0;
   const delays: number[] = [];
 
@@ -263,6 +259,6 @@ test('uses case-insensitive retry-after header from generic errors', async (t) =
     },
   });
 
-  t.is(attempts, 2);
-  t.deepEqual(delays, [12000]);
+  expect(attempts).toBe(2);
+  expect(delays).toEqual([12000]);
 });

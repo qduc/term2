@@ -1,12 +1,12 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { getReasoningEfficiencyAddendum } from './reasoning-efficiency.js';
 
-test('getReasoningEfficiencyAddendum returns a non-empty string with guidance keywords', (t) => {
+it('getReasoningEfficiencyAddendum returns a non-empty string with guidance keywords', () => {
   const addendum = getReasoningEfficiencyAddendum();
 
-  t.is(typeof addendum, 'string');
-  t.true(addendum.length > 0);
-  t.true(addendum.includes('### Reasoning Efficiency Guidelines'));
-  t.true(addendum.includes('Treat confirmed context as settled'));
-  t.true(addendum.includes('End when done'));
+  expect(typeof addendum).toBe('string');
+  expect(addendum.length > 0).toBe(true);
+  expect(addendum.includes('### Reasoning Efficiency Guidelines')).toBe(true);
+  expect(addendum.includes('Treat confirmed context as settled')).toBe(true);
+  expect(addendum.includes('End when done')).toBe(true);
 });

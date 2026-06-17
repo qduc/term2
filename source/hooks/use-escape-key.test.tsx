@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { act, useEffect, useState } from 'react';
 import { useEscapeKey } from './use-escape-key.js';
 import type { InputMode } from '../context/InputContext.js';
@@ -46,8 +45,8 @@ const flushReactUpdates = async (iterations = 1) => {
   });
 };
 
-const renderAndFlush = async (element: React.ReactElement, context: Parameters<typeof renderInAct>[1]) => {
-  const result = await renderInAct(element, context);
+const renderAndFlush = async (element: React.ReactElement) => {
+  const result = await renderInAct(element);
   await flushReactUpdates(10);
   return result;
 };
@@ -68,7 +67,7 @@ const pressEscape = async (emitter: { emit: (event: string, input: string) => vo
   await flushReactUpdates(3);
 };
 
-test.serial('pressing ESC once shows hint, second time clears input', async (t) => {
+it.sequential('pressing ESC once shows hint, second time clears input', async () => {
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
 
   const TestHarness = () => {
@@ -78,31 +77,31 @@ test.serial('pressing ESC once shows hint, second time clears input', async (t) 
     return <TestComponent />;
   };
 
-  const { lastFrame } = await renderAndFlush(<TestHarness />, t);
+  const { lastFrame } = await renderAndFlush(<TestHarness />);
 
   // Initial state
-  t.true(lastFrame()!.includes('Value: some text'));
-  t.false(lastFrame()!.includes('HINT'));
+  expect(lastFrame()!.includes('Value: some text')).toBe(true);
+  expect(lastFrame()!.includes('HINT')).toBe(false);
 
   // First ESC
   // Ink's stdin.write sends raw bytes. ESC is \u001B
   await pressEscape(inputEmitter!);
 
-  t.true(lastFrame()!.includes('HINT'), 'Hint should be visible after first ESC');
-  t.true(lastFrame()!.includes('Value: some text'), 'Value should still be there');
+  expect(lastFrame()!.includes('HINT'), 'Hint should be visible after first ESC').toBe(true);
+  expect(lastFrame()!.includes('Value: some text'), 'Value should still be there').toBe(true);
 
   // Second ESC
   await pressEscape(inputEmitter!);
 
   const finalFrame = lastFrame()!;
   // console.log('Final frame:', JSON.stringify(finalFrame));
-  t.false(finalFrame.includes('HINT'), 'Hint should be hidden after second ESC');
-  t.true(finalFrame.includes('Mode: text'), 'Mode should still be text');
-  t.true(finalFrame.includes('Value:'), 'Label should be present');
-  t.false(finalFrame.includes('some text'), 'Value should be cleared');
+  expect(finalFrame.includes('HINT'), 'Hint should be hidden after second ESC').toBe(false);
+  expect(finalFrame.includes('Mode: text'), 'Mode should still be text').toBe(true);
+  expect(finalFrame.includes('Value:'), 'Label should be present').toBe(true);
+  expect(finalFrame.includes('some text'), 'Value should be cleared').toBe(false);
 });
 
-test.serial('useInput fires ESC in non-text mode', async (t) => {
+it.sequential('useInput fires ESC in non-text mode', async () => {
   // Minimal test: verify useInput fires ESC when mode starts as model_selection
   let inputFired = false;
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
@@ -116,12 +115,12 @@ test.serial('useInput fires ESC in non-text mode', async (t) => {
     return <Text>test</Text>;
   };
 
-  await renderAndFlush(<MinimalComponent />, t);
+  await renderAndFlush(<MinimalComponent />);
   await pressEscape(inputEmitter!);
-  t.true(inputFired, 'useInput should fire on ESC');
+  expect(inputFired, 'useInput should fire on ESC').toBe(true);
 });
 
-test.serial('pressing ESC in model_selection mode clears input and switches to text mode', async (t) => {
+it.sequential('pressing ESC in model_selection mode clears input and switches to text mode', async () => {
   let modes: InputMode[] = [];
   let values: string[] = [];
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
@@ -159,27 +158,21 @@ test.serial('pressing ESC in model_selection mode clears input and switches to t
     );
   };
 
-  const { lastFrame } = await renderAndFlush(<ModelSelectionTestComponent />, t);
+  const { lastFrame } = await renderAndFlush(<ModelSelectionTestComponent />);
 
   const initialFrame = lastFrame()!;
-  t.log('Initial frame:', JSON.stringify(initialFrame));
-  t.log('Initial modes:', modes.join(', '));
-  t.log('Initial values:', values.join(', '));
-  t.true(initialFrame.includes('Mode: model_selection'), 'Initial mode should be model_selection');
-  t.true(initialFrame.includes('Value: /model'), 'Initial value should contain trigger');
+  expect(initialFrame.includes('Mode: model_selection'), 'Initial mode should be model_selection').toBe(true);
+  expect(initialFrame.includes('Value: /model'), 'Initial value should contain trigger').toBe(true);
 
   // Press ESC
   await pressEscape(inputEmitter!);
 
   const frame = lastFrame()!;
-  t.log('Modes seen:', modes.join(', '));
-  t.log('Values seen:', values.join(', '));
-  t.log('Frame after ESC:', frame);
-  t.true(frame.includes('Mode: text'), 'Mode should switch to text');
-  t.false(frame.includes('/model'), 'Input trigger text should be cleared');
+  expect(frame.includes('Mode: text'), 'Mode should switch to text').toBe(true);
+  expect(frame.includes('/model'), 'Input trigger text should be cleared').toBe(false);
 });
 
-test.serial('pressing ESC in slash_commands mode clears input and switches to text mode', async (t) => {
+it.sequential('pressing ESC in slash_commands mode clears input and switches to text mode', async () => {
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   const SlashTestComponent = () => {
     const [value, onChange] = useState('/cle');
@@ -211,18 +204,18 @@ test.serial('pressing ESC in slash_commands mode clears input and switches to te
     );
   };
 
-  const { lastFrame } = await renderAndFlush(<SlashTestComponent />, t);
+  const { lastFrame } = await renderAndFlush(<SlashTestComponent />);
 
-  t.true(lastFrame()!.includes('Mode: slash_commands'), 'Initial mode should be slash_commands');
+  expect(lastFrame()!.includes('Mode: slash_commands'), 'Initial mode should be slash_commands').toBe(true);
 
   await pressEscape(inputEmitter!);
 
   const frame = lastFrame()!;
-  t.true(frame.includes('Mode: text'), 'Mode should switch to text');
-  t.false(frame.includes('/cle'), 'Input trigger text should be cleared');
+  expect(frame.includes('Mode: text'), 'Mode should switch to text').toBe(true);
+  expect(frame.includes('/cle'), 'Input trigger text should be cleared').toBe(false);
 });
 
-test.serial('pressing ESC in path_completion mode keeps input and switches to text mode', async (t) => {
+it.sequential('pressing ESC in path_completion mode keeps input and switches to text mode', async () => {
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   const PathTestComponent = () => {
     const [value, onChange] = useState('@src/foo');
@@ -254,18 +247,21 @@ test.serial('pressing ESC in path_completion mode keeps input and switches to te
     );
   };
 
-  const { lastFrame } = await renderAndFlush(<PathTestComponent />, t);
+  const { lastFrame } = await renderAndFlush(<PathTestComponent />);
 
-  t.true(lastFrame()!.includes('Mode: path_completion'), 'Initial mode should be path_completion');
+  expect(lastFrame()!.includes('Mode: path_completion'), 'Initial mode should be path_completion').toBe(true);
 
   await pressEscape(inputEmitter!);
 
   const frame = lastFrame()!;
-  t.true(frame.includes('Mode: text'), 'Mode should switch to text');
-  t.true(frame.includes('Value: @src/foo'), 'Inline path trigger text must be preserved when cancelling the popup');
+  expect(frame.includes('Mode: text'), 'Mode should switch to text').toBe(true);
+  expect(
+    frame.includes('Value: @src/foo'),
+    'Inline path trigger text must be preserved when cancelling the popup',
+  ).toBe(true);
 });
 
-test.serial('pressing ESC in settings_completion mode clears input and switches to text mode', async (t) => {
+it.sequential('pressing ESC in settings_completion mode clears input and switches to text mode', async () => {
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   const SettingsTestComponent = () => {
     const [value, onChange] = useState('/settings ');
@@ -297,18 +293,18 @@ test.serial('pressing ESC in settings_completion mode clears input and switches 
     );
   };
 
-  const { lastFrame } = await renderAndFlush(<SettingsTestComponent />, t);
+  const { lastFrame } = await renderAndFlush(<SettingsTestComponent />);
 
-  t.true(lastFrame()!.includes('Mode: settings_completion'), 'Initial mode should be settings_completion');
+  expect(lastFrame()!.includes('Mode: settings_completion'), 'Initial mode should be settings_completion').toBe(true);
 
   await pressEscape(inputEmitter!);
 
   const frame = lastFrame()!;
-  t.true(frame.includes('Mode: text'), 'Mode should switch to text');
-  t.false(frame.includes('/settings'), 'Input trigger text should be cleared');
+  expect(frame.includes('Mode: text'), 'Mode should switch to text').toBe(true);
+  expect(frame.includes('/settings'), 'Input trigger text should be cleared').toBe(false);
 });
 
-test.serial(
+it.sequential(
   'pressing ESC in model_selection mode with settings-backed model setting restores settings menu',
   async (t) => {
     let settingsOpenArgs: { startIndex: number; initialSelectionKey: string } | null = null;
@@ -361,38 +357,37 @@ test.serial(
       );
     };
 
-    const { lastFrame } = await renderAndFlush(<SettingsBackedModelComponent />, t);
+    const { lastFrame } = await renderAndFlush(<SettingsBackedModelComponent />);
 
     const initialFrame = lastFrame()!;
-    t.true(initialFrame.includes('Mode: model_selection'), 'Initial mode should be model_selection');
-    t.true(initialFrame.includes('Value: /settings agent.model'), 'Initial value should contain settings trigger');
+    expect(initialFrame.includes('Mode: model_selection'), 'Initial mode should be model_selection').toBe(true);
+    expect(initialFrame.includes('Value: /settings agent.model'), 'Initial value should contain settings trigger').toBe(
+      true,
+    );
 
     // Press ESC
     await pressEscape(inputEmitter!);
 
     const frame = lastFrame()!;
-    t.log('Frame after ESC:', frame);
-    t.log('Settings open args:', settingsOpenArgs);
-    t.log('Models closed:', modelsClosed);
 
     // Should NOT switch to text mode - should keep settings_completion or similar
-    t.false(frame.includes('Mode: text'), 'Mode should not switch to text for settings-backed model');
+    expect(frame.includes('Mode: text'), 'Mode should not switch to text for settings-backed model').toBe(false);
 
     // Should close models menu
-    t.true(modelsClosed, 'Models menu should be closed');
+    expect(modelsClosed, 'Models menu should be closed').toBe(true);
 
     // Should call settings.open with the model key
     const hasArgs = settingsOpenArgs !== null;
-    t.true(hasArgs, 'settings.open should have been called');
+    expect(hasArgs, 'settings.open should have been called').toBe(true);
     if (hasArgs) {
       // settingsOpenArgs is narrowed to non-null here by TypeScript
-      t.is(settingsOpenArgs!.initialSelectionKey, 'agent.model', 'Settings should open with agent.model key');
-      t.is(settingsOpenArgs!.startIndex, SETTINGS_TRIGGER.length, 'Settings should open at trigger length');
+      expect(settingsOpenArgs!.initialSelectionKey).toBe('agent.model'); // was: t.is(settingsOpenArgs!.initialSelectionKey, 'agent.model', 'Settings should open with agent.model key')
+      expect(settingsOpenArgs!.startIndex).toBe(SETTINGS_TRIGGER.length); // was: t.is(settingsOpenArgs!.startIndex, SETTINGS_TRIGGER.length, 'Settings should open at trigger length')
     }
   },
 );
 
-test.serial(
+it.sequential(
   'pressing ESC in non-settings settings_value_completion mode keeps trigger text and switches to text mode',
   async (t) => {
     let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
@@ -428,25 +423,19 @@ test.serial(
       );
     };
 
-    const { lastFrame } = await renderAndFlush(<SettingsValueTestComponent />, t);
+    const { lastFrame } = await renderAndFlush(<SettingsValueTestComponent />);
 
-    t.true(
-      lastFrame()!.includes('Mode: settings_value_completion'),
-      'Initial mode should be settings_value_completion',
-    );
+    expect(lastFrame()!).toContain('Mode: settings_value_completion');
 
     await pressEscape(inputEmitter!);
 
     const frame = lastFrame()!;
-    t.true(frame.includes('Mode: text'), 'Mode should switch to text');
-    t.true(
-      frame.includes('Value: /effort'),
-      'Inline settings-value trigger text must be preserved when cancelling the popup',
-    );
+    expect(frame.includes('Mode: text'), 'Mode should switch to text').toBe(true);
+    expect(frame).toContain('Value: /effort');
   },
 );
 
-test.serial('pressing ESC in provider_selection calls goBack', async (t) => {
+it.sequential('pressing ESC in provider_selection calls goBack', async () => {
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   let goBackCalls = 0;
 
@@ -481,18 +470,18 @@ test.serial('pressing ESC in provider_selection calls goBack', async (t) => {
     );
   };
 
-  const { lastFrame } = await renderAndFlush(<ProviderSelectionTestComponent />, t);
-  t.true(lastFrame()!.includes('Mode: provider_selection'));
+  const { lastFrame } = await renderAndFlush(<ProviderSelectionTestComponent />);
+  expect(lastFrame()!.includes('Mode: provider_selection')).toBe(true);
 
   await pressEscape(inputEmitter!);
 
-  t.is(goBackCalls, 1);
-  t.true(lastFrame()!.includes('Mode: provider_selection'));
+  expect(goBackCalls).toBe(1);
+  expect(lastFrame()!.includes('Mode: provider_selection')).toBe(true);
 });
 
-test.serial(
+it.sequential(
   'pressing ESC in provider_selection calls the LATEST goBack function (verifying ref is not stale)',
-  async (t) => {
+  async () => {
     let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
     let lastGoBackCalledWith: number | null = null;
     let triggerUpdate: (() => void) | null = null;
@@ -536,9 +525,9 @@ test.serial(
       );
     };
 
-    const { lastFrame } = await renderAndFlush(<ProviderSelectionStaleClosureHarness />, t);
-    t.true(lastFrame()!.includes('Mode: provider_selection'));
-    t.true(lastFrame()!.includes('Version: 1'));
+    const { lastFrame } = await renderAndFlush(<ProviderSelectionStaleClosureHarness />);
+    expect(lastFrame()!.includes('Mode: provider_selection')).toBe(true);
+    expect(lastFrame()!.includes('Version: 1')).toBe(true);
 
     // Trigger re-render to change providerSelection identity and implementation
     await act(async () => {
@@ -546,15 +535,11 @@ test.serial(
     });
     await flushReactUpdates(5);
 
-    t.true(lastFrame()!.includes('Version: 2'));
+    expect(lastFrame()!.includes('Version: 2')).toBe(true);
 
     // Press ESC
     await pressEscape(inputEmitter!);
 
-    t.is(
-      lastGoBackCalledWith as any,
-      2,
-      'Should call the goBack function from the latest render, not the initial render',
-    );
+    expect(lastGoBackCalledWith as any).toBe(2);
   },
 );

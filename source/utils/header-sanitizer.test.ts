@@ -1,12 +1,12 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { sanitizeHeaders } from './header-sanitizer.js';
 
-test('sanitizeHeaders returns undefined for empty input', (t) => {
-  t.is(sanitizeHeaders(undefined), undefined);
-  t.is(sanitizeHeaders(null as any), undefined);
+it('sanitizeHeaders returns undefined for empty input', () => {
+  expect(sanitizeHeaders(undefined)).toBe(undefined);
+  expect(sanitizeHeaders(null as any)).toBe(undefined);
 });
 
-test('sanitizeHeaders handles Record<string, string> and case-insensitive redactions', (t) => {
+it('sanitizeHeaders handles Record<string, string> and case-insensitive redactions', () => {
   const input = {
     'Content-Type': 'application/json',
     Authorization: 'Bearer secret-token-123',
@@ -28,10 +28,10 @@ test('sanitizeHeaders handles Record<string, string> and case-insensitive redact
   };
 
   const result = sanitizeHeaders(input);
-  t.deepEqual(result, expected);
+  expect(result).toEqual(expected);
 });
 
-test('sanitizeHeaders handles Array of pairs', (t) => {
+it('sanitizeHeaders handles Array of pairs', () => {
   const input: [string, string][] = [
     ['Authorization', 'Bearer 12345'],
     ['Accept', 'text/html'],
@@ -43,12 +43,12 @@ test('sanitizeHeaders handles Array of pairs', (t) => {
   };
 
   const result = sanitizeHeaders(input);
-  t.deepEqual(result, expected);
+  expect(result).toEqual(expected);
 });
 
-test('sanitizeHeaders handles Headers instance if available', (t) => {
+it('sanitizeHeaders handles Headers instance if available', () => {
   if (typeof Headers === 'undefined') {
-    t.pass('Headers not defined in environment');
+    expect(true).toBe(true);
     return;
   }
 
@@ -62,5 +62,5 @@ test('sanitizeHeaders handles Headers instance if available', (t) => {
   };
 
   const result = sanitizeHeaders(headers);
-  t.deepEqual(result, expected);
+  expect(result).toEqual(expected);
 });

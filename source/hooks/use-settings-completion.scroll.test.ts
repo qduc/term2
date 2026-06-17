@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { useEffect, act } from 'react';
 import { render } from 'ink-testing-library';
 import { InputProvider, useInputContext } from '../context/InputContext.js';
@@ -52,7 +51,7 @@ const SearchComponent = ({ onResults }: { onResults: (results: any) => void }) =
   return React.createElement(Text, null, settings.query);
 };
 
-test('useSettingsCompletion filters settings by active task tab and switches tabs', (t) => {
+it('useSettingsCompletion filters settings by active task tab and switches tabs', () => {
   let capturedSettings: any;
   let renderer: any;
 
@@ -72,33 +71,37 @@ test('useSettingsCompletion filters settings by active task tab and switches tab
 
   // Verify initial state
   const categories = capturedSettings.categories;
-  t.true(categories.length > 1, 'Should have at least 2 categories to switch');
+  expect(categories.length > 1).toBe(true);
   const initialCategoryId = categories[0].id;
   const nextCategoryId = categories[1].id;
 
-  t.is(capturedSettings.activeCategoryId, initialCategoryId);
-  t.true(capturedSettings.filteredEntries.length > 0);
-  t.true(capturedSettings.filteredEntries.every((item: any) => getSettingCategory(item.key).id === initialCategoryId));
-  t.is(capturedSettings.selectedIndex, 0);
-  t.is(capturedSettings.scrollOffset, 0);
+  expect(capturedSettings.activeCategoryId).toBe(initialCategoryId);
+  expect(capturedSettings.filteredEntries.length > 0).toBe(true);
+  expect(
+    capturedSettings.filteredEntries.every((item: any) => getSettingCategory(item.key).id === initialCategoryId),
+  ).toBe(true);
+  expect(capturedSettings.selectedIndex).toBe(0);
+  expect(capturedSettings.scrollOffset).toBe(0);
 
   // Switch category
   act(() => {
     capturedSettings.switchCategory('next');
   });
 
-  t.is(capturedSettings.activeCategoryId, nextCategoryId);
-  t.true(capturedSettings.filteredEntries.length > 0);
-  t.true(capturedSettings.filteredEntries.every((item: any) => getSettingCategory(item.key).id === nextCategoryId));
-  t.is(capturedSettings.selectedIndex, 0);
-  t.is(capturedSettings.scrollOffset, 0);
+  expect(capturedSettings.activeCategoryId).toBe(nextCategoryId);
+  expect(capturedSettings.filteredEntries.length > 0).toBe(true);
+  expect(
+    capturedSettings.filteredEntries.every((item: any) => getSettingCategory(item.key).id === nextCategoryId),
+  ).toBe(true);
+  expect(capturedSettings.selectedIndex).toBe(0);
+  expect(capturedSettings.scrollOffset).toBe(0);
 
   act(() => {
     renderer.unmount();
   });
 });
 
-test('useSettingsCompletion searches all task tabs when query is present', (t) => {
+it('useSettingsCompletion searches all task tabs when query is present', () => {
   let capturedSettings: any;
   let renderer: any;
 
@@ -116,9 +119,9 @@ test('useSettingsCompletion searches all task tabs when query is present', (t) =
     );
   });
 
-  t.is(capturedSettings.activeCategoryId, capturedSettings.categories[0].id);
-  t.true(capturedSettings.isSearchingAll);
-  t.true(capturedSettings.filteredEntries.some((item: any) => item.key === 'shell.timeout'));
+  expect(capturedSettings.activeCategoryId).toBe(capturedSettings.categories[0].id);
+  expect(capturedSettings.isSearchingAll).toBe(true);
+  expect(capturedSettings.filteredEntries.some((item: any) => item.key === 'shell.timeout')).toBe(true);
 
   act(() => {
     renderer.unmount();

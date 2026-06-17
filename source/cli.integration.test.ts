@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { execFileSync, execSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
@@ -6,17 +6,17 @@ import path from 'path';
 
 let testDir = '';
 
-test.beforeEach(() => {
+beforeEach(() => {
   testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-cli-test-'));
 });
 
-test.afterEach.always(() => {
+afterEach(() => {
   if (testDir && fs.existsSync(testDir)) {
     fs.rmSync(testDir, { recursive: true, force: true });
   }
 });
 
-test('CLI --resume ls prints list of conversations and exits', (t) => {
+it('CLI --resume ls prints list of conversations and exits', () => {
   // Create a mock conversation file in the testDir
   const convId = 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6';
   const filePath = path.join(testDir, `${convId}.jsonl`);
@@ -86,18 +86,18 @@ test('CLI --resume ls prints list of conversations and exits', (t) => {
     },
   }).toString();
 
-  t.true(stdout.includes('Recent Conversations (last 10):'));
-  t.true(stdout.includes(convId));
-  t.false(stdout.includes(otherConvId));
-  t.false(stdout.includes(process.cwd()));
-  t.true(stdout.includes('hello this is a test prompt'));
-  t.true(stdout.includes('1 message'));
-  t.true(stdout.includes('model: gpt-4o'));
-  t.true(stdout.includes('mode: lite'));
-  t.true(stdout.includes(`term2 --resume ${convId}`));
+  expect(stdout.includes('Recent Conversations (last 10):')).toBe(true);
+  expect(stdout.includes(convId)).toBe(true);
+  expect(stdout.includes(otherConvId)).toBe(false);
+  expect(stdout.includes(process.cwd())).toBe(false);
+  expect(stdout.includes('hello this is a test prompt')).toBe(true);
+  expect(stdout.includes('1 message')).toBe(true);
+  expect(stdout.includes('model: gpt-4o')).toBe(true);
+  expect(stdout.includes('mode: lite')).toBe(true);
+  expect(stdout.includes(`term2 --resume ${convId}`)).toBe(true);
 });
 
-test('CLI --resume list also works', (t) => {
+it('CLI --resume list also works', () => {
   // Create a mock conversation file in the testDir
   const convId = 'a12d4fae-7dec-11d0-a765-00a0c91e6bf6';
   const filePath = path.join(testDir, `${convId}.jsonl`);
@@ -127,11 +127,11 @@ test('CLI --resume list also works', (t) => {
     },
   }).toString();
 
-  t.true(stdout.includes('Recent Conversations (last 10):'));
-  t.true(stdout.includes(convId));
+  expect(stdout.includes('Recent Conversations (last 10):')).toBe(true);
+  expect(stdout.includes(convId)).toBe(true);
 });
 
-test('CLI --resume prints message and exits when no conversation is found', (t) => {
+it('CLI --resume prints message and exits when no conversation is found', () => {
   const cliPath = path.resolve('dist/cli.js');
 
   let error: any;
@@ -150,13 +150,13 @@ test('CLI --resume prints message and exits when no conversation is found', (t) 
     stderr = err.stderr.toString();
   }
 
-  t.truthy(error);
-  t.is(error.status, 1);
-  t.true(stderr.includes('No conversation found to resume (dummy).'));
-  t.true(stderr.includes('Run "term2 --resume ls" to list available conversations.'));
+  expect(error).toBeTruthy();
+  expect(error.status).toBe(1);
+  expect(stderr.includes('No conversation found to resume (dummy).')).toBe(true);
+  expect(stderr.includes('Run "term2 --resume ls" to list available conversations.')).toBe(true);
 });
 
-test('CLI prompts before starting in non-lite mode from home directory', (t) => {
+it('CLI prompts before starting in non-lite mode from home directory', () => {
   const cliPath = path.resolve('dist/cli.js');
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
 
@@ -181,13 +181,13 @@ test('CLI prompts before starting in non-lite mode from home directory', (t) => 
 
   fs.rmSync(tempHome, { recursive: true, force: true });
 
-  t.truthy(error);
-  t.is(error.status, 1);
-  t.true(stderr.includes('Warning: you are starting term2 in non-lite mode from your home directory.'));
-  t.true(stderr.includes('Cancelled.'));
+  expect(error).toBeTruthy();
+  expect(error.status).toBe(1);
+  expect(stderr.includes('Warning: you are starting term2 in non-lite mode from your home directory.')).toBe(true);
+  expect(stderr.includes('Cancelled.')).toBe(true);
 });
 
-test('CLI prompts before starting in non-lite mode from root directory', (t) => {
+it('CLI prompts before starting in non-lite mode from root directory', () => {
   const cliPath = path.resolve('dist/cli.js');
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
 
@@ -212,8 +212,8 @@ test('CLI prompts before starting in non-lite mode from root directory', (t) => 
 
   fs.rmSync(tempHome, { recursive: true, force: true });
 
-  t.truthy(error);
-  t.is(error.status, 1);
-  t.true(stderr.includes('Warning: you are starting term2 in non-lite mode from your home directory.'));
-  t.true(stderr.includes('Cancelled.'));
+  expect(error).toBeTruthy();
+  expect(error.status).toBe(1);
+  expect(stderr.includes('Warning: you are starting term2 in non-lite mode from your home directory.')).toBe(true);
+  expect(stderr.includes('Cancelled.')).toBe(true);
 });

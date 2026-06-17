@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { TurnAttemptFactory } from './turn-attempt-factory.js';
 
 function setup(options: { pendingModeNotice?: string | null; lastUserMessage?: string } = {}) {
@@ -33,7 +33,7 @@ function setup(options: { pendingModeNotice?: string | null; lastUserMessage?: s
   return { factory, wasAborted: () => aborted };
 }
 
-test('creates an attempt with normalized legacy retry counts and pending mode notice', (t) => {
+it('creates an attempt with normalized legacy retry counts and pending mode notice', () => {
   const { factory } = setup({ pendingModeNotice: 'Plan mode enabled' });
 
   const result = factory.create('Do the work', {
@@ -46,48 +46,48 @@ test('creates an attempt with normalized legacy retry counts and pending mode no
     maxModelRetries: 5,
   });
 
-  t.is(result.kind, 'created');
+  expect(result.kind).toBe('created');
   if (result.kind !== 'created') return;
-  t.is(result.attempt.turn.text, 'Plan mode enabled\n\nDo the work');
-  t.deepEqual(result.attempt.retryCounts, {
+  expect(result.attempt.turn.text).toBe('Plan mode enabled\n\nDo the work');
+  expect(result.attempt.retryCounts).toEqual({
     transientRetryCount: 1,
     serviceTierFallbackCount: 2,
     modelRetryCount: 3,
     transportDowngradeCount: 4,
   });
-  t.is(result.attempt.maxTransientRetries, 3);
-  t.is(result.attempt.maxModelRetries, 5);
-  t.deepEqual(result.attempt.initialLedgerSnapshot, [{ callId: 'call-1' }]);
+  expect(result.attempt.maxTransientRetries).toBe(3);
+  expect(result.attempt.maxModelRetries).toBe(5);
+  expect(result.attempt.initialLedgerSnapshot).toEqual([{ callId: 'call-1' }]);
 });
 
-test('recovers the last user message for a skipped empty turn', (t) => {
+it('recovers the last user message for a skipped empty turn', () => {
   const { factory } = setup({ lastUserMessage: 'Previous request' });
 
   const result = factory.create({ text: '' }, { skipUserMessage: true });
 
-  t.is(result.kind, 'created');
+  expect(result.kind).toBe('created');
   if (result.kind !== 'created') return;
-  t.is(result.attempt.turn.text, 'Previous request');
+  expect(result.attempt.turn.text).toBe('Previous request');
 });
 
-test('returns stale for an outdated aborted approval context', (t) => {
+it('returns stale for an outdated aborted approval context', () => {
   const { factory } = setup();
 
   const result = factory.create('Resume', {
     abortedContext: { token: 6 } as any,
   });
 
-  t.deepEqual(result, { kind: 'stale' });
+  expect(result).toEqual({ kind: 'stale' });
 });
 
-test('wires the attempt abort signal to the agent client', (t) => {
+it('wires the attempt abort signal to the agent client', () => {
   const controller = new AbortController();
   const { factory, wasAborted } = setup();
 
   const result = factory.create('Run', { signal: controller.signal });
-  t.is(result.kind, 'created');
+  expect(result.kind).toBe('created');
 
   controller.abort();
-  t.true(wasAborted());
+  expect(wasAborted()).toBe(true);
   if (result.kind === 'created') result.attempt.close();
 });

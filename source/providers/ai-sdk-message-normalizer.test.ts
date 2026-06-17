@@ -1,7 +1,7 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { mergeAssistantMessages, withMergedAssistantMessages } from './ai-sdk-message-normalizer.js';
 
-test('mergeAssistantMessages folds assistant reasoning into following assistant tool call', (t) => {
+it('mergeAssistantMessages folds assistant reasoning into following assistant tool call', () => {
   const messages = [
     { role: 'user', content: 'what time is it?' },
     {
@@ -25,7 +25,7 @@ test('mergeAssistantMessages folds assistant reasoning into following assistant 
     },
   ];
 
-  t.deepEqual(mergeAssistantMessages(messages), [
+  expect(mergeAssistantMessages(messages)).toEqual([
     { role: 'user', content: 'what time is it?' },
     {
       role: 'assistant',
@@ -45,7 +45,7 @@ test('mergeAssistantMessages folds assistant reasoning into following assistant 
   ]);
 });
 
-test('mergeAssistantMessages preserves reasoning-only assistant messages that still need to be replayed', (t) => {
+it('mergeAssistantMessages preserves reasoning-only assistant messages that still need to be replayed', () => {
   const messages = [
     { role: 'user', content: 'show package json' },
     {
@@ -57,7 +57,7 @@ test('mergeAssistantMessages preserves reasoning-only assistant messages that st
     { role: 'user', content: 'retry after failed hallucinated tool call' },
   ];
 
-  t.deepEqual(mergeAssistantMessages(messages), [
+  expect(mergeAssistantMessages(messages)).toEqual([
     { role: 'user', content: 'show package json' },
     {
       role: 'assistant',
@@ -69,7 +69,7 @@ test('mergeAssistantMessages preserves reasoning-only assistant messages that st
   ]);
 });
 
-test('mergeAssistantMessages folds AI SDK reasoning content part into following assistant tool call', (t) => {
+it('mergeAssistantMessages folds AI SDK reasoning content part into following assistant tool call', () => {
   const messages = [
     {
       role: 'assistant',
@@ -99,7 +99,7 @@ test('mergeAssistantMessages folds AI SDK reasoning content part into following 
     },
   ];
 
-  t.deepEqual(mergeAssistantMessages(messages), [
+  expect(mergeAssistantMessages(messages)).toEqual([
     {
       role: 'assistant',
       content: [
@@ -123,7 +123,7 @@ test('mergeAssistantMessages folds AI SDK reasoning content part into following 
   ]);
 });
 
-test('mergeAssistantMessages preserves assistant messages separated by non-assistant messages', (t) => {
+it('mergeAssistantMessages preserves assistant messages separated by non-assistant messages', () => {
   const messages = [
     {
       role: 'assistant',
@@ -141,10 +141,10 @@ test('mergeAssistantMessages preserves assistant messages separated by non-assis
     },
   ];
 
-  t.deepEqual(mergeAssistantMessages(messages), messages);
+  expect(mergeAssistantMessages(messages)).toEqual(messages);
 });
 
-test('mergeAssistantMessages merges contiguous assistant messages', (t) => {
+it('mergeAssistantMessages merges contiguous assistant messages', () => {
   const messages = [
     { role: 'user', content: 'start' },
     { role: 'assistant', content: 'first' },
@@ -154,7 +154,7 @@ test('mergeAssistantMessages merges contiguous assistant messages', (t) => {
     { role: 'assistant', content: 'after tool' },
   ];
 
-  t.deepEqual(mergeAssistantMessages(messages), [
+  expect(mergeAssistantMessages(messages)).toEqual([
     { role: 'user', content: 'start' },
     {
       role: 'assistant',
@@ -167,7 +167,7 @@ test('mergeAssistantMessages merges contiguous assistant messages', (t) => {
   ]);
 });
 
-test('mergeAssistantMessages merges contiguous AI SDK assistant content parts', (t) => {
+it('mergeAssistantMessages merges contiguous AI SDK assistant content parts', () => {
   const messages = [
     {
       role: 'assistant',
@@ -183,7 +183,7 @@ test('mergeAssistantMessages merges contiguous AI SDK assistant content parts', 
     },
   ];
 
-  t.deepEqual(mergeAssistantMessages(messages), [
+  expect(mergeAssistantMessages(messages)).toEqual([
     {
       role: 'assistant',
       content: [
@@ -195,7 +195,7 @@ test('mergeAssistantMessages merges contiguous AI SDK assistant content parts', 
   ]);
 });
 
-test('mergeAssistantMessages merges real-world split assistant turns before tool results', (t) => {
+it('mergeAssistantMessages merges real-world split assistant turns before tool results', () => {
   const messages = [
     {
       role: 'system',
@@ -283,7 +283,7 @@ test('mergeAssistantMessages merges real-world split assistant turns before tool
     },
   ];
 
-  t.deepEqual(mergeAssistantMessages(messages), [
+  expect(mergeAssistantMessages(messages)).toEqual([
     {
       role: 'system',
       content: [{ type: 'text', text: 'You are a lightweight terminal assistant fo...' }],
@@ -353,7 +353,7 @@ test('mergeAssistantMessages merges real-world split assistant turns before tool
   ]);
 });
 
-test('withMergedAssistantMessages normalizes doGenerate messages before delegating', async (t) => {
+it('withMergedAssistantMessages normalizes doGenerate messages before delegating', async () => {
   let delegatedOptions: any;
   const model = withMergedAssistantMessages({
     provider: 'example',
@@ -375,13 +375,13 @@ test('withMergedAssistantMessages normalizes doGenerate messages before delegati
     ],
   });
 
-  t.deepEqual(delegatedOptions, {
+  expect(delegatedOptions).toEqual({
     temperature: 0,
     messages: [{ role: 'assistant', content: null, reasoning_content: 'reasoning', tool_calls: [{ id: 'call:0' }] }],
   });
 });
 
-test('withMergedAssistantMessages normalizes doGenerate prompt before delegating', async (t) => {
+it('withMergedAssistantMessages normalizes doGenerate prompt before delegating', async () => {
   let delegatedOptions: any;
   const model = withMergedAssistantMessages({
     provider: 'example',
@@ -402,12 +402,12 @@ test('withMergedAssistantMessages normalizes doGenerate prompt before delegating
     ],
   });
 
-  t.deepEqual(delegatedOptions.prompt, [
+  expect(delegatedOptions.prompt).toEqual([
     { role: 'assistant', content: null, reasoning_content: 'reasoning', tool_calls: [{ id: 'call:0' }] },
   ]);
 });
 
-test('withMergedAssistantMessages normalizes doStream messages before delegating', async (t) => {
+it('withMergedAssistantMessages normalizes doStream messages before delegating', async () => {
   let delegatedOptions: any;
   const model = withMergedAssistantMessages({
     provider: 'example',
@@ -428,12 +428,12 @@ test('withMergedAssistantMessages normalizes doStream messages before delegating
     ],
   });
 
-  t.deepEqual(delegatedOptions.messages, [
+  expect(delegatedOptions.messages).toEqual([
     { role: 'assistant', content: null, reasoning_content: 'reasoning', tool_calls: [{ id: 'call:0' }] },
   ]);
 });
 
-test('withMergedAssistantMessages preserves model properties exposed by getters', (t) => {
+it('withMergedAssistantMessages preserves model properties exposed by getters', () => {
   class GetterBackedModel {
     #provider = 'example.chat';
     #modelId = 'selected-model';
@@ -465,8 +465,8 @@ test('withMergedAssistantMessages preserves model properties exposed by getters'
 
   const model = withMergedAssistantMessages(new GetterBackedModel());
 
-  t.is(model.provider, 'example.chat');
-  t.is(model.modelId, 'selected-model');
-  t.is(model.specificationVersion, 'v3');
-  t.deepEqual(model.supportedUrls, {});
+  expect(model.provider).toBe('example.chat');
+  expect(model.modelId).toBe('selected-model');
+  expect(model.specificationVersion).toBe('v3');
+  expect(model.supportedUrls).toEqual({});
 });

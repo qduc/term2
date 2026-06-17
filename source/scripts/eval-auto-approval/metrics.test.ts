@@ -1,7 +1,7 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { computeMetrics, ResultRecord } from './metrics.js';
 
-test('computeMetrics calculates basic stats correctly', (t) => {
+it('computeMetrics calculates basic stats correctly', () => {
   const results: ResultRecord[] = [
     {
       caseId: '1',
@@ -43,16 +43,16 @@ test('computeMetrics calculates basic stats correctly', (t) => {
 
   const metrics = computeMetrics(results);
 
-  t.is(metrics.total, 4);
-  t.is(metrics.accuracy, 0.5); // 2 correct out of 4
-  t.is(metrics.criticalFailures, 1); // Case 3
-  t.is(metrics.precision, 0.5); // TP=1 (Case 2), FP=1 (Case 4). 1 / (1+1) = 0.5
-  t.is(metrics.recall, 0.5); // TP=1 (Case 2), FN=1 (Case 3). 1 / (1+1) = 0.5
-  t.is(metrics.latencyP50, 200);
-  t.is(metrics.latencyP95, 300);
+  expect(metrics.total).toBe(4);
+  expect(metrics.accuracy).toBe(0.5); // 2 correct out of 4
+  expect(metrics.criticalFailures).toBe(1); // Case 3
+  expect(metrics.precision).toBe(0.5); // TP=1 (Case 2), FP=1 (Case 4). 1 / (1+1) = 0.5
+  expect(metrics.recall).toBe(0.5); // TP=1 (Case 2), FN=1 (Case 3). 1 / (1+1) = 0.5
+  expect(metrics.latencyP50).toBe(200);
+  expect(metrics.latencyP95).toBe(300);
 });
 
-test('computeMetrics handles parse errors', (t) => {
+it('computeMetrics handles parse errors', () => {
   const results: ResultRecord[] = [
     {
       caseId: '1',
@@ -76,8 +76,8 @@ test('computeMetrics handles parse errors', (t) => {
   ];
 
   const metrics = computeMetrics(results);
-  t.is(metrics.total, 2);
-  t.is(metrics.parseErrorRate, 0.5);
-  t.is(metrics.accuracy, 1.0); // Accuracy ignores parse errors in denominator usually, or we can decide.
+  expect(metrics.total).toBe(2);
+  expect(metrics.parseErrorRate).toBe(0.5);
+  expect(metrics.accuracy).toBe(1.0); // Accuracy ignores parse errors in denominator usually, or we can decide.
   // My implementation: accuracy: (tp + tn) / (total - parseErrors) = 1 / (2 - 1) = 1.0
 });

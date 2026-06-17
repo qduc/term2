@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { buildAgent } from './agent-factory.js';
 import { clearModelCache, fetchModels } from '../services/model-service.js';
 import { getProvider, registerProvider, unregisterProvider, type ProviderDefinition } from '../providers/registry.js';
@@ -77,64 +77,64 @@ const createDeps = (
 
 const originalCodexProvider = getProvider('codex');
 
-test.serial('buildAgent creates Agent with correct model name', (t) => {
+it.sequential('buildAgent creates Agent with correct model name', () => {
   const { deps } = createDeps({ settingsValues: { 'agent.model': 'gpt-4o-mini' } });
 
   const result = buildAgent({ model: 'gpt-4o-mini' }, deps);
 
-  t.is(result.agent.model, 'gpt-4o-mini');
-  t.is(result.resolvedModel, 'gpt-4o-mini');
+  expect(result.agent.model).toBe('gpt-4o-mini');
+  expect(result.resolvedModel).toBe('gpt-4o-mini');
 });
 
-test.serial('buildAgent resolves model from settings when model param is omitted', (t) => {
+it.sequential('buildAgent resolves model from settings when model param is omitted', () => {
   const { deps } = createDeps({ settingsValues: { 'agent.model': 'gpt-4.1-mini' } });
 
   const result = buildAgent({}, deps);
 
-  t.is(result.resolvedModel, 'gpt-4.1-mini');
-  t.is(result.agent.model, 'gpt-4.1-mini');
+  expect(result.resolvedModel).toBe('gpt-4.1-mini');
+  expect(result.agent.model).toBe('gpt-4.1-mini');
 });
 
-test.serial('buildAgent returns resolvedModel', (t) => {
+it.sequential('buildAgent returns resolvedModel', () => {
   const { deps } = createDeps();
 
   const result = buildAgent({ model: 'gpt-4o' }, deps);
 
-  t.is(result.resolvedModel, 'gpt-4o');
+  expect(result.resolvedModel).toBe('gpt-4o');
 });
 
-test.serial('buildAgent applies strict tool schema when provider supports it', (t) => {
+it.sequential('buildAgent applies strict tool schema when provider supports it', () => {
   const { deps } = createDeps({ providerId: 'openai', settingsValues: { 'agent.model': 'gpt-4o' } });
 
   const result = buildAgent({ model: 'gpt-4o' }, deps);
   const readFileTool = result.agent.tools.find((tool: any) => tool.name === 'read_file') as any;
 
-  t.truthy(readFileTool);
-  t.true(Array.isArray(readFileTool.parameters.required));
-  t.true(readFileTool.parameters.required.includes('start_line'));
-  t.true(readFileTool.parameters.required.includes('end_line'));
+  expect(readFileTool).toBeTruthy();
+  expect(Array.isArray(readFileTool.parameters.required)).toBe(true);
+  expect(readFileTool.parameters.required.includes('start_line')).toBe(true);
+  expect(readFileTool.parameters.required.includes('end_line')).toBe(true);
 });
 
-test.serial('buildAgent excludes custom apply_patch when native patch tool is enabled', (t) => {
+it.sequential('buildAgent excludes custom apply_patch when native patch tool is enabled', () => {
   const { deps } = createDeps({ providerId: 'openai' });
 
   const result = buildAgent({ model: 'gpt-5.1' }, deps);
   const toolNames = result.agent.tools.map((tool: any) => tool.name);
 
-  t.is(toolNames.filter((name: string) => name === 'apply_patch').length, 1);
-  t.true(toolNames.includes('apply_patch'));
+  expect(toolNames.filter((name: string) => name === 'apply_patch').length).toBe(1);
+  expect(toolNames.includes('apply_patch')).toBe(true);
 });
 
-test.serial('buildAgent includes native applyPatchTool for supported models', (t) => {
+it.sequential('buildAgent includes native applyPatchTool for supported models', () => {
   const { deps, logger } = createDeps({ providerId: 'openai' });
 
   const result = buildAgent({ model: 'gpt-5.1' }, deps);
 
-  t.true(result.agent.tools.some((tool: any) => tool.name === 'apply_patch'));
-  t.true(logger.debugCalls.some(([message]) => message === 'Using native applyPatchTool from SDK'));
+  expect(result.agent.tools.some((tool: any) => tool.name === 'apply_patch')).toBe(true);
+  expect(logger.debugCalls.some(([message]) => message === 'Using native applyPatchTool from SDK')).toBe(true);
 });
 
-test.serial('buildAgent resolves codex default_reasoning_level', async (t) => {
+it.sequential('buildAgent resolves codex default_reasoning_level', async () => {
   clearModelCache();
 
   const fakeCodexProvider: ProviderDefinition = {
@@ -149,14 +149,6 @@ test.serial('buildAgent resolves codex default_reasoning_level', async (t) => {
   };
 
   registerProvider(fakeCodexProvider, { allowOverride: true });
-  t.teardown(() => {
-    clearModelCache();
-    if (originalCodexProvider) {
-      registerProvider(originalCodexProvider, { allowOverride: true });
-    } else {
-      unregisterProvider('codex');
-    }
-  });
 
   const { deps } = createDeps({
     providerId: 'codex',
@@ -179,12 +171,12 @@ test.serial('buildAgent resolves codex default_reasoning_level', async (t) => {
   const result = buildAgent({ model: 'gpt-5.3-codex' }, deps);
   const agent = result.agent as any;
 
-  t.is(result.resolvedModel, 'gpt-5.3-codex');
-  t.is(agent.modelSettings?.reasoning?.effort, 'medium');
-  t.is(agent.defaultRunOptions?.reasoning?.effort, 'medium');
+  expect(result.resolvedModel).toBe('gpt-5.3-codex');
+  expect(agent.modelSettings?.reasoning?.effort).toBe('medium');
+  expect(agent.defaultRunOptions?.reasoning?.effort).toBe('medium');
 });
 
-test.serial('buildAgent sets flex service tier when enabled', (t) => {
+it.sequential('buildAgent sets flex service tier when enabled', () => {
   const { deps } = createDeps({
     providerId: 'openai',
     settingsValues: {
@@ -194,10 +186,10 @@ test.serial('buildAgent sets flex service tier when enabled', (t) => {
 
   const result = buildAgent({ model: 'gpt-4o' }, deps);
 
-  t.is(result.agent.modelSettings?.providerData?.service_tier, 'flex');
+  expect(result.agent.modelSettings?.providerData?.service_tier).toBe('flex');
 });
 
-test.serial('buildAgent leaves parallel tool calls enabled by provider policy for Codex', (t) => {
+it.sequential('buildAgent leaves parallel tool calls enabled by provider policy for Codex', () => {
   const { deps } = createDeps({
     providerId: 'codex',
     settingsValues: {
@@ -207,10 +199,10 @@ test.serial('buildAgent leaves parallel tool calls enabled by provider policy fo
 
   const result = buildAgent({ model: 'gpt-5.4-mini' }, deps);
 
-  t.false('parallelToolCalls' in (result.agent.modelSettings ?? {}));
+  expect('parallelToolCalls' in (result.agent.modelSettings ?? {})).toBe(false);
 });
 
-test.serial('buildAgent omits flex service tier when serviceTierOverrideForNextRequest is standard', (t) => {
+it.sequential('buildAgent omits flex service tier when serviceTierOverrideForNextRequest is standard', () => {
   const { deps } = createDeps({
     providerId: 'openai',
     serviceTierOverrideForNextRequest: 'standard',
@@ -221,10 +213,10 @@ test.serial('buildAgent omits flex service tier when serviceTierOverrideForNextR
 
   const result = buildAgent({ model: 'gpt-4o' }, deps);
 
-  t.falsy(result.agent.modelSettings?.providerData?.service_tier);
+  expect(result.agent.modelSettings?.providerData?.service_tier).toBeFalsy();
 });
 
-test.serial('buildModelSettings omits reasoning when effort is default', (t) => {
+it.sequential('buildModelSettings omits reasoning when effort is default', () => {
   const { deps } = createDeps({
     providerId: 'openai',
     settingsValues: {
@@ -234,5 +226,5 @@ test.serial('buildModelSettings omits reasoning when effort is default', (t) => 
 
   const result = buildAgent({ model: 'gpt-4o', reasoningEffort: 'default' }, deps);
 
-  t.falsy(result.agent.modelSettings?.reasoning);
+  expect(result.agent.modelSettings?.reasoning).toBeFalsy();
 });

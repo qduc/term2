@@ -1,14 +1,13 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import ChatMessage from './ChatMessage.js';
 
 const stripAnsi = (s: string) => s.replaceAll(/\u001B\[[0-9;]*m/g, '');
 
-test('ChatMessage renders reasoning messages with Markdown formatting', async (t) => {
+it('ChatMessage renders reasoning messages with Markdown formatting', async () => {
   let lastFrame!: () => string | undefined;
   let unmount!: () => void;
 
@@ -26,11 +25,11 @@ test('ChatMessage renders reasoning messages with Markdown formatting', async (t
   });
 
   const frame = stripAnsi(lastFrame() || '');
-  t.true(frame.includes('Checking'));
-  t.true(frame.includes('constraints'));
-  t.true(frame.includes('editing'));
-  t.false(frame.includes('**constraints**'));
-  t.false(frame.includes('`editing`'));
+  expect(frame.includes('Checking')).toBe(true);
+  expect(frame.includes('constraints')).toBe(true);
+  expect(frame.includes('editing')).toBe(true);
+  expect(frame.includes('**constraints**')).toBe(false);
+  expect(frame.includes('`editing`')).toBe(false);
 
   await act(async () => {
     unmount();

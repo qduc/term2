@@ -1,95 +1,95 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { validateCommandSafety } from './command-safety/index.js';
 
 // Safe git commands (GREEN - auto-approved)
-test('git status is green (safe)', (t) => {
-  t.false(validateCommandSafety('git status'));
+it('git status is green (safe)', () => {
+  expect(validateCommandSafety('git status')).toBe(false);
 });
 
-test('git log is green (safe)', (t) => {
-  t.false(validateCommandSafety('git log --oneline'));
+it('git log is green (safe)', () => {
+  expect(validateCommandSafety('git log --oneline')).toBe(false);
 });
 
-test('git diff is green (safe)', (t) => {
-  t.false(validateCommandSafety('git diff HEAD'));
+it('git diff is green (safe)', () => {
+  expect(validateCommandSafety('git diff HEAD')).toBe(false);
 });
 
-test('git show is green (safe)', (t) => {
-  t.false(validateCommandSafety('git show abc123'));
+it('git show is green (safe)', () => {
+  expect(validateCommandSafety('git show abc123')).toBe(false);
 });
 
-test('git blame is green (safe)', (t) => {
-  t.false(validateCommandSafety('git blame file.txt'));
+it('git blame is green (safe)', () => {
+  expect(validateCommandSafety('git blame file.txt')).toBe(false);
 });
 
-test('git reflog is green (safe)', (t) => {
-  t.false(validateCommandSafety('git reflog'));
+it('git reflog is green (safe)', () => {
+  expect(validateCommandSafety('git reflog')).toBe(false);
 });
 
-test('git ls-files is green (safe)', (t) => {
-  t.false(validateCommandSafety('git ls-files'));
+it('git ls-files is green (safe)', () => {
+  expect(validateCommandSafety('git ls-files')).toBe(false);
 });
 
-test('git grep is green (safe)', (t) => {
-  t.false(validateCommandSafety('git grep "pattern"'));
+it('git grep is green (safe)', () => {
+  expect(validateCommandSafety('git grep "pattern"')).toBe(false);
 });
 
 // Dangerous git commands (YELLOW - requires approval)
-test('git push is yellow (write operation)', (t) => {
-  t.true(validateCommandSafety('git push origin main'));
+it('git push is yellow (write operation)', () => {
+  expect(validateCommandSafety('git push origin main')).toBe(true);
 });
 
-test('git commit is yellow (write operation)', (t) => {
-  t.true(validateCommandSafety('git commit -m "message"'));
+it('git commit is yellow (write operation)', () => {
+  expect(validateCommandSafety('git commit -m "message"')).toBe(true);
 });
 
-test('git reset is yellow (destructive)', (t) => {
-  t.true(validateCommandSafety('git reset --hard HEAD'));
+it('git reset is yellow (destructive)', () => {
+  expect(validateCommandSafety('git reset --hard HEAD')).toBe(true);
 });
 
-test('git clean is yellow (destructive)', (t) => {
-  t.true(validateCommandSafety('git clean -fd'));
+it('git clean is yellow (destructive)', () => {
+  expect(validateCommandSafety('git clean -fd')).toBe(true);
 });
 
-test('git rebase is yellow (destructive)', (t) => {
-  t.true(validateCommandSafety('git rebase main'));
+it('git rebase is yellow (destructive)', () => {
+  expect(validateCommandSafety('git rebase main')).toBe(true);
 });
 
-test('git merge is yellow (write operation)', (t) => {
-  t.true(validateCommandSafety('git merge feature'));
+it('git merge is yellow (write operation)', () => {
+  expect(validateCommandSafety('git merge feature')).toBe(true);
 });
 
-test('git add is yellow (write operation)', (t) => {
-  t.true(validateCommandSafety('git add .'));
+it('git add is yellow (write operation)', () => {
+  expect(validateCommandSafety('git add .')).toBe(true);
 });
 
-test('git checkout is yellow (branch switching)', (t) => {
-  t.true(validateCommandSafety('git checkout main'));
+it('git checkout is yellow (branch switching)', () => {
+  expect(validateCommandSafety('git checkout main')).toBe(true);
 });
 
 // Safe commands with dangerous flags (YELLOW)
-test('git log with force flag is yellow', (t) => {
-  t.true(validateCommandSafety('git log --force'));
+it('git log with force flag is yellow', () => {
+  expect(validateCommandSafety('git log --force')).toBe(true);
 });
 
-test('git diff with hard flag is yellow', (t) => {
-  t.true(validateCommandSafety('git diff --hard'));
+it('git diff with hard flag is yellow', () => {
+  expect(validateCommandSafety('git diff --hard')).toBe(true);
 });
 
-test('git status with delete flag is yellow', (t) => {
-  t.true(validateCommandSafety('git status --delete'));
+it('git status with delete flag is yellow', () => {
+  expect(validateCommandSafety('git status --delete')).toBe(true);
 });
 
 // Unknown subcommands (YELLOW)
-test('unknown git subcommand is yellow', (t) => {
-  t.true(validateCommandSafety('git unknowncommand'));
+it('unknown git subcommand is yellow', () => {
+  expect(validateCommandSafety('git unknowncommand')).toBe(true);
 });
 
 // Git without subcommand (YELLOW)
-test('git without subcommand is yellow', (t) => {
-  t.true(validateCommandSafety('git'));
+it('git without subcommand is yellow', () => {
+  expect(validateCommandSafety('git')).toBe(true);
 });
 
-test('git with only flags is yellow', (t) => {
-  t.true(validateCommandSafety('git --version'));
+it('git with only flags is yellow', () => {
+  expect(validateCommandSafety('git --version')).toBe(true);
 });

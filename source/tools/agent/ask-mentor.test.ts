@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createAskMentorToolDefinition } from './ask-mentor.js';
 
 // Mock function helper
@@ -14,34 +14,34 @@ const fn = (impl?: (...args: any[]) => any) => {
   });
 };
 
-test('createAskMentorToolDefinition defines the tool correctly', (t) => {
+it('createAskMentorToolDefinition defines the tool correctly', () => {
   const mockAskMentor = fn();
   const tool = createAskMentorToolDefinition(mockAskMentor);
 
-  t.is(tool.name, 'ask_mentor');
-  t.true(tool.description.includes('mentor'));
-  t.is(tool.needsApproval({ question: 'test' }, undefined), false);
+  expect(tool.name).toBe('ask_mentor');
+  expect(tool.description.includes('mentor')).toBe(true);
+  expect(tool.needsApproval({ question: 'test' }, undefined)).toBe(false);
 });
 
-test('createAskMentorToolDefinition schema allows omitted context and rejects null', (t) => {
+it('createAskMentorToolDefinition schema allows omitted context and rejects null', () => {
   const mockAskMentor = fn();
   const tool = createAskMentorToolDefinition(mockAskMentor);
 
-  t.true(tool.parameters.safeParse({ question: 'test' }).success);
-  t.false(tool.parameters.safeParse({ question: 'test', context: null }).success);
+  expect(tool.parameters.safeParse({ question: 'test' }).success).toBe(true);
+  expect(tool.parameters.safeParse({ question: 'test', context: null }).success).toBe(false);
 });
 
-test('createAskMentorToolDefinition executes correctly', async (t) => {
+it('createAskMentorToolDefinition executes correctly', async () => {
   const mockAskMentor = fn(async () => 'Expert advice');
   const tool = createAskMentorToolDefinition(mockAskMentor);
 
   const result = await tool.execute({ question: 'How do I center a div?' }, undefined);
 
-  t.is(mockAskMentor.calls[0][0], 'How do I center a div?');
-  t.is(result, 'Expert advice');
+  expect(mockAskMentor.calls[0][0]).toBe('How do I center a div?');
+  expect(result).toBe('Expert advice');
 });
 
-test('createAskMentorToolDefinition includes context', async (t) => {
+it('createAskMentorToolDefinition includes context', async () => {
   const mockAskMentor = fn(async () => 'Contextual advice');
   const tool = createAskMentorToolDefinition(mockAskMentor);
 
@@ -53,11 +53,11 @@ test('createAskMentorToolDefinition includes context', async (t) => {
     undefined,
   );
 
-  t.is(mockAskMentor.calls[0][0], 'Context:\nError: invalid prop\n\nQuestion:\nWhy is this failing?');
-  t.is(result, 'Contextual advice');
+  expect(mockAskMentor.calls[0][0]).toBe('Context:\nError: invalid prop\n\nQuestion:\nWhy is this failing?');
+  expect(result).toBe('Contextual advice');
 });
 
-test('createAskMentorToolDefinition handles errors', async (t) => {
+it('createAskMentorToolDefinition handles errors', async () => {
   const mockAskMentor = fn(async () => {
     throw new Error('API Error');
   });
@@ -65,5 +65,5 @@ test('createAskMentorToolDefinition handles errors', async (t) => {
 
   const result = await tool.execute({ question: 'fail' }, undefined);
 
-  t.true((result as string).includes('Failed to ask mentor: API Error'));
+  expect((result as string).includes('Failed to ask mentor: API Error')).toBe(true);
 });

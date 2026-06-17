@@ -1,12 +1,12 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { patchStdoutForSynchronizedOutput, isSynchronizedOutputSupported } from './synchronized-output.js';
 import { Writable } from 'stream';
 
-test('isSynchronizedOutputSupported returns true', (t) => {
-  t.true(isSynchronizedOutputSupported());
+it('isSynchronizedOutputSupported returns true', () => {
+  expect(isSynchronizedOutputSupported()).toBe(true);
 });
 
-test('patchStdoutForSynchronizedOutput wraps string writes with sync markers', (t) => {
+it('patchStdoutForSynchronizedOutput wraps string writes with sync markers', () => {
   const chunks: string[] = [];
   const fakeStream = new Writable({
     write(chunk, _encoding, callback) {
@@ -22,11 +22,11 @@ test('patchStdoutForSynchronizedOutput wraps string writes with sync markers', (
 
   fakeStream.write('hello');
 
-  t.is(chunks.length, 1);
-  t.is(chunks[0], '\x1b[?2026hhello\x1b[?2026l');
+  expect(chunks.length).toBe(1);
+  expect(chunks[0]).toBe('\x1b[?2026hhello\x1b[?2026l');
 });
 
-test('patchStdoutForSynchronizedOutput passes through non-string writes', (t) => {
+it('patchStdoutForSynchronizedOutput passes through non-string writes', () => {
   const chunks: Buffer[] = [];
   const fakeStream = new Writable({
     write(chunk, _encoding, callback) {
@@ -42,12 +42,12 @@ test('patchStdoutForSynchronizedOutput passes through non-string writes', (t) =>
   const buf = Buffer.from([0x01, 0x02, 0x03]);
   fakeStream.write(buf);
 
-  t.is(chunks.length, 1);
+  expect(chunks.length).toBe(1);
   // Buffer writes should NOT be wrapped with sync markers
-  t.deepEqual(chunks[0], buf);
+  expect(chunks[0]).toEqual(buf);
 });
 
-test('patchStdoutForSynchronizedOutput handles nested writes without double-wrapping', (t) => {
+it('patchStdoutForSynchronizedOutput handles nested writes without double-wrapping', () => {
   const chunks: string[] = [];
   let writeImpl: (chunk: any, encoding?: any, callback?: any) => boolean;
 
@@ -82,7 +82,7 @@ test('patchStdoutForSynchronizedOutput handles nested writes without double-wrap
 
   // The outer write should be wrapped, and the nested write should also be
   // handled (not double-wrapped since syncing flag is set)
-  t.true(chunks.some((c) => c.includes('\x1b[?2026h')));
+  expect(chunks.some((c) => c.includes('\x1b[?2026h'))).toBe(true);
   // Nested call should NOT contain sync markers (double-wrapping prevented)
-  t.is(chunks[1], 'nested');
+  expect(chunks[1]).toBe('nested');
 });

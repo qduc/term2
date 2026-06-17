@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ConversationStore } from '../conversation/conversation-store.js';
 import { type SavedToolExecution } from '../tool-execution-ledger.js';
 import type { RetryCounts, RecoveryState } from './retry-contracts.js';
@@ -29,7 +29,7 @@ const baseRecoveryState = (overrides: Partial<RecoveryState> = {}): RecoveryStat
   ...overrides,
 });
 
-test('resume_stream returns run instruction with resume state', (t) => {
+it('resume_stream returns run instruction with resume state', () => {
   const { executor } = makeExecutor();
   const mockState = { _currentTurn: 'x' } as any;
 
@@ -39,14 +39,14 @@ test('resume_stream returns run instruction with resume state', (t) => {
     retryCounts: baseCounts(),
   });
 
-  t.is(result.kind, 'run');
+  expect(result.kind).toBe('run');
   if (result.kind !== 'run') return;
-  t.true(result.instruction.skipUserMessage);
-  t.is(result.instruction.resumeState, mockState);
-  t.is(result.instruction.resumePreviousResponseId, 'resp-1');
+  expect(result.instruction.skipUserMessage).toBe(true);
+  expect(result.instruction.resumeState).toBe(mockState);
+  expect(result.instruction.resumePreviousResponseId).toBe('resp-1');
 });
 
-test('replay_turn with rollback removes user message and clears continuity', (t) => {
+it('replay_turn with rollback removes user message and clears continuity', () => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');
   deps.providerContinuity.update('resp-old');
@@ -57,14 +57,14 @@ test('replay_turn with rollback removes user message and clears continuity', (t)
     retryCounts: baseCounts(),
   });
 
-  t.is(result.kind, 'run');
-  t.is(deps.providerContinuity.previousResponseId, null);
-  t.is(deps.conversationStore.getHistory().length, 0);
+  expect(result.kind).toBe('run');
+  expect(deps.providerContinuity.previousResponseId).toBe(null);
+  expect(deps.conversationStore.getHistory().length).toBe(0);
   if (result.kind !== 'run') return;
-  t.false(result.instruction.skipUserMessage);
+  expect(result.instruction.skipUserMessage).toBe(false);
 });
 
-test('replay_turn without rollback keeps user message', (t) => {
+it('replay_turn without rollback keeps user message', () => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');
 
@@ -74,13 +74,13 @@ test('replay_turn without rollback keeps user message', (t) => {
     retryCounts: baseCounts(),
   });
 
-  t.is(result.kind, 'run');
-  t.is(deps.conversationStore.getHistory().length, 1);
+  expect(result.kind).toBe('run');
+  expect(deps.conversationStore.getHistory().length).toBe(1);
   if (result.kind !== 'run') return;
-  t.true(result.instruction.skipUserMessage);
+  expect(result.instruction.skipUserMessage).toBe(true);
 });
 
-test('replay_turn with errorContext injects error context into conversation store', (t) => {
+it('replay_turn with errorContext injects error context into conversation store', () => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');
 
@@ -104,10 +104,10 @@ test('replay_turn with errorContext injects error context into conversation stor
       typeof (item as any).content === 'string' &&
       (item as any).content.includes('Previous attempt failed'),
   );
-  t.truthy(errorItem, 'should have injected error context into history');
+  expect(errorItem).toBeTruthy();
 });
 
-test('retry_fresh with stream reconciles history and restores ledger', (t) => {
+it('retry_fresh with stream reconciles history and restores ledger', () => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');
   deps.providerContinuity.update('resp-old');
@@ -131,11 +131,11 @@ test('retry_fresh with stream reconciles history and restores ledger', (t) => {
     retryCounts: baseCounts(),
   });
 
-  t.is(result.kind, 'run');
-  t.is(deps.providerContinuity.previousResponseId, null);
+  expect(result.kind).toBe('run');
+  expect(deps.providerContinuity.previousResponseId).toBe(null);
 });
 
-test('retry_fresh without stream preserves user message and clears continuity', (t) => {
+it('retry_fresh without stream preserves user message and clears continuity', () => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');
   deps.providerContinuity.update('resp-old');
@@ -146,12 +146,12 @@ test('retry_fresh without stream preserves user message and clears continuity', 
     retryCounts: baseCounts(),
   });
 
-  t.is(result.kind, 'run');
-  t.is(deps.providerContinuity.previousResponseId, null);
-  t.is(deps.conversationStore.getHistory().length, 1);
+  expect(result.kind).toBe('run');
+  expect(deps.providerContinuity.previousResponseId).toBe(null);
+  expect(deps.conversationStore.getHistory().length).toBe(1);
 });
 
-test('retry_fresh with useStandardServiceTier passes flag through', (t) => {
+it('retry_fresh with useStandardServiceTier passes flag through', () => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');
   deps.providerContinuity.update('resp-old');
@@ -162,12 +162,12 @@ test('retry_fresh with useStandardServiceTier passes flag through', (t) => {
     retryCounts: baseCounts(),
   });
 
-  t.is(result.kind, 'run');
+  expect(result.kind).toBe('run');
   if (result.kind !== 'run') return;
-  t.true(result.useStandardServiceTier);
+  expect(result.useStandardServiceTier).toBe(true);
 });
 
-test('terminate removes user message when added without stream', (t) => {
+it('terminate removes user message when added without stream', () => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');
 
@@ -177,14 +177,14 @@ test('terminate removes user message when added without stream', (t) => {
     retryCounts: baseCounts(),
   });
 
-  t.is(result.kind, 'terminated');
-  t.is(deps.conversationStore.getHistory().length, 0);
+  expect(result.kind).toBe('terminated');
+  expect(deps.conversationStore.getHistory().length).toBe(0);
   if (result.kind !== 'terminated') return;
-  t.is(result.events.length, 1);
-  t.is(result.events[0].type, 'error');
+  expect(result.events.length).toBe(1);
+  expect(result.events[0].type).toBe('error');
 });
 
-test('terminate with stream marks open calls aborted and reconciles history', (t) => {
+it('terminate with stream marks open calls aborted and reconciles history', () => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');
 
@@ -194,12 +194,12 @@ test('terminate with stream marks open calls aborted and reconciles history', (t
     retryCounts: baseCounts(),
   });
 
-  t.is(result.kind, 'terminated');
+  expect(result.kind).toBe('terminated');
   if (result.kind !== 'terminated') return;
-  t.is(result.events[0].type, 'error');
+  expect(result.events[0].type).toBe('error');
 });
 
-test('terminate includes tool_recovery event when there are recovered calls', (t) => {
+it('terminate includes tool_recovery event when there are recovered calls', () => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');
   deps.toolTracker.ledger.recordFunctionCall({
@@ -216,8 +216,8 @@ test('terminate includes tool_recovery event when there are recovered calls', (t
     retryCounts: baseCounts(),
   });
 
-  t.is(result.kind, 'terminated');
+  expect(result.kind).toBe('terminated');
   if (result.kind !== 'terminated') return;
   const recoveryEvent = result.events.find((e) => e.type === 'tool_recovery');
-  t.truthy(recoveryEvent);
+  expect(recoveryEvent).toBeTruthy();
 });

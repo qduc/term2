@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { LogEvent } from '../logging/conversation-log-events.js';
 import { createConversationSession } from './session-composition.js';
@@ -64,7 +64,7 @@ class MockStream {
   }
 }
 
-test('run() emits tool_started with parsed arguments when function_call arguments are JSON string', async (t) => {
+it('run() emits tool_started with parsed arguments when function_call arguments are JSON string', async () => {
   const stream = new MockStream([
     {
       type: 'run_item_stream_event',
@@ -101,12 +101,12 @@ test('run() emits tool_started with parsed arguments when function_call argument
   const firstEvent = emitted[0] as Extract<ConversationEvent, { type: 'tool_started' }> & {
     arguments: { command: string };
   };
-  t.is(firstEvent.type, 'tool_started');
-  t.true(typeof firstEvent.arguments === 'object');
-  t.is(firstEvent.arguments.command, 'echo hi');
+  expect(firstEvent.type).toBe('tool_started');
+  expect(typeof firstEvent.arguments === 'object').toBe(true);
+  expect(firstEvent.arguments.command).toBe('echo hi');
 });
 
-test('run() emits one diagnostic packet when tool arguments contain malformed JSON', async (t) => {
+it('run() emits one diagnostic packet when tool arguments contain malformed JSON', async () => {
   const stream = new MockStream([
     {
       type: 'run_item_stream_event',
@@ -153,19 +153,19 @@ test('run() emits one diagnostic packet when tool arguments contain malformed JS
   const packets = events.filter(
     (entry) => entry.level === 'error' && entry.meta?.eventType === 'tool_call.parse_failed',
   );
-  t.is(packets.length, 1);
+  expect(packets.length).toBe(1);
   const packet = packets[0]!;
   const packetMeta = packet.meta as {
     errorCode: string;
     traceId: string;
     validationErrors: unknown[];
   };
-  t.is(packetMeta.errorCode, 'INVALID_TOOL_CALL_FORMAT');
-  t.is(packetMeta.traceId, 'trace-test-1');
-  t.true(Array.isArray(packetMeta.validationErrors));
+  expect(packetMeta.errorCode).toBe('INVALID_TOOL_CALL_FORMAT');
+  expect(packetMeta.traceId).toBe('trace-test-1');
+  expect(Array.isArray(packetMeta.validationErrors)).toBe(true);
 });
 
-test('approval continuation does not persist duplicate tool_started when SDK replays function_call', async (t) => {
+it('approval continuation does not persist duplicate tool_started when SDK replays function_call', async () => {
   const callId = 'call-approval-replay';
   const args = JSON.stringify({ command: 'git status' });
   const state = { approve: () => undefined };
@@ -229,11 +229,11 @@ test('approval continuation does not persist duplicate tool_started when SDK rep
     (event): event is Extract<LogEvent, { type: 'tool_started' }> =>
       event.type === 'tool_started' && event.toolCallId === callId,
   );
-  t.is(starts.length, 1);
-  t.deepEqual(starts[0]!.arguments, { command: 'git status' });
+  expect(starts.length).toBe(1);
+  expect(starts[0]!.arguments).toEqual({ command: 'git status' });
 });
 
-test('run() emits one tool_started for duplicate function_call events with the same callId', async (t) => {
+it('run() emits one tool_started for duplicate function_call events with the same callId', async () => {
   const stream = new MockStream([
     {
       type: 'run_item_stream_event',
@@ -283,6 +283,6 @@ test('run() emits one tool_started for duplicate function_call events with the s
     (event): event is Extract<ConversationEvent, { type: 'tool_started' }> =>
       event.type === 'tool_started' && event.toolCallId === 'call-dup',
   );
-  t.is(starts.length, 1);
-  t.deepEqual(starts[0]!.arguments, { command: 'npm test' });
+  expect(starts.length).toBe(1);
+  expect(starts[0]!.arguments).toEqual({ command: 'npm test' });
 });

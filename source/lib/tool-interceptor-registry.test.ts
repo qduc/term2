@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 
@@ -13,37 +13,37 @@ const createMockLogger = (): ILoggingService => ({
   clearCorrelationId: () => {},
 });
 
-test('add returns a removal function', (t) => {
+it('add returns a removal function', () => {
   const registry = new ToolInterceptorRegistry({ logger: createMockLogger() });
   const remove = registry.add(async () => null);
-  t.is(typeof remove, 'function');
+  expect(typeof remove).toBe('function');
   remove();
-  t.pass();
+  expect(true).toBe(true);
 });
 
-test('check returns null when no interceptors registered', async (t) => {
+it('check returns null when no interceptors registered', async () => {
   const registry = new ToolInterceptorRegistry({ logger: createMockLogger() });
   const result = await registry.check('some_tool', {});
-  t.is(result, null);
+  expect(result).toBe(null);
 });
 
-test('check returns null when all interceptors return null', async (t) => {
+it('check returns null when all interceptors return null', async () => {
   const registry = new ToolInterceptorRegistry({ logger: createMockLogger() });
   registry.add(async () => null);
   registry.add(async () => null);
   const result = await registry.check('some_tool', {});
-  t.is(result, null);
+  expect(result).toBe(null);
 });
 
-test('check returns first non-null rejection', async (t) => {
+it('check returns first non-null rejection', async () => {
   const registry = new ToolInterceptorRegistry({ logger: createMockLogger() });
   registry.add(async () => null);
   registry.add(async () => 'second interceptor rejected');
   const result = await registry.check('some_tool', {});
-  t.is(result, 'second interceptor rejected');
+  expect(result).toBe('second interceptor rejected');
 });
 
-test('check short-circuits on first rejection', async (t) => {
+it('check short-circuits on first rejection', async () => {
   let secondCalled = false;
   const registry = new ToolInterceptorRegistry({ logger: createMockLogger() });
   registry.add(async () => 'first interceptor rejected');
@@ -52,21 +52,21 @@ test('check short-circuits on first rejection', async (t) => {
     return 'second interceptor rejected';
   });
   const result = await registry.check('some_tool', {});
-  t.is(result, 'first interceptor rejected');
-  t.false(secondCalled);
+  expect(result).toBe('first interceptor rejected');
+  expect(secondCalled).toBe(false);
 });
 
-test('check catches thrown errors and returns error message', async (t) => {
+it('check catches thrown errors and returns error message', async () => {
   const registry = new ToolInterceptorRegistry({ logger: createMockLogger() });
   registry.add(async () => {
     throw new Error('something went wrong');
   });
   const result = await registry.check('some_tool', {});
-  t.truthy(result);
-  t.true(result!.includes('something went wrong'));
+  expect(result).toBeTruthy();
+  expect(result!.includes('something went wrong')).toBe(true);
 });
 
-test('check logs errors from interceptors', async (t) => {
+it('check logs errors from interceptors', async () => {
   let loggedMessage = '';
   let loggedMeta: any = null;
   const logger: ILoggingService = {
@@ -87,13 +87,13 @@ test('check logs errors from interceptors', async (t) => {
     throw new Error('boom');
   });
   await registry.check('some_tool', { foo: 'bar' }, 'call-123');
-  t.is(loggedMessage, 'Tool interceptor threw an error');
-  t.is(loggedMeta?.name, 'some_tool');
-  t.is(loggedMeta?.toolCallId, 'call-123');
-  t.is(loggedMeta?.error, 'boom');
+  expect(loggedMessage).toBe('Tool interceptor threw an error');
+  expect(loggedMeta?.name).toBe('some_tool');
+  expect(loggedMeta?.toolCallId).toBe('call-123');
+  expect(loggedMeta?.error).toBe('boom');
 });
 
-test('removed interceptor is no longer called', async (t) => {
+it('removed interceptor is no longer called', async () => {
   let callCount = 0;
   const registry = new ToolInterceptorRegistry({ logger: createMockLogger() });
   const interceptor = async () => {
@@ -103,10 +103,10 @@ test('removed interceptor is no longer called', async (t) => {
   const remove = registry.add(interceptor);
   remove();
   await registry.check('some_tool', {});
-  t.is(callCount, 0);
+  expect(callCount).toBe(0);
 });
 
-test('check passes toolCallId to interceptors', async (t) => {
+it('check passes toolCallId to interceptors', async () => {
   let capturedToolCallId: string | undefined;
   const registry = new ToolInterceptorRegistry({ logger: createMockLogger() });
   registry.add(async (_name, _params, toolCallId) => {
@@ -114,5 +114,5 @@ test('check passes toolCallId to interceptors', async (t) => {
     return null;
   });
   await registry.check('some_tool', {}, 'tool-call-42');
-  t.is(capturedToolCallId, 'tool-call-42');
+  expect(capturedToolCallId).toBe('tool-call-42');
 });

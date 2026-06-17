@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -27,90 +27,88 @@ function createFakeJwt(expiresInSeconds: number): string {
 // Temporary directory inside the system temp directory for safe testing
 const TEST_DIR = path.join(os.tmpdir(), `term2-temp-codex-test-${Math.random().toString(36).slice(2)}`);
 
-test.before(() => {
+beforeAll(() => {
   if (fs.existsSync(TEST_DIR)) {
     fs.rmSync(TEST_DIR, { recursive: true, force: true });
   }
   fs.mkdirSync(TEST_DIR, { recursive: true });
 });
 
-test.after.always(() => {
+afterAll(() => {
   if (fs.existsSync(TEST_DIR)) {
     fs.rmSync(TEST_DIR, { recursive: true, force: true });
   }
 });
 
-test('getJwtExpiry decodes valid JWT and returns expiration timestamp', (t) => {
+it('getJwtExpiry decodes valid JWT and returns expiration timestamp', () => {
   const expSeconds = 3600;
   const jwt = createFakeJwt(expSeconds);
   const expiry = getJwtExpiry(jwt);
-  t.truthy(expiry);
+  expect(expiry).toBeTruthy();
   // Allow small clock drift tolerance
   const expected = Math.floor(Date.now() / 1000) + expSeconds;
-  t.true(Math.abs((expiry || 0) / 1000 - expected) < 2);
+  expect(Math.abs((expiry || 0) / 1000 - expected) < 2).toBe(true);
 });
 
-test('getJwtExpiry returns null for invalid JWT', (t) => {
-  t.is(getJwtExpiry('invalid-token'), null);
-  t.is(getJwtExpiry('foo.bar'), null);
-  t.is(getJwtExpiry('foo.bar.baz'), null); // not valid base64 JSON
+it('getJwtExpiry returns null for invalid JWT', () => {
+  expect(getJwtExpiry('invalid-token')).toBe(null);
+  expect(getJwtExpiry('foo.bar')).toBe(null);
+  expect(getJwtExpiry('foo.bar.baz')).toBe(null); // not valid base64 JSON
 });
 
-test.serial('resolveTokenPath resolves paths in correct order', (t) => {
+it.sequential('resolveTokenPath resolves paths in correct order', () => {
   // Save original env vars
   const origHome = process.env.CHATGPT_LOCAL_HOME;
   const origCodexHome = process.env.CODEX_HOME;
 
-  t.teardown(() => {
+  try {
+    const chatgptLocalHomeDir = path.join(TEST_DIR, 'chatgpt-local-home');
+    const codexHomeDir = path.join(TEST_DIR, 'codex-home');
+
+    fs.mkdirSync(chatgptLocalHomeDir, { recursive: true });
+    fs.mkdirSync(codexHomeDir, { recursive: true });
+
+    const path1 = path.join(chatgptLocalHomeDir, 'auth.json');
+    const path2 = path.join(codexHomeDir, 'auth.json');
+
+    // Case 1: CHATGPT_LOCAL_HOME is set
+    fs.writeFileSync(path1, '{}');
+    fs.writeFileSync(path2, '{}');
+    process.env.CHATGPT_LOCAL_HOME = chatgptLocalHomeDir;
+    process.env.CODEX_HOME = codexHomeDir;
+
+    const resolved = resolveTokenPath();
+    expect(resolved).toBe(path1);
+
+    // Case 2: Only CODEX_HOME is set
+    delete process.env.CHATGPT_LOCAL_HOME;
+    const resolved2 = resolveTokenPath();
+    expect(resolved2).toBe(path2);
+
+    // Cleanup files
+    fs.unlinkSync(path1);
+    fs.unlinkSync(path2);
+  } finally {
+    // Restore original env vars
     if (origHome) process.env.CHATGPT_LOCAL_HOME = origHome;
     else delete process.env.CHATGPT_LOCAL_HOME;
     if (origCodexHome) process.env.CODEX_HOME = origCodexHome;
     else delete process.env.CODEX_HOME;
-  });
-
-  const chatgptLocalHomeDir = path.join(TEST_DIR, 'chatgpt-local-home');
-  const codexHomeDir = path.join(TEST_DIR, 'codex-home');
-
-  fs.mkdirSync(chatgptLocalHomeDir, { recursive: true });
-  fs.mkdirSync(codexHomeDir, { recursive: true });
-
-  const path1 = path.join(chatgptLocalHomeDir, 'auth.json');
-  const path2 = path.join(codexHomeDir, 'auth.json');
-
-  // Case 1: CHATGPT_LOCAL_HOME is set
-  fs.writeFileSync(path1, '{}');
-  fs.writeFileSync(path2, '{}');
-  process.env.CHATGPT_LOCAL_HOME = chatgptLocalHomeDir;
-  process.env.CODEX_HOME = codexHomeDir;
-
-  const resolved = resolveTokenPath();
-  t.is(resolved, path1);
-
-  // Case 2: Only CODEX_HOME is set
-  delete process.env.CHATGPT_LOCAL_HOME;
-  const resolved2 = resolveTokenPath();
-  t.is(resolved2, path2);
-
-  // Cleanup files
-  fs.unlinkSync(path1);
-  fs.unlinkSync(path2);
+  }
 });
 
-test('CodexTokenManager throws if no token file found', async (t) => {
+it('CodexTokenManager throws if no token file found', async () => {
   // Use a manager with empty/non-existent paths
   const manager = new CodexTokenManager({
     tokenPathResolver: () => null,
   });
 
-  await t.throwsAsync(
-    async () => {
-      await manager.getOrRefreshAccessToken();
-    },
-    { message: /Codex token file not found/ },
-  );
+  await expect(async () => {
+    await manager.getOrRefreshAccessToken();
+  }).rejects.toThrow(/Codex token file not found/);
 });
 
-test('CodexTokenManager does not refresh if access token is valid and refresh is recent', async (t) => {
+it('CodexTokenManager does not refresh if access token is valid and refresh is recent', async () => {
   const tokenPath = path.join(TEST_DIR, 'auth_valid.json');
   const validToken = createFakeJwt(3600); // 1 hour expiry
   const initialTokens = {
@@ -137,11 +135,11 @@ test('CodexTokenManager does not refresh if access token is valid and refresh is
   });
 
   const token = await manager.getOrRefreshAccessToken();
-  t.is(token, validToken);
-  t.false(fetchCalled, 'Should not have triggered refresh fetch');
+  expect(token).toBe(validToken);
+  expect(fetchCalled).toBe(false);
 });
 
-test('CodexTokenManager refreshes if access token is expired or within 5 minutes of expiry', async (t) => {
+it('CodexTokenManager refreshes if access token is expired or within 5 minutes of expiry', async () => {
   const tokenPath = path.join(TEST_DIR, 'auth_expired.json');
   const expiredToken = createFakeJwt(120); // 2 minutes expiry (within 5 minutes boundary)
   const initialTokens = {
@@ -176,29 +174,29 @@ test('CodexTokenManager refreshes if access token is expired or within 5 minutes
   });
 
   const token = await manager.getOrRefreshAccessToken();
-  t.is(token, newToken);
+  expect(token).toBe(newToken);
 
   // Verify fetch payload
-  t.is(fetchPayload.grant_type, 'refresh_token');
-  t.is(fetchPayload.refresh_token, 'old-refresh-token');
-  t.is(fetchPayload.client_id, 'app_EMoamEEZ73f0CkXaXp7hrann');
+  expect(fetchPayload.grant_type).toBe('refresh_token');
+  expect(fetchPayload.refresh_token).toBe('old-refresh-token');
+  expect(fetchPayload.client_id).toBe('app_EMoamEEZ73f0CkXaXp7hrann');
 
   // Verify file update & mode
   const updatedContent = JSON.parse(fs.readFileSync(tokenPath, 'utf8'));
-  t.is(updatedContent.tokens.access_token, newToken);
-  t.is(updatedContent.tokens.refresh_token, 'new-refresh-token');
-  t.is(updatedContent.tokens.id_token, 'new-id-token');
-  t.is(updatedContent.tokens.account_id, 'account-123'); // preserved
-  t.truthy(updatedContent.last_refresh);
+  expect(updatedContent.tokens.access_token).toBe(newToken);
+  expect(updatedContent.tokens.refresh_token).toBe('new-refresh-token');
+  expect(updatedContent.tokens.id_token).toBe('new-id-token');
+  expect(updatedContent.tokens.account_id).toBe('account-123'); // preserved
+  expect(updatedContent.last_refresh).toBeTruthy();
 
   // Check file mode 0600 on non-windows
   if (process.platform !== 'win32') {
     const stat = fs.statSync(tokenPath);
-    t.is(stat.mode & 0o777, 0o600);
+    expect(stat.mode & 0o777).toBe(0o600);
   }
 });
 
-test('CodexTokenManager refreshes if last_refresh is more than 55 minutes ago', async (t) => {
+it('CodexTokenManager refreshes if last_refresh is more than 55 minutes ago', async () => {
   const tokenPath = path.join(TEST_DIR, 'auth_old_refresh.json');
   const validToken = createFakeJwt(3600); // JWT still valid for 1 hour
   const initialTokens = {
@@ -229,17 +227,17 @@ test('CodexTokenManager refreshes if last_refresh is more than 55 minutes ago', 
   });
 
   const token = await manager.getOrRefreshAccessToken();
-  t.is(token, newToken);
+  expect(token).toBe(newToken);
 });
 
-test('Codex provider is registered in the registry', (t) => {
+it('Codex provider is registered in the registry', () => {
   const provider = getProvider('codex');
-  t.truthy(provider, 'codex provider should be registered');
-  t.is(provider?.id, 'codex');
-  t.is(provider?.label, 'Codex');
-  t.is(typeof provider?.fetchModels, 'function');
-  t.is(typeof provider?.createRunner, 'function');
-  t.deepEqual(provider?.capabilities, {
+  expect(provider).toBeTruthy();
+  expect(provider?.id).toBe('codex');
+  expect(provider?.label).toBe('Codex');
+  expect(typeof provider?.fetchModels).toBe('function');
+  expect(typeof provider?.createRunner).toBe('function');
+  expect(provider?.capabilities).toEqual({
     supportsConversationChaining: true,
     supportsTracingControl: false,
     usesStrictToolSchema: true,
@@ -247,9 +245,9 @@ test('Codex provider is registered in the registry', (t) => {
   });
 });
 
-test('Codex fetchModels parses custom models endpoint', async (t) => {
+it('Codex fetchModels parses custom models endpoint', async () => {
   const provider = getProvider('codex');
-  t.truthy(provider);
+  expect(provider).toBeTruthy();
 
   const tokenPath = path.join(TEST_DIR, 'auth_models.json');
   const validToken = createFakeJwt(3600);
@@ -295,13 +293,13 @@ test('Codex fetchModels parses custom models endpoint', async (t) => {
 
   try {
     const models = await provider!.fetchModels(deps as any, mockFetch as any);
-    t.true(fetchUrl.startsWith('https://chatgpt.com/backend-api/codex/models?client_version='));
-    t.is(authHeader, `Bearer ${validToken}`);
-    t.is(models.length, 2);
-    t.is(models[1].id, 'gpt-4o');
-    t.is(models[1].default_reasoning_level, 'low');
-    t.is(models[0].id, 'gpt-5-codex');
-    t.is(models[0].default_reasoning_level, 'medium');
+    expect(fetchUrl.startsWith('https://chatgpt.com/backend-api/codex/models?client_version=')).toBe(true);
+    expect(authHeader).toBe(`Bearer ${validToken}`);
+    expect(models.length).toBe(2);
+    expect(models[1].id).toBe('gpt-4o');
+    expect(models[1].default_reasoning_level).toBe('low');
+    expect(models[0].id).toBe('gpt-5-codex');
+    expect(models[0].default_reasoning_level).toBe('medium');
   } finally {
     process.env.CHATGPT_LOCAL_HOME = origHome;
     try {
@@ -312,12 +310,12 @@ test('Codex fetchModels parses custom models endpoint', async (t) => {
   }
 });
 
-test('resolveCodexClientVersion returns local version if available and writes to cache', async (t) => {
+it('resolveCodexClientVersion returns local version if available and writes to cache', async () => {
   const cacheDir = path.join(TEST_DIR, 'cache-local');
   fs.mkdirSync(cacheDir, { recursive: true });
 
   const execImpl = async (cmd: string) => {
-    t.is(cmd, 'codex --version');
+    expect(cmd).toBe('codex --version');
     return { stdout: 'codex-cli 1.2.3' };
   };
 
@@ -326,17 +324,17 @@ test('resolveCodexClientVersion returns local version if available and writes to
     execImpl: execImpl as any,
   });
 
-  t.is(version, '1.2.3');
+  expect(version).toBe('1.2.3');
 
   // Verify it is cached
   const cachePath = path.join(cacheDir, 'codex-client-version.json');
-  t.true(fs.existsSync(cachePath));
+  expect(fs.existsSync(cachePath)).toBe(true);
   const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-  t.is(cached.version, '1.2.3');
-  t.true(typeof cached.timestamp === 'number');
+  expect(cached.version).toBe('1.2.3');
+  expect(typeof cached.timestamp === 'number').toBe(true);
 });
 
-test('sanitizeCodexRequestInit leaves non-responses requests unchanged', (t) => {
+it('sanitizeCodexRequestInit leaves non-responses requests unchanged', () => {
   const init: RequestInit = {
     body: JSON.stringify({
       input: [{ type: 'reasoning', id: 'rs_123' }],
@@ -344,10 +342,10 @@ test('sanitizeCodexRequestInit leaves non-responses requests unchanged', (t) => 
   };
 
   const sanitized = sanitizeCodexRequestInit('https://chatgpt.com/backend-api/codex/models', init);
-  t.deepEqual(sanitized, init);
+  expect(sanitized).toEqual(init);
 });
 
-test('sanitizeCodexRequestInit normalizes include JSON string to array', (t) => {
+it('sanitizeCodexRequestInit normalizes include JSON string to array', () => {
   const init: RequestInit = {
     body: JSON.stringify({
       input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] }],
@@ -357,11 +355,11 @@ test('sanitizeCodexRequestInit normalizes include JSON string to array', (t) => 
 
   const sanitized = sanitizeCodexRequestInit('https://chatgpt.com/backend-api/codex/responses', init);
   const body = JSON.parse(String(sanitized?.body));
-  t.true(Array.isArray(body.include));
-  t.deepEqual(body.include, ['reasoning.encrypted_content']);
+  expect(Array.isArray(body.include)).toBe(true);
+  expect(body.include).toEqual(['reasoning.encrypted_content']);
 });
 
-test('resolveCodexClientVersion falls back to npm registry if local version fails', async (t) => {
+it('resolveCodexClientVersion falls back to npm registry if local version fails', async () => {
   const cacheDir = path.join(TEST_DIR, 'cache-npm');
   fs.mkdirSync(cacheDir, { recursive: true });
 
@@ -381,17 +379,17 @@ test('resolveCodexClientVersion falls back to npm registry if local version fail
     fetchImpl: mockFetch as any,
   });
 
-  t.is(version, '2.3.4');
-  t.is(fetchUrl, 'https://registry.npmjs.org/@openai/codex/latest');
+  expect(version).toBe('2.3.4');
+  expect(fetchUrl).toBe('https://registry.npmjs.org/@openai/codex/latest');
 
   // Verify cached
   const cachePath = path.join(cacheDir, 'codex-client-version.json');
-  t.true(fs.existsSync(cachePath));
+  expect(fs.existsSync(cachePath)).toBe(true);
   const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-  t.is(cached.version, '2.3.4');
+  expect(cached.version).toBe('2.3.4');
 });
 
-test('resolveCodexClientVersion falls back to fallback version if all fails', async (t) => {
+it('resolveCodexClientVersion falls back to fallback version if all fails', async () => {
   const cacheDir = path.join(TEST_DIR, 'cache-fallback');
   fs.mkdirSync(cacheDir, { recursive: true });
 
@@ -409,16 +407,16 @@ test('resolveCodexClientVersion falls back to fallback version if all fails', as
     fetchImpl: mockFetch as any,
   });
 
-  t.is(version, '0.133.0');
+  expect(version).toBe('0.133.0');
 
   // Verify cached
   const cachePath = path.join(cacheDir, 'codex-client-version.json');
-  t.true(fs.existsSync(cachePath));
+  expect(fs.existsSync(cachePath)).toBe(true);
   const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-  t.is(cached.version, '0.133.0');
+  expect(cached.version).toBe('0.133.0');
 });
 
-test('resolveCodexClientVersion uses cache if valid and less than one week old', async (t) => {
+it('resolveCodexClientVersion uses cache if valid and less than one week old', async () => {
   const cacheDir = path.join(TEST_DIR, 'cache-valid');
   fs.mkdirSync(cacheDir, { recursive: true });
 
@@ -432,12 +430,12 @@ test('resolveCodexClientVersion uses cache if valid and less than one week old',
   );
 
   const execImpl = async () => {
-    t.fail('exec should not be called when valid cache exists');
+    expect(true).toBe(false);
     return { stdout: '' };
   };
 
   const mockFetch = async () => {
-    t.fail('fetch should not be called when valid cache exists');
+    expect(true).toBe(false);
     return new Response(JSON.stringify({}), { status: 200 });
   };
 
@@ -447,10 +445,10 @@ test('resolveCodexClientVersion uses cache if valid and less than one week old',
     fetchImpl: mockFetch as any,
   });
 
-  t.is(version, '9.9.9');
+  expect(version).toBe('9.9.9');
 });
 
-test('resolveCodexClientVersion ignores cache if older than one week', async (t) => {
+it('resolveCodexClientVersion ignores cache if older than one week', async () => {
   const cacheDir = path.join(TEST_DIR, 'cache-expired');
   fs.mkdirSync(cacheDir, { recursive: true });
 
@@ -472,17 +470,17 @@ test('resolveCodexClientVersion ignores cache if older than one week', async (t)
     execImpl: execImpl as any,
   });
 
-  t.is(version, '1.0.0');
+  expect(version).toBe('1.0.0');
 
   // Verify cache updated
   const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-  t.is(cached.version, '1.0.0');
-  t.true(Date.now() - cached.timestamp < 1000);
+  expect(cached.version).toBe('1.0.0');
+  expect(Date.now() - cached.timestamp < 1000).toBe(true);
 });
 
-test('Codex fetchModels appends correct client_version from cache/resolver', async (t) => {
+it('Codex fetchModels appends correct client_version from cache/resolver', async () => {
   const provider = getProvider('codex');
-  t.truthy(provider);
+  expect(provider).toBeTruthy();
 
   // Set cache dir to test dir
   const origCacheDir = process.env.TERM2_CACHE_DIR;
@@ -531,7 +529,7 @@ test('Codex fetchModels appends correct client_version from cache/resolver', asy
 
   try {
     await provider!.fetchModels(deps as any, mockFetch as any);
-    t.is(fetchUrl, 'https://chatgpt.com/backend-api/codex/models?client_version=1.2.3-test');
+    expect(fetchUrl).toBe('https://chatgpt.com/backend-api/codex/models?client_version=1.2.3-test');
   } finally {
     process.env.CHATGPT_LOCAL_HOME = origHome;
     process.env.TERM2_CACHE_DIR = origCacheDir;
@@ -547,19 +545,19 @@ function createFakeJwtWithClaims(claims: any): string {
   return `${header}.${payload}.signature`;
 }
 
-test('extractAccountIdFromClaims resolves account ID with correct precedence', (t) => {
+it('extractAccountIdFromClaims resolves account ID with correct precedence', () => {
   const claims1 = { chatgpt_account_id: 'acc_1' };
-  t.is(extractAccountIdFromClaims(claims1), 'acc_1');
+  expect(extractAccountIdFromClaims(claims1)).toBe('acc_1');
 
   const claims2 = {
     'https://api.openai.com/auth': { chatgpt_account_id: 'acc_2' },
   };
-  t.is(extractAccountIdFromClaims(claims2), 'acc_2');
+  expect(extractAccountIdFromClaims(claims2)).toBe('acc_2');
 
   const claims3 = {
     organizations: [{ id: 'org_3' }],
   };
-  t.is(extractAccountIdFromClaims(claims3), 'org_3');
+  expect(extractAccountIdFromClaims(claims3)).toBe('org_3');
 
   // Precedence test: chatgpt_account_id > https://api.openai.com/auth > organizations
   const claimsAll = {
@@ -567,28 +565,28 @@ test('extractAccountIdFromClaims resolves account ID with correct precedence', (
     'https://api.openai.com/auth': { chatgpt_account_id: 'acc_2' },
     organizations: [{ id: 'org_3' }],
   };
-  t.is(extractAccountIdFromClaims(claimsAll), 'acc_1');
+  expect(extractAccountIdFromClaims(claimsAll)).toBe('acc_1');
 
   const claimsNestedAndOrg = {
     'https://api.openai.com/auth': { chatgpt_account_id: 'acc_2' },
     organizations: [{ id: 'org_3' }],
   };
-  t.is(extractAccountIdFromClaims(claimsNestedAndOrg), 'acc_2');
+  expect(extractAccountIdFromClaims(claimsNestedAndOrg)).toBe('acc_2');
 });
 
-test('extractAccountId prefers id_token claims over access_token claims', (t) => {
+it('extractAccountId prefers id_token claims over access_token claims', () => {
   const idToken = createFakeJwtWithClaims({ chatgpt_account_id: 'acc_id_token' });
   const accessToken = createFakeJwtWithClaims({ chatgpt_account_id: 'acc_access_token' });
 
   // Preferred id_token
-  t.is(extractAccountId(idToken, accessToken), 'acc_id_token');
+  expect(extractAccountId(idToken, accessToken)).toBe('acc_id_token');
 
   // Fallback to access_token if id_token is missing or has no relevant claim
-  t.is(extractAccountId(undefined, accessToken), 'acc_access_token');
-  t.is(extractAccountId('', accessToken), 'acc_access_token');
+  expect(extractAccountId(undefined, accessToken)).toBe('acc_access_token');
+  expect(extractAccountId('', accessToken)).toBe('acc_access_token');
 });
 
-test.serial('CodexTokenManager extracts and stores accountId from file and refresh responses', async (t) => {
+it.sequential('CodexTokenManager extracts and stores accountId from file and refresh responses', async () => {
   const tokenPath = path.join(TEST_DIR, 'auth_account_id.json');
   const idToken = createFakeJwtWithClaims({ chatgpt_account_id: 'acc_from_id_token' });
   const accessToken = createFakeJwt(3600);
@@ -609,10 +607,10 @@ test.serial('CodexTokenManager extracts and stores accountId from file and refre
   });
 
   // Ensure accountId is initially null before loading
-  t.is(manager.getAccountId(), null);
+  expect(manager.getAccountId()).toBe(null);
 
   await manager.getOrRefreshAccessToken();
-  t.is(manager.getAccountId(), 'acc_from_id_token');
+  expect(manager.getAccountId()).toBe('acc_from_id_token');
 
   // Test update with fallback to file-level account_id if no claims found
   const tokenPathFallback = path.join(TEST_DIR, 'auth_account_id_fallback.json');
@@ -630,12 +628,12 @@ test.serial('CodexTokenManager extracts and stores accountId from file and refre
     tokenPathResolver: () => tokenPathFallback,
   });
   await managerFallback.getOrRefreshAccessToken();
-  t.is(managerFallback.getAccountId(), 'acc_from_file_direct');
+  expect(managerFallback.getAccountId()).toBe('acc_from_file_direct');
 });
 
-test.serial('Codex fetchModels injects ChatGPT-Account-Id header if present', async (t) => {
+it.sequential('Codex fetchModels injects ChatGPT-Account-Id header if present', async () => {
   const provider = getProvider('codex');
-  t.truthy(provider);
+  expect(provider).toBeTruthy();
 
   const tokenPath = path.join(TEST_DIR, 'auth_models_header.json');
   const validToken = createFakeJwt(3600);
@@ -670,7 +668,7 @@ test.serial('Codex fetchModels injects ChatGPT-Account-Id header if present', as
 
   try {
     await provider!.fetchModels(deps as any, mockFetch as any);
-    t.is(fetchHeaders['ChatGPT-Account-Id'], 'acc_models_test');
+    expect(fetchHeaders['ChatGPT-Account-Id']).toBe('acc_models_test');
   } finally {
     process.env.CHATGPT_LOCAL_HOME = origHome;
     try {
@@ -679,11 +677,11 @@ test.serial('Codex fetchModels injects ChatGPT-Account-Id header if present', as
   }
 });
 
-test.serial('Codex provider createRunner custom fetch injects chatgpt-account-id header', async (t) => {
+it.sequential('Codex provider createRunner custom fetch injects chatgpt-account-id header', async () => {
   const provider = getProvider('codex');
-  t.truthy(provider);
+  expect(provider).toBeTruthy();
   if (!provider || !provider.createRunner) {
-    t.fail('createRunner is undefined');
+    expect(true).toBe(false);
     return;
   }
 
@@ -734,7 +732,7 @@ test.serial('Codex provider createRunner custom fetch injects chatgpt-account-id
 
   try {
     const runner = provider.createRunner(deps as any);
-    t.truthy(runner);
+    expect(runner).toBeTruthy();
     if (!runner) return;
     const modelProvider = runner.config.modelProvider;
     const model = await modelProvider.getModel('gpt-5.3-codex');
@@ -747,7 +745,7 @@ test.serial('Codex provider createRunner custom fetch injects chatgpt-account-id
       })
       .catch(() => {});
 
-    t.is(interceptorHeaders['chatgpt-account-id'], 'acc_runner_test');
+    expect(interceptorHeaders['chatgpt-account-id']).toBe('acc_runner_test');
   } finally {
     globalThis.fetch = origFetch;
     process.env.CHATGPT_LOCAL_HOME = origHome;

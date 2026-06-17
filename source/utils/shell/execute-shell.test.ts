@@ -1,9 +1,9 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { PassThrough, Writable } from 'stream';
 import type { ChildProcess } from 'child_process';
 import { executeShellCommand } from './execute-shell.js';
 
-test('executeShellCommand returns stdout and exit code for successful command', async (t) => {
+it('executeShellCommand returns stdout and exit code for successful command', async () => {
   const result = await executeShellCommand("printf 'hello'", {
     execImpl: (_command, _options, callback) => {
       queueMicrotask(() => callback(null, 'hello', ''));
@@ -11,13 +11,13 @@ test('executeShellCommand returns stdout and exit code for successful command', 
     },
   });
 
-  t.is(result.stdout, 'hello');
-  t.is(result.stderr, '');
-  t.is(result.exitCode, 0);
-  t.false(result.timedOut);
+  expect(result.stdout).toBe('hello');
+  expect(result.stderr).toBe('');
+  expect(result.exitCode).toBe(0);
+  expect(result.timedOut).toBe(false);
 });
 
-test('executeShellCommand captures stderr and exit code for failed command', async (t) => {
+it('executeShellCommand captures stderr and exit code for failed command', async () => {
   const result = await executeShellCommand('fails', {
     execImpl: (_command, _options, callback) => {
       const error = new Error('failed') as Error & { code: number; stderr: string };
@@ -27,12 +27,12 @@ test('executeShellCommand captures stderr and exit code for failed command', asy
     },
   });
 
-  t.is(result.stderr.trim(), 'oops');
-  t.is(result.exitCode, 2);
-  t.false(result.timedOut);
+  expect(result.stderr.trim()).toBe('oops');
+  expect(result.exitCode).toBe(2);
+  expect(result.timedOut).toBe(false);
 });
 
-test('executeShellCommand reports timeouts', async (t) => {
+it('executeShellCommand reports timeouts', async () => {
   const result = await executeShellCommand('long-running', {
     timeout: 50,
     execImpl: (_command, _options, callback) => {
@@ -43,10 +43,10 @@ test('executeShellCommand reports timeouts', async (t) => {
     },
   });
 
-  t.true(result.timedOut);
+  expect(result.timedOut).toBe(true);
 });
 
-test('executeShellCommand closes child stdin immediately', async (t) => {
+it('executeShellCommand closes child stdin immediately', async () => {
   let stdinEnded = false;
 
   const result = await executeShellCommand('waits-for-stdin', {
@@ -67,11 +67,11 @@ test('executeShellCommand closes child stdin immediately', async (t) => {
     },
   });
 
-  t.true(stdinEnded);
-  t.is(result.exitCode, 0);
+  expect(stdinEnded).toBe(true);
+  expect(result.exitCode).toBe(0);
 });
 
-test('executeShellCommand stops the child process when execution is aborted', async (t) => {
+it('executeShellCommand stops the child process when execution is aborted', async () => {
   const abortController = new AbortController();
   let killCalls = 0;
 
@@ -93,8 +93,8 @@ test('executeShellCommand stops the child process when execution is aborted', as
   abortController.abort();
   const result = await resultPromise;
 
-  t.is(killCalls, 1);
-  t.true(result.timedOut);
+  expect(killCalls).toBe(1);
+  expect(result.timedOut).toBe(true);
 });
 
 function createFakeChildProcess(): ChildProcess {

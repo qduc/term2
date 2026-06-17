@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { InitialInputPreparer } from './initial-input-preparer.js';
 import { TurnAttempt } from './turn-attempt.js';
 
@@ -20,7 +20,7 @@ function createAttempt() {
   });
 }
 
-test('adds the user turn once and attaches the planned input', (t) => {
+it('adds the user turn once and attaches the planned input', () => {
   const added: unknown[] = [];
   const attempt = createAttempt();
   const preparer = new InitialInputPreparer({
@@ -41,14 +41,14 @@ test('adds the user turn once and attaches the planned input', (t) => {
     state: { pendingModeNotice: 'notice' } as any,
   });
 
-  t.deepEqual(preparer.prepare(attempt, false), { kind: 'ready' });
-  t.deepEqual(preparer.prepare(attempt, false), { kind: 'ready' });
-  t.is(added.length, 1);
-  t.deepEqual(attempt.streamInput, ['history']);
-  t.is(attempt.inputMode, 'full_history');
+  expect(preparer.prepare(attempt, false)).toEqual({ kind: 'ready' });
+  expect(preparer.prepare(attempt, false)).toEqual({ kind: 'ready' });
+  expect(added.length).toBe(1);
+  expect(attempt.streamInput).toEqual(['history']);
+  expect(attempt.inputMode).toBe('full_history');
 });
 
-test('rolls back an inserted user turn when the surge guard blocks', (t) => {
+it('rolls back an inserted user turn when the surge guard blocks', () => {
   let removed = 0;
   const attempt = createAttempt();
   const preparer = new InitialInputPreparer({
@@ -79,13 +79,13 @@ test('rolls back an inserted user turn when the surge guard blocks', (t) => {
 
   const result = preparer.prepare(attempt, false);
 
-  t.is(result.kind, 'blocked');
+  expect(result.kind).toBe('blocked');
   if (result.kind !== 'blocked') return;
-  t.is(removed, 1);
-  t.deepEqual(result.event.droppedUserMessage, { text: 'hello', imageCount: 1 });
+  expect(removed).toBe(1);
+  expect(result.event.droppedUserMessage).toEqual({ text: 'hello', imageCount: 1 });
 });
 
-test('does not roll back a user turn after the generation becomes stale', (t) => {
+it('does not roll back a user turn after the generation becomes stale', () => {
   let removed = 0;
   const attempt = createAttempt();
   const preparer = new InitialInputPreparer({
@@ -116,5 +116,5 @@ test('does not roll back a user turn after the generation becomes stale', (t) =>
 
   preparer.prepare(attempt, false);
 
-  t.is(removed, 0);
+  expect(removed).toBe(0);
 });

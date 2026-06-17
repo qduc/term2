@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { getAgentDefinition } from './agent.js';
 import { createMockSettingsService } from './services/settings/settings-service.mock.js';
 
@@ -14,7 +14,7 @@ const mockLogger = {
 
 const WORKTREE_HYGIENE_FRAGMENT_MARKER = 'Before making any code changes, inspect the repo worktree.';
 
-test('getAgentDefinition includes grep and find_files when searchViaShell is false', (t) => {
+it('getAgentDefinition includes grep and find_files when searchViaShell is false', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'off',
     'agent.model': 'gpt-4o',
@@ -26,13 +26,13 @@ test('getAgentDefinition includes grep and find_files when searchViaShell is fal
   });
 
   const toolNames = definition.tools.map((tool) => tool.name);
-  t.true(toolNames.includes('grep'));
-  t.true(toolNames.includes('find_files'));
-  t.true(toolNames.includes('read_code_outline'));
-  t.true(toolNames.includes('code_context_search'));
+  expect(toolNames.includes('grep')).toBe(true);
+  expect(toolNames.includes('find_files')).toBe(true);
+  expect(toolNames.includes('read_code_outline')).toBe(true);
+  expect(toolNames.includes('code_context_search')).toBe(true);
 });
 
-test('getAgentDefinition includes ask_user in standard mode when getAskUserAnswer is provided', (t) => {
+it('getAgentDefinition includes ask_user in standard mode when getAskUserAnswer is provided', () => {
   const definition = getAgentDefinition({
     settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
     loggingService: mockLogger,
@@ -40,10 +40,10 @@ test('getAgentDefinition includes ask_user in standard mode when getAskUserAnswe
   });
 
   const toolNames = definition.tools.map((tool) => tool.name);
-  t.true(toolNames.includes('ask_user'));
+  expect(toolNames.includes('ask_user')).toBe(true);
 });
 
-test('getAgentDefinition includes ask_user in lite mode when getAskUserAnswer is provided', (t) => {
+it('getAgentDefinition includes ask_user in lite mode when getAskUserAnswer is provided', () => {
   const definition = getAgentDefinition({
     settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o', 'app.liteMode': true }),
     loggingService: mockLogger,
@@ -51,10 +51,10 @@ test('getAgentDefinition includes ask_user in lite mode when getAskUserAnswer is
   });
 
   const toolNames = definition.tools.map((tool) => tool.name);
-  t.true(toolNames.includes('ask_user'));
+  expect(toolNames.includes('ask_user')).toBe(true);
 });
 
-test('getAgentDefinition includes ask_user in orchestrator mode when getAskUserAnswer is provided', (t) => {
+it('getAgentDefinition includes ask_user in orchestrator mode when getAskUserAnswer is provided', () => {
   const definition = getAgentDefinition({
     settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o', 'app.orchestratorMode': true }),
     loggingService: mockLogger,
@@ -63,20 +63,20 @@ test('getAgentDefinition includes ask_user in orchestrator mode when getAskUserA
   });
 
   const toolNames = definition.tools.map((tool) => tool.name);
-  t.true(toolNames.includes('ask_user'));
+  expect(toolNames.includes('ask_user')).toBe(true);
 });
 
-test('getAgentDefinition omits ask_user when getAskUserAnswer is absent', (t) => {
+it('getAgentDefinition omits ask_user when getAskUserAnswer is absent', () => {
   const definition = getAgentDefinition({
     settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
     loggingService: mockLogger,
   });
 
   const toolNames = definition.tools.map((tool) => tool.name);
-  t.false(toolNames.includes('ask_user'));
+  expect(toolNames.includes('ask_user')).toBe(false);
 });
 
-test('getAgentDefinition injects delegation guidance in orchestrator mode when runSubagent is provided', (t) => {
+it('getAgentDefinition injects delegation guidance in orchestrator mode when runSubagent is provided', () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'app.orchestratorMode': true,
@@ -88,11 +88,11 @@ test('getAgentDefinition injects delegation guidance in orchestrator mode when r
     runSubagent: async () => ({} as any),
   });
 
-  t.true(definition.tools.map((tool) => tool.name).includes('run_subagent'));
-  t.true(definition.instructions.includes('### Delegating to subagents'));
+  expect(definition.tools.map((tool) => tool.name).includes('run_subagent')).toBe(true);
+  expect(definition.instructions.includes('### Delegating to subagents')).toBe(true);
 });
 
-test('getAgentDefinition omits delegation guidance in standard mode even if runSubagent is provided', (t) => {
+it('getAgentDefinition omits delegation guidance in standard mode even if runSubagent is provided', () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
   });
@@ -103,11 +103,11 @@ test('getAgentDefinition omits delegation guidance in standard mode even if runS
     runSubagent: async () => ({} as any),
   });
 
-  t.true(definition.tools.map((tool) => tool.name).includes('run_subagent'));
-  t.false(definition.instructions.includes('### Delegating to subagents'));
+  expect(definition.tools.map((tool) => tool.name).includes('run_subagent')).toBe(true);
+  expect(definition.instructions.includes('### Delegating to subagents')).toBe(false);
 });
 
-test('getAgentDefinition omits delegation guidance when runSubagent is absent', (t) => {
+it('getAgentDefinition omits delegation guidance when runSubagent is absent', () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
   });
@@ -117,11 +117,11 @@ test('getAgentDefinition omits delegation guidance when runSubagent is absent', 
     loggingService: mockLogger,
   });
 
-  t.false(definition.tools.map((tool) => tool.name).includes('run_subagent'));
-  t.false(definition.instructions.includes('### Delegating to subagents'));
+  expect(definition.tools.map((tool) => tool.name).includes('run_subagent')).toBe(false);
+  expect(definition.instructions.includes('### Delegating to subagents')).toBe(false);
 });
 
-test('getAgentDefinition omits delegation guidance in lite mode', (t) => {
+it('getAgentDefinition omits delegation guidance in lite mode', () => {
   const settingsService = createMockSettingsService({
     'app.liteMode': true,
     'agent.model': 'gpt-4o',
@@ -133,11 +133,11 @@ test('getAgentDefinition omits delegation guidance in lite mode', (t) => {
     runSubagent: async () => ({} as any),
   });
 
-  t.false(definition.tools.map((tool) => tool.name).includes('run_subagent'));
-  t.false(definition.instructions.includes('### Delegating to subagents'));
+  expect(definition.tools.map((tool) => tool.name).includes('run_subagent')).toBe(false);
+  expect(definition.instructions.includes('### Delegating to subagents')).toBe(false);
 });
 
-test('getAgentDefinition in orchestrator mode exposes run_subagent, shell, read_file, and grep', (t) => {
+it('getAgentDefinition in orchestrator mode exposes run_subagent, shell, read_file, and grep', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
     'agent.model': 'gpt-5',
@@ -149,13 +149,10 @@ test('getAgentDefinition in orchestrator mode exposes run_subagent, shell, read_
     runSubagent: async () => ({} as any),
   });
 
-  t.deepEqual(
-    definition.tools.map((tool) => tool.name),
-    ['run_subagent', 'shell', 'read_file', 'grep'],
-  );
+  expect(definition.tools.map((tool) => tool.name)).toEqual(['run_subagent', 'shell', 'read_file', 'grep']);
 });
 
-test('getAgentDefinition in orchestrator mode requires delegated tool work', (t) => {
+it('getAgentDefinition in orchestrator mode requires delegated tool work', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
     'agent.model': 'gpt-5',
@@ -167,14 +164,14 @@ test('getAgentDefinition in orchestrator mode requires delegated tool work', (t)
     runSubagent: async () => ({} as any),
   });
 
-  t.true(definition.instructions.includes('Orchestrator mode'));
-  t.true(definition.instructions.includes('Delegate workspace inspection'));
-  t.false(definition.instructions.includes('Use `read_code_outline`'));
+  expect(definition.instructions.includes('Orchestrator mode')).toBe(true);
+  expect(definition.instructions.includes('Delegate workspace inspection')).toBe(true);
+  expect(definition.instructions.includes('Use `read_code_outline`')).toBe(false);
   // Verify non-orchestrator direct-tool guidance is absent from orchestrator instructions
-  t.false(definition.instructions.includes('Prefer `read_file` for reading file contents.'));
+  expect(definition.instructions.includes('Prefer `read_file` for reading file contents.')).toBe(false);
 });
 
-test('getAgentDefinition in orchestrator mode exposes run_subagent, shell, read_file, and grep for non-gpt-5 model', (t) => {
+it('getAgentDefinition in orchestrator mode exposes run_subagent, shell, read_file, and grep for non-gpt-5 model', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
     'agent.model': 'gpt-4o',
@@ -186,29 +183,24 @@ test('getAgentDefinition in orchestrator mode exposes run_subagent, shell, read_
     runSubagent: async () => ({} as any),
   });
 
-  t.deepEqual(
-    definition.tools.map((tool) => tool.name),
-    ['run_subagent', 'shell', 'read_file', 'grep'],
-  );
+  expect(definition.tools.map((tool) => tool.name)).toEqual(['run_subagent', 'shell', 'read_file', 'grep']);
 });
 
-test('getAgentDefinition throws if orchestratorMode is true and runSubagent is missing', (t) => {
+it('getAgentDefinition throws if orchestratorMode is true and runSubagent is missing', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
     'agent.model': 'gpt-4o',
   });
 
-  t.throws(
-    () =>
-      getAgentDefinition({
-        settingsService,
-        loggingService: mockLogger,
-      }),
-    { instanceOf: Error, message: /orchestratorMode.*runSubagent|runSubagent.*orchestratorMode/i },
-  );
+  expect(() =>
+    getAgentDefinition({
+      settingsService,
+      loggingService: mockLogger,
+    }),
+  ).toThrow(/orchestratorMode.*runSubagent|runSubagent.*orchestratorMode/i);
 });
 
-test('getAgentDefinition excludes grep and find_files when searchViaShell is true', (t) => {
+it('getAgentDefinition excludes grep and find_files when searchViaShell is true', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
     'agent.model': 'gpt-4o',
@@ -220,13 +212,13 @@ test('getAgentDefinition excludes grep and find_files when searchViaShell is tru
   });
 
   const toolNames = definition.tools.map((tool) => tool.name);
-  t.false(toolNames.includes('grep'));
-  t.false(toolNames.includes('find_files'));
-  t.true(toolNames.includes('read_code_outline'));
-  t.true(toolNames.includes('code_context_search'));
+  expect(toolNames.includes('grep')).toBe(false);
+  expect(toolNames.includes('find_files')).toBe(false);
+  expect(toolNames.includes('read_code_outline')).toBe(true);
+  expect(toolNames.includes('code_context_search')).toBe(true);
 });
 
-test('getAgentDefinition preserves read_file and editing tools when searchViaShell is true', (t) => {
+it('getAgentDefinition preserves read_file and editing tools when searchViaShell is true', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
     'agent.model': 'gpt-4o',
@@ -238,15 +230,15 @@ test('getAgentDefinition preserves read_file and editing tools when searchViaShe
   });
 
   const toolNames = definition.tools.map((tool) => tool.name);
-  t.true(toolNames.includes('read_file'));
-  t.true(toolNames.includes('read_code_outline'));
-  t.true(toolNames.includes('code_context_search'));
-  t.true(toolNames.includes('search_replace'));
-  t.true(toolNames.includes('create_file'));
-  t.true(toolNames.includes('shell'));
+  expect(toolNames.includes('read_file')).toBe(true);
+  expect(toolNames.includes('read_code_outline')).toBe(true);
+  expect(toolNames.includes('code_context_search')).toBe(true);
+  expect(toolNames.includes('search_replace')).toBe(true);
+  expect(toolNames.includes('create_file')).toBe(true);
+  expect(toolNames.includes('shell')).toBe(true);
 });
 
-test('getAgentDefinition excludes grep and find_files in lite mode when searchViaShell is true', (t) => {
+it('getAgentDefinition excludes grep and find_files in lite mode when searchViaShell is true', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
     'app.liteMode': true,
@@ -259,15 +251,15 @@ test('getAgentDefinition excludes grep and find_files in lite mode when searchVi
   });
 
   const toolNames = definition.tools.map((tool) => tool.name);
-  t.false(toolNames.includes('grep'));
-  t.false(toolNames.includes('find_files'));
-  t.true(toolNames.includes('read_code_outline'));
-  t.true(toolNames.includes('code_context_search'));
-  t.true(toolNames.includes('read_file'));
-  t.false(toolNames.includes('search_replace'));
+  expect(toolNames.includes('grep')).toBe(false);
+  expect(toolNames.includes('find_files')).toBe(false);
+  expect(toolNames.includes('read_code_outline')).toBe(true);
+  expect(toolNames.includes('code_context_search')).toBe(true);
+  expect(toolNames.includes('read_file')).toBe(true);
+  expect(toolNames.includes('search_replace')).toBe(false);
 });
 
-test('getAgentDefinition for gpt-5 omits grep and find_files regardless of searchViaShell', (t) => {
+it('getAgentDefinition for gpt-5 omits grep and find_files regardless of searchViaShell', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'off',
     'agent.model': 'gpt-5',
@@ -279,14 +271,14 @@ test('getAgentDefinition for gpt-5 omits grep and find_files regardless of searc
   });
 
   const toolNames = definition.tools.map((tool) => tool.name);
-  t.false(toolNames.includes('grep'));
-  t.false(toolNames.includes('find_files'));
-  t.true(toolNames.includes('read_code_outline'));
-  t.true(toolNames.includes('code_context_search'));
-  t.true(toolNames.includes('apply_patch'));
+  expect(toolNames.includes('grep')).toBe(false);
+  expect(toolNames.includes('find_files')).toBe(false);
+  expect(toolNames.includes('read_code_outline')).toBe(true);
+  expect(toolNames.includes('code_context_search')).toBe(true);
+  expect(toolNames.includes('apply_patch')).toBe(true);
 });
 
-test('getAgentDefinition defaults searchViaShell to true for gpt-5 models when not explicitly configured', (t) => {
+it('getAgentDefinition defaults searchViaShell to true for gpt-5 models when not explicitly configured', () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-5',
   });
@@ -296,10 +288,10 @@ test('getAgentDefinition defaults searchViaShell to true for gpt-5 models when n
     loggingService: mockLogger,
   });
 
-  t.true(definition.instructions.includes('### Searching via the shell'));
+  expect(definition.instructions.includes('### Searching via the shell')).toBe(true);
 });
 
-test('getAgentDefinition respects explicitly disabled searchViaShell for gpt-5 models', (t) => {
+it('getAgentDefinition respects explicitly disabled searchViaShell for gpt-5 models', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'off',
     'agent.model': 'gpt-5',
@@ -310,10 +302,10 @@ test('getAgentDefinition respects explicitly disabled searchViaShell for gpt-5 m
     loggingService: mockLogger,
   });
 
-  t.false(definition.instructions.includes('### Searching via the shell'));
+  expect(definition.instructions.includes('### Searching via the shell')).toBe(false);
 });
 
-test('getAgentDefinition does not default searchViaShell to true for non-gpt-5 models', (t) => {
+it('getAgentDefinition does not default searchViaShell to true for non-gpt-5 models', () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
   });
@@ -323,12 +315,12 @@ test('getAgentDefinition does not default searchViaShell to true for non-gpt-5 m
     loggingService: mockLogger,
   });
 
-  t.false(definition.instructions.includes('### Searching via the shell'));
-  t.true(definition.instructions.includes('`find_files`'));
-  t.true(definition.instructions.includes('`grep`'));
+  expect(definition.instructions.includes('### Searching via the shell')).toBe(false);
+  expect(definition.instructions.includes('`find_files`')).toBe(true);
+  expect(definition.instructions.includes('`grep`')).toBe(true);
 });
 
-test('getAgentDefinition forces searchViaShell on for non-gpt-5 models when explicitly set to on', (t) => {
+it('getAgentDefinition forces searchViaShell on for non-gpt-5 models when explicitly set to on', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
     'agent.model': 'gpt-4o',
@@ -339,20 +331,20 @@ test('getAgentDefinition forces searchViaShell on for non-gpt-5 models when expl
     loggingService: mockLogger,
   });
 
-  t.true(definition.instructions.includes('### Searching via the shell'));
-  t.false(definition.instructions.includes('`find_files`'));
-  t.false(definition.instructions.includes('`grep`'));
+  expect(definition.instructions.includes('### Searching via the shell')).toBe(true);
+  expect(definition.instructions.includes('`find_files`')).toBe(false);
+  expect(definition.instructions.includes('`grep`')).toBe(false);
 });
 
-// test('getAgentDefinition includes GPT version-specific prompt fragments', (t) => {
+// it('getAgentDefinition includes GPT version-specific prompt fragments', () => {
 //   const gpt55 = getAgentDefinition({
 //     settingsService: createMockSettingsService({
 //       'agent.model': 'gpt-5.5-2026-04-23',
 //     }),
 //     loggingService: mockLogger,
 //   });
-//   t.true(gpt55.instructions.includes('## GPT-5.5 Guidance'));
-//   t.true(gpt55.instructions.includes('outcome-first behavior'));
+//   expect(gpt55.instructions.includes('## GPT-5.5 Guidance')).toBe(true);
+//   expect(gpt55.instructions.includes('outcome-first behavior')).toBe(true);
 //
 //   const gpt54 = getAgentDefinition({
 //     settingsService: createMockSettingsService({
@@ -360,8 +352,8 @@ test('getAgentDefinition forces searchViaShell on for non-gpt-5 models when expl
 //     }),
 //     loggingService: mockLogger,
 //   });
-//   t.true(gpt54.instructions.includes('## GPT-5.4 Guidance'));
-//   t.false(gpt54.instructions.includes('## GPT-5.4 Small-Model Guidance'));
+//   expect(gpt54.instructions.includes('## GPT-5.4 Guidance')).toBe(true);
+//   expect(gpt54.instructions.includes('## GPT-5.4 Small-Model Guidance')).toBe(false);
 //
 //   const gpt54Mini = getAgentDefinition({
 //     settingsService: createMockSettingsService({
@@ -369,8 +361,8 @@ test('getAgentDefinition forces searchViaShell on for non-gpt-5 models when expl
 //     }),
 //     loggingService: mockLogger,
 //   });
-//   t.true(gpt54Mini.instructions.includes('## GPT-5.4 Guidance'));
-//   t.true(gpt54Mini.instructions.includes('## GPT-5.4 Small-Model Guidance'));
+//   expect(gpt54Mini.instructions.includes('## GPT-5.4 Guidance')).toBe(true);
+//   expect(gpt54Mini.instructions.includes('## GPT-5.4 Small-Model Guidance')).toBe(true);
 //
 //   const gpt53Codex = getAgentDefinition({
 //     settingsService: createMockSettingsService({
@@ -378,10 +370,10 @@ test('getAgentDefinition forces searchViaShell on for non-gpt-5 models when expl
 //     }),
 //     loggingService: mockLogger,
 //   });
-//   t.true(gpt53Codex.instructions.includes('## GPT-5.3 Codex Guidance'));
+//   expect(gpt53Codex.instructions.includes('## GPT-5.3 Codex Guidance')).toBe(true);
 // });
 
-test('getAgentDefinition appends search-via-shell addendum when enabled', (t) => {
+it('getAgentDefinition appends search-via-shell addendum when enabled', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
     'agent.model': 'gpt-4o',
@@ -392,10 +384,10 @@ test('getAgentDefinition appends search-via-shell addendum when enabled', (t) =>
     loggingService: mockLogger,
   });
 
-  t.true(definition.instructions.includes('### Searching via the shell'));
+  expect(definition.instructions.includes('### Searching via the shell')).toBe(true);
 });
 
-test('getAgentDefinition omits dedicated search tool references from prompt when searchViaShell is true', (t) => {
+it('getAgentDefinition omits dedicated search tool references from prompt when searchViaShell is true', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
     'agent.model': 'gpt-4o',
@@ -406,11 +398,11 @@ test('getAgentDefinition omits dedicated search tool references from prompt when
     loggingService: mockLogger,
   });
 
-  t.false(definition.instructions.includes('`find_files`'));
-  t.false(definition.instructions.includes('`grep`'));
+  expect(definition.instructions.includes('`find_files`')).toBe(false);
+  expect(definition.instructions.includes('`grep`')).toBe(false);
 });
 
-test('getAgentDefinition dynamically includes dedicated search tool references when searchViaShell is false', (t) => {
+it('getAgentDefinition dynamically includes dedicated search tool references when searchViaShell is false', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'off',
     'agent.model': 'gpt-4o',
@@ -421,14 +413,14 @@ test('getAgentDefinition dynamically includes dedicated search tool references w
     loggingService: mockLogger,
   });
 
-  t.true(definition.instructions.includes('`find_files`'));
-  t.true(definition.instructions.includes('`grep`'));
-  t.true(definition.instructions.includes('read_code_outline'));
-  t.true(definition.instructions.includes('code_context_search'));
-  t.true(definition.instructions.includes('read_file'));
+  expect(definition.instructions.includes('`find_files`')).toBe(true);
+  expect(definition.instructions.includes('`grep`')).toBe(true);
+  expect(definition.instructions.includes('read_code_outline')).toBe(true);
+  expect(definition.instructions.includes('code_context_search')).toBe(true);
+  expect(definition.instructions.includes('read_file')).toBe(true);
 });
 
-test('getAgentDefinition dynamically includes code-context tool references when available', (t) => {
+it('getAgentDefinition dynamically includes code-context tool references when available', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
     'agent.model': 'gpt-4o',
@@ -439,12 +431,12 @@ test('getAgentDefinition dynamically includes code-context tool references when 
     loggingService: mockLogger,
   });
 
-  t.true(definition.instructions.includes('read_code_outline'));
-  t.true(definition.instructions.includes('code_context_search'));
-  t.true(definition.instructions.includes('read_file'));
+  expect(definition.instructions.includes('read_code_outline')).toBe(true);
+  expect(definition.instructions.includes('code_context_search')).toBe(true);
+  expect(definition.instructions.includes('read_file')).toBe(true);
 });
 
-test('getAgentDefinition dynamically includes code-context tool references for gpt-5 models', (t) => {
+it('getAgentDefinition dynamically includes code-context tool references for gpt-5 models', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'off',
     'agent.model': 'gpt-5',
@@ -455,11 +447,11 @@ test('getAgentDefinition dynamically includes code-context tool references for g
     loggingService: mockLogger,
   });
 
-  t.true(definition.instructions.includes('read_code_outline'));
-  t.true(definition.instructions.includes('code_context_search'));
+  expect(definition.instructions.includes('read_code_outline')).toBe(true);
+  expect(definition.instructions.includes('code_context_search')).toBe(true);
 });
 
-test('getAgentDefinition uses fallback search prompt for remote execution', (t) => {
+it('getAgentDefinition uses fallback search prompt for remote execution', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
     'agent.model': 'gpt-4o',
@@ -478,13 +470,13 @@ test('getAgentDefinition uses fallback search prompt for remote execution', (t) 
   });
 
   // Remote should always fallback to grep/find instructions
-  t.true(definition.instructions.includes('`grep`'));
-  t.true(definition.instructions.includes('`find`'));
-  t.false(definition.instructions.includes('`rg`'));
-  t.false(definition.instructions.includes('`fd`'));
+  expect(definition.instructions.includes('`grep`')).toBe(true);
+  expect(definition.instructions.includes('`find`')).toBe(true);
+  expect(definition.instructions.includes('`rg`')).toBe(false);
+  expect(definition.instructions.includes('`fd`')).toBe(false);
 });
 
-test('getAgentDefinition excludes code-context tools in remote (SSH) execution', (t) => {
+it('getAgentDefinition excludes code-context tools in remote (SSH) execution', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'off',
     'agent.model': 'gpt-4o',
@@ -503,12 +495,12 @@ test('getAgentDefinition excludes code-context tools in remote (SSH) execution',
   });
 
   const toolNames = definition.tools.map((tool) => tool.name);
-  t.false(toolNames.includes('read_code_outline'));
-  t.false(toolNames.includes('code_context_search'));
-  t.false(definition.instructions.includes('read_code_outline'));
+  expect(toolNames.includes('read_code_outline')).toBe(false);
+  expect(toolNames.includes('code_context_search')).toBe(false);
+  expect(definition.instructions.includes('read_code_outline')).toBe(false);
 });
 
-test('getAgentDefinition does not filter tools based on planMode setting', (t) => {
+it('getAgentDefinition does not filter tools based on planMode setting', () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'app.planMode': true,
@@ -520,8 +512,8 @@ test('getAgentDefinition does not filter tools based on planMode setting', (t) =
   });
 
   const toolsWithPlan = definitionWithPlan.tools.map((tool) => tool.name);
-  t.true(toolsWithPlan.includes('create_file'));
-  t.true(toolsWithPlan.includes('search_replace'));
+  expect(toolsWithPlan.includes('create_file')).toBe(true);
+  expect(toolsWithPlan.includes('search_replace')).toBe(true);
 
   const settingsServiceWithoutPlan = createMockSettingsService({
     'agent.model': 'gpt-4o',
@@ -534,11 +526,11 @@ test('getAgentDefinition does not filter tools based on planMode setting', (t) =
   });
 
   const toolsWithoutPlan = definitionWithoutPlan.tools.map((tool) => tool.name);
-  t.true(toolsWithoutPlan.includes('create_file'));
-  t.true(toolsWithoutPlan.includes('search_replace'));
+  expect(toolsWithoutPlan.includes('create_file')).toBe(true);
+  expect(toolsWithoutPlan.includes('search_replace')).toBe(true);
 });
 
-test('getAgentDefinition includes AGENTS.md and full envInfo for orchestrator mode and plan mode', (t) => {
+it('getAgentDefinition includes AGENTS.md and full envInfo for orchestrator mode and plan mode', () => {
   // Test Orchestrator Mode
   const settingsOrchestrator = createMockSettingsService({
     'agent.model': 'gpt-4o',
@@ -549,8 +541,8 @@ test('getAgentDefinition includes AGENTS.md and full envInfo for orchestrator mo
     loggingService: mockLogger,
     runSubagent: async () => ({} as any),
   });
-  t.true(definitionOrchestrator.instructions.includes('AGENTS.md contents:'));
-  t.true(definitionOrchestrator.instructions.includes('Project structure:'));
+  expect(definitionOrchestrator.instructions.includes('AGENTS.md contents:')).toBe(true);
+  expect(definitionOrchestrator.instructions.includes('Project structure:')).toBe(true);
 
   // Test Plan Mode
   const settingsPlan = createMockSettingsService({
@@ -561,18 +553,18 @@ test('getAgentDefinition includes AGENTS.md and full envInfo for orchestrator mo
     settingsService: settingsPlan,
     loggingService: mockLogger,
   });
-  t.true(definitionPlan.instructions.includes('AGENTS.md contents:'));
-  t.true(definitionPlan.instructions.includes('Project structure:'));
+  expect(definitionPlan.instructions.includes('AGENTS.md contents:')).toBe(true);
+  expect(definitionPlan.instructions.includes('Project structure:')).toBe(true);
 });
 
-test('getAgentDefinition includes worktree hygiene fragment in standard, mentor, plan, and orchestrator modes', (t) => {
+it('getAgentDefinition includes worktree hygiene fragment in standard, mentor, plan, and orchestrator modes', () => {
   const standard = getAgentDefinition({
     settingsService: createMockSettingsService({
       'agent.model': 'gpt-4o',
     }),
     loggingService: mockLogger,
   });
-  t.true(standard.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER));
+  expect(standard.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER)).toBe(true);
 
   const mentor = getAgentDefinition({
     settingsService: createMockSettingsService({
@@ -581,7 +573,7 @@ test('getAgentDefinition includes worktree hygiene fragment in standard, mentor,
     }),
     loggingService: mockLogger,
   });
-  t.true(mentor.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER));
+  expect(mentor.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER)).toBe(true);
 
   const plan = getAgentDefinition({
     settingsService: createMockSettingsService({
@@ -590,7 +582,7 @@ test('getAgentDefinition includes worktree hygiene fragment in standard, mentor,
     }),
     loggingService: mockLogger,
   });
-  t.true(plan.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER));
+  expect(plan.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER)).toBe(true);
 
   const orchestrator = getAgentDefinition({
     settingsService: createMockSettingsService({
@@ -600,10 +592,10 @@ test('getAgentDefinition includes worktree hygiene fragment in standard, mentor,
     loggingService: mockLogger,
     runSubagent: async () => ({} as any),
   });
-  t.true(orchestrator.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER));
+  expect(orchestrator.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER)).toBe(true);
 });
 
-test('getAgentDefinition omits worktree hygiene fragment in lite mode', (t) => {
+it('getAgentDefinition omits worktree hygiene fragment in lite mode', () => {
   const definition = getAgentDefinition({
     settingsService: createMockSettingsService({
       'agent.model': 'gpt-4o',
@@ -612,10 +604,10 @@ test('getAgentDefinition omits worktree hygiene fragment in lite mode', (t) => {
     loggingService: mockLogger,
   });
 
-  t.false(definition.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER));
+  expect(definition.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER)).toBe(false);
 });
 
-test('getAgentDefinition registers activate_skill tool and includes catalog when skills exist', (t) => {
+it('getAgentDefinition registers activate_skill tool and includes catalog when skills exist', () => {
   const mockSkillsService = {
     getAvailableSkillsForModel: () => [
       {
@@ -637,11 +629,11 @@ test('getAgentDefinition registers activate_skill tool and includes catalog when
   });
 
   const toolNames = definition.tools.map((tool) => tool.name);
-  t.true(toolNames.includes('activate_skill'));
-  t.true(definition.instructions.includes('<available_skills>Mock Catalog</available_skills>'));
+  expect(toolNames.includes('activate_skill')).toBe(true);
+  expect(definition.instructions.includes('<available_skills>Mock Catalog</available_skills>')).toBe(true);
 });
 
-test('getAgentDefinition omits activate_skill tool and catalog when skills do not exist', (t) => {
+it('getAgentDefinition omits activate_skill tool and catalog when skills do not exist', () => {
   const mockSkillsService = {
     getAvailableSkillsForModel: () => [],
     getSkillCatalog: () => '',
@@ -654,6 +646,6 @@ test('getAgentDefinition omits activate_skill tool and catalog when skills do no
   });
 
   const toolNames = definition.tools.map((tool) => tool.name);
-  t.false(toolNames.includes('activate_skill'));
-  t.false(definition.instructions.includes('<available_skills>'));
+  expect(toolNames.includes('activate_skill')).toBe(false);
+  expect(definition.instructions.includes('<available_skills>')).toBe(false);
 });

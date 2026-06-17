@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import { InputProvider } from '../../context/InputContext.js';
@@ -54,18 +53,18 @@ const renderBottomArea = async (props: typeof baseProps) => {
   return result!;
 };
 
-test.serial('BottomArea shows input when idle', async (t) => {
+it.sequential('BottomArea shows input when idle', async () => {
   const { lastFrame, unmount } = await renderBottomArea(baseProps);
   const output = lastFrame() ?? '';
-  t.true(output.includes('❯'));
-  t.false(output.includes('processing'));
-  t.false(output.includes('Allow this action?'));
+  expect(output.includes('❯')).toBe(true);
+  expect(output.includes('processing')).toBe(false);
+  expect(output.includes('Allow this action?')).toBe(false);
   act(() => {
     unmount();
   });
 });
 
-test.serial('BottomArea shows approval prompt when waiting for approval', async (t) => {
+it.sequential('BottomArea shows approval prompt when waiting for approval', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     pendingApproval: {
@@ -77,30 +76,30 @@ test.serial('BottomArea shows approval prompt when waiting for approval', async 
     waitingForApproval: true,
   });
   const output = lastFrame() ?? '';
-  t.true(output.includes('Allow this action?'));
-  t.true(output.includes('Approve'));
-  t.true(output.includes('Reject'));
-  t.false(output.includes('processing'));
+  expect(output.includes('Allow this action?')).toBe(true);
+  expect(output.includes('Approve')).toBe(true);
+  expect(output.includes('Reject')).toBe(true);
+  expect(output.includes('processing')).toBe(false);
   act(() => {
     unmount();
   });
 });
 
-test.serial('BottomArea shows processing indicator when busy', async (t) => {
+it.sequential('BottomArea shows processing indicator when busy', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     isProcessing: true,
   });
   const output = lastFrame() ?? '';
-  t.true(output.includes('processing.'));
-  t.false(output.includes('Allow this action?'));
-  t.false(output.includes('❯'));
+  expect(output.includes('processing.')).toBe(true);
+  expect(output.includes('Allow this action?')).toBe(false);
+  expect(output.includes('❯')).toBe(false);
   act(() => {
     unmount();
   });
 });
 
-test.serial('BottomArea shows thinking timer when reasoning is active', async (t) => {
+it.sequential('BottomArea shows thinking timer when reasoning is active', async () => {
   const originalNow = Date.now;
   Date.now = () => 12_000;
 
@@ -111,8 +110,8 @@ test.serial('BottomArea shows thinking timer when reasoning is active', async (t
   });
 
   const output = lastFrame() ?? '';
-  t.true(output.includes('Thinking... 12s'));
-  t.false(output.includes('processing'));
+  expect(output.includes('Thinking... 12s')).toBe(true);
+  expect(output.includes('processing')).toBe(false);
 
   act(() => {
     unmount();
@@ -120,7 +119,7 @@ test.serial('BottomArea shows thinking timer when reasoning is active', async (t
   Date.now = originalNow;
 });
 
-test.serial('BottomArea shows handoff confirmation prompt when handoffState is confirm_model', async (t) => {
+it.sequential('BottomArea shows handoff confirmation prompt when handoffState is confirm_model', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     handoffState: {
@@ -129,16 +128,16 @@ test.serial('BottomArea shows handoff confirmation prompt when handoffState is c
     },
   });
   const output = lastFrame() ?? '';
-  t.true(output.includes('📋 Change model?'));
-  t.true(output.includes('Yes'));
-  t.true(output.includes('No'));
-  t.false(output.includes('Allow this action?'));
+  expect(output.includes('📋 Change model?')).toBe(true);
+  expect(output.includes('Yes')).toBe(true);
+  expect(output.includes('No')).toBe(true);
+  expect(output.includes('Allow this action?')).toBe(false);
   act(() => {
     unmount();
   });
 });
 
-test.serial('BottomArea shows large uncached confirmation prompt when pending turn exists', async (t) => {
+it.sequential('BottomArea shows large uncached confirmation prompt when pending turn exists', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     pendingLargeUncachedTurn: { text: 'Describe this', images: [] },
@@ -147,17 +146,17 @@ test.serial('BottomArea shows large uncached confirmation prompt when pending tu
   });
 
   const output = lastFrame() ?? '';
-  t.true(output.includes('Send 72,100 tokens anyway?'));
-  t.true(output.includes('may miss prompt cache'));
-  t.true(output.includes('Send'));
-  t.true(output.includes('Cancel'));
-  t.false(output.includes('Allow this action?'));
+  expect(output.includes('Send 72,100 tokens anyway?')).toBe(true);
+  expect(output.includes('may miss prompt cache')).toBe(true);
+  expect(output.includes('Send')).toBe(true);
+  expect(output.includes('Cancel')).toBe(true);
+  expect(output.includes('Allow this action?')).toBe(false);
   act(() => {
     unmount();
   });
 });
 
-test.serial('BottomArea shows input with handoff message prompt when handoffState is entering_message', async (t) => {
+it.sequential('BottomArea shows input with handoff message prompt when handoffState is entering_message', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     handoffState: {
@@ -166,62 +165,62 @@ test.serial('BottomArea shows input with handoff message prompt when handoffStat
     },
   });
   const output = lastFrame() ?? '';
-  t.true(output.includes('Handoff message (enter to use default message):'));
-  t.false(output.includes('Allow this action?'));
-  t.false(output.includes('processing'));
+  expect(output.includes('Handoff message (enter to use default message):')).toBe(true);
+  expect(output.includes('Allow this action?')).toBe(false);
+  expect(output.includes('processing')).toBe(false);
   act(() => {
     unmount();
   });
 });
 
-test.serial('BottomArea shows tool call streaming indicator when toolCallStreamingInfo is set', async (t) => {
+it.sequential('BottomArea shows tool call streaming indicator when toolCallStreamingInfo is set', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     isProcessing: true,
     toolCallStreamingInfo: { toolName: 'shell', argumentCharCount: 150 },
   });
   const output = lastFrame() ?? '';
-  t.true(output.includes('Calling'));
-  t.true(output.includes('shell'));
-  t.true(output.includes('150 chars'));
-  t.false(output.includes('processing'));
-  t.false(output.includes('Thinking'));
+  expect(output.includes('Calling')).toBe(true);
+  expect(output.includes('shell')).toBe(true);
+  expect(output.includes('150 chars')).toBe(true);
+  expect(output.includes('processing')).toBe(false);
+  expect(output.includes('Thinking')).toBe(false);
   act(() => {
     unmount();
   });
 });
 
-test.serial('BottomArea shows tool call streaming indicator without tool name', async (t) => {
+it.sequential('BottomArea shows tool call streaming indicator without tool name', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     isProcessing: true,
     toolCallStreamingInfo: { argumentCharCount: 42 },
   });
   const output = lastFrame() ?? '';
-  t.true(output.includes('Calling'));
-  t.true(output.includes('tool'));
-  t.true(output.includes('42 chars'));
-  t.false(output.includes('processing'));
+  expect(output.includes('Calling')).toBe(true);
+  expect(output.includes('tool')).toBe(true);
+  expect(output.includes('42 chars')).toBe(true);
+  expect(output.includes('processing')).toBe(false);
   act(() => {
     unmount();
   });
 });
 
-test.serial('BottomArea falls back to processing when toolCallStreamingInfo is null', async (t) => {
+it.sequential('BottomArea falls back to processing when toolCallStreamingInfo is null', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     isProcessing: true,
     toolCallStreamingInfo: null,
   });
   const output = lastFrame() ?? '';
-  t.true(output.includes('processing'));
-  t.false(output.includes('Calling'));
+  expect(output.includes('processing')).toBe(true);
+  expect(output.includes('Calling')).toBe(false);
   act(() => {
     unmount();
   });
 });
 
-test.serial('BottomArea shows tool call streaming over thinking when both are active', async (t) => {
+it.sequential('BottomArea shows tool call streaming over thinking when both are active', async () => {
   const originalNow = Date.now;
   Date.now = () => 5000;
 
@@ -233,9 +232,9 @@ test.serial('BottomArea shows tool call streaming over thinking when both are ac
   });
   const output = lastFrame() ?? '';
   // Tool call streaming takes priority over thinking
-  t.true(output.includes('Calling'));
-  t.true(output.includes('shell'));
-  t.false(output.includes('Thinking'));
+  expect(output.includes('Calling')).toBe(true);
+  expect(output.includes('shell')).toBe(true);
+  expect(output.includes('Thinking')).toBe(false);
 
   act(() => {
     unmount();
@@ -243,7 +242,7 @@ test.serial('BottomArea shows tool call streaming over thinking when both are ac
   Date.now = originalNow;
 });
 
-test.serial('BottomArea shows input surge confirmation prompt when pending surge turn exists', async (t) => {
+it.sequential('BottomArea shows input surge confirmation prompt when pending surge turn exists', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     pendingSurgeTurn: { text: 'Some massive text', images: [] },
@@ -251,10 +250,10 @@ test.serial('BottomArea shows input surge confirmation prompt when pending surge
   });
 
   const output = lastFrame() ?? '';
-  t.true(output.includes('Input Surge Warning: Outgoing message count jumped'));
-  t.true(output.includes('Send request anyway?'));
-  t.true(output.includes('Send anyway'));
-  t.true(output.includes('Cancel'));
+  expect(output.includes('Input Surge Warning: Outgoing message count jumped')).toBe(true);
+  expect(output.includes('Send request anyway?')).toBe(true);
+  expect(output.includes('Send anyway')).toBe(true);
+  expect(output.includes('Cancel')).toBe(true);
   act(() => {
     unmount();
   });

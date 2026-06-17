@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 import SettingsSelectionMenu from './SettingsSelectionMenu.js';
@@ -28,7 +27,7 @@ const defaultTabs = {
   ],
 };
 
-test.serial('SettingsSelectionMenu renders empty state (does not disappear)', async (t) => {
+it.sequential('SettingsSelectionMenu renders empty state (does not disappear)', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsSelectionMenu
       items={[]}
@@ -37,13 +36,12 @@ test.serial('SettingsSelectionMenu renders empty state (does not disappear)', as
       activeCategoryId={defaultTabs.activeCategoryId}
       categories={defaultTabs.categories}
     />,
-    t,
   );
-  t.true(lastFrame()?.includes('No settings match'));
-  t.true(lastFrame()?.includes('abc'));
+  expect(lastFrame()?.includes('No settings match')).toBe(true);
+  expect(lastFrame()?.includes('abc')).toBe(true);
 });
 
-test.serial('SettingsSelectionMenu renders settings list and their current values', async (t) => {
+it.sequential('SettingsSelectionMenu renders settings list and their current values', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsSelectionMenu
       items={items}
@@ -53,15 +51,14 @@ test.serial('SettingsSelectionMenu renders settings list and their current value
       activeCategoryId={defaultTabs.activeCategoryId}
       categories={defaultTabs.categories}
     />,
-    t,
   );
   const output = lastFrame() ?? '';
-  t.true(output.includes('agent.model'));
-  t.true(output.includes('gpt-5'));
-  t.true(output.includes('shell.timeout'));
+  expect(output.includes('agent.model')).toBe(true);
+  expect(output.includes('gpt-5')).toBe(true);
+  expect(output.includes('shell.timeout')).toBe(true);
 });
 
-test.serial('SettingsSelectionMenu shows category headers', async (t) => {
+it.sequential('SettingsSelectionMenu shows category headers', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsSelectionMenu
       items={items}
@@ -70,13 +67,12 @@ test.serial('SettingsSelectionMenu shows category headers', async (t) => {
       activeCategoryId={defaultTabs.activeCategoryId}
       categories={defaultTabs.categories}
     />,
-    t,
   );
   const output = lastFrame() ?? '';
-  t.true(output.includes('Model & Reasoning'));
+  expect(output.includes('Model & Reasoning')).toBe(true);
 });
 
-test.serial('SettingsSelectionMenu marks the selected item', async (t) => {
+it.sequential('SettingsSelectionMenu marks the selected item', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsSelectionMenu
       items={items}
@@ -85,10 +81,9 @@ test.serial('SettingsSelectionMenu marks the selected item', async (t) => {
       activeCategoryId={defaultTabs.activeCategoryId}
       categories={defaultTabs.categories}
     />,
-    t,
   );
   const output = lastFrame() ?? '';
   // We mark selected rows with a leading arrow
-  t.true(output.includes('▶'));
-  t.true(output.includes('shell.timeout'));
+  expect(output.includes('▶')).toBe(true);
+  expect(output.includes('shell.timeout')).toBe(true);
 });

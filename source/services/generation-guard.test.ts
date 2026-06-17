@@ -1,43 +1,43 @@
-import test from 'ava';
+import { describe, it, expect } from 'vitest';
 import { GenerationGuard } from './generation-guard.js';
 import { createConversationSessionComposition } from './session/session-composition.js';
 import { TurnItemAccumulator } from './session/turn-item-accumulator.js';
 import { MockStream } from './test-helpers/mock-stream.js';
 
-test('capture returns a token and increments generation', (t) => {
+it('capture returns a token and increments generation', () => {
   const guard = new GenerationGuard();
   const token = guard.capture();
-  t.is(token, 1);
-  t.is(guard.currentGeneration, 1);
+  expect(token).toBe(1);
+  expect(guard.currentGeneration).toBe(1);
 });
 
-test('isCurrent returns true for the latest token', (t) => {
+it('isCurrent returns true for the latest token', () => {
   const guard = new GenerationGuard();
   const token = guard.capture();
-  t.true(guard.isCurrent(token));
+  expect(guard.isCurrent(token)).toBe(true);
 });
 
-test('isCurrent returns false for an older token', (t) => {
+it('isCurrent returns false for an older token', () => {
   const guard = new GenerationGuard();
   const token1 = guard.capture();
   guard.capture();
-  t.false(guard.isCurrent(token1));
+  expect(guard.isCurrent(token1)).toBe(false);
 });
 
-test('isCurrent returns true for zero token when generation is zero', (t) => {
+it('isCurrent returns true for zero token when generation is zero', () => {
   const guard = new GenerationGuard();
-  t.true(guard.isCurrent(0));
+  expect(guard.isCurrent(0)).toBe(true);
 });
 
-test('invalidate bumps generation and invalidates prior tokens', (t) => {
+it('invalidate bumps generation and invalidates prior tokens', () => {
   const guard = new GenerationGuard();
   const token1 = guard.capture();
   guard.invalidate();
-  t.false(guard.isCurrent(token1));
-  t.is(guard.currentGeneration, 2);
+  expect(guard.isCurrent(token1)).toBe(false);
+  expect(guard.currentGeneration).toBe(2);
 });
 
-test('runIfCurrent executes mutation when token is current', (t) => {
+it('runIfCurrent executes mutation when token is current', () => {
   const guard = new GenerationGuard();
   const token = guard.capture();
   let called = false;
@@ -45,11 +45,11 @@ test('runIfCurrent executes mutation when token is current', (t) => {
     called = true;
     return 'ok';
   });
-  t.true(called);
-  t.is(result, true);
+  expect(called).toBe(true);
+  expect(result).toBe(true);
 });
 
-test('runIfCurrent skips mutation when token is stale', (t) => {
+it('runIfCurrent skips mutation when token is stale', () => {
   const guard = new GenerationGuard();
   const token = guard.capture();
   guard.invalidate();
@@ -57,8 +57,8 @@ test('runIfCurrent skips mutation when token is stale', (t) => {
   const result = guard.runIfCurrent(token, () => {
     called = true;
   });
-  t.false(called);
-  t.is(result, false);
+  expect(called).toBe(false);
+  expect(result).toBe(false);
 });
 
 // ── Integration Tests for Invalidation Sources ────────────────────────────
@@ -113,7 +113,7 @@ function setupSession(mockClient: any) {
   return { turnCoordinator: composition.turnCoordinator, composition };
 }
 
-test('integration - undo during active stream work prevents mutation and aborts turn', async (t) => {
+it('integration - undo during active stream work prevents mutation and aborts turn', async () => {
   let releaseGate: any;
   const gate = new Promise((resolve) => {
     releaseGate = resolve;
@@ -157,11 +157,11 @@ test('integration - undo during active stream work prevents mutation and aborts 
   // Assert mutation safety: history should not contain the assistant's response
   const state = composition.stateFacade.exportState();
   const assistantTurns = state.history.filter((h: any) => h.role === 'assistant');
-  t.is(assistantTurns.length, 0, 'No assistant response should be committed');
-  t.is(composition.appState.statusMachine.current, 'idle', 'Status should be idle');
+  expect(assistantTurns.length).toBe(0);
+  expect(composition.appState.statusMachine.current).toBe('idle');
 });
 
-test('integration - undo while approval is pending invalidates pending approval and prevents continuation', async (t) => {
+it('integration - undo while approval is pending invalidates pending approval and prevents continuation', async () => {
   const interruption = createShellInterruption({ callId: 'call-1', command: 'echo hello' });
   const interruptedStream = new MockStream([]);
   interruptedStream.interruptions = [interruption];
@@ -180,27 +180,24 @@ test('integration - undo while approval is pending invalidates pending approval 
     emitted.push(event);
   }
 
-  t.is(composition.appState.statusMachine.current, 'awaiting_approval');
-  t.truthy(composition.approvalState.getPending());
+  expect(composition.appState.statusMachine.current).toBe('awaiting_approval');
+  expect(composition.approvalState.getPending()).toBeTruthy();
 
   // Trigger undo
   composition.stateFacade.undoLastUserTurn();
 
   // Verify pending approval is cleared and status machine is idle
-  t.is(composition.approvalState.getPending(), null);
-  t.is(composition.appState.statusMachine.current, 'idle');
+  expect(composition.approvalState.getPending()).toBeNull();
+  expect(composition.appState.statusMachine.current).toBe('idle');
 
   // Attempting to continue should fail
-  await t.throwsAsync(
-    async () => {
-      for await (const _ of turnCoordinator.continueAfterApproval({ answer: 'y' })) {
-      }
-    },
-    { message: 'No pending approval to continue.' },
-  );
+  await expect(async () => {
+    for await (const _ of turnCoordinator.continueAfterApproval({ answer: 'y' })) {
+    }
+  }).rejects.toThrow('No pending approval to continue.');
 });
 
-test('integration - model change during active stream work prevents mutation and aborts turn', async (t) => {
+it('integration - model change during active stream work prevents mutation and aborts turn', async () => {
   let releaseGate: any;
   const gate = new Promise((resolve) => {
     releaseGate = resolve;
@@ -245,11 +242,11 @@ test('integration - model change during active stream work prevents mutation and
   // Assert mutation safety
   const state = composition.stateFacade.exportState();
   const assistantTurns = state.history.filter((h: any) => h.role === 'assistant');
-  t.is(assistantTurns.length, 0, 'No assistant response should be committed');
-  t.is(composition.appState.statusMachine.current, 'idle');
+  expect(assistantTurns.length).toBe(0);
+  expect(composition.appState.statusMachine.current).toBe('idle');
 });
 
-test('integration - import during active stream work prevents mutation and aborts turn', async (t) => {
+it('integration - import during active stream work prevents mutation and aborts turn', async () => {
   let releaseGate: any;
   const gate = new Promise((resolve) => {
     releaseGate = resolve;
@@ -297,11 +294,11 @@ test('integration - import during active stream work prevents mutation and abort
   // Assert mutation safety
   const state = composition.stateFacade.exportState();
   const assistantTurns = state.history.filter((h: any) => h.role === 'assistant');
-  t.is(assistantTurns.length, 0, 'No assistant response should be committed');
-  t.is(composition.appState.statusMachine.current, 'idle');
+  expect(assistantTurns.length).toBe(0);
+  expect(composition.appState.statusMachine.current).toBe('idle');
 });
 
-test('integration - session clear/reset during active stream work prevents mutation and aborts turn', async (t) => {
+it('integration - session clear/reset during active stream work prevents mutation and aborts turn', async () => {
   let releaseGate: any;
   const gate = new Promise((resolve) => {
     releaseGate = resolve;
@@ -346,11 +343,11 @@ test('integration - session clear/reset during active stream work prevents mutat
   // Assert mutation safety
   const state = composition.stateFacade.exportState();
   const assistantTurns = state.history.filter((h: any) => h.role === 'assistant');
-  t.is(assistantTurns.length, 0, 'No assistant response should be committed');
-  t.is(composition.appState.statusMachine.current, 'idle');
+  expect(assistantTurns.length).toBe(0);
+  expect(composition.appState.statusMachine.current).toBe('idle');
 });
 
-test('integration - disposal during active stream work prevents mutation and aborts turn', async (t) => {
+it('integration - disposal during active stream work prevents mutation and aborts turn', async () => {
   let releaseGate: any;
   const gate = new Promise((resolve) => {
     releaseGate = resolve;
@@ -395,11 +392,11 @@ test('integration - disposal during active stream work prevents mutation and abo
   // Assert mutation safety
   const state = composition.stateFacade.exportState();
   const assistantTurns = state.history.filter((h: any) => h.role === 'assistant');
-  t.is(assistantTurns.length, 0, 'No assistant response should be committed');
-  t.is(composition.appState.statusMachine.current, 'idle');
+  expect(assistantTurns.length).toBe(0);
+  expect(composition.appState.statusMachine.current).toBe('idle');
 });
 
-test('integration - aborted-approval input with current token executes resolution continuation', async (t) => {
+it('integration - aborted-approval input with current token executes resolution continuation', async () => {
   const interruptedStream = new MockStream([]);
   interruptedStream.interruptions = [createShellInterruption({ callId: 'c1', command: 'echo hello' })];
   interruptedStream.state = createApprovalState();
@@ -427,16 +424,16 @@ test('integration - aborted-approval input with current token executes resolutio
   for await (const ev of turnCoordinator.start('run command')) {
     events1.push(ev);
   }
-  t.is(composition.appState.statusMachine.current, 'awaiting_approval');
+  expect(composition.appState.statusMachine.current).toBe('awaiting_approval');
 
   // Verify pending approval context with a token is set
   const pending = composition.approvalState.getPending();
-  t.truthy(pending);
-  t.truthy(pending!.token);
+  expect(pending).toBeTruthy();
+  expect(pending!.token).toBeTruthy();
 
   // Abort it correctly via turnCoordinator.abort()
   turnCoordinator.abort();
-  t.is(composition.appState.statusMachine.current, 'idle');
+  expect(composition.appState.statusMachine.current).toBe('idle');
 
   // Send resolution user input with the current token (which is in the aborted context)
   const events2: any[] = [];
@@ -445,11 +442,11 @@ test('integration - aborted-approval input with current token executes resolutio
   }
 
   // The resolution continuation should be executed, yielding user_message_consumed_for_abort
-  t.true(events2.some((e: any) => e.type === 'user_message_consumed_for_abort'));
-  t.true(events2.some((e: any) => e.type === 'text_delta' && e.delta === 'continuation reply'));
+  expect(events2.some((e: any) => e.type === 'user_message_consumed_for_abort')).toBe(true);
+  expect(events2.some((e: any) => e.type === 'text_delta' && e.delta === 'continuation reply')).toBe(true);
 });
 
-test('integration - aborted-approval input with stale token is discarded without mutation', async (t) => {
+it('integration - aborted-approval input with stale token is discarded without mutation', async () => {
   const interruptedStream = new MockStream([]);
   interruptedStream.interruptions = [createShellInterruption({ callId: 'c1', command: 'echo hello' })];
   interruptedStream.state = createApprovalState();
@@ -469,7 +466,7 @@ test('integration - aborted-approval input with stale token is discarded without
   // Run a command that triggers approval requirement
   for await (const _ of turnCoordinator.start('run command')) {
   }
-  t.is(composition.appState.statusMachine.current, 'awaiting_approval');
+  expect(composition.appState.statusMachine.current).toBe('awaiting_approval');
 
   // Abort it correctly via turnCoordinator.abort()
   turnCoordinator.abort();
@@ -484,6 +481,6 @@ test('integration - aborted-approval input with stale token is discarded without
   }
 
   // It should be discarded immediately, yielding no events
-  t.is(events.length, 0);
-  t.is(composition.appState.statusMachine.current, 'idle');
+  expect(events.length).toBe(0);
+  expect(composition.appState.statusMachine.current).toBe('idle');
 });

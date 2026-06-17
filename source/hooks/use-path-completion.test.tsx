@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { Text } from 'ink';
 import { render } from 'ink-testing-library';
@@ -9,24 +8,24 @@ import { InputProvider } from '../context/InputContext.js';
 import { buildWorkspaceLimitWarning, usePathCompletion } from './use-path-completion.js';
 import type { PathEntry } from '../services/file-service.js';
 
-test('buildWorkspaceLimitWarning explains the total-entry breadth-first sample limit', (t) => {
-  t.is(
+it('buildWorkspaceLimitWarning explains the total-entry breadth-first sample limit', () => {
+  expect(
     buildWorkspaceLimitWarning({
       truncatedByTotalLimit: true,
       limit: 5_000,
     }),
+  ).toBe(
     'Path completion is limited to 5000 entries because this repo is too large. Showing a best-effort breadth-first sample.',
   );
 });
 
-test('buildWorkspaceLimitWarning returns null when nothing was truncated', (t) => {
-  t.is(
+it('buildWorkspaceLimitWarning returns null when nothing was truncated', () => {
+  expect(
     buildWorkspaceLimitWarning({
       truncatedByTotalLimit: false,
       limit: 5_000,
     }),
-    null,
-  );
+  ).toBe(null);
 });
 
 const fakeEntries: PathEntry[] = [
@@ -34,7 +33,7 @@ const fakeEntries: PathEntry[] = [
   { path: 'b.ts', type: 'file' },
 ];
 
-test('does not infinitely re-render when the loggingService reference is unstable', async (t) => {
+it('does not infinitely re-render when the loggingService reference is unstable', async () => {
   let renders = 0;
   let loadCalls = 0;
   let renderer: ReturnType<typeof render> | null = null;
@@ -75,8 +74,8 @@ test('does not infinitely re-render when the loggingService reference is unstabl
     await Promise.resolve();
   });
 
-  t.is(loadCalls, 1);
-  t.true(renders < 20, `expected a bounded render count, got ${renders}`);
+  expect(loadCalls).toBe(1);
+  expect(renders < 20).toBe(true);
 
   await act(async () => {
     renderer?.unmount();

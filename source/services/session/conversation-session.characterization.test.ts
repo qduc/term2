@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createConversationSession, createConversationSessionComposition } from './session-composition.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
@@ -68,7 +68,7 @@ const createMockAgentClient = (overrides: Record<string, unknown> = {}): Convers
 //    setSubagentEventSink in finally
 // ══════════════════════════════════════════════════════════════════════════
 
-test('sendMessage installs setSubagentEventSink with a function then clears it to null', async (t) => {
+it('sendMessage installs setSubagentEventSink with a function then clears it to null', async () => {
   const sinkCalls: unknown[] = [];
 
   const stream = new MockStream([]);
@@ -96,14 +96,14 @@ test('sendMessage installs setSubagentEventSink with a function then clears it t
   await terminalAdapter.sendMessage('hello');
 
   // First call: a function (the wrapped onEvent)
-  t.is(sinkCalls[0], 'function', 'First setSubagentEventSink call should install a function callback');
+  expect(sinkCalls[0], 'First setSubagentEventSink call should install a function callback').toBe('function');
   // After the finally block: null
-  t.is(sinkCalls[sinkCalls.length - 1], null, 'Last setSubagentEventSink call should clear to null');
+  expect(sinkCalls[sinkCalls.length - 1], 'Last setSubagentEventSink call should clear to null').toBe(null);
   // Exactly 2 calls: install then clear
-  t.is(sinkCalls.length, 2, 'setSubagentEventSink should be called exactly twice (install + clear)');
+  expect(sinkCalls.length, 'setSubagentEventSink should be called exactly twice (install + clear)').toBe(2);
 });
 
-test('sendMessage dispatches events through conversationLogger before onEvent callback', async (t) => {
+it('sendMessage dispatches events through conversationLogger before onEvent callback', async () => {
   const eventLog: any[] = [];
 
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Hello' }]);
@@ -132,16 +132,16 @@ test('sendMessage dispatches events through conversationLogger before onEvent ca
     },
   });
 
-  t.is(result.type, 'response');
+  expect(result.type).toBe('response');
   // The onEvent callback was called at least for final event
-  t.true(eventLog.length > 0, 'onEvent callback should have been invoked');
+  expect(eventLog.length > 0).toBe(true);
 });
 
 // ══════════════════════════════════════════════════════════════════════════
 // 2. handleApprovalDecision returns null when no approval is pending
 // ══════════════════════════════════════════════════════════════════════════
 
-test('handleApprovalDecision returns null when no approval is pending', async (t) => {
+it('handleApprovalDecision returns null when no approval is pending', async () => {
   const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
@@ -160,10 +160,10 @@ test('handleApprovalDecision returns null when no approval is pending', async (t
 
   // No approval pending
   const result = await terminalAdapter.handleApprovalDecision('y');
-  t.is(result, null);
+  expect(result).toBe(null);
 });
 
-test('handleApprovalDecision returns null for rejection when no approval is pending', async (t) => {
+it('handleApprovalDecision returns null for rejection when no approval is pending', async () => {
   const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
@@ -181,7 +181,7 @@ test('handleApprovalDecision returns null for rejection when no approval is pend
   const { terminalAdapter } = bundle;
 
   const result = await terminalAdapter.handleApprovalDecision('n', 'User rejected');
-  t.is(result, null);
+  expect(result).toBe(null);
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -189,7 +189,7 @@ test('handleApprovalDecision returns null for rejection when no approval is pend
 //    accepted approvals
 // ══════════════════════════════════════════════════════════════════════════
 
-test('handleApprovalDecision forwards approvalAnswer to agentClient.setAskUserAnswer', async (t) => {
+it('handleApprovalDecision forwards approvalAnswer to agentClient.setAskUserAnswer', async () => {
   const askUserCalls: any[] = [];
 
   const interruptedStream = new MockStream([]);
@@ -222,18 +222,18 @@ test('handleApprovalDecision forwards approvalAnswer to agentClient.setAskUserAn
   const { terminalAdapter } = bundle;
 
   const approvalResult = await terminalAdapter.sendMessage('ask the user');
-  t.is(approvalResult.type, 'approval_required');
+  expect(approvalResult.type).toBe('approval_required');
 
   const finalResult = await terminalAdapter.handleApprovalDecision('y', undefined, {
     approvalAnswer: 'Use option B',
   });
 
-  t.is(finalResult?.type, 'response');
-  t.is((finalResult as { type: 'response'; finalText: string }).finalText, 'Answer forwarded.');
-  t.deepEqual(askUserCalls, [{ callId: 'call-ask-user-test', answer: 'Use option B' }]);
+  expect(finalResult?.type).toBe('response');
+  expect((finalResult as { type: 'response'; finalText: string }).finalText).toBe('Answer forwarded.');
+  expect(askUserCalls).toEqual([{ callId: 'call-ask-user-test', answer: 'Use option B' }]);
 });
 
-test('handleApprovalDecision does not call setAskUserAnswer when answer is not y', async (t) => {
+it('handleApprovalDecision does not call setAskUserAnswer when answer is not y', async () => {
   const askUserCalls: any[] = [];
 
   const interruptedStream = new MockStream([]);
@@ -266,18 +266,18 @@ test('handleApprovalDecision does not call setAskUserAnswer when answer is not y
   const { terminalAdapter } = bundle;
 
   const approvalResult = await terminalAdapter.sendMessage('run command');
-  t.is(approvalResult.type, 'approval_required');
+  expect(approvalResult.type).toBe('approval_required');
 
   const rejectionResult = await terminalAdapter.handleApprovalDecision('n', 'User rejected', {
     approvalAnswer: 'Use option B',
   });
 
   // Rejection returns a response from the continuation runner
-  t.is(rejectionResult?.type, 'response');
-  t.false(askUserCalls.length > 0, 'setAskUserAnswer should NOT be called on rejection');
+  expect(rejectionResult?.type).toBe('response');
+  expect(askUserCalls.length > 0).toBe(false);
 });
 
-test('handleApprovalDecision does not call setAskUserAnswer when approvalAnswer is not provided', async (t) => {
+it('handleApprovalDecision does not call setAskUserAnswer when approvalAnswer is not provided', async () => {
   const askUserCalls: any[] = [];
 
   const interruptedStream = new MockStream([]);
@@ -310,12 +310,12 @@ test('handleApprovalDecision does not call setAskUserAnswer when approvalAnswer 
   const { terminalAdapter } = bundle;
 
   const approvalResult = await terminalAdapter.sendMessage('run command');
-  t.is(approvalResult.type, 'approval_required');
+  expect(approvalResult.type).toBe('approval_required');
 
   // No approvalAnswer provided; handleApprovalDecision still calls continueAfterApproval
   const result = await terminalAdapter.handleApprovalDecision('y');
-  t.is(result?.type, 'response');
-  t.false(askUserCalls.length > 0, 'setAskUserAnswer should NOT be called without approvalAnswer');
+  expect(result?.type).toBe('response');
+  expect(askUserCalls.length > 0).toBe(false);
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -323,7 +323,7 @@ test('handleApprovalDecision does not call setAskUserAnswer when approvalAnswer 
 //    approval was pending
 // ══════════════════════════════════════════════════════════════════════════
 
-test('abort with no pending approval does not throw and produces no change in snapshot toolLedger', async (t) => {
+it('abort with no pending approval does not throw and produces no change in snapshot toolLedger', async () => {
   const mockClient = createMockAgentClient({
     abort() {},
     async startStream() {
@@ -346,10 +346,10 @@ test('abort with no pending approval does not throw and produces no change in sn
 
   // The tool ledger should still be empty
   const snapshot = stateFacade.getCurrentSnapshot();
-  t.deepEqual(snapshot.toolLedger, [], 'Tool ledger should be empty when no approval was pending at abort');
+  expect(snapshot.toolLedger, 'Tool ledger should be empty when no approval was pending at abort').toEqual([]);
 });
 
-test('abort with pending approval records aborted entry in tool ledger', async (t) => {
+it('abort with pending approval records aborted entry in tool ledger', async () => {
   const interruptedStream = new MockStream([]);
   interruptedStream.interruptions = [createShellInterruption({ callId: 'call-abort-1', command: 'echo abort me' })];
   interruptedStream.state = createApprovalState();
@@ -376,8 +376,8 @@ test('abort with pending approval records aborted entry in tool ledger', async (
   // Verify the tool ledger has an aborted entry
   const snapshot = stateFacade.getCurrentSnapshot();
   const abortedEntries = snapshot.toolLedger.filter((entry) => entry.status === 'aborted');
-  t.true(abortedEntries.length > 0, 'Should have at least one aborted entry in the tool ledger');
-  t.is(abortedEntries[0].callId, 'call-abort-1');
+  expect(abortedEntries.length > 0).toBe(true);
+  expect(abortedEntries[0].callId).toBe('call-abort-1');
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -385,7 +385,7 @@ test('abort with pending approval records aborted entry in tool ledger', async (
 //    includes provider/model
 // ══════════════════════════════════════════════════════════════════════════
 
-test('getCurrentSnapshot returns expected shape with history, previousResponseId, and toolLedger', async (t) => {
+it('getCurrentSnapshot returns expected shape with history, previousResponseId, and toolLedger', async () => {
   const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
@@ -404,12 +404,12 @@ test('getCurrentSnapshot returns expected shape with history, previousResponseId
 
   const snapshot = stateFacade.getCurrentSnapshot();
 
-  t.true(Array.isArray(snapshot.history));
-  t.true(snapshot.previousResponseId === null || typeof snapshot.previousResponseId === 'string');
-  t.true(Array.isArray(snapshot.toolLedger));
+  expect(Array.isArray(snapshot.history)).toBe(true);
+  expect(snapshot.previousResponseId === null || typeof snapshot.previousResponseId === 'string').toBe(true);
+  expect(Array.isArray(snapshot.toolLedger)).toBe(true);
 });
 
-test('getCurrentSnapshot includes provider from agentClient.getProvider when available', async (t) => {
+it('getCurrentSnapshot includes provider from agentClient.getProvider when available', async () => {
   const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
@@ -430,10 +430,10 @@ test('getCurrentSnapshot includes provider from agentClient.getProvider when ava
   const { stateFacade } = bundle;
 
   const snapshot = stateFacade.getCurrentSnapshot();
-  t.is(snapshot.provider, 'test-provider');
+  expect(snapshot.provider).toBe('test-provider');
 });
 
-test('getCurrentSnapshot includes model from settingsService when available', async (t) => {
+it('getCurrentSnapshot includes model from settingsService when available', async () => {
   const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
@@ -455,7 +455,7 @@ test('getCurrentSnapshot includes model from settingsService when available', as
   const { stateFacade } = bundle;
 
   const snapshot = stateFacade.getCurrentSnapshot();
-  t.is(snapshot.model, 'gpt-4o-test');
+  expect(snapshot.model).toBe('gpt-4o-test');
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -463,7 +463,7 @@ test('getCurrentSnapshot includes model from settingsService when available', as
 //    afterProviderChanged before mutating agent client
 // ══════════════════════════════════════════════════════════════════════════
 
-test('setModel calls afterProviderChanged then agentClient.setModel', async (t) => {
+it('setModel calls afterProviderChanged then agentClient.setModel', async () => {
   const calls: any[] = [];
 
   const mockClient = createMockAgentClient({
@@ -487,12 +487,12 @@ test('setModel calls afterProviderChanged then agentClient.setModel', async (t) 
 
   runtimeController.setModel('gpt-4');
 
-  t.is(calls.length, 1);
-  t.is(calls[0].method, 'setModel');
-  t.is(calls[0].model, 'gpt-4');
+  expect(calls.length).toBe(1);
+  expect(calls[0].method).toBe('setModel');
+  expect(calls[0].model).toBe('gpt-4');
 });
 
-test('setProvider calls afterProviderChanged then agentClient.setProvider', async (t) => {
+it('setProvider calls afterProviderChanged then agentClient.setProvider', async () => {
   const calls: any[] = [];
 
   const mockClient = createMockAgentClient({
@@ -516,12 +516,12 @@ test('setProvider calls afterProviderChanged then agentClient.setProvider', asyn
 
   runtimeController.setProvider('anthropic');
 
-  t.is(calls.length, 1);
-  t.is(calls[0].method, 'setProvider');
-  t.is(calls[0].provider, 'anthropic');
+  expect(calls.length).toBe(1);
+  expect(calls[0].method).toBe('setProvider');
+  expect(calls[0].provider).toBe('anthropic');
 });
 
-test('setProvider is idempotent via switchProvider alias', async (t) => {
+it('setProvider is idempotent via switchProvider alias', async () => {
   const calls: any[] = [];
 
   const mockClient = createMockAgentClient({
@@ -545,11 +545,11 @@ test('setProvider is idempotent via switchProvider alias', async (t) => {
 
   runtimeController.switchProvider('openai');
 
-  t.is(calls.length, 1);
-  t.is(calls[0].provider, 'openai');
+  expect(calls.length).toBe(1);
+  expect(calls[0].provider).toBe('openai');
 });
 
-test('setTemperature calls afterProviderChanged then agentClient.setTemperature', async (t) => {
+it('setTemperature calls afterProviderChanged then agentClient.setTemperature', async () => {
   const calls: any[] = [];
 
   const mockClient = createMockAgentClient({
@@ -573,12 +573,12 @@ test('setTemperature calls afterProviderChanged then agentClient.setTemperature'
 
   runtimeController.setTemperature(0.7);
 
-  t.is(calls.length, 1);
-  t.is(calls[0].method, 'setTemperature');
-  t.is(calls[0].temp, 0.7);
+  expect(calls.length).toBe(1);
+  expect(calls[0].method).toBe('setTemperature');
+  expect(calls[0].temp).toBe(0.7);
 });
 
-test('setTemperature with undefined is passed through to agentClient', async (t) => {
+it('setTemperature with undefined is passed through to agentClient', async () => {
   const calls: any[] = [];
 
   const mockClient = createMockAgentClient({
@@ -602,11 +602,11 @@ test('setTemperature with undefined is passed through to agentClient', async (t)
 
   runtimeController.setTemperature(undefined);
 
-  t.is(calls.length, 1);
-  t.is(calls[0].temp, undefined);
+  expect(calls.length).toBe(1);
+  expect(calls[0].temp).toBe(undefined);
 });
 
-test('setReasoningEffort calls afterProviderChanged then agentClient.setReasoningEffort', async (t) => {
+it('setReasoningEffort calls afterProviderChanged then agentClient.setReasoningEffort', async () => {
   const calls: any[] = [];
 
   const mockClient = createMockAgentClient({
@@ -630,12 +630,12 @@ test('setReasoningEffort calls afterProviderChanged then agentClient.setReasonin
 
   runtimeController.setReasoningEffort('high');
 
-  t.is(calls.length, 1);
-  t.is(calls[0].method, 'setReasoningEffort');
-  t.is(calls[0].effort, 'high');
+  expect(calls.length).toBe(1);
+  expect(calls[0].method).toBe('setReasoningEffort');
+  expect(calls[0].effort).toBe('high');
 });
 
-test('setReasoningEffort is a no-op when agentClient lacks setReasoningEffort', async (t) => {
+it('setReasoningEffort is a no-op when agentClient lacks setReasoningEffort', async () => {
   // An agentClient without the optional setReasoningEffort method
   const mockClient = createMockAgentClient({
     async startStream() {
@@ -655,7 +655,7 @@ test('setReasoningEffort is a no-op when agentClient lacks setReasoningEffort', 
 
   // Should not throw
   runtimeController.setReasoningEffort('low');
-  t.pass();
+  expect(true).toBe(true);
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -663,7 +663,7 @@ test('setReasoningEffort is a no-op when agentClient lacks setReasoningEffort', 
 //    command messages (#buildAndResolve)
 // ══════════════════════════════════════════════════════════════════════════
 
-test('auto-approve: cumulative usage from continuation supersedes first-turn usage', async (t) => {
+it('auto-approve: cumulative usage from continuation supersedes first-turn usage', async () => {
   const firstInterruption = createShellInterruption({ callId: 'call-usage-1', command: 'ls source' });
 
   const initialStream = new MockStream([]);
@@ -711,16 +711,16 @@ test('auto-approve: cumulative usage from continuation supersedes first-turn usa
 
   const result = await terminalAdapter.sendMessage('list the source files');
 
-  t.is(result.type, 'response');
+  expect(result.type).toBe('response');
   if (result.type !== 'response') return;
 
   // The continuation usage (300/50) supersedes the first-turn usage (100/20)
-  t.is(result.usage?.prompt_tokens, 300);
-  t.is(result.usage?.completion_tokens, 50);
-  t.is(result.usage?.total_tokens, 350);
+  expect(result.usage?.prompt_tokens).toBe(300);
+  expect(result.usage?.completion_tokens).toBe(50);
+  expect(result.usage?.total_tokens).toBe(350);
 });
 
-test('auto-approve: finalText comes from auto-approved continuation', async (t) => {
+it('auto-approve: finalText comes from auto-approved continuation', async () => {
   const firstInterruption = createShellInterruption({ callId: 'call-text-1', command: 'echo hello' });
 
   const initialStream = new MockStream([]);
@@ -762,12 +762,12 @@ test('auto-approve: finalText comes from auto-approved continuation', async (t) 
 
   const result = await terminalAdapter.sendMessage('echo hello');
 
-  t.is(result.type, 'response');
+  expect(result.type).toBe('response');
   if (result.type !== 'response') return;
-  t.is(result.finalText, 'Hello from continuation.');
+  expect(result.finalText).toBe('Hello from continuation.');
 });
 
-test('auto-approve: command messages from continuation are preserved in final result', async (t) => {
+it('auto-approve: command messages from continuation are preserved in final result', async () => {
   const firstInterruption = createShellInterruption({ callId: 'call-cmd-1', command: 'ls' });
 
   const initialStream = new MockStream([]);
@@ -810,13 +810,13 @@ test('auto-approve: command messages from continuation are preserved in final re
 
   const result = await terminalAdapter.sendMessage('list files');
 
-  t.is(result.type, 'response');
+  expect(result.type).toBe('response');
   if (result.type !== 'response') return;
-  t.true(Array.isArray(result.commandMessages));
-  t.is(result.finalText, 'Done.');
+  expect(Array.isArray(result.commandMessages)).toBe(true);
+  expect(result.finalText).toBe('Done.');
 });
 
-test('auto-approve: two auto-approved commands continue until approval_required or final', async (t) => {
+it('auto-approve: two auto-approved commands continue until approval_required or final', async () => {
   const first = createShellInterruption({ callId: 'call-batch-a', command: 'ls' });
   const second = createShellInterruption({ callId: 'call-batch-b', command: 'pwd' });
 
@@ -864,19 +864,19 @@ test('auto-approve: two auto-approved commands continue until approval_required 
   // rejected by the LLM, so we should get an approval_required event
   const result = await terminalAdapter.sendMessage('list files and print working directory');
 
-  t.is(result.type, 'approval_required');
+  expect(result.type).toBe('approval_required');
   if (result.type !== 'approval_required') return;
 
   // The second command is the one that triggered the prompt
-  t.is(result.approval.toolName, 'shell');
-  t.truthy(result.approval.llmAdvisory);
+  expect(result.approval.toolName).toBe('shell');
+  expect(result.approval.llmAdvisory).toBeTruthy();
 });
 
 // ══════════════════════════════════════════════════════════════════════════
 // 8. Traffic context includes session context fields
 // ══════════════════════════════════════════════════════════════════════════
 
-test('sendMessage runs inside sessionContextService.runWithContext with session context fields', async (t) => {
+it('sendMessage runs inside sessionContextService.runWithContext with session context fields', async () => {
   const contextLog: any[] = [];
 
   const sessionContextService = {
@@ -911,17 +911,17 @@ test('sendMessage runs inside sessionContextService.runWithContext with session 
 
   await terminalAdapter.sendMessage('my first question');
 
-  t.is(contextLog.length, 1);
+  expect(contextLog.length).toBe(1);
   const ctx = contextLog[0];
 
-  t.is(ctx.sessionId, 'traffic-test');
-  t.truthy(ctx.sessionStartedAt, 'sessionStartedAt should be a non-empty string');
-  t.is(ctx.firstUserMessagePreview, 'my first question');
-  t.is(ctx.mode, 'standard', 'Default mode (no settingsService) should be standard');
-  t.is(ctx.traceId, 'trace-abc-123');
+  expect(ctx.sessionId).toBe('traffic-test');
+  expect(ctx.sessionStartedAt, 'sessionStartedAt should be a non-empty string').toBeTruthy();
+  expect(ctx.firstUserMessagePreview).toBe('my first question');
+  expect(ctx.mode).toBe('standard'); // was: t.is(ctx.mode, 'standard', 'Default mode (no settingsService) should be standard')
+  expect(ctx.traceId).toBe('trace-abc-123');
 });
 
-test('sendMessage sets firstUserMessagePreview to first turn text even on subsequent messages', async (t) => {
+it('sendMessage sets firstUserMessagePreview to first turn text even on subsequent messages', async () => {
   const contextLog: any[] = [];
 
   const sessionContextService = {
@@ -964,18 +964,18 @@ test('sendMessage sets firstUserMessagePreview to first turn text even on subseq
   // Second message should still show "first turn" as the firstUserMessagePreview
   await terminalAdapter.sendMessage('second turn');
 
-  t.is(contextLog.length, 2);
+  expect(contextLog.length).toBe(2);
 
   // Both traffic contexts should reference the first message as the preview
-  t.is(contextLog[0].firstUserMessagePreview, 'first turn');
-  t.is(contextLog[1].firstUserMessagePreview, 'first turn', 'Second turn should keep first turn as preview');
+  expect(contextLog[0].firstUserMessagePreview).toBe('first turn');
+  expect(contextLog[1].firstUserMessagePreview).toBe('first turn'); // was: t.is(contextLog[1].firstUserMessagePreview, 'first turn', 'Second turn should keep first turn as preview')
 });
 
 // ══════════════════════════════════════════════════════════════════════════
 // 9. TurnCoordinator observable event sequences
 // ══════════════════════════════════════════════════════════════════════════
 
-test('approval then approval emits each terminal boundary in order', async (t) => {
+it('approval then approval emits each terminal boundary in order', async () => {
   const first = createShellInterruption({ callId: 'call-first', command: 'echo first' });
   const second = createShellInterruption({ callId: 'call-second', command: 'echo second' });
 
@@ -1010,7 +1010,7 @@ test('approval then approval emits each terminal boundary in order', async (t) =
     events.push(event);
   }
 
-  t.deepEqual(
+  expect(
     events.map((event) =>
       event.type === 'approval_required'
         ? { type: event.type, callId: event.approval.callId }
@@ -1018,15 +1018,14 @@ test('approval then approval emits each terminal boundary in order', async (t) =
         ? { type: event.type, callId: event.toolCallId }
         : { type: event.type },
     ),
-    [
-      { type: 'approval_required', callId: 'call-first' },
-      { type: 'tool_started', callId: 'call-first' },
-      { type: 'approval_required', callId: 'call-second' },
-    ],
-  );
+  ).toEqual([
+    { type: 'approval_required', callId: 'call-first' },
+    { type: 'tool_started', callId: 'call-first' },
+    { type: 'approval_required', callId: 'call-second' },
+  ]);
 });
 
-test('approval then rejection emits no tool_started event for the rejected tool', async (t) => {
+it('approval then rejection emits no tool_started event for the rejected tool', async () => {
   const interruption = createShellInterruption({ callId: 'call-rejected', command: 'echo rejected' });
   const approvalState = createApprovalState();
 
@@ -1063,7 +1062,7 @@ test('approval then rejection emits no tool_started event for the rejected tool'
     events.push(event);
   }
 
-  t.deepEqual(
+  expect(
     events.map((event) =>
       event.type === 'approval_required'
         ? { type: event.type, callId: event.approval.callId }
@@ -1071,17 +1070,16 @@ test('approval then rejection emits no tool_started event for the rejected tool'
         ? { type: event.type, text: event.type === 'text_delta' ? event.delta : event.finalText }
         : { type: event.type },
     ),
-    [
-      { type: 'approval_required', callId: 'call-rejected' },
-      { type: 'text_delta', text: 'Rejected.' },
-      { type: 'final', text: 'Rejected.' },
-    ],
-  );
-  t.deepEqual(approvalState.approveCalls, []);
-  t.deepEqual(approvalState.rejectCalls, [interruption]);
+  ).toEqual([
+    { type: 'approval_required', callId: 'call-rejected' },
+    { type: 'text_delta', text: 'Rejected.' },
+    { type: 'final', text: 'Rejected.' },
+  ]);
+  expect(approvalState.approveCalls).toEqual([]);
+  expect(approvalState.rejectCalls).toEqual([interruption]);
 });
 
-test('multiple sequential interruptions preserve approval and tool-start ordering', async (t) => {
+it('multiple sequential interruptions preserve approval and tool-start ordering', async () => {
   const interruptions = [
     createShellInterruption({ callId: 'call-one', command: 'echo one' }),
     createShellInterruption({ callId: 'call-two', command: 'echo two' }),
@@ -1124,7 +1122,7 @@ test('multiple sequential interruptions preserve approval and tool-start orderin
     }
   }
 
-  t.deepEqual(
+  expect(
     events.map((event) => {
       if (event.type === 'approval_required') {
         return `${event.type}:${event.approval.callId}`;
@@ -1134,20 +1132,19 @@ test('multiple sequential interruptions preserve approval and tool-start orderin
       }
       return event.type;
     }),
-    [
-      'approval_required:call-one',
-      'tool_started:call-one',
-      'approval_required:call-two',
-      'tool_started:call-two',
-      'approval_required:call-three',
-      'tool_started:call-three',
-      'text_delta',
-      'final',
-    ],
-  );
+  ).toEqual([
+    'approval_required:call-one',
+    'tool_started:call-one',
+    'approval_required:call-two',
+    'tool_started:call-two',
+    'approval_required:call-three',
+    'tool_started:call-three',
+    'text_delta',
+    'final',
+  ]);
 });
 
-test('aborted approval resolved by new user input emits the abort marker before resumed output', async (t) => {
+it('aborted approval resolved by new user input emits the abort marker before resumed output', async () => {
   const interruption = createShellInterruption({ callId: 'call-aborted', command: 'echo pending' });
   const initialStream = new MockStream([]);
   initialStream.interruptions = [interruption];
@@ -1181,21 +1178,22 @@ test('aborted approval resolved by new user input emits the abort marker before 
     events.push(event);
   }
 
-  t.deepEqual(
-    events.map((event) => event.type),
-    ['approval_required', 'user_message_consumed_for_abort', 'text_delta', 'final'],
-  );
-  t.deepEqual(
-    bundle.stateFacade.listUserTurns().map(({ text, imageCount }) => ({ text, imageCount })),
-    [{ text: 'run pending command', imageCount: 0 }],
-  );
+  expect(events.map((event) => event.type)).toEqual([
+    'approval_required',
+    'user_message_consumed_for_abort',
+    'text_delta',
+    'final',
+  ]);
+  expect(bundle.stateFacade.listUserTurns().map(({ text, imageCount }) => ({ text, imageCount }))).toEqual([
+    { text: 'run pending command', imageCount: 0 },
+  ]);
 });
 
 // ══════════════════════════════════════════════════════════════════════════
 // Refactoring characterization tests
 // ══════════════════════════════════════════════════════════════════════════
 
-test('characterization - undo while an approval is pending invalidates pending approval and prevents continuation', async (t) => {
+it('characterization - undo while an approval is pending invalidates pending approval and prevents continuation', async () => {
   const interruption = createShellInterruption({ callId: 'call-pending-tool', command: 'rm -rf /' });
   const interruptedStream = new MockStream([]);
   interruptedStream.interruptions = [interruption];
@@ -1220,29 +1218,26 @@ test('characterization - undo while an approval is pending invalidates pending a
   }
 
   // We should have received approval_required
-  t.is(emitted.length, 1);
-  t.is(emitted[0].type, 'approval_required');
+  expect(emitted.length).toBe(1);
+  expect(emitted[0].type).toBe('approval_required');
 
   // Verify there is a pending approval in approvalState
-  t.truthy(composition.approvalState.getPending());
+  expect(composition.approvalState.getPending()).toBeTruthy();
 
   // Trigger undo
   composition.stateFacade.undoLastUserTurn();
 
   // Verify that pending approval is invalidated/cleared
-  t.is(composition.approvalState.getPending(), null);
+  expect(composition.approvalState.getPending()).toBe(null);
 
   // Verify continuation is not allowed (throws error)
-  await t.throwsAsync(
-    async () => {
-      for await (const _ of composition.turnCoordinator.continueAfterApproval({ answer: 'y' })) {
-      }
-    },
-    { message: 'No pending approval to continue.' },
-  );
+  await expect(async () => {
+    for await (const _ of composition.turnCoordinator.continueAfterApproval({ answer: 'y' })) {
+    }
+  }).rejects.toThrow('No pending approval to continue.');
 });
 
-test('characterization - reset while an approval is pending invalidates pending approval and resets status machine', async (t) => {
+it('characterization - reset while an approval is pending invalidates pending approval and resets status machine', async () => {
   const interruption = createShellInterruption({ callId: 'call-pending-tool-reset', command: 'rm -rf /' });
   const interruptedStream = new MockStream([]);
   interruptedStream.interruptions = [interruption];
@@ -1266,30 +1261,27 @@ test('characterization - reset while an approval is pending invalidates pending 
     emitted.push(event);
   }
 
-  t.is(emitted[0].type, 'approval_required');
-  t.truthy(composition.approvalState.getPending());
+  expect(emitted[0].type).toBe('approval_required');
+  expect(composition.approvalState.getPending()).toBeTruthy();
 
   // Trigger reset
   composition.stateFacade.reset();
 
   // Verify pending approval is cleared
-  t.is(composition.approvalState.getPending(), null);
+  expect(composition.approvalState.getPending()).toBe(null);
 
   // Verify continuation throws 'No pending approval to continue.' because status machine is reset to idle
-  await t.throwsAsync(
-    async () => {
-      for await (const _ of composition.turnCoordinator.continueAfterApproval({ answer: 'y' })) {
-      }
-    },
-    { message: 'No pending approval to continue.' },
-  );
+  await expect(async () => {
+    for await (const _ of composition.turnCoordinator.continueAfterApproval({ answer: 'y' })) {
+    }
+  }).rejects.toThrow('No pending approval to continue.');
 });
 
 // ══════════════════════════════════════════════════════════════════════════
 // Service-boundary characterization: critical gap coverage
 // ══════════════════════════════════════════════════════════════════════════
 
-test('characterization - fresh start execution recovers from transient error with successful re-drive', async (t) => {
+it('characterization - fresh start execution recovers from transient error with successful re-drive', async () => {
   const interruption = createShellInterruption({ callId: 'call-fresh-start', command: 'echo recover' });
 
   const initialStream = new MockStream([]);
@@ -1327,23 +1319,23 @@ test('characterization - fresh start execution recovers from transient error wit
 
   // First sendMessage -> approval_required
   const result1 = await terminalAdapter.sendMessage('run command');
-  t.is(result1.type, 'approval_required');
+  expect(result1.type).toBe('approval_required');
 
   // handleApprovalDecision -> continuation throws -> fresh start re-drive -> response
   const result2 = await terminalAdapter.handleApprovalDecision('y');
 
-  t.is(result2?.type, 'response');
+  expect(result2?.type).toBe('response');
   if (result2?.type === 'response') {
-    t.is(result2.finalText, 'Recovered from transient error.');
+    expect(result2.finalText).toBe('Recovered from transient error.');
   }
-  t.is(startCallCount, 2, 'startStream should be called twice (initial + fresh start re-drive)');
+  expect(startCallCount).toBe(2); // was: t.is(startCallCount, 2, 'startStream should be called twice (initial + fresh start re-drive)')
 
   const result3 = await terminalAdapter.sendMessage('next message');
-  t.is(result3.type, 'response');
-  t.is(startCallCount, 3, 'a new turn should start after fresh-start recovery completes');
+  expect(result3.type).toBe('response');
+  expect(startCallCount).toBe(3); // was: t.is(startCallCount, 3, 'a new turn should start after fresh-start recovery completes')
 });
 
-test('characterization - approve-approve-response through handleApprovalDecision API', async (t) => {
+it('characterization - approve-approve-response through handleApprovalDecision API', async () => {
   const first = createShellInterruption({ callId: 'call-aa1', command: 'echo first' });
   const second = createShellInterruption({ callId: 'call-aa2', command: 'echo second' });
 
@@ -1387,33 +1379,33 @@ test('characterization - approve-approve-response through handleApprovalDecision
   const r1 = await terminalAdapter.sendMessage('run commands', {
     onEvent: (e) => events.push(e),
   });
-  t.is(r1.type, 'approval_required');
-  t.is((r1 as { type: 'approval_required'; approval: { callId: string } }).approval.callId, 'call-aa1');
+  expect(r1.type).toBe('approval_required');
+  expect((r1 as { type: 'approval_required'; approval: { callId: string } }).approval.callId).toBe('call-aa1');
 
   // First handleApprovalDecision -> approval_required (tool 2)
   const r2 = await terminalAdapter.handleApprovalDecision('y', undefined, {
     onEvent: (e) => events.push(e),
   });
-  t.is(r2?.type, 'approval_required');
-  t.is((r2 as { type: 'approval_required'; approval: { callId: string } })?.approval.callId, 'call-aa2');
+  expect(r2?.type).toBe('approval_required');
+  expect((r2 as { type: 'approval_required'; approval: { callId: string } })?.approval.callId).toBe('call-aa2');
 
   // Second handleApprovalDecision -> response
   const r3 = await terminalAdapter.handleApprovalDecision('y', undefined, {
     onEvent: (e) => events.push(e),
   });
-  t.is(r3?.type, 'response');
+  expect(r3?.type).toBe('response');
   if (r3?.type === 'response') {
-    t.is(r3.finalText, 'All done.');
+    expect(r3.finalText).toBe('All done.');
   }
 
   // Verify tool_started events for both tools
   const toolStarted = events.filter((e) => e.type === 'tool_started');
-  t.is(toolStarted.length, 2, 'Should have exactly 2 tool_started events');
-  t.is(toolStarted[0].toolCallId, 'call-aa1');
-  t.is(toolStarted[1].toolCallId, 'call-aa2');
+  expect(toolStarted.length).toBe(2); // was: t.is(toolStarted.length, 2, 'Should have exactly 2 tool_started events')
+  expect(toolStarted[0].toolCallId).toBe('call-aa1');
+  expect(toolStarted[1].toolCallId).toBe('call-aa2');
 });
 
-test('characterization - reject then approve sequence through handleApprovalDecision API', async (t) => {
+it('characterization - reject then approve sequence through handleApprovalDecision API', async () => {
   const firstTool = createShellInterruption({ callId: 'call-rej1', command: 'echo rejectable' });
   const secondTool = createShellInterruption({ callId: 'call-appr1', command: 'echo approvable' });
   const approvalState = createApprovalState();
@@ -1457,31 +1449,31 @@ test('characterization - reject then approve sequence through handleApprovalDeci
 
   // Turn 1: sendMessage -> approval_required
   const r1 = await terminalAdapter.sendMessage('run command 1');
-  t.is(r1.type, 'approval_required');
+  expect(r1.type).toBe('approval_required');
 
   // Turn 1: reject -> response
   const r2 = await terminalAdapter.handleApprovalDecision('n', 'Not needed');
-  t.is(r2?.type, 'response');
-  t.truthy((r2 as { type: 'response'; finalText?: string })?.finalText);
+  expect(r2?.type).toBe('response');
+  expect((r2 as { type: 'response'; finalText?: string })?.finalText).toBeTruthy();
 
   // Verify rejection was recorded in the approval state
-  t.is(approvalState.approveCalls.length, 0, 'No approvals should have been recorded');
-  t.is(approvalState.rejectCalls.length, 1, 'One rejection should be recorded');
-  t.is((approvalState.rejectCalls[0] as { callId: string }).callId, 'call-rej1', 'Rejected call should match');
+  expect(approvalState.approveCalls.length).toBe(0); // was: t.is(approvalState.approveCalls.length, 0, 'No approvals should have been recorded')
+  expect(approvalState.rejectCalls.length).toBe(1); // was: t.is(approvalState.rejectCalls.length, 1, 'One rejection should be recorded')
+  expect((approvalState.rejectCalls[0] as { callId: string }).callId).toBe('call-rej1'); // was: t.is((approvalState.rejectCalls[0] as { callId: string }).callId, 'call-rej1', 'Rejected call should match')
 
   // Turn 2: new sendMessage -> approval_required (subsequent tool needs approval after rejection)
   const r3 = await terminalAdapter.sendMessage('run command 2');
-  t.is(r3.type, 'approval_required');
+  expect(r3.type).toBe('approval_required');
 
   // Turn 2: approve -> response (subsequent approval works correctly after rejection)
   const r4 = await terminalAdapter.handleApprovalDecision('y');
-  t.is(r4?.type, 'response');
+  expect(r4?.type).toBe('response');
   if (r4?.type === 'response') {
-    t.is(r4.finalText, 'Approved.');
+    expect(r4.finalText).toBe('Approved.');
   }
 });
 
-test('characterization - abort during pending approval clears state and prevents continuation', async (t) => {
+it('characterization - abort during pending approval clears state and prevents continuation', async () => {
   const interruption = createShellInterruption({ callId: 'call-abort-chain', command: 'echo pending' });
   const approvalState = createApprovalState();
 
@@ -1507,22 +1499,22 @@ test('characterization - abort during pending approval clears state and prevents
   for await (const event of composition.turnCoordinator.start('run command')) {
     emitted.push(event);
   }
-  t.is(emitted.length, 1);
-  t.is(emitted[0].type, 'approval_required');
-  t.truthy(composition.approvalState.getPending(), 'Should have pending approval before abort');
+  expect(emitted.length).toBe(1);
+  expect(emitted[0].type).toBe('approval_required');
+  expect(composition.approvalState.getPending(), 'Should have pending approval before abort').toBeTruthy();
 
   // Abort while approval is pending
   composition.turnCoordinator.abort();
 
   // Status should return to idle
-  t.is(composition.appState.statusMachine.current, 'idle', 'Status machine should be idle after abort');
+  expect(composition.appState.statusMachine.current).toBe('idle'); // was: t.is(composition.appState.statusMachine.current, 'idle', 'Status machine should be idle after abort')
 
   // No pending approval after abort
-  t.is(composition.approvalState.getPending(), null, 'No pending approval after abort');
+  expect(composition.approvalState.getPending()).toBe(null); // was: t.is(composition.approvalState.getPending(), null, 'No pending approval after abort')
 
   // Tool ledger should have aborted entry
   const ledger = composition.toolTracker.ledger.export();
   const abortedEntries = ledger.filter((entry) => entry.status === 'aborted');
-  t.true(abortedEntries.length >= 1, 'Tool ledger should have at least one aborted entry');
-  t.is(abortedEntries[0].callId, 'call-abort-chain', 'Aborted entry should match the interrupted call');
+  expect(abortedEntries.length >= 1, 'Tool ledger should have at least one aborted entry').toBe(true);
+  expect(abortedEntries[0].callId).toBe('call-abort-chain'); // was: t.is(abortedEntries[0].callId, 'call-abort-chain', 'Aborted entry should match the interrupted call')
 });

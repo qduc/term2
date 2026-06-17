@@ -1,8 +1,7 @@
-import test from 'ava';
-
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { repairConversationHistory } from './conversation-history-repair.js';
 
-test('repairConversationHistory collapses repeated full-history tool replay into the latest transcript', (t) => {
+it('repairConversationHistory collapses repeated full-history tool replay into the latest transcript', () => {
   const history = [
     { role: 'user', type: 'message', content: 'Investigate upgrade' },
     { type: 'function_call', callId: 'call-search', name: 'web_search', arguments: '{}' },
@@ -17,17 +16,17 @@ test('repairConversationHistory collapses repeated full-history tool replay into
 
   const result = repairConversationHistory(history);
 
-  t.true(result.repaired);
-  t.is(result.statsBefore.count, 9);
-  t.is(result.statsAfter.count, 6);
-  t.is(result.repairs[0]?.kind, 'replayed_full_history_prefix');
-  t.is((result.history[0] as any).content, 'Investigate upgrade');
-  t.is((result.history[5] as any).role, 'assistant');
-  t.is(result.history.filter((item: any) => item.callId === 'call-search').length, 2);
-  t.is(result.history.filter((item: any) => item.callId === 'call-read').length, 2);
+  expect(result.repaired).toBe(true);
+  expect(result.statsBefore.count).toBe(9);
+  expect(result.statsAfter.count).toBe(6);
+  expect(result.repairs[0]?.kind).toBe('replayed_full_history_prefix');
+  expect((result.history[0] as any).content).toBe('Investigate upgrade');
+  expect((result.history[5] as any).role).toBe('assistant');
+  expect(result.history.filter((item: any) => item.callId === 'call-search').length).toBe(2);
+  expect(result.history.filter((item: any) => item.callId === 'call-read').length).toBe(2);
 });
 
-test('repairConversationHistory removes duplicate tool pairs with stable callId and changed SDK ids', (t) => {
+it('repairConversationHistory removes duplicate tool pairs with stable callId and changed SDK ids', () => {
   const history = [
     { role: 'user', type: 'message', content: 'Inspect the repo' },
     { type: 'function_call', id: 'fc_1', callId: 'call-read', name: 'read_file', arguments: '{}' },
@@ -39,16 +38,16 @@ test('repairConversationHistory removes duplicate tool pairs with stable callId 
 
   const result = repairConversationHistory(history);
 
-  t.true(result.repaired);
-  t.is(result.repairs.at(-1)?.kind, 'duplicated_tool_call_result_pair');
-  t.is(result.history.length, 4);
-  t.deepEqual(
-    result.history.filter((item: any) => item.callId === 'call-read').map((item: any) => item.id),
-    ['fc_1', 'fcr_1'],
-  );
+  expect(result.repaired).toBe(true);
+  expect(result.repairs.at(-1)?.kind).toBe('duplicated_tool_call_result_pair');
+  expect(result.history.length).toBe(4);
+  expect(result.history.filter((item: any) => item.callId === 'call-read').map((item: any) => item.id)).toEqual([
+    'fc_1',
+    'fcr_1',
+  ]);
 });
 
-test('repairConversationHistory leaves repeated user and assistant text unchanged without duplicated tool pairs', (t) => {
+it('repairConversationHistory leaves repeated user and assistant text unchanged without duplicated tool pairs', () => {
   const history = [
     { role: 'user', type: 'message', content: 'again' },
     { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first' }] },
@@ -58,11 +57,11 @@ test('repairConversationHistory leaves repeated user and assistant text unchange
 
   const result = repairConversationHistory(history);
 
-  t.false(result.repaired);
-  t.deepEqual(result.history, history);
+  expect(result.repaired).toBe(false);
+  expect(result.history).toEqual(history);
 });
 
-test('repairConversationHistory leaves valid distinct tool calls unchanged', (t) => {
+it('repairConversationHistory leaves valid distinct tool calls unchanged', () => {
   const history = [
     { role: 'user', type: 'message', content: 'Inspect' },
     { type: 'function_call', callId: 'call-read-1', name: 'read_file', arguments: '{}' },
@@ -73,11 +72,11 @@ test('repairConversationHistory leaves valid distinct tool calls unchanged', (t)
 
   const result = repairConversationHistory(history);
 
-  t.false(result.repaired);
-  t.deepEqual(result.history, history);
+  expect(result.repaired).toBe(false);
+  expect(result.history).toEqual(history);
 });
 
-test('repairConversationHistory handles rawItem wrappers and camel or snake call id fields', (t) => {
+it('repairConversationHistory handles rawItem wrappers and camel or snake call id fields', () => {
   const history = [
     { rawItem: { role: 'user', type: 'message', content: 'Run tools' } },
     { rawItem: { type: 'function_call', call_id: 'call-shell', id: 'fc_1', name: 'shell', arguments: '{}' } },
@@ -88,10 +87,7 @@ test('repairConversationHistory handles rawItem wrappers and camel or snake call
 
   const result = repairConversationHistory(history);
 
-  t.true(result.repaired);
-  t.is(result.history.length, 3);
-  t.deepEqual(
-    result.history.slice(1).map((item: any) => item.rawItem.id),
-    ['fc_1', 'fcr_1'],
-  );
+  expect(result.repaired).toBe(true);
+  expect(result.history.length).toBe(3);
+  expect(result.history.slice(1).map((item: any) => item.rawItem.id)).toEqual(['fc_1', 'fcr_1']);
 });

@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ConversationAdapter } from './conversation-adapter.js';
 import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import type { ConversationLogger } from '../logging/conversation-logger.js';
@@ -23,7 +23,7 @@ const sessionContextService = {
   getContext: () => null,
 };
 
-test('ConversationAdapter delegates turn execution through an explicit turnFlow dependency', async (t) => {
+it('ConversationAdapter delegates turn execution through an explicit turnFlow dependency', async () => {
   const calls: Array<{ method: string; input?: any; options?: any }> = [];
   const turnFlow = {
     async *start(input: string, options?: any) {
@@ -58,9 +58,9 @@ test('ConversationAdapter delegates turn execution through an explicit turnFlow 
   const initial = await adapter.sendMessage('hello');
   const continued = await adapter.handleApprovalDecision('y');
 
-  t.is((initial as FinalTerminal).finalText, 'started');
-  t.is((continued as FinalTerminal | null)?.finalText, 'continued');
-  t.deepEqual(calls, [
+  expect((initial as FinalTerminal).finalText).toBe('started');
+  expect((continued as FinalTerminal | null)?.finalText).toBe('continued');
+  expect(calls).toEqual([
     {
       method: 'start',
       input: 'hello',

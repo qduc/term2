@@ -1,8 +1,8 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { computeMetrics, ResultRecord } from './metrics.js';
 import { generateReport } from './report.js';
 
-test('generateReport includes prompt version when provided', (t) => {
+it('generateReport includes prompt version when provided', () => {
   const results: ResultRecord[] = [
     {
       caseId: 'safe-1',
@@ -21,5 +21,5 @@ test('generateReport includes prompt version when provided', (t) => {
     promptVersion: 'auto-approval-prompt-v1',
   });
 
-  t.true(report.includes('Prompt version: `auto-approval-prompt-v1`'));
+  expect(report.includes('Prompt version: `auto-approval-prompt-v1`')).toBe(true);
 });

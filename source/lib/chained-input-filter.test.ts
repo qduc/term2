@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   filterChainedModelInput,
   findChainedDeltaStart,
@@ -11,133 +11,133 @@ import {
 
 // --- asRecord ---
 
-test('asRecord returns object for plain objects', (t) => {
-  t.deepEqual(asRecord({ a: 1 }), { a: 1 });
+it('asRecord returns object for plain objects', () => {
+  expect(asRecord({ a: 1 })).toEqual({ a: 1 });
 });
 
-test('asRecord returns null for arrays', (t) => {
-  t.is(asRecord([1, 2]), null);
+it('asRecord returns null for arrays', () => {
+  expect(asRecord([1, 2])).toBe(null);
 });
 
-test('asRecord returns null for primitives', (t) => {
-  t.is(asRecord('hello'), null);
-  t.is(asRecord(42), null);
-  t.is(asRecord(null), null);
+it('asRecord returns null for primitives', () => {
+  expect(asRecord('hello')).toBe(null);
+  expect(asRecord(42)).toBe(null);
+  expect(asRecord(null)).toBe(null);
 });
 
 // --- isUserInputMessage ---
 
-test('isUserInputMessage returns true for user role', (t) => {
-  t.true(isUserInputMessage({ role: 'user', content: 'hello' }));
+it('isUserInputMessage returns true for user role', () => {
+  expect(isUserInputMessage({ role: 'user', content: 'hello' })).toBe(true);
 });
 
-test('isUserInputMessage returns false for assistant role', (t) => {
-  t.false(isUserInputMessage({ role: 'assistant' }));
+it('isUserInputMessage returns false for assistant role', () => {
+  expect(isUserInputMessage({ role: 'assistant' })).toBe(false);
 });
 
-test('isUserInputMessage returns false for non-objects', (t) => {
-  t.false(isUserInputMessage('string'));
-  t.false(isUserInputMessage(null));
+it('isUserInputMessage returns false for non-objects', () => {
+  expect(isUserInputMessage('string')).toBe(false);
+  expect(isUserInputMessage(null)).toBe(false);
 });
 
 // --- isToolResultItem ---
 
-test('isToolResultItem returns true for known tool result types', (t) => {
+it('isToolResultItem returns true for known tool result types', () => {
   for (const type of TOOL_RESULT_ITEM_TYPES) {
-    t.true(isToolResultItem({ type }), `Expected true for type: ${type}`);
+    expect(isToolResultItem({ type })).toBe(true);
   }
 });
 
-test('isToolResultItem returns false for unknown types', (t) => {
-  t.false(isToolResultItem({ type: 'message' }));
-  t.false(isToolResultItem({ type: 'text' }));
+it('isToolResultItem returns false for unknown types', () => {
+  expect(isToolResultItem({ type: 'message' })).toBe(false);
+  expect(isToolResultItem({ type: 'text' })).toBe(false);
 });
 
-test('isToolResultItem returns false for non-objects', (t) => {
-  t.false(isToolResultItem(null));
-  t.false(isToolResultItem('string'));
+it('isToolResultItem returns false for non-objects', () => {
+  expect(isToolResultItem(null)).toBe(false);
+  expect(isToolResultItem('string')).toBe(false);
 });
 
 // --- getToolResultCallId ---
 
-test('getToolResultCallId extracts callId from tool result item', (t) => {
+it('getToolResultCallId extracts callId from tool result item', () => {
   const item = { type: 'function_call_output', callId: 'call_123', output: 'ok' };
-  t.is(getToolResultCallId(item), 'call_123');
+  expect(getToolResultCallId(item)).toBe('call_123');
 });
 
-test('getToolResultCallId extracts call_id as fallback', (t) => {
+it('getToolResultCallId extracts call_id as fallback', () => {
   const item = { type: 'function_call_output', call_id: 'call_456', output: 'ok' };
-  t.is(getToolResultCallId(item), 'call_456');
+  expect(getToolResultCallId(item)).toBe('call_456');
 });
 
-test('getToolResultCallId extracts tool_call_id as fallback', (t) => {
+it('getToolResultCallId extracts tool_call_id as fallback', () => {
   const item = { type: 'tool_call_output', tool_call_id: 'call_789', output: 'ok' };
-  t.is(getToolResultCallId(item), 'call_789');
+  expect(getToolResultCallId(item)).toBe('call_789');
 });
 
-test('getToolResultCallId extracts from rawItem when top-level has no callId', (t) => {
+it('getToolResultCallId extracts from rawItem when top-level has no callId', () => {
   const item = { type: 'function_call_output', rawItem: { callId: 'raw_001' } };
-  t.is(getToolResultCallId(item), 'raw_001');
+  expect(getToolResultCallId(item)).toBe('raw_001');
 });
 
-test('getToolResultCallId falls back to top-level call_id when rawItem lacks call ID', (t) => {
+it('getToolResultCallId falls back to top-level call_id when rawItem lacks call ID', () => {
   const item = { type: 'function_call_output', call_id: 'top_001', output: 'ok', rawItem: { output: 'ok' } };
-  t.is(getToolResultCallId(item), 'top_001');
+  expect(getToolResultCallId(item)).toBe('top_001');
 });
 
-test('getToolResultCallId returns null for non-tool-result items', (t) => {
-  t.is(getToolResultCallId({ role: 'user', content: 'hi' }), null);
+it('getToolResultCallId returns null for non-tool-result items', () => {
+  expect(getToolResultCallId({ role: 'user', content: 'hi' })).toBe(null);
 });
 
-test('getToolResultCallId returns null when callId is missing', (t) => {
-  t.is(getToolResultCallId({ type: 'function_call_output', output: 'ok' }), null);
+it('getToolResultCallId returns null when callId is missing', () => {
+  expect(getToolResultCallId({ type: 'function_call_output', output: 'ok' })).toBe(null);
 });
 
 // --- findChainedDeltaStart ---
 
-test('findChainedDeltaStart returns index of first trailing tool result', (t) => {
+it('findChainedDeltaStart returns index of first trailing tool result', () => {
   const input = [
     { role: 'user', content: 'hi' },
     { role: 'assistant', content: 'hello' },
     { type: 'function_call_output', callId: 'c1', output: 'r1' },
     { type: 'function_call_output', callId: 'c2', output: 'r2' },
   ];
-  t.is(findChainedDeltaStart(input), 2);
+  expect(findChainedDeltaStart(input)).toBe(2);
 });
 
-test('findChainedDeltaStart returns last user message index when no trailing tool results', (t) => {
+it('findChainedDeltaStart returns last user message index when no trailing tool results', () => {
   const input = [
     { role: 'user', content: 'first' },
     { role: 'assistant', content: 'reply' },
     { role: 'user', content: 'second' },
     { role: 'assistant', content: 'reply2' },
   ];
-  t.is(findChainedDeltaStart(input), 2);
+  expect(findChainedDeltaStart(input)).toBe(2);
 });
 
-test('findChainedDeltaStart returns 0 when input has no user messages or tool results', (t) => {
+it('findChainedDeltaStart returns 0 when input has no user messages or tool results', () => {
   const input = [{ role: 'assistant', content: 'only' }];
-  t.is(findChainedDeltaStart(input), 0);
+  expect(findChainedDeltaStart(input)).toBe(0);
 });
 
-test('findChainedDeltaStart returns 0 for empty input', (t) => {
-  t.is(findChainedDeltaStart([]), 0);
+it('findChainedDeltaStart returns 0 for empty input', () => {
+  expect(findChainedDeltaStart([])).toBe(0);
 });
 
 // --- filterChainedModelInput ---
 
-test('filterChainedModelInput returns modelData unchanged when input is not an array', (t) => {
+it('filterChainedModelInput returns modelData unchanged when input is not an array', () => {
   const modelData = { input: null, other: 'data' };
-  t.deepEqual(filterChainedModelInput(modelData), modelData);
+  expect(filterChainedModelInput(modelData)).toEqual(modelData);
 });
 
-test('filterChainedModelInput returns modelData unchanged when input has 0 or 1 items', (t) => {
+it('filterChainedModelInput returns modelData unchanged when input has 0 or 1 items', () => {
   const modelData = { input: [{ role: 'user', content: 'hi' }] };
-  t.deepEqual(filterChainedModelInput(modelData), modelData);
-  t.deepEqual(filterChainedModelInput({ input: [] }), { input: [] });
+  expect(filterChainedModelInput(modelData)).toEqual(modelData);
+  expect(filterChainedModelInput({ input: [] })).toEqual({ input: [] });
 });
 
-test('filterChainedModelInput keeps only specified toolResultCallIds when provided', (t) => {
+it('filterChainedModelInput keeps only specified toolResultCallIds when provided', () => {
   const modelData = {
     input: [
       { role: 'user', content: 'hi' },
@@ -147,13 +147,13 @@ test('filterChainedModelInput keeps only specified toolResultCallIds when provid
     ],
   };
   const result = filterChainedModelInput(modelData, { toolResultCallIds: ['c1', 'c3'] });
-  t.deepEqual(result.input, [
+  expect(result.input).toEqual([
     { type: 'function_call_output', callId: 'c1', output: 'r1' },
     { type: 'function_call_output', callId: 'c3', output: 'r3' },
   ]);
 });
 
-test('filterChainedModelInput keeps outputs whose top-level call_id is recoverable even when rawItem lacks it', (t) => {
+it('filterChainedModelInput keeps outputs whose top-level call_id is recoverable even when rawItem lacks it', () => {
   const modelData = {
     input: [
       { role: 'user', content: 'hi' },
@@ -163,14 +163,14 @@ test('filterChainedModelInput keeps outputs whose top-level call_id is recoverab
     ],
   };
   const result = filterChainedModelInput(modelData, { toolResultCallIds: ['c1', 'c2', 'c3'] });
-  t.deepEqual(result.input, [
+  expect(result.input).toEqual([
     { type: 'function_call_output', callId: 'c1', output: 'r1' },
     { type: 'function_call_output', call_id: 'c2', output: 'r2', rawItem: { output: 'r2' } },
     { type: 'function_call_output', callId: 'c3', output: 'r3' },
   ]);
 });
 
-test('filterChainedModelInput falls back to delta start when no matching callIds found', (t) => {
+it('filterChainedModelInput falls back to delta start when no matching callIds found', () => {
   const modelData = {
     input: [
       { role: 'user', content: 'hi' },
@@ -180,10 +180,10 @@ test('filterChainedModelInput falls back to delta start when no matching callIds
   };
   // No matching callIds → falls back to findChainedDeltaStart → trailing tool result start at index 2
   const result = filterChainedModelInput(modelData, { toolResultCallIds: ['nonexistent'] });
-  t.deepEqual(result.input, [{ type: 'function_call_output', callId: 'c1', output: 'r1' }]);
+  expect(result.input).toEqual([{ type: 'function_call_output', callId: 'c1', output: 'r1' }]);
 });
 
-test('filterChainedModelInput preserves non-input properties on modelData', (t) => {
+it('filterChainedModelInput preserves non-input properties on modelData', () => {
   const modelData = {
     input: [
       { role: 'user', content: 'hi' },
@@ -193,10 +193,10 @@ test('filterChainedModelInput preserves non-input properties on modelData', (t) 
     metadata: { key: 'value' },
   };
   const result = filterChainedModelInput(modelData);
-  t.is(result.metadata, modelData.metadata);
+  expect(result.metadata).toBe(modelData.metadata);
 });
 
-test('filterChainedModelInput handles toolResultCallIds with falsy entries', (t) => {
+it('filterChainedModelInput handles toolResultCallIds with falsy entries', () => {
   const modelData = {
     input: [
       { type: 'function_call_output', callId: 'c1', output: 'r1' },
@@ -205,10 +205,10 @@ test('filterChainedModelInput handles toolResultCallIds with falsy entries', (t)
   };
   // Falsy entries (empty string) should be filtered out from toolResultCallIds
   const result = filterChainedModelInput(modelData, { toolResultCallIds: ['c1', '', undefined as any] });
-  t.deepEqual(result.input, [{ type: 'function_call_output', callId: 'c1', output: 'r1' }]);
+  expect(result.input).toEqual([{ type: 'function_call_output', callId: 'c1', output: 'r1' }]);
 });
 
-test('filterChainedModelInput returns full input when deltaStart is 0', (t) => {
+it('filterChainedModelInput returns full input when deltaStart is 0', () => {
   const modelData = {
     input: [
       { role: 'assistant', content: 'only' },
@@ -216,5 +216,5 @@ test('filterChainedModelInput returns full input when deltaStart is 0', (t) => {
     ],
   };
   const result = filterChainedModelInput(modelData);
-  t.deepEqual(result.input, modelData.input);
+  expect(result.input).toEqual(modelData.input);
 });

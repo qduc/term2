@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ContinuationPlanApplier } from './continuation-plan-applier.js';
 
 function createMockToolTracker() {
@@ -25,23 +25,22 @@ function createMockDeps(): any {
   };
 }
 
-test('prepareInit throws when no pending approval for approval_decision', (t) => {
+it('prepareInit throws when no pending approval for approval_decision', () => {
   const deps = createMockDeps();
   deps.approvalFlow.prepareContinuation = () => null;
 
   const applier = new ContinuationPlanApplier(deps);
-  t.throws(
-    () =>
-      applier.prepareInit({
-        kind: 'approval_decision',
-        answer: 'y',
-        generation: 1,
-      }),
-    { message: 'No pending approval for continuation' },
-  );
+
+  expect(() =>
+    applier.prepareInit({
+      kind: 'approval_decision',
+      answer: 'y',
+      generation: 1,
+    }),
+  ).toThrow('No pending approval for continuation');
 });
 
-test('prepareInit returns prepared continuation for approval_decision', (t) => {
+it('prepareInit returns prepared continuation for approval_decision', () => {
   const deps = createMockDeps();
   deps.approvalFlow.prepareContinuation = () => ({
     pendingApprovalContext: {
@@ -66,13 +65,13 @@ test('prepareInit returns prepared continuation for approval_decision', (t) => {
     generation: 1,
   });
 
-  t.is(prepared.source, 'continueRunStream');
-  t.is(prepared.token, 5);
-  t.is(prepared.inputMode, 'full_history');
-  t.is((prepared.toolStartedEvent as any).type, 'tool_started');
+  expect(prepared.source).toBe('continueRunStream');
+  expect(prepared.token).toBe(5);
+  expect(prepared.inputMode).toBe('full_history');
+  expect((prepared.toolStartedEvent as any).type).toBe('tool_started');
 });
 
-test('prepareInit records aborted approval for rejection', (t) => {
+it('prepareInit records aborted approval for rejection', () => {
   const deps = createMockDeps();
   let abortedCallId: string | undefined;
   deps.toolTracker.recordAbortedApproval = (_output: string, _output2: string, callId: string | undefined) => {
@@ -97,10 +96,10 @@ test('prepareInit records aborted approval for rejection', (t) => {
     generation: 1,
   });
 
-  t.is(abortedCallId, 'c1');
+  expect(abortedCallId).toBe('c1');
 });
 
-test('prepareInit returns prepared continuation for abort_resolution', (t) => {
+it('prepareInit returns prepared continuation for abort_resolution', () => {
   const deps = createMockDeps();
   deps.approvalFlow.prepareAbortResolution = (_context: any, _text: string) => ({
     removeInterceptor: () => {},
@@ -124,12 +123,12 @@ test('prepareInit returns prepared continuation for abort_resolution', (t) => {
     generation: 1,
   });
 
-  t.is(prepared.source, 'abortResolution');
-  t.is(prepared.token, 3);
-  t.is(prepared.toolStartedEvent, undefined);
+  expect(prepared.source).toBe('abortResolution');
+  expect(prepared.token).toBe(3);
+  expect(prepared.toolStartedEvent).toBe(undefined);
 });
 
-test('applyInitialSetup yields deduped tool_started event', async (t) => {
+it('applyInitialSetup yields deduped tool_started event', async () => {
   const deps = createMockDeps();
   deps.toolTracker.dedupeToolStarted = (event: any) => event;
 
@@ -145,11 +144,11 @@ test('applyInitialSetup yields deduped tool_started event', async (t) => {
     events.push(event);
   }
 
-  t.is(events.length, 1);
-  t.is(events[0].type, 'tool_started');
+  expect(events.length).toBe(1);
+  expect(events[0].type).toBe('tool_started');
 });
 
-test('applyInitialSetup populates toolTracker argumentsById', async (t) => {
+it('applyInitialSetup populates toolTracker argumentsById', async () => {
   const deps = createMockDeps();
   const applier = new ContinuationPlanApplier(deps);
   const prepared = {
@@ -162,10 +161,10 @@ test('applyInitialSetup populates toolTracker argumentsById', async (t) => {
     // no events
   }
 
-  t.is(deps.toolTracker.argumentsById.get('k1'), 'v1');
+  expect(deps.toolTracker.argumentsById.get('k1')).toBe('v1');
 });
 
-test('applyInitialSetup captures the current tool ledger for recovery', async (t) => {
+it('applyInitialSetup captures the current tool ledger for recovery', async () => {
   const deps = createMockDeps();
   const snapshot = [{ callId: 'existing-call', status: 'completed' }];
   deps.toolTracker.export = () => snapshot;
@@ -186,10 +185,10 @@ test('applyInitialSetup captures the current tool ledger for recovery', async (t
     // no events
   }
 
-  t.is(capturedSnapshot, snapshot);
+  expect(capturedSnapshot).toBe(snapshot);
 });
 
-test('recordPendingApproval adds the pending function call to the tool ledger', (t) => {
+it('recordPendingApproval adds the pending function call to the tool ledger', () => {
   const deps = createMockDeps();
   let recordedItem: unknown;
   deps.toolTracker.recordFunctionCall = (item: unknown) => {
@@ -203,7 +202,7 @@ test('recordPendingApproval adds the pending function call to the tool ledger', 
     callId: 'call-pending',
   });
 
-  t.deepEqual(recordedItem, {
+  expect(recordedItem).toEqual({
     type: 'function_call',
     callId: 'call-pending',
     name: 'apply_patch',
@@ -211,17 +210,17 @@ test('recordPendingApproval adds the pending function call to the tool ledger', 
   });
 });
 
-test('applyNextPlan updates state for approved plan', async (t) => {
+it('applyNextPlan updates state for approved plan', async () => {
   const deps = createMockDeps();
   const applier = new ContinuationPlanApplier(deps);
 
   const state = {
     advanceFromPlan: (nextState: any, nextInterruption: any, nextInputMode: any, mergedIds: any, ledger: any) => {
-      t.is(nextState.id, 's2');
-      t.is(nextInterruption.callId, 'c2');
-      t.is(nextInputMode, 'full_history');
-      t.deepEqual(mergedIds, new Set(['id1']));
-      t.deepEqual(ledger, []);
+      expect(nextState.id).toBe('s2');
+      expect(nextInterruption.callId).toBe('c2');
+      expect(nextInputMode).toBe('full_history');
+      expect(mergedIds).toEqual(new Set(['id1']));
+      expect(ledger).toEqual([]);
     },
   } as any;
 
@@ -240,7 +239,7 @@ test('applyNextPlan updates state for approved plan', async (t) => {
   }
 });
 
-test('applyNextPlan records aborted approval for rejected plan', async (t) => {
+it('applyNextPlan records aborted approval for rejected plan', async () => {
   const deps = createMockDeps();
   let abortedCallId: string | undefined;
   deps.toolTracker.recordAbortedApproval = (_output: string, _output2: string, callId: string | undefined) => {
@@ -265,5 +264,5 @@ test('applyNextPlan records aborted approval for rejected plan', async (t) => {
     // no events
   }
 
-  t.is(abortedCallId, 'c2');
+  expect(abortedCallId).toBe('c2');
 });

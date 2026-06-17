@@ -1,8 +1,8 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { sanitizeLogMetadata, truncateLogText } from './log-truncation.js';
 import type { LogMetadata, ImageContentPart } from './log-truncation.js';
 
-test('sanitizeLogMetadata truncates image payloads in messages content', (t) => {
+it('sanitizeLogMetadata truncates image payloads in messages content', () => {
   const longBase64 = 'data:image/png;base64,' + 'a'.repeat(10000);
   const meta: LogMetadata = {
     eventType: 'provider.request.started',
@@ -24,16 +24,16 @@ test('sanitizeLogMetadata truncates image payloads in messages content', (t) => 
   const directImage = content[1].image!;
   const imageUrl = content[2].image_url!.url!;
 
-  t.not(sanitized, meta);
-  t.true(directImage.length < 500);
-  t.true(directImage.endsWith('... (truncated)'));
-  t.true(imageUrl.length < 500);
-  t.true(imageUrl.endsWith('... (truncated)'));
-  t.is((meta.messages![0]!.content as ImageContentPart[])[1].image, longBase64);
-  t.is((meta.messages![0]!.content as ImageContentPart[])[2].image_url!.url, longBase64);
+  expect(sanitized).not.toBe(meta);
+  expect(directImage.length < 500).toBe(true);
+  expect(directImage.endsWith('... (truncated)')).toBe(true);
+  expect(imageUrl.length < 500).toBe(true);
+  expect(imageUrl.endsWith('... (truncated)')).toBe(true);
+  expect((meta.messages![0]!.content as ImageContentPart[])[1].image).toBe(longBase64);
+  expect((meta.messages![0]!.content as ImageContentPart[])[2].image_url!.url).toBe(longBase64);
 });
 
-test('sanitizeLogMetadata returns metadata unchanged when there are no truncation targets', (t) => {
+it('sanitizeLogMetadata returns metadata unchanged when there are no truncation targets', () => {
   const meta = {
     eventType: 'provider.request.started',
     messages: [
@@ -47,12 +47,12 @@ test('sanitizeLogMetadata returns metadata unchanged when there are no truncatio
 
   const sanitized = sanitizeLogMetadata(meta);
 
-  t.is(sanitized, meta);
+  expect(sanitized).toBe(meta);
 });
 
-test('sanitizeLogMetadata truncates long system prompt content', (t) => {
+it('sanitizeLogMetadata truncates long system prompt content', () => {
   const longSystemPrompt = 'You are a helpful assistant. '.repeat(50);
-  t.true(longSystemPrompt.length > 500);
+  expect(longSystemPrompt.length > 500).toBe(true);
 
   const meta = {
     eventType: 'provider.request.started',
@@ -65,38 +65,38 @@ test('sanitizeLogMetadata truncates long system prompt content', (t) => {
   const sanitized = sanitizeLogMetadata(meta);
   const systemMsg = sanitized.messages![0]!;
 
-  t.not(sanitized, meta);
-  t.true(typeof systemMsg.content === 'string');
-  t.true((systemMsg.content as string).length < 700);
-  t.true((systemMsg.content as string).includes('... (truncated'));
+  expect(sanitized).not.toBe(meta);
+  expect(typeof systemMsg.content === 'string').toBe(true);
+  expect((systemMsg.content as string).length < 700).toBe(true);
+  expect((systemMsg.content as string).includes('... (truncated')).toBe(true);
 });
 
-test('sanitizeLogMetadata truncates developer role content', (t) => {
+it('sanitizeLogMetadata truncates developer role content', () => {
   const longDevPrompt = 'You are Claude. '.repeat(50);
-  t.true(longDevPrompt.length > 500);
+  expect(longDevPrompt.length > 500).toBe(true);
 
   const meta = {
     messages: [{ role: 'developer', content: longDevPrompt }],
   };
 
   const sanitized = sanitizeLogMetadata(meta);
-  t.not(sanitized, meta);
-  t.true((sanitized.messages![0]!.content as string).includes('... (truncated'));
+  expect(sanitized).not.toBe(meta);
+  expect((sanitized.messages![0]!.content as string).includes('... (truncated')).toBe(true);
 });
 
-test('sanitizeLogMetadata does not truncate short system prompt', (t) => {
+it('sanitizeLogMetadata does not truncate short system prompt', () => {
   const shortSystem = 'You are helpful.';
 
   const meta = {
     messages: [{ role: 'system', content: shortSystem }],
   };
 
-  t.is(sanitizeLogMetadata(meta), meta);
+  expect(sanitizeLogMetadata(meta)).toBe(meta);
 });
 
-test('sanitizeLogMetadata truncates long tool descriptions', (t) => {
+it('sanitizeLogMetadata truncates long tool descriptions', () => {
   const longDesc = 'This tool does something very important. '.repeat(30);
-  t.true(longDesc.length > 200);
+  expect(longDesc.length > 200).toBe(true);
 
   const meta = {
     tools: [
@@ -114,12 +114,12 @@ test('sanitizeLogMetadata truncates long tool descriptions', (t) => {
   const sanitized = sanitizeLogMetadata(meta);
   const desc = sanitized.tools![0]!.function!.description!;
 
-  t.not(sanitized, meta);
-  t.true(desc.length < 500);
-  t.true(desc.includes('... (truncated'));
+  expect(sanitized).not.toBe(meta);
+  expect(desc.length < 500).toBe(true);
+  expect(desc.includes('... (truncated')).toBe(true);
 });
 
-test('sanitizeLogMetadata does not truncate short tool description', (t) => {
+it('sanitizeLogMetadata does not truncate short tool description', () => {
   const meta = {
     tools: [
       {
@@ -133,10 +133,10 @@ test('sanitizeLogMetadata does not truncate short tool description', (t) => {
     ],
   };
 
-  t.is(sanitizeLogMetadata(meta), meta);
+  expect(sanitizeLogMetadata(meta)).toBe(meta);
 });
 
-test('sanitizeLogMetadata handles both messages and tools together', (t) => {
+it('sanitizeLogMetadata handles both messages and tools together', () => {
   const longSystem = 'You are helpful. '.repeat(50);
   const longDesc = 'This does something. '.repeat(30);
 
@@ -155,12 +155,12 @@ test('sanitizeLogMetadata handles both messages and tools together', (t) => {
   };
 
   const sanitized = sanitizeLogMetadata(meta);
-  t.not(sanitized, meta);
-  t.true((sanitized.messages![0]!.content as string).length < longSystem.length);
-  t.true(sanitized.tools![0]!.function!.description!.length < longDesc.length);
+  expect(sanitized).not.toBe(meta);
+  expect((sanitized.messages![0]!.content as string).length < longSystem.length).toBe(true);
+  expect(sanitized.tools![0]!.function!.description!.length < longDesc.length).toBe(true);
 });
 
-test('sanitizeLogMetadata returns original when tools array has no descriptions to truncate', (t) => {
+it('sanitizeLogMetadata returns original when tools array has no descriptions to truncate', () => {
   const meta = {
     tools: [
       {
@@ -173,10 +173,10 @@ test('sanitizeLogMetadata returns original when tools array has no descriptions 
     ],
   };
 
-  t.is(sanitizeLogMetadata(meta), meta);
+  expect(sanitizeLogMetadata(meta)).toBe(meta);
 });
 
-test('sanitizeLogMetadata omits reasoning fields from assistant messages', (t) => {
+it('sanitizeLogMetadata omits reasoning fields from assistant messages', () => {
   const meta = {
     messages: [
       {
@@ -190,17 +190,17 @@ test('sanitizeLogMetadata omits reasoning fields from assistant messages', (t) =
 
   const sanitized = sanitizeLogMetadata(meta);
   const msg = sanitized.messages![0]!;
-  t.false('reasoning' in msg);
-  t.false('reasoning_content' in msg);
-  t.deepEqual(msg.content, meta.messages![0]!.content as ImageContentPart[]);
+  expect('reasoning' in msg).toBe(false);
+  expect('reasoning_content' in msg).toBe(false);
+  expect(msg.content).toEqual(meta.messages![0]!.content as ImageContentPart[]);
 });
 
-test('truncateLogText keeps the head and tail of long text', (t) => {
+it('truncateLogText keeps the head and tail of long text', () => {
   const text = `HEAD-${'a'.repeat(2000)}-TAIL`;
   const truncated = truncateLogText(text, 1200);
 
-  t.true(truncated.startsWith('HEAD-'));
-  t.true(truncated.endsWith('-TAIL'));
-  t.true(truncated.includes('... (truncated,'));
-  t.true(truncated.length < text.length);
+  expect(truncated.startsWith('HEAD-')).toBe(true);
+  expect(truncated.endsWith('-TAIL')).toBe(true);
+  expect(truncated.includes('... (truncated,')).toBe(true);
+  expect(truncated.length < text.length).toBe(true);
 });

@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { decideTurnTransition } from './turn-transition.js';
 import type { ConversationTerminal, FinalTerminal, ApprovalRequiredTerminal } from '../../contracts/conversation.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
@@ -30,130 +30,130 @@ const defaultRetryCounts: RetryCounts = {
 
 // ── Valid transitions: streaming ───────────────────────────────
 
-test('streaming + response → idle + emit_terminal', (t) => {
+it('streaming + response → idle + emit_terminal', () => {
   const result = decideTurnTransition('streaming', { kind: 'response', terminal: terminalResponse });
-  t.is(result.next, 'idle');
-  t.is(result.command.kind, 'emit_terminal');
+  expect(result.next).toBe('idle');
+  expect(result.command.kind).toBe('emit_terminal');
   if (result.command.kind === 'emit_terminal') {
-    t.is(result.command.terminal, terminalResponse);
+    expect(result.command.terminal).toBe(terminalResponse);
   }
 });
 
-test('streaming + approval_required → awaiting_approval + emit_terminal', (t) => {
+it('streaming + approval_required → awaiting_approval + emit_terminal', () => {
   const result = decideTurnTransition('streaming', { kind: 'approval_required', terminal: terminalApproval });
-  t.is(result.next, 'awaiting_approval');
-  t.is(result.command.kind, 'emit_terminal');
+  expect(result.next).toBe('awaiting_approval');
+  expect(result.command.kind).toBe('emit_terminal');
   if (result.command.kind === 'emit_terminal') {
-    t.is(result.command.terminal, terminalApproval);
+    expect(result.command.terminal).toBe(terminalApproval);
   }
 });
 
-test('streaming + stale → streaming + none', (t) => {
+it('streaming + stale → streaming + none', () => {
   const result = decideTurnTransition('streaming', { kind: 'stale' });
-  t.is(result.next, 'streaming');
-  t.is(result.command.kind, 'none');
+  expect(result.next).toBe('streaming');
+  expect(result.command.kind).toBe('none');
 });
 
-test('streaming + failed → idle + none', (t) => {
+it('streaming + failed → idle + none', () => {
   const result = decideTurnTransition('streaming', { kind: 'failed' });
-  t.is(result.next, 'idle');
-  t.is(result.command.kind, 'none');
+  expect(result.next).toBe('idle');
+  expect(result.command.kind).toBe('none');
 });
 
 // ── Valid transitions: continuing ──────────────────────────────
 
-test('continuing + response → idle + emit_terminal', (t) => {
+it('continuing + response → idle + emit_terminal', () => {
   const result = decideTurnTransition('continuing', { kind: 'response', terminal: terminalResponse });
-  t.is(result.next, 'idle');
-  t.is(result.command.kind, 'emit_terminal');
+  expect(result.next).toBe('idle');
+  expect(result.command.kind).toBe('emit_terminal');
   if (result.command.kind === 'emit_terminal') {
-    t.is(result.command.terminal, terminalResponse);
+    expect(result.command.terminal).toBe(terminalResponse);
   }
 });
 
-test('continuing + approval_required → awaiting_approval + emit_terminal', (t) => {
+it('continuing + approval_required → awaiting_approval + emit_terminal', () => {
   const result = decideTurnTransition('continuing', { kind: 'approval_required', terminal: terminalApproval });
-  t.is(result.next, 'awaiting_approval');
-  t.is(result.command.kind, 'emit_terminal');
+  expect(result.next).toBe('awaiting_approval');
+  expect(result.command.kind).toBe('emit_terminal');
   if (result.command.kind === 'emit_terminal') {
-    t.is(result.command.terminal, terminalApproval);
+    expect(result.command.terminal).toBe(terminalApproval);
   }
 });
 
-test('continuing + stale → continuing + none', (t) => {
+it('continuing + stale → continuing + none', () => {
   const result = decideTurnTransition('continuing', { kind: 'stale' });
-  t.is(result.next, 'continuing');
-  t.is(result.command.kind, 'none');
+  expect(result.next).toBe('continuing');
+  expect(result.command.kind).toBe('none');
 });
 
-test('continuing + fresh_start_required → streaming + re_drive', (t) => {
+it('continuing + fresh_start_required → streaming + re_drive', () => {
   const result = decideTurnTransition('continuing', {
     kind: 'fresh_start_required',
     retryCounts: defaultRetryCounts,
   });
-  t.is(result.next, 'streaming');
-  t.is(result.command.kind, 're_drive');
+  expect(result.next).toBe('streaming');
+  expect(result.command.kind).toBe('re_drive');
   if (result.command.kind === 're_drive') {
-    t.true(result.command.options.skipUserMessage);
-    t.is(result.command.options.retries, defaultRetryCounts);
-    t.is(result.command.options.delayMs, undefined);
-    t.is(result.command.options.useStandardServiceTier, undefined);
+    expect(result.command.options.skipUserMessage).toBe(true);
+    expect(result.command.options.retries).toBe(defaultRetryCounts);
+    expect(result.command.options.delayMs).toBe(undefined);
+    expect(result.command.options.useStandardServiceTier).toBe(undefined);
   }
 });
 
-test('continuing + fresh_start_required with delayMs and useStandardServiceTier', (t) => {
+it('continuing + fresh_start_required with delayMs and useStandardServiceTier', () => {
   const result = decideTurnTransition('continuing', {
     kind: 'fresh_start_required',
     retryCounts: defaultRetryCounts,
     delayMs: 500,
     useStandardServiceTier: true,
   });
-  t.is(result.next, 'streaming');
-  t.is(result.command.kind, 're_drive');
+  expect(result.next).toBe('streaming');
+  expect(result.command.kind).toBe('re_drive');
   if (result.command.kind === 're_drive') {
-    t.true(result.command.options.skipUserMessage);
-    t.is(result.command.options.delayMs, 500);
-    t.is(result.command.options.useStandardServiceTier, true);
+    expect(result.command.options.skipUserMessage).toBe(true);
+    expect(result.command.options.delayMs).toBe(500);
+    expect(result.command.options.useStandardServiceTier).toBe(true);
   }
 });
 
 // ── Invalid transitions ───────────────────────────────────────
 
-test('idle + any outcome throws', (t) => {
-  t.throws(() => decideTurnTransition('idle', { kind: 'stale' }), {
-    message: /Invalid transition from idle/,
-  });
-  t.throws(() => decideTurnTransition('idle', { kind: 'failed' }), {
-    message: /Invalid transition from idle/,
-  });
-  t.throws(() => decideTurnTransition('idle', { kind: 'response', terminal: terminalResponse }), {
-    message: /Invalid transition from idle/,
-  });
+it('idle + any outcome throws', () => {
+  expect(() => decideTurnTransition('idle', { kind: 'stale' })).toThrow(/Invalid transition from idle/);
+
+  expect(() => decideTurnTransition('idle', { kind: 'failed' })).toThrow(/Invalid transition from idle/);
+
+  expect(() => decideTurnTransition('idle', { kind: 'response', terminal: terminalResponse })).toThrow(
+    /Invalid transition from idle/,
+  );
 });
 
-test('awaiting_approval + any outcome throws', (t) => {
-  t.throws(() => decideTurnTransition('awaiting_approval', { kind: 'stale' }), {
-    message: /Invalid transition from awaiting_approval/,
-  });
-  t.throws(() => decideTurnTransition('awaiting_approval', { kind: 'failed' }), {
-    message: /Invalid transition from awaiting_approval/,
-  });
-  t.throws(() => decideTurnTransition('awaiting_approval', { kind: 'response', terminal: terminalResponse }), {
-    message: /Invalid transition from awaiting_approval/,
-  });
+it('awaiting_approval + any outcome throws', () => {
+  expect(() => decideTurnTransition('awaiting_approval', { kind: 'stale' })).toThrow(
+    /Invalid transition from awaiting_approval/,
+  );
+
+  expect(() => decideTurnTransition('awaiting_approval', { kind: 'failed' })).toThrow(
+    /Invalid transition from awaiting_approval/,
+  );
+
+  expect(() => decideTurnTransition('awaiting_approval', { kind: 'response', terminal: terminalResponse })).toThrow(
+    /Invalid transition from awaiting_approval/,
+  );
 });
 
 // ── Invalid outcome for state (compile-time checks) ───────────
 
-test('streaming + fresh_start_required throws', (t) => {
-  t.throws(() =>
+it('streaming + fresh_start_required throws', () => {
+  expect(() =>
     decideTurnTransition('streaming', {
       kind: 'fresh_start_required',
       retryCounts: defaultRetryCounts,
     } as any),
-  );
+  ).toThrow();
 });
 
-test('continuing + failed throws', (t) => {
-  t.throws(() => decideTurnTransition('continuing', { kind: 'failed' } as any));
+it('continuing + failed throws', () => {
+  expect(() => decideTurnTransition('continuing', { kind: 'failed' } as any)).toThrow();
 });

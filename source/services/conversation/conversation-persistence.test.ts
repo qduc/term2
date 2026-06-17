@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -65,40 +65,38 @@ class MockStream {
   }
 }
 
-test.beforeEach(() => {
+beforeEach(() => {
   testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-conversations-test-'));
   persistenceModule.setConversationsDirForTest(testDir);
 });
-test.afterEach.always(cleanupAll);
-test.afterEach.always(() => {
+afterEach(cleanupAll);
+afterEach(() => {
   persistenceModule.setConversationsDirForTest(null);
   testDir = '';
 });
 
-test.serial('generateId: returns a valid UUID', (t) => {
+it.sequential('generateId: returns a valid UUID', () => {
   const id = persistenceModule.generateId();
-  t.regex(id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 });
 
-test.serial('generateId: returns unique IDs', (t) => {
-  t.not(persistenceModule.generateId(), persistenceModule.generateId());
+it.sequential('generateId: returns unique IDs', () => {
+  expect(persistenceModule.generateId()).not.toBe(persistenceModule.generateId());
 });
 
-test.serial('getResumeCommand: returns correct format', (t) => {
+it.sequential('getResumeCommand: returns correct format', () => {
   const id = 'test-uuid-123';
-  t.is(persistenceModule.getResumeCommand(id), 'term2 --resume test-uuid-123');
-  t.is(persistenceModule.getResumeCommand(id, 'user@host'), 'term2 --ssh user@host --resume test-uuid-123');
-  t.is(
-    persistenceModule.getResumeCommand(id, 'user@host', '/path'),
+  expect(persistenceModule.getResumeCommand(id)).toBe('term2 --resume test-uuid-123');
+  expect(persistenceModule.getResumeCommand(id, 'user@host')).toBe('term2 --ssh user@host --resume test-uuid-123');
+  expect(persistenceModule.getResumeCommand(id, 'user@host', '/path')).toBe(
     'term2 --ssh user@host --remote-dir /path --resume test-uuid-123',
   );
-  t.is(
-    persistenceModule.getResumeCommand(id, 'user@host', '/path', 2222),
+  expect(persistenceModule.getResumeCommand(id, 'user@host', '/path', 2222)).toBe(
     'term2 --ssh user@host --remote-dir /path --ssh-port 2222 --resume test-uuid-123',
   );
 });
 
-test.serial('writer + loadConversation: round-trips a basic conversation', (t) => {
+it.sequential('writer + loadConversation: round-trips a basic conversation', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({
@@ -117,20 +115,20 @@ test.serial('writer + loadConversation: round-trips a basic conversation', (t) =
   void writer.close();
 
   const restored = persistenceModule.loadConversation(id);
-  t.truthy(restored);
-  t.is(restored!.id, id);
-  t.is(restored!.previousResponseId, 'resp-1');
-  t.is(restored!.history.length, 2);
-  t.is(restored!.messages.length, 2);
-  t.is(restored!.messages[0].sender, 'user');
-  t.is(restored!.messages[1].sender, 'bot');
+  expect(restored).toBeTruthy();
+  expect(restored!.id).toBe(id);
+  expect(restored!.previousResponseId).toBe('resp-1');
+  expect(restored!.history.length).toBe(2);
+  expect(restored!.messages.length).toBe(2);
+  expect(restored!.messages[0].sender).toBe('user');
+  expect(restored!.messages[1].sender).toBe('bot');
 });
 
-test.serial('loadConversation: returns null for missing id', (t) => {
-  t.is(persistenceModule.loadConversation('nope'), null);
+it.sequential('loadConversation: returns null for missing id', () => {
+  expect(persistenceModule.loadConversation('nope')).toBe(null);
 });
 
-test.serial('replay: mid-turn crash with tool_started inserts recovery notice', (t) => {
+it.sequential('replay: mid-turn crash with tool_started inserts recovery notice', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
@@ -143,14 +141,14 @@ test.serial('replay: mid-turn crash with tool_started inserts recovery notice', 
   void writer.close();
 
   const restored = persistenceModule.loadConversation(id);
-  t.truthy(restored);
-  t.true(restored!.replayWarnings.some((w) => w.includes('interrupted')));
+  expect(restored).toBeTruthy();
+  expect(restored!.replayWarnings.some((w) => w.includes('interrupted'))).toBe(true);
 
   // The interrupted system message is on UI messages
-  t.true(restored!.messages.some((m) => m.sender === 'system' && String(m.text).includes('interrupted')));
+  expect(restored!.messages.some((m) => m.sender === 'system' && String(m.text).includes('interrupted'))).toBe(true);
 });
 
-test.serial('replay: user_message only with no assistant_turn flags interruption', (t) => {
+it.sequential('replay: user_message only with no assistant_turn flags interruption', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
@@ -158,12 +156,12 @@ test.serial('replay: user_message only with no assistant_turn flags interruption
   void writer.close();
 
   const restored = persistenceModule.loadConversation(id);
-  t.truthy(restored);
-  t.true(restored!.replayWarnings.length > 0);
-  t.true(restored!.messages.some((m) => m.sender === 'system' && String(m.text).includes('interrupted')));
+  expect(restored).toBeTruthy();
+  expect(restored!.replayWarnings.length > 0).toBe(true);
+  expect(restored!.messages.some((m) => m.sender === 'system' && String(m.text).includes('interrupted'))).toBe(true);
 });
 
-test.serial('replay: settings_changed updates restored model', (t) => {
+it.sequential('replay: settings_changed updates restored model', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z', model: 'gpt-4o' });
@@ -176,10 +174,10 @@ test.serial('replay: settings_changed updates restored model', (t) => {
   void writer.close();
 
   const restored = persistenceModule.loadConversation(id);
-  t.is(restored!.model, 'gpt-5');
+  expect(restored!.model).toBe('gpt-5');
 });
 
-test.serial('replay: undo with snapshot replaces state', (t) => {
+it.sequential('replay: undo with snapshot replaces state', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
@@ -191,11 +189,11 @@ test.serial('replay: undo with snapshot replaces state', (t) => {
   void writer.close();
 
   const restored = persistenceModule.loadConversation(id);
-  t.is(restored!.history.length, 0);
-  t.is(restored!.previousResponseId, null);
+  expect(restored!.history.length).toBe(0);
+  expect(restored!.previousResponseId).toBe(null);
 });
 
-test.serial('replay: corrupt line is skipped', (t) => {
+it.sequential('replay: corrupt line is skipped', () => {
   const id = persistenceModule.generateId();
   fs.mkdirSync(testDir, { recursive: true });
   const filePath = path.join(testDir, `${id}.jsonl`);
@@ -218,29 +216,30 @@ test.serial('replay: corrupt line is skipped', (t) => {
   fs.writeFileSync(filePath, `${goodInit}\n{not json\n${goodTurn}\n`, 'utf-8');
 
   const restored = persistenceModule.loadConversation(id);
-  t.is(restored!.previousResponseId, 'r1');
+  expect(restored!.previousResponseId).toBe('r1');
 });
 
-test.serial('lock: collision throws LockConflictError', (t) => {
+it.sequential('lock: collision throws LockConflictError', () => {
   const id = persistenceModule.generateId();
   const w1 = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   w1.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
   const w2 = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
-  t.throws(() => w2.init({ id, createdAt: '2026-05-26T00:00:00.000Z' }), { instanceOf: LockConflictError });
+
+  expect(() => w2.init({ id, createdAt: '2026-05-26T00:00:00.000Z' }), { instanceOf: LockConflictError }).toThrow();
   void w1.close();
 });
 
-test.serial('lock: released on writer close, second writer succeeds', async (t) => {
+it.sequential('lock: released on writer close, second writer succeeds', async () => {
   const id = persistenceModule.generateId();
   const w1 = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   w1.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
   await w1.close();
   const w2 = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
-  t.notThrows(() => w2.init({ id, createdAt: '2026-05-26T00:00:00.000Z' }));
+  expect(() => w2.init({ id, createdAt: '2026-05-26T00:00:00.000Z' }));
   await w2.close();
 });
 
-test.serial('forkConversation: copies the source jsonl to a new id', (t) => {
+it.sequential('forkConversation: copies the source jsonl to a new id', () => {
   const srcId = persistenceModule.generateId();
   const dstId = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: srcId, dir: testDir, logger: stubLogger });
@@ -248,12 +247,12 @@ test.serial('forkConversation: copies the source jsonl to a new id', (t) => {
   writer.append(assistantTurn('A'));
   void writer.close();
 
-  t.true(persistenceModule.forkConversation(srcId, dstId));
+  expect(persistenceModule.forkConversation(srcId, dstId)).toBe(true);
   const restored = persistenceModule.loadConversation(dstId);
-  t.is(restored!.previousResponseId, 'r1');
+  expect(restored!.previousResponseId).toBe('r1');
 });
 
-test.serial('listConversations: lists sessions sorted by mtime desc', (t) => {
+it.sequential('listConversations: lists sessions sorted by mtime desc', () => {
   const id1 = persistenceModule.generateId();
   const w1 = createConversationLogWriter({ sessionId: id1, dir: testDir, logger: stubLogger });
   w1.init({ id: id1, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/p1' });
@@ -269,12 +268,12 @@ test.serial('listConversations: lists sessions sorted by mtime desc', (t) => {
   void w2.close();
 
   const list = persistenceModule.listConversations();
-  t.is(list.length, 2);
-  t.is(list[0].id, id2);
-  t.is(list[0].projectPath, '/p2');
+  expect(list.length).toBe(2);
+  expect(list[0].id).toBe(id2);
+  expect(list[0].projectPath).toBe('/p2');
 });
 
-test.serial('listConversations: filters sessions by workspace and ssh host', (t) => {
+it.sequential('listConversations: filters sessions by workspace and ssh host', () => {
   const id1 = persistenceModule.generateId();
   const w1 = createConversationLogWriter({ sessionId: id1, dir: testDir, logger: stubLogger });
   w1.init({ id: id1, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/workspace/p1' });
@@ -292,42 +291,42 @@ test.serial('listConversations: filters sessions by workspace and ssh host', (t)
 
   // Filter for local /workspace/p1
   const listP1Local = persistenceModule.listConversations('/workspace/p1');
-  t.is(listP1Local.length, 1);
-  t.is(listP1Local[0].id, id1);
+  expect(listP1Local.length).toBe(1);
+  expect(listP1Local[0].id).toBe(id1);
 
   // Filter for remote /workspace/p1 on host1
   const listP1Host1 = persistenceModule.listConversations('/workspace/p1', 'host1');
-  t.is(listP1Host1.length, 1);
-  t.is(listP1Host1[0].id, id3);
+  expect(listP1Host1.length).toBe(1);
+  expect(listP1Host1[0].id).toBe(id3);
 
   // Filter for /workspace/p2
   const listP2Local = persistenceModule.listConversations('/workspace/p2');
-  t.is(listP2Local.length, 1);
-  t.is(listP2Local[0].id, id2);
+  expect(listP2Local.length).toBe(1);
+  expect(listP2Local[0].id).toBe(id2);
 });
 
-test.serial('loadConversation: returns null when expected project path differs', (t) => {
+it.sequential('loadConversation: returns null when expected project path differs', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/workspace/alpha' });
   void writer.close();
-  t.is(persistenceModule.loadConversation(id, '/workspace/beta'), null);
+  expect(persistenceModule.loadConversation(id, '/workspace/beta')).toBe(null);
 });
 
-test.serial('loadConversationForProject: reports project mismatch', (t) => {
+it.sequential('loadConversationForProject: reports project mismatch', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/workspace/alpha' });
   void writer.close();
   const result = persistenceModule.loadConversationForProject(id, '/workspace/beta');
-  t.is(result.status, 'project_mismatch');
+  expect(result.status).toBe('project_mismatch');
 });
 
-test.serial('loadConversationForProject: not_found for missing', (t) => {
-  t.is(persistenceModule.loadConversationForProject('missing', '/x').status, 'not_found');
+it.sequential('loadConversationForProject: not_found for missing', () => {
+  expect(persistenceModule.loadConversationForProject('missing', '/x').status).toBe('not_found');
 });
 
-test.serial('loadLastConversation: returns the last written conversation', (t) => {
+it.sequential('loadLastConversation: returns the last written conversation', () => {
   const id1 = persistenceModule.generateId();
   const w1 = createConversationLogWriter({ sessionId: id1, dir: testDir, logger: stubLogger });
   w1.init({ id: id1, createdAt: '2026-05-26T00:00:00.000Z' });
@@ -344,52 +343,52 @@ test.serial('loadLastConversation: returns the last written conversation', (t) =
   void w2.close();
 
   const last = persistenceModule.loadLastConversation();
-  t.truthy(last);
-  t.is(last!.id, id2);
+  expect(last).toBeTruthy();
+  expect(last!.id).toBe(id2);
 });
 
-test.serial('loadLastConversation: does not save last.json for empty conversation', (t) => {
+it.sequential('loadLastConversation: does not save last.json for empty conversation', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
   void writer.close();
 
   const last = persistenceModule.loadLastConversation();
-  t.is(last, null);
-  t.false(fs.existsSync(path.join(testDir, 'last.json')));
+  expect(last).toBe(null);
+  expect(fs.existsSync(path.join(testDir, 'last.json'))).toBe(false);
 });
 
-test.serial('hasConversationContent: returns false for missing conversation', (t) => {
-  t.false(persistenceModule.hasConversationContent('non-existent-id'));
+it.sequential('hasConversationContent: returns false for missing conversation', () => {
+  expect(persistenceModule.hasConversationContent('non-existent-id')).toBe(false);
 });
 
-test.serial('hasConversationContent: returns false for empty conversation', (t) => {
+it.sequential('hasConversationContent: returns false for empty conversation', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
   void writer.close();
-  t.false(persistenceModule.hasConversationContent(id));
+  expect(persistenceModule.hasConversationContent(id)).toBe(false);
 });
 
-test.serial('hasConversationContent: returns true for user_message', (t) => {
+it.sequential('hasConversationContent: returns true for user_message', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
   writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } });
   void writer.close();
-  t.true(persistenceModule.hasConversationContent(id));
+  expect(persistenceModule.hasConversationContent(id)).toBe(true);
 });
 
-test.serial('hasConversationContent: returns true for assistant_turn', (t) => {
+it.sequential('hasConversationContent: returns true for assistant_turn', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
   writer.append(assistantTurn('hello'));
   void writer.close();
-  t.true(persistenceModule.hasConversationContent(id));
+  expect(persistenceModule.hasConversationContent(id)).toBe(true);
 });
 
-test.serial('hasConversationContent: ignores unsupported assistant_final events', (t) => {
+it.sequential('hasConversationContent: ignores unsupported assistant_final events', () => {
   const id = persistenceModule.generateId();
   const filePath = path.join(testDir, `${id}.jsonl`);
   fs.writeFileSync(
@@ -402,10 +401,10 @@ test.serial('hasConversationContent: ignores unsupported assistant_final events'
     }) + '\n',
     'utf-8',
   );
-  t.false(persistenceModule.hasConversationContent(id));
+  expect(persistenceModule.hasConversationContent(id)).toBe(false);
 });
 
-test.serial('hasConversationContent: skips corrupt lines and finds content', (t) => {
+it.sequential('hasConversationContent: skips corrupt lines and finds content', () => {
   const id = persistenceModule.generateId();
   const filePath = path.join(testDir, `${id}.jsonl`);
   fs.writeFileSync(
@@ -417,21 +416,21 @@ test.serial('hasConversationContent: skips corrupt lines and finds content', (t)
       '{"v":1,"seq":2,"ts":"2026-05-26T00:00:01.000Z","event":{"type":"user_message","message":{"id":"u1","sender":"user","text":"hi"}}}\n',
     'utf-8',
   );
-  t.true(persistenceModule.hasConversationContent(id));
+  expect(persistenceModule.hasConversationContent(id)).toBe(true);
 });
 
-test.serial('deleteConversation: removes the jsonl and clears last.json', (t) => {
+it.sequential('deleteConversation: removes the jsonl and clears last.json', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
   writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } });
   void writer.close();
-  t.true(persistenceModule.deleteConversation(id));
-  t.false(fs.existsSync(path.join(testDir, `${id}.jsonl`)));
-  t.false(fs.existsSync(path.join(testDir, 'last.json')));
+  expect(persistenceModule.deleteConversation(id)).toBe(true);
+  expect(fs.existsSync(path.join(testDir, `${id}.jsonl`))).toBe(false);
+  expect(fs.existsSync(path.join(testDir, 'last.json'))).toBe(false);
 });
 
-test.serial('subagent_completed and corresponding records omit nestedRunResult', (t) => {
+it.sequential('subagent_completed and corresponding records omit nestedRunResult', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
@@ -502,31 +501,31 @@ test.serial('subagent_completed and corresponding records omit nestedRunResult',
 
   // Find subagent_completed
   const completedEnv = envelopes.find((env) => env.event?.type === 'subagent_completed');
-  t.truthy(completedEnv);
-  t.is(completedEnv.event.result.status, 'completed');
-  t.is(completedEnv.event.result.finalText, 'Task resolved successfully');
-  t.deepEqual(completedEnv.event.result.filesChanged, ['src/app.ts']);
-  t.is(completedEnv.event.result.nestedRunResult, undefined);
+  expect(completedEnv).toBeTruthy();
+  expect(completedEnv.event.result.status).toBe('completed');
+  expect(completedEnv.event.result.finalText).toBe('Task resolved successfully');
+  expect(completedEnv.event.result.filesChanged).toEqual(['src/app.ts']);
+  expect(completedEnv.event.result.nestedRunResult).toBe(undefined);
 
   // Find tool_result
   const toolResultEnv = envelopes.find((env) => env.event?.type === 'tool_result');
-  t.truthy(toolResultEnv);
-  t.is(toolResultEnv.event.toolName, 'run_subagent');
+  expect(toolResultEnv).toBeTruthy();
+  expect(toolResultEnv.event.toolName).toBe('run_subagent');
   const parsedOutput = JSON.parse(toolResultEnv.event.output);
-  t.is(parsedOutput.status, 'completed');
-  t.is(parsedOutput.finalText, 'Result text');
-  t.is(parsedOutput.nestedRunResult, undefined);
+  expect(parsedOutput.status).toBe('completed');
+  expect(parsedOutput.finalText).toBe('Result text');
+  expect(parsedOutput.nestedRunResult).toBe(undefined);
 
   // Find assistant_turn and check turn items
   const turnEnv = envelopes.find((env) => env.event?.type === 'assistant_turn');
-  t.truthy(turnEnv);
+  expect(turnEnv).toBeTruthy();
   const turnOutput = JSON.parse(turnEnv.event.turn.items[0].output);
-  t.is(turnOutput.status, 'completed');
-  t.is(turnOutput.finalText, 'Turn result text');
-  t.is(turnOutput.nestedRunResult, undefined);
+  expect(turnOutput.status).toBe('completed');
+  expect(turnOutput.finalText).toBe('Turn result text');
+  expect(turnOutput.nestedRunResult).toBe(undefined);
 });
 
-test.serial('saveLastConversation: stores per-project last conversation', (t) => {
+it.sequential('saveLastConversation: stores per-project last conversation', () => {
   const id1 = persistenceModule.generateId();
   const w1 = createConversationLogWriter({ sessionId: id1, dir: testDir, logger: stubLogger });
   w1.init({ id: id1, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/project-a' });
@@ -540,15 +539,15 @@ test.serial('saveLastConversation: stores per-project last conversation', (t) =>
   void w2.close();
 
   const lastA = persistenceModule.loadLastConversation('/project-a');
-  t.truthy(lastA);
-  t.is(lastA!.id, id1);
+  expect(lastA).toBeTruthy();
+  expect(lastA!.id).toBe(id1);
 
   const lastB = persistenceModule.loadLastConversation('/project-b');
-  t.truthy(lastB);
-  t.is(lastB!.id, id2);
+  expect(lastB).toBeTruthy();
+  expect(lastB!.id).toBe(id2);
 });
 
-test.serial('saveLastConversation: stores per-ssh-host last conversation', (t) => {
+it.sequential('saveLastConversation: stores per-ssh-host last conversation', () => {
   const id1 = persistenceModule.generateId();
   const w1 = createConversationLogWriter({ sessionId: id1, dir: testDir, logger: stubLogger });
   w1.init({ id: id1, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/remote', sshHost: 'host-a' });
@@ -562,15 +561,15 @@ test.serial('saveLastConversation: stores per-ssh-host last conversation', (t) =
   void w2.close();
 
   const lastA = persistenceModule.loadLastConversation('/remote', 'host-a');
-  t.truthy(lastA);
-  t.is(lastA!.id, id1);
+  expect(lastA).toBeTruthy();
+  expect(lastA!.id).toBe(id1);
 
   const lastB = persistenceModule.loadLastConversation('/remote', 'host-b');
-  t.truthy(lastB);
-  t.is(lastB!.id, id2);
+  expect(lastB).toBeTruthy();
+  expect(lastB!.id).toBe(id2);
 });
 
-test.serial('loadLastConversation: falls back to scanning when no last.json entry matches', (t) => {
+it.sequential('loadLastConversation: falls back to scanning when no last.json entry matches', () => {
   const id = persistenceModule.generateId();
   const w = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   w.init({ id, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/fallback' });
@@ -585,11 +584,11 @@ test.serial('loadLastConversation: falls back to scanning when no last.json entr
   );
 
   const last = persistenceModule.loadLastConversation('/fallback');
-  t.truthy(last);
-  t.is(last!.id, id);
+  expect(last).toBeTruthy();
+  expect(last!.id).toBe(id);
 });
 
-test.serial('loadLastConversation: migrates old last.json format', (t) => {
+it.sequential('loadLastConversation: migrates old last.json format', () => {
   const id = persistenceModule.generateId();
   const w = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   w.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
@@ -604,11 +603,11 @@ test.serial('loadLastConversation: migrates old last.json format', (t) => {
   );
 
   const last = persistenceModule.loadLastConversation();
-  t.truthy(last);
-  t.is(last!.id, id);
+  expect(last).toBeTruthy();
+  expect(last!.id).toBe(id);
 });
 
-test.serial('deleteConversation: removes only matching entry from last.json', (t) => {
+it.sequential('deleteConversation: removes only matching entry from last.json', () => {
   const id1 = persistenceModule.generateId();
   const w1 = createConversationLogWriter({ sessionId: id1, dir: testDir, logger: stubLogger });
   w1.init({ id: id1, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/project-a' });
@@ -621,16 +620,16 @@ test.serial('deleteConversation: removes only matching entry from last.json', (t
   w2.append({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'hi b' } });
   void w2.close();
 
-  t.true(persistenceModule.deleteConversation(id1));
-  t.false(fs.existsSync(path.join(testDir, `${id1}.jsonl`)));
-  t.true(fs.existsSync(path.join(testDir, 'last.json')));
+  expect(persistenceModule.deleteConversation(id1)).toBe(true);
+  expect(fs.existsSync(path.join(testDir, `${id1}.jsonl`))).toBe(false);
+  expect(fs.existsSync(path.join(testDir, 'last.json'))).toBe(true);
 
   const lastB = persistenceModule.loadLastConversation('/project-b');
-  t.truthy(lastB);
-  t.is(lastB!.id, id2);
+  expect(lastB).toBeTruthy();
+  expect(lastB!.id).toBe(id2);
 });
 
-test.serial('saveLastConversation: updates entry when projectPath changes for same id', (t) => {
+it.sequential('saveLastConversation: updates entry when projectPath changes for same id', () => {
   const id = persistenceModule.generateId();
   const w = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   w.init({ id, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/old-path' });
@@ -643,18 +642,18 @@ test.serial('saveLastConversation: updates entry when projectPath changes for sa
   w2.append({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'hi again' } });
   void w2.close();
 
-  t.is(persistenceModule.loadLastConversation('/old-path'), null);
+  expect(persistenceModule.loadLastConversation('/old-path')).toBe(null);
 
   const lastNew = persistenceModule.loadLastConversation('/new-path');
-  t.truthy(lastNew);
-  t.is(lastNew!.id, id);
+  expect(lastNew).toBeTruthy();
+  expect(lastNew!.id).toBe(id);
 });
 
 // Suppress unused-event-import lint
 const _ev: LogEvent | null = null;
 void _ev;
 
-test.serial('writer + loadConversation: round-trips a v2 conversation with assistant_turn', (t) => {
+it.sequential('writer + loadConversation: round-trips a v2 conversation with assistant_turn', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({
@@ -714,53 +713,53 @@ test.serial('writer + loadConversation: round-trips a v2 conversation with assis
   void writer.close();
 
   const restored = persistenceModule.loadConversation(id);
-  t.truthy(restored);
-  t.is(restored!.id, id);
-  t.is(restored!.previousResponseId, 'resp-v2');
+  expect(restored).toBeTruthy();
+  expect(restored!.id).toBe(id);
+  expect(restored!.previousResponseId).toBe('resp-v2');
   // Reasoning is reconstructed as a standalone history item (matching the live SDK
   // output), NOT folded into the following tool_call's providerData. Folding caused
   // the reasoning_content to be serialized onto both the assistant message and the
   // tool call (duplicate reasoning_content) by the chat-completions converter.
-  t.is(restored!.history.length, 5);
-  t.deepEqual(restored!.history[0], { role: 'user', type: 'message', content: 'run tool' });
-  t.deepEqual(restored!.history[1], {
+  expect(restored!.history.length).toBe(5);
+  expect(restored!.history[0]).toMatchObject({ role: 'user' });
+  expect(restored!.history[1]).toEqual({
     type: 'reasoning',
     content: [{ type: 'reasoning_text', text: 'thinking about ls' }],
     rawContent: [{ type: 'reasoning_text', text: 'thinking about ls' }],
   });
-  t.deepEqual(restored!.history[2], {
+  expect(restored!.history[2]).toEqual({
     type: 'function_call',
     callId: 'call-v2',
     name: 'shell',
     arguments: 'ls',
   });
-  t.deepEqual(restored!.history[3], {
+  expect(restored!.history[3]).toEqual({
     type: 'function_call_result',
     callId: 'call-v2',
     name: 'shell',
     output: 'file.txt',
   });
-  t.deepEqual(restored!.history[4], {
+  expect(restored!.history[4]).toEqual({
     role: 'assistant',
     type: 'message',
     status: 'completed',
     content: [{ type: 'output_text', text: 'here is the file' }],
   });
-  t.is(restored!.toolLedger.length, 1);
-  t.is(restored!.toolLedger[0].callId, 'call-v2');
+  expect(restored!.toolLedger.length).toBe(1);
+  expect(restored!.toolLedger[0].callId).toBe('call-v2');
 
   // exact messages ordering: user, reasoning, command, bot
-  t.is(restored!.messages.length, 4);
-  t.is(restored!.messages[0].sender, 'user');
-  t.is(restored!.messages[1].sender, 'reasoning');
-  t.is(restored!.messages[1].text, 'thinking about ls');
-  t.is(restored!.messages[2].sender, 'command');
-  t.is(restored!.messages[2].status, 'completed');
-  t.is(restored!.messages[3].sender, 'bot');
-  t.is(restored!.messages[3].text, 'here is the file');
+  expect(restored!.messages.length).toBe(4);
+  expect(restored!.messages[0].sender).toBe('user');
+  expect(restored!.messages[1].sender).toBe('reasoning');
+  expect(restored!.messages[1].text).toBe('thinking about ls');
+  expect(restored!.messages[2].sender).toBe('command');
+  expect(restored!.messages[2].status).toBe('completed');
+  expect(restored!.messages[3].sender).toBe('bot');
+  expect(restored!.messages[3].text).toBe('here is the file');
 });
 
-test.serial('session logging writes compact v3 assistant_turn state without cumulative snapshot', async (t) => {
+it.sequential('session logging writes compact v3 assistant_turn state without cumulative snapshot', async () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({
@@ -800,7 +799,7 @@ test.serial('session logging writes compact v3 assistant_turn state without cumu
   conversationLogger.setLogSink((event) => writer.append(event));
 
   const result = await terminalAdapter.sendMessage('hello');
-  t.is(result.type, 'response');
+  expect(result.type).toBe('response');
   await writer.close();
 
   const filePath = path.join(testDir, `${id}.jsonl`);
@@ -811,20 +810,20 @@ test.serial('session logging writes compact v3 assistant_turn state without cumu
     .map((line) => JSON.parse(line));
   const turnEnvelope = envelopes.find((env) => env.event?.type === 'assistant_turn');
 
-  t.truthy(turnEnvelope);
-  t.is(turnEnvelope.v, 3);
-  t.deepEqual(turnEnvelope.event.state, {
+  expect(turnEnvelope).toBeTruthy();
+  expect(turnEnvelope.v).toBe(3);
+  expect(turnEnvelope.event.state).toEqual({
     previousResponseId: 'resp-v3',
     model: 'gpt-5',
     provider: 'openai',
   });
-  t.is(turnEnvelope.event.displayUsage, undefined);
-  t.is(turnEnvelope.event.snapshot, undefined);
-  t.is(turnEnvelope.event.turn.items.length, 1);
-  t.is(turnEnvelope.event.turn.items[0].text, 'Done.');
+  expect(turnEnvelope.event.displayUsage).toBe(undefined);
+  expect(turnEnvelope.event.snapshot).toBe(undefined);
+  expect(turnEnvelope.event.turn.items.length).toBe(1);
+  expect(turnEnvelope.event.turn.items[0].text).toBe('Done.');
 });
 
-test.serial('session logging persists displayUsage separately from cumulative assistant_turn usage', async (t) => {
+it.sequential('session logging persists displayUsage separately from cumulative assistant_turn usage', async () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({
@@ -933,12 +932,12 @@ test.serial('session logging persists displayUsage separately from cumulative as
     .map((line) => JSON.parse(line));
   const turnEnvelope = envelopes.find((env) => env.event?.type === 'assistant_turn');
 
-  t.truthy(turnEnvelope);
-  t.deepEqual(turnEnvelope.event.usage, { prompt_tokens: 300, completion_tokens: 50, total_tokens: 350 });
-  t.deepEqual(turnEnvelope.event.displayUsage, { prompt_tokens: 175, completion_tokens: 18, total_tokens: 193 });
+  expect(turnEnvelope).toBeTruthy();
+  expect(turnEnvelope.event.usage).toMatchObject({ prompt_tokens: 300 });
+  expect(turnEnvelope.event.displayUsage).toMatchObject({ prompt_tokens: 175 });
 });
 
-test.serial('replay: interrupted v2 logs without assistant_turn still recover from coarse events', (t) => {
+it.sequential('replay: interrupted v2 logs without assistant_turn still recover from coarse events', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
@@ -961,16 +960,16 @@ test.serial('replay: interrupted v2 logs without assistant_turn still recover fr
   void writer.close();
 
   const restored = persistenceModule.loadConversation(id);
-  t.truthy(restored);
-  t.true(restored!.replayWarnings.some((w) => w.includes('interrupted')));
-  t.is(restored!.messages.length, 3); // user, command, system interrupted warning
-  t.is(restored!.messages[0].sender, 'user');
-  t.is(restored!.messages[1].sender, 'command');
-  t.is(restored!.messages[1].status, 'completed');
-  t.is(restored!.messages[2].sender, 'system');
+  expect(restored).toBeTruthy();
+  expect(restored!.replayWarnings.some((w) => w.includes('interrupted'))).toBe(true);
+  expect(restored!.messages.length).toBe(3); // user, command, system interrupted warning
+  expect(restored!.messages[0].sender).toBe('user');
+  expect(restored!.messages[1].sender).toBe('command');
+  expect(restored!.messages[1].status).toBe('completed');
+  expect(restored!.messages[2].sender).toBe('system');
 });
 
-test.serial(
+it.sequential(
   'session logging with auto-approved tool continuation writes only one assistant_turn containing all details',
   async (t) => {
     const id = persistenceModule.generateId();
@@ -1059,8 +1058,8 @@ test.serial(
     conversationLogger.setLogSink((event) => writer.append(event));
 
     const result = await terminalAdapter.sendMessage('hello');
-    t.is(result.type, 'response');
-    t.true(continueCalled);
+    expect(result.type).toBe('response');
+    expect(continueCalled).toBe(true);
     await writer.close();
 
     // Read raw file contents to check what was written to disk
@@ -1074,22 +1073,22 @@ test.serial(
     const assistantTurnEnvelopes = envelopes.filter((env) => env.event?.type === 'assistant_turn');
 
     // Verify that EXACTLY one assistant_turn event was logged!
-    t.is(assistantTurnEnvelopes.length, 1);
+    expect(assistantTurnEnvelopes.length).toBe(1);
 
     const turnEvent = assistantTurnEnvelopes[0].event;
-    t.truthy(turnEvent);
-    t.is(turnEvent.turn.items.length, 3); // tool_call, tool_result, assistant_text
+    expect(turnEvent).toBeTruthy();
+    expect(turnEvent.turn.items.length).toBe(3); // tool_call, tool_result, assistant_text
 
-    t.is(turnEvent.turn.items[0].type, 'tool_call');
-    t.is(turnEvent.turn.items[0].callId, 'call-1');
-    t.is(turnEvent.turn.items[1].type, 'tool_result');
-    t.is(turnEvent.turn.items[1].callId, 'call-1');
-    t.is(turnEvent.turn.items[2].type, 'assistant_text');
-    t.is(turnEvent.turn.items[2].text, 'Done continuation.');
+    expect(turnEvent.turn.items[0].type).toBe('tool_call');
+    expect(turnEvent.turn.items[0].callId).toBe('call-1');
+    expect(turnEvent.turn.items[1].type).toBe('tool_result');
+    expect(turnEvent.turn.items[1].callId).toBe('call-1');
+    expect(turnEvent.turn.items[2].type).toBe('assistant_text');
+    expect(turnEvent.turn.items[2].text).toBe('Done continuation.');
   },
 );
 
-test.serial('ensureConversationsDir: automatically migrates files from log to data directory', (t) => {
+it.sequential('ensureConversationsDir: automatically migrates files from log to data directory', () => {
   const logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-test-log-'));
   const dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-test-db-'));
 
@@ -1112,14 +1111,14 @@ test.serial('ensureConversationsDir: automatically migrates files from log to da
     persistenceModule.loadConversation('non-existent-id');
 
     // Verify files are migrated
-    t.true(fs.existsSync(path.join(dbDir, testFile1)));
-    t.true(fs.existsSync(path.join(dbDir, testFile2)));
-    t.false(fs.existsSync(path.join(dbDir, otherFile))); // Unrelated files should not be migrated
-    t.false(fs.existsSync(path.join(logDir, testFile1)));
-    t.false(fs.existsSync(path.join(logDir, testFile2)));
+    expect(fs.existsSync(path.join(dbDir, testFile1))).toBe(true);
+    expect(fs.existsSync(path.join(dbDir, testFile2))).toBe(true);
+    expect(fs.existsSync(path.join(dbDir, otherFile))).toBe(false); // Unrelated files should not be migrated
+    expect(fs.existsSync(path.join(logDir, testFile1))).toBe(false);
+    expect(fs.existsSync(path.join(logDir, testFile2))).toBe(false);
 
-    t.is(fs.readFileSync(path.join(dbDir, testFile1), 'utf-8'), 'envelope 1');
-    t.is(fs.readFileSync(path.join(dbDir, testFile2), 'utf-8'), 'last data');
+    expect(fs.readFileSync(path.join(dbDir, testFile1), 'utf-8')).toBe('envelope 1');
+    expect(fs.readFileSync(path.join(dbDir, testFile2), 'utf-8')).toBe('last data');
   } finally {
     // Cleanup
     delete process.env['TERM2_TEST_LOG_DIR'];
@@ -1129,7 +1128,7 @@ test.serial('ensureConversationsDir: automatically migrates files from log to da
   }
 });
 
-test.serial('ensureConversationsDir: migrated conversations are not resurrected after deletion', (t) => {
+it.sequential('ensureConversationsDir: migrated conversations are not resurrected after deletion', () => {
   const logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-test-log-'));
   const dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-test-db-'));
 
@@ -1142,14 +1141,14 @@ test.serial('ensureConversationsDir: migrated conversations are not resurrected 
     persistenceModule.setConversationsDirForTest(dbDir);
 
     persistenceModule.loadConversation('non-existent-id');
-    t.true(fs.existsSync(path.join(dbDir, `${migratedId}.jsonl`)));
+    expect(fs.existsSync(path.join(dbDir, `${migratedId}.jsonl`))).toBe(true);
 
-    t.true(persistenceModule.deleteConversation(migratedId));
-    t.false(fs.existsSync(path.join(dbDir, `${migratedId}.jsonl`)));
+    expect(persistenceModule.deleteConversation(migratedId)).toBe(true);
+    expect(fs.existsSync(path.join(dbDir, `${migratedId}.jsonl`))).toBe(false);
 
     persistenceModule.loadConversation('another-non-existent-id');
-    t.false(fs.existsSync(path.join(dbDir, `${migratedId}.jsonl`)));
-    t.false(fs.existsSync(path.join(logDir, `${migratedId}.jsonl`)));
+    expect(fs.existsSync(path.join(dbDir, `${migratedId}.jsonl`))).toBe(false);
+    expect(fs.existsSync(path.join(logDir, `${migratedId}.jsonl`))).toBe(false);
   } finally {
     delete process.env['TERM2_TEST_LOG_DIR'];
     delete process.env['TERM2_TEST_DB_DIR'];
@@ -1158,7 +1157,7 @@ test.serial('ensureConversationsDir: migrated conversations are not resurrected 
   }
 });
 
-test.serial('writer + loadConversation: round-trips a crash-after-partial-text journal', (t) => {
+it.sequential('writer + loadConversation: round-trips a crash-after-partial-text journal', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
@@ -1181,13 +1180,13 @@ test.serial('writer + loadConversation: round-trips a crash-after-partial-text j
   void writer.close();
 
   const restored = persistenceModule.loadConversation(id);
-  t.truthy(restored);
-  t.true(restored!.messages.some((m) => m.sender === 'reasoning' && m.text === 'think'));
-  t.true(restored!.messages.some((m) => m.sender === 'bot' && m.text === 'hi there'));
-  t.is(restored!.previousResponseId, null);
+  expect(restored).toBeTruthy();
+  expect(restored!.messages.some((m) => m.sender === 'reasoning' && m.text === 'think')).toBe(true);
+  expect(restored!.messages.some((m) => m.sender === 'bot' && m.text === 'hi there')).toBe(true);
+  expect(restored!.previousResponseId).toBe(null);
 });
 
-test.serial('writer + loadConversation: round-trips a crash-after-tool-start journal', (t) => {
+it.sequential('writer + loadConversation: round-trips a crash-after-tool-start journal', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
@@ -1212,13 +1211,13 @@ test.serial('writer + loadConversation: round-trips a crash-after-tool-start jou
   void writer.close();
 
   const restored = persistenceModule.loadConversation(id);
-  t.truthy(restored);
+  expect(restored).toBeTruthy();
   // Tool call survives the crash and is visible in the tool ledger.
-  t.true(restored!.toolLedger.some((e) => e.callId === 'call-1'));
-  t.true(restored!.history.some((h: any) => h.type === 'function_call' && h.callId === 'call-1'));
+  expect(restored!.toolLedger.some((e) => e.callId === 'call-1')).toBe(true);
+  expect(restored!.history.some((h: any) => h.type === 'function_call' && h.callId === 'call-1')).toBe(true);
 });
 
-test.serial('writer + loadConversation: old logs without journal entries still load', (t) => {
+it.sequential('writer + loadConversation: old logs without journal entries still load', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z', model: 'gpt-4o' });
@@ -1227,7 +1226,7 @@ test.serial('writer + loadConversation: old logs without journal entries still l
   void writer.close();
 
   const restored = persistenceModule.loadConversation(id);
-  t.is(restored!.previousResponseId, 'r1');
-  t.is(restored!.model, 'gpt-4o');
-  t.true(restored!.messages.some((m) => m.sender === 'bot' && m.text === 'hello'));
+  expect(restored!.previousResponseId).toBe('r1');
+  expect(restored!.model).toBe('gpt-4o');
+  expect(restored!.messages.some((m) => m.sender === 'bot' && m.text === 'hello')).toBe(true);
 });

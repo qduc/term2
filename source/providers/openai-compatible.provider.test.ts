@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { setTracingDisabled, withTrace } from '@openai/agents-core';
 import {
   createCustomProviderModelProvider,
@@ -90,7 +90,7 @@ const baseRequest = {
   tracing: false as const,
 };
 
-test('runtime openai-compatible createRunner returns a runner', (t) => {
+it('runtime openai-compatible createRunner returns a runner', () => {
   const provider = createOpenAICompatibleProviderDefinition({
     name: 'local-test',
     baseUrl: 'http://localhost:11434',
@@ -127,10 +127,10 @@ test('runtime openai-compatible createRunner returns a runner', (t) => {
 
   const runner = provider.createRunner!(deps);
 
-  t.truthy(runner);
+  expect(runner).toBeTruthy();
 });
 
-test('providerData fields are forwarded into the chat-completions request body root', async (t) => {
+it('providerData fields are forwarded into the chat-completions request body root', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
   const model = await provider.getModel('provider-model');
@@ -148,13 +148,13 @@ test('providerData fields are forwarded into the chat-completions request body r
     } as any),
   );
 
-  t.is(captured.length, 1);
+  expect(captured.length).toBe(1);
   const body = captured[0].body;
-  t.is(body.service_tier, 'flex');
-  t.is(body.custom_vendor_flag, 'on');
+  expect(body.service_tier).toBe('flex');
+  expect(body.custom_vendor_flag).toBe('on');
 });
 
-test('modelSettings.reasoning.effort is forwarded as reasoning_effort', async (t) => {
+it('modelSettings.reasoning.effort is forwarded as reasoning_effort', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
   const model = await provider.getModel('provider-model');
@@ -167,11 +167,11 @@ test('modelSettings.reasoning.effort is forwarded as reasoning_effort', async (t
     } as any),
   );
 
-  t.is(captured.length, 1);
-  t.is(captured[0].body.reasoning_effort, 'high');
+  expect(captured.length).toBe(1);
+  expect(captured[0].body.reasoning_effort).toBe('high');
 });
 
-test('assistant reasoning_content is passed back with the following tool call', async (t) => {
+it('assistant reasoning_content is passed back with the following tool call', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
   const model = await provider.getModel('claude-model');
@@ -202,8 +202,8 @@ test('assistant reasoning_content is passed back with the following tool call', 
     } as any),
   );
 
-  t.is(captured.length, 1);
-  t.deepEqual(captured[0].body.messages.slice(1, 4), [
+  expect(captured.length).toBe(1);
+  expect(captured[0].body.messages.slice(1, 4)).toEqual([
     {
       role: 'assistant',
       content: null,
@@ -228,7 +228,7 @@ test('assistant reasoning_content is passed back with the following tool call', 
   ]);
 });
 
-test('assistant reasoning_content from provider response is preserved as reasoning output', async (t) => {
+it('assistant reasoning_content from provider response is preserved as reasoning output', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, {
     ...successResponse,
@@ -254,14 +254,14 @@ test('assistant reasoning_content from provider response is preserved as reasoni
     } as any),
   );
 
-  t.deepEqual(result.output[0], {
+  expect(result.output[0]).toEqual({
     type: 'reasoning',
     content: [],
     rawContent: [{ type: 'reasoning_text', text: 'Need to inspect the project first.' }],
   });
 });
 
-test('assistant reasoning_content from provider stream is preserved as reasoning output', async (t) => {
+it('assistant reasoning_content from provider stream is preserved as reasoning output', async () => {
   const captured: CapturedRequest[] = [];
   const stream = new ReadableStream({
     start(controller) {
@@ -299,14 +299,14 @@ test('assistant reasoning_content from provider stream is preserved as reasoning
   }
 
   const finalEvent = events.find((event: any) => event.type === 'response_done') as any;
-  t.deepEqual(finalEvent.response.output[0], {
+  expect(finalEvent.response.output[0]).toEqual({
     type: 'reasoning',
     content: [],
     rawContent: [{ type: 'reasoning_text', text: 'Need to stream reasoning.' }],
   });
 });
 
-test('assistant choices with non-zero index in single-choice stream are normalized to 0', async (t) => {
+it('assistant choices with non-zero index in single-choice stream are normalized to 0', async () => {
   const captured: CapturedRequest[] = [];
   const stream = new ReadableStream({
     start(controller) {
@@ -343,12 +343,12 @@ test('assistant choices with non-zero index in single-choice stream are normaliz
   }
 
   const finalEvent = events.find((event: any) => event.type === 'response_done') as any;
-  t.is(finalEvent.response.output[0].type, 'message');
-  t.is(finalEvent.response.output[0].content[0].type, 'output_text');
-  t.is(finalEvent.response.output[0].content[0].text, 'Hello! How can I help you today?');
+  expect(finalEvent.response.output[0].type).toBe('message');
+  expect(finalEvent.response.output[0].content[0].type).toBe('output_text');
+  expect(finalEvent.response.output[0].content[0].text).toBe('Hello! How can I help you today?');
 });
 
-test('reasoning field is stripped and preserved only as reasoning_content in outgoing requests', async (t) => {
+it('reasoning field is stripped and preserved only as reasoning_content in outgoing requests', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
   const model = await provider.getModel('provider-model');
@@ -379,14 +379,14 @@ test('reasoning field is stripped and preserved only as reasoning_content in out
     } as any),
   );
 
-  t.is(captured.length, 1);
+  expect(captured.length).toBe(1);
   const assistantMsg = captured[0].body.messages.find((m: any) => m.role === 'assistant' && m.tool_calls);
-  t.truthy(assistantMsg);
-  t.is(assistantMsg.reasoning_content, 'I should run date.');
-  t.false('reasoning' in assistantMsg, 'reasoning field must not be sent to strict Chat Completions providers');
+  expect(assistantMsg).toBeTruthy();
+  expect(assistantMsg.reasoning_content).toBe('I should run date.');
+  expect('reasoning' in assistantMsg).toBe(false);
 });
 
-test('stray top-level index from replayed tool-call providerData is stripped from outgoing messages', async (t) => {
+it('stray top-level index from replayed tool-call providerData is stripped from outgoing messages', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
   const model = await provider.getModel('provider-model');
@@ -414,16 +414,13 @@ test('stray top-level index from replayed tool-call providerData is stripped fro
     } as any),
   );
 
-  t.is(captured.length, 1);
+  expect(captured.length).toBe(1);
   for (const message of captured[0].body.messages) {
-    t.false(
-      'index' in message,
-      "top-level 'index' must not be sent to strict Chat Completions providers (Extra inputs are not permitted)",
-    );
+    expect('index' in message).toBe(false);
   }
 });
 
-test('llama.cpp maps high reasoning effort to chat template kwargs', async (t) => {
+it('llama.cpp maps high reasoning effort to chat template kwargs', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'llama.cpp');
   const model = await provider.getModel('provider-model');
@@ -436,9 +433,9 @@ test('llama.cpp maps high reasoning effort to chat template kwargs', async (t) =
     } as any),
   );
 
-  t.is(captured.length, 1);
-  t.is(captured[0].body.reasoning_effort, undefined);
-  t.deepEqual(captured[0].body.chat_template_kwargs, {
+  expect(captured.length).toBe(1);
+  expect(captured[0].body.reasoning_effort).toBe(undefined);
+  expect(captured[0].body.chat_template_kwargs).toEqual({
     reasoning_effort: 'high',
     enable_thinking: true,
     thinking_mode: 'high',
@@ -446,7 +443,7 @@ test('llama.cpp maps high reasoning effort to chat template kwargs', async (t) =
   });
 });
 
-test('llama.cpp disables thinking for none reasoning effort', async (t) => {
+it('llama.cpp disables thinking for none reasoning effort', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'llama.cpp');
   const model = await provider.getModel('provider-model');
@@ -459,9 +456,9 @@ test('llama.cpp disables thinking for none reasoning effort', async (t) => {
     } as any),
   );
 
-  t.is(captured.length, 1);
-  t.is(captured[0].body.reasoning_effort, undefined);
-  t.deepEqual(captured[0].body.chat_template_kwargs, {
+  expect(captured.length).toBe(1);
+  expect(captured[0].body.reasoning_effort).toBe(undefined);
+  expect(captured[0].body.chat_template_kwargs).toEqual({
     reasoning_effort: 'low',
     enable_thinking: false,
     thinking_mode: 'disabled',
@@ -469,7 +466,7 @@ test('llama.cpp disables thinking for none reasoning effort', async (t) => {
   });
 });
 
-test('llama.cpp maps xhigh to high template mode with xhigh budget', async (t) => {
+it('llama.cpp maps xhigh to high template mode with xhigh budget', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'llama.cpp');
   const model = await provider.getModel('provider-model');
@@ -482,8 +479,8 @@ test('llama.cpp maps xhigh to high template mode with xhigh budget', async (t) =
     } as any),
   );
 
-  t.is(captured.length, 1);
-  t.deepEqual(captured[0].body.chat_template_kwargs, {
+  expect(captured.length).toBe(1);
+  expect(captured[0].body.chat_template_kwargs).toEqual({
     reasoning_effort: 'high',
     enable_thinking: true,
     thinking_mode: 'high',
@@ -491,7 +488,7 @@ test('llama.cpp maps xhigh to high template mode with xhigh budget', async (t) =
   });
 });
 
-test('llama.cpp leaves reasoning controls unset when effort is default', async (t) => {
+it('llama.cpp leaves reasoning controls unset when effort is default', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'llama.cpp');
   const model = await provider.getModel('provider-model');
@@ -504,12 +501,12 @@ test('llama.cpp leaves reasoning controls unset when effort is default', async (
     } as any),
   );
 
-  t.is(captured.length, 1);
-  t.is(captured[0].body.reasoning_effort, undefined);
-  t.is(captured[0].body.chat_template_kwargs, undefined);
+  expect(captured.length).toBe(1);
+  expect(captured[0].body.reasoning_effort).toBe(undefined);
+  expect(captured[0].body.chat_template_kwargs).toBe(undefined);
 });
 
-test('outgoing request hits the configured /chat/completions endpoint with bearer auth', async (t) => {
+it('outgoing request hits the configured /chat/completions endpoint with bearer auth', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
   const model = await provider.getModel('provider-model');
@@ -522,13 +519,13 @@ test('outgoing request hits the configured /chat/completions endpoint with beare
     } as any),
   );
 
-  t.is(captured.length, 1);
-  t.regex(captured[0].url, /\/chat\/completions(\?|$)/);
-  t.is(captured[0].headers.authorization, 'Bearer provider-key');
-  t.is(captured[0].body.model, 'provider-model');
+  expect(captured.length).toBe(1);
+  expect(captured[0].url).toMatch(/\/chat\/completions(\?|$)/);
+  expect(captured[0].headers.authorization).toBe('Bearer provider-key');
+  expect(captured[0].body.model).toBe('provider-model');
 });
 
-test('opencode.ai baseUrl adds x-opencode-session header', async (t) => {
+it('opencode.ai baseUrl adds x-opencode-session header', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://opencode.ai/v1');
   const model = await provider.getModel('provider-model');
@@ -541,17 +538,16 @@ test('opencode.ai baseUrl adds x-opencode-session header', async (t) => {
     } as any),
   );
 
-  t.is(captured.length, 1);
-  t.truthy(captured[0].headers['x-opencode-session'], 'should have x-opencode-session header');
-  t.regex(
-    captured[0].headers['x-opencode-session'],
+  expect(captured.length).toBe(1);
+  expect(captured[0].headers['x-opencode-session']).toBeTruthy();
+  expect(captured[0].headers['x-opencode-session']).toMatch(
     /^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/,
     'session ID should match ses_<12hex><14base62> format (30 chars)',
   );
-  t.is(captured[0].headers['x-opencode-session'].length, 30, 'session ID should be exactly 30 characters');
+  expect(captured[0].headers['x-opencode-session'].length, 'session ID should be exactly 30 characters').toBe(30);
 });
 
-test('opencode session ID is stable across requests within a session', async (t) => {
+it('opencode session ID is stable across requests within a session', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://opencode.ai/v1');
   const model = await provider.getModel('provider-model');
@@ -569,14 +565,13 @@ test('opencode session ID is stable across requests within a session', async (t)
   const firstSessionId = captured[0].headers['x-opencode-session'];
 
   await makeRequest();
-  t.is(
+  expect(
     captured[1].headers['x-opencode-session'],
-    firstSessionId,
     'session ID should be stable across requests in the same session',
-  );
+  ).toBe(firstSessionId);
 });
 
-test('opencode session header prefers fallback session ID over traffic context session ID', async (t) => {
+it('opencode session header prefers fallback session ID over traffic context session ID', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(
     captured,
@@ -611,13 +606,13 @@ test('opencode session header prefers fallback session ID over traffic context s
     } as any),
   );
 
-  t.is(captured.length, 1);
-  t.truthy(captured[0].headers['x-opencode-session']);
-  t.not(captured[0].headers['x-opencode-session'], 'conversation-session-123');
-  t.regex(captured[0].headers['x-opencode-session'], /^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/);
+  expect(captured.length).toBe(1);
+  expect(captured[0].headers['x-opencode-session']).toBeTruthy();
+  expect(captured[0].headers['x-opencode-session']).not.toBe('conversation-session-123');
+  expect(captured[0].headers['x-opencode-session']).toMatch(/^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/);
 });
 
-test('non-opencode.ai baseUrl does not add opencode headers or body fields', async (t) => {
+it('non-opencode.ai baseUrl does not add opencode headers or body fields', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://other-provider.com/v1');
   const model = await provider.getModel('provider-model');
@@ -630,11 +625,11 @@ test('non-opencode.ai baseUrl does not add opencode headers or body fields', asy
     } as any),
   );
 
-  t.is(captured.length, 1);
-  t.falsy(captured[0].headers['x-opencode-session'], 'should not have x-opencode-session header');
+  expect(captured.length).toBe(1);
+  expect(captured[0].headers['x-opencode-session']).toBeFalsy();
 });
 
-test('opencode.ai detection is case-insensitive', async (t) => {
+it('opencode.ai detection is case-insensitive', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://OPENCODE.AI/v1');
   const model = await provider.getModel('provider-model');
@@ -647,202 +642,202 @@ test('opencode.ai detection is case-insensitive', async (t) => {
     } as any),
   );
 
-  t.is(captured.length, 1);
-  t.truthy(captured[0].headers['x-opencode-session'], 'should detect OPENCODE.AI case-insensitively');
+  expect(captured.length).toBe(1);
+  expect(captured[0].headers['x-opencode-session']).toBeTruthy();
 });
 
-test('opencode provider type uses default base URL and falls back to OPENCODE_API_KEY', async (t) => {
+it('opencode provider type uses default base URL and falls back to OPENCODE_API_KEY', async () => {
   const captured: CapturedRequest[] = [];
   process.env.OPENCODE_API_KEY = 'env-opencode-key';
-  t.teardown(() => {
-    delete process.env.OPENCODE_API_KEY;
-  });
-
-  const provider = createCustomProviderModelProvider(
-    {
-      name: 'opencode-test',
-      type: 'opencode',
-      // baseUrl and apiKey omitted
-    },
-    {
-      defaultModel: 'provider-model',
-      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const headers: Record<string, string> = {};
-        const rawHeaders = init?.headers as any;
-        if (rawHeaders) {
-          if (typeof rawHeaders.forEach === 'function') {
-            rawHeaders.forEach((v: string, k: string) => {
-              headers[k.toLowerCase()] = String(v);
-            });
-          } else {
-            for (const [k, v] of Object.entries(rawHeaders as Record<string, string>)) {
-              headers[k.toLowerCase()] = String(v);
+  try {
+    const provider = createCustomProviderModelProvider(
+      {
+        name: 'opencode-test',
+        type: 'opencode',
+        // baseUrl and apiKey omitted
+      },
+      {
+        defaultModel: 'provider-model',
+        fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+          const headers: Record<string, string> = {};
+          const rawHeaders = init?.headers as any;
+          if (rawHeaders) {
+            if (typeof rawHeaders.forEach === 'function') {
+              rawHeaders.forEach((v: string, k: string) => {
+                headers[k.toLowerCase()] = String(v);
+              });
+            } else {
+              for (const [k, v] of Object.entries(rawHeaders as Record<string, string>)) {
+                headers[k.toLowerCase()] = String(v);
+              }
             }
           }
-        }
-        const rawBody = typeof init?.body === 'string' ? init.body : '';
-        captured.push({
-          url: typeof input === 'string' ? input : (input as URL).toString(),
-          body: rawBody ? JSON.parse(rawBody) : null,
-          headers,
-        });
-        return new Response(JSON.stringify(successResponse), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }) as typeof fetch,
-    },
-  );
+          const rawBody = typeof init?.body === 'string' ? init.body : '';
+          captured.push({
+            url: typeof input === 'string' ? input : (input as URL).toString(),
+            body: rawBody ? JSON.parse(rawBody) : null,
+            headers,
+          });
+          return new Response(JSON.stringify(successResponse), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }) as typeof fetch,
+      },
+    );
 
-  const model = await provider.getModel('provider-model');
-
-  await runUnderTrace(() =>
-    model.getResponse({
-      ...baseRequest,
-      input: [{ role: 'user', content: 'hello' }] as any,
-      modelSettings: {},
-    } as any),
-  );
-
-  t.is(captured.length, 1);
-  t.regex(captured[0].url, /^https:\/\/opencode\.ai\/v1\/chat\/completions(\?|$)/);
-  t.is(captured[0].headers.authorization, 'Bearer env-opencode-key');
-  t.truthy(captured[0].headers['x-opencode-session']);
-});
-
-test('opencode qwen models use Anthropic messages transport with session header', async (t) => {
-  const captured: CapturedRequest[] = [];
-  process.env.OPENCODE_API_KEY = 'env-opencode-key';
-  t.teardown(() => {
-    delete process.env.OPENCODE_API_KEY;
-  });
-
-  const provider = createCustomProviderModelProvider(
-    {
-      name: 'opencode-test',
-      type: 'opencode',
-    },
-    {
-      defaultModel: 'qwen3-coder',
-      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const headers: Record<string, string> = {};
-        const rawHeaders = init?.headers as any;
-        if (rawHeaders) {
-          if (typeof rawHeaders.forEach === 'function') {
-            rawHeaders.forEach((v: string, k: string) => {
-              headers[k.toLowerCase()] = String(v);
-            });
-          } else {
-            for (const [k, v] of Object.entries(rawHeaders as Record<string, string>)) {
-              headers[k.toLowerCase()] = String(v);
-            }
-          }
-        }
-        const rawBody = typeof init?.body === 'string' ? init.body : '';
-        captured.push({
-          url: typeof input === 'string' ? input : (input as URL).toString(),
-          body: rawBody ? JSON.parse(rawBody) : null,
-          headers,
-        });
-        return new Response(
-          JSON.stringify({
-            id: 'msg_test',
-            type: 'message',
-            role: 'assistant',
-            model: 'qwen3-coder',
-            content: [{ type: 'text', text: 'ok' }],
-            stop_reason: 'end_turn',
-            stop_sequence: null,
-            usage: { input_tokens: 1, output_tokens: 1 },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      }) as typeof fetch,
-    },
-  );
-
-  const model = await provider.getModel('qwen3-coder');
-
-  await runUnderTrace(() =>
-    model.getResponse({
-      ...baseRequest,
-      input: [{ role: 'user', content: 'hello' }] as any,
-      modelSettings: { reasoning: { effort: 'high' } },
-    } as any),
-  );
-
-  t.is(captured.length, 1);
-  t.regex(captured[0].url, /^https:\/\/opencode\.ai\/v1\/messages(\?|$)/);
-  t.is(captured[0].headers['x-api-key'], 'env-opencode-key');
-  t.truthy(captured[0].headers['x-opencode-session']);
-  t.is(captured[0].body.model, 'qwen3-coder');
-  t.is(captured[0].body.reasoning_effort, undefined);
-  t.truthy(captured[0].body.messages[0].content[0].cache_control);
-});
-
-test('opencode provider type keeps the fallback session ID stable across turns', async (t) => {
-  const captured: CapturedRequest[] = [];
-  process.env.OPENCODE_API_KEY = 'env-opencode-key';
-  t.teardown(() => {
-    delete process.env.OPENCODE_API_KEY;
-  });
-
-  const provider = createCustomProviderModelProvider(
-    {
-      name: 'opencode-test',
-      type: 'opencode',
-    },
-    {
-      defaultModel: 'provider-model',
-      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const headers: Record<string, string> = {};
-        const rawHeaders = init?.headers as any;
-        if (rawHeaders) {
-          if (typeof rawHeaders.forEach === 'function') {
-            rawHeaders.forEach((v: string, k: string) => {
-              headers[k.toLowerCase()] = String(v);
-            });
-          } else {
-            for (const [k, v] of Object.entries(rawHeaders as Record<string, string>)) {
-              headers[k.toLowerCase()] = String(v);
-            }
-          }
-        }
-        const rawBody = typeof init?.body === 'string' ? init.body : '';
-        captured.push({
-          url: typeof input === 'string' ? input : (input as URL).toString(),
-          body: rawBody ? JSON.parse(rawBody) : null,
-          headers,
-        });
-        return new Response(JSON.stringify(successResponse), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }) as typeof fetch,
-    },
-  );
-
-  const runTurn = async () => {
     const model = await provider.getModel('provider-model');
-    return runUnderTrace(() =>
+
+    await runUnderTrace(() =>
       model.getResponse({
         ...baseRequest,
         input: [{ role: 'user', content: 'hello' }] as any,
         modelSettings: {},
       } as any),
     );
-  };
 
-  await runTurn();
-  const firstSessionId = captured[0].headers['x-opencode-session'];
-
-  await runTurn();
-
-  t.is(captured.length, 2);
-  t.is(captured[1].headers['x-opencode-session'], firstSessionId);
+    expect(captured.length).toBe(1);
+    expect(captured[0].url).toMatch(/^https:\/\/opencode\.ai\/v1\/chat\/completions(\?|$)/);
+    expect(captured[0].headers.authorization).toBe('Bearer env-opencode-key');
+    expect(captured[0].headers['x-opencode-session']).toBeTruthy();
+  } finally {
+    delete process.env.OPENCODE_API_KEY;
+  }
 });
 
-test('lazy opencode provider reuses the same model provider instance across getModel calls (regression: was recreated per turn, resetting session ID)', async (t) => {
+it('opencode qwen models use Anthropic messages transport with session header', async () => {
+  const captured: CapturedRequest[] = [];
+  process.env.OPENCODE_API_KEY = 'env-opencode-key';
+  try {
+    const provider = createCustomProviderModelProvider(
+      {
+        name: 'opencode-test',
+        type: 'opencode',
+      },
+      {
+        defaultModel: 'qwen3-coder',
+        fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+          const headers: Record<string, string> = {};
+          const rawHeaders = init?.headers as any;
+          if (rawHeaders) {
+            if (typeof rawHeaders.forEach === 'function') {
+              rawHeaders.forEach((v: string, k: string) => {
+                headers[k.toLowerCase()] = String(v);
+              });
+            } else {
+              for (const [k, v] of Object.entries(rawHeaders as Record<string, string>)) {
+                headers[k.toLowerCase()] = String(v);
+              }
+            }
+          }
+          const rawBody = typeof init?.body === 'string' ? init.body : '';
+          captured.push({
+            url: typeof input === 'string' ? input : (input as URL).toString(),
+            body: rawBody ? JSON.parse(rawBody) : null,
+            headers,
+          });
+          return new Response(
+            JSON.stringify({
+              id: 'msg_test',
+              type: 'message',
+              role: 'assistant',
+              model: 'qwen3-coder',
+              content: [{ type: 'text', text: 'ok' }],
+              stop_reason: 'end_turn',
+              stop_sequence: null,
+              usage: { input_tokens: 1, output_tokens: 1 },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }) as typeof fetch,
+      },
+    );
+
+    const model = await provider.getModel('qwen3-coder');
+
+    await runUnderTrace(() =>
+      model.getResponse({
+        ...baseRequest,
+        input: [{ role: 'user', content: 'hello' }] as any,
+        modelSettings: { reasoning: { effort: 'high' } },
+      } as any),
+    );
+
+    expect(captured.length).toBe(1);
+    expect(captured[0].url).toMatch(/^https:\/\/opencode\.ai\/v1\/messages(\?|$)/);
+    expect(captured[0].headers['x-api-key']).toBe('env-opencode-key');
+    expect(captured[0].headers['x-opencode-session']).toBeTruthy();
+    expect(captured[0].body.model).toBe('qwen3-coder');
+    expect(captured[0].body.reasoning_effort).toBe(undefined);
+    expect(captured[0].body.messages[0].content[0].cache_control).toBeTruthy();
+  } finally {
+    delete process.env.OPENCODE_API_KEY;
+  }
+});
+
+it('opencode provider type keeps the fallback session ID stable across turns', async () => {
+  const captured: CapturedRequest[] = [];
+  process.env.OPENCODE_API_KEY = 'env-opencode-key';
+  try {
+    const provider = createCustomProviderModelProvider(
+      {
+        name: 'opencode-test',
+        type: 'opencode',
+      },
+      {
+        defaultModel: 'provider-model',
+        fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+          const headers: Record<string, string> = {};
+          const rawHeaders = init?.headers as any;
+          if (rawHeaders) {
+            if (typeof rawHeaders.forEach === 'function') {
+              rawHeaders.forEach((v: string, k: string) => {
+                headers[k.toLowerCase()] = String(v);
+              });
+            } else {
+              for (const [k, v] of Object.entries(rawHeaders as Record<string, string>)) {
+                headers[k.toLowerCase()] = String(v);
+              }
+            }
+          }
+          const rawBody = typeof init?.body === 'string' ? init.body : '';
+          captured.push({
+            url: typeof input === 'string' ? input : (input as URL).toString(),
+            body: rawBody ? JSON.parse(rawBody) : null,
+            headers,
+          });
+          return new Response(JSON.stringify(successResponse), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }) as typeof fetch,
+      },
+    );
+
+    const runTurn = async () => {
+      const model = await provider.getModel('provider-model');
+      return runUnderTrace(() =>
+        model.getResponse({
+          ...baseRequest,
+          input: [{ role: 'user', content: 'hello' }] as any,
+          modelSettings: {},
+        } as any),
+      );
+    };
+
+    await runTurn();
+    const firstSessionId = captured[0].headers['x-opencode-session'];
+
+    await runTurn();
+
+    expect(captured.length).toBe(2);
+    expect(captured[1].headers['x-opencode-session']).toBe(firstSessionId);
+  } finally {
+    delete process.env.OPENCODE_API_KEY;
+  }
+});
+
+it('lazy opencode provider reuses the same model provider instance across getModel calls (regression: was recreated per turn, resetting session ID)', async () => {
   const deps: ProviderDeps = {
     settingsService: {
       get: (key: string) => {
@@ -865,7 +860,7 @@ test('lazy opencode provider reuses the same model provider instance across getM
   const definition = createLazyProviderDefinition({ name: 'opencode-lazy-test', type: 'opencode' });
   const runner = definition.createRunner!(deps)!;
   const modelProvider = (runner as any).config?.modelProvider;
-  t.truthy(modelProvider, 'runner should expose a modelProvider via config');
+  expect(modelProvider).toBeTruthy();
 
   // Wrap getModel to track how many distinct underlying provider instances are created.
   // The lazy provider wraps a cached inner provider; the model instances it returns are
@@ -874,14 +869,13 @@ test('lazy opencode provider reuses the same model provider instance across getM
   const model1 = await modelProvider.getModel('provider-model');
   const model2 = await modelProvider.getModel('provider-model');
 
-  t.is(
+  expect(
     model1,
-    model2,
     'same model instance must be returned on repeated getModel calls — a new instance means a new session ID',
-  );
+  ).toBe(model2);
 });
 
-test('opencode provider type caches model instances across getModel calls', async (t) => {
+it('opencode provider type caches model instances across getModel calls', async () => {
   const provider = createCustomProviderModelProvider(
     {
       name: 'opencode-test',
@@ -912,5 +906,5 @@ test('opencode provider type caches model instances across getModel calls', asyn
 
   const model1 = await provider.getModel('provider-model');
   const model2 = await provider.getModel('provider-model');
-  t.is(model1, model2, 'getModel should return the same model instance for the same model name');
+  expect(model1, 'getModel should return the same model instance for the same model name').toBe(model2);
 });

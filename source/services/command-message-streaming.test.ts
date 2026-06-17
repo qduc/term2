@@ -1,11 +1,11 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   attachCachedArguments,
   captureToolCallArguments,
   emitCommandMessagesFromItems,
 } from './command-message-streaming.js';
 
-test('captureToolCallArguments: stores args for function_call rawItem', (t) => {
+it('captureToolCallArguments: stores args for function_call rawItem', () => {
   const toolCallArgumentsById = new Map<string, unknown>();
   const item = {
     rawItem: {
@@ -17,10 +17,10 @@ test('captureToolCallArguments: stores args for function_call rawItem', (t) => {
 
   captureToolCallArguments(item, toolCallArgumentsById);
 
-  t.deepEqual(toolCallArgumentsById.get('call-1'), { command: 'ls' });
+  expect(toolCallArgumentsById.get('call-1')).toEqual({ command: 'ls' });
 });
 
-test('attachCachedArguments: adds cached args when missing on item', (t) => {
+it('attachCachedArguments: adds cached args when missing on item', () => {
   const toolCallArgumentsById = new Map<string, unknown>([['call-2', { command: 'pwd' }]]);
   const items: any[] = [
     {
@@ -32,10 +32,10 @@ test('attachCachedArguments: adds cached args when missing on item', (t) => {
 
   attachCachedArguments(items, toolCallArgumentsById);
 
-  t.deepEqual(items[0].arguments, { command: 'pwd' });
+  expect(items[0].arguments).toEqual({ command: 'pwd' });
 });
 
-test('emitCommandMessagesFromItems: attaches args and filters duplicates/rejections', (t) => {
+it('emitCommandMessagesFromItems: attaches args and filters duplicates/rejections', () => {
   const toolCallArgumentsById = new Map<string, unknown>([['call-3', { command: 'whoami' }]]);
   const emittedCommandIds = new Set<string>(['dupe']);
   const items: any[] = [
@@ -47,7 +47,7 @@ test('emitCommandMessagesFromItems: attaches args and filters duplicates/rejecti
   ];
 
   const extractCommandMessages = (passedItems: any[]) => {
-    t.deepEqual(passedItems[0].arguments, { command: 'whoami' });
+    expect(passedItems[0].arguments).toEqual({ command: 'whoami' });
     return [
       {
         id: 'dupe',
@@ -83,11 +83,11 @@ test('emitCommandMessagesFromItems: attaches args and filters duplicates/rejecti
     extractCommandMessages,
   });
 
-  t.is(events.length, 2);
-  t.is(events[0].type, 'command_message');
-  t.is((events[0] as any).message.id, 'keep');
-  t.is(events[1].type, 'command_message');
-  t.is((events[1] as any).message.id, 'reject');
-  t.true(emittedCommandIds.has('keep'));
-  t.true(emittedCommandIds.has('reject'));
+  expect(events.length).toBe(2);
+  expect(events[0].type).toBe('command_message');
+  expect((events[0] as any).message.id).toBe('keep');
+  expect(events[1].type).toBe('command_message');
+  expect((events[1] as any).message.id).toBe('reject');
+  expect(emittedCommandIds.has('keep')).toBe(true);
+  expect(emittedCommandIds.has('reject')).toBe(true);
 });

@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { SSHService, SSHConfig } from './ssh-service.js';
 
@@ -63,17 +63,17 @@ const testConfig: SSHConfig = {
 
 // --- Connection Tests ---
 
-test('connect: establishes connection successfully', async (t) => {
+it('connect: establishes connection successfully', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
 
   await service.connect();
 
-  t.true(mockClient.connectCalled);
-  t.true(service.isConnected());
+  expect(mockClient.connectCalled).toBe(true);
+  expect(service.isConnected()).toBe(true);
 });
 
-test('connect: rejects on connection error', async (t) => {
+it('connect: rejects on connection error', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
 
@@ -83,63 +83,61 @@ test('connect: rejects on connection error', async (t) => {
     setImmediate(() => mockClient.emit('error', new Error('Connection refused')));
   };
 
-  await t.throwsAsync(service.connect(), { message: 'Connection refused' });
-  t.false(service.isConnected());
+  await await expect(service.connect()).rejects.toThrow('Connection refused');
+  expect(service.isConnected()).toBe(false);
 });
 
-test('disconnect: closes connection', async (t) => {
+it('disconnect: closes connection', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
 
   await service.connect();
-  t.true(service.isConnected());
+  expect(service.isConnected()).toBe(true);
 
   await service.disconnect();
-  t.true(mockClient.endCalled);
-  t.false(service.isConnected());
+  expect(mockClient.endCalled).toBe(true);
+  expect(service.isConnected()).toBe(false);
 });
 
-test('disconnect: handles already disconnected', async (t) => {
+it('disconnect: handles already disconnected', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
 
   // Disconnect without connecting first
   await service.disconnect();
-  t.false(mockClient.endCalled);
-  t.false(service.isConnected());
+  expect(mockClient.endCalled).toBe(false);
+  expect(service.isConnected()).toBe(false);
 });
 
-test('isConnected: returns false initially', (t) => {
+it('isConnected: returns false initially', () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
 
-  t.false(service.isConnected());
+  expect(service.isConnected()).toBe(false);
 });
 
-test('isConnected: returns false after end event', async (t) => {
+it('isConnected: returns false after end event', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
 
   await service.connect();
-  t.true(service.isConnected());
+  expect(service.isConnected()).toBe(true);
 
   // Simulate connection end from server
   mockClient.emit('end');
-  t.false(service.isConnected());
+  expect(service.isConnected()).toBe(false);
 });
 
 // --- Execute Command Tests ---
 
-test('executeCommand: throws when not connected', async (t) => {
+it('executeCommand: throws when not connected', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
 
-  await t.throwsAsync(service.executeCommand('ls'), {
-    message: 'SSH client not connected',
-  });
+  await expect(service.executeCommand('ls')).rejects.toThrow('SSH client not connected');
 });
 
-test('executeCommand: executes command and returns result', async (t) => {
+it('executeCommand: executes command and returns result', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
   await service.connect();
@@ -149,19 +147,19 @@ test('executeCommand: executes command and returns result', async (t) => {
   // Wait for exec to be called
   await new Promise((resolve) => setImmediate(resolve));
 
-  t.is(mockClient.lastExecCommand, 'ls -la');
+  expect(mockClient.lastExecCommand).toBe('ls -la');
 
   // Simulate command output
   mockClient.mockStream!.simulateOutput('file1.txt\nfile2.txt\n', '', 0);
 
   const result = await resultPromise;
-  t.is(result.stdout, 'file1.txt\nfile2.txt\n');
-  t.is(result.stderr, '');
-  t.is(result.exitCode, 0);
-  t.false(result.timedOut);
+  expect(result.stdout).toBe('file1.txt\nfile2.txt\n');
+  expect(result.stderr).toBe('');
+  expect(result.exitCode).toBe(0);
+  expect(result.timedOut).toBe(false);
 });
 
-test('executeCommand: captures stderr', async (t) => {
+it('executeCommand: captures stderr', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
   await service.connect();
@@ -173,12 +171,12 @@ test('executeCommand: captures stderr', async (t) => {
   mockClient.mockStream!.simulateOutput('', 'command not found', 127);
 
   const result = await resultPromise;
-  t.is(result.stdout, '');
-  t.is(result.stderr, 'command not found');
-  t.is(result.exitCode, 127);
+  expect(result.stdout).toBe('');
+  expect(result.stderr).toBe('command not found');
+  expect(result.exitCode).toBe(127);
 });
 
-test('executeCommand: handles both stdout and stderr', async (t) => {
+it('executeCommand: handles both stdout and stderr', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
   await service.connect();
@@ -192,12 +190,12 @@ test('executeCommand: handles both stdout and stderr', async (t) => {
   mockClient.mockStream!.emit('close', 0);
 
   const result = await resultPromise;
-  t.is(result.stdout, 'stdout line\n');
-  t.is(result.stderr, 'stderr line\n');
-  t.is(result.exitCode, 0);
+  expect(result.stdout).toBe('stdout line\n');
+  expect(result.stderr).toBe('stderr line\n');
+  expect(result.exitCode).toBe(0);
 });
 
-test('executeCommand: prepends cd when cwd option provided', async (t) => {
+it('executeCommand: prepends cd when cwd option provided', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
   await service.connect();
@@ -206,13 +204,13 @@ test('executeCommand: prepends cd when cwd option provided', async (t) => {
 
   await new Promise((resolve) => setImmediate(resolve));
 
-  t.is(mockClient.lastExecCommand, 'cd "/home/user" && ls');
+  expect(mockClient.lastExecCommand).toBe('cd "/home/user" && ls');
 
   mockClient.mockStream!.simulateOutput('', '', 0);
   await resultPromise;
 });
 
-test('executeCommand: rejects on exec error', async (t) => {
+it('executeCommand: rejects on exec error', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
   await service.connect();
@@ -222,12 +220,12 @@ test('executeCommand: rejects on exec error', async (t) => {
     setImmediate(() => callback(new Error('Exec failed'), null as any));
   };
 
-  await t.throwsAsync(service.executeCommand('ls'), { message: 'Exec failed' });
+  await await expect(service.executeCommand('ls')).rejects.toThrow('Exec failed');
 });
 
 // --- File Operations Tests ---
 
-test('readFile: reads file content via cat', async (t) => {
+it('readFile: reads file content via cat', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
   await service.connect();
@@ -236,15 +234,15 @@ test('readFile: reads file content via cat', async (t) => {
 
   await new Promise((resolve) => setImmediate(resolve));
 
-  t.is(mockClient.lastExecCommand, 'cat "/path/to/file.txt"');
+  expect(mockClient.lastExecCommand).toBe('cat "/path/to/file.txt"');
 
   mockClient.mockStream!.simulateOutput('file content here', '', 0);
 
   const content = await resultPromise;
-  t.is(content, 'file content here');
+  expect(content).toBe('file content here');
 });
 
-test('readFile: throws on failure', async (t) => {
+it('readFile: throws on failure', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
   await service.connect();
@@ -255,12 +253,10 @@ test('readFile: throws on failure', async (t) => {
 
   mockClient.mockStream!.simulateOutput('', 'No such file or directory', 1);
 
-  await t.throwsAsync(resultPromise, {
-    message: /Failed to read file.*No such file or directory/,
-  });
+  await expect(resultPromise).rejects.toThrow(/Failed to read file.*No such file or directory/);
 });
 
-test('writeFile: writes content via heredoc', async (t) => {
+it('writeFile: writes content via heredoc', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
   await service.connect();
@@ -270,15 +266,15 @@ test('writeFile: writes content via heredoc', async (t) => {
   await new Promise((resolve) => setImmediate(resolve));
 
   // Should use heredoc with unique delimiter
-  t.true(mockClient.lastExecCommand!.startsWith('cat > "/path/to/file.txt" << \'TERM2_EOF_'));
-  t.true(mockClient.lastExecCommand!.includes('new content'));
+  expect(mockClient.lastExecCommand!.startsWith('cat > "/path/to/file.txt" << \'TERM2_EOF_')).toBe(true);
+  expect(mockClient.lastExecCommand!.includes('new content')).toBe(true);
 
   mockClient.mockStream!.simulateOutput('', '', 0);
   await resultPromise;
-  t.pass();
+  expect(true).toBe(true);
 });
 
-test('writeFile: throws on failure', async (t) => {
+it('writeFile: throws on failure', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
   await service.connect();
@@ -289,12 +285,10 @@ test('writeFile: throws on failure', async (t) => {
 
   mockClient.mockStream!.simulateOutput('', 'Permission denied', 1);
 
-  await t.throwsAsync(resultPromise, {
-    message: /Failed to write file.*Permission denied/,
-  });
+  await expect(resultPromise).rejects.toThrow(/Failed to write file.*Permission denied/);
 });
 
-test('writeFile: throws if content contains delimiter', async (t) => {
+it('writeFile: throws if content contains delimiter', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
   await service.connect();
@@ -305,15 +299,15 @@ test('writeFile: throws if content contains delimiter', async (t) => {
   Date.now = () => 12345;
 
   try {
-    await t.throwsAsync(service.writeFile('/path/file.txt', 'content with TERM2_EOF_12345 in it'), {
-      message: 'Content contains internal delimiter',
-    });
+    await expect(service.writeFile('/path/file.txt', 'content with TERM2_EOF_12345 in it')).rejects.toThrow(
+      'Content contains internal delimiter',
+    );
   } finally {
     Date.now = originalDateNow;
   }
 });
 
-test('mkdir: creates directory', async (t) => {
+it('mkdir: creates directory', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
   await service.connect();
@@ -322,14 +316,14 @@ test('mkdir: creates directory', async (t) => {
 
   await new Promise((resolve) => setImmediate(resolve));
 
-  t.regex(mockClient.lastExecCommand ?? '', /^mkdir\s+"\/new\/dir"$/);
+  expect(mockClient.lastExecCommand ?? '').toMatch(/^mkdir\s+"\/new\/dir"$/);
 
   mockClient.mockStream!.simulateOutput('', '', 0);
   await resultPromise;
-  t.pass();
+  expect(true).toBe(true);
 });
 
-test('mkdir: creates directory recursively', async (t) => {
+it('mkdir: creates directory recursively', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
   await service.connect();
@@ -338,14 +332,14 @@ test('mkdir: creates directory recursively', async (t) => {
 
   await new Promise((resolve) => setImmediate(resolve));
 
-  t.regex(mockClient.lastExecCommand ?? '', /^mkdir\s+-p\s+"\/new\/nested\/dir"$/);
+  expect(mockClient.lastExecCommand ?? '').toMatch(/^mkdir\s+-p\s+"\/new\/nested\/dir"$/);
 
   mockClient.mockStream!.simulateOutput('', '', 0);
   await resultPromise;
-  t.pass();
+  expect(true).toBe(true);
 });
 
-test('mkdir: throws on failure', async (t) => {
+it('mkdir: throws on failure', async () => {
   const mockClient = new MockClient();
   const service = new SSHService(testConfig, mockClient as any);
   await service.connect();
@@ -356,7 +350,5 @@ test('mkdir: throws on failure', async (t) => {
 
   mockClient.mockStream!.simulateOutput('', 'Permission denied', 1);
 
-  await t.throwsAsync(resultPromise, {
-    message: /Failed to mkdir.*Permission denied/,
-  });
+  await expect(resultPromise).rejects.toThrow(/Failed to mkdir.*Permission denied/);
 });

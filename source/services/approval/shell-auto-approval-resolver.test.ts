@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
 import { LoggingService } from '../logging/logging-service.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
@@ -29,7 +29,7 @@ const makeMockAgentClient = (_advisories: Record<string, LLMAdvisory>): any => {
   };
 };
 
-test('non-shell tools return undefined advisory', async (t) => {
+it('non-shell tools return undefined advisory', async () => {
   const resolver = new ShellAutoApprovalResolver({
     conversationStore: new ConversationStore(),
     agentClient: makeMockAgentClient({}),
@@ -43,10 +43,10 @@ test('non-shell tools return undefined advisory', async (t) => {
     siblings: [],
   });
 
-  t.is(advisory, undefined);
+  expect(advisory).toBe(undefined);
 });
 
-test('getAutoApproveMode reads setting', (t) => {
+it('getAutoApproveMode reads setting', () => {
   const resolver = new ShellAutoApprovalResolver({
     conversationStore: new ConversationStore(),
     agentClient: makeMockAgentClient({}),
@@ -54,10 +54,10 @@ test('getAutoApproveMode reads setting', (t) => {
     settingsService: makeMockSettings('advisory') as any,
     sessionContextService: createSessionContextService() as any,
   });
-  t.is(resolver.getAutoApproveMode(), 'advisory');
+  expect(resolver.getAutoApproveMode()).toBe('advisory');
 });
 
-test('shouldAutoApprove requires auto mode + approved + llm source', (t) => {
+it('shouldAutoApprove requires auto mode + approved + llm source', () => {
   const resolver = new ShellAutoApprovalResolver({
     conversationStore: new ConversationStore(),
     agentClient: makeMockAgentClient({}),
@@ -65,13 +65,13 @@ test('shouldAutoApprove requires auto mode + approved + llm source', (t) => {
     settingsService: makeMockSettings('auto') as any,
     sessionContextService: createSessionContextService() as any,
   });
-  t.true(resolver.shouldAutoApprove(makeAdvisory({ approved: true, source: 'llm' })));
-  t.false(resolver.shouldAutoApprove(makeAdvisory({ approved: false, source: 'llm' })));
-  t.false(resolver.shouldAutoApprove(makeAdvisory({ approved: true, source: 'system' })));
-  t.false(resolver.shouldAutoApprove(undefined));
+  expect(resolver.shouldAutoApprove(makeAdvisory({ approved: true, source: 'llm' }))).toBe(true);
+  expect(resolver.shouldAutoApprove(makeAdvisory({ approved: false, source: 'llm' }))).toBe(false);
+  expect(resolver.shouldAutoApprove(makeAdvisory({ approved: true, source: 'system' }))).toBe(false);
+  expect(resolver.shouldAutoApprove(undefined)).toBe(false);
 });
 
-test('shouldAutoApprove returns false when mode is not auto', (t) => {
+it('shouldAutoApprove returns false when mode is not auto', () => {
   const resolver = new ShellAutoApprovalResolver({
     conversationStore: new ConversationStore(),
     agentClient: makeMockAgentClient({}),
@@ -79,10 +79,10 @@ test('shouldAutoApprove returns false when mode is not auto', (t) => {
     settingsService: makeMockSettings('advisory') as any,
     sessionContextService: createSessionContextService() as any,
   });
-  t.false(resolver.shouldAutoApprove(makeAdvisory({ approved: true, source: 'llm' })));
+  expect(resolver.shouldAutoApprove(makeAdvisory({ approved: true, source: 'llm' }))).toBe(false);
 });
 
-test('clearCache empties cached advisories so next eval re-runs LLM', async (t) => {
+it('clearCache empties cached advisories so next eval re-runs LLM', async () => {
   let chatCount = 0;
   const agentClient: any = {
     chat: async () => {
@@ -100,16 +100,16 @@ test('clearCache empties cached advisories so next eval re-runs LLM', async (t) 
 
   const interruption = { name: 'shell', arguments: { command: 'ls' }, callId: 'c1' };
   const a1 = await resolver.resolveAdvisoryForInterruption({ interruption, siblings: [interruption] });
-  t.truthy(a1);
+  expect(a1).toBeTruthy();
   await resolver.resolveAdvisoryForInterruption({ interruption, siblings: [interruption] });
-  t.is(chatCount, 1, 'second call uses cache');
+  expect(chatCount, 'second call uses cache').toBe(1);
 
   resolver.clearCache();
   await resolver.resolveAdvisoryForInterruption({ interruption, siblings: [interruption] });
-  t.is(chatCount, 2, 'after clearCache, evaluation runs again');
+  expect(chatCount, 'after clearCache, evaluation runs again').toBe(2);
 });
 
-test('interruption without callId uses inline __single__ evaluation', async (t) => {
+it('interruption without callId uses inline __single__ evaluation', async () => {
   let chatCount = 0;
   let promptSeen = '';
   const agentClient: any = {
@@ -129,8 +129,8 @@ test('interruption without callId uses inline __single__ evaluation', async (t) 
 
   const interruption = { name: 'shell', arguments: { command: 'ls' } };
   const advisory = await resolver.resolveAdvisoryForInterruption({ interruption, siblings: [interruption] });
-  t.truthy(advisory);
-  t.is(advisory?.approved, true);
-  t.is(chatCount, 1);
-  t.true(promptSeen.includes('ls'));
+  expect(advisory).toBeTruthy();
+  expect(advisory?.approved).toBe(true);
+  expect(chatCount).toBe(1);
+  expect(promptSeen.includes('ls')).toBe(true);
 });

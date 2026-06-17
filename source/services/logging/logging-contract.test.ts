@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   RuntimeLogSchema,
   buildRuntimeLogRecord,
@@ -10,7 +10,7 @@ import {
   shouldSampleLog,
 } from './logging-contract.js';
 
-test('buildRuntimeLogRecord produces canonical required fields', (t) => {
+it('buildRuntimeLogRecord produces canonical required fields', () => {
   const record = buildRuntimeLogRecord({
     level: 'info',
     correlationId: 'trace-123',
@@ -24,14 +24,14 @@ test('buildRuntimeLogRecord produces canonical required fields', (t) => {
   });
 
   const parsed = RuntimeLogSchema.parse(record);
-  t.is(parsed.traceId, 'trace-123');
-  t.is(parsed.eventType, 'stream.started');
-  t.is(parsed.traceId, 'trace-123');
-  t.false('category' in record, 'category should be stripped');
-  t.false('phase' in record, 'phase should be stripped');
+  expect(parsed.traceId).toBe('trace-123');
+  expect(parsed.eventType).toBe('stream.started');
+  expect(parsed.traceId).toBe('trace-123');
+  expect('category' in record).toBe(false);
+  expect('phase' in record).toBe(false);
 });
 
-test('buildRuntimeLogRecord omits sentinel-valued fields', (t) => {
+it('buildRuntimeLogRecord omits sentinel-valued fields', () => {
   const record = buildRuntimeLogRecord({
     level: 'warn',
     meta: {
@@ -40,17 +40,17 @@ test('buildRuntimeLogRecord omits sentinel-valued fields', (t) => {
     },
   });
 
-  t.false('provider' in record, 'unknown provider omitted');
-  t.false('model' in record, 'unknown model omitted');
-  t.false('sessionId' in record, 'session-unknown omitted');
-  t.false('traceId' in record, 'trace-unknown omitted');
-  t.false('category' in record, 'category stripped');
-  t.false('phase' in record, 'phase stripped');
+  expect('provider' in record).toBe(false);
+  expect('model' in record).toBe(false);
+  expect('sessionId' in record).toBe(false);
+  expect('traceId' in record).toBe(false);
+  expect('category' in record).toBe(false);
+  expect('phase' in record).toBe(false);
   const parsed = RuntimeLogSchema.parse(record);
-  t.is(parsed.eventType, 'log.message');
+  expect(parsed.eventType).toBe('log.message');
 });
 
-test('buildRuntimeLogRecord preserves valid provider/model/session/trace', (t) => {
+it('buildRuntimeLogRecord preserves valid provider/model/session/trace', () => {
   const record = buildRuntimeLogRecord({
     level: 'info',
     meta: {
@@ -63,47 +63,47 @@ test('buildRuntimeLogRecord preserves valid provider/model/session/trace', (t) =
     },
   });
 
-  t.is(record.provider, 'openai');
-  t.is(record.model, 'gpt-5');
-  t.is(record.sessionId, 'abc-123');
-  t.is(record.traceId, '550e8400-e29b-41d4-a716-446655440000');
+  expect(record.provider).toBe('openai');
+  expect(record.model).toBe('gpt-5');
+  expect(record.sessionId).toBe('abc-123');
+  expect(record.traceId).toBe('550e8400-e29b-41d4-a716-446655440000');
 });
 
-test('parseCategoryFilter parses valid comma-separated categories', (t) => {
+it('parseCategoryFilter parses valid comma-separated categories', () => {
   const parsed = parseCategoryFilter('retry, tool,invalid');
-  t.truthy(parsed);
-  t.true(parsed?.has('retry'));
-  t.true(parsed?.has('tool'));
-  t.false(parsed?.has('provider'));
+  expect(parsed).toBeTruthy();
+  expect(parsed?.has('retry')).toBe(true);
+  expect(parsed?.has('tool')).toBe(true);
+  expect(parsed?.has('provider')).toBe(false);
 });
 
-test('shouldLogForCategory always keeps warn/error logs', (t) => {
+it('shouldLogForCategory always keeps warn/error logs', () => {
   const enabled = new Set(['tool'] as const);
-  t.true(shouldLogForCategory({ level: 'warn', category: 'stream', enabledCategories: enabled as any }));
-  t.true(shouldLogForCategory({ level: 'error', category: 'stream', enabledCategories: enabled as any }));
-  t.false(shouldLogForCategory({ level: 'info', category: 'stream', enabledCategories: enabled as any }));
+  expect(shouldLogForCategory({ level: 'warn', category: 'stream', enabledCategories: enabled as any })).toBe(true);
+  expect(shouldLogForCategory({ level: 'error', category: 'stream', enabledCategories: enabled as any })).toBe(true);
+  expect(shouldLogForCategory({ level: 'info', category: 'stream', enabledCategories: enabled as any })).toBe(false);
 });
 
-test('shouldIncludeVerbosePayload keeps payload only for error unless verbose', (t) => {
-  t.false(shouldIncludeVerbosePayload({ level: 'info', verbosePayloads: false }));
-  t.true(shouldIncludeVerbosePayload({ level: 'error', verbosePayloads: false }));
-  t.true(shouldIncludeVerbosePayload({ level: 'info', verbosePayloads: true }));
+it('shouldIncludeVerbosePayload keeps payload only for error unless verbose', () => {
+  expect(shouldIncludeVerbosePayload({ level: 'info', verbosePayloads: false })).toBe(false);
+  expect(shouldIncludeVerbosePayload({ level: 'error', verbosePayloads: false })).toBe(true);
+  expect(shouldIncludeVerbosePayload({ level: 'info', verbosePayloads: true })).toBe(true);
 });
 
-test('shouldSampleLog respects sample rate but never drops errors', (t) => {
-  t.false(shouldSampleLog({ level: 'debug', sampleRate: 0.2, randomValue: 0.9 }));
-  t.true(shouldSampleLog({ level: 'debug', sampleRate: 0.2, randomValue: 0.1 }));
-  t.true(shouldSampleLog({ level: 'error', sampleRate: 0, randomValue: 0.99 }));
+it('shouldSampleLog respects sample rate but never drops errors', () => {
+  expect(shouldSampleLog({ level: 'debug', sampleRate: 0.2, randomValue: 0.9 })).toBe(false);
+  expect(shouldSampleLog({ level: 'debug', sampleRate: 0.2, randomValue: 0.1 })).toBe(true);
+  expect(shouldSampleLog({ level: 'error', sampleRate: 0, randomValue: 0.99 })).toBe(true);
 });
 
-test('resolveLogCategory infers category from event type prefix', (t) => {
-  t.is(resolveLogCategory({ eventType: 'retry.hallucination' }), 'retry');
-  t.is(resolveLogCategory({ eventType: 'tool_call.validation_failed' }), 'tool');
-  t.is(resolveLogCategory({ eventType: 'approval.required' }), 'approval');
-  t.is(resolveLogCategory({ eventType: 'something.else' }), 'general');
+it('resolveLogCategory infers category from event type prefix', () => {
+  expect(resolveLogCategory({ eventType: 'retry.hallucination' })).toBe('retry');
+  expect(resolveLogCategory({ eventType: 'tool_call.validation_failed' })).toBe('tool');
+  expect(resolveLogCategory({ eventType: 'approval.required' })).toBe('approval');
+  expect(resolveLogCategory({ eventType: 'something.else' })).toBe('general');
 });
 
-test('createInvalidToolCallDiagnostic returns a complete packet', (t) => {
+it('createInvalidToolCallDiagnostic returns a complete packet', () => {
   const diagnostic = createInvalidToolCallDiagnostic({
     toolName: 'shell',
     toolCallId: 'call-7',
@@ -114,8 +114,8 @@ test('createInvalidToolCallDiagnostic returns a complete packet', (t) => {
     retryContext: { hallucinationRetryCount: 1 },
   });
 
-  t.is(diagnostic.eventType, 'tool_call.parse_failed');
-  t.is(diagnostic.errorCode, 'INVALID_TOOL_CALL_FORMAT');
-  t.deepEqual(diagnostic.validationErrors, ['arguments must be valid JSON']);
-  t.true(typeof diagnostic.rawPayloadSnippet === 'string');
+  expect(diagnostic.eventType).toBe('tool_call.parse_failed');
+  expect(diagnostic.errorCode).toBe('INVALID_TOOL_CALL_FORMAT');
+  expect(diagnostic.validationErrors).toEqual(['arguments must be valid JSON']);
+  expect(typeof diagnostic.rawPayloadSnippet === 'string').toBe(true);
 });

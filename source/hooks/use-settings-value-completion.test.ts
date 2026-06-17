@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   buildSettingValueSuggestions,
   filterSettingValueSuggestionsByQuery,
@@ -7,37 +7,37 @@ import {
   type SettingValueSuggestion,
 } from './use-settings-value-completion.js';
 
-test('buildSettingValueSuggestions returns enum suggestions for reasoningEffort', (t) => {
+it('buildSettingValueSuggestions returns enum suggestions for reasoningEffort', () => {
   const result = buildSettingValueSuggestions('agent.reasoningEffort');
   const values = result.map((r) => r.value);
-  t.true(values.includes('low'));
-  t.true(values.includes('medium'));
-  t.true(values.includes('high'));
-  t.true(values.includes('xhigh'));
-  t.true(values.includes('default'));
+  expect(values.includes('low')).toBe(true);
+  expect(values.includes('medium')).toBe(true);
+  expect(values.includes('high')).toBe(true);
+  expect(values.includes('xhigh')).toBe(true);
+  expect(values.includes('default')).toBe(true);
 });
 
-test('buildSettingValueSuggestions returns enum suggestions for shell.autoApproveMode', (t) => {
+it('buildSettingValueSuggestions returns enum suggestions for shell.autoApproveMode', () => {
   const result = buildSettingValueSuggestions('shell.autoApproveMode');
   const values = result.map((r) => r.value);
-  t.true(values.includes('off'));
-  t.true(values.includes('advisory'));
-  t.true(values.includes('auto'));
+  expect(values.includes('off')).toBe(true);
+  expect(values.includes('advisory')).toBe(true);
+  expect(values.includes('auto')).toBe(true);
 });
 
-test('buildSettingValueSuggestions returns enum suggestions for webSearch.provider', (t) => {
+it('buildSettingValueSuggestions returns enum suggestions for webSearch.provider', () => {
   const result = buildSettingValueSuggestions('webSearch.provider');
   const values = result.map((r) => r.value);
-  t.true(values.includes('tavily'));
-  t.true(values.includes('exa'));
+  expect(values.includes('tavily')).toBe(true);
+  expect(values.includes('exa')).toBe(true);
 });
 
-test('buildSettingValueSuggestions returns boolean suggestions for boolean settings', (t) => {
+it('buildSettingValueSuggestions returns boolean suggestions for boolean settings', () => {
   const result = buildSettingValueSuggestions('logging.suppressConsoleOutput');
-  t.deepEqual(result.map((r) => r.value).sort(), ['false', 'true']);
+  expect(result.map((r) => r.value).sort()).toEqual(['false', 'true']);
 });
 
-test('filterSettingValueSuggestionsByQuery filters by partial match', (t) => {
+it('filterSettingValueSuggestionsByQuery filters by partial match', () => {
   const suggestions: SettingValueSuggestion[] = [
     { value: 'debug' },
     { value: 'info' },
@@ -47,97 +47,97 @@ test('filterSettingValueSuggestionsByQuery filters by partial match', (t) => {
 
   const result = filterSettingValueSuggestionsByQuery(suggestions, 'err', 10);
 
-  t.true(result.some((r) => r.value === 'error'));
+  expect(result.some((r) => r.value === 'error')).toBe(true);
 });
 
-test('filterSettingValueSuggestionsByQuery includes custom number value for number settings', (t) => {
+it('filterSettingValueSuggestionsByQuery includes custom number value for number settings', () => {
   const suggestions: SettingValueSuggestion[] = [{ value: '100' }, { value: '200' }];
 
   const result = filterSettingValueSuggestionsByQuery(suggestions, '150', 10, 'ui.historySize');
 
-  t.true(result.length >= 1);
-  t.is(result[0]?.value, '150');
-  t.is(result[0]?.description, 'Custom value');
+  expect(result.length >= 1).toBe(true);
+  expect(result[0]?.value).toBe('150');
+  expect(result[0]?.description).toBe('Custom value');
 });
 
-test('filterSettingValueSuggestionsByQuery does not include custom number if already present', (t) => {
+it('filterSettingValueSuggestionsByQuery does not include custom number if already present', () => {
   const suggestions: SettingValueSuggestion[] = [{ value: '100' }, { value: '200' }];
 
   const result = filterSettingValueSuggestionsByQuery(suggestions, '100', 10, 'ui.historySize');
 
-  t.true(result.length >= 1);
-  t.is(result[0]?.value, '100');
-  t.not(result[0]?.description, 'Custom value');
-  t.false(result.some((r) => r.description === 'Custom value'));
+  expect(result.length >= 1).toBe(true);
+  expect(result[0]?.value).toBe('100');
+  expect(result[0]?.description).not.toBe('Custom value');
+  expect(result.some((r) => r.description === 'Custom value')).toBe(false);
 });
 
-test('filterSettingValueSuggestionsByQuery does not include non-number custom values even for number settings', (t) => {
+it('filterSettingValueSuggestionsByQuery does not include non-number custom values even for number settings', () => {
   const suggestions: SettingValueSuggestion[] = [];
   const result = filterSettingValueSuggestionsByQuery(suggestions, 'abc', 10, 'ui.historySize');
 
-  t.is(result.length, 0);
+  expect(result.length).toBe(0);
 });
 
-test('isNumberSetting returns true for number setting keys', (t) => {
-  t.true(isNumberSetting('agent.maxTurns'));
-  t.true(isNumberSetting('agent.temperature'));
-  t.true(isNumberSetting('agent.retryAttempts'));
-  t.true(isNumberSetting('agent.maxParallelToolCalls'));
-  t.true(isNumberSetting('shell.timeout'));
-  t.true(isNumberSetting('ui.pasteThreshold'));
-  t.true(isNumberSetting('ssh.port'));
+it('isNumberSetting returns true for number setting keys', () => {
+  expect(isNumberSetting('agent.maxTurns')).toBe(true);
+  expect(isNumberSetting('agent.temperature')).toBe(true);
+  expect(isNumberSetting('agent.retryAttempts')).toBe(true);
+  expect(isNumberSetting('agent.maxParallelToolCalls')).toBe(true);
+  expect(isNumberSetting('shell.timeout')).toBe(true);
+  expect(isNumberSetting('ui.pasteThreshold')).toBe(true);
+  expect(isNumberSetting('ssh.port')).toBe(true);
 });
 
-test('isNumberSetting returns false for non-number setting keys', (t) => {
-  t.false(isNumberSetting('agent.model'));
-  t.false(isNumberSetting('agent.provider'));
-  t.false(isNumberSetting('logging.logLevel'));
-  t.false(isNumberSetting('app.mentorMode'));
-  t.false(isNumberSetting('tools.enableEditHealing'));
+it('isNumberSetting returns false for non-number setting keys', () => {
+  expect(isNumberSetting('agent.model')).toBe(false);
+  expect(isNumberSetting('agent.provider')).toBe(false);
+  expect(isNumberSetting('logging.logLevel')).toBe(false);
+  expect(isNumberSetting('app.mentorMode')).toBe(false);
+  expect(isNumberSetting('tools.enableEditHealing')).toBe(false);
 });
 
-test('isStringSetting returns true for string setting keys', (t) => {
-  t.true(isStringSetting('agent.model'));
-  t.true(isStringSetting('agent.provider'));
-  t.true(isStringSetting('webSearch.exa.apiKey'));
-  t.true(isStringSetting('webSearch.tavily.apiKey'));
-  t.true(isStringSetting('webSearch.provider'));
-  t.true(isStringSetting('ssh.host'));
-  t.true(isStringSetting('app.shellPath'));
+it('isStringSetting returns true for string setting keys', () => {
+  expect(isStringSetting('agent.model')).toBe(true);
+  expect(isStringSetting('agent.provider')).toBe(true);
+  expect(isStringSetting('webSearch.exa.apiKey')).toBe(true);
+  expect(isStringSetting('webSearch.tavily.apiKey')).toBe(true);
+  expect(isStringSetting('webSearch.provider')).toBe(true);
+  expect(isStringSetting('ssh.host')).toBe(true);
+  expect(isStringSetting('app.shellPath')).toBe(true);
 });
 
-test('isStringSetting returns false for non-string setting keys', (t) => {
-  t.false(isStringSetting('agent.maxTurns'));
-  t.false(isStringSetting('agent.temperature'));
-  t.false(isStringSetting('ssh.port'));
-  t.false(isStringSetting('logging.logLevel'));
-  t.false(isStringSetting('logging.suppressConsoleOutput'));
-  t.false(isStringSetting('app.mentorMode'));
-  t.false(isStringSetting('tools.enableEditHealing'));
+it('isStringSetting returns false for non-string setting keys', () => {
+  expect(isStringSetting('agent.maxTurns')).toBe(false);
+  expect(isStringSetting('agent.temperature')).toBe(false);
+  expect(isStringSetting('ssh.port')).toBe(false);
+  expect(isStringSetting('logging.logLevel')).toBe(false);
+  expect(isStringSetting('logging.suppressConsoleOutput')).toBe(false);
+  expect(isStringSetting('app.mentorMode')).toBe(false);
+  expect(isStringSetting('tools.enableEditHealing')).toBe(false);
 });
 
-test('filterSettingValueSuggestionsByQuery includes custom string value for string settings without predefined suggestions', (t) => {
+it('filterSettingValueSuggestionsByQuery includes custom string value for string settings without predefined suggestions', () => {
   const suggestions: SettingValueSuggestion[] = [];
 
   const result = filterSettingValueSuggestionsByQuery(suggestions, 'my-api-key', 10, 'webSearch.exa.apiKey');
 
-  t.true(result.length >= 1);
-  t.is(result[0]?.value, 'my-api-key');
-  t.is(result[0]?.description, 'Custom value');
+  expect(result.length >= 1).toBe(true);
+  expect(result[0]?.value).toBe('my-api-key');
+  expect(result[0]?.description).toBe('Custom value');
 });
 
-test('filterSettingValueSuggestionsByQuery does not include custom string if already present', (t) => {
+it('filterSettingValueSuggestionsByQuery does not include custom string if already present', () => {
   const suggestions: SettingValueSuggestion[] = [{ value: 'current-key', description: 'Current value' }];
 
   const result = filterSettingValueSuggestionsByQuery(suggestions, 'current-key', 10, 'webSearch.exa.apiKey');
 
-  t.true(result.length >= 1);
-  t.is(result[0]?.value, 'current-key');
-  t.not(result[0]?.description, 'Custom value');
-  t.false(result.some((r) => r.description === 'Custom value'));
+  expect(result.length >= 1).toBe(true);
+  expect(result[0]?.value).toBe('current-key');
+  expect(result[0]?.description).not.toBe('Custom value');
+  expect(result.some((r) => r.description === 'Custom value')).toBe(false);
 });
 
-test('filterSettingValueSuggestionsByQuery does not include custom string for string settings with predefined suggestions', (t) => {
+it('filterSettingValueSuggestionsByQuery does not include custom string for string settings with predefined suggestions', () => {
   const suggestions: SettingValueSuggestion[] = [
     { value: 'openai', description: 'OpenAI official API' },
     { value: 'openrouter', description: 'OpenRouter.ai' },
@@ -149,31 +149,31 @@ test('filterSettingValueSuggestionsByQuery does not include custom string for st
 
   const result = filterSettingValueSuggestionsByQuery(suggestions, 'custom-provider', 10, 'agent.provider');
 
-  t.false(result.some((r) => r.description === 'Custom value'));
+  expect(result.some((r) => r.description === 'Custom value')).toBe(false);
 });
 
-test('filterSettingValueSuggestionsByQuery does not include custom string for empty query', (t) => {
+it('filterSettingValueSuggestionsByQuery does not include custom string for empty query', () => {
   const suggestions: SettingValueSuggestion[] = [];
 
   const result = filterSettingValueSuggestionsByQuery(suggestions, '', 10, 'webSearch.exa.apiKey');
 
-  t.false(result.some((r) => r.description === 'Custom value'));
+  expect(result.some((r) => r.description === 'Custom value')).toBe(false);
 });
 
-test('buildSettingValueSuggestions returns no predefined values for free-form API key settings', (t) => {
-  t.deepEqual(buildSettingValueSuggestions('webSearch.exa.apiKey'), []);
-  t.deepEqual(buildSettingValueSuggestions('webSearch.tavily.apiKey'), []);
+it('buildSettingValueSuggestions returns no predefined values for free-form API key settings', () => {
+  expect(buildSettingValueSuggestions('webSearch.exa.apiKey')).toEqual([]);
+  expect(buildSettingValueSuggestions('webSearch.tavily.apiKey')).toEqual([]);
 });
 
-test('buildSettingValueSuggestions returns enum suggestions for ui.displayMode', (t) => {
+it('buildSettingValueSuggestions returns enum suggestions for ui.displayMode', () => {
   const result = buildSettingValueSuggestions('ui.displayMode');
   const values = result.map((r) => r.value);
-  t.deepEqual(values, ['standard', 'concise']);
+  expect(values).toEqual(['standard', 'concise']);
 });
 
-test('buildSettingValueSuggestions returns transport suggestions', (t) => {
-  t.deepEqual(
-    buildSettingValueSuggestions('agent.transport').map((suggestion) => suggestion.value),
-    ['websocket', 'http'],
-  );
+it('buildSettingValueSuggestions returns transport suggestions', () => {
+  expect(buildSettingValueSuggestions('agent.transport').map((suggestion) => suggestion.value)).toEqual([
+    'websocket',
+    'http',
+  ]);
 });

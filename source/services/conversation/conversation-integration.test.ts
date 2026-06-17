@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ModelBehaviorError } from '@openai/agents';
 import { ConversationService } from './conversation-service.js';
 
@@ -48,7 +48,7 @@ class MockStream {
   }
 }
 
-test('integration: streamed response emits deltas and final output', async (t) => {
+it('integration: streamed response emits deltas and final output', async () => {
   const stream = new MockStream([
     { type: 'response.output_text.delta', delta: 'Hello' },
     { type: 'response.output_text.delta', delta: ' world' },
@@ -75,18 +75,18 @@ test('integration: streamed response emits deltas and final output', async (t) =
     },
   });
 
-  t.deepEqual(chunks, [
+  expect(chunks).toEqual([
     { full: 'Hello', chunk: 'Hello' },
     { full: 'Hello world', chunk: ' world' },
   ]);
-  t.deepEqual(events, ['text_delta', 'text_delta', 'final']);
-  t.is(result.type, 'response');
+  expect(events).toEqual(['text_delta', 'text_delta', 'final']);
+  expect(result.type).toBe('response');
   if (result.type === 'response') {
-    t.is(result.finalText, 'Hello world');
+    expect(result.finalText).toBe('Hello world');
   }
 });
 
-test('integration: approval round-trip (approval_required -> continue -> final)', async (t) => {
+it('integration: approval round-trip (approval_required -> continue -> final)', async () => {
   const interruption = {
     name: 'shell',
     agent: { name: 'CLI Agent' },
@@ -121,7 +121,7 @@ test('integration: approval round-trip (approval_required -> continue -> final)'
         return initialStream;
       },
       async continueRunStream(state: any, options: any) {
-        t.is(state, approvalState);
+        expect(state).toBe(approvalState);
         continueOptions = options;
         return continuationStream;
       },
@@ -130,24 +130,24 @@ test('integration: approval round-trip (approval_required -> continue -> final)'
   });
 
   const first = await service.sendMessage('run command');
-  t.is(first.type, 'approval_required');
+  expect(first.type).toBe('approval_required');
   if (first.type === 'approval_required') {
-    t.is(first.approval.toolName, 'shell');
-    t.is(first.approval.argumentsText, 'echo hi');
+    expect(first.approval.toolName).toBe('shell');
+    expect(first.approval.argumentsText).toBe('echo hi');
   }
 
   const final = await service.handleApprovalDecision('y');
-  t.truthy(final);
-  t.is(final?.type, 'response');
-  t.is(final?.type === 'response' ? final.finalText : '', 'Approved run');
-  t.deepEqual(approvalState.approved, [interruption]);
-  t.deepEqual(approvalState.rejected, []);
-  t.truthy(continueOptions);
-  t.is(continueOptions.previousResponseId, 'resp-before-approval');
-  t.is(continueOptions.sessionId, 'default');
+  expect(final).toBeTruthy();
+  expect(final?.type).toBe('response');
+  expect(final?.type === 'response' ? final.finalText : '').toBe('Approved run');
+  expect(approvalState.approved).toEqual([interruption]);
+  expect(approvalState.rejected).toEqual([]);
+  expect(continueOptions).toBeTruthy();
+  expect(continueOptions.previousResponseId).toBe('resp-before-approval');
+  expect(continueOptions.sessionId).toBe('default');
 });
 
-test('integration: hallucination retry retries once and succeeds', async (t) => {
+it('integration: hallucination retry retries once and succeeds', async () => {
   let startCalls = 0;
   const successfulStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Retried successfully' }]);
   successfulStream.finalOutput = 'Retried successfully';
@@ -172,12 +172,12 @@ test('integration: hallucination retry retries once and succeeds', async (t) => 
     },
   });
 
-  t.is(startCalls, 2);
-  t.true(emittedEvents.includes('retry'));
-  t.true(emittedEvents.includes('final'));
-  t.is(result.type, 'response');
+  expect(startCalls).toBe(2);
+  expect(emittedEvents.includes('retry')).toBe(true);
+  expect(emittedEvents.includes('final')).toBe(true);
+  expect(result.type).toBe('response');
   if (result.type === 'response') {
-    t.is(result.finalText, 'Retried successfully');
+    expect(result.finalText).toBe('Retried successfully');
   }
 });
 
@@ -185,7 +185,7 @@ test('integration: hallucination retry retries once and succeeds', async (t) => 
 // The store must NOT contain pending tool call/output from the initial
 // interrupted stream; only the completed continuation may write the cumulative
 // stream.output once.
-test('integration: terminal-write gate prevents store write on interrupted stream; continuation writes cumulative output once', async (t) => {
+it('integration: terminal-write gate prevents store write on interrupted stream; continuation writes cumulative output once', async () => {
   const interruption = {
     name: 'shell',
     agent: { name: 'CLI Agent' },
@@ -255,35 +255,35 @@ test('integration: terminal-write gate prevents store write on interrupted strea
 
   // Step 1: sendMessage triggers approval
   const first = await service.sendMessage('list files');
-  t.is(first.type, 'approval_required');
+  expect(first.type).toBe('approval_required');
   if (first.type === 'approval_required') {
-    t.is(first.approval.toolName, 'shell');
-    t.is(first.approval.argumentsText, 'ls');
+    expect(first.approval.toolName).toBe('shell');
+    expect(first.approval.argumentsText).toBe('ls');
   }
 
   // Step 2: store must NOT contain the initial output.
   // The terminal gate prevented writing because the stream was interrupted.
   const historyAfterInterrupt = service.exportState().history as any[];
-  t.is(historyAfterInterrupt.length, 1, 'store should have only the user message after interrupted stream');
-  t.is(historyAfterInterrupt[0].role, 'user');
-  t.is(historyAfterInterrupt[0].content, 'list files');
+  expect(historyAfterInterrupt.length, 'store should have only the user message after interrupted stream').toBe(1);
+  expect(historyAfterInterrupt[0].role).toBe('user');
+  expect(historyAfterInterrupt[0].content).toBe('list files');
 
   // Step 3: approve and continue
   const final = await service.handleApprovalDecision('y');
-  t.truthy(final);
-  t.is(final?.type, 'response');
-  t.is(final?.type === 'response' ? final.finalText : '', 'Here are your files: file1.txt, file2.txt');
-  t.deepEqual(approvalState.approved, [interruption]);
+  expect(final).toBeTruthy();
+  expect(final?.type).toBe('response');
+  expect(final?.type === 'response' ? final.finalText : '').toBe('Here are your files: file1.txt, file2.txt');
+  expect(approvalState.approved).toEqual([interruption]);
 
   // Step 4: store must now contain user message + cumulative output,
   // with no duplicated assistant text items.
   const historyAfterComplete = service.exportState().history as any[];
   const expectedLength = 1 + continuationOutput.length; // user msg + output items
-  t.is(historyAfterComplete.length, expectedLength, 'store should have user message + cumulative output items');
+  expect(historyAfterComplete.length, 'store should have user message + cumulative output items').toBe(expectedLength);
 
   // User message is still first
-  t.is(historyAfterComplete[0].role, 'user');
-  t.is(historyAfterComplete[0].content, 'list files');
+  expect(historyAfterComplete[0].role).toBe('user');
+  expect(historyAfterComplete[0].content).toBe('list files');
 
   // Collect assistant text items — each should appear exactly once
   const assistantTexts: string[] = [];
@@ -293,13 +293,12 @@ test('integration: terminal-write gate prevents store write on interrupted strea
       assistantTexts.push(item.content[0].text);
     }
   }
-  t.deepEqual(
-    assistantTexts,
-    ['I will list files for you.', 'Here are your files: file1.txt, file2.txt'],
-    'assistant output texts should appear exactly once, no duplicates',
-  );
+  expect(assistantTexts, 'assistant output texts should appear exactly once, no duplicates').toEqual([
+    'I will list files for you.',
+    'Here are your files: file1.txt, file2.txt',
+  ]);
 
   // Continuation options must thread previousResponseId from the initial stream
-  t.truthy(continueOptions);
-  t.is(continueOptions.previousResponseId, 'resp-before-gate');
+  expect(continueOptions).toBeTruthy();
+  expect(continueOptions.previousResponseId).toBe('resp-before-gate');
 });

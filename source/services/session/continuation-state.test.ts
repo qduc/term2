@@ -1,17 +1,17 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ContinuationState } from './continuation-state.js';
 
-test('ContinuationState initializes with default values', (t) => {
+it('ContinuationState initializes with default values', () => {
   const state = new ContinuationState(1);
-  t.is(state.token, 1);
-  t.deepEqual(state.currentCallIds, []);
-  t.is(state.source, 'continueRunStream');
-  t.deepEqual(state.previouslyEmittedIds, new Set());
-  t.deepEqual(state.cumulativeCommandMessages, []);
-  t.is(state.inputMode, 'delta');
-  t.is(state.lastStream, null);
-  t.is(state.currentResumePreviousResponseId, undefined);
-  t.deepEqual(state.retryCounts, {
+  expect(state.token).toBe(1);
+  expect(state.currentCallIds).toEqual([]);
+  expect(state.source).toBe('continueRunStream');
+  expect(state.previouslyEmittedIds).toEqual(new Set());
+  expect(state.cumulativeCommandMessages).toEqual([]);
+  expect(state.inputMode).toBe('delta');
+  expect(state.lastStream).toBe(null);
+  expect(state.currentResumePreviousResponseId).toBe(undefined);
+  expect(state.retryCounts).toEqual({
     transientRetryCount: 0,
     serviceTierFallbackCount: 0,
     modelRetryCount: 0,
@@ -19,7 +19,7 @@ test('ContinuationState initializes with default values', (t) => {
   });
 });
 
-test('initializeFrom populates all fields from prepared continuation', (t) => {
+it('initializeFrom populates all fields from prepared continuation', () => {
   const state = new ContinuationState(5);
   const prepared = {
     state: { id: 'run-1' } as any,
@@ -37,18 +37,18 @@ test('initializeFrom populates all fields from prepared continuation', (t) => {
 
   state.initializeFrom(prepared);
 
-  t.is(state.token, 7);
-  t.is(state.currentState, prepared.state);
-  t.deepEqual(state.currentCallIds, ['call-1']);
-  t.is(state.source, 'abortResolution');
-  t.deepEqual(state.previouslyEmittedIds, new Set(['id-1']));
-  t.is(state.inputMode, 'full_history');
-  t.is(state.cumulativeUsage, prepared.cumulativeUsage);
-  t.deepEqual(state.cumulativeCommandMessages, prepared.cumulativeCommandMessages);
-  t.deepEqual(state.cumulativeTurnItems, prepared.cumulativeTurnItems);
+  expect(state.token).toBe(7);
+  expect(state.currentState).toBe(prepared.state);
+  expect(state.currentCallIds).toEqual(['call-1']);
+  expect(state.source).toBe('abortResolution');
+  expect(state.previouslyEmittedIds).toEqual(new Set(['id-1']));
+  expect(state.inputMode).toBe('full_history');
+  expect(state.cumulativeUsage).toBe(prepared.cumulativeUsage);
+  expect(state.cumulativeCommandMessages).toEqual(prepared.cumulativeCommandMessages);
+  expect(state.cumulativeTurnItems).toEqual(prepared.cumulativeTurnItems);
 });
 
-test('initializeFrom includes sibling interruption call IDs from the run state', (t) => {
+it('initializeFrom includes sibling interruption call IDs from the run state', () => {
   const state = new ContinuationState(5);
   const prepared = {
     state: {
@@ -63,10 +63,10 @@ test('initializeFrom includes sibling interruption call IDs from the run state',
 
   state.initializeFrom(prepared);
 
-  t.deepEqual(state.currentCallIds, ['call-1', 'call-2']);
+  expect(state.currentCallIds).toEqual(['call-1', 'call-2']);
 });
 
-test('initializeFrom falls back to constructor token when prepared token is missing', (t) => {
+it('initializeFrom falls back to constructor token when prepared token is missing', () => {
   const state = new ContinuationState(5);
   const prepared = {
     state: { id: 'run-1' } as any,
@@ -78,10 +78,10 @@ test('initializeFrom falls back to constructor token when prepared token is miss
   };
 
   state.initializeFrom(prepared);
-  t.is(state.token, 5);
+  expect(state.token).toBe(5);
 });
 
-test('advanceFromPlan updates state for next iteration', (t) => {
+it('advanceFromPlan updates state for next iteration', () => {
   const state = new ContinuationState(1);
   state.initializeFrom({
     state: { id: 'run-1' } as any,
@@ -99,15 +99,15 @@ test('advanceFromPlan updates state for next iteration', (t) => {
 
   state.advanceFromPlan(nextState, nextInterruption, 'delta', mergedIds, snapshot);
 
-  t.is(state.currentState, nextState);
-  t.deepEqual(state.currentCallIds, ['call-2']);
-  t.is(state.source, 'continueRunStream');
-  t.deepEqual(state.previouslyEmittedIds, mergedIds);
-  t.is(state.inputMode, 'delta');
-  t.deepEqual(state.ledgerSnapshot, snapshot);
+  expect(state.currentState).toBe(nextState);
+  expect(state.currentCallIds).toEqual(['call-2']);
+  expect(state.source).toBe('continueRunStream');
+  expect(state.previouslyEmittedIds).toEqual(mergedIds);
+  expect(state.inputMode).toBe('delta');
+  expect(state.ledgerSnapshot).toEqual(snapshot);
 });
 
-test('advanceFromPlan includes sibling interruption call IDs from the next run state', (t) => {
+it('advanceFromPlan includes sibling interruption call IDs from the next run state', () => {
   const state = new ContinuationState(1);
   state.initializeFrom({
     state: { id: 'run-1' } as any,
@@ -124,10 +124,10 @@ test('advanceFromPlan includes sibling interruption call IDs from the next run s
 
   state.advanceFromPlan(nextState, { callId: 'call-2' }, 'delta', new Set(), []);
 
-  t.deepEqual(state.currentCallIds, ['call-2', 'call-3']);
+  expect(state.currentCallIds).toEqual(['call-2', 'call-3']);
 });
 
-test('advanceFromPlan preserves inputMode when nextInputMode is undefined', (t) => {
+it('advanceFromPlan preserves inputMode when nextInputMode is undefined', () => {
   const state = new ContinuationState(1);
   state.initializeFrom({
     state: { id: 'run-1' } as any,
@@ -140,10 +140,10 @@ test('advanceFromPlan preserves inputMode when nextInputMode is undefined', (t) 
   });
 
   state.advanceFromPlan({ id: 'run-2' } as any, { callId: 'call-2' }, undefined, new Set(), []);
-  t.is(state.inputMode, 'full_history');
+  expect(state.inputMode).toBe('full_history');
 });
 
-test('initializeFrom includes tool output call IDs from generatedItems', (t) => {
+it('initializeFrom includes tool output call IDs from generatedItems', () => {
   const state = new ContinuationState(5);
   const prepared = {
     state: {
@@ -162,10 +162,10 @@ test('initializeFrom includes tool output call IDs from generatedItems', (t) => 
 
   state.initializeFrom(prepared);
 
-  t.deepEqual(state.currentCallIds, ['call-1', 'call-2']);
+  expect(state.currentCallIds).toEqual(['call-1', 'call-2']);
 });
 
-test('initializeFrom includes generatedItems call IDs for all recognized tool result shapes', (t) => {
+it('initializeFrom includes generatedItems call IDs for all recognized tool result shapes', () => {
   const state = new ContinuationState(5);
   const prepared = {
     state: {
@@ -184,10 +184,10 @@ test('initializeFrom includes generatedItems call IDs for all recognized tool re
 
   state.initializeFrom(prepared);
 
-  t.deepEqual(state.currentCallIds, ['call-1', 'call-2', 'call-3', 'call-4']);
+  expect(state.currentCallIds).toEqual(['call-1', 'call-2', 'call-3', 'call-4']);
 });
 
-test('advanceFromPlan includes tool output call IDs from generatedItems', (t) => {
+it('advanceFromPlan includes tool output call IDs from generatedItems', () => {
   const state = new ContinuationState(1);
   state.initializeFrom({
     state: { id: 'run-1' } as any,
@@ -205,5 +205,5 @@ test('advanceFromPlan includes tool output call IDs from generatedItems', (t) =>
 
   state.advanceFromPlan(nextState, { callId: 'call-1' }, 'delta', new Set(), []);
 
-  t.deepEqual(state.currentCallIds, ['call-1', 'call-2']);
+  expect(state.currentCallIds).toEqual(['call-1', 'call-2']);
 });

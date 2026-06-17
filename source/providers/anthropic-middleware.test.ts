@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { composeFetch } from './fetch/compose.js';
 import { createAnthropicMiddleware } from './anthropic-middleware.js';
 
@@ -32,7 +32,7 @@ function makeCapturingFetch(captured: CapturedRequest[]): typeof fetch {
   };
 }
 
-test('adds x-opencode-session header for opencode provider', async (t) => {
+it('adds x-opencode-session header for opencode provider', async () => {
   const captured: CapturedRequest[] = [];
   const middleware = createAnthropicMiddleware('opencode', 'https://opencode.ai/v1');
   const composed = composeFetch(makeCapturingFetch(captured), [middleware]);
@@ -42,13 +42,13 @@ test('adds x-opencode-session header for opencode provider', async (t) => {
     body: JSON.stringify({ model: 'claude-sonnet-4-5', messages: [{ role: 'user', content: 'Hello' }] }),
   });
 
-  t.is(captured.length, 1);
-  t.truthy(captured[0].headers['x-opencode-session']);
-  t.regex(captured[0].headers['x-opencode-session'], /^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/);
-  t.is(captured[0].headers['x-opencode-session'].length, 30);
+  expect(captured.length).toBe(1);
+  expect(captured[0].headers['x-opencode-session']).toBeTruthy();
+  expect(captured[0].headers['x-opencode-session']).toMatch(/^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/);
+  expect(captured[0].headers['x-opencode-session'].length).toBe(30);
 });
 
-test('does not add x-opencode-session for non-opencode provider', async (t) => {
+it('does not add x-opencode-session for non-opencode provider', async () => {
   const captured: CapturedRequest[] = [];
   const middleware = createAnthropicMiddleware('anthropic', 'https://api.anthropic.com');
   const composed = composeFetch(makeCapturingFetch(captured), [middleware]);
@@ -58,11 +58,11 @@ test('does not add x-opencode-session for non-opencode provider', async (t) => {
     body: JSON.stringify({ model: 'claude-sonnet-4-5', messages: [{ role: 'user', content: 'Hello' }] }),
   });
 
-  t.is(captured.length, 1);
-  t.falsy(captured[0].headers['x-opencode-session']);
+  expect(captured.length).toBe(1);
+  expect(captured[0].headers['x-opencode-session']).toBeFalsy();
 });
 
-test('opencode detection is case-insensitive', async (t) => {
+it('opencode detection is case-insensitive', async () => {
   const captured: CapturedRequest[] = [];
   const middleware = createAnthropicMiddleware('anthropic', 'https://OPENCODE.AI/v1');
   const composed = composeFetch(makeCapturingFetch(captured), [middleware]);
@@ -72,11 +72,11 @@ test('opencode detection is case-insensitive', async (t) => {
     body: JSON.stringify({ model: 'claude-sonnet-4-5', messages: [{ role: 'user', content: 'Hello' }] }),
   });
 
-  t.is(captured.length, 1);
-  t.truthy(captured[0].headers['x-opencode-session']);
+  expect(captured.length).toBe(1);
+  expect(captured[0].headers['x-opencode-session']).toBeTruthy();
 });
 
-test('session ID is stable across requests in same session', async (t) => {
+it('session ID is stable across requests in same session', async () => {
   const captured: CapturedRequest[] = [];
   const middleware = createAnthropicMiddleware('opencode', 'https://opencode.ai/v1');
   const composed = composeFetch(makeCapturingFetch(captured), [middleware]);
@@ -91,10 +91,10 @@ test('session ID is stable across requests in same session', async (t) => {
   const firstSessionId = captured[0].headers['x-opencode-session'];
   await send();
 
-  t.is(captured[1].headers['x-opencode-session'], firstSessionId);
+  expect(captured[1].headers['x-opencode-session']).toBe(firstSessionId);
 });
 
-test('opencode type derived from providerType alone', async (t) => {
+it('opencode type derived from providerType alone', async () => {
   const captured: CapturedRequest[] = [];
   const middleware = createAnthropicMiddleware('opencode');
   const composed = composeFetch(makeCapturingFetch(captured), [middleware]);
@@ -104,11 +104,11 @@ test('opencode type derived from providerType alone', async (t) => {
     body: JSON.stringify({ model: 'claude-sonnet-4-5', messages: [{ role: 'user', content: 'Hello' }] }),
   });
 
-  t.is(captured.length, 1);
-  t.truthy(captured[0].headers['x-opencode-session']);
+  expect(captured.length).toBe(1);
+  expect(captured[0].headers['x-opencode-session']).toBeTruthy();
 });
 
-test('session ID uses fallbackSessionIdOverride when provided', async (t) => {
+it('session ID uses fallbackSessionIdOverride when provided', async () => {
   const captured: CapturedRequest[] = [];
   const middleware = createAnthropicMiddleware('opencode', 'https://opencode.ai/v1', {
     fallbackSessionIdOverride: 'ses_123456789012abcABC0abcABC0ab',
@@ -120,10 +120,10 @@ test('session ID uses fallbackSessionIdOverride when provided', async (t) => {
     body: JSON.stringify({ model: 'claude-sonnet-4-5', messages: [{ role: 'user', content: 'Hello' }] }),
   });
 
-  t.is(captured[0].headers['x-opencode-session'], 'ses_123456789012abcABC0abcABC0ab');
+  expect(captured[0].headers['x-opencode-session']).toBe('ses_123456789012abcABC0abcABC0ab');
 });
 
-test('does not modify the request body', async (t) => {
+it('does not modify the request body', async () => {
   const captured: CapturedRequest[] = [];
   const middleware = createAnthropicMiddleware('opencode', 'https://opencode.ai/v1');
   const composed = composeFetch(makeCapturingFetch(captured), [middleware]);
@@ -141,10 +141,10 @@ test('does not modify the request body', async (t) => {
     body: JSON.stringify(bodyPayload),
   });
 
-  t.deepEqual(captured[0].body, bodyPayload);
+  expect(captured[0].body).toEqual(bodyPayload);
 });
 
-test('preserves existing headers when adding opencode session header', async (t) => {
+it('preserves existing headers when adding opencode session header', async () => {
   const captured: CapturedRequest[] = [];
   const middleware = createAnthropicMiddleware('opencode');
   const composed = composeFetch(makeCapturingFetch(captured), [middleware]);
@@ -155,12 +155,12 @@ test('preserves existing headers when adding opencode session header', async (t)
     body: JSON.stringify({ model: 'claude-sonnet-4-5', messages: [{ role: 'user', content: 'Hello' }] }),
   });
 
-  t.is(captured[0].headers['anthropic-version'], '2023-06-01');
-  t.is(captured[0].headers['x-api-key'], 'sk-test');
-  t.truthy(captured[0].headers['x-opencode-session']);
+  expect(captured[0].headers['anthropic-version']).toBe('2023-06-01');
+  expect(captured[0].headers['x-api-key']).toBe('sk-test');
+  expect(captured[0].headers['x-opencode-session']).toBeTruthy();
 });
 
-test('passes through non-JSON bodies unchanged', async (t) => {
+it('passes through non-JSON bodies unchanged', async () => {
   const captured: CapturedRequest[] = [];
   const middleware = createAnthropicMiddleware('opencode', 'https://opencode.ai/v1');
   const composed = composeFetch(makeCapturingFetch(captured), [middleware]);
@@ -171,7 +171,7 @@ test('passes through non-JSON bodies unchanged', async (t) => {
     body: new Uint8Array([1, 2, 3]),
   });
 
-  t.is(captured.length, 1);
-  t.true(captured[0].body instanceof Uint8Array);
-  t.truthy(captured[0].headers['x-opencode-session'], 'opencode header should still be added');
+  expect(captured.length).toBe(1);
+  expect(captured[0].body instanceof Uint8Array).toBe(true);
+  expect(captured[0].headers['x-opencode-session']).toBeTruthy();
 });

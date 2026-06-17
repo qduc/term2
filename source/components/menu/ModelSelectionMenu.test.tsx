@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 import ModelSelectionMenu from './ModelSelectionMenu.js';
@@ -14,7 +13,7 @@ const mockModels: ModelInfo[] = [
   { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'openrouter' },
 ];
 
-test.serial('ModelSelectionMenu renders loading state', async (t) => {
+it.sequential('ModelSelectionMenu renders loading state', async () => {
   const { lastFrame } = await renderInAct(
     <ModelSelectionMenu
       settingsService={createMockSettingsService()}
@@ -23,12 +22,11 @@ test.serial('ModelSelectionMenu renders loading state', async (t) => {
       query=""
       loading={true}
     />,
-    t,
   );
-  t.true(lastFrame()?.includes('Loading models'));
+  expect(lastFrame()?.includes('Loading models')).toBe(true);
 });
 
-test.serial('ModelSelectionMenu renders error state', async (t) => {
+it.sequential('ModelSelectionMenu renders error state', async () => {
   const { lastFrame } = await renderInAct(
     <ModelSelectionMenu
       settingsService={createMockSettingsService()}
@@ -37,32 +35,29 @@ test.serial('ModelSelectionMenu renders error state', async (t) => {
       query=""
       error="Failed to fetch"
     />,
-    t,
   );
-  t.true(lastFrame()?.includes('Unable to load models: Failed to fetch'));
+  expect(lastFrame()?.includes('Unable to load models: Failed to fetch')).toBe(true);
 });
 
-test.serial('ModelSelectionMenu renders empty state', async (t) => {
+it.sequential('ModelSelectionMenu renders empty state', async () => {
   const { lastFrame } = await renderInAct(
     <ModelSelectionMenu settingsService={createMockSettingsService()} items={[]} selectedIndex={0} query="xyz" />,
-    t,
   );
-  t.true(lastFrame()?.includes('No models match "xyz"'));
+  expect(lastFrame()?.includes('No models match "xyz"')).toBe(true);
 });
 
-test.serial('ModelSelectionMenu renders list of models', async (t) => {
+it.sequential('ModelSelectionMenu renders list of models', async () => {
   const { lastFrame } = await renderInAct(
     <ModelSelectionMenu settingsService={createMockSettingsService()} items={mockModels} selectedIndex={0} query="" />,
-    t,
   );
   const output = lastFrame();
-  t.true(output?.includes('gpt-4o'));
-  t.true(output?.includes('GPT-4o'));
-  t.true(output?.includes('gpt-4-turbo'));
-  t.true(output?.includes('claude-3-opus'));
+  expect(output?.includes('gpt-4o')).toBe(true);
+  expect(output?.includes('GPT-4o')).toBe(true);
+  expect(output?.includes('gpt-4-turbo')).toBe(true);
+  expect(output?.includes('claude-3-opus')).toBe(true);
 });
 
-test.serial('ModelSelectionMenu highlights selected item', async (t) => {
+it.sequential('ModelSelectionMenu highlights selected item', async () => {
   // Ink testing library doesn't easily show colors in text output,
   // but we can check if the selected item is present.
   // We rely on the component logic which we can assume works if it renders.
@@ -70,13 +65,12 @@ test.serial('ModelSelectionMenu highlights selected item', async (t) => {
   // but checking content is usually enough for unit tests here.
   const { lastFrame } = await renderInAct(
     <ModelSelectionMenu settingsService={createMockSettingsService()} items={mockModels} selectedIndex={1} query="" />,
-    t,
   );
   const output = lastFrame();
-  t.true(output?.includes('gpt-4-turbo'));
+  expect(output?.includes('gpt-4-turbo')).toBe(true);
 });
 
-test.serial('ModelSelectionMenu shows provider in header if specified', async (t) => {
+it.sequential('ModelSelectionMenu shows provider in header if specified', async () => {
   const { lastFrame } = await renderInAct(
     <ModelSelectionMenu
       settingsService={createMockSettingsService()}
@@ -85,12 +79,11 @@ test.serial('ModelSelectionMenu shows provider in header if specified', async (t
       query=""
       provider="openai"
     />,
-    t,
   );
-  t.true(lastFrame()?.includes('OpenAI'));
+  expect(lastFrame()?.includes('OpenAI')).toBe(true);
 });
 
-test.serial('ModelSelectionMenu provider tabs include custom providers from settings', async (t) => {
+it.sequential('ModelSelectionMenu provider tabs include custom providers from settings', async () => {
   // Use a short provider name that will fit in the visible tab area
   const providerId = `ls`;
   const settingsService = createMockSettingsService({
@@ -110,16 +103,15 @@ test.serial('ModelSelectionMenu provider tabs include custom providers from sett
       query=""
       provider="openai"
     />,
-    t,
   );
 
   const output = lastFrame();
   // Check that the short provider name appears in the tab bar
   // or that there's a right-scroll indicator (▶) meaning there are more tabs
-  t.true(output?.includes(providerId) || output?.includes('▶'), 'custom provider should appear in tab bar');
+  expect(output?.includes(providerId) || output?.includes('▶')).toBe(true);
 });
 
-test.serial('ModelSelectionMenu shows scroll indicators for long lists', async (t) => {
+it.sequential('ModelSelectionMenu shows scroll indicators for long lists', async () => {
   const longList: ModelInfo[] = Array.from({ length: 20 }, (_, i) => ({
     id: `model-${i}`,
     name: `Model ${i}`,
@@ -135,16 +127,15 @@ test.serial('ModelSelectionMenu shows scroll indicators for long lists', async (
       scrollOffset={2}
       maxHeight={10}
     />,
-    t,
   );
   const output = lastFrame();
   // Should show scroll up indicator
-  t.true(output?.includes('↑ 2 more'));
+  expect(output?.includes('↑ 2 more')).toBe(true);
   // Should show scroll down indicator (20 - 2 - 10 = 8 more)
-  t.true(output?.includes('↓ 8 more'));
+  expect(output?.includes('↓ 8 more')).toBe(true);
 });
 
-test.serial('ModelSelectionMenu does not show scroll indicators for short lists', async (t) => {
+it.sequential('ModelSelectionMenu does not show scroll indicators for short lists', async () => {
   const { lastFrame } = await renderInAct(
     <ModelSelectionMenu
       settingsService={createMockSettingsService()}
@@ -154,12 +145,11 @@ test.serial('ModelSelectionMenu does not show scroll indicators for short lists'
       scrollOffset={0}
       maxHeight={10}
     />,
-    t,
   );
   const output = lastFrame();
   // Should not show position indicator for lists shorter than maxHeight
   // Check for the specific pagination format N-N/N rather than any "/"
-  t.false(output?.match(/\d+-\d+\/\d+/) !== null);
+  expect(output?.match(/\d+-\d+\/\d+/) !== null).toBe(false);
   // For short lists with no scroll, should not have "N more" indicators
-  t.false(output?.match(/\d+ more/) !== null);
+  expect(output?.match(/\d+ more/) !== null).toBe(false);
 });

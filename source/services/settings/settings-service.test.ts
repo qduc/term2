@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,36 +58,36 @@ const cleanupSettings = () => {
   }
 };
 
-test.before(() => {
+beforeAll(() => {
   cleanupSettings();
 });
 
-test.after.always(() => {
+afterAll(() => {
   cleanupSettings();
 });
 
-test('SettingsService initializes with defaults', async (t) => {
+it('SettingsService initializes with defaults', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
     disableLogging: true,
   });
 
-  t.truthy(service);
-  t.is(service.get('agent.model'), 'gpt-5.1');
-  t.is(service.get('agent.reasoningEffort'), 'default');
-  t.is(service.get('agent.temperature'), undefined);
-  t.is(service.get('agent.maxTurns'), 100);
-  t.is(service.get('agent.retryAttempts'), 2);
-  t.is(service.get('agent.maxParallelToolCalls'), 3);
-  t.is(service.get('shell.timeout'), 120000);
-  t.is(service.get('shell.maxOutputLines'), 1000);
-  t.is(service.get('shell.maxOutputChars'), 10000);
-  t.is(service.get('ui.historySize'), 1000);
-  t.is(service.get('logging.logLevel'), 'info');
+  expect(service).toBeTruthy();
+  expect(service.get('agent.model')).toBe('gpt-5.1');
+  expect(service.get('agent.reasoningEffort')).toBe('default');
+  expect(service.get('agent.temperature')).toBe(undefined);
+  expect(service.get('agent.maxTurns')).toBe(100);
+  expect(service.get('agent.retryAttempts')).toBe(2);
+  expect(service.get('agent.maxParallelToolCalls')).toBe(3);
+  expect(service.get('shell.timeout')).toBe(120000);
+  expect(service.get('shell.maxOutputLines')).toBe(1000);
+  expect(service.get('shell.maxOutputChars')).toBe(10000);
+  expect(service.get('ui.historySize')).toBe(1000);
+  expect(service.get('logging.logLevel')).toBe('info');
 });
 
-test('skips file writes in test environment (constructor + set)', async (t) => {
+it('skips file writes in test environment (constructor + set)', async () => {
   const settingsDir = getTestSettingsDir();
   const settingsFile = getSettingsFilePath(settingsDir);
 
@@ -96,13 +96,13 @@ test('skips file writes in test environment (constructor + set)', async (t) => {
     disableLogging: true,
   });
 
-  t.false(fs.existsSync(settingsFile), 'Should not create settings.json during tests');
+  expect(fs.existsSync(settingsFile)).toBe(false);
 
   service.set('agent.model', 'gpt-4o');
-  t.false(fs.existsSync(settingsFile), 'Should not write settings.json during tests when calling set()');
+  expect(fs.existsSync(settingsFile)).toBe(false);
 });
 
-test.serial('disableFilePersistence: true prevents writes even outside test environment', async (t) => {
+it.sequential('disableFilePersistence: true prevents writes even outside test environment', async () => {
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();
     const settingsFile = getSettingsFilePath(settingsDir);
@@ -113,20 +113,14 @@ test.serial('disableFilePersistence: true prevents writes even outside test envi
       disableFilePersistence: true,
     });
 
-    t.false(
-      fs.existsSync(settingsFile),
-      'Explicit disableFilePersistence should prevent settings.json creation at startup',
-    );
+    expect(fs.existsSync(settingsFile)).toBe(false);
 
     service.set('agent.model', 'gpt-4o');
-    t.false(
-      fs.existsSync(settingsFile),
-      'Explicit disableFilePersistence should prevent settings.json writes on set()',
-    );
+    expect(fs.existsSync(settingsFile)).toBe(false);
   });
 });
 
-test.serial('normal operation persists settings.json when not in test environment', async (t) => {
+it.sequential('normal operation persists settings.json when not in test environment', async () => {
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();
     const settingsFile = getSettingsFilePath(settingsDir);
@@ -136,27 +130,27 @@ test.serial('normal operation persists settings.json when not in test environmen
       disableLogging: true,
     });
 
-    t.true(fs.existsSync(settingsFile), 'Should create settings.json at startup outside test environment');
+    expect(fs.existsSync(settingsFile)).toBe(true);
 
     service.set('agent.model', 'gpt-4o');
 
     const content = fs.readFileSync(settingsFile, 'utf-8');
     const config = JSON.parse(content);
-    t.is(config.agent.model, 'gpt-4o');
+    expect(config.agent.model).toBe('gpt-4o');
   });
 });
 
-test('creates settings directory if it does not exist', async (t) => {
+it('creates settings directory if it does not exist', async () => {
   const settingsDir = getTestSettingsDir();
   new SettingsService({
     settingsDir,
     disableLogging: true,
   });
 
-  t.true(fs.existsSync(settingsDir));
+  expect(fs.existsSync(settingsDir)).toBe(true);
 });
 
-test('CLI overrides take highest precedence', async (t) => {
+it('CLI overrides take highest precedence', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
@@ -168,11 +162,11 @@ test('CLI overrides take highest precedence', async (t) => {
     } as any,
   });
 
-  t.is(service.get('agent.model'), 'gpt-4o');
-  t.is(service.getSource('agent.model'), 'cli');
+  expect(service.get('agent.model')).toBe('gpt-4o');
+  expect(service.getSource('agent.model')).toBe('cli');
 });
 
-test('env overrides config file but not CLI', async (t) => {
+it('env overrides config file but not CLI', async () => {
   const settingsDir = getTestSettingsDir();
 
   // Create a config file
@@ -201,8 +195,8 @@ test('env overrides config file but not CLI', async (t) => {
     } as any,
   });
 
-  t.is(service.get('agent.model'), 'gpt-4-turbo');
-  t.is(service.getSource('agent.model'), 'env');
+  expect(service.get('agent.model')).toBe('gpt-4-turbo');
+  expect(service.getSource('agent.model')).toBe('env');
 
   // Now test with CLI override
   const service2 = new SettingsService({
@@ -220,11 +214,11 @@ test('env overrides config file but not CLI', async (t) => {
     } as any,
   });
 
-  t.is(service2.get('agent.model'), 'gpt-5.1');
-  t.is(service2.getSource('agent.model'), 'cli');
+  expect(service2.get('agent.model')).toBe('gpt-5.1');
+  expect(service2.getSource('agent.model')).toBe('cli');
 });
 
-test('config file overrides defaults', async (t) => {
+it('config file overrides defaults', async () => {
   const settingsDir = getTestSettingsDir();
 
   // Create a config file
@@ -249,16 +243,17 @@ test('config file overrides defaults', async (t) => {
     disableLogging: true,
   });
 
-  t.is(service.get('shell.timeout'), 60000);
-  t.is(service.get('shell.maxOutputChars'), 5000);
-  t.is(service.getSource('shell.timeout'), 'config');
+  expect(service.get('shell.timeout')).toBe(60000);
+  expect(service.get('shell.maxOutputChars')).toBe(5000);
+  expect(service.getSource('shell.timeout')).toBe('config');
 });
 
-test('registers custom OpenAI-compatible providers from settings.json', async (t) => {
+it('registers custom OpenAI-compatible providers from settings.json', async () => {
   const settingsDir = getTestSettingsDir();
 
   const providerName = 'lmstudio-settings-service-test';
-  t.teardown(() => unregisterProvider(providerName));
+
+  // TODO: // TODO: t.teardown(() => unregisterProvider(providerName)) needs manual try/finally conversion;
 
   // Create a config file with providers
   const configFile = path.join(settingsDir, 'settings.json');
@@ -289,16 +284,17 @@ test('registers custom OpenAI-compatible providers from settings.json', async (t
   });
 
   // Provider should be registered and selectable
-  t.truthy(getProvider(providerName));
-  t.true(getAllProviders().some((p) => p.id === providerName));
-  t.is(service.get('agent.provider'), providerName);
+  expect(getProvider(providerName)).toBeTruthy();
+  expect(getAllProviders().some((p) => p.id === providerName)).toBe(true);
+  expect(service.get('agent.provider')).toBe(providerName);
 });
 
-test('custom providers default missing type for old settings.json files', async (t) => {
+it('custom providers default missing type for old settings.json files', async () => {
   const settingsDir = getTestSettingsDir();
 
   const providerName = 'legacy-compatible-settings-service-test';
-  t.teardown(() => unregisterProvider(providerName));
+
+  // TODO: // TODO: t.teardown(() => unregisterProvider(providerName)) needs manual try/finally conversion;
 
   const configFile = path.join(settingsDir, 'settings.json');
   if (!fs.existsSync(settingsDir)) {
@@ -327,10 +323,10 @@ test('custom providers default missing type for old settings.json files', async 
     disableFilePersistence: true,
   });
 
-  t.is(service.get('providers')[0].type, 'openai-compatible');
+  expect(service.get('providers')[0].type).toBe('openai-compatible');
 });
 
-test('set() modifies runtime-modifiable settings', async (t) => {
+it('set() modifies runtime-modifiable settings', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
@@ -338,33 +334,31 @@ test('set() modifies runtime-modifiable settings', async (t) => {
   });
 
   service.set('agent.model', 'gpt-4o');
-  t.is(service.get('agent.model'), 'gpt-4o');
-  t.is(service.getSource('agent.model'), 'cli');
+  expect(service.get('agent.model')).toBe('gpt-4o');
+  expect(service.getSource('agent.model')).toBe('cli');
 
   service.set('agent.temperature', 0.2);
-  t.is(service.get('agent.temperature'), 0.2);
-  t.is(service.getSource('agent.temperature'), 'cli');
+  expect(service.get('agent.temperature')).toBe(0.2);
+  expect(service.getSource('agent.temperature')).toBe('cli');
 
   service.set('agent.maxParallelToolCalls', 5);
-  t.is(service.get('agent.maxParallelToolCalls'), 5);
-  t.is(service.getSource('agent.maxParallelToolCalls'), 'cli');
+  expect(service.get('agent.maxParallelToolCalls')).toBe(5);
+  expect(service.getSource('agent.maxParallelToolCalls')).toBe('cli');
 });
 
-test('set() throws for startup-only settings', async (t) => {
+it('set() throws for startup-only settings', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
     disableLogging: true,
   });
 
-  const error = t.throws(() => {
+  expect(() => {
     service.set('agent.maxTurns', 30);
-  });
-
-  t.true(error.message.includes('Cannot modify') && error.message.includes('at runtime'));
+  }).toThrow(/Cannot modify.*at runtime/);
 });
 
-test('setPersistent() saves startup-only settings after validating them', async (t) => {
+it('setPersistent() saves startup-only settings after validating them', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
@@ -374,11 +368,11 @@ test('setPersistent() saves startup-only settings after validating them', async 
 
   service.setPersistent('agent.maxTurns', 30);
 
-  t.is(service.get('agent.maxTurns'), 30);
-  t.is(service.getSource('agent.maxTurns'), 'cli');
+  expect(service.get('agent.maxTurns')).toBe(30);
+  expect(service.getSource('agent.maxTurns')).toBe('cli');
 });
 
-test('setPersistent() rejects invalid values', async (t) => {
+it('setPersistent() rejects invalid values', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
@@ -386,14 +380,12 @@ test('setPersistent() rejects invalid values', async (t) => {
     disableFilePersistence: true,
   });
 
-  const error = t.throws(() => {
+  expect(() => {
     service.setPersistent('agent.maxTurns', 0);
-  });
-
-  t.true(error.message.includes("Invalid value for 'agent.maxTurns'"));
+  }).toThrow(/Invalid value for 'agent.maxTurns'/);
 });
 
-test('isRuntimeModifiable identifies correct settings', async (t) => {
+it('isRuntimeModifiable identifies correct settings', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
@@ -401,24 +393,24 @@ test('isRuntimeModifiable identifies correct settings', async (t) => {
   });
 
   // Runtime-modifiable settings
-  t.true(service.isRuntimeModifiable('agent.model'));
-  t.true(service.isRuntimeModifiable('agent.reasoningEffort'));
-  t.true(service.isRuntimeModifiable('agent.temperature'));
-  t.true(service.isRuntimeModifiable('agent.retryAttempts'));
-  t.true(service.isRuntimeModifiable('agent.maxParallelToolCalls'));
-  t.true(service.isRuntimeModifiable('tools.editHealingModel'));
-  t.true(service.isRuntimeModifiable('tools.editHealingProvider'));
-  t.true(service.isRuntimeModifiable('shell.timeout'));
-  t.true(service.isRuntimeModifiable('shell.maxOutputLines'));
-  t.true(service.isRuntimeModifiable('shell.maxOutputChars'));
-  t.true(service.isRuntimeModifiable('logging.logLevel'));
+  expect(service.isRuntimeModifiable('agent.model')).toBe(true);
+  expect(service.isRuntimeModifiable('agent.reasoningEffort')).toBe(true);
+  expect(service.isRuntimeModifiable('agent.temperature')).toBe(true);
+  expect(service.isRuntimeModifiable('agent.retryAttempts')).toBe(true);
+  expect(service.isRuntimeModifiable('agent.maxParallelToolCalls')).toBe(true);
+  expect(service.isRuntimeModifiable('tools.editHealingModel')).toBe(true);
+  expect(service.isRuntimeModifiable('tools.editHealingProvider')).toBe(true);
+  expect(service.isRuntimeModifiable('shell.timeout')).toBe(true);
+  expect(service.isRuntimeModifiable('shell.maxOutputLines')).toBe(true);
+  expect(service.isRuntimeModifiable('shell.maxOutputChars')).toBe(true);
+  expect(service.isRuntimeModifiable('logging.logLevel')).toBe(true);
 
   // Startup-only settings
-  t.false(service.isRuntimeModifiable('agent.maxTurns'));
-  t.false(service.isRuntimeModifiable('ui.historySize'));
+  expect(service.isRuntimeModifiable('agent.maxTurns')).toBe(false);
+  expect(service.isRuntimeModifiable('ui.historySize')).toBe(false);
 });
 
-test('reset() clones object defaults instead of reusing shared references', async (t) => {
+it('reset() clones object defaults instead of reusing shared references', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
@@ -432,11 +424,11 @@ test('reset() clones object defaults instead of reusing shared references', asyn
   service.reset('agent.openrouter');
   const secondResetValue = service.get('agent.openrouter');
 
-  t.deepEqual(secondResetValue, {});
-  t.not(secondResetValue, firstResetValue);
+  expect(secondResetValue).toEqual({});
+  expect(secondResetValue).not.toBe(firstResetValue);
 });
 
-test('reset() returns setting to default', async (t) => {
+it('reset() returns setting to default', async () => {
   const settingsDir = getTestSettingsDir();
 
   // Create a config file
@@ -460,13 +452,13 @@ test('reset() returns setting to default', async (t) => {
     disableLogging: true,
   });
 
-  t.is(service.get('shell.timeout'), 60000);
+  expect(service.get('shell.timeout')).toBe(60000);
 
   service.reset('shell.timeout');
-  t.is(service.get('shell.timeout'), 120000);
+  expect(service.get('shell.timeout')).toBe(120000);
 });
 
-test('getAll() returns all settings with sources', async (t) => {
+it('getAll() returns all settings with sources', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
@@ -480,19 +472,19 @@ test('getAll() returns all settings with sources', async (t) => {
 
   const all = service.getAll();
 
-  t.truthy(all.agent);
-  t.truthy(all.shell);
-  t.truthy(all.ui);
-  t.truthy(all.logging);
-  t.is(all.agent.model.value, 'gpt-4o');
-  t.is(all.agent.model.source, 'cli');
-  t.is(all.agent.reasoningEffort.value, 'default');
-  t.is(all.agent.reasoningEffort.source, 'default');
-  t.is(all.agent.maxParallelToolCalls.value, 3);
-  t.is(all.agent.maxParallelToolCalls.source, 'default');
+  expect(all.agent).toBeTruthy();
+  expect(all.shell).toBeTruthy();
+  expect(all.ui).toBeTruthy();
+  expect(all.logging).toBeTruthy();
+  expect(all.agent.model.value).toBe('gpt-4o');
+  expect(all.agent.model.source).toBe('cli');
+  expect(all.agent.reasoningEffort.value).toBe('default');
+  expect(all.agent.reasoningEffort.source).toBe('default');
+  expect(all.agent.maxParallelToolCalls.value).toBe(3);
+  expect(all.agent.maxParallelToolCalls.source).toBe('default');
 });
 
-test('getAll() maps optional nested values and sources for agent.temperature and webSearch.tavily', async (t) => {
+it('getAll() maps optional nested values and sources for agent.temperature and webSearch.tavily', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
@@ -506,13 +498,13 @@ test('getAll() maps optional nested values and sources for agent.temperature and
 
   const all = service.getAll();
 
-  t.is(all.agent.temperature.value, undefined);
-  t.is(all.agent.temperature.source, 'default');
-  t.is(all.webSearch.tavily.value, undefined);
-  t.is(all.webSearch.tavily.source, 'default');
+  expect(all.agent.temperature.value).toBe(undefined);
+  expect(all.agent.temperature.source).toBe('default');
+  expect(all.webSearch.tavily.value).toBe(undefined);
+  expect(all.webSearch.tavily.source).toBe('default');
 });
 
-test('SettingsService initialization applies logging.logLevel to loggingService', async (t) => {
+it('SettingsService initialization applies logging.logLevel to loggingService', async () => {
   const settingsDir = getTestSettingsDir();
   const mockLoggingService = {
     setLogLevel: (level: string) => {
@@ -531,11 +523,11 @@ test('SettingsService initialization applies logging.logLevel to loggingService'
     } as any,
   });
 
-  t.is(service.get('logging.logLevel'), 'debug');
-  t.is(mockLoggingService.getLogLevel(), 'debug');
+  expect(service.get('logging.logLevel')).toBe('debug');
+  expect(mockLoggingService.getLogLevel()).toBe('debug');
 });
 
-test('SettingsService runtime set updates loggingService', async (t) => {
+it('SettingsService runtime set updates loggingService', async () => {
   const settingsDir = getTestSettingsDir();
   const mockLoggingService = {
     setLogLevel: (level: string) => {
@@ -552,15 +544,15 @@ test('SettingsService runtime set updates loggingService', async (t) => {
   });
 
   // Initially default
-  t.is(service.get('logging.logLevel'), 'info');
+  expect(service.get('logging.logLevel')).toBe('info');
 
   service.set('logging.logLevel', 'debug');
 
-  t.is(service.get('logging.logLevel'), 'debug');
-  t.is(mockLoggingService.getLogLevel(), 'debug');
+  expect(service.get('logging.logLevel')).toBe('debug');
+  expect(mockLoggingService.getLogLevel()).toBe('debug');
 });
 
-test('gracefully degrades on invalid config file', async (t) => {
+it('gracefully degrades on invalid config file', async () => {
   const settingsDir = getTestSettingsDir();
 
   // Create an invalid config file
@@ -577,10 +569,10 @@ test('gracefully degrades on invalid config file', async (t) => {
   });
 
   // Should load defaults and not throw
-  t.is(service.get('agent.model'), 'gpt-5.1');
+  expect(service.get('agent.model')).toBe('gpt-5.1');
 });
 
-test('gracefully degrades on invalid schema in config file', async (t) => {
+it('gracefully degrades on invalid schema in config file', async () => {
   const settingsDir = getTestSettingsDir();
 
   // Create a config file with invalid values
@@ -606,11 +598,11 @@ test('gracefully degrades on invalid schema in config file', async (t) => {
   });
 
   // Should fall back to defaults for invalid settings
-  t.is(service.get('shell.timeout'), 120000);
-  t.is(service.get('shell.maxOutputChars'), 10000);
+  expect(service.get('shell.timeout')).toBe(120000);
+  expect(service.get('shell.maxOutputChars')).toBe(10000);
 });
 
-test('loads settings from config file on startup', async (t) => {
+it('loads settings from config file on startup', async () => {
   const settingsDir = getTestSettingsDir();
 
   // Create a config file
@@ -635,11 +627,11 @@ test('loads settings from config file on startup', async (t) => {
     disableLogging: true,
   });
 
-  t.is(service.get('agent.model'), 'custom-model');
-  t.is(service.get('agent.reasoningEffort'), 'high');
+  expect(service.get('agent.model')).toBe('custom-model');
+  expect(service.get('agent.reasoningEffort')).toBe('high');
 });
 
-test('accepts xhigh reasoning effort for newer reasoning models', async (t) => {
+it('accepts xhigh reasoning effort for newer reasoning models', async () => {
   const settingsDir = getTestSettingsDir();
 
   const configFile = path.join(settingsDir, 'settings.json');
@@ -663,11 +655,11 @@ test('accepts xhigh reasoning effort for newer reasoning models', async (t) => {
     disableLogging: true,
   });
 
-  t.is(service.get('agent.reasoningEffort'), 'xhigh');
-  t.is(service.get('agent.mentorReasoningEffort'), 'xhigh');
+  expect(service.get('agent.reasoningEffort')).toBe('xhigh');
+  expect(service.get('agent.mentorReasoningEffort')).toBe('xhigh');
 });
 
-test.serial('persists changes to config file', async (t) => {
+it.sequential('persists changes to config file', async () => {
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();
     const service = new SettingsService({
@@ -682,11 +674,11 @@ test.serial('persists changes to config file', async (t) => {
     const content = fs.readFileSync(configFile, 'utf-8');
     const config = JSON.parse(content);
 
-    t.is(config.agent.model, 'gpt-4o');
+    expect(config.agent.model).toBe('gpt-4o');
   });
 });
 
-test('tracks setting sources correctly', async (t) => {
+it('tracks setting sources correctly', async () => {
   const settingsDir = getTestSettingsDir();
 
   // Create a config file
@@ -720,13 +712,13 @@ test('tracks setting sources correctly', async (t) => {
     } as any,
   });
 
-  t.is(service.getSource('agent.model'), 'cli');
-  t.is(service.getSource('agent.reasoningEffort'), 'env');
-  t.is(service.getSource('shell.timeout'), 'config');
-  t.is(service.getSource('agent.maxTurns'), 'default');
+  expect(service.getSource('agent.model')).toBe('cli');
+  expect(service.getSource('agent.reasoningEffort')).toBe('env');
+  expect(service.getSource('shell.timeout')).toBe('config');
+  expect(service.getSource('agent.maxTurns')).toBe('default');
 });
 
-test('deep merges partial settings from multiple sources', async (t) => {
+it('deep merges partial settings from multiple sources', async () => {
   const settingsDir = getTestSettingsDir();
 
   const service = new SettingsService({
@@ -747,31 +739,31 @@ test('deep merges partial settings from multiple sources', async (t) => {
   });
 
   // CLI should override for agent.model
-  t.is(service.get('agent.model'), 'cli-model');
+  expect(service.get('agent.model')).toBe('cli-model');
 
   // Default for agent.reasoningEffort since not in CLI
-  t.is(service.get('agent.reasoningEffort'), 'default');
+  expect(service.get('agent.reasoningEffort')).toBe('default');
 
   // Env should override for shell.timeout
-  t.is(service.get('shell.timeout'), 60000);
+  expect(service.get('shell.timeout')).toBe(60000);
 
   // Default for shell.maxOutputLines since not in env
-  t.is(service.get('shell.maxOutputLines'), 1000);
+  expect(service.get('shell.maxOutputLines')).toBe(1000);
 });
 
-test('getSource() returns default when setting not overridden', async (t) => {
+it('getSource() returns default when setting not overridden', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
     disableLogging: true,
   });
 
-  t.is(service.getSource('agent.model'), 'default');
-  t.is(service.getSource('shell.timeout'), 'default');
-  t.is(service.getSource('ui.historySize'), 'default');
+  expect(service.getSource('agent.model')).toBe('default');
+  expect(service.getSource('shell.timeout')).toBe('default');
+  expect(service.getSource('ui.historySize')).toBe('default');
 });
 
-test('validates enum values', async (t) => {
+it('validates enum values', async () => {
   const settingsDir = getTestSettingsDir();
 
   // Create a config file with invalid enum value
@@ -796,10 +788,10 @@ test('validates enum values', async (t) => {
   });
 
   // Should fall back to default for invalid enum
-  t.is(service.get('agent.reasoningEffort'), 'default');
+  expect(service.get('agent.reasoningEffort')).toBe('default');
 });
 
-test('respects disableLogging flag', async (t) => {
+it('respects disableLogging flag', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
@@ -809,10 +801,10 @@ test('respects disableLogging flag', async (t) => {
   service.set('agent.model', 'gpt-4o');
 
   // Should not throw
-  t.pass();
+  expect(true).toBe(true);
 });
 
-test.serial('updates config file when new settings are added', async (t) => {
+it.sequential('updates config file when new settings are added', async () => {
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();
     const configFile = path.join(settingsDir, 'settings.json');
@@ -843,17 +835,17 @@ test.serial('updates config file when new settings are added', async (t) => {
     });
 
     // Verify service has the provider setting with default value
-    t.is(service.get('agent.provider'), 'openai');
+    expect(service.get('agent.provider')).toBe('openai');
 
     // Verify the file was updated with the new setting
     const updatedContent = fs.readFileSync(configFile, 'utf-8');
     const updatedConfig = JSON.parse(updatedContent);
 
-    t.is(updatedConfig.agent.provider, 'openai');
+    expect(updatedConfig.agent.provider).toBe('openai');
   });
 });
 
-test.serial('does not update config file when no new settings are added', async (t) => {
+it.sequential('does not update config file when no new settings are added', async () => {
   const settingsDir = getTestSettingsDir();
   const configFile = path.join(settingsDir, 'settings.json');
 
@@ -926,10 +918,10 @@ test.serial('does not update config file when no new settings are added', async 
     loggingService: mockLogging as any,
   });
 
-  t.false(updateLogged, 'Should not have logged an update to the settings file');
+  expect(updateLogged).toBe(false);
 });
 
-test.serial('does not update config file when format differs but content is same', async (t) => {
+it.sequential('does not update config file when format differs but content is same', async () => {
   const settingsDir = getTestSettingsDir();
   const configFile = path.join(settingsDir, 'settings.json');
 
@@ -991,9 +983,9 @@ test.serial('does not update config file when format differs but content is same
     loggingService: mockLogging as any,
   });
 
-  t.false(updateLogged, 'Should not have logged an update to the settings file');
+  expect(updateLogged).toBe(false);
 });
-test('isSensitive() identifies sensitive settings', async (t) => {
+it('isSensitive() identifies sensitive settings', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
@@ -1001,55 +993,47 @@ test('isSensitive() identifies sensitive settings', async (t) => {
   });
 
   // Sensitive settings
-  t.true(service.isSensitive('agent.openrouter.baseUrl'));
-  t.true(service.isSensitive('agent.openrouter.referrer'));
-  t.true(service.isSensitive('agent.openrouter.title'));
-  t.true(service.isSensitive('app.shellPath'));
+  expect(service.isSensitive('agent.openrouter.baseUrl')).toBe(true);
+  expect(service.isSensitive('agent.openrouter.referrer')).toBe(true);
+  expect(service.isSensitive('agent.openrouter.title')).toBe(true);
+  expect(service.isSensitive('app.shellPath')).toBe(true);
 
   // Non-sensitive settings
-  t.false(service.isSensitive('agent.model'));
-  t.false(service.isSensitive('agent.openrouter.model'));
-  t.false(service.isSensitive('shell.timeout'));
-  t.false(service.isSensitive('logging.logLevel'));
-  t.false(service.isSensitive('agent.openrouter.apiKey'));
-  t.false(service.isSensitive('agent.openai.apiKey'));
-  t.false(service.isSensitive('webSearch.tavily.apiKey'));
-  t.false(service.isSensitive('webSearch.exa.apiKey'));
+  expect(service.isSensitive('agent.model')).toBe(false);
+  expect(service.isSensitive('agent.openrouter.model')).toBe(false);
+  expect(service.isSensitive('shell.timeout')).toBe(false);
+  expect(service.isSensitive('logging.logLevel')).toBe(false);
+  expect(service.isSensitive('agent.openrouter.apiKey')).toBe(false);
+  expect(service.isSensitive('agent.openai.apiKey')).toBe(false);
+  expect(service.isSensitive('webSearch.tavily.apiKey')).toBe(false);
+  expect(service.isSensitive('webSearch.exa.apiKey')).toBe(false);
 });
 
-test('set() throws for sensitive settings', async (t) => {
+it('set() throws for sensitive settings', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
     disableLogging: true,
   });
 
-  const error = t.throws(
-    () => {
-      service.set('agent.openrouter.baseUrl', 'https://internal.api.com');
-    },
-    { instanceOf: Error },
-  );
-  t.true(error.message.includes('sensitive setting'), 'Error should mention sensitive setting');
+  expect(() => {
+    service.set('agent.openrouter.baseUrl', 'https://internal.api.com');
+  }).toThrow(/sensitive setting/);
 });
 
-test('reset() throws for sensitive settings', async (t) => {
+it('reset() throws for sensitive settings', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
     disableLogging: true,
   });
 
-  const error = t.throws(
-    () => {
-      service.reset('agent.openrouter.baseUrl');
-    },
-    { instanceOf: Error },
-  );
-  t.true(error.message.includes('sensitive setting'), 'Error should mention sensitive setting');
+  expect(() => {
+    service.reset('agent.openrouter.baseUrl');
+  }).toThrow(/sensitive setting/);
 });
 
-test.serial('sensitive settings are never saved to config file', async (t) => {
+it.sequential('sensitive settings are never saved to config file', async () => {
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();
 
@@ -1083,18 +1067,18 @@ test.serial('sensitive settings are never saved to config file', async (t) => {
     const config = JSON.parse(content);
 
     // Verify sensitive values are NOT in the file
-    t.falsy(config.agent?.openrouter?.baseUrl, 'baseUrl should not be saved');
-    t.falsy(config.agent?.openrouter?.referrer, 'referrer should not be saved');
-    t.falsy(config.agent?.openrouter?.title, 'title should not be saved');
-    t.falsy(config.app?.shellPath, 'shellPath should not be saved');
+    expect(config.agent?.openrouter?.baseUrl).toBeFalsy();
+    expect(config.agent?.openrouter?.referrer).toBeFalsy();
+    expect(config.agent?.openrouter?.title).toBeFalsy();
+    expect(config.app?.shellPath).toBeFalsy();
 
     // Verify non-sensitive openrouter values ARE saved
-    t.is(config.agent?.openrouter?.model, 'gpt-4', 'model should be saved');
-    t.is(config.agent?.openrouter?.apiKey, 'sk-secret-key', 'apiKey should be saved');
+    expect(config.agent?.openrouter?.model, 'model should be saved').toBe('gpt-4');
+    expect(config.agent?.openrouter?.apiKey, 'apiKey should be saved').toBe('sk-secret-key');
   });
 });
 
-test.serial('sensitive settings loaded from env are accessible at runtime', async (t) => {
+it.sequential('sensitive settings loaded from env are accessible at runtime', async () => {
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();
 
@@ -1115,22 +1099,22 @@ test.serial('sensitive settings loaded from env are accessible at runtime', asyn
     });
 
     // Verify sensitive values ARE accessible at runtime
-    t.is(service.get('agent.openrouter.apiKey'), 'sk-secret-key');
-    t.is(service.get('agent.openrouter.baseUrl'), 'https://internal.api.com');
-    t.is(service.get('app.shellPath'), '/bin/bash');
+    expect(service.get('agent.openrouter.apiKey')).toBe('sk-secret-key');
+    expect(service.get('agent.openrouter.baseUrl')).toBe('https://internal.api.com');
+    expect(service.get('app.shellPath')).toBe('/bin/bash');
 
     // But they should not be in the saved file
     const configFile = path.join(settingsDir, 'settings.json');
     const content = fs.readFileSync(configFile, 'utf-8');
     const config = JSON.parse(content);
 
-    t.falsy(config.agent?.openrouter?.baseUrl);
-    t.falsy(config.app?.shellPath);
-    t.is(config.agent?.openrouter?.apiKey, 'sk-secret-key');
+    expect(config.agent?.openrouter?.baseUrl).toBeFalsy();
+    expect(config.app?.shellPath).toBeFalsy();
+    expect(config.agent?.openrouter?.apiKey).toBe('sk-secret-key');
   });
 });
 
-test('set() enables target app mode and disables sibling modes', async (t) => {
+it('set() enables target app mode and disables sibling modes', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
@@ -1139,22 +1123,22 @@ test('set() enables target app mode and disables sibling modes', async (t) => {
 
   // Enable orchestrator mode initially
   service.set('app.orchestratorMode', true);
-  t.true(service.get('app.orchestratorMode'));
-  t.false(service.get('app.liteMode'));
-  t.false(service.get('app.planMode'));
-  t.false(service.get('app.mentorMode'));
+  expect(service.get('app.orchestratorMode')).toBe(true);
+  expect(service.get('app.liteMode')).toBe(false);
+  expect(service.get('app.planMode')).toBe(false);
+  expect(service.get('app.mentorMode')).toBe(false);
 
   // Setting liteMode to true should disable orchestratorMode
   service.set('app.liteMode', true);
-  t.true(service.get('app.liteMode'));
-  t.false(service.get('app.orchestratorMode'));
-  t.false(service.get('app.planMode'));
-  t.false(service.get('app.mentorMode'));
+  expect(service.get('app.liteMode')).toBe(true);
+  expect(service.get('app.orchestratorMode')).toBe(false);
+  expect(service.get('app.planMode')).toBe(false);
+  expect(service.get('app.mentorMode')).toBe(false);
 
   // Setting planMode to true should disable liteMode
   service.set('app.planMode', true);
-  t.true(service.get('app.planMode'));
-  t.false(service.get('app.liteMode'));
-  t.false(service.get('app.orchestratorMode'));
-  t.false(service.get('app.mentorMode'));
+  expect(service.get('app.planMode')).toBe(true);
+  expect(service.get('app.liteMode')).toBe(false);
+  expect(service.get('app.orchestratorMode')).toBe(false);
+  expect(service.get('app.mentorMode')).toBe(false);
 });

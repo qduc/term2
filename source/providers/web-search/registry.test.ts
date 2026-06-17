@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 // Import directly from registry.js to avoid auto-registration of providers through index.js
 import {
   registerWebSearchProvider,
@@ -25,46 +25,45 @@ const createMockSettingsService = (settings: Record<string, any> = {}) => ({
 });
 
 // Clear providers before each test to ensure isolation
-test.beforeEach(() => {
+beforeEach(() => {
   clearWebSearchProviders();
 });
 
-test.serial('registerWebSearchProvider registers a provider', (t) => {
+it.sequential('registerWebSearchProvider registers a provider', () => {
   const provider = createMockProvider('test', 'Test');
 
   registerWebSearchProvider(provider);
 
   const registered = getWebSearchProvider('test');
-  t.is(registered?.id, 'test');
-  t.is(registered?.label, 'Test');
+  expect(registered?.id).toBe('test');
+  expect(registered?.label).toBe('Test');
 });
 
-test.serial('registerWebSearchProvider throws on duplicate ID', (t) => {
+it.sequential('registerWebSearchProvider throws on duplicate ID', () => {
   const provider1 = createMockProvider('dup-test', 'Test 1');
   const provider2 = createMockProvider('dup-test', 'Test 2');
 
   registerWebSearchProvider(provider1);
 
-  const error = t.throws(() => registerWebSearchProvider(provider2));
-  t.true(error?.message.includes("'dup-test' is already registered"));
+  expect(() => registerWebSearchProvider(provider2)).toThrow(/'dup-test' is already registered/);
 });
 
-test.serial('getWebSearchProvider returns registered provider', (t) => {
+it.sequential('getWebSearchProvider returns registered provider', () => {
   const provider = createMockProvider('custom', 'Custom');
   registerWebSearchProvider(provider);
 
   const result = getWebSearchProvider('custom');
 
-  t.is(result?.id, 'custom');
-  t.is(result?.label, 'Custom');
+  expect(result?.id).toBe('custom');
+  expect(result?.label).toBe('Custom');
 });
 
-test.serial('getWebSearchProvider returns undefined for unknown ID', (t) => {
+it.sequential('getWebSearchProvider returns undefined for unknown ID', () => {
   const result = getWebSearchProvider('nonexistent');
-  t.is(result, undefined);
+  expect(result).toBe(undefined);
 });
 
-test.serial('getDefaultWebSearchProvider returns first registered provider', (t) => {
+it.sequential('getDefaultWebSearchProvider returns first registered provider', () => {
   const provider1 = createMockProvider('first', 'First');
   const provider2 = createMockProvider('second', 'Second');
 
@@ -72,10 +71,10 @@ test.serial('getDefaultWebSearchProvider returns first registered provider', (t)
   registerWebSearchProvider(provider2);
 
   const result = getDefaultWebSearchProvider();
-  t.is(result?.id, 'first');
+  expect(result?.id).toBe('first');
 });
 
-test.serial('getDefaultWebSearchProvider respects isDefault option', (t) => {
+it.sequential('getDefaultWebSearchProvider respects isDefault option', () => {
   const provider1 = createMockProvider('first-def', 'First');
   const provider2 = createMockProvider('second-def', 'Second');
 
@@ -83,15 +82,15 @@ test.serial('getDefaultWebSearchProvider respects isDefault option', (t) => {
   registerWebSearchProvider(provider2, { isDefault: true });
 
   const result = getDefaultWebSearchProvider();
-  t.is(result?.id, 'second-def');
+  expect(result?.id).toBe('second-def');
 });
 
-test.serial('getDefaultWebSearchProvider returns undefined when no providers registered', (t) => {
+it.sequential('getDefaultWebSearchProvider returns undefined when no providers registered', () => {
   const result = getDefaultWebSearchProvider();
-  t.is(result, undefined);
+  expect(result).toBe(undefined);
 });
 
-test.serial('getAllWebSearchProviders returns all registered providers', (t) => {
+it.sequential('getAllWebSearchProviders returns all registered providers', () => {
   const provider1 = createMockProvider('one', 'One');
   const provider2 = createMockProvider('two', 'Two');
 
@@ -99,12 +98,12 @@ test.serial('getAllWebSearchProviders returns all registered providers', (t) => 
   registerWebSearchProvider(provider2);
 
   const all = getAllWebSearchProviders();
-  t.is(all.length, 2);
-  t.truthy(all.find((p) => p.id === 'one'));
-  t.truthy(all.find((p) => p.id === 'two'));
+  expect(all.length).toBe(2);
+  expect(all.find((p) => p.id === 'one')).toBeTruthy();
+  expect(all.find((p) => p.id === 'two')).toBeTruthy();
 });
 
-test.serial('getConfiguredWebSearchProvider uses settings preference', (t) => {
+it.sequential('getConfiguredWebSearchProvider uses settings preference', () => {
   const provider1 = createMockProvider('first-conf', 'First');
   const provider2 = createMockProvider('second-conf', 'Second');
 
@@ -114,35 +113,35 @@ test.serial('getConfiguredWebSearchProvider uses settings preference', (t) => {
   const settings = createMockSettingsService({ 'webSearch.provider': 'second-conf' });
   const result = getConfiguredWebSearchProvider({ settingsService: settings });
 
-  t.is(result?.id, 'second-conf');
+  expect(result?.id).toBe('second-conf');
 });
 
-test.serial('getConfiguredWebSearchProvider falls back to default', (t) => {
+it.sequential('getConfiguredWebSearchProvider falls back to default', () => {
   const provider = createMockProvider('default-fb', 'Default');
   registerWebSearchProvider(provider, { isDefault: true });
 
   const settings = createMockSettingsService({}); // No provider preference
   const result = getConfiguredWebSearchProvider({ settingsService: settings });
 
-  t.is(result?.id, 'default-fb');
+  expect(result?.id).toBe('default-fb');
 });
 
-test.serial('getConfiguredWebSearchProvider falls back when configured provider not found', (t) => {
+it.sequential('getConfiguredWebSearchProvider falls back when configured provider not found', () => {
   const provider = createMockProvider('default-nf', 'Default');
   registerWebSearchProvider(provider, { isDefault: true });
 
   const settings = createMockSettingsService({ 'webSearch.provider': 'nonexistent' });
   const result = getConfiguredWebSearchProvider({ settingsService: settings });
 
-  t.is(result?.id, 'default-nf');
+  expect(result?.id).toBe('default-nf');
 });
 
-test.serial('clearWebSearchProviders removes all providers', (t) => {
+it.sequential('clearWebSearchProviders removes all providers', () => {
   registerWebSearchProvider(createMockProvider('test-clear', 'Test'));
-  t.is(getAllWebSearchProviders().length, 1);
+  expect(getAllWebSearchProviders().length).toBe(1);
 
   clearWebSearchProviders();
 
-  t.is(getAllWebSearchProviders().length, 0);
-  t.is(getDefaultWebSearchProvider(), undefined);
+  expect(getAllWebSearchProviders().length).toBe(0);
+  expect(getDefaultWebSearchProvider()).toBe(undefined);
 });

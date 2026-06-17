@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { renderInAct, rerenderInAct, toVisibleText } from '../../test-helpers/ink-testing.js';
 import SettingsSelectionMenu from './SettingsSelectionMenu.js';
@@ -13,7 +12,7 @@ const items: SettingCompletionItem[] = Array.from({ length: 12 }, (_, index) => 
   currentValue: index,
 }));
 
-test.serial('SettingsSelectionMenu uses scrollOffset to control the visible window', async (t) => {
+it.sequential('SettingsSelectionMenu uses scrollOffset to control the visible window', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsSelectionMenu
       items={items}
@@ -23,18 +22,17 @@ test.serial('SettingsSelectionMenu uses scrollOffset to control the visible wind
       activeCategoryId="model"
       categories={[{ id: 'model', label: 'Model & Reasoning' }]}
     />,
-    t,
   );
 
   const output = lastFrame() ?? '';
 
-  t.false(output.includes('agent.setting0'));
-  t.true(output.includes('agent.setting1'));
-  t.true(output.includes('agent.setting10'));
-  t.false(output.includes('agent.setting11'));
+  expect(output.includes('agent.setting0')).toBe(false);
+  expect(output.includes('agent.setting1')).toBe(true);
+  expect(output.includes('agent.setting10')).toBe(true);
+  expect(output.includes('agent.setting11')).toBe(false);
 });
 
-test.serial('SettingsSelectionMenu renders task tabs and switch hint', async (t) => {
+it.sequential('SettingsSelectionMenu renders task tabs and switch hint', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsSelectionMenu
       items={[
@@ -53,17 +51,16 @@ test.serial('SettingsSelectionMenu renders task tabs and switch hint', async (t)
         { id: 'shell', label: 'Shell Execution' },
       ]}
     />,
-    t,
   );
 
   const output = lastFrame() ?? '';
 
-  t.true(output.includes('Model & Reasoning'));
-  t.true(output.includes('Shell Execution'));
-  t.true(output.includes('Tab/←→ → switch section'));
+  expect(output.includes('Model & Reasoning')).toBe(true);
+  expect(output.includes('Shell Execution')).toBe(true);
+  expect(output.includes('Tab/←→ → switch section')).toBe(true);
 });
 
-test.serial('SettingsSelectionMenu keeps task tabs on one row', async (t) => {
+it.sequential('SettingsSelectionMenu keeps task tabs on one row', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsSelectionMenu
       items={[
@@ -93,16 +90,15 @@ test.serial('SettingsSelectionMenu keeps task tabs on one row', async (t) => {
         { id: 'advanced', label: 'Advanced' },
       ]}
     />,
-    t,
   );
 
   const lines = toVisibleText(lastFrame() ?? '').split('\n');
-  t.true(lines[0]?.includes('Tab/←→ → switch section'));
-  t.false(lines[0]?.includes('STab/←→ → switch section'));
-  t.true(lines[1]?.startsWith('╭'));
+  expect(lines[0]?.includes('Tab/←→ → switch section')).toBe(true);
+  expect(lines[0]?.includes('STab/←→ → switch section')).toBe(false);
+  expect(lines[1]?.startsWith('╭')).toBe(true);
 });
 
-test.serial('SettingsSelectionMenu shrinks after broad search collapses', async (t) => {
+it.sequential('SettingsSelectionMenu shrinks after broad search collapses', async () => {
   const categories = [
     { id: 'model', label: 'Model & Reasoning' },
     { id: 'modes', label: 'Modes' },
@@ -152,7 +148,6 @@ test.serial('SettingsSelectionMenu shrinks after broad search collapses', async 
       activeCategoryId="modes"
       categories={categories}
     />,
-    t,
   );
   const expandedHeight = (view.lastFrame() ?? '').split('\n').length;
 
@@ -193,6 +188,6 @@ test.serial('SettingsSelectionMenu shrinks after broad search collapses', async 
   );
   const switchedHeight = (view.lastFrame() ?? '').split('\n').length;
 
-  t.true(collapsedHeight < expandedHeight);
-  t.true(switchedHeight < expandedHeight);
+  expect(collapsedHeight < expandedHeight).toBe(true);
+  expect(switchedHeight < expandedHeight).toBe(true);
 });

@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { clearApprovalRejectionMarkers, extractCommandMessages } from './extract-command-messages.js';
 import { clearToolFormatters, registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { formatApplyPatchCommandMessage } from '../../tools/file/apply-patch.js';
@@ -19,7 +19,7 @@ const withStubbedNow = (value: number) => {
   };
 };
 
-test.beforeEach(() => {
+beforeEach(() => {
   clearApprovalRejectionMarkers();
   clearToolFormatters();
   registerToolFormatters([
@@ -33,12 +33,12 @@ test.beforeEach(() => {
   ]);
 });
 
-test.afterEach(() => {
+afterEach(() => {
   clearApprovalRejectionMarkers();
   clearToolFormatters();
 });
 
-test('extracts failure reason from shell command outcome', (t) => {
+it('extracts failure reason from shell command outcome', () => {
   const restore = withStubbedNow(1700000000200);
 
   try {
@@ -57,8 +57,8 @@ test('extracts failure reason from shell command outcome', (t) => {
     ];
     const messages = extractCommandMessages(items);
 
-    t.is(messages.length, 1);
-    t.deepEqual(messages[0], {
+    expect(messages.length).toBe(1);
+    expect(messages[0]).toEqual({
       id: '1700000000200-0-0',
       sender: 'command',
       status: 'completed',
@@ -74,7 +74,7 @@ test('extracts failure reason from shell command outcome', (t) => {
   }
 });
 
-test('extracts shell command from matching function_call item', (t) => {
+it('extracts shell command from matching function_call item', () => {
   const restore = withStubbedNow(1700000000250);
 
   try {
@@ -97,8 +97,8 @@ test('extracts shell command from matching function_call item', (t) => {
     ];
 
     const messages = extractCommandMessages(items);
-    t.is(messages.length, 1);
-    t.deepEqual(messages[0], {
+    expect(messages.length).toBe(1);
+    expect(messages[0]).toEqual({
       id: 'call-abc-0',
       callId: 'call-abc',
       sender: 'command',
@@ -115,7 +115,7 @@ test('extracts shell command from matching function_call item', (t) => {
   }
 });
 
-test('extracts shell command from output items using call_id', (t) => {
+it('extracts shell command from output items using call_id', () => {
   const restore = withStubbedNow(1700000000261);
 
   try {
@@ -139,8 +139,8 @@ test('extracts shell command from output items using call_id', (t) => {
     ];
 
     const messages = extractCommandMessages(items);
-    t.is(messages.length, 1);
-    t.deepEqual(messages[0], {
+    expect(messages.length).toBe(1);
+    expect(messages[0]).toEqual({
       id: 'result-1-0',
       callId: 'call-abc',
       sender: 'command',
@@ -157,7 +157,7 @@ test('extracts shell command from output items using call_id', (t) => {
   }
 });
 
-test('extracts grep output from plain text tool result', (t) => {
+it('extracts grep output from plain text tool result', () => {
   const restore = withStubbedNow(1700000000260);
 
   try {
@@ -182,8 +182,8 @@ test('extracts grep output from plain text tool result', (t) => {
     ];
 
     const messages = extractCommandMessages(items);
-    t.is(messages.length, 1);
-    t.deepEqual(messages[0], {
+    expect(messages.length).toBe(1);
+    expect(messages[0]).toEqual({
       id: 'call-grep-1-0',
       callId: 'call-grep-1',
       sender: 'command',
@@ -207,7 +207,7 @@ test('extracts grep output from plain text tool result', (t) => {
   }
 });
 
-test('extracts grep command from matching function_call item', (t) => {
+it('extracts grep command from matching function_call item', () => {
   const restore = withStubbedNow(1700000000265);
 
   try {
@@ -237,8 +237,8 @@ test('extracts grep command from matching function_call item', (t) => {
     ];
 
     const messages = extractCommandMessages(items);
-    t.is(messages.length, 1);
-    t.deepEqual(messages[0], {
+    expect(messages.length).toBe(1);
+    expect(messages[0]).toEqual({
       id: 'call-grep-abc-0',
       callId: 'call-grep-abc',
       sender: 'command',
@@ -262,7 +262,7 @@ test('extracts grep command from matching function_call item', (t) => {
   }
 });
 
-test('grep output containing "error" or "failed" should still be success', (t) => {
+it('grep output containing "error" or "failed" should still be success', () => {
   const restore = withStubbedNow(1700000000270);
 
   try {
@@ -284,8 +284,8 @@ test('grep output containing "error" or "failed" should still be success', (t) =
     ];
 
     const messages = extractCommandMessages(items);
-    t.is(messages.length, 1);
-    t.is(messages[0].success, true, 'grep result with "error" in content should be success');
+    expect(messages.length).toBe(1);
+    expect(messages[0].success, 'grep result with "error" in content should be success').toBe(true);
 
     // Test case where grep results contain the word "failed"
     const items2 = [
@@ -305,14 +305,14 @@ test('grep output containing "error" or "failed" should still be success', (t) =
     ];
 
     const messages2 = extractCommandMessages(items2);
-    t.is(messages2.length, 1);
-    t.is(messages2[0].success, true, 'grep result with "failed" in content should be success');
+    expect(messages2.length).toBe(1);
+    expect(messages2[0].success, 'grep result with "failed" in content should be success').toBe(true);
   } finally {
     restore();
   }
 });
 
-test('grep with no matches is still a success', (t) => {
+it('grep with no matches is still a success', () => {
   const restore = withStubbedNow(1700000000275);
 
   try {
@@ -333,15 +333,15 @@ test('grep with no matches is still a success', (t) => {
     ];
 
     const messages = extractCommandMessages(items);
-    t.is(messages.length, 1);
-    t.is(messages[0].success, true, 'grep with no matches should be success, not error');
-    t.is(messages[0].output, 'No matches found.');
+    expect(messages.length).toBe(1);
+    expect(messages[0].success, 'grep with no matches should be success, not error').toBe(true);
+    expect(messages[0].output).toBe('No matches found.');
   } finally {
     restore();
   }
 });
 
-test('extracts successful apply_patch create_file operation', (t) => {
+it('extracts successful apply_patch create_file operation', () => {
   const restore = withStubbedNow(1700000000300);
 
   try {
@@ -370,8 +370,8 @@ test('extracts successful apply_patch create_file operation', (t) => {
     ];
     const messages = extractCommandMessages(items);
 
-    t.is(messages.length, 1);
-    t.deepEqual(messages[0], {
+    expect(messages.length).toBe(1);
+    expect(messages[0]).toEqual({
       id: '1700000000300-0-0',
       sender: 'command',
       status: 'completed',
@@ -391,7 +391,7 @@ test('extracts successful apply_patch create_file operation', (t) => {
   }
 });
 
-test('extracts successful apply_patch update_file operation', (t) => {
+it('extracts successful apply_patch update_file operation', () => {
   const restore = withStubbedNow(1700000000400);
 
   try {
@@ -420,8 +420,8 @@ test('extracts successful apply_patch update_file operation', (t) => {
     ];
     const messages = extractCommandMessages(items);
 
-    t.is(messages.length, 1);
-    t.deepEqual(messages[0], {
+    expect(messages.length).toBe(1);
+    expect(messages[0]).toEqual({
       id: '1700000000400-0-0',
       sender: 'command',
       status: 'completed',
@@ -441,7 +441,7 @@ test('extracts successful apply_patch update_file operation', (t) => {
   }
 });
 
-// test('extracts successful apply_patch delete_file operation', t => {
+// it('extracts successful apply_patch delete_file operation', t => {
 //     const restore = withStubbedNow(1700000000500);
 
 //     try {
@@ -470,7 +470,7 @@ test('extracts successful apply_patch update_file operation', (t) => {
 //         ];
 //         const messages = extractCommandMessages(items);
 
-//         t.is(messages.length, 1);
+//         expect(messages.length).toBe(1);
 //         t.deepEqual(messages[0], {
 //             id: '1700000000500-0-0',
 //             sender: 'command',
@@ -483,7 +483,7 @@ test('extracts successful apply_patch update_file operation', (t) => {
 //     }
 // });
 
-test('extracts failed apply_patch operation', (t) => {
+it('extracts failed apply_patch operation', () => {
   const restore = withStubbedNow(1700000000600);
 
   try {
@@ -510,8 +510,8 @@ test('extracts failed apply_patch operation', (t) => {
     ];
     const messages = extractCommandMessages(items);
 
-    t.is(messages.length, 1);
-    t.deepEqual(messages[0], {
+    expect(messages.length).toBe(1);
+    expect(messages[0]).toEqual({
       id: '1700000000600-0-0',
       sender: 'command',
       status: 'completed',
@@ -531,7 +531,7 @@ test('extracts failed apply_patch operation', (t) => {
   }
 });
 
-test('extracts native apply_patch_call output with diff args', (t) => {
+it('extracts native apply_patch_call output with diff args', () => {
   const restore = withStubbedNow(1700000000650);
 
   try {
@@ -560,8 +560,8 @@ test('extracts native apply_patch_call output with diff args', (t) => {
 
     const messages = extractCommandMessages(items);
 
-    t.is(messages.length, 1);
-    t.deepEqual(messages[0], {
+    expect(messages.length).toBe(1);
+    expect(messages[0]).toEqual({
       id: 'native-call-1-0',
       callId: 'native-call-1',
       sender: 'command',
@@ -582,7 +582,7 @@ test('extracts native apply_patch_call output with diff args', (t) => {
   }
 });
 
-test('extracts ask_mentor output', (t) => {
+it('extracts ask_mentor output', () => {
   const restore = withStubbedNow(1700000000700);
 
   try {
@@ -601,8 +601,8 @@ test('extracts ask_mentor output', (t) => {
     ];
     const messages = extractCommandMessages(items);
 
-    t.is(messages.length, 1);
-    t.deepEqual(messages[0], {
+    expect(messages.length).toBe(1);
+    expect(messages[0]).toEqual({
       id: '1700000000700-0-0',
       sender: 'command',
       status: 'completed',
@@ -620,7 +620,7 @@ test('extracts ask_mentor output', (t) => {
   }
 });
 
-test('extracts read_file output', (t) => {
+it('extracts read_file output', () => {
   const restore = withStubbedNow(1700000000800);
 
   try {
@@ -641,8 +641,8 @@ test('extracts read_file output', (t) => {
     ];
     const messages = extractCommandMessages(items);
 
-    t.is(messages.length, 1);
-    t.deepEqual(messages[0], {
+    expect(messages.length).toBe(1);
+    expect(messages[0]).toEqual({
       id: '1700000000800-0-0',
       sender: 'command',
       status: 'completed',
@@ -662,7 +662,7 @@ test('extracts read_file output', (t) => {
   }
 });
 
-test('extracts read_code_outline output', (t) => {
+it('extracts read_code_outline output', () => {
   const restore = withStubbedNow(1700000000900);
 
   try {
@@ -681,8 +681,8 @@ test('extracts read_code_outline output', (t) => {
     ];
     const messages = extractCommandMessages(items);
 
-    t.is(messages.length, 1);
-    t.deepEqual(messages[0], {
+    expect(messages.length).toBe(1);
+    expect(messages[0]).toEqual({
       id: '1700000000900-0-0',
       sender: 'command',
       status: 'completed',
@@ -700,7 +700,7 @@ test('extracts read_code_outline output', (t) => {
   }
 });
 
-test('extracts code_context_search output', (t) => {
+it('extracts code_context_search output', () => {
   const restore = withStubbedNow(1700000000910);
 
   try {
@@ -720,8 +720,8 @@ test('extracts code_context_search output', (t) => {
     ];
     const messages = extractCommandMessages(items);
 
-    t.is(messages.length, 1);
-    t.deepEqual(messages[0], {
+    expect(messages.length).toBe(1);
+    expect(messages[0]).toEqual({
       id: '1700000000910-0-0',
       sender: 'command',
       status: 'completed',

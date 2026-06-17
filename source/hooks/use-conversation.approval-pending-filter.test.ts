@@ -1,7 +1,7 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { filterPendingCommandMessagesForApproval } from '../services/approval/approval-presentation-policy.js';
 
-test('filters pending/running command messages matching approval callId', (t) => {
+it('filters pending/running command messages matching approval callId', () => {
   const messages = [
     { id: 1, sender: 'user', text: 'hi' },
     {
@@ -29,13 +29,13 @@ test('filters pending/running command messages matching approval callId', (t) =>
     toolName: 'shell',
   });
 
-  t.is(out.length, 2);
-  t.true(out.some((m) => m.sender === 'user'));
-  t.true(out.some((m) => m.status === 'completed'));
-  t.false(out.some((m) => m.status === 'running'));
+  expect(out.length).toBe(2);
+  expect(out.some((m) => m.sender === 'user')).toBe(true);
+  expect(out.some((m) => m.status === 'completed')).toBe(true);
+  expect(out.some((m) => m.status === 'running')).toBe(false);
 });
 
-test('filters pending/running command messages matching approval toolName when callId missing', (t) => {
+it('filters pending/running command messages matching approval toolName when callId missing', () => {
   const messages = [
     {
       id: 'x',
@@ -59,6 +59,6 @@ test('filters pending/running command messages matching approval toolName when c
     toolName: 'apply_patch',
   });
 
-  t.is(out.length, 1);
-  t.is(out[0].toolName, 'grep');
+  expect(out.length).toBe(1);
+  expect(out[0].toolName).toBe('grep');
 });

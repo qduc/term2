@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents-core';
 import {
   FallbackResponsesModel,
@@ -37,38 +37,42 @@ function createSleepRecorder() {
   };
 }
 
-test('isNetworkProtocolError correctly flags network protocol errors', (t) => {
+it('isNetworkProtocolError correctly flags network protocol errors', () => {
   // System network errors
-  t.true(isNetworkProtocolError({ code: 'ENOTFOUND' }));
-  t.true(isNetworkProtocolError({ code: 'ECONNREFUSED' }));
-  t.true(isNetworkProtocolError({ code: 'ETIMEDOUT' }));
-  t.true(isNetworkProtocolError({ code: 'ECONNRESET' }));
+  expect(isNetworkProtocolError({ code: 'ENOTFOUND' })).toBe(true);
+  expect(isNetworkProtocolError({ code: 'ECONNREFUSED' })).toBe(true);
+  expect(isNetworkProtocolError({ code: 'ETIMEDOUT' })).toBe(true);
+  expect(isNetworkProtocolError({ code: 'ECONNRESET' })).toBe(true);
 
   // WebSocket message signatures
-  t.true(isNetworkProtocolError(new Error('Responses websocket connection closed before opening.')));
-  t.true(isNetworkProtocolError(new Error('Responses websocket connection closed before a terminal response event.')));
-  t.true(isNetworkProtocolError(new Error('Responses websocket is not open.')));
-  t.true(isNetworkProtocolError(new Error('unexpected server response: 502')));
-  t.true(isNetworkProtocolError(new Error('Responses websocket connection timed out before opening after 15000ms')));
-  t.true(isNetworkProtocolError(new Error('Responses websocket connection timed out')));
-  t.true(isNetworkProtocolError(new Error('WebSocket first frame timeout after 5000ms')));
-  t.true(isNetworkProtocolError({ name: 'InvalidStateError', message: 'Socket is closing' }));
+  expect(isNetworkProtocolError(new Error('Responses websocket connection closed before opening.'))).toBe(true);
+  expect(
+    isNetworkProtocolError(new Error('Responses websocket connection closed before a terminal response event.')),
+  ).toBe(true);
+  expect(isNetworkProtocolError(new Error('Responses websocket is not open.'))).toBe(true);
+  expect(isNetworkProtocolError(new Error('unexpected server response: 502'))).toBe(true);
+  expect(
+    isNetworkProtocolError(new Error('Responses websocket connection timed out before opening after 15000ms')),
+  ).toBe(true);
+  expect(isNetworkProtocolError(new Error('Responses websocket connection timed out'))).toBe(true);
+  expect(isNetworkProtocolError(new Error('WebSocket first frame timeout after 5000ms'))).toBe(true);
+  expect(isNetworkProtocolError({ name: 'InvalidStateError', message: 'Socket is closing' })).toBe(true);
 
   // Exclusions (auth and rate limits)
-  t.false(isNetworkProtocolError(new Error('unexpected server response: 401')));
-  t.false(isNetworkProtocolError(new Error('unexpected server response: 403')));
-  t.false(isNetworkProtocolError(new Error('unexpected server response: 429')));
-  t.false(isNetworkProtocolError(new Error('unexpected server response: 400')));
-  t.false(isNetworkProtocolError(new Error('unexpected server response: 404')));
-  t.true(isNetworkProtocolError(new Error('unexpected server response: 502')));
+  expect(isNetworkProtocolError(new Error('unexpected server response: 401'))).toBe(false);
+  expect(isNetworkProtocolError(new Error('unexpected server response: 403'))).toBe(false);
+  expect(isNetworkProtocolError(new Error('unexpected server response: 429'))).toBe(false);
+  expect(isNetworkProtocolError(new Error('unexpected server response: 400'))).toBe(false);
+  expect(isNetworkProtocolError(new Error('unexpected server response: 404'))).toBe(false);
+  expect(isNetworkProtocolError(new Error('unexpected server response: 502'))).toBe(true);
 
   // Generic non-network errors
-  t.false(isNetworkProtocolError(new Error('Something else went wrong')));
-  t.false(isNetworkProtocolError({}));
-  t.false(isNetworkProtocolError(null));
+  expect(isNetworkProtocolError(new Error('Something else went wrong'))).toBe(false);
+  expect(isNetworkProtocolError({})).toBe(false);
+  expect(isNetworkProtocolError(null)).toBe(false);
 });
 
-test('FallbackResponsesModel.getResponse uses WS model by default and falls back on network error', async (t) => {
+it('FallbackResponsesModel.getResponse uses WS model by default and falls back on network error', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
   let downgradeLogged = false;
@@ -98,7 +102,7 @@ test('FallbackResponsesModel.getResponse uses WS model by default and falls back
     httpModel,
     state,
     (err) => {
-      t.is(err, wsError);
+      expect(err).toBe(wsError);
       downgradeLogged = true;
     },
     undefined,
@@ -109,21 +113,21 @@ test('FallbackResponsesModel.getResponse uses WS model by default and falls back
 
   const result = await model.getResponse({} as any);
 
-  t.is(wsCalled, expectedWsAttempts, 'should exhaust WS retries before HTTP fallback');
-  t.is(httpCalled, 1);
-  t.true(state.isDowngraded);
-  t.true(downgradeLogged);
-  t.is(result, expectedResponse);
-  t.is(sleep.delays.length, DEFAULT_STREAM_MAX_RETRIES, 'should sleep between WS retries');
+  expect(wsCalled, 'should exhaust WS retries before HTTP fallback').toBe(expectedWsAttempts);
+  expect(httpCalled).toBe(1);
+  expect(state.isDowngraded).toBe(true);
+  expect(downgradeLogged).toBe(true);
+  expect(result).toBe(expectedResponse);
+  expect(sleep.delays.length, 'should sleep between WS retries').toBe(DEFAULT_STREAM_MAX_RETRIES);
 
   // Subsequent call should skip WS model and go directly to HTTP model
   const result2 = await model.getResponse({} as any);
-  t.is(wsCalled, expectedWsAttempts); // still same count
-  t.is(httpCalled, 2);
-  t.is(result2, expectedResponse);
+  expect(wsCalled).toBe(expectedWsAttempts); // still same count
+  expect(httpCalled).toBe(2);
+  expect(result2).toBe(expectedResponse);
 });
 
-test('FallbackResponsesModel.getResponse immediately throws non-network errors without falling back', async (t) => {
+it('FallbackResponsesModel.getResponse immediately throws non-network errors without falling back', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
 
@@ -146,19 +150,16 @@ test('FallbackResponsesModel.getResponse immediately throws non-network errors w
   const state = { isDowngraded: false };
   const model = new FallbackResponsesModel(wsModel, httpModel, state);
 
-  await t.throwsAsync(
-    async () => {
-      await model.getResponse({} as any);
-    },
-    { message: 'unexpected server response: 401' },
-  );
+  await expect(async () => {
+    await model.getResponse({} as any);
+  }).rejects.toThrow('unexpected server response: 401');
 
-  t.is(wsCalled, 1);
-  t.is(httpCalled, 0);
-  t.false(state.isDowngraded);
+  expect(wsCalled).toBe(1);
+  expect(httpCalled).toBe(0);
+  expect(state.isDowngraded).toBe(false);
 });
 
-test('FallbackResponsesModel.getResponse falls back to HTTP when WS returns response with undefined output (SDK convertToOutputItem crash)', async (t) => {
+it('FallbackResponsesModel.getResponse falls back to HTTP when WS returns response with undefined output (SDK convertToOutputItem crash)', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
   let downgradeFired = false;
@@ -188,14 +189,14 @@ test('FallbackResponsesModel.getResponse falls back to HTTP when WS returns resp
   const result = await model.getResponse({} as any);
 
   // SDK crash is deterministic — should fall back to HTTP immediately, not retry WS
-  t.is(wsCalled, 1);
-  t.is(httpCalled, 1);
-  t.is(result, httpResponse);
-  t.true(state.isDowngraded);
-  t.true(downgradeFired);
+  expect(wsCalled).toBe(1);
+  expect(httpCalled).toBe(1);
+  expect(result).toBe(httpResponse);
+  expect(state.isDowngraded).toBe(true);
+  expect(downgradeFired).toBe(true);
 });
 
-test('FallbackResponsesModel.getStreamedResponse falls back seamlessly if error occurs before any events', async (t) => {
+it('FallbackResponsesModel.getStreamedResponse falls back seamlessly if error occurs before any events', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
   let downgradeLogged = false;
@@ -224,7 +225,7 @@ test('FallbackResponsesModel.getStreamedResponse falls back seamlessly if error 
     httpModel,
     state,
     (err) => {
-      t.is(err, wsError);
+      expect(err).toBe(wsError);
       downgradeLogged = true;
     },
     undefined,
@@ -238,14 +239,14 @@ test('FallbackResponsesModel.getStreamedResponse falls back seamlessly if error 
     events.push(event);
   }
 
-  t.is(wsCalled, expectedWsAttempts, 'should exhaust WS retries before HTTP fallback');
-  t.is(httpCalled, 1);
-  t.true(state.isDowngraded);
-  t.true(downgradeLogged);
-  t.deepEqual(events, [{ type: 'response_started' }, { type: 'output_text_delta', delta: 'Hello' }]);
+  expect(wsCalled, 'should exhaust WS retries before HTTP fallback').toBe(expectedWsAttempts);
+  expect(httpCalled).toBe(1);
+  expect(state.isDowngraded).toBe(true);
+  expect(downgradeLogged).toBe(true);
+  expect(events).toEqual([{ type: 'response_started' }, { type: 'output_text_delta', delta: 'Hello' }]);
 });
 
-test('FallbackResponsesModel.getStreamedResponse propagates error and does not fallback if any output already streamed', async (t) => {
+it('FallbackResponsesModel.getStreamedResponse propagates error and does not fallback if any output already streamed', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
   let downgradeLogged = false;
@@ -268,28 +269,26 @@ test('FallbackResponsesModel.getStreamedResponse propagates error and does not f
 
   const state = { isDowngraded: false };
   const model = new FallbackResponsesModel(wsModel, httpModel, state, (err) => {
-    t.is(err, wsError);
+    expect(err).toBe(wsError);
     downgradeLogged = true;
   });
 
   const events: any[] = [];
-  await t.throwsAsync(
-    async () => {
-      for await (const event of model.getStreamedResponse({} as any)) {
-        events.push(event);
-      }
-    },
-    { message: 'socket hang up' },
-  );
 
-  t.is(wsCalled, 1);
-  t.is(httpCalled, 0); // No HTTP fallback!
-  t.false(state.isDowngraded, 'mid-stream failures should be retried by the session before downgrading');
-  t.false(downgradeLogged);
-  t.deepEqual(events, [{ type: 'output_text_delta', delta: 'Partial' }]);
+  await expect(async () => {
+    for await (const event of model.getStreamedResponse({} as any)) {
+      events.push(event);
+    }
+  }).rejects.toThrow('socket hang up');
+
+  expect(wsCalled).toBe(1);
+  expect(httpCalled).toBe(0); // No HTTP fallback!
+  expect(state.isDowngraded).toBe(false);
+  expect(downgradeLogged).toBe(false);
+  expect(events).toEqual([{ type: 'output_text_delta', delta: 'Partial' }]);
 });
 
-test('FallbackResponsesModel logs unary WS request start, success, and failure events', async (t) => {
+it('FallbackResponsesModel logs unary WS request start, success, and failure events', async () => {
   const wsModel = makeMockModel(
     {
       getResponse: async () => {
@@ -350,23 +349,23 @@ test('FallbackResponsesModel logs unary WS request start, success, and failure e
 
   await model.getResponse(request);
 
-  t.is(logs.length, 2);
-  t.is(logs[0].level, 'debug');
-  t.is(logs[0].meta.eventType, 'provider.request.started');
-  t.is(logs[0].meta.provider, 'openai');
-  t.is(logs[0].meta.model, 'gpt-4o');
-  t.is(logs[0].meta.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
-  t.is(logs[0].meta.modelWrapperClass, 'FallbackResponsesModel');
-  t.deepEqual(logs[0].meta.headers, {
+  expect(logs.length).toBe(2);
+  expect(logs[0].level).toBe('debug');
+  expect(logs[0].meta.eventType).toBe('provider.request.started');
+  expect(logs[0].meta.provider).toBe('openai');
+  expect(logs[0].meta.model).toBe('gpt-4o');
+  expect(logs[0].meta.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
+  expect(logs[0].meta.modelWrapperClass).toBe('FallbackResponsesModel');
+  expect(logs[0].meta.headers).toEqual({
     authorization: '[REDACTED]',
     'x-opencode-session': 'session-ws-abc',
   });
 
-  t.is(logs[1].level, 'debug');
-  t.is(logs[1].meta.eventType, 'provider.response.received');
-  t.is(logs[1].meta.text, 'Hello back');
-  t.is(logs[1].meta.payload.transport, 'json');
-  t.is(logs[1].meta.payload.payload.id, 'resp_ws_123');
+  expect(logs[1].level).toBe('debug');
+  expect(logs[1].meta.eventType).toBe('provider.response.received');
+  expect(logs[1].meta.text).toBe('Hello back');
+  expect(logs[1].meta.payload.transport).toBe('json');
+  expect(logs[1].meta.payload.payload.id).toBe('resp_ws_123');
 
   // Test failure logging
   logs.length = 0;
@@ -388,19 +387,19 @@ test('FallbackResponsesModel logs unary WS request start, success, and failure e
 
   await modelFail.getResponse(request);
   // 1 request start + DEFAULT_STREAM_MAX_RETRIES + 1 failure logs (one per WS attempt)
-  t.is(logs.length, 1 + DEFAULT_STREAM_MAX_RETRIES + 1);
-  t.is(logs[0].meta.eventType, 'provider.request.started');
+  expect(logs.length).toBe(1 + DEFAULT_STREAM_MAX_RETRIES + 1);
+  expect(logs[0].meta.eventType).toBe('provider.request.started');
   // Each retry attempt logs a failure
   for (let i = 1; i <= DEFAULT_STREAM_MAX_RETRIES + 1; i++) {
-    t.is(logs[i].level, 'error');
-    t.is(logs[i].meta.eventType, 'provider.response.failed');
-    t.is(logs[i].meta.error, 'websocket connection closed before opening');
-    t.is(logs[i].meta.wsAttempt, i);
-    t.is(logs[i].meta.wsMaxAttempts, DEFAULT_STREAM_MAX_RETRIES + 1);
+    expect(logs[i].level).toBe('error');
+    expect(logs[i].meta.eventType).toBe('provider.response.failed');
+    expect(logs[i].meta.error).toBe('websocket connection closed before opening');
+    expect(logs[i].meta.wsAttempt).toBe(i);
+    expect(logs[i].meta.wsMaxAttempts).toBe(DEFAULT_STREAM_MAX_RETRIES + 1);
   }
 });
 
-test('FallbackResponsesModel falls back to HTTP when WebSocket times out', async (t) => {
+it('FallbackResponsesModel falls back to HTTP when WebSocket times out', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
 
@@ -430,19 +429,19 @@ test('FallbackResponsesModel falls back to HTTP when WebSocket times out', async
 
   const result = await model.getResponse({} as any);
 
-  t.is(wsCalled, expectedWsAttempts, 'should exhaust WS retries before HTTP fallback');
-  t.is(httpCalled, 1);
-  t.true(state.isDowngraded);
-  t.is(result, expectedResponse);
+  expect(wsCalled, 'should exhaust WS retries before HTTP fallback').toBe(expectedWsAttempts);
+  expect(httpCalled).toBe(1);
+  expect(state.isDowngraded).toBe(true);
+  expect(result).toBe(expectedResponse);
 
   // Subsequent calls should skip WS and use HTTP directly
   const result2 = await model.getResponse({} as any);
-  t.is(wsCalled, expectedWsAttempts);
-  t.is(httpCalled, 2);
-  t.is(result2, expectedResponse);
+  expect(wsCalled).toBe(expectedWsAttempts);
+  expect(httpCalled).toBe(2);
+  expect(result2).toBe(expectedResponse);
 });
 
-test('FallbackResponsesModel logs streaming WS request start and response completion events', async (t) => {
+it('FallbackResponsesModel logs streaming WS request start and response completion events', async () => {
   const wsModel = makeMockModel(
     {
       getStreamedResponse: async function* () {
@@ -515,17 +514,17 @@ test('FallbackResponsesModel logs streaming WS request start and response comple
   for await (const _ of model.getStreamedResponse(request)) {
   }
 
-  t.is(logs.length, 2);
-  t.is(logs[0].meta.eventType, 'provider.request.started');
-  t.is(logs[0].meta.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
-  t.is(logs[0].meta.modelWrapperClass, 'FallbackResponsesModel');
-  t.is(logs[1].meta.eventType, 'provider.response.received');
-  t.is(logs[1].meta.text, 'Hello'); // parsed delta content
-  t.is(logs[1].meta.payload.transport, 'sse'); // parsed as text/event-stream sse
-  t.is(logs[1].meta.payload.payload.id, 'resp_ws_stream_123');
+  expect(logs.length).toBe(2);
+  expect(logs[0].meta.eventType).toBe('provider.request.started');
+  expect(logs[0].meta.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
+  expect(logs[0].meta.modelWrapperClass).toBe('FallbackResponsesModel');
+  expect(logs[1].meta.eventType).toBe('provider.response.received');
+  expect(logs[1].meta.text).toBe('Hello'); // parsed delta content
+  expect(logs[1].meta.payload.transport).toBe('sse'); // parsed as text/event-stream sse
+  expect(logs[1].meta.payload.payload.id).toBe('resp_ws_stream_123');
 });
 
-test('FallbackResponsesModel.getResponse falls back after exhausting WS retries on pre-response failure', async (t) => {
+it('FallbackResponsesModel.getResponse falls back after exhausting WS retries on pre-response failure', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
   let downgradeLogged = false;
@@ -564,14 +563,14 @@ test('FallbackResponsesModel.getResponse falls back after exhausting WS retries 
 
   const result = await model.getResponse({} as any);
 
-  t.is(wsCalled, expectedWsAttempts, 'should exhaust WS retries before HTTP fallback');
-  t.is(httpCalled, 1);
-  t.true(state.isDowngraded);
-  t.true(downgradeLogged);
-  t.is(result, expectedResponse);
+  expect(wsCalled, 'should exhaust WS retries before HTTP fallback').toBe(expectedWsAttempts);
+  expect(httpCalled).toBe(1);
+  expect(state.isDowngraded).toBe(true);
+  expect(downgradeLogged).toBe(true);
+  expect(result).toBe(expectedResponse);
 });
 
-test('FallbackResponsesModel.getResponse retries first-frame timeout before falling back to HTTP', async (t) => {
+it('FallbackResponsesModel.getResponse retries first-frame timeout before falling back to HTTP', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
 
@@ -600,13 +599,13 @@ test('FallbackResponsesModel.getResponse retries first-frame timeout before fall
 
   const result = await model.getResponse({} as any);
 
-  t.is(wsCalled, expectedWsAttempts, 'should retry WS before HTTP fallback');
-  t.is(httpCalled, 1);
-  t.true(state.isDowngraded);
-  t.is(result, expectedResponse);
+  expect(wsCalled, 'should retry WS before HTTP fallback').toBe(expectedWsAttempts);
+  expect(httpCalled).toBe(1);
+  expect(state.isDowngraded).toBe(true);
+  expect(result).toBe(expectedResponse);
 });
 
-test('FallbackResponsesModel.getResponse falls back after exhausting WS retries for pre-response network errors', async (t) => {
+it('FallbackResponsesModel.getResponse falls back after exhausting WS retries for pre-response network errors', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
 
@@ -635,13 +634,13 @@ test('FallbackResponsesModel.getResponse falls back after exhausting WS retries 
 
   const result = await model.getResponse({} as any);
 
-  t.is(wsCalled, expectedWsAttempts, 'should exhaust WS retries before HTTP fallback');
-  t.is(httpCalled, 1);
-  t.true(state.isDowngraded);
-  t.is(result, expectedResponse);
+  expect(wsCalled, 'should exhaust WS retries before HTTP fallback').toBe(expectedWsAttempts);
+  expect(httpCalled).toBe(1);
+  expect(state.isDowngraded).toBe(true);
+  expect(result).toBe(expectedResponse);
 });
 
-test('FallbackResponsesModel.getResponse falls back after exhausting WS retries for abnormal websocket close 1006', async (t) => {
+it('FallbackResponsesModel.getResponse falls back after exhausting WS retries for abnormal websocket close 1006', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
 
@@ -670,13 +669,13 @@ test('FallbackResponsesModel.getResponse falls back after exhausting WS retries 
 
   const result = await model.getResponse({} as any);
 
-  t.is(wsCalled, expectedWsAttempts, 'should exhaust WS retries before HTTP fallback');
-  t.is(httpCalled, 1);
-  t.true(state.isDowngraded);
-  t.is(result, expectedResponse);
+  expect(wsCalled, 'should exhaust WS retries before HTTP fallback').toBe(expectedWsAttempts);
+  expect(httpCalled).toBe(1);
+  expect(state.isDowngraded).toBe(true);
+  expect(result).toBe(expectedResponse);
 });
 
-test('FallbackResponsesModel.getStreamedResponse falls back after exhausting WS retries on pre-stream failure', async (t) => {
+it('FallbackResponsesModel.getStreamedResponse falls back after exhausting WS retries on pre-stream failure', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
   let downgradeLogged = false;
@@ -716,14 +715,14 @@ test('FallbackResponsesModel.getStreamedResponse falls back after exhausting WS 
     events.push(event);
   }
 
-  t.is(wsCalled, expectedWsAttempts, 'should exhaust WS retries before HTTP fallback');
-  t.is(httpCalled, 1);
-  t.true(state.isDowngraded);
-  t.true(downgradeLogged);
-  t.deepEqual(events, [{ type: 'response_started' }]);
+  expect(wsCalled, 'should exhaust WS retries before HTTP fallback').toBe(expectedWsAttempts);
+  expect(httpCalled).toBe(1);
+  expect(state.isDowngraded).toBe(true);
+  expect(downgradeLogged).toBe(true);
+  expect(events).toEqual([{ type: 'response_started' }]);
 });
 
-test('FallbackResponsesModel.getStreamedResponse falls back after exhausting WS retries for abnormal websocket close 1006', async (t) => {
+it('FallbackResponsesModel.getStreamedResponse falls back after exhausting WS retries for abnormal websocket close 1006', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
 
@@ -753,13 +752,13 @@ test('FallbackResponsesModel.getStreamedResponse falls back after exhausting WS 
     events.push(event);
   }
 
-  t.is(wsCalled, expectedWsAttempts, 'should exhaust WS retries before HTTP fallback');
-  t.is(httpCalled, 1);
-  t.true(state.isDowngraded);
-  t.deepEqual(events, [{ type: 'output_text_delta', delta: 'fallback' }]);
+  expect(wsCalled, 'should exhaust WS retries before HTTP fallback').toBe(expectedWsAttempts);
+  expect(httpCalled).toBe(1);
+  expect(state.isDowngraded).toBe(true);
+  expect(events).toEqual([{ type: 'output_text_delta', delta: 'fallback' }]);
 });
 
-test('FallbackResponsesModel.getStreamedResponse does not retry once events have been yielded', async (t) => {
+it('FallbackResponsesModel.getStreamedResponse does not retry once events have been yielded', async () => {
   let wsCalled = 0;
 
   const firstFrameError = new Error('WebSocket first frame timeout after 5000ms');
@@ -780,21 +779,19 @@ test('FallbackResponsesModel.getStreamedResponse does not retry once events have
   const model = new FallbackResponsesModel(wsModel, httpModel, state);
 
   const events: any[] = [];
-  await t.throwsAsync(
-    async () => {
-      for await (const event of model.getStreamedResponse({} as any)) {
-        events.push(event);
-      }
-    },
-    { message: /first frame timeout/ },
-  );
 
-  t.is(wsCalled, 1, 'should not retry once a frame has been yielded');
-  t.false(state.isDowngraded, 'session-level retry should get a chance to reconnect WS before downgrade');
-  t.deepEqual(events, [{ type: 'output_text_delta', delta: 'partial' }]);
+  await expect(async () => {
+    for await (const event of model.getStreamedResponse({} as any)) {
+      events.push(event);
+    }
+  }).rejects.toThrow(/first frame timeout/);
+
+  expect(wsCalled, 'should not retry once a frame has been yielded').toBe(1);
+  expect(state.isDowngraded).toBe(false);
+  expect(events).toEqual([{ type: 'output_text_delta', delta: 'partial' }]);
 });
 
-test('FallbackResponsesModel.getStreamedResponse does not flip downgrade flag on mid-stream idle timeout', async (t) => {
+it('FallbackResponsesModel.getStreamedResponse does not flip downgrade flag on mid-stream idle timeout', async () => {
   let wsCalled = 0;
   let downgradeLogged = false;
 
@@ -818,22 +815,20 @@ test('FallbackResponsesModel.getStreamedResponse does not flip downgrade flag on
   });
 
   const events: any[] = [];
-  await t.throwsAsync(
-    async () => {
-      for await (const event of model.getStreamedResponse({} as any)) {
-        events.push(event);
-      }
-    },
-    { message: /idle timeout/ },
-  );
 
-  t.is(wsCalled, 1);
-  t.false(state.isDowngraded, 'one transient mid-stream stall should not flip the session-wide downgrade flag');
-  t.false(downgradeLogged);
-  t.deepEqual(events, [{ type: 'output_text_delta', delta: 'partial' }]);
+  await expect(async () => {
+    for await (const event of model.getStreamedResponse({} as any)) {
+      events.push(event);
+    }
+  }).rejects.toThrow(/idle timeout/);
+
+  expect(wsCalled).toBe(1);
+  expect(state.isDowngraded).toBe(false);
+  expect(downgradeLogged).toBe(false);
+  expect(events).toEqual([{ type: 'output_text_delta', delta: 'partial' }]);
 });
 
-test('FallbackResponsesModel.getStreamedResponse falls back after exhausting WS retries for pre-stream idle timeout', async (t) => {
+it('FallbackResponsesModel.getStreamedResponse falls back after exhausting WS retries for pre-stream idle timeout', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
 
@@ -863,13 +858,13 @@ test('FallbackResponsesModel.getStreamedResponse falls back after exhausting WS 
     events.push(event);
   }
 
-  t.is(wsCalled, expectedWsAttempts, 'should exhaust WS retries before HTTP fallback');
-  t.is(httpCalled, 1);
-  t.true(state.isDowngraded, 'exhausted WS retries still indicate a broken WS path');
-  t.deepEqual(events, [{ type: 'response_started' }]);
+  expect(wsCalled, 'should exhaust WS retries before HTTP fallback').toBe(expectedWsAttempts);
+  expect(httpCalled).toBe(1);
+  expect(state.isDowngraded).toBe(true);
+  expect(events).toEqual([{ type: 'response_started' }]);
 });
 
-test('Codex getResponse throws ChainingTransportDowngradeError when WS fails on a chained request after exhausting retries', async (t) => {
+it('Codex getResponse throws ChainingTransportDowngradeError when WS fails on a chained request after exhausting retries', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
 
@@ -906,16 +901,21 @@ test('Codex getResponse throws ChainingTransportDowngradeError when WS fails on 
     outputType: {} as any,
   };
 
-  const error = await t.throwsAsync(() => model.getResponse(chainedRequest));
-  t.true(error instanceof ChainingTransportDowngradeError);
-  t.is(error.message, 'Codex WS connection failed; cannot chain via HTTP');
-  t.is((error as any).cause, wsError);
-  t.is(wsCalled, expectedWsAttempts, 'should exhaust WS retries before throwing chaining error');
-  t.is(httpCalled, 0, 'HTTP model should not be called when chaining breaks');
-  t.true(state.isDowngraded);
+  let error: unknown;
+  try {
+    await model.getResponse(chainedRequest);
+  } catch (e: unknown) {
+    error = e;
+  }
+  expect(error instanceof ChainingTransportDowngradeError).toBe(true);
+  expect((error as Error).message).toBe('Codex WS connection failed; cannot chain via HTTP');
+  expect((error as any).cause).toBe(wsError);
+  expect(wsCalled, 'should exhaust WS retries before throwing chaining error').toBe(expectedWsAttempts);
+  expect(httpCalled, 'HTTP model should not be called when chaining breaks').toBe(0);
+  expect(state.isDowngraded).toBe(true);
 });
 
-test('Codex getStreamedResponse throws ChainingTransportDowngradeError when WS fails on a chained request after exhausting retries', async (t) => {
+it('Codex getStreamedResponse throws ChainingTransportDowngradeError when WS fails on a chained request after exhausting retries', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
 
@@ -952,22 +952,26 @@ test('Codex getStreamedResponse throws ChainingTransportDowngradeError when WS f
   };
 
   const events: any[] = [];
-  const error = await t.throwsAsync(async () => {
+
+  let error: unknown;
+  try {
     for await (const event of model.getStreamedResponse(chainedRequest)) {
       events.push(event);
     }
-  });
+  } catch (e) {
+    error = e;
+  }
 
-  t.true(error instanceof ChainingTransportDowngradeError);
-  t.is(error.message, 'Codex WS connection failed; cannot chain via HTTP');
-  t.is((error as any).cause, wsError);
-  t.is(wsCalled, expectedWsAttempts, 'should exhaust WS retries before throwing chaining error');
-  t.is(httpCalled, 0, 'HTTP stream should not be called when chaining breaks');
-  t.true(state.isDowngraded);
-  t.deepEqual(events, []);
+  expect(error instanceof ChainingTransportDowngradeError).toBe(true);
+  expect(error.message).toBe('Codex WS connection failed; cannot chain via HTTP');
+  expect((error as any).cause).toBe(wsError);
+  expect(wsCalled, 'should exhaust WS retries before throwing chaining error').toBe(expectedWsAttempts);
+  expect(httpCalled, 'HTTP stream should not be called when chaining breaks').toBe(0);
+  expect(state.isDowngraded).toBe(true);
+  expect(events).toEqual([]);
 });
 
-test('Codex getStreamedResponse still falls back to HTTP when WS fails on a non-chained request', async (t) => {
+it('Codex getStreamedResponse still falls back to HTTP when WS fails on a non-chained request', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
 
@@ -1009,13 +1013,13 @@ test('Codex getStreamedResponse still falls back to HTTP when WS fails on a non-
     events.push(event);
   }
 
-  t.is(wsCalled, expectedWsAttempts, 'should exhaust WS retries before HTTP fallback');
-  t.is(httpCalled, 1, 'HTTP fallback should still happen for non-chained request');
-  t.true(state.isDowngraded);
-  t.deepEqual(events, [{ type: 'response_started' }]);
+  expect(wsCalled, 'should exhaust WS retries before HTTP fallback').toBe(expectedWsAttempts);
+  expect(httpCalled, 'HTTP fallback should still happen for non-chained request').toBe(1);
+  expect(state.isDowngraded).toBe(true);
+  expect(events).toEqual([{ type: 'response_started' }]);
 });
 
-test('FallbackResponsesModel fires state.onDowngrade callback when downgrading', async (t) => {
+it('FallbackResponsesModel fires state.onDowngrade callback when downgrading', async () => {
   let stateDowngradeFired = false;
   let constructorDowngradeFired = false;
 
@@ -1053,12 +1057,12 @@ test('FallbackResponsesModel fires state.onDowngrade callback when downgrading',
 
   await model.getResponse({} as any);
 
-  t.true(state.isDowngraded);
-  t.true(stateDowngradeFired, 'state.onDowngrade should have been called');
-  t.true(constructorDowngradeFired, 'constructor onDowngrade should have been called');
+  expect(state.isDowngraded).toBe(true);
+  expect(stateDowngradeFired).toBe(true);
+  expect(constructorDowngradeFired).toBe(true);
 });
 
-test('FallbackResponsesModel.getResponse succeeds on WS retry without falling back to HTTP', async (t) => {
+it('FallbackResponsesModel.getResponse succeeds on WS retry without falling back to HTTP', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
 
@@ -1091,14 +1095,14 @@ test('FallbackResponsesModel.getResponse succeeds on WS retry without falling ba
 
   const result = await model.getResponse({} as any);
 
-  t.is(wsCalled, 3, 'should retry WS and succeed on third attempt');
-  t.is(httpCalled, 0, 'should not fall back to HTTP when WS retry succeeds');
-  t.false(state.isDowngraded, 'should not downgrade when WS retry succeeds');
-  t.is(result, expectedResponse);
-  t.is(sleep.delays.length, 2, 'should sleep between WS retries');
+  expect(wsCalled, 'should retry WS and succeed on third attempt').toBe(3);
+  expect(httpCalled, 'should not fall back to HTTP when WS retry succeeds').toBe(0);
+  expect(state.isDowngraded).toBe(false);
+  expect(result).toBe(expectedResponse);
+  expect(sleep.delays.length, 'should sleep between WS retries').toBe(2);
 });
 
-test('FallbackResponsesModel.getStreamedResponse succeeds on WS retry without falling back to HTTP', async (t) => {
+it('FallbackResponsesModel.getStreamedResponse succeeds on WS retry without falling back to HTTP', async () => {
   let wsCalled = 0;
   let httpCalled = 0;
 
@@ -1134,14 +1138,14 @@ test('FallbackResponsesModel.getStreamedResponse succeeds on WS retry without fa
     events.push(event);
   }
 
-  t.is(wsCalled, 2, 'should retry WS and succeed on second attempt');
-  t.is(httpCalled, 0, 'should not fall back to HTTP when WS retry succeeds');
-  t.false(state.isDowngraded, 'should not downgrade when WS retry succeeds');
-  t.deepEqual(events, [{ type: 'response_started' }, { type: 'output_text_delta', delta: 'retried' }]);
-  t.is(sleep.delays.length, 1, 'should sleep between WS retries');
+  expect(wsCalled, 'should retry WS and succeed on second attempt').toBe(2);
+  expect(httpCalled, 'should not fall back to HTTP when WS retry succeeds').toBe(0);
+  expect(state.isDowngraded).toBe(false);
+  expect(events).toEqual([{ type: 'response_started' }, { type: 'output_text_delta', delta: 'retried' }]);
+  expect(sleep.delays.length, 'should sleep between WS retries').toBe(1);
 });
 
-test('FallbackResponsesModel.getResponse uses exponential backoff between WS retries', async (t) => {
+it('FallbackResponsesModel.getResponse uses exponential backoff between WS retries', async () => {
   let wsCalled = 0;
 
   const wsError = new Error('WebSocket first frame timeout after 5000ms');
@@ -1164,18 +1168,18 @@ test('FallbackResponsesModel.getResponse uses exponential backoff between WS ret
 
   await model.getResponse({} as any);
 
-  t.is(sleep.delays.length, DEFAULT_STREAM_MAX_RETRIES, 'should sleep between each WS retry');
+  expect(sleep.delays.length, 'should sleep between each WS retry').toBe(DEFAULT_STREAM_MAX_RETRIES);
   // With random=0.5 and jitter formula: baseDelay * jitter where jitter = 0.9 + 0.5*0.2 = 1.0
   // attempt 1: min(500 * 2^0, 30000) * 1.0 = 500ms
   // attempt 2: min(500 * 2^1, 30000) * 1.0 = 1000ms
   // attempt 3: min(500 * 2^2, 30000) * 1.0 = 2000ms
   // etc.
-  t.is(sleep.delays[0], 500, 'first retry delay');
-  t.is(sleep.delays[1], 1000, 'second retry delay');
-  t.is(sleep.delays[2], 2000, 'third retry delay');
+  expect(sleep.delays[0], 'first retry delay').toBe(500);
+  expect(sleep.delays[1], 'second retry delay').toBe(1000);
+  expect(sleep.delays[2], 'third retry delay').toBe(2000);
 });
 
-test('FallbackResponsesModel invokes onRetry before each WS retry backoff', async (t) => {
+it('FallbackResponsesModel invokes onRetry before each WS retry backoff', async () => {
   let wsCalled = 0;
   let retryCount = 0;
 
@@ -1198,6 +1202,6 @@ test('FallbackResponsesModel invokes onRetry before each WS retry backoff', asyn
 
   await model.getResponse({} as any);
 
-  t.is(wsCalled, DEFAULT_STREAM_MAX_RETRIES + 1);
-  t.is(retryCount, DEFAULT_STREAM_MAX_RETRIES);
+  expect(wsCalled).toBe(DEFAULT_STREAM_MAX_RETRIES + 1);
+  expect(retryCount).toBe(DEFAULT_STREAM_MAX_RETRIES);
 });

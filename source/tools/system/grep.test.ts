@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -42,7 +42,7 @@ async function withTempDir(run: (dir: string) => Promise<void>) {
   }
 }
 
-test.serial('execute: file_pattern does not include gitignored files', async (t) => {
+it.sequential('execute: file_pattern does not include gitignored files', async () => {
   await withTempDir(async (dir) => {
     await execFileAsync('git', ['init'], { cwd: dir });
     await fs.mkdir(path.join(dir, 'source'), { recursive: true });
@@ -56,12 +56,12 @@ test.serial('execute: file_pattern does not include gitignored files', async (t)
       file_pattern: '*.ts*',
     });
 
-    t.true(result.includes('source/app.ts'));
-    t.false(result.includes('tsconfig.tsbuildinfo'));
+    expect(result.includes('source/app.ts')).toBe(true);
+    expect(result.includes('tsconfig.tsbuildinfo')).toBe(false);
   });
 });
 
-test.serial('execute: regex mode is the default', async (t) => {
+it.sequential('execute: regex mode is the default', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'hello.world\nhello-world\n');
 
@@ -70,12 +70,12 @@ test.serial('execute: regex mode is the default', async (t) => {
       path: '.',
     });
 
-    t.true(result.includes('hello.world'));
-    t.true(result.includes('hello-world'));
+    expect(result.includes('hello.world')).toBe(true);
+    expect(result.includes('hello-world')).toBe(true);
   });
 });
 
-test.serial('execute: searches are case-sensitive by default', async (t) => {
+it.sequential('execute: searches are case-sensitive by default', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'axc\naXc\n');
 
@@ -84,12 +84,12 @@ test.serial('execute: searches are case-sensitive by default', async (t) => {
       path: '.',
     });
 
-    t.false(result.includes('axc'));
-    t.true(result.includes('aXc'));
+    expect(result.includes('axc')).toBe(false);
+    expect(result.includes('aXc')).toBe(true);
   });
 });
 
-test.serial('execute: case_sensitive false enables case-insensitive search', async (t) => {
+it.sequential('execute: case_sensitive false enables case-insensitive search', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'axc\naXc\n');
 
@@ -99,12 +99,12 @@ test.serial('execute: case_sensitive false enables case-insensitive search', asy
       case_sensitive: false,
     });
 
-    t.true(result.includes('axc'));
-    t.true(result.includes('aXc'));
+    expect(result.includes('axc')).toBe(true);
+    expect(result.includes('aXc')).toBe(true);
   });
 });
 
-test.serial('execute: regex mode supports parsed digit class patterns', async (t) => {
+it.sequential('execute: regex mode supports parsed digit class patterns', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'testabc\ntest123\ntest456\n');
 
@@ -113,13 +113,13 @@ test.serial('execute: regex mode supports parsed digit class patterns', async (t
       path: '.',
     });
 
-    t.false(result.includes('testabc'));
-    t.true(result.includes('test123'));
-    t.true(result.includes('test456'));
+    expect(result.includes('testabc')).toBe(false);
+    expect(result.includes('test123')).toBe(true);
+    expect(result.includes('test456')).toBe(true);
   });
 });
 
-test.serial('execute: regex mode supports parsed escaped dot patterns', async (t) => {
+it.sequential('execute: regex mode supports parsed escaped dot patterns', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'hello.hello\nhelloXhello\n');
 
@@ -128,12 +128,12 @@ test.serial('execute: regex mode supports parsed escaped dot patterns', async (t
       path: '.',
     });
 
-    t.true(result.includes('hello.hello'));
-    t.false(result.includes('helloXhello'));
+    expect(result.includes('hello.hello')).toBe(true);
+    expect(result.includes('helloXhello')).toBe(false);
   });
 });
 
-test.serial('invoke: grep uses strict JSON parsing before regex execution', async (t) => {
+it.sequential('invoke: grep uses strict JSON parsing before regex execution', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'testabc\ntest123\ntest456\n');
     const grep = createWrappedGrepTool();
@@ -141,14 +141,14 @@ test.serial('invoke: grep uses strict JSON parsing before regex execution', asyn
     const validJsonResult = await grep.invoke({} as RunContext, String.raw`{"pattern":"test\\d+","path":"."}`, {});
     const invalidJsonResult = await grep.invoke({} as RunContext, String.raw`{"pattern":"test\d+","path":"."}`, {});
 
-    t.true(String(validJsonResult).includes('test123'));
-    t.true(String(validJsonResult).includes('test456'));
-    t.false(String(validJsonResult).includes('testabc'));
-    t.regex(String(invalidJsonResult), /Retry with/);
+    expect(String(validJsonResult).includes('test123')).toBe(true);
+    expect(String(validJsonResult).includes('test456')).toBe(true);
+    expect(String(validJsonResult).includes('testabc')).toBe(false);
+    expect(String(invalidJsonResult)).toMatch(/Retry with/);
   });
 });
 
-test.serial('execute: literal mode uses fixed-string matching', async (t) => {
+it.sequential('execute: literal mode uses fixed-string matching', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'hello.world\nhello-world\n');
 
@@ -158,12 +158,12 @@ test.serial('execute: literal mode uses fixed-string matching', async (t) => {
       mode: 'literal',
     });
 
-    t.true(result.includes('hello.world'));
-    t.false(result.includes('hello-world'));
+    expect(result.includes('hello.world')).toBe(true);
+    expect(result.includes('hello-world')).toBe(false);
   });
 });
 
-test('formatGrepCommandMessage sets toolName to "grep" so the match counter uses the structured parser', (t) => {
+it('formatGrepCommandMessage sets toolName to "grep" so the match counter uses the structured parser', () => {
   const item = {
     rawItem: {
       arguments: JSON.stringify({ pattern: 'hello', path: '.' }),
@@ -175,6 +175,6 @@ test('formatGrepCommandMessage sets toolName to "grep" so the match counter uses
 
   const messages = formatGrepCommandMessage(item, 0, new Map());
 
-  t.is(messages.length, 1);
-  t.is(messages[0].toolName, 'grep');
+  expect(messages.length).toBe(1);
+  expect(messages[0].toolName).toBe('grep');
 });

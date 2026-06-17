@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createThrottledFunction, type ThrottleScheduler } from './throttle.js';
 
 const createScheduler = () => {
@@ -32,7 +32,7 @@ const createScheduler = () => {
   };
 };
 
-test('throttle batches updates and uses latest args', (t) => {
+it('throttle batches updates and uses latest args', () => {
   const calls: string[] = [];
   const clock = createScheduler();
   const { throttled } = createThrottledFunction((value: string) => calls.push(value), 40, clock.scheduler);
@@ -40,14 +40,14 @@ test('throttle batches updates and uses latest args', (t) => {
   throttled('a');
   throttled('b');
 
-  t.deepEqual(calls, ['a']);
+  expect(calls).toEqual(['a']);
 
   clock.advance(60);
 
-  t.deepEqual(calls, ['a', 'b']);
+  expect(calls).toEqual(['a', 'b']);
 });
 
-test('flush emits pending call immediately', (t) => {
+it('flush emits pending call immediately', () => {
   const calls: string[] = [];
   const clock = createScheduler();
   const { throttled, flush } = createThrottledFunction((value: string) => calls.push(value), 100, clock.scheduler);
@@ -56,13 +56,13 @@ test('flush emits pending call immediately', (t) => {
   throttled('b');
   flush();
 
-  t.deepEqual(calls, ['a', 'b']);
+  expect(calls).toEqual(['a', 'b']);
 
   clock.advance(120);
-  t.deepEqual(calls, ['a', 'b']);
+  expect(calls).toEqual(['a', 'b']);
 });
 
-test('cancel drops pending call', (t) => {
+it('cancel drops pending call', () => {
   const calls: string[] = [];
   const clock = createScheduler();
   const { throttled, cancel } = createThrottledFunction((value: string) => calls.push(value), 50, clock.scheduler);
@@ -72,5 +72,5 @@ test('cancel drops pending call', (t) => {
   cancel();
 
   clock.advance(80);
-  t.deepEqual(calls, ['a']);
+  expect(calls).toEqual(['a']);
 });

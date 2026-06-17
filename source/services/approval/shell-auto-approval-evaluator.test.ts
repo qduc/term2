@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
 
 const createSessionContextService = () => ({
@@ -32,7 +32,7 @@ const createMockSettings = (
   },
 });
 
-test('returns empty advisories and skips chat when auto-approval mode is off', async (t) => {
+it('returns empty advisories and skips chat when auto-approval mode is off', async () => {
   let chatCalls = 0;
   const advisories = await evaluateShellAutoApprovalAdvisories({
     commands: [{ id: 'call-1', command: 'ls source' }],
@@ -48,11 +48,11 @@ test('returns empty advisories and skips chat when auto-approval mode is off', a
     sessionContextService: createSessionContextService() as any,
   });
 
-  t.is(advisories.size, 0);
-  t.is(chatCalls, 0);
+  expect(advisories.size).toBe(0);
+  expect(chatCalls).toBe(0);
 });
 
-test('evaluates RED commands via chat but keeps system rejection advisory', async (t) => {
+it('evaluates RED commands via chat but keeps system rejection advisory', async () => {
   let chatCalls = 0;
   const advisories = await evaluateShellAutoApprovalAdvisories({
     commands: [{ id: 'call-red', command: 'rm -rf /' }],
@@ -61,7 +61,7 @@ test('evaluates RED commands via chat but keeps system rejection advisory', asyn
     agentClient: {
       chat: async (prompt: string) => {
         chatCalls++;
-        t.true(prompt.includes('rm -rf /'));
+        expect(prompt.includes('rm -rf /')).toBe(true);
         return JSON.stringify({
           results: [{ id: 'call-red', reasoning: 'This recursively deletes files from root.', approved: false }],
         });
@@ -72,16 +72,16 @@ test('evaluates RED commands via chat but keeps system rejection advisory', asyn
   });
 
   const redAdvisory = advisories.get('call-red');
-  t.truthy(redAdvisory);
-  t.is(redAdvisory?.approved, false);
-  t.is(redAdvisory?.model, 'test-auto-model');
-  t.is(redAdvisory?.source, 'system');
-  t.regex(redAdvisory?.reasoning ?? '', /Blocked by safety heuristics \(RED\):/);
-  t.regex(redAdvisory?.reasoning ?? '', /Model advisory: This recursively deletes files from root\./);
-  t.is(chatCalls, 1);
+  expect(redAdvisory).toBeTruthy();
+  expect(redAdvisory?.approved).toBe(false);
+  expect(redAdvisory?.model).toBe('test-auto-model');
+  expect(redAdvisory?.source).toBe('system');
+  expect(redAdvisory?.reasoning ?? '').toMatch(/Blocked by safety heuristics \(RED\):/);
+  expect(redAdvisory?.reasoning ?? '').toMatch(/Model advisory: This recursively deletes files from root\./);
+  expect(chatCalls).toBe(1);
 });
 
-test('evaluates non-RED commands via chat and parses valid JSON results', async (t) => {
+it('evaluates non-RED commands via chat and parses valid JSON results', async () => {
   const chatCalls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
   const advisories = await evaluateShellAutoApprovalAdvisories({
     commands: [{ id: 'call-safe', command: 'ls source' }],
@@ -99,20 +99,20 @@ test('evaluates non-RED commands via chat and parses valid JSON results', async 
     sessionContextService: createSessionContextService() as any,
   });
 
-  t.deepEqual(advisories.get('call-safe'), {
+  expect(advisories.get('call-safe')).toEqual({
     model: 'test-auto-model',
     reasoning: 'Read-only listing is safe.',
     approved: true,
     source: 'llm',
   });
-  t.is(chatCalls.length, 1);
-  t.true(chatCalls[0].prompt.includes('ls source'));
-  t.is(chatCalls[0].options.model, 'test-auto-model');
-  t.is(chatCalls[0].options.provider, 'test-auto-provider');
-  t.is(chatCalls[0].options.reasoningEffort, 'none');
+  expect(chatCalls.length).toBe(1);
+  expect(chatCalls[0].prompt.includes('ls source')).toBe(true);
+  expect(chatCalls[0].options.model).toBe('test-auto-model');
+  expect(chatCalls[0].options.provider).toBe('test-auto-provider');
+  expect(chatCalls[0].options.reasoningEffort).toBe('none');
 });
 
-test('uses structured chatJson when structured support is unknown', async (t) => {
+it('uses structured chatJson when structured support is unknown', async () => {
   const chatJsonCalls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
   let chatCalls = 0;
 
@@ -134,18 +134,18 @@ test('uses structured chatJson when structured support is unknown', async (t) =>
     sessionContextService: createSessionContextService() as any,
   });
 
-  t.deepEqual(advisories.get('call-safe'), {
+  expect(advisories.get('call-safe')).toEqual({
     model: 'test-auto-model',
     reasoning: 'Read-only current directory inspection is safe.',
     approved: true,
     source: 'llm',
   });
-  t.is(chatJsonCalls.length, 1);
-  t.is(chatCalls, 0);
-  t.is(chatJsonCalls[0].options.provider, 'structured-unknown-provider');
+  expect(chatJsonCalls.length).toBe(1);
+  expect(chatCalls).toBe(0);
+  expect(chatJsonCalls[0].options.provider).toBe('structured-unknown-provider');
 });
 
-test.serial('caches structured support after a successful structured request', async (t) => {
+it.sequential('caches structured support after a successful structured request', async () => {
   const provider = 'structured-supported-provider';
   let chatJsonCalls = 0;
 
@@ -167,13 +167,13 @@ test.serial('caches structured support after a successful structured request', a
       sessionContextService: createSessionContextService() as any,
     });
 
-    t.is(advisories.get(id)?.approved, true);
+    expect(advisories.get(id)?.approved).toBe(true);
   }
 
-  t.is(chatJsonCalls, 2);
+  expect(chatJsonCalls).toBe(2);
 });
 
-test.serial('falls back to chat and caches unsupported after structured output unsupported error', async (t) => {
+it.sequential('falls back to chat and caches unsupported after structured output unsupported error', async () => {
   const provider = 'structured-unsupported-provider';
   let chatJsonCalls = 0;
   let chatCalls = 0;
@@ -218,13 +218,13 @@ test.serial('falls back to chat and caches unsupported after structured output u
     sessionContextService: createSessionContextService() as any,
   });
 
-  t.is(first.get('call-1')?.approved, true);
-  t.is(second.get('call-2')?.approved, true);
-  t.is(chatJsonCalls, 1);
-  t.is(chatCalls, 2);
+  expect(first.get('call-1')?.approved).toBe(true);
+  expect(second.get('call-2')?.approved).toBe(true);
+  expect(chatJsonCalls).toBe(1);
+  expect(chatCalls).toBe(2);
 });
 
-test.serial('does not cache unsupported for malformed structured output', async (t) => {
+it.sequential('does not cache unsupported for malformed structured output', async () => {
   const provider = 'structured-malformed-provider';
   let chatJsonCalls = 0;
 
@@ -262,12 +262,12 @@ test.serial('does not cache unsupported for malformed structured output', async 
     sessionContextService: createSessionContextService() as any,
   });
 
-  t.is(first.get('call-1')?.approved, false);
-  t.is(second.get('call-2')?.approved, true);
-  t.is(chatJsonCalls, 3);
+  expect(first.get('call-1')?.approved).toBe(false);
+  expect(second.get('call-2')?.approved).toBe(true);
+  expect(chatJsonCalls).toBe(3);
 });
 
-test('retries once when structured output is missing approved', async (t) => {
+it('retries once when structured output is missing approved', async () => {
   let chatJsonCalls = 0;
 
   const advisories = await evaluateShellAutoApprovalAdvisories({
@@ -280,7 +280,7 @@ test('retries once when structured output is missing approved', async (t) => {
         if (chatJsonCalls === 1) {
           return { results: [{ reasoning: 'Missing approved field.' }] };
         }
-        t.true(prompt.includes('The previous shell auto-approval response was invalid.'));
+        expect(prompt.includes('The previous shell auto-approval response was invalid.')).toBe(true);
         return { results: [{ reasoning: 'Read-only current directory inspection is safe.', approved: true }] };
       },
       chat: async () => {
@@ -291,11 +291,11 @@ test('retries once when structured output is missing approved', async (t) => {
     sessionContextService: createSessionContextService() as any,
   });
 
-  t.is(advisories.get('call-safe')?.approved, true);
-  t.is(chatJsonCalls, 2);
+  expect(advisories.get('call-safe')?.approved).toBe(true);
+  expect(chatJsonCalls).toBe(2);
 });
 
-test('denies all non-RED commands when original plus repair are invalid', async (t) => {
+it('denies all non-RED commands when original plus repair are invalid', async () => {
   const advisories = await evaluateShellAutoApprovalAdvisories({
     commands: [
       { id: 'call-safe-1', command: 'ls source' },
@@ -315,7 +315,7 @@ test('denies all non-RED commands when original plus repair are invalid', async 
   });
 
   for (const id of ['call-safe-1', 'call-safe-2']) {
-    t.deepEqual(advisories.get(id), {
+    expect(advisories.get(id)).toEqual({
       model: 'test-auto-model',
       reasoning: 'LLM did not provide a valid ordered evaluation for this command.',
       approved: false,
@@ -324,7 +324,7 @@ test('denies all non-RED commands when original plus repair are invalid', async 
   }
 });
 
-test('instructions distinguish auto-approval from user-requested destructive intent', async (t) => {
+it('instructions distinguish auto-approval from user-requested destructive intent', async () => {
   const chatCalls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
   await evaluateShellAutoApprovalAdvisories({
     commands: [{ id: 'call-reset', command: 'git reset --hard HEAD' }],
@@ -342,19 +342,19 @@ test('instructions distinguish auto-approval from user-requested destructive int
     sessionContextService: createSessionContextService() as any,
   });
 
-  t.is(chatCalls.length, 1);
-  t.false(chatCalls[0].prompt.includes('without a human approval prompt'));
-  t.false(chatCalls[0].prompt.includes('even if the user requested them'));
-  t.false(chatCalls[0].prompt.includes('force flags'));
-  t.false(chatCalls[0].prompt.includes('resets'));
-  t.true(String(chatCalls[0].options.instructions).includes('without a human approval prompt'));
-  t.true(String(chatCalls[0].options.instructions).includes('even if the user requested them'));
-  t.true(String(chatCalls[0].options.instructions).includes('force flags'));
-  t.true(String(chatCalls[0].options.instructions).includes('resets'));
-  t.false(chatCalls[0].prompt.includes('Think step-by-step'));
+  expect(chatCalls.length).toBe(1);
+  expect(chatCalls[0].prompt.includes('without a human approval prompt')).toBe(false);
+  expect(chatCalls[0].prompt.includes('even if the user requested them')).toBe(false);
+  expect(chatCalls[0].prompt.includes('force flags')).toBe(false);
+  expect(chatCalls[0].prompt.includes('resets')).toBe(false);
+  expect(String(chatCalls[0].options.instructions).includes('without a human approval prompt')).toBe(true);
+  expect(String(chatCalls[0].options.instructions).includes('even if the user requested them')).toBe(true);
+  expect(String(chatCalls[0].options.instructions).includes('force flags')).toBe(true);
+  expect(String(chatCalls[0].options.instructions).includes('resets')).toBe(true);
+  expect(chatCalls[0].prompt.includes('Think step-by-step')).toBe(false);
 });
 
-test('prompt contains only user and assistant text from bounded history context', async (t) => {
+it('prompt contains only user and assistant text from bounded history context', async () => {
   const largeToolOutput = 'SECRET_OUTPUT '.repeat(2_000);
   const largeAssistantText = 'assistant detail '.repeat(600);
   const largeUserText = 'please inspect the repository '.repeat(300);
@@ -387,19 +387,19 @@ test('prompt contains only user and assistant text from bounded history context'
     sessionContextService: createSessionContextService() as any,
   });
 
-  t.is(chatCalls.length, 1);
-  t.true(chatCalls[0].prompt.includes('[user]'));
-  t.true(chatCalls[0].prompt.includes('[assistant]'));
-  t.false(chatCalls[0].prompt.includes('[tool call]'));
-  t.false(chatCalls[0].prompt.includes('[tool result]'));
-  t.false(chatCalls[0].prompt.includes('SECRET_OUTPUT'));
-  t.false(chatCalls[0].prompt.includes('pwd'));
-  t.false(chatCalls[0].prompt.includes('expensive hidden reasoning'));
-  t.false(chatCalls[0].prompt.includes('reasoning_details'));
-  t.true(chatCalls[0].prompt.length < 6_000);
+  expect(chatCalls.length).toBe(1);
+  expect(chatCalls[0].prompt.includes('[user]')).toBe(true);
+  expect(chatCalls[0].prompt.includes('[assistant]')).toBe(true);
+  expect(chatCalls[0].prompt.includes('[tool call]')).toBe(false);
+  expect(chatCalls[0].prompt.includes('[tool result]')).toBe(false);
+  expect(chatCalls[0].prompt.includes('SECRET_OUTPUT')).toBe(false);
+  expect(chatCalls[0].prompt.includes('pwd')).toBe(false);
+  expect(chatCalls[0].prompt.includes('expensive hidden reasoning')).toBe(false);
+  expect(chatCalls[0].prompt.includes('reasoning_details')).toBe(false);
+  expect(chatCalls[0].prompt.length < 6_000).toBe(true);
 });
 
-test('falls back to deny advisory for all commands when chat response shape is malformed', async (t) => {
+it('falls back to deny advisory for all commands when chat response shape is malformed', async () => {
   const advisories = await evaluateShellAutoApprovalAdvisories({
     commands: [
       { id: 'call-safe-1', command: 'ls source' },
@@ -416,7 +416,7 @@ test('falls back to deny advisory for all commands when chat response shape is m
   });
 
   for (const id of ['call-safe-1', 'call-safe-2']) {
-    t.deepEqual(advisories.get(id), {
+    expect(advisories.get(id)).toEqual({
       model: 'test-auto-model',
       reasoning: 'LLM did not provide a valid ordered evaluation for this command.',
       approved: false,
@@ -425,7 +425,7 @@ test('falls back to deny advisory for all commands when chat response shape is m
   }
 });
 
-test('performs exactly one corrective repair for malformed JSON without upstream retries', async (t) => {
+it('performs exactly one corrective repair for malformed JSON without upstream retries', async () => {
   const chatCalls: string[] = [];
 
   const advisories = await evaluateShellAutoApprovalAdvisories({
@@ -438,7 +438,7 @@ test('performs exactly one corrective repair for malformed JSON without upstream
         if (chatCalls.length === 1) {
           return 'not valid json';
         }
-        t.true(prompt.includes('The previous shell auto-approval response was invalid.'));
+        expect(prompt.includes('The previous shell auto-approval response was invalid.')).toBe(true);
         return JSON.stringify({
           results: [{ reasoning: 'Read-only listing is safe.', approved: true }],
         });
@@ -449,8 +449,8 @@ test('performs exactly one corrective repair for malformed JSON without upstream
     retryOptions: { sleep: async () => {}, random: () => 0 } as any,
   } as any);
 
-  t.is(chatCalls.length, 2);
-  t.deepEqual(advisories.get('call-safe'), {
+  expect(chatCalls.length).toBe(2);
+  expect(advisories.get('call-safe')).toEqual({
     model: 'test-auto-model',
     reasoning: 'Read-only listing is safe.',
     approved: true,
@@ -458,7 +458,7 @@ test('performs exactly one corrective repair for malformed JSON without upstream
   });
 });
 
-test('keeps RED commands system-rejected even if the LLM approves them', async (t) => {
+it('keeps RED commands system-rejected even if the LLM approves them', async () => {
   const advisories = await evaluateShellAutoApprovalAdvisories({
     commands: [{ id: 'call-red', command: 'rm -rf /' }],
     history: [{ role: 'user', type: 'message', content: 'clean the machine' }],
@@ -476,8 +476,8 @@ test('keeps RED commands system-rejected even if the LLM approves them', async (
   });
 
   const redAdvisory = advisories.get('call-red');
-  t.is(redAdvisory?.approved, false);
-  t.is(redAdvisory?.source, 'system');
-  t.regex(redAdvisory?.reasoning ?? '', /Blocked by safety heuristics \(RED\):/);
-  t.regex(redAdvisory?.reasoning ?? '', /Model advisory: The model incorrectly approved/);
+  expect(redAdvisory?.approved).toBe(false);
+  expect(redAdvisory?.source).toBe('system');
+  expect(redAdvisory?.reasoning ?? '').toMatch(/Blocked by safety heuristics \(RED\):/);
+  expect(redAdvisory?.reasoning ?? '').toMatch(/Model advisory: The model incorrectly approved/);
 });

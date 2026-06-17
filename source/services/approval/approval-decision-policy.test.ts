@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   ManualApprovalDecisionPolicy,
   ShellAutoApprovalDecisionPolicy,
@@ -50,19 +50,19 @@ const createMockAgentClient = () => {
 
 // ── ManualApprovalDecisionPolicy ────────────────────────────────
 
-test('ManualApprovalDecisionPolicy always returns prompt', async (t) => {
+it('ManualApprovalDecisionPolicy always returns prompt', async () => {
   const policy: ApprovalDecisionPolicy = new ManualApprovalDecisionPolicy();
   const result = await policy.decide({
     toolName: 'shell',
     argumentsText: 'ls',
     callId: 'c1',
   });
-  t.is(result, 'prompt');
+  expect(result).toBe('prompt');
 });
 
 // ── ShellAutoApprovalDecisionPolicy ──────────────────────────────
 
-test('ShellAutoApprovalDecisionPolicy returns approve for auto-approvable shell command', async (t) => {
+it('ShellAutoApprovalDecisionPolicy returns approve for auto-approvable shell command', async () => {
   const client = createMockAgentClient();
   const conversationStore = new ConversationStore();
 
@@ -87,10 +87,10 @@ test('ShellAutoApprovalDecisionPolicy returns approve for auto-approvable shell 
     callId: 'c1',
     llmAdvisory: { reasoning: 'safe', approved: true, model: 'test', source: 'llm' },
   });
-  t.is(result, 'approve');
+  expect(result).toBe('approve');
 });
 
-test('ShellAutoApprovalDecisionPolicy returns prompt for non-shell tool', async (t) => {
+it('ShellAutoApprovalDecisionPolicy returns prompt for non-shell tool', async () => {
   const client = createMockAgentClient();
   const conversationStore = new ConversationStore();
 
@@ -114,10 +114,10 @@ test('ShellAutoApprovalDecisionPolicy returns prompt for non-shell tool', async 
     argumentsText: 'patch',
     callId: 'c1',
   });
-  t.is(result, 'prompt');
+  expect(result).toBe('prompt');
 });
 
-test('ShellAutoApprovalDecisionPolicy returns prompt without advisory', async (t) => {
+it('ShellAutoApprovalDecisionPolicy returns prompt without advisory', async () => {
   const client = createMockAgentClient();
   const conversationStore = new ConversationStore();
 
@@ -141,10 +141,10 @@ test('ShellAutoApprovalDecisionPolicy returns prompt without advisory', async (t
     argumentsText: 'ls',
     callId: 'c1',
   });
-  t.is(result, 'prompt');
+  expect(result).toBe('prompt');
 });
 
-test('ShellAutoApprovalDecisionPolicy returns prompt when advisory says not approved', async (t) => {
+it('ShellAutoApprovalDecisionPolicy returns prompt when advisory says not approved', async () => {
   const client = createMockAgentClient();
   const conversationStore = new ConversationStore();
 
@@ -169,5 +169,5 @@ test('ShellAutoApprovalDecisionPolicy returns prompt when advisory says not appr
     callId: 'c1',
     llmAdvisory: { reasoning: 'dangerous', approved: false, model: 'test', source: 'llm' },
   });
-  t.is(result, 'prompt');
+  expect(result).toBe('prompt');
 });

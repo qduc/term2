@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -88,30 +88,30 @@ function extractOverwriteCode(error: string): string {
   return match[1];
 }
 
-test.serial('parameters default overwrite to false', (t) => {
+it.sequential('parameters default overwrite to false', () => {
   const tool = createTool();
 
   const parsed = tool.parameters.safeParse({ path: 'new.txt', content: 'content' });
 
-  t.true(parsed.success);
+  expect(parsed.success).toBe(true);
   if (parsed.success) {
-    t.false(parsed.data.overwrite);
+    expect(parsed.data.overwrite).toBe(false);
   }
 });
 
-test.serial('parameters accept overwrite true', (t) => {
+it.sequential('parameters accept overwrite true', () => {
   const tool = createTool();
 
-  t.true(tool.parameters.safeParse({ path: 'new.txt', content: 'content', overwrite: true }).success);
+  expect(tool.parameters.safeParse({ path: 'new.txt', content: 'content', overwrite: true }).success).toBe(true);
 });
 
-test.serial('parameters reject overwrite null', (t) => {
+it.sequential('parameters reject overwrite null', () => {
   const tool = createTool();
 
-  t.false(tool.parameters.safeParse({ path: 'new.txt', content: 'content', overwrite: null }).success);
+  expect(tool.parameters.safeParse({ path: 'new.txt', content: 'content', overwrite: null }).success).toBe(false);
 });
 
-test.serial('needsApproval auto-approves creation when inside workspace', async (t) => {
+it.sequential('needsApproval auto-approves creation when inside workspace', async () => {
   await withTempDir(async () => {
     const tool = createTool(createMockSettingsService());
     const filePath = 'new-file.txt';
@@ -121,11 +121,11 @@ test.serial('needsApproval auto-approves creation when inside workspace', async 
       content: 'initial content',
     });
 
-    t.false(result);
+    expect(result).toBe(false);
   });
 });
 
-test.serial('execute creates a new file and returns success', async (t) => {
+it.sequential('execute creates a new file and returns success', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'test-file.txt';
@@ -138,15 +138,15 @@ test.serial('execute creates a new file and returns success', async (t) => {
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
-    t.true(parsed.output[0].message!.includes(filePath));
+    expect(parsed.output[0].success).toBe(true);
+    expect(parsed.output[0].message!.includes(filePath)).toBe(true);
 
     const createdContent = await fs.readFile(absPath, 'utf8');
-    t.is(createdContent, content);
+    expect(createdContent).toBe(content);
   });
 });
 
-test.serial('execute returns overwrite confirmation and preserves existing file', async (t) => {
+it.sequential('execute returns overwrite confirmation and preserves existing file', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'existing.txt';
@@ -159,17 +159,17 @@ test.serial('execute returns overwrite confirmation and preserves existing file'
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('confirm'));
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error.includes('confirm')).toBe(true);
     const code = extractOverwriteCode(parsed.output[0].error);
-    t.is(code.length, 6);
+    expect(code.length).toBe(6);
 
     const content = await fs.readFile(absPath, 'utf8');
-    t.is(content, 'original');
+    expect(content).toBe('original');
   });
 });
 
-test.serial('execute overwrites using the confirmation code and original content', async (t) => {
+it.sequential('execute overwrites using the confirmation code and original content', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'existing.txt';
@@ -192,15 +192,15 @@ test.serial('execute overwrites using the confirmation code and original content
     });
 
     const secondParsed = parsePlainResult(secondResult);
-    t.true(secondParsed.output[0].success);
-    t.true(secondParsed.output[0].message.includes('Overwrote'));
+    expect(secondParsed.output[0].success).toBe(true);
+    expect(secondParsed.output[0].message.includes('Overwrote')).toBe(true);
 
     const fileContent = await fs.readFile(absPath, 'utf8');
-    t.is(fileContent, 'replacement content');
+    expect(fileContent).toBe('replacement content');
   });
 });
 
-test.serial('execute rejects a wrong overwrite code and preserves the file', async (t) => {
+it.sequential('execute rejects a wrong overwrite code and preserves the file', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'existing.txt';
@@ -223,15 +223,15 @@ test.serial('execute rejects a wrong overwrite code and preserves the file', asy
     });
 
     const secondParsed = parsePlainResult(secondResult);
-    t.false(secondParsed.output[0].success);
-    t.true(secondParsed.output[0].error.includes('confirmation'));
+    expect(secondParsed.output[0].success).toBe(false);
+    expect(secondParsed.output[0].error.includes('confirmation')).toBe(true);
 
     const content = await fs.readFile(absPath, 'utf8');
-    t.is(content, 'original');
+    expect(content).toBe('original');
   });
 });
 
-test.serial('execute treats confirmOverwriteCode string "undefined" as absent', async (t) => {
+it.sequential('execute treats confirmOverwriteCode string "undefined" as absent', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'existing.txt';
@@ -244,7 +244,7 @@ test.serial('execute treats confirmOverwriteCode string "undefined" as absent', 
       content: 'replacement content',
     });
     const firstParsed = parsePlainResult(firstResult);
-    t.false(firstParsed.output[0].success);
+    expect(firstParsed.output[0].success).toBe(false);
 
     // LLM sends confirmOverwriteCode as the string "undefined" instead of omitting it.
     // normalizeObjectParams strips the "undefined" sentinel so the tool sees it as
@@ -257,17 +257,17 @@ test.serial('execute treats confirmOverwriteCode string "undefined" as absent', 
       confirmOverwriteCode: 'undefined',
     };
     const normalized = normalizeObjectParams(rawParams, tool.parameters) as any;
-    t.is(normalized.confirmOverwriteCode, undefined, 'string "undefined" should be stripped');
+    expect(normalized.confirmOverwriteCode, 'string "undefined" should be stripped').toBe(undefined);
 
     const secondResult = await tool.execute(normalized);
     const secondParsed = parsePlainResult(secondResult);
-    t.true(secondParsed.output[0].success);
+    expect(secondParsed.output[0].success).toBe(true);
     const diskContent = await fs.readFile(absPath, 'utf8');
-    t.is(diskContent, 'replacement content');
+    expect(diskContent).toBe('replacement content');
   });
 });
 
-test.serial('execute overwrites directly when overwrite=true without confirmation code', async (t) => {
+it.sequential('execute overwrites directly when overwrite=true without confirmation code', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'existing.txt';
@@ -281,15 +281,15 @@ test.serial('execute overwrites directly when overwrite=true without confirmatio
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
-    t.true(parsed.output[0].message.includes('Overwrote'));
+    expect(parsed.output[0].success).toBe(true);
+    expect(parsed.output[0].message.includes('Overwrote')).toBe(true);
 
     const content = await fs.readFile(absPath, 'utf8');
-    t.is(content, 'replacement content');
+    expect(content).toBe('replacement content');
   });
 });
 
-test.serial('execute invalidates pending code after successful overwrite', async (t) => {
+it.sequential('execute invalidates pending code after successful overwrite', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'existing.txt';
@@ -309,7 +309,7 @@ test.serial('execute invalidates pending code after successful overwrite', async
       content: 'new content',
       overwrite: true,
     });
-    t.true(parsePlainResult(secondResult).success);
+    expect(parsePlainResult(secondResult).success).toBe(true);
 
     // Step 3: the old confirmation code should no longer work
     const thirdResult = await tool.execute({
@@ -319,16 +319,16 @@ test.serial('execute invalidates pending code after successful overwrite', async
       confirmOverwriteCode: code,
     });
     const thirdParsed = parsePlainResult(thirdResult);
-    t.false(thirdParsed.success);
-    t.true(thirdParsed.error.includes('No matching overwrite confirmation'));
+    expect(thirdParsed.success).toBe(false);
+    expect(thirdParsed.error.includes('No matching overwrite confirmation')).toBe(true);
 
     // File should still have the content from step 2
     const content = await fs.readFile(absPath, 'utf8');
-    t.is(content, 'new content');
+    expect(content).toBe('new content');
   });
 });
 
-test.serial('execute overwrites directly even when stale pending entry exists from prior attempt', async (t) => {
+it.sequential('execute overwrites directly even when stale pending entry exists from prior attempt', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'existing.txt';
@@ -341,8 +341,8 @@ test.serial('execute overwrites directly even when stale pending entry exists fr
       content: 'stale content',
     });
     const firstParsed = parsePlainResult(firstResult);
-    t.false(firstParsed.output[0].success);
-    t.true(firstParsed.output[0].error.includes('confirm'));
+    expect(firstParsed.output[0].success).toBe(false);
+    expect(firstParsed.output[0].error.includes('confirm')).toBe(true);
 
     // Step 2: agent skips the code and overwrites directly with new content
     const secondResult = await tool.execute({
@@ -352,14 +352,14 @@ test.serial('execute overwrites directly even when stale pending entry exists fr
     });
 
     const secondParsed = parsePlainResult(secondResult);
-    t.true(secondParsed.output[0].success);
+    expect(secondParsed.output[0].success).toBe(true);
 
     const content = await fs.readFile(absPath, 'utf8');
-    t.is(content, 'new content');
+    expect(content).toBe('new content');
   });
 });
 
-test.serial('execute creates a new file even when overwrite is true', async (t) => {
+it.sequential('execute creates a new file even when overwrite is true', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'fresh.txt';
@@ -372,14 +372,14 @@ test.serial('execute creates a new file even when overwrite is true', async (t) 
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const content = await fs.readFile(absPath, 'utf8');
-    t.is(content, 'fresh content');
+    expect(content).toBe('fresh content');
   });
 });
 
-test.serial('execute overwrites a remote existing file after confirmation', async (t) => {
+it.sequential('execute overwrites a remote existing file after confirmation', async () => {
   const remoteDir = '/remote/workspace';
   const filePath = 'existing.txt';
   const absPath = path.posix.join(remoteDir, filePath);
@@ -393,7 +393,7 @@ test.serial('execute overwrites a remote existing file after confirmation', asyn
 
   const firstParsed = parsePlainResult(firstResult);
   const code = extractOverwriteCode(firstParsed.output[0].error);
-  t.is(files.get(absPath), 'original');
+  expect(files.get(absPath)).toBe('original');
 
   const secondResult = await tool.execute({
     path: filePath,
@@ -403,11 +403,11 @@ test.serial('execute overwrites a remote existing file after confirmation', asyn
   });
 
   const secondParsed = parsePlainResult(secondResult);
-  t.true(secondParsed.output[0].success);
-  t.is(files.get(absPath), 'replacement content');
+  expect(secondParsed.output[0].success).toBe(true);
+  expect(files.get(absPath)).toBe('replacement content');
 });
 
-test.serial('execute creates parent directories automatically', async (t) => {
+it.sequential('execute creates parent directories automatically', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'subdir/deep/file.txt';
@@ -420,14 +420,14 @@ test.serial('execute creates parent directories automatically', async (t) => {
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const createdContent = await fs.readFile(absPath, 'utf8');
-    t.is(createdContent, content);
+    expect(createdContent).toBe(content);
   });
 });
 
-test.serial('formatCommandMessage returns correct base message structure', async (t) => {
+it.sequential('formatCommandMessage returns correct base message structure', async () => {
   const tool = createTool();
   const callArgs = { path: 'new.txt', content: 'test' };
 
@@ -440,14 +440,14 @@ test.serial('formatCommandMessage returns correct base message structure', async
 
   const messages = tool.formatCommandMessage(item, 0, new Map());
 
-  t.is(messages.length, 1);
-  t.is(messages[0].command, 'create_file "new.txt"');
-  t.true(messages[0].success);
-  t.is(messages[0].toolName, 'create_file');
-  t.deepEqual(messages[0].toolArgs, callArgs);
+  expect(messages.length).toBe(1);
+  expect(messages[0].command).toBe('create_file "new.txt"');
+  expect(messages[0].success).toBe(true);
+  expect(messages[0].toolName).toBe('create_file');
+  expect(messages[0].toolArgs).toEqual(callArgs);
 });
 
-test.serial('needsApproval requires approval and handles error when path is outside workspace', async (t) => {
+it.sequential('needsApproval requires approval and handles error when path is outside workspace', async () => {
   await withTempDir(async () => {
     const tool = createTool(createMockSettingsService());
     const filePath = '../outside-file.txt';
@@ -457,6 +457,6 @@ test.serial('needsApproval requires approval and handles error when path is outs
       content: 'initial content',
     });
 
-    t.true(result);
+    expect(result).toBe(true);
   });
 });

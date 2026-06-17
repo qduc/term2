@@ -1,54 +1,49 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import * as path from 'path';
 import { homedir } from 'os';
 import { resolveWorkspacePath } from './utils.js';
 
-test('resolveWorkspacePath: expands ~ to home directory', (t) => {
+it('resolveWorkspacePath: expands ~ to home directory', () => {
   const home = homedir();
   const workspace = '/Users/test/workspace';
 
   // Test ~/ expansion
   const resolved = resolveWorkspacePath('~/documents/file.txt', workspace, { allowOutsideWorkspace: true });
-  t.is(resolved, path.join(home, 'documents', 'file.txt'));
+  expect(resolved).toBe(path.join(home, 'documents', 'file.txt'));
 
   // Test ~ expansion
   const resolvedHome = resolveWorkspacePath('~', workspace, { allowOutsideWorkspace: true });
-  t.is(resolvedHome, home);
+  expect(resolvedHome).toBe(home);
 });
 
-test('resolveWorkspacePath: throws if ~ expanded path is outside workspace and not allowed', (t) => {
+it('resolveWorkspacePath: throws if ~ expanded path is outside workspace and not allowed', () => {
   const workspace = '/tmp/workspace';
 
-  t.throws(
-    () => {
-      resolveWorkspacePath('~/somefile', workspace, { allowOutsideWorkspace: false });
-    },
-    { message: /Operation outside workspace/ },
-  );
+  expect(() => {
+    resolveWorkspacePath('~/somefile', workspace, { allowOutsideWorkspace: false });
+  }).toThrow(/Operation outside workspace/);
 });
 
-test('resolveWorkspacePath: handles regular relative paths', (t) => {
+it('resolveWorkspacePath: handles regular relative paths', () => {
   const workspace = '/tmp/workspace';
   const resolved = resolveWorkspacePath('src/main.ts', workspace);
-  t.is(resolved, path.join(workspace, 'src/main.ts'));
+  expect(resolved).toBe(path.join(workspace, 'src/main.ts'));
 });
 
-test('resolveWorkspacePath: allows paths under /tmp or /private/tmp even when outside workspace', (t) => {
+it('resolveWorkspacePath: allows paths under /tmp or /private/tmp even when outside workspace', () => {
   const workspace = '/Users/test/workspace';
 
   // Test /tmp path
   const resolvedTmp = resolveWorkspacePath('/tmp/test-file.txt', workspace);
-  t.is(resolvedTmp, path.normalize('/tmp/test-file.txt'));
+  expect(resolvedTmp).toBe(path.normalize('/tmp/test-file.txt'));
 
   // Test /private/tmp path
   const resolvedPrivateTmp = resolveWorkspacePath('/private/tmp/sub/file.txt', workspace);
-  t.is(resolvedPrivateTmp, path.normalize('/private/tmp/sub/file.txt'));
+  expect(resolvedPrivateTmp).toBe(path.normalize('/private/tmp/sub/file.txt'));
 
   // Test that /opt or other outside paths still throw
-  t.throws(
-    () => {
-      resolveWorkspacePath('/opt/app.log', workspace);
-    },
-    { message: /Operation outside workspace/ },
-  );
+
+  expect(() => {
+    resolveWorkspacePath('/opt/app.log', workspace);
+  }).toThrow(/Operation outside workspace/);
 });

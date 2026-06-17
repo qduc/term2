@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   filterCommands,
   shouldAutocomplete,
@@ -27,13 +27,13 @@ const MOCK_COMMANDS: SlashCommand[] = [
 ];
 
 // filterCommands tests
-test('filterCommands - empty filter returns all commands in original order', (t) => {
+it('filterCommands - empty filter returns all commands in original order', () => {
   const result = filterCommands(MOCK_COMMANDS, '');
-  t.is(result.length, MOCK_COMMANDS.length);
-  t.deepEqual(result, MOCK_COMMANDS);
+  expect(result.length).toBe(MOCK_COMMANDS.length);
+  expect(result).toEqual(MOCK_COMMANDS);
 });
 
-test('filterCommands - simple partial match (case insensitive)', (t) => {
+it('filterCommands - simple partial match (case insensitive)', () => {
   const cases: Array<{ filter: string; expectedNames: string[] }> = [
     { filter: 'mod', expectedNames: ['model'] },
     { filter: 'MODEL', expectedNames: ['model'] },
@@ -45,22 +45,22 @@ test('filterCommands - simple partial match (case insensitive)', (t) => {
   for (const { filter, expectedNames } of cases) {
     const result = filterCommands(MOCK_COMMANDS, filter);
     const resultNames = result.map((cmd) => cmd.name);
-    t.deepEqual(resultNames, expectedNames, `Filter "${filter}" should match ${expectedNames.join(', ')}`);
+    expect(resultNames, `Filter "${filter}" should match ${expectedNames.join(', ')}`).toEqual(expectedNames);
   }
 });
 
-test('filterCommands - no match returns empty array', (t) => {
+it('filterCommands - no match returns empty array', () => {
   const result = filterCommands(MOCK_COMMANDS, 'xyz');
-  t.is(result.length, 0);
+  expect(result.length).toBe(0);
 });
 
-test('filterCommands - exact match works', (t) => {
+it('filterCommands - exact match works', () => {
   const result = filterCommands(MOCK_COMMANDS, 'clear');
-  t.is(result.length, 1);
-  t.is(result[0]!.name, 'clear');
+  expect(result.length).toBe(1);
+  expect(result[0]!.name).toBe('clear');
 });
 
-test('filterCommands - command with arguments (space present)', (t) => {
+it('filterCommands - command with arguments (space present)', () => {
   const cases: Array<{ filter: string; expectedNames: string[] }> = [
     { filter: 'model ', expectedNames: ['model'] },
     { filter: 'model gpt-4', expectedNames: ['model'] },
@@ -72,29 +72,29 @@ test('filterCommands - command with arguments (space present)', (t) => {
   for (const { filter, expectedNames } of cases) {
     const result = filterCommands(MOCK_COMMANDS, filter);
     const resultNames = result.map((cmd) => cmd.name);
-    t.deepEqual(resultNames, expectedNames, `Filter "${filter}" should match ${expectedNames.join(', ')}`);
+    expect(resultNames, `Filter "${filter}" should match ${expectedNames.join(', ')}`).toEqual(expectedNames);
   }
 });
 
-test('filterCommands - command with args does not match other commands', (t) => {
+it('filterCommands - command with args does not match other commands', () => {
   const result = filterCommands(MOCK_COMMANDS, 'modelx gpt-4');
-  t.is(result.length, 0);
+  expect(result.length).toBe(0);
 });
 
-test('filterCommands - partial match includes substring anywhere', (t) => {
+it('filterCommands - partial match includes substring anywhere', () => {
   // "el" should match "model" and "help" (both contain "el")
   const result = filterCommands(MOCK_COMMANDS, 'el');
   const resultNames = result.map((cmd) => cmd.name);
-  t.true(resultNames.includes('model'));
-  t.true(resultNames.includes('help'));
+  expect(resultNames.includes('model')).toBe(true);
+  expect(resultNames.includes('help')).toBe(true);
 });
 
-test('filterCommands - handles empty commands array', (t) => {
+it('filterCommands - handles empty commands array', () => {
   const result = filterCommands([], 'test');
-  t.is(result.length, 0);
+  expect(result.length).toBe(0);
 });
 
-test('filterCommands - multiple matches returned in order', (t) => {
+it('filterCommands - multiple matches returned in order', () => {
   const commands: SlashCommand[] = [
     { name: 'test1', description: '', action: () => {} },
     { name: 'test2', description: '', action: () => {} },
@@ -102,25 +102,25 @@ test('filterCommands - multiple matches returned in order', (t) => {
   ];
 
   const result = filterCommands(commands, 'test');
-  t.is(result.length, 3);
-  t.is(result[0]!.name, 'test1');
-  t.is(result[1]!.name, 'test2');
-  t.is(result[2]!.name, 'test3');
+  expect(result.length).toBe(3);
+  expect(result[0]!.name).toBe('test1');
+  expect(result[1]!.name).toBe('test2');
+  expect(result[2]!.name).toBe('test3');
 });
 
 // shouldAutocomplete tests
-test('shouldAutocomplete - returns false when command does not expect args', (t) => {
+it('shouldAutocomplete - returns false when command does not expect args', () => {
   const command: SlashCommand = {
     name: 'clear',
     description: 'Clear screen',
     action: () => {},
   };
 
-  t.false(shouldAutocomplete(command, 'clear'));
-  t.false(shouldAutocomplete(command, 'cle'));
+  expect(shouldAutocomplete(command, 'clear')).toBe(false);
+  expect(shouldAutocomplete(command, 'cle')).toBe(false);
 });
 
-test('shouldAutocomplete - returns true when command expects args and filter is incomplete', (t) => {
+it('shouldAutocomplete - returns true when command expects args and filter is incomplete', () => {
   const command: SlashCommand = {
     name: 'model',
     description: 'Change model',
@@ -135,11 +135,11 @@ test('shouldAutocomplete - returns true when command expects args and filter is 
   ];
 
   for (const { filter, expected } of cases) {
-    t.is(shouldAutocomplete(command, filter), expected, `Filter "${filter}" should autocomplete: ${expected}`);
+    expect(shouldAutocomplete(command, filter), `Filter "${filter}" should autocomplete: ${expected}`).toBe(expected);
   }
 });
 
-test('shouldAutocomplete - returns false when command expects args and filter is complete', (t) => {
+it('shouldAutocomplete - returns false when command expects args and filter is complete', () => {
   const command: SlashCommand = {
     name: 'model',
     description: 'Change model',
@@ -154,11 +154,11 @@ test('shouldAutocomplete - returns false when command expects args and filter is
   ];
 
   for (const { filter, expected } of cases) {
-    t.is(shouldAutocomplete(command, filter), expected, `Filter "${filter}" should autocomplete: ${expected}`);
+    expect(shouldAutocomplete(command, filter), `Filter "${filter}" should autocomplete: ${expected}`).toBe(expected);
   }
 });
 
-test('shouldAutocomplete - handles edge case with expectsArgs undefined', (t) => {
+it('shouldAutocomplete - handles edge case with expectsArgs undefined', () => {
   const command: SlashCommand = {
     name: 'test',
     description: 'Test',
@@ -166,11 +166,11 @@ test('shouldAutocomplete - handles edge case with expectsArgs undefined', (t) =>
     expectsArgs: undefined,
   };
 
-  t.false(shouldAutocomplete(command, 'test'));
+  expect(shouldAutocomplete(command, 'test')).toBe(false);
 });
 
 // extractCommandArgs tests
-test('extractCommandArgs - extracts args after command name', (t) => {
+it('extractCommandArgs - extracts args after command name', () => {
   const cases: Array<{
     filter: string;
     commandName: string;
@@ -188,11 +188,11 @@ test('extractCommandArgs - extracts args after command name', (t) => {
 
   for (const { filter, commandName, expected } of cases) {
     const result = extractCommandArgs(filter, commandName);
-    t.is(result, expected, `Args for "${filter}" with command "${commandName}"`);
+    expect(result, `Args for "${filter}" with command "${commandName}"`).toBe(expected);
   }
 });
 
-test('extractCommandArgs - returns empty string when no args', (t) => {
+it('extractCommandArgs - returns empty string when no args', () => {
   const cases = [
     { filter: 'model', commandName: 'model' },
     { filter: 'model ', commandName: 'model' },
@@ -201,11 +201,11 @@ test('extractCommandArgs - returns empty string when no args', (t) => {
 
   for (const { filter, commandName } of cases) {
     const result = extractCommandArgs(filter, commandName);
-    t.is(result, '', `No args for "${filter}"`);
+    expect(result, `No args for "${filter}"`).toBe('');
   }
 });
 
-test('extractCommandArgs - trims whitespace from args', (t) => {
+it('extractCommandArgs - trims whitespace from args', () => {
   const cases = [
     { filter: 'model   gpt-4', commandName: 'model', expected: 'gpt-4' },
     { filter: 'model gpt-4  ', commandName: 'model', expected: 'gpt-4' },
@@ -214,11 +214,11 @@ test('extractCommandArgs - trims whitespace from args', (t) => {
 
   for (const { filter, commandName, expected } of cases) {
     const result = extractCommandArgs(filter, commandName);
-    t.is(result, expected, `Trimmed args for "${filter}"`);
+    expect(result, `Trimmed args for "${filter}"`).toBe(expected);
   }
 });
 
-test('extractCommandArgs - handles args with special characters', (t) => {
+it('extractCommandArgs - handles args with special characters', () => {
   const cases = [
     {
       filter: 'cmd arg-with-dashes',
@@ -244,17 +244,17 @@ test('extractCommandArgs - handles args with special characters', (t) => {
 
   for (const { filter, commandName, expected } of cases) {
     const result = extractCommandArgs(filter, commandName);
-    t.is(result, expected, `Special chars in args for "${filter}"`);
+    expect(result, `Special chars in args for "${filter}"`).toBe(expected);
   }
 });
 
-test('extractCommandArgs - handles empty filter', (t) => {
+it('extractCommandArgs - handles empty filter', () => {
   const result = extractCommandArgs('', 'cmd');
-  t.is(result, '');
+  expect(result).toBe('');
 });
 
 // Integration tests combining multiple functions
-test('Integration - filter and autocomplete flow for command with args', (t) => {
+it('Integration - filter and autocomplete flow for command with args', () => {
   const command: SlashCommand = {
     name: 'model',
     description: 'Change model',
@@ -264,20 +264,20 @@ test('Integration - filter and autocomplete flow for command with args', (t) => 
 
   // User types "mod"
   const filtered1 = filterCommands([command], 'mod');
-  t.is(filtered1.length, 1);
-  t.true(shouldAutocomplete(filtered1[0]!, 'mod'));
+  expect(filtered1.length).toBe(1);
+  expect(shouldAutocomplete(filtered1[0]!, 'mod')).toBe(true);
 
   // User types "model "
   const filtered2 = filterCommands([command], 'model ');
-  t.is(filtered2.length, 1);
-  t.false(shouldAutocomplete(filtered2[0]!, 'model '));
+  expect(filtered2.length).toBe(1);
+  expect(shouldAutocomplete(filtered2[0]!, 'model ')).toBe(false);
 
   // User types "model gpt-4"
   const args = extractCommandArgs('model gpt-4', 'model');
-  t.is(args, 'gpt-4');
+  expect(args).toBe('gpt-4');
 });
 
-test('Integration - filter and execute flow for command without args', (t) => {
+it('Integration - filter and execute flow for command without args', () => {
   const command: SlashCommand = {
     name: 'clear',
     description: 'Clear screen',
@@ -286,15 +286,15 @@ test('Integration - filter and execute flow for command without args', (t) => {
 
   // User types "cle"
   const filtered = filterCommands([command], 'cle');
-  t.is(filtered.length, 1);
-  t.false(shouldAutocomplete(filtered[0]!, 'cle'));
+  expect(filtered.length).toBe(1);
+  expect(shouldAutocomplete(filtered[0]!, 'cle')).toBe(false);
 
   // Extract args (should be empty)
   const args = extractCommandArgs('clear', 'clear');
-  t.is(args, '');
+  expect(args).toBe('');
 });
 
-test('executeSlashCommandSelection clears input after successful command execution', (t) => {
+it('executeSlashCommandSelection clears input after successful command execution', () => {
   let input = '/cle';
   let closed = false;
   let actionCalled = false;
@@ -317,12 +317,12 @@ test('executeSlashCommandSelection clears input after successful command executi
     },
   });
 
-  t.true(actionCalled);
-  t.true(closed);
-  t.is(input, '');
+  expect(actionCalled).toBe(true);
+  expect(closed).toBe(true);
+  expect(input).toBe('');
 });
 
-test('executeSlashCommandSelection autocompletes and executes for expectsArgs commands', (t) => {
+it('executeSlashCommandSelection autocompletes and executes for expectsArgs commands', () => {
   let input = '/mod';
   let closed = false;
   let actionCalled = false;
@@ -347,12 +347,12 @@ test('executeSlashCommandSelection autocompletes and executes for expectsArgs co
     },
   });
 
-  t.true(actionCalled);
-  t.true(closed);
-  t.is(input, '/model ');
+  expect(actionCalled).toBe(true);
+  expect(closed).toBe(true);
+  expect(input).toBe('/model ');
 });
 
-test('executeSlashCommandSelection executes undo command after autocomplete', (t) => {
+it('executeSlashCommandSelection executes undo command after autocomplete', () => {
   let input = '/un';
   let closed = false;
   let undoMenuOpened = false;
@@ -377,8 +377,8 @@ test('executeSlashCommandSelection executes undo command after autocomplete', (t
     },
   });
 
-  t.true(undoMenuOpened, 'undo menu should open after selecting undo from slash menu');
-  t.true(closed, 'slash menu should close');
+  expect(undoMenuOpened).toBe(true);
+  expect(closed).toBe(true);
   // Action returns true → setInput('') clears the input
-  t.is(input, '');
+  expect(input).toBe('');
 });

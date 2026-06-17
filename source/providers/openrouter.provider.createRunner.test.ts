@@ -1,48 +1,48 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { getProvider } from './index.js';
 import type { ProviderDeps } from './registry.js';
 
-test('openrouter createRunner does not crash in ESM when api key is missing', (t) => {
+it('openrouter createRunner does not crash in ESM when api key is missing', () => {
   const originalKey = process.env.OPENROUTER_API_KEY;
   delete process.env.OPENROUTER_API_KEY;
-  t.teardown(() => {
+  try {
+    const provider = getProvider('openrouter');
+    expect(provider).toBeTruthy();
+    expect(typeof provider?.createRunner).toBe('function');
+
+    const deps: ProviderDeps = {
+      settingsService: {
+        get: <T = any>() => undefined as T,
+        set: () => {},
+      },
+      loggingService: {
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        debug: () => {},
+        security: () => {},
+        setCorrelationId: () => {},
+        getCorrelationId: () => undefined,
+        clearCorrelationId: () => {},
+      },
+    };
+
+    // This must not throw "ReferenceError: require is not defined" under ESM.
+    let runner: any = 'unset';
+    expect(() => {
+      runner = provider!.createRunner!(deps);
+    }).not.toThrow();
+
+    // With no API key, the OpenRouter provider should opt out (null runner).
+    expect(runner).toBe(null);
+  } finally {
     process.env.OPENROUTER_API_KEY = originalKey;
-  });
-
-  const provider = getProvider('openrouter');
-  t.truthy(provider, 'openrouter provider should be registered');
-  t.is(typeof provider?.createRunner, 'function');
-
-  const deps: ProviderDeps = {
-    settingsService: {
-      get: <T = any>() => undefined as T,
-      set: () => {},
-    },
-    loggingService: {
-      info: () => {},
-      warn: () => {},
-      error: () => {},
-      debug: () => {},
-      security: () => {},
-      setCorrelationId: () => {},
-      getCorrelationId: () => undefined,
-      clearCorrelationId: () => {},
-    },
-  };
-
-  // This must not throw "ReferenceError: require is not defined" under ESM.
-  let runner: any = 'unset';
-  t.notThrows(() => {
-    runner = provider!.createRunner!(deps);
-  });
-
-  // With no API key, the OpenRouter provider should opt out (null runner).
-  t.is(runner, null);
+  }
 });
 
-test('openrouter createRunner returns a runner when api key is configured', (t) => {
+it('openrouter createRunner returns a runner when api key is configured', () => {
   const provider = getProvider('openrouter');
-  t.truthy(provider, 'openrouter provider should be registered');
+  expect(provider).toBeTruthy();
 
   const deps: ProviderDeps = {
     settingsService: {
@@ -69,5 +69,5 @@ test('openrouter createRunner returns a runner when api key is configured', (t) 
 
   const runner = provider!.createRunner!(deps);
 
-  t.truthy(runner);
+  expect(runner).toBeTruthy();
 });

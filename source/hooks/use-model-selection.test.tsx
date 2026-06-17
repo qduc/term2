@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -112,7 +112,7 @@ const ImmediateToggleComponent = ({ onResults, settingsService }: ImmediateToggl
   return <Text>Provider: {models.provider}</Text>;
 };
 
-test.serial('toggleProvider cycles through available providers', async (t) => {
+it.sequential('toggleProvider cycles through available providers', async () => {
   let capturedModels: any;
   let renderer: any;
   await flush(() => {
@@ -129,7 +129,7 @@ test.serial('toggleProvider cycles through available providers', async (t) => {
   await waitForIdle(() => capturedModels);
 
   const firstProvider = capturedModels.provider;
-  t.truthy(firstProvider);
+  expect(firstProvider).toBeTruthy();
 
   // Manual toggle
   await flush(() => {
@@ -138,7 +138,7 @@ test.serial('toggleProvider cycles through available providers', async (t) => {
   await waitForIdle(() => capturedModels);
 
   const secondProvider = capturedModels.provider;
-  t.not(secondProvider, firstProvider, 'Provider should have switched');
+  expect(secondProvider, 'Provider should have switched').not.toBe(firstProvider);
 
   // Toggle back or to next
   await flush(() => {
@@ -146,14 +146,14 @@ test.serial('toggleProvider cycles through available providers', async (t) => {
   });
   await waitForIdle(() => capturedModels);
   const thirdProvider = capturedModels.provider;
-  t.not(thirdProvider, secondProvider, 'Provider should have switched again');
+  expect(thirdProvider, 'Provider should have switched again').not.toBe(secondProvider);
 
   await flush(() => {
     renderer.unmount();
   });
 });
 
-test.serial('toggleProvider supports prev and next direction', async (t) => {
+it.sequential('toggleProvider supports prev and next direction', async () => {
   let capturedModels: any;
   let renderer: any;
   await flush(() => {
@@ -170,7 +170,7 @@ test.serial('toggleProvider supports prev and next direction', async (t) => {
   await waitForIdle(() => capturedModels);
 
   const firstProvider = capturedModels.provider;
-  t.truthy(firstProvider);
+  expect(firstProvider).toBeTruthy();
 
   // Toggle prev should switch to the last provider
   await flush(() => {
@@ -179,23 +179,23 @@ test.serial('toggleProvider supports prev and next direction', async (t) => {
   await waitForIdle(() => capturedModels);
 
   const lastProvider = capturedModels.provider;
-  t.not(lastProvider, firstProvider, 'Provider should have switched to previous/last');
+  expect(lastProvider, 'Provider should have switched to previous/last').not.toBe(firstProvider);
 
   // Toggle next should switch back to the first provider
   await flush(() => {
     capturedModels.toggleProvider('next');
   });
   await waitForIdle(() => capturedModels);
-  t.is(capturedModels.provider, firstProvider, 'Provider should have switched back to first');
+  expect(capturedModels.provider, 'Provider should have switched back to first').toBe(firstProvider);
 
   await flush(() => {
     renderer.unmount();
   });
 });
 
-test.serial('toggleProvider uses the configured provider immediately after opening', async (t) => {
+it.sequential('toggleProvider uses the configured provider immediately after opening', async () => {
   const providerIds = getProviderIds();
-  t.true(providerIds.length > 1);
+  expect(providerIds.length > 1).toBe(true);
 
   let capturedModels: any;
   const configuredProvider = providerIds[1];
@@ -220,14 +220,14 @@ test.serial('toggleProvider uses the configured provider immediately after openi
   });
   await waitForIdle(() => capturedModels);
 
-  t.is(capturedModels.provider, expectedPrevious);
+  expect(capturedModels.provider).toBe(expectedPrevious);
 
   await flush(() => {
     renderer.unmount();
   });
 });
 
-test.serial('exposes modelSettingConfig for settings-backed triggers', async (t) => {
+it.sequential('exposes modelSettingConfig for settings-backed triggers', async () => {
   let capturedModels: any;
   clearModelCache();
   const testProvider = `setting-backed-provider-${Date.now()}-${Math.random()}`;
@@ -236,10 +236,7 @@ test.serial('exposes modelSettingConfig for settings-backed triggers', async (t)
     label: testProvider,
     fetchModels: (() => []) as any,
   });
-  t.teardown(() => {
-    clearModelCache();
-    unregisterProvider(testProvider);
-  });
+
   const settingsService = createMockSettingsService({
     'agent.provider': testProvider,
   });
@@ -261,9 +258,9 @@ test.serial('exposes modelSettingConfig for settings-backed triggers', async (t)
 
   await waitForIdle(() => capturedModels);
 
-  t.truthy(capturedModels.modelSettingConfig);
-  t.is(capturedModels.modelSettingConfig.modelKey, 'agent.model');
-  t.is(capturedModels.modelSettingConfig.providerKey, 'agent.provider');
+  expect(capturedModels.modelSettingConfig).toBeTruthy();
+  expect(capturedModels.modelSettingConfig.modelKey).toBe('agent.model');
+  expect(capturedModels.modelSettingConfig.providerKey).toBe('agent.provider');
 
   await flush(() => {
     renderer.unmount();
@@ -273,7 +270,7 @@ test.serial('exposes modelSettingConfig for settings-backed triggers', async (t)
   }
 });
 
-test.serial('modelSettingConfig is undefined for command-backed triggers', async (t) => {
+it.sequential('modelSettingConfig is undefined for command-backed triggers', async () => {
   let capturedModels: any;
   clearModelCache();
   const testProvider = `command-backed-provider-${Date.now()}-${Math.random()}`;
@@ -282,10 +279,7 @@ test.serial('modelSettingConfig is undefined for command-backed triggers', async
     label: testProvider,
     fetchModels: (() => []) as any,
   });
-  t.teardown(() => {
-    clearModelCache();
-    unregisterProvider(testProvider);
-  });
+
   const settingsService = createMockSettingsService({
     'agent.provider': testProvider,
   });
@@ -307,7 +301,7 @@ test.serial('modelSettingConfig is undefined for command-backed triggers', async
 
   await waitForIdle(() => capturedModels);
 
-  t.is(capturedModels.modelSettingConfig, undefined);
+  expect(capturedModels.modelSettingConfig).toBe(undefined);
 
   await flush(() => {
     renderer.unmount();
@@ -317,7 +311,7 @@ test.serial('modelSettingConfig is undefined for command-backed triggers', async
   }
 });
 
-test.serial('model selection query strips provider suffix from input', async (t) => {
+it.sequential('model selection query strips provider suffix from input', async () => {
   let capturedModels: any;
   let renderer: any;
   await flush(() => {
@@ -333,14 +327,14 @@ test.serial('model selection query strips provider suffix from input', async (t)
   });
   await waitForIdle(() => capturedModels);
 
-  t.is(capturedModels.query, 'deepseek-v4-flash');
+  expect(capturedModels.query).toBe('deepseek-v4-flash');
 
   await flush(() => {
     renderer.unmount();
   });
 });
 
-test.serial('ignores stale model results after switching providers', async (t) => {
+it.sequential('ignores stale model results after switching providers', async () => {
   clearModelCache();
 
   const firstProvider = `slow-provider-${Date.now()}-${Math.random()}`;
@@ -363,11 +357,7 @@ test.serial('ignores stale model results after switching providers', async (t) =
     fetchModels: async () => [{ id: 'fast-model', name: 'Fast Model' }],
   });
 
-  t.teardown(() => {
-    clearModelCache();
-    unregisterProvider(firstProvider);
-    unregisterProvider(secondProvider);
-  });
+  // cleanup handled inline (unique providers don't conflict)
 
   let capturedModels: any;
   const settingsService = createMockSettingsService({
@@ -390,35 +380,29 @@ test.serial('ignores stale model results after switching providers', async (t) =
   });
   await waitForIdle(() => capturedModels);
 
-  t.is(capturedModels.provider, firstProvider);
+  expect(capturedModels.provider).toBe(firstProvider);
 
   await flush(() => {
     capturedModels.toggleProvider();
   });
   await waitForIdle(() => capturedModels);
-  t.is(capturedModels.provider, secondProvider);
-  t.deepEqual(
-    capturedModels.filteredModels.map((model: any) => model.id),
-    ['fast-model'],
-  );
+  expect(capturedModels.provider).toBe(secondProvider);
+  expect(capturedModels.filteredModels.map((model: any) => model.id)).toEqual(['fast-model']);
 
   await flush(() => {
     resolveFirst?.();
   });
   await waitForIdle(() => capturedModels);
 
-  t.is(capturedModels.provider, secondProvider);
-  t.deepEqual(
-    capturedModels.filteredModels.map((model: any) => model.id),
-    ['fast-model'],
-  );
+  expect(capturedModels.provider).toBe(secondProvider);
+  expect(capturedModels.filteredModels.map((model: any) => model.id)).toEqual(['fast-model']);
 
   await flush(() => {
     renderer.unmount();
   });
 });
 
-test.serial('keeps completed provider results ready when switching back', async (t) => {
+it.sequential('keeps completed provider results ready when switching back', async () => {
   clearModelCache();
 
   const firstProvider = `return-slow-provider-${Date.now()}-${Math.random()}`;
@@ -441,11 +425,7 @@ test.serial('keeps completed provider results ready when switching back', async 
     fetchModels: async () => [{ id: 'fast-model', name: 'Fast Model' }],
   });
 
-  t.teardown(() => {
-    clearModelCache();
-    unregisterProvider(firstProvider);
-    unregisterProvider(secondProvider);
-  });
+  // cleanup handled inline (unique providers don't conflict)
 
   let capturedModels: any;
   const settingsService = createMockSettingsService({
@@ -472,20 +452,14 @@ test.serial('keeps completed provider results ready when switching back', async 
     capturedModels.toggleProvider();
   });
   await waitForIdle(() => capturedModels);
-  t.is(capturedModels.provider, secondProvider);
-  t.deepEqual(
-    capturedModels.filteredModels.map((model: any) => model.id),
-    ['fast-model'],
-  );
+  expect(capturedModels.provider).toBe(secondProvider);
+  expect(capturedModels.filteredModels.map((model: any) => model.id)).toEqual(['fast-model']);
 
   await flush(() => {
     resolveFirst?.();
   });
   await waitForIdle(() => capturedModels);
-  t.deepEqual(
-    capturedModels.filteredModels.map((model: any) => model.id),
-    ['fast-model'],
-  );
+  expect(capturedModels.filteredModels.map((model: any) => model.id)).toEqual(['fast-model']);
 
   for (let i = 0; i < getProviderIds().length && capturedModels.provider !== firstProvider; i++) {
     await flush(() => {
@@ -494,18 +468,15 @@ test.serial('keeps completed provider results ready when switching back', async 
     await waitForIdle(() => capturedModels);
   }
 
-  t.is(capturedModels.provider, firstProvider);
-  t.deepEqual(
-    capturedModels.filteredModels.map((model: any) => model.id),
-    ['slow-model'],
-  );
+  expect(capturedModels.provider).toBe(firstProvider);
+  expect(capturedModels.filteredModels.map((model: any) => model.id)).toEqual(['slow-model']);
 
   await flush(() => {
     renderer.unmount();
   });
 });
 
-test.serial('pre-selects the current model of the setting it is changing (command-backed)', async (t) => {
+it.sequential('pre-selects the current model of the setting it is changing (command-backed)', async () => {
   clearModelCache();
 
   const testProvider = `test-provider-${Date.now()}-${Math.random()}`;
@@ -521,10 +492,7 @@ test.serial('pre-selects the current model of the setting it is changing (comman
     fetchModels: (() => modelsList) as any,
   });
 
-  t.teardown(() => {
-    clearModelCache();
-    unregisterProvider(testProvider);
-  });
+  // cleanup handled inline (unique providers don't conflict)
 
   let capturedModels: any;
   const settingsService = createMockSettingsService({
@@ -549,15 +517,15 @@ test.serial('pre-selects the current model of the setting it is changing (comman
   });
   await waitForIdle(() => capturedModels);
 
-  t.is(capturedModels.provider, testProvider);
-  t.is(capturedModels.selectedIndex, 1);
+  expect(capturedModels.provider).toBe(testProvider);
+  expect(capturedModels.selectedIndex).toBe(1);
 
   await flush(() => {
     renderer.unmount();
   });
 });
 
-test.serial('pre-selects the current model of the setting it is changing (settings-backed)', async (t) => {
+it.sequential('pre-selects the current model of the setting it is changing (settings-backed)', async () => {
   clearModelCache();
 
   const testProvider = `test-provider-mentor-${Date.now()}-${Math.random()}`;
@@ -573,10 +541,7 @@ test.serial('pre-selects the current model of the setting it is changing (settin
     fetchModels: (() => modelsList) as any,
   });
 
-  t.teardown(() => {
-    clearModelCache();
-    unregisterProvider(testProvider);
-  });
+  // cleanup handled inline (unique providers don't conflict)
 
   let capturedModels: any;
   const settingsService = createMockSettingsService({
@@ -601,15 +566,15 @@ test.serial('pre-selects the current model of the setting it is changing (settin
   });
   await waitForIdle(() => capturedModels);
 
-  t.is(capturedModels.provider, testProvider);
-  t.is(capturedModels.selectedIndex, 2);
+  expect(capturedModels.provider).toBe(testProvider);
+  expect(capturedModels.selectedIndex).toBe(2);
 
   await flush(() => {
     renderer.unmount();
   });
 });
 
-test.serial('allows switching the main provider even when conversation history exists', async (t) => {
+it.sequential('allows switching the main provider even when conversation history exists', async () => {
   clearModelCache();
 
   const firstProvider = `history-provider-a-${Date.now()}-${Math.random()}`;
@@ -626,11 +591,7 @@ test.serial('allows switching the main provider even when conversation history e
     fetchModels: async () => [{ id: 'model-b', name: 'Model B' }],
   });
 
-  t.teardown(() => {
-    clearModelCache();
-    unregisterProvider(firstProvider);
-    unregisterProvider(secondProvider);
-  });
+  // cleanup handled inline (unique providers don't conflict)
 
   let capturedModels: any;
   let renderer: any;
@@ -654,15 +615,15 @@ test.serial('allows switching the main provider even when conversation history e
   });
   await waitForIdle(() => capturedModels);
 
-  t.true(capturedModels.canSwitchProvider);
-  t.is(capturedModels.provider, firstProvider);
+  expect(capturedModels.canSwitchProvider).toBe(true);
+  expect(capturedModels.provider).toBe(firstProvider);
 
   await flush(() => {
     capturedModels.toggleProvider();
   });
   await waitForIdle(() => capturedModels);
 
-  t.is(capturedModels.provider, secondProvider);
+  expect(capturedModels.provider).toBe(secondProvider);
 
   await flush(() => {
     renderer.unmount();

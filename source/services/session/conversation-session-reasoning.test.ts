@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createConversationSession } from './session-composition.js';
 import { LoggingService } from '../logging/logging-service.js';
 
@@ -9,7 +9,7 @@ const createSessionContextService = () => ({
   getContext: () => null,
 });
 
-test('ConversationSession extracts reasoning_content from stream', async (t) => {
+it('ConversationSession extracts reasoning_content from stream', async () => {
   const mockAgentClient: any = {
     startStream: async () => ({
       [Symbol.asyncIterator]: async function* () {
@@ -65,8 +65,8 @@ test('ConversationSession extracts reasoning_content from stream', async (t) => 
   }
 
   const reasoningEvents = events.filter((e) => e.type === 'reasoning_delta');
-  t.is(reasoningEvents.length, 2);
-  t.is(reasoningEvents[0].delta, 'think');
-  t.is(reasoningEvents[1].delta, 'ing');
-  t.is(reasoningEvents[1].fullText, 'thinking');
+  expect(reasoningEvents.length).toBe(2);
+  expect(reasoningEvents[0].delta).toBe('think');
+  expect(reasoningEvents[1].delta).toBe('ing');
+  expect(reasoningEvents[1].fullText).toBe('thinking');
 });

@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { AgentInputItem } from '@openai/agents';
 import { ConversationStore, SHELL_CONTEXT_PREFIX } from './conversation-store.js';
 
@@ -10,31 +10,31 @@ const addLegacyModeNotice = (store: ConversationStore, text: string) => {
   } as AgentInputItem);
 };
 
-test('addUserMessage() appends a user message item', (t) => {
+it('addUserMessage() appends a user message item', () => {
   const store = new ConversationStore();
   store.addUserMessage('Hello');
 
   const history = store.getHistory();
-  t.is(history.length, 1);
+  expect(history.length).toBe(1);
   const item: any = history[0];
-  t.is(item.role, 'user');
-  t.is(item.type, 'message');
-  t.is(item.content, 'Hello');
+  expect(item.role).toBe('user');
+  expect(item.type).toBe('message');
+  expect(item.content).toBe('Hello');
 });
 
-test('addUserTurn() appends a text-only user message item', (t) => {
+it('addUserTurn() appends a text-only user message item', () => {
   const store = new ConversationStore();
   store.addUserTurn({ text: 'Hello' });
 
   const history = store.getHistory();
-  t.is(history.length, 1);
+  expect(history.length).toBe(1);
   const item: any = history[0];
-  t.is(item.role, 'user');
-  t.is(item.type, 'message');
-  t.is(item.content, 'Hello');
+  expect(item.role).toBe('user');
+  expect(item.type).toBe('message');
+  expect(item.content).toBe('Hello');
 });
 
-test('addUserTurn() appends multimodal user message content', (t) => {
+it('addUserTurn() appends multimodal user message content', () => {
   const store = new ConversationStore();
   store.addUserTurn({
     text: 'Describe this',
@@ -42,27 +42,27 @@ test('addUserTurn() appends multimodal user message content', (t) => {
   });
 
   const history = store.getHistory();
-  t.is(history.length, 1);
+  expect(history.length).toBe(1);
   const item: any = history[0];
-  t.is(item.role, 'user');
-  t.is(item.type, 'message');
-  t.deepEqual(item.content, [
+  expect(item.role).toBe('user');
+  expect(item.type).toBe('message');
+  expect(item.content).toEqual([
     { type: 'input_text', text: 'Describe this' },
     { type: 'input_image', image: 'data:image/png;base64,abc123', detail: 'auto' },
   ]);
 });
 
-test('getLastUserMessage() returns text from multimodal user content', (t) => {
+it('getLastUserMessage() returns text from multimodal user content', () => {
   const store = new ConversationStore();
   store.addUserTurn({
     text: 'What is in this image?',
     images: [{ id: 'img-1', data: 'abc123', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
   });
 
-  t.is(store.getLastUserMessage(), 'What is in this image?');
+  expect(store.getLastUserMessage()).toBe('What is in this image?');
 });
 
-test('getHistory() returns a copy (external mutation does not affect store)', (t) => {
+it('getHistory() returns a copy (external mutation does not affect store)', () => {
   const store = new ConversationStore();
   store.addUserMessage('A');
 
@@ -75,20 +75,20 @@ test('getHistory() returns a copy (external mutation does not affect store)', (t
   } as AgentInputItem);
 
   const history2 = store.getHistory();
-  t.is(history2.length, 1);
+  expect(history2.length).toBe(1);
   const item: any = history2[0];
-  t.is(item.content, 'A');
+  expect(item.content).toBe('A');
 });
 
-test('getLastUserMessage() returns the most recent user message text', (t) => {
+it('getLastUserMessage() returns the most recent user message text', () => {
   const store = new ConversationStore();
   store.addUserMessage('First');
   store.addUserMessage('Second');
 
-  t.is(store.getLastUserMessage(), 'Second');
+  expect(store.getLastUserMessage()).toBe('Second');
 });
 
-test('appendOutput() appends items to existing history', (t) => {
+it('appendOutput() appends items to existing history', () => {
   const store = new ConversationStore();
   store.addUserMessage('Hi');
 
@@ -97,10 +97,10 @@ test('appendOutput() appends items to existing history', (t) => {
   ] satisfies AgentInputItem[]);
 
   const history = store.getHistory();
-  t.is(history.length, 2);
+  expect(history.length).toBe(2);
   const last: any = history[history.length - 1];
-  t.is(last.role, 'assistant');
-  t.is(last.content[0].text, 'Hello!');
+  expect(last.role).toBe('assistant');
+  expect(last.content[0].text).toBe('Hello!');
 
   store.addUserMessage('How are you?');
   store.appendOutput([
@@ -112,10 +112,10 @@ test('appendOutput() appends items to existing history', (t) => {
     },
   ] satisfies AgentInputItem[]);
 
-  t.is(store.getHistory().length, 4);
+  expect(store.getHistory().length).toBe(4);
 });
 
-test('replaceHistory() overwrites the store with a full transcript', (t) => {
+it('replaceHistory() overwrites the store with a full transcript', () => {
   const store = new ConversationStore();
   store.addUserMessage('Old');
 
@@ -125,30 +125,30 @@ test('replaceHistory() overwrites the store with a full transcript', (t) => {
   ] satisfies AgentInputItem[]);
 
   const history = store.getHistory();
-  t.is(history.length, 2);
-  t.is((history[0] as any).content, 'New Q');
-  t.is((history[1] as any).content[0].text, 'New A');
+  expect(history.length).toBe(2);
+  expect((history[0] as any).content).toBe('New Q');
+  expect((history[1] as any).content[0].text).toBe('New A');
 });
 
-test('appendOutput() is a no-op on empty or non-array input', (t) => {
+it('appendOutput() is a no-op on empty or non-array input', () => {
   const store = new ConversationStore();
   store.addUserMessage('A');
   store.appendOutput([] as any);
   store.appendOutput(null as any);
   store.appendOutput(undefined as any);
-  t.is(store.getHistory().length, 1);
+  expect(store.getHistory().length).toBe(1);
 });
 
-test('replaceHistory() is a no-op on empty or non-array input', (t) => {
+it('replaceHistory() is a no-op on empty or non-array input', () => {
   const store = new ConversationStore();
   store.addUserMessage('A');
   store.replaceHistory([] as any);
   store.replaceHistory(null as any);
-  t.is(store.getHistory().length, 1);
-  t.is((store.getHistory()[0] as any).content, 'A');
+  expect(store.getHistory().length).toBe(1);
+  expect((store.getHistory()[0] as any).content).toBe('A');
 });
 
-test('appendOutput() returns deep clones (external mutation does not affect store)', (t) => {
+it('appendOutput() returns deep clones (external mutation does not affect store)', () => {
   const store = new ConversationStore();
   const items: AgentInputItem[] = [
     { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Original' }] },
@@ -156,19 +156,19 @@ test('appendOutput() returns deep clones (external mutation does not affect stor
   store.appendOutput(items);
   (items[0] as any).content[0].text = 'Mutated';
   const history = store.getHistory();
-  t.is((history[0] as any).content[0].text, 'Original');
+  expect((history[0] as any).content[0].text).toBe('Original');
 });
-test('clear() resets history', (t) => {
+it('clear() resets history', () => {
   const store = new ConversationStore();
   store.addUserMessage('Hello');
-  t.is(store.getHistory().length, 1);
+  expect(store.getHistory().length).toBe(1);
 
   store.clear();
-  t.is(store.getHistory().length, 0);
-  t.is(store.getLastUserMessage(), '');
+  expect(store.getHistory().length).toBe(0);
+  expect(store.getLastUserMessage()).toBe('');
 });
 
-test('addShellContext() appends shell history as user message', (t) => {
+it('addShellContext() appends shell history as user message', () => {
   const store = new ConversationStore();
   store.addUserMessage('Hello');
 
@@ -176,14 +176,14 @@ test('addShellContext() appends shell history as user message', (t) => {
   store.addShellContext(historyText);
 
   const history = store.getHistory();
-  t.is(history.length, 2);
+  expect(history.length).toBe(2);
   const item: any = history[1];
-  t.is(item.role, 'user');
-  t.is(item.type, 'message');
-  t.is(item.content, historyText);
+  expect(item.role).toBe('user');
+  expect(item.type).toBe('message');
+  expect(item.content).toBe(historyText);
 });
 
-test('removeLastUserTurn() removes the last user message and everything after it', (t) => {
+it('removeLastUserTurn() removes the last user message and everything after it', () => {
   const store = new ConversationStore();
   store.addUserMessage('First');
   store.appendOutput([
@@ -194,18 +194,18 @@ test('removeLastUserTurn() removes the last user message and everything after it
     { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 2' }] },
   ] satisfies AgentInputItem[]);
 
-  t.is(store.getHistory().length, 4);
+  expect(store.getHistory().length).toBe(4);
 
   const result = store.removeLastUserTurn();
 
-  t.deepEqual(result, { text: 'Second', imageCount: 0 });
+  expect(result).toEqual({ text: 'Second', imageCount: 0 });
   const history = store.getHistory();
-  t.is(history.length, 2);
-  t.is((history[0] as any).content, 'First');
-  t.is((history[1] as any).content[0].text, 'Reply 1');
+  expect(history.length).toBe(2);
+  expect((history[0] as any).content).toBe('First');
+  expect((history[1] as any).content[0].text).toBe('Reply 1');
 });
 
-test('removeLastUserTurn() returns null when no user message exists', (t) => {
+it('removeLastUserTurn() returns null when no user message exists', () => {
   const store = new ConversationStore();
   store.appendOutput([
     { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Hi' }] },
@@ -213,22 +213,22 @@ test('removeLastUserTurn() returns null when no user message exists', (t) => {
 
   const result = store.removeLastUserTurn();
 
-  t.is(result, null);
-  t.is(store.getHistory().length, 1);
+  expect(result).toBe(null);
+  expect(store.getHistory().length).toBe(1);
 });
 
-test('removeLastUserTurn() clears history when only one user message exists', (t) => {
+it('removeLastUserTurn() clears history when only one user message exists', () => {
   const store = new ConversationStore();
   store.addUserMessage('Only');
 
   const result = store.removeLastUserTurn();
 
-  t.deepEqual(result, { text: 'Only', imageCount: 0 });
-  t.is(store.getHistory().length, 0);
-  t.is(store.getLastUserMessage(), '');
+  expect(result).toEqual({ text: 'Only', imageCount: 0 });
+  expect(store.getHistory().length).toBe(0);
+  expect(store.getLastUserMessage()).toBe('');
 });
 
-test('removeLastUserTurn() returns { text, imageCount: 0 } and removes turn + everything after it', (t) => {
+it('removeLastUserTurn() returns { text, imageCount: 0 } and removes turn + everything after it', () => {
   const store = new ConversationStore();
   store.addUserMessage('hello');
   store.appendOutput([
@@ -242,11 +242,11 @@ test('removeLastUserTurn() returns { text, imageCount: 0 } and removes turn + ev
 
   const result = store.removeLastUserTurn();
 
-  t.deepEqual(result, { text: 'hello', imageCount: 0 });
-  t.is(store.getHistory().length, 0);
+  expect(result).toEqual({ text: 'hello', imageCount: 0 });
+  expect(store.getHistory().length).toBe(0);
 });
 
-test('removeLastUserTurn() skips trailing shell-context item and removes genuine user turn', (t) => {
+it('removeLastUserTurn() skips trailing shell-context item and removes genuine user turn', () => {
   const store = new ConversationStore();
   store.addUserMessage('A');
   store.appendOutput([
@@ -261,11 +261,11 @@ test('removeLastUserTurn() skips trailing shell-context item and removes genuine
 
   const result = store.removeLastUserTurn();
 
-  t.deepEqual(result, { text: 'A', imageCount: 0 });
-  t.is(store.getHistory().length, 0);
+  expect(result).toEqual({ text: 'A', imageCount: 0 });
+  expect(store.getHistory().length).toBe(0);
 });
 
-test('removeLastUserTurn() returns imageCount > 0 for multimodal turn', (t) => {
+it('removeLastUserTurn() returns imageCount > 0 for multimodal turn', () => {
   const store = new ConversationStore();
   store.addUserTurn({
     text: 'hi',
@@ -274,28 +274,28 @@ test('removeLastUserTurn() returns imageCount > 0 for multimodal turn', (t) => {
 
   const result = store.removeLastUserTurn();
 
-  t.is(result?.text, 'hi');
-  t.is(result?.imageCount, 1);
-  t.is(result?.images?.[0]?.data, 'AAAA');
-  t.is(result?.images?.[0]?.mimeType, 'image/png');
-  t.is(result?.images?.[0]?.byteSize, 3);
-  t.is(result?.images?.[0]?.displayNumber, 1);
-  t.is(store.getHistory().length, 0);
+  expect(result?.text).toBe('hi');
+  expect(result?.imageCount).toBe(1);
+  expect(result?.images?.[0]?.data).toBe('AAAA');
+  expect(result?.images?.[0]?.mimeType).toBe('image/png');
+  expect(result?.images?.[0]?.byteSize).toBe(3);
+  expect(result?.images?.[0]?.displayNumber).toBe(1);
+  expect(store.getHistory().length).toBe(0);
 });
 
-test('removeLastUserTurn() returns null when only a shell-context item is present', (t) => {
+it('removeLastUserTurn() returns null when only a shell-context item is present', () => {
   const store = new ConversationStore();
   store.addShellContext(`${SHELL_CONTEXT_PREFIX}\n\n$ ls\nExit: 0`);
 
   const result = store.removeLastUserTurn();
 
-  t.is(result, null);
-  t.is(store.getHistory().length, 1);
+  expect(result).toBe(null);
+  expect(store.getHistory().length).toBe(1);
 });
 
 // listUserTurns tests
 
-test('listUserTurns() returns all genuine user turns with index and text', (t) => {
+it('listUserTurns() returns all genuine user turns with index and text', () => {
   const store = new ConversationStore();
   store.addUserMessage('First');
   store.appendOutput([
@@ -305,23 +305,23 @@ test('listUserTurns() returns all genuine user turns with index and text', (t) =
 
   const turns = store.listUserTurns();
 
-  t.is(turns.length, 2);
-  t.is(turns[0].text, 'First');
-  t.is(turns[1].text, 'Second');
+  expect(turns.length).toBe(2);
+  expect(turns[0].text).toBe('First');
+  expect(turns[1].text).toBe('Second');
 });
 
-test('listUserTurns() excludes shell context items', (t) => {
+it('listUserTurns() excludes shell context items', () => {
   const store = new ConversationStore();
   store.addShellContext(`${SHELL_CONTEXT_PREFIX}\n\n$ ls\nExit: 0`);
   store.addUserMessage('Hello');
 
   const turns = store.listUserTurns();
 
-  t.is(turns.length, 1);
-  t.is(turns[0].text, 'Hello');
+  expect(turns.length).toBe(1);
+  expect(turns[0].text).toBe('Hello');
 });
 
-test('listUserTurns() returns empty array when no user turns', (t) => {
+it('listUserTurns() returns empty array when no user turns', () => {
   const store = new ConversationStore();
   store.appendOutput([
     { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Hi' }] },
@@ -329,10 +329,10 @@ test('listUserTurns() returns empty array when no user turns', (t) => {
 
   const turns = store.listUserTurns();
 
-  t.is(turns.length, 0);
+  expect(turns.length).toBe(0);
 });
 
-test('listUserTurns() includes imageCount for multimodal turns', (t) => {
+it('listUserTurns() includes imageCount for multimodal turns', () => {
   const store = new ConversationStore();
   store.addUserTurn({
     text: 'Describe this',
@@ -341,14 +341,14 @@ test('listUserTurns() includes imageCount for multimodal turns', (t) => {
 
   const turns = store.listUserTurns();
 
-  t.is(turns.length, 1);
-  t.is(turns[0].imageCount, 1);
-  t.is(turns[0].text, 'Describe this');
+  expect(turns.length).toBe(1);
+  expect(turns[0].imageCount).toBe(1);
+  expect(turns[0].text).toBe('Describe this');
 });
 
 // removeNLastUserTurns tests
 
-test('removeNLastUserTurns(1) behaves the same as removeLastUserTurn()', (t) => {
+it('removeNLastUserTurns(1) behaves the same as removeLastUserTurn()', () => {
   const store = new ConversationStore();
   store.addUserMessage('First');
   store.appendOutput([
@@ -361,14 +361,14 @@ test('removeNLastUserTurns(1) behaves the same as removeLastUserTurn()', (t) => 
 
   const result = store.removeNLastUserTurns(1);
 
-  t.deepEqual(result, { text: 'Second', imageCount: 0 });
+  expect(result).toEqual({ text: 'Second', imageCount: 0 });
   const history = store.getHistory();
-  t.is(history.length, 2);
-  t.is((history[0] as any).content, 'First');
-  t.is((history[1] as any).content[0].text, 'Reply 1');
+  expect(history.length).toBe(2);
+  expect((history[0] as any).content).toBe('First');
+  expect((history[1] as any).content[0].text).toBe('Reply 1');
 });
 
-test('removeNLastUserTurns(2) removes last 2 user turns and their responses', (t) => {
+it('removeNLastUserTurns(2) removes last 2 user turns and their responses', () => {
   const store = new ConversationStore();
   store.addUserMessage('First');
   store.appendOutput([
@@ -385,14 +385,14 @@ test('removeNLastUserTurns(2) removes last 2 user turns and their responses', (t
 
   const result = store.removeNLastUserTurns(2);
 
-  t.deepEqual(result, { text: 'Second', imageCount: 0 });
+  expect(result).toEqual({ text: 'Second', imageCount: 0 });
   const history = store.getHistory();
-  t.is(history.length, 2);
-  t.is((history[0] as any).content, 'First');
-  t.is((history[1] as any).content[0].text, 'Reply 1');
+  expect(history.length).toBe(2);
+  expect((history[0] as any).content).toBe('First');
+  expect((history[1] as any).content[0].text).toBe('Reply 1');
 });
 
-test('removeNLastUserTurns(3) removes all when fewer than n turns exist', (t) => {
+it('removeNLastUserTurns(3) removes all when fewer than n turns exist', () => {
   const store = new ConversationStore();
   store.addUserMessage('Only');
   store.appendOutput([
@@ -401,29 +401,29 @@ test('removeNLastUserTurns(3) removes all when fewer than n turns exist', (t) =>
 
   const result = store.removeNLastUserTurns(3);
 
-  t.deepEqual(result, { text: 'Only', imageCount: 0 });
-  t.is(store.getHistory().length, 0);
+  expect(result).toEqual({ text: 'Only', imageCount: 0 });
+  expect(store.getHistory().length).toBe(0);
 });
 
-test('removeNLastUserTurns(0) returns null', (t) => {
+it('removeNLastUserTurns(0) returns null', () => {
   const store = new ConversationStore();
   store.addUserMessage('Hello');
 
   const result = store.removeNLastUserTurns(0);
 
-  t.is(result, null);
-  t.is(store.getHistory().length, 1);
+  expect(result).toBe(null);
+  expect(store.getHistory().length).toBe(1);
 });
 
-test('removeNLastUserTurns() returns null when no user turns exist', (t) => {
+it('removeNLastUserTurns() returns null when no user turns exist', () => {
   const store = new ConversationStore();
 
   const result = store.removeNLastUserTurns(1);
 
-  t.is(result, null);
+  expect(result).toBe(null);
 });
 
-test('removeNLastUserTurns() skips shell context items', (t) => {
+it('removeNLastUserTurns() skips shell context items', () => {
   const store = new ConversationStore();
   store.addUserMessage('A');
   store.appendOutput([
@@ -438,14 +438,14 @@ test('removeNLastUserTurns() skips shell context items', (t) => {
   // Remove both user turns (skipping shell context)
   const result = store.removeNLastUserTurns(2);
 
-  t.deepEqual(result, { text: 'A', imageCount: 0 });
+  expect(result).toEqual({ text: 'A', imageCount: 0 });
   // Only the shell context item should remain
   // (it's before the first user turn anchor, but the anchor is at user turn A, so everything from A onward is removed)
   const history = store.getHistory();
-  t.is(history.length, 0);
+  expect(history.length).toBe(0);
 });
 
-test('removeLastUserTurn() skips trailing legacy mode-notice item', (t) => {
+it('removeLastUserTurn() skips trailing legacy mode-notice item', () => {
   const store = new ConversationStore();
   store.addUserMessage('A');
   store.appendOutput([
@@ -460,32 +460,32 @@ test('removeLastUserTurn() skips trailing legacy mode-notice item', (t) => {
 
   const result = store.removeLastUserTurn();
 
-  t.deepEqual(result, { text: 'A', imageCount: 0 });
-  t.is(store.getHistory().length, 0);
+  expect(result).toEqual({ text: 'A', imageCount: 0 });
+  expect(store.getHistory().length).toBe(0);
 });
 
-test('removeLastUserTurn() returns null when only a legacy mode-notice item is present', (t) => {
+it('removeLastUserTurn() returns null when only a legacy mode-notice item is present', () => {
   const store = new ConversationStore();
   addLegacyModeNotice(store, 'Plan Mode ON');
 
   const result = store.removeLastUserTurn();
 
-  t.is(result, null);
-  t.is(store.getHistory().length, 1);
+  expect(result).toBeNull();
+  expect(store.getHistory().length).toBe(1);
 });
 
-test('listUserTurns() excludes legacy mode notice items', (t) => {
+it('listUserTurns() excludes legacy mode notice items', () => {
   const store = new ConversationStore();
   addLegacyModeNotice(store, 'Plan Mode ON');
   store.addUserMessage('Hello');
 
   const turns = store.listUserTurns();
 
-  t.is(turns.length, 1);
-  t.is(turns[0].text, 'Hello');
+  expect(turns.length).toBe(1);
+  expect(turns[0].text).toBe('Hello');
 });
 
-test('removeNLastUserTurns() skips legacy mode notice items', (t) => {
+it('removeNLastUserTurns() skips legacy mode notice items', () => {
   const store = new ConversationStore();
   store.addUserMessage('A');
   store.appendOutput([
@@ -500,7 +500,7 @@ test('removeNLastUserTurns() skips legacy mode notice items', (t) => {
   // Remove both user turns (skipping legacy mode notice)
   const result = store.removeNLastUserTurns(2);
 
-  t.deepEqual(result, { text: 'A', imageCount: 0 });
+  expect(result).toEqual({ text: 'A', imageCount: 0 });
   const history = store.getHistory();
-  t.is(history.length, 0);
+  expect(history.length).toBe(0);
 });

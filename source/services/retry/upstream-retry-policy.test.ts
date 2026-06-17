@@ -1,4 +1,4 @@
-import test from 'ava';
+import { it, expect } from 'vitest';
 import { RateLimitError } from 'openai';
 import { OpenAICompatibleError, OpenRouterError, LongRetryDelayError } from '../../providers/common/provider-errors.js';
 import {
@@ -11,69 +11,69 @@ function asInstanceOf<T extends object>(prototype: object, props: Partial<T>): T
   return Object.assign(Object.create(prototype), props) as T;
 }
 
-test('getRetryAfterMs parses case-insensitive Retry-After from generic Headers-like objects', (t) => {
+it('getRetryAfterMs parses case-insensitive Retry-After from generic Headers-like objects', () => {
   const headers = {
     get(name: string) {
       return name.toLowerCase() === 'retry-after' ? '12' : null;
     },
   };
 
-  t.is(getRetryAfterMs({ headers }), 12000);
+  expect(getRetryAfterMs({ headers })).toBe(12000);
 });
 
-test('getRetryAfterMs ignores invalid Retry-After values', (t) => {
-  t.is(getRetryAfterMs({ headers: { 'retry-after': 'not-a-number' } }), undefined);
+it('getRetryAfterMs ignores invalid Retry-After values', () => {
+  expect(getRetryAfterMs({ headers: { 'retry-after': 'not-a-number' } })).toBe(undefined);
 });
 
-test('classifyUpstreamRetryableError marks OpenRouter and OpenAI-compatible upstream statuses retryable', (t) => {
+it('classifyUpstreamRetryableError marks OpenRouter and OpenAI-compatible upstream statuses retryable', () => {
   const openrouter = classifyUpstreamRetryableError(new OpenRouterError('server error', 503, {}));
   const compatible = classifyUpstreamRetryableError(new OpenAICompatibleError('rate limited', 429, {}));
 
-  t.like(openrouter, {
+  expect(openrouter).toMatchObject({
     retryable: true,
     status: 503,
     reason: 'provider-status',
   });
-  t.like(compatible, {
+  expect(compatible).toMatchObject({
     retryable: true,
     status: 429,
     reason: 'provider-status',
   });
 });
 
-test('classifyUpstreamRetryableError marks generic 429/5xx and rate-limit messages retryable', (t) => {
+it('classifyUpstreamRetryableError marks generic 429/5xx and rate-limit messages retryable', () => {
   const err429 = new Error('too many requests');
   (err429 as any).status = 429;
 
   const err503 = new Error('service unavailable');
   (err503 as any).statusCode = 503;
 
-  t.like(classifyUpstreamRetryableError(err429), {
+  expect(classifyUpstreamRetryableError(err429)).toMatchObject({
     retryable: true,
     status: 429,
     reason: 'generic-status',
   });
-  t.like(classifyUpstreamRetryableError(err503), {
+  expect(classifyUpstreamRetryableError(err503)).toMatchObject({
     retryable: true,
     status: 503,
     reason: 'generic-status',
   });
-  t.like(classifyUpstreamRetryableError(new Error('Rate limit exceeded')), {
+  expect(classifyUpstreamRetryableError(new Error('Rate limit exceeded'))).toMatchObject({
     retryable: true,
     reason: 'rate-limit-message',
   });
 });
 
-test('classifyUpstreamRetryableError keeps non-retryable 400 errors rejected', (t) => {
-  t.like(classifyUpstreamRetryableError(new OpenAICompatibleError('bad request', 400, {})), {
+it('classifyUpstreamRetryableError keeps non-retryable 400 errors rejected', () => {
+  expect(classifyUpstreamRetryableError(new OpenAICompatibleError('bad request', 400, {}))).toMatchObject({
     retryable: false,
     status: 400,
     reason: 'provider-status',
   });
 });
 
-test('computeUpstreamRetryDelayMs uses Retry-After override before jittered backoff', (t) => {
-  t.is(computeUpstreamRetryDelayMs({ retryAfterMs: 7000, attemptIndex: 1, random: () => 0.9 }), 7000);
+it('computeUpstreamRetryDelayMs uses Retry-After override before jittered backoff', () => {
+  expect(computeUpstreamRetryDelayMs({ retryAfterMs: 7000, attemptIndex: 1, random: () => 0.9 })).toBe(7000);
 
   let randomIndex = 0;
   const randomValues = [0.4, 0.2, 0.5, 0.8];
@@ -83,11 +83,11 @@ test('computeUpstreamRetryDelayMs uses Retry-After override before jittered back
     return value;
   };
 
-  t.is(computeUpstreamRetryDelayMs({ attemptIndex: 0, random }), 3000);
-  t.is(computeUpstreamRetryDelayMs({ attemptIndex: 1, random }), 24000);
+  expect(computeUpstreamRetryDelayMs({ attemptIndex: 0, random })).toBe(3000);
+  expect(computeUpstreamRetryDelayMs({ attemptIndex: 1, random })).toBe(24000);
 });
 
-test('computeUpstreamRetryDelayMs uses session attempt numbers for bounded jitter', (t) => {
+it('computeUpstreamRetryDelayMs uses session attempt numbers for bounded jitter', () => {
   let randomIndex = 0;
   const randomValues = [0, 1];
   const random = () => {
@@ -96,51 +96,51 @@ test('computeUpstreamRetryDelayMs uses session attempt numbers for bounded jitte
     return value;
   };
 
-  t.is(computeUpstreamRetryDelayMs({ attemptNumber: 1, random }), 450);
-  t.is(computeUpstreamRetryDelayMs({ attemptNumber: 3, random }), 2200);
+  expect(computeUpstreamRetryDelayMs({ attemptNumber: 1, random })).toBe(450);
+  expect(computeUpstreamRetryDelayMs({ attemptNumber: 3, random })).toBe(2200);
 });
 
-test('classifyUpstreamRetryableError marks RateLimitExceededError non-retryable', (t) => {
-  t.like(classifyUpstreamRetryableError(new LongRetryDelayError(120)), {
+it('classifyUpstreamRetryableError marks RateLimitExceededError non-retryable', () => {
+  expect(classifyUpstreamRetryableError(new LongRetryDelayError(120))).toMatchObject({
     retryable: false,
     reason: 'long-retry-delay',
   });
-  t.like(classifyUpstreamRetryableError(new LongRetryDelayError(300)), {
+  expect(classifyUpstreamRetryableError(new LongRetryDelayError(300))).toMatchObject({
     retryable: false,
     reason: 'long-retry-delay',
   });
 });
 
-test('classifyUpstreamRetryableError marks RateLimitError with retry-after > 60s non-retryable', (t) => {
+it('classifyUpstreamRetryableError marks RateLimitError with retry-after > 60s non-retryable', () => {
   const err = new RateLimitError(429, 'rate limited', 'rate limited', { get: () => '120' } as any);
-  t.like(classifyUpstreamRetryableError(err), {
+  expect(classifyUpstreamRetryableError(err)).toMatchObject({
     retryable: false,
     reason: 'long-retry-delay',
   });
 });
 
-test('classifyUpstreamRetryableError marks RateLimitError with retry-after <= 60s retryable', (t) => {
+it('classifyUpstreamRetryableError marks RateLimitError with retry-after <= 60s retryable', () => {
   const err = new RateLimitError(429, 'rate limited', 'rate limited', { get: () => '30' } as any);
-  t.like(classifyUpstreamRetryableError(err), {
+  expect(classifyUpstreamRetryableError(err)).toMatchObject({
     retryable: true,
     reason: 'openai-sdk',
   });
 });
 
-test('classifyUpstreamRetryableError marks RateLimitError without retry-after retryable', (t) => {
+it('classifyUpstreamRetryableError marks RateLimitError without retry-after retryable', () => {
   const err = new RateLimitError(429, 'rate limited', 'rate limited', { get: () => null } as any);
-  t.like(classifyUpstreamRetryableError(err), {
+  expect(classifyUpstreamRetryableError(err)).toMatchObject({
     retryable: true,
     reason: 'openai-sdk',
   });
 });
 
-test('classifyUpstreamRetryableError parses retry-after from generic error headers', (t) => {
+it('classifyUpstreamRetryableError parses retry-after from generic error headers', () => {
   const error = asInstanceOf<Error>(Error.prototype, { message: 'rate limited' });
   (error as any).statusCode = 429;
   (error as any).headers = { 'Retry-After': '7' };
 
-  t.like(classifyUpstreamRetryableError(error), {
+  expect(classifyUpstreamRetryableError(error)).toMatchObject({
     retryable: true,
     status: 429,
     retryAfterMs: 7000,

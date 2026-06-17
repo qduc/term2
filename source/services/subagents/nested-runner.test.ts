@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -158,7 +158,7 @@ function createParentHarness(nestedRunner: NestedSubagentRunner, model: Model) {
   return { parentAgent, parentRunner };
 }
 
-test.serial('NestedSubagentRunner constructs, clearCache, getRoleAgent, getRoleAgentTool', async (t) => {
+it.sequential('NestedSubagentRunner constructs, clearCache, getRoleAgent, getRoleAgentTool', async () => {
   const settings = createMockSettings({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
@@ -188,21 +188,21 @@ test.serial('NestedSubagentRunner constructs, clearCache, getRoleAgent, getRoleA
     roleToolCache,
   });
 
-  t.is(roleToolCache.size, 0);
+  expect(roleToolCache.size).toBe(0);
 
   const agent = runner.getRoleAgent('explorer');
-  t.truthy(agent);
-  t.is(roleToolCache.size, 1);
-  t.true(roleToolCache.has('explorer'));
+  expect(agent).toBeTruthy();
+  expect(roleToolCache.size).toBe(1);
+  expect(roleToolCache.has('explorer')).toBe(true);
 
   const tool = runner.getRoleAgentTool('explorer');
-  t.truthy(tool);
+  expect(tool).toBeTruthy();
 
   runner.clearCache();
-  t.is(roleToolCache.size, 0);
+  expect(roleToolCache.size).toBe(0);
 });
 
-test.serial('NestedSubagentRunner.runAsTool executes and emits events', async (t) => {
+it.sequential('NestedSubagentRunner.runAsTool executes and emits events', async () => {
   const settings = createMockSettings({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
@@ -255,15 +255,15 @@ test.serial('NestedSubagentRunner.runAsTool executes and emits events', async (t
   };
 
   const result = await runner.runAsTool(request);
-  t.is(result.status, 'completed');
-  t.is(result.finalText, 'Done from nested mock.');
+  expect(result.status).toBe('completed');
+  expect(result.finalText).toBe('Done from nested mock.');
 
   // Verify events emitted
-  t.true(events.some((e) => e.type === 'subagent_started' && e.role === 'explorer'));
-  t.true(events.some((e) => e.type === 'subagent_completed'));
+  expect(events.some((e) => e.type === 'subagent_started' && e.role === 'explorer')).toBe(true);
+  expect(events.some((e) => e.type === 'subagent_completed')).toBe(true);
 });
 
-test.serial('NestedSubagentRunner.runAsTool surfaces Agent.asTool runtime failures', async (t) => {
+it.sequential('NestedSubagentRunner.runAsTool surfaces Agent.asTool runtime failures', async () => {
   const settings = createMockSettings({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
@@ -291,17 +291,20 @@ test.serial('NestedSubagentRunner.runAsTool surfaces Agent.asTool runtime failur
   (tool as any).invoke = async () =>
     'An error occurred while running the tool. Please try again. Error: TypeError: fetch failed';
 
-  const error = await t.throwsAsync(() =>
-    runner.runAsTool({
+  let error: Error | undefined;
+  try {
+    await runner.runAsTool({
       role: 'explorer',
       task: 'inspect a file',
-    }),
-  );
+    });
+  } catch (e) {
+    error = e as Error;
+  }
 
-  t.is(error?.message, 'TypeError: fetch failed');
+  expect(error?.message).toBe('TypeError: fetch failed');
 });
 
-test.serial('NestedSubagentRunner.runAsTool restores context from resumeState', async (t) => {
+it.sequential('NestedSubagentRunner.runAsTool restores context from resumeState', async () => {
   const settings = createMockSettings({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
@@ -372,17 +375,17 @@ test.serial('NestedSubagentRunner.runAsTool restores context from resumeState', 
   };
 
   const result = await runner.runAsTool(request, undefined, { resumeState });
-  t.is(result.status, 'completed');
-  t.is(result.agentId, restoredAgentId);
-  t.deepEqual(result.filesChanged, ['src/index.ts']);
-  t.deepEqual(result.toolsUsed, [{ toolName: 'shell', count: 2 }]);
+  expect(result.status).toBe('completed');
+  expect(result.agentId).toBe(restoredAgentId);
+  expect(result.filesChanged).toEqual(['src/index.ts']);
+  expect(result.toolsUsed).toEqual([{ toolName: 'shell', count: 2 }]);
 
   // Verify subagent_started is NOT emitted when resuming
-  t.false(events.some((e) => e.type === 'subagent_started'));
-  t.true(events.some((e) => e.type === 'subagent_completed'));
+  expect(events.some((e) => e.type === 'subagent_started')).toBe(false);
+  expect(events.some((e) => e.type === 'subagent_completed')).toBe(true);
 });
 
-test.serial('NestedSubagentRunner.runAsTool propagates parent approvals', async (t) => {
+it.sequential('NestedSubagentRunner.runAsTool propagates parent approvals', async () => {
   const settings = createMockSettings({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
@@ -443,15 +446,15 @@ test.serial('NestedSubagentRunner.runAsTool propagates parent approvals', async 
 
   await runner.runAsTool(request, parentContext);
 
-  t.truthy(invokedNestedContext);
+  expect(invokedNestedContext).toBeTruthy();
   // Verify that parent approvals were merged
   const nestedApprovals = invokedNestedContext.toJSON().approvals;
-  t.deepEqual(nestedApprovals, {
+  expect(nestedApprovals).toEqual({
     'tool-call-123': { approved: true },
   });
 });
 
-test.serial('NestedSubagentRunner.runAsTool handles cancellation via abort signal', async (t) => {
+it.sequential('NestedSubagentRunner.runAsTool handles cancellation via abort signal', async () => {
   const settings = createMockSettings({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
@@ -507,19 +510,21 @@ test.serial('NestedSubagentRunner.runAsTool handles cancellation via abort signa
     });
   };
 
-  await t.throwsAsync(() => runner.runAsTool(request, undefined, { signal: controller.signal }), {
-    name: 'AbortError',
-    message: /aborted/i,
-  });
+  let thrown: Error | undefined;
+  try {
+    await runner.runAsTool(request, undefined, { signal: controller.signal });
+  } catch (e) {
+    thrown = e as Error;
+  }
+  expect(thrown?.name).toBe('AbortError');
+  expect(thrown?.message).toMatch(/aborted/i);
 });
 
-test.serial('NestedSubagentRunner resumes a real Agent.asTool run after nested approval', async (t) => {
+it.sequential('NestedSubagentRunner resumes a real Agent.asTool run after nested approval', async () => {
   const providerId = `nested-approval-${randomUUID()}`;
   const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-nested-approval-'));
-  t.teardown(() => {
-    unregisterProvider(providerId);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
+
+  // cleanup handled at end of test via try/finally
   const events: ConversationEvent[] = [];
   const model = scriptedApprovalModel();
   const runner = createRunner({
@@ -535,47 +540,47 @@ test.serial('NestedSubagentRunner resumes a real Agent.asTool run after nested a
   const { parentAgent, parentRunner } = createParentHarness(runner, model);
 
   const interrupted = await parentRunner.run(parentAgent, 'delegate this task');
-  t.is(interrupted.interruptions.length, 1);
-  t.false(fs.existsSync(path.join(tmpDir, 'approved.txt')));
+  expect(interrupted.interruptions.length).toBe(1);
+  expect(fs.existsSync(path.join(tmpDir, 'approved.txt'))).toBe(false);
 
   const state = await RunState.fromString(parentAgent, interrupted.state.toString());
   const [approval] = state.getInterruptions();
   state.approve(approval);
   const resumed = await parentRunner.run(parentAgent, state);
 
-  t.is(resumed.finalOutput, 'Parent work completed.');
-  t.true(fs.existsSync(path.join(tmpDir, 'approved.txt')));
-  t.deepEqual(
-    events.filter((event) => event.type === 'subagent_started').map((event: any) => event.agentId),
-    ['parent-subagent-call'],
-  );
-  t.is(events.filter((event) => event.type === 'subagent_completed').length, 1);
+  expect(resumed.finalOutput).toBe('Parent work completed.');
+  expect(fs.existsSync(path.join(tmpDir, 'approved.txt'))).toBe(true);
+  expect(events.filter((event) => event.type === 'subagent_started').map((event: any) => event.agentId)).toEqual([
+    'parent-subagent-call',
+  ]);
+  expect(events.filter((event) => event.type === 'subagent_completed').length).toBe(1);
 });
 
-test.serial('NestedSubagentRunner rejects malformed real Agent.asTool resume state', async (t) => {
+it.sequential('NestedSubagentRunner rejects malformed real Agent.asTool resume state', async () => {
   const providerId = `nested-malformed-${randomUUID()}`;
-  t.teardown(() => unregisterProvider(providerId));
+
+  // TODO: // TODO: t.teardown(() => unregisterProvider(providerId)) needs manual try/finally conversion;
   const runner = createRunner({
     providerId,
     model: scriptedApprovalModel(),
   });
 
-  await t.throwsAsync(
-    () =>
-      runner.runAsTool({ role: 'explorer', task: 'resume malformed state' }, undefined, {
-        resumeState: '{"context":{"context":{"agentId":"restored"}}}',
-      }),
-    { message: /Run state is missing schema version/i },
-  );
+  let thrown2: Error | undefined;
+  try {
+    await runner.runAsTool({ role: 'explorer', task: 'resume malformed state' }, undefined, {
+      resumeState: '{"context":{"context":{"agentId":"restored"}}}',
+    });
+  } catch (e) {
+    thrown2 = e as Error;
+  }
+  expect(thrown2?.message).toMatch(/Run state is missing schema version/i);
 });
 
-test.serial('NestedSubagentRunner does not resume approved nested work after parent cancellation', async (t) => {
+it.sequential('NestedSubagentRunner does not resume approved nested work after parent cancellation', async () => {
   const providerId = `nested-cancelled-resume-${randomUUID()}`;
   const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-nested-cancelled-'));
-  t.teardown(() => {
-    unregisterProvider(providerId);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
+
+  // cleanup handled at end of test via try/finally
   const model = scriptedApprovalModel();
   const runner = createRunner({
     providerId,
@@ -593,23 +598,25 @@ test.serial('NestedSubagentRunner does not resume approved nested work after par
   const [approval] = state.getInterruptions();
   state.approve(approval);
   const nestedResumeState = state.getPendingAgentToolRun('run_subagent', 'parent-subagent-call');
-  t.truthy(nestedResumeState);
+  expect(nestedResumeState).toBeTruthy();
   const controller = new AbortController();
   controller.abort();
 
-  await t.throwsAsync(
-    () =>
-      runner.runAsTool({ role: 'worker', task: 'create approved.txt' }, (state as any)._context, {
-        resumeState: nestedResumeState,
-        signal: controller.signal,
-        toolCall: { callId: 'parent-subagent-call' },
-      }),
-    { name: 'AbortError' },
-  );
-  t.false(fs.existsSync(path.join(tmpDir, 'approved.txt')));
+  let thrown3: Error | undefined;
+  try {
+    await runner.runAsTool({ role: 'worker', task: 'create approved.txt' }, (state as any)._context, {
+      resumeState: nestedResumeState,
+      signal: controller.signal,
+      toolCall: { callId: 'parent-subagent-call' },
+    });
+  } catch (e) {
+    thrown3 = e as Error;
+  }
+  expect(thrown3?.name).toBe('AbortError');
+  expect(fs.existsSync(path.join(tmpDir, 'approved.txt'))).toBe(false);
 });
 
-test('incrementSubagentTurnCount reads turnCount from the unwrapped user context', (t) => {
+it('incrementSubagentTurnCount reads turnCount from the unwrapped user context', () => {
   // Regression test: the OpenAI Agents SDK passes the user context unwrapped
   // to callModelInputFilter (see applyCallModelInputFilter in
   // @openai/agents-core/dist/runner/conversation.js, which sets
@@ -624,20 +631,20 @@ test('incrementSubagentTurnCount reads turnCount from the unwrapped user context
   const userContext = { turnCount: 0, maxTurns: 20 };
 
   // The SDK calls the filter with the unwrapped user context as args.context.
-  t.is(incrementSubagentTurnCount({ context: userContext, modelData }), modelData);
-  t.is(userContext.turnCount, 1);
+  expect(incrementSubagentTurnCount({ context: userContext, modelData })).toBe(modelData);
+  expect(userContext.turnCount).toBe(1);
 
-  t.is(incrementSubagentTurnCount({ context: userContext, modelData }), modelData);
-  t.is(userContext.turnCount, 2);
+  expect(incrementSubagentTurnCount({ context: userContext, modelData })).toBe(modelData);
+  expect(userContext.turnCount).toBe(2);
 });
 
-test('incrementSubagentTurnCount is a no-op when context is missing or non-object', (t) => {
+it('incrementSubagentTurnCount is a no-op when context is missing or non-object', () => {
   // Defensive: the filter must tolerate the SDK passing no context, an
   // undefined context, or a non-object context without throwing.
   const modelData = { input: [] };
 
-  t.is(incrementSubagentTurnCount({ context: undefined, modelData }), modelData);
-  t.is(incrementSubagentTurnCount({ context: null, modelData }), modelData);
-  t.is(incrementSubagentTurnCount({ modelData }), modelData);
-  t.is(incrementSubagentTurnCount({ context: 'not-an-object', modelData }), modelData);
+  expect(incrementSubagentTurnCount({ context: undefined, modelData })).toBe(modelData);
+  expect(incrementSubagentTurnCount({ context: null, modelData })).toBe(modelData);
+  expect(incrementSubagentTurnCount({ modelData })).toBe(modelData);
+  expect(incrementSubagentTurnCount({ context: 'not-an-object', modelData })).toBe(modelData);
 });

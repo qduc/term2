@@ -1,66 +1,66 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   shouldPreferPatchEditingModel,
   shouldUseNativePatchTool,
   shouldUseStrictToolSchema,
 } from './tool-selection-policy.js';
 
-test('shouldPreferPatchEditingModel returns true for gpt-5 models', (t) => {
-  t.true(shouldPreferPatchEditingModel('gpt-5'));
-  t.true(shouldPreferPatchEditingModel('gpt-5.1'));
-  t.true(shouldPreferPatchEditingModel('GPT-5-mini'));
+it('shouldPreferPatchEditingModel returns true for gpt-5 models', () => {
+  expect(shouldPreferPatchEditingModel('gpt-5')).toBe(true);
+  expect(shouldPreferPatchEditingModel('gpt-5.1')).toBe(true);
+  expect(shouldPreferPatchEditingModel('GPT-5-mini')).toBe(true);
 });
 
-test('shouldPreferPatchEditingModel returns false for non gpt-5 models', (t) => {
-  t.false(shouldPreferPatchEditingModel('gpt-4.1'));
-  t.false(shouldPreferPatchEditingModel('claude-3.7-sonnet'));
+it('shouldPreferPatchEditingModel returns false for non gpt-5 models', () => {
+  expect(shouldPreferPatchEditingModel('gpt-4.1')).toBe(false);
+  expect(shouldPreferPatchEditingModel('claude-3.7-sonnet')).toBe(false);
 });
 
-test('shouldUseNativePatchTool returns true for OpenAI gpt-5.1 models', (t) => {
-  t.true(
+it('shouldUseNativePatchTool returns true for OpenAI gpt-5.1 models', () => {
+  expect(
     shouldUseNativePatchTool({
       providerId: 'openai',
       model: 'gpt-5.1',
     }),
-  );
+  ).toBe(true);
 });
 
-test('shouldUseNativePatchTool returns true for OpenAI gpt-5.10 and newer models', (t) => {
-  t.true(
+it('shouldUseNativePatchTool returns true for OpenAI gpt-5.10 and newer models', () => {
+  expect(
     shouldUseNativePatchTool({
       providerId: 'openai',
       model: 'gpt-5.10',
     }),
-  );
+  ).toBe(true);
 
-  t.true(
+  expect(
     shouldUseNativePatchTool({
       providerId: 'openai',
       model: 'gpt-6.0',
     }),
-  );
+  ).toBe(true);
 });
 
-test('shouldUseNativePatchTool returns false for OpenAI non-5.1 models', (t) => {
-  t.false(
+it('shouldUseNativePatchTool returns false for OpenAI non-5.1 models', () => {
+  expect(
     shouldUseNativePatchTool({
       providerId: 'openai',
       model: 'gpt-5',
     }),
-  );
+  ).toBe(false);
 });
 
-test('shouldUseNativePatchTool returns false for non-OpenAI providers', (t) => {
-  t.false(
+it('shouldUseNativePatchTool returns false for non-OpenAI providers', () => {
+  expect(
     shouldUseNativePatchTool({
       providerId: 'openrouter',
       model: 'gpt-5.1',
     }),
-  );
+  ).toBe(false);
 });
 
-test('shouldUseNativePatchTool honors provider model prefix capability', (t) => {
-  t.true(
+it('shouldUseNativePatchTool honors provider model prefix capability', () => {
+  expect(
     shouldUseNativePatchTool({
       providerId: 'custom-provider',
       model: 'custom-editor-v2',
@@ -70,11 +70,11 @@ test('shouldUseNativePatchTool honors provider model prefix capability', (t) => 
         nativePatchModelPrefixes: ['custom-editor'],
       },
     }),
-  );
+  ).toBe(true);
 });
 
-test('shouldUseNativePatchTool treats gpt model prefixes semantically', (t) => {
-  t.true(
+it('shouldUseNativePatchTool treats gpt model prefixes semantically', () => {
+  expect(
     shouldUseNativePatchTool({
       providerId: 'custom-provider',
       model: 'gpt-5.1-mini',
@@ -84,9 +84,9 @@ test('shouldUseNativePatchTool treats gpt model prefixes semantically', (t) => {
         nativePatchModelPrefixes: ['gpt-5.1'],
       },
     }),
-  );
+  ).toBe(true);
 
-  t.true(
+  expect(
     shouldUseNativePatchTool({
       providerId: 'custom-provider',
       model: 'gpt-6.0',
@@ -96,9 +96,9 @@ test('shouldUseNativePatchTool treats gpt model prefixes semantically', (t) => {
         nativePatchModelPrefixes: ['gpt-5.1'],
       },
     }),
-  );
+  ).toBe(true);
 
-  t.false(
+  expect(
     shouldUseNativePatchTool({
       providerId: 'custom-provider',
       model: 'gpt-5.0',
@@ -108,19 +108,19 @@ test('shouldUseNativePatchTool treats gpt model prefixes semantically', (t) => {
         nativePatchModelPrefixes: ['gpt-5.1'],
       },
     }),
-  );
+  ).toBe(false);
 });
 
-test('shouldUseStrictToolSchema returns true for OpenAI provider', (t) => {
-  t.true(
+it('shouldUseStrictToolSchema returns true for OpenAI provider', () => {
+  expect(
     shouldUseStrictToolSchema({
       providerId: 'openai',
     }),
-  );
+  ).toBe(true);
 });
 
-test('shouldUseStrictToolSchema honors explicit provider capability', (t) => {
-  t.false(
+it('shouldUseStrictToolSchema honors explicit provider capability', () => {
+  expect(
     shouldUseStrictToolSchema({
       providerId: 'openai',
       capabilities: {
@@ -129,9 +129,9 @@ test('shouldUseStrictToolSchema honors explicit provider capability', (t) => {
         usesStrictToolSchema: false,
       },
     }),
-  );
+  ).toBe(false);
 
-  t.true(
+  expect(
     shouldUseStrictToolSchema({
       providerId: 'custom-provider',
       capabilities: {
@@ -140,13 +140,13 @@ test('shouldUseStrictToolSchema honors explicit provider capability', (t) => {
         usesStrictToolSchema: true,
       },
     }),
-  );
+  ).toBe(true);
 });
 
-test('shouldUseStrictToolSchema returns false for non-OpenAI provider', (t) => {
-  t.false(
+it('shouldUseStrictToolSchema returns false for non-OpenAI provider', () => {
+  expect(
     shouldUseStrictToolSchema({
       providerId: 'openrouter',
     }),
-  );
+  ).toBe(false);
 });

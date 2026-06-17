@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { logCommandExecution } from './command-logger.js';
 
 const buildSettingsService = (overrides: Record<string, unknown> = {}) => ({
@@ -17,7 +17,7 @@ const buildSettingsService = (overrides: Record<string, unknown> = {}) => ({
   set: () => {},
 });
 
-test('logCommandExecution does not write to console when suppressed', (t) => {
+it('logCommandExecution does not write to console when suppressed', () => {
   const originalConsoleError = console.error;
   const calls: string[][] = [];
 
@@ -28,7 +28,7 @@ test('logCommandExecution does not write to console when suppressed', (t) => {
   try {
     logCommandExecution(buildSettingsService(), 'echo hi', false, true);
 
-    t.is(calls.length, 0);
+    expect(calls.length).toBe(0);
   } finally {
     console.error = originalConsoleError;
   }

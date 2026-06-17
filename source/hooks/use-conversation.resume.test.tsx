@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { Text } from 'ink';
 
@@ -31,7 +30,7 @@ const Harness = ({ initialMessages }: { initialMessages: Message[] }) => {
   );
 };
 
-test.serial('useConversation initializes with restored messages', async (t) => {
+it.sequential('useConversation initializes with restored messages', async () => {
   const { lastFrame } = await renderInAct(
     <Harness
       initialMessages={[
@@ -39,13 +38,12 @@ test.serial('useConversation initializes with restored messages', async (t) => {
         { id: 'bot-1', sender: 'bot', text: 'previous answer', status: 'finalized' },
       ]}
     />,
-    t,
   );
 
-  t.is(lastFrame(), 'previous question|previous answer\nnull');
+  expect(lastFrame()).toBe('previous question|previous answer\nnull');
 });
 
-test.serial('useConversation initializes lastUsage from the last restored assistant message', async (t) => {
+it.sequential('useConversation initializes lastUsage from the last restored assistant message', async () => {
   const { lastFrame } = await renderInAct(
     <Harness
       initialMessages={[
@@ -66,11 +64,9 @@ test.serial('useConversation initializes lastUsage from the last restored assist
         },
       ]}
     />,
-    t,
   );
 
-  t.is(
-    lastFrame(),
+  expect(lastFrame()).toBe(
     'earlier answer|follow-up|latest answer\n{"prompt_tokens":1200,"completion_tokens":350,"cache_read_tokens":900,"total_tokens":1550}',
   );
 });

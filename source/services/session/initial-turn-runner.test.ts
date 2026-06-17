@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createConversationSessionComposition } from './session-composition.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
@@ -47,7 +47,7 @@ const defaultRetryCounts: RetryCounts = {
   transportDowngradeCount: 0,
 };
 
-test('plain success', async (t) => {
+it('plain success', async () => {
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello response' }]);
   stream.finalOutput = 'hello response';
 
@@ -83,14 +83,14 @@ test('plain success', async (t) => {
 
   const outcome = await runPromise;
   if (outcome.kind === 'response' && outcome.terminal.type === 'response') {
-    t.is(outcome.terminal.finalText, 'hello response');
+    expect(outcome.terminal.finalText).toBe('hello response');
   } else {
-    t.fail('Expected response outcome with FinalTerminal');
+    expect(true).toBe(false);
   }
-  t.is(attempt.closed, true);
+  expect(attempt.closed).toBe(true);
 });
 
-test('a fresh user turn resets the assistant journal sequence', async (t) => {
+it('a fresh user turn resets the assistant journal sequence', async () => {
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello response' }]);
   stream.finalOutput = 'hello response';
 
@@ -126,10 +126,10 @@ test('a fresh user turn resets the assistant journal sequence', async (t) => {
     // drain
   }
 
-  t.is(resetCalls, 1);
+  expect(resetCalls).toBe(1);
 });
 
-test('input-surge block and user-message rollback', async (t) => {
+it('input-surge block and user-message rollback', async () => {
   const mockClient = {
     getProvider() {
       return 'openai';
@@ -180,13 +180,13 @@ test('input-surge block and user-message rollback', async (t) => {
   })();
 
   const outcome = await runPromise;
-  t.is(outcome.kind, 'failed');
-  t.true(events.some((e) => e.type === 'error' && e.kind === 'input_surge_guard'));
-  t.is(attempt.addedUserMessage, true);
-  t.is(composition.conversationStore.getHistory().length, 0, 'User message should be rolled back');
+  expect(outcome.kind).toBe('failed');
+  expect(events.some((e) => e.type === 'error' && e.kind === 'input_surge_guard')).toBe(true);
+  expect(attempt.addedUserMessage).toBe(true);
+  expect(composition.conversationStore.getHistory().length, 'User message should be rolled back').toBe(0);
 });
 
-test('unrecoverable failure before stream creation', async (t) => {
+it('unrecoverable failure before stream creation', async () => {
   const mockClient = {
     getProvider() {
       return 'openai';
@@ -213,21 +213,19 @@ test('unrecoverable failure before stream creation', async (t) => {
   });
 
   const events: any[] = [];
-  await t.throwsAsync(
-    async () => {
-      const it = runner.run(attempt);
-      for await (const event of it) {
-        events.push(event);
-      }
-    },
-    { message: 'Some unrecoverable error' },
-  );
 
-  t.true(events.some((e) => e.type === 'error'));
-  t.is(recoveryApplyCalls, 1);
+  await expect(async () => {
+    const it = runner.run(attempt);
+    for await (const event of it) {
+      events.push(event);
+    }
+  }).rejects.toThrow('Some unrecoverable error');
+
+  expect(events.some((e) => e.type === 'error')).toBe(true);
+  expect(recoveryApplyCalls).toBe(1);
 });
 
-test('stale finalization returns no terminal and does not mutate approval state', async (t) => {
+it('stale finalization returns no terminal and does not mutate approval state', async () => {
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'stale response' }]);
   stream.finalOutput = 'stale response';
 
@@ -267,11 +265,11 @@ test('stale finalization returns no terminal and does not mutate approval state'
     result = await iterator.next();
   }
 
-  t.deepEqual(result.value, { kind: 'stale' });
-  t.is(composition.approvalState.getPending(), pending);
+  expect(result.value).toEqual({ kind: 'stale' });
+  expect(composition.approvalState.getPending()).toBe(pending);
 });
 
-test('continuation recovery delay checks generation before one-shot client mutation', async (t) => {
+it('continuation recovery delay checks generation before one-shot client mutation', async () => {
   let startCalls = 0;
   let standardTierCalls = 0;
   const mockClient = {
@@ -302,26 +300,26 @@ test('continuation recovery delay checks generation before one-shot client mutat
     composition.generationGuard.invalidate();
     return originalSetTimeout(handler, 0);
   }) as typeof setTimeout;
-  t.teardown(() => {
+  try {
+    const iterator = runner.run(attempt, {
+      skipUserMessage: true,
+      delayMs: 100,
+      useStandardServiceTier: true,
+    });
+    let result = await iterator.next();
+    while (!result.done) {
+      result = await iterator.next();
+    }
+
+    expect(result.value).toEqual({ kind: 'stale' });
+    expect(standardTierCalls).toBe(0);
+    expect(startCalls).toBe(0);
+  } finally {
     globalThis.setTimeout = originalSetTimeout;
-  });
-
-  const iterator = runner.run(attempt, {
-    skipUserMessage: true,
-    delayMs: 100,
-    useStandardServiceTier: true,
-  });
-  let result = await iterator.next();
-  while (!result.done) {
-    result = await iterator.next();
   }
-
-  t.deepEqual(result.value, { kind: 'stale' });
-  t.is(standardTierCalls, 0);
-  t.is(startCalls, 0);
 });
 
-test('aborted-approval input reusing the current token', async (t) => {
+it('aborted-approval input reusing the current token', async () => {
   const interruption = {
     name: 'shell',
     agent: { name: 'CLI Agent' },
@@ -370,17 +368,17 @@ test('aborted-approval input reusing the current token', async (t) => {
   })();
 
   const outcome = await runPromise;
-  t.is(outcome.kind, 'abort_resolution_required');
+  expect(outcome.kind).toBe('abort_resolution_required');
   if (outcome.kind === 'abort_resolution_required') {
-    t.is(outcome.abortedContext, abortedContext);
-    t.is(outcome.userText, 'resolved text');
-    t.is(outcome.generation, token);
+    expect(outcome.abortedContext).toBe(abortedContext);
+    expect(outcome.userText).toBe('resolved text');
+    expect(outcome.generation).toBe(token);
   }
-  t.is(events.length, 1);
-  t.is(events[0].type, 'user_message_consumed_for_abort');
+  expect(events.length).toBe(1);
+  expect(events[0].type).toBe('user_message_consumed_for_abort');
 });
 
-test('stale aborted-approval context produces no mutation', async (t) => {
+it('stale aborted-approval context produces no mutation', async () => {
   const interruption = {
     name: 'shell',
     agent: { name: 'CLI Agent' },
@@ -432,6 +430,6 @@ test('stale aborted-approval context produces no mutation', async (t) => {
   })();
 
   const outcome = await runPromise;
-  t.is(outcome.kind, 'stale');
-  t.is(events.length, 0);
+  expect(outcome.kind).toBe('stale');
+  expect(events.length).toBe(0);
 });

@@ -1,7 +1,7 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { buildMessagesFromRequest, addCacheControlToLastTwoMessages } from './openai-compatible-messages.js';
 
-test('buildMessagesFromRequest() preserves user text and image content', (t) => {
+it('buildMessagesFromRequest() preserves user text and image content', () => {
   const messages = buildMessagesFromRequest({
     input: [
       {
@@ -15,7 +15,7 @@ test('buildMessagesFromRequest() preserves user text and image content', (t) => 
     ],
   } as any);
 
-  t.deepEqual(messages, [
+  expect(messages).toEqual([
     {
       role: 'user',
       content: [
@@ -26,7 +26,7 @@ test('buildMessagesFromRequest() preserves user text and image content', (t) => 
   ]);
 });
 
-test('buildMessagesFromRequest() extracts text from assistant content blocks with type=text (Responses API shape)', (t) => {
+it('buildMessagesFromRequest() extracts text from assistant content blocks with type=text (Responses API shape)', () => {
   const messages = buildMessagesFromRequest({
     input: [
       {
@@ -37,10 +37,10 @@ test('buildMessagesFromRequest() extracts text from assistant content blocks wit
     ],
   } as any);
 
-  t.deepEqual(messages, [{ role: 'assistant', content: 'Hi! How can I help?' }]);
+  expect(messages).toEqual([{ role: 'assistant', content: 'Hi! How can I help?' }]);
 });
 
-test('buildMessagesFromRequest() concatenates mixed output_text and text content blocks', (t) => {
+it('buildMessagesFromRequest() concatenates mixed output_text and text content blocks', () => {
   const messages = buildMessagesFromRequest({
     input: [
       {
@@ -54,10 +54,10 @@ test('buildMessagesFromRequest() concatenates mixed output_text and text content
     ],
   } as any);
 
-  t.deepEqual(messages, [{ role: 'assistant', content: 'Part one. Part two.' }]);
+  expect(messages).toEqual([{ role: 'assistant', content: 'Part one. Part two.' }]);
 });
 
-test('addCacheControlToLastTwoMessages() adds cache control to system, last user, and last tool messages', (t) => {
+it('addCacheControlToLastTwoMessages() adds cache control to system, last user, and last tool messages', () => {
   const messages = [
     { role: 'system', content: 'sys1' },
     { role: 'user', content: 'user1' },
@@ -65,13 +65,13 @@ test('addCacheControlToLastTwoMessages() adds cache control to system, last user
     { role: 'user', content: 'user2' },
   ];
   addCacheControlToLastTwoMessages(messages);
-  t.deepEqual(messages[0].content, [{ type: 'text', text: 'sys1', cache_control: { type: 'ephemeral' } }]);
-  t.deepEqual(messages[1].content, 'user1'); // not last user
-  t.deepEqual(messages[2].content, [{ type: 'text', text: 'tool1', cache_control: { type: 'ephemeral' } }]); // last tool
-  t.deepEqual(messages[3].content, [{ type: 'text', text: 'user2', cache_control: { type: 'ephemeral' } }]); // last user
+  expect(messages[0].content).toEqual([{ type: 'text', text: 'sys1', cache_control: { type: 'ephemeral' } }]);
+  expect(messages[1].content).toEqual('user1'); // not last user
+  expect(messages[2].content).toEqual([{ type: 'text', text: 'tool1', cache_control: { type: 'ephemeral' } }]); // last tool
+  expect(messages[3].content).toEqual([{ type: 'text', text: 'user2', cache_control: { type: 'ephemeral' } }]); // last user
 });
 
-test('addCacheControlToLastTwoMessages() marks only the last system message when several exist', (t) => {
+it('addCacheControlToLastTwoMessages() marks only the last system message when several exist', () => {
   const messages = [
     { role: 'system', content: 'system prompt' },
     { role: 'user', content: 'u1' },
@@ -85,30 +85,30 @@ test('addCacheControlToLastTwoMessages() marks only the last system message when
   addCacheControlToLastTwoMessages(messages);
 
   // Only the last system message carries a breakpoint (not every one).
-  t.is(messages[0].content, 'system prompt');
-  t.is(messages[3].content, 'Plan Mode ON');
-  t.deepEqual(messages[6].content, [{ type: 'text', text: 'Plan Mode OFF', cache_control: { type: 'ephemeral' } }]);
+  expect(messages[0].content).toBe('system prompt');
+  expect(messages[3].content).toBe('Plan Mode ON');
+  expect(messages[6].content).toEqual([{ type: 'text', text: 'Plan Mode OFF', cache_control: { type: 'ephemeral' } }]);
 
   // Plus the rolling last-user breakpoint. Total breakpoints stay within the
   // provider cap regardless of how many mode notices accumulate.
-  t.deepEqual(messages[7].content, [{ type: 'text', text: 'u3', cache_control: { type: 'ephemeral' } }]);
+  expect(messages[7].content).toEqual([{ type: 'text', text: 'u3', cache_control: { type: 'ephemeral' } }]);
   const breakpoints = messages.filter(
     (m) => Array.isArray(m.content) && m.content.some((c: any) => c.cache_control),
   ).length;
-  t.is(breakpoints, 2);
+  expect(breakpoints).toBe(2);
 });
 
-test('addCacheControlToLastTwoMessages() adds cache_control to last text block in array content', (t) => {
+it('addCacheControlToLastTwoMessages() adds cache_control to last text block in array content', () => {
   const messages = [
     { role: 'user', content: [{ type: 'text', text: 'hello' }] },
     { role: 'user', content: [{ type: 'text', text: 'world' }] },
   ];
   addCacheControlToLastTwoMessages(messages);
-  t.deepEqual(messages[0].content, [{ type: 'text', text: 'hello' }]); // not last user
-  t.deepEqual(messages[1].content, [{ type: 'text', text: 'world', cache_control: { type: 'ephemeral' } }]); // last user
+  expect(messages[0].content).toEqual([{ type: 'text', text: 'hello' }]); // not last user
+  expect(messages[1].content).toEqual([{ type: 'text', text: 'world', cache_control: { type: 'ephemeral' } }]); // last user
 });
 
-test('addCacheControlToLastTwoMessages() leaves other messages untouched', (t) => {
+it('addCacheControlToLastTwoMessages() leaves other messages untouched', () => {
   const messages = [
     { role: 'user', content: 'untouched' },
     { role: 'user', content: 'untouched2' },
@@ -116,29 +116,29 @@ test('addCacheControlToLastTwoMessages() leaves other messages untouched', (t) =
     { role: 'user', content: 'marked' },
   ];
   addCacheControlToLastTwoMessages(messages);
-  t.is(messages[0].content, 'untouched');
-  t.is(messages[1].content, 'untouched2');
-  t.is(messages[2].content, 'assistant');
-  t.deepEqual(messages[3].content, [{ type: 'text', text: 'marked', cache_control: { type: 'ephemeral' } }]);
+  expect(messages[0].content).toBe('untouched');
+  expect(messages[1].content).toBe('untouched2');
+  expect(messages[2].content).toBe('assistant');
+  expect(messages[3].content).toEqual([{ type: 'text', text: 'marked', cache_control: { type: 'ephemeral' } }]);
 });
 
-test('addCacheControlToLastTwoMessages() does nothing on empty array', (t) => {
+it('addCacheControlToLastTwoMessages() does nothing on empty array', () => {
   const messages: any[] = [];
-  t.notThrows(() => addCacheControlToLastTwoMessages(messages));
-  t.deepEqual(messages, []);
+  expect(() => addCacheControlToLastTwoMessages(messages)).not.toThrow();
+  expect(messages).toEqual([]);
 });
 
-test('addCacheControlToLastTwoMessages() skips messages with no text content block', (t) => {
+it('addCacheControlToLastTwoMessages() skips messages with no text content block', () => {
   const messages = [
     { role: 'tool', content: [{ type: 'image', data: 'abc' }] },
     { role: 'user', content: [{ type: 'text', text: 'hi' }] },
   ];
   addCacheControlToLastTwoMessages(messages);
-  t.deepEqual(messages[0].content, [{ type: 'image', data: 'abc' }]);
-  t.deepEqual(messages[1].content, [{ type: 'text', text: 'hi', cache_control: { type: 'ephemeral' } }]);
+  expect(messages[0].content).toEqual([{ type: 'image', data: 'abc' }]);
+  expect(messages[1].content).toEqual([{ type: 'text', text: 'hi', cache_control: { type: 'ephemeral' } }]);
 });
 
-test('buildMessagesFromRequest() preserves assistant messages that only carry reasoning metadata', (t) => {
+it('buildMessagesFromRequest() preserves assistant messages that only carry reasoning metadata', () => {
   const messages = buildMessagesFromRequest({
     input: [
       { role: 'user', type: 'message', content: 'read package json' },
@@ -152,7 +152,7 @@ test('buildMessagesFromRequest() preserves assistant messages that only carry re
     ],
   } as any);
 
-  t.deepEqual(messages, [
+  expect(messages).toEqual([
     { role: 'user', content: 'read package json' },
     {
       role: 'assistant',
@@ -162,7 +162,7 @@ test('buildMessagesFromRequest() preserves assistant messages that only carry re
   ]);
 });
 
-test('addCacheControlToLastTwoMessages() filters by modelId correctly', (t) => {
+it('addCacheControlToLastTwoMessages() filters by modelId correctly', () => {
   const testCases = [
     { modelId: 'anthropic/claude-3-5-sonnet', shouldCache: true },
     { modelId: 'claude-3-5-haiku', shouldCache: true },
@@ -179,16 +179,16 @@ test('addCacheControlToLastTwoMessages() filters by modelId correctly', (t) => {
     ];
     addCacheControlToLastTwoMessages(messages, modelId);
     if (shouldCache) {
-      t.deepEqual(messages[0].content, [{ type: 'text', text: 'hello', cache_control: { type: 'ephemeral' } }]);
-      t.deepEqual(messages[1].content, 'world'); // assistant does not get cache control under new rules
+      expect(messages[0].content).toEqual([{ type: 'text', text: 'hello', cache_control: { type: 'ephemeral' } }]);
+      expect(messages[1].content).toEqual('world'); // assistant does not get cache control under new rules
     } else {
-      t.deepEqual(messages[0].content, 'hello');
-      t.deepEqual(messages[1].content, 'world');
+      expect(messages[0].content).toEqual('hello');
+      expect(messages[1].content).toEqual('world');
     }
   }
 });
 
-test('buildMessagesFromRequest() adds cache control for Qwen models', (t) => {
+it('buildMessagesFromRequest() adds cache control for Qwen models', () => {
   const messages = buildMessagesFromRequest(
     {
       input: [
@@ -203,6 +203,6 @@ test('buildMessagesFromRequest() adds cache control for Qwen models', (t) => {
     'qwen/qwen-2.5-coder',
   );
 
-  t.deepEqual(messages[0].content, [{ type: 'text', text: 'hello', cache_control: { type: 'ephemeral' } }]);
-  t.is(messages[1].content, 'hi');
+  expect(messages[0].content).toEqual([{ type: 'text', text: 'hello', cache_control: { type: 'ephemeral' } }]);
+  expect(messages[1].content).toBe('hi');
 });

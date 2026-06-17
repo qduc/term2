@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createRunSubagentToolDefinition, getSubagentsRolesSection } from './run-subagent.js';
 import type { SubagentResult } from '../../services/subagents/types.js';
 
@@ -14,55 +14,55 @@ function makeResult(overrides: Partial<SubagentResult> = {}): SubagentResult {
   };
 }
 
-test('createRunSubagentToolDefinition defines the tool correctly', (t) => {
+it('createRunSubagentToolDefinition defines the tool correctly', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 
-  t.is(tool.name, 'run_subagent');
-  t.true(tool.description.includes('Delegate'));
-  t.is(tool.needsApproval({ role: 'explorer', task: 'test' }, undefined), false);
+  expect(tool.name).toBe('run_subagent');
+  expect(tool.description.includes('Delegate')).toBe(true);
+  expect(tool.needsApproval({ role: 'explorer', task: 'test' }, undefined)).toBe(false);
 });
 
-test('schema requires role and task', (t) => {
+it('schema requires role and task', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 
-  t.true(tool.parameters.safeParse({ role: 'explorer', task: 'find files' }).success);
-  t.false(tool.parameters.safeParse({ role: 'explorer' }).success);
-  t.false(tool.parameters.safeParse({ task: 'find files' }).success);
+  expect(tool.parameters.safeParse({ role: 'explorer', task: 'find files' }).success).toBe(true);
+  expect(tool.parameters.safeParse({ role: 'explorer' }).success).toBe(false);
+  expect(tool.parameters.safeParse({ task: 'find files' }).success).toBe(false);
 });
 
-test('schema rejects unsupported roles', (t) => {
+it('schema rejects unsupported roles', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 
   for (const role of ['explorer', 'worker', 'researcher', 'mentor']) {
-    t.true(tool.parameters.safeParse({ role, task: 'do work' }).success);
+    expect(tool.parameters.safeParse({ role, task: 'do work' }).success).toBe(true);
   }
-  t.false(tool.parameters.safeParse({ role: 'custom', task: 'do work' }).success);
+  expect(tool.parameters.safeParse({ role: 'custom', task: 'do work' }).success).toBe(false);
 });
 
-test('execute returns plain-text SubagentResult', async (t) => {
+it('execute returns plain-text SubagentResult', async () => {
   const expected = makeResult({ finalText: 'Answer here.' });
   const tool = createRunSubagentToolDefinition(async () => expected);
 
   const raw = await tool.execute({ role: 'explorer', task: 'find files' });
 
-  t.true(raw.includes('Status: completed'));
-  t.true(raw.includes('Answer here.'));
-  t.false(raw.startsWith('{'));
+  expect(raw.includes('Status: completed')).toBe(true);
+  expect(raw.includes('Answer here.')).toBe(true);
+  expect(raw.startsWith('{')).toBe(false);
 });
 
-test('execute returns failed result as plain text on error', async (t) => {
+it('execute returns failed result as plain text on error', async () => {
   const tool = createRunSubagentToolDefinition(async () => {
     throw new Error('Connection failed');
   });
 
   const raw = await tool.execute({ role: 'explorer', task: 'find files' });
 
-  t.true(raw.includes('Status: failed'));
-  t.true(raw.includes('Error: Connection failed'));
-  t.false(raw.startsWith('{'));
+  expect(raw.includes('Status: failed')).toBe(true);
+  expect(raw.includes('Error: Connection failed')).toBe(true);
+  expect(raw.startsWith('{')).toBe(false);
 });
 
-test('execute passes tool invocation details to subagent runner', async (t) => {
+it('execute passes tool invocation details to subagent runner', async () => {
   let capturedDetails: unknown;
   const tool = createRunSubagentToolDefinition(async (_params, _context, details) => {
     capturedDetails = details;
@@ -73,10 +73,10 @@ test('execute passes tool invocation details to subagent runner', async (t) => {
 
   await tool.execute({ role: 'explorer', task: 'find files' }, undefined, details);
 
-  t.is(capturedDetails, details);
+  expect(capturedDetails).toBe(details);
 });
 
-test('formatCommandMessage renders completed result', (t) => {
+it('formatCommandMessage renders completed result', () => {
   const result = makeResult({
     finalText: 'Found 3 relevant files.',
     toolsUsed: [{ toolName: 'read_file', count: 3 }],
@@ -91,14 +91,14 @@ test('formatCommandMessage renders completed result', (t) => {
   };
 
   const messages = tool.formatCommandMessage(item, 0, new Map());
-  t.is(messages.length, 1);
-  t.true(messages[0].command.includes('explorer'));
-  t.true(messages[0].command.includes('find files'));
-  t.true(messages[0].output.includes('Found 3 relevant files.'));
-  t.true(messages[0].success ?? true);
+  expect(messages.length).toBe(1);
+  expect(messages[0].command.includes('explorer')).toBe(true);
+  expect(messages[0].command.includes('find files')).toBe(true);
+  expect(messages[0].output.includes('Found 3 relevant files.')).toBe(true);
+  expect(messages[0].success ?? true).toBe(true);
 });
 
-test('formatCommandMessage truncates long task in command', (t) => {
+it('formatCommandMessage truncates long task in command', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
   const longTask = 'a'.repeat(400);
 
@@ -110,11 +110,11 @@ test('formatCommandMessage truncates long task in command', (t) => {
   };
 
   const messages = tool.formatCommandMessage(item, 0, new Map());
-  t.is(messages[0].command.length, 'run_subagent [explorer] '.length + 300);
-  t.true(messages[0].command.endsWith('...'));
+  expect(messages[0].command.length).toBe('run_subagent [explorer] '.length + 300);
+  expect(messages[0].command.endsWith('...')).toBe(true);
 });
 
-test('formatCommandMessage uses only the first paragraph', (t) => {
+it('formatCommandMessage uses only the first paragraph', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
   const taskWithParagraphs = 'First paragraph content.\n\nSecond paragraph content that should be ignored.';
 
@@ -126,10 +126,10 @@ test('formatCommandMessage uses only the first paragraph', (t) => {
   };
 
   const messages = tool.formatCommandMessage(item, 0, new Map());
-  t.is(messages[0].command, 'run_subagent [explorer] First paragraph content.');
+  expect(messages[0].command).toBe('run_subagent [explorer] First paragraph content.');
 });
 
-test('formatCommandMessage truncates long output', (t) => {
+it('formatCommandMessage truncates long output', () => {
   const longOutput = 'b'.repeat(400);
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 
@@ -141,11 +141,11 @@ test('formatCommandMessage truncates long output', (t) => {
   };
 
   const messages = tool.formatCommandMessage(item, 0, new Map());
-  t.is(messages[0].output.split('\n')[0].length, 300);
-  t.true(messages[0].output.split('\n')[0].endsWith('...'));
+  expect(messages[0].output.split('\n')[0].length).toBe(300);
+  expect(messages[0].output.split('\n')[0].endsWith('...')).toBe(true);
 });
 
-test('formatCommandMessage uses only the first paragraph of output', (t) => {
+it('formatCommandMessage uses only the first paragraph of output', () => {
   const outputWithParagraphs = 'First output paragraph.\n\nSecond output paragraph.';
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 
@@ -157,10 +157,10 @@ test('formatCommandMessage uses only the first paragraph of output', (t) => {
   };
 
   const messages = tool.formatCommandMessage(item, 0, new Map());
-  t.is(messages[0].output.split('\n')[0], 'First output paragraph.');
+  expect(messages[0].output.split('\n')[0]).toBe('First output paragraph.');
 });
 
-test('formatCommandMessage renders failed result', (t) => {
+it('formatCommandMessage renders failed result', () => {
   const result = makeResult({ status: 'failed', error: 'Role not found', finalText: '' });
   const tool = createRunSubagentToolDefinition(async () => result);
 
@@ -172,11 +172,11 @@ test('formatCommandMessage renders failed result', (t) => {
   };
 
   const messages = tool.formatCommandMessage(item, 0, new Map());
-  t.is(messages.length, 1);
-  t.false(messages[0].success!);
+  expect(messages.length).toBe(1);
+  expect(messages[0].success!).toBe(false);
 });
 
-test('formatCommandMessage includes tool usage summary', (t) => {
+it('formatCommandMessage includes tool usage summary', () => {
   const result = makeResult({
     toolsUsed: [
       { toolName: 'read_file', count: 5 },
@@ -193,11 +193,11 @@ test('formatCommandMessage includes tool usage summary', (t) => {
   };
 
   const messages = tool.formatCommandMessage(item, 0, new Map());
-  t.true(messages[0].output.includes('read_file(5)'));
-  t.true(messages[0].output.includes('grep(2)'));
+  expect(messages[0].output.includes('read_file(5)')).toBe(true);
+  expect(messages[0].output.includes('grep(2)')).toBe(true);
 });
 
-test('formatCommandMessage includes files changed summary for worker', (t) => {
+it('formatCommandMessage includes files changed summary for worker', () => {
   const result = makeResult({
     role: 'worker',
     filesChanged: ['src/foo.ts', 'src/bar.ts'],
@@ -212,21 +212,21 @@ test('formatCommandMessage includes files changed summary for worker', (t) => {
   };
 
   const messages = tool.formatCommandMessage(item, 0, new Map());
-  t.true(messages[0].output.includes('src/foo.ts'));
-  t.true(messages[0].output.includes('src/bar.ts'));
+  expect(messages[0].output.includes('src/foo.ts')).toBe(true);
+  expect(messages[0].output.includes('src/bar.ts')).toBe(true);
 });
 
-test('getSubagentsRolesSection extracts descriptions from markdown files', (t) => {
+it('getSubagentsRolesSection extracts descriptions from markdown files', () => {
   const section = getSubagentsRolesSection();
 
-  t.true(section.includes('## Roles'));
-  t.true(section.includes('`explorer`'));
-  t.true(section.includes('`mentor`'));
-  t.true(section.includes('`researcher`'));
-  t.true(section.includes('`worker`'));
+  expect(section.includes('## Roles')).toBe(true);
+  expect(section.includes('`explorer`')).toBe(true);
+  expect(section.includes('`mentor`')).toBe(true);
+  expect(section.includes('`researcher`')).toBe(true);
+  expect(section.includes('`worker`')).toBe(true);
 
-  t.regex(section, /-\s+`explorer`:\s+\S+/);
-  t.regex(section, /-\s+`mentor`:\s+\S+/);
-  t.regex(section, /-\s+`researcher`:\s+\S+/);
-  t.regex(section, /-\s+`worker`:\s+\S+/);
+  expect(section).toMatch(/-\s+`explorer`:\s+\S+/);
+  expect(section).toMatch(/-\s+`mentor`:\s+\S+/);
+  expect(section).toMatch(/-\s+`researcher`:\s+\S+/);
+  expect(section).toMatch(/-\s+`worker`:\s+\S+/);
 });

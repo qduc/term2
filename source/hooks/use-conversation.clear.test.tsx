@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { act, useState } from 'react';
 import { Text } from 'ink';
 import { useConversation } from './use-conversation.js';
@@ -12,7 +11,7 @@ const loggingService = {
   error() {},
 } as any;
 
-test.serial('useConversation triggers onClear and resets messages/sessionId', async (t) => {
+it.sequential('useConversation triggers onClear and resets messages/sessionId', async () => {
   let onClearCalled = false;
   const mockConversationService = {
     sessionId: 'old-session-id',
@@ -47,21 +46,21 @@ test.serial('useConversation triggers onClear and resets messages/sessionId', as
   };
 
   let lastFrame: (() => string | undefined) | undefined;
-  ({ lastFrame } = await renderInAct(<Harness />, t));
-  t.truthy(lastFrame);
-  t.is(lastFrame!(), 'old-session-id|1');
+  ({ lastFrame } = await renderInAct(<Harness />));
+  expect(lastFrame).toBeTruthy();
+  expect(lastFrame!()).toBe('old-session-id|1');
 
   await act(async () => {
     await clearFn();
   });
 
-  t.true(onClearCalled);
-  t.is(mockConversationService.sessionId, 'new-session-id');
-  t.truthy(lastFrame);
-  t.is(lastFrame!(), 'new-session-id|0');
+  expect(onClearCalled).toBe(true);
+  expect(mockConversationService.sessionId).toBe('new-session-id');
+  expect(lastFrame).toBeTruthy();
+  expect(lastFrame!()).toBe('new-session-id|0');
 });
 
-test.serial('useConversation fallback clear resets with a fresh session id', async (t) => {
+it.sequential('useConversation fallback clear resets with a fresh session id', async () => {
   const mockConversationService = {
     sessionId: 'old-session-id',
     resetWithNewId(newId: string) {
@@ -84,21 +83,21 @@ test.serial('useConversation fallback clear resets with a fresh session id', asy
   };
 
   let lastFrame: (() => string | undefined) | undefined;
-  ({ lastFrame } = await renderInAct(<Harness />, t));
-  t.truthy(lastFrame);
-  t.is(lastFrame!(), '1');
+  ({ lastFrame } = await renderInAct(<Harness />));
+  expect(lastFrame).toBeTruthy();
+  expect(lastFrame!()).toBe('1');
 
   await act(async () => {
     await clearFn();
   });
 
-  t.not(mockConversationService.sessionId, 'old-session-id');
-  t.truthy(mockConversationService.sessionId);
-  t.truthy(lastFrame);
-  t.is(lastFrame!(), '0');
+  expect(mockConversationService.sessionId).not.toBe('old-session-id');
+  expect(mockConversationService.sessionId).toBeTruthy();
+  expect(lastFrame).toBeTruthy();
+  expect(lastFrame!()).toBe('0');
 });
 
-test.serial('useConversation filters duplicate stack trace from rawEvent when logging error', async (t) => {
+it.sequential('useConversation filters duplicate stack trace from rawEvent when logging error', async () => {
   const loggedErrors: any[] = [];
   const loggingServiceMock = {
     debug() {},
@@ -132,7 +131,7 @@ test.serial('useConversation filters duplicate stack trace from rawEvent when lo
     return <Text>Harness</Text>;
   };
 
-  await renderInAct(<Harness />, t);
+  await renderInAct(<Harness />);
 
   await act(async () => {
     try {
@@ -142,13 +141,13 @@ test.serial('useConversation filters duplicate stack trace from rawEvent when lo
     }
   });
 
-  t.is(loggedErrors.length, 1);
+  expect(loggedErrors.length).toBe(1);
   const meta = loggedErrors[0];
-  t.is(meta.error, 'Test error');
-  t.truthy(meta.stack);
+  expect(meta.error).toBe('Test error');
+  expect(meta.stack).toBeTruthy();
 });
 
-test.serial('useConversation exposes transient thinking state only while hidden reasoning is active', async (t) => {
+it.sequential('useConversation exposes transient thinking state only while hidden reasoning is active', async () => {
   let emitTextDelta: (() => void) | undefined;
   let resolveSend: (() => void) | undefined;
   const mockConversationService = {
@@ -177,9 +176,9 @@ test.serial('useConversation exposes transient thinking state only while hidden 
   };
 
   let lastFrame: (() => string | undefined) | undefined;
-  ({ lastFrame } = await renderInAct(<Harness />, t));
+  ({ lastFrame } = await renderInAct(<Harness />));
 
-  t.is(lastFrame!(), 'idle');
+  expect(lastFrame!()).toBe('idle');
 
   let pendingSend: Promise<void> | undefined;
   await act(async () => {
@@ -187,13 +186,13 @@ test.serial('useConversation exposes transient thinking state only while hidden 
     await Promise.resolve();
   });
 
-  t.is(lastFrame!(), 'thinking');
+  expect(lastFrame!()).toBe('thinking');
 
   await act(async () => {
     emitTextDelta?.();
   });
 
-  t.is(lastFrame!(), 'idle');
+  expect(lastFrame!()).toBe('idle');
 
   await act(async () => {
     resolveSend?.();

@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   confirmHomeDirectoryStart,
   isAffirmativeAnswer,
@@ -6,51 +6,51 @@ import {
   shouldWarnOnHomeDirectoryStart,
 } from './home-directory-start-guard.js';
 
-test('isExactDirectory only matches the exact path', (t) => {
-  t.true(isExactDirectory('/home/user', '/home/user'));
-  t.false(isExactDirectory('/home/user/project', '/home/user'));
-  t.false(isExactDirectory('/home/other', '/home/user'));
+it('isExactDirectory only matches the exact path', () => {
+  expect(isExactDirectory('/home/user', '/home/user')).toBe(true);
+  expect(isExactDirectory('/home/user/project', '/home/user')).toBe(false);
+  expect(isExactDirectory('/home/other', '/home/user')).toBe(false);
 });
 
-test('shouldWarnOnHomeDirectoryStart only warns at the exact home directory or root directory', (t) => {
-  t.true(
+it('shouldWarnOnHomeDirectoryStart only warns at the exact home directory or root directory', () => {
+  expect(
     shouldWarnOnHomeDirectoryStart({
       cwd: '/home/user',
       homeDir: '/home/user',
       isNonLiteStart: true,
     }),
-  );
-  t.false(
+  ).toBe(true);
+  expect(
     shouldWarnOnHomeDirectoryStart({
       cwd: '/home/user/project',
       homeDir: '/home/user',
       isNonLiteStart: false,
     }),
-  );
-  t.false(
+  ).toBe(false);
+  expect(
     shouldWarnOnHomeDirectoryStart({
       cwd: '/home/user/project',
       homeDir: '/home/user',
       isNonLiteStart: true,
     }),
-  );
-  t.true(
+  ).toBe(false);
+  expect(
     shouldWarnOnHomeDirectoryStart({
       cwd: '/',
       homeDir: '/home/user',
       isNonLiteStart: true,
     }),
-  );
+  ).toBe(true);
 });
 
-test('isAffirmativeAnswer accepts yes and y responses only', (t) => {
-  t.true(isAffirmativeAnswer('y'));
-  t.true(isAffirmativeAnswer(' yes '));
-  t.false(isAffirmativeAnswer('n'));
-  t.false(isAffirmativeAnswer(''));
+it('isAffirmativeAnswer accepts yes and y responses only', () => {
+  expect(isAffirmativeAnswer('y')).toBe(true);
+  expect(isAffirmativeAnswer(' yes ')).toBe(true);
+  expect(isAffirmativeAnswer('n')).toBe(false);
+  expect(isAffirmativeAnswer('')).toBe(false);
 });
 
-test('confirmHomeDirectoryStart resolves affirmative answers', async (t) => {
-  t.true(await confirmHomeDirectoryStart(async () => 'yes'));
-  t.false(await confirmHomeDirectoryStart(async () => 'no'));
+it('confirmHomeDirectoryStart resolves affirmative answers', async () => {
+  expect(await confirmHomeDirectoryStart(async () => 'yes')).toBe(true);
+  expect(await confirmHomeDirectoryStart(async () => 'no')).toBe(false);
 });

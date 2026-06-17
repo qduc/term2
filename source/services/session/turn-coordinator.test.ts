@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { TurnCoordinator } from './turn-coordinator.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
 
@@ -76,38 +76,35 @@ const makeHarness = () => {
   };
 };
 
-test('Foreground-turn admission: throws when already active', async (t) => {
+it('Foreground-turn admission: throws when already active', async () => {
   const { coordinator, statusMachine } = makeHarness();
   statusMachine.beginTurn(); // status becomes 'streaming'
 
-  await t.throwsAsync(
-    async () => {
-      for await (const _ of coordinator.start('hello')) {
-      }
-    },
-    { message: 'Another foreground turn is already active.' },
-  );
+  await expect(async () => {
+    for await (const _ of coordinator.start('hello')) {
+    }
+  }).rejects.toThrow('Another foreground turn is already active.');
 });
 
-test('streaming -> awaiting_approval', async (t) => {
+it('streaming -> awaiting_approval', async () => {
   const { coordinator, statusMachine, initialTurnRunner } = makeHarness();
   initialTurnRunner.setNextResult({
     kind: 'approval_required',
     terminal: { type: 'approval_required', approval: { toolName: 'shell', argumentsText: 'ls' } },
   });
 
-  t.is(statusMachine.current, 'idle');
+  expect(statusMachine.current).toBe('idle');
   const events: any[] = [];
   for await (const ev of coordinator.start('run command')) {
     events.push(ev);
   }
 
-  t.is(statusMachine.current, 'awaiting_approval');
-  t.is(events.length, 1);
-  t.is(events[0].type, 'approval_required');
+  expect(statusMachine.current).toBe('awaiting_approval');
+  expect(events.length).toBe(1);
+  expect(events[0].type).toBe('approval_required');
 });
 
-test('awaiting_approval -> continuing -> awaiting_approval', async (t) => {
+it('awaiting_approval -> continuing -> awaiting_approval', async () => {
   const { coordinator, statusMachine, continuationDriver } = makeHarness();
   statusMachine.beginTurn();
   statusMachine.requestApproval(); // status becomes 'awaiting_approval'
@@ -117,18 +114,18 @@ test('awaiting_approval -> continuing -> awaiting_approval', async (t) => {
     terminal: { type: 'approval_required', approval: { toolName: 'shell', argumentsText: 'ls' } },
   });
 
-  t.is(statusMachine.current, 'awaiting_approval');
+  expect(statusMachine.current).toBe('awaiting_approval');
   const events: any[] = [];
   for await (const ev of coordinator.continueAfterApproval({ answer: 'y' })) {
     events.push(ev);
   }
 
-  t.is(statusMachine.current, 'awaiting_approval');
-  t.is(events.length, 1);
-  t.is(events[0].type, 'approval_required');
+  expect(statusMachine.current).toBe('awaiting_approval');
+  expect(events.length).toBe(1);
+  expect(events[0].type).toBe('approval_required');
 });
 
-test('Auto-approved initial continuations leave status streaming', async (t) => {
+it('Auto-approved initial continuations leave status streaming', async () => {
   const { coordinator, statusMachine, initialTurnRunner } = makeHarness();
 
   let checkedStatusInLoop: any = null;
@@ -142,11 +139,11 @@ test('Auto-approved initial continuations leave status streaming', async (t) => 
   for await (const _ of coordinator.start('run command')) {
   }
 
-  t.is(checkedStatusInLoop, 'streaming');
-  t.is(statusMachine.current, 'idle');
+  expect(checkedStatusInLoop).toBe('streaming');
+  expect(statusMachine.current).toBe('idle');
 });
 
-test('Auto-approved manual continuations leave status continuing', async (t) => {
+it('Auto-approved manual continuations leave status continuing', async () => {
   const { coordinator, statusMachine, continuationDriver } = makeHarness();
   statusMachine.beginTurn();
   statusMachine.requestApproval(); // status becomes 'awaiting_approval'
@@ -162,36 +159,36 @@ test('Auto-approved manual continuations leave status continuing', async (t) => 
   for await (const _ of coordinator.continueAfterApproval({ answer: 'y' })) {
   }
 
-  t.is(checkedStatusInLoop, 'continuing');
-  t.is(statusMachine.current, 'idle');
+  expect(checkedStatusInLoop).toBe('continuing');
+  expect(statusMachine.current).toBe('idle');
 });
 
-test('Terminal completion to idle', async (t) => {
+it('Terminal completion to idle', async () => {
   const { coordinator, statusMachine, initialTurnRunner } = makeHarness();
   initialTurnRunner.setNextResult({
     kind: 'response',
     terminal: { type: 'response', finalText: 'complete' },
   });
 
-  t.is(statusMachine.current, 'idle');
+  expect(statusMachine.current).toBe('idle');
   for await (const _ of coordinator.start('run command')) {
   }
-  t.is(statusMachine.current, 'idle');
+  expect(statusMachine.current).toBe('idle');
 });
 
-test('failed completes the status because the runner already emitted terminal events', async (t) => {
+it('failed completes the status because the runner already emitted terminal events', async () => {
   const { coordinator, statusMachine, initialTurnRunner } = makeHarness();
   initialTurnRunner.setNextResult({
     kind: 'failed',
   });
 
-  t.is(statusMachine.current, 'idle');
+  expect(statusMachine.current).toBe('idle');
   for await (const _ of coordinator.start('run command')) {
   }
-  t.is(statusMachine.current, 'idle');
+  expect(statusMachine.current).toBe('idle');
 });
 
-test('stale leaves status untouched because lifecycle operation resolved it', async (t) => {
+it('stale leaves status untouched because lifecycle operation resolved it', async () => {
   const { coordinator, statusMachine, initialTurnRunner } = makeHarness();
 
   initialTurnRunner.run = async function* () {
@@ -201,13 +198,13 @@ test('stale leaves status untouched because lifecycle operation resolved it', as
     return { kind: 'stale' };
   };
 
-  t.is(statusMachine.current, 'idle');
+  expect(statusMachine.current).toBe('idle');
   for await (const _ of coordinator.start('run command')) {
   }
-  t.is(statusMachine.current, 'streaming'); // remains streaming
+  expect(statusMachine.current).toBe('streaming'); // remains streaming
 });
 
-test('stale initial outcome does not emit a terminal event', async (t) => {
+it('stale initial outcome does not emit a terminal event', async () => {
   const { coordinator, initialTurnRunner } = makeHarness();
   initialTurnRunner.setNextResult({
     kind: 'stale',
@@ -219,10 +216,10 @@ test('stale initial outcome does not emit a terminal event', async (t) => {
     events.push(event);
   }
 
-  t.deepEqual(events, []);
+  expect(events).toEqual([]);
 });
 
-test('stale continuation leaves a newer turn status untouched', async (t) => {
+it('stale continuation leaves a newer turn status untouched', async () => {
   const { coordinator, statusMachine, continuationDriver } = makeHarness();
   statusMachine.beginTurn();
   statusMachine.requestApproval();
@@ -236,10 +233,10 @@ test('stale continuation leaves a newer turn status untouched', async (t) => {
   for await (const _ of coordinator.continueAfterApproval({ answer: 'y' })) {
   }
 
-  t.is(statusMachine.current, 'streaming');
+  expect(statusMachine.current).toBe('streaming');
 });
 
-test('fresh-start continuation forwards recovery instructions to the initial runner', async (t) => {
+it('fresh-start continuation forwards recovery instructions to the initial runner', async () => {
   const { coordinator, statusMachine, continuationDriver, initialTurnRunner, initialRunnerCalls, approvalFlow } =
     makeHarness();
   statusMachine.beginTurn();
@@ -264,15 +261,15 @@ test('fresh-start continuation forwards recovery instructions to the initial run
   for await (const _ of coordinator.continueAfterApproval({ answer: 'y' })) {
   }
 
-  t.like(initialRunnerCalls[0]?.options, {
+  expect(initialRunnerCalls[0]?.options).toMatchObject({
     token: 7,
     delayMs: 125,
     useStandardServiceTier: true,
   });
-  t.is(statusMachine.current, 'idle');
+  expect(statusMachine.current).toBe('idle');
 });
 
-test('fresh-start completion releases the turn for the next user message', async (t) => {
+it('fresh-start completion releases the turn for the next user message', async () => {
   const { coordinator, statusMachine, continuationDriver, initialTurnRunner, approvalFlow } = makeHarness();
   statusMachine.beginTurn();
   statusMachine.requestApproval();
@@ -294,19 +291,18 @@ test('fresh-start completion releases the turn for the next user message', async
   for await (const _ of coordinator.continueAfterApproval({ answer: 'y' })) {
   }
 
-  t.is(statusMachine.current, 'idle');
+  expect(statusMachine.current).toBe('idle');
 
   initialTurnRunner.setNextResult({
     kind: 'response',
     terminal: { type: 'response', finalText: 'next turn' },
   });
-  await t.notThrowsAsync(async () => {
-    for await (const _ of coordinator.start('next message')) {
-    }
-  });
+  // Should not throw - this verifies the turn is released
+  for await (const _ of coordinator.start('next message')) {
+  }
 });
 
-test('fresh-start auto-approval is driven before the recovered turn completes', async (t) => {
+it('fresh-start auto-approval is driven before the recovered turn completes', async () => {
   const { coordinator, statusMachine, continuationDriver, continuationDriverCalls, initialTurnRunner, approvalFlow } =
     makeHarness();
   statusMachine.beginTurn();
@@ -337,24 +333,24 @@ test('fresh-start auto-approval is driven before the recovered turn completes', 
     events.push(event);
   }
 
-  t.is(continuationDriverCalls.length, 2);
-  t.deepEqual(continuationDriverCalls[1], {
+  expect(continuationDriverCalls.length).toBe(2);
+  expect(continuationDriverCalls[1]).toEqual({
     kind: 'approval_decision',
     answer: 'y',
     generation: 7,
   });
-  t.is(events.at(-1)?.type, 'final');
-  t.is(events.at(-1)?.finalText, 'recovered after approval');
-  t.is(statusMachine.current, 'idle');
+  expect(events.at(-1)?.type).toBe('final');
+  expect(events.at(-1)?.finalText).toBe('recovered after approval');
+  expect(statusMachine.current).toBe('idle');
 });
 
-test('Abort to idle with pending approval reconciliation', async (t) => {
+it('Abort to idle with pending approval reconciliation', async () => {
   const { coordinator, statusMachine, getAbortCalled } = makeHarness();
   statusMachine.beginTurn();
   statusMachine.requestApproval(); // awaiting_approval
 
   coordinator.abort();
 
-  t.true(getAbortCalled());
-  t.is(statusMachine.current, 'idle');
+  expect(getAbortCalled()).toBe(true);
+  expect(statusMachine.current).toBe('idle');
 });

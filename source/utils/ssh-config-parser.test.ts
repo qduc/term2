@@ -1,7 +1,7 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { parseSSHConfig, resolveSSHHost } from './ssh-config-parser.js';
 
-test('parseSSHConfig parses simple host entry', (t) => {
+it('parseSSHConfig parses simple host entry', () => {
   const config = `
 Host docker
     HostName 192.168.1.100
@@ -9,14 +9,14 @@ Host docker
     Port 2222
 `;
   const result = parseSSHConfig(config);
-  t.deepEqual(result['docker'], {
+  expect(result['docker']).toEqual({
     hostName: '192.168.1.100',
     user: 'myuser',
     port: 2222,
   });
 });
 
-test('parseSSHConfig parses multiple host entries', (t) => {
+it('parseSSHConfig parses multiple host entries', () => {
   const config = `
 Host docker
     HostName 192.168.1.100
@@ -28,12 +28,12 @@ Host staging
     Port 22
 `;
   const result = parseSSHConfig(config);
-  t.is(Object.keys(result).length, 2);
-  t.is(result['docker']?.hostName, '192.168.1.100');
-  t.is(result['staging']?.hostName, 'staging.example.com');
+  expect(Object.keys(result).length).toBe(2);
+  expect(result['docker']?.hostName).toBe('192.168.1.100');
+  expect(result['staging']?.hostName).toBe('staging.example.com');
 });
 
-test('parseSSHConfig handles IdentityFile', (t) => {
+it('parseSSHConfig handles IdentityFile', () => {
   const config = `
 Host myserver
     HostName server.example.com
@@ -41,10 +41,10 @@ Host myserver
     IdentityFile ~/.ssh/mykey
 `;
   const result = parseSSHConfig(config);
-  t.is(result['myserver']?.identityFile, '~/.ssh/mykey');
+  expect(result['myserver']?.identityFile).toBe('~/.ssh/mykey');
 });
 
-test('parseSSHConfig handles case-insensitive keywords', (t) => {
+it('parseSSHConfig handles case-insensitive keywords', () => {
   const config = `
 Host test
     hostname example.com
@@ -52,12 +52,12 @@ Host test
     port 2222
 `;
   const result = parseSSHConfig(config);
-  t.is(result['test']?.hostName, 'example.com');
-  t.is(result['test']?.user, 'testuser');
-  t.is(result['test']?.port, 2222);
+  expect(result['test']?.hostName).toBe('example.com');
+  expect(result['test']?.user).toBe('testuser');
+  expect(result['test']?.port).toBe(2222);
 });
 
-test('parseSSHConfig ignores comments and empty lines', (t) => {
+it('parseSSHConfig ignores comments and empty lines', () => {
   const config = `
 # This is a comment
 Host docker
@@ -67,11 +67,11 @@ Host docker
     User myuser
 `;
   const result = parseSSHConfig(config);
-  t.is(result['docker']?.hostName, '192.168.1.100');
-  t.is(result['docker']?.user, 'myuser');
+  expect(result['docker']?.hostName).toBe('192.168.1.100');
+  expect(result['docker']?.user).toBe('myuser');
 });
 
-test('parseSSHConfig handles wildcard hosts', (t) => {
+it('parseSSHConfig handles wildcard hosts', () => {
   const config = `
 Host *
     User defaultuser
@@ -81,11 +81,11 @@ Host docker
     HostName 192.168.1.100
 `;
   const result = parseSSHConfig(config);
-  t.truthy(result['*']);
-  t.is(result['*']?.user, 'defaultuser');
+  expect(result['*']).toBeTruthy();
+  expect(result['*']?.user).toBe('defaultuser');
 });
 
-test('resolveSSHHost returns config for matching host', (t) => {
+it('resolveSSHHost returns config for matching host', () => {
   const config = `
 Host docker
     HostName 192.168.1.100
@@ -93,23 +93,23 @@ Host docker
     Port 2222
 `;
   const result = resolveSSHHost('docker', config);
-  t.deepEqual(result, {
+  expect(result).toEqual({
     hostName: '192.168.1.100',
     user: 'myuser',
     port: 2222,
   });
 });
 
-test('resolveSSHHost returns undefined for non-matching host', (t) => {
+it('resolveSSHHost returns undefined for non-matching host', () => {
   const config = `
 Host docker
     HostName 192.168.1.100
 `;
   const result = resolveSSHHost('unknown', config);
-  t.is(result, undefined);
+  expect(result).toBe(undefined);
 });
 
-test('resolveSSHHost merges wildcard defaults', (t) => {
+it('resolveSSHHost merges wildcard defaults', () => {
   const config = `
 Host *
     User defaultuser
@@ -119,12 +119,12 @@ Host docker
     HostName 192.168.1.100
 `;
   const result = resolveSSHHost('docker', config);
-  t.is(result?.hostName, '192.168.1.100');
-  t.is(result?.user, 'defaultuser');
-  t.is(result?.port, 22);
+  expect(result?.hostName).toBe('192.168.1.100');
+  expect(result?.user).toBe('defaultuser');
+  expect(result?.port).toBe(22);
 });
 
-test('resolveSSHHost host-specific values override wildcards', (t) => {
+it('resolveSSHHost host-specific values override wildcards', () => {
   const config = `
 Host *
     User defaultuser
@@ -136,29 +136,29 @@ Host docker
     Port 2222
 `;
   const result = resolveSSHHost('docker', config);
-  t.is(result?.hostName, '192.168.1.100');
-  t.is(result?.user, 'docker-user');
-  t.is(result?.port, 2222);
+  expect(result?.hostName).toBe('192.168.1.100');
+  expect(result?.user).toBe('docker-user');
+  expect(result?.port).toBe(2222);
 });
 
-test('parseSSHConfig handles tabs and spaces', (t) => {
+it('parseSSHConfig handles tabs and spaces', () => {
   const config = `
 Host docker
 	HostName 192.168.1.100
     User myuser
 `;
   const result = parseSSHConfig(config);
-  t.is(result['docker']?.hostName, '192.168.1.100');
-  t.is(result['docker']?.user, 'myuser');
+  expect(result['docker']?.hostName).toBe('192.168.1.100');
+  expect(result['docker']?.user).toBe('myuser');
 });
 
-test('parseSSHConfig handles Host with equals sign format', (t) => {
+it('parseSSHConfig handles Host with equals sign format', () => {
   const config = `
 Host docker
     HostName=192.168.1.100
     User=myuser
 `;
   const result = parseSSHConfig(config);
-  t.is(result['docker']?.hostName, '192.168.1.100');
-  t.is(result['docker']?.user, 'myuser');
+  expect(result['docker']?.hostName).toBe('192.168.1.100');
+  expect(result['docker']?.user).toBe('myuser');
 });

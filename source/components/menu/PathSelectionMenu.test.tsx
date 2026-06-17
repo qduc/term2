@@ -1,24 +1,33 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
-import React from 'react';
-import { renderInAct } from '../../test-helpers/ink-testing.js';
+import { it, expect } from 'vitest';
+import React, { act } from 'react';
+import { render } from 'ink-testing-library';
 import PathSelectionMenu from './PathSelectionMenu.js';
 
-test('PathSelectionMenu renders a warning above the menu when the workspace is truncated', async (t) => {
-  const { lastFrame } = await renderInAct(
-    <PathSelectionMenu
-      items={[{ path: 'source/app.ts', type: 'file' }]}
-      selectedIndex={0}
-      query="app"
-      warning="Path completion is limited to 5000 entries because this repo is too large. Showing a best-effort breadth-first sample."
-    />,
-    t,
-  );
+it('PathSelectionMenu renders a warning above the menu when the workspace is truncated', async () => {
+  let lastFrame!: () => string | undefined;
+  let unmount!: () => void;
 
-  t.truthy(lastFrame);
-  const frame = lastFrame!();
-  t.true(frame?.includes('Path completion is limited to 5000 entries because this repo is too large'));
-  t.true(frame?.includes('source/app.ts'));
+  await act(async () => {
+    const result = render(
+      <PathSelectionMenu
+        items={[{ path: 'source/app.ts', type: 'file' }]}
+        selectedIndex={0}
+        query="app"
+        warning="Path completion is limited to 5000 entries because this repo is too large. Showing a best-effort breadth-first sample."
+      />,
+    );
+    lastFrame = result.lastFrame;
+    unmount = result.unmount;
+  });
+
+  expect(lastFrame).toBeTruthy();
+  const frame = lastFrame();
+  expect(frame?.includes('Path completion is limited to 5000 entries because this repo is too large')).toBe(true);
+  expect(frame?.includes('source/app.ts')).toBe(true);
+
+  await act(async () => {
+    unmount();
+  });
 });

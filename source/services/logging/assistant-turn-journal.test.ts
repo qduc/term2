@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { AssistantTurnJournal } from './assistant-turn-journal.js';
 import type { LogEvent } from './conversation-log-events.js';
 
@@ -7,7 +7,7 @@ const makeSink = (): { events: LogEvent[]; sink: (e: LogEvent) => void } => {
   return { events, sink: (e) => events.push(e) };
 };
 
-test('AssistantTurnJournal: emits monotonic per-turn journal sequence numbers', (t) => {
+it('AssistantTurnJournal: emits monotonic per-turn journal sequence numbers', () => {
   const { events, sink } = makeSink();
   const journal = new AssistantTurnJournal({
     getCurrentTurnId: () => 'turn-3',
@@ -16,36 +16,33 @@ test('AssistantTurnJournal: emits monotonic per-turn journal sequence numbers', 
   journal.recordReasoningDelta('a');
   journal.recordTextDelta('b');
   journal.recordTextDelta('c');
-  t.deepEqual(events, [
+  expect(events).toEqual([
     { type: 'assistant_journal_delta', turnId: 'turn-3', seq: 1, kind: 'reasoning', delta: 'a' },
     { type: 'assistant_journal_delta', turnId: 'turn-3', seq: 2, kind: 'text', delta: 'b' },
     { type: 'assistant_journal_delta', turnId: 'turn-3', seq: 3, kind: 'text', delta: 'c' },
   ]);
 });
 
-test('AssistantTurnJournal: empty deltas are not recorded', (t) => {
+it('AssistantTurnJournal: empty deltas are not recorded', () => {
   const { events, sink } = makeSink();
   const journal = new AssistantTurnJournal({ getCurrentTurnId: () => 'turn-1', sink });
   journal.recordTextDelta('');
   journal.recordReasoningDelta('');
-  t.deepEqual(events, []);
-  t.is(journal.peekNextSeq(), 1);
+  expect(events).toEqual([]);
+  expect(journal.peekNextSeq()).toBe(1);
 });
 
-test('AssistantTurnJournal: resetForNewTurn zeros the per-turn sequence', (t) => {
+it('AssistantTurnJournal: resetForNewTurn zeros the per-turn sequence', () => {
   const { events, sink } = makeSink();
   const journal = new AssistantTurnJournal({ getCurrentTurnId: () => 'turn-1', sink });
   journal.recordTextDelta('hi');
   journal.recordTextDelta(' there');
   journal.resetForNewTurn();
   journal.recordTextDelta('new');
-  t.deepEqual(
-    events.map((e) => (e.type === 'assistant_journal_delta' ? e.seq : null)),
-    [1, 2, 1],
-  );
+  expect(events.map((e) => (e.type === 'assistant_journal_delta' ? e.seq : null))).toEqual([1, 2, 1]);
 });
 
-test('AssistantTurnJournal: normalizes function_call raw items into persisted tool_call items', (t) => {
+it('AssistantTurnJournal: normalizes function_call raw items into persisted tool_call items', () => {
   const { events, sink } = makeSink();
   const journal = new AssistantTurnJournal({ getCurrentTurnId: () => 'turn-1', sink });
   const persisted = journal.recordRunItem({
@@ -56,9 +53,9 @@ test('AssistantTurnJournal: normalizes function_call raw items into persisted to
       arguments: JSON.stringify({ command: 'ls' }),
     },
   });
-  t.true(persisted.length > 0);
-  t.is(persisted[0]?.type, 'tool_call');
-  t.deepEqual(events, [
+  expect(persisted.length > 0).toBe(true);
+  expect(persisted[0]?.type).toBe('tool_call');
+  expect(events).toEqual([
     {
       type: 'assistant_journal_item',
       turnId: 'turn-1',
@@ -79,7 +76,7 @@ test('AssistantTurnJournal: normalizes function_call raw items into persisted to
   ]);
 });
 
-test('AssistantTurnJournal: normalizes tool result raw items into persisted tool_result items', (t) => {
+it('AssistantTurnJournal: normalizes tool result raw items into persisted tool_result items', () => {
   const { events, sink } = makeSink();
   const journal = new AssistantTurnJournal({ getCurrentTurnId: () => 'turn-1', sink });
   const persisted = journal.recordRunItem({
@@ -90,13 +87,13 @@ test('AssistantTurnJournal: normalizes tool result raw items into persisted tool
       output: 'file.txt',
     },
   });
-  t.is(persisted[0]?.type, 'tool_result');
-  t.is(persisted[0] && persisted[0].type === 'tool_result' ? persisted[0].output : undefined, 'file.txt');
-  t.is(events.length, 1);
-  t.is(events[0].type, 'assistant_journal_item');
+  expect(persisted[0]?.type).toBe('tool_result');
+  expect(persisted[0] && persisted[0].type === 'tool_result' ? persisted[0].output : undefined).toBe('file.txt');
+  expect(events.length).toBe(1);
+  expect(events[0].type).toBe('assistant_journal_item');
 });
 
-test('AssistantTurnJournal: preserves the same turn id across approval continuation', (t) => {
+it('AssistantTurnJournal: preserves the same turn id across approval continuation', () => {
   const { events, sink } = makeSink();
   let currentTurn = 'turn-2';
   const journal = new AssistantTurnJournal({ getCurrentTurnId: () => currentTurn, sink });
@@ -117,16 +114,16 @@ test('AssistantTurnJournal: preserves the same turn id across approval continuat
   journal.recordTextDelta('new turn');
 
   const turnIds = events.map((e) => (e as { turnId: string }).turnId);
-  t.deepEqual(turnIds, ['turn-2', 'turn-2', 'turn-2', 'turn-3']);
+  expect(turnIds).toEqual(['turn-2', 'turn-2', 'turn-2', 'turn-3']);
 });
 
-test('AssistantTurnJournal: dedupes duplicate raw items within the same turn', (t) => {
+it('AssistantTurnJournal: dedupes duplicate raw items within the same turn', () => {
   const { events, sink } = makeSink();
   const journal = new AssistantTurnJournal({ getCurrentTurnId: () => 'turn-1', sink });
   const item = { rawItem: { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{}' } };
   const first = journal.recordRunItem(item);
   const second = journal.recordRunItem(item);
-  t.true(first.length > 0);
-  t.deepEqual(second, []);
-  t.is(events.filter((e) => e.type === 'assistant_journal_item').length, 1);
+  expect(first.length > 0).toBe(true);
+  expect(second).toEqual([]);
+  expect(events.filter((e) => e.type === 'assistant_journal_item').length).toBe(1);
 });

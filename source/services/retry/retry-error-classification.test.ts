@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
 import { ModelBehaviorError } from '@openai/agents';
 import { OpenAICompatibleError, OpenRouterError, LongRetryDelayError } from '../../providers/common/provider-errors.js';
@@ -24,73 +24,73 @@ function createLoggerMock() {
   };
 }
 
-test('isNetworkProtocolError correctly flags network protocol errors', (t) => {
-  t.true(isNetworkProtocolError({ code: 'ENOTFOUND' }));
-  t.true(isNetworkProtocolError({ code: 'ECONNREFUSED' }));
-  t.true(isNetworkProtocolError({ code: 'ETIMEDOUT' }));
-  t.true(isNetworkProtocolError({ code: 'ECONNRESET' }));
+it('isNetworkProtocolError correctly flags network protocol errors', () => {
+  expect(isNetworkProtocolError({ code: 'ENOTFOUND' })).toBe(true);
+  expect(isNetworkProtocolError({ code: 'ECONNREFUSED' })).toBe(true);
+  expect(isNetworkProtocolError({ code: 'ETIMEDOUT' })).toBe(true);
+  expect(isNetworkProtocolError({ code: 'ECONNRESET' })).toBe(true);
 
-  t.true(isNetworkProtocolError(new Error('Responses websocket connection closed before opening.')));
-  t.true(isNetworkProtocolError(new Error('Responses websocket connection closed before a terminal response event.')));
-  t.true(isNetworkProtocolError(new Error('Responses websocket is not open.')));
-  t.true(isNetworkProtocolError(new Error('unexpected server response: 502')));
-  t.true(isNetworkProtocolError(new Error('Responses websocket connection timed out before opening after 15000ms')));
-  t.true(isNetworkProtocolError(new Error('Responses websocket connection timed out')));
-  t.true(isNetworkProtocolError(new Error('WebSocket first frame timeout after 5000ms')));
-  t.true(isNetworkProtocolError({ name: 'InvalidStateError', message: 'Socket is closing' }));
+  expect(isNetworkProtocolError(new Error('Responses websocket connection closed before opening.'))).toBe(true);
+  expect(
+    isNetworkProtocolError(new Error('Responses websocket connection closed before a terminal response event.')),
+  ).toBe(true);
+  expect(isNetworkProtocolError(new Error('Responses websocket is not open.'))).toBe(true);
+  expect(isNetworkProtocolError(new Error('unexpected server response: 502'))).toBe(true);
+  expect(
+    isNetworkProtocolError(new Error('Responses websocket connection timed out before opening after 15000ms')),
+  ).toBe(true);
+  expect(isNetworkProtocolError(new Error('Responses websocket connection timed out'))).toBe(true);
+  expect(isNetworkProtocolError(new Error('WebSocket first frame timeout after 5000ms'))).toBe(true);
+  expect(isNetworkProtocolError({ name: 'InvalidStateError', message: 'Socket is closing' })).toBe(true);
 
-  t.false(isNetworkProtocolError(new Error('unexpected server response: 401')));
-  t.false(isNetworkProtocolError(new Error('unexpected server response: 403')));
-  t.false(isNetworkProtocolError(new Error('unexpected server response: 429')));
-  t.false(isNetworkProtocolError(new Error('unexpected server response: 400')));
-  t.false(isNetworkProtocolError(new Error('unexpected server response: 404')));
-  t.true(isNetworkProtocolError(new Error('unexpected server response: 502')));
+  expect(isNetworkProtocolError(new Error('unexpected server response: 401'))).toBe(false);
+  expect(isNetworkProtocolError(new Error('unexpected server response: 403'))).toBe(false);
+  expect(isNetworkProtocolError(new Error('unexpected server response: 429'))).toBe(false);
+  expect(isNetworkProtocolError(new Error('unexpected server response: 400'))).toBe(false);
+  expect(isNetworkProtocolError(new Error('unexpected server response: 404'))).toBe(false);
+  expect(isNetworkProtocolError(new Error('unexpected server response: 502'))).toBe(true);
 
-  t.false(isNetworkProtocolError(new Error('Something else went wrong')));
-  t.false(isNetworkProtocolError({}));
-  t.false(isNetworkProtocolError(null));
+  expect(isNetworkProtocolError(new Error('Something else went wrong'))).toBe(false);
+  expect(isNetworkProtocolError({})).toBe(false);
+  expect(isNetworkProtocolError(null)).toBe(false);
 });
 
-test('isRetryableTransportError separates retryable errors from HTTP fallback candidates', (t) => {
-  t.deepEqual(isRetryableTransportError(new Error('WebSocket first frame timeout after 5000ms')), {
+it('isRetryableTransportError separates retryable errors from HTTP fallback candidates', () => {
+  expect(isRetryableTransportError(new Error('WebSocket first frame timeout after 5000ms'))).toEqual({
     retryable: true,
     transportFallback: true,
   });
-  t.deepEqual(
+  expect(
     isRetryableTransportError(new Error('WebSocket connection closed before response completed (code=1006)')),
-    {
-      retryable: true,
-      transportFallback: true,
-    },
-  );
-  t.deepEqual(
+  ).toEqual({
+    retryable: true,
+    transportFallback: true,
+  });
+  expect(
     isRetryableTransportError(new Error('WebSocket connection closed before response completed (code=1001)')),
-    {
-      retryable: true,
-      transportFallback: true,
-    },
-  );
-  t.deepEqual(
+  ).toEqual({
+    retryable: true,
+    transportFallback: true,
+  });
+  expect(
     isRetryableTransportError(new Error('WebSocket connection closed before response completed (code=1012)')),
-    {
-      retryable: true,
-      transportFallback: true,
-    },
-  );
-  t.deepEqual(
+  ).toEqual({
+    retryable: true,
+    transportFallback: true,
+  });
+  expect(
     isRetryableTransportError(new Error('WebSocket connection closed before response completed (code=1008)')),
-    {
-      retryable: true,
-      transportFallback: true,
-    },
-  );
-  t.deepEqual(isRetryableTransportError(new Error('unexpected server response: 401')), {
+  ).toEqual({
+    retryable: true,
+    transportFallback: true,
+  });
+  expect(isRetryableTransportError(new Error('unexpected server response: 401'))).toEqual({
     retryable: false,
     transportFallback: false,
   });
 });
 
-test('isRetryableTransportError logs websocket close code at info level', (t) => {
+it('isRetryableTransportError logs websocket close code at info level', () => {
   const { calls, logger } = createLoggerMock();
 
   const decision = isRetryableTransportError(
@@ -98,10 +98,10 @@ test('isRetryableTransportError logs websocket close code at info level', (t) =>
     logger,
   );
 
-  t.deepEqual(decision, { retryable: true, transportFallback: true });
-  t.is(calls.length, 1);
-  t.is(calls[0]?.message, 'WebSocket close code detected');
-  t.deepEqual(calls[0]?.meta, {
+  expect(decision).toEqual({ retryable: true, transportFallback: true });
+  expect(calls.length).toBe(1);
+  expect(calls[0]?.message).toBe('WebSocket close code detected');
+  expect(calls[0]?.meta).toEqual({
     eventType: 'retry.websocket_close_code_detected',
     category: 'retry',
     closeCode: '1006',
@@ -109,76 +109,96 @@ test('isRetryableTransportError logs websocket close code at info level', (t) =>
   });
 });
 
-test('isTransientRetryableError: OpenAI SDK errors are retryable', (t) => {
-  t.true(isTransientRetryableError(asInstanceOf(APIConnectionError.prototype, { message: 'conn error' })));
-  t.true(isTransientRetryableError(asInstanceOf(APIConnectionTimeoutError.prototype, { message: 'timeout' })));
-  t.true(isTransientRetryableError(asInstanceOf(InternalServerError.prototype, { message: 'ise', status: 500 })));
-  t.true(isTransientRetryableError(asInstanceOf(RateLimitError.prototype, { message: 'rate limit', status: 429 })));
+it('isTransientRetryableError: OpenAI SDK errors are retryable', () => {
+  expect(isTransientRetryableError(asInstanceOf(APIConnectionError.prototype, { message: 'conn error' }))).toBe(true);
+  expect(isTransientRetryableError(asInstanceOf(APIConnectionTimeoutError.prototype, { message: 'timeout' }))).toBe(
+    true,
+  );
+  expect(isTransientRetryableError(asInstanceOf(InternalServerError.prototype, { message: 'ise', status: 500 }))).toBe(
+    true,
+  );
+  expect(
+    isTransientRetryableError(asInstanceOf(RateLimitError.prototype, { message: 'rate limit', status: 429 })),
+  ).toBe(true);
 });
 
-test('isTransientRetryableError: OpenRouter 429/5xx are retryable', (t) => {
-  t.true(isTransientRetryableError(new OpenRouterError('rate limited', 429, {})));
-  t.true(isTransientRetryableError(new OpenRouterError('server error', 500, {})));
-  t.true(isTransientRetryableError(new OpenRouterError('bad gateway', 502, {})));
-  t.false(isTransientRetryableError(new OpenRouterError('not found', 404, {})));
+it('isTransientRetryableError: OpenRouter 429/5xx are retryable', () => {
+  expect(isTransientRetryableError(new OpenRouterError('rate limited', 429, {}))).toBe(true);
+  expect(isTransientRetryableError(new OpenRouterError('server error', 500, {}))).toBe(true);
+  expect(isTransientRetryableError(new OpenRouterError('bad gateway', 502, {}))).toBe(true);
+  expect(isTransientRetryableError(new OpenRouterError('not found', 404, {}))).toBe(false);
 });
 
-test('isTransientRetryableError: OpenAI-compatible 429/5xx are retryable', (t) => {
-  t.true(isTransientRetryableError(new OpenAICompatibleError('rate limited', 429, {})));
-  t.true(isTransientRetryableError(new OpenAICompatibleError('server error', 503, {})));
-  t.false(isTransientRetryableError(new OpenAICompatibleError('bad request', 400, {})));
+it('isTransientRetryableError: OpenAI-compatible 429/5xx are retryable', () => {
+  expect(isTransientRetryableError(new OpenAICompatibleError('rate limited', 429, {}))).toBe(true);
+  expect(isTransientRetryableError(new OpenAICompatibleError('server error', 503, {}))).toBe(true);
+  expect(isTransientRetryableError(new OpenAICompatibleError('bad request', 400, {}))).toBe(false);
 });
 
-test('isTransientRetryableError: generic errors with 429/5xx status are retryable', (t) => {
+it('isTransientRetryableError: generic errors with 429/5xx status are retryable', () => {
   const err429 = new Error('too many requests');
   (err429 as any).status = 429;
-  t.true(isTransientRetryableError(err429));
+  expect(isTransientRetryableError(err429)).toBe(true);
 
   const err503 = new Error('service unavailable');
   (err503 as any).statusCode = 503;
-  t.true(isTransientRetryableError(err503));
+  expect(isTransientRetryableError(err503)).toBe(true);
 });
 
-test('isTransientRetryableError: generic errors with rate-limit message are retryable', (t) => {
-  t.true(
+it('isTransientRetryableError: generic errors with rate-limit message are retryable', () => {
+  expect(
     isTransientRetryableError(new Error("We're currently processing too many requests — please try again later.")),
-  );
-  t.true(isTransientRetryableError(new Error('Rate limit exceeded')));
-  t.true(isTransientRetryableError(new Error('rate_limit retry after 10s')));
+  ).toBe(true);
+  expect(isTransientRetryableError(new Error('Rate limit exceeded'))).toBe(true);
+  expect(isTransientRetryableError(new Error('rate_limit retry after 10s'))).toBe(true);
 });
 
-test('isTransientRetryableError: websocket response completion closes are retryable unless policy close code is present', (t) => {
-  t.true(isTransientRetryableError(new Error('WebSocket connection closed before response completed')));
-  t.true(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1006)')));
-  t.true(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1001)')));
-  t.true(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1011)')));
-  t.true(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1012)')));
-  t.true(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1013)')));
-  t.true(
+it('isTransientRetryableError: websocket response completion closes are retryable unless policy close code is present', () => {
+  expect(isTransientRetryableError(new Error('WebSocket connection closed before response completed'))).toBe(true);
+  expect(
+    isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1006)')),
+  ).toBe(true);
+  expect(
+    isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1001)')),
+  ).toBe(true);
+  expect(
+    isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1011)')),
+  ).toBe(true);
+  expect(
+    isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1012)')),
+  ).toBe(true);
+  expect(
+    isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1013)')),
+  ).toBe(true);
+  expect(
     isTransientRetryableError(new Error('WebSocket closed before response.completed (code 1006: Connection ended)')),
-  );
-  t.false(
+  ).toBe(true);
+  expect(
     isTransientRetryableError(
       new Error('WebSocket connection closed before response completed (code=1008, reason="rate limit exceeded")'),
     ),
-  );
-  t.false(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1002)')));
-  t.false(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1003)')));
+  ).toBe(false);
+  expect(
+    isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1002)')),
+  ).toBe(false);
+  expect(
+    isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1003)')),
+  ).toBe(false);
 });
 
-test('isTransientRetryableError logs websocket close code at info level', (t) => {
+it('isTransientRetryableError logs websocket close code at info level', () => {
   const { calls, logger } = createLoggerMock();
 
-  t.true(
+  expect(
     isTransientRetryableError(
       new Error('WebSocket connection closed before response completed (code=1012, reason="service restart")'),
       logger,
     ),
-  );
+  ).toBe(true);
 
-  t.is(calls.length, 1);
-  t.is(calls[0]?.message, 'WebSocket close code detected');
-  t.deepEqual(calls[0]?.meta, {
+  expect(calls.length).toBe(1);
+  expect(calls[0]?.message).toBe('WebSocket close code detected');
+  expect(calls[0]?.meta).toEqual({
     eventType: 'retry.websocket_close_code_detected',
     category: 'retry',
     closeCode: '1012',
@@ -186,48 +206,50 @@ test('isTransientRetryableError logs websocket close code at info level', (t) =>
   });
 });
 
-test('isTransientRetryableError: terminated errors are retryable', (t) => {
-  t.true(isTransientRetryableError('terminated'));
-  t.true(isTransientRetryableError('terminated: other side closed'));
-  t.true(isTransientRetryableError(new Error('terminated')));
-  t.true(isTransientRetryableError(new Error('terminated: other side closed')));
+it('isTransientRetryableError: terminated errors are retryable', () => {
+  expect(isTransientRetryableError('terminated')).toBe(true);
+  expect(isTransientRetryableError('terminated: other side closed')).toBe(true);
+  expect(isTransientRetryableError(new Error('terminated'))).toBe(true);
+  expect(isTransientRetryableError(new Error('terminated: other side closed'))).toBe(true);
 });
 
-test('isTransientRetryableError: RateLimitExceededError is never retryable', (t) => {
-  t.false(isTransientRetryableError(new LongRetryDelayError(120)));
-  t.false(isTransientRetryableError(new LongRetryDelayError(300)));
+it('isTransientRetryableError: RateLimitExceededError is never retryable', () => {
+  expect(isTransientRetryableError(new LongRetryDelayError(120))).toBe(false);
+  expect(isTransientRetryableError(new LongRetryDelayError(300))).toBe(false);
 });
 
-test('isTransientRetryableError: RateLimitError with retry-after > 60s is not retryable', (t) => {
+it('isTransientRetryableError: RateLimitError with retry-after > 60s is not retryable', () => {
   const err = new RateLimitError(429, 'rate limited', 'rate limited', { get: () => '120' } as any);
-  t.false(isTransientRetryableError(err));
+  expect(isTransientRetryableError(err)).toBe(false);
 });
 
-test('isTransientRetryableError: RateLimitError with retry-after <= 60s is retryable', (t) => {
+it('isTransientRetryableError: RateLimitError with retry-after <= 60s is retryable', () => {
   const err = new RateLimitError(429, 'rate limited', 'rate limited', { get: () => '30' } as any);
-  t.true(isTransientRetryableError(err));
+  expect(isTransientRetryableError(err)).toBe(true);
 });
 
-test('isTransientRetryableError: RateLimitError without retry-after is retryable', (t) => {
+it('isTransientRetryableError: RateLimitError without retry-after is retryable', () => {
   const err = new RateLimitError(429, 'rate limited', 'rate limited', { get: () => null } as any);
-  t.true(isTransientRetryableError(err));
+  expect(isTransientRetryableError(err)).toBe(true);
 });
 
-test('isTransientRetryableError: non-retryable errors return false', (t) => {
-  t.false(isTransientRetryableError(new Error('something else')));
-  t.false(isTransientRetryableError(new ModelBehaviorError('Tool x not found')));
-  t.false(isTransientRetryableError(null));
-  t.false(isTransientRetryableError('string error'));
-  t.false(isTransientRetryableError('unterminated string'));
-  t.false(isTransientRetryableError(new Error('unterminated string')));
-  t.false(isTransientRetryableError(42));
+it('isTransientRetryableError: non-retryable errors return false', () => {
+  expect(isTransientRetryableError(new Error('something else'))).toBe(false);
+  expect(isTransientRetryableError(new ModelBehaviorError('Tool x not found'))).toBe(false);
+  expect(isTransientRetryableError(null)).toBe(false);
+  expect(isTransientRetryableError('string error')).toBe(false);
+  expect(isTransientRetryableError('unterminated string')).toBe(false);
+  expect(isTransientRetryableError(new Error('unterminated string'))).toBe(false);
+  expect(isTransientRetryableError(42)).toBe(false);
 });
 
-test('isTransientRetryableError: stream parsing and JSON syntax errors are retryable', (t) => {
-  t.true(isTransientRetryableError(new Error("Expecting ',' delimiter: line 1 column 680 (char 679)")));
-  t.true(isTransientRetryableError(new SyntaxError('Unexpected end of JSON input')));
-  t.true(isTransientRetryableError(new Error('Unexpected token < in JSON at position 0')));
-  t.true(isTransientRetryableError(new SyntaxError('Expected double-quoted property name in JSON at position 39')));
+it('isTransientRetryableError: stream parsing and JSON syntax errors are retryable', () => {
+  expect(isTransientRetryableError(new Error("Expecting ',' delimiter: line 1 column 680 (char 679)"))).toBe(true);
+  expect(isTransientRetryableError(new SyntaxError('Unexpected end of JSON input'))).toBe(true);
+  expect(isTransientRetryableError(new Error('Unexpected token < in JSON at position 0'))).toBe(true);
+  expect(
+    isTransientRetryableError(new SyntaxError('Expected double-quoted property name in JSON at position 39')),
+  ).toBe(true);
 
   // Undici throws a bare `new TypeError()` (empty message, no code) when the
   // TLS socket closes mid-response-body. Stack originates in #onSocketClose.
@@ -238,19 +260,19 @@ test('isTransientRetryableError: stream parsing and JSON syntax errors are retry
     '    at TLSSocket.onSocketClose (node:internal/deps/undici/undici:15153:72)',
     '    at TLSSocket.emit (node:events:520:35)',
   ].join('\n');
-  t.true(isNetworkProtocolError(undiciSocketClose));
-  t.true(isTransientRetryableError(undiciSocketClose));
-  t.deepEqual(isRetryableTransportError(undiciSocketClose), { retryable: true, transportFallback: true });
+  expect(isNetworkProtocolError(undiciSocketClose)).toBe(true);
+  expect(isTransientRetryableError(undiciSocketClose)).toBe(true);
+  expect(isRetryableTransportError(undiciSocketClose)).toEqual({ retryable: true, transportFallback: true });
 
   // Non-undici TypeError with empty message must NOT be flagged.
   const plainTypeError = new TypeError();
   plainTypeError.stack = 'TypeError\n    at userCode (file.ts:1:1)';
-  t.false(isNetworkProtocolError(plainTypeError));
-  t.false(isTransientRetryableError(plainTypeError));
+  expect(isNetworkProtocolError(plainTypeError)).toBe(false);
+  expect(isTransientRetryableError(plainTypeError)).toBe(false);
 
   // TypeError with a real message must NOT be flagged as a socket close.
   const typedValueError = new TypeError('Cannot read properties of undefined');
-  t.false(isNetworkProtocolError(typedValueError));
+  expect(isNetworkProtocolError(typedValueError)).toBe(false);
 
   // Re-wrapped undici socket close: plain Error with message "TypeError"
   // and the original undici stack frames. Intermediate layers (SDK wrappers,
@@ -262,65 +284,65 @@ test('isTransientRetryableError: stream parsing and JSON syntax errors are retry
     '    at TLSSocket.onSocketClose (node:internal/deps/undici/undici:15153:72)',
     '    at TLSSocket.emit (node:events:520:35)',
   ].join('\n');
-  t.true(isNetworkProtocolError(rewrappedUndiciSocketClose));
-  t.true(isTransientRetryableError(rewrappedUndiciSocketClose));
-  t.deepEqual(isRetryableTransportError(rewrappedUndiciSocketClose), { retryable: true, transportFallback: true });
+  expect(isNetworkProtocolError(rewrappedUndiciSocketClose)).toBe(true);
+  expect(isTransientRetryableError(rewrappedUndiciSocketClose)).toBe(true);
+  expect(isRetryableTransportError(rewrappedUndiciSocketClose)).toEqual({ retryable: true, transportFallback: true });
 
   // Plain Error with message "TypeError" but NO undici stack must NOT be flagged.
   const plainErrorWithTypeError = new Error('TypeError');
   plainErrorWithTypeError.stack = 'Error: TypeError\n    at userCode (file.ts:1:1)';
-  t.false(isNetworkProtocolError(plainErrorWithTypeError));
-  t.false(isTransientRetryableError(plainErrorWithTypeError));
+  expect(isNetworkProtocolError(plainErrorWithTypeError)).toBe(false);
+  expect(isTransientRetryableError(plainErrorWithTypeError)).toBe(false);
 });
 
-test('isNetworkProtocolError and isTransientRetryableError recursive cause-chain walking and undici timeouts', (t) => {
+it('isNetworkProtocolError and isTransientRetryableError recursive cause-chain walking and undici timeouts', () => {
   // - TypeError("fetch failed", { cause: { code: "UND_ERR_CONNECT_TIMEOUT" } }) → retryable
   const connectTimeout = new TypeError('fetch failed');
   (connectTimeout as any).cause = { code: 'UND_ERR_CONNECT_TIMEOUT' };
-  t.true(isNetworkProtocolError(connectTimeout));
-  t.true(isTransientRetryableError(connectTimeout));
-  t.deepEqual(isRetryableTransportError(connectTimeout), { retryable: true, transportFallback: true });
+  expect(isNetworkProtocolError(connectTimeout)).toBe(true);
+  expect(isTransientRetryableError(connectTimeout)).toBe(true);
+  expect(isRetryableTransportError(connectTimeout)).toEqual({ retryable: true, transportFallback: true });
 
   // - TypeError("fetch failed", { cause: { code: "UND_ERR_HEADERS_TIMEOUT" } }) → retryable
   const headersTimeout = new TypeError('fetch failed');
   (headersTimeout as any).cause = { code: 'UND_ERR_HEADERS_TIMEOUT' };
-  t.true(isNetworkProtocolError(headersTimeout));
-  t.true(isTransientRetryableError(headersTimeout));
+  expect(isNetworkProtocolError(headersTimeout)).toBe(true);
+  expect(isTransientRetryableError(headersTimeout)).toBe(true);
 
   // - TypeError("fetch failed", { cause: { code: "UND_ERR_BODY_TIMEOUT" } }) → retryable
   const bodyTimeout = new TypeError('fetch failed');
   (bodyTimeout as any).cause = { code: 'UND_ERR_BODY_TIMEOUT' };
-  t.true(isNetworkProtocolError(bodyTimeout));
-  t.true(isTransientRetryableError(bodyTimeout));
+  expect(isNetworkProtocolError(bodyTimeout)).toBe(true);
+  expect(isTransientRetryableError(bodyTimeout)).toBe(true);
 
   // - TypeError("fetch failed", { cause: { code: "ETIMEDOUT" } }) → retryable
   const sysTimeout = new TypeError('fetch failed');
   (sysTimeout as any).cause = { code: 'ETIMEDOUT' };
-  t.true(isNetworkProtocolError(sysTimeout));
-  t.true(isTransientRetryableError(sysTimeout));
+  expect(isNetworkProtocolError(sysTimeout)).toBe(true);
+  expect(isTransientRetryableError(sysTimeout)).toBe(true);
 
   // - TypeError("fetch failed", { cause: new Error("DEPTH_ZERO_SELF_SIGNED_CERT") }) → NOT retryable
   const certError = new TypeError('fetch failed');
   (certError as any).cause = new Error('DEPTH_ZERO_SELF_SIGNED_CERT');
-  t.false(isNetworkProtocolError(certError));
-  t.false(isTransientRetryableError(certError));
+  expect(isNetworkProtocolError(certError)).toBe(false);
+  expect(isTransientRetryableError(certError)).toBe(false);
 
   // - Plain TypeError("fetch failed") without cause → NOT retryable
   const plainFetchFailed = new TypeError('fetch failed');
-  t.false(isNetworkProtocolError(plainFetchFailed));
-  t.false(isTransientRetryableError(plainFetchFailed));
+  expect(isNetworkProtocolError(plainFetchFailed)).toBe(false);
+  expect(isTransientRetryableError(plainFetchFailed)).toBe(false);
 
   // - AggregateError([{ code: "ETIMEDOUT" }]) → retryable
   const aggregateError = new Error('Multiple failures');
   (aggregateError as any).errors = [{ code: 'ETIMEDOUT' }];
-  t.true(isNetworkProtocolError(aggregateError));
-  t.true(isTransientRetryableError(aggregateError));
+  expect(isNetworkProtocolError(aggregateError)).toBe(true);
+  expect(isTransientRetryableError(aggregateError)).toBe(true);
 
   // - Cyclic .cause → does not hang
   const cyclicError = new Error('Cyclic error');
   (cyclicError as any).cause = cyclicError;
-  t.false(isNetworkProtocolError(cyclicError));
-  t.false(isTransientRetryableError(cyclicError));
+  expect(isNetworkProtocolError(cyclicError)).toBe(false);
+  expect(isTransientRetryableError(cyclicError)).toBe(false);
 
   // - 3-level deep cause chain → correctly classified
   const deepError = new Error('Outer');
@@ -329,8 +351,8 @@ test('isNetworkProtocolError and isTransientRetryableError recursive cause-chain
   (innerError as any).code = 'ECONNREFUSED';
   (midError as any).cause = innerError;
   (deepError as any).cause = midError;
-  t.true(isNetworkProtocolError(deepError));
-  t.true(isTransientRetryableError(deepError));
+  expect(isNetworkProtocolError(deepError)).toBe(true);
+  expect(isTransientRetryableError(deepError)).toBe(true);
 
   // Verify consistency of isTransientRetryableError and isRetryableTransportError
   const cases = [
@@ -345,27 +367,27 @@ test('isNetworkProtocolError and isTransientRetryableError recursive cause-chain
     deepError,
   ];
   for (const c of cases) {
-    t.is(isTransientRetryableError(c), isRetryableTransportError(c).retryable);
+    expect(isTransientRetryableError(c)).toBe(isRetryableTransportError(c).retryable);
   }
 });
 
-test('isNetworkProtocolError and isTransientRetryableError findings regression tests', (t) => {
+it('isNetworkProtocolError and isTransientRetryableError findings regression tests', () => {
   // P1: Status/authentication rejection precedence
   const authRejectionError = new Error('unexpected server response: 401');
   (authRejectionError as any).cause = { code: 'ETIMEDOUT' };
-  t.false(isNetworkProtocolError(authRejectionError));
-  t.false(isTransientRetryableError(authRejectionError));
+  expect(isNetworkProtocolError(authRejectionError)).toBe(false);
+  expect(isTransientRetryableError(authRejectionError)).toBe(false);
 
   // P1: Wrapped WebSocket messages, InvalidStateError, and undici stack signals in cause
   const wrappedWsError = new Error('Wrapper');
   (wrappedWsError as any).cause = new Error('Responses websocket connection closed before opening.');
-  t.true(isNetworkProtocolError(wrappedWsError));
-  t.true(isTransientRetryableError(wrappedWsError));
+  expect(isNetworkProtocolError(wrappedWsError)).toBe(true);
+  expect(isTransientRetryableError(wrappedWsError)).toBe(true);
 
   const wrappedInvalidState = new Error('Wrapper');
   (wrappedInvalidState as any).cause = { name: 'InvalidStateError', message: 'Socket is closing' };
-  t.true(isNetworkProtocolError(wrappedInvalidState));
-  t.true(isTransientRetryableError(wrappedInvalidState));
+  expect(isNetworkProtocolError(wrappedInvalidState)).toBe(true);
+  expect(isTransientRetryableError(wrappedInvalidState)).toBe(true);
 
   const undiciSocketClose = new TypeError();
   undiciSocketClose.stack = [
@@ -376,50 +398,50 @@ test('isNetworkProtocolError and isTransientRetryableError findings regression t
   ].join('\n');
   const wrappedUndici = new Error('Wrapper');
   (wrappedUndici as any).cause = undiciSocketClose;
-  t.true(isNetworkProtocolError(wrappedUndici));
-  t.true(isTransientRetryableError(wrappedUndici));
+  expect(isNetworkProtocolError(wrappedUndici)).toBe(true);
+  expect(isTransientRetryableError(wrappedUndici)).toBe(true);
 
   // P2: Restored message signals
   const socketHangup = new Error('socket hang up');
-  t.true(isNetworkProtocolError(socketHangup));
-  t.true(isTransientRetryableError(socketHangup));
+  expect(isNetworkProtocolError(socketHangup)).toBe(true);
+  expect(isTransientRetryableError(socketHangup)).toBe(true);
 
   const connFailed = new Error('connection failed');
-  t.true(isNetworkProtocolError(connFailed));
-  t.true(isTransientRetryableError(connFailed));
+  expect(isNetworkProtocolError(connFailed)).toBe(true);
+  expect(isTransientRetryableError(connFailed)).toBe(true);
 
   const failedToOpen = new Error('failed to open');
-  t.true(isNetworkProtocolError(failedToOpen));
-  t.true(isTransientRetryableError(failedToOpen));
+  expect(isNetworkProtocolError(failedToOpen)).toBe(true);
+  expect(isTransientRetryableError(failedToOpen)).toBe(true);
 
   const connError = new Error('connection error');
-  t.true(isNetworkProtocolError(connError));
-  t.true(isTransientRetryableError(connError));
+  expect(isNetworkProtocolError(connError)).toBe(true);
+  expect(isTransientRetryableError(connError)).toBe(true);
 });
 
-test('isNetworkProtocolError and isTransientRetryableError handle 520 status code and Cloudflare 520 errors', (t) => {
+it('isNetworkProtocolError and isTransientRetryableError handle 520 status code and Cloudflare 520 errors', () => {
   // Error object with message "520 status code (no body)"
   const errNoBody = new Error('520 status code (no body)');
-  t.true(isNetworkProtocolError(errNoBody));
-  t.true(isTransientRetryableError(errNoBody));
+  expect(isNetworkProtocolError(errNoBody)).toBe(true);
+  expect(isTransientRetryableError(errNoBody)).toBe(true);
 
   // Error object with status property = 520
   const errStatus = Object.assign(new Error('Cloudflare error'), { status: 520 });
-  t.true(isNetworkProtocolError(errStatus));
-  t.true(isTransientRetryableError(errStatus));
+  expect(isNetworkProtocolError(errStatus)).toBe(true);
+  expect(isTransientRetryableError(errStatus)).toBe(true);
 
   // Error object with statusCode property = 520
   const errStatusCode = Object.assign(new Error('Cloudflare error'), { statusCode: 520 });
-  t.true(isNetworkProtocolError(errStatusCode));
-  t.true(isTransientRetryableError(errStatusCode));
+  expect(isNetworkProtocolError(errStatusCode)).toBe(true);
+  expect(isTransientRetryableError(errStatusCode)).toBe(true);
 
   // Error message with "unexpected server response: 520"
   const errUnexpected520 = new Error('unexpected server response: 520');
-  t.true(isNetworkProtocolError(errUnexpected520));
-  t.true(isTransientRetryableError(errUnexpected520));
+  expect(isNetworkProtocolError(errUnexpected520)).toBe(true);
+  expect(isTransientRetryableError(errUnexpected520)).toBe(true);
 
   // String error
   const stringErr = 'Error: 520 status code (no body)';
-  t.true(isNetworkProtocolError(stringErr));
-  t.true(isTransientRetryableError(stringErr));
+  expect(isNetworkProtocolError(stringErr)).toBe(true);
+  expect(isTransientRetryableError(stringErr)).toBe(true);
 });

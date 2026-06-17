@@ -1,57 +1,57 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { findMarkdownCommitOffset } from './markdown-commit-frontier.js';
 
-test('keeps the final top-level paragraph mutable', (t) => {
+it('keeps the final top-level paragraph mutable', () => {
   const source = 'First paragraph.\n\nSecond paragraph.\n\nCurrent tail';
 
-  t.is(findMarkdownCommitOffset(source), 'First paragraph.\n\nSecond paragraph.\n\n'.length);
+  expect(findMarkdownCommitOffset(source)).toBe('First paragraph.\n\nSecond paragraph.\n\n'.length);
 });
 
-test('uses parser structure for Setext headings', (t) => {
+it('uses parser structure for Setext headings', () => {
   const source = 'Title\n---\nFollowing paragraph';
 
-  t.is(findMarkdownCommitOffset(source), 'Title\n---\n'.length);
+  expect(findMarkdownCommitOffset(source)).toBe('Title\n---\n'.length);
 });
 
-test('keeps an unclosed fenced code block mutable', (t) => {
+it('keeps an unclosed fenced code block mutable', () => {
   const source = 'Introduction.\n\n```ts\nconst value = 1;\n';
 
-  t.is(findMarkdownCommitOffset(source), 'Introduction.\n\n'.length);
+  expect(findMarkdownCommitOffset(source)).toBe('Introduction.\n\n'.length);
 });
 
-test('commits a closed fenced code block when a following block exists', (t) => {
+it('commits a closed fenced code block when a following block exists', () => {
   const source = '```ts\nconst value = 1;\n```\nFollowing paragraph';
 
-  t.is(findMarkdownCommitOffset(source), '```ts\nconst value = 1;\n```\n'.length);
+  expect(findMarkdownCommitOffset(source)).toBe('```ts\nconst value = 1;\n```\n'.length);
 });
 
-test('keeps reference-definition documents fully mutable', (t) => {
+it('keeps reference-definition documents fully mutable', () => {
   const source = 'Read [the documentation].\n\nAnother paragraph.\n\n[the documentation]: https://example.com';
 
-  t.is(findMarkdownCommitOffset(source), 0);
+  expect(findMarkdownCommitOffset(source)).toBe(0);
 });
 
-test('keeps unresolved reference syntax mutable before its definition arrives', (t) => {
+it('keeps unresolved reference syntax mutable before its definition arrives', () => {
   const source = 'Read [the documentation].\n\nAnother paragraph is streaming';
 
-  t.is(findMarkdownCommitOffset(source), 0);
+  expect(findMarkdownCommitOffset(source)).toBe(0);
 });
 
-test('does not treat inline links as document-wide references', (t) => {
+it('does not treat inline links as document-wide references', () => {
   const source = 'Read [the documentation](https://example.com).\n\nAnother paragraph is streaming';
 
-  t.is(findMarkdownCommitOffset(source), 'Read [the documentation](https://example.com).\n\n'.length);
+  expect(findMarkdownCommitOffset(source)).toBe('Read [the documentation](https://example.com).\n\n'.length);
 });
 
-test('does not commit a whitespace-only prefix', (t) => {
+it('does not commit a whitespace-only prefix', () => {
   const source = '   \n\nActual content';
 
-  t.is(findMarkdownCommitOffset(source), 0);
+  expect(findMarkdownCommitOffset(source)).toBe(0);
 });
 
-test('returns an absolute monotonic offset for an uncommitted suffix', (t) => {
+it('returns an absolute monotonic offset for an uncommitted suffix', () => {
   const source = 'Committed.\n\nFirst live block.\n\nSecond live block';
   const committedOffset = 'Committed.\n\n'.length;
 
-  t.is(findMarkdownCommitOffset(source, committedOffset), 'Committed.\n\nFirst live block.\n\n'.length);
+  expect(findMarkdownCommitOffset(source, committedOffset)).toBe('Committed.\n\nFirst live block.\n\n'.length);
 });

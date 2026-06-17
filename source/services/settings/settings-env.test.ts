@@ -1,35 +1,36 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { buildEnvOverrides, isTestEnvironment, parseBooleanEnv } from './settings-env.js';
 
-test('parseBooleanEnv: supports 1/true/yes (case-insensitive)', (t) => {
-  t.true(parseBooleanEnv('1'));
-  t.true(parseBooleanEnv('TRUE'));
-  t.true(parseBooleanEnv(' yes '));
-  t.false(parseBooleanEnv('0'));
-  t.false(parseBooleanEnv(undefined));
+it('parseBooleanEnv: supports 1/true/yes (case-insensitive)', () => {
+  expect(parseBooleanEnv('1')).toBe(true);
+  expect(parseBooleanEnv('TRUE')).toBe(true);
+  expect(parseBooleanEnv(' yes ')).toBe(true);
+  expect(parseBooleanEnv('0')).toBe(false);
+  expect(parseBooleanEnv(undefined)).toBe(false);
 });
 
-test('buildEnvOverrides: maps TAVILY_API_KEY and WEB_SEARCH_PROVIDER', (t) => {
+it('buildEnvOverrides: maps TAVILY_API_KEY and WEB_SEARCH_PROVIDER', () => {
   const prev = { ...process.env };
   process.env.TAVILY_API_KEY = 'k';
   process.env.WEB_SEARCH_PROVIDER = 'tavily';
 
-  t.teardown(() => {
+  try {
+    const env = buildEnvOverrides();
+    expect((env as any).webSearch?.provider).toBe('tavily');
+    expect((env as any).webSearch?.tavily?.apiKey).toBe('k');
+  } finally {
     process.env = prev;
-  });
-
-  const env = buildEnvOverrides();
-  t.is((env as any).webSearch?.provider, 'tavily');
-  t.is((env as any).webSearch?.tavily?.apiKey, 'k');
+  }
 });
 
-test('isTestEnvironment: true when TERM2_TEST_MODE is set', (t) => {
+it('isTestEnvironment: true when TERM2_TEST_MODE is set', () => {
   const prev = process.env.TERM2_TEST_MODE;
   process.env.TERM2_TEST_MODE = 'true';
-  t.teardown(() => {
+
+  try {
+    expect(isTestEnvironment()).toBe(true);
+  } finally {
     if (prev === undefined) delete process.env.TERM2_TEST_MODE;
     else process.env.TERM2_TEST_MODE = prev;
-  });
-
-  t.true(isTestEnvironment());
+  }
 });

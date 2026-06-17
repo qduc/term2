@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { useConversationSettings } from './use-conversation-settings.js';
 import type { ConversationService } from '../services/conversation/conversation-service.js';
@@ -24,54 +23,54 @@ const Harness = ({ service }: { service: ConversationService }) => {
   return null;
 };
 
-const renderHarness = async (conversationService: ConversationService, context: Parameters<typeof renderInAct>[1]) => {
+const renderHarness = async (conversationService: ConversationService) => {
   outerBox.current = null;
-  const { rerender } = await renderInAct(<Harness service={conversationService} />, context);
+  const { rerender } = await renderInAct(<Harness service={conversationService} />);
   if (!outerBox.current) {
     throw new Error('Hook did not mount');
   }
   return { rerender };
 };
 
-test.serial('setModel delegates to conversationService.setModel', async (t) => {
+it.sequential('setModel delegates to conversationService.setModel', async () => {
   const service = createMockConversationService();
   let calledWith: any = '';
   service.setModel = (m) => {
     calledWith = m;
   };
 
-  await renderHarness(service, t);
+  await renderHarness(service);
   outerBox.current!.setModel('gpt-4o');
-  t.is(calledWith, 'gpt-4o');
+  expect(calledWith).toBe('gpt-4o');
 });
 
-test.serial('setReasoningEffort delegates to conversationService.setReasoningEffort', async (t) => {
+it.sequential('setReasoningEffort delegates to conversationService.setReasoningEffort', async () => {
   const service = createMockConversationService();
   let calledWith: any = '';
   service.setReasoningEffort = (e) => {
     calledWith = e;
   };
 
-  await renderHarness(service, t);
+  await renderHarness(service);
   outerBox.current!.setReasoningEffort('high');
-  t.is(calledWith, 'high');
+  expect(calledWith).toBe('high');
 });
 
-test.serial('setTemperature delegates to conversationService.setTemperature', async (t) => {
+it.sequential('setTemperature delegates to conversationService.setTemperature', async () => {
   const service = createMockConversationService();
   let calledWith: any = undefined;
   service.setTemperature = (temp) => {
     calledWith = temp;
   };
 
-  await renderHarness(service, t);
+  await renderHarness(service);
   outerBox.current!.setTemperature(0.7);
-  t.is(calledWith, 0.7);
+  expect(calledWith).toBe(0.7);
 });
 
-test.serial('callback identity is stable across rerenders with the same conversationService', async (t) => {
+it.sequential('callback identity is stable across rerenders with the same conversationService', async () => {
   const service = createMockConversationService();
-  const { rerender } = await renderHarness(service, t);
+  const { rerender } = await renderHarness(service);
 
   const initialSetModel = outerBox.current!.setModel;
   const initialSetReasoningEffort = outerBox.current!.setReasoningEffort;
@@ -82,15 +81,15 @@ test.serial('callback identity is stable across rerenders with the same conversa
     rerender(<Harness service={service} />);
   });
 
-  t.is(outerBox.current!.setModel, initialSetModel);
-  t.is(outerBox.current!.setReasoningEffort, initialSetReasoningEffort);
-  t.is(outerBox.current!.setTemperature, initialSetTemperature);
+  expect(outerBox.current!.setModel).toBe(initialSetModel);
+  expect(outerBox.current!.setReasoningEffort).toBe(initialSetReasoningEffort);
+  expect(outerBox.current!.setTemperature).toBe(initialSetTemperature);
 });
 
-test.serial('callbacks are updated when a new conversationService is provided', async (t) => {
+it.sequential('callbacks are updated when a new conversationService is provided', async () => {
   const service1 = createMockConversationService();
   const service2 = createMockConversationService();
-  const { rerender } = await renderHarness(service1, t);
+  const { rerender } = await renderHarness(service1);
 
   const initialSetModel = outerBox.current!.setModel;
 
@@ -99,5 +98,5 @@ test.serial('callbacks are updated when a new conversationService is provided', 
     rerender(<Harness service={service2} />);
   });
 
-  t.not(outerBox.current!.setModel, initialSetModel);
+  expect(outerBox.current!.setModel).not.toBe(initialSetModel);
 });

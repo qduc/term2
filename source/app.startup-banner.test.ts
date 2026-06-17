@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   TERMINAL_REDRAW_CLEAR,
   appendStartupBannerId,
@@ -7,26 +7,26 @@ import {
   scheduleExitSideEffects,
 } from './app.js';
 
-test('appendStartupBannerId appends a new stable id for each clear', (t) => {
-  t.deepEqual(appendStartupBannerId(['startup-banner-0']), ['startup-banner-0', 'startup-banner-1']);
-  t.deepEqual(appendStartupBannerId(['startup-banner-0', 'startup-banner-1']), [
+it('appendStartupBannerId appends a new stable id for each clear', () => {
+  expect(appendStartupBannerId(['startup-banner-0'])).toEqual(['startup-banner-0', 'startup-banner-1']);
+  expect(appendStartupBannerId(['startup-banner-0', 'startup-banner-1'])).toEqual([
     'startup-banner-0',
     'startup-banner-1',
     'startup-banner-2',
   ]);
 });
 
-test('hasConversationContent ignores empty and system-only conversations', (t) => {
-  t.false(hasConversationContent([]));
-  t.false(hasConversationContent([{ id: 'system-message', sender: 'system', text: 'Welcome' }]));
+it('hasConversationContent ignores empty and system-only conversations', () => {
+  expect(hasConversationContent([])).toBe(false);
+  expect(hasConversationContent([{ id: 'system-message', sender: 'system', text: 'Welcome' }])).toBe(false);
 });
 
-test('hasConversationContent detects real conversation messages', (t) => {
-  t.true(hasConversationContent([{ id: 'user-message', sender: 'user', text: 'hello' }]));
-  t.true(hasConversationContent([{ id: 'assistant-message', sender: 'bot', text: 'hello' }]));
+it('hasConversationContent detects real conversation messages', () => {
+  expect(hasConversationContent([{ id: 'user-message', sender: 'user', text: 'hello' }])).toBe(true);
+  expect(hasConversationContent([{ id: 'assistant-message', sender: 'bot', text: 'hello' }])).toBe(true);
 });
 
-test('clearTerminalForRedraw clears scrollback and moves cursor home', (t) => {
+it('clearTerminalForRedraw clears scrollback and moves cursor home', () => {
   const writes: string[] = [];
   clearTerminalForRedraw({
     write: (value) => {
@@ -35,10 +35,10 @@ test('clearTerminalForRedraw clears scrollback and moves cursor home', (t) => {
     },
   });
 
-  t.deepEqual(writes, [TERMINAL_REDRAW_CLEAR]);
+  expect(writes).toEqual([TERMINAL_REDRAW_CLEAR]);
 });
 
-test('scheduleExitSideEffects schedules the exit-usage hook', (t) => {
+it('scheduleExitSideEffects schedules the exit-usage hook', () => {
   const events: string[] = [];
   const scheduled: Array<() => void> = [];
 
@@ -53,7 +53,7 @@ test('scheduleExitSideEffects schedules the exit-usage hook', (t) => {
     },
   );
 
-  t.deepEqual(events, ['scheduled']);
+  expect(events).toEqual(['scheduled']);
   scheduled[0]!();
-  t.deepEqual(events, ['scheduled', 'usage']);
+  expect(events).toEqual(['scheduled', 'usage']);
 });

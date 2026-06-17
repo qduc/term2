@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { SessionLifecycle } from './session-lifecycle.js';
 
 const makeLifecycleHarness = () => {
@@ -146,45 +146,45 @@ const makeLifecycleHarness = () => {
   return { calls, deps, providerContinuity };
 };
 
-test('resetSession clears approval state through approvalFlow and keeps persistence on providerContinuity', (t) => {
+it('resetSession clears approval state through approvalFlow and keeps persistence on providerContinuity', () => {
   const { calls, deps, providerContinuity } = makeLifecycleHarness();
   const lifecycle = new SessionLifecycle(deps as any);
 
-  t.false('previousResponseId' in lifecycle);
-  t.is(lifecycle.exportPersistedState().previousResponseId, 'resp-123');
+  expect('previousResponseId' in lifecycle).toBe(false);
+  expect(lifecycle.exportPersistedState().previousResponseId).toBe('resp-123');
 
   lifecycle.resetSession();
 
-  t.is(calls.approvalFlow.clearPending, 1);
-  t.is(calls.approvalFlow.consumeAborted, 1);
-  t.is(calls.approvalState.clearPending, 0);
-  t.is(calls.approvalState.consumeAborted, 0);
-  t.is(calls.providerContinuity.clear, 1);
-  t.is(calls.providerContinuity.update, 0);
-  t.is(calls.statusMachine.abort, 1);
-  t.is(calls.generationGuard.invalidate, 1);
-  t.is(calls.agentClient.clearConversations, 1);
-  t.is(lifecycle.exportPersistedState().previousResponseId, null);
-  t.is(providerContinuity.previousResponseId, null);
+  expect(calls.approvalFlow.clearPending).toBe(1);
+  expect(calls.approvalFlow.consumeAborted).toBe(1);
+  expect(calls.approvalState.clearPending).toBe(0);
+  expect(calls.approvalState.consumeAborted).toBe(0);
+  expect(calls.providerContinuity.clear).toBe(1);
+  expect(calls.providerContinuity.update).toBe(0);
+  expect(calls.statusMachine.abort).toBe(1);
+  expect(calls.generationGuard.invalidate).toBe(1);
+  expect(calls.agentClient.clearConversations).toBe(1);
+  expect(lifecycle.exportPersistedState().previousResponseId).toBe(null);
+  expect(providerContinuity.previousResponseId).toBe(null);
 });
 
-test('afterUndo routes approval cleanup through approvalFlow coordinator', (t) => {
+it('afterUndo routes approval cleanup through approvalFlow coordinator', () => {
   const { calls, deps } = makeLifecycleHarness();
   const lifecycle = new SessionLifecycle(deps as any);
 
   lifecycle.afterUndo();
 
-  t.is(calls.approvalFlow.clearPending, 1);
-  t.is(calls.approvalFlow.consumeAborted, 1);
-  t.is(calls.approvalState.clearPending, 0);
-  t.is(calls.approvalState.consumeAborted, 0);
-  t.is(calls.toolTracker.pruneToCurrentHistory, 1);
-  t.is(calls.inputPlanner.markUndoOrRewind, 1);
-  t.is(calls.statusMachine.abort, 1);
-  t.is(calls.agentClient.clearConversations, 1);
+  expect(calls.approvalFlow.clearPending).toBe(1);
+  expect(calls.approvalFlow.consumeAborted).toBe(1);
+  expect(calls.approvalState.clearPending).toBe(0);
+  expect(calls.approvalState.consumeAborted).toBe(0);
+  expect(calls.toolTracker.pruneToCurrentHistory).toBe(1);
+  expect(calls.inputPlanner.markUndoOrRewind).toBe(1);
+  expect(calls.statusMachine.abort).toBe(1);
+  expect(calls.agentClient.clearConversations).toBe(1);
 });
 
-test('importPersistedState clears approval state through approvalFlow coordinator', (t) => {
+it('importPersistedState clears approval state through approvalFlow coordinator', () => {
   const { calls, deps, providerContinuity } = makeLifecycleHarness();
   const lifecycle = new SessionLifecycle(deps as any);
 
@@ -195,15 +195,15 @@ test('importPersistedState clears approval state through approvalFlow coordinato
     updatedAt: '2024-01-01T00:00:00.000Z',
   });
 
-  t.is(calls.approvalFlow.clearPending, 1);
-  t.is(calls.approvalFlow.consumeAborted, 1);
-  t.is(calls.approvalState.clearPending, 0);
-  t.is(calls.approvalState.consumeAborted, 0);
-  t.is(calls.providerContinuity.clear, 1);
-  t.is(calls.providerContinuity.update, 0);
-  t.is(calls.inputPlanner.reset, 1);
-  t.is(calls.inputPlanner.markResumedSession, 1);
-  t.is(calls.turnAccumulator.resetPersistedTurnState, 1);
-  t.is(calls.statusMachine.abort, 1);
-  t.is(providerContinuity.previousResponseId, null);
+  expect(calls.approvalFlow.clearPending).toBe(1);
+  expect(calls.approvalFlow.consumeAborted).toBe(1);
+  expect(calls.approvalState.clearPending).toBe(0);
+  expect(calls.approvalState.consumeAborted).toBe(0);
+  expect(calls.providerContinuity.clear).toBe(1);
+  expect(calls.providerContinuity.update).toBe(0);
+  expect(calls.inputPlanner.reset).toBe(1);
+  expect(calls.inputPlanner.markResumedSession).toBe(1);
+  expect(calls.turnAccumulator.resetPersistedTurnState).toBe(1);
+  expect(calls.statusMachine.abort).toBe(1);
+  expect(providerContinuity.previousResponseId).toBe(null);
 });

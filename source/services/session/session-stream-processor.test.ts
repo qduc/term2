@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect } from 'vitest';
 import { LoggingService } from '../logging/logging-service.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
@@ -29,7 +29,7 @@ const createDeferred = <T>() => {
   return { promise, resolve };
 };
 
-test('SessionStreamProcessor.process() streams events and updates toolTracker', async (t) => {
+it('SessionStreamProcessor.process() streams events and updates toolTracker', async () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
 
@@ -96,16 +96,16 @@ test('SessionStreamProcessor.process() streams events and updates toolTracker', 
     }
   }
 
-  t.truthy(acc);
-  t.true(events.some((e) => e.type === 'tool_started'));
-  t.is(toolTracker.argumentsById.get('call-1'), JSON.stringify({ command: 'ls' }));
-  t.is(loggedEvents.length, 1);
-  t.is(loggedEvents[0].type, 'tool_result');
-  t.is(loggedEvents[0].callId, 'call-1');
-  t.is(loggedEvents[0].output, 'file1.txt');
+  expect(acc).toBeTruthy();
+  expect(events.some((e) => e.type === 'tool_started')).toBe(true);
+  expect(toolTracker.argumentsById.get('call-1')).toBe(JSON.stringify({ command: 'ls' }));
+  expect(loggedEvents.length).toBe(1);
+  expect(loggedEvents[0].type).toBe('tool_result');
+  expect(loggedEvents[0].callId).toBe('call-1');
+  expect(loggedEvents[0].output).toBe('file1.txt');
 });
 
-test('SessionStreamProcessor.process() preserves reasoning before recovered tool call history', async (t) => {
+it('SessionStreamProcessor.process() preserves reasoning before recovered tool call history', async () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
 
@@ -170,21 +170,15 @@ test('SessionStreamProcessor.process() preserves reasoning before recovered tool
     events.push(result.value);
   }
 
-  t.true(events.some((event) => event.type === 'reasoning_delta'));
-  t.deepEqual(
-    events.map((event) => event.type),
-    ['reasoning_delta', 'tool_started', 'command_message'],
-  );
+  expect(events.some((event) => event.type === 'reasoning_delta')).toBe(true);
+  expect(events.map((event) => event.type)).toEqual(['reasoning_delta', 'tool_started', 'command_message']);
   const historyItems = toolTracker.export()[0].historyItems as Array<Record<string, any>>;
-  t.deepEqual(
-    historyItems.map((item) => item.type),
-    ['reasoning', 'function_call', 'function_call_result'],
-  );
-  t.is(historyItems[0].content[0].text, 'I should inspect.');
-  t.deepEqual(loggedEvents[0].historyItems, historyItems);
+  expect(historyItems.map((item) => item.type)).toEqual(['reasoning', 'function_call', 'function_call_result']);
+  expect(historyItems[0].content[0].text).toBe('I should inspect.');
+  expect(loggedEvents[0].historyItems).toEqual(historyItems);
 });
 
-test('SessionStreamProcessor.process() does not log tool results for startStream source', async (t) => {
+it('SessionStreamProcessor.process() does not log tool results for startStream source', async () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
 
@@ -233,10 +227,10 @@ test('SessionStreamProcessor.process() does not log tool results for startStream
     events.push(event);
   }
 
-  t.is(loggedEvents.length, 0); // Should not log for startStream
+  expect(loggedEvents.length).toBe(0); // Should not log for startStream
 });
 
-test('SessionStreamProcessor.process() stops pulling stale stream work after generation invalidation', async (t) => {
+it('SessionStreamProcessor.process() stops pulling stale stream work after generation invalidation', async () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
 
@@ -292,19 +286,19 @@ test('SessionStreamProcessor.process() stops pulling stale stream work after gen
   });
 
   const first = await generator.next();
-  t.false(first.done);
-  t.true('type' in first.value);
-  t.is((first.value as ConversationEvent).type, 'tool_started');
+  expect(first.done).toBe(false);
+  expect('type' in first.value).toBe(true);
+  expect((first.value as ConversationEvent).type).toBe('tool_started');
 
   generationGuard.invalidate();
 
   const second = await generator.next();
-  t.true(second.done);
-  t.is(toolTracker.export()[0]?.status, 'started');
-  t.is(loggedEvents.length, 0);
+  expect(second.done).toBe(true);
+  expect(toolTracker.export()[0]?.status).toBe('started');
+  expect(loggedEvents.length).toBe(0);
 });
 
-test('SessionStreamProcessor.process() ignores a stale tool result that arrives while next() is blocked', async (t) => {
+it('SessionStreamProcessor.process() ignores a stale tool result that arrives while next() is blocked', async () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
 
@@ -369,25 +363,25 @@ test('SessionStreamProcessor.process() ignores a stale tool result that arrives 
   });
 
   const first = await generator.next();
-  t.false(first.done);
-  t.true('type' in first.value);
-  t.is((first.value as ConversationEvent).type, 'tool_started');
+  expect(first.done).toBe(false);
+  expect('type' in first.value).toBe(true);
+  expect((first.value as ConversationEvent).type).toBe('tool_started');
 
   const secondPromise = generator.next();
   await Promise.resolve();
-  t.true(secondPullStarted);
+  expect(secondPullStarted).toBe(true);
 
   generationGuard.invalidate();
   releaseSecond.resolve();
 
   const second = await secondPromise;
-  t.true(second.done);
+  expect(second.done).toBe(true);
   const ledger = toolTracker.export();
-  t.is(ledger.length, 1);
-  t.is(ledger[0]?.callId, 'call-1');
-  t.is(ledger[0]?.status, 'started');
-  t.is(ledger[0]?.output, undefined);
-  t.deepEqual(ledger[0]?.historyItems, [
+  expect(ledger.length).toBe(1);
+  expect(ledger[0]?.callId).toBe('call-1');
+  expect(ledger[0]?.status).toBe('started');
+  expect(ledger[0]?.output).toBeUndefined();
+  expect(ledger[0]?.historyItems).toEqual([
     {
       type: 'function_call',
       callId: 'call-1',
@@ -395,10 +389,10 @@ test('SessionStreamProcessor.process() ignores a stale tool result that arrives 
       arguments: JSON.stringify({ command: 'ls' }),
     },
   ]);
-  t.is(loggedEvents.length, 0);
+  expect(loggedEvents.length).toBe(0);
 });
 
-test('SessionStreamProcessor.finalize() updates providerContinuity previousResponseId', async (t) => {
+it('SessionStreamProcessor.finalize() updates providerContinuity previousResponseId', async () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
   const conversationLogger = {} as unknown as ConversationLogger;
@@ -423,11 +417,11 @@ test('SessionStreamProcessor.finalize() updates providerContinuity previousRespo
 
   const result = processor.finalize(stream, token, 'delta', 'startStream');
 
-  t.deepEqual(result, { kind: 'committed' });
-  t.is(providerContinuity.previousResponseId, 'resp-123');
+  expect(result).toEqual({ kind: 'committed' });
+  expect(providerContinuity.previousResponseId).toBe('resp-123');
 });
 
-test('SessionStreamProcessor.finalize() prefers full replay history when full-history output only contains tool results', (t) => {
+it('SessionStreamProcessor.finalize() prefers full replay history when full-history output only contains tool results', () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
   const conversationLogger = {} as unknown as ConversationLogger;
@@ -467,11 +461,11 @@ test('SessionStreamProcessor.finalize() prefers full replay history when full-hi
 
   const result = processor.finalize(stream, token, 'full_history', 'startStream');
 
-  t.deepEqual(result, { kind: 'committed' });
-  t.deepEqual(conversationStore.getHistory(), fullHistory);
+  expect(result).toEqual({ kind: 'committed' });
+  expect(conversationStore.getHistory()).toEqual(fullHistory);
 });
 
-test('SessionStreamProcessor.finalize() - stale finalization mutates neither continuity nor history and returns stale', (t) => {
+it('SessionStreamProcessor.finalize() - stale finalization mutates neither continuity nor history and returns stale', () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
   const conversationLogger = {} as unknown as ConversationLogger;
@@ -499,12 +493,12 @@ test('SessionStreamProcessor.finalize() - stale finalization mutates neither con
 
   const result = processor.finalize(stream, staleToken, 'delta', 'startStream');
 
-  t.deepEqual(result, { kind: 'stale' });
-  t.is(providerContinuity.previousResponseId, null);
-  t.is(conversationStore.getHistory().length, 0);
+  expect(result).toEqual({ kind: 'stale' });
+  expect(providerContinuity.previousResponseId).toBeNull();
+  expect(conversationStore.getHistory().length).toBe(0);
 });
 
-test('SessionStreamProcessor.finalize() - interrupted stream returns partial, updates continuity, but does not commit terminal history', (t) => {
+it('SessionStreamProcessor.finalize() - interrupted stream returns partial, updates continuity, but does not commit terminal history', () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
   const conversationLogger = {} as unknown as ConversationLogger;
@@ -531,12 +525,12 @@ test('SessionStreamProcessor.finalize() - interrupted stream returns partial, up
 
   const result = processor.finalize(stream, token, 'delta', 'startStream');
 
-  t.deepEqual(result, { kind: 'partial' });
-  t.is(providerContinuity.previousResponseId, 'resp-123');
-  t.is(conversationStore.getHistory().length, 0); // Should not commit history
+  expect(result).toEqual({ kind: 'partial' });
+  expect(providerContinuity.previousResponseId).toBe('resp-123');
+  expect(conversationStore.getHistory().length).toBe(0); // Should not commit history
 });
 
-test('SessionStreamProcessor.process() feeds every raw run item into the journal', async (t) => {
+it('SessionStreamProcessor.process() feeds every raw run item into the journal', async () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
   const conversationLogger = { hasSink: () => false } as unknown as ConversationLogger;
@@ -586,12 +580,12 @@ test('SessionStreamProcessor.process() feeds every raw run item into the journal
   }
 
   // Both raw run items should have been fed to the journal.
-  t.is(journalItems.length, 2);
-  t.is((journalItems[0] as any).rawItem.type, 'function_call');
-  t.is((journalItems[1] as any).rawItem.type, 'function_call_result');
+  expect(journalItems.length).toBe(2);
+  expect((journalItems[0] as any).rawItem.type).toBe('function_call');
+  expect((journalItems[1] as any).rawItem.type).toBe('function_call_result');
 });
 
-test('SessionStreamProcessor.process() drops journal writes after generation invalidation', async (t) => {
+it('SessionStreamProcessor.process() drops journal writes after generation invalidation', async () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
   const conversationLogger = { hasSink: () => false } as unknown as ConversationLogger;
@@ -650,6 +644,6 @@ test('SessionStreamProcessor.process() drops journal writes after generation inv
   }
 
   // Only the first raw item was committed to the journal; the second was dropped.
-  t.is(journalItems.length, 1);
-  t.is((journalItems[0] as any).rawItem.type, 'function_call');
+  expect(journalItems.length).toBe(1);
+  expect((journalItems[0] as any).rawItem.type).toBe('function_call');
 });

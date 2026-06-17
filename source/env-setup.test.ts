@@ -1,6 +1,6 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import './env-setup.js';
 
-test('env-setup disables openai agents tracing globally', (t) => {
-  t.is(process.env.OPENAI_AGENTS_DISABLE_TRACING, 'true');
+it('env-setup disables openai agents tracing globally', () => {
+  expect(process.env.OPENAI_AGENTS_DISABLE_TRACING).toBe('true');
 });

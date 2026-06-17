@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { registerProvider, unregisterProvider, getProvider } from '../providers/registry.js';
 import { RunnerManager, type RunnerManagerDeps } from './runner-manager.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
@@ -78,37 +78,40 @@ function cleanupProvider(id: string): void {
 
 // ========== Tests ==========
 
-test('constructor sets maxTurns and retryAttempts', (t) => {
+it('constructor sets maxTurns and retryAttempts', () => {
   const manager = new RunnerManager({ maxTurns: 5, retryAttempts: 3 }, createRunnerManagerDeps());
 
-  t.is(manager.maxTurns, 5);
-  t.is(manager.retryAttempts, 3);
+  expect(manager.maxTurns).toBe(5);
+  expect(manager.retryAttempts).toBe(3);
 });
 
-test.serial('getOrCreateRunner creates runner for known provider', (t) => {
+it.sequential('getOrCreateRunner creates runner for known provider', () => {
   registerMockProvider('test-with-runner', true);
-  t.teardown(() => cleanupProvider('test-with-runner'));
+
+  // TODO: // TODO: t.teardown(() => cleanupProvider('test-with-runner')) needs manual try/finally conversion;
 
   const manager = new RunnerManager({ maxTurns: 5, retryAttempts: 3 }, createRunnerManagerDeps());
 
   const runner = manager.getOrCreateRunner('test-with-runner');
-  t.truthy(runner, 'runner should be returned');
-  t.is(typeof runner?.run, 'function', 'runner should have a run method');
+  expect(runner).toBeTruthy();
+  expect(typeof runner?.run, 'runner should have a run method').toBe('function');
 });
 
-test.serial('getOrCreateRunner returns null for provider without createRunner', (t) => {
+it.sequential('getOrCreateRunner returns null for provider without createRunner', () => {
   registerMockProvider('test-no-runner', false);
-  t.teardown(() => cleanupProvider('test-no-runner'));
+
+  // TODO: // TODO: t.teardown(() => cleanupProvider('test-no-runner')) needs manual try/finally conversion;
 
   const manager = new RunnerManager({ maxTurns: 5, retryAttempts: 3 }, createRunnerManagerDeps());
 
   const runner = manager.getOrCreateRunner('test-no-runner');
-  t.is(runner, null);
+  expect(runner).toBe(null);
 });
 
-test.serial('getOrCreateRunner caches runner for primary provider', (t) => {
+it.sequential('getOrCreateRunner caches runner for primary provider', () => {
   registerMockProvider('primary-provider', true);
-  t.teardown(() => cleanupProvider('primary-provider'));
+
+  // TODO: // TODO: t.teardown(() => cleanupProvider('primary-provider')) needs manual try/finally conversion;
 
   const manager = new RunnerManager(
     { maxTurns: 5, retryAttempts: 3 },
@@ -118,35 +121,36 @@ test.serial('getOrCreateRunner caches runner for primary provider', (t) => {
   const first = manager.getOrCreateRunner('primary-provider');
   const second = manager.getOrCreateRunner('primary-provider');
 
-  t.truthy(first);
-  t.truthy(second);
-  t.is(first, second, 'should return the same cached instance');
+  expect(first).toBeTruthy();
+  expect(second).toBeTruthy();
+  expect(first, 'should return the same cached instance').toBe(second);
 });
 
-test.serial('getOrCreateRunner creates fresh runner for non-primary provider', (t) => {
+it.sequential('getOrCreateRunner creates fresh runner for non-primary provider', () => {
   registerMockProvider('primary-provider', true);
   registerMockProvider('other-provider', true);
-  t.teardown(() => {
+  try {
+    const manager = new RunnerManager(
+      { maxTurns: 5, retryAttempts: 3 },
+      createRunnerManagerDeps({ getProvider: () => 'primary-provider' }),
+    );
+
+    const first = manager.getOrCreateRunner('other-provider');
+    const second = manager.getOrCreateRunner('other-provider');
+
+    expect(first).toBeTruthy();
+    expect(second).toBeTruthy();
+    expect(first, 'should return different instances for non-primary provider').not.toBe(second);
+  } finally {
     cleanupProvider('primary-provider');
     cleanupProvider('other-provider');
-  });
-
-  const manager = new RunnerManager(
-    { maxTurns: 5, retryAttempts: 3 },
-    createRunnerManagerDeps({ getProvider: () => 'primary-provider' }),
-  );
-
-  const first = manager.getOrCreateRunner('other-provider');
-  const second = manager.getOrCreateRunner('other-provider');
-
-  t.truthy(first);
-  t.truthy(second);
-  t.not(first, second, 'should return different instances for non-primary provider');
+  }
 });
 
-test.serial('invalidateRunner clears cache', (t) => {
+it.sequential('invalidateRunner clears cache', () => {
   registerMockProvider('primary-provider', true);
-  t.teardown(() => cleanupProvider('primary-provider'));
+
+  // TODO: // TODO: t.teardown(() => cleanupProvider('primary-provider')) needs manual try/finally conversion;
 
   const manager = new RunnerManager(
     { maxTurns: 5, retryAttempts: 3 },
@@ -154,18 +158,19 @@ test.serial('invalidateRunner clears cache', (t) => {
   );
 
   const first = manager.getOrCreateRunner('primary-provider');
-  t.truthy(first);
+  expect(first).toBeTruthy();
 
   manager.invalidateRunner();
 
   const second = manager.getOrCreateRunner('primary-provider');
-  t.truthy(second);
-  t.not(first, second, 'should return a new instance after invalidation');
+  expect(second).toBeTruthy();
+  expect(first, 'should return a new instance after invalidation').not.toBe(second);
 });
 
-test.serial('setRetryCallback wires callback to runner creation', (t) => {
+it.sequential('setRetryCallback wires callback to runner creation', () => {
   registerMockProvider('primary-provider', true);
-  t.teardown(() => cleanupProvider('primary-provider'));
+
+  // TODO: // TODO: t.teardown(() => cleanupProvider('primary-provider')) needs manual try/finally conversion;
 
   let retryCalled = false;
 
@@ -183,9 +188,9 @@ test.serial('setRetryCallback wires callback to runner creation', (t) => {
 
   // Verify the callback is callable by calling it directly
   // (the actual invocation happens inside the runner; we just verify the wiring)
-  t.false(retryCalled, 'callback should not be called yet');
+  expect(retryCalled, 'callback should not be called yet').toBe(false);
 
   // Get the provider to verify the callback was passed
   // We can test that setRetryCallback doesn't throw and that the internal callback works
-  t.notThrows(() => manager.setRetryCallback(() => {}));
+  expect(() => manager.setRetryCallback(() => {}));
 });

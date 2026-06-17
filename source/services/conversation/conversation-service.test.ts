@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ConversationService } from './conversation-service.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { AgentStream } from '../agent-stream.js';
@@ -53,16 +53,16 @@ function asApproval(result: ConversationTerminal): ApprovalRequiredTerminal {
   return result;
 }
 
-test.before(() => {
+beforeAll(() => {
   registerToolFormatters([{ name: 'shell', formatCommandMessage: formatShellCommandMessage }]);
 });
 
-test.beforeEach(() => {
+beforeEach(() => {
   clearApprovalRejectionMarkers();
 });
 
-test('emits live text chunks for response.output_text.delta events', async (t) => {
-  t.plan(3);
+it('emits live text chunks for response.output_text.delta events', async () => {
+  expect.assertions(3);
 
   const events = [
     { type: 'response.output_text.delta', delta: 'Hello' },
@@ -86,15 +86,15 @@ test('emits live text chunks for response.output_text.delta events', async (t) =
     },
   });
 
-  t.deepEqual(chunks, [
+  expect(chunks).toEqual([
     { full: 'Hello', chunk: 'Hello' },
     { full: 'Hello world', chunk: ' world' },
   ]);
-  t.is(result.type, 'response');
-  t.is(asFinal(result).finalText, 'Hello world');
+  expect(result.type).toBe('response');
+  expect(asFinal(result).finalText).toBe('Hello world');
 });
 
-test('emits ConversationEvents (text_delta → final) in order', async (t) => {
+it('emits ConversationEvents (text_delta → final) in order', async () => {
   const events = [
     { type: 'response.output_text.delta', delta: 'Hello' },
     { type: 'response.output_text.delta', delta: ' world' },
@@ -117,15 +117,12 @@ test('emits ConversationEvents (text_delta → final) in order', async (t) => {
     },
   });
 
-  t.is(result.type, 'response');
-  t.is(asFinal(result).finalText, 'Hello world');
-  t.deepEqual(
-    emitted.map((e) => e.type),
-    ['text_delta', 'text_delta', 'final'],
-  );
+  expect(result.type).toBe('response');
+  expect(asFinal(result).finalText).toBe('Hello world');
+  expect(emitted.map((e) => e.type)).toEqual(['text_delta', 'text_delta', 'final']);
 });
 
-test('emits approval_required ConversationEvent for interruptions', async (t) => {
+it('emits approval_required ConversationEvent for interruptions', async () => {
   const interruption = {
     name: 'bash',
     agent: { name: 'CLI Agent' },
@@ -153,16 +150,16 @@ test('emits approval_required ConversationEvent for interruptions', async (t) =>
     },
   });
 
-  t.is(result.type, 'approval_required');
-  t.is(asApproval(result).approval.callId, 'call-xyz');
-  t.is(emitted.length, 1);
-  t.is(emitted[0].type, 'approval_required');
-  t.is(emitted[0].approval.toolName, 'bash');
-  t.is(emitted[0].approval.argumentsText, 'echo hi');
-  t.is(emitted[0].approval.callId, 'call-xyz');
+  expect(result.type).toBe('approval_required');
+  expect(asApproval(result).approval.callId).toBe('call-xyz');
+  expect(emitted.length).toBe(1);
+  expect(emitted[0].type).toBe('approval_required');
+  expect(emitted[0].approval.toolName).toBe('bash');
+  expect(emitted[0].approval.argumentsText).toBe('echo hi');
+  expect(emitted[0].approval.callId).toBe('call-xyz');
 });
 
-test('compacts whitespace-heavy JSON arguments for approvals', async (t) => {
+it('compacts whitespace-heavy JSON arguments for approvals', async () => {
   const interruption = {
     name: 'apply_patch',
     agent: { name: 'CLI Agent' },
@@ -190,13 +187,13 @@ test('compacts whitespace-heavy JSON arguments for approvals', async (t) => {
     },
   });
 
-  t.is(result.type, 'approval_required');
-  t.is(emitted.length, 1);
-  t.is(emitted[0].type, 'approval_required');
-  t.is(emitted[0].approval.argumentsText, '{"path":"a.txt","timeout_ms":null,"max_output_length":null}');
+  expect(result.type).toBe('approval_required');
+  expect(emitted.length).toBe(1);
+  expect(emitted[0].type).toBe('approval_required');
+  expect(emitted[0].approval.argumentsText).toBe('{"path":"a.txt","timeout_ms":null,"max_output_length":null}');
 });
 
-test('emits events when resolving aborted approval on next message', async (t) => {
+it('emits events when resolving aborted approval on next message', async () => {
   const interruption = {
     name: 'bash',
     agent: { name: 'CLI Agent' },
@@ -233,8 +230,8 @@ test('emits events when resolving aborted approval on next message', async (t) =
       return initialStream;
     },
     async continueRunStream(state: any, options: any) {
-      t.is(state, initialStream.state);
-      t.deepEqual(options, {
+      expect(state).toBe(initialStream.state);
+      expect(options).toEqual({
         previousResponseId: 'resp_test',
         sessionId: 'default',
         toolResultCallIds: ['call-abort'],
@@ -254,8 +251,8 @@ test('emits events when resolving aborted approval on next message', async (t) =
       approvalEvents.push(event);
     },
   });
-  t.is(approvalResult.type, 'approval_required');
-  t.is(approvalEvents[0].type, 'approval_required');
+  expect(approvalResult.type).toBe('approval_required');
+  expect(approvalEvents[0].type).toBe('approval_required');
 
   service.abort();
 
@@ -266,16 +263,16 @@ test('emits events when resolving aborted approval on next message', async (t) =
     },
   });
 
-  t.is(resolvedResult.type, 'response');
-  t.is(asFinal(resolvedResult).finalText, 'After abort');
-  t.true(resolvedEvents.some((e) => e.type === 'text_delta'));
-  t.true(resolvedEvents.some((e) => e.type === 'final'));
-  t.is(interceptorCount, 0);
-  t.deepEqual(initialStream.state.approveCalls, []);
-  t.deepEqual(initialStream.state.rejectCalls, [interruption]);
+  expect(resolvedResult.type).toBe('response');
+  expect(asFinal(resolvedResult).finalText).toBe('After abort');
+  expect(resolvedEvents.some((e) => e.type === 'text_delta')).toBe(true);
+  expect(resolvedEvents.some((e) => e.type === 'final')).toBe(true);
+  expect(interceptorCount).toBe(0);
+  expect(initialStream.state.approveCalls).toEqual([]);
+  expect(initialStream.state.rejectCalls).toEqual([interruption]);
 });
 
-test('reject with reason and abort+new input yield the same history', async (t) => {
+it('reject with reason and abort+new input yield the same history', async () => {
   const baseHistory = [
     {
       role: 'user',
@@ -353,7 +350,7 @@ test('reject with reason and abort+new input yield the same history', async (t) 
     });
 
     const approvalResult = await service.sendMessage('run command');
-    t.is(approvalResult.type, 'approval_required');
+    expect(approvalResult.type).toBe('approval_required');
 
     if (mode === 'reject') {
       await service.handleApprovalDecision('n', 'no thanks');
@@ -364,17 +361,17 @@ test('reject with reason and abort+new input yield the same history', async (t) 
 
     await service.sendMessage('next');
 
-    t.is(startCalls.length, 2);
+    expect(startCalls.length).toBe(2);
     return startCalls[1].input;
   };
 
   const rejectionHistoryAfter = await runFlow('reject');
   const abortHistoryAfter = await runFlow('abort');
 
-  t.deepEqual(abortHistoryAfter, rejectionHistoryAfter);
+  expect(abortHistoryAfter).toEqual(rejectionHistoryAfter);
 });
 
-test('passes previous response ids into subsequent runs', async (t) => {
+it('passes previous response ids into subsequent runs', async () => {
   const streams = [new MockStream([]), new MockStream([])];
   streams[0].lastResponseId = 'resp-1';
   streams[0].finalOutput = 'First run done.';
@@ -397,15 +394,15 @@ test('passes previous response ids into subsequent runs', async (t) => {
   await service.sendMessage('first');
   const secondResult = await service.sendMessage('second');
 
-  t.deepEqual(startCalls, [
+  expect(startCalls).toEqual([
     { text: 'first', options: { previousResponseId: null, sessionId: 'default' } },
     { text: 'second', options: { previousResponseId: 'resp-1', sessionId: 'default' } },
   ]);
-  t.is(secondResult.type, 'response');
-  t.is(asFinal(secondResult).finalText, 'Second run done.');
+  expect(secondResult.type).toBe('response');
+  expect(asFinal(secondResult).finalText).toBe('Second run done.');
 });
 
-test('emits approval interruptions and resumes after approval', async (t) => {
+it('emits approval interruptions and resumes after approval', async () => {
   const interruption = {
     name: 'bash',
     agent: { name: 'CLI Agent' },
@@ -433,8 +430,8 @@ test('emits approval interruptions and resumes after approval', async (t) => {
       return initialStream;
     },
     async continueRunStream(state: any, options: any) {
-      t.is(state, initialStream.state);
-      t.deepEqual(options, {
+      expect(state).toBe(initialStream.state);
+      expect(options).toEqual({
         previousResponseId: 'resp_test',
         sessionId: 'default',
         toolResultCallIds: [],
@@ -448,19 +445,19 @@ test('emits approval interruptions and resumes after approval', async (t) => {
     deps: { logger: mockLogger, sessionContextService },
   });
   const approvalResult = await service.sendMessage('run command');
-  t.is(approvalResult.type, 'approval_required');
-  t.is(asApproval(approvalResult).approval.toolName, 'bash');
-  t.is(asApproval(approvalResult).approval.argumentsText, 'echo hi');
+  expect(approvalResult.type).toBe('approval_required');
+  expect(asApproval(approvalResult).approval.toolName).toBe('bash');
+  expect(asApproval(approvalResult).approval.argumentsText).toBe('echo hi');
 
   const finalResult = await service.handleApprovalDecision('y');
-  t.truthy(finalResult);
-  t.is(finalResult!.type, 'response');
-  t.is(asFinal(finalResult!).finalText, 'Approved run');
-  t.deepEqual(initialStream.state.approveCalls, [interruption]);
-  t.deepEqual(initialStream.state.rejectCalls, []);
+  expect(finalResult).toBeTruthy();
+  expect(finalResult!.type).toBe('response');
+  expect(asFinal(finalResult!).finalText).toBe('Approved run');
+  expect(initialStream.state.approveCalls).toEqual([interruption]);
+  expect(initialStream.state.rejectCalls).toEqual([]);
 });
 
-test('dedupes command messages emitted live from run events', async (t) => {
+it('dedupes command messages emitted live from run events', async () => {
   const commandPayload = 'exit 0\nfile.txt';
   const rawItem = {
     id: 'call-123',
@@ -495,7 +492,7 @@ test('dedupes command messages emitted live from run events', async (t) => {
     },
   });
 
-  t.deepEqual(emitted, [
+  expect(emitted).toEqual([
     {
       id: 'call-123-0',
       callId: 'call-123',
@@ -509,10 +506,10 @@ test('dedupes command messages emitted live from run events', async (t) => {
       toolName: 'shell',
     },
   ]);
-  t.deepEqual(asFinal(result).commandMessages, []);
+  expect(asFinal(result).commandMessages).toEqual([]);
 });
 
-test('attaches cached shell args when output uses call_id', async (t) => {
+it('attaches cached shell args when output uses call_id', async () => {
   const functionCallItem = {
     rawItem: {
       type: 'function_call',
@@ -558,7 +555,7 @@ test('attaches cached shell args when output uses call_id', async (t) => {
     },
   });
 
-  t.deepEqual(emitted, [
+  expect(emitted).toEqual([
     {
       id: 'result-1-0',
       callId: 'call-abc',
@@ -572,10 +569,10 @@ test('attaches cached shell args when output uses call_id', async (t) => {
       toolName: 'shell',
     },
   ]);
-  t.deepEqual(asFinal(result).commandMessages, []);
+  expect(asFinal(result).commandMessages).toEqual([]);
 });
 
-test('preserves approval rejection command messages', async (t) => {
+it('preserves approval rejection command messages', async () => {
   const rejectionPayload = JSON.stringify({
     output: [
       {
@@ -621,14 +618,14 @@ test('preserves approval rejection command messages', async (t) => {
     },
   });
 
-  t.is(emitted.length, 1);
-  t.true(emitted[0].isApprovalRejection);
-  t.is(emitted[0].command, 'should-not-show');
-  t.is(emitted[0].output, rejectionPayload);
-  t.deepEqual(asFinal(result).commandMessages, []);
+  expect(emitted.length).toBe(1);
+  expect(emitted[0].isApprovalRejection).toBe(true);
+  expect(emitted[0].command).toBe('should-not-show');
+  expect(emitted[0].output).toBe(rejectionPayload);
+  expect(asFinal(result).commandMessages).toEqual([]);
 });
 
-test('dedupes commands from initial stream when continuation history contains them', async (t) => {
+it('dedupes commands from initial stream when continuation history contains them', async () => {
   // This test simulates the scenario where:
   // 1. Initial stream emits command 'ls' before hitting an approval interruption
   // 2. User approves, continuation stream runs
@@ -710,9 +707,9 @@ test('dedupes commands from initial stream when continuation history contains th
     },
   });
 
-  t.is(approvalResult.type, 'approval_required');
-  t.is(emittedCommands.length, 1);
-  t.is(emittedCommands[0].id, 'call-ls-123-0');
+  expect(approvalResult.type).toBe('approval_required');
+  expect(emittedCommands.length).toBe(1);
+  expect(emittedCommands[0].id).toBe('call-ls-123-0');
 
   // Handle approval - should emit 'sed' but NOT duplicate 'ls'
   const finalResult = await service.handleApprovalDecision('y', undefined, {
@@ -721,15 +718,15 @@ test('dedupes commands from initial stream when continuation history contains th
     },
   });
 
-  t.is(finalResult!.type, 'response');
+  expect(finalResult!.type).toBe('response');
   // Only 'sed' should be emitted during continuation
-  t.is(emittedCommands.length, 2);
-  t.is(emittedCommands[1].id, 'call-sed-456-0');
+  expect(emittedCommands.length).toBe(2);
+  expect(emittedCommands[1].id).toBe('call-sed-456-0');
   // Final result should have no additional commands since both were emitted live
-  t.deepEqual(asFinal(finalResult!).commandMessages, []);
+  expect(asFinal(finalResult!).commandMessages).toEqual([]);
 });
 
-test('continuation replays the just-emitted tool in newItems without re-emitting it in the final result', async (t) => {
+it('continuation replays the just-emitted tool in newItems without re-emitting it in the final result', async () => {
   // Regression: when the SDK continuation stream replays the tool that the
   // current turn has already emitted via command_message (in stream.newItems
   // and/or stream.history), the final response must not include that tool in
@@ -791,20 +788,20 @@ test('continuation replays the just-emitted tool in newItems without re-emitting
       emittedCommands.push(message);
     },
   });
-  t.is(approvalResult.type, 'approval_required');
+  expect(approvalResult.type).toBe('approval_required');
 
   const finalResult = await service.handleApprovalDecision('y', undefined, {
     onCommandMessage(message) {
       emittedCommands.push(message);
     },
   });
-  t.is(finalResult!.type, 'response');
-  t.is(emittedCommands.length, 1);
-  t.is(emittedCommands[0].id, 'call-replay-1-0');
-  t.deepEqual(asFinal(finalResult!).commandMessages, []);
+  expect(finalResult!.type).toBe('response');
+  expect(emittedCommands.length).toBe(1);
+  expect(emittedCommands[0].id).toBe('call-replay-1-0');
+  expect(asFinal(finalResult!).commandMessages).toEqual([]);
 });
 
-test('resetWithNewId() clears conversation state', async (t) => {
+it('resetWithNewId() clears conversation state', async () => {
   const streams = [new MockStream([]), new MockStream([])];
   streams[0].lastResponseId = 'resp-1';
 
@@ -826,22 +823,22 @@ test('resetWithNewId() clears conversation state', async (t) => {
 
   await service.sendMessage('second');
 
-  t.deepEqual(startCalls[1].options, { previousResponseId: null, sessionId: 'new-id' });
+  expect(startCalls[1].options).toMatchObject({ previousResponseId: null });
 });
 
-test('resetWithNewId() updates sessionId', (t) => {
+it('resetWithNewId() updates sessionId', () => {
   const service = new ConversationService({
     agentClient: partialClient(),
     sessionId: 'old-id',
     deps: { logger: mockLogger, sessionContextService },
   });
-  t.is(service.sessionId, 'old-id');
+  expect(service.sessionId).toBe('old-id');
 
   service.resetWithNewId('new-id');
-  t.is(service.sessionId, 'new-id');
+  expect(service.sessionId).toBe('new-id');
 });
 
-test('resetWithNewId() clears provider conversations when supported', async (t) => {
+it('resetWithNewId() clears provider conversations when supported', async () => {
   let clearCalls = 0;
   const mockClient = partialClient({
     clearConversations() {
@@ -860,10 +857,10 @@ test('resetWithNewId() clears provider conversations when supported', async (t) 
 
   service.resetWithNewId('new-id');
 
-  t.is(clearCalls, 1);
+  expect(clearCalls).toBe(1);
 });
 
-test('setModel() delegates to agent client', (t) => {
+it('setModel() delegates to agent client', () => {
   let setModelCalledWith: any = null;
   const mockClient = partialClient({
     setModel(model: string) {
@@ -877,10 +874,10 @@ test('setModel() delegates to agent client', (t) => {
   });
   service.setModel('gpt-4');
 
-  t.is(setModelCalledWith, 'gpt-4');
+  expect(setModelCalledWith).toBe('gpt-4');
 });
 
-test('setTemperature() delegates to agent client when supported', (t) => {
+it('setTemperature() delegates to agent client when supported', () => {
   let setTemperatureCalledWith: any = null;
   const mockClient = partialClient({
     setTemperature(value: number) {
@@ -894,10 +891,10 @@ test('setTemperature() delegates to agent client when supported', (t) => {
   });
   service.setTemperature(0.7);
 
-  t.is(setTemperatureCalledWith, 0.7);
+  expect(setTemperatureCalledWith).toBe(0.7);
 });
 
-test('abort() delegates to agent client and clears pending approval', async (t) => {
+it('abort() delegates to agent client and clears pending approval', async () => {
   let abortCalled = false;
   const mockClient = partialClient({
     abort() {
@@ -925,13 +922,13 @@ test('abort() delegates to agent client and clears pending approval', async (t) 
 
   service.abort();
 
-  t.true(abortCalled);
+  expect(abortCalled).toBe(true);
 
   const result = await service.handleApprovalDecision('y');
-  t.is(result, null);
+  expect(result).toBe(null);
 });
 
-test('abort() preserves the aborted tool turn in exported state and snapshot', async (t) => {
+it('abort() preserves the aborted tool turn in exported state and snapshot', async () => {
   const interruption = {
     name: 'shell',
     agent: { name: 'CLI Agent' },
@@ -957,7 +954,7 @@ test('abort() preserves the aborted tool turn in exported state and snapshot', a
   });
 
   const first = await service.sendMessage('run command');
-  t.is(first.type, 'approval_required');
+  expect(first.type).toBe('approval_required');
 
   service.abort();
 
@@ -965,17 +962,14 @@ test('abort() preserves the aborted tool turn in exported state and snapshot', a
   const snapshot = service.getCurrentSnapshot();
 
   for (const state of [exported, snapshot]) {
-    t.deepEqual(
-      state.history.map((item: any) => item.type),
-      ['message', 'function_call', 'tool_call_output_item'],
-    );
-    t.is((state.history[1] as any).callId, 'call-abort');
-    t.is((state.history[2] as any).callId, 'call-abort');
-    t.is((state.history[2] as any).output, 'Tool execution was not approved.');
+    expect(state.history.map((item: any) => item.type)).toEqual(['message', 'function_call', 'tool_call_output_item']);
+    expect((state.history[1] as any).callId).toBe('call-abort');
+    expect((state.history[2] as any).callId).toBe('call-abort');
+    expect((state.history[2] as any).output).toBe('Tool execution was not approved.');
   }
 });
 
-test('switchProvider() after abort reuses the preserved tool turn in the next full-history request', async (t) => {
+it('switchProvider() after abort reuses the preserved tool turn in the next full-history request', async () => {
   const interruption = {
     name: 'shell',
     agent: { name: 'CLI Agent' },
@@ -1013,26 +1007,28 @@ test('switchProvider() after abort reuses the preserved tool turn in the next fu
   });
 
   const first = await service.sendMessage('run command');
-  t.is(first.type, 'approval_required');
+  expect(first.type).toBe('approval_required');
 
   service.abort();
   service.switchProvider('openrouter');
 
   const second = await service.sendMessage('next');
-  t.is(second.type, 'response');
+  expect(second.type).toBe('response');
 
-  t.is(startCalls.length, 2);
-  t.deepEqual(
-    startCalls[1].map((item: any) => item.type),
-    ['message', 'function_call', 'tool_call_output_item', 'message'],
-  );
-  t.is(startCalls[1][1].callId, 'call-abort');
-  t.is(startCalls[1][2].callId, 'call-abort');
-  t.is(startCalls[1][2].output, 'Tool execution was not approved.');
-  t.is(startCalls[1][3].content, 'next');
+  expect(startCalls.length).toBe(2);
+  expect(startCalls[1].map((item: any) => item.type)).toEqual([
+    'message',
+    'function_call',
+    'tool_call_output_item',
+    'message',
+  ]);
+  expect(startCalls[1][1].callId).toBe('call-abort');
+  expect(startCalls[1][2].callId).toBe('call-abort');
+  expect(startCalls[1][2].output).toBe('Tool execution was not approved.');
+  expect(startCalls[1][3].content).toBe('next');
 });
 
-test('handleApprovalDecision() rejects interruption when answer is n', async (t) => {
+it('handleApprovalDecision() rejects interruption when answer is n', async () => {
   const interruption = {
     name: 'bash',
     agent: { name: 'CLI Agent' },
@@ -1060,7 +1056,7 @@ test('handleApprovalDecision() rejects interruption when answer is n', async (t)
       return initialStream;
     },
     async continueRunStream(_state: any, options: any) {
-      t.deepEqual(options, {
+      expect(options).toEqual({
         previousResponseId: 'resp_test',
         sessionId: 'default',
         toolResultCallIds: [],
@@ -1080,22 +1076,22 @@ test('handleApprovalDecision() rejects interruption when answer is n', async (t)
 
   const finalResult = await service.handleApprovalDecision('n');
 
-  t.is(finalResult!.type, 'response');
-  t.deepEqual(initialStream.state.approveCalls, []);
-  t.deepEqual(initialStream.state.rejectCalls, [interruption]);
+  expect(finalResult!.type).toBe('response');
+  expect(initialStream.state.approveCalls).toEqual([]);
+  expect(initialStream.state.rejectCalls).toEqual([interruption]);
 });
 
-test('handleApprovalDecision() returns null when no pending approval', async (t) => {
+it('handleApprovalDecision() returns null when no pending approval', async () => {
   const service = new ConversationService({
     agentClient: partialClient(),
     deps: { logger: mockLogger, sessionContextService },
   });
   const result = await service.handleApprovalDecision('y');
-  t.is(result, null);
+  expect(result).toBe(null);
 });
 
-test('emits live reasoning chunks', async (t) => {
-  t.plan(3);
+it('emits live reasoning chunks', async () => {
+  expect.assertions(3);
 
   // Reasoning is now streamed via model events carrying reasoning_summary_text deltas
   const events = [
@@ -1138,15 +1134,15 @@ test('emits live reasoning chunks', async (t) => {
     },
   });
 
-  t.deepEqual(chunks, [
+  expect(chunks).toEqual([
     { full: 'Thinking...', chunk: 'Thinking...' },
     { full: 'Thinking... Still thinking.', chunk: ' Still thinking.' },
   ]);
-  t.is(result.type, 'response');
-  t.is(asFinal(result).reasoningText, 'Thinking... Still thinking.');
+  expect(result.type).toBe('response');
+  expect(asFinal(result).reasoningText).toBe('Thinking... Still thinking.');
 });
 
-test('retries on tool hallucination error (ModelBehaviorError)', async (t) => {
+it('retries on tool hallucination error (ModelBehaviorError)', async () => {
   // Import ModelBehaviorError dynamically
   const { ModelBehaviorError } = await import('@openai/agents');
 
@@ -1177,12 +1173,12 @@ test('retries on tool hallucination error (ModelBehaviorError)', async (t) => {
   const result = await service.sendMessage('explain this file');
 
   // Should have retried and succeeded on second attempt
-  t.is(callCount, 2);
-  t.is(result.type, 'response');
-  t.is(asFinal(result).finalText, 'Retried successfully');
+  expect(callCount).toBe(2);
+  expect(result.type).toBe('response');
+  expect(asFinal(result).finalText).toBe('Retried successfully');
 });
 
-test('stops retrying after max hallucination retries', async (t) => {
+it('stops retrying after max hallucination retries', async () => {
   const { ModelBehaviorError } = await import('@openai/agents');
 
   let callCount = 0;
@@ -1201,17 +1197,17 @@ test('stops retrying after max hallucination retries', async (t) => {
 
   try {
     await service.sendMessage('test message');
-    t.fail('Should have thrown error after max retries');
+    throw new Error('Should have thrown error after max retries');
   } catch (error: unknown) {
     // collectTerminalResult re-throws the error event message as a plain Error,
     // so the original ModelBehaviorError is not preserved.
-    t.is((error as Error).message, 'Tool fake_tool not found in agent Test Agent.');
+    expect((error as Error).message).toBe('Tool fake_tool not found in agent Test Agent.');
     // Should have tried: initial + 2 retries = 3 total attempts
-    t.is(callCount, 3);
+    expect(callCount).toBe(3);
   }
 });
 
-test('does not retry on non-hallucination ModelBehaviorError', async (t) => {
+it('does not retry on non-hallucination ModelBehaviorError', async () => {
   const { ModelBehaviorError } = await import('@openai/agents');
 
   let callCount = 0;
@@ -1230,17 +1226,17 @@ test('does not retry on non-hallucination ModelBehaviorError', async (t) => {
 
   try {
     await service.sendMessage('test message');
-    t.fail('Should have thrown error');
+    throw new Error('Should have thrown error');
   } catch (error: unknown) {
     // collectTerminalResult re-throws the error event message as a plain Error,
     // so the original ModelBehaviorError is not preserved.
-    t.is((error as Error).message, 'Model violated safety guidelines');
+    expect((error as Error).message).toBe('Model violated safety guidelines');
     // Should NOT retry - only 1 call
-    t.is(callCount, 1);
+    expect(callCount).toBe(1);
   }
 });
 
-test('failed user turn is dropped from history after non-retryable provider error', async (t) => {
+it('failed user turn is dropped from history after non-retryable provider error', async () => {
   const startCalls: any[] = [];
   const mockClient = partialClient({
     getProvider() {
@@ -1268,19 +1264,17 @@ test('failed user turn is dropped from history after non-retryable provider erro
     deps: { logger: mockLogger, sessionContextService },
   });
 
-  await t.throwsAsync(() => service.sendMessage('first failed message'), {
-    message: '400 Error from provider: bad request',
-  });
+  await expect(service.sendMessage('first failed message')).rejects.toThrow('400 Error from provider: bad request');
 
   const result = await service.sendMessage('second message');
 
-  t.is(result.type, 'response');
-  t.is(startCalls.length, 2);
+  expect(result.type).toBe('response');
+  expect(startCalls.length).toBe(2);
   // The session removes the failed user turn from the store before yielding the
   // error event (so the drop happens regardless of generator-cleanup semantics),
   // and surfaces the dropped text on the error event for UI restoration. The
   // next request must not include the stranded first turn.
-  t.deepEqual(startCalls[1], [
+  expect(startCalls[1]).toEqual([
     {
       role: 'user',
       type: 'message',

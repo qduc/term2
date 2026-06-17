@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -21,21 +21,21 @@ function createNoopLogger(overrides: Partial<ILoggingService> = {}): ILoggingSer
   };
 }
 
-function createTmpDir(t: any): string {
+function createTmpDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-shell-test-'));
-  t.teardown(() => fs.rmSync(dir, { recursive: true, force: true }));
+
   return dir;
 }
 
-function createFakeRtk(t: any): string {
-  const dir = createTmpDir(t);
+function createFakeRtk(): string {
+  const dir = createTmpDir();
   const rtkPath = path.join(dir, 'rtk');
   fs.writeFileSync(rtkPath, '#!/bin/sh\nexec "$@"\n');
   fs.chmodSync(rtkPath, 0o755);
   return rtkPath;
 }
 
-test.serial('shell execute appends spill-file guidance when output is truncated', async (t) => {
+it.sequential('shell execute appends spill-file guidance when output is truncated', async () => {
   const longStdout = `${'x'.repeat(6000)}FULL-ONLY-SENTINEL${'y'.repeat(6000)}`;
 
   const tool = createShellToolDefinition({
@@ -55,29 +55,29 @@ test.serial('shell execute appends spill-file guidance when output is truncated'
     max_output_length: 120,
   });
 
-  t.true(output.includes('Full shell output saved to'));
-  t.true(/Runtime: \d+ms/.test(output));
-  t.true(
+  expect(output.includes('Full shell output saved to')).toBe(true);
+  expect(/Runtime: \d+ms/.test(output)).toBe(true);
+  expect(
     output.includes(
       'Search that file for what you need instead of rerunning the command or changing the filter criteria with a `| grep` pipeline.',
     ),
-  );
-  t.false(output.includes('FULL-ONLY-SENTINEL'));
+  ).toBe(true);
+  expect(output.includes('FULL-ONLY-SENTINEL')).toBe(false);
 });
 
-test('shell description mentions saved long output and avoiding reruns', (t) => {
+it('shell description mentions saved long output and avoiding reruns', () => {
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService(),
   });
 
-  t.true(tool.description.includes('Long output is saved to a file'));
-  t.true(
+  expect(tool.description.includes('Long output is saved to a file')).toBe(true);
+  expect(
     tool.description.includes('instead of rerunning the command just to change filters or add a `| grep` pipeline'),
-  );
+  ).toBe(true);
 });
 
-test.serial('shell execute restores previous correlation id after command execution', async (t) => {
+it.sequential('shell execute restores previous correlation id after command execution', async () => {
   let clearCorrelationCalls = 0;
   let currentCorrelationId: string | undefined = 'trace-parent';
 
@@ -108,12 +108,12 @@ test.serial('shell execute restores previous correlation id after command execut
     max_output_length: 10000,
   });
 
-  t.true(output.includes('exit 0'));
-  t.is(currentCorrelationId, 'trace-parent');
-  t.is(clearCorrelationCalls, 0);
+  expect(output.includes('exit 0')).toBe(true);
+  expect(currentCorrelationId).toBe('trace-parent');
+  expect(clearCorrelationCalls).toBe(0);
 });
 
-test.serial('shell execute clears correlation id when no previous correlation exists', async (t) => {
+it.sequential('shell execute clears correlation id when no previous correlation exists', async () => {
   let currentCorrelationId: string | undefined = undefined;
   let clearCorrelationCalls = 0;
 
@@ -144,11 +144,11 @@ test.serial('shell execute clears correlation id when no previous correlation ex
     max_output_length: 10000,
   });
 
-  t.is(currentCorrelationId, undefined);
-  t.is(clearCorrelationCalls, 1);
+  expect(currentCorrelationId).toBe(undefined);
+  expect(clearCorrelationCalls).toBe(1);
 });
 
-test.serial('shell execute stops a running command when the tool invocation is aborted', async (t) => {
+it.sequential('shell execute stops a running command when the tool invocation is aborted', async () => {
   const abortController = new AbortController();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
@@ -168,11 +168,11 @@ test.serial('shell execute stops a running command when the tool invocation is a
   queueMicrotask(() => abortController.abort());
   const output = await outputPromise;
 
-  t.true(output.startsWith('timeout'));
-  t.false(output.includes('finished'));
+  expect(output.startsWith('timeout')).toBe(true);
+  expect(output.includes('finished')).toBe(false);
 });
 
-test.serial('shell execute does not install RTK for unsupported commands', async (t) => {
+it.sequential('shell execute does not install RTK for unsupported commands', async () => {
   let installCalled = false;
 
   const tool = createShellToolDefinition({
@@ -190,14 +190,14 @@ test.serial('shell execute does not install RTK for unsupported commands', async
     max_output_length: 10000,
   });
 
-  t.true(output.includes('exit 0'));
-  t.false(installCalled);
+  expect(output.includes('exit 0')).toBe(true);
+  expect(installCalled).toBe(false);
 });
 
-test.serial('shell execute wraps eligible RTK commands', async (t) => {
+it.sequential('shell execute wraps eligible RTK commands', async () => {
   let installCalled = false;
   let wrappedCommand: string | undefined;
-  const rtkPath = createFakeRtk(t);
+  const rtkPath = createFakeRtk();
 
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger({
@@ -220,12 +220,12 @@ test.serial('shell execute wraps eligible RTK commands', async (t) => {
     max_output_length: 10000,
   });
 
-  t.true(output.includes('package.json'));
-  t.true(installCalled);
-  t.is(wrappedCommand, 'ls package.json');
+  expect(output.includes('package.json')).toBe(true);
+  expect(installCalled).toBe(true);
+  expect(wrappedCommand).toBe('ls package.json');
 });
 
-test.serial('shell execute does not install RTK for allowlisted commands in a pipeline', async (t) => {
+it.sequential('shell execute does not install RTK for allowlisted commands in a pipeline', async () => {
   let installCalled = false;
 
   const tool = createShellToolDefinition({
@@ -243,13 +243,13 @@ test.serial('shell execute does not install RTK for allowlisted commands in a pi
     max_output_length: 10000,
   });
 
-  t.true(output.includes('exit 0'));
-  t.false(installCalled);
+  expect(output.includes('exit 0')).toBe(true);
+  expect(installCalled).toBe(false);
 });
 
-test.serial('shell execute does not install RTK for allowlisted commands redirected to files', async (t) => {
+it.sequential('shell execute does not install RTK for allowlisted commands redirected to files', async () => {
   let installCalled = false;
-  const dir = createTmpDir(t);
+  const dir = createTmpDir();
   const stdoutPath = path.join(dir, 'stdout.txt');
   const stderrPath = path.join(dir, 'stderr.txt');
 
@@ -273,14 +273,14 @@ test.serial('shell execute does not install RTK for allowlisted commands redirec
     max_output_length: 10000,
   });
 
-  t.true(stdoutRedirect.includes('exit 0'));
-  t.true(stderrRedirect.includes('exit 1') || stderrRedirect.includes('exit 2')); // Different variants of ls can return either exit 1 or exit 2
-  t.true(fs.existsSync(stdoutPath));
-  t.true(fs.existsSync(stderrPath));
-  t.false(installCalled);
+  expect(stdoutRedirect.includes('exit 0')).toBe(true);
+  expect(stderrRedirect.includes('exit 1') || stderrRedirect.includes('exit 2')).toBe(true); // Different variants of ls can return either exit 1 or exit 2
+  expect(fs.existsSync(stdoutPath)).toBe(true);
+  expect(fs.existsSync(stderrPath)).toBe(true);
+  expect(installCalled).toBe(false);
 });
 
-test.serial('shell execute bypasses RTK for SSH commands', async (t) => {
+it.sequential('shell execute bypasses RTK for SSH commands', async () => {
   let installCalled = false;
   let executedCommand: string | undefined;
   const sshService: ISSHService = {
@@ -312,12 +312,12 @@ test.serial('shell execute bypasses RTK for SSH commands', async (t) => {
     max_output_length: 10000,
   });
 
-  t.true(output.includes('remote'));
-  t.is(executedCommand, 'ls package.json');
-  t.false(installCalled);
+  expect(output.includes('remote')).toBe(true);
+  expect(executedCommand).toBe('ls package.json');
+  expect(installCalled).toBe(false);
 });
 
-test.serial('shell execute in plan mode blocks mutating commands but runs green commands', async (t) => {
+it.sequential('shell execute in plan mode blocks mutating commands but runs green commands', async () => {
   const settingsService = createMockSettingsService({
     'app.planMode': true,
   });
@@ -334,8 +334,8 @@ test.serial('shell execute in plan mode blocks mutating commands but runs green 
     max_output_length: 10000,
   });
 
-  t.true(outputMutating.includes('plan mode is read-only'));
-  t.true(outputMutating.includes('Command not executed'));
+  expect(outputMutating.includes('plan mode is read-only')).toBe(true);
+  expect(outputMutating.includes('Command not executed')).toBe(true);
 
   // Green command: echo hello
   const outputGreen = await tool.execute({
@@ -344,11 +344,11 @@ test.serial('shell execute in plan mode blocks mutating commands but runs green 
     max_output_length: 10000,
   });
 
-  t.true(outputGreen.includes('hello_plan_mode_test'));
-  t.true(outputGreen.includes('exit 0'));
+  expect(outputGreen.includes('hello_plan_mode_test')).toBe(true);
+  expect(outputGreen.includes('exit 0')).toBe(true);
 });
 
-test.serial('shell needsApproval classifications in planMode false', async (t) => {
+it.sequential('shell needsApproval classifications in planMode false', async () => {
   const settingsService = createMockSettingsService({
     'app.planMode': false,
   });
@@ -358,6 +358,6 @@ test.serial('shell needsApproval classifications in planMode false', async (t) =
     settingsService,
   });
 
-  t.true(await tool.needsApproval({ command: 'touch /tmp/somefile_test' }));
-  t.false(await tool.needsApproval({ command: 'ls' }));
+  expect(await tool.needsApproval({ command: 'touch /tmp/somefile_test' })).toBe(true);
+  expect(await tool.needsApproval({ command: 'ls' })).toBe(false);
 });

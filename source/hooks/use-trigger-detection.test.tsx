@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { useMemo } from 'react';
 import { Text } from 'ink';
 import { useTriggerDetection } from './use-trigger-detection.js';
@@ -58,7 +57,7 @@ const TestComponent = ({ counts, mode, value, cursorOffset, slashCommands = [] }
   return <Text>test</Text>;
 };
 
-test.serial('useTriggerDetection keeps model selection open when cursor moves before the model trigger', async (t) => {
+it.sequential('useTriggerDetection keeps model selection open when cursor moves before the model trigger', async () => {
   const counts: Counts = {};
   const slashCommands: SlashCommand[] = [
     {
@@ -77,17 +76,16 @@ test.serial('useTriggerDetection keeps model selection open when cursor moves be
       cursorOffset={1}
       slashCommands={slashCommands}
     />,
-    t,
   );
 
-  t.is(counts['models.close'] ?? 0, 0);
-  t.is(counts['models.open'] ?? 0, 0);
+  expect(counts['models.close'] ?? 0).toBe(0);
+  expect(counts['models.open'] ?? 0).toBe(0);
 });
 
-test.serial('useTriggerDetection closes model selection on none outside model mode', async (t) => {
+it.sequential('useTriggerDetection closes model selection on none outside model mode', async () => {
   const counts: Counts = {};
 
-  await renderInAct(<TestComponent counts={counts} mode="text" value="/model gpt-5" cursorOffset={1} />, t);
+  await renderInAct(<TestComponent counts={counts} mode="text" value="/model gpt-5" cursorOffset={1} />);
 
-  t.is(counts['models.close'], 1);
+  expect(counts['models.close']).toBe(1);
 });

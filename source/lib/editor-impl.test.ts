@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import os from 'node:os';
 import { writeFile, readFile, rm, mkdtemp } from 'fs/promises';
@@ -47,7 +47,7 @@ function createMockSettings(values: Record<string, any> = {}): ISettingsService 
 
 // ========== resolveWorkspacePath tests (via editor operations) ==========
 
-test('createFile rejects path outside workspace using parent directory traversal', async (t) => {
+it('createFile rejects path outside workspace using parent directory traversal', async () => {
   const logger = createMockLogger();
   const settings = createMockSettings({ 'tools.logFileOperations': false });
   const editor = createEditorImpl({ loggingService: logger, settingsService: settings });
@@ -58,11 +58,11 @@ test('createFile rejects path outside workspace using parent directory traversal
     diff: '*** Begin Patch\n*** Add File: test\n+test content\n*** End Patch',
   });
 
-  t.is(result.status, 'failed');
-  t.true(result.output?.includes('Operation outside workspace'));
+  expect(result.status).toBe('failed');
+  expect(result.output?.includes('Operation outside workspace')).toBe(true);
 });
 
-test('updateFile rejects absolute path outside workspace', async (t) => {
+it('updateFile rejects absolute path outside workspace', async () => {
   const logger = createMockLogger();
   const settings = createMockSettings({ 'tools.logFileOperations': false });
   const editor = createEditorImpl({ loggingService: logger, settingsService: settings });
@@ -73,11 +73,11 @@ test('updateFile rejects absolute path outside workspace', async (t) => {
     diff: '*** Begin Patch\n*** Update File: /etc/passwd\n-root\n+hacked\n*** End Patch',
   });
 
-  t.is(result.status, 'failed');
-  t.true(result.output?.includes('Operation outside workspace') || result.output?.includes('Cannot update'));
+  expect(result.status).toBe('failed');
+  expect(result.output?.includes('Operation outside workspace') || result.output?.includes('Cannot update')).toBe(true);
 });
 
-test('deleteFile rejects path outside workspace', async (t) => {
+it('deleteFile rejects path outside workspace', async () => {
   const logger = createMockLogger();
   const settings = createMockSettings({ 'tools.logFileOperations': false });
   const editor = createEditorImpl({ loggingService: logger, settingsService: settings });
@@ -87,13 +87,13 @@ test('deleteFile rejects path outside workspace', async (t) => {
     path: '../../../tmp/somefile',
   });
 
-  t.is(result.status, 'failed');
-  t.true(result.output?.includes('Operation outside workspace'));
+  expect(result.status).toBe('failed');
+  expect(result.output?.includes('Operation outside workspace')).toBe(true);
 });
 
 // ========== createFile tests ==========
 
-test('createFile creates a new file with valid diff', async (t) => {
+it('createFile creates a new file with valid diff', async () => {
   await withTempDir(async (dir) => {
     const logger = createMockLogger();
     const settings = createMockSettings({ 'tools.logFileOperations': true });
@@ -111,15 +111,15 @@ test('createFile creates a new file with valid diff', async (t) => {
       diff: '@@ -0,0 +1 @@\n+hello world',
     });
 
-    t.is(result.status, 'completed');
-    t.true(result.output?.includes('Created'));
+    expect(result.status).toBe('completed');
+    expect(result.output?.includes('Created')).toBe(true);
 
     const content = await readFile(testFile, 'utf8');
-    t.is(content, 'hello world\n');
+    expect(content).toBe('hello world\n');
   });
 });
 
-test('createFile returns failed status for invalid diff', async (t) => {
+it('createFile returns failed status for invalid diff', async () => {
   const logger = createMockLogger();
   const settings = createMockSettings({ 'tools.logFileOperations': false });
   const editor = createEditorImpl({ loggingService: logger, settingsService: settings });
@@ -130,13 +130,13 @@ test('createFile returns failed status for invalid diff', async (t) => {
     diff: 'this is not a valid diff format',
   });
 
-  t.is(result.status, 'failed');
-  t.true(result.output?.includes('Invalid patch'));
+  expect(result.status).toBe('failed');
+  expect(result.output?.includes('Invalid patch')).toBe(true);
 });
 
 // ========== updateFile tests ==========
 
-test('updateFile updates existing file with valid diff', async (t) => {
+it('updateFile updates existing file with valid diff', async () => {
   await withTempDir(async (dir) => {
     const logger = createMockLogger();
     const settings = createMockSettings({ 'tools.logFileOperations': true });
@@ -156,15 +156,15 @@ test('updateFile updates existing file with valid diff', async (t) => {
       diff: '@@ -1,3 +1,3 @@\n line1\n-line2\n+modified line2\n line3',
     });
 
-    t.is(result.status, 'completed');
-    t.true(result.output?.includes('Updated'));
+    expect(result.status).toBe('completed');
+    expect(result.output?.includes('Updated')).toBe(true);
 
     const content = await readFile(testFile, 'utf8');
-    t.true(content.includes('modified line2'));
+    expect(content.includes('modified line2')).toBe(true);
   });
 });
 
-test('updateFile returns failed status for missing file', async (t) => {
+it('updateFile returns failed status for missing file', async () => {
   const logger = createMockLogger();
   const settings = createMockSettings({ 'tools.logFileOperations': true });
   const editor = createEditorImpl({ loggingService: logger, settingsService: settings });
@@ -175,11 +175,11 @@ test('updateFile returns failed status for missing file', async (t) => {
     diff: '*** Begin Patch\n*** Update File: nonexistent\n-old\n+new\n*** End Patch',
   });
 
-  t.is(result.status, 'failed');
-  t.true(result.output?.includes('Cannot update missing file'));
+  expect(result.status).toBe('failed');
+  expect(result.output?.includes('Cannot update missing file')).toBe(true);
 });
 
-test('updateFile returns failed status for invalid diff', async (t) => {
+it('updateFile returns failed status for invalid diff', async () => {
   await withTempDir(async (dir) => {
     const logger = createMockLogger();
     const settings = createMockSettings({ 'tools.logFileOperations': false });
@@ -199,14 +199,14 @@ test('updateFile returns failed status for invalid diff', async (t) => {
       diff: 'not a valid diff',
     });
 
-    t.is(result.status, 'failed');
-    t.true(result.output?.includes('Invalid patch'));
+    expect(result.status).toBe('failed');
+    expect(result.output?.includes('Invalid patch')).toBe(true);
   });
 });
 
 // ========== deleteFile tests ==========
 
-test('deleteFile deletes existing file', async (t) => {
+it('deleteFile deletes existing file', async (t) => {
   await withTempDir(async (dir) => {
     const logger = createMockLogger();
     const settings = createMockSettings({ 'tools.logFileOperations': true });
@@ -225,15 +225,15 @@ test('deleteFile deletes existing file', async (t) => {
       path: 'to-delete.txt',
     });
 
-    t.is(result.status, 'completed');
-    t.true(result.output?.includes('Deleted'));
+    expect(result.status).toBe('completed');
+    expect(result.output?.includes('Deleted')).toBe(true);
 
     // Verify file is gone
-    await t.throwsAsync(readFile(testFile, 'utf8'), { code: 'ENOENT' });
+    await expect(readFile(testFile, 'utf8')).rejects.toHaveProperty('code', 'ENOENT');
   });
 });
 
-test('deleteFile succeeds even when file does not exist (force: true)', async (t) => {
+it('deleteFile succeeds even when file does not exist (force: true)', async () => {
   const logger = createMockLogger();
   const settings = createMockSettings({ 'tools.logFileOperations': false });
   const editor = createEditorImpl({ loggingService: logger, settingsService: settings });
@@ -244,5 +244,5 @@ test('deleteFile succeeds even when file does not exist (force: true)', async (t
   });
 
   // rm with force:true doesn't fail for missing files
-  t.is(result.status, 'completed');
+  expect(result.status).toBe('completed');
 });

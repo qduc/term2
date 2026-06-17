@@ -1,5 +1,4 @@
-import test from 'ava';
-
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
 import {
   classifySearchKind,
@@ -15,88 +14,88 @@ import {
   parseWebSearchOutput,
 } from './command-message-helpers.js';
 
-test('getMatchCount returns 0 when output is empty or undefined', (t) => {
-  t.is(getMatchCount(undefined, 'grep -rn hello source/', ''), 0);
-  t.is(getMatchCount(undefined, 'grep -rn hello source/', undefined), 0);
+it('getMatchCount returns 0 when output is empty or undefined', () => {
+  expect(getMatchCount(undefined, 'grep -rn hello source/', '')).toBe(0);
+  expect(getMatchCount(undefined, 'grep -rn hello source/', undefined)).toBe(0);
 });
 
-test('getMatchCount returns 0 for "No matches found." output', (t) => {
-  t.is(getMatchCount('grep', 'grep', 'No matches found.'), 0);
+it('getMatchCount returns 0 for "No matches found." output', () => {
+  expect(getMatchCount('grep', 'grep', 'No matches found.')).toBe(0);
 });
 
-test('getMatchCount returns 0 for grep tool when structured parser returns null (unparseable output)', (t) => {
+it('getMatchCount returns 0 for grep tool when structured parser returns null (unparseable output)', () => {
   // Output that parseGrepOutput cannot decode (no file:line:content pattern) should not
   // fall through to the shell fallback and miscount as 1 match.
-  t.is(getMatchCount('grep', 'grep', 'Search failed: some rg error'), 0);
-  t.is(getMatchCount('grep', 'grep', 'some unexpected single line'), 0);
+  expect(getMatchCount('grep', 'grep', 'Search failed: some rg error')).toBe(0);
+  expect(getMatchCount('grep', 'grep', 'some unexpected single line')).toBe(0);
 });
 
-test('getMatchCount returns 0 for find_files tool when structured parser returns null', (t) => {
+it('getMatchCount returns 0 for find_files tool when structured parser returns null', () => {
   // Output that parseFindFilesOutput cannot decode should return 0, not fall through.
-  t.is(getMatchCount('find_files', 'find_files', 'Error: no such directory'), 0);
+  expect(getMatchCount('find_files', 'find_files', 'Error: no such directory')).toBe(0);
 });
 
-test('getMatchCount returns 0 for "No files found matching pattern: ..." output', (t) => {
-  t.is(getMatchCount('find_files', 'find_files', 'No files found matching pattern: *.ts'), 0);
+it('getMatchCount returns 0 for "No files found matching pattern: ..." output', () => {
+  expect(getMatchCount('find_files', 'find_files', 'No files found matching pattern: *.ts')).toBe(0);
 });
 
-test('getMatchCount returns 0 for fallback shell output indicating no results', (t) => {
-  t.is(getMatchCount(undefined, 'grep hello', 'No matches found.'), 0);
-  t.is(getMatchCount(undefined, 'find . -name "*.ts"', 'No files found'), 0);
+it('getMatchCount returns 0 for fallback shell output indicating no results', () => {
+  expect(getMatchCount(undefined, 'grep hello', 'No matches found.')).toBe(0);
+  expect(getMatchCount(undefined, 'find . -name "*.ts"', 'No files found')).toBe(0);
 });
 
-test('getMatchCount returns the sum of matches across files for structured grep output', (t) => {
+it('getMatchCount returns the sum of matches across files for structured grep output', () => {
   const output = 'file1.ts:1:hello\nfile1.ts:3:hello again\nfile2.ts:2:hello';
 
-  t.is(getMatchCount('grep', 'grep', output), 3);
+  expect(getMatchCount('grep', 'grep', output)).toBe(3);
 });
 
-test('getMatchCount returns the file count for structured find_files output', (t) => {
+it('getMatchCount returns the file count for structured find_files output', () => {
   const output = 'src/a.ts\nsrc/b.ts\nsrc/c.ts';
 
-  t.is(getMatchCount('find_files', 'find_files', output), 3);
+  expect(getMatchCount('find_files', 'find_files', output)).toBe(3);
 });
 
-test('getMatchCount falls through to the shell fallback when toolName is undefined', (t) => {
+it('getMatchCount falls through to the shell fallback when toolName is undefined', () => {
   const output = 'src/a.ts:1:hello\nsrc/b.ts:3:hello';
 
-  t.is(getMatchCount(undefined, 'grep -rn hello source/', output), 2);
+  expect(getMatchCount(undefined, 'grep -rn hello source/', output)).toBe(2);
 });
 
-test('shell fallback skips Note lines', (t) => {
+it('shell fallback skips Note lines', () => {
   const output = 'Note: searching from workspace root\nsrc/a.ts:1:hello';
 
-  t.is(getMatchCount(undefined, 'grep -rn hello source/', output), 1);
+  expect(getMatchCount(undefined, 'grep -rn hello source/', output)).toBe(1);
 });
 
-test('shell fallback skips Error lines', (t) => {
+it('shell fallback skips Error lines', () => {
   const output = 'Error: permission denied\nsrc/a.ts:1:hello';
 
-  t.is(getMatchCount(undefined, 'grep -rn hello source/', output), 1);
+  expect(getMatchCount(undefined, 'grep -rn hello source/', output)).toBe(1);
 });
 
-test('shell fallback skips grep-prefixed error lines', (t) => {
+it('shell fallback skips grep-prefixed error lines', () => {
   const output = 'grep: src/a.ts: No such file or directory\nsrc/b.ts:1:hello';
 
-  t.is(getMatchCount(undefined, 'grep -rn hello source/', output), 1);
+  expect(getMatchCount(undefined, 'grep -rn hello source/', output)).toBe(1);
 });
 
-test('shell fallback skips rg-prefixed error lines', (t) => {
+it('shell fallback skips rg-prefixed error lines', () => {
   const output = 'rg: src/a.ts: No such file or directory\nsrc/b.ts:1:hello';
 
-  t.is(getMatchCount(undefined, 'rg hello source/', output), 1);
+  expect(getMatchCount(undefined, 'rg hello source/', output)).toBe(1);
 });
 
-test('getMatchCount ignores rg stderr when structured grep output is present', (t) => {
+it('getMatchCount ignores rg stderr when structured grep output is present', () => {
   const output = 'rg: src/missing.ts: No such file or directory\nsrc/a.ts:1:hello\nsrc/b.ts:3:hello';
 
-  t.is(getMatchCount('grep', 'grep', output), 2);
+  expect(getMatchCount('grep', 'grep', output)).toBe(2);
 });
 
-test('parseGrepOutput ignores rg stderr lines and still parses matches', (t) => {
+it('parseGrepOutput ignores rg stderr lines and still parses matches', () => {
   const output = 'rg: src/missing.ts: No such file or directory\nsrc/a.ts:1:hello\nsrc/b.ts:3:hello';
 
-  t.deepEqual(parseGrepOutput(output), {
+  expect(parseGrepOutput(output)).toEqual({
     matchesByFile: {
       'src/a.ts': [{ lineNum: 1, content: 'hello' }],
       'src/b.ts': [{ lineNum: 3, content: 'hello' }],
@@ -105,42 +104,42 @@ test('parseGrepOutput ignores rg stderr lines and still parses matches', (t) => 
   });
 });
 
-test('shell fallback skips find-prefixed error lines', (t) => {
+it('shell fallback skips find-prefixed error lines', () => {
   const output = 'find: src/a.ts: Permission denied\nsrc/b.ts:1:hello';
 
-  t.is(getMatchCount(undefined, 'find . -name "*.ts"', output), 1);
+  expect(getMatchCount(undefined, 'find . -name "*.ts"', output)).toBe(1);
 });
 
-test('shell fallback skips the separator line', (t) => {
+it('shell fallback skips the separator line', () => {
   const output = 'src/a.ts:1:hello\n--\nsrc/b.ts:1:hello';
 
-  t.is(getMatchCount(undefined, 'grep -rn hello source/', output), 2);
+  expect(getMatchCount(undefined, 'grep -rn hello source/', output)).toBe(2);
 });
 
-test('shell fallback counts other non-empty lines', (t) => {
+it('shell fallback counts other non-empty lines', () => {
   const output = 'src/a.ts:1:hello\nplain summary line';
 
-  t.is(getMatchCount(undefined, 'grep -rn hello source/', output), 2);
+  expect(getMatchCount(undefined, 'grep -rn hello source/', output)).toBe(2);
 });
 
-test("classifySearchKind returns 'grep' for grep tools", (t) => {
-  t.is(classifySearchKind('grep', 'rg hello source/'), 'grep');
+it("classifySearchKind returns 'grep' for grep tools", () => {
+  expect(classifySearchKind('grep', 'rg hello source/')).toBe('grep');
 });
 
-test("classifySearchKind returns 'find_files' for find_files tools", (t) => {
-  t.is(classifySearchKind('find_files', 'find_files'), 'find_files');
+it("classifySearchKind returns 'find_files' for find_files tools", () => {
+  expect(classifySearchKind('find_files', 'find_files')).toBe('find_files');
 });
 
-test("classifySearchKind returns 'shell' for shell-routed search", (t) => {
-  t.is(classifySearchKind(undefined, 'grep -rn hello source/'), 'shell');
+it("classifySearchKind returns 'shell' for shell-routed search", () => {
+  expect(classifySearchKind(undefined, 'grep -rn hello source/')).toBe('shell');
 });
 
-test('parseGrepOutput returns null when the first non-empty line is not a Note or match', (t) => {
-  t.is(parseGrepOutput('plain summary line\nfile1.ts:1:hello'), null);
+it('parseGrepOutput returns null when the first non-empty line is not a Note or match', () => {
+  expect(parseGrepOutput('plain summary line\nfile1.ts:1:hello')).toBe(null);
 });
 
-test('parseReadFileOutput extracts metadata and content lines', (t) => {
-  t.deepEqual(parseReadFileOutput('File: source/a.ts (10 lines) [lines 2-4]\n===\nline 2\nline 3'), {
+it('parseReadFileOutput extracts metadata and content lines', () => {
+  expect(parseReadFileOutput('File: source/a.ts (10 lines) [lines 2-4]\n===\nline 2\nline 3')).toEqual({
     filePath: 'source/a.ts',
     totalLines: 10,
     startLine: 2,
@@ -149,23 +148,22 @@ test('parseReadFileOutput extracts metadata and content lines', (t) => {
   });
 });
 
-test('parseSubagentOutput extracts status metadata and remaining text', (t) => {
-  t.deepEqual(
+it('parseSubagentOutput extracts status metadata and remaining text', () => {
+  expect(
     parseSubagentOutput('Status: completed\nTools used: shell, read_file\nFiles changed: source/a.ts\nSummary', {
       role: 'worker',
     }),
-    {
-      role: 'worker',
-      status: 'completed',
-      toolsUsed: 'shell, read_file',
-      filesChanged: 'source/a.ts',
-      mainText: 'Summary',
-    },
-  );
+  ).toEqual({
+    role: 'worker',
+    status: 'completed',
+    toolsUsed: 'shell, read_file',
+    filesChanged: 'source/a.ts',
+    mainText: 'Summary',
+  });
 });
 
-test('parseSubagentOutput marks Error-prefixed output as failed', (t) => {
-  t.deepEqual(parseSubagentOutput('Error: failed\nDetails', { role: 'explorer' }), {
+it('parseSubagentOutput marks Error-prefixed output as failed', () => {
+  expect(parseSubagentOutput('Error: failed\nDetails', { role: 'explorer' })).toEqual({
     role: 'explorer',
     status: 'failed',
     toolsUsed: '',
@@ -174,7 +172,7 @@ test('parseSubagentOutput marks Error-prefixed output as failed', (t) => {
   });
 });
 
-test('parseWebSearchOutput extracts answer and result entries', (t) => {
+it('parseWebSearchOutput extracts answer and result entries', () => {
   const output = [
     '## Answer',
     'Use focused tests.',
@@ -185,7 +183,7 @@ test('parseWebSearchOutput extracts answer and result entries', (t) => {
     'Relevant content.',
   ].join('\n');
 
-  t.deepEqual(parseWebSearchOutput(output), {
+  expect(parseWebSearchOutput(output)).toEqual({
     answer: 'Use focused tests.',
     results: [
       {
@@ -198,7 +196,7 @@ test('parseWebSearchOutput extracts answer and result entries', (t) => {
   });
 });
 
-test('parseWebFetchOutput separates table of contents, notes, temp file, and content', (t) => {
+it('parseWebFetchOutput separates table of contents, notes, temp file, and content', () => {
   const output = [
     'Title: Example',
     'URL: https://example.com',
@@ -211,7 +209,7 @@ test('parseWebFetchOutput separates table of contents, notes, temp file, and con
     'The full content has been saved for reference.',
   ].join('\n');
 
-  t.deepEqual(parseWebFetchOutput(output), {
+  expect(parseWebFetchOutput(output)).toEqual({
     title: 'Example',
     url: 'https://example.com',
     toc: '- Intro',
@@ -221,7 +219,7 @@ test('parseWebFetchOutput separates table of contents, notes, temp file, and con
   });
 });
 
-test('parseCodeOutlineOutput groups imports exports and declarations', (t) => {
+it('parseCodeOutlineOutput groups imports exports and declarations', () => {
   const output = [
     'FILE source/a.ts',
     'LANG ts',
@@ -233,7 +231,7 @@ test('parseCodeOutlineOutput groups imports exports and declarations', (t) => {
     'function y',
   ].join('\n');
 
-  t.deepEqual(parseCodeOutlineOutput(output), {
+  expect(parseCodeOutlineOutput(output)).toEqual({
     filePath: 'source/a.ts',
     lang: 'ts',
     imports: ["import x from 'x';"],
@@ -242,32 +240,34 @@ test('parseCodeOutlineOutput groups imports exports and declarations', (t) => {
   });
 });
 
-test('parseCodeContextSearchOutput parses related file results', (t) => {
+it('parseCodeContextSearchOutput parses related file results', () => {
   const output = ['QUERY related', 'TARGET source/a.ts', 'source/b.ts', 'REL imports', 'WARNING ignored'].join('\n');
 
-  t.deepEqual(parseCodeContextSearchOutput(output), {
+  expect(parseCodeContextSearchOutput(output)).toEqual({
     queryType: 'related',
     target: 'source/a.ts',
     relatedFiles: [{ filePath: 'source/b.ts', relations: 'imports' }],
   });
 });
 
-test('parseCodeContextSearchOutput parses symbol results', (t) => {
+it('parseCodeContextSearchOutput parses symbol results', () => {
   const output = ['QUERY symbol', 'SYMBOL run', 'source/a.ts:12 function run exported'].join('\n');
 
-  t.deepEqual(parseCodeContextSearchOutput(output), {
+  expect(parseCodeContextSearchOutput(output)).toEqual({
     queryType: 'symbol',
     symbol: 'run',
     results: [{ filePath: 'source/a.ts', lineNum: 12, kind: 'function', name: 'run', exported: true }],
   });
 });
 
-test('formatToolArgs parses stringified JSON args', (t) => {
-  t.is(formatToolArgs('read_file', '{"path":"source/a.ts","start_line":2,"end_line":4}'), '"source/a.ts" (lines 2-4)');
+it('formatToolArgs parses stringified JSON args', () => {
+  expect(formatToolArgs('read_file', '{"path":"source/a.ts","start_line":2,"end_line":4}')).toBe(
+    '"source/a.ts" (lines 2-4)',
+  );
 });
 
-test('formatToolArgs summarizes search replacement batches in concise mode', (t) => {
-  t.is(
+it('formatToolArgs summarizes search replacement batches in concise mode', () => {
+  expect(
     formatToolArgs(
       TOOL_NAME_SEARCH_REPLACE,
       {
@@ -279,16 +279,17 @@ test('formatToolArgs summarizes search replacement batches in concise mode', (t)
       },
       'concise',
     ),
-    '"source/a.ts" (+ 1 more)',
+  ).toBe('"source/a.ts" (+ 1 more)');
+});
+
+it('formatToolArgs formats apply patch operation and path', () => {
+  expect(formatToolArgs(TOOL_NAME_APPLY_PATCH, { type: 'update_file', path: 'source/a.ts' })).toBe(
+    'update_file source/a.ts',
   );
 });
 
-test('formatToolArgs formats apply patch operation and path', (t) => {
-  t.is(formatToolArgs(TOOL_NAME_APPLY_PATCH, { type: 'update_file', path: 'source/a.ts' }), 'update_file source/a.ts');
-});
-
-test('countDiffStats ignores diff headers and hunk markers', (t) => {
-  t.deepEqual(countDiffStats('--- a/source/a.ts\n+++ b/source/a.ts\n@@ section\n-old\n+new\n context'), {
+it('countDiffStats ignores diff headers and hunk markers', () => {
+  expect(countDiffStats('--- a/source/a.ts\n+++ b/source/a.ts\n@@ section\n-old\n+new\n context')).toEqual({
     added: 1,
     removed: 1,
   });

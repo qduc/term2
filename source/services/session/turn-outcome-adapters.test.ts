@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { fromInitialOutcome, fromDriveResult } from './turn-outcome-adapters.js';
 import type { InitialTurnOutcome } from './initial-turn-runner.js';
 import type { ContinuationDriveResult } from './continuation-driver.js';
@@ -32,85 +32,85 @@ const defaultRetryCounts: RetryCounts = {
 
 // ── fromInitialOutcome ─────────────────────────────────────────
 
-test('fromInitialOutcome maps response correctly', (t) => {
+it('fromInitialOutcome maps response correctly', () => {
   const outcome: InitialTurnOutcome = { kind: 'response', terminal: terminalResponse };
   const result = fromInitialOutcome(outcome);
 
-  t.is(result.kind, 'response');
+  expect(result.kind).toBe('response');
   if (result.kind === 'response') {
-    t.is(result.terminal, terminalResponse);
+    expect(result.terminal).toBe(terminalResponse);
   }
 });
 
-test('fromInitialOutcome maps approval_required correctly', (t) => {
+it('fromInitialOutcome maps approval_required correctly', () => {
   const outcome: InitialTurnOutcome = { kind: 'approval_required', terminal: terminalApproval };
   const result = fromInitialOutcome(outcome);
 
-  t.is(result.kind, 'approval_required');
+  expect(result.kind).toBe('approval_required');
   if (result.kind === 'approval_required') {
-    t.is(result.terminal, terminalApproval);
+    expect(result.terminal).toBe(terminalApproval);
   }
 });
 
-test('fromInitialOutcome maps failed correctly', (t) => {
+it('fromInitialOutcome maps failed correctly', () => {
   const outcome: InitialTurnOutcome = { kind: 'failed' };
   const result = fromInitialOutcome(outcome);
 
-  t.is(result.kind, 'failed');
+  expect(result.kind).toBe('failed');
 });
 
-test('fromInitialOutcome maps stale correctly', (t) => {
+it('fromInitialOutcome maps stale correctly', () => {
   const outcome: InitialTurnOutcome = { kind: 'stale' };
   const result = fromInitialOutcome(outcome);
 
-  t.is(result.kind, 'stale');
+  expect(result.kind).toBe('stale');
 });
 
 // ── fromDriveResult ────────────────────────────────────────────
 
-test('fromDriveResult maps response correctly', (t) => {
+it('fromDriveResult maps response correctly', () => {
   const driveResult: ContinuationDriveResult = { kind: 'response', terminal: terminalResponse };
   const result = fromDriveResult(driveResult);
 
-  t.is(result.kind, 'response');
+  expect(result.kind).toBe('response');
   if (result.kind === 'response') {
-    t.is(result.terminal, terminalResponse);
+    expect(result.terminal).toBe(terminalResponse);
   }
 });
 
-test('fromDriveResult maps approval_required correctly', (t) => {
+it('fromDriveResult maps approval_required correctly', () => {
   const driveResult: ContinuationDriveResult = { kind: 'approval_required', terminal: terminalApproval };
   const result = fromDriveResult(driveResult);
 
-  t.is(result.kind, 'approval_required');
+  expect(result.kind).toBe('approval_required');
   if (result.kind === 'approval_required') {
-    t.is(result.terminal, terminalApproval);
+    expect(result.terminal).toBe(terminalApproval);
   }
 });
 
-test('fromDriveResult maps stale correctly', (t) => {
+it('fromDriveResult maps stale correctly', () => {
   const driveResult: ContinuationDriveResult = { kind: 'stale' };
   const result = fromDriveResult(driveResult);
 
-  t.is(result.kind, 'stale');
+  expect(result.kind).toBe('stale');
 });
 
-test('fromDriveResult maps fresh_start_required with retryCounts only', (t) => {
+it('fromDriveResult maps fresh_start_required with retryCounts only', () => {
   const driveResult: ContinuationDriveResult = {
     kind: 'fresh_start_required',
     retryCounts: defaultRetryCounts,
   };
   const result = fromDriveResult(driveResult);
 
-  t.is(result.kind, 'fresh_start_required');
+  expect(result.kind).toBe('fresh_start_required');
   if (result.kind === 'fresh_start_required') {
-    t.is(result.retryCounts, defaultRetryCounts);
-    t.is(result.delayMs, undefined);
-    t.is(result.useStandardServiceTier, undefined);
+    expect(result.retryCounts).toBe(defaultRetryCounts);
+    expect(result.delayMs).toBe(undefined);
+    expect(result.useStandardServiceTier).toBe(undefined);
   }
 });
 
-test('fromDriveResult maps fresh_start_required with retryCounts + delayMs + useStandardServiceTier', (t) => {
+it('fromDriveResult maps fresh_start_required with retryCounts + delayMs + useStandardServiceTier', () => {
   const driveResult: ContinuationDriveResult = {
     kind: 'fresh_start_required',
     retryCounts: defaultRetryCounts,
@@ -119,10 +119,10 @@ test('fromDriveResult maps fresh_start_required with retryCounts + delayMs + use
   };
   const result = fromDriveResult(driveResult);
 
-  t.is(result.kind, 'fresh_start_required');
+  expect(result.kind).toBe('fresh_start_required');
   if (result.kind === 'fresh_start_required') {
-    t.is(result.retryCounts, defaultRetryCounts);
-    t.is(result.delayMs, 500);
-    t.is(result.useStandardServiceTier, true);
+    expect(result.retryCounts).toBe(defaultRetryCounts);
+    expect(result.delayMs).toBe(500);
+    expect(result.useStandardServiceTier).toBe(true);
   }
 });

@@ -1,8 +1,8 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
 
-test('toOpenAIStrictToolSchema converts optional fields to nullable default null', (t) => {
+it('toOpenAIStrictToolSchema converts optional fields to nullable default null', () => {
   const schema = z.object({
     command: z.string(),
     timeout_ms: z.number().int().positive().optional().describe('timeout'),
@@ -10,21 +10,21 @@ test('toOpenAIStrictToolSchema converts optional fields to nullable default null
 
   const transformed = toOpenAIStrictToolSchema(schema);
   const parsed = transformed.safeParse({ command: 'echo hi' });
-  t.true(parsed.success);
+  expect(parsed.success).toBe(true);
   if (parsed.success) {
-    t.is((parsed.data as any).timeout_ms, null);
+    expect((parsed.data as any).timeout_ms).toBe(null);
   }
 
-  t.true(transformed.safeParse({ command: 'echo hi', timeout_ms: null }).success);
-  t.true(transformed.safeParse({ command: 'echo hi', timeout_ms: 1000 }).success);
+  expect(transformed.safeParse({ command: 'echo hi', timeout_ms: null }).success).toBe(true);
+  expect(transformed.safeParse({ command: 'echo hi', timeout_ms: 1000 }).success).toBe(true);
 });
 
-test('toOpenAIStrictToolSchema leaves schema unchanged when there are no optional fields', (t) => {
+it('toOpenAIStrictToolSchema leaves schema unchanged when there are no optional fields', () => {
   const schema = z.object({
     command: z.string(),
   });
 
   const transformed = toOpenAIStrictToolSchema(schema);
-  t.is(transformed, schema);
-  t.true(transformed.safeParse({ command: 'echo hi' }).success);
+  expect(transformed).toBe(schema);
+  expect(transformed.safeParse({ command: 'echo hi' }).success).toBe(true);
 });

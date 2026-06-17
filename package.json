@@ -33,8 +33,11 @@
     "start": "node dist/cli.js",
     "build": "tsc && pnpm run post-build",
     "dev": "tsc --watch",
-    "test": "ava --reporter=min",
-    "test:verbose": "tsc && ava",
+    "test": "vitest run",
+    "test:verbose": "vitest run --reporter=verbose",
+    "test:vitest": "vitest run",
+    "test:vitest:watch": "vitest",
+    "test:vitest:coverage": "vitest run --coverage",
     "lint": "prettier --check .",
     "lint-fix": "prettier --write .",
     "post-build": "cp -r source/prompts dist/",
@@ -80,7 +83,6 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@ava/typescript": "^6.0.0",
     "@babel/cli": "^7.21.0",
     "@babel/preset-react": "^7.18.6",
     "@types/env-paths": "^1.0.2",
@@ -90,7 +92,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.0.0",
     "@types/turndown": "^5.0.6",
-    "ava": "^6.4.1",
+    "@vitest/coverage-v8": "^4.1.9",
     "chalk": "^5.2.0",
     "eslint-config-xo-react": "^0.27.0",
     "eslint-plugin-react": "^7.32.2",
@@ -101,31 +103,11 @@
     "lint-staged": "^16.2.7",
     "prettier": "^2.8.7",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.9"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,md,json}": "prettier --write"
-  },
-  "ava": {
-    "concurrency": 4,
-    "environmentVariables": {
-      "NODE_NO_WARNINGS": "1",
-      "DISABLE_LOGGING": "1"
-    },
-    "typescript": {
-      "extensions": [
-        "ts",
-        "tsx"
-      ],
-      "rewritePaths": {
-        "source/": "dist/"
-      },
-      "compile": "tsc"
-    },
-    "files": [
-      "source/**/*.test.ts",
-      "source/**/*.test.tsx"
-    ]
   },
   "xo": {
     "extends": "xo-react",

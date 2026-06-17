@@ -1,12 +1,11 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { useEffect } from 'react';
 import { InputProvider, useInputActions, useInputContext } from './InputContext.js';
 import { renderInAct } from '../test-helpers/ink-testing.js';
 
-test.serial('useInputActions remains stable across input updates', async (t) => {
+it.sequential('useInputActions remains stable across input updates', async () => {
   const actionsSeen: any[] = [];
 
   const ActionsProbe = () => {
@@ -29,9 +28,8 @@ test.serial('useInputActions remains stable across input updates', async (t) => 
       <ActionsProbe />
       <Trigger />
     </InputProvider>,
-    t,
   );
 
-  t.true(actionsSeen.length >= 1);
-  t.is(actionsSeen[0], actionsSeen[actionsSeen.length - 1]);
+  expect(actionsSeen.length >= 1).toBe(true);
+  expect(actionsSeen[0]).toBe(actionsSeen[actionsSeen.length - 1]);
 });

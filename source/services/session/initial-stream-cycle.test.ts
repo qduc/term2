@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { InitialStreamCycle } from './initial-stream-cycle.js';
 import { TurnAttempt } from './turn-attempt.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
@@ -24,7 +24,7 @@ function createAttempt() {
   return attempt;
 }
 
-test('starts and processes a stream, then returns the built response', async (t) => {
+it('starts and processes a stream, then returns the built response', async () => {
   const stream = new MockStream([]);
   stream.finalOutput = 'done';
   const recorded: unknown[] = [];
@@ -65,23 +65,23 @@ test('starts and processes a stream, then returns the built response', async (t)
     next = await iterator.next();
   }
 
-  t.deepEqual(events, [{ type: 'text_delta', delta: 'done' }]);
-  t.is(next.value.kind, 'completed');
+  expect(events).toEqual([{ type: 'text_delta', delta: 'done' }]);
+  expect(next.value.kind).toBe('completed');
   if (next.value.kind !== 'completed') return;
-  t.is(next.value.outcome.kind, 'response');
+  expect(next.value.outcome.kind).toBe('response');
   if (next.value.outcome.kind === 'response') {
-    t.is(next.value.outcome.result.finalText, 'done');
+    expect(next.value.outcome.result.finalText).toBe('done');
   }
-  t.is(recorded.length, 1);
+  expect(recorded.length).toBe(1);
 });
 
-test('returns stale without building a result when finalization is stale', async (t) => {
+it('returns stale without building a result when finalization is stale', async () => {
   const stream = new MockStream([]);
   const cycle = new InitialStreamCycle({
     agentClient: { startStream: async () => stream } as any,
     approvalFlow: {} as any,
     conversationStore: { getHistory: () => [] } as any,
-    inputPlanner: { recordSuccess: () => t.fail() } as any,
+    inputPlanner: { recordSuccess: () => expect(true).toBe(false) } as any,
     logger: {} as any,
     providerContinuity: { previousResponseId: null } as any,
     sessionId: 'session-1',
@@ -105,5 +105,5 @@ test('returns stale without building a result when finalization is stale', async
   let next = await iterator.next();
   while (!next.done) next = await iterator.next();
 
-  t.deepEqual(next.value, { kind: 'stale' });
+  expect(next.value).toEqual({ kind: 'stale' });
 });

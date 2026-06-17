@@ -1,11 +1,11 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { buildPersistedAssistantTurnItems, synthesizeHistoryFromAssistantTurn } from './conversation-turn-items.js';
 
 // Some providers (e.g. openai-compatible / deepseek via opencode) emit reasoning
 // items whose text lives in a `rawContent` array of `{ type: 'reasoning_text', text }`
 // parts rather than in `content`, `text`, or `reasoning_content`. These must still
 // be captured so the reasoning survives a persist -> resume round trip.
-test('buildPersistedAssistantTurnItems captures reasoning text from rawContent', (t) => {
+it('buildPersistedAssistantTurnItems captures reasoning text from rawContent', () => {
   const items = [
     {
       type: 'reasoning',
@@ -16,12 +16,12 @@ test('buildPersistedAssistantTurnItems captures reasoning text from rawContent',
 
   const persisted = buildPersistedAssistantTurnItems(items);
 
-  t.is(persisted.length, 1);
-  t.is(persisted[0].type, 'reasoning');
-  t.is((persisted[0] as { text: string }).text, 'The user wants the kernel version.');
+  expect(persisted.length).toBe(1);
+  expect(persisted[0].type).toBe('reasoning');
+  expect((persisted[0] as { text: string }).text).toBe('The user wants the kernel version.');
 });
 
-test('synthesizeHistoryFromAssistantTurn round-trips rawContent reasoning into history', (t) => {
+it('synthesizeHistoryFromAssistantTurn round-trips rawContent reasoning into history', () => {
   const items = [
     {
       type: 'reasoning',
@@ -40,7 +40,7 @@ test('synthesizeHistoryFromAssistantTurn round-trips rawContent reasoning into h
 
   // The reasoning content must be recoverable somewhere in the synthesized history.
   const serialized = JSON.stringify(history);
-  t.true(serialized.includes('Think about it.'));
+  expect(serialized.includes('Think about it.')).toBe(true);
 });
 
 // The SDK's chat-completions converter reads a standalone reasoning item's
@@ -48,7 +48,7 @@ test('synthesizeHistoryFromAssistantTurn round-trips rawContent reasoning into h
 // at message level. Folding reasoning into a function_call's providerData instead
 // makes it serialize onto BOTH the message and the tool-call (duplicate
 // reasoning_content). Reasoning must be reconstructed as a standalone item.
-test('synthesizeHistoryFromAssistantTurn reconstructs reasoning before a tool_call as a standalone item, not folded into the tool call', (t) => {
+it('synthesizeHistoryFromAssistantTurn reconstructs reasoning before a tool_call as a standalone item, not folded into the tool call', () => {
   const items = [
     {
       type: 'reasoning',
@@ -67,11 +67,11 @@ test('synthesizeHistoryFromAssistantTurn reconstructs reasoning before a tool_ca
   const history = synthesizeHistoryFromAssistantTurn([], turn) as Array<Record<string, any>>;
 
   const reasoningItem = history.find((h) => h.type === 'reasoning');
-  t.truthy(reasoningItem, 'a standalone reasoning item should exist');
-  t.is(reasoningItem?.content?.[0]?.text, "I'll run uname -a.");
+  expect(reasoningItem).toBeTruthy();
+  expect(reasoningItem?.content?.[0]?.text).toBe("I'll run uname -a.");
 
   const toolCall = history.find((h) => h.type === 'function_call');
-  t.truthy(toolCall);
+  expect(toolCall).toBeTruthy();
   const serializedToolCall = JSON.stringify(toolCall);
-  t.false(serializedToolCall.includes("I'll run uname -a."), 'reasoning text must not be folded into the tool call');
+  expect(serializedToolCall.includes("I'll run uname -a.")).toBe(false);
 });

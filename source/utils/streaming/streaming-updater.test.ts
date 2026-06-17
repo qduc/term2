@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createStreamingUpdateCoordinator } from './streaming-updater.js';
 import type { ThrottleScheduler } from '../throttle.js';
 
@@ -33,7 +33,7 @@ const createScheduler = () => {
   };
 };
 
-test('coalesces rapid updates and uses latest value', (t) => {
+it('coalesces rapid updates and uses latest value', () => {
   const calls: string[] = [];
   const clock = createScheduler();
   const updater = createStreamingUpdateCoordinator((value: string) => calls.push(value), 40, clock.scheduler);
@@ -41,14 +41,14 @@ test('coalesces rapid updates and uses latest value', (t) => {
   updater.push('a');
   updater.push('b');
 
-  t.deepEqual(calls, ['a']);
+  expect(calls).toEqual(['a']);
 
   clock.advance(60);
 
-  t.deepEqual(calls, ['a', 'b']);
+  expect(calls).toEqual(['a', 'b']);
 });
 
-test('skips duplicate updates', (t) => {
+it('skips duplicate updates', () => {
   const calls: string[] = [];
   const clock = createScheduler();
   const updater = createStreamingUpdateCoordinator((value: string) => calls.push(value), 20, clock.scheduler);
@@ -58,10 +58,10 @@ test('skips duplicate updates', (t) => {
 
   clock.advance(30);
 
-  t.deepEqual(calls, ['same']);
+  expect(calls).toEqual(['same']);
 });
 
-test('flush emits pending update immediately', (t) => {
+it('flush emits pending update immediately', () => {
   const calls: string[] = [];
   const clock = createScheduler();
   const updater = createStreamingUpdateCoordinator((value: string) => calls.push(value), 100, clock.scheduler);
@@ -70,13 +70,13 @@ test('flush emits pending update immediately', (t) => {
   updater.push('b');
   updater.flush();
 
-  t.deepEqual(calls, ['a', 'b']);
+  expect(calls).toEqual(['a', 'b']);
 
   clock.advance(120);
-  t.deepEqual(calls, ['a', 'b']);
+  expect(calls).toEqual(['a', 'b']);
 });
 
-test('cancel drops pending update', (t) => {
+it('cancel drops pending update', () => {
   const calls: string[] = [];
   const clock = createScheduler();
   const updater = createStreamingUpdateCoordinator((value: string) => calls.push(value), 50, clock.scheduler);
@@ -86,5 +86,5 @@ test('cancel drops pending update', (t) => {
   updater.cancel();
 
   clock.advance(80);
-  t.deepEqual(calls, ['a']);
+  expect(calls).toEqual(['a']);
 });

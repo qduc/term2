@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
 import { OpenAIResponsesModelWithPromptCacheKey, OpenAIResponsesWSModelWithPromptCacheKey } from './openai.provider.js';
 import { getProvider } from './registry.js';
@@ -15,9 +15,9 @@ const loggingService = {
   },
 } as any;
 
-test('OpenAI provider defaults to websocket and honors explicit HTTP transport', async (t) => {
+it('OpenAI provider defaults to websocket and honors explicit HTTP transport', async () => {
   const provider = getProvider('openai');
-  t.truthy(provider?.createRunner);
+  expect(provider?.createRunner).toBeTruthy();
 
   for (const [transport, expectedClass] of [
     [undefined, OpenAIResponsesWSModelWithPromptCacheKey],
@@ -35,11 +35,11 @@ test('OpenAI provider defaults to websocket and honors explicit HTTP transport',
       loggingService,
     });
     const model = await runner!.config.modelProvider!.getModel('gpt-4o');
-    t.true((model as any).wrappedModel instanceof expectedClass);
+    expect((model as any).wrappedModel instanceof expectedClass).toBe(true);
   }
 });
 
-test.serial('OpenAIResponsesModelWithPromptCacheKey forwards prompt_cache_key from modelSettings', (t) => {
+it.sequential('OpenAIResponsesModelWithPromptCacheKey forwards prompt_cache_key from modelSettings', () => {
   const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
   (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
     return {
@@ -63,14 +63,14 @@ test.serial('OpenAIResponsesModelWithPromptCacheKey forwards prompt_cache_key fr
       true,
     );
 
-    t.is(built.requestData.prompt_cache_key, 'conv_123');
-    t.is(built.requestData.temperature, 0.4);
+    expect(built.requestData.prompt_cache_key).toBe('conv_123');
+    expect(built.requestData.temperature).toBe(0.4);
   } finally {
     (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
   }
 });
 
-test.serial('OpenAIResponsesWSModelWithPromptCacheKey forwards prompt_cache_key from modelSettings', (t) => {
+it.sequential('OpenAIResponsesWSModelWithPromptCacheKey forwards prompt_cache_key from modelSettings', () => {
   const original = (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest;
   (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = function () {
     return {
@@ -94,8 +94,8 @@ test.serial('OpenAIResponsesWSModelWithPromptCacheKey forwards prompt_cache_key 
       true,
     );
 
-    t.is(built.requestData.prompt_cache_key, 'conv_456');
-    t.is(built.requestData.temperature, 0.4);
+    expect(built.requestData.prompt_cache_key).toBe('conv_456');
+    expect(built.requestData.temperature).toBe(0.4);
   } finally {
     (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = original;
   }

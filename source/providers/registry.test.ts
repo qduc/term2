@@ -1,83 +1,81 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { getProvider, getAllProviders, getProviderIds, sortProvidersByOrder } from './index.js';
 
-test('openai provider is registered', (t) => {
+it('openai provider is registered', () => {
   const provider = getProvider('openai');
-  t.truthy(provider, 'openai provider should be registered');
-  t.is(provider?.id, 'openai');
-  t.is(provider?.label, 'OpenAI');
-  t.is(typeof provider?.fetchModels, 'function', 'fetchModels should be a function');
+  expect(provider).toBeTruthy();
+  expect(provider?.id).toBe('openai');
+  expect(provider?.label).toBe('OpenAI');
+  expect(typeof provider?.fetchModels, 'fetchModels should be a function').toBe('function');
 });
 
-test('openrouter provider is registered', (t) => {
+it('openrouter provider is registered', () => {
   const provider = getProvider('openrouter');
-  t.truthy(provider, 'openrouter provider should be registered');
-  t.is(provider?.id, 'openrouter');
-  t.is(provider?.label, 'OpenRouter');
-  t.is(typeof provider?.fetchModels, 'function', 'fetchModels should be a function');
+  expect(provider).toBeTruthy();
+  expect(provider?.id).toBe('openrouter');
+  expect(provider?.label).toBe('OpenRouter');
+  expect(typeof provider?.fetchModels, 'fetchModels should be a function').toBe('function');
 });
 
-test('getProvider returns undefined for unknown provider', (t) => {
+it('getProvider returns undefined for unknown provider', () => {
   const provider = getProvider('nonexistent');
-  t.is(provider, undefined);
+  expect(provider).toBe(undefined);
 });
 
-test('getAllProviders returns array of provider definitions', (t) => {
+it('getAllProviders returns array of provider definitions', () => {
   const providers = getAllProviders();
-  t.true(Array.isArray(providers));
-  t.true(providers.length >= 2, 'should have at least openai and openrouter');
+  expect(Array.isArray(providers)).toBe(true);
+  expect(providers.length >= 2).toBe(true);
 
   const ids = providers.map((p) => p.id);
-  t.true(ids.includes('openai'));
-  t.true(ids.includes('openrouter'));
+  expect(ids.includes('openai')).toBe(true);
+  expect(ids.includes('openrouter')).toBe(true);
 });
 
-test('getProviderIds returns array of provider IDs', (t) => {
+it('getProviderIds returns array of provider IDs', () => {
   const ids = getProviderIds();
-  t.true(Array.isArray(ids));
-  t.true(ids.length >= 2, 'should have at least openai and openrouter');
-  t.true(ids.includes('openai'));
-  t.true(ids.includes('openrouter'));
+  expect(Array.isArray(ids)).toBe(true);
+  expect(ids.length >= 2).toBe(true);
+  expect(ids.includes('openai')).toBe(true);
+  expect(ids.includes('openrouter')).toBe(true);
 });
 
-test('provider definitions have required properties', (t) => {
+it('provider definitions have required properties', () => {
   const providers = getAllProviders();
 
   for (const provider of providers) {
-    t.is(typeof provider.id, 'string', `${provider.id}: id should be string`);
-    t.is(typeof provider.label, 'string', `${provider.id}: label should be string`);
-    t.is(typeof provider.fetchModels, 'function', `${provider.id}: fetchModels should be function`);
+    expect(typeof provider.id, `${provider.id}: id should be string`).toBe('string');
+    expect(typeof provider.label, `${provider.id}: label should be string`).toBe('string');
+    expect(typeof provider.fetchModels, `${provider.id}: fetchModels should be function`).toBe('function');
 
     // Optional properties
     if (provider.createRunner !== undefined) {
-      t.is(typeof provider.createRunner, 'function', `${provider.id}: createRunner should be function if defined`);
+      expect(typeof provider.createRunner, `${provider.id}: createRunner should be function if defined`).toBe(
+        'function',
+      );
     }
 
     if (provider.clearConversations !== undefined) {
-      t.is(
+      expect(
         typeof provider.clearConversations,
-        'function',
         `${provider.id}: clearConversations should be function if defined`,
-      );
+      ).toBe('function');
     }
 
     if (provider.sensitiveSettingKeys !== undefined) {
-      t.true(
-        Array.isArray(provider.sensitiveSettingKeys),
-        `${provider.id}: sensitiveSettingKeys should be array if defined`,
-      );
+      expect(Array.isArray(provider.sensitiveSettingKeys)).toBe(true);
     }
   }
 });
 
-test('openai provider has createRunner function', (t) => {
+it('openai provider has createRunner function', () => {
   const provider = getProvider('openai');
-  t.is(typeof provider?.createRunner, 'function');
+  expect(typeof provider?.createRunner).toBe('function');
 });
 
-test('openai provider exposes capabilities without requiring credentials', (t) => {
+it('openai provider exposes capabilities without requiring credentials', () => {
   const provider = getProvider('openai');
-  t.deepEqual(provider?.capabilities, {
+  expect(provider?.capabilities).toEqual({
     supportsConversationChaining: true,
     supportsTracingControl: true,
     usesStrictToolSchema: true,
@@ -86,53 +84,53 @@ test('openai provider exposes capabilities without requiring credentials', (t) =
   });
 });
 
-test('openrouter provider has createRunner function', (t) => {
+it('openrouter provider has createRunner function', () => {
   const provider = getProvider('openrouter');
-  t.is(typeof provider?.createRunner, 'function');
+  expect(typeof provider?.createRunner).toBe('function');
 });
 
-test('openai provider has sensitiveSettingKeys defined', (t) => {
+it('openai provider has sensitiveSettingKeys defined', () => {
   const provider = getProvider('openai');
-  t.truthy(provider?.sensitiveSettingKeys);
-  t.true(Array.isArray(provider?.sensitiveSettingKeys));
+  expect(provider?.sensitiveSettingKeys).toBeTruthy();
+  expect(Array.isArray(provider?.sensitiveSettingKeys)).toBe(true);
   // OpenAI provider currently has an empty array
-  t.is(provider!.sensitiveSettingKeys!.length, 0);
+  expect(provider!.sensitiveSettingKeys!.length).toBe(0);
 });
 
-test('openrouter provider has sensitive setting keys', (t) => {
+it('openrouter provider has sensitive setting keys', () => {
   const provider = getProvider('openrouter');
-  t.truthy(provider?.sensitiveSettingKeys);
-  t.true(Array.isArray(provider?.sensitiveSettingKeys));
-  t.true(provider!.sensitiveSettingKeys!.includes('agent.openrouter.apiKey'));
-  t.true(provider!.sensitiveSettingKeys!.includes('agent.openrouter.baseUrl'));
+  expect(provider?.sensitiveSettingKeys).toBeTruthy();
+  expect(Array.isArray(provider?.sensitiveSettingKeys)).toBe(true);
+  expect(provider!.sensitiveSettingKeys!.includes('agent.openrouter.apiKey')).toBe(true);
+  expect(provider!.sensitiveSettingKeys!.includes('agent.openrouter.baseUrl')).toBe(true);
 });
 
-test('sortProvidersByOrder returns original order when providerOrder is empty', (t) => {
+it('sortProvidersByOrder returns original order when providerOrder is empty', () => {
   const ids = ['openai', 'openrouter', 'codex'];
   const result = sortProvidersByOrder(ids, []);
-  t.deepEqual(result, ['openai', 'openrouter', 'codex']);
+  expect(result).toEqual(['openai', 'openrouter', 'codex']);
 });
 
-test('sortProvidersByOrder reorders according to providerOrder', (t) => {
+it('sortProvidersByOrder reorders according to providerOrder', () => {
   const ids = ['openai', 'openrouter', 'codex'];
   const result = sortProvidersByOrder(ids, ['codex', 'openai']);
-  t.deepEqual(result, ['codex', 'openai', 'openrouter']);
+  expect(result).toEqual(['codex', 'openai', 'openrouter']);
 });
 
-test('sortProvidersByOrder appends unknown providers at the end', (t) => {
+it('sortProvidersByOrder appends unknown providers at the end', () => {
   const ids = ['openai', 'openrouter', 'codex'];
   const result = sortProvidersByOrder(ids, ['anthropic', 'codex']);
-  t.deepEqual(result, ['codex', 'openai', 'openrouter']);
+  expect(result).toEqual(['codex', 'openai', 'openrouter']);
 });
 
-test('sortProvidersByOrder ignores providerOrder entries not in the list', (t) => {
+it('sortProvidersByOrder ignores providerOrder entries not in the list', () => {
   const ids = ['openai', 'openrouter'];
   const result = sortProvidersByOrder(ids, ['codex', 'openrouter', 'openai']);
-  t.deepEqual(result, ['openrouter', 'openai']);
+  expect(result).toEqual(['openrouter', 'openai']);
 });
 
-test('sortProvidersByOrder preserves relative order of unordered providers', (t) => {
+it('sortProvidersByOrder preserves relative order of unordered providers', () => {
   const ids = ['a', 'b', 'c', 'd'];
   const result = sortProvidersByOrder(ids, ['c', 'a']);
-  t.deepEqual(result, ['c', 'a', 'b', 'd']);
+  expect(result).toEqual(['c', 'a', 'b', 'd']);
 });

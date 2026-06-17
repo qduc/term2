@@ -1,13 +1,12 @@
 // @ts-ignore
 global.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 import { Box, Text } from 'ink';
 import { MenuContainer } from './MenuContainer.js';
 
-test.serial('MenuContainer renders items', async (t) => {
+it.sequential('MenuContainer renders items', async () => {
   const { lastFrame } = await renderInAct(
     <MenuContainer
       items={['a', 'b', 'c']}
@@ -15,17 +14,16 @@ test.serial('MenuContainer renders items', async (t) => {
       borderColor="magenta"
       renderItem={(item) => <Text key={item}>{item}</Text>}
     />,
-    t,
   );
 
   const output = lastFrame();
-  t.truthy(output);
-  t.true(output!.includes('a'));
-  t.true(output!.includes('b'));
-  t.true(output!.includes('c'));
+  expect(output).toBeTruthy();
+  expect(output!.includes('a')).toBe(true);
+  expect(output!.includes('b')).toBe(true);
+  expect(output!.includes('c')).toBe(true);
 });
 
-test.serial('MenuContainer passes isInactive to renderItem and identifies them correctly', async (t) => {
+it.sequential('MenuContainer passes isInactive to renderItem and identifies them correctly', async () => {
   const items = ['a', 'b', 'c'];
   const renderedInactiveArgs: boolean[] = [];
 
@@ -40,15 +38,14 @@ test.serial('MenuContainer passes isInactive to renderItem and identifies them c
         return <Text key={item}>{item}</Text>;
       }}
     />,
-    t,
   );
 
   const output = lastFrame();
-  t.truthy(output);
-  t.deepEqual(renderedInactiveArgs, [false, true, false]);
+  expect(output).toBeTruthy();
+  expect(renderedInactiveArgs).toEqual([false, true, false]);
 });
 
-test.serial('MenuContainer handles inactive items that return Box components without crashing', async (t) => {
+it.sequential('MenuContainer handles inactive items that return Box components without crashing', async () => {
   const items = ['a', 'b', 'c'];
 
   const { lastFrame } = await renderInAct(
@@ -63,12 +60,11 @@ test.serial('MenuContainer handles inactive items that return Box components wit
         </Box>
       )}
     />,
-    t,
   );
 
   const output = lastFrame();
-  t.truthy(output);
-  t.true(output!.includes('a'));
-  t.true(output!.includes('b'));
-  t.true(output!.includes('c'));
+  expect(output).toBeTruthy();
+  expect(output!.includes('a')).toBe(true);
+  expect(output!.includes('b')).toBe(true);
+  expect(output!.includes('c')).toBe(true);
 });

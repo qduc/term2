@@ -1,30 +1,29 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { calculateInputWidth } from './input-width.js';
 
-test('calculateInputWidth uses default prompt width for normal mode', (t) => {
-  t.is(calculateInputWidth({ terminalColumns: 80, waitingForRejectionReason: false, isShellMode: false }), 74);
+it('calculateInputWidth uses default prompt width for normal mode', () => {
+  expect(calculateInputWidth({ terminalColumns: 80, waitingForRejectionReason: false, isShellMode: false })).toBe(74);
 });
 
-test('calculateInputWidth uses default prompt width for shell mode', (t) => {
-  t.is(calculateInputWidth({ terminalColumns: 80, waitingForRejectionReason: false, isShellMode: true }), 74);
+it('calculateInputWidth uses default prompt width for shell mode', () => {
+  expect(calculateInputWidth({ terminalColumns: 80, waitingForRejectionReason: false, isShellMode: true })).toBe(74);
 });
 
-test('calculateInputWidth uses rejection prompt width for rejection mode', (t) => {
-  t.is(calculateInputWidth({ terminalColumns: 80, waitingForRejectionReason: true, isShellMode: false }), 71);
+it('calculateInputWidth uses rejection prompt width for rejection mode', () => {
+  expect(calculateInputWidth({ terminalColumns: 80, waitingForRejectionReason: true, isShellMode: false })).toBe(71);
 });
 
-test('calculateInputWidth handles custom promptLabel', (t) => {
-  t.is(
+it('calculateInputWidth handles custom promptLabel', () => {
+  expect(
     calculateInputWidth({
       terminalColumns: 80,
       waitingForRejectionReason: false,
       isShellMode: false,
       promptLabel: 'Enter Provider Name: ',
     }),
-    80 - 4 - 'Enter Provider Name: '.length,
-  );
+  ).toBe(80 - 4 - 'Enter Provider Name: '.length);
 });
 
-test('calculateInputWidth returns 0 when terminalColumns is undefined', (t) => {
-  t.is(calculateInputWidth({ waitingForRejectionReason: false, isShellMode: false }), 0);
+it('calculateInputWidth returns 0 when terminalColumns is undefined', () => {
+  expect(calculateInputWidth({ waitingForRejectionReason: false, isShellMode: false })).toBe(0);
 });

@@ -1,26 +1,26 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { copyToClipboard, copyViaOsc52, getClipboardCommandCandidates } from './clipboard.js';
 
 // ── getClipboardCommandCandidates ───────────────────────────────────────────
 
-test('getClipboardCommandCandidates returns macOS command', (t) => {
-  t.deepEqual(getClipboardCommandCandidates('darwin', {}), [{ command: 'pbcopy', args: [] }]);
+it('getClipboardCommandCandidates returns macOS command', () => {
+  expect(getClipboardCommandCandidates('darwin', {})).toEqual([{ command: 'pbcopy', args: [] }]);
 });
 
-test('getClipboardCommandCandidates returns Windows command', (t) => {
-  t.deepEqual(getClipboardCommandCandidates('win32', {}), [{ command: 'clip', args: [] }]);
+it('getClipboardCommandCandidates returns Windows command', () => {
+  expect(getClipboardCommandCandidates('win32', {})).toEqual([{ command: 'clip', args: [] }]);
 });
 
-test('getClipboardCommandCandidates prefers wl-copy on Wayland and falls back to X11 tools', (t) => {
-  t.deepEqual(getClipboardCommandCandidates('linux', { WAYLAND_DISPLAY: 'wayland-0' }), [
+it('getClipboardCommandCandidates prefers wl-copy on Wayland and falls back to X11 tools', () => {
+  expect(getClipboardCommandCandidates('linux', { WAYLAND_DISPLAY: 'wayland-0' })).toEqual([
     { command: 'wl-copy', args: [] },
     { command: 'xclip', args: ['-selection', 'clipboard'] },
     { command: 'xsel', args: ['--clipboard', '--input'] },
   ]);
 });
 
-test('getClipboardCommandCandidates prefers X11 tools when Wayland is not present', (t) => {
-  t.deepEqual(getClipboardCommandCandidates('linux', {}), [
+it('getClipboardCommandCandidates prefers X11 tools when Wayland is not present', () => {
+  expect(getClipboardCommandCandidates('linux', {})).toEqual([
     { command: 'xclip', args: ['-selection', 'clipboard'] },
     { command: 'xsel', args: ['--clipboard', '--input'] },
     { command: 'wl-copy', args: [] },
@@ -29,7 +29,7 @@ test('getClipboardCommandCandidates prefers X11 tools when Wayland is not presen
 
 // ── copyViaOsc52 ────────────────────────────────────────────────────────────
 
-test('copyViaOsc52 writes bare OSC 52 sequence with base64-encoded text', async (t) => {
+it('copyViaOsc52 writes bare OSC 52 sequence with base64-encoded text', async () => {
   let written = '';
   await copyViaOsc52('Hello', {
     env: {},
@@ -38,10 +38,10 @@ test('copyViaOsc52 writes bare OSC 52 sequence with base64-encoded text', async 
     },
   });
   const expected = `\x1b]52;c;${Buffer.from('Hello').toString('base64')}\x07`;
-  t.is(written, expected);
+  expect(written).toBe(expected);
 });
 
-test('copyViaOsc52 wraps in tmux DCS passthrough when TMUX is set', async (t) => {
+it('copyViaOsc52 wraps in tmux DCS passthrough when TMUX is set', async () => {
   let written = '';
   await copyViaOsc52('Hi', {
     env: { TMUX: '/tmp/tmux-1000/default,12345,0' },
@@ -51,10 +51,10 @@ test('copyViaOsc52 wraps in tmux DCS passthrough when TMUX is set', async (t) =>
   });
   const inner = `\x1b]52;c;${Buffer.from('Hi').toString('base64')}\x07`;
   const escaped = inner.replace(/\x1b/g, '\x1b\x1b');
-  t.is(written, `\x1bPtmux;\x1b${escaped}\x1b\\`);
+  expect(written).toBe(`\x1bPtmux;\x1b${escaped}\x1b\\`);
 });
 
-test('copyViaOsc52 wraps in screen DCS passthrough when TERM starts with screen', async (t) => {
+it('copyViaOsc52 wraps in screen DCS passthrough when TERM starts with screen', async () => {
   let written = '';
   await copyViaOsc52('Hi', {
     env: { TERM: 'screen-256color' },
@@ -63,10 +63,10 @@ test('copyViaOsc52 wraps in screen DCS passthrough when TERM starts with screen'
     },
   });
   const inner = `\x1b]52;c;${Buffer.from('Hi').toString('base64')}\x07`;
-  t.is(written, `\x1bP${inner}\x1b\\`);
+  expect(written).toBe(`\x1bP${inner}\x1b\\`);
 });
 
-test('copyViaOsc52 chunks screen DCS passthrough at 768 characters', async (t) => {
+it('copyViaOsc52 chunks screen DCS passthrough at 768 characters', async () => {
   // 600 raw bytes → ~800 base64 chars → inner length > 768
   const longText = 'x'.repeat(600);
   let written = '';
@@ -77,36 +77,35 @@ test('copyViaOsc52 chunks screen DCS passthrough at 768 characters', async (t) =
     },
   });
   const inner = `\x1b]52;c;${Buffer.from(longText).toString('base64')}\x07`;
-  t.true(inner.length > 768, 'precondition: inner sequence must exceed 768 chars');
+  expect(inner.length > 768).toBe(true);
   const chunk1 = inner.slice(0, 768);
   const chunk2 = inner.slice(768);
-  t.is(written, `\x1bP${chunk1}\x1b\\` + `\x1bP${chunk2}\x1b\\`);
+  expect(written).toBe(`\x1bP${chunk1}\x1b\\` + `\x1bP${chunk2}\x1b\\`);
 });
 
-test('copyViaOsc52 throws when no TTY is available', async (t) => {
-  const error = await t.throwsAsync(
+it('copyViaOsc52 throws when no TTY is available', async () => {
+  await expect(
     copyViaOsc52('hello', {
       env: {},
       getTtyWriter: () => null,
     }),
-  );
-  t.regex(error.message, /No TTY available/i);
+  ).rejects.toThrow(/No TTY available/i);
 });
 
-test('copyViaOsc52 throws when text exceeds the size limit', async (t) => {
+it('copyViaOsc52 throws when text exceeds the size limit', async () => {
   const largeText = 'x'.repeat(71 * 1024);
-  const error = await t.throwsAsync(
+
+  await expect(
     copyViaOsc52(largeText, {
       env: {},
       getTtyWriter: () => (_data) => {},
     }),
-  );
-  t.regex(error.message, /too large/i);
+  ).rejects.toThrow(/too large/i);
 });
 
 // ── copyToClipboard ─────────────────────────────────────────────────────────
 
-test('copyToClipboard uses the first successful command', async (t) => {
+it('copyToClipboard uses the first successful command', async () => {
   const calls: Array<{ command: string; args: string[]; input: string }> = [];
 
   await copyToClipboard('hello', {
@@ -119,10 +118,10 @@ test('copyToClipboard uses the first successful command', async (t) => {
     getTtyWriter: () => null,
   });
 
-  t.deepEqual(calls, [{ command: 'pbcopy', args: [], input: 'hello' }]);
+  expect(calls).toEqual([{ command: 'pbcopy', args: [], input: 'hello' }]);
 });
 
-test('copyToClipboard falls back when a command is unavailable', async (t) => {
+it('copyToClipboard falls back when a command is unavailable', async () => {
   const calls: string[] = [];
 
   await copyToClipboard('hello', {
@@ -139,24 +138,21 @@ test('copyToClipboard falls back when a command is unavailable', async (t) => {
     getTtyWriter: () => null,
   });
 
-  t.deepEqual(calls, ['wl-copy', 'xclip']);
+  expect(calls).toEqual(['wl-copy', 'xclip']);
 });
 
-test('copyToClipboard throws when no clipboard command succeeds and no TTY is available', async (t) => {
-  const error = await t.throwsAsync(
+it('copyToClipboard throws when no clipboard command succeeds and no TTY is available', async () => {
+  await expect(
     copyToClipboard('hello', {
       platform: 'linux',
       env: {},
       runCommand: () => ({ success: false, errorMessage: 'not found' }),
       getTtyWriter: () => null,
     }),
-  );
-
-  t.regex(error.message, /Clipboard is unavailable/i);
-  t.regex(error.message, /xclip, xsel, wl-copy/i);
+  ).rejects.toThrow(/Clipboard is unavailable/i);
 });
 
-test('copyToClipboard awaits asynchronous command results', async (t) => {
+it('copyToClipboard awaits asynchronous command results', async () => {
   const calls: string[] = [];
 
   await copyToClipboard('hello', {
@@ -177,58 +173,58 @@ test('copyToClipboard awaits asynchronous command results', async (t) => {
     getTtyWriter: () => null,
   });
 
-  t.deepEqual(calls, ['xclip', 'xsel']);
+  expect(calls).toEqual(['xclip', 'xsel']);
 });
 
-test('copyToClipboard uses OSC 52 when SSH_CONNECTION is set, not native', async (t) => {
+it('copyToClipboard uses OSC 52 when SSH_CONNECTION is set, not native', async () => {
   let written = '';
   await copyToClipboard('hello', {
     platform: 'linux',
     env: { SSH_CONNECTION: '10.0.0.1 12345 10.0.0.2 22' },
     runCommand: () => {
-      t.fail('native command should not be invoked in SSH session');
+      expect(true).toBe(false);
       return { success: false };
     },
     getTtyWriter: () => (data) => {
       written = data;
     },
   });
-  t.regex(written, /^\x1b\]52;c;/);
+  expect(written).toMatch(/^\x1b\]52;c;/);
 });
 
-test('copyToClipboard uses OSC 52 when SSH_TTY is set', async (t) => {
+it('copyToClipboard uses OSC 52 when SSH_TTY is set', async () => {
   let written = '';
   await copyToClipboard('hello', {
     platform: 'linux',
     env: { SSH_TTY: '/dev/pts/0' },
     runCommand: () => {
-      t.fail('should not call native');
+      expect(true).toBe(false);
       return { success: false };
     },
     getTtyWriter: () => (data) => {
       written = data;
     },
   });
-  t.truthy(written);
+  expect(written).toBeTruthy();
 });
 
-test('copyToClipboard uses OSC 52 when SSH_CLIENT is set', async (t) => {
+it('copyToClipboard uses OSC 52 when SSH_CLIENT is set', async () => {
   let written = '';
   await copyToClipboard('hello', {
     platform: 'linux',
     env: { SSH_CLIENT: '10.0.0.1 12345 22' },
     runCommand: () => {
-      t.fail('should not call native');
+      expect(true).toBe(false);
       return { success: false };
     },
     getTtyWriter: () => (data) => {
       written = data;
     },
   });
-  t.truthy(written);
+  expect(written).toBeTruthy();
 });
 
-test('copyToClipboard falls back to OSC 52 when all native commands fail locally', async (t) => {
+it('copyToClipboard falls back to OSC 52 when all native commands fail locally', async () => {
   let written = '';
   await copyToClipboard('hello', {
     platform: 'linux',
@@ -238,32 +234,30 @@ test('copyToClipboard falls back to OSC 52 when all native commands fail locally
       written = data;
     },
   });
-  t.regex(written, /^\x1b\]52;c;/);
+  expect(written).toMatch(/^\x1b\]52;c;/);
 });
 
-test('copyToClipboard rethrows native error when native fails and no TTY is available locally', async (t) => {
-  const error = await t.throwsAsync(
+it('copyToClipboard rethrows native error when native fails and no TTY is available locally', async () => {
+  await expect(
     copyToClipboard('hello', {
       platform: 'linux',
       env: {},
       runCommand: () => ({ success: false, errorMessage: 'not found' }),
       getTtyWriter: () => null,
     }),
-  );
-  t.regex(error.message, /Clipboard is unavailable/i);
+  ).rejects.toThrow(/Clipboard is unavailable/i);
 });
 
-test('copyToClipboard throws no-TTY error when in SSH session and no TTY is available', async (t) => {
-  const error = await t.throwsAsync(
+it('copyToClipboard throws no-TTY error when in SSH session and no TTY is available', async () => {
+  await expect(
     copyToClipboard('hello', {
       platform: 'linux',
       env: { SSH_CONNECTION: '10.0.0.1 12345 10.0.0.2 22' },
       runCommand: () => {
-        t.fail('should not call native');
+        expect(true).toBe(false);
         return { success: false };
       },
       getTtyWriter: () => null,
     }),
-  );
-  t.regex(error.message, /No TTY available/i);
+  ).rejects.toThrow(/No TTY available/i);
 });

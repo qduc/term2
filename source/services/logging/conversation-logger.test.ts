@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ConversationLogger } from './conversation-logger.js';
 import { TurnItemAccumulator } from '../session/turn-item-accumulator.js';
 
@@ -19,7 +19,7 @@ const makeLoggingService = () => {
   };
 };
 
-test('setLogSink updates the sink used by log', (t) => {
+it('setLogSink updates the sink used by log', () => {
   const { logger } = makeLoggingService();
   const sinkA: any[] = [];
   const sinkB: any[] = [];
@@ -38,13 +38,13 @@ test('setLogSink updates the sink used by log', (t) => {
     snapshot: { history: [], previousResponseId: null, toolLedger: [] },
   });
 
-  t.deepEqual(sinkA, [{ type: 'session_cleared' }]);
-  t.deepEqual(sinkB, [
+  expect(sinkA).toEqual([{ type: 'session_cleared' }]);
+  expect(sinkB).toEqual([
     { type: 'undo', removedUserTurns: 1, snapshot: { history: [], previousResponseId: null, toolLedger: [] } },
   ]);
 });
 
-test('log is a no-op when the sink is null', (t) => {
+it('log is a no-op when the sink is null', () => {
   const { logger, warnings } = makeLoggingService();
   const conversationLogger = new ConversationLogger({
     turnAccumulator: new TurnItemAccumulator(),
@@ -54,10 +54,10 @@ test('log is a no-op when the sink is null', (t) => {
 
   conversationLogger.log({ type: 'session_cleared' });
 
-  t.is(warnings.length, 0);
+  expect(warnings.length).toBe(0);
 });
 
-test('log warns when the sink throws', (t) => {
+it('log warns when the sink throws', () => {
   const { logger, warnings } = makeLoggingService();
   const conversationLogger = new ConversationLogger({
     turnAccumulator: new TurnItemAccumulator(),
@@ -70,16 +70,16 @@ test('log warns when the sink throws', (t) => {
   });
   conversationLogger.log({ type: 'session_cleared' });
 
-  t.is(warnings.length, 1);
-  t.is(warnings[0].message, 'Conversation log sink threw');
-  t.deepEqual(warnings[0].meta, {
+  expect(warnings.length).toBe(1);
+  expect(warnings[0].message).toBe('Conversation log sink threw');
+  expect(warnings[0].meta).toEqual({
     eventType: 'conversation_log.sink_failed',
     category: 'persistence',
     errorMessage: 'boom',
   });
 });
 
-test('log stamps the current turn id on operational events', (t) => {
+it('log stamps the current turn id on operational events', () => {
   const { logger } = makeLoggingService();
   const sinkEvents: any[] = [];
   const conversationLogger = new ConversationLogger({
@@ -117,13 +117,10 @@ test('log stamps the current turn id on operational events', (t) => {
     state: { previousResponseId: null },
   });
 
-  t.deepEqual(
-    sinkEvents.map((event) => event.turnId),
-    ['turn-9', 'turn-9', 'turn-9', 'turn-9', 'turn-9'],
-  );
+  expect(sinkEvents.map((event) => event.turnId)).toEqual(['turn-9', 'turn-9', 'turn-9', 'turn-9', 'turn-9']);
 });
 
-test('dispatchEventToLog accumulates turn items and logs the final assistant turn', (t) => {
+it('dispatchEventToLog accumulates turn items and logs the final assistant turn', () => {
   const { logger, warnings } = makeLoggingService();
   const sinkEvents: any[] = [];
   const turnAccumulator = new TurnItemAccumulator();
@@ -151,8 +148,8 @@ test('dispatchEventToLog accumulates turn items and logs the final assistant tur
     usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 },
   });
 
-  t.is(warnings.length, 0);
-  t.deepEqual(sinkEvents, [
+  expect(warnings.length).toBe(0);
+  expect(sinkEvents).toEqual([
     {
       type: 'assistant_turn',
       turn: {
@@ -168,7 +165,7 @@ test('dispatchEventToLog accumulates turn items and logs the final assistant tur
   ]);
 });
 
-test('dispatchEventToLog checkpoints accumulated turn items before logging an error', (t) => {
+it('dispatchEventToLog checkpoints accumulated turn items before logging an error', () => {
   const { logger } = makeLoggingService();
   const sinkEvents: any[] = [];
   const turnAccumulator = new TurnItemAccumulator();
@@ -210,7 +207,7 @@ test('dispatchEventToLog checkpoints accumulated turn items before logging an er
     kind: 'network',
   });
 
-  t.deepEqual(sinkEvents, [
+  expect(sinkEvents).toEqual([
     { type: 'tool_started', toolCallId: 'call-1', toolName: 'shell', arguments: { command: 'pwd' } },
     {
       type: 'command_message',
@@ -238,10 +235,10 @@ test('dispatchEventToLog checkpoints accumulated turn items before logging an er
     },
     { type: 'error', message: 'network timed out', kind: 'network' },
   ]);
-  t.deepEqual(turnAccumulator.getTurnItems(), []);
+  expect(turnAccumulator.getTurnItems()).toEqual([]);
 });
 
-test('dispatchEventToLog logs event-specific records', (t) => {
+it('dispatchEventToLog logs event-specific records', () => {
   const { logger } = makeLoggingService();
   const sinkEvents: any[] = [];
   const turnAccumulator = new TurnItemAccumulator();
@@ -312,7 +309,7 @@ test('dispatchEventToLog logs event-specific records', (t) => {
     stack: 'stack-trace',
   });
 
-  t.deepEqual(sinkEvents, [
+  expect(sinkEvents).toEqual([
     { type: 'tool_started', toolCallId: 'call-1', toolName: 'shell', arguments: { command: 'echo hi' } },
     {
       type: 'command_message',
@@ -366,8 +363,8 @@ test('dispatchEventToLog logs event-specific records', (t) => {
     type: 'final',
     finalText: 'done',
   });
-  t.deepEqual(turnAccumulator.getTurnItems(), []);
-  t.deepEqual(sinkEvents.at(-1), {
+  expect(turnAccumulator.getTurnItems()).toEqual([]);
+  expect(sinkEvents.at(-1)).toEqual({
     type: 'assistant_turn',
     turn: {
       items: [{ type: 'assistant_text', text: 'done' }],
@@ -376,7 +373,7 @@ test('dispatchEventToLog logs event-specific records', (t) => {
   });
 });
 
-test('dispatchEventToLog forwards text and reasoning deltas to the journal', (t) => {
+it('dispatchEventToLog forwards text and reasoning deltas to the journal', () => {
   const { logger } = makeLoggingService();
   const sinkEvents: any[] = [];
   const turnAccumulator = new TurnItemAccumulator();
@@ -396,13 +393,13 @@ test('dispatchEventToLog forwards text and reasoning deltas to the journal', (t)
   conversationLogger.dispatchEventToLog({ type: 'reasoning_delta', delta: 'think' });
   conversationLogger.dispatchEventToLog({ type: 'text_delta', delta: 'hi' });
 
-  t.deepEqual(journalDeltas, [
+  expect(journalDeltas).toEqual([
     { kind: 'reasoning', delta: 'think' },
     { kind: 'text', delta: 'hi' },
   ]);
 });
 
-test('dispatchEventToLog is a no-op for the journal when no journal is registered', (t) => {
+it('dispatchEventToLog is a no-op for the journal when no journal is registered', () => {
   const { logger } = makeLoggingService();
   const sinkEvents: any[] = [];
   const turnAccumulator = new TurnItemAccumulator();
@@ -416,5 +413,5 @@ test('dispatchEventToLog is a no-op for the journal when no journal is registere
   // Should not throw.
   conversationLogger.dispatchEventToLog({ type: 'reasoning_delta', delta: 'x' });
   conversationLogger.dispatchEventToLog({ type: 'text_delta', delta: 'y' });
-  t.deepEqual(sinkEvents, []);
+  expect(sinkEvents).toEqual([]);
 });

@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { AgentChatService } from './agent-chat-service.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 
@@ -74,11 +74,11 @@ class MockRunnerManager {
   }
 }
 
-test.before(() => {
+beforeAll(() => {
   lastRunAgent = null;
 });
 
-test.serial('chat returns extracted response from agent run', async (t) => {
+it.sequential('chat returns extracted response from agent run', async () => {
   lastRunAgent = null;
 
   const service = new AgentChatService({
@@ -89,10 +89,10 @@ test.serial('chat returns extracted response from agent run', async (t) => {
   });
 
   const response = await service.chat('Hello');
-  t.is(response, 'mock response');
+  expect(response).toBe('mock response');
 });
 
-test.serial('chat with temp provider builds temp agent', async (t) => {
+it.sequential('chat with temp provider builds temp agent', async () => {
   lastRunAgent = null;
 
   const service = new AgentChatService({
@@ -104,12 +104,12 @@ test.serial('chat with temp provider builds temp agent', async (t) => {
 
   await service.chat('Hello', { provider: 'other-provider' });
 
-  t.truthy(lastRunAgent);
-  t.is(lastRunAgent.name, 'Chat');
-  t.is(lastRunAgent.model, 'mock-model');
+  expect(lastRunAgent).toBeTruthy();
+  expect(lastRunAgent.name).toBe('Chat');
+  expect(lastRunAgent.model).toBe('mock-model');
 });
 
-test.serial('chatJson passes outputType to temp agent', async (t) => {
+it.sequential('chatJson passes outputType to temp agent', async () => {
   lastRunAgent = null;
 
   const service = new AgentChatService({
@@ -135,8 +135,8 @@ test.serial('chatJson passes outputType to temp agent', async (t) => {
     },
   });
 
-  t.truthy(lastRunAgent);
-  t.deepEqual(lastRunAgent.outputType, {
+  expect(lastRunAgent).toBeTruthy();
+  expect(lastRunAgent.outputType).toEqual({
     type: 'json_schema',
     name: 'test_output',
     strict: true,
@@ -151,7 +151,7 @@ test.serial('chatJson passes outputType to temp agent', async (t) => {
   });
 });
 
-test.serial('chatJson returns finalOutput when available', async (t) => {
+it.sequential('chatJson returns finalOutput when available', async () => {
   lastRunAgent = null;
 
   const service = new AgentChatService({
@@ -177,5 +177,5 @@ test.serial('chatJson returns finalOutput when available', async (t) => {
     },
   });
 
-  t.is(result, 'mock response');
+  expect(result).toBe('mock response');
 });

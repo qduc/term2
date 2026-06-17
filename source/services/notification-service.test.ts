@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect } from 'vitest';
 import {
   canUseBell,
   getNotificationMethod,
@@ -24,116 +24,116 @@ function createStream(isTTY: boolean): NodeJS.WriteStream & { written: string } 
   } as unknown as NodeJS.WriteStream & { written: string };
 }
 
-test('supportsOsc777 recognizes supported terminals', (t) => {
-  t.true(supportsOsc777({ TERM_PROGRAM: 'ghostty' }));
-  t.true(supportsOsc777({ TERM_PROGRAM: 'WezTerm' }));
-  t.true(supportsOsc777({ TERM: 'foot' }));
-  t.true(supportsOsc777({ TERM: 'foot-extra' }));
-  t.true(supportsOsc777({ TERM: 'xterm-ghostty-256color' }));
+it('supportsOsc777 recognizes supported terminals', () => {
+  expect(supportsOsc777({ TERM_PROGRAM: 'ghostty' })).toBe(true);
+  expect(supportsOsc777({ TERM_PROGRAM: 'WezTerm' })).toBe(true);
+  expect(supportsOsc777({ TERM: 'foot' })).toBe(true);
+  expect(supportsOsc777({ TERM: 'foot-extra' })).toBe(true);
+  expect(supportsOsc777({ TERM: 'xterm-ghostty-256color' })).toBe(true);
 });
 
-test('supportsOsc777 excludes kitty and unrelated terminals', (t) => {
-  t.false(supportsOsc777({ TERM_PROGRAM: 'kitty' }));
-  t.false(supportsOsc777({ TERM: 'xterm-kitty' }));
-  t.false(supportsOsc777({ TERM_PROGRAM: 'iTerm.app' }));
+it('supportsOsc777 excludes kitty and unrelated terminals', () => {
+  expect(supportsOsc777({ TERM_PROGRAM: 'kitty' })).toBe(false);
+  expect(supportsOsc777({ TERM: 'xterm-kitty' })).toBe(false);
+  expect(supportsOsc777({ TERM_PROGRAM: 'iTerm.app' })).toBe(false);
 });
 
-test('supportsOsc9 recognizes explicitly supported terminals', (t) => {
-  t.true(supportsOsc9({ TERM_PROGRAM: 'iTerm.app' }));
-  t.true(supportsOsc9({ TERM_PROGRAM: 'WezTerm' }));
-  t.true(supportsOsc9({ TERM_PROGRAM: 'WarpTerminal' }));
-  t.true(supportsOsc9({ TERM: 'rio' }));
-  t.true(supportsOsc9({ TERM: 'rio-256color' }));
-  t.true(supportsOsc9({ TERM: 'wezterm' }));
+it('supportsOsc9 recognizes explicitly supported terminals', () => {
+  expect(supportsOsc9({ TERM_PROGRAM: 'iTerm.app' })).toBe(true);
+  expect(supportsOsc9({ TERM_PROGRAM: 'WezTerm' })).toBe(true);
+  expect(supportsOsc9({ TERM_PROGRAM: 'WarpTerminal' })).toBe(true);
+  expect(supportsOsc9({ TERM: 'rio' })).toBe(true);
+  expect(supportsOsc9({ TERM: 'rio-256color' })).toBe(true);
+  expect(supportsOsc9({ TERM: 'wezterm' })).toBe(true);
 });
 
-test('supportsOsc9 excludes generic and unrelated terminals', (t) => {
-  t.false(supportsOsc9({ TERM: 'xterm-256color' }));
-  t.false(supportsOsc9({ TERM_PROGRAM: 'ghostty' }));
-  t.false(supportsOsc9({ TERM_PROGRAM: 'kitty' }));
-  t.false(supportsOsc9({}));
+it('supportsOsc9 excludes generic and unrelated terminals', () => {
+  expect(supportsOsc9({ TERM: 'xterm-256color' })).toBe(false);
+  expect(supportsOsc9({ TERM_PROGRAM: 'ghostty' })).toBe(false);
+  expect(supportsOsc9({ TERM_PROGRAM: 'kitty' })).toBe(false);
+  expect(supportsOsc9({})).toBe(false);
 });
 
-test('canUseBell requires a real TTY and non-CI environment', (t) => {
-  t.true(canUseBell({ TERM: 'xterm-256color' }, { isTTY: true } as NodeJS.WriteStream));
-  t.true(canUseBell({ TERM: 'dumb' }, { isTTY: true } as NodeJS.WriteStream));
-  t.false(canUseBell({ TERM: 'xterm-256color', CI: '1' }, { isTTY: true } as NodeJS.WriteStream));
-  t.false(canUseBell({ TERM: 'xterm-256color' }, { isTTY: false } as NodeJS.WriteStream));
-  t.true(canUseBell({}, { isTTY: true } as NodeJS.WriteStream));
+it('canUseBell requires a real TTY and non-CI environment', () => {
+  expect(canUseBell({ TERM: 'xterm-256color' }, { isTTY: true } as NodeJS.WriteStream)).toBe(true);
+  expect(canUseBell({ TERM: 'dumb' }, { isTTY: true } as NodeJS.WriteStream)).toBe(true);
+  expect(canUseBell({ TERM: 'xterm-256color', CI: '1' }, { isTTY: true } as NodeJS.WriteStream)).toBe(false);
+  expect(canUseBell({ TERM: 'xterm-256color' }, { isTTY: false } as NodeJS.WriteStream)).toBe(false);
+  expect(canUseBell({}, { isTTY: true } as NodeJS.WriteStream)).toBe(true);
 });
 
-test('getNotificationMethod prefers OSC 777 over bell', (t) => {
+it('getNotificationMethod prefers OSC 777 over bell', () => {
   const stream = { isTTY: true } as NodeJS.WriteStream;
-  t.is(getNotificationMethod({ TERM_PROGRAM: 'ghostty', TERM: 'xterm-256color' }, stream), 'osc777');
+  expect(getNotificationMethod({ TERM_PROGRAM: 'ghostty', TERM: 'xterm-256color' }, stream)).toBe('osc777');
 });
 
-test('getNotificationMethod falls back to OSC 9 for explicitly supported terminals', (t) => {
+it('getNotificationMethod falls back to OSC 9 for explicitly supported terminals', () => {
   const stream = { isTTY: true } as NodeJS.WriteStream;
-  t.is(getNotificationMethod({ TERM_PROGRAM: 'iTerm.app', TERM: 'xterm-256color' }, stream), 'osc9');
-  t.is(getNotificationMethod({ TERM: 'rio' }, stream), 'osc9');
+  expect(getNotificationMethod({ TERM_PROGRAM: 'iTerm.app', TERM: 'xterm-256color' }, stream)).toBe('osc9');
+  expect(getNotificationMethod({ TERM: 'rio' }, stream)).toBe('osc9');
 });
 
-test('getNotificationMethod returns undefined when no notification path is available', (t) => {
+it('getNotificationMethod returns undefined when no notification path is available', () => {
   const stream = { isTTY: true } as NodeJS.WriteStream;
-  t.is(getNotificationMethod({ TERM: 'xterm-256color', CI: '1' }, stream), undefined);
-  t.is(getNotificationMethod({ TERM: 'dumb' }, { isTTY: false } as NodeJS.WriteStream), undefined);
+  expect(getNotificationMethod({ TERM: 'xterm-256color', CI: '1' }, stream)).toBeUndefined();
+  expect(getNotificationMethod({ TERM: 'dumb' }, { isTTY: false } as NodeJS.WriteStream)).toBeUndefined();
 });
 
-test('getNotificationMethod falls back to bell for dumb terminals on a TTY', (t) => {
+it('getNotificationMethod falls back to bell for dumb terminals on a TTY', () => {
   const stream = { isTTY: true } as NodeJS.WriteStream;
-  t.is(getNotificationMethod({ TERM: 'dumb' }, stream), 'bell');
-  t.is(getNotificationMethod({ TERM: 'xterm-256color' }, stream), 'bell');
+  expect(getNotificationMethod({ TERM: 'dumb' }, stream)).toBe('bell');
+  expect(getNotificationMethod({ TERM: 'xterm-256color' }, stream)).toBe('bell');
 });
 
-test('notify writes OSC 777 for capable terminals and sanitizes payloads', (t) => {
+it('notify writes OSC 777 for capable terminals and sanitizes payloads', () => {
   const stream = createStream(true);
   const result = notify('Ti;tle\x1b', 'Me\x07ss;age', {
     env: { TERM_PROGRAM: 'ghostty' },
     stream,
   });
 
-  t.true(result);
-  t.is(stream.written, '\x1b]777;notify;Ti,tle;Mess,age\x07');
+  expect(result).toBe(true);
+  expect(stream.written).toBe('\x1b]777;notify;Ti,tle;Mess,age\x07');
 });
 
-test('notify writes OSC 9 fallback for explicitly supported terminals', (t) => {
+it('notify writes OSC 9 fallback for explicitly supported terminals', () => {
   const stream = createStream(true);
   const result = notify('Alert', 'Done', {
     env: { TERM_PROGRAM: 'iTerm.app', TERM: 'xterm-256color' },
     stream,
   });
 
-  t.true(result);
-  t.is(stream.written, '\x1b]9;Done\x07');
+  expect(result).toBe(true);
+  expect(stream.written).toBe('\x1b]9;Done\x07');
 });
 
-test('notify returns false when no notification method is available', (t) => {
+it('notify returns false when no notification method is available', () => {
   const stream = createStream(false);
   const result = notify('T', 'M', {
     env: { TERM: 'dumb' },
     stream,
   });
 
-  t.false(result);
-  t.is(stream.written, '');
+  expect(result).toBe(false);
+  expect(stream.written).toBe('');
 });
 
-test('buildNotificationSequence mirrors the selected notification method', (t) => {
-  t.is(
-    buildNotificationSequence('A', 'B', { TERM_PROGRAM: 'ghostty' }, { isTTY: true } as NodeJS.WriteStream),
+it('buildNotificationSequence mirrors the selected notification method', () => {
+  expect(buildNotificationSequence('A', 'B', { TERM_PROGRAM: 'ghostty' }, { isTTY: true } as NodeJS.WriteStream)).toBe(
     '\x1b]777;notify;A;B\x07',
   );
-  t.is(
+  expect(
     buildNotificationSequence('A', 'B', { TERM_PROGRAM: 'iTerm.app' }, { isTTY: true } as NodeJS.WriteStream),
-    '\x1b]9;B\x07',
+  ).toBe('\x1b]9;B\x07');
+  expect(buildNotificationSequence('A', 'B', { TERM: 'xterm-256color' }, { isTTY: true } as NodeJS.WriteStream)).toBe(
+    '\x07',
   );
-  t.is(buildNotificationSequence('A', 'B', { TERM: 'xterm-256color' }, { isTTY: true } as NodeJS.WriteStream), '\x07');
-  t.is(buildNotificationSequence('A', 'B', {}, { isTTY: false } as NodeJS.WriteStream), '');
-  t.is(buildNotificationSequence('A', 'B', { TERM: 'dumb' }, { isTTY: true } as NodeJS.WriteStream), '\x07');
-  t.is(buildNotificationSequence('A', 'B', { TERM: 'dumb' }, { isTTY: false } as NodeJS.WriteStream), '');
+  expect(buildNotificationSequence('A', 'B', {}, { isTTY: false } as NodeJS.WriteStream)).toBe('');
+  expect(buildNotificationSequence('A', 'B', { TERM: 'dumb' }, { isTTY: true } as NodeJS.WriteStream)).toBe('\x07');
+  expect(buildNotificationSequence('A', 'B', { TERM: 'dumb' }, { isTTY: false } as NodeJS.WriteStream)).toBe('');
 });
 
-test('sendNotification supports injected tty writers for compatibility', (t) => {
+it('sendNotification supports injected tty writers for compatibility', () => {
   let written = '';
 
   const result = sendNotification('Alert', 'Done', {
@@ -144,11 +144,11 @@ test('sendNotification supports injected tty writers for compatibility', (t) => 
     },
   });
 
-  t.true(result);
-  t.is(written, '\x1b]777;notify;Alert;Done\x07');
+  expect(result).toBe(true);
+  expect(written).toBe('\x1b]777;notify;Alert;Done\x07');
 });
 
-test('sendNotification wraps OSC sequences for tmux passthrough', (t) => {
+it('sendNotification wraps OSC sequences for tmux passthrough', () => {
   let written = '';
 
   const result = sendNotification('Alert', 'Done', {
@@ -159,11 +159,11 @@ test('sendNotification wraps OSC sequences for tmux passthrough', (t) => {
     },
   });
 
-  t.true(result);
-  t.is(written, '\x1bPtmux;\x1b\x1b\x1b]777;notify;Alert;Done\x07\x1b\\');
+  expect(result).toBe(true);
+  expect(written).toBe('\x1bPtmux;\x1b\x1b\x1b]777;notify;Alert;Done\x07\x1b\\');
 });
 
-test('sendNotification uses OSC 9 fallback through tty writer', (t) => {
+it('sendNotification uses OSC 9 fallback through tty writer', () => {
   let written = '';
 
   const result = sendNotification('Alert', 'Done', {
@@ -174,11 +174,11 @@ test('sendNotification uses OSC 9 fallback through tty writer', (t) => {
     },
   });
 
-  t.true(result);
-  t.is(written, '\x1b]9;Done\x07');
+  expect(result).toBe(true);
+  expect(written).toBe('\x1b]9;Done\x07');
 });
 
-test('sendNotification uses bell for unknown terminals on a TTY', (t) => {
+it('sendNotification uses bell for unknown terminals on a TTY', () => {
   let written = '';
 
   const result = sendNotification('Alert', 'Done', {
@@ -189,6 +189,6 @@ test('sendNotification uses bell for unknown terminals on a TTY', (t) => {
     },
   });
 
-  t.true(result);
-  t.is(written, '\x07');
+  expect(result).toBe(true);
+  expect(written).toBe('\x07');
 });

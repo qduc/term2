@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -54,7 +54,7 @@ function createTool(settingsService = createMockSettingsService()) {
   });
 }
 
-test.serial('create_file: creates a new file with content', async (t) => {
+it.sequential('create_file: creates a new file with content', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'new-file.txt';
@@ -67,15 +67,15 @@ test.serial('create_file: creates a new file with content', async (t) => {
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
-    t.true(parsed.output[0].message!.startsWith('Created'));
+    expect(parsed.output[0].success).toBe(true);
+    expect(parsed.output[0].message!.startsWith('Created')).toBe(true);
 
     const content = await fs.readFile(path.join(dir, filePath), 'utf8');
-    t.is(content.trim(), 'Hello World');
+    expect(content.trim()).toBe('Hello World');
   });
 });
 
-test.serial('update_file: updates an existing file', async (t) => {
+it.sequential('update_file: updates an existing file', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'existing.txt';
@@ -91,14 +91,14 @@ test.serial('update_file: updates an existing file', async (t) => {
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const content = await fs.readFile(absPath, 'utf8');
-    t.is(content, 'Hello\nUniverse');
+    expect(content).toBe('Hello\nUniverse');
   });
 });
 
-test.serial('update_file: preserves parallel patches to different regions of the same file', async (t) => {
+it.sequential('update_file: preserves parallel patches to different regions of the same file', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'parallel-patch.txt';
@@ -118,18 +118,15 @@ test.serial('update_file: preserves parallel patches to different regions of the
 
     for (const result of results) {
       const parsed = parsePlainResult(result);
-      t.true(parsed.output[0].success);
+      expect(parsed.output[0].success).toBe(true);
     }
 
     const content = await fs.readFile(absPath, 'utf8');
-    t.deepEqual(
-      content.split('\n'),
-      tokens.map((_, index) => `done_${index}`),
-    );
+    expect(content.split('\n')).toEqual(tokens.map((_, index) => `done_${index}`));
   });
 });
 
-test.serial('execute: applies batched patch operations in order', async (t) => {
+it.sequential('execute: applies batched patch operations in order', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
 
@@ -149,17 +146,17 @@ test.serial('execute: applies batched patch operations in order', async (t) => {
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output.every((item: { success: boolean }) => item.success));
+    expect(parsed.output.every((item: { success: boolean }) => item.success)).toBe(true);
     const messages = parsed.output.map((item: { message?: string }) => item.message ?? '');
-    t.true(messages.some((message: string) => message.startsWith('Created')));
-    t.true(messages.some((message: string) => message.startsWith('Updated')));
+    expect(messages.some((message: string) => message.startsWith('Created'))).toBe(true);
+    expect(messages.some((message: string) => message.startsWith('Updated'))).toBe(true);
 
     const content = await fs.readFile(path.join(dir, 'batch.txt'), 'utf8');
-    t.is(content, 'Hello\nUniverse\n');
+    expect(content).toBe('Hello\nUniverse\n');
   });
 });
 
-// test.serial('delete_file: deletes a file', async t => {
+// it.sequential('delete_file: deletes a file', async t => {
 //     await withTempDir(async (dir) => {
 //         const filePath = 'to-delete.txt';
 //         const absPath = path.join(dir, filePath);
@@ -172,24 +169,24 @@ test.serial('execute: applies batched patch operations in order', async (t) => {
 //         });
 
 //         const parsed = parsePlainResult(result);
-//         t.true(parsed.output[0].success);
+//         expect(parsed.output[0].success).toBe(true);
 
-//         await t.throwsAsync(fs.readFile(absPath));
+//         await await expect(fs.readFile(absPath)).rejects.toThrow();
 //     });
 // });
 
-// test.serial('needsApproval: requires approval for delete_file', async t => {
+// it.sequential('needsApproval: requires approval for delete_file', async t => {
 //     await withTempDir(async () => {
 //         const result = await applyPatchToolDefinition.needsApproval({
 //             type: 'delete_file',
 //             path: 'any.txt',
 //             diff: '',
 //         });
-//         t.true(result);
+//         expect(result).toBe(true);
 //     });
 // });
 
-test.serial('needsApproval: requires approval for outside workspace', async (t) => {
+it.sequential('needsApproval: requires approval for outside workspace', async () => {
   await withTempDir(async () => {
     const tool = createTool();
     const result = await tool.needsApproval({
@@ -197,11 +194,11 @@ test.serial('needsApproval: requires approval for outside workspace', async (t) 
       path: '../outside.txt',
       diff: '@@ -0,0 +1 @@\n+content',
     });
-    t.true(result);
+    expect(result).toBe(true);
   });
 });
 
-test.serial('needsApproval: auto-approves for create/update inside cwd', async (t) => {
+it.sequential('needsApproval: auto-approves for create/update inside cwd', async () => {
   await withTempDir(async () => {
     const tool = createTool(createMockSettingsService());
 
@@ -210,11 +207,11 @@ test.serial('needsApproval: auto-approves for create/update inside cwd', async (
       path: 'inside.txt',
       diff: '@@ -0,0 +1 @@\n+content',
     });
-    t.false(result);
+    expect(result).toBe(false);
   });
 });
 
-test.serial('needsApproval: auto-approves invalid diffs (will fail in execute)', async (t) => {
+it.sequential('needsApproval: auto-approves invalid diffs (will fail in execute)', async () => {
   await withTempDir(async () => {
     const tool = createTool();
     // Invalid diffs now return false (auto-approve) to avoid breaking the stream
@@ -223,11 +220,11 @@ test.serial('needsApproval: auto-approves invalid diffs (will fail in execute)',
       path: 'test.txt',
       diff: 'garbage',
     });
-    t.false(result);
+    expect(result).toBe(false);
   });
 });
 
-test.serial('needsApproval: update_file missing target requires approval', async (t) => {
+it.sequential('needsApproval: update_file missing target requires approval', async () => {
   await withTempDir(async () => {
     const tool = createTool();
     const result = await tool.needsApproval({
@@ -235,11 +232,11 @@ test.serial('needsApproval: update_file missing target requires approval', async
       path: 'missing.txt',
       diff: '@@ anything\n-old\n+new',
     });
-    t.true(result);
+    expect(result).toBe(true);
   });
 });
 
-test.serial('needsApproval: update_file malformed diff auto-approves when file exists', async (t) => {
+it.sequential('needsApproval: update_file malformed diff auto-approves when file exists', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'existing.txt'), 'line 1\nline 2');
     const tool = createTool();
@@ -248,11 +245,11 @@ test.serial('needsApproval: update_file malformed diff auto-approves when file e
       path: 'existing.txt',
       diff: 'garbage',
     });
-    t.false(result);
+    expect(result).toBe(false);
   });
 });
 
-test.serial('execute: rejects invalid diffs with proper error', async (t) => {
+it.sequential('execute: rejects invalid diffs with proper error', async () => {
   await withTempDir(async () => {
     const tool = createTool();
     const result = await tool.execute({
@@ -261,12 +258,12 @@ test.serial('execute: rejects invalid diffs with proper error', async (t) => {
       diff: 'garbage',
     });
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('Invalid patch'));
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error.includes('Invalid patch')).toBe(true);
   });
 });
 
-test.serial('execute: detailed error for unified diff headers', async (t) => {
+it.sequential('execute: detailed error for unified diff headers', async () => {
   await withTempDir(async () => {
     const tool = createTool();
     const result = await tool.execute({
@@ -275,12 +272,12 @@ test.serial('execute: detailed error for unified diff headers', async (t) => {
       diff: '--- a/test.txt\n+++ b/test.txt\n+Hello',
     });
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('Remove standard file headers'));
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error.includes('Remove standard file headers')).toBe(true);
   });
 });
 
-test.serial('execute: detailed error for chunk headers with line numbers', async (t) => {
+it.sequential('execute: detailed error for chunk headers with line numbers', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'existing.txt';
@@ -293,12 +290,12 @@ test.serial('execute: detailed error for chunk headers with line numbers', async
       diff: '@@ -1,2 +1,2 @@\n Hello\n-World\n+Universe\n line missing',
     });
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('Remove line numbers from "@@" headers'));
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error.includes('Remove line numbers from "@@" headers')).toBe(true);
   });
 });
 
-test.serial('execute: detailed error for leading line numbers', async (t) => {
+it.sequential('execute: detailed error for leading line numbers', async () => {
   await withTempDir(async () => {
     const tool = createTool();
     const result = await tool.execute({
@@ -307,12 +304,12 @@ test.serial('execute: detailed error for leading line numbers', async (t) => {
       diff: '10: +Hello',
     });
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('Remove leading line numbers'));
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error.includes('Remove leading line numbers')).toBe(true);
   });
 });
 
-test.serial('execute: detailed error for invalid line prefix', async (t) => {
+it.sequential('execute: detailed error for invalid line prefix', async () => {
   await withTempDir(async () => {
     const tool = createTool();
     const result = await tool.execute({
@@ -321,12 +318,12 @@ test.serial('execute: detailed error for invalid line prefix', async (t) => {
       diff: 'Hello',
     });
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('Use only space, +, -, or @@ prefixes'));
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error.includes('Use only space, +, -, or @@ prefixes')).toBe(true);
   });
 });
 
-test.serial('execute: detailed error for context block mismatch', async (t) => {
+it.sequential('execute: detailed error for context block mismatch', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'existing.txt';
@@ -340,8 +337,8 @@ test.serial('execute: detailed error for context block mismatch', async (t) => {
       diff: '@@\n line one\n line missing\n line three',
     });
     const parsed1 = parsePlainResult(result1);
-    t.false(parsed1.output[0].success);
-    t.true(parsed1.output[0].error.includes('context block was not found'));
+    expect(parsed1.output[0].success).toBe(false);
+    expect(parsed1.output[0].error.includes('context block was not found')).toBe(true);
 
     // Indentation mismatch (with a missing line to force application failure)
     const result2 = await tool.execute({
@@ -350,7 +347,7 @@ test.serial('execute: detailed error for context block mismatch', async (t) => {
       diff: '@@\n line one\n line two\n line missing\n line three', // diff has 0 spaces for 'line two', file has 2 spaces
     });
     const parsed2 = parsePlainResult(result2);
-    t.false(parsed2.output[0].success);
-    t.true(parsed2.output[0].error.includes('Mismatch details'));
+    expect(parsed2.output[0].success).toBe(false);
+    expect(parsed2.output[0].error.includes('Mismatch details')).toBe(true);
   });
 });

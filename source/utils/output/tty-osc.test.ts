@@ -1,42 +1,42 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import { wrapForMultiplexer, writeOscSequence, getTtyWriter } from './tty-osc.js';
 
 // ── wrapForMultiplexer ──────────────────────────────────────────────────────
 
-test('wrapForMultiplexer returns inner unchanged in a bare terminal', (t) => {
+it('wrapForMultiplexer returns inner unchanged in a bare terminal', () => {
   const inner = '\x1b]9;hello\x07';
-  t.is(wrapForMultiplexer(inner, {}), inner);
+  expect(wrapForMultiplexer(inner, {})).toBe(inner);
 });
 
-test('wrapForMultiplexer wraps in tmux DCS passthrough when TMUX is set', (t) => {
+it('wrapForMultiplexer wraps in tmux DCS passthrough when TMUX is set', () => {
   const inner = '\x1b]9;hello\x07';
   const escaped = inner.replace(/\x1b/g, '\x1b\x1b');
   const expected = `\x1bPtmux;\x1b${escaped}\x1b\\`;
-  t.is(wrapForMultiplexer(inner, { TMUX: '/tmp/tmux' }), expected);
+  expect(wrapForMultiplexer(inner, { TMUX: '/tmp/tmux' })).toBe(expected);
 });
 
-test('wrapForMultiplexer wraps in screen DCS passthrough when TERM starts with screen', (t) => {
+it('wrapForMultiplexer wraps in screen DCS passthrough when TERM starts with screen', () => {
   const inner = '\x1b]9;hi\x07';
   const expected = `\x1bP${inner}\x1b\\`;
-  t.is(wrapForMultiplexer(inner, { TERM: 'screen-256color' }), expected);
+  expect(wrapForMultiplexer(inner, { TERM: 'screen-256color' })).toBe(expected);
 });
 
-test('wrapForMultiplexer chunks screen DCS passthrough at 768 characters', (t) => {
+it('wrapForMultiplexer chunks screen DCS passthrough at 768 characters', () => {
   // Create an inner sequence longer than 768 chars
   const longMsg = 'x'.repeat(800);
   const inner = `\x1b]9;${longMsg}\x07`;
-  t.true(inner.length > 768, 'precondition: inner sequence must exceed 768 chars');
+  expect(inner.length > 768).toBe(true);
 
   const result = wrapForMultiplexer(inner, { TERM: 'screen' });
   const chunk1 = inner.slice(0, 768);
   const chunk2 = inner.slice(768);
-  t.is(result, `\x1bP${chunk1}\x1b\\` + `\x1bP${chunk2}\x1b\\`);
+  expect(result).toBe(`\x1bP${chunk1}\x1b\\` + `\x1bP${chunk2}\x1b\\`);
 });
 
 // ── writeOscSequence ────────────────────────────────────────────────────────
 
-test('writeOscSequence calls the injected writer with the bare sequence in a plain env', (t) => {
+it('writeOscSequence calls the injected writer with the bare sequence in a plain env', () => {
   let written = '';
   const inner = '\x1b]9;hello\x07';
   writeOscSequence(inner, {
@@ -45,11 +45,11 @@ test('writeOscSequence calls the injected writer with the bare sequence in a pla
       written = data;
     },
   });
-  t.is(written, inner);
+  expect(written).toBe(inner);
 });
 
-test('writeOscSequence does nothing when getTtyWriter returns null', (t) => {
-  t.notThrows(() => {
+it('writeOscSequence does nothing when getTtyWriter returns null', () => {
+  expect(() => {
     writeOscSequence('\x1b]9;test\x07', {
       env: {},
       getTtyWriter: () => null,
@@ -57,7 +57,7 @@ test('writeOscSequence does nothing when getTtyWriter returns null', (t) => {
   });
 });
 
-test('writeOscSequence applies tmux wrapping before writing', (t) => {
+it('writeOscSequence applies tmux wrapping before writing', () => {
   let written = '';
   const inner = '\x1b]9;msg\x07';
   const escaped = inner.replace(/\x1b/g, '\x1b\x1b');
@@ -69,10 +69,10 @@ test('writeOscSequence applies tmux wrapping before writing', (t) => {
       written = data;
     },
   });
-  t.is(written, expected);
+  expect(written).toBe(expected);
 });
 
-test.serial('getTtyWriter returned writer opens and closes /dev/tty on each write', (t) => {
+it.sequential('getTtyWriter returned writer opens and closes /dev/tty on each write', () => {
   const isTty = process.stdout.isTTY;
   Object.defineProperty(process.stdout, 'isTTY', {
     value: false,
@@ -115,29 +115,29 @@ test.serial('getTtyWriter returned writer opens and closes /dev/tty on each writ
 
   try {
     const writer = getTtyWriter();
-    t.truthy(writer);
+    expect(writer).toBeTruthy();
 
     // First verification open/close on getTtyWriter call:
-    t.is(openedFds.length, 1);
-    t.is(closedFds.length, 1);
-    t.is(openedFds[0], closedFds[0]);
+    expect(openedFds.length).toBe(1);
+    expect(closedFds.length).toBe(1);
+    expect(openedFds[0]).toBe(closedFds[0]);
 
     // Perform two writes:
     writer!('hello');
     writer!('world');
 
     // Should have opened and closed two more times
-    t.is(openedFds.length, 3);
-    t.is(closedFds.length, 3);
+    expect(openedFds.length).toBe(3);
+    expect(closedFds.length).toBe(3);
 
-    t.is(writtenData.length, 2);
-    t.is(writtenData[0].data, 'hello');
-    t.is(writtenData[1].data, 'world');
+    expect(writtenData.length).toBe(2);
+    expect(writtenData[0].data).toBe('hello');
+    expect(writtenData[1].data).toBe('world');
     // Verify each write had its own fd opened and closed
-    t.is(writtenData[0].fd, openedFds[1]);
-    t.is(closedFds[1], openedFds[1]);
-    t.is(writtenData[1].fd, openedFds[2]);
-    t.is(closedFds[2], openedFds[2]);
+    expect(writtenData[0].fd).toBe(openedFds[1]);
+    expect(closedFds[1]).toBe(openedFds[1]);
+    expect(writtenData[1].fd).toBe(openedFds[2]);
+    expect(closedFds[2]).toBe(openedFds[2]);
   } finally {
     fs.openSync = originalOpen;
     fs.closeSync = originalClose;

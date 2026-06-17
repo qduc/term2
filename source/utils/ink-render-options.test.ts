@@ -1,8 +1,8 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { getInkRenderOptions } from './ink-render-options.js';
 
-test('getInkRenderOptions disables incremental rendering', (t) => {
+it('getInkRenderOptions disables incremental rendering', () => {
   const options = getInkRenderOptions();
 
-  t.is(options.incrementalRendering, false);
+  expect(options.incrementalRendering).toBe(false);
 });

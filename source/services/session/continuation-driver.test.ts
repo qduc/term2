@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ContinuationDriver } from './continuation-driver.js';
 import { ManualApprovalDecisionPolicy, ShellAutoApprovalDecisionPolicy } from '../approval/approval-decision-policy.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
@@ -78,7 +78,7 @@ function createDriver(deps: any) {
 
 // ── stale approval continuation ────────────────────────────────
 
-test('stale approval continuation returns stale outcome', async (t) => {
+it('stale approval continuation returns stale outcome', async () => {
   const driver = createDriver({
     generationGuard: { isCurrent: () => false } as any,
   });
@@ -86,12 +86,12 @@ test('stale approval continuation returns stale outcome', async (t) => {
   const { result } = await collectResult(
     driver.drive({ kind: 'approval_decision', answer: 'y', generation: 0 }, new ManualApprovalDecisionPolicy()),
   );
-  t.is(result.kind, 'stale');
+  expect(result.kind).toBe('stale');
 });
 
 // ── drive with no pending approval ─────────────────────────────
 
-test('drive with no pending approval throws error', async (t) => {
+it('drive with no pending approval throws error', async () => {
   const driver = createDriver({
     planApplier: {
       prepareInit: () => {
@@ -100,18 +100,16 @@ test('drive with no pending approval throws error', async (t) => {
     } as any,
   });
 
-  await t.throwsAsync(
-    async () =>
-      collectResult(
-        driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, new ManualApprovalDecisionPolicy()),
-      ),
-    { message: 'No pending approval for continuation' },
-  );
+  await expect(async () =>
+    collectResult(
+      driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, new ManualApprovalDecisionPolicy()),
+    ),
+  ).rejects.toThrow('No pending approval for continuation');
 });
 
 // ── unrecoverable error ──────────────────────────────────────
 
-test('drive yields error event when continuation stream throws unrecoverable error', async (t) => {
+it('drive yields error event when continuation stream throws unrecoverable error', async () => {
   const driver = createDriver({
     streamCycle: {
       async *execute() {
@@ -141,13 +139,13 @@ test('drive yields error event when continuation stream throws unrecoverable err
   }
 
   const errorEvents = events.filter((e) => e.type === 'error');
-  t.is(errorEvents.length, 1);
-  t.is(errorEvents[0]?.message, 'stream boom');
+  expect(errorEvents.length).toBe(1);
+  expect(errorEvents[0]?.message).toBe('stream boom');
 });
 
 // ── continuation from rejection ───────────────────────────────
 
-test('continuation from rejection records aborted approval in tool tracker', async (t) => {
+it('continuation from rejection records aborted approval in tool tracker', async () => {
   const driver = createDriver({
     planApplier: {
       prepareInit: (init: any) => ({
@@ -181,12 +179,12 @@ test('continuation from rejection records aborted approval in tool tracker', asy
       new ManualApprovalDecisionPolicy(),
     ),
   );
-  t.is(result.kind, 'response');
+  expect(result.kind).toBe('response');
 });
 
 // ── continuation from approval decision ────────────────────────
 
-test('continuation from approval decision returns final response', async (t) => {
+it('continuation from approval decision returns final response', async () => {
   const driver = createDriver({
     streamCycle: {
       async *execute() {
@@ -205,16 +203,16 @@ test('continuation from approval decision returns final response', async (t) => 
     driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, new ManualApprovalDecisionPolicy()),
   );
 
-  t.is(result.kind, 'response');
+  expect(result.kind).toBe('response');
   if (result.kind === 'response') {
-    t.is(result.terminal.type, 'response');
-    t.is((result.terminal as { finalText: string }).finalText, 'Done.');
+    expect(result.terminal.type).toBe('response');
+    expect((result.terminal as { finalText: string }).finalText).toBe('Done.');
   }
 });
 
 // ── continuation from approval emits deduplicated tool_started ─
 
-test('continuation from approval emits deduplicated tool_started event', async (t) => {
+it('continuation from approval emits deduplicated tool_started event', async () => {
   const startedEvent = { type: 'tool_started', toolCallId: 'call-tool-1', toolName: 'shell' };
   const driver = createDriver({
     planApplier: {
@@ -240,15 +238,15 @@ test('continuation from approval emits deduplicated tool_started event', async (
   );
 
   const toolStarted = events.filter((e) => e.type === 'tool_started');
-  t.is(toolStarted.length, 1);
+  expect(toolStarted.length).toBe(1);
   if (toolStarted[0] && toolStarted[0].type === 'tool_started') {
-    t.is(toolStarted[0].toolCallId, 'call-tool-1');
+    expect(toolStarted[0].toolCallId).toBe('call-tool-1');
   }
 });
 
 // ── nested approval emits subagent_tool_started ───────────────
 
-test('continuation from nested approval emits one subagent_tool_started and no parent tool_started', async (t) => {
+it('continuation from nested approval emits one subagent_tool_started and no parent tool_started', async () => {
   const startedEvent = {
     type: 'subagent_tool_started',
     agentId: 'worker-1',
@@ -281,16 +279,16 @@ test('continuation from nested approval emits one subagent_tool_started and no p
 
   const toolStarted = events.filter((e) => e.type === 'tool_started');
   const subagentStarted = events.filter((e) => e.type === 'subagent_tool_started');
-  t.is(toolStarted.length, 0);
-  t.is(subagentStarted.length, 1);
+  expect(toolStarted.length).toBe(0);
+  expect(subagentStarted.length).toBe(1);
   if (subagentStarted[0] && subagentStarted[0].type === 'subagent_tool_started') {
-    t.is(subagentStarted[0].toolCallId, 'nested-tool-1');
+    expect(subagentStarted[0].toolCallId).toBe('nested-tool-1');
   }
 });
 
 // ── drive returns approval_required when policy says prompt ───
 
-test('drive returns approval_required when policy says prompt', async (t) => {
+it('drive returns approval_required when policy says prompt', async () => {
   let recordedApproval: unknown;
   const driver = createDriver({
     planApplier: {
@@ -338,11 +336,11 @@ test('drive returns approval_required when policy says prompt', async (t) => {
     driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, new ManualApprovalDecisionPolicy()),
   );
 
-  t.is(result.kind, 'approval_required');
+  expect(result.kind).toBe('approval_required');
   if (result.kind === 'approval_required') {
-    t.is((result.terminal as { approval: { toolName: string } }).approval.toolName, 'apply_patch');
+    expect((result.terminal as { approval: { toolName: string } }).approval.toolName).toBe('apply_patch');
   }
-  t.deepEqual(recordedApproval, {
+  expect(recordedApproval).toEqual({
     toolName: 'apply_patch',
     argumentsText: 'patch',
     callId: 'call-3',
@@ -350,7 +348,7 @@ test('drive returns approval_required when policy says prompt', async (t) => {
   });
 });
 
-test('driver preserves the initial ledger snapshot and records a prompted approval', async (t) => {
+it('driver preserves the initial ledger snapshot and records a prompted approval', async () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
   toolTracker.recordFunctionCall({
@@ -421,20 +419,14 @@ test('driver preserves the initial ledger snapshot and records a prompted approv
     driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, new ManualApprovalDecisionPolicy()),
   );
 
-  t.is(result.kind, 'approval_required');
-  t.deepEqual(
-    (initialSnapshot as Array<{ callId: string }>).map((entry) => entry.callId),
-    ['existing-call'],
-  );
-  t.deepEqual(
-    toolTracker.export().map((entry) => entry.callId),
-    ['existing-call', 'pending-call'],
-  );
+  expect(result.kind).toBe('approval_required');
+  expect((initialSnapshot as Array<{ callId: string }>).map((entry) => entry.callId)).toEqual(['existing-call']);
+  expect(toolTracker.export().map((entry) => entry.callId)).toEqual(['existing-call', 'pending-call']);
 });
 
 // ── multiple auto-approved interruptions ─────────────────────
 
-test('multiple auto-approved interruptions followed by manual approval', async (t) => {
+it('multiple auto-approved interruptions followed by manual approval', async () => {
   let cycleCount = 0;
   const driver = createDriver({
     shellAutoApproval: {
@@ -503,15 +495,15 @@ test('multiple auto-approved interruptions followed by manual approval', async (
     driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, policy),
   );
 
-  t.is(result.kind, 'approval_required');
+  expect(result.kind).toBe('approval_required');
   if (result.kind === 'approval_required') {
-    t.is((result.terminal as { approval: { toolName: string } }).approval.toolName, 'apply_patch');
-    t.is((result.terminal as { approval: { callId: string } }).approval.callId, 'call-3');
+    expect((result.terminal as { approval: { toolName: string } }).approval.toolName).toBe('apply_patch');
+    expect((result.terminal as { approval: { callId: string } }).approval.callId).toBe('call-3');
   }
-  t.is(cycleCount, 3);
+  expect(cycleCount).toBe(3);
 });
 
-test('parallel approval batch is fully decided before the continuation stream resumes', async (t) => {
+it('parallel approval batch is fully decided before the continuation stream resumes', async () => {
   const interruptions = [
     { name: 'shell', callId: 'call-1', arguments: { command: 'pwd' } },
     { name: 'shell', callId: 'call-2', arguments: { command: 'ls' } },
@@ -584,20 +576,19 @@ test('parallel approval batch is fully decided before the continuation stream re
 
   const { result } = await collectResult(driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }));
 
-  t.is(result.kind, 'response');
-  t.deepEqual(
-    decisions,
-    new Map<string, boolean | undefined>([
+  expect(result.kind).toBe('response');
+  expect(decisions).toEqual(
+    new Map<string, boolean>([
       ['call-1', true],
       ['call-2', true],
       ['call-3', true],
     ]),
   );
-  t.is(streamExecutions, 1);
-  t.deepEqual(resumedCallIds, ['call-1', 'call-2', 'call-3']);
+  expect(streamExecutions).toBe(1);
+  expect(resumedCallIds).toEqual(['call-1', 'call-2', 'call-3']);
 });
 
-test('parallel approval batch prompts for unresolved siblings without resuming the stream', async (t) => {
+it('parallel approval batch prompts for unresolved siblings without resuming the stream', async () => {
   const interruptions = [
     { name: 'shell', callId: 'call-1', arguments: { command: 'pwd' } },
     { name: 'shell', callId: 'call-2', arguments: { command: 'git log --all' } },
@@ -653,17 +644,17 @@ test('parallel approval batch prompts for unresolved siblings without resuming t
 
   const { result } = await collectResult(driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }));
 
-  t.is(result.kind, 'approval_required');
+  expect(result.kind).toBe('approval_required');
   if (result.kind === 'approval_required') {
-    t.is((result.terminal as any).approval.callId, 'call-2');
+    expect((result.terminal as any).approval.callId).toBe('call-2');
   }
-  t.is(pending.interruption, interruptions[1]);
-  t.is(streamExecutions, 0);
+  expect(pending.interruption).toBe(interruptions[1]);
+  expect(streamExecutions).toBe(0);
 });
 
 // ── abort resolution ──────────────────────────────────────────
 
-test('continuation from abort resolution drives stream and returns result', async (t) => {
+it('continuation from abort resolution drives stream and returns result', async () => {
   const driver = createDriver({
     planApplier: {
       prepareInit: (init: any) => ({
@@ -697,12 +688,12 @@ test('continuation from abort resolution drives stream and returns result', asyn
     ),
   );
 
-  t.is(result.kind, 'response');
+  expect(result.kind).toBe('response');
 });
 
 // ── fresh_start_required ─────────────────────────────────────
 
-test('recovery returns fresh_start_required', async (t) => {
+it('recovery returns fresh_start_required', async () => {
   const driver = createDriver({
     streamCycle: {
       async *execute() {
@@ -729,16 +720,16 @@ test('recovery returns fresh_start_required', async (t) => {
     driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, new ManualApprovalDecisionPolicy()),
   );
 
-  t.is(result.kind, 'fresh_start_required');
+  expect(result.kind).toBe('fresh_start_required');
   if (result.kind === 'fresh_start_required') {
-    t.is(result.retryCounts.transientRetryCount, 1);
-    t.is(result.delayMs, 100);
+    expect(result.retryCounts.transientRetryCount).toBe(1);
+    expect(result.delayMs).toBe(100);
   }
 });
 
 // ── rejection preserves event order and ledger state ─────────
 
-test('rejection preserves event order and ledger state', async (t) => {
+it('rejection preserves event order and ledger state', async () => {
   const driver = createDriver({
     planApplier: {
       prepareInit: (init: any) => ({
@@ -773,7 +764,7 @@ test('rejection preserves event order and ledger state', async (t) => {
     ),
   );
 
-  t.is(result.kind, 'response');
+  expect(result.kind).toBe('response');
   const toolStarted = events.filter((e) => e.type === 'tool_started');
-  t.is(toolStarted.length, 0);
+  expect(toolStarted.length).toBe(0);
 });

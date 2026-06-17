@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 import SettingsValueSelectionMenu from './SettingsValueSelectionMenu.js';
@@ -13,38 +12,35 @@ const suggestions: SettingValueSuggestion[] = [
   { value: 'high', description: 'Highest reasoning' },
 ];
 
-test.serial('SettingsValueSelectionMenu renders empty state', async (t) => {
+it.sequential('SettingsValueSelectionMenu renders empty state', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsValueSelectionMenu settingKey="agent.reasoningEffort" items={[]} selectedIndex={0} query="zzz" />,
-    t,
   );
-  t.true(lastFrame()?.includes('No values match'));
-  t.true(lastFrame()?.includes('zzz'));
+  expect(lastFrame()?.includes('No values match')).toBe(true);
+  expect(lastFrame()?.includes('zzz')).toBe(true);
 });
 
-test.serial('SettingsValueSelectionMenu shows suggestions list', async (t) => {
+it.sequential('SettingsValueSelectionMenu shows suggestions list', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsValueSelectionMenu settingKey="agent.reasoningEffort" items={suggestions} selectedIndex={0} query="" />,
-    t,
   );
   const output = lastFrame() ?? '';
-  t.true(output.includes('low'));
-  t.true(output.includes('Lower reasoning cost'));
-  t.true(output.includes('medium'));
-  t.true(output.includes('high'));
+  expect(output.includes('low')).toBe(true);
+  expect(output.includes('Lower reasoning cost')).toBe(true);
+  expect(output.includes('medium')).toBe(true);
+  expect(output.includes('high')).toBe(true);
 });
 
-test.serial('SettingsValueSelectionMenu marks the selected value', async (t) => {
+it.sequential('SettingsValueSelectionMenu marks the selected value', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsValueSelectionMenu settingKey="agent.reasoningEffort" items={suggestions} selectedIndex={2} query="" />,
-    t,
   );
   const output = lastFrame() ?? '';
-  t.true(output.includes('▶'));
-  t.true(output.includes('high'));
+  expect(output.includes('▶')).toBe(true);
+  expect(output.includes('high')).toBe(true);
 });
 
-test.serial('SettingsValueSelectionMenu shows numeric hint when applicable (empty state)', async (t) => {
+it.sequential('SettingsValueSelectionMenu shows numeric hint when applicable (empty state)', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsValueSelectionMenu
       settingKey="agent.temperature"
@@ -53,13 +49,12 @@ test.serial('SettingsValueSelectionMenu shows numeric hint when applicable (empt
       query="invalid"
       isNumericSettings={true}
     />,
-    t,
   );
   const output = lastFrame() ?? '';
-  t.true(output.includes('This setting accepts numeric values'));
+  expect(output.includes('This setting accepts numeric values')).toBe(true);
 });
 
-test.serial('SettingsValueSelectionMenu renders footer', async (t) => {
+it.sequential('SettingsValueSelectionMenu renders footer', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsValueSelectionMenu
       settingKey="agent.temperature"
@@ -68,9 +63,8 @@ test.serial('SettingsValueSelectionMenu renders footer', async (t) => {
       query=""
       isNumericSettings={true}
     />,
-    t,
   );
   const output = lastFrame() ?? '';
-  t.true(output.includes('confirm'));
-  t.true(output.includes('cancel'));
+  expect(output.includes('confirm')).toBe(true);
+  expect(output.includes('cancel')).toBe(true);
 });

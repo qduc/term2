@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { RecoveryContext, RetryCounts } from './retry-contracts.js';
 import { DefaultConversationRecoveryPolicy } from './recovery-policy.js';
 
@@ -20,12 +20,12 @@ const baseRecoveryContext = (overrides: Partial<RecoveryContext> = {}): Recovery
   ...overrides,
 });
 
-test('service_tier_fallback produces retry_fresh with delta input and useStandardServiceTier', (t) => {
+it('service_tier_fallback produces retry_fresh with delta input and useStandardServiceTier', () => {
   const result = policy.plan(baseRecoveryContext({ failure: { kind: 'service_tier_fallback' } }));
-  t.deepEqual(result, { kind: 'retry_fresh', inputMode: 'delta', useStandardServiceTier: true });
+  expect(result).toEqual({ kind: 'retry_fresh', inputMode: 'delta', useStandardServiceTier: true });
 });
 
-test('transient failure with resumable stream replays full history', (t) => {
+it('transient failure with resumable stream replays full history', () => {
   const result = policy.plan(
     baseRecoveryContext({
       failure: { kind: 'transient', attempt: 1, delayMs: 500 },
@@ -33,10 +33,10 @@ test('transient failure with resumable stream replays full history', (t) => {
     }),
   );
 
-  t.deepEqual(result, { kind: 'retry_fresh', inputMode: 'full_history' });
+  expect(result).toEqual({ kind: 'retry_fresh', inputMode: 'full_history' });
 });
 
-test('transient failure without stream produces retry_fresh with full_history', (t) => {
+it('transient failure without stream produces retry_fresh with full_history', () => {
   const result = policy.plan(
     baseRecoveryContext({
       failure: { kind: 'transient', attempt: 2, delayMs: 1000 },
@@ -44,15 +44,15 @@ test('transient failure without stream produces retry_fresh with full_history', 
     }),
   );
 
-  t.deepEqual(result, { kind: 'retry_fresh', inputMode: 'full_history' });
+  expect(result).toEqual({ kind: 'retry_fresh', inputMode: 'full_history' });
 });
 
-test('transport_downgrade produces retry_fresh with full_history', (t) => {
+it('transport_downgrade produces retry_fresh with full_history', () => {
   const result = policy.plan(baseRecoveryContext({ failure: { kind: 'transport_downgrade' } }));
-  t.deepEqual(result, { kind: 'retry_fresh', inputMode: 'full_history' });
+  expect(result).toEqual({ kind: 'retry_fresh', inputMode: 'full_history' });
 });
 
-test('model_retry with stream produces replay_turn without rollback and with errorContext', (t) => {
+it('model_retry with stream produces replay_turn without rollback and with errorContext', () => {
   const result = policy.plan(
     baseRecoveryContext({
       failure: { kind: 'model_retry', errorContext: 'Previous attempt failed' },
@@ -60,7 +60,7 @@ test('model_retry with stream produces replay_turn without rollback and with err
     }),
   );
 
-  t.deepEqual(result, {
+  expect(result).toEqual({
     kind: 'replay_turn',
     inputMode: 'full_history',
     rollbackUserMessage: false,
@@ -68,7 +68,7 @@ test('model_retry with stream produces replay_turn without rollback and with err
   });
 });
 
-test('model_retry without stream produces replay_turn with rollback', (t) => {
+it('model_retry without stream produces replay_turn with rollback', () => {
   const result = policy.plan(
     baseRecoveryContext({
       failure: { kind: 'model_retry' },
@@ -76,16 +76,16 @@ test('model_retry without stream produces replay_turn with rollback', (t) => {
     }),
   );
 
-  t.deepEqual(result, { kind: 'replay_turn', inputMode: 'full_history', rollbackUserMessage: true });
+  expect(result).toEqual({ kind: 'replay_turn', inputMode: 'full_history', rollbackUserMessage: true });
 });
 
-test('unrecoverable produces terminate with empty events', (t) => {
+it('unrecoverable produces terminate with empty events', () => {
   const result = policy.plan(baseRecoveryContext({ failure: { kind: 'unrecoverable' } }));
 
-  t.deepEqual(result, { kind: 'terminate', events: [] });
+  expect(result).toEqual({ kind: 'terminate', events: [] });
 });
 
-test('fresh-start retries disabled converts non-unrecoverable failure without stream to terminate', (t) => {
+it('fresh-start retries disabled converts non-unrecoverable failure without stream to terminate', () => {
   const result = policy.plan(
     baseRecoveryContext({
       failure: { kind: 'transient', attempt: 1, delayMs: 500 },
@@ -94,10 +94,10 @@ test('fresh-start retries disabled converts non-unrecoverable failure without st
     }),
   );
 
-  t.deepEqual(result, { kind: 'terminate', events: [] });
+  expect(result).toEqual({ kind: 'terminate', events: [] });
 });
 
-test('fresh-start retries disabled terminates transport recovery even when stream exists', (t) => {
+it('fresh-start retries disabled terminates transport recovery even when stream exists', () => {
   const result = policy.plan(
     baseRecoveryContext({
       failure: { kind: 'transient', attempt: 1, delayMs: 500 },
@@ -106,35 +106,35 @@ test('fresh-start retries disabled terminates transport recovery even when strea
     }),
   );
 
-  t.deepEqual(result, { kind: 'terminate', events: [] });
+  expect(result).toEqual({ kind: 'terminate', events: [] });
 });
 
 // ── nextRetryCounts ────────────────────────────────────────────
 
-test('nextRetryCounts increments transient count for transient failure', (t) => {
+it('nextRetryCounts increments transient count for transient failure', () => {
   const result = policy.nextRetryCounts(baseCounts(), { kind: 'transient', attempt: 3, delayMs: 500 });
-  t.is(result.transientRetryCount, 3);
-  t.is(result.serviceTierFallbackCount, 0);
+  expect(result.transientRetryCount).toBe(3);
+  expect(result.serviceTierFallbackCount).toBe(0);
 });
 
-test('nextRetryCounts increments service tier fallback count', (t) => {
+it('nextRetryCounts increments service tier fallback count', () => {
   const result = policy.nextRetryCounts(baseCounts(), { kind: 'service_tier_fallback' });
-  t.is(result.serviceTierFallbackCount, 1);
+  expect(result.serviceTierFallbackCount).toBe(1);
 });
 
-test('nextRetryCounts resets transient and increments transport downgrade', (t) => {
+it('nextRetryCounts resets transient and increments transport downgrade', () => {
   const result = policy.nextRetryCounts({ ...baseCounts(), transientRetryCount: 5 }, { kind: 'transport_downgrade' });
-  t.is(result.transientRetryCount, 0);
-  t.is(result.transportDowngradeCount, 1);
+  expect(result.transientRetryCount).toBe(0);
+  expect(result.transportDowngradeCount).toBe(1);
 });
 
-test('nextRetryCounts increments model retry count', (t) => {
+it('nextRetryCounts increments model retry count', () => {
   const result = policy.nextRetryCounts(baseCounts(), { kind: 'model_retry', errorContext: 'x' });
-  t.is(result.modelRetryCount, 1);
+  expect(result.modelRetryCount).toBe(1);
 });
 
-test('nextRetryCounts returns unchanged counts for unrecoverable', (t) => {
+it('nextRetryCounts returns unchanged counts for unrecoverable', () => {
   const counts = baseCounts();
   const result = policy.nextRetryCounts(counts, { kind: 'unrecoverable' });
-  t.deepEqual(result, counts);
+  expect(result).toEqual(counts);
 });

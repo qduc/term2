@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect } from 'vitest';
 import { ExecutionContext } from './execution-context.js';
 import { ISSHService } from './service-interfaces.js';
 
@@ -15,43 +15,43 @@ function createMockSSHService(): ISSHService {
   };
 }
 
-test('isRemote returns false when no SSH service provided', (t) => {
+it('isRemote returns false when no SSH service provided', () => {
   const ctx = new ExecutionContext();
-  t.false(ctx.isRemote());
+  expect(ctx.isRemote()).toBe(false);
 });
 
-test('isRemote returns true when SSH service provided', (t) => {
+it('isRemote returns true when SSH service provided', () => {
   const mockSSH = createMockSSHService();
   const ctx = new ExecutionContext(mockSSH, '/remote/path');
-  t.true(ctx.isRemote());
+  expect(ctx.isRemote()).toBe(true);
 });
 
-test('getSSHService returns undefined when no SSH service', (t) => {
+it('getSSHService returns undefined when no SSH service', () => {
   const ctx = new ExecutionContext();
-  t.is(ctx.getSSHService(), undefined);
+  expect(ctx.getSSHService()).toBeUndefined();
 });
 
-test('getSSHService returns SSH service when provided', (t) => {
+it('getSSHService returns SSH service when provided', () => {
   const mockSSH = createMockSSHService();
   const ctx = new ExecutionContext(mockSSH, '/remote/path');
-  t.is(ctx.getSSHService(), mockSSH);
+  expect(ctx.getSSHService()).toBe(mockSSH);
 });
 
-test('getCwd returns process.cwd when not remote', (t) => {
+it('getCwd returns process.cwd when not remote', () => {
   const ctx = new ExecutionContext();
-  t.is(ctx.getCwd(), process.cwd());
+  expect(ctx.getCwd()).toBe(process.cwd());
 });
 
-test('getCwd returns remoteDir when in remote mode', (t) => {
+it('getCwd returns remoteDir when in remote mode', () => {
   const mockSSH = createMockSSHService();
   const remoteDir = '/home/user/project';
   const ctx = new ExecutionContext(mockSSH, remoteDir);
-  t.is(ctx.getCwd(), remoteDir);
+  expect(ctx.getCwd()).toBe(remoteDir);
 });
 
-test('getCwd returns process.cwd when remote but no remoteDir', (t) => {
+it('getCwd returns process.cwd when remote but no remoteDir', () => {
   const mockSSH = createMockSSHService();
   const ctx = new ExecutionContext(mockSSH);
   // When SSH service is provided but no remoteDir, falls back to process.cwd
-  t.is(ctx.getCwd(), process.cwd());
+  expect(ctx.getCwd()).toBe(process.cwd());
 });

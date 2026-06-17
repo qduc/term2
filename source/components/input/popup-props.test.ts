@@ -1,7 +1,7 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { toPopupProps } from './popup-props.js';
 
-test('toPopupProps forwards slash scrollOffset', (t) => {
+it('toPopupProps forwards slash scrollOffset', () => {
   const props = toPopupProps({
     slash: {
       isOpen: true,
@@ -76,5 +76,5 @@ test('toPopupProps forwards slash scrollOffset', (t) => {
     } as any,
   });
 
-  t.is(props.slash.scrollOffset, 3);
+  expect(props.slash.scrollOffset).toBe(3);
 });

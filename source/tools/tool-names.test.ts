@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   TOOL_NAME_APPLY_PATCH,
   TOOL_NAME_CODE_CONTEXT_SEARCH,
@@ -7,10 +7,10 @@ import {
   TOOL_NAME_SEARCH_REPLACE,
 } from './tool-names.js';
 
-test('tool name constants remain stable', (t) => {
-  t.is(TOOL_NAME_APPLY_PATCH, 'apply_patch');
-  t.is(TOOL_NAME_CREATE_FILE, 'create_file');
-  t.is(TOOL_NAME_SEARCH_REPLACE, 'search_replace');
-  t.is(TOOL_NAME_READ_CODE_OUTLINE, 'read_code_outline');
-  t.is(TOOL_NAME_CODE_CONTEXT_SEARCH, 'code_context_search');
+it('tool name constants remain stable', () => {
+  expect(TOOL_NAME_APPLY_PATCH).toBe('apply_patch');
+  expect(TOOL_NAME_CREATE_FILE).toBe('create_file');
+  expect(TOOL_NAME_SEARCH_REPLACE).toBe('search_replace');
+  expect(TOOL_NAME_READ_CODE_OUTLINE).toBe('read_code_outline');
+  expect(TOOL_NAME_CODE_CONTEXT_SEARCH).toBe('code_context_search');
 });

@@ -1,7 +1,7 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ApprovalState } from './approval-state.js';
 
-test('set/get pending context', (t) => {
+it('set/get pending context', () => {
   const state = new ApprovalState();
   const pending = {
     state: { id: 'state' } as any,
@@ -13,10 +13,10 @@ test('set/get pending context', (t) => {
 
   state.setPending(pending);
 
-  t.is(state.getPending(), pending);
+  expect(state.getPending()).toBe(pending);
 });
 
-test('setPendingRemoveInterceptor stores cleanup on pending', (t) => {
+it('setPendingRemoveInterceptor stores cleanup on pending', () => {
   const state = new ApprovalState();
   const pending = {
     state: { id: 'state' } as any,
@@ -29,10 +29,10 @@ test('setPendingRemoveInterceptor stores cleanup on pending', (t) => {
   state.setPending(pending);
   state.setPendingRemoveInterceptor(removeInterceptor);
 
-  t.is(state.getPending()?.removeInterceptor, removeInterceptor);
+  expect(state.getPending()?.removeInterceptor).toBe(removeInterceptor);
 });
 
-test('abortPending() moves pending to aborted and clears pending', (t) => {
+it('abortPending() moves pending to aborted and clears pending', () => {
   const state = new ApprovalState();
   const pending = {
     state: { id: 'state' } as any,
@@ -45,18 +45,18 @@ test('abortPending() moves pending to aborted and clears pending', (t) => {
   state.setPending(pending);
   state.abortPending();
 
-  t.is(state.getPending(), null);
+  expect(state.getPending()).toBe(null);
 
   const aborted = state.consumeAborted();
-  t.truthy(aborted);
-  t.is(aborted?.state, pending.state);
-  t.is(aborted?.interruption, pending.interruption);
-  t.deepEqual(aborted?.emittedCommandIds, pending.emittedCommandIds);
-  t.deepEqual(aborted?.toolCallArgumentsById, pending.toolCallArgumentsById);
-  t.deepEqual(aborted?.owner, pending.owner);
+  expect(aborted).toBeTruthy();
+  expect(aborted?.state).toBe(pending.state);
+  expect(aborted?.interruption).toBe(pending.interruption);
+  expect(aborted?.emittedCommandIds).toEqual(pending.emittedCommandIds);
+  expect(aborted?.toolCallArgumentsById).toEqual(pending.toolCallArgumentsById);
+  expect(aborted?.owner).toEqual(pending.owner);
 });
 
-test('consumeAborted() returns aborted context and clears it', (t) => {
+it('consumeAborted() returns aborted context and clears it', () => {
   const state = new ApprovalState();
   const pending = {
     state: { id: 'state' } as any,
@@ -69,11 +69,11 @@ test('consumeAborted() returns aborted context and clears it', (t) => {
   state.abortPending();
 
   const aborted = state.consumeAborted();
-  t.truthy(aborted);
-  t.is(state.consumeAborted(), null);
+  expect(aborted).toBeTruthy();
+  expect(state.consumeAborted()).toBe(null);
 });
 
-test('abortPending carries forward removeInterceptor when set', (t) => {
+it('abortPending carries forward removeInterceptor when set', () => {
   const state = new ApprovalState();
   let interceptorCalled = false;
   const removeInterceptor = () => {
@@ -91,10 +91,10 @@ test('abortPending carries forward removeInterceptor when set', (t) => {
   state.abortPending();
 
   const aborted = state.consumeAborted();
-  t.truthy(aborted);
-  t.is(typeof aborted?.removeInterceptor, 'function', 'removeInterceptor should be carried to aborted context');
+  expect(aborted).toBeTruthy();
+  expect(typeof aborted?.removeInterceptor, 'removeInterceptor should be carried to aborted context').toBe('function');
 
   // Calling it should invoke the original cleanup
   aborted?.removeInterceptor?.();
-  t.true(interceptorCalled, 'removeInterceptor should delegate to the original cleanup function');
+  expect(interceptorCalled).toBe(true);
 });

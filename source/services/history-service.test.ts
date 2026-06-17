@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -34,7 +34,7 @@ const image = {
   displayNumber: 1,
 } as const;
 
-test('addMessage() stores multimodal turns and persists them', (t) => {
+it('addMessage() stores multimodal turns and persists them', () => {
   const { dir, historyFile } = createTempHistoryFile();
   try {
     const service = new HistoryService(createDeps(historyFile));
@@ -42,20 +42,20 @@ test('addMessage() stores multimodal turns and persists them', (t) => {
 
     service.addMessage(turn);
 
-    t.deepEqual(service.getTurns(), [turn]);
-    t.deepEqual(service.getMessages(), ['Describe this']);
+    expect(service.getTurns()).toEqual([turn]);
+    expect(service.getMessages()).toEqual(['Describe this']);
 
     const written = JSON.parse(fs.readFileSync(historyFile, 'utf-8')) as { messages: UserTurn[] };
-    t.deepEqual(written.messages, [turn]);
+    expect(written.messages).toEqual([turn]);
 
     const reloaded = new HistoryService(createDeps(historyFile));
-    t.deepEqual(reloaded.getTurns(), [turn]);
+    expect(reloaded.getTurns()).toEqual([turn]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('addMessage() stores image-only turns', (t) => {
+it('addMessage() stores image-only turns', () => {
   const { dir, historyFile } = createTempHistoryFile();
   try {
     const service = new HistoryService(createDeps(historyFile));
@@ -65,23 +65,23 @@ test('addMessage() stores image-only turns', (t) => {
       images: [image],
     });
 
-    t.is(service.getTurns().length, 1);
-    t.deepEqual(service.getTurns()[0], { text: '', images: [image] });
-    t.deepEqual(service.getMessages(), ['']);
+    expect(service.getTurns().length).toBe(1);
+    expect(service.getTurns()[0]).toEqual({ text: '', images: [image] });
+    expect(service.getMessages()).toEqual(['']);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('load() supports legacy string-only history files', (t) => {
+it('load() supports legacy string-only history files', () => {
   const { dir, historyFile } = createTempHistoryFile();
   try {
     fs.writeFileSync(historyFile, JSON.stringify({ messages: ['First', 'Second'] }, null, 2), 'utf-8');
 
     const service = new HistoryService(createDeps(historyFile));
 
-    t.deepEqual(service.getTurns(), [{ text: 'First' }, { text: 'Second' }]);
-    t.deepEqual(service.getMessages(), ['First', 'Second']);
+    expect(service.getTurns()).toEqual([{ text: 'First' }, { text: 'Second' }]);
+    expect(service.getMessages()).toEqual(['First', 'Second']);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

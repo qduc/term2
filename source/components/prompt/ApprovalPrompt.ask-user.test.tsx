@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import ApprovalPrompt from './ApprovalPrompt.js';
 import type { ApprovalDescriptor } from '../../contracts/conversation.js';
@@ -33,37 +32,35 @@ const baseApproval: ApprovalDescriptor = {
   rawInterruption: { type: 'ask_user' },
 };
 
-test.serial('ApprovalPrompt renders ask_user question and options', async (t) => {
+it.sequential('ApprovalPrompt renders ask_user question and options', async () => {
   const result = await renderInAct(
     <ApprovalPrompt approval={baseApproval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
-    t,
   );
   const { lastFrame } = result;
 
   const output = lastFrame() ?? '';
-  t.true(output.includes('Which option should I use?'));
-  t.true(output.includes('Use the safe default'));
-  t.true(output.includes('Use the faster option'));
-  t.true(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL));
-  t.true(output.includes(ASK_USER_DECLINE_LABEL));
-  t.false(output.includes('Allow this action?'));
-  t.false(output.includes('Approve'));
+  expect(output.includes('Which option should I use?')).toBe(true);
+  expect(output.includes('Use the safe default')).toBe(true);
+  expect(output.includes('Use the faster option')).toBe(true);
+  expect(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL)).toBe(true);
+  expect(output.includes(ASK_USER_DECLINE_LABEL)).toBe(true);
+  expect(output.includes('Allow this action?')).toBe(false);
+  expect(output.includes('Approve')).toBe(false);
 });
 
-test.serial('ApprovalPrompt ask_user navigation wraps around menu items', async (t) => {
+it.sequential('ApprovalPrompt ask_user navigation wraps around menu items', async () => {
   const { lastFrame, stdin } = await renderInAct(
     <ApprovalPrompt approval={baseApproval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
-    t,
   );
 
   await writeInput(stdin, '\u001b[A');
-  t.true((lastFrame() ?? '').includes(`\u276f ${ASK_USER_DECLINE_LABEL}`));
+  expect((lastFrame() ?? '').includes(`\u276f ${ASK_USER_DECLINE_LABEL}`)).toBe(true);
 
   await writeInput(stdin, '\u001b[B');
-  t.true((lastFrame() ?? '').includes('❯ Use the safe default (recommended)'));
+  expect((lastFrame() ?? '').includes('❯ Use the safe default (recommended)')).toBe(true);
 });
 
-test.serial('ApprovalPrompt ask_user Enter on an option calls onApprove with the option text', async (t) => {
+it.sequential('ApprovalPrompt ask_user Enter on an option calls onApprove with the option text', async () => {
   let approved: string | undefined;
   const { stdin } = await renderInAct(
     <ApprovalPrompt
@@ -74,14 +71,13 @@ test.serial('ApprovalPrompt ask_user Enter on an option calls onApprove with the
       onReject={() => {}}
       onTypeAnswer={() => {}}
     />,
-    t,
   );
 
   await writeInput(stdin, '\r');
-  t.is(approved, 'Use the safe default');
+  expect(approved).toBe('Use the safe default');
 });
 
-test.serial('ApprovalPrompt ask_user Enter on Decline to answer calls the decline approval value', async (t) => {
+it.sequential('ApprovalPrompt ask_user Enter on Decline to answer calls the decline approval value', async () => {
   let approved: string | undefined;
   const { stdin } = await renderInAct(
     <ApprovalPrompt
@@ -92,16 +88,15 @@ test.serial('ApprovalPrompt ask_user Enter on Decline to answer calls the declin
       onReject={() => {}}
       onTypeAnswer={() => {}}
     />,
-    t,
   );
 
   await writeInput(stdin, '\u001b[A');
   await writeInput(stdin, '\r');
 
-  t.is(approved, ASK_USER_DECLINE_RESULT);
+  expect(approved).toBe(ASK_USER_DECLINE_RESULT);
 });
 
-test.serial('ApprovalPrompt ask_user Enter on Type custom answer calls onTypeAnswer', async (t) => {
+it.sequential('ApprovalPrompt ask_user Enter on Type custom answer calls onTypeAnswer', async () => {
   let typedAnswer = 0;
   const approval: ApprovalDescriptor = {
     ...baseApproval,
@@ -124,7 +119,6 @@ test.serial('ApprovalPrompt ask_user Enter on Type custom answer calls onTypeAns
         typedAnswer += 1;
       }}
     />,
-    t,
   );
 
   // Menu: Option 0, Option 1, Type custom answer...(index 2), Decline(index 3)
@@ -132,10 +126,10 @@ test.serial('ApprovalPrompt ask_user Enter on Type custom answer calls onTypeAns
   await writeInput(stdin, '\u001B[B'); // down to Type custom answer...
   await writeInput(stdin, '\r');
 
-  t.is(typedAnswer, 1);
+  expect(typedAnswer).toBe(1);
 });
 
-test.serial('ApprovalPrompt ignores y and n keys for ask_user', async (t) => {
+it.sequential('ApprovalPrompt ignores y and n keys for ask_user', async () => {
   let approveCount = 0;
   let rejectCount = 0;
   const { stdin } = await renderInAct(
@@ -149,19 +143,18 @@ test.serial('ApprovalPrompt ignores y and n keys for ask_user', async (t) => {
       }}
       onTypeAnswer={() => {}}
     />,
-    t,
   );
 
   await writeInput(stdin, 'y');
   await writeInput(stdin, 'n');
 
-  t.is(approveCount, 0);
-  t.is(rejectCount, 0);
+  expect(approveCount).toBe(0);
+  expect(rejectCount).toBe(0);
 });
 
-test.serial(
+it.sequential(
   'ApprovalPrompt ask_user still shows custom answer and decline options without predefined options',
-  async (t) => {
+  async () => {
     const approval: ApprovalDescriptor = {
       ...baseApproval,
       argumentsText: JSON.stringify({
@@ -171,17 +164,16 @@ test.serial(
 
     const { lastFrame } = await renderInAct(
       <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
-      t,
     );
 
     const output = lastFrame() ?? '';
-    t.true(output.includes('Please answer this question'));
-    t.true(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL));
-    t.true(output.includes(ASK_USER_DECLINE_LABEL));
+    expect(output.includes('Please answer this question')).toBe(true);
+    expect(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL)).toBe(true);
+    expect(output.includes(ASK_USER_DECLINE_LABEL)).toBe(true);
   },
 );
 
-test.serial('ApprovalPrompt renders multi-select options with checkboxes', async (t) => {
+it.sequential('ApprovalPrompt renders multi-select options with checkboxes', async () => {
   const approval: ApprovalDescriptor = {
     agentName: 'Agent',
     toolName: 'ask_user',
@@ -199,17 +191,16 @@ test.serial('ApprovalPrompt renders multi-select options with checkboxes', async
 
   const { lastFrame } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
-    t,
   );
 
   const output = lastFrame() ?? '';
-  t.true(output.includes('[ ] git'));
-  t.true(output.includes('[ ] npm'));
-  t.true(output.includes('[ ] cargo'));
-  t.true(output.includes('[Confirm selections]'));
+  expect(output.includes('[ ] git')).toBe(true);
+  expect(output.includes('[ ] npm')).toBe(true);
+  expect(output.includes('[ ] cargo')).toBe(true);
+  expect(output.includes('[Confirm selections]')).toBe(true);
 });
 
-test.serial('ApprovalPrompt toggles multi-select options and submits on Confirm', async (t) => {
+it.sequential('ApprovalPrompt toggles multi-select options and submits on Confirm', async () => {
   const approval: ApprovalDescriptor = {
     agentName: 'Agent',
     toolName: 'ask_user',
@@ -235,16 +226,15 @@ test.serial('ApprovalPrompt toggles multi-select options and submits on Confirm'
       onReject={() => {}}
       onTypeAnswer={() => {}}
     />,
-    t,
   );
 
   // Toggle first option (git)
   await writeInput(stdin, '\r');
-  t.true((lastFrame() ?? '').includes('[x] git'));
+  expect((lastFrame() ?? '').includes('[x] git')).toBe(true);
   // Move down to second option (npm) and toggle it
   await writeInput(stdin, '\u001b[B');
   await writeInput(stdin, '\r');
-  t.true((lastFrame() ?? '').includes('[x] npm'));
+  expect((lastFrame() ?? '').includes('[x] npm')).toBe(true);
 
   // Move down to "[Confirm selections]" (which is at index 3: git at 0, npm at 1, cargo at 2, Confirm selections at 3)
   // Currently we are at index 1 (npm). Move down twice to reach index 3.
@@ -252,10 +242,10 @@ test.serial('ApprovalPrompt toggles multi-select options and submits on Confirm'
   await writeInput(stdin, '\u001b[B');
   await writeInput(stdin, '\r');
 
-  t.deepEqual(JSON.parse(approved || '[]'), ['git', 'npm']);
+  expect(JSON.parse(approved || '[]')).toEqual(['git', 'npm']);
 });
 
-test.serial('ApprovalPrompt renders question index prefix for multiple questions', async (t) => {
+it.sequential('ApprovalPrompt renders question index prefix for multiple questions', async () => {
   const approval: ApprovalDescriptor = {
     agentName: 'Agent',
     toolName: 'ask_user',
@@ -273,16 +263,15 @@ test.serial('ApprovalPrompt renders question index prefix for multiple questions
       onTypeAnswer={() => {}}
       currentQuestionIndex={1}
     />,
-    t,
   );
 
   const output = lastFrame() ?? '';
-  t.true(output.includes('[Question 2/2] Second question'));
+  expect(output.includes('[Question 2/2] Second question')).toBe(true);
 });
 
-test.serial(
+it.sequential(
   'ApprovalPrompt displays custom typing message and suppresses keys when waitingForAskUserAnswer is true',
-  async (t) => {
+  async () => {
     let approved: string | undefined;
     const { lastFrame, stdin } = await renderInAct(
       <ApprovalPrompt
@@ -294,15 +283,14 @@ test.serial(
         onTypeAnswer={() => {}}
         waitingForAskUserAnswer={true}
       />,
-      t,
     );
 
     const output = lastFrame() ?? '';
-    t.true(output.includes('Type your custom answer in the prompt below'));
-    t.false(output.includes('Use the safe default'));
+    expect(output.includes('Type your custom answer in the prompt below')).toBe(true);
+    expect(output.includes('Use the safe default')).toBe(false);
 
     // Pressing Enter should do nothing because key input is suppressed
     await writeInput(stdin, '\r');
-    t.is(approved, undefined);
+    expect(approved).toBe(undefined);
   },
 );

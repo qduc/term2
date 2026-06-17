@@ -1,5 +1,4 @@
-import test from 'ava';
-
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { PendingApproval } from '../contracts/conversation.js';
 import { conversationUIReducer, createInitialUIState, type ConversationUIState } from './conversation-ui-reducer.js';
 
@@ -21,29 +20,29 @@ const askUserApprovalFixture: PendingApproval = {
 // createInitialUIState
 // ---------------------------------------------------------------------------
 
-test('createInitialUIState returns all defaults', (t) => {
+it('createInitialUIState returns all defaults', () => {
   const state = createInitialUIState(null);
-  t.is(state.isProcessing, false);
-  t.is(state.thinkingStartedAt, null);
-  t.is(state.toolCallStreamingInfo, null);
-  t.is(state.waitingForApproval, false);
-  t.is(state.pendingApproval, null);
-  t.is(state.askUserAnswers.length, 0);
-  t.is(state.lastUsage, null);
-  t.is(state.lastCodexRateLimit, null);
+  expect(state.isProcessing).toBe(false);
+  expect(state.thinkingStartedAt).toBe(null);
+  expect(state.toolCallStreamingInfo).toBe(null);
+  expect(state.waitingForApproval).toBe(false);
+  expect(state.pendingApproval).toBe(null);
+  expect(state.askUserAnswers.length).toBe(0);
+  expect(state.lastUsage).toBe(null);
+  expect(state.lastCodexRateLimit).toBe(null);
 });
 
-test('createInitialUIState preserves initial usage', (t) => {
+it('createInitialUIState preserves initial usage', () => {
   const usage = { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 };
   const state = createInitialUIState(usage);
-  t.deepEqual(state.lastUsage, usage);
+  expect(state.lastUsage).toEqual(usage);
 });
 
 // ---------------------------------------------------------------------------
 // Turn lifecycle
 // ---------------------------------------------------------------------------
 
-test('turn/started sets processing and clears indicators', (t) => {
+it('turn/started sets processing and clears indicators', () => {
   const prev: ConversationUIState = {
     ...createInitialUIState(null),
     isProcessing: false,
@@ -51,78 +50,78 @@ test('turn/started sets processing and clears indicators', (t) => {
     toolCallStreamingInfo: { toolName: 'shell', argumentCharCount: 5 },
   };
   const next = conversationUIReducer(prev, { type: 'turn/started' });
-  t.is(next.isProcessing, true);
-  t.is(next.thinkingStartedAt, null);
-  t.is(next.toolCallStreamingInfo, null);
+  expect(next.isProcessing).toBe(true);
+  expect(next.thinkingStartedAt).toBe(null);
+  expect(next.toolCallStreamingInfo).toBe(null);
 });
 
-test('turn/completed clears processing and thinking', (t) => {
+it('turn/completed clears processing and thinking', () => {
   const prev: ConversationUIState = {
     ...createInitialUIState(null),
     isProcessing: true,
     thinkingStartedAt: 2000,
   };
   const next = conversationUIReducer(prev, { type: 'turn/completed' });
-  t.is(next.isProcessing, false);
-  t.is(next.thinkingStartedAt, null);
+  expect(next.isProcessing).toBe(false);
+  expect(next.thinkingStartedAt).toBe(null);
 });
 
 // ---------------------------------------------------------------------------
 // Streaming indicators
 // ---------------------------------------------------------------------------
 
-test('streaming/thinking_started sets timestamp on first call', (t) => {
+it('streaming/thinking_started sets timestamp on first call', () => {
   const state = createInitialUIState(null);
   const next = conversationUIReducer(state, { type: 'streaming/thinking_started', timestamp: 1000 });
-  t.is(next.thinkingStartedAt, 1000);
+  expect(next.thinkingStartedAt).toBe(1000);
 });
 
-test('streaming/thinking_started preserves existing timestamp', (t) => {
+it('streaming/thinking_started preserves existing timestamp', () => {
   const prev: ConversationUIState = { ...createInitialUIState(null), thinkingStartedAt: 500 };
   const next = conversationUIReducer(prev, { type: 'streaming/thinking_started', timestamp: 1000 });
-  t.is(next.thinkingStartedAt, 500);
+  expect(next.thinkingStartedAt).toBe(500);
 });
 
-test('streaming/thinking_cleared resets timestamp', (t) => {
+it('streaming/thinking_cleared resets timestamp', () => {
   const prev: ConversationUIState = { ...createInitialUIState(null), thinkingStartedAt: 500 };
   const next = conversationUIReducer(prev, { type: 'streaming/thinking_cleared' });
-  t.is(next.thinkingStartedAt, null);
+  expect(next.thinkingStartedAt).toBe(null);
 });
 
-test('streaming/tool_info sets info', (t) => {
+it('streaming/tool_info sets info', () => {
   const state = createInitialUIState(null);
   const next = conversationUIReducer(state, {
     type: 'streaming/tool_info',
     info: { toolName: 'shell', argumentCharCount: 10 },
   });
-  t.deepEqual(next.toolCallStreamingInfo, { toolName: 'shell', argumentCharCount: 10 });
+  expect(next.toolCallStreamingInfo).toEqual({ toolName: 'shell', argumentCharCount: 10 });
 });
 
-test('streaming/tool_info null clears info', (t) => {
+it('streaming/tool_info null clears info', () => {
   const prev: ConversationUIState = {
     ...createInitialUIState(null),
     toolCallStreamingInfo: { toolName: 'shell', argumentCharCount: 10 },
   };
   const next = conversationUIReducer(prev, { type: 'streaming/tool_info', info: null });
-  t.is(next.toolCallStreamingInfo, null);
+  expect(next.toolCallStreamingInfo).toBe(null);
 });
 
 // ---------------------------------------------------------------------------
 // Approval flow
 // ---------------------------------------------------------------------------
 
-test('approval/requested sets approval state', (t) => {
+it('approval/requested sets approval state', () => {
   const state = createInitialUIState(null);
   const next = conversationUIReducer(state, {
     type: 'approval/requested',
     approval: approvalFixture,
   });
-  t.is(next.waitingForApproval, true);
-  t.deepEqual(next.pendingApproval, approvalFixture);
-  t.is(next.waitingForAskUserAnswer, false);
+  expect(next.waitingForApproval).toBe(true);
+  expect(next.pendingApproval).toEqual(approvalFixture);
+  expect(next.waitingForAskUserAnswer).toBe(false);
 });
 
-test('approval/requested for ask_user resets ask_user state', (t) => {
+it('approval/requested for ask_user resets ask_user state', () => {
   const prev: ConversationUIState = {
     ...createInitialUIState(null),
     askUserAnswers: ['old'],
@@ -133,11 +132,11 @@ test('approval/requested for ask_user resets ask_user state', (t) => {
     type: 'approval/requested',
     approval: askUserApprovalFixture,
   });
-  t.deepEqual(next.askUserAnswers, []);
-  t.is(next.currentAskUserQuestionIndex, 0);
+  expect(next.askUserAnswers).toEqual([]);
+  expect(next.currentAskUserQuestionIndex).toBe(0);
 });
 
-test('approval/resolved clears all approval state', (t) => {
+it('approval/resolved clears all approval state', () => {
   const prev: ConversationUIState = {
     ...createInitialUIState(null),
     waitingForApproval: true,
@@ -147,112 +146,112 @@ test('approval/resolved clears all approval state', (t) => {
     currentAskUserQuestionIndex: 1,
   };
   const next = conversationUIReducer(prev, { type: 'approval/resolved' });
-  t.is(next.waitingForApproval, false);
-  t.is(next.pendingApproval, null);
-  t.is(next.waitingForAskUserAnswer, false);
-  t.deepEqual(next.askUserAnswers, []);
-  t.is(next.currentAskUserQuestionIndex, 0);
+  expect(next.waitingForApproval).toBe(false);
+  expect(next.pendingApproval).toBe(null);
+  expect(next.waitingForAskUserAnswer).toBe(false);
+  expect(next.askUserAnswers).toEqual([]);
+  expect(next.currentAskUserQuestionIndex).toBe(0);
 });
 
 // ---------------------------------------------------------------------------
 // Ask user sub-flow
 // ---------------------------------------------------------------------------
 
-test('ask_user/set_waiting enables waiting', (t) => {
+it('ask_user/set_waiting enables waiting', () => {
   const state = createInitialUIState(null);
   const next = conversationUIReducer(state, { type: 'ask_user/set_waiting' });
-  t.is(next.waitingForAskUserAnswer, true);
+  expect(next.waitingForAskUserAnswer).toBe(true);
 });
 
-test('ask_user/answer_submitted appends answer', (t) => {
+it('ask_user/answer_submitted appends answer', () => {
   const prev: ConversationUIState = {
     ...createInitialUIState(null),
     askUserAnswers: ['first'],
   };
   const next = conversationUIReducer(prev, { type: 'ask_user/answer_submitted', answer: 'second' });
-  t.deepEqual(next.askUserAnswers, ['first', 'second']);
+  expect(next.askUserAnswers).toEqual(['first', 'second']);
 });
 
-test('ask_user/advance_to_next updates index and clears waiting', (t) => {
+it('ask_user/advance_to_next updates index and clears waiting', () => {
   const prev: ConversationUIState = {
     ...createInitialUIState(null),
     currentAskUserQuestionIndex: 0,
     waitingForAskUserAnswer: true,
   };
   const next = conversationUIReducer(prev, { type: 'ask_user/advance_to_next', nextIndex: 1 });
-  t.is(next.currentAskUserQuestionIndex, 1);
-  t.is(next.waitingForAskUserAnswer, false);
+  expect(next.currentAskUserQuestionIndex).toBe(1);
+  expect(next.waitingForAskUserAnswer).toBe(false);
 });
 
 // ---------------------------------------------------------------------------
 // Max turns
 // ---------------------------------------------------------------------------
 
-test('max_turns/approved clears approval and starts processing', (t) => {
+it('max_turns/approved clears approval and starts processing', () => {
   const prev: ConversationUIState = {
     ...createInitialUIState(null),
     waitingForApproval: true,
     pendingApproval: { ...approvalFixture, isMaxTurnsPrompt: true },
   };
   const next = conversationUIReducer(prev, { type: 'max_turns/approved' });
-  t.is(next.isProcessing, true);
-  t.is(next.waitingForApproval, false);
-  t.is(next.pendingApproval, null);
+  expect(next.isProcessing).toBe(true);
+  expect(next.waitingForApproval).toBe(false);
+  expect(next.pendingApproval).toBe(null);
 });
 
-test('max_turns/declined clears approval without starting processing', (t) => {
+it('max_turns/declined clears approval without starting processing', () => {
   const prev: ConversationUIState = {
     ...createInitialUIState(null),
     waitingForApproval: true,
     pendingApproval: { ...approvalFixture, isMaxTurnsPrompt: true },
   };
   const next = conversationUIReducer(prev, { type: 'max_turns/declined' });
-  t.is(next.isProcessing, false);
-  t.is(next.waitingForApproval, false);
-  t.is(next.pendingApproval, null);
+  expect(next.isProcessing).toBe(false);
+  expect(next.waitingForApproval).toBe(false);
+  expect(next.pendingApproval).toBe(null);
 });
 
 // ---------------------------------------------------------------------------
 // Usage
 // ---------------------------------------------------------------------------
 
-test('usage/updated sets usage', (t) => {
+it('usage/updated sets usage', () => {
   const state = createInitialUIState(null);
   const usage = { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 };
   const next = conversationUIReducer(state, { type: 'usage/updated', usage });
-  t.deepEqual(next.lastUsage, usage);
+  expect(next.lastUsage).toEqual(usage);
 });
 
-test('usage/cleared resets usage', (t) => {
+it('usage/cleared resets usage', () => {
   const prev: ConversationUIState = {
     ...createInitialUIState(null),
     lastUsage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
   };
   const next = conversationUIReducer(prev, { type: 'usage/cleared' });
-  t.is(next.lastUsage, null);
+  expect(next.lastUsage).toBe(null);
 });
 
-test('rate_limit/updated sets rate limit', (t) => {
+it('rate_limit/updated sets rate limit', () => {
   const state = createInitialUIState(null);
   const rateLimit = { allowed: false, limit_reached: true };
   const next = conversationUIReducer(state, { type: 'rate_limit/updated', rateLimit });
-  t.deepEqual(next.lastCodexRateLimit, rateLimit);
+  expect(next.lastCodexRateLimit).toEqual(rateLimit);
 });
 
-test('rate_limit/cleared resets rate limit', (t) => {
+it('rate_limit/cleared resets rate limit', () => {
   const prev: ConversationUIState = {
     ...createInitialUIState(null),
     lastCodexRateLimit: { allowed: true, limit_reached: false },
   };
   const next = conversationUIReducer(prev, { type: 'rate_limit/cleared' });
-  t.is(next.lastCodexRateLimit, null);
+  expect(next.lastCodexRateLimit).toBe(null);
 });
 
 // ---------------------------------------------------------------------------
 // Compound resets
 // ---------------------------------------------------------------------------
 
-test('reset_transient clears all transient state but preserves usage', (t) => {
+it('reset_transient clears all transient state but preserves usage', () => {
   const prev: ConversationUIState = {
     isProcessing: true,
     thinkingStartedAt: 1000,
@@ -267,21 +266,21 @@ test('reset_transient clears all transient state but preserves usage', (t) => {
     lastCodexRateLimit: { allowed: true, limit_reached: false },
   };
   const next = conversationUIReducer(prev, { type: 'reset_transient' });
-  t.is(next.isProcessing, false);
-  t.is(next.thinkingStartedAt, null);
-  t.is(next.toolCallStreamingInfo, null);
-  t.is(next.waitingForApproval, false);
-  t.is(next.pendingApproval, null);
-  t.is(next.waitingForRejectionReason, false);
-  t.is(next.waitingForAskUserAnswer, false);
-  t.deepEqual(next.askUserAnswers, []);
-  t.is(next.currentAskUserQuestionIndex, 0);
+  expect(next.isProcessing).toBe(false);
+  expect(next.thinkingStartedAt).toBe(null);
+  expect(next.toolCallStreamingInfo).toBe(null);
+  expect(next.waitingForApproval).toBe(false);
+  expect(next.pendingApproval).toBe(null);
+  expect(next.waitingForRejectionReason).toBe(false);
+  expect(next.waitingForAskUserAnswer).toBe(false);
+  expect(next.askUserAnswers).toEqual([]);
+  expect(next.currentAskUserQuestionIndex).toBe(0);
   // Usage preserved
-  t.deepEqual(next.lastUsage, prev.lastUsage);
-  t.deepEqual(next.lastCodexRateLimit, prev.lastCodexRateLimit);
+  expect(next.lastUsage).toEqual(prev.lastUsage);
+  expect(next.lastCodexRateLimit).toEqual(prev.lastCodexRateLimit);
 });
 
-test('reset_all clears everything including usage', (t) => {
+it('reset_all clears everything including usage', () => {
   const prev: ConversationUIState = {
     isProcessing: true,
     thinkingStartedAt: 1000,
@@ -296,21 +295,21 @@ test('reset_all clears everything including usage', (t) => {
     lastCodexRateLimit: { allowed: true, limit_reached: false },
   };
   const next = conversationUIReducer(prev, { type: 'reset_all' });
-  t.is(next.isProcessing, false);
-  t.is(next.thinkingStartedAt, null);
-  t.is(next.toolCallStreamingInfo, null);
-  t.is(next.waitingForApproval, false);
-  t.is(next.pendingApproval, null);
-  t.is(next.lastUsage, null);
-  t.is(next.lastCodexRateLimit, null);
+  expect(next.isProcessing).toBe(false);
+  expect(next.thinkingStartedAt).toBe(null);
+  expect(next.toolCallStreamingInfo).toBe(null);
+  expect(next.waitingForApproval).toBe(false);
+  expect(next.pendingApproval).toBe(null);
+  expect(next.lastUsage).toBe(null);
+  expect(next.lastCodexRateLimit).toBe(null);
 });
 
 // ---------------------------------------------------------------------------
 // Immutability
 // ---------------------------------------------------------------------------
 
-test('reducer returns new object references', (t) => {
+it('reducer returns new object references', () => {
   const state = createInitialUIState(null);
   const next = conversationUIReducer(state, { type: 'turn/started' });
-  t.not(state, next);
+  expect(state).not.toBe(next);
 });

@@ -1,8 +1,8 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ConversationStore } from '../conversation/conversation-store.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 
-test('dedupeToolStarted scopes subagent starts by agent and call ID', (t) => {
+it('dedupeToolStarted scopes subagent starts by agent and call ID', () => {
   const tracker = new SessionToolTracker(new ConversationStore());
   const event = {
     type: 'subagent_tool_started' as const,
@@ -13,7 +13,7 @@ test('dedupeToolStarted scopes subagent starts by agent and call ID', (t) => {
     arguments: { command: 'pwd' },
   };
 
-  t.is(tracker.dedupeToolStarted(event), event);
-  t.is(tracker.dedupeToolStarted(event), null);
-  t.truthy(tracker.dedupeToolStarted({ ...event, agentId: 'worker-2' }));
+  expect(tracker.dedupeToolStarted(event)).toBe(event);
+  expect(tracker.dedupeToolStarted(event)).toBe(null);
+  expect(tracker.dedupeToolStarted({ ...event, agentId: 'worker-2' })).toBeTruthy();
 });

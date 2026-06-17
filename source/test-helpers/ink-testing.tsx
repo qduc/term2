@@ -8,9 +8,21 @@ type TeardownContext = {
 
 type InkRenderResult = ReturnType<typeof render>;
 
+// Module-level store for teardown callbacks when no AVA-style context is provided.
+const teardownCallbacks: Array<() => void | Promise<void>> = [];
+
+/**
+ * Run all pending teardowns (call from vitest's afterEach or onTestFinished).
+ */
+export const runTeardowns = async (): Promise<void> => {
+  for (const cb of teardownCallbacks.splice(0)) {
+    await cb();
+  }
+};
+
 export const toVisibleText = (value: string): string => stripVTControlCharacters(value);
 
-export const renderInAct = async (element: React.ReactElement, context: TeardownContext): Promise<InkRenderResult> => {
+export const renderInAct = async (element: React.ReactElement, context?: TeardownContext): Promise<InkRenderResult> => {
   let result!: InkRenderResult;
 
   await act(async () => {
@@ -18,7 +30,13 @@ export const renderInAct = async (element: React.ReactElement, context: Teardown
     await Promise.resolve();
   });
 
-  context.teardown(async () => {
+  const schedule =
+    context?.teardown ??
+    ((fn: () => void | Promise<void>) => {
+      teardownCallbacks.push(fn);
+    });
+
+  schedule(async () => {
     await act(async () => {
       result.unmount();
     });

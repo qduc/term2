@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ModelBehaviorError } from '@openai/agents';
 import { OpenAICompatibleError } from '../../providers/common/provider-errors.js';
 import type { ClassificationContext } from './retry-contracts.js';
@@ -22,7 +22,7 @@ const baseContext = (overrides: Partial<ClassificationContext> = {}): Classifica
   ...overrides,
 });
 
-test('classify does not return service_tier_fallback when already attempted', (t) => {
+it('classify does not return service_tier_fallback when already attempted', () => {
   const classifier = makeClassifier({ shouldRetryWithoutFlexServiceTier: () => true });
 
   const result = classifier.classify(
@@ -31,10 +31,10 @@ test('classify does not return service_tier_fallback when already attempted', (t
     }),
   );
 
-  t.not(result.kind, 'service_tier_fallback');
+  expect(result.kind).not.toBe('service_tier_fallback');
 });
 
-test('classify does not call forceTransportDowngrade for non-retryable errors', (t) => {
+it('classify does not call forceTransportDowngrade for non-retryable errors', () => {
   let downgradeCalled = false;
   const classifier = makeClassifier({
     forceTransportDowngrade: () => {
@@ -45,11 +45,11 @@ test('classify does not call forceTransportDowngrade for non-retryable errors', 
 
   const result = classifier.classify(baseContext({ error: new Error('boom') }));
 
-  t.is(result.kind, 'unrecoverable');
-  t.false(downgradeCalled);
+  expect(result.kind).toBe('unrecoverable');
+  expect(downgradeCalled).toBe(false);
 });
 
-test('classify returns model_retry for recoverable model error with error context', (t) => {
+it('classify returns model_retry for recoverable model error with error context', () => {
   const classifier = makeClassifier();
 
   const result = classifier.classify(
@@ -60,13 +60,13 @@ test('classify returns model_retry for recoverable model error with error contex
     }),
   );
 
-  t.is(result.kind, 'model_retry');
+  expect(result.kind).toBe('model_retry');
   if (result.kind !== 'model_retry') return;
-  t.truthy(result.errorContext);
-  t.true(result.errorContext!.includes('fake_tool'));
+  expect(result.errorContext).toBeTruthy();
+  expect(result.errorContext!.includes('fake_tool')).toBe(true);
 });
 
-test('classify returns model_retry without error context when stream produced no history', (t) => {
+it('classify returns model_retry without error context when stream produced no history', () => {
   const classifier = makeClassifier();
 
   const result = classifier.classify(
@@ -76,12 +76,12 @@ test('classify returns model_retry without error context when stream produced no
     }),
   );
 
-  t.is(result.kind, 'model_retry');
+  expect(result.kind).toBe('model_retry');
   if (result.kind !== 'model_retry') return;
-  t.is(result.errorContext, undefined);
+  expect(result.errorContext).toBe(undefined);
 });
 
-test('classify returns unrecoverable when all retry limits are exhausted', (t) => {
+it('classify returns unrecoverable when all retry limits are exhausted', () => {
   const classifier = makeClassifier({
     shouldRetryWithoutFlexServiceTier: () => true,
     forceTransportDowngrade: () => true,
@@ -99,26 +99,26 @@ test('classify returns unrecoverable when all retry limits are exhausted', (t) =
     }),
   );
 
-  t.deepEqual(result, { kind: 'unrecoverable' });
+  expect(result).toEqual({ kind: 'unrecoverable' });
 });
 
-test('classify returns unrecoverable for generic non-retryable error', (t) => {
+it('classify returns unrecoverable for generic non-retryable error', () => {
   const classifier = makeClassifier();
 
   const result = classifier.classify(baseContext({ error: new Error('unknown') }));
 
-  t.deepEqual(result, { kind: 'unrecoverable' });
+  expect(result).toEqual({ kind: 'unrecoverable' });
 });
 
-test('classify returns unrecoverable for 400 status error', (t) => {
+it('classify returns unrecoverable for 400 status error', () => {
   const classifier = makeClassifier();
 
   const result = classifier.classify(baseContext({ error: new OpenAICompatibleError('bad request', 400, {}) }));
 
-  t.deepEqual(result, { kind: 'unrecoverable' });
+  expect(result).toEqual({ kind: 'unrecoverable' });
 });
 
-test('classify returns transport_downgrade for previous_response_not_found websocket 400 payload', (t) => {
+it('classify returns transport_downgrade for previous_response_not_found websocket 400 payload', () => {
   const classifier = makeClassifier();
   const error = Object.assign(
     new Error(
@@ -127,19 +127,19 @@ test('classify returns transport_downgrade for previous_response_not_found webso
     { status: 400 },
   );
 
-  t.is(classifier.classify(baseContext({ error })).kind, 'transport_downgrade');
+  expect(classifier.classify(baseContext({ error })).kind).toBe('transport_downgrade');
 });
 
-test('classify leaves unrelated websocket 400 errors unrecoverable', (t) => {
+it('classify leaves unrelated websocket 400 errors unrecoverable', () => {
   const classifier = makeClassifier();
   const error = Object.assign(new Error('Unexpected server response: 400 {"error":{"code":"invalid_request_error"}}'), {
     status: 400,
   });
 
-  t.deepEqual(classifier.classify(baseContext({ error })), { kind: 'unrecoverable' });
+  expect(classifier.classify(baseContext({ error }))).toEqual({ kind: 'unrecoverable' });
 });
 
-test('classify returns unrecoverable when model retry count exceeds max', (t) => {
+it('classify returns unrecoverable when model retry count exceeds max', () => {
   const classifier = makeClassifier();
 
   const result = classifier.classify(
@@ -150,10 +150,10 @@ test('classify returns unrecoverable when model retry count exceeds max', (t) =>
     }),
   );
 
-  t.is(result.kind, 'unrecoverable');
+  expect(result.kind).toBe('unrecoverable');
 });
 
-test('classify returns transient for undici onSocketClose TypeError mid-stream', (t) => {
+it('classify returns transient for undici onSocketClose TypeError mid-stream', () => {
   const classifier = makeClassifier();
 
   const undiciSocketClose = new TypeError();
@@ -172,13 +172,13 @@ test('classify returns transient for undici onSocketClose TypeError mid-stream',
     }),
   );
 
-  t.is(result.kind, 'transient');
+  expect(result.kind).toBe('transient');
   if (result.kind !== 'transient') return;
-  t.is(result.attempt, 1);
-  t.true(result.delayMs > 0 && result.delayMs <= 30000);
+  expect(result.attempt).toBe(1);
+  expect(result.delayMs > 0 && result.delayMs <= 30000).toBe(true);
 });
 
-test('classify returns transient for ECONNRESET socket error', (t) => {
+it('classify returns transient for ECONNRESET socket error', () => {
   const classifier = makeClassifier();
 
   const result = classifier.classify(
@@ -188,10 +188,10 @@ test('classify returns transient for ECONNRESET socket error', (t) => {
     }),
   );
 
-  t.is(result.kind, 'transient');
+  expect(result.kind).toBe('transient');
 });
 
-test('classify returns unrecoverable when transient retries are exhausted', (t) => {
+it('classify returns unrecoverable when transient retries are exhausted', () => {
   const classifier = makeClassifier();
 
   const undiciSocketClose = new TypeError();
@@ -209,10 +209,10 @@ test('classify returns unrecoverable when transient retries are exhausted', (t) 
     }),
   );
 
-  t.is(result.kind, 'unrecoverable');
+  expect(result.kind).toBe('unrecoverable');
 });
 
-test('classify returns unrecoverable for plain TypeError (non-undici) with empty message', (t) => {
+it('classify returns unrecoverable for plain TypeError (non-undici) with empty message', () => {
   const classifier = makeClassifier();
 
   const plain = new TypeError();
@@ -225,10 +225,10 @@ test('classify returns unrecoverable for plain TypeError (non-undici) with empty
     }),
   );
 
-  t.is(result.kind, 'unrecoverable');
+  expect(result.kind).toBe('unrecoverable');
 });
 
-test('classify transient attempt count increments with prior transient retries', (t) => {
+it('classify transient attempt count increments with prior transient retries', () => {
   const classifier = makeClassifier();
 
   const undiciSocketClose = new TypeError();
@@ -244,12 +244,12 @@ test('classify transient attempt count increments with prior transient retries',
     }),
   );
 
-  t.is(result.kind, 'transient');
+  expect(result.kind).toBe('transient');
   if (result.kind !== 'transient') return;
-  t.is(result.attempt, 3);
+  expect(result.attempt).toBe(3);
 });
 
-test('classify returns transient for re-wrapped undici onSocketClose (Error with message "TypeError")', (t) => {
+it('classify returns transient for re-wrapped undici onSocketClose (Error with message "TypeError")', () => {
   const classifier = makeClassifier();
 
   const rewrapped = new Error('TypeError');
@@ -268,13 +268,13 @@ test('classify returns transient for re-wrapped undici onSocketClose (Error with
     }),
   );
 
-  t.is(result.kind, 'transient');
+  expect(result.kind).toBe('transient');
   if (result.kind !== 'transient') return;
-  t.is(result.attempt, 1);
-  t.true(result.delayMs > 0 && result.delayMs <= 30000);
+  expect(result.attempt).toBe(1);
+  expect(result.delayMs > 0 && result.delayMs <= 30000).toBe(true);
 });
 
-test('classify returns unrecoverable for plain Error with message "TypeError" but no undici stack', (t) => {
+it('classify returns unrecoverable for plain Error with message "TypeError" but no undici stack', () => {
   const classifier = makeClassifier();
 
   const plain = new Error('TypeError');
@@ -287,5 +287,5 @@ test('classify returns unrecoverable for plain Error with message "TypeError" bu
     }),
   );
 
-  t.is(result.kind, 'unrecoverable');
+  expect(result.kind).toBe('unrecoverable');
 });

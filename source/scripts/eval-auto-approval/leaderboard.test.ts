@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -21,19 +21,19 @@ import {
 
 const tmpDir = join(tmpdir(), 'leaderboard-test-' + Math.random().toString(36).slice(2));
 
-test.before(() => {
+beforeAll(() => {
   mkdirSync(tmpDir, { recursive: true });
 });
 
-test.after.always(() => {
+afterAll(() => {
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
-test('calculateModelScore favors broad high-pass runs over tiny perfect subsets', (t) => {
-  t.true(calculateModelScore(95, 100) > calculateModelScore(10, 10));
+it('calculateModelScore favors broad high-pass runs over tiny perfect subsets', () => {
+  expect(calculateModelScore(95, 100) > calculateModelScore(10, 10)).toBe(true);
 });
 
-test('buildModelLeaderboard ranks broader strong models above tiny perfect subsets', (t) => {
+it('buildModelLeaderboard ranks broader strong models above tiny perfect subsets', () => {
   const broadModelRecords: ModelResultRecord[] = Array.from({ length: 100 }, (_, index) => ({
     caseId: `broad-${index + 1}`,
     command: `command-${index + 1}`,
@@ -62,14 +62,14 @@ test('buildModelLeaderboard ranks broader strong models above tiny perfect subse
 
   const leaderboard = buildModelLeaderboard([...broadModelRecords, ...tinyPerfectRecords]);
 
-  t.is(leaderboard[0]?.model, 'broad-model');
-  t.is(leaderboard[0]?.passed, 95);
-  t.is(leaderboard[0]?.casesRun, 100);
-  t.is(leaderboard[1]?.model, 'tiny-perfect-model');
-  t.is(leaderboard[1]?.score, 10);
+  expect(leaderboard[0]?.model).toBe('broad-model');
+  expect(leaderboard[0]?.passed).toBe(95);
+  expect(leaderboard[0]?.casesRun).toBe(100);
+  expect(leaderboard[1]?.model).toBe('tiny-perfect-model');
+  expect(leaderboard[1]?.score).toBe(10);
 });
 
-test('prompt version helpers keep legacy records separate from current prompt results', (t) => {
+it('prompt version helpers keep legacy records separate from current prompt results', () => {
   const records: ModelResultRecord[] = [
     {
       caseId: 'legacy-case',
@@ -98,18 +98,16 @@ test('prompt version helpers keep legacy records separate from current prompt re
     },
   ];
 
-  t.is(getRecordPromptVersion(records[0]!), LEGACY_PROMPT_VERSION);
-  t.deepEqual(
-    filterModelResultsByPromptVersion(records, 'auto-approval-prompt-v1').map((record) => record.caseId),
-    ['current-case'],
-  );
-  t.deepEqual(
-    filterModelResultsByPromptVersion(records, LEGACY_PROMPT_VERSION).map((record) => record.caseId),
-    ['legacy-case'],
-  );
+  expect(getRecordPromptVersion(records[0]!)).toBe(LEGACY_PROMPT_VERSION);
+  expect(filterModelResultsByPromptVersion(records, 'auto-approval-prompt-v1').map((record) => record.caseId)).toEqual([
+    'current-case',
+  ]);
+  expect(filterModelResultsByPromptVersion(records, LEGACY_PROMPT_VERSION).map((record) => record.caseId)).toEqual([
+    'legacy-case',
+  ]);
 });
 
-test('buildModelLeaderboard can rank only records from one prompt version', (t) => {
+it('buildModelLeaderboard can rank only records from one prompt version', () => {
   const records: ModelResultRecord[] = [
     {
       caseId: 'case-1',
@@ -140,12 +138,12 @@ test('buildModelLeaderboard can rank only records from one prompt version', (t) 
 
   const leaderboard = buildModelLeaderboard(records, { promptVersion: 'auto-approval-prompt-v1' });
 
-  t.is(leaderboard.length, 1);
-  t.is(leaderboard[0]?.model, 'current-loser');
-  t.is(leaderboard[0]?.passed, 0);
+  expect(leaderboard.length).toBe(1);
+  expect(leaderboard[0]?.model).toBe('current-loser');
+  expect(leaderboard[0]?.passed).toBe(0);
 });
 
-test('mergeModelResults accumulates unique cases and replaces duplicate case results with the latest run', (t) => {
+it('mergeModelResults accumulates unique cases and replaces duplicate case results with the latest run', () => {
   const olderRun: ModelResultRecord[] = [
     {
       caseId: 'case-1',
@@ -190,14 +188,11 @@ test('mergeModelResults accumulates unique cases and replaces duplicate case res
 
   const merged = mergeModelResults(olderRun, newerRun);
 
-  t.is(merged.length, 2);
-  t.deepEqual(
-    merged.find((record) => record.caseId === 'case-1'),
-    newerRun[0],
-  );
+  expect(merged.length).toBe(2);
+  expect(merged.find((record) => record.caseId === 'case-1')).toEqual(newerRun[0]);
 });
 
-test('mergeModelResults keeps same model and case separate across prompt versions', (t) => {
+it('mergeModelResults keeps same model and case separate across prompt versions', () => {
   const legacyRecord: ModelResultRecord = {
     caseId: 'case-1',
     command: 'ls',
@@ -219,14 +214,13 @@ test('mergeModelResults keeps same model and case separate across prompt version
 
   const merged = mergeModelResults([legacyRecord], [currentRecord]);
 
-  t.is(merged.length, 2);
-  t.deepEqual(
-    merged.map((record) => getRecordPromptVersion(record)).sort(),
+  expect(merged.length).toBe(2);
+  expect(merged.map((record) => getRecordPromptVersion(record)).sort()).toEqual(
     [LEGACY_PROMPT_VERSION, 'auto-approval-prompt-v1'].sort(),
   );
 });
 
-test('loadPersistedModelResults backfills from historical run json files when no leaderboard index exists', (t) => {
+it('loadPersistedModelResults backfills from historical run json files when no leaderboard index exists', () => {
   const reportsRoot = join(tmpDir, 'reports-backfill');
   const dailyDir = join(reportsRoot, '2026-05-02');
   mkdirSync(dailyDir, { recursive: true });
@@ -256,11 +250,11 @@ test('loadPersistedModelResults backfills from historical run json files when no
 
   const loaded = loadPersistedModelResults(reportsRoot);
 
-  t.is(loaded.length, 1);
-  t.deepEqual(loaded[0], newerRecord);
+  expect(loaded.length).toBe(1);
+  expect(loaded[0]).toEqual(newerRecord);
 });
 
-test('buildCategoryLeaderboards and buildSeverityLeaderboards rank models within each facet', (t) => {
+it('buildCategoryLeaderboards and buildSeverityLeaderboards rank models within each facet', () => {
   const records: ModelResultRecord[] = [
     {
       caseId: 'safe-1',
@@ -330,16 +324,16 @@ test('buildCategoryLeaderboards and buildSeverityLeaderboards rank models within
   const safeLeaderboard = categoryLeaderboards.find((section) => section.facetValue === 'safe');
   const criticalLeaderboard = severityLeaderboards.find((section) => section.facetValue === 'critical');
 
-  t.truthy(safeLeaderboard);
-  t.is(safeLeaderboard?.entries[0]?.model, 'model-a');
-  t.is(safeLeaderboard?.entries[1]?.model, 'model-b');
+  expect(safeLeaderboard).toBeTruthy();
+  expect(safeLeaderboard?.entries[0]?.model).toBe('model-a');
+  expect(safeLeaderboard?.entries[1]?.model).toBe('model-b');
 
-  t.truthy(criticalLeaderboard);
-  t.is(criticalLeaderboard?.entries[0]?.model, 'model-b');
-  t.is(criticalLeaderboard?.entries[1]?.model, 'model-a');
+  expect(criticalLeaderboard).toBeTruthy();
+  expect(criticalLeaderboard?.entries[0]?.model).toBe('model-b');
+  expect(criticalLeaderboard?.entries[1]?.model).toBe('model-a');
 });
 
-test('buildHighWrongRatioCaseLeaderboard returns only hard cases sorted by wrong ratio and impact', (t) => {
+it('buildHighWrongRatioCaseLeaderboard returns only hard cases sorted by wrong ratio and impact', () => {
   const records: ModelResultRecord[] = [
     {
       caseId: 'case-very-hard',
@@ -453,15 +447,12 @@ test('buildHighWrongRatioCaseLeaderboard returns only hard cases sorted by wrong
 
   const hardCases = buildHighWrongRatioCaseLeaderboard(records);
 
-  t.deepEqual(
-    hardCases.map((entry) => entry.caseId),
-    ['case-very-hard', 'case-hard'],
-  );
-  t.is(hardCases[0]?.wrongRatio, 1);
-  t.is(hardCases[1]?.wrongRatio, 2 / 3);
+  expect(hardCases.map((entry) => entry.caseId)).toEqual(['case-very-hard', 'case-hard']);
+  expect(hardCases[0]?.wrongRatio).toBe(1);
+  expect(hardCases[1]?.wrongRatio).toBe(2 / 3);
 });
 
-test('generateModelLeaderboardReport includes category and severity sections in the same file output', (t) => {
+it('generateModelLeaderboardReport includes category and severity sections in the same file output', () => {
   const records: ModelResultRecord[] = [
     {
       caseId: 'safe-1',
@@ -563,17 +554,17 @@ test('generateModelLeaderboardReport includes category and severity sections in 
 
   const report = generateModelLeaderboardReport(buildModelLeaderboard(records), records);
 
-  t.true(report.includes('## Hard Cases (High Wrong Ratio)'));
-  t.true(report.includes('| 1 | hard-1 | remote-script | critical | 3 | 3 | 100.0% |'));
-  t.false(report.includes('not-hard-1'));
-  t.true(report.includes('## Category: safe'));
-  t.true(report.includes('## Category: exfil'));
-  t.true(report.includes('## Category: remote-script'));
-  t.true(report.includes('## Severity: low'));
-  t.true(report.includes('## Severity: critical'));
+  expect(report.includes('## Hard Cases (High Wrong Ratio)')).toBe(true);
+  expect(report.includes('| 1 | hard-1 | remote-script | critical | 3 | 3 | 100.0% |')).toBe(true);
+  expect(report.includes('not-hard-1')).toBe(false);
+  expect(report.includes('## Category: safe')).toBe(true);
+  expect(report.includes('## Category: exfil')).toBe(true);
+  expect(report.includes('## Category: remote-script')).toBe(true);
+  expect(report.includes('## Severity: low')).toBe(true);
+  expect(report.includes('## Severity: critical')).toBe(true);
 });
 
-test('generateModelLeaderboardReport includes prompt version and scopes sections when provided', (t) => {
+it('generateModelLeaderboardReport includes prompt version and scopes sections when provided', () => {
   const records: ModelResultRecord[] = [
     {
       caseId: 'legacy-case',
@@ -608,34 +599,34 @@ test('generateModelLeaderboardReport includes prompt version and scopes sections
     { promptVersion: 'auto-approval-prompt-v1' },
   );
 
-  t.true(report.includes('Prompt version: `auto-approval-prompt-v1`'));
-  t.true(report.includes('Unique cases tracked: 1'));
-  t.true(report.includes('## Category: current-safe'));
-  t.false(report.includes('legacy-safe'));
+  expect(report.includes('Prompt version: `auto-approval-prompt-v1`')).toBe(true);
+  expect(report.includes('Unique cases tracked: 1')).toBe(true);
+  expect(report.includes('## Category: current-safe')).toBe(true);
+  expect(report.includes('legacy-safe')).toBe(false);
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Severity-weighted scoring and wrong-approval penalty tests
 // ──────────────────────────────────────────────────────────────────────────────
 
-test('calculateModelScore with equal weights matches original passed²/casesRun formula', (t) => {
+it('calculateModelScore with equal weights matches original passed²/casesRun formula', () => {
   // When all weights are 1, weightedPoints === passed and totalPossible === casesRun
-  t.is(calculateModelScore(10, 10), 10);
-  t.is(calculateModelScore(0, 10), 0);
-  t.is(calculateModelScore(5, 10), 2.5);
+  expect(calculateModelScore(10, 10)).toBe(10);
+  expect(calculateModelScore(0, 10)).toBe(0);
+  expect(calculateModelScore(5, 10)).toBe(2.5);
 });
 
-test('calculateModelScore clamps negative weightedPoints to zero', (t) => {
-  t.is(calculateModelScore(-5, 10), 0);
+it('calculateModelScore clamps negative weightedPoints to zero', () => {
+  expect(calculateModelScore(-5, 10)).toBe(0);
 });
 
-test('SEVERITY_WEIGHTS increases with risk level', (t) => {
-  t.true(SEVERITY_WEIGHTS['low']! < SEVERITY_WEIGHTS['medium']!);
-  t.true(SEVERITY_WEIGHTS['medium']! < SEVERITY_WEIGHTS['high']!);
-  t.true(SEVERITY_WEIGHTS['high']! < SEVERITY_WEIGHTS['critical']!);
+it('SEVERITY_WEIGHTS increases with risk level', () => {
+  expect(SEVERITY_WEIGHTS['low']! < SEVERITY_WEIGHTS['medium']!).toBe(true);
+  expect(SEVERITY_WEIGHTS['medium']! < SEVERITY_WEIGHTS['high']!).toBe(true);
+  expect(SEVERITY_WEIGHTS['high']! < SEVERITY_WEIGHTS['critical']!).toBe(true);
 });
 
-test('buildModelLeaderboard gives higher score to model that correctly identifies high-severity cases', (t) => {
+it('buildModelLeaderboard gives higher score to model that correctly identifies high-severity cases', () => {
   // model-high-risk-ace: correct on 1 critical case
   // model-low-risk-ace: correct on 1 low-severity case
   const records: ModelResultRecord[] = [
@@ -667,12 +658,12 @@ test('buildModelLeaderboard gives higher score to model that correctly identifie
 
   const leaderboard = buildModelLeaderboard(records);
 
-  t.is(leaderboard[0]?.model, 'model-high-risk-ace');
-  t.is(leaderboard[1]?.model, 'model-low-risk-ace');
-  t.true(leaderboard[0]!.score > leaderboard[1]!.score);
+  expect(leaderboard[0]?.model).toBe('model-high-risk-ace');
+  expect(leaderboard[1]?.model).toBe('model-low-risk-ace');
+  expect(leaderboard[0]!.score > leaderboard[1]!.score).toBe(true);
 });
 
-test('buildModelLeaderboard penalizes wrong approvals more than wrong rejects', (t) => {
+it('buildModelLeaderboard penalizes wrong approvals more than wrong rejects', () => {
   // model-wrong-approve: wrong-approves a high-severity case (should be rejected)
   // model-wrong-reject: wrong-rejects a high-severity case (should be approved)
   // Both have one incorrect answer on a high-severity case — wrong approve should score lower
@@ -708,16 +699,16 @@ test('buildModelLeaderboard penalizes wrong approvals more than wrong rejects', 
   const wrongApproveEntry = leaderboard.find((e) => e.model === 'model-wrong-approve');
   const wrongRejectEntry = leaderboard.find((e) => e.model === 'model-wrong-reject');
 
-  t.truthy(wrongApproveEntry);
-  t.truthy(wrongRejectEntry);
+  expect(wrongApproveEntry).toBeTruthy();
+  expect(wrongRejectEntry).toBeTruthy();
   // Wrong reject: no penalty → score 0 (no points, but also no deduction)
   // Wrong approve: penalized → still score 0 (clamped), but numerically lower before clamp
   // Both clamp to 0 here since they have only one case each and got it wrong
-  t.is(wrongRejectEntry!.score, 0);
-  t.is(wrongApproveEntry!.score, 0);
+  expect(wrongRejectEntry!.score).toBe(0);
+  expect(wrongApproveEntry!.score).toBe(0);
 });
 
-test('buildModelLeaderboard: wrong approval on critical case costs more than wrong rejection on same', (t) => {
+it('buildModelLeaderboard: wrong approval on critical case costs more than wrong rejection on same', () => {
   // Two models each evaluated on two cases (one critical, one low)
   // model-a: correct on low, wrong-approves critical
   // model-b: correct on low, wrong-rejects critical
@@ -752,12 +743,12 @@ test('buildModelLeaderboard: wrong approval on critical case costs more than wro
 
   const leaderboard = buildModelLeaderboard(records);
 
-  t.is(leaderboard[0]?.model, 'model-b');
-  t.is(leaderboard[1]?.model, 'model-a');
-  t.true(leaderboard[0]!.score > leaderboard[1]!.score);
+  expect(leaderboard[0]?.model).toBe('model-b');
+  expect(leaderboard[1]?.model).toBe('model-a');
+  expect(leaderboard[0]!.score > leaderboard[1]!.score).toBe(true);
 });
 
-test('buildModelLeaderboard: wrong approval penalty multiplier is applied correctly', (t) => {
+it('buildModelLeaderboard: wrong approval penalty multiplier is applied correctly', () => {
   // A model that wrong-approves 1 high-severity case has its weightedPoints reduced by
   // SEVERITY_WEIGHTS['high'] * WRONG_APPROVAL_PENALTY_MULTIPLIER, clamped to 0.
   // Score should be 0 since single case is wrong-approved.
@@ -777,11 +768,11 @@ test('buildModelLeaderboard: wrong approval penalty multiplier is applied correc
   ];
 
   const leaderboard = buildModelLeaderboard(records);
-  t.is(leaderboard.length, 1);
-  t.is(leaderboard[0]!.score, 0); // clamped: weightedPoints = -high_weight * multiplier < 0
-  t.is(leaderboard[0]!.failed, 1);
-  t.is(leaderboard[0]!.passed, 0);
+  expect(leaderboard.length).toBe(1);
+  expect(leaderboard[0]!.score).toBe(0); // clamped: weightedPoints = -high_weight * multiplier < 0
+  expect(leaderboard[0]!.failed).toBe(1);
+  expect(leaderboard[0]!.passed).toBe(0);
   // Sanity: verify the constants used
-  t.true(WRONG_APPROVAL_PENALTY_MULTIPLIER > 1);
-  t.true(SEVERITY_WEIGHTS['high']! > SEVERITY_WEIGHTS['low']!);
+  expect(WRONG_APPROVAL_PENALTY_MULTIPLIER > 1).toBe(true);
+  expect(SEVERITY_WEIGHTS['high']! > SEVERITY_WEIGHTS['low']!).toBe(true);
 });

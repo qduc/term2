@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createConversationEventHandler, type ConversationEventHandlerDeps } from './conversation-event-handler.js';
 import { createStreamingState } from './conversation-utils.js';
 import type { ConversationEvent } from '../../services/conversation/conversation-events.js';
@@ -75,7 +75,7 @@ function createMockDeps(): MockDeps & {
 // text_delta tests
 // =============================================================================
 
-test('text_delta: avoids splitting inside a code block and splits after it closes', (t) => {
+it('text_delta: avoids splitting inside a code block and splits after it closes', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -85,15 +85,15 @@ test('text_delta: avoids splitting inside a code block and splits after it close
     delta: 'Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\nTail',
   } as ConversationEvent);
 
-  t.is(deps.calls.setMessagesCalls.length, 1);
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
   const next = deps.calls.setMessagesCalls[0]([]);
-  t.is(next[0].text, 'Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\n');
-  t.is(next[1].text, 'Tail');
-  t.is(state.accumulatedText, 'Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\nTail');
-  t.is(state.flushedTextLength, 'Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\n'.length);
+  expect(next[0].text).toBe('Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\n');
+  expect(next[1].text).toBe('Tail');
+  expect(state.accumulatedText).toBe('Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\nTail');
+  expect(state.flushedTextLength).toBe('Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\n'.length);
 });
 
-test('text_delta: accumulates text and pushes to live response', (t) => {
+it('text_delta: accumulates text and pushes to live response', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -101,11 +101,11 @@ test('text_delta: accumulates text and pushes to live response', (t) => {
   handler({ type: 'text_delta', delta: 'Hello ' } as ConversationEvent);
   handler({ type: 'text_delta', delta: 'world!' } as ConversationEvent);
 
-  t.is(state.accumulatedText, 'Hello world!');
-  t.deepEqual(deps.calls.botResponsePushes, ['Hello ', 'Hello world!']);
+  expect(state.accumulatedText).toBe('Hello world!');
+  expect(deps.calls.botResponsePushes).toEqual(['Hello ', 'Hello world!']);
 });
 
-test('text_delta: preserves newline between code fence language and first code line', (t) => {
+it('text_delta: preserves newline between code fence language and first code line', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -114,11 +114,11 @@ test('text_delta: preserves newline between code fence language and first code l
   handler({ type: 'text_delta', delta: '\n' } as ConversationEvent);
   handler({ type: 'text_delta', delta: 'if (enabled) {\n' } as ConversationEvent);
 
-  t.is(state.accumulatedText, '```typescript\nif (enabled) {\n');
-  t.true(deps.calls.botResponsePushes.includes('```typescript\nif (enabled) {\n'));
+  expect(state.accumulatedText).toBe('```typescript\nif (enabled) {\n');
+  expect(deps.calls.botResponsePushes.includes('```typescript\nif (enabled) {\n')).toBe(true);
 });
 
-test('text_delta: finalizes stable paragraphs and streams only the unfinished tail', (t) => {
+it('text_delta: finalizes stable paragraphs and streams only the unfinished tail', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -131,8 +131,8 @@ test('text_delta: finalizes stable paragraphs and streams only the unfinished ta
     delta: 'First paragraph.\n\nSecond paragraph.\n\nCurrent tail',
   } as ConversationEvent);
 
-  t.is(deps.calls.setMessagesCalls.length, 1);
-  t.deepEqual(deps.calls.setMessagesCalls[0]([]), [
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
+  expect(deps.calls.setMessagesCalls[0]([])).toEqual([
     {
       id: 'msg-0',
       sender: 'bot',
@@ -146,12 +146,12 @@ test('text_delta: finalizes stable paragraphs and streams only the unfinished ta
       text: 'Current tail',
     },
   ]);
-  t.is(state.flushedTextLength, 'First paragraph.\n\nSecond paragraph.\n\n'.length);
-  t.true(deps.calls.botResponseCancelled);
-  t.is(state.currentBotMessageId, 'msg-1');
+  expect(state.flushedTextLength).toBe('First paragraph.\n\nSecond paragraph.\n\n'.length);
+  expect(deps.calls.botResponseCancelled).toBe(true);
+  expect(state.currentBotMessageId).toBe('msg-1');
 });
 
-test('text_delta: atomically commits a heading before its unfinished paragraph', (t) => {
+it('text_delta: atomically commits a heading before its unfinished paragraph', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -159,7 +159,7 @@ test('text_delta: atomically commits a heading before its unfinished paragraph',
 
   handler({ type: 'text_delta', delta: text } as ConversationEvent);
 
-  t.deepEqual(deps.calls.setMessagesCalls[0]([]), [
+  expect(deps.calls.setMessagesCalls[0]([])).toEqual([
     {
       id: 'msg-0',
       sender: 'bot',
@@ -175,7 +175,7 @@ test('text_delta: atomically commits a heading before its unfinished paragraph',
   ]);
 });
 
-test('text_delta: atomically replaces the live message with a finalized prefix and live suffix', (t) => {
+it('text_delta: atomically replaces the live message with a finalized prefix and live suffix', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   state.currentBotMessageId = 'active-bot';
@@ -186,43 +186,42 @@ test('text_delta: atomically replaces the live message with a finalized prefix a
     delta: 'First paragraph.\n\nCurrent tail',
   } as ConversationEvent);
 
-  t.is(deps.calls.setMessagesCalls.length, 1);
-  t.deepEqual(
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
+  expect(
     deps.calls.setMessagesCalls[0]([
       { id: 'active-bot', sender: 'bot', status: 'streaming', text: 'First paragraph.' },
     ]),
-    [
-      {
-        id: 'active-bot',
-        sender: 'bot',
-        status: 'finalized',
-        text: 'First paragraph.\n\n',
-      },
-      {
-        id: 'msg-0',
-        sender: 'bot',
-        status: 'streaming',
-        text: 'Current tail',
-      },
-    ],
-  );
-  t.is(state.currentBotMessageId, 'msg-0');
+  ).toEqual([
+    {
+      id: 'active-bot',
+      sender: 'bot',
+      status: 'finalized',
+      text: 'First paragraph.\n\n',
+    },
+    {
+      id: 'msg-0',
+      sender: 'bot',
+      status: 'streaming',
+      text: 'Current tail',
+    },
+  ]);
+  expect(state.currentBotMessageId).toBe('msg-0');
 });
 
-test('text_delta: does not finalize until a paragraph boundary exists', (t) => {
+it('text_delta: does not finalize until a paragraph boundary exists', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
 
   handler({ type: 'text_delta', delta: 'Single paragraph still growing' } as ConversationEvent);
 
-  t.deepEqual(deps.calls.appendedMessages, []);
-  t.is(state.flushedTextLength, 0);
-  t.is(state.accumulatedText, 'Single paragraph still growing');
-  t.deepEqual(deps.calls.botResponsePushes, ['Single paragraph still growing']);
+  expect(deps.calls.appendedMessages).toEqual([]);
+  expect(state.flushedTextLength).toBe(0);
+  expect(state.accumulatedText).toBe('Single paragraph still growing');
+  expect(deps.calls.botResponsePushes).toEqual(['Single paragraph still growing']);
 });
 
-test('text_delta: finalizes an existing live bot message in place before streaming a new tail', (t) => {
+it('text_delta: finalizes an existing live bot message in place before streaming a new tail', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   state.currentBotMessageId = 'active-bot';
@@ -236,8 +235,8 @@ test('text_delta: finalizes an existing live bot message in place before streami
     delta: 'Old tail now complete.\n\nNew tail',
   } as ConversationEvent);
 
-  t.deepEqual(deps.calls.appendedMessages, []);
-  t.is(deps.calls.setMessagesCalls.length, 1);
+  expect(deps.calls.appendedMessages).toEqual([]);
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
 
   const next = deps.calls.setMessagesCalls[0]([
     {
@@ -247,7 +246,7 @@ test('text_delta: finalizes an existing live bot message in place before streami
     },
   ]);
 
-  t.deepEqual(next, [
+  expect(next).toEqual([
     {
       id: 'active-bot',
       sender: 'bot',
@@ -261,12 +260,12 @@ test('text_delta: finalizes an existing live bot message in place before streami
       text: 'New tail',
     },
   ]);
-  t.is(state.currentBotMessageId, 'msg-0');
-  t.is(state.flushedTextLength, 'Old tail now complete.\n\n'.length);
-  t.true(deps.calls.botResponseCancelled);
+  expect(state.currentBotMessageId).toBe('msg-0');
+  expect(state.flushedTextLength).toBe('Old tail now complete.\n\n'.length);
+  expect(deps.calls.botResponseCancelled).toBe(true);
 });
 
-test('text_delta: keeps the final paragraph mutable when only trailing whitespace follows it', (t) => {
+it('text_delta: keeps the final paragraph mutable when only trailing whitespace follows it', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   state.currentBotMessageId = 'active-bot';
@@ -277,16 +276,16 @@ test('text_delta: keeps the final paragraph mutable when only trailing whitespac
     delta: 'Finished paragraph.\n\n',
   } as ConversationEvent);
 
-  t.is(deps.calls.setMessagesCalls.length, 0);
-  t.deepEqual(deps.calls.botResponsePushes, ['Finished paragraph.\n\n']);
-  t.false(deps.calls.botResponseCancelled);
+  expect(deps.calls.setMessagesCalls.length).toBe(0);
+  expect(deps.calls.botResponsePushes).toEqual(['Finished paragraph.\n\n']);
+  expect(deps.calls.botResponseCancelled).toBe(false);
 });
 
 // =============================================================================
 // reasoning_delta tests
 // =============================================================================
 
-test('reasoning_delta: accumulates reasoning after flushed position', (t) => {
+it('reasoning_delta: accumulates reasoning after flushed position', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -297,11 +296,11 @@ test('reasoning_delta: accumulates reasoning after flushed position', (t) => {
     fullText: 'Thinking',
   } as ConversationEvent);
 
-  t.is(state.accumulatedReasoningText, 'Thinking');
-  t.deepEqual(deps.calls.reasoningPushes, ['Thinking']);
+  expect(state.accumulatedReasoningText).toBe('Thinking');
+  expect(deps.calls.reasoningPushes).toEqual(['Thinking']);
 });
 
-test('reasoning_delta: skips already flushed reasoning', (t) => {
+it('reasoning_delta: skips already flushed reasoning', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   state.flushedReasoningLength = 5; // Already flushed "Think"
@@ -313,11 +312,11 @@ test('reasoning_delta: skips already flushed reasoning', (t) => {
     fullText: 'Thinking',
   } as ConversationEvent);
 
-  t.is(state.accumulatedReasoningText, 'ing');
-  t.deepEqual(deps.calls.reasoningPushes, ['ing']);
+  expect(state.accumulatedReasoningText).toBe('ing');
+  expect(deps.calls.reasoningPushes).toEqual(['ing']);
 });
 
-test('reasoning_delta: ignores empty reasoning', (t) => {
+it('reasoning_delta: ignores empty reasoning', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -328,11 +327,11 @@ test('reasoning_delta: ignores empty reasoning', (t) => {
     fullText: '   ',
   } as ConversationEvent);
 
-  t.is(state.accumulatedReasoningText, '   ');
-  t.deepEqual(deps.calls.reasoningPushes, []);
+  expect(state.accumulatedReasoningText).toBe('   ');
+  expect(deps.calls.reasoningPushes).toEqual([]);
 });
 
-test('reasoning_delta: finalizes stable paragraphs and streams only the unfinished tail', (t) => {
+it('reasoning_delta: finalizes stable paragraphs and streams only the unfinished tail', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -343,8 +342,8 @@ test('reasoning_delta: finalizes stable paragraphs and streams only the unfinish
     fullText: 'First paragraph.\n\nSecond paragraph.\n\nCurrent tail',
   } as ConversationEvent);
 
-  t.is(deps.calls.appendedMessages.length, 1);
-  t.deepEqual(deps.calls.appendedMessages[0], [
+  expect(deps.calls.appendedMessages.length).toBe(1);
+  expect(deps.calls.appendedMessages[0]).toEqual([
     {
       id: 'msg-0',
       sender: 'reasoning',
@@ -352,12 +351,12 @@ test('reasoning_delta: finalizes stable paragraphs and streams only the unfinish
       text: 'First paragraph.\n\nSecond paragraph.\n\n',
     },
   ]);
-  t.is(state.flushedReasoningLength, 'First paragraph.\n\nSecond paragraph.\n\n'.length);
-  t.is(state.accumulatedReasoningText, 'Current tail');
-  t.deepEqual(deps.calls.reasoningPushes, ['Current tail']);
+  expect(state.flushedReasoningLength).toBe('First paragraph.\n\nSecond paragraph.\n\n'.length);
+  expect(state.accumulatedReasoningText).toBe('Current tail');
+  expect(deps.calls.reasoningPushes).toEqual(['Current tail']);
 });
 
-test('reasoning_delta: does not finalize until a paragraph boundary exists', (t) => {
+it('reasoning_delta: does not finalize until a paragraph boundary exists', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -368,13 +367,13 @@ test('reasoning_delta: does not finalize until a paragraph boundary exists', (t)
     fullText: 'Single paragraph still growing',
   } as ConversationEvent);
 
-  t.deepEqual(deps.calls.appendedMessages, []);
-  t.is(state.flushedReasoningLength, 0);
-  t.is(state.accumulatedReasoningText, 'Single paragraph still growing');
-  t.deepEqual(deps.calls.reasoningPushes, ['Single paragraph still growing']);
+  expect(deps.calls.appendedMessages).toEqual([]);
+  expect(state.flushedReasoningLength).toBe(0);
+  expect(state.accumulatedReasoningText).toBe('Single paragraph still growing');
+  expect(deps.calls.reasoningPushes).toEqual(['Single paragraph still growing']);
 });
 
-test('reasoning_delta: finalizes an existing live reasoning message in place before streaming a new tail', (t) => {
+it('reasoning_delta: finalizes an existing live reasoning message in place before streaming a new tail', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   state.currentReasoningMessageId = 'active-reasoning';
@@ -386,8 +385,8 @@ test('reasoning_delta: finalizes an existing live reasoning message in place bef
     fullText: 'Old tail now complete.\n\nNew tail',
   } as ConversationEvent);
 
-  t.deepEqual(deps.calls.appendedMessages, []);
-  t.is(deps.calls.setMessagesCalls.length, 1);
+  expect(deps.calls.appendedMessages).toEqual([]);
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
 
   const next = deps.calls.setMessagesCalls[0]([
     {
@@ -397,7 +396,7 @@ test('reasoning_delta: finalizes an existing live reasoning message in place bef
     },
   ]);
 
-  t.deepEqual(next, [
+  expect(next).toEqual([
     {
       id: 'active-reasoning',
       sender: 'reasoning',
@@ -405,14 +404,14 @@ test('reasoning_delta: finalizes an existing live reasoning message in place bef
       text: 'Old tail now complete.\n\n',
     },
   ]);
-  t.true(state.currentReasoningMessageId === null);
-  t.is(state.flushedReasoningLength, 'Old tail now complete.\n\n'.length);
-  t.is(state.accumulatedReasoningText, 'New tail');
-  t.deepEqual(deps.calls.reasoningPushes, ['New tail']);
-  t.true(deps.calls.reasoningCancelled);
+  expect(state.currentReasoningMessageId === null).toBe(true);
+  expect(state.flushedReasoningLength).toBe('Old tail now complete.\n\n'.length);
+  expect(state.accumulatedReasoningText).toBe('New tail');
+  expect(deps.calls.reasoningPushes).toEqual(['New tail']);
+  expect(deps.calls.reasoningCancelled).toBe(true);
 });
 
-test('reasoning_delta: keeps the final paragraph mutable when only trailing whitespace follows it', (t) => {
+it('reasoning_delta: keeps the final paragraph mutable when only trailing whitespace follows it', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   state.currentReasoningMessageId = 'active-reasoning';
@@ -424,18 +423,18 @@ test('reasoning_delta: keeps the final paragraph mutable when only trailing whit
     fullText: 'Finished reasoning paragraph.\n\n',
   } as ConversationEvent);
 
-  t.is(deps.calls.setMessagesCalls.length, 0);
-  t.false(deps.calls.reasoningCancelled);
-  t.deepEqual(deps.calls.reasoningPushes, ['Finished reasoning paragraph.\n\n']);
-  t.is(state.accumulatedReasoningText, 'Finished reasoning paragraph.\n\n');
-  t.is(state.currentReasoningMessageId, 'active-reasoning');
+  expect(deps.calls.setMessagesCalls.length).toBe(0);
+  expect(deps.calls.reasoningCancelled).toBe(false);
+  expect(deps.calls.reasoningPushes).toEqual(['Finished reasoning paragraph.\n\n']);
+  expect(state.accumulatedReasoningText).toBe('Finished reasoning paragraph.\n\n');
+  expect(state.currentReasoningMessageId).toBe('active-reasoning');
 });
 
 // =============================================================================
 // tool_started tests
 // =============================================================================
 
-test('tool_started: flushes accumulated text before showing tool', (t) => {
+it('tool_started: flushes accumulated text before showing tool', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   state.accumulatedText = 'Some text before tool';
@@ -448,17 +447,17 @@ test('tool_started: flushes accumulated text before showing tool', (t) => {
     arguments: { command: 'ls' },
   } as ConversationEvent);
 
-  t.is(state.accumulatedText, '');
-  t.is(state.textWasFlushed, true);
-  t.true(deps.calls.botResponseCancelled);
+  expect(state.accumulatedText).toBe('');
+  expect(state.textWasFlushed).toBe(true);
+  expect(deps.calls.botResponseCancelled).toBe(true);
   // Should append text message and command message
-  t.is(deps.calls.appendedMessages.length, 2);
-  t.is(deps.calls.appendedMessages[0][0].sender, 'bot');
-  t.is(deps.calls.appendedMessages[0][0].status, 'finalized');
-  t.is(deps.calls.appendedMessages[0][0].text, 'Some text before tool');
+  expect(deps.calls.appendedMessages.length).toBe(2);
+  expect(deps.calls.appendedMessages[0][0].sender).toBe('bot');
+  expect(deps.calls.appendedMessages[0][0].status).toBe('finalized');
+  expect(deps.calls.appendedMessages[0][0].text).toBe('Some text before tool');
 });
 
-test('tool_started: flushes accumulated reasoning before showing tool', (t) => {
+it('tool_started: flushes accumulated reasoning before showing tool', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   state.accumulatedReasoningText = 'Some reasoning';
@@ -471,13 +470,13 @@ test('tool_started: flushes accumulated reasoning before showing tool', (t) => {
     arguments: { command: 'ls' },
   } as ConversationEvent);
 
-  t.true(deps.calls.reasoningFlushed);
-  t.is(state.accumulatedReasoningText, '');
-  t.is(state.flushedReasoningLength, 14); // 'Some reasoning'.length
-  t.true(state.currentReasoningMessageId === null);
+  expect(deps.calls.reasoningFlushed).toBe(true);
+  expect(state.accumulatedReasoningText).toBe('');
+  expect(state.flushedReasoningLength).toBe(14); // 'Some reasoning'.length
+  expect(state.currentReasoningMessageId === null).toBe(true);
 });
 
-test('tool_started: finalizes live reasoning text before clearing it', (t) => {
+it('tool_started: finalizes live reasoning text before clearing it', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   state.currentReasoningMessageId = 'active-reasoning';
@@ -491,8 +490,8 @@ test('tool_started: finalizes live reasoning text before clearing it', (t) => {
     arguments: { command: 'ls' },
   } as ConversationEvent);
 
-  t.true(deps.calls.reasoningFlushed);
-  t.is(deps.calls.setMessagesCalls.length, 1);
+  expect(deps.calls.reasoningFlushed).toBe(true);
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
 
   const next = deps.calls.setMessagesCalls[0]([
     {
@@ -502,7 +501,7 @@ test('tool_started: finalizes live reasoning text before clearing it', (t) => {
     },
   ]);
 
-  t.deepEqual(next, [
+  expect(next).toEqual([
     {
       id: 'active-reasoning',
       sender: 'reasoning',
@@ -510,12 +509,12 @@ test('tool_started: finalizes live reasoning text before clearing it', (t) => {
       text: 'Reasoning before the tool',
     },
   ]);
-  t.is(state.accumulatedReasoningText, '');
-  t.is(state.flushedReasoningLength, 'Reasoning before the tool'.length);
-  t.true(state.currentReasoningMessageId === null);
+  expect(state.accumulatedReasoningText).toBe('');
+  expect(state.flushedReasoningLength).toBe('Reasoning before the tool'.length);
+  expect(state.currentReasoningMessageId === null).toBe(true);
 });
 
-test('reasoning_delta: does not drop prefix when reasoning restarts after a tool', (t) => {
+it('reasoning_delta: does not drop prefix when reasoning restarts after a tool', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -539,11 +538,11 @@ test('reasoning_delta: does not drop prefix when reasoning restarts after a tool
     fullText: 'After tool reasoning',
   } as ConversationEvent);
 
-  t.is(state.accumulatedReasoningText, 'After tool reasoning');
-  t.deepEqual(deps.calls.reasoningPushes, ['Before tool', 'After tool reasoning']);
+  expect(state.accumulatedReasoningText).toBe('After tool reasoning');
+  expect(deps.calls.reasoningPushes).toEqual(['Before tool', 'After tool reasoning']);
 });
 
-test('tool_started: creates pending command message with shell command', (t) => {
+it('tool_started: creates pending command message with shell command', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -555,16 +554,16 @@ test('tool_started: creates pending command message with shell command', (t) => 
     arguments: { command: 'echo hello' },
   } as ConversationEvent);
 
-  t.is(deps.calls.appendedMessages.length, 1);
+  expect(deps.calls.appendedMessages.length).toBe(1);
   const cmdMsg = deps.calls.appendedMessages[0][0];
-  t.is(cmdMsg.sender, 'command');
-  t.is(cmdMsg.status, 'running');
-  t.is(cmdMsg.command, 'echo hello');
-  t.is(cmdMsg.toolName, 'shell');
-  t.is(cmdMsg.callId, 'call-1');
+  expect(cmdMsg.sender).toBe('command');
+  expect(cmdMsg.status).toBe('running');
+  expect(cmdMsg.command).toBe('echo hello');
+  expect(cmdMsg.toolName).toBe('shell');
+  expect(cmdMsg.callId).toBe('call-1');
 });
 
-test('tool_started: parses JSON string arguments', (t) => {
+it('tool_started: parses JSON string arguments', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -577,11 +576,11 @@ test('tool_started: parses JSON string arguments', (t) => {
   } as ConversationEvent);
 
   const cmdMsg = deps.calls.appendedMessages[0][0];
-  t.is(cmdMsg.command, 'pwd');
-  t.deepEqual(cmdMsg.toolArgs, { command: 'pwd' });
+  expect(cmdMsg.command).toBe('pwd');
+  expect(cmdMsg.toolArgs).toEqual({ command: 'pwd' });
 });
 
-test('tool_started: formats grep command correctly', (t) => {
+it('tool_started: formats grep command correctly', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -594,10 +593,10 @@ test('tool_started: formats grep command correctly', (t) => {
   } as ConversationEvent);
 
   const cmdMsg = deps.calls.appendedMessages[0][0];
-  t.is(cmdMsg.command, 'grep "TODO" src/');
+  expect(cmdMsg.command).toBe('grep "TODO" src/');
 });
 
-test('tool_started: skips pending message for run_subagent (SubagentActivityMessage handles display)', (t) => {
+it('tool_started: skips pending message for run_subagent (SubagentActivityMessage handles display)', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -609,10 +608,10 @@ test('tool_started: skips pending message for run_subagent (SubagentActivityMess
     arguments: { role: 'worker', task: 'fix the bug' },
   } as ConversationEvent);
 
-  t.is(deps.calls.appendedMessages.length, 0);
+  expect(deps.calls.appendedMessages.length).toBe(0);
 });
 
-test('tool_started: does not append duplicate running message for the same callId', (t) => {
+it('tool_started: does not append duplicate running message for the same callId', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -631,16 +630,16 @@ test('tool_started: does not append duplicate running message for the same callI
     arguments: { command: 'ls -la' },
   } as ConversationEvent);
 
-  t.is(deps.calls.appendedMessages.length, 1);
-  t.is(deps.calls.appendedMessages[0][0].callId, 'call-dup-1');
-  t.is(deps.calls.appendedMessages[0][0].status, 'running');
+  expect(deps.calls.appendedMessages.length).toBe(1);
+  expect(deps.calls.appendedMessages[0][0].callId).toBe('call-dup-1');
+  expect(deps.calls.appendedMessages[0][0].status).toBe('running');
 });
 
 // =============================================================================
 // command_message tests
 // =============================================================================
 
-test('command_message: annotates and updates existing pending message', (t) => {
+it('command_message: annotates and updates existing pending message', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -658,16 +657,16 @@ test('command_message: annotates and updates existing pending message', (t) => {
     },
   } as ConversationEvent);
 
-  t.is(deps.calls.setMessagesCalls.length, 1);
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
   // The annotateCommandMessage should have been called
   const updater = deps.calls.setMessagesCalls[0]!;
   const existingMessages = [{ id: 'call-1', sender: 'command', status: 'running', callId: 'call-1' }];
   const result = updater(existingMessages);
-  t.true(result[0].annotated);
-  t.is(result[0].status, 'completed');
+  expect(result[0].annotated).toBe(true);
+  expect(result[0].status).toBe('completed');
 });
 
-test('command_message: adds new message if no pending exists', (t) => {
+it('command_message: adds new message if no pending exists', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -688,11 +687,11 @@ test('command_message: adds new message if no pending exists', (t) => {
   const updater = deps.calls.setMessagesCalls[0]!;
   const existingMessages = [{ id: 1, sender: 'user', text: 'hi' }];
   const result = updater(existingMessages);
-  t.is(result.length, 2);
-  t.true(result[1].annotated);
+  expect(result.length).toBe(2);
+  expect(result[1].annotated).toBe(true);
 });
 
-test('command_message: flushes accumulated text before adding', (t) => {
+it('command_message: flushes accumulated text before adding', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   state.accumulatedText = 'Partial response';
@@ -710,14 +709,14 @@ test('command_message: flushes accumulated text before adding', (t) => {
     },
   } as ConversationEvent);
 
-  t.is(state.accumulatedText, '');
-  t.is(state.textWasFlushed, true);
-  t.is(deps.calls.appendedMessages.length, 1);
-  t.is(deps.calls.appendedMessages[0][0].status, 'finalized');
-  t.is(deps.calls.appendedMessages[0][0].text, 'Partial response');
+  expect(state.accumulatedText).toBe('');
+  expect(state.textWasFlushed).toBe(true);
+  expect(deps.calls.appendedMessages.length).toBe(1);
+  expect(deps.calls.appendedMessages[0][0].status).toBe('finalized');
+  expect(deps.calls.appendedMessages[0][0].text).toBe('Partial response');
 });
 
-test('tool_recovery: marks dropped running commands failed and appends recovery note', (t) => {
+it('tool_recovery: marks dropped running commands failed and appends recovery note', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -730,7 +729,7 @@ test('tool_recovery: marks dropped running commands failed and appends recovery 
       'Recovered 1 completed tool call/result pair(s) from a previously interrupted turn. Dropped 1 incomplete tool call(s); do not assume dropped calls completed.',
   } as ConversationEvent);
 
-  t.is(deps.calls.setMessagesCalls.length, 1);
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
   const next = deps.calls.setMessagesCalls[0]!([
     {
       id: 'read',
@@ -750,19 +749,19 @@ test('tool_recovery: marks dropped running commands failed and appends recovery 
     },
   ]);
 
-  t.is(next[0].status, 'completed');
-  t.is(next[1].status, 'failed');
-  t.is(next[1].failureReason, 'Dropped during recovery');
-  t.true(next[1].output.includes('not sent to model history'));
-  t.is(next[2].sender, 'system');
-  t.true(next[2].text.startsWith('Recovered 1 completed'));
+  expect(next[0].status).toBe('completed');
+  expect(next[1].status).toBe('failed');
+  expect(next[1].failureReason).toBe('Dropped during recovery');
+  expect(next[1].output.includes('not sent to model history')).toBe(true);
+  expect(next[2].sender).toBe('system');
+  expect(next[2].text.startsWith('Recovered 1 completed')).toBe(true);
 });
 
 // =============================================================================
 // subagent activity tests
 // =============================================================================
 
-test('subagent events: maintains a live peek with the last three tools', (t) => {
+it('subagent events: maintains a live peek with the last three tools', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -774,7 +773,7 @@ test('subagent events: maintains a live peek with the last three tools', (t) => 
     task: 'inspect the command message rendering flow and report findings',
   } as ConversationEvent);
 
-  t.deepEqual(deps.calls.appendedMessages[0], [
+  expect(deps.calls.appendedMessages[0]).toEqual([
     {
       id: 'subagent-agent-1',
       sender: 'subagent',
@@ -821,7 +820,7 @@ test('subagent events: maintains a live peek with the last three tools', (t) => 
     messages = update(messages);
   }
 
-  t.deepEqual(messages, [
+  expect(messages).toEqual([
     {
       id: 'subagent-agent-1',
       sender: 'subagent',
@@ -838,7 +837,7 @@ test('subagent events: maintains a live peek with the last three tools', (t) => 
   ]);
 });
 
-test('subagent_completed updates the status of the live peek', (t) => {
+it('subagent_completed updates the status of the live peek', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -867,7 +866,7 @@ test('subagent_completed updates the status of the live peek', (t) => {
     },
   ]);
 
-  t.deepEqual(result, [
+  expect(result).toEqual([
     {
       id: 'subagent-agent-1',
       sender: 'subagent',
@@ -880,7 +879,7 @@ test('subagent_completed updates the status of the live peek', (t) => {
   ]);
 });
 
-test('subagent_started links callId from tool_started and command_message replaces it', (t) => {
+it('subagent_started links callId from tool_started and command_message replaces it', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -901,10 +900,10 @@ test('subagent_started links callId from tool_started and command_message replac
     task: 'do task X',
   } as ConversationEvent);
 
-  t.is(deps.calls.appendedMessages.length, 1);
+  expect(deps.calls.appendedMessages.length).toBe(1);
   const subagentMsg = deps.calls.appendedMessages[0][0];
-  t.is(subagentMsg.sender, 'subagent');
-  t.is(subagentMsg.callId, 'call-sa-123');
+  expect(subagentMsg.sender).toBe('subagent');
+  expect(subagentMsg.callId).toBe('call-sa-123');
 
   // 3. subagent_completed updates status
   handler({
@@ -935,20 +934,20 @@ test('subagent_started links callId from tool_started and command_message replac
   } as ConversationEvent);
 
   // Only one setMessages call: from subagent_completed, not from command_message
-  t.is(deps.calls.setMessagesCalls.length, 1);
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
 
   // The subagent message remains intact (not replaced by command message)
   const completedMsg = deps.calls.setMessagesCalls[0]!([subagentMsg]);
-  t.is(completedMsg.length, 1);
-  t.is(completedMsg[0].sender, 'subagent');
-  t.is(completedMsg[0].status, 'completed');
+  expect(completedMsg.length).toBe(1);
+  expect(completedMsg[0].sender).toBe('subagent');
+  expect(completedMsg[0].status).toBe('completed');
 });
 
 // =============================================================================
 // retry tests
 // =============================================================================
 
-test('retry: adds system message about hallucination retry', (t) => {
+it('retry: adds system message about hallucination retry', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -962,16 +961,16 @@ test('retry: adds system message about hallucination retry', (t) => {
     retryType: 'hallucination',
   } as ConversationEvent);
 
-  t.is(deps.calls.setMessagesCalls.length, 1);
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
   const updater = deps.calls.setMessagesCalls[0]!;
   const result = updater([]);
-  t.is(result.length, 1);
-  t.is(result[0].sender, 'system');
-  t.true(result[0].text.includes('shell'));
-  t.true(result[0].text.includes('1/2'));
+  expect(result.length).toBe(1);
+  expect(result[0].sender).toBe('system');
+  expect(result[0].text.includes('shell')).toBe(true);
+  expect(result[0].text.includes('1/2')).toBe(true);
 });
 
-test('retry: adds generic system message when retryType is undefined', (t) => {
+it('retry: adds generic system message when retryType is undefined', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -986,12 +985,12 @@ test('retry: adds generic system message when retryType is undefined', (t) => {
 
   const updater = deps.calls.setMessagesCalls[0]!;
   const result = updater([]);
-  t.is(result.length, 1);
-  t.is(result[0].sender, 'system');
-  t.is(result[0].text, 'Retrying... (Attempt 1/2)');
+  expect(result.length).toBe(1);
+  expect(result[0].sender).toBe('system');
+  expect(result[0].text).toBe('Retrying... (Attempt 1/2)');
 });
 
-test('retry: adds system message about flex service tier fallback', (t) => {
+it('retry: adds system message about flex service tier fallback', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1007,13 +1006,13 @@ test('retry: adds system message about flex service tier fallback', (t) => {
 
   const updater = deps.calls.setMessagesCalls[0]!;
   const result = updater([]);
-  t.is(result.length, 1);
-  t.is(result[0].sender, 'system');
-  t.true(result[0].text.includes('Flex service tier timed out'));
-  t.true(result[0].text.includes('standard service tier'));
+  expect(result.length).toBe(1);
+  expect(result[0].sender).toBe('system');
+  expect(result[0].text.includes('Flex service tier timed out')).toBe(true);
+  expect(result[0].text.includes('standard service tier')).toBe(true);
 });
 
-test('retry: adds system message about upstream retry', (t) => {
+it('retry: adds system message about upstream retry', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1029,12 +1028,12 @@ test('retry: adds system message about upstream retry', (t) => {
 
   const updater = deps.calls.setMessagesCalls[0]!;
   const result = updater([]);
-  t.is(result.length, 1);
-  t.is(result[0].sender, 'system');
-  t.is(result[0].text, 'Upstream error or rate limit encountered. Retrying... (Attempt 1/3)');
+  expect(result.length).toBe(1);
+  expect(result[0].sender).toBe('system');
+  expect(result[0].text).toBe('Upstream error or rate limit encountered. Retrying... (Attempt 1/3)');
 });
 
-test('retry: adds system message about parsing error retry', (t) => {
+it('retry: adds system message about parsing error retry', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1050,12 +1049,12 @@ test('retry: adds system message about parsing error retry', (t) => {
 
   const updater = deps.calls.setMessagesCalls[0]!;
   const result = updater([]);
-  t.is(result.length, 1);
-  t.is(result[0].sender, 'system');
-  t.is(result[0].text, 'Model parsing error detected. Retrying... (Attempt 1/2)');
+  expect(result.length).toBe(1);
+  expect(result[0].sender).toBe('system');
+  expect(result[0].text).toBe('Model parsing error detected. Retrying... (Attempt 1/2)');
 });
 
-test('retry: adds system message about behavior error retry', (t) => {
+it('retry: adds system message about behavior error retry', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1071,16 +1070,16 @@ test('retry: adds system message about behavior error retry', (t) => {
 
   const updater = deps.calls.setMessagesCalls[0]!;
   const result = updater([]);
-  t.is(result.length, 1);
-  t.is(result[0].sender, 'system');
-  t.is(result[0].text, 'Model behavior error detected. Retrying... (Attempt 2/2)');
+  expect(result.length).toBe(1);
+  expect(result[0].sender).toBe('system');
+  expect(result[0].text).toBe('Model behavior error detected. Retrying... (Attempt 2/2)');
 });
 
 // =============================================================================
 // final event tests
 // =============================================================================
 
-test('final: finalizes trailing reasoning message that was never followed by a tool call', (t) => {
+it('final: finalizes trailing reasoning message that was never followed by a tool call', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   state.currentReasoningMessageId = 'active-reasoning';
@@ -1089,21 +1088,21 @@ test('final: finalizes trailing reasoning message that was never followed by a t
 
   handler({ type: 'final', finalText: '' } as any);
 
-  t.true(deps.calls.reasoningFlushed);
-  t.is(state.accumulatedReasoningText, '');
-  t.true(state.currentReasoningMessageId === null);
+  expect(deps.calls.reasoningFlushed).toBe(true);
+  expect(state.accumulatedReasoningText).toBe('');
+  expect(state.currentReasoningMessageId === null).toBe(true);
 
   // markCurrentReasoningFinalized sets status via setMessages
-  t.is(deps.calls.setMessagesCalls.length, 1);
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
   const next = deps.calls.setMessagesCalls[0]!([
     { id: 'active-reasoning', sender: 'reasoning', text: 'Trailing reasoning with no tool call' },
   ]);
-  t.deepEqual(next, [
+  expect(next).toEqual([
     { id: 'active-reasoning', sender: 'reasoning', status: 'finalized', text: 'Trailing reasoning with no tool call' },
   ]);
 });
 
-test('final: appends missing final text after already flushed streamed text', (t) => {
+it('final: appends missing final text after already flushed streamed text', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1111,9 +1110,9 @@ test('final: appends missing final text after already flushed streamed text', (t
   handler({ type: 'text_delta', delta: 'Intro\n\n' } as ConversationEvent);
   handler({ type: 'final', finalText: 'Intro\n\n## Missing Header\n\nBody' } as ConversationEvent);
 
-  t.is(state.accumulatedText, 'Intro\n\n## Missing Header\n\nBody');
-  t.is(deps.calls.appendedMessages.length, 1);
-  t.deepEqual(deps.calls.appendedMessages[0], [
+  expect(state.accumulatedText).toBe('Intro\n\n## Missing Header\n\nBody');
+  expect(deps.calls.appendedMessages.length).toBe(1);
+  expect(deps.calls.appendedMessages[0]).toEqual([
     {
       id: 'msg-0',
       sender: 'bot',
@@ -1123,23 +1122,23 @@ test('final: appends missing final text after already flushed streamed text', (t
   ]);
 });
 
-test('final: is a no-op when there is no pending reasoning', (t) => {
+it('final: is a no-op when there is no pending reasoning', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
 
   handler({ type: 'final', finalText: '' } as any);
 
-  t.false(deps.calls.reasoningFlushed);
-  t.is(deps.calls.setMessagesCalls.length, 0);
-  t.is(deps.calls.appendedMessages.length, 0);
+  expect(deps.calls.reasoningFlushed).toBe(false);
+  expect(deps.calls.setMessagesCalls.length).toBe(0);
+  expect(deps.calls.appendedMessages.length).toBe(0);
 });
 
 // =============================================================================
 // unknown event tests
 // =============================================================================
 
-test('unknown event: is ignored without error', (t) => {
+it('unknown event: is ignored without error', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1147,15 +1146,15 @@ test('unknown event: is ignored without error', (t) => {
   // Should not throw
   handler({ type: 'unknown_event' } as any);
 
-  t.is(deps.calls.appendedMessages.length, 0);
-  t.is(deps.calls.setMessagesCalls.length, 0);
+  expect(deps.calls.appendedMessages.length).toBe(0);
+  expect(deps.calls.setMessagesCalls.length).toBe(0);
 });
 
 // =============================================================================
 // Bug: final event silently ignores corrections when finalText.length <= accumulatedText.length
 // =============================================================================
 
-test('final: ignores corrected finalText when it is the same length as accumulated streamed text', (t) => {
+it('final: ignores corrected finalText when it is the same length as accumulated streamed text', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   // Simulate streaming that produced a typo whose length matches the correct text
@@ -1167,13 +1166,13 @@ test('final: ignores corrected finalText when it is the same length as accumulat
 
   // The guard `finalText.length > accumulatedText.length` is false for equal-length strings.
   // accumulatedText is never updated, so the typo is what gets flushed.
-  t.is(deps.calls.appendedMessages.length, 1);
+  expect(deps.calls.appendedMessages.length).toBe(1);
   const flushedMsg = deps.calls.appendedMessages[0][0];
   // Fails: actual is 'Hello wrold' (the typo) — correction from finalText is silently lost
-  t.is(flushedMsg.text, 'Hello world');
+  expect(flushedMsg.text).toBe('Hello world');
 });
 
-test('final: flushes over-accumulated streamed content when finalText is shorter than accumulated', (t) => {
+it('final: flushes over-accumulated streamed content when finalText is shorter than accumulated', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   // Simulate streaming that over-shot the authoritative answer
@@ -1185,17 +1184,17 @@ test('final: flushes over-accumulated streamed content when finalText is shorter
 
   // The guard `finalText.length > accumulatedText.length` is false when final is shorter.
   // accumulatedText is not corrected, so the hallucinated tail is included in the flush.
-  t.is(deps.calls.appendedMessages.length, 1);
+  expect(deps.calls.appendedMessages.length).toBe(1);
   const flushedMsg = deps.calls.appendedMessages[0][0];
   // Fails: actual is the full over-accumulated string including ' Extra hallucinated sentence.'
-  t.is(flushedMsg.text, 'The answer is 42.');
+  expect(flushedMsg.text).toBe('The answer is 42.');
 });
 
 // =============================================================================
 // Whitespace preservation
 // =============================================================================
 
-test('text_delta: preserves whitespace before the first block', (t) => {
+it('text_delta: preserves whitespace before the first block', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1203,21 +1202,21 @@ test('text_delta: preserves whitespace before the first block', (t) => {
   // Response begins with whitespace before the paragraph boundary
   handler({ type: 'text_delta', delta: '   \n\nActual content' } as ConversationEvent);
 
-  t.is(state.flushedTextLength, 0);
-  t.is(deps.calls.appendedMessages.length, 0);
+  expect(state.flushedTextLength).toBe(0);
+  expect(deps.calls.appendedMessages.length).toBe(0);
 
-  t.deepEqual(deps.calls.botResponsePushes, ['   \n\nActual content']);
+  expect(deps.calls.botResponsePushes).toEqual(['   \n\nActual content']);
 
   handler({ type: 'final', finalText: '   \n\nActual content' } as any);
-  t.is(deps.calls.appendedMessages.length, 1);
-  t.is(deps.calls.appendedMessages[0][0].text, '   \n\nActual content');
+  expect(deps.calls.appendedMessages.length).toBe(1);
+  expect(deps.calls.appendedMessages[0][0].text).toBe('   \n\nActual content');
 });
 
 // =============================================================================
 // Bug: command_message without callId leaves the running message stranded
 // =============================================================================
 
-test('command_message: leaves stale running message when no callId is present on either side', (t) => {
+it('command_message: leaves stale running message when no callId is present on either side', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1231,8 +1230,8 @@ test('command_message: leaves stale running message when no callId is present on
   } as any);
 
   const runningMsg = deps.calls.appendedMessages[0][0];
-  t.is(runningMsg.status, 'running');
-  t.is(runningMsg.callId, undefined);
+  expect(runningMsg.status).toBe('running');
+  expect(runningMsg.callId).toBe(undefined);
 
   // command_message also has no callId, so pendingIndex is immediately -1
   // and the completed message is appended rather than replacing the running one
@@ -1254,11 +1253,11 @@ test('command_message: leaves stale running message when no callId is present on
 
   // Fails: result has 2 messages — the stale 'running' + the new 'completed'
   // Expected: 1 message, the running entry replaced by the completed one
-  t.is(result.length, 1);
-  t.is(result[0].status, 'completed');
+  expect(result.length).toBe(1);
+  expect(result[0].status).toBe('completed');
 });
 
-test('command_message: preserves the id of the running message when replacing it', (t) => {
+it('command_message: preserves the id of the running message when replacing it', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1279,12 +1278,12 @@ test('command_message: preserves the id of the running message when replacing it
   const updater = deps.calls.setMessagesCalls[0]!;
   const existingMessages = [{ id: 'call-1', sender: 'command', status: 'running', callId: 'call-1' }];
   const result = updater(existingMessages);
-  t.is(result.length, 1);
-  t.is(result[0].id, 'call-1'); // preserves running message id
-  t.is(result[0].status, 'completed');
+  expect(result.length).toBe(1);
+  expect(result[0].id).toBe('call-1'); // preserves running message id
+  expect(result[0].status).toBe('completed');
 });
 
-test('command_message: preserves running ids for batch completions matched by callId', (t) => {
+it('command_message: preserves running ids for batch completions matched by callId', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1323,20 +1322,19 @@ test('command_message: preserves running ids for batch completions matched by ca
   ]);
   const afterSecond = secondUpdater(afterFirst);
 
-  t.deepEqual(
+  expect(
     afterSecond.map((message) => ({
       id: message.id,
       callId: (message as any).callId,
       status: message.status,
     })),
-    [
-      { id: 'call-1', callId: 'call-1', status: 'completed' },
-      { id: 'call-2', callId: 'call-2', status: 'completed' },
-    ],
-  );
+  ).toEqual([
+    { id: 'call-1', callId: 'call-1', status: 'completed' },
+    { id: 'call-2', callId: 'call-2', status: 'completed' },
+  ]);
 });
 
-test('subagent_started: ignores event if parentTool is ask_mentor', (t) => {
+it('subagent_started: ignores event if parentTool is ask_mentor', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1349,10 +1347,10 @@ test('subagent_started: ignores event if parentTool is ask_mentor', (t) => {
     parentTool: 'ask_mentor',
   } as ConversationEvent);
 
-  t.is(deps.calls.appendedMessages.length, 0);
+  expect(deps.calls.appendedMessages.length).toBe(0);
 });
 
-test('subagent_command_message: replaces generic toolName or appends command to subagent tools', (t) => {
+it('subagent_command_message: replaces generic toolName or appends command to subagent tools', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1393,7 +1391,7 @@ test('subagent_command_message: replaces generic toolName or appends command to 
     messages = update(messages);
   }
 
-  t.deepEqual(messages, [
+  expect(messages).toEqual([
     {
       id: 'subagent-agent-1',
       sender: 'subagent',
@@ -1406,7 +1404,7 @@ test('subagent_command_message: replaces generic toolName or appends command to 
   ]);
 });
 
-test('subagent_command_message: creates subagent message if not present', (t) => {
+it('subagent_command_message: creates subagent message if not present', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1425,15 +1423,15 @@ test('subagent_command_message: creates subagent message if not present', (t) =>
     },
   } as any);
 
-  t.is(deps.calls.setMessagesCalls.length, 1);
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
   const result = deps.calls.setMessagesCalls[0]([]);
-  t.is(result.length, 1);
-  t.is(result[0].sender, 'subagent');
-  t.is(result[0].agentId, 'agent-1');
-  t.deepEqual(result[0].tools, ['read_file "source/app.tsx" (Success)']);
+  expect(result.length).toBe(1);
+  expect(result[0].sender).toBe('subagent');
+  expect(result[0].agentId).toBe('agent-1');
+  expect(result[0].tools).toEqual(['read_file "source/app.tsx" (Success)']);
 });
 
-test('subagent_tool_started: formats shell command with args', (t) => {
+it('subagent_tool_started: formats shell command with args', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1458,10 +1456,10 @@ test('subagent_tool_started: formats shell command with args', (t) => {
     messages = update(messages);
   }
 
-  t.deepEqual(messages[0].tools, []);
+  expect(messages[0].tools).toEqual([]);
 });
 
-test('subagent_command_message: replaces formatted shell command and appends outcome', (t) => {
+it('subagent_command_message: replaces formatted shell command and appends outcome', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1500,10 +1498,10 @@ test('subagent_command_message: replaces formatted shell command and appends out
     messages = update(messages);
   }
 
-  t.deepEqual(messages[0].tools, ['shell npm test (Failed)']);
+  expect(messages[0].tools).toEqual(['shell npm test (Failed)']);
 });
 
-test('subagent_command_message: counts matches for grep tool and appends count', (t) => {
+it('subagent_command_message: counts matches for grep tool and appends count', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1542,10 +1540,10 @@ test('subagent_command_message: counts matches for grep tool and appends count',
     messages = update(messages);
   }
 
-  t.deepEqual(messages[0].tools, ['grep "TODO" "src/" (2 matches)']);
+  expect(messages[0].tools).toEqual(['grep "TODO" "src/" (2 matches)']);
 });
 
-test('subagent_command_message: appends 0 matches for empty grep output', (t) => {
+it('subagent_command_message: appends 0 matches for empty grep output', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1584,10 +1582,10 @@ test('subagent_command_message: appends 0 matches for empty grep output', (t) =>
     messages = update(messages);
   }
 
-  t.deepEqual(messages[0].tools, ['grep "TODO" "src/" (0 matches)']);
+  expect(messages[0].tools).toEqual(['grep "TODO" "src/" (0 matches)']);
 });
 
-test('subagent_command_message: stores CommandMessage object for write tools', (t) => {
+it('subagent_command_message: stores CommandMessage object for write tools', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1621,11 +1619,11 @@ test('subagent_command_message: stores CommandMessage object for write tools', (
     messages = update(messages);
   }
 
-  t.is(messages[0].tools.length, 1);
-  t.deepEqual(messages[0].tools[0], writeMsg);
+  expect(messages[0].tools.length).toBe(1);
+  expect(messages[0].tools[0]).toEqual(writeMsg);
 });
 
-test('tool_started: renders parent tool call when a subagent is active', (t) => {
+it('tool_started: renders parent tool call when a subagent is active', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1643,11 +1641,11 @@ test('tool_started: renders parent tool call when a subagent is active', (t) => 
     arguments: { command: 'pwd' },
   } as any);
 
-  t.is(deps.calls.appendedMessages.length, 2);
-  t.is(deps.calls.appendedMessages[1][0].callId, 'call-shell-1');
+  expect(deps.calls.appendedMessages.length).toBe(2);
+  expect(deps.calls.appendedMessages[1][0].callId).toBe('call-shell-1');
 });
 
-test('tool_started: renders parent tool call after local subagent activity', (t) => {
+it('tool_started: renders parent tool call after local subagent activity', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1666,12 +1664,12 @@ test('tool_started: renders parent tool call after local subagent activity', (t)
     arguments: { command: 'pwd' },
   } as any);
 
-  t.is(deps.calls.appendedMessages.length, 2);
-  t.is(deps.calls.appendedMessages[0][0].sender, 'subagent');
-  t.is(deps.calls.appendedMessages[1][0].callId, 'call-shell-1');
+  expect(deps.calls.appendedMessages.length).toBe(2);
+  expect(deps.calls.appendedMessages[0][0].sender).toBe('subagent');
+  expect(deps.calls.appendedMessages[1][0].callId).toBe('call-shell-1');
 });
 
-test('command_message: renders parent tool completion when subagent is active', (t) => {
+it('command_message: renders parent tool completion when subagent is active', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1695,10 +1693,10 @@ test('command_message: renders parent tool completion when subagent is active', 
     },
   } as any);
 
-  t.is(deps.calls.setMessagesCalls.length, 1);
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
 });
 
-test('tool_started: links subagent delegation tools to subagent activity', (t) => {
+it('tool_started: links subagent delegation tools to subagent activity', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1717,7 +1715,7 @@ test('tool_started: links subagent delegation tools to subagent activity', (t) =
     task: 'nested work',
   } as any);
 
-  t.is(deps.calls.appendedMessages.length, 1);
-  t.is(deps.calls.appendedMessages[0][0].id, 'subagent-agent-sa-nested');
-  t.is(deps.calls.appendedMessages[0][0].callId, 'call-sa-nested');
+  expect(deps.calls.appendedMessages.length).toBe(1);
+  expect(deps.calls.appendedMessages[0][0].id).toBe('subagent-agent-sa-nested');
+  expect(deps.calls.appendedMessages[0][0].callId).toBe('call-sa-nested');
 });

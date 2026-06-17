@@ -1,13 +1,12 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { renderInAct, toVisibleText } from '../../test-helpers/ink-testing.js';
 import SubagentActivityMessage from './SubagentActivityMessage.js';
 import { TOOL_NAME_CREATE_FILE } from '../../tools/tool-names.js';
 
-test.serial('SubagentActivityMessage renders plain string tools', async (t) => {
+it.sequential('SubagentActivityMessage renders plain string tools', async () => {
   const props = {
     msg: {
       role: 'explorer',
@@ -17,14 +16,14 @@ test.serial('SubagentActivityMessage renders plain string tools', async (t) => {
     },
   };
 
-  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />, t);
+  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  t.true(output.includes('run_subagent [explorer] find x'), `Expected title in output: ${output}`);
-  t.true(output.includes('✔ read_file "source/app.tsx"'), `Expected tool in output: ${output}`);
+  expect(output.includes('run_subagent [explorer] find x')).toBe(true);
+  expect(output.includes('✔ read_file "source/app.tsx"')).toBe(true);
 });
 
-test.serial('SubagentActivityMessage renders write tool CommandMessage concisely', async (t) => {
+it.sequential('SubagentActivityMessage renders write tool CommandMessage concisely', async () => {
   const writeMsg = {
     id: 'cmd-w1',
     sender: 'command' as const,
@@ -46,31 +45,22 @@ test.serial('SubagentActivityMessage renders write tool CommandMessage concisely
 
   const originalForceColor = process.env.FORCE_COLOR;
   process.env.FORCE_COLOR = '1';
-  t.teardown(() => {
-    if (originalForceColor === undefined) {
-      delete process.env.FORCE_COLOR;
-    } else {
-      process.env.FORCE_COLOR = originalForceColor;
-    }
-  });
-  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />, t);
+
+  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const rawOutput = lastFrame() ?? '';
   const output = toVisibleText(rawOutput);
 
-  t.true(output.includes('run_subagent [explorer] find x'), `Expected title in output: ${output}`);
-  t.true(output.includes('✔'), `Expected concise checkmark in output: ${output}`);
-  t.true(output.includes('Created "src/test.txt"'), `Expected concise display action: ${output}`);
+  expect(output.includes('run_subagent [explorer] find x')).toBe(true);
+  expect(output.includes('✔')).toBe(true);
+  expect(output.includes('Created "src/test.txt"')).toBe(true);
 
   // Verify left-alignment: no leading spaces before the checkmark
   const lines = output.split('\n').map((l) => l.trimEnd());
-  t.true(
-    lines.some((line) => line.startsWith('✔ Created "src/test.txt"')),
-    `Expected left-aligned checkmark in lines: ${JSON.stringify(lines)}`,
-  );
+  expect(lines.some((line) => line.startsWith('✔ Created "src/test.txt"'))).toBe(true);
 
   // Verify the hex color #64748b is applied if ANSI colors are generated
   if (rawOutput !== output) {
-    t.true(
+    expect(
       rawOutput.includes('100;116;139') ||
         rawOutput.includes('38;2;100;116;139') ||
         rawOutput.includes('38;5;103') ||
@@ -79,12 +69,17 @@ test.serial('SubagentActivityMessage renders write tool CommandMessage concisely
         rawOutput.includes('38;2;100') ||
         rawOutput.includes('90m') ||
         rawOutput.includes('37m'),
-      `Expected color escape sequence in raw output: ${JSON.stringify(rawOutput)}`,
-    );
+    ).toBe(true);
+  }
+
+  if (originalForceColor === undefined) {
+    delete process.env.FORCE_COLOR;
+  } else {
+    process.env.FORCE_COLOR = originalForceColor;
   }
 });
 
-test.serial('SubagentActivityMessage renders failed string tool with cross', async (t) => {
+it.sequential('SubagentActivityMessage renders failed string tool with cross', async () => {
   const props = {
     msg: {
       role: 'explorer',
@@ -94,13 +89,13 @@ test.serial('SubagentActivityMessage renders failed string tool with cross', asy
     },
   };
 
-  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />, t);
+  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  t.true(output.includes('✖ read_file "source/app.tsx"'), `Expected cross and tool: ${output}`);
+  expect(output.includes('✖ read_file "source/app.tsx"')).toBe(true);
 });
 
-test.serial('SubagentActivityMessage renders failed-with-reason string tool with cross', async (t) => {
+it.sequential('SubagentActivityMessage renders failed-with-reason string tool with cross', async () => {
   const props = {
     msg: {
       role: 'explorer',
@@ -110,13 +105,13 @@ test.serial('SubagentActivityMessage renders failed-with-reason string tool with
     },
   };
 
-  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />, t);
+  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  t.true(output.includes('✖ read_file "source/app.tsx"'), `Expected cross and tool: ${output}`);
+  expect(output.includes('✖ read_file "source/app.tsx"')).toBe(true);
 });
 
-test.serial('SubagentActivityMessage renders cancelled string tool with cross', async (t) => {
+it.sequential('SubagentActivityMessage renders cancelled string tool with cross', async () => {
   const props = {
     msg: {
       role: 'explorer',
@@ -126,13 +121,13 @@ test.serial('SubagentActivityMessage renders cancelled string tool with cross', 
     },
   };
 
-  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />, t);
+  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  t.true(output.includes('✖ read_file "source/app.tsx"'), `Expected cross and tool: ${output}`);
+  expect(output.includes('✖ read_file "source/app.tsx"')).toBe(true);
 });
 
-test.serial('SubagentActivityMessage renders match-count string tool with checkmark', async (t) => {
+it.sequential('SubagentActivityMessage renders match-count string tool with checkmark', async () => {
   const props = {
     msg: {
       role: 'explorer',
@@ -142,13 +137,13 @@ test.serial('SubagentActivityMessage renders match-count string tool with checkm
     },
   };
 
-  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />, t);
+  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  t.true(output.includes('✔ grep "TODO"'), `Expected checkmark and tool: ${output}`);
+  expect(output.includes('✔ grep "TODO"')).toBe(true);
 });
 
-test.serial('SubagentActivityMessage renders single-match string tool with checkmark', async (t) => {
+it.sequential('SubagentActivityMessage renders single-match string tool with checkmark', async () => {
   const props = {
     msg: {
       role: 'explorer',
@@ -158,13 +153,13 @@ test.serial('SubagentActivityMessage renders single-match string tool with check
     },
   };
 
-  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />, t);
+  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  t.true(output.includes('✔ grep "TODO"'), `Expected checkmark and tool: ${output}`);
+  expect(output.includes('✔ grep "TODO"')).toBe(true);
 });
 
-test.serial('SubagentActivityMessage renders unknown-suffix tool as running when activity is running', async (t) => {
+it.sequential('SubagentActivityMessage renders unknown-suffix tool as running when activity is running', async () => {
   const props = {
     msg: {
       role: 'explorer',
@@ -174,13 +169,13 @@ test.serial('SubagentActivityMessage renders unknown-suffix tool as running when
     },
   };
 
-  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />, t);
+  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  t.true(output.includes('\u25b6 read_file "source/app.tsx"'), `Expected arrow and tool: ${output}`);
+  expect(output.includes('\u25b6 read_file "source/app.tsx"')).toBe(true);
 });
 
-test.serial('SubagentActivityMessage renders unknown-suffix tool as success when activity is completed', async (t) => {
+it.sequential('SubagentActivityMessage renders unknown-suffix tool as success when activity is completed', async () => {
   const props = {
     msg: {
       role: 'explorer',
@@ -190,13 +185,13 @@ test.serial('SubagentActivityMessage renders unknown-suffix tool as success when
     },
   };
 
-  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />, t);
+  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  t.true(output.includes('\u2714 read_file "source/app.tsx"'), `Expected checkmark and tool: ${output}`);
+  expect(output.includes('\u2714 read_file "source/app.tsx"')).toBe(true);
 });
 
-test.serial('SubagentActivityMessage does not misparse embedded (Failed: in arguments', async (t) => {
+it.sequential('SubagentActivityMessage does not misparse embedded (Failed: in arguments', async () => {
   const props = {
     msg: {
       role: 'explorer',
@@ -206,9 +201,9 @@ test.serial('SubagentActivityMessage does not misparse embedded (Failed: in argu
     },
   };
 
-  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />, t);
+  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  t.true(output.includes('\u2714'), `Expected checkmark: ${output}`);
-  t.true(output.includes('write_file "notes (Failed: old).txt"'), `Expected full tool with embedded text: ${output}`);
+  expect(output.includes('\u2714')).toBe(true);
+  expect(output.includes('write_file "notes (Failed: old).txt"')).toBe(true);
 });

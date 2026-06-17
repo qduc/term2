@@ -1,9 +1,9 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG, LargeUncachedInputGuard } from './large-uncached-input-guard.js';
 
 const largeInput = () => 'x'.repeat(DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG.largePromptTokenThreshold * 4);
 
-test('warns above threshold after provider, model, or reasoning changes', (t) => {
+it('warns above threshold after provider, model, or reasoning changes', () => {
   const guard = new LargeUncachedInputGuard();
   guard.recordSuccessfulInput({
     input: 'small',
@@ -22,8 +22,8 @@ test('warns above threshold after provider, model, or reasoning changes', (t) =>
     reasoningEffort: 'medium',
     mode: 'standard',
   });
-  t.is(providerDecision.action, 'warn');
-  t.true(providerDecision.reasons.includes('provider_changed'));
+  expect(providerDecision.action).toBe('warn');
+  expect(providerDecision.reasons.includes('provider_changed')).toBe(true);
 
   const modelDecision = guard.inspect({
     input: largeInput(),
@@ -33,8 +33,8 @@ test('warns above threshold after provider, model, or reasoning changes', (t) =>
     reasoningEffort: 'medium',
     mode: 'standard',
   });
-  t.is(modelDecision.action, 'warn');
-  t.true(modelDecision.reasons.includes('model_changed'));
+  expect(modelDecision.action).toBe('warn');
+  expect(modelDecision.reasons.includes('model_changed')).toBe(true);
 
   const reasoningDecision = guard.inspect({
     input: largeInput(),
@@ -44,11 +44,11 @@ test('warns above threshold after provider, model, or reasoning changes', (t) =>
     reasoningEffort: 'high',
     mode: 'standard',
   });
-  t.is(reasoningDecision.action, 'warn');
-  t.true(reasoningDecision.reasons.includes('reasoning_effort_changed'));
+  expect(reasoningDecision.action).toBe('warn');
+  expect(reasoningDecision.reasons.includes('reasoning_effort_changed')).toBe(true);
 });
 
-test('does not warn below threshold', (t) => {
+it('does not warn below threshold', () => {
   const guard = new LargeUncachedInputGuard();
   guard.recordSuccessfulInput({
     input: largeInput(),
@@ -68,10 +68,10 @@ test('does not warn below threshold', (t) => {
     mode: 'lite',
   });
 
-  t.is(decision.action, 'allow');
+  expect(decision.action).toBe('allow');
 });
 
-test('uses estimated token size from the serialized outgoing input', (t) => {
+it('uses estimated token size from the serialized outgoing input', () => {
   const guard = new LargeUncachedInputGuard();
   guard.recordSuccessfulInput({
     input: largeInput(),
@@ -91,12 +91,14 @@ test('uses estimated token size from the serialized outgoing input', (t) => {
     mode: 'standard',
   });
 
-  t.is(estimatedDecision.action, 'warn');
-  t.true(estimatedDecision.estimatedTokens >= DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG.largePromptTokenThreshold);
-  t.true(estimatedDecision.reasons.includes('idle_timeout'));
+  expect(estimatedDecision.action).toBe('warn');
+  expect(estimatedDecision.estimatedTokens >= DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG.largePromptTokenThreshold).toBe(
+    true,
+  );
+  expect(estimatedDecision.reasons.includes('idle_timeout')).toBe(true);
 });
 
-test('warns after idle time exceeds five minutes', (t) => {
+it('warns after idle time exceeds five minutes', () => {
   const guard = new LargeUncachedInputGuard();
   guard.recordSuccessfulInput({
     input: largeInput(),
@@ -116,11 +118,11 @@ test('warns after idle time exceeds five minutes', (t) => {
     mode: 'standard',
   });
 
-  t.is(decision.action, 'warn');
-  t.true(decision.reasons.includes('idle_timeout'));
+  expect(decision.action).toBe('warn');
+  expect(decision.reasons.includes('idle_timeout')).toBe(true);
 });
 
-test('does not warn for Standard to Plan mode changes alone', (t) => {
+it('does not warn for Standard to Plan mode changes alone', () => {
   const guard = new LargeUncachedInputGuard();
   guard.recordSuccessfulInput({
     input: largeInput(),
@@ -140,10 +142,10 @@ test('does not warn for Standard to Plan mode changes alone', (t) => {
     mode: 'plan',
   });
 
-  t.is(decision.action, 'allow');
+  expect(decision.action).toBe('allow');
 });
 
-test('warns for resumed large old sessions', (t) => {
+it('warns for resumed large old sessions', () => {
   const guard = new LargeUncachedInputGuard();
   guard.markResumedSession({ updatedAtMs: 1_000 });
 
@@ -156,11 +158,11 @@ test('warns for resumed large old sessions', (t) => {
     mode: 'standard',
   });
 
-  t.is(decision.action, 'warn');
-  t.true(decision.reasons.includes('resumed_session_stale'));
+  expect(decision.action).toBe('warn');
+  expect(decision.reasons.includes('resumed_session_stale')).toBe(true);
 });
 
-test('warning key is stable for the same pending input and changes when input changes', (t) => {
+it('warning key is stable for the same pending input and changes when input changes', () => {
   const guard = new LargeUncachedInputGuard();
   guard.recordSuccessfulInput({
     input: largeInput(),
@@ -196,9 +198,9 @@ test('warning key is stable for the same pending input and changes when input ch
     mode: 'standard',
   });
 
-  t.is(first.action, 'warn');
-  t.is(second.action, 'warn');
-  t.is(changed.action, 'warn');
-  t.is(first.warningKey, second.warningKey);
-  t.not(first.warningKey, changed.warningKey);
+  expect(first.action).toBe('warn');
+  expect(second.action).toBe('warn');
+  expect(changed.action).toBe('warn');
+  expect(first.warningKey).toBe(second.warningKey);
+  expect(first.warningKey).not.toBe(changed.warningKey);
 });

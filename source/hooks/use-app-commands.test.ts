@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import type { Message } from './use-conversation.js';
@@ -12,14 +11,18 @@ import { createUsageSlashCommand } from '../commands/usage-command.js';
 import { useAppCommands } from './use-app-commands.js';
 import { getLastFinalAssistantText } from '../utils/conversation/message-utils.js';
 import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
-import { renderInAct } from '../test-helpers/ink-testing.js';
+import { renderInAct, runTeardowns } from '../test-helpers/ink-testing.js';
+
+afterEach(async () => {
+  await runTeardowns();
+});
 
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
 }
 
-test.serial('getLastFinalAssistantText returns the response from the latest assistant turn', (t) => {
+it.sequential('getLastFinalAssistantText returns the response from the latest assistant turn', () => {
   const messages: Message[] = [
     { id: '1', sender: 'user', text: 'Hi' },
     { id: '2', sender: 'bot', text: 'First answer' },
@@ -27,10 +30,10 @@ test.serial('getLastFinalAssistantText returns the response from the latest assi
     { id: '4', sender: 'bot', text: 'Final answer' },
   ];
 
-  t.is(getLastFinalAssistantText(messages), 'Final answer');
+  expect(getLastFinalAssistantText(messages)).toBe('Final answer');
 });
 
-test.serial('getLastFinalAssistantText combines contiguous bot messages to return the full message', (t) => {
+it.sequential('getLastFinalAssistantText combines contiguous bot messages to return the full message', () => {
   const messages: Message[] = [
     { id: '1', sender: 'user', text: 'Tell me a story' },
     { id: '2', sender: 'bot', text: 'Paragraph 1\n\n' },
@@ -38,49 +41,49 @@ test.serial('getLastFinalAssistantText combines contiguous bot messages to retur
     { id: '4', sender: 'bot', text: 'Paragraph 3' },
   ];
 
-  t.is(getLastFinalAssistantText(messages), 'Paragraph 1\n\nParagraph 2\n\nParagraph 3');
+  expect(getLastFinalAssistantText(messages)).toBe('Paragraph 1\n\nParagraph 2\n\nParagraph 3');
 });
 
-test.serial('getLastFinalAssistantText ignores reasoning and system messages', (t) => {
+it.sequential('getLastFinalAssistantText ignores reasoning and system messages', () => {
   const messages: Message[] = [
     { id: '1', sender: 'bot', text: 'Earlier answer' },
     { id: '2', sender: 'reasoning', text: 'hidden chain of thought' },
     { id: '3', sender: 'system', text: 'Stopped' },
   ];
 
-  t.is(getLastFinalAssistantText(messages), 'Earlier answer');
+  expect(getLastFinalAssistantText(messages)).toBe('Earlier answer');
 });
 
-test.serial('getLastFinalAssistantText returns null when no bot message exists', (t) => {
+it.sequential('getLastFinalAssistantText returns null when no bot message exists', () => {
   const messages: Message[] = [
     { id: '1', sender: 'user', text: 'Hi' },
     { id: '2', sender: 'reasoning', text: 'thinking' },
     { id: '3', sender: 'system', text: 'No response yet' },
   ];
 
-  t.is(getLastFinalAssistantText(messages), null);
+  expect(getLastFinalAssistantText(messages)).toBe(null);
 });
 
-test.serial('parseModelProviderArg supports provider names with spaces for /model', (t) => {
-  t.deepEqual(parseModelProviderArg('deepseek-v4-flash --provider=opencode go'), {
+it.sequential('parseModelProviderArg supports provider names with spaces for /model', () => {
+  expect(parseModelProviderArg('deepseek-v4-flash --provider=opencode go')).toEqual({
     modelId: 'deepseek-v4-flash',
     provider: 'opencode go',
   });
 });
 
-test.serial('createUsageSlashCommand shows current session usage', (t) => {
+it.sequential('createUsageSlashCommand shows current session usage', () => {
   const messages: string[] = [];
   const command = createUsageSlashCommand(
     (text) => messages.push(text),
     () => 'Token usage: 20,000 input (1,000,000 cached), 20,000 output',
   );
 
-  t.is(command.name, 'usage');
-  t.is(command.action(), true);
-  t.deepEqual(messages, ['Token usage: 20,000 input (1,000,000 cached), 20,000 output']);
+  expect(command.name).toBe('usage');
+  expect(command.action()).toBe(true);
+  expect(messages).toEqual(['Token usage: 20,000 input (1,000,000 cached), 20,000 output']);
 });
 
-test.serial('createCopySlashCommand returns immediately and reports success after async clipboard copy', async (t) => {
+it.sequential('createCopySlashCommand returns immediately and reports success after async clipboard copy', async () => {
   const systemMessages: string[] = [];
   let resolveCopy: (() => void) | undefined;
   const command = createCopySlashCommand({
@@ -92,16 +95,16 @@ test.serial('createCopySlashCommand returns immediately and reports success afte
       }),
   });
 
-  t.is(command.action(), true);
-  t.deepEqual(systemMessages, []);
+  expect(command.action()).toBe(true);
+  expect(systemMessages).toEqual([]);
 
   resolveCopy?.();
   await flushMicrotasks();
 
-  t.deepEqual(systemMessages, ['Copied the latest assistant response to the clipboard.']);
+  expect(systemMessages).toEqual(['Copied the latest assistant response to the clipboard.']);
 });
 
-test.serial('createCopySlashCommand reports clipboard failures asynchronously', async (t) => {
+it.sequential('createCopySlashCommand reports clipboard failures asynchronously', async () => {
   const systemMessages: string[] = [];
   const command = createCopySlashCommand({
     messages: [{ id: '1', sender: 'bot', text: 'hello' }],
@@ -111,13 +114,13 @@ test.serial('createCopySlashCommand reports clipboard failures asynchronously', 
     },
   });
 
-  t.is(command.action(), true);
+  expect(command.action()).toBe(true);
   await flushMicrotasks();
 
-  t.deepEqual(systemMessages, ['Failed to copy to clipboard: clipboard unavailable']);
+  expect(systemMessages).toEqual(['Failed to copy to clipboard: clipboard unavailable']);
 });
 
-test.serial('createUndoSlashCommand opens undo menu when no args', (t) => {
+it.sequential('createUndoSlashCommand opens undo menu when no args', () => {
   let menuOpened = false;
   const command = createUndoSlashCommand({
     undoLastUserMessage: () => ({ text: 'Previous message' }),
@@ -129,11 +132,11 @@ test.serial('createUndoSlashCommand opens undo menu when no args', (t) => {
   });
 
   const result = command.action();
-  t.is(result, true);
-  t.true(menuOpened);
+  expect(result).toBe(true);
+  expect(menuOpened).toBe(true);
 });
 
-test.serial('createUndoSlashCommand with "last" arg restores last user message to input and returns false', (t) => {
+it.sequential('createUndoSlashCommand with "last" arg restores last user message to input and returns false', () => {
   let input = '';
   let undoRedraws = 0;
   const command = createUndoSlashCommand({
@@ -148,16 +151,16 @@ test.serial('createUndoSlashCommand with "last" arg restores last user message t
     },
   });
 
-  t.is(command.name, 'undo');
+  expect(command.name).toBe('undo');
   const result = command.action('last');
-  t.is(result, false);
-  t.is(input, 'Previous message');
-  t.is(undoRedraws, 1);
+  expect(result).toBe(false);
+  expect(input).toBe('Previous message');
+  expect(undoRedraws).toBe(1);
 });
 
-test.serial(
+it.sequential(
   'createUndoSlashCommand shows system message via undoLastUserMessage when nothing to undo with "last" arg',
-  (t) => {
+  () => {
     const systemMessages: string[] = [];
     let undoRedraws = 0;
     const command = createUndoSlashCommand({
@@ -171,13 +174,13 @@ test.serial(
     });
 
     const result = command.action('last');
-    t.is(result, true);
-    t.deepEqual(systemMessages, ['Nothing to undo.']);
-    t.is(undoRedraws, 0);
+    expect(result).toBe(true);
+    expect(systemMessages).toEqual(['Nothing to undo.']);
+    expect(undoRedraws).toBe(0);
   },
 );
 
-test.serial('createRetrySlashCommand undoes and re-sends the last user message', async (t) => {
+it.sequential('createRetrySlashCommand undoes and re-sends the last user message', async () => {
   const systemMessages: string[] = [];
   let undoCalled = false;
   let sentText: string | null = null;
@@ -198,17 +201,17 @@ test.serial('createRetrySlashCommand undoes and re-sends the last user message',
     },
   });
 
-  t.is(command.name, 'retry');
+  expect(command.name).toBe('retry');
   const result = command.action();
-  t.is(result, true);
-  t.true(undoCalled);
-  t.not(sentText, null);
-  t.is(sentText!, 'hello');
-  t.is(undoRedraws, 1);
-  t.deepEqual(systemMessages, []);
+  expect(result).toBe(true);
+  expect(undoCalled).toBe(true);
+  expect(sentText).not.toBe(null);
+  expect(sentText!).toBe('hello');
+  expect(undoRedraws).toBe(1);
+  expect(systemMessages).toEqual([]);
 });
 
-test.serial('createRetrySlashCommand shows system message when nothing to retry', (t) => {
+it.sequential('createRetrySlashCommand shows system message when nothing to retry', () => {
   const systemMessages: string[] = [];
   let undoCalled = false;
 
@@ -223,12 +226,12 @@ test.serial('createRetrySlashCommand shows system message when nothing to retry'
   });
 
   const result = command.action();
-  t.is(result, true);
-  t.true(undoCalled);
-  t.deepEqual(systemMessages, ['Nothing to retry.']);
+  expect(result).toBe(true);
+  expect(undoCalled).toBe(true);
+  expect(systemMessages).toEqual(['Nothing to retry.']);
 });
 
-test.serial('createRetrySlashCommand retries when previous turn included images', async (t) => {
+it.sequential('createRetrySlashCommand retries when previous turn included images', async () => {
   const systemMessages: string[] = [];
   let undoCalled = false;
   let sentInput: any = null;
@@ -249,13 +252,13 @@ test.serial('createRetrySlashCommand retries when previous turn included images'
   });
 
   const result = command.action();
-  t.is(result, true);
-  t.true(undoCalled);
-  t.deepEqual(sentInput, {
+  expect(result).toBe(true);
+  expect(undoCalled).toBe(true);
+  expect(sentInput).toEqual({
     text: 'hello',
     images: [{ id: 'img-1', data: 'xyz', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
   });
-  t.deepEqual(systemMessages, []);
+  expect(systemMessages).toEqual([]);
 });
 
 const TestHookWrapper = ({
@@ -297,7 +300,7 @@ const TestHookWrapper = ({
   return null;
 };
 
-test.serial('useAppCommands togglePlanMode toggles plan mode', async (t) => {
+it.sequential('useAppCommands togglePlanMode toggles plan mode', async () => {
   const settings = new Map<string, any>();
   const applied: string[] = [];
   let hookResult: any;
@@ -313,24 +316,23 @@ test.serial('useAppCommands togglePlanMode toggles plan mode', async (t) => {
         settings.set(key, value);
       },
     }),
-    t,
   );
 
   // Toggle planMode ON
   await act(async () => {
     hookResult.togglePlanMode();
   });
-  t.true(settings.get('app.planMode'));
-  t.true(applied.includes('app.planMode'));
+  expect(settings.get('app.planMode')).toBe(true);
+  expect(applied.includes('app.planMode')).toBe(true);
 
   // Toggle planMode OFF
   await act(async () => {
     hookResult.togglePlanMode();
   });
-  t.false(settings.get('app.planMode'));
+  expect(settings.get('app.planMode')).toBe(false);
 });
 
-test.serial('useAppCommands cycleAppModes cycles Standard -> Plan -> Standard', async (t) => {
+it.sequential('useAppCommands cycleAppModes cycles Standard -> Plan -> Standard', async () => {
   const settings = new Map<string, any>();
   const applied: string[] = [];
   let hookResult: any;
@@ -346,26 +348,25 @@ test.serial('useAppCommands cycleAppModes cycles Standard -> Plan -> Standard', 
         settings.set(key, value);
       },
     }),
-    t,
   );
 
   // Starts in Standard (planMode false)
-  t.falsy(settings.get('app.planMode'));
+  expect(settings.get('app.planMode')).toBeFalsy();
 
   // Standard -> Plan
   await act(async () => {
     hookResult.cycleAppModes();
   });
-  t.true(settings.get('app.planMode'));
+  expect(settings.get('app.planMode')).toBe(true);
 
   // Plan -> Standard
   await act(async () => {
     hookResult.cycleAppModes();
   });
-  t.false(settings.get('app.planMode'));
+  expect(settings.get('app.planMode')).toBe(false);
 });
 
-test.serial('useAppCommands /orchestrator enables exclusive orchestrator mode', async (t) => {
+it.sequential('useAppCommands /orchestrator enables exclusive orchestrator mode', async () => {
   const settings = new Map<string, any>([
     ['app.liteMode', true],
     ['app.mentorMode', true],
@@ -381,20 +382,19 @@ test.serial('useAppCommands /orchestrator enables exclusive orchestrator mode', 
       },
       onApply: (key: string, value: any) => settings.set(key, value),
     }),
-    t,
   );
 
   await act(async () => {
     hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
   });
 
-  t.true(settings.get('app.orchestratorMode'));
-  t.false(settings.get('app.liteMode'));
-  t.false(settings.get('app.mentorMode'));
-  t.false(settings.get('app.planMode'));
+  expect(settings.get('app.orchestratorMode')).toBe(true);
+  expect(settings.get('app.liteMode')).toBe(false);
+  expect(settings.get('app.mentorMode')).toBe(false);
+  expect(settings.get('app.planMode')).toBe(false);
 });
 
-test.serial('useAppCommands blocks /orchestrator when the session has non-system history', async (t) => {
+it.sequential('useAppCommands blocks /orchestrator when the session has non-system history', async () => {
   const settings = new Map<string, any>();
   const systemMessages: string[] = [];
   let hookResult: any;
@@ -408,20 +408,19 @@ test.serial('useAppCommands blocks /orchestrator when the session has non-system
         hookResult = res;
       },
     }),
-    t,
   );
 
   await act(async () => {
     hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
   });
 
-  t.falsy(settings.get('app.orchestratorMode'));
-  t.true(systemMessages.some((message) => message.includes('/clear')));
+  expect(settings.get('app.orchestratorMode')).toBeFalsy();
+  expect(systemMessages.some((message) => message.includes('/clear'))).toBe(true);
 });
 
-test.serial(
+it.sequential(
   'useAppCommands blocks orchestrator settings changes when the session has non-system history',
-  async (t) => {
+  async () => {
     const settings = new Map<string, any>();
     const systemMessages: string[] = [];
     let hookResult: any;
@@ -435,19 +434,18 @@ test.serial(
           hookResult = res;
         },
       }),
-      t,
     );
 
     await act(async () => {
       hookResult.slashCommands.find((command: any) => command.name === 'settings').action('app.orchestratorMode true');
     });
 
-    t.falsy(settings.get('app.orchestratorMode'));
-    t.true(systemMessages.some((message) => message.includes('/clear')));
+    expect(settings.get('app.orchestratorMode')).toBeFalsy();
+    expect(systemMessages.some((message) => message.includes('/clear'))).toBe(true);
   },
 );
 
-test.serial('useAppCommands enabling orchestrator disables all of: lite, plan, mentor', async (t) => {
+it.sequential('useAppCommands enabling orchestrator disables all of: lite, plan, mentor', async () => {
   const settings = new Map<string, any>([
     ['app.liteMode', true],
     ['app.planMode', true],
@@ -464,20 +462,19 @@ test.serial('useAppCommands enabling orchestrator disables all of: lite, plan, m
       },
       onApply: (key: string, value: any) => settings.set(key, value),
     }),
-    t,
   );
 
   await act(async () => {
     hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
   });
 
-  t.true(settings.get('app.orchestratorMode'));
-  t.false(settings.get('app.liteMode'));
-  t.false(settings.get('app.planMode'));
-  t.false(settings.get('app.mentorMode'));
+  expect(settings.get('app.orchestratorMode')).toBe(true);
+  expect(settings.get('app.liteMode')).toBe(false);
+  expect(settings.get('app.planMode')).toBe(false);
+  expect(settings.get('app.mentorMode')).toBe(false);
 });
 
-test.serial('useAppCommands enabling plan disables all of: lite, orchestrator, mentor', async (t) => {
+it.sequential('useAppCommands enabling plan disables all of: lite, orchestrator, mentor', async () => {
   const settings = new Map<string, any>([
     ['app.liteMode', true],
     ['app.orchestratorMode', true],
@@ -494,20 +491,19 @@ test.serial('useAppCommands enabling plan disables all of: lite, orchestrator, m
       },
       onApply: (key: string, value: any) => settings.set(key, value),
     }),
-    t,
   );
 
   await act(async () => {
     hookResult.slashCommands.find((command: any) => command.name === 'plan').action();
   });
 
-  t.true(settings.get('app.planMode'));
-  t.false(settings.get('app.liteMode'));
-  t.false(settings.get('app.orchestratorMode'));
-  t.false(settings.get('app.mentorMode'));
+  expect(settings.get('app.planMode')).toBe(true);
+  expect(settings.get('app.liteMode')).toBe(false);
+  expect(settings.get('app.orchestratorMode')).toBe(false);
+  expect(settings.get('app.mentorMode')).toBe(false);
 });
 
-test.serial('useAppCommands cycleAppModes when in mentor mode switches to plan and disables mentor', async (t) => {
+it.sequential('useAppCommands cycleAppModes when in mentor mode switches to plan and disables mentor', async () => {
   const settings = new Map<string, any>([
     ['app.mentorMode', true],
     ['app.planMode', false],
@@ -522,18 +518,17 @@ test.serial('useAppCommands cycleAppModes when in mentor mode switches to plan a
       },
       onApply: (key: string, value: any) => settings.set(key, value),
     }),
-    t,
   );
 
   await act(async () => {
     hookResult.cycleAppModes();
   });
 
-  t.true(settings.get('app.planMode'));
-  t.false(settings.get('app.mentorMode'));
+  expect(settings.get('app.planMode')).toBe(true);
+  expect(settings.get('app.mentorMode')).toBe(false);
 });
 
-test.serial('useAppCommands /handoff when no assistant response exists shows system message', async (t) => {
+it.sequential('useAppCommands /handoff when no assistant response exists shows system message', async () => {
   const settings = new Map<string, any>();
   const systemMessages: string[] = [];
   let hookResult: any;
@@ -547,22 +542,21 @@ test.serial('useAppCommands /handoff when no assistant response exists shows sys
         hookResult = res;
       },
     }),
-    t,
   );
 
   const command = hookResult.slashCommands.find((c: any) => c.name === 'handoff');
-  t.truthy(command);
+  expect(command).toBeTruthy();
   let result = false;
   await act(async () => {
     result = command.action();
   });
-  t.is(result, true);
-  t.deepEqual(systemMessages, ['No assistant response available to hand off.']);
+  expect(result).toBe(true);
+  expect(systemMessages).toEqual(['No assistant response available to hand off.']);
 });
 
-test.serial(
+it.sequential(
   'useAppCommands /handoff when assistant response exists copies, clears, message, and calls onHandoff',
-  async (t) => {
+  async () => {
     const settings = new Map<string, any>();
     const systemMessages: string[] = [];
     let clearCalled = false;
@@ -610,17 +604,17 @@ test.serial(
     });
 
     const command = hookResult.slashCommands.find((c: any) => c.name === 'handoff');
-    t.truthy(command);
+    expect(command).toBeTruthy();
     let result = false;
     await act(async () => {
       result = command.action();
       await flushMicrotasks();
     });
-    t.is(result, true);
-    t.false(clearCalled);
+    expect(result).toBe(true);
+    expect(clearCalled).toBe(false);
 
-    t.is(handoffText as any, 'my plan');
-    t.deepEqual(systemMessages, []);
+    expect(handoffText as any).toBe('my plan');
+    expect(systemMessages).toEqual([]);
 
     await act(async () => {
       unmount();

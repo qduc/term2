@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect } from 'vitest';
 import { createConversationSession, createConversationSessionComposition } from './session-composition.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 
@@ -57,20 +57,20 @@ const makeMockClient = (overrides = {}) =>
 
 // ── Factory return shape ───────────────────────────────────────────
 
-test('createConversationSession returns bundle with correct sessionId', (t) => {
+it('createConversationSession returns bundle with correct sessionId', () => {
   const { sessionId } = createConversationSession({
     sessionId: 'test-123',
     agentClient: makeMockClient(),
     deps: { logger: makeLogger(), sessionContextService },
   });
-  t.is(sessionId, 'test-123');
+  expect(sessionId).toBe('test-123');
 });
 
-test('createConversationSession is the public name for the session composition root', (t) => {
-  t.is(createConversationSession, createConversationSessionComposition);
+it('createConversationSession is the public name for the session composition root', () => {
+  expect(createConversationSession).toBe(createConversationSessionComposition);
 });
 
-test('createConversationSession returns bundle with correct sessionStartedAt when provided', (t) => {
+it('createConversationSession returns bundle with correct sessionStartedAt when provided', () => {
   const ts = '2024-01-01T00:00:00.000Z';
   const { sessionStartedAt } = createConversationSession({
     sessionId: 'test-ts',
@@ -78,10 +78,10 @@ test('createConversationSession returns bundle with correct sessionStartedAt whe
     agentClient: makeMockClient(),
     deps: { logger: makeLogger(), sessionContextService },
   });
-  t.is(sessionStartedAt, ts);
+  expect(sessionStartedAt).toBe(ts);
 });
 
-test('createConversationSession returns bundle with auto sessionStartedAt when not provided', (t) => {
+it('createConversationSession returns bundle with auto sessionStartedAt when not provided', () => {
   const before = new Date().toISOString();
   const { sessionStartedAt } = createConversationSession({
     sessionId: 'auto-ts',
@@ -89,21 +89,21 @@ test('createConversationSession returns bundle with auto sessionStartedAt when n
     deps: { logger: makeLogger(), sessionContextService },
   });
   const after = new Date().toISOString();
-  t.true(sessionStartedAt >= before);
-  t.true(sessionStartedAt <= after);
+  expect(sessionStartedAt >= before).toBe(true);
+  expect(sessionStartedAt <= after).toBe(true);
 });
 
-test('createConversationSession returns a terminalAdapter with sendMessage', (t) => {
+it('createConversationSession returns a terminalAdapter with sendMessage', () => {
   const { terminalAdapter } = createConversationSession({
     sessionId: 'ta-test',
     agentClient: makeMockClient(),
     deps: { logger: makeLogger(), sessionContextService },
   });
-  t.is(typeof terminalAdapter.sendMessage, 'function');
-  t.is(typeof terminalAdapter.handleApprovalDecision, 'function');
+  expect(typeof terminalAdapter.sendMessage).toBe('function');
+  expect(typeof terminalAdapter.handleApprovalDecision).toBe('function');
 });
 
-test('createConversationSessionComposition composes a plain appState object with a statusMachine', (t) => {
+it('createConversationSessionComposition composes a plain appState object with a statusMachine', () => {
   const { appState } = createConversationSessionComposition({
     sessionId: 'app-state-test',
     agentClient: makeMockClient(),
@@ -124,63 +124,63 @@ test('createConversationSessionComposition composes a plain appState object with
       getPersistedTurnState: () => [],
     } as any,
   });
-  t.is(Object.getPrototypeOf(appState), Object.prototype);
-  t.is(appState.statusMachine.current, 'idle');
+  expect(Object.getPrototypeOf(appState)).toBe(Object.prototype);
+  expect(appState.statusMachine.current).toBe('idle');
 });
 
-test('createConversationSession returns stateFacade with undo/snapshot operations', (t) => {
+it('createConversationSession returns stateFacade with undo/snapshot operations', () => {
   const { stateFacade } = createConversationSession({
     sessionId: 'sf-test',
     agentClient: makeMockClient(),
     deps: { logger: makeLogger(), sessionContextService },
   });
-  t.is(typeof stateFacade.reset, 'function');
-  t.is(typeof stateFacade.undoLastUserTurn, 'function');
-  t.is(typeof stateFacade.listUserTurns, 'function');
-  t.is(typeof stateFacade.undoNUserTurns, 'function');
-  t.is(typeof stateFacade.getCurrentSnapshot, 'function');
-  t.is(typeof stateFacade.exportState, 'function');
-  t.is(typeof stateFacade.importState, 'function');
-  t.is(typeof stateFacade.addShellContext, 'function');
-  t.is(typeof stateFacade.queueModeNotice, 'function');
+  expect(typeof stateFacade.reset).toBe('function');
+  expect(typeof stateFacade.undoLastUserTurn).toBe('function');
+  expect(typeof stateFacade.listUserTurns).toBe('function');
+  expect(typeof stateFacade.undoNUserTurns).toBe('function');
+  expect(typeof stateFacade.getCurrentSnapshot).toBe('function');
+  expect(typeof stateFacade.exportState).toBe('function');
+  expect(typeof stateFacade.importState).toBe('function');
+  expect(typeof stateFacade.addShellContext).toBe('function');
+  expect(typeof stateFacade.queueModeNotice).toBe('function');
 });
 
-test('createConversationSession returns runtimeController with model/provider operations', (t) => {
+it('createConversationSession returns runtimeController with model/provider operations', () => {
   const { runtimeController } = createConversationSession({
     sessionId: 'rc-test',
     agentClient: makeMockClient(),
     deps: { logger: makeLogger(), sessionContextService },
   });
-  t.is(typeof runtimeController.setModel, 'function');
-  t.is(typeof runtimeController.setProvider, 'function');
-  t.is(typeof runtimeController.switchProvider, 'function');
-  t.is(typeof runtimeController.setRetryCallback, 'function');
+  expect(typeof runtimeController.setModel).toBe('function');
+  expect(typeof runtimeController.setProvider).toBe('function');
+  expect(typeof runtimeController.switchProvider).toBe('function');
+  expect(typeof runtimeController.setRetryCallback).toBe('function');
 });
 
-test('createConversationSession returns a dispose function', (t) => {
+it('createConversationSession returns a dispose function', () => {
   const { dispose } = createConversationSession({
     sessionId: 'dispose-test',
     agentClient: makeMockClient(),
     deps: { logger: makeLogger(), sessionContextService },
   });
-  t.is(typeof dispose, 'function');
+  expect(typeof dispose).toBe('function');
 });
 
 // ── Disposal ─────────────────────────────────────────────────────
 
-test('dispose() is idempotent — safe to call twice without throwing', (t) => {
+it('dispose() is idempotent — safe to call twice without throwing', () => {
   const { dispose } = createConversationSession({
     sessionId: 'idempotent',
     agentClient: makeMockClient(),
     deps: { logger: makeLogger(), sessionContextService },
   });
-  t.notThrows(() => {
+  expect(() => {
     dispose();
     dispose();
-  });
+  }).not.toThrow();
 });
 
-test('dispose() resets previousResponseId so next run starts fresh', (t) => {
+it('dispose() resets previousResponseId so next run starts fresh', () => {
   const { dispose } = createConversationSession({
     sessionId: 'prev-resp-id',
     agentClient: makeMockClient(),
@@ -188,12 +188,12 @@ test('dispose() resets previousResponseId so next run starts fresh', (t) => {
   });
 
   // We'll just check that dispose doesn't throw
-  t.notThrows(() => dispose());
+  expect(() => dispose()).not.toThrow();
 });
 
 // ── No callback into partially-constructed session ────────────────
 
-test('turnCoordinator.abort() does not throw', (t) => {
+it('turnCoordinator.abort() does not throw', () => {
   const abortCalled = { value: false };
   const mockClient = makeMockClient({
     abort: () => {
@@ -208,12 +208,12 @@ test('turnCoordinator.abort() does not throw', (t) => {
   });
 
   // Should not throw
-  t.notThrows(() => turnCoordinator.abort());
+  expect(() => turnCoordinator.abort()).not.toThrow();
 });
 
 // ── Non-interactive path ──────────────────────────────────────────
 
-test('createConversationSession can be used as ConversationSessionLike', (t) => {
+it('createConversationSession can be used as ConversationSessionLike', () => {
   const { terminalAdapter } = createConversationSession({
     sessionId: 'ni-test',
     agentClient: makeMockClient(),
@@ -221,6 +221,6 @@ test('createConversationSession can be used as ConversationSessionLike', (t) => 
   });
 
   // Verify the shape matches what runWithSession expects
-  t.is(typeof terminalAdapter.sendMessage, 'function');
-  t.is(typeof terminalAdapter.handleApprovalDecision, 'function');
+  expect(typeof terminalAdapter.sendMessage).toBe('function');
+  expect(typeof terminalAdapter.handleApprovalDecision).toBe('function');
 });

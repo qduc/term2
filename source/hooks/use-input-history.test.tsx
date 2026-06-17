@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { useInputHistory } from './use-input-history.js';
 import { renderInAct } from '../test-helpers/ink-testing.js';
@@ -23,7 +22,7 @@ const HookHarness = ({ historyService }: { historyService: TestHistoryService })
   return null;
 };
 
-test.serial('useInputHistory preserves image attachments when navigating back to the draft', async (t) => {
+it.sequential('useInputHistory preserves image attachments when navigating back to the draft', async () => {
   hookControls = null;
 
   const draftImage = {
@@ -48,9 +47,9 @@ test.serial('useInputHistory preserves image attachments when navigating back to
     getMessages: () => ['Look at this'],
   };
 
-  await renderInAct(<HookHarness historyService={historyService} />, t);
+  await renderInAct(<HookHarness historyService={historyService} />);
 
-  t.truthy(hookControls);
+  expect(hookControls).toBeTruthy();
 
   let recalled = null as ReturnType<typeof useInputHistory>['navigateUp'] extends (...args: any[]) => infer R
     ? R
@@ -58,7 +57,7 @@ test.serial('useInputHistory preserves image attachments when navigating back to
   await act(async () => {
     recalled = hookControls!.navigateUp({ text: 'draft note', images: [draftImage] });
   });
-  t.deepEqual(recalled, { text: 'Look at this', images: [recalledImage] });
+  expect(recalled).toEqual({ text: 'Look at this', images: [recalledImage] });
 
   let restored = null as ReturnType<typeof useInputHistory>['navigateDown'] extends (...args: any[]) => infer R
     ? R
@@ -66,5 +65,5 @@ test.serial('useInputHistory preserves image attachments when navigating back to
   await act(async () => {
     restored = hookControls!.navigateDown();
   });
-  t.deepEqual(restored, { text: 'draft note', images: [draftImage] });
+  expect(restored).toEqual({ text: 'draft note', images: [draftImage] });
 });

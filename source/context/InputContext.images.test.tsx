@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { act, useEffect, useState } from 'react';
 import { InputProvider, useInputContext } from './InputContext.js';
 import { renderInAct } from '../test-helpers/ink-testing.js';
@@ -14,7 +13,7 @@ const flushReactUpdates = async (iterations = 1) => {
   });
 };
 
-test.serial('InputProvider exposes shared image state', async (t) => {
+it.sequential('InputProvider exposes shared image state', async () => {
   let capturedContext: any;
 
   const Capture = () => {
@@ -31,17 +30,16 @@ test.serial('InputProvider exposes shared image state', async (t) => {
     <InputProvider>
       <Capture />
     </InputProvider>,
-    t,
   );
 
   await flushReactUpdates(1);
 
-  t.truthy(capturedContext);
-  t.deepEqual(capturedContext.images, []);
-  t.is(typeof capturedContext.setImages, 'function');
+  expect(capturedContext).toBeTruthy();
+  expect(capturedContext.images).toEqual([]);
+  expect(typeof capturedContext.setImages).toBe('function');
 });
 
-test.serial('InputProvider preserves images across child unmounts', async (t) => {
+it.sequential('InputProvider preserves images across child unmounts', async () => {
   const image = { id: 'img-1', data: 'abc123', mimeType: 'image/png', byteSize: 3, displayNumber: 1 };
   let seenImages: (typeof image)[] | null = null;
 
@@ -74,8 +72,8 @@ test.serial('InputProvider preserves images across child unmounts', async (t) =>
     return <InputProvider>{showSeeder ? <Seeder onSeeded={() => setShowSeeder(false)} /> : <Viewer />}</InputProvider>;
   };
 
-  await renderInAct(<Harness />, t);
+  await renderInAct(<Harness />);
   await flushReactUpdates(3);
 
-  t.deepEqual(seenImages, [image]);
+  expect(seenImages).toEqual([image]);
 });

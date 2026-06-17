@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 import { ApprovalState } from './approval-state.js';
 import { LoggingService } from '../logging/logging-service.js';
@@ -31,7 +31,7 @@ const makeMockAgentClient = () => {
   return { client, installs, removes };
 };
 
-test('abort delegates to agentClient and approvalState', (t) => {
+it('abort delegates to agentClient and approvalState', () => {
   let abortCalled = false;
   const client: any = { abort: () => (abortCalled = true) };
   const approvalState = new ApprovalState();
@@ -51,11 +51,11 @@ test('abort delegates to agentClient and approvalState', (t) => {
   });
 
   const result = coord.abort();
-  t.true(abortCalled);
-  t.true(result.aborted);
+  expect(abortCalled).toBe(true);
+  expect(result.aborted).toBe(true);
 });
 
-test('abort returns false when no pending approval', (t) => {
+it('abort returns false when no pending approval', () => {
   const client: any = { abort: () => undefined };
   const coord = new ApprovalFlowCoordinator({
     agentClient: client,
@@ -65,10 +65,10 @@ test('abort returns false when no pending approval', (t) => {
     toolTracker: mockToolTracker,
     generationGuard: mockGenerationGuard,
   });
-  t.false(coord.abort().aborted);
+  expect(coord.abort().aborted).toBe(false);
 });
 
-test('prepareContinuation returns null when no pending approval', (t) => {
+it('prepareContinuation returns null when no pending approval', () => {
   const client: any = {};
   const coord = new ApprovalFlowCoordinator({
     agentClient: client,
@@ -78,10 +78,10 @@ test('prepareContinuation returns null when no pending approval', (t) => {
     toolTracker: mockToolTracker,
     generationGuard: mockGenerationGuard,
   });
-  t.is(coord.prepareContinuation('y', undefined), null);
+  expect(coord.prepareContinuation('y', undefined)).toBe(null);
 });
 
-test('prepareContinuation answer=y emits tool_started and approves', (t) => {
+it('prepareContinuation answer=y emits tool_started and approves', () => {
   let approved = false;
   const state: any = { approve: () => (approved = true) };
   const interruption = { name: 'shell', callId: 'c1', arguments: { command: 'ls' } };
@@ -104,16 +104,16 @@ test('prepareContinuation answer=y emits tool_started and approves', (t) => {
   });
 
   const plan = coord.prepareContinuation('y', undefined);
-  t.truthy(plan);
-  t.true(approved);
-  t.is(plan?.toolStartedEvent?.type, 'tool_started');
+  expect(plan).toBeTruthy();
+  expect(approved).toBe(true);
+  expect(plan?.toolStartedEvent?.type).toBe('tool_started');
   if (plan?.toolStartedEvent?.type === 'tool_started') {
-    t.is(plan.toolStartedEvent.toolName, 'shell');
-    t.is(plan.toolStartedEvent.toolCallId, 'c1');
+    expect(plan.toolStartedEvent.toolName).toBe('shell');
+    expect(plan.toolStartedEvent.toolCallId).toBe('c1');
   }
 });
 
-test('prepareContinuation answer=y normalizes JSON string tool_started arguments', (t) => {
+it('prepareContinuation answer=y normalizes JSON string tool_started arguments', () => {
   const state: any = { approve: () => undefined };
   const approvalState = new ApprovalState();
   approvalState.setPending({
@@ -134,13 +134,13 @@ test('prepareContinuation answer=y normalizes JSON string tool_started arguments
   });
 
   const plan = coord.prepareContinuation('y', undefined);
-  t.is(plan?.toolStartedEvent?.type, 'tool_started');
+  expect(plan?.toolStartedEvent?.type).toBe('tool_started');
   if (plan?.toolStartedEvent?.type === 'tool_started') {
-    t.deepEqual(plan.toolStartedEvent.arguments, { command: 'npm test' });
+    expect(plan.toolStartedEvent.arguments).toEqual({ command: 'npm test' });
   }
 });
 
-test('prepareContinuation answer=y emits subagent_tool_started for subagent ownership', (t) => {
+it('prepareContinuation answer=y emits subagent_tool_started for subagent ownership', () => {
   const state: any = { approve: () => undefined };
   const approvalState = new ApprovalState();
   approvalState.setPending({
@@ -162,7 +162,7 @@ test('prepareContinuation answer=y emits subagent_tool_started for subagent owne
   });
 
   const plan = coord.prepareContinuation('y', undefined);
-  t.deepEqual(plan?.toolStartedEvent, {
+  expect(plan?.toolStartedEvent).toEqual({
     type: 'subagent_tool_started',
     agentId: 'worker-1',
     role: 'worker',
@@ -172,7 +172,7 @@ test('prepareContinuation answer=y emits subagent_tool_started for subagent owne
   });
 });
 
-test('prepareContinuation rejection calls state.reject with the correct rejection message', (t) => {
+it('prepareContinuation rejection calls state.reject with the correct rejection message', () => {
   let approved = false;
   let rejectedInterruption: any = null;
   let rejectedOptions: any = null;
@@ -203,13 +203,13 @@ test('prepareContinuation rejection calls state.reject with the correct rejectio
   });
 
   const plan = coord.prepareContinuation('n', 'too dangerous');
-  t.truthy(plan);
-  t.false(approved);
-  t.is(rejectedInterruption, interruption);
-  t.deepEqual(rejectedOptions, { message: "Tool execution was not approved. User's reason: too dangerous" });
+  expect(plan).toBeTruthy();
+  expect(approved).toBe(false);
+  expect(rejectedInterruption).toBe(interruption);
+  expect(rejectedOptions).toEqual({ message: "Tool execution was not approved. User's reason: too dangerous" });
 });
 
-test('prepareContinuation rejection for nested subagent calls state.reject with the correct rejection message', (t) => {
+it('prepareContinuation rejection for nested subagent calls state.reject with the correct rejection message', () => {
   let approved = false;
   let rejectedInterruption: any = null;
   let rejectedOptions: any = null;
@@ -241,13 +241,13 @@ test('prepareContinuation rejection for nested subagent calls state.reject with 
   });
 
   const plan = coord.prepareContinuation('n', 'do not run it');
-  t.truthy(plan);
-  t.false(approved);
-  t.is(rejectedInterruption, interruption);
-  t.deepEqual(rejectedOptions, { message: "Tool execution was not approved. User's reason: do not run it" });
+  expect(plan).toBeTruthy();
+  expect(approved).toBe(false);
+  expect(rejectedInterruption).toBe(interruption);
+  expect(rejectedOptions).toEqual({ message: "Tool execution was not approved. User's reason: do not run it" });
 });
 
-test('prepareContinuation rejection: nested subagent where state.reject is undefined — does not throw', (t) => {
+it('prepareContinuation rejection: nested subagent where state.reject is undefined — does not throw', (t) => {
   // state has no reject method — simulates SDK state that only has approve
   const state: any = {
     approve: () => undefined,
@@ -273,12 +273,12 @@ test('prepareContinuation rejection: nested subagent where state.reject is undef
   });
 
   // Should not throw — reject is optional-chained in the implementation
-  t.notThrows(() => {
+  expect(() => {
     coord.prepareContinuation('n', undefined);
-  });
+  }).not.toThrow();
 });
 
-test('prepareAbortResolution calls state.reject with the correct rejection message', (t) => {
+it('prepareAbortResolution calls state.reject with the correct rejection message', () => {
   let rejectedInterruption: any = null;
   let rejectedOptions: any = null;
   const state: any = {
@@ -306,14 +306,14 @@ test('prepareAbortResolution calls state.reject with the correct rejection messa
   });
 
   const plan = coord.prepareAbortResolution(aborted, 'a new question');
-  t.is(rejectedInterruption, aborted.interruption);
-  t.deepEqual(rejectedOptions, {
+  expect(rejectedInterruption).toBe(aborted.interruption);
+  expect(rejectedOptions).toEqual({
     message: 'Tool execution was not approved. User provided new input instead: a new question',
   });
-  t.is(typeof plan.removeInterceptor, 'function');
+  expect(typeof plan.removeInterceptor).toBe('function');
 });
 
-test('retargetPendingInterruption preserves batch context', (t) => {
+it('retargetPendingInterruption preserves batch context', () => {
   const approvalState = new ApprovalState();
   const state = { _pendingAgentToolRuns: new Map() } as any;
   approvalState.setPending({
@@ -336,8 +336,8 @@ test('retargetPendingInterruption preserves batch context', (t) => {
 
   const pending = coord.retargetPendingInterruption(nextInterruption);
 
-  t.is(pending?.interruption, nextInterruption);
-  t.is(pending?.state, state);
-  t.deepEqual(pending?.emittedCommandIds, new Set(['message-1']));
-  t.deepEqual(pending?.toolCallArgumentsById, new Map([['call-1', { command: 'pwd' }]]));
+  expect(pending?.interruption).toBe(nextInterruption);
+  expect(pending?.state).toBe(state);
+  expect(pending?.emittedCommandIds).toEqual(new Set(['message-1']));
+  expect(pending?.toolCallArgumentsById).toEqual(new Map([['call-1', { command: 'pwd' }]]));
 });

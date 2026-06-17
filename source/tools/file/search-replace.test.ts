@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -58,7 +58,7 @@ function createTool(
   });
 }
 
-test.serial('needsApproval auto-approves creation when search_content is empty and file is missing', async (t) => {
+it.sequential('needsApproval auto-approves creation when search_content is empty and file is missing', async () => {
   await withTempDir(async () => {
     const tool = createTool(createMockSettingsService());
     const filePath = 'new-file.txt';
@@ -73,11 +73,11 @@ test.serial('needsApproval auto-approves creation when search_content is empty a
       ],
     });
 
-    t.false(result);
+    expect(result).toBe(false);
   });
 });
 
-test.serial('needsApproval auto-approves a unique exact match', async (t) => {
+it.sequential('needsApproval auto-approves a unique exact match', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService());
     const filePath = 'sample.txt';
@@ -94,11 +94,11 @@ test.serial('needsApproval auto-approves a unique exact match', async (t) => {
       ],
     });
 
-    t.false(result);
+    expect(result).toBe(false);
   });
 });
 
-test.serial('needsApproval auto-approves when multiple exact matches are found', async (t) => {
+it.sequential('needsApproval auto-approves when multiple exact matches are found', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService());
     const filePath = 'sample.txt';
@@ -115,11 +115,11 @@ test.serial('needsApproval auto-approves when multiple exact matches are found',
       ],
     });
 
-    t.false(result);
+    expect(result).toBe(false);
   });
 });
 
-test.serial('execute replaces only a unique exact match', async (t) => {
+it.sequential('execute replaces only a unique exact match', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
@@ -137,14 +137,14 @@ test.serial('execute replaces only a unique exact match', async (t) => {
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'done before unique after');
+    expect(updated).toBe('done before unique after');
   });
 });
 
-test.serial('execute fails with a match_all hint when multiple exact matches are found', async (t) => {
+it.sequential('execute fails with a match_all hint when multiple exact matches are found', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
@@ -162,16 +162,16 @@ test.serial('execute fails with a match_all hint when multiple exact matches are
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.regex(parsed.output[0].error, /Found 3 exact matches/);
-    t.regex(parsed.output[0].error, /Set match_all to true to replace all matches/);
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error).toMatch(/Found 3 exact matches/);
+    expect(parsed.output[0].error).toMatch(/Set match_all to true to replace all matches/);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'foo foo foo');
+    expect(updated).toBe('foo foo foo');
   });
 });
 
-test.serial('execute replaces all exact matches when match_all is true', async (t) => {
+it.sequential('execute replaces all exact matches when match_all is true', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
@@ -190,15 +190,15 @@ test.serial('execute replaces all exact matches when match_all is true', async (
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
-    t.regex(parsed.output[0].message, /3 exact matches/);
+    expect(parsed.output[0].success).toBe(true);
+    expect(parsed.output[0].message).toMatch(/3 exact matches/);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'bar bar bar');
+    expect(updated).toBe('bar bar bar');
   });
 });
 
-test.serial('execute performs relaxed match replacement when exact match is not found', async (t) => {
+it.sequential('execute performs relaxed match replacement when exact match is not found', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
@@ -216,14 +216,14 @@ test.serial('execute performs relaxed match replacement when exact match is not 
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'new block\nremainder');
+    expect(updated).toBe('new block\nremainder');
   });
 });
 
-test.serial('execute fails when multiple relaxed matches are found', async (t) => {
+it.sequential('execute fails when multiple relaxed matches are found', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
@@ -241,17 +241,17 @@ test.serial('execute fails when multiple relaxed matches are found', async (t) =
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.true(
+    expect(parsed.output[0].success).toBe(false);
+    expect(
       parsed.output[0].error.includes('relaxed matches') || parsed.output[0].error.includes('Found 2 relaxed matches'),
-    );
+    ).toBe(true);
 
     const unchanged = await fs.readFile(absPath, 'utf8');
-    t.is(unchanged, '  foo  \n\tbar\n---\n  foo  \n\tbar\n');
+    expect(unchanged).toBe('  foo  \n\tbar\n---\n  foo  \n\tbar\n');
   });
 });
 
-test.serial('execute replaces all relaxed matches when match_all is true', async (t) => {
+it.sequential('execute replaces all relaxed matches when match_all is true', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
@@ -270,15 +270,15 @@ test.serial('execute replaces all relaxed matches when match_all is true', async
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
-    t.regex(parsed.output[0].message, /2 relaxed matches/);
+    expect(parsed.output[0].success).toBe(true);
+    expect(parsed.output[0].message).toMatch(/2 relaxed matches/);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'replacement\n---\nreplacement\n');
+    expect(updated).toBe('replacement\n---\nreplacement\n');
   });
 });
 
-test.serial('execute creates a new file when search_content is empty and file is missing', async (t) => {
+it.sequential('execute creates a new file when search_content is empty and file is missing', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'missing.txt';
@@ -295,14 +295,14 @@ test.serial('execute creates a new file when search_content is empty and file is
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const createdContent = await fs.readFile(absPath, 'utf8');
-    t.is(createdContent, 'new content');
+    expect(createdContent).toBe('new content');
   });
 });
 
-test.serial('execute preserves parallel edits to different regions of the same file', async (t) => {
+it.sequential('execute preserves parallel edits to different regions of the same file', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'parallel.txt';
@@ -326,18 +326,15 @@ test.serial('execute preserves parallel edits to different regions of the same f
 
     for (const result of results) {
       const parsed = parsePlainResult(result);
-      t.true(parsed.output[0].success);
+      expect(parsed.output[0].success).toBe(true);
     }
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.deepEqual(
-      updated.split('\n'),
-      tokens.map((_, index) => `done_${index}`),
-    );
+    expect(updated.split('\n')).toEqual(tokens.map((_, index) => `done_${index}`));
   });
 });
 
-test.serial('execute applies batched replacements to one file with a single result per edit', async (t) => {
+it.sequential('execute applies batched replacements to one file with a single result per edit', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'batch.txt';
@@ -359,16 +356,16 @@ test.serial('execute applies batched replacements to one file with a single resu
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output.every((item: { success: boolean }) => item.success));
-    t.is(parsed.output.length, 2);
-    t.true(parsed.output.every((item: { message?: string }) => item.message?.includes(filePath)));
+    expect(parsed.output.every((item: { success: boolean }) => item.success)).toBe(true);
+    expect(parsed.output.length).toBe(2);
+    expect(parsed.output.every((item: { message?: string }) => item.message?.includes(filePath))).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'ALPHA\nbeta\nGAMMA\n');
+    expect(updated).toBe('ALPHA\nbeta\nGAMMA\n');
   });
 });
 
-test.serial('execute keeps successful batched replacements when another replacement fails', async (t) => {
+it.sequential('execute keeps successful batched replacements when another replacement fails', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'batch-failure.txt';
@@ -395,16 +392,16 @@ test.serial('execute keeps successful batched replacements when another replacem
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
-    t.false(parsed.output[1].success);
-    t.true(parsed.output[2].success);
+    expect(parsed.output[0].success).toBe(true);
+    expect(parsed.output[1].success).toBe(false);
+    expect(parsed.output[2].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'ALPHA\nbeta\nGAMMA\n');
+    expect(updated).toBe('ALPHA\nbeta\nGAMMA\n');
   });
 });
 
-test.serial('execute reports failure when search string is not found', async (t) => {
+it.sequential('execute reports failure when search string is not found', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'content.txt';
@@ -423,14 +420,14 @@ test.serial('execute reports failure when search string is not found', async (t)
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(false);
 
     const unchanged = await fs.readFile(absPath, 'utf8');
-    t.is(unchanged, originalContent);
+    expect(unchanged).toBe(originalContent);
   });
 });
 
-test.serial('execute heals search content when no match is found', async (t) => {
+it.sequential('execute heals search content when no match is found', async () => {
   await withTempDir(async (dir) => {
     const filePath = 'content.txt';
     const absPath = path.join(dir, filePath);
@@ -456,15 +453,15 @@ test.serial('execute heals search content when no match is found', async (t) => 
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
-    t.true(parsed.output[0].message.includes('auto healing'));
+    expect(parsed.output[0].success).toBe(true);
+    expect(parsed.output[0].message.includes('auto healing')).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'const foo = 3;\n');
+    expect(updated).toBe('const foo = 3;\n');
   });
 });
 
-test.serial('execute includes auto-healing failure reason when healing does not find a match', async (t) => {
+it.sequential('execute includes auto-healing failure reason when healing does not find a match', async () => {
   await withTempDir(async (dir) => {
     const filePath = 'content.txt';
     const absPath = path.join(dir, filePath);
@@ -488,17 +485,17 @@ test.serial('execute includes auto-healing failure reason when healing does not 
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('model returned NO_MATCH'));
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error.includes('model returned NO_MATCH')).toBe(true);
   });
 });
 
-test.serial('execute treats special regex characters literally', async (t) => {
+it.sequential('execute treats special regex characters literally', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'code.js';
     const absPath = path.join(dir, filePath);
-    const originalContent = 'function test() { return [1, 2, 3]; }';
+    const originalContent = 'function it() { return [1, 2, 3]; }';
     await fs.writeFile(absPath, originalContent);
 
     const result = await tool.execute({
@@ -512,14 +509,14 @@ test.serial('execute treats special regex characters literally', async (t) => {
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'function test() { return [4, 5, 6]; }');
+    expect(updated).toBe('function it() { return [4, 5, 6]; }');
   });
 });
 
-test.serial('execute deletes content when replacement is empty string', async (t) => {
+it.sequential('execute deletes content when replacement is empty string', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'sample.txt';
@@ -537,14 +534,14 @@ test.serial('execute deletes content when replacement is empty string', async (t
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'before after');
+    expect(updated).toBe('before after');
   });
 });
 
-test.serial('execute performs exact multi-line match without whitespace normalization', async (t) => {
+it.sequential('execute performs exact multi-line match without whitespace normalization', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'exact.txt';
@@ -562,14 +559,14 @@ test.serial('execute performs exact multi-line match without whitespace normaliz
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'new content\nline three');
+    expect(updated).toBe('new content\nline three');
   });
 });
 
-test.serial('execute handles leading/trailing whitespace differences in relaxed mode', async (t) => {
+it.sequential('execute handles leading/trailing whitespace differences in relaxed mode', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'whitespace.txt';
@@ -587,14 +584,14 @@ test.serial('execute handles leading/trailing whitespace differences in relaxed 
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'replaced');
+    expect(updated).toBe('replaced');
   });
 });
 
-test.serial('execute performs normalized whitespace match across line breaks', async (t) => {
+it.sequential('execute performs normalized whitespace match across line breaks', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'normalized.txt';
@@ -612,14 +609,14 @@ test.serial('execute performs normalized whitespace match across line breaks', a
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'const foo = 1;\nconst bar = 42;\nconst baz = 3;\n');
+    expect(updated).toBe('const foo = 1;\nconst bar = 42;\nconst baz = 3;\n');
   });
 });
 
-test.serial('execute matches escaped newline sequences in search content', async (t) => {
+it.sequential('execute matches escaped newline sequences in search content', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'escaped.txt';
@@ -637,14 +634,14 @@ test.serial('execute matches escaped newline sequences in search content', async
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'replaced\nafter');
+    expect(updated).toBe('replaced\nafter');
   });
 });
 
-test.serial('execute trims whitespace around the whole search string as a fallback', async (t) => {
+it.sequential('execute trims whitespace around the whole search string as a fallback', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'boundary-whitespace.txt';
@@ -662,16 +659,16 @@ test.serial('execute trims whitespace around the whole search string as a fallba
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'before\nconst value = 2;\nafter');
+    expect(updated).toBe('before\nconst value = 2;\nafter');
   });
 });
 
-test.serial(
+it.sequential(
   'execute recovers a unique multiline block with matching anchors and a minor middle difference',
-  async (t) => {
+  async () => {
     await withTempDir(async (dir) => {
       const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
       const filePath = 'anchor-context.ts';
@@ -704,15 +701,15 @@ test.serial(
       });
 
       const parsed = parsePlainResult(result);
-      t.true(parsed.output[0].success);
+      expect(parsed.output[0].success).toBe(true);
 
       const updated = await fs.readFile(absPath, 'utf8');
-      t.is(updated, 'function calculate() {\n  return getSubtotal() * 1.2;\n}');
+      expect(updated).toBe('function calculate() {\n  return getSubtotal() * 1.2;\n}');
     });
   },
 );
 
-test.serial('needsApproval requires approval for anchor recovery outside the workspace', async (t) => {
+it.sequential('needsApproval requires approval for anchor recovery outside the workspace', async () => {
   await withTempDir(async () => {
     const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-search-replace-outside-'));
     const filePath = path.join(outsideDir, 'anchor-context.ts');
@@ -745,16 +742,16 @@ test.serial('needsApproval requires approval for anchor recovery outside the wor
         ],
       });
 
-      t.true(result);
+      expect(result).toBe(true);
     } finally {
       await fs.rm(outsideDir, { recursive: true, force: true });
     }
   });
 });
 
-test.serial(
+it.sequential(
   'execute rejects anchor recovery when the selected span is much larger than the search string',
-  async (t) => {
+  async () => {
     await withTempDir(async (dir) => {
       const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
       const filePath = 'oversized-anchor.ts';
@@ -778,15 +775,15 @@ test.serial(
       });
 
       const parsed = parsePlainResult(result);
-      t.false(parsed.output[0].success);
+      expect(parsed.output[0].success).toBe(false);
 
       const unchanged = await fs.readFile(absPath, 'utf8');
-      t.is(unchanged, originalContent);
+      expect(unchanged).toBe(originalContent);
     });
   },
 );
 
-test.serial('execute rejects multiple normalized matches', async (t) => {
+it.sequential('execute rejects multiple normalized matches', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'normalized-multi.txt';
@@ -804,15 +801,15 @@ test.serial('execute rejects multiple normalized matches', async (t) => {
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('normalized matches'));
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error.includes('normalized matches')).toBe(true);
 
     const unchanged = await fs.readFile(absPath, 'utf8');
-    t.is(unchanged, 'const foo = 1;\n   const bar = 2;\n---\nconst foo = 1;\tconst bar = 2;\n');
+    expect(unchanged).toBe('const foo = 1;\n   const bar = 2;\n---\nconst foo = 1;\tconst bar = 2;\n');
   });
 });
 
-test.serial('execute does not match substrings in relaxed mode', async (t) => {
+it.sequential('execute does not match substrings in relaxed mode', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'substring.txt';
@@ -831,14 +828,14 @@ test.serial('execute does not match substrings in relaxed mode', async (t) => {
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(false);
 
     const unchanged = await fs.readFile(absPath, 'utf8');
-    t.is(unchanged, originalContent);
+    expect(unchanged).toBe(originalContent);
   });
 });
 
-test.serial('execute normalizes CRLF search content to match LF file', async (t) => {
+it.sequential('execute normalizes CRLF search content to match LF file', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'lf-file.txt';
@@ -856,14 +853,14 @@ test.serial('execute normalizes CRLF search content to match LF file', async (t)
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'replaced\nline three');
+    expect(updated).toBe('replaced\nline three');
   });
 });
 
-test.serial('execute normalizes LF search content to match CRLF file', async (t) => {
+it.sequential('execute normalizes LF search content to match CRLF file', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'crlf-file.txt';
@@ -881,14 +878,14 @@ test.serial('execute normalizes LF search content to match CRLF file', async (t)
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'replaced\r\nline three');
+    expect(updated).toBe('replaced\r\nline three');
   });
 });
 
-test.serial('execute preserves CRLF in replacement content when file uses CRLF', async (t) => {
+it.sequential('execute preserves CRLF in replacement content when file uses CRLF', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'crlf-file.txt';
@@ -906,14 +903,14 @@ test.serial('execute preserves CRLF in replacement content when file uses CRLF',
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'new\r\nline\r\nworld');
+    expect(updated).toBe('new\r\nline\r\nworld');
   });
 });
 
-test.serial('execute strips leading filepath comment from search content', async (t) => {
+it.sequential('execute strips leading filepath comment from search content', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'sample.ts';
@@ -931,14 +928,14 @@ test.serial('execute strips leading filepath comment from search content', async
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'const x = 42;\nconst y = 2;');
+    expect(updated).toBe('const x = 42;\nconst y = 2;');
   });
 });
 
-test.serial('execute strips leading hash filepath comment from search content', async (t) => {
+it.sequential('execute strips leading hash filepath comment from search content', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'script.py';
@@ -956,14 +953,14 @@ test.serial('execute strips leading hash filepath comment from search content', 
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'x = 42\ny = 2');
+    expect(updated).toBe('x = 42\ny = 2');
   });
 });
 
-test.serial('execute does not strip non-filepath leading comments', async (t) => {
+it.sequential('execute does not strip non-filepath leading comments', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'code.ts';
@@ -981,14 +978,14 @@ test.serial('execute does not strip non-filepath leading comments', async (t) =>
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'const x = 42;');
+    expect(updated).toBe('const x = 42;');
   });
 });
 
-test.serial('execute rejects search content with "Lines X-Y omitted" marker', async (t) => {
+it.sequential('execute rejects search content with "Lines X-Y omitted" marker', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
@@ -1006,12 +1003,12 @@ test.serial('execute rejects search content with "Lines X-Y omitted" marker', as
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('omitted'));
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error.includes('omitted')).toBe(true);
   });
 });
 
-test.serial('execute rejects search content with ellipsis marker {…}', async (t) => {
+it.sequential('execute rejects search content with ellipsis marker {…}', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
@@ -1029,12 +1026,12 @@ test.serial('execute rejects search content with ellipsis marker {…}', async (
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('ellipsis'));
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error.includes('ellipsis')).toBe(true);
   });
 });
 
-test.serial('execute rejects search content with /*...*/ marker', async (t) => {
+it.sequential('execute rejects search content with /*...*/ marker', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
@@ -1052,12 +1049,12 @@ test.serial('execute rejects search content with /*...*/ marker', async (t) => {
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('/*...*/'));
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error.includes('/*...*/')).toBe(true);
   });
 });
 
-test.serial('execute rejects search content with // ... marker', async (t) => {
+it.sequential('execute rejects search content with // ... marker', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
@@ -1075,12 +1072,12 @@ test.serial('execute rejects search content with // ... marker', async (t) => {
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('// ...'));
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error.includes('// ...')).toBe(true);
   });
 });
 
-test.serial('execute rejects search content when search and replace content are identical', async (t) => {
+it.sequential('execute rejects search content when search and replace content are identical', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
@@ -1098,12 +1095,12 @@ test.serial('execute rejects search content when search and replace content are 
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.regex(parsed.output[0].error, /identical/i);
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error).toMatch(/identical/i);
   });
 });
 
-test.serial('needsApproval auto-approves when search and replace content are identical', async (t) => {
+it.sequential('needsApproval auto-approves when search and replace content are identical', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
@@ -1120,11 +1117,11 @@ test.serial('needsApproval auto-approves when search and replace content are ide
       ],
     });
 
-    t.false(result);
+    expect(result).toBe(false);
   });
 });
 
-test.serial('execute performs gap match: head <...> tail replaces entire region', async (t) => {
+it.sequential('execute performs gap match: head <...> tail replaces entire region', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'content.txt';
@@ -1145,15 +1142,15 @@ test.serial('execute performs gap match: head <...> tail replaces entire region'
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
-    t.true(parsed.output[0].message.includes('gap'));
+    expect(parsed.output[0].success).toBe(true);
+    expect(parsed.output[0].message.includes('gap')).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'function foo() {\n  return 6;\n}\n');
+    expect(updated).toBe('function foo() {\n  return 6;\n}\n');
   });
 });
 
-test.serial('execute performs gap match with single-line head and tail', async (t) => {
+it.sequential('execute performs gap match with single-line head and tail', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'content.txt';
@@ -1171,14 +1168,14 @@ test.serial('execute performs gap match with single-line head and tail', async (
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'replaced\nafter');
+    expect(updated).toBe('replaced\nafter');
   });
 });
 
-test.serial('execute performs gap match with adjacent head and tail (no actual gap content)', async (t) => {
+it.sequential('execute performs gap match with adjacent head and tail (no actual gap content)', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'content.txt';
@@ -1196,14 +1193,14 @@ test.serial('execute performs gap match with adjacent head and tail (no actual g
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'replaced\nline3');
+    expect(updated).toBe('replaced\nline3');
   });
 });
 
-test.serial('execute performs gap match with multiple <...> markers', async (t) => {
+it.sequential('execute performs gap match with multiple <...> markers', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'content.txt';
@@ -1224,14 +1221,14 @@ test.serial('execute performs gap match with multiple <...> markers', async (t) 
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'function abc() {\n  combined;\n}\n');
+    expect(updated).toBe('function abc() {\n  combined;\n}\n');
   });
 });
 
-test.serial('execute gap match fails when head is not found', async (t) => {
+it.sequential('execute gap match fails when head is not found', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'content.txt';
@@ -1249,11 +1246,11 @@ test.serial('execute gap match fails when head is not found', async (t) => {
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(false);
   });
 });
 
-test.serial('execute gap match fails when tail is not found after head', async (t) => {
+it.sequential('execute gap match fails when tail is not found after head', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'content.txt';
@@ -1271,13 +1268,13 @@ test.serial('execute gap match fails when tail is not found after head', async (
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(false);
   });
 });
 
-test.serial(
+it.sequential(
   'execute does not invoke healing for a failed gap pattern and reports a head-anchor diagnostic',
-  async (t) => {
+  async () => {
     await withTempDir(async (dir) => {
       let healingCalls = 0;
       const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': true }), async (params) => {
@@ -1298,15 +1295,15 @@ test.serial(
       });
 
       const parsed = parsePlainResult(result);
-      t.false(parsed.output[0].success);
-      t.is(healingCalls, 0);
-      t.regex(parsed.output[0].error, /head anchor/i);
-      t.regex(parsed.output[0].error, /not auto-healed/i);
+      expect(parsed.output[0].success).toBe(false);
+      expect(healingCalls).toBe(0);
+      expect(parsed.output[0].error).toMatch(/head anchor/i);
+      expect(parsed.output[0].error).toMatch(/not auto-healed/i);
     });
   },
 );
 
-test.serial('execute gap diagnostic identifies the anchor that failed after the head matched', async (t) => {
+it.sequential('execute gap diagnostic identifies the anchor that failed after the head matched', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': true }), async (params) => ({
       params,
@@ -1327,12 +1324,12 @@ test.serial('execute gap diagnostic identifies the anchor that failed after the 
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.regex(parsed.output[0].error, /not found after/i);
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error).toMatch(/not found after/i);
   });
 });
 
-test.serial('execute gap match rejects multiple matches', async (t) => {
+it.sequential('execute gap match rejects multiple matches', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'content.txt';
@@ -1350,12 +1347,12 @@ test.serial('execute gap match rejects multiple matches', async (t) => {
     });
 
     const parsed = parsePlainResult(result);
-    t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('gap'));
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error.includes('gap')).toBe(true);
   });
 });
 
-test.serial('execute gap match works with relaxed whitespace matching in segments', async (t) => {
+it.sequential('execute gap match works with relaxed whitespace matching in segments', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'content.txt';
@@ -1373,14 +1370,14 @@ test.serial('execute gap match works with relaxed whitespace matching in segment
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'function foo() {\n  return 42;\n}\n');
+    expect(updated).toBe('function foo() {\n  return 42;\n}\n');
   });
 });
 
-test.serial('needsApproval handles gap match', async (t) => {
+it.sequential('needsApproval handles gap match', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService());
     const filePath = 'content.txt';
@@ -1397,11 +1394,11 @@ test.serial('needsApproval handles gap match', async (t) => {
       ],
     });
 
-    t.false(result);
+    expect(result).toBe(false);
   });
 });
 
-test.serial('execute falls back to literal match when gap matching fails with standalone <...>', async (t) => {
+it.sequential('execute falls back to literal match when gap matching fails with standalone <...>', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'literal-standalone-gap-fallback.txt';
@@ -1420,14 +1417,14 @@ test.serial('execute falls back to literal match when gap matching fails with st
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'prefix\nreplacement\n');
+    expect(updated).toBe('prefix\nreplacement\n');
   });
 });
 
-test.serial('execute matches literal <...> when not on a standalone line', async (t) => {
+it.sequential('execute matches literal <...> when not on a standalone line', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'literal-inline.txt';
@@ -1445,14 +1442,14 @@ test.serial('execute matches literal <...> when not on a standalone line', async
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'export const GAP_MARKER = "___";\n');
+    expect(updated).toBe('export const GAP_MARKER = "___";\n');
   });
 });
 
-test.serial('execute performs gap match when input has literal \\n sequences', async (t) => {
+it.sequential('execute performs gap match when input has literal \\n sequences', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'unescape-gap.txt';
@@ -1470,14 +1467,14 @@ test.serial('execute performs gap match when input has literal \\n sequences', a
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'class MyClass {\n  myMethod() { return 100; }\n}\n');
+    expect(updated).toBe('class MyClass {\n  myMethod() { return 100; }\n}\n');
   });
 });
 
-test.serial('execute gap match preserves blank lines inside anchors', async (t) => {
+it.sequential('execute gap match preserves blank lines inside anchors', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'blank-lines-anchor.txt';
@@ -1495,14 +1492,14 @@ test.serial('execute gap match preserves blank lines inside anchors', async (t) 
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'const replaced = true;\n');
+    expect(updated).toBe('const replaced = true;\n');
   });
 });
 
-test.serial('execute gap match works with normalized whitespace within lines', async (t) => {
+it.sequential('execute gap match works with normalized whitespace within lines', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'whitespace-norm-gap.txt';
@@ -1520,9 +1517,9 @@ test.serial('execute gap match works with normalized whitespace within lines', a
     });
 
     const parsed = parsePlainResult(result);
-    t.true(parsed.output[0].success);
+    expect(parsed.output[0].success).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'if (condition) {\n  return false;\n}\n');
+    expect(updated).toBe('if (condition) {\n  return false;\n}\n');
   });
 });

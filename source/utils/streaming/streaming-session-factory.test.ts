@@ -1,7 +1,7 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createStreamingSession } from './streaming-session-factory.js';
 
-test('createStreamingSession wires state and logs final usage', (t) => {
+it('createStreamingSession wires state and logs final usage', () => {
   const calls: {
     eventHandlerEvents: any[];
     debugMessages: Array<{ message: string; meta?: any }>;
@@ -64,22 +64,22 @@ test('createStreamingSession wires state and logs final usage', (t) => {
     'sendUserMessage',
   );
 
-  t.is(calls.eventHandlerState, calls.streamingState);
+  expect(calls.eventHandlerState).toBe(calls.streamingState);
 
   const finalEvent = { type: 'final', usage, finalText: '' } as const;
   session.applyConversationEvent(finalEvent);
 
-  t.is(calls.lastUsage, usage);
-  t.is(session.streamingState.latestUsage, usage);
-  t.is(calls.debugMessages[0]?.message, 'UI received final usage (sendUserMessage)');
-  t.deepEqual(calls.debugMessages[0]?.meta, { usage });
-  t.deepEqual(calls.eventHandlerEvents, [finalEvent]);
+  expect(calls.lastUsage).toBe(usage);
+  expect(session.streamingState.latestUsage).toBe(usage);
+  expect(calls.debugMessages[0]?.message).toBe('UI received final usage (sendUserMessage)');
+  expect(calls.debugMessages[0]?.meta).toEqual({ usage });
+  expect(calls.eventHandlerEvents).toEqual([finalEvent]);
 
   session.applyConversationEvent({ type: 'final', finalText: '' } as const);
-  t.is(calls.debugMessages[1]?.message, 'UI final event has no usage (sendUserMessage)');
+  expect(calls.debugMessages[1]?.message).toBe('UI final event has no usage (sendUserMessage)');
 });
 
-test('final event does not overwrite the per-turn footer usage with the run-cumulative total', (t) => {
+it('final event does not overwrite the per-turn footer usage with the run-cumulative total', () => {
   const calls: { lastUsageHistory: any[]; debugMessages: string[] } = {
     lastUsageHistory: [],
     debugMessages: [],
@@ -123,12 +123,12 @@ test('final event does not overwrite the per-turn footer usage with the run-cumu
   session.applyConversationEvent({ type: 'final', finalText: 'Done.', usage: runTotalUsage } as const);
 
   // Footer keeps the last per-turn value; it is not overwritten by the run total.
-  t.is(session.streamingState.latestUsage, lastTurnUsage);
-  t.deepEqual(calls.lastUsageHistory, [lastTurnUsage]);
-  t.true(calls.debugMessages.some((m) => m.startsWith('UI keeping last streamed turn usage')));
+  expect(session.streamingState.latestUsage).toBe(lastTurnUsage);
+  expect(calls.lastUsageHistory).toEqual([lastTurnUsage]);
+  expect(calls.debugMessages.some((m) => m.startsWith('UI keeping last streamed turn usage'))).toBe(true);
 });
 
-test('botResponseUpdater creates and updates streaming bot messages', (t) => {
+it('botResponseUpdater creates and updates streaming bot messages', () => {
   let messages: any[] = [];
 
   const session = createStreamingSession(
@@ -169,7 +169,7 @@ test('botResponseUpdater creates and updates streaming bot messages', (t) => {
   session.botResponseUpdater.push('Partial');
   session.botResponseUpdater.push('Partial response');
 
-  t.deepEqual(messages, [
+  expect(messages).toEqual([
     {
       id: '456-0',
       sender: 'bot',

@@ -1,26 +1,26 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { formatShellCommandMessage } from './system/shell.js';
 import { formatGrepCommandMessage } from './system/grep.js';
 
-test('formatShellCommandMessage: sets toolName to "shell"', (t) => {
+it('formatShellCommandMessage: sets toolName to "shell"', () => {
   const item = {
     arguments: { command: 'echo "hello"' },
     output: 'exit 0\nhello',
   };
   const messages = formatShellCommandMessage(item, 0, new Map());
-  t.is(messages.length, 1);
-  t.is(messages[0].toolName, 'shell');
-  t.is(messages[0].command, 'echo "hello"');
+  expect(messages.length).toBe(1);
+  expect(messages[0].toolName).toBe('shell');
+  expect(messages[0].command).toBe('echo "hello"');
 });
 
-test('formatGrepCommandMessage: sets toolName to "grep" and populates toolArgs', (t) => {
+it('formatGrepCommandMessage: sets toolName to "grep" and populates toolArgs', () => {
   const item = {
     arguments: { pattern: 'TODO', path: 'src/' },
     output: 'src/main.ts:1:TODO: something',
   };
   const messages = formatGrepCommandMessage(item, 0, new Map());
-  t.is(messages.length, 1);
-  t.is(messages[0].toolName, 'grep');
-  t.is(messages[0].command, 'grep "TODO" "src/"');
-  t.deepEqual(messages[0].toolArgs, { pattern: 'TODO', path: 'src/' });
+  expect(messages.length).toBe(1);
+  expect(messages[0].toolName).toBe('grep');
+  expect(messages[0].command).toBe('grep "TODO" "src/"');
+  expect(messages[0].toolArgs).toEqual({ pattern: 'TODO', path: 'src/' });
 });

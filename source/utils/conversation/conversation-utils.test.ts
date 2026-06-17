@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   parseToolArguments,
   formatToolCommand,
@@ -13,231 +13,231 @@ import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../../tools/too
 // parseToolArguments tests
 // =============================================================================
 
-test('parseToolArguments: returns object as-is', (t) => {
+it('parseToolArguments: returns object as-is', () => {
   const args = { command: 'echo hi' };
-  t.deepEqual(parseToolArguments(args), args);
+  expect(parseToolArguments(args)).toEqual(args);
 });
 
-test('parseToolArguments: parses valid JSON string', (t) => {
+it('parseToolArguments: parses valid JSON string', () => {
   const args = '{"command": "echo hi"}';
-  t.deepEqual(parseToolArguments(args), { command: 'echo hi' });
+  expect(parseToolArguments(args)).toEqual({ command: 'echo hi' });
 });
 
-test('parseToolArguments: returns invalid JSON string as-is', (t) => {
+it('parseToolArguments: returns invalid JSON string as-is', () => {
   const args = 'not valid json';
-  t.is(parseToolArguments(args), args);
+  expect(parseToolArguments(args)).toBe(args);
 });
 
-test('parseToolArguments: returns empty string as-is', (t) => {
-  t.is(parseToolArguments(''), '');
+it('parseToolArguments: returns empty string as-is', () => {
+  expect(parseToolArguments('')).toBe('');
 });
 
-test('parseToolArguments: returns whitespace-only string as-is', (t) => {
-  t.is(parseToolArguments('   '), '   ');
+it('parseToolArguments: returns whitespace-only string as-is', () => {
+  expect(parseToolArguments('   ')).toBe('   ');
 });
 
-test('parseToolArguments: handles null', (t) => {
-  t.is(parseToolArguments(null), null);
+it('parseToolArguments: handles null', () => {
+  expect(parseToolArguments(null)).toBe(null);
 });
 
-test('parseToolArguments: handles undefined', (t) => {
-  t.is(parseToolArguments(undefined), undefined);
+it('parseToolArguments: handles undefined', () => {
+  expect(parseToolArguments(undefined)).toBe(undefined);
 });
 
-test('parseToolArguments: parses array JSON', (t) => {
+it('parseToolArguments: parses array JSON', () => {
   const args = '["a", "b", "c"]';
-  t.deepEqual(parseToolArguments(args), ['a', 'b', 'c']);
+  expect(parseToolArguments(args)).toEqual(['a', 'b', 'c']);
 });
 
 // =============================================================================
 // formatToolCommand tests
 // =============================================================================
 
-test('formatToolCommand: shell with string command', (t) => {
+it('formatToolCommand: shell with string command', () => {
   const result = formatToolCommand('shell', { command: 'echo hello' });
-  t.is(result, 'echo hello');
+  expect(result).toBe('echo hello');
 });
 
-test('formatToolCommand: shell with commands (plural) string', (t) => {
+it('formatToolCommand: shell with commands (plural) string', () => {
   const result = formatToolCommand('shell', { commands: 'ls -la' });
-  t.is(result, 'ls -la');
+  expect(result).toBe('ls -la');
 });
 
-test('formatToolCommand: shell with array commands', (t) => {
+it('formatToolCommand: shell with array commands', () => {
   const result = formatToolCommand('shell', { commands: ['cd /tmp', 'ls'] });
-  t.is(result, 'cd /tmp\nls');
+  expect(result).toBe('cd /tmp\nls');
 });
 
-test('formatToolCommand: shell with empty command returns tool name', (t) => {
+it('formatToolCommand: shell with empty command returns tool name', () => {
   const result = formatToolCommand('shell', { command: '' });
-  t.is(result, 'shell');
+  expect(result).toBe('shell');
 });
 
-test('formatToolCommand: grep with pattern and path', (t) => {
+it('formatToolCommand: grep with pattern and path', () => {
   const result = formatToolCommand('grep', {
     pattern: 'TODO',
     path: 'src/',
   });
-  t.is(result, 'grep "TODO" src/');
+  expect(result).toBe('grep "TODO" src/');
 });
 
-test('formatToolCommand: grep with pattern only uses default path', (t) => {
+it('formatToolCommand: grep with pattern only uses default path', () => {
   const result = formatToolCommand('grep', { pattern: 'FIXME' });
-  t.is(result, 'grep "FIXME" .');
+  expect(result).toBe('grep "FIXME" .');
 });
 
-test('formatToolCommand: grep without pattern returns tool name', (t) => {
+it('formatToolCommand: grep without pattern returns tool name', () => {
   const result = formatToolCommand('grep', {});
-  t.is(result, 'grep');
+  expect(result).toBe('grep');
 });
 
-test('formatToolCommand: search_replace with all args', (t) => {
+it('formatToolCommand: search_replace with all args', () => {
   const result = formatToolCommand(TOOL_NAME_SEARCH_REPLACE, {
     search_content: 'old',
     replace_content: 'new',
     path: 'file.ts',
   });
-  t.is(result, 'search_replace "old" → "new" file.ts');
+  expect(result).toBe('search_replace "old" → "new" file.ts');
 });
 
-test('formatToolCommand: search_replace with missing args', (t) => {
+it('formatToolCommand: search_replace with missing args', () => {
   const result = formatToolCommand(TOOL_NAME_SEARCH_REPLACE, {});
-  t.is(result, 'search_replace "" → "" ');
+  expect(result).toBe('search_replace "" → "" ');
 });
 
-test('formatToolCommand: apply_patch with type and path', (t) => {
+it('formatToolCommand: apply_patch with type and path', () => {
   const result = formatToolCommand(TOOL_NAME_APPLY_PATCH, {
     type: 'create',
     path: 'newfile.ts',
   });
-  t.is(result, 'apply_patch create newfile.ts');
+  expect(result).toBe('apply_patch create newfile.ts');
 });
 
-test('formatToolCommand: apply_patch with missing args', (t) => {
+it('formatToolCommand: apply_patch with missing args', () => {
   const result = formatToolCommand(TOOL_NAME_APPLY_PATCH, {});
-  t.is(result, 'apply_patch unknown ');
+  expect(result).toBe('apply_patch unknown ');
 });
 
-test('formatToolCommand: ask_mentor with question', (t) => {
+it('formatToolCommand: ask_mentor with question', () => {
   const result = formatToolCommand('ask_mentor', {
     question: 'How do I refactor this?',
   });
-  t.is(result, 'ask_mentor: How do I refactor this?');
+  expect(result).toBe('ask_mentor: How do I refactor this?');
 });
 
-test('formatToolCommand: ask_mentor with empty question', (t) => {
+it('formatToolCommand: ask_mentor with empty question', () => {
   const result = formatToolCommand('ask_mentor', {});
-  t.is(result, 'ask_mentor: ');
+  expect(result).toBe('ask_mentor: ');
 });
 
-test('formatToolCommand: unknown tool returns tool name', (t) => {
+it('formatToolCommand: unknown tool returns tool name', () => {
   const result = formatToolCommand('custom_tool', { foo: 'bar' });
-  t.is(result, 'custom_tool');
+  expect(result).toBe('custom_tool');
 });
 
-test('formatToolCommand: handles null/undefined args', (t) => {
+it('formatToolCommand: handles null/undefined args', () => {
   const result = formatToolCommand('shell', null as any);
-  t.is(result, 'shell');
+  expect(result).toBe('shell');
 });
 
 // =============================================================================
 // createStreamingState tests
 // =============================================================================
 
-test('createStreamingState: returns correct initial values', (t) => {
+it('createStreamingState: returns correct initial values', () => {
   const state = createStreamingState();
-  t.is(state.accumulatedText, '');
-  t.is(state.accumulatedReasoningText, '');
-  t.is(state.flushedReasoningLength, 0);
-  t.is(state.textWasFlushed, false);
-  t.is(state.currentReasoningMessageId, null);
+  expect(state.accumulatedText).toBe('');
+  expect(state.accumulatedReasoningText).toBe('');
+  expect(state.flushedReasoningLength).toBe(0);
+  expect(state.textWasFlushed).toBe(false);
+  expect(state.currentReasoningMessageId).toBe(null);
 });
 
-test('createStreamingState: returns new object each call', (t) => {
+it('createStreamingState: returns new object each call', () => {
   const state1 = createStreamingState();
   const state2 = createStreamingState();
-  t.not(state1, state2);
+  expect(state1).not.toBe(state2);
 });
 
 // =============================================================================
 // enhanceApiKeyError tests
 // =============================================================================
 
-test('enhanceApiKeyError: enhances OPENAI_API_KEY message', (t) => {
+it('enhanceApiKeyError: enhances OPENAI_API_KEY message', () => {
   const result = enhanceApiKeyError('Missing OPENAI_API_KEY');
-  t.true(result.includes('OpenAI API key is not configured'));
-  t.true(result.includes('platform.openai.com/api-keys'));
+  expect(result.includes('OpenAI API key is not configured')).toBe(true);
+  expect(result.includes('platform.openai.com/api-keys')).toBe(true);
 });
 
-test('enhanceApiKeyError: enhances 401 unauthorized message', (t) => {
+it('enhanceApiKeyError: enhances 401 unauthorized message', () => {
   const result = enhanceApiKeyError('Error 401: Unauthorized access');
-  t.true(result.includes('OpenAI API key is not configured'));
+  expect(result.includes('OpenAI API key is not configured')).toBe(true);
 });
 
-test('enhanceApiKeyError: passes through other errors', (t) => {
+it('enhanceApiKeyError: passes through other errors', () => {
   const result = enhanceApiKeyError('Network timeout');
-  t.is(result, 'Network timeout');
+  expect(result).toBe('Network timeout');
 });
 
-test('enhanceApiKeyError: handles empty string', (t) => {
+it('enhanceApiKeyError: handles empty string', () => {
   const result = enhanceApiKeyError('');
-  t.is(result, '');
+  expect(result).toBe('');
 });
 
 // =============================================================================
 // isMaxTurnsError tests
 // =============================================================================
 
-test('isMaxTurnsError: returns true for max turns exceeded', (t) => {
-  t.true(isMaxTurnsError('Max turns (10) exceeded'));
+it('isMaxTurnsError: returns true for max turns exceeded', () => {
+  expect(isMaxTurnsError('Max turns (10) exceeded')).toBe(true);
 });
 
-test('isMaxTurnsError: returns false for partial match - only Max turns', (t) => {
-  t.false(isMaxTurnsError('Max turns reached'));
+it('isMaxTurnsError: returns false for partial match - only Max turns', () => {
+  expect(isMaxTurnsError('Max turns reached')).toBe(false);
 });
 
-test('isMaxTurnsError: returns false for partial match - only exceeded', (t) => {
-  t.false(isMaxTurnsError('Rate limit exceeded'));
+it('isMaxTurnsError: returns false for partial match - only exceeded', () => {
+  expect(isMaxTurnsError('Rate limit exceeded')).toBe(false);
 });
 
-test('isMaxTurnsError: returns false for unrelated message', (t) => {
-  t.false(isMaxTurnsError('Something went wrong'));
+it('isMaxTurnsError: returns false for unrelated message', () => {
+  expect(isMaxTurnsError('Something went wrong')).toBe(false);
 });
 
-test('isMaxTurnsError: returns false for empty string', (t) => {
-  t.false(isMaxTurnsError(''));
+it('isMaxTurnsError: returns false for empty string', () => {
+  expect(isMaxTurnsError('')).toBe(false);
 });
 
 // =============================================================================
 // createShellMessageOutput tests
 // =============================================================================
 
-test('createShellMessageOutput: stdout only', (t) => {
+it('createShellMessageOutput: stdout only', () => {
   const result = createShellMessageOutput(0, 'hello world', '');
-  t.is(result, 'hello world\n\nReturn code: 0');
+  expect(result).toBe('hello world\n\nReturn code: 0');
 });
 
-test('createShellMessageOutput: stderr only', (t) => {
+it('createShellMessageOutput: stderr only', () => {
   const result = createShellMessageOutput(1, '', 'error occurred');
-  t.is(result, 'error occurred\n\nReturn code: 1');
+  expect(result).toBe('error occurred\n\nReturn code: 1');
 });
 
-test('createShellMessageOutput: both stdout and stderr', (t) => {
+it('createShellMessageOutput: both stdout and stderr', () => {
   const result = createShellMessageOutput(0, 'output', 'warning');
-  t.is(result, 'output\nwarning\n\nReturn code: 0');
+  expect(result).toBe('output\nwarning\n\nReturn code: 0');
 });
 
-test('createShellMessageOutput: null return code', (t) => {
+it('createShellMessageOutput: null return code', () => {
   const result = createShellMessageOutput(null, 'output', '');
-  t.is(result, 'output');
+  expect(result).toBe('output');
 });
 
-test('createShellMessageOutput: empty output with return code', (t) => {
+it('createShellMessageOutput: empty output with return code', () => {
   const result = createShellMessageOutput(0, '', '');
-  t.is(result, '\n\nReturn code: 0');
+  expect(result).toBe('\n\nReturn code: 0');
 });
 
-test('createShellMessageOutput: trims trailing newlines from stdout', (t) => {
+it('createShellMessageOutput: trims trailing newlines from stdout', () => {
   const result = createShellMessageOutput(0, 'hello\n\n', '');
-  t.is(result, 'hello\n\nReturn code: 0');
+  expect(result).toBe('hello\n\nReturn code: 0');
 });

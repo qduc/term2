@@ -1,7 +1,7 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { SessionManager } from './session-manager.js';
 
-test('getCurrentSnapshot reads previousResponseId from persisted state, not a state accessor', (t) => {
+it('getCurrentSnapshot reads previousResponseId from persisted state, not a state accessor', () => {
   const state = {
     exportPersistedState: () => ({
       history: [],
@@ -35,5 +35,5 @@ test('getCurrentSnapshot reads previousResponseId from persisted state, not a st
   } as any);
 
   const snapshot = manager.getCurrentSnapshot();
-  t.is(snapshot.previousResponseId, 'resp-1');
+  expect(snapshot.previousResponseId).toBe('resp-1');
 });

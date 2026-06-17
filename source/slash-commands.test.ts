@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { resolveSlashCommand } from './slash-commands.js';
 import type { SlashCommand } from './slash-commands.js';
 
@@ -8,22 +8,22 @@ const command = (name: string): SlashCommand => ({
   action: () => {},
 });
 
-test('resolveSlashCommand returns exact command matches first', (t) => {
+it('resolveSlashCommand returns exact command matches first', () => {
   const undo = command('undo');
   const commands = [command('usage'), undo];
 
-  t.is(resolveSlashCommand(commands, 'undo'), undo);
+  expect(resolveSlashCommand(commands, 'undo')).toBe(undo);
 });
 
-test('resolveSlashCommand returns a unique command prefix match', (t) => {
+it('resolveSlashCommand returns a unique command prefix match', () => {
   const undo = command('undo');
   const commands = [command('clear'), command('quit'), undo];
 
-  t.is(resolveSlashCommand(commands, 'u'), undo);
+  expect(resolveSlashCommand(commands, 'u')).toBe(undo);
 });
 
-test('resolveSlashCommand ignores ambiguous command prefixes', (t) => {
+it('resolveSlashCommand ignores ambiguous command prefixes', () => {
   const commands = [command('clear'), command('copy')];
 
-  t.is(resolveSlashCommand(commands, 'c'), undefined);
+  expect(resolveSlashCommand(commands, 'c')).toBe(undefined);
 });

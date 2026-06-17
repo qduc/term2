@@ -1,28 +1,26 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 import InputSurgeConfirmationPrompt from './InputSurgeConfirmationPrompt.js';
 
-test.serial('InputSurgeConfirmationPrompt renders prompt and choices', async (t) => {
+it.sequential('InputSurgeConfirmationPrompt renders prompt and choices', async () => {
   const { lastFrame, unmount } = await renderInAct(
     <InputSurgeConfirmationPrompt reason="Outgoing message count jumped" onConfirm={() => {}} onDecline={() => {}} />,
-    t,
   );
 
   const output = lastFrame() ?? '';
-  t.true(output.includes('Input Surge Warning: Outgoing message count jumped'));
-  t.true(output.includes('Send request anyway?'));
-  t.true(output.includes('Send anyway'));
-  t.true(output.includes('Cancel'));
+  expect(output.includes('Input Surge Warning: Outgoing message count jumped')).toBe(true);
+  expect(output.includes('Send request anyway?')).toBe(true);
+  expect(output.includes('Send anyway')).toBe(true);
+  expect(output.includes('Cancel')).toBe(true);
   act(() => {
     unmount();
   });
 });
 
-test.serial('InputSurgeConfirmationPrompt declines on n input', async (t) => {
+it.sequential('InputSurgeConfirmationPrompt declines on n input', async () => {
   let declined = false;
 
   const { lastFrame, stdin, unmount } = await renderInAct(
@@ -33,7 +31,6 @@ test.serial('InputSurgeConfirmationPrompt declines on n input', async (t) => {
         declined = true;
       }}
     />,
-    t,
   );
 
   act(() => {
@@ -41,8 +38,8 @@ test.serial('InputSurgeConfirmationPrompt declines on n input', async (t) => {
   });
   await new Promise((resolve) => setImmediate(resolve));
 
-  t.true((lastFrame() ?? '').includes('Input Surge Warning: Outgoing message count jumped'));
-  t.true(declined);
+  expect((lastFrame() ?? '').includes('Input Surge Warning: Outgoing message count jumped')).toBe(true);
+  expect(declined).toBe(true);
   act(() => {
     unmount();
   });

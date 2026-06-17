@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -20,7 +20,7 @@ const readRequestFile = (filePath: string): Record<string, unknown>[] =>
 
 const expectedTruncation = (length: number): string => `[omitted ${length - TRAFFIC_TEXT_LIMIT} chars]`;
 
-test('sanitizeSentTrafficBody truncates instruction-like fields and preserves user/tool content', (t) => {
+it('sanitizeSentTrafficBody truncates instruction-like fields and preserves user/tool content', () => {
   const longText = 'x'.repeat(1200);
   const body = {
     instructions: longText,
@@ -42,14 +42,14 @@ test('sanitizeSentTrafficBody truncates instruction-like fields and preserves us
 
   const sanitized = sanitizeSentTrafficBody(body);
 
-  t.true(typeof sanitized.instructions === 'string');
-  t.true((sanitized.instructions as string).includes(expectedTruncation(longText.length)));
-  t.is((sanitized.instructions as string).length < longText.length, true);
-  t.deepEqual(sanitized.input, body.input);
-  t.deepEqual(sanitized.tools, ['read_file', 'web_search']);
+  expect(typeof sanitized.instructions === 'string').toBe(true);
+  expect((sanitized.instructions as string).includes(expectedTruncation(longText.length))).toBe(true);
+  expect((sanitized.instructions as string).length < longText.length).toBe(true);
+  expect(sanitized.input).toEqual(body.input);
+  expect(sanitized.tools).toEqual(['read_file', 'web_search']);
 });
 
-test('sanitizeSentTrafficBody truncates system and developer messages in messages-style bodies only', (t) => {
+it('sanitizeSentTrafficBody truncates system and developer messages in messages-style bodies only', () => {
   const longText = 'y'.repeat(1105);
   const body = {
     messages: [
@@ -65,15 +65,15 @@ test('sanitizeSentTrafficBody truncates system and developer messages in message
   const sanitized = sanitizeSentTrafficBody(body);
   const messages = sanitized.messages as Array<Record<string, unknown>>;
 
-  t.true(String(messages[0].content).includes(expectedTruncation(longText.length)));
-  t.true(String(messages[1].content).includes(expectedTruncation(longText.length)));
-  t.is(messages[2].content, 'leave me alone');
-  t.is(messages[3].content, 'tool output stays');
-  t.deepEqual(messages[4].tool_calls, body.messages[4].tool_calls);
-  t.deepEqual(sanitized.tools, ['apply_patch']);
+  expect(String(messages[0].content).includes(expectedTruncation(longText.length))).toBe(true);
+  expect(String(messages[1].content).includes(expectedTruncation(longText.length))).toBe(true);
+  expect(messages[2].content).toBe('leave me alone');
+  expect(messages[3].content).toBe('tool output stays');
+  expect(messages[4].tool_calls).toEqual(body.messages[4].tool_calls);
+  expect(sanitized.tools).toEqual(['apply_patch']);
 });
 
-test('sanitizeSentTrafficBody truncates system message with content array', (t) => {
+it('sanitizeSentTrafficBody truncates system message with content array', () => {
   const longText = 'z'.repeat(1200);
   const body = {
     messages: [
@@ -86,14 +86,14 @@ test('sanitizeSentTrafficBody truncates system message with content array', (t) 
   const messages = sanitized.messages as Array<Record<string, unknown>>;
   const systemContent = messages[0].content as Array<Record<string, unknown>>;
 
-  t.is(systemContent[0].type, 'text');
-  t.true(String(systemContent[0].text).startsWith('z'.repeat(TRAFFIC_TEXT_LIMIT)));
-  t.true(String(systemContent[0].text).includes(expectedTruncation(longText.length)));
-  t.deepEqual(systemContent[0].cache_control, { type: 'ephemeral' });
-  t.is(messages[1].content, 'hi');
+  expect(systemContent[0].type).toBe('text');
+  expect(String(systemContent[0].text).startsWith('z'.repeat(TRAFFIC_TEXT_LIMIT))).toBe(true);
+  expect(String(systemContent[0].text).includes(expectedTruncation(longText.length))).toBe(true);
+  expect(systemContent[0].cache_control).toEqual({ type: 'ephemeral' });
+  expect(messages[1].content).toBe('hi');
 });
 
-test('sanitizeSentTrafficBody truncates anthropic message api system prompt (string or content array)', (t) => {
+it('sanitizeSentTrafficBody truncates anthropic message api system prompt (string or content array)', () => {
   const longText = 'a'.repeat(1200);
   const bodyWithStringSystem = {
     system: longText,
@@ -101,9 +101,9 @@ test('sanitizeSentTrafficBody truncates anthropic message api system prompt (str
   };
 
   const sanitizedString = sanitizeSentTrafficBody(bodyWithStringSystem);
-  t.true(typeof sanitizedString.system === 'string');
-  t.true((sanitizedString.system as string).includes(expectedTruncation(longText.length)));
-  t.is((sanitizedString.system as string).length < longText.length, true);
+  expect(typeof sanitizedString.system === 'string').toBe(true);
+  expect((sanitizedString.system as string).includes(expectedTruncation(longText.length))).toBe(true);
+  expect((sanitizedString.system as string).length < longText.length).toBe(true);
 
   const bodyWithArraySystem = {
     system: [{ type: 'text', text: longText, cache_control: { type: 'ephemeral' } }],
@@ -112,13 +112,13 @@ test('sanitizeSentTrafficBody truncates anthropic message api system prompt (str
 
   const sanitizedArray = sanitizeSentTrafficBody(bodyWithArraySystem);
   const systemContent = sanitizedArray.system as Array<Record<string, unknown>>;
-  t.is(systemContent[0].type, 'text');
-  t.true(String(systemContent[0].text).startsWith('a'.repeat(TRAFFIC_TEXT_LIMIT)));
-  t.true(String(systemContent[0].text).includes(expectedTruncation(longText.length)));
-  t.deepEqual(systemContent[0].cache_control, { type: 'ephemeral' });
+  expect(systemContent[0].type).toBe('text');
+  expect(String(systemContent[0].text).startsWith('a'.repeat(TRAFFIC_TEXT_LIMIT))).toBe(true);
+  expect(String(systemContent[0].text).includes(expectedTruncation(longText.length))).toBe(true);
+  expect(systemContent[0].cache_control).toEqual({ type: 'ephemeral' });
 });
 
-test('sanitizeSentTrafficBody removes encrypted reasoning payload data from messages', (t) => {
+it('sanitizeSentTrafficBody removes encrypted reasoning payload data from messages', () => {
   const body = {
     messages: [
       {
@@ -136,14 +136,14 @@ test('sanitizeSentTrafficBody removes encrypted reasoning payload data from mess
   const messages = sanitized.messages as Array<Record<string, unknown>>;
   const reasoningDetails = messages[0].reasoning_details as Array<Record<string, unknown>>;
 
-  t.deepEqual(reasoningDetails, [
+  expect(reasoningDetails).toEqual([
     { type: 'reasoning.encrypted', data: '', id: 'r1' },
     { type: 'reasoning.summary', data: 'keep-readable', id: 'r2' },
   ]);
-  t.is(messages[0].content, 'keep assistant content');
+  expect(messages[0].content).toBe('keep assistant content');
 });
 
-test('summarizeReceivedTraffic merges OpenAI Responses SSE text reasoning and tool arguments', async (t) => {
+it('summarizeReceivedTraffic merges OpenAI Responses SSE text reasoning and tool arguments', async () => {
   const sse = [
     ': ping',
     '',
@@ -173,23 +173,23 @@ test('summarizeReceivedTraffic merges OpenAI Responses SSE text reasoning and to
     }),
   );
 
-  t.is(summary.transport, 'sse');
-  t.is(summary.status, 200);
-  t.is((summary.payload as any)?.id, 'resp_1');
-  t.is((summary.payload as any)?.choices?.[0]?.delta?.content, 'Hello');
-  t.is((summary.payload as any)?.choices?.[0]?.delta?.reasoning, 'Think');
-  t.deepEqual((summary.payload as any)?.usage, { input_tokens: 10, output_tokens: 5 });
-  t.deepEqual((summary.payload as any)?.choices?.[0]?.delta?.tool_calls, [
+  expect(summary.transport).toBe('sse');
+  expect(summary.status).toBe(200);
+  expect((summary.payload as any)?.id).toBe('resp_1');
+  expect((summary.payload as any)?.choices?.[0]?.delta?.content).toBe('Hello');
+  expect((summary.payload as any)?.choices?.[0]?.delta?.reasoning).toBe('Think');
+  expect((summary.payload as any)?.usage).toEqual({ input_tokens: 10, output_tokens: 5 });
+  expect((summary.payload as any)?.choices?.[0]?.delta?.tool_calls).toEqual([
     {
       id: 'fc_1',
       type: 'function',
       function: { arguments: '{"a":1}' },
     },
   ]);
-  t.deepEqual(summary.unknownFrames, []);
+  expect(summary.unknownFrames).toEqual([]);
 });
 
-test('summarizeReceivedTraffic merges chat completions deltas and retains malformed and unknown frames', async (t) => {
+it('summarizeReceivedTraffic merges chat completions deltas and retains malformed and unknown frames', async () => {
   const sse = [
     'data: {"choices":[{"delta":{"content":"Hi","reasoning":"R","tool_calls":[{"index":0,"id":"call_1","function":{"name":"shell","arguments":"{\\"c"}}]}}]}',
     '',
@@ -212,24 +212,24 @@ test('summarizeReceivedTraffic merges chat completions deltas and retains malfor
     }),
   );
 
-  t.is((summary.payload as any)?.choices?.[0]?.delta?.content, 'Hi');
-  t.is((summary.payload as any)?.choices?.[0]?.delta?.reasoning, 'R');
-  t.is((summary.payload as any)?.id, 'resp_chat');
-  t.is((summary.payload as any)?.choices?.[0]?.finish_reason, 'tool_calls');
-  t.deepEqual((summary.payload as any)?.choices?.[0]?.delta?.tool_calls, [
+  expect((summary.payload as any)?.choices?.[0]?.delta?.content).toBe('Hi');
+  expect((summary.payload as any)?.choices?.[0]?.delta?.reasoning).toBe('R');
+  expect((summary.payload as any)?.id).toBe('resp_chat');
+  expect((summary.payload as any)?.choices?.[0]?.finish_reason).toBe('tool_calls');
+  expect((summary.payload as any)?.choices?.[0]?.delta?.tool_calls).toEqual([
     {
       id: 'call_1',
       type: 'function',
       function: { name: 'shell', arguments: '{"cmd":"ls"}' },
     },
   ]);
-  t.is(summary.errorFrames.length, 1);
-  t.is(summary.malformedFrames.length, 1);
-  t.is(summary.unknownFrames.length, 1);
-  t.is(summary.unknownFrames[0]?.count, 1);
+  expect(summary.errorFrames.length).toBe(1);
+  expect(summary.malformedFrames.length).toBe(1);
+  expect(summary.unknownFrames.length).toBe(1);
+  expect(summary.unknownFrames[0]?.count).toBe(1);
 });
 
-test('summarizeReceivedTraffic recognizes assistant role-only chunks and ignores cost-only trailers', async (t) => {
+it('summarizeReceivedTraffic recognizes assistant role-only chunks and ignores cost-only trailers', async () => {
   const sse = [
     'data: {"id":"chatcmpl_1","object":"chat.completion.chunk","created":1779512639,"model":"accounts/fireworks/models/kimi-k2p6","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}],"usage":null}',
     '',
@@ -248,12 +248,12 @@ test('summarizeReceivedTraffic recognizes assistant role-only chunks and ignores
     }),
   );
 
-  t.is((summary.payload as any)?.id, 'chatcmpl_1');
-  t.is((summary.payload as any)?.choices?.[0]?.delta?.content, 'Hi');
-  t.deepEqual(summary.unknownFrames, []);
+  expect((summary.payload as any)?.id).toBe('chatcmpl_1');
+  expect((summary.payload as any)?.choices?.[0]?.delta?.content).toBe('Hi');
+  expect(summary.unknownFrames).toEqual([]);
 });
 
-test('summarizeReceivedTraffic handles non-stream JSON and falls back safely for unknown JSON', async (t) => {
+it('summarizeReceivedTraffic handles non-stream JSON and falls back safely for unknown JSON', async () => {
   const jsonSummary = await summarizeReceivedTraffic(
     new Response(
       JSON.stringify({
@@ -268,10 +268,10 @@ test('summarizeReceivedTraffic handles non-stream JSON and falls back safely for
     ),
   );
 
-  t.is(jsonSummary.transport, 'json');
-  t.is((jsonSummary.payload as any)?.id, 'resp_json');
-  t.is((jsonSummary.payload as any)?.output_text, 'Done');
-  t.deepEqual((jsonSummary.payload as any)?.usage, { input_tokens: 3, output_tokens: 2 });
+  expect(jsonSummary.transport).toBe('json');
+  expect((jsonSummary.payload as any)?.id).toBe('resp_json');
+  expect((jsonSummary.payload as any)?.output_text).toBe('Done');
+  expect((jsonSummary.payload as any)?.usage).toEqual({ input_tokens: 3, output_tokens: 2 });
 
   const fallbackSummary = await summarizeReceivedTraffic(
     new Response(JSON.stringify({ strange: { nested: true } }), {
@@ -280,11 +280,11 @@ test('summarizeReceivedTraffic handles non-stream JSON and falls back safely for
     }),
   );
 
-  t.truthy(fallbackSummary.fallbackBody);
-  t.is((fallbackSummary.fallbackBody as any).strange.nested, true);
+  expect(fallbackSummary.fallbackBody).toBeTruthy();
+  expect((fallbackSummary.fallbackBody as any).strange.nested).toBe(true);
 });
 
-test('summarizeReceivedTraffic sniffs SSE body when content-type is missing', async (t) => {
+it('summarizeReceivedTraffic sniffs SSE body when content-type is missing', async () => {
   const sse = [
     'event: response.output_text.delta',
     'data: {"type":"response.output_text.delta","delta":"Hi"}',
@@ -298,25 +298,25 @@ test('summarizeReceivedTraffic sniffs SSE body when content-type is missing', as
 
   const summary = await summarizeReceivedTraffic(new Response(sse, { status: 200 }));
 
-  t.is(summary.transport, 'sse');
-  t.is((summary.payload as any)?.id, 'resp_sniff');
-  t.is((summary.payload as any)?.choices?.[0]?.delta?.content, 'Hi');
-  t.falsy(summary.fallbackBody);
+  expect(summary.transport).toBe('sse');
+  expect((summary.payload as any)?.id).toBe('resp_sniff');
+  expect((summary.payload as any)?.choices?.[0]?.delta?.content).toBe('Hi');
+  expect(summary.fallbackBody).toBeFalsy();
 });
 
-test('summarizeReceivedTraffic sniffs JSON body when content-type is missing', async (t) => {
+it('summarizeReceivedTraffic sniffs JSON body when content-type is missing', async () => {
   const summary = await summarizeReceivedTraffic(
     new Response(JSON.stringify({ id: 'resp_json_sniff', output_text: 'Done' }), {
       status: 200,
     }),
   );
 
-  t.is(summary.transport, 'json');
-  t.is((summary.payload as any)?.id, 'resp_json_sniff');
-  t.falsy(summary.fallbackBody);
+  expect(summary.transport).toBe('json');
+  expect((summary.payload as any)?.id).toBe('resp_json_sniff');
+  expect(summary.fallbackBody).toBeFalsy();
 });
 
-test('summarizeReceivedTraffic recognizes response.content_part.added as a lifecycle frame', async (t) => {
+it('summarizeReceivedTraffic recognizes response.content_part.added as a lifecycle frame', async () => {
   const sse = [
     'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_1","output_index":0,"part":{"type":"output_text","annotations":[],"text":""},"sequence_number":1}',
     '',
@@ -333,11 +333,11 @@ test('summarizeReceivedTraffic recognizes response.content_part.added as a lifec
     }),
   );
 
-  t.deepEqual(summary.unknownFrames, []);
-  t.is((summary.payload as any)?.choices?.[0]?.delta?.content, 'Hello');
+  expect(summary.unknownFrames).toEqual([]);
+  expect((summary.payload as any)?.choices?.[0]?.delta?.content).toBe('Hello');
 });
 
-test('summarizeReceivedTraffic recognizes Responses API lifecycle frames without adding to unknownFrames', async (t) => {
+it('summarizeReceivedTraffic recognizes Responses API lifecycle frames without adding to unknownFrames', async () => {
   const sse = [
     'data: {"type":"response.created","response":{"id":"resp_abc","status":"in_progress","output":[]},"sequence_number":0}',
     '',
@@ -358,13 +358,13 @@ test('summarizeReceivedTraffic recognizes Responses API lifecycle frames without
     }),
   );
 
-  t.is(summary.transport, 'sse');
-  t.is((summary.payload as any)?.id, 'resp_abc');
-  t.is((summary.payload as any)?.choices?.[0]?.delta?.content, 'Hello');
-  t.deepEqual(summary.unknownFrames, []);
+  expect(summary.transport).toBe('sse');
+  expect((summary.payload as any)?.id).toBe('resp_abc');
+  expect((summary.payload as any)?.choices?.[0]?.delta?.content).toBe('Hello');
+  expect(summary.unknownFrames).toEqual([]);
 });
 
-test('summarizeReceivedTraffic registers tool name from response.output_item.added function_call frame', async (t) => {
+it('summarizeReceivedTraffic registers tool name from response.output_item.added function_call frame', async () => {
   const sse = [
     'data: {"type":"response.created","response":{"id":"resp_xyz","status":"in_progress","output":[]},"sequence_number":0}',
     '',
@@ -385,14 +385,14 @@ test('summarizeReceivedTraffic registers tool name from response.output_item.add
     }),
   );
 
-  t.deepEqual(summary.unknownFrames, []);
+  expect(summary.unknownFrames).toEqual([]);
   const toolCalls = (summary.payload as any)?.choices?.[0]?.delta?.tool_calls;
-  t.is(toolCalls?.length, 1);
-  t.is(toolCalls?.[0]?.function?.name, 'shell');
-  t.is(toolCalls?.[0]?.function?.arguments, '{"cmd":"ls"}');
+  expect(toolCalls?.length).toBe(1);
+  expect(toolCalls?.[0]?.function?.name).toBe('shell');
+  expect(toolCalls?.[0]?.function?.arguments).toBe('{"cmd":"ls"}');
 });
 
-test('summarizeReceivedTraffic does not duplicate content from output_text.done after delta events', async (t) => {
+it('summarizeReceivedTraffic does not duplicate content from output_text.done after delta events', async () => {
   const sse = [
     'data: {"type":"response.output_text.delta","content_index":0,"item_id":"msg_1","output_index":0,"delta":"Hello! How can I help?","sequence_number":1}',
     '',
@@ -413,11 +413,11 @@ test('summarizeReceivedTraffic does not duplicate content from output_text.done 
     }),
   );
 
-  t.deepEqual(summary.unknownFrames, []);
-  t.is((summary.payload as any)?.choices?.[0]?.delta?.content, 'Hello! How can I help?');
+  expect(summary.unknownFrames).toEqual([]);
+  expect((summary.payload as any)?.choices?.[0]?.delta?.content).toBe('Hello! How can I help?');
 });
 
-test('ProviderTrafficArtifactStore writes per-day per-session request files and daily index', (t) => {
+it('ProviderTrafficArtifactStore writes per-day per-session request files and daily index', (t) => {
   const rootDir = makeTempDir();
   const store = new ProviderTrafficArtifactStore({ rootDir });
 
@@ -440,17 +440,17 @@ test('ProviderTrafficArtifactStore writes per-day per-session request files and 
   const sessionDir = path.join(dayDir, '09-14-31_sessi');
   const requestFile = path.join(sessionDir, '09-14-35.044Z_req-1.jsonl');
 
-  t.true(fs.existsSync(dayDir));
-  t.true(fs.existsSync(sessionDir));
-  t.true(fs.existsSync(requestFile));
-  t.is(path.basename(requestFile), '09-14-35.044Z_req-1.jsonl');
-  t.false(path.basename(requestFile).includes('session-123'));
+  expect(fs.existsSync(dayDir)).toBe(true);
+  expect(fs.existsSync(sessionDir)).toBe(true);
+  expect(fs.existsSync(requestFile)).toBe(true);
+  expect(path.basename(requestFile)).toBe('09-14-35.044Z_req-1.jsonl');
+  expect(path.basename(requestFile).includes('session-123')).toBe(false);
 
   const firstRecord = readRequestFile(requestFile)[0];
-  t.is(firstRecord?.direction, 'sent');
-  t.deepEqual(firstRecord?.headers, { host: 'api.openrouter.ai', authorization: '[REDACTED]' });
-  t.is(firstRecord?.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
-  t.is(firstRecord?.modelWrapperClass, 'RetryingModel');
+  expect(firstRecord?.direction).toBe('sent');
+  expect(firstRecord?.headers).toEqual({ host: 'api.openrouter.ai', authorization: '[REDACTED]' });
+  expect(firstRecord?.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
+  expect(firstRecord?.modelWrapperClass).toBe('RetryingModel');
 
   const indexPath = path.join(dayDir, 'index.jsonl');
   const indexEntries = fs
@@ -458,8 +458,8 @@ test('ProviderTrafficArtifactStore writes per-day per-session request files and 
     .trim()
     .split('\n')
     .map((line) => JSON.parse(line));
-  t.is(indexEntries.length, 1);
-  t.like(indexEntries[0], {
+  expect(indexEntries.length).toBe(1);
+  expect(indexEntries[0]).toMatchObject({
     sessionId: 'session-123',
     sessionDir: '09-14-31_sessi',
     firstRequestAt: '2026-05-22T09:14:35.044Z',
@@ -471,7 +471,7 @@ test('ProviderTrafficArtifactStore writes per-day per-session request files and 
   });
 });
 
-test('ProviderTrafficArtifactStore appends received line, upserts newest-first index, records failures, and allows later-day session folders', (t) => {
+it('ProviderTrafficArtifactStore appends received line, upserts newest-first index, records failures, and allows later-day session folders', () => {
   const rootDir = makeTempDir();
   const legacyFile = path.join(rootDir, 'traffic-2026-05-22.log');
   fs.writeFileSync(legacyFile, '{"legacy":true}\n', 'utf8');
@@ -543,35 +543,35 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
 
   const requestFile = path.join(rootDir, '2026-05-22', '09-14-31_sessi', '09-14-35.044Z_req-1.jsonl');
   const requestRecords = readRequestFile(requestFile);
-  t.is(requestRecords.length, 2);
-  t.is(requestRecords[1]?.direction, 'received');
-  t.is((requestRecords[1]?.summary as any)?.outputText, 'done');
-  t.is(requestRecords[0]?.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
-  t.is(requestRecords[0]?.modelWrapperClass, 'RetryingModel');
-  t.is(requestRecords[1]?.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
-  t.is(requestRecords[1]?.modelWrapperClass, 'RetryingModel');
+  expect(requestRecords.length).toBe(2);
+  expect(requestRecords[1]?.direction).toBe('received');
+  expect((requestRecords[1]?.summary as any)?.outputText).toBe('done');
+  expect(requestRecords[0]?.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
+  expect(requestRecords[0]?.modelWrapperClass).toBe('RetryingModel');
+  expect(requestRecords[1]?.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
+  expect(requestRecords[1]?.modelWrapperClass).toBe('RetryingModel');
 
   const failureFile = path.join(rootDir, '2026-05-22', '10-00-00_sessi', '10-00-00.000Z_req-2.jsonl');
-  t.is((readRequestFile(failureFile)[1]?.error as any)?.message, 'fetch failed');
-  t.is(readRequestFile(failureFile)[0]?.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
-  t.is(readRequestFile(failureFile)[1]?.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
+  expect((readRequestFile(failureFile)[1]?.error as any)?.message).toBe('fetch failed');
+  expect(readRequestFile(failureFile)[0]?.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
+  expect(readRequestFile(failureFile)[1]?.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
 
   const indexEntries = fs
     .readFileSync(path.join(rootDir, '2026-05-22', 'index.jsonl'), 'utf8')
     .trim()
     .split('\n')
     .map((line) => JSON.parse(line));
-  t.is(indexEntries.length, 2);
-  t.is(indexEntries[0].sessionId, 'session-999');
-  t.is(indexEntries[1].sessionId, 'session-123');
-  t.deepEqual(indexEntries[0].providersSeen, ['openrouter']);
-  t.deepEqual(indexEntries[1].modelsSeen, ['gpt-5']);
+  expect(indexEntries.length).toBe(2);
+  expect(indexEntries[0].sessionId).toBe('session-999');
+  expect(indexEntries[1].sessionId).toBe('session-123');
+  expect(indexEntries[0].providersSeen).toEqual(['openrouter']);
+  expect(indexEntries[1].modelsSeen).toEqual(['gpt-5']);
 
-  t.true(fs.existsSync(path.join(rootDir, '2026-05-23', '00-00-00_sessi', '00-00-01.000Z_req-3.jsonl')));
-  t.is(fs.readFileSync(legacyFile, 'utf8'), '{"legacy":true}\n');
+  expect(fs.existsSync(path.join(rootDir, '2026-05-23', '00-00-00_sessi', '00-00-01.000Z_req-3.jsonl'))).toBe(true);
+  expect(fs.readFileSync(legacyFile, 'utf8')).toBe('{"legacy":true}\n');
 });
 
-test('ProviderTrafficArtifactStore places evaluator requests under evaluator subfolder', (t) => {
+it('ProviderTrafficArtifactStore places evaluator requests under evaluator subfolder', () => {
   const rootDir = makeTempDir();
   const store = new ProviderTrafficArtifactStore({ rootDir });
 
@@ -606,19 +606,19 @@ test('ProviderTrafficArtifactStore places evaluator requests under evaluator sub
   const sessionDir = path.join(dayDir, '09-14-31_sessi');
   const requestFile = path.join(sessionDir, 'evaluator_09-14-35.044Z_eval-.jsonl');
 
-  t.true(fs.existsSync(dayDir));
-  t.true(fs.existsSync(sessionDir));
-  t.true(fs.existsSync(requestFile));
+  expect(fs.existsSync(dayDir)).toBe(true);
+  expect(fs.existsSync(sessionDir)).toBe(true);
+  expect(fs.existsSync(requestFile)).toBe(true);
 
   const records = readRequestFile(requestFile);
-  t.is(records.length, 2);
-  t.is(records[0]?.direction, 'sent');
-  t.is(records[1]?.direction, 'received');
-  t.is(records[0]?.modelClass, 'CodexResponsesWSModel');
-  t.is(records[1]?.modelClass, 'CodexResponsesWSModel');
+  expect(records.length).toBe(2);
+  expect(records[0]?.direction).toBe('sent');
+  expect(records[1]?.direction).toBe('received');
+  expect(records[0]?.modelClass).toBe('CodexResponsesWSModel');
+  expect(records[1]?.modelClass).toBe('CodexResponsesWSModel');
 });
 
-test('recordRequestComplete removes completed request path from map so a second completion without a fresh start gets a new path', (t) => {
+it('recordRequestComplete removes completed request path from map so a second completion without a fresh start gets a new path', () => {
   const rootDir = makeTempDir();
   const store = new ProviderTrafficArtifactStore({ rootDir });
 
@@ -666,13 +666,13 @@ test('recordRequestComplete removes completed request path from map so a second 
 
   // The file created by recordRequestStart holds sent + first received (2 records)
   const startFile = path.join(sessionDir, '10-00-01.000Z_test-.jsonl');
-  t.true(fs.existsSync(startFile), 'start file should exist');
-  t.is(readRequestFile(startFile).length, 2, 'start file should have sent + first received');
+  expect(fs.existsSync(startFile)).toBe(true);
+  expect(readRequestFile(startFile).length, 'start file should have sent + first received').toBe(2);
 
   // The second completion MUST write to a NEW file, not reuse the stored path
   const secondFile = path.join(sessionDir, '10-00-10.000Z_test-.jsonl');
-  t.true(fs.existsSync(secondFile), 'second completion must create a new file, not reuse the old one');
+  expect(fs.existsSync(secondFile)).toBe(true);
   const secondRecords = readRequestFile(secondFile);
-  t.is(secondRecords.length, 1, 'new file should have exactly one received record');
-  t.is(secondRecords[0]?.timestamp, '2026-06-01T10:00:10.000Z');
+  expect(secondRecords.length, 'new file should have exactly one received record').toBe(1);
+  expect(secondRecords[0]?.timestamp).toBe('2026-06-01T10:00:10.000Z');
 });

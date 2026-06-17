@@ -1,16 +1,16 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { clearToolFormatters, getToolFormatter, registerToolFormatters } from './command-message-formatters.js';
 import type { ToolDefinition } from './types.js';
 
-test.beforeEach(() => {
+beforeEach(() => {
   clearToolFormatters();
 });
 
-test.afterEach(() => {
+afterEach(() => {
   clearToolFormatters();
 });
 
-test('registerToolFormatters indexes formatter by tool name', (t) => {
+it('registerToolFormatters indexes formatter by tool name', () => {
   const formatter = () => [];
   const tool = {
     name: 'example_tool',
@@ -19,11 +19,11 @@ test('registerToolFormatters indexes formatter by tool name', (t) => {
 
   registerToolFormatters([tool]);
 
-  t.is(getToolFormatter('example_tool'), formatter);
+  expect(getToolFormatter('example_tool')).toBe(formatter);
 });
 
-test('registry has no built-in formatters before registration', (t) => {
-  t.is(getToolFormatter('shell'), undefined);
-  t.is(getToolFormatter('web_search'), undefined);
-  t.is(getToolFormatter('unknown_tool'), undefined);
+it('registry has no built-in formatters before registration', () => {
+  expect(getToolFormatter('shell')).toBe(undefined);
+  expect(getToolFormatter('web_search')).toBe(undefined);
+  expect(getToolFormatter('unknown_tool')).toBe(undefined);
 });

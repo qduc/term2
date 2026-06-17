@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { renderInAct, rerenderInAct } from '../test-helpers/ink-testing.js';
 // Import the built component (tests run against compiled files)
@@ -12,259 +11,242 @@ const rstrip = (s: string) => s.replaceAll(/[ \t]+$/g, '');
 
 // --- Basic text rendering ---
 
-test.serial('renders plain text', async (t) => {
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, 'Hello world'), t);
+it.sequential('renders plain text', async () => {
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, 'Hello world'));
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('Hello world'));
+  expect(frame.includes('Hello world')).toBe(true);
 });
 
 // --- Inline formatting ---
 
-test.serial('renders bold text', async (t) => {
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, 'This is **bold** text'), t);
+it.sequential('renders bold text', async () => {
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, 'This is **bold** text'));
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('bold'));
-  t.true(frame.includes('This is'));
+  expect(frame.includes('bold')).toBe(true);
+  expect(frame.includes('This is')).toBe(true);
 });
 
-test.serial('renders italic text', async (t) => {
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, 'This is *italic* text'), t);
+it.sequential('renders italic text', async () => {
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, 'This is *italic* text'));
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('italic'));
-  t.true(frame.includes('This is'));
+  expect(frame.includes('italic')).toBe(true);
+  expect(frame.includes('This is')).toBe(true);
 });
 
-test.serial('renders inline code with non-breaking space padding', async (t) => {
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, 'Run `npm install` to start'), t);
+it.sequential('renders inline code with non-breaking space padding', async () => {
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, 'Run `npm install` to start'));
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('\u00A0npm install\u00A0'));
+  expect(frame.includes('\u00A0npm install\u00A0')).toBe(true);
 });
 
-test.serial('renders links', async (t) => {
+it.sequential('renders links', async () => {
   const { lastFrame } = await renderInAct(
     React.createElement(MarkdownRenderer, null, 'Visit [example](https://example.com)'),
-    t,
   );
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('example'));
+  expect(frame.includes('example')).toBe(true);
 });
 
-test.serial('renders images as text placeholder', async (t) => {
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, '![alt text](image.png)'), t);
+it.sequential('renders images as text placeholder', async () => {
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, '![alt text](image.png)'));
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('[Image: alt text]'));
+  expect(frame.includes('[Image: alt text]')).toBe(true);
 });
 
 // --- Headings ---
 
-test.serial('renders H1 heading', async (t) => {
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, '# Main Title'), t);
+it.sequential('renders H1 heading', async () => {
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, '# Main Title'));
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('# Main Title'));
+  expect(frame.includes('# Main Title')).toBe(true);
 });
 
-test.serial('renders H2 heading', async (t) => {
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, '## Subtitle'), t);
+it.sequential('renders H2 heading', async () => {
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, '## Subtitle'));
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('## Subtitle'));
+  expect(frame.includes('## Subtitle')).toBe(true);
 });
 
-test.serial('renders H3+ headings with exact depths', async (t) => {
-  const { lastFrame: lf3 } = await renderInAct(React.createElement(MarkdownRenderer, null, '### Section'), t);
-  t.true(stripAnsi(lf3()).includes('### Section'));
+it.sequential('renders H3+ headings with exact depths', async () => {
+  const { lastFrame: lf3 } = await renderInAct(React.createElement(MarkdownRenderer, null, '### Section'));
+  expect(stripAnsi(lf3()).includes('### Section')).toBe(true);
 
-  const { lastFrame: lf4 } = await renderInAct(React.createElement(MarkdownRenderer, null, '#### Detail'), t);
-  t.true(stripAnsi(lf4()).includes('#### Detail'));
+  const { lastFrame: lf4 } = await renderInAct(React.createElement(MarkdownRenderer, null, '#### Detail'));
+  expect(stripAnsi(lf4()).includes('#### Detail')).toBe(true);
 });
 
-test.serial('preserves spacing and trailing blank lines for swallowed heading/table newlines', async (t) => {
+it.sequential('preserves spacing and trailing blank lines for swallowed heading/table newlines', async () => {
   const { lastFrame: lfHeading } = await renderInAct(
     React.createElement(
       MarkdownRenderer,
       null,
       '## Detailed Review\n\n#### MessageList.tsx change\n\nIn the renderStaticItem function',
     ),
-    t,
   );
   const frameHeading = stripAnsi(lfHeading());
-  t.true(
+  expect(
     frameHeading.includes('## Detailed Review\n\n#### MessageList.tsx change\n\nIn the renderStaticItem function'),
-  );
+  ).toBe(true);
 
   const { lastFrame: lfTable } = await renderInAct(
     React.createElement(MarkdownRenderer, null, '| col1 |\n| --- |\n| val1 |\n\nParagraph'),
-    t,
   );
   const frameTable = stripAnsi(lfTable());
-  t.true(frameTable.includes('val1'));
-  t.true(frameTable.includes('\n\nParagraph'));
+  expect(frameTable.includes('val1')).toBe(true);
+  expect(frameTable.includes('\n\nParagraph')).toBe(true);
 });
 
 // --- Paragraphs ---
 
-test.serial('renders multiple paragraphs', async (t) => {
+it.sequential('renders multiple paragraphs', async () => {
   const { lastFrame } = await renderInAct(
     React.createElement(MarkdownRenderer, null, 'First paragraph\n\nSecond paragraph'),
-    t,
   );
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('First paragraph'));
-  t.true(frame.includes('Second paragraph'));
+  expect(frame.includes('First paragraph')).toBe(true);
+  expect(frame.includes('Second paragraph')).toBe(true);
 });
 
 // --- Lists ---
 
-test.serial('renders unordered list', async (t) => {
-  const { lastFrame } = await renderInAct(
-    React.createElement(MarkdownRenderer, null, '- Item 1\n- Item 2\n- Item 3'),
-    t,
-  );
+it.sequential('renders unordered list', async () => {
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, '- Item 1\n- Item 2\n- Item 3'));
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('Item 1'));
-  t.true(frame.includes('Item 2'));
-  t.true(frame.includes('Item 3'));
+  expect(frame.includes('Item 1')).toBe(true);
+  expect(frame.includes('Item 2')).toBe(true);
+  expect(frame.includes('Item 3')).toBe(true);
   // Check for bullet points
-  t.true(frame.includes('•'));
+  expect(frame.includes('•')).toBe(true);
 });
 
-test.serial('renders ordered list', async (t) => {
-  const { lastFrame } = await renderInAct(
-    React.createElement(MarkdownRenderer, null, '1. First\n2. Second\n3. Third'),
-    t,
-  );
+it.sequential('renders ordered list', async () => {
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, '1. First\n2. Second\n3. Third'));
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('First'));
-  t.true(frame.includes('Second'));
-  t.true(frame.includes('Third'));
+  expect(frame.includes('First')).toBe(true);
+  expect(frame.includes('Second')).toBe(true);
+  expect(frame.includes('Third')).toBe(true);
 });
 
-test.serial('renders nested lists', async (t) => {
+it.sequential('renders nested lists', async () => {
   const { lastFrame } = await renderInAct(
     React.createElement(MarkdownRenderer, null, '- Parent\n  - Child 1\n  - Child 2'),
-    t,
   );
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('Parent'));
-  t.true(frame.includes('Child 1'));
-  t.true(frame.includes('Child 2'));
+  expect(frame.includes('Parent')).toBe(true);
+  expect(frame.includes('Child 1')).toBe(true);
+  expect(frame.includes('Child 2')).toBe(true);
 });
 
-test.serial('renders list with inline formatting', async (t) => {
+it.sequential('renders list with inline formatting', async () => {
   const { lastFrame } = await renderInAct(
     React.createElement(MarkdownRenderer, null, '- **Bold** item\n- *Italic* item'),
-    t,
   );
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('Bold'));
-  t.true(frame.includes('Italic'));
+  expect(frame.includes('Bold')).toBe(true);
+  expect(frame.includes('Italic')).toBe(true);
 });
 
 // --- Code blocks ---
 
-test.serial('renders fenced code block', async (t) => {
+it.sequential('renders fenced code block', async () => {
   const { lastFrame } = await renderInAct(
     React.createElement(MarkdownRenderer, null, '```\nconst x = 1;\nconsole.log(x);\n```'),
-    t,
   );
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('const x = 1;'));
-  t.true(frame.includes('console.log(x);'));
+  expect(frame.includes('const x = 1;')).toBe(true);
+  expect(frame.includes('console.log(x);')).toBe(true);
 });
 
-test.serial('renders code block with language', async (t) => {
+it.sequential('renders code block with language', async () => {
   const { lastFrame } = await renderInAct(
-    React.createElement(MarkdownRenderer, null, '```javascript\nfunction test() {}\n```'),
-    t,
+    React.createElement(MarkdownRenderer, null, '```javascript\nfunction it() {}\n```'),
   );
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('function test() {}'));
+  expect(frame.includes('function it() {}')).toBe(true);
 });
 
-test.serial('renders first code line when it is accidentally joined to the fence language', async (t) => {
+it.sequential('renders first code line when it is accidentally joined to the fence language', async () => {
   const markdown = '```typescriptif (enabled) {\n  run();\n}\n```';
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown), t);
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown));
   const frame = stripAnsi(lastFrame());
 
-  t.true(frame.includes('if (enabled) {'));
-  t.true(frame.includes('run();'));
+  expect(frame.includes('if (enabled) {')).toBe(true);
+  expect(frame.includes('run();')).toBe(true);
 });
 
-test.serial('renders indented code block', async (t) => {
+it.sequential('renders indented code block', async () => {
   const { lastFrame } = await renderInAct(
     React.createElement(MarkdownRenderer, null, '    const x = 1;\n    const y = 2;'),
-    t,
   );
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('const x = 1;'));
-  t.true(frame.includes('const y = 2;'));
+  expect(frame.includes('const x = 1;')).toBe(true);
+  expect(frame.includes('const y = 2;')).toBe(true);
 });
 
 // --- Blockquotes ---
 
-test.serial('renders blockquote', async (t) => {
+it.sequential('renders blockquote', async () => {
   const { lastFrame } = await renderInAct(
     React.createElement(MarkdownRenderer, null, '> This is a quote\n> with multiple lines'),
-    t,
   );
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('This is a quote'));
-  t.true(frame.includes('with multiple lines'));
+  expect(frame.includes('This is a quote')).toBe(true);
+  expect(frame.includes('with multiple lines')).toBe(true);
 });
 
-test.serial('renders nested blockquote', async (t) => {
+it.sequential('renders nested blockquote', async () => {
   const { lastFrame } = await renderInAct(
     React.createElement(MarkdownRenderer, null, '> Outer quote\n>> Nested quote'),
-    t,
   );
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('Outer quote'));
-  t.true(frame.includes('Nested quote'));
+  expect(frame.includes('Outer quote')).toBe(true);
+  expect(frame.includes('Nested quote')).toBe(true);
 });
 
 // --- Horizontal rules ---
 
-test.serial('renders horizontal rule', async (t) => {
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, 'Before\n\n---\n\nAfter'), t);
+it.sequential('renders horizontal rule', async () => {
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, 'Before\n\n---\n\nAfter'));
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('Before'));
-  t.true(frame.includes('After'));
-  t.true(frame.includes('───')); // Check for rule characters
+  expect(frame.includes('Before')).toBe(true);
+  expect(frame.includes('After')).toBe(true);
+  expect(frame.includes('───')).toBe(true); // Check for rule characters
 });
 
 // --- Tables ---
 
-test.serial('wraps long table cell content within a bounded table width', async (t) => {
+it.sequential('wraps long table cell content within a bounded table width', async () => {
   const markdown = `| File | Change |
 | --- | --- |
 | \`openai-compatible/model.ts\` | Track \`reasoningContent\` separately from \`reasoning\`; emit both \`reasoning_content\` and \`providerData\` in messages and function_calls; accumulate \`reasoning_content\` delta in streams |`;
 
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown), t);
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown));
   const frame = stripAnsi(lastFrame());
   const lines = frame.split('\n').filter(Boolean);
 
-  t.true(frame.includes('reasoningContent'));
-  t.true(lines.every((line) => line.length <= 100));
+  expect(frame.includes('reasoningContent')).toBe(true);
+  expect(lines.every((line) => line.length <= 100)).toBe(true);
 });
 
-test.serial('renders wide table lines with room for terminal newline wrapping', async (t) => {
+it.sequential('renders wide table lines with room for terminal newline wrapping', async () => {
   const markdown = `| Product | Description | Price | Availability |
 | --- | --- | --- | --- |
 | Laptop Pro X1 | A high-performance ultrabook with a 15.6-inch 4K display, 16GB RAM, 512GB SSD storage, and Intel Core i7 processor for professionals who need speed and reliability. | $1,299.99 | In Stock |
 | Wireless Headphones Max | Premium noise-cancelling headphones with 30-hour battery life, Bluetooth 5.0 connectivity, memory foam ear cushions, and a sleek folding design for easy portability. | $349.99 | Only 3 left |`;
 
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown), t);
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown));
   const frame = stripAnsi(lastFrame());
   const lines = frame.split('\n').map(rstrip).filter(Boolean);
 
-  t.true(lines.every((line) => line.length < 100));
+  expect(lines.every((line) => line.length < 100)).toBe(true);
 });
 
-test.serial('keeps table header labels intact when reserving column widths', async (t) => {
+it.sequential('keeps table header labels intact when reserving column widths', async () => {
   const markdown = `| Product | Description | Price | Availability |
 | --- | --- | --- | --- |
 | Laptop Pro X1 | A high-performance ultrabook with a 15.6-inch 4K display, 16GB RAM, 512GB SSD storage, and Intel Core i7 processor for professionals who need speed and reliability. | $1,299.99 | In Stock |`;
 
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown), t);
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown));
   const frame = stripAnsi(lastFrame());
   const lines = frame.split('\n').map(rstrip).filter(Boolean);
   const headerLines = lines.slice(
@@ -272,39 +254,39 @@ test.serial('keeps table header labels intact when reserving column widths', asy
     lines.findIndex((line, index) => index > 0 && line.trimStart().startsWith('+')),
   );
 
-  t.true(headerLines.some((line) => line.includes('Availability')));
+  expect(headerLines.some((line) => line.includes('Availability'))).toBe(true);
 });
 
-test.serial('renders table borders and header separator with the same width as table rows', async (t) => {
+it.sequential('renders table borders and header separator with the same width as table rows', async () => {
   const markdown = `| A | B |
 | --- | --- |
 | 1 | 22 |`;
 
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown), t);
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown));
   const frame = stripAnsi(lastFrame());
   const lines = frame.split('\n').map(rstrip).filter(Boolean);
 
   // ASCII style is the default.
   const borderLines = lines.filter((line) => line.trimStart().startsWith('+'));
-  t.is(borderLines.length, 3);
+  expect(borderLines.length).toBe(3);
 
   const [top, middle, bottom] = borderLines;
-  t.is(top.length, middle.length);
-  t.is(top.length, bottom.length);
+  expect(top.length).toBe(middle.length);
+  expect(top.length).toBe(bottom.length);
 
   // Pick the first header row line and first data row line and ensure they match border width.
   const headerLine = lines.find((line) => line.trimStart().startsWith('|')) ?? '';
-  t.true(headerLine.length > 0);
-  t.is(headerLine.length, top.length);
+  expect(headerLine.length > 0).toBe(true);
+  expect(headerLine.length).toBe(top.length);
 
   const dataLine = [...lines].reverse().find((line) => line.trimStart().startsWith('|')) ?? '';
-  t.true(dataLine.length > 0);
-  t.is(dataLine.length, top.length);
+  expect(dataLine.length > 0).toBe(true);
+  expect(dataLine.length).toBe(top.length);
 });
 
 // --- Complex markdown ---
 
-test.serial('renders complex markdown with multiple elements', async (t) => {
+it.sequential('renders complex markdown with multiple elements', async () => {
   const markdown = `# Title
 
 This is a **paragraph** with *formatting*.
@@ -322,20 +304,20 @@ code block
 
 Final paragraph with \`inline code\``;
 
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown), t);
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown));
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('Title'));
-  t.true(frame.includes('paragraph'));
-  t.true(frame.includes('Subtitle'));
-  t.true(frame.includes('Item 1'));
-  t.true(frame.includes('code block'));
-  t.true(frame.includes('Final paragraph'));
-  t.true(frame.includes('inline code'));
+  expect(frame.includes('Title')).toBe(true);
+  expect(frame.includes('paragraph')).toBe(true);
+  expect(frame.includes('Subtitle')).toBe(true);
+  expect(frame.includes('Item 1')).toBe(true);
+  expect(frame.includes('code block')).toBe(true);
+  expect(frame.includes('Final paragraph')).toBe(true);
+  expect(frame.includes('inline code')).toBe(true);
 });
 
 // --- Pre-parsed tokens ---
 
-test.serial('accepts pre-parsed tokens instead of children', async (t) => {
+it.sequential('accepts pre-parsed tokens instead of children', async () => {
   const tokens = [
     {
       type: 'paragraph',
@@ -348,12 +330,12 @@ test.serial('accepts pre-parsed tokens instead of children', async (t) => {
     },
   ];
 
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, { tokens }), t);
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, { tokens }));
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('Custom tokens'));
+  expect(frame.includes('Custom tokens')).toBe(true);
 });
 
-test.serial('rerenders pre-parsed tokens without raw content', async (t) => {
+it.sequential('rerenders pre-parsed tokens without raw content', async () => {
   const makeTokens = (text: string) => [
     {
       type: 'paragraph',
@@ -366,42 +348,41 @@ test.serial('rerenders pre-parsed tokens without raw content', async (t) => {
     },
   ];
 
-  const renderer = await renderInAct(React.createElement(MarkdownRenderer, { tokens: makeTokens('First tokens') }), t);
+  const renderer = await renderInAct(React.createElement(MarkdownRenderer, { tokens: makeTokens('First tokens') }));
   await rerenderInAct(renderer, React.createElement(MarkdownRenderer, { tokens: makeTokens('Second tokens') }));
 
   const frame = stripAnsi(renderer.lastFrame());
-  t.true(frame.includes('Second tokens'));
-  t.false(frame.includes('First tokens'));
+  expect(frame.includes('Second tokens')).toBe(true);
+  expect(frame.includes('First tokens')).toBe(false);
 });
 
 // --- Edge cases ---
 
-test.serial('handles line breaks', async (t) => {
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, 'Line 1  \nLine 2'), t);
+it.sequential('handles line breaks', async () => {
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, 'Line 1  \nLine 2'));
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('Line 1'));
-  t.true(frame.includes('Line 2'));
+  expect(frame.includes('Line 1')).toBe(true);
+  expect(frame.includes('Line 2')).toBe(true);
 });
 
-test.serial('escapes special characters', async (t) => {
+it.sequential('escapes special characters', async () => {
   const { lastFrame } = await renderInAct(
     React.createElement(MarkdownRenderer, null, '\\*not bold\\* and \\`not code\\`'),
-    t,
   );
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('*not bold*'));
-  t.true(frame.includes('`not code`'));
+  expect(frame.includes('*not bold*')).toBe(true);
+  expect(frame.includes('`not code`')).toBe(true);
 });
 
-test.serial('handles mixed list types', async (t) => {
+it.sequential('handles mixed list types', async () => {
   const markdown = `- Unordered 1
 - Unordered 2
 
 1. Ordered 1
 2. Ordered 2`;
 
-  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown), t);
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown));
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('Unordered 1'));
-  t.true(frame.includes('Ordered 1'));
+  expect(frame.includes('Unordered 1')).toBe(true);
+  expect(frame.includes('Ordered 1')).toBe(true);
 });

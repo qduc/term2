@@ -1,7 +1,7 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { AiSdkOpenRouterProvider } from './ai-sdk-openrouter.provider.js';
 
-test('AiSdkOpenRouterProvider creates an AI SDK model with OpenRouter settings', (t) => {
+it('AiSdkOpenRouterProvider creates an AI SDK model with OpenRouter settings', () => {
   const calls: any[] = [];
   let requestedModel: string | undefined;
   const provider = new AiSdkOpenRouterProvider({
@@ -34,8 +34,8 @@ test('AiSdkOpenRouterProvider creates an AI SDK model with OpenRouter settings',
 
   const model = provider.getModel('anthropic/claude-sonnet-4.5');
 
-  t.is(calls.length, 1);
-  t.like(calls[0], {
+  expect(calls.length).toBe(1);
+  expect(calls[0]).toMatchObject({
     baseURL: 'https://openrouter.test/api/v1',
     apiKey: 'sk-test',
     headers: {
@@ -46,12 +46,12 @@ test('AiSdkOpenRouterProvider creates an AI SDK model with OpenRouter settings',
     appUrl: 'https://term2.test',
     compatibility: 'strict',
   });
-  t.is(requestedModel, 'anthropic/claude-sonnet-4.5');
-  t.is(typeof (model as any).getResponse, 'function');
-  t.is(typeof (model as any).getStreamedResponse, 'function');
+  expect(requestedModel).toBe('anthropic/claude-sonnet-4.5');
+  expect(typeof (model as any).getResponse).toBe('function');
+  expect(typeof (model as any).getStreamedResponse).toBe('function');
 });
 
-test('AiSdkOpenRouterProvider uses the default model when none is requested', (t) => {
+it('AiSdkOpenRouterProvider uses the default model when none is requested', () => {
   let requestedModel: string | undefined;
   const provider = new AiSdkOpenRouterProvider({
     defaultModel: 'openrouter/auto',
@@ -71,10 +71,10 @@ test('AiSdkOpenRouterProvider uses the default model when none is requested', (t
 
   provider.getModel();
 
-  t.is(requestedModel, 'openrouter/auto');
+  expect(requestedModel).toBe('openrouter/auto');
 });
 
-test('AiSdkOpenRouterProvider passes configured fetch to OpenRouter provider', (t) => {
+it('AiSdkOpenRouterProvider passes configured fetch to OpenRouter provider', () => {
   const fetchImpl = async () => new Response('{}');
   const calls: any[] = [];
   const provider = new AiSdkOpenRouterProvider({
@@ -98,5 +98,5 @@ test('AiSdkOpenRouterProvider passes configured fetch to OpenRouter provider', (
 
   provider.getModel('selected-model');
 
-  t.is(calls[0].fetch, fetchImpl);
+  expect(calls[0].fetch).toBe(fetchImpl);
 });

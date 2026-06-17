@@ -1,25 +1,25 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   injectWarningIntoToolOutput,
   injectTurnLimitWarning,
   buildTurnLimitWarning,
 } from './inject-warning-into-tool-output.js';
 
-test('injectWarningIntoToolOutput appends to plain text', (t) => {
+it('injectWarningIntoToolOutput appends to plain text', () => {
   const output = 'Hello World';
   const warning = ' [Warning: Turns left]';
   const result = injectWarningIntoToolOutput(output, warning);
-  t.is(result, 'Hello World [Warning: Turns left]');
+  expect(result).toBe('Hello World [Warning: Turns left]');
 });
 
-test('injectWarningIntoToolOutput handles JSON string output', (t) => {
+it('injectWarningIntoToolOutput handles JSON string output', () => {
   const output = JSON.stringify('Hello World');
   const warning = ' [Warning: Turns left]';
   const result = injectWarningIntoToolOutput(output, warning);
-  t.is(JSON.parse(result), 'Hello World [Warning: Turns left]');
+  expect(JSON.parse(result)).toBe('Hello World [Warning: Turns left]');
 });
 
-test('injectWarningIntoToolOutput appends to standard envelope JSON array stdout', (t) => {
+it('injectWarningIntoToolOutput appends to standard envelope JSON array stdout', () => {
   const output = JSON.stringify({
     output: [
       {
@@ -31,20 +31,20 @@ test('injectWarningIntoToolOutput appends to standard envelope JSON array stdout
   const warning = ' [Warning]';
   const result = injectWarningIntoToolOutput(output, warning);
   const parsed = JSON.parse(result);
-  t.is(parsed.output[0].stdout, 'Command output [Warning]');
+  expect(parsed.output[0].stdout).toBe('Command output [Warning]');
 });
 
-test('injectWarningIntoToolOutput appends to simple JSON object content', (t) => {
+it('injectWarningIntoToolOutput appends to simple JSON object content', () => {
   const output = JSON.stringify({
     content: 'File content',
   });
   const warning = ' [Warning]';
   const result = injectWarningIntoToolOutput(output, warning);
   const parsed = JSON.parse(result);
-  t.is(parsed.content, 'File content [Warning]');
+  expect(parsed.content).toBe('File content [Warning]');
 });
 
-test('injectWarningIntoToolOutput appends to standard envelope JSON array message', (t) => {
+it('injectWarningIntoToolOutput appends to standard envelope JSON array message', () => {
   const output = JSON.stringify({
     output: [
       {
@@ -56,10 +56,10 @@ test('injectWarningIntoToolOutput appends to standard envelope JSON array messag
   const warning = ' [Warning]';
   const result = injectWarningIntoToolOutput(output, warning);
   const parsed = JSON.parse(result);
-  t.is(parsed.output[0].message, 'Updated file.ts [Warning]');
+  expect(parsed.output[0].message).toBe('Updated file.ts [Warning]');
 });
 
-test('injectWarningIntoToolOutput appends to top-level JSON object message without corrupting JSON', (t) => {
+it('injectWarningIntoToolOutput appends to top-level JSON object message without corrupting JSON', () => {
   const output = JSON.stringify({
     success: true,
     path: 'new-file.ts',
@@ -68,12 +68,12 @@ test('injectWarningIntoToolOutput appends to top-level JSON object message witho
   const warning = ' [Warning]';
   const result = injectWarningIntoToolOutput(output, warning);
   const parsed = JSON.parse(result);
-  t.is(parsed.message, 'Created new-file.ts [Warning]');
-  t.is(parsed.success, true);
-  t.is(parsed.path, 'new-file.ts');
+  expect(parsed.message).toBe('Created new-file.ts [Warning]');
+  expect(parsed.success).toBe(true);
+  expect(parsed.path).toBe('new-file.ts');
 });
 
-test('injectWarningIntoToolOutput preserves JSON object shape when no text field exists', (t) => {
+it('injectWarningIntoToolOutput preserves JSON object shape when no text field exists', () => {
   const output = JSON.stringify({
     success: true,
     path: 'new-file.ts',
@@ -81,19 +81,19 @@ test('injectWarningIntoToolOutput preserves JSON object shape when no text field
   const warning = ' [Warning]';
   const result = injectWarningIntoToolOutput(output, warning);
   const parsed = JSON.parse(result);
-  t.is(parsed.warning, warning.trim());
-  t.is(parsed.success, true);
+  expect(parsed.warning).toBe(warning.trim());
+  expect(parsed.success).toBe(true);
 });
 
-test('injectWarningIntoToolOutput appends warning as new item to JSON array when last item is not a string or object', (t) => {
+it('injectWarningIntoToolOutput appends warning as new item to JSON array when last item is not a string or object', () => {
   const output = JSON.stringify([1, 2]);
   const warning = ' [Warning]';
   const result = injectWarningIntoToolOutput(output, warning);
   const parsed = JSON.parse(result);
-  t.deepEqual(parsed, [1, 2, ' [Warning]']);
+  expect(parsed).toEqual([1, 2, ' [Warning]']);
 });
 
-test('injectWarningIntoToolOutput appends warning as new item in envelope output array when last item is not a string or object', (t) => {
+it('injectWarningIntoToolOutput appends warning as new item in envelope output array when last item is not a string or object', () => {
   const output = JSON.stringify({
     output: [
       {
@@ -105,7 +105,7 @@ test('injectWarningIntoToolOutput appends warning as new item in envelope output
   const warning = ' [Warning]';
   const result = injectWarningIntoToolOutput(output, warning);
   const parsed = JSON.parse(result);
-  t.deepEqual(parsed.output, [
+  expect(parsed.output).toEqual([
     {
       success: true,
     },
@@ -117,53 +117,53 @@ test('injectWarningIntoToolOutput appends warning as new item in envelope output
   ]);
 });
 
-test('buildTurnLimitWarning produces correct warning string', (t) => {
+it('buildTurnLimitWarning produces correct warning string', () => {
   const warning = buildTurnLimitWarning(3);
-  t.true(warning.includes('3 turns left'));
-  t.true(warning.includes('[Warning: You are approaching the maximum turn limit.'));
-  t.true(warning.includes('situation update message'));
+  expect(warning.includes('3 turns left')).toBe(true);
+  expect(warning.includes('[Warning: You are approaching the maximum turn limit.')).toBe(true);
+  expect(warning.includes('situation update message')).toBe(true);
 });
 
-test('injectTurnLimitWarning returns output unchanged when context is undefined', (t) => {
+it('injectTurnLimitWarning returns output unchanged when context is undefined', () => {
   const output = JSON.stringify({ output: [{ success: true, stdout: 'ok' }] });
-  t.is(injectTurnLimitWarning(output, undefined), output);
+  expect(injectTurnLimitWarning(output, undefined)).toBe(output);
 });
 
-test('injectTurnLimitWarning returns output unchanged when context is null', (t) => {
+it('injectTurnLimitWarning returns output unchanged when context is null', () => {
   const output = JSON.stringify({ output: [{ success: true, stdout: 'ok' }] });
-  t.is(injectTurnLimitWarning(output, null), output);
+  expect(injectTurnLimitWarning(output, null)).toBe(output);
 });
 
-test('injectTurnLimitWarning returns output unchanged when turns left > 5', (t) => {
+it('injectTurnLimitWarning returns output unchanged when turns left > 5', () => {
   const output = 'result';
   const result = injectTurnLimitWarning(output, { turnCount: 10, maxTurns: 100 });
-  t.is(result, output);
+  expect(result).toBe(output);
 });
 
-test('injectTurnLimitWarning returns output unchanged when turnCount or maxTurns is not a number', (t) => {
+it('injectTurnLimitWarning returns output unchanged when turnCount or maxTurns is not a number', () => {
   const output = 'result';
-  t.is(injectTurnLimitWarning(output, { turnCount: undefined, maxTurns: 100 }), output);
-  t.is(injectTurnLimitWarning(output, { turnCount: 10, maxTurns: undefined }), output);
+  expect(injectTurnLimitWarning(output, { turnCount: undefined, maxTurns: 100 })).toBe(output);
+  expect(injectTurnLimitWarning(output, { turnCount: 10, maxTurns: undefined })).toBe(output);
 });
 
-test('injectTurnLimitWarning injects warning when turns left <= 5', (t) => {
+it('injectTurnLimitWarning injects warning when turns left <= 5', () => {
   const output = JSON.stringify({ output: [{ success: true, stdout: 'result' }] });
   const result = injectTurnLimitWarning(output, { turnCount: 96, maxTurns: 100 });
   const parsed = JSON.parse(result);
-  t.true(parsed.output[0].stdout.includes('4 turns left'));
-  t.true(parsed.output[0].stdout.includes('[Warning: You are approaching the maximum turn limit.'));
+  expect(parsed.output[0].stdout.includes('4 turns left')).toBe(true);
+  expect(parsed.output[0].stdout.includes('[Warning: You are approaching the maximum turn limit.')).toBe(true);
 });
 
-test('injectTurnLimitWarning injects warning when turns left is 0', (t) => {
+it('injectTurnLimitWarning injects warning when turns left is 0', () => {
   const output = JSON.stringify({ output: [{ success: true, stdout: 'result' }] });
   const result = injectTurnLimitWarning(output, { turnCount: 100, maxTurns: 100 });
   const parsed = JSON.parse(result);
-  t.true(parsed.output[0].stdout.includes('0 turns left'));
+  expect(parsed.output[0].stdout.includes('0 turns left')).toBe(true);
 });
 
-test('injectTurnLimitWarning injects warning for plain text output', (t) => {
+it('injectTurnLimitWarning injects warning for plain text output', () => {
   const output = 'tool result';
   const result = injectTurnLimitWarning(output, { turnCount: 98, maxTurns: 100 });
-  t.true(result.includes('tool result'));
-  t.true(result.includes('2 turns left'));
+  expect(result.includes('tool result')).toBe(true);
+  expect(result.includes('2 turns left')).toBe(true);
 });

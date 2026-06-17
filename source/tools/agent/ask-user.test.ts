@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createAskUserToolDefinition, formatAskUserCommandMessage } from './ask-user.js';
 import {
   ASK_USER_CUSTOM_ANSWER_LABEL,
@@ -19,21 +19,21 @@ const fn = (impl?: (...args: any[]) => any) => {
   });
 };
 
-test('createAskUserToolDefinition defines the tool correctly', (t) => {
+it('createAskUserToolDefinition defines the tool correctly', () => {
   const mockGetAskUserAnswer = fn();
   const tool = createAskUserToolDefinition(mockGetAskUserAnswer);
 
-  t.is(tool.name, 'ask_user');
-  t.true(tool.description.includes('clarifying questions'));
-  t.true(tool.needsApproval({ questions: [{ question: 'test' }] }, undefined));
+  expect(tool.name).toBe('ask_user');
+  expect(tool.description.includes('clarifying questions')).toBe(true);
+  expect(tool.needsApproval({ questions: [{ question: 'test' }] }, undefined)).toBe(true);
 });
 
-test('createAskUserToolDefinition schema validates question and options', (t) => {
+it('createAskUserToolDefinition schema validates question and options', () => {
   const mockGetAskUserAnswer = fn();
   const tool = createAskUserToolDefinition(mockGetAskUserAnswer);
 
-  t.true(tool.parameters.safeParse({ questions: [{ question: 'What should I do?' }] }).success);
-  t.true(
+  expect(tool.parameters.safeParse({ questions: [{ question: 'What should I do?' }] }).success).toBe(true);
+  expect(
     tool.parameters.safeParse({
       questions: [
         {
@@ -42,18 +42,18 @@ test('createAskUserToolDefinition schema validates question and options', (t) =>
         },
       ],
     }).success,
-  );
-  t.false(tool.parameters.safeParse({ questions: [{ question: '' }] }).success);
-  t.false(tool.parameters.safeParse({ questions: [{ question: '   ' }] }).success);
-  t.false(tool.parameters.safeParse({ questions: [{ question: 'Pick one', options: ['   '] }] }).success);
-  t.false(
+  ).toBe(true);
+  expect(tool.parameters.safeParse({ questions: [{ question: '' }] }).success).toBe(false);
+  expect(tool.parameters.safeParse({ questions: [{ question: '   ' }] }).success).toBe(false);
+  expect(tool.parameters.safeParse({ questions: [{ question: 'Pick one', options: ['   '] }] }).success).toBe(false);
+  expect(
     tool.parameters.safeParse({ questions: [{ question: 'Pick one', options: [ASK_USER_CUSTOM_ANSWER_LABEL] }] })
       .success,
-  );
-  t.false(
+  ).toBe(false);
+  expect(
     tool.parameters.safeParse({ questions: [{ question: 'Pick one', options: [ASK_USER_DECLINE_LABEL] }] }).success,
-  );
-  t.false(
+  ).toBe(false);
+  expect(
     tool.parameters.safeParse({
       questions: [
         {
@@ -62,9 +62,9 @@ test('createAskUserToolDefinition schema validates question and options', (t) =>
         },
       ],
     }).success,
-  );
+  ).toBe(false);
   // Options must have at least 2 options
-  t.false(
+  expect(
     tool.parameters.safeParse({
       questions: [
         {
@@ -73,9 +73,9 @@ test('createAskUserToolDefinition schema validates question and options', (t) =>
         },
       ],
     }).success,
-  );
+  ).toBe(false);
   // is_multi_select requires options
-  t.false(
+  expect(
     tool.parameters.safeParse({
       questions: [
         {
@@ -84,9 +84,9 @@ test('createAskUserToolDefinition schema validates question and options', (t) =>
         },
       ],
     }).success,
-  );
+  ).toBe(false);
   // is_multi_select with options is valid
-  t.true(
+  expect(
     tool.parameters.safeParse({
       questions: [
         {
@@ -96,10 +96,10 @@ test('createAskUserToolDefinition schema validates question and options', (t) =>
         },
       ],
     }).success,
-  );
+  ).toBe(true);
 });
 
-test('createAskUserToolDefinition executes and returns the answer', async (t) => {
+it('createAskUserToolDefinition executes and returns the answer', async () => {
   const mockGetAskUserAnswer = fn(() => '["Use the existing config"]');
   const tool = createAskUserToolDefinition(mockGetAskUserAnswer);
 
@@ -107,11 +107,11 @@ test('createAskUserToolDefinition executes and returns the answer', async (t) =>
     toolCall: { callId: 'call-1' },
   });
 
-  t.is(mockGetAskUserAnswer.calls[0][0], 'call-1');
-  t.is(result, '["Use the existing config"]');
+  expect(mockGetAskUserAnswer.calls[0][0]).toBe('call-1');
+  expect(result).toBe('["Use the existing config"]');
 });
 
-test('createAskUserToolDefinition returns fallback text when no answer is provided', async (t) => {
+it('createAskUserToolDefinition returns fallback text when no answer is provided', async () => {
   const mockGetAskUserAnswer = fn(() => undefined);
   const tool = createAskUserToolDefinition(mockGetAskUserAnswer);
 
@@ -119,11 +119,11 @@ test('createAskUserToolDefinition returns fallback text when no answer is provid
     toolCall: { callId: 'call-2' },
   });
 
-  t.is(mockGetAskUserAnswer.calls[0][0], 'call-2');
-  t.is(result, ASK_USER_NO_ANSWER_RESULT);
+  expect(mockGetAskUserAnswer.calls[0][0]).toBe('call-2');
+  expect(result).toBe(ASK_USER_NO_ANSWER_RESULT);
 });
 
-test('createAskUserToolDefinition returns fallback text when no answer is provided even with options', async (t) => {
+it('createAskUserToolDefinition returns fallback text when no answer is provided even with options', async () => {
   const mockGetAskUserAnswer = fn(() => undefined);
   const tool = createAskUserToolDefinition(mockGetAskUserAnswer);
 
@@ -137,10 +137,10 @@ test('createAskUserToolDefinition returns fallback text when no answer is provid
     },
   );
 
-  t.is(result, ASK_USER_NO_ANSWER_RESULT);
+  expect(result).toBe(ASK_USER_NO_ANSWER_RESULT);
 });
 
-test('formatAskUserCommandMessage renders the question and output', (t) => {
+it('formatAskUserCommandMessage renders the question and output', () => {
   const item = {
     rawItem: {
       callId: 'call-1',
@@ -151,14 +151,14 @@ test('formatAskUserCommandMessage renders the question and output', (t) => {
 
   const messages = formatAskUserCommandMessage(item, 0, new Map());
 
-  t.is(messages.length, 1);
-  t.is(messages[0].command, 'ask_user: Which config should I use?');
-  t.is(messages[0].output, 'Question: Which config should I use?\nAnswer: Use the existing config');
-  t.true(messages[0].success);
-  t.is(messages[0].toolName, 'ask_user');
+  expect(messages.length).toBe(1);
+  expect(messages[0].command).toBe('ask_user: Which config should I use?');
+  expect(messages[0].output).toBe('Question: Which config should I use?\nAnswer: Use the existing config');
+  expect(messages[0].success).toBe(true);
+  expect(messages[0].toolName).toBe('ask_user');
 });
 
-test('formatAskUserCommandMessage handles fallback arguments', (t) => {
+it('formatAskUserCommandMessage handles fallback arguments', () => {
   const item = {
     rawItem: {
       callId: 'call-2',
@@ -181,10 +181,10 @@ test('formatAskUserCommandMessage handles fallback arguments', (t) => {
 
   const messages = formatAskUserCommandMessage(item, 0, toolCallArgumentsById);
 
-  t.is(messages[0].command, 'ask_user: Pick a safe default');
-  t.is(messages[0].output, 'User did not provide an answer.');
-  t.false(messages[0].success);
-  t.deepEqual(messages[0].toolArgs, {
+  expect(messages[0].command).toBe('ask_user: Pick a safe default');
+  expect(messages[0].output).toBe('User did not provide an answer.');
+  expect(messages[0].success).toBe(false);
+  expect(messages[0].toolArgs).toEqual({
     questions: [
       {
         question: 'Pick a safe default',
@@ -194,7 +194,7 @@ test('formatAskUserCommandMessage handles fallback arguments', (t) => {
   });
 });
 
-test('formatAskUserCommandMessage treats missing output as unsuccessful', (t) => {
+it('formatAskUserCommandMessage treats missing output as unsuccessful', () => {
   const item = {
     rawItem: {
       callId: 'call-3',
@@ -204,11 +204,11 @@ test('formatAskUserCommandMessage treats missing output as unsuccessful', (t) =>
 
   const messages = formatAskUserCommandMessage(item, 0, new Map());
 
-  t.is(messages[0].output, ASK_USER_NO_RESPONSE_DISPLAY);
-  t.false(messages[0].success);
+  expect(messages[0].output).toBe(ASK_USER_NO_RESPONSE_DISPLAY);
+  expect(messages[0].success).toBe(false);
 });
 
-test('formatAskUserCommandMessage falls back for malformed arguments', (t) => {
+it('formatAskUserCommandMessage falls back for malformed arguments', () => {
   const item = {
     rawItem: {
       callId: 'call-4',
@@ -219,12 +219,12 @@ test('formatAskUserCommandMessage falls back for malformed arguments', (t) => {
 
   const messages = formatAskUserCommandMessage(item, 0, new Map());
 
-  t.is(messages[0].command, 'ask_user: Unknown questions');
-  t.is(messages[0].output, '["Use default"]');
-  t.true(messages[0].success);
+  expect(messages[0].command).toBe('ask_user: Unknown questions');
+  expect(messages[0].output).toBe('["Use default"]');
+  expect(messages[0].success).toBe(true);
 });
 
-test('formatAskUserCommandMessage formats array answers with mismatched length', (t) => {
+it('formatAskUserCommandMessage formats array answers with mismatched length', () => {
   const item = {
     rawItem: {
       callId: 'call-5',
@@ -235,9 +235,9 @@ test('formatAskUserCommandMessage formats array answers with mismatched length',
 
   const messages = formatAskUserCommandMessage(item, 0, new Map());
 
-  t.is(messages[0].command, 'ask_user: Choose one');
+  expect(messages[0].command).toBe('ask_user: Choose one');
   // Output should fall back to a joined representation since 2 answers != 1 question
-  t.true(messages[0].output.includes('a'));
-  t.true(messages[0].output.includes('b'));
-  t.true(messages[0].success);
+  expect(messages[0].output.includes('a')).toBe(true);
+  expect(messages[0].output.includes('b')).toBe(true);
+  expect(messages[0].success).toBe(true);
 });

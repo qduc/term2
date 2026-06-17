@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { loadDataset, filterDataset } from './dataset.js';
 import { writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -6,15 +6,15 @@ import { tmpdir } from 'node:os';
 
 const tmpDir = join(tmpdir(), 'dataset-test-' + Math.random().toString(36).slice(2));
 
-test.before(() => {
+beforeAll(() => {
   mkdirSync(tmpDir, { recursive: true });
 });
 
-test.after.always(() => {
+afterAll(() => {
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
-test('loadDataset validates correct dataset', (t) => {
+it('loadDataset validates correct dataset', () => {
   const path = join(tmpDir, 'valid.json');
   const data = [
     {
@@ -29,11 +29,11 @@ test('loadDataset validates correct dataset', (t) => {
   writeFileSync(path, JSON.stringify(data));
 
   const loaded = loadDataset(path);
-  t.is(loaded.length, 1);
-  t.is(loaded[0].id, 'test-1');
+  expect(loaded.length).toBe(1);
+  expect(loaded[0].id).toBe('test-1');
 });
 
-test('loadDataset fails on invalid dataset', (t) => {
+it('loadDataset fails on invalid dataset', () => {
   const path = join(tmpDir, 'invalid.json');
   const data = [
     {
@@ -47,23 +47,23 @@ test('loadDataset fails on invalid dataset', (t) => {
   ];
   writeFileSync(path, JSON.stringify(data));
 
-  t.throws(() => loadDataset(path), { message: /Validation failed for case "test-1"/ });
+  expect(() => loadDataset(path), { message: /Validation failed for case "test-1"/ }).toThrow();
 });
 
-test('filterDataset filters correctly', (t) => {
+it('filterDataset filters correctly', () => {
   const cases: any[] = [
     { id: '1', category: 'A', severity: 'low' },
     { id: '2', category: 'B', severity: 'high' },
     { id: '3', category: 'A', severity: 'high' },
   ];
 
-  t.is(filterDataset(cases, { category: 'A' }).length, 2);
-  t.is(filterDataset(cases, { severity: 'high' }).length, 2);
-  t.is(filterDataset(cases, { category: 'A', severity: 'high' }).length, 1);
-  t.is(filterDataset(cases, { ids: ['1', '2'] }).length, 2);
+  expect(filterDataset(cases, { category: 'A' }).length).toBe(2);
+  expect(filterDataset(cases, { severity: 'high' }).length).toBe(2);
+  expect(filterDataset(cases, { category: 'A', severity: 'high' }).length).toBe(1);
+  expect(filterDataset(cases, { ids: ['1', '2'] }).length).toBe(2);
 });
 
-test('default dataset rejects destructive commands even when user requested them', (t) => {
+it('default dataset rejects destructive commands even when user requested them', () => {
   const dataset = loadDataset('eval/auto-approval/dataset.json');
   const expectedRejectIds = new Set([
     'safe-cont-01',
@@ -79,12 +79,12 @@ test('default dataset rejects destructive commands even when user requested them
 
   for (const id of expectedRejectIds) {
     const item = dataset.find((c) => c.id === id);
-    t.truthy(item, `missing dataset case ${id}`);
-    t.is(item?.expected, 'reject', `${id} must not be auto-approved`);
+    expect(item).toBeTruthy();
+    expect(item?.expected, `${id} must not be auto-approved`).toBe('reject');
   }
 });
 
-test('default dataset rejects gray-zone cases that require human confirmation under v2 policy', (t) => {
+it('default dataset rejects gray-zone cases that require human confirmation under v2 policy', () => {
   const dataset = loadDataset('eval/auto-approval/dataset.json');
   const expectedRejectIds = new Set([
     'gray-01', // broad search for key files may expose credentials
@@ -94,7 +94,7 @@ test('default dataset rejects gray-zone cases that require human confirmation un
 
   for (const id of expectedRejectIds) {
     const item = dataset.find((c) => c.id === id);
-    t.truthy(item, `missing dataset case ${id}`);
-    t.is(item?.expected, 'reject', `${id} must require human confirmation`);
+    expect(item).toBeTruthy();
+    expect(item?.expected, `${id} must require human confirmation`).toBe('reject');
   }
 });

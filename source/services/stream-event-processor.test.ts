@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { LoggingService } from './logging/logging-service.js';
 import {
   createStreamAccumulator,
@@ -28,7 +28,7 @@ const baseOpts = (): StreamProcessorOptions => ({
 
 const baseDeps = (): StreamProcessorDeps => ({ logger, sessionId: 'test-session' });
 
-test('emits text_delta events with accumulated fullText', async (t) => {
+it('emits text_delta events with accumulated fullText', async () => {
   const stream = makeStream([
     { type: 'raw_model_stream_event', data: { type: 'output_text_delta', delta: 'Hello' } },
     { type: 'raw_model_stream_event', data: { type: 'output_text_delta', delta: ' world' } },
@@ -40,15 +40,15 @@ test('emits text_delta events with accumulated fullText', async (t) => {
   }
 
   const textEvents = events.filter((e) => e.type === 'text_delta');
-  t.is(textEvents.length, 2);
-  t.is(textEvents[0].delta, 'Hello');
-  t.is(textEvents[0].fullText, 'Hello');
-  t.is(textEvents[1].fullText, 'Hello world');
-  t.is(acc.finalOutput, 'Hello world');
-  t.is(acc.textDeltaCount, 2);
+  expect(textEvents.length).toBe(2);
+  expect(textEvents[0].delta).toBe('Hello');
+  expect(textEvents[0].fullText).toBe('Hello');
+  expect(textEvents[1].fullText).toBe('Hello world');
+  expect(acc.finalOutput).toBe('Hello world');
+  expect(acc.textDeltaCount).toBe(2);
 });
 
-test('preserves newline between code fence language and first code line across text deltas', async (t) => {
+it('preserves newline between code fence language and first code line across text deltas', async () => {
   const stream = makeStream([
     { type: 'raw_model_stream_event', data: { type: 'output_text_delta', delta: '```typescript' } },
     { type: 'raw_model_stream_event', data: { type: 'output_text_delta', delta: '\n' } },
@@ -61,11 +61,11 @@ test('preserves newline between code fence language and first code line across t
     events.push(ev);
   }
 
-  t.is(acc.finalOutput, '```typescript\nif (enabled) {\n  run();\n}\n```');
-  t.true(events.some((e) => e.type === 'text_delta' && e.fullText === '```typescript\nif (enabled) {\n'));
+  expect(acc.finalOutput).toBe('```typescript\nif (enabled) {\n  run();\n}\n```');
+  expect(events.some((e) => e.type === 'text_delta' && e.fullText === '```typescript\nif (enabled) {\n')).toBe(true);
 });
 
-test('emits reasoning_delta events with accumulated fullText', async (t) => {
+it('emits reasoning_delta events with accumulated fullText', async () => {
   const stream = makeStream([
     { data: { type: 'model', event: { choices: [{ delta: { reasoning_content: 'think' } }] } } },
     { data: { type: 'model', event: { choices: [{ delta: { reasoning_content: 'ing' } }] } } },
@@ -77,12 +77,12 @@ test('emits reasoning_delta events with accumulated fullText', async (t) => {
   }
 
   const reasoningEvents = events.filter((e) => e.type === 'reasoning_delta');
-  t.is(reasoningEvents.length, 2);
-  t.is(reasoningEvents[0].delta, 'think');
-  t.is(reasoningEvents[1].fullText, 'thinking');
+  expect(reasoningEvents.length).toBe(2);
+  expect(reasoningEvents[0].delta).toBe('think');
+  expect(reasoningEvents[1].fullText).toBe('thinking');
 });
 
-test('emits tool_started for function_call run_item_stream_event', async (t) => {
+it('emits tool_started for function_call run_item_stream_event', async () => {
   const stream = makeStream([
     {
       type: 'run_item_stream_event',
@@ -104,13 +104,13 @@ test('emits tool_started for function_call run_item_stream_event', async (t) => 
   }
 
   const toolStarted = events.find((e) => e.type === 'tool_started');
-  t.truthy(toolStarted);
-  t.is(toolStarted.toolCallId, 'call-1');
-  t.is(toolStarted.toolName, 'shell');
-  t.deepEqual(toolStarted.arguments, { command: 'ls' });
+  expect(toolStarted).toBeTruthy();
+  expect(toolStarted.toolCallId).toBe('call-1');
+  expect(toolStarted.toolName).toBe('shell');
+  expect(toolStarted.arguments).toEqual({ command: 'ls' });
 });
 
-test('emits one tool_started for duplicate function_call events with the same callId', async (t) => {
+it('emits one tool_started for duplicate function_call events with the same callId', async () => {
   const functionCall = {
     type: 'run_item_stream_event',
     item: {
@@ -132,12 +132,12 @@ test('emits one tool_started for duplicate function_call events with the same ca
   }
 
   const starts = events.filter((e) => e.type === 'tool_started');
-  t.is(starts.length, 2);
-  t.deepEqual(starts[0].arguments, { command: 'npm test' });
-  t.deepEqual(starts[1].arguments, { command: 'npm test' });
+  expect(starts.length).toBe(2);
+  expect(starts[0].arguments).toEqual({ command: 'npm test' });
+  expect(starts[1].arguments).toEqual({ command: 'npm test' });
 });
 
-test('emits tool_started even when the callId was already emitted by approval handling', async (t) => {
+it('emits tool_started even when the callId was already emitted by approval handling', async () => {
   const stream = makeStream([
     {
       type: 'run_item_stream_event',
@@ -159,10 +159,10 @@ test('emits tool_started even when the callId was already emitted by approval ha
     events.push(ev);
   }
 
-  t.true(events.some((e) => e.type === 'tool_started'));
+  expect(events.some((e) => e.type === 'tool_started')).toBe(true);
 });
 
-test('invalid JSON arguments are deduped via emittedInvalidToolCallPackets', async (t) => {
+it('invalid JSON arguments are deduped via emittedInvalidToolCallPackets', async () => {
   const events1 = [
     {
       type: 'run_item_stream_event',
@@ -199,11 +199,11 @@ test('invalid JSON arguments are deduped via emittedInvalidToolCallPackets', asy
   for await (const _ of processStreamEvents(makeStream(events1), acc2, opts, deps)) {
     void _;
   }
-  t.is(errorLogCount, 1);
-  t.true(opts.emittedInvalidToolCallPackets.has('call-bad'));
+  expect(errorLogCount).toBe(1);
+  expect(opts.emittedInvalidToolCallPackets.has('call-bad')).toBe(true);
 });
 
-test('preserveExistingToolArgs=false clears the args map at start', async (t) => {
+it('preserveExistingToolArgs=false clears the args map at start', async () => {
   const opts = baseOpts();
   opts.toolCallArgumentsById.set('old-call', { stale: true });
   opts.preserveExistingToolArgs = false;
@@ -212,10 +212,10 @@ test('preserveExistingToolArgs=false clears the args map at start', async (t) =>
   for await (const _ of processStreamEvents(stream, acc, opts, baseDeps())) {
     void _;
   }
-  t.false(opts.toolCallArgumentsById.has('old-call'));
+  expect(opts.toolCallArgumentsById.has('old-call')).toBe(false);
 });
 
-test('preserveExistingToolArgs=true keeps the args map intact', async (t) => {
+it('preserveExistingToolArgs=true keeps the args map intact', async () => {
   const opts = baseOpts();
   opts.toolCallArgumentsById.set('old-call', { kept: true });
   opts.preserveExistingToolArgs = true;
@@ -224,10 +224,10 @@ test('preserveExistingToolArgs=true keeps the args map intact', async (t) => {
   for await (const _ of processStreamEvents(stream, acc, opts, baseDeps())) {
     void _;
   }
-  t.deepEqual(opts.toolCallArgumentsById.get('old-call'), { kept: true });
+  expect(opts.toolCallArgumentsById.get('old-call')).toEqual({ kept: true });
 });
 
-test('emits usage_update when stream event includes usage', async (t) => {
+it('emits usage_update when stream event includes usage', async () => {
   const stream = makeStream([
     {
       data: {
@@ -244,11 +244,11 @@ test('emits usage_update when stream event includes usage', async (t) => {
     events.push(ev);
   }
   const usageEvents = events.filter((e) => e.type === 'usage_update');
-  t.is(usageEvents.length, 1);
-  t.truthy(acc.latestUsage);
+  expect(usageEvents.length).toBe(1);
+  expect(acc.latestUsage).toBeTruthy();
 });
 
-test('end-of-stream usage harvest from completed promise', async (t) => {
+it('end-of-stream usage harvest from completed promise', async () => {
   const stream = makeStream([], {
     completed: Promise.resolve({ usage: { input_tokens: 5, output_tokens: 7 } }),
   });
@@ -256,10 +256,10 @@ test('end-of-stream usage harvest from completed promise', async (t) => {
   for await (const _ of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
     void _;
   }
-  t.truthy(acc.latestUsage);
+  expect(acc.latestUsage).toBeTruthy();
 });
 
-test('end-of-stream usage preserves cache counters from streaming events when completion omits them', async (t) => {
+it('end-of-stream usage preserves cache counters from streaming events when completion omits them', async () => {
   const stream = makeStream(
     [
       {
@@ -288,7 +288,7 @@ test('end-of-stream usage preserves cache counters from streaming events when co
     void _;
   }
 
-  t.deepEqual(acc.latestUsage, {
+  expect(acc.latestUsage).toEqual({
     prompt_tokens: 100,
     completion_tokens: 20,
     total_tokens: 120,
@@ -296,23 +296,21 @@ test('end-of-stream usage preserves cache counters from streaming events when co
   });
 });
 
-test('throws AbortError if stream is cancelled', async (t) => {
+it('throws AbortError if stream is cancelled', async () => {
   const stream = makeStream([], {
     completed: Promise.resolve(null),
     cancelled: true,
   });
   const acc = createStreamAccumulator();
-  await t.throwsAsync(
-    async () => {
-      for await (const _ of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
-        void _;
-      }
-    },
-    { name: 'AbortError', message: 'The user aborted a request.' },
-  );
+
+  await expect(async () => {
+    for await (const _ of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+      void _;
+    }
+  }).rejects.toMatchObject({ name: 'AbortError', message: 'The user aborted a request.' });
 });
 
-test('extracts codex rate limits from nested or flat structures in raw events', async (t) => {
+it('extracts codex rate limits from nested or flat structures in raw events', async () => {
   const nestedEvent = {
     type: 'codex.rate_limits',
     plan_type: 'plus',
@@ -332,15 +330,15 @@ test('extracts codex rate limits from nested or flat structures in raw events', 
   }
 
   const rateLimitEvents = events.filter((e) => e.type === 'codex_rate_limits');
-  t.is(rateLimitEvents.length, 1);
+  expect(rateLimitEvents.length).toBe(1);
   const info = rateLimitEvents[0].rateLimits;
-  t.is(info.allowed, true);
-  t.is(info.limit_reached, false);
-  t.is(info.primary.used_percent, 11);
-  t.is(info.secondary.used_percent, 14);
+  expect(info.allowed).toBe(true);
+  expect(info.limit_reached).toBe(false);
+  expect(info.primary.used_percent).toBe(11);
+  expect(info.secondary.used_percent).toBe(14);
 });
 
-test('emits tool_call_streaming_delta for Responses API argument deltas', async (t) => {
+it('emits tool_call_streaming_delta for Responses API argument deltas', async () => {
   const stream = makeStream([
     // Model starts a function_call
     {
@@ -385,16 +383,16 @@ test('emits tool_call_streaming_delta for Responses API argument deltas', async 
   }
 
   const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
-  t.is(deltas.length, 2);
+  expect(deltas.length).toBe(2);
   // First delta: tool name from added event
-  t.is(deltas[0].toolName, 'shell');
-  t.is(deltas[0].argumentCharCount, 9); // '{"command'.length
+  expect(deltas[0].toolName).toBe('shell');
+  expect(deltas[0].argumentCharCount).toBe(9); // '{"command'.length
   // Second delta: name still available, count accumulated
-  t.is(deltas[1].toolName, 'shell');
-  t.is(deltas[1].argumentCharCount, 16); // full args length
+  expect(deltas[1].toolName).toBe('shell');
+  expect(deltas[1].argumentCharCount).toBe(16); // full args length
 });
 
-test('emits tool_call_streaming_delta for custom tool input deltas', async (t) => {
+it('emits tool_call_streaming_delta for custom tool input deltas', async () => {
   const stream = makeStream([
     {
       type: 'raw_model_stream_event',
@@ -437,13 +435,13 @@ test('emits tool_call_streaming_delta for custom tool input deltas', async (t) =
   }
 
   const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
-  t.is(deltas.length, 2);
-  t.is(deltas[0].toolName, 'custom_tool');
-  t.is(deltas[0].argumentCharCount, 5); // '{"arg'.length
-  t.is(deltas[1].argumentCharCount, 9);
+  expect(deltas.length).toBe(2);
+  expect(deltas[0].toolName).toBe('custom_tool');
+  expect(deltas[0].argumentCharCount).toBe(5); // '{"arg'.length
+  expect(deltas[1].argumentCharCount).toBe(9);
 });
 
-test('emits tool_call_streaming_delta for MCP tool call argument deltas', async (t) => {
+it('emits tool_call_streaming_delta for MCP tool call argument deltas', async () => {
   const stream = makeStream([
     {
       type: 'raw_model_stream_event',
@@ -475,12 +473,12 @@ test('emits tool_call_streaming_delta for MCP tool call argument deltas', async 
   }
 
   const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
-  t.is(deltas.length, 1);
-  t.is(deltas[0].toolName, 'mcp_tool');
-  t.is(deltas[0].argumentCharCount, 7);
+  expect(deltas.length).toBe(1);
+  expect(deltas[0].toolName).toBe('mcp_tool');
+  expect(deltas[0].argumentCharCount).toBe(7);
 });
 
-test('emits tool_call_streaming_delta for legacy response.output_item.delta fallback', async (t) => {
+it('emits tool_call_streaming_delta for legacy response.output_item.delta fallback', async () => {
   const stream = makeStream([
     {
       type: 'raw_model_stream_event',
@@ -506,12 +504,12 @@ test('emits tool_call_streaming_delta for legacy response.output_item.delta fall
   }
 
   const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
-  t.is(deltas.length, 1);
-  t.is(deltas[0].toolName, 'shell');
-  t.is(deltas[0].argumentCharCount, 9);
+  expect(deltas.length).toBe(1);
+  expect(deltas[0].toolName).toBe('shell');
+  expect(deltas[0].argumentCharCount).toBe(9);
 });
 
-test('emits tool_call_streaming_delta for Chat Completions API tool_calls deltas', async (t) => {
+it('emits tool_call_streaming_delta for Chat Completions API tool_calls deltas', async () => {
   const stream = makeStream([
     // First chunk: tool call starts with name
     {
@@ -566,14 +564,14 @@ test('emits tool_call_streaming_delta for Chat Completions API tool_calls deltas
 
   const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
   // First chunk has empty arguments, so only 2 deltas emitted (chunks 2 and 3)
-  t.is(deltas.length, 2);
-  t.is(deltas[0].toolName, 'shell');
-  t.is(deltas[0].argumentCharCount, 5); // '{"cmd'.length
-  t.is(deltas[1].toolName, 'shell');
-  t.is(deltas[1].argumentCharCount, 13); // full args length: '{"cmd' + '":"pwd"}'
+  expect(deltas.length).toBe(2);
+  expect(deltas[0].toolName).toBe('shell');
+  expect(deltas[0].argumentCharCount).toBe(5); // '{"cmd'.length
+  expect(deltas[1].toolName).toBe('shell');
+  expect(deltas[1].argumentCharCount).toBe(13); // full args length: '{"cmd' + '":"pwd"}'
 });
 
-test('tool_call_streaming_delta accumulates argument char count across deltas', async (t) => {
+it('tool_call_streaming_delta accumulates argument char count across deltas', async () => {
   const stream = makeStream([
     {
       data: {
@@ -613,13 +611,13 @@ test('tool_call_streaming_delta accumulates argument char count across deltas', 
   }
 
   const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
-  t.is(deltas.length, 3);
-  t.is(deltas[0].argumentCharCount, 3);
-  t.is(deltas[1].argumentCharCount, 6);
-  t.is(deltas[2].argumentCharCount, 9);
+  expect(deltas.length).toBe(3);
+  expect(deltas[0].argumentCharCount).toBe(3);
+  expect(deltas[1].argumentCharCount).toBe(6);
+  expect(deltas[2].argumentCharCount).toBe(9);
 });
 
-test('tool_call_streaming_delta includes tool name from output_item.added when available', async (t) => {
+it('tool_call_streaming_delta includes tool name from output_item.added when available', async () => {
   const stream = makeStream([
     {
       data: {
@@ -649,12 +647,12 @@ test('tool_call_streaming_delta includes tool name from output_item.added when a
   }
 
   const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
-  t.is(deltas.length, 1);
-  t.is(deltas[0].toolName, 'find_files');
-  t.is(deltas[0].argumentCharCount, 9); // '{"pattern'.length
+  expect(deltas.length).toBe(1);
+  expect(deltas[0].toolName).toBe('find_files');
+  expect(deltas[0].argumentCharCount).toBe(9); // '{"pattern'.length
 });
 
-test('tool_call_streaming_delta omits tool name when no output_item.added was seen', async (t) => {
+it('tool_call_streaming_delta omits tool name when no output_item.added was seen', async () => {
   const stream = makeStream([
     {
       data: {
@@ -674,12 +672,12 @@ test('tool_call_streaming_delta omits tool name when no output_item.added was se
   }
 
   const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
-  t.is(deltas.length, 1);
-  t.is(deltas[0].toolName, undefined);
-  t.is(deltas[0].argumentCharCount, 7);
+  expect(deltas.length).toBe(1);
+  expect(deltas[0].toolName).toBe(undefined);
+  expect(deltas[0].argumentCharCount).toBe(7);
 });
 
-test('tool_call_streaming_delta tracks argument char count independently per tool call index', async (t) => {
+it('tool_call_streaming_delta tracks argument char count independently per tool call index', async () => {
   const stream = makeStream([
     // Tool call 0 starts
     {
@@ -744,16 +742,16 @@ test('tool_call_streaming_delta tracks argument char count independently per too
   }
 
   const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
-  t.is(deltas.length, 3);
-  t.is(deltas[0].toolName, 'shell');
-  t.is(deltas[0].argumentCharCount, 12); // '{"cmd":"ls"}'.length
-  t.is(deltas[1].toolName, 'find_files');
-  t.is(deltas[1].argumentCharCount, 18); // '{"pattern":"*.ts"}'.length
-  t.is(deltas[2].toolName, 'shell');
-  t.is(deltas[2].argumentCharCount, 28); // 12 + ',"detailed":true'.length
+  expect(deltas.length).toBe(3);
+  expect(deltas[0].toolName).toBe('shell');
+  expect(deltas[0].argumentCharCount).toBe(12); // '{"cmd":"ls"}'.length
+  expect(deltas[1].toolName).toBe('find_files');
+  expect(deltas[1].argumentCharCount).toBe(18); // '{"pattern":"*.ts"}'.length
+  expect(deltas[2].toolName).toBe('shell');
+  expect(deltas[2].argumentCharCount).toBe(28); // 12 + ',"detailed":true'.length
 });
 
-test('emits tool_call_streaming_delta for AI SDK tool-input start and delta events', async (t) => {
+it('emits tool_call_streaming_delta for AI SDK tool-input start and delta events', async () => {
   const stream = makeStream([
     {
       type: 'raw_model_stream_event',
@@ -796,14 +794,14 @@ test('emits tool_call_streaming_delta for AI SDK tool-input start and delta even
   }
 
   const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
-  t.is(deltas.length, 2);
-  t.is(deltas[0].toolName, 'shell');
-  t.is(deltas[0].argumentCharCount, 9); // '{"command'.length
-  t.is(deltas[1].toolName, 'shell');
-  t.is(deltas[1].argumentCharCount, 16); // full args length
+  expect(deltas.length).toBe(2);
+  expect(deltas[0].toolName).toBe('shell');
+  expect(deltas[0].argumentCharCount).toBe(9); // '{"command'.length
+  expect(deltas[1].toolName).toBe('shell');
+  expect(deltas[1].argumentCharCount).toBe(16); // full args length
 });
 
-test('tool_call_streaming_delta resets argument char count when a new tool call starts on the same index/id', async (t) => {
+it('tool_call_streaming_delta resets argument char count when a new tool call starts on the same index/id', async () => {
   const stream = makeStream([
     // Responses API - tool call 0 (shell)
     {
@@ -958,23 +956,23 @@ test('tool_call_streaming_delta resets argument char count when a new tool call 
   }
 
   const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
-  t.is(deltas.length, 6);
+  expect(deltas.length).toBe(6);
 
   // Responses API verification
-  t.is(deltas[0].toolName, 'shell');
-  t.is(deltas[0].argumentCharCount, 12); // '{"cmd":"ls"}'.length
-  t.is(deltas[1].toolName, 'grep');
-  t.is(deltas[1].argumentCharCount, 17); // '{"pattern":"foo"}'.length (should be reset, not 29)
+  expect(deltas[0].toolName).toBe('shell');
+  expect(deltas[0].argumentCharCount).toBe(12); // '{"cmd":"ls"}'.length
+  expect(deltas[1].toolName).toBe('grep');
+  expect(deltas[1].argumentCharCount).toBe(17); // '{"pattern":"foo"}'.length (should be reset, not 29)
 
   // Chat Completions API verification
-  t.is(deltas[2].toolName, 'shell');
-  t.is(deltas[2].argumentCharCount, 6); // '{"cmd"'.length
-  t.is(deltas[3].toolName, 'grep');
-  t.is(deltas[3].argumentCharCount, 6); // '{"pat"'.length (should be reset, not 12)
+  expect(deltas[2].toolName).toBe('shell');
+  expect(deltas[2].argumentCharCount).toBe(6); // '{"cmd"'.length
+  expect(deltas[3].toolName).toBe('grep');
+  expect(deltas[3].argumentCharCount).toBe(6); // '{"pat"'.length (should be reset, not 12)
 
   // AI SDK verification
-  t.is(deltas[4].toolName, 'shell');
-  t.is(deltas[4].argumentCharCount, 9); // '{"command'.length
-  t.is(deltas[5].toolName, 'grep');
-  t.is(deltas[5].argumentCharCount, 9); // '{"pattern'.length (should be reset, not 18)
+  expect(deltas[4].toolName).toBe('shell');
+  expect(deltas[4].argumentCharCount).toBe(9); // '{"command'.length
+  expect(deltas[5].toolName).toBe('grep');
+  expect(deltas[5].argumentCharCount).toBe(9); // '{"pattern'.length (should be reset, not 18)
 });

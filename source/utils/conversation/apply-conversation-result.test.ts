@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   computeNextMessages,
   isStreamingBotMessageId,
@@ -45,7 +45,7 @@ const makeResponse = (
   ...overrides,
 });
 
-test('appends a new finalized bot message when no streaming happened (sync provider path)', (t) => {
+it('appends a new finalized bot message when no streaming happened (sync provider path)', () => {
   const { options, streamingState } = makeHarness();
   idCounter = 0;
   const prev: Message[] = [];
@@ -54,13 +54,13 @@ test('appends a new finalized bot message when no streaming happened (sync provi
     result: makeResponse({ finalText: 'Hello world.' }),
     prev,
   });
-  t.false(finalizedStreamingMessage);
-  t.deepEqual(next, [{ id: 'm0', sender: 'bot', status: 'finalized', text: 'Hello world.' }]);
-  t.true(streamingState.currentBotMessageId === null);
-  t.false(streamingState.textWasFlushed);
+  expect(finalizedStreamingMessage).toBe(false);
+  expect(next).toEqual([{ id: 'm0', sender: 'bot', status: 'finalized', text: 'Hello world.' }]);
+  expect(streamingState.currentBotMessageId === null).toBe(true);
+  expect(streamingState.textWasFlushed).toBe(false);
 });
 
-test('does not duplicate bot text when a streaming message exists and no boundary flushed', (t) => {
+it('does not duplicate bot text when a streaming message exists and no boundary flushed', () => {
   // Regression: the streaming event handler kept a "status: 'streaming'" bot
   // message live while text_delta events arrived. applyServiceResult used to
   // also append a finalized copy of the same finalText, so users saw the
@@ -86,19 +86,19 @@ test('does not duplicate bot text when a streaming message exists and no boundar
     prev,
   });
 
-  t.true(finalizedStreamingMessage);
-  t.deepEqual(next, [
+  expect(finalizedStreamingMessage).toBe(true);
+  expect(next).toEqual([
     { id: 'user-1', sender: 'user', text: 'Run tests' },
     { id: 'live-bot', sender: 'bot', status: 'finalized', text: 'All 2868 tests pass.' },
   ]);
   // Caller is expected to clear the streaming state bookkeeping when the
   // streaming message has been promoted to finalized.
   clearStreamingBotMessage(streamingState);
-  t.true(streamingState.currentBotMessageId === null);
-  t.true(streamingState.textWasFlushed);
+  expect(streamingState.currentBotMessageId === null).toBe(true);
+  expect(streamingState.textWasFlushed).toBe(true);
 });
 
-test('does not duplicate the flushed prefix when only the tail is still streaming', (t) => {
+it('does not duplicate the flushed prefix when only the tail is still streaming', () => {
   // When the stream crossed a safe boundary mid-text the handler promotes
   // the prefix to a finalized message and starts a fresh streaming message
   // for the tail. applyServiceResult must finalize only the tail, not the
@@ -126,8 +126,8 @@ test('does not duplicate the flushed prefix when only the tail is still streamin
     prev,
   });
 
-  t.true(finalizedStreamingMessage);
-  t.deepEqual(next, [
+  expect(finalizedStreamingMessage).toBe(true);
+  expect(next).toEqual([
     {
       id: 'flushed-1',
       sender: 'bot',
@@ -138,7 +138,7 @@ test('does not duplicate the flushed prefix when only the tail is still streamin
   ]);
 });
 
-test('does not append when textWasFlushed and no streaming message remains', (t) => {
+it('does not append when textWasFlushed and no streaming message remains', () => {
   // The streaming message may have already been promoted to a finalized
   // message by the handler (e.g. via a tool_started event) so the final
   // result's finalText is the tail that is already represented. We must
@@ -157,11 +157,11 @@ test('does not append when textWasFlushed and no streaming message remains', (t)
     prev,
   });
 
-  t.false(finalizedStreamingMessage);
-  t.deepEqual(next, [{ id: 'flushed-1', sender: 'bot', status: 'finalized', text: 'Finalized tail.' }]);
+  expect(finalizedStreamingMessage).toBe(false);
+  expect(next).toEqual([{ id: 'flushed-1', sender: 'bot', status: 'finalized', text: 'Finalized tail.' }]);
 });
 
-test('merges command messages into the response result', (t) => {
+it('merges command messages into the response result', () => {
   const { options } = makeHarness({
     annotateCommandMessage: identityAnnotate,
   });
@@ -183,14 +183,14 @@ test('merges command messages into the response result', (t) => {
     prev: [{ id: 'user-1', sender: 'user', text: 'hi' }],
   });
 
-  t.deepEqual(next, [
+  expect(next).toEqual([
     { id: 'user-1', sender: 'user', text: 'hi' },
     commandMessage,
     { id: 'm0', sender: 'bot', status: 'finalized', text: 'Done.' },
   ]);
 });
 
-test('skips the bot text when finalText is empty/whitespace', (t) => {
+it('skips the bot text when finalText is empty/whitespace', () => {
   const { options } = makeHarness();
   idCounter = 0;
   const { next } = computeNextMessages({
@@ -198,29 +198,29 @@ test('skips the bot text when finalText is empty/whitespace', (t) => {
     result: makeResponse({ finalText: '   \n' }),
     prev: [],
   });
-  t.deepEqual(next, []);
+  expect(next).toEqual([]);
 });
 
-test('isStreamingBotMessageId: returns id only when the live message still exists', (t) => {
+it('isStreamingBotMessageId: returns id only when the live message still exists', () => {
   const streamingState = createStreamingState();
   streamingState.currentBotMessageId = 'live-bot';
   const messages: Message[] = [{ id: 'live-bot', sender: 'bot', status: 'streaming', text: 'x' }];
-  t.is(isStreamingBotMessageId(streamingState, messages), 'live-bot');
+  expect(isStreamingBotMessageId(streamingState, messages)).toBe('live-bot');
 
   // Message no longer in the list (e.g. trimmed or replaced)
-  t.is(isStreamingBotMessageId(streamingState, []), null);
+  expect(isStreamingBotMessageId(streamingState, [])).toBe(null);
   streamingState.currentBotMessageId = null;
-  t.is(isStreamingBotMessageId(streamingState, messages), null);
+  expect(isStreamingBotMessageId(streamingState, messages)).toBe(null);
 });
 
-test('clearStreamingBotMessage resets the streaming state', (t) => {
+it('clearStreamingBotMessage resets the streaming state', () => {
   const streamingState = createStreamingState();
   streamingState.currentBotMessageId = 'live-bot';
   streamingState.accumulatedText = 'tail';
   streamingState.flushedTextLength = 5;
   clearStreamingBotMessage(streamingState);
-  t.true(streamingState.currentBotMessageId === null);
-  t.is(streamingState.accumulatedText, '');
-  t.is(streamingState.flushedTextLength, 0);
-  t.true(streamingState.textWasFlushed);
+  expect(streamingState.currentBotMessageId === null).toBe(true);
+  expect(streamingState.accumulatedText).toBe('');
+  expect(streamingState.flushedTextLength).toBe(0);
+  expect(streamingState.textWasFlushed).toBe(true);
 });

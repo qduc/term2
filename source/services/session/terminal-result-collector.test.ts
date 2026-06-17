@@ -1,4 +1,4 @@
-import test from 'ava';
+import { it, expect } from 'vitest';
 import { collectTerminalResult } from './terminal-result-collector.js';
 
 const asAsyncIterable = async function* (events: any[]) {
@@ -7,7 +7,7 @@ const asAsyncIterable = async function* (events: any[]) {
   }
 };
 
-test('collectTerminalResult returns approval_required with raw interruption from callback', async (t) => {
+it('collectTerminalResult returns approval_required with raw interruption from callback', async () => {
   const seenEvents: string[] = [];
   const textChunks: string[] = [];
 
@@ -31,16 +31,16 @@ test('collectTerminalResult returns approval_required with raw interruption from
     },
   );
 
-  t.deepEqual(seenEvents, ['text_delta', 'approval_required']);
-  t.deepEqual(textChunks, ['Hello:Hello']);
-  t.is(result.type, 'approval_required');
+  expect(seenEvents).toEqual(['text_delta', 'approval_required']);
+  expect(textChunks).toEqual(['Hello:Hello']);
+  expect(result.type).toBe('approval_required');
   if (result.type === 'approval_required') {
-    t.is(result.approval.callId, 'call-approval');
-    t.deepEqual(result.approval.rawInterruption, { id: 'raw-interruption' });
+    expect(result.approval.callId).toBe('call-approval');
+    expect(result.approval.rawInterruption).toEqual({ id: 'raw-interruption' });
   }
 });
 
-test('collectTerminalResult preserves usage on approval_required', async (t) => {
+it('collectTerminalResult preserves usage on approval_required', async () => {
   const result = await collectTerminalResult(
     asAsyncIterable([
       {
@@ -60,13 +60,13 @@ test('collectTerminalResult preserves usage on approval_required', async (t) => 
     ]),
   );
 
-  t.is(result.type, 'approval_required');
+  expect(result.type).toBe('approval_required');
   if (result.type === 'approval_required') {
-    t.deepEqual(result.usage, { prompt_tokens: 120, completion_tokens: 12, total_tokens: 132 });
+    expect(result.usage).toEqual({ prompt_tokens: 120, completion_tokens: 12, total_tokens: 132 });
   }
 });
 
-test('collectTerminalResult carries usage_update usage into approval_required result', async (t) => {
+it('collectTerminalResult carries usage_update usage into approval_required result', async () => {
   const result = await collectTerminalResult(
     asAsyncIterable([
       {
@@ -84,13 +84,13 @@ test('collectTerminalResult carries usage_update usage into approval_required re
     ]),
   );
 
-  t.is(result.type, 'approval_required');
+  expect(result.type).toBe('approval_required');
   if (result.type === 'approval_required') {
-    t.deepEqual(result.usage, { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 });
+    expect(result.usage).toEqual({ prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 });
   }
 });
 
-test('collectTerminalResult trusts the final run-cumulative usage and does not re-sum per-turn snapshots', async (t) => {
+it('collectTerminalResult trusts the final run-cumulative usage and does not re-sum per-turn snapshots', async () => {
   // Long-horizon regression: a multi-turn run streams a per-turn `usage_update`
   // before each tool call. The terminal `final` event carries the authoritative
   // run-cumulative usage from the SDK. The collector must report that cumulative
@@ -119,9 +119,9 @@ test('collectTerminalResult trusts the final run-cumulative usage and does not r
     ]),
   );
 
-  t.is(result.type, 'response');
+  expect(result.type, 'response');
   if (result.type === 'response') {
-    t.deepEqual(result.usage, {
+    expect(result.usage, {
       prompt_tokens: 6000,
       completion_tokens: 280,
       total_tokens: 6280,
@@ -130,7 +130,7 @@ test('collectTerminalResult trusts the final run-cumulative usage and does not r
   }
 });
 
-test('collectTerminalResult lets a later final supersede an earlier one (auto-approved continuation)', async (t) => {
+it('collectTerminalResult lets a later final supersede an earlier one (auto-approved continuation)', async (t) => {
   // The auto-approve path emits a `final` for the first turn, then another
   // `final` after the continuation. Because the SDK accumulator keeps growing
   // on the same run state, the later `final` is the whole-run cumulative and
@@ -142,13 +142,13 @@ test('collectTerminalResult lets a later final supersede an earlier one (auto-ap
     ]),
   );
 
-  t.is(result.type, 'response');
+  expect(result.type, 'response');
   if (result.type === 'response') {
-    t.deepEqual(result.usage, { prompt_tokens: 500, completion_tokens: 60, total_tokens: 560 });
+    expect(result.usage, { prompt_tokens: 500, completion_tokens: 60, total_tokens: 560 });
   }
 });
 
-test('collectTerminalResult falls back to the latest streamed usage when no final usage is present', async (t) => {
+it('collectTerminalResult falls back to the latest streamed usage when no final usage is present', async (t) => {
   const result = await collectTerminalResult(
     asAsyncIterable([
       { type: 'usage_update', usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 } },
@@ -157,13 +157,13 @@ test('collectTerminalResult falls back to the latest streamed usage when no fina
     ]),
   );
 
-  t.is(result.type, 'response');
+  expect(result.type, 'response');
   if (result.type === 'response') {
-    t.deepEqual(result.usage, { prompt_tokens: 175, completion_tokens: 18, total_tokens: 193 });
+    expect(result.usage, { prompt_tokens: 175, completion_tokens: 18, total_tokens: 193 });
   }
 });
 
-test('collectTerminalResult accumulates streamed callbacks and returns final response payload', async (t) => {
+it('collectTerminalResult accumulates streamed callbacks and returns final response payload', async (t) => {
   const seenText: string[] = [];
   const seenReasoning: string[] = [];
   const seenCommands: string[] = [];
@@ -213,25 +213,22 @@ test('collectTerminalResult accumulates streamed callbacks and returns final res
     },
   );
 
-  t.true(sawFinal);
-  t.deepEqual(seenText, ['Hello:Hello']);
-  t.deepEqual(seenReasoning, ['Think:Think']);
-  t.deepEqual(seenCommands, ['cmd-1']);
-  t.deepEqual(seenEvents, ['text_delta', 'reasoning_delta', 'command_message', 'final']);
+  expect(sawFinal).toBe(true);
+  expect(seenText).toEqual(['Hello:Hello']);
+  expect(seenReasoning).toEqual(['Think:Think']);
+  expect(seenCommands).toEqual(['cmd-1']);
+  expect(seenEvents).toEqual(['text_delta', 'reasoning_delta', 'command_message', 'final']);
 
-  t.is(result.type, 'response');
+  expect(result.type).toBe('response');
   if (result.type === 'response') {
-    t.is(result.finalText, 'Done.');
-    t.is(result.reasoningText, 'Finished reasoning');
-    t.deepEqual(result.usage, { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 });
-    t.deepEqual(
-      result.commandMessages.map((m) => m.id),
-      ['cmd-2'],
-    );
+    expect(result.finalText).toBe('Done.');
+    expect(result.reasoningText).toBe('Finished reasoning');
+    expect(result.usage).toEqual({ prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 });
+    expect(result.commandMessages.map((m) => m.id)).toEqual(['cmd-2']);
   }
 });
 
-test('collectTerminalResult preserves multiple reasoning and text segments in turnItems in order', async (t) => {
+it('collectTerminalResult preserves multiple reasoning and text segments in turnItems in order', async () => {
   const result = await collectTerminalResult(
     asAsyncIterable([
       { type: 'reasoning_delta', delta: 'Think 1' },
@@ -242,10 +239,10 @@ test('collectTerminalResult preserves multiple reasoning and text segments in tu
     ]),
   );
 
-  t.is(result.type, 'response');
+  expect(result.type).toBe('response');
   if (result.type === 'response') {
-    t.is(result.finalText, 'Hello World');
-    t.deepEqual(result.turnItems, [
+    expect(result.finalText).toBe('Hello World');
+    expect(result.turnItems).toEqual([
       { type: 'reasoning', text: 'Think 1' },
       { type: 'assistant_text', text: 'Hello' },
       { type: 'reasoning', text: 'Think 2' },
@@ -254,7 +251,7 @@ test('collectTerminalResult preserves multiple reasoning and text segments in tu
   }
 });
 
-test('collectTerminalResult trusts event.turnItems if provided on final event', async (t) => {
+it('collectTerminalResult trusts event.turnItems if provided on final event', async () => {
   const result = await collectTerminalResult(
     asAsyncIterable([
       { type: 'reasoning_delta', delta: 'Ignored delta' },
@@ -271,10 +268,10 @@ test('collectTerminalResult trusts event.turnItems if provided on final event', 
     ]),
   );
 
-  t.is(result.type, 'response');
+  expect(result.type).toBe('response');
   if (result.type === 'response') {
-    t.is(result.finalText, 'Final text');
-    t.deepEqual(result.turnItems, [
+    expect(result.finalText).toBe('Final text');
+    expect(result.turnItems).toEqual([
       { type: 'reasoning', text: 'Authoritative reasoning' },
       { type: 'assistant_text', text: 'Authoritative text' },
       { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: 'ls' },

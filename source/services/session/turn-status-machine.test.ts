@@ -1,109 +1,114 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { TurnStatusMachine } from './turn-status-machine.js';
 
-test('begins turn from idle', (t) => {
+it('begins turn from idle', () => {
   const machine = new TurnStatusMachine();
-  t.is(machine.current, 'idle');
+  expect(machine.current).toBe('idle');
   machine.beginTurn();
-  t.is(machine.current, 'streaming');
+  expect(machine.current).toBe('streaming');
 });
 
-test('beginTurn from non-idle throws', (t) => {
+it('beginTurn from non-idle throws', () => {
   const machine = new TurnStatusMachine();
   machine.beginTurn();
-  t.throws(() => machine.beginTurn(), { message: /Invalid transition.*streaming.*streaming/ });
+
+  expect(() => machine.beginTurn(), { message: /Invalid transition.*streaming.*streaming/ }).toThrow();
 });
 
-test('requestApproval from streaming succeeds', (t) => {
-  const machine = new TurnStatusMachine();
-  machine.beginTurn();
-  machine.requestApproval();
-  t.is(machine.current, 'awaiting_approval');
-});
-
-test('requestApproval from continuing succeeds', (t) => {
+it('requestApproval from streaming succeeds', () => {
   const machine = new TurnStatusMachine();
   machine.beginTurn();
   machine.requestApproval();
-  machine.beginContinuation();
-  machine.requestApproval();
-  t.is(machine.current, 'awaiting_approval');
+  expect(machine.current).toBe('awaiting_approval');
 });
 
-test('requestApproval from idle or awaiting_approval throws', (t) => {
-  const machine = new TurnStatusMachine();
-  t.throws(() => machine.requestApproval(), { message: /Cannot request approval from idle/ });
-  machine.beginTurn();
-  machine.requestApproval();
-  t.throws(() => machine.requestApproval(), { message: /Cannot request approval from awaiting_approval/ });
-});
-
-test('beginContinuation from awaiting_approval succeeds', (t) => {
+it('requestApproval from continuing succeeds', () => {
   const machine = new TurnStatusMachine();
   machine.beginTurn();
   machine.requestApproval();
   machine.beginContinuation();
-  t.is(machine.current, 'continuing');
+  machine.requestApproval();
+  expect(machine.current).toBe('awaiting_approval');
 });
 
-test('beginContinuation from non-awaiting_approval throws', (t) => {
+it('requestApproval from idle or awaiting_approval throws', () => {
   const machine = new TurnStatusMachine();
-  t.throws(() => machine.beginContinuation(), { message: /Invalid transition.*idle.*continuing/ });
+
+  expect(() => machine.requestApproval(), { message: /Cannot request approval from idle/ }).toThrow();
   machine.beginTurn();
-  t.throws(() => machine.beginContinuation(), { message: /Invalid transition.*streaming.*continuing/ });
+  machine.requestApproval();
+
+  expect(() => machine.requestApproval(), { message: /Cannot request approval from awaiting_approval/ }).toThrow();
 });
 
-test('complete from streaming returns to idle', (t) => {
+it('beginContinuation from awaiting_approval succeeds', () => {
+  const machine = new TurnStatusMachine();
+  machine.beginTurn();
+  machine.requestApproval();
+  machine.beginContinuation();
+  expect(machine.current).toBe('continuing');
+});
+
+it('beginContinuation from non-awaiting_approval throws', () => {
+  const machine = new TurnStatusMachine();
+
+  expect(() => machine.beginContinuation(), { message: /Invalid transition.*idle.*continuing/ }).toThrow();
+  machine.beginTurn();
+
+  expect(() => machine.beginContinuation(), { message: /Invalid transition.*streaming.*continuing/ }).toThrow();
+});
+
+it('complete from streaming returns to idle', () => {
   const machine = new TurnStatusMachine();
   machine.beginTurn();
   machine.complete();
-  t.is(machine.current, 'idle');
+  expect(machine.current).toBe('idle');
 });
 
-test('complete from continuing returns to idle', (t) => {
+it('complete from continuing returns to idle', () => {
   const machine = new TurnStatusMachine();
   machine.beginTurn();
   machine.requestApproval();
   machine.beginContinuation();
   machine.complete();
-  t.is(machine.current, 'idle');
+  expect(machine.current).toBe('idle');
 });
 
-test('complete from idle and awaiting_approval is a no-op', (t) => {
+it('complete from idle and awaiting_approval is a no-op', () => {
   const machine = new TurnStatusMachine();
   machine.complete();
-  t.is(machine.current, 'idle');
+  expect(machine.current).toBe('idle');
   machine.beginTurn();
   machine.requestApproval();
   machine.complete();
-  t.is(machine.current, 'awaiting_approval');
+  expect(machine.current).toBe('awaiting_approval');
 });
 
-test('abort from any state returns to idle', (t) => {
+it('abort from any state returns to idle', () => {
   const machine = new TurnStatusMachine();
   machine.abort();
-  t.is(machine.current, 'idle');
+  expect(machine.current).toBe('idle');
 
   machine.beginTurn();
   machine.abort();
-  t.is(machine.current, 'idle');
+  expect(machine.current).toBe('idle');
 
   machine.beginTurn();
   machine.requestApproval();
   machine.abort();
-  t.is(machine.current, 'idle');
+  expect(machine.current).toBe('idle');
 
   machine.beginTurn();
   machine.requestApproval();
   machine.beginContinuation();
   machine.abort();
-  t.is(machine.current, 'idle');
+  expect(machine.current).toBe('idle');
 });
 
-test('is helper matches current status', (t) => {
+it('is helper matches current status', () => {
   const machine = new TurnStatusMachine();
-  t.true(machine.is('idle'));
+  expect(machine.is('idle')).toBe(true);
   machine.beginTurn();
-  t.true(machine.is('streaming'));
-  t.false(machine.is('idle'));
+  expect(machine.is('streaming')).toBe(true);
+  expect(machine.is('idle')).toBe(false);
 });

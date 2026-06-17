@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,13 +13,13 @@ const getTestSettingsDir = () => {
   return path.join(TEST_BASE_DIR, `test-${testCounter}`);
 };
 
-test.after.always(() => {
+afterAll(() => {
   if (fs.existsSync(TEST_BASE_DIR)) {
     fs.rmSync(TEST_BASE_DIR, { recursive: true, force: true });
   }
 });
 
-test('OpenAI Flex Service Tier setting can be enabled', (t) => {
+it('OpenAI Flex Service Tier setting can be enabled', () => {
   const settings = new SettingsService({
     settingsDir: getTestSettingsDir(),
     disableFilePersistence: true,
@@ -31,10 +31,10 @@ test('OpenAI Flex Service Tier setting can be enabled', (t) => {
 
   // Verify the setting is stored correctly
   const value = settings.get<boolean>(SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER);
-  t.is(value, true);
+  expect(value).toBe(true);
 });
 
-test('OpenAI Flex Service Tier setting is disabled by default', (t) => {
+it('OpenAI Flex Service Tier setting is disabled by default', () => {
   const settings = new SettingsService({
     settingsDir: getTestSettingsDir(),
     disableFilePersistence: true,
@@ -43,10 +43,10 @@ test('OpenAI Flex Service Tier setting is disabled by default', (t) => {
 
   // Verify the default value is false
   const value = settings.get<boolean>(SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER);
-  t.is(value, false);
+  expect(value).toBe(false);
 });
 
-test('OpenAI Flex Service Tier setting can be disabled', (t) => {
+it('OpenAI Flex Service Tier setting can be disabled', () => {
   const settings = new SettingsService({
     settingsDir: getTestSettingsDir(),
     disableFilePersistence: true,
@@ -59,10 +59,10 @@ test('OpenAI Flex Service Tier setting can be disabled', (t) => {
 
   // Verify the setting is false
   const value = settings.get<boolean>(SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER);
-  t.is(value, false);
+  expect(value).toBe(false);
 });
 
-test('OpenAI Flex Service Tier setting is runtime modifiable', (t) => {
+it('OpenAI Flex Service Tier setting is runtime modifiable', () => {
   const settings = new SettingsService({
     settingsDir: getTestSettingsDir(),
     disableFilePersistence: true,
@@ -70,10 +70,10 @@ test('OpenAI Flex Service Tier setting is runtime modifiable', (t) => {
   });
 
   // Verify the setting is runtime modifiable
-  t.true(settings.isRuntimeModifiable(SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER));
+  expect(settings.isRuntimeModifiable(SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER)).toBe(true);
 });
 
-test('OpenAI Flex Service Tier setting is included in getAll()', (t) => {
+it('OpenAI Flex Service Tier setting is included in getAll()', () => {
   const settings = new SettingsService({
     settingsDir: getTestSettingsDir(),
     disableFilePersistence: true,
@@ -83,8 +83,8 @@ test('OpenAI Flex Service Tier setting is included in getAll()', (t) => {
   const allSettings = settings.getAll();
 
   // Verify the setting is present in the returned object
-  t.truthy(allSettings.agent.useFlexServiceTier);
-  t.is(allSettings.agent.useFlexServiceTier.value, false);
+  expect(allSettings.agent.useFlexServiceTier).toBeTruthy();
+  expect(allSettings.agent.useFlexServiceTier.value).toBe(false);
   // Source can be 'default' or 'config' depending on whether a settings file exists
-  t.true(['default', 'config'].includes(allSettings.agent.useFlexServiceTier.source));
+  expect(['default', 'config'].includes(allSettings.agent.useFlexServiceTier.source)).toBe(true);
 });

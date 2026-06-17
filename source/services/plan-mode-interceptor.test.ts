@@ -1,7 +1,7 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { installPlanModeInterceptor } from './plan-mode-interceptor.js';
 
-test('installPlanModeInterceptor rejects mutating tools when planMode is true', async (t) => {
+it('installPlanModeInterceptor rejects mutating tools when planMode is true', async () => {
   let capturedInterceptor: any;
   let planMode = true;
 
@@ -22,47 +22,47 @@ test('installPlanModeInterceptor rejects mutating tools when planMode is true', 
     { settingsService: mockSettingsService },
   );
 
-  t.truthy(capturedInterceptor);
+  expect(capturedInterceptor).toBeTruthy();
 
   // When planMode is true, mutating tools should be blocked
   const rejectCreate = await capturedInterceptor('create_file', {});
-  t.truthy(rejectCreate);
-  t.true(rejectCreate.includes('disabled'));
+  expect(rejectCreate).toBeTruthy();
+  expect(rejectCreate.includes('disabled')).toBe(true);
 
   const rejectSearchReplace = await capturedInterceptor('search_replace', {});
-  t.truthy(rejectSearchReplace);
-  t.true(rejectSearchReplace.includes('disabled'));
+  expect(rejectSearchReplace).toBeTruthy();
+  expect(rejectSearchReplace.includes('disabled')).toBe(true);
 
   const rejectApplyPatch = await capturedInterceptor('apply_patch', {});
-  t.truthy(rejectApplyPatch);
-  t.true(rejectApplyPatch.includes('disabled'));
+  expect(rejectApplyPatch).toBeTruthy();
+  expect(rejectApplyPatch.includes('disabled')).toBe(true);
 
   // Write-capable worker subagent is blocked
   const rejectWorker = await capturedInterceptor('run_subagent', { role: 'worker' });
-  t.truthy(rejectWorker);
-  t.true(rejectWorker.includes('disabled'));
+  expect(rejectWorker).toBeTruthy();
+  expect(rejectWorker.includes('disabled')).toBe(true);
 
   // Unknown / missing role is blocked (could be a write-capable custom role)
-  t.truthy(await capturedInterceptor('run_subagent', {}));
-  t.truthy(await capturedInterceptor('run_subagent', { role: 'mystery' }));
+  expect(await capturedInterceptor('run_subagent', {})).toBeTruthy();
+  expect(await capturedInterceptor('run_subagent', { role: 'mystery' })).toBeTruthy();
 
   // Read-only subagent roles are allowed in plan mode
-  t.is(await capturedInterceptor('run_subagent', { role: 'explorer' }), null);
-  t.is(await capturedInterceptor('run_subagent', { role: 'researcher' }), null);
-  t.is(await capturedInterceptor('run_subagent', { role: 'mentor' }), null);
+  expect(await capturedInterceptor('run_subagent', { role: 'explorer' })).toBe(null);
+  expect(await capturedInterceptor('run_subagent', { role: 'researcher' })).toBe(null);
+  expect(await capturedInterceptor('run_subagent', { role: 'mentor' })).toBe(null);
   // Role passed as a JSON string (provider may stringify args)
-  t.is(await capturedInterceptor('run_subagent', JSON.stringify({ role: 'explorer' })), null);
+  expect(await capturedInterceptor('run_subagent', JSON.stringify({ role: 'explorer' }))).toBe(null);
 
   // Non-mutating tools should pass through
-  t.is(await capturedInterceptor('read_file', {}), null);
-  t.is(await capturedInterceptor('grep', {}), null);
-  t.is(await capturedInterceptor('shell', {}), null);
+  expect(await capturedInterceptor('read_file', {})).toBe(null);
+  expect(await capturedInterceptor('grep', {})).toBe(null);
+  expect(await capturedInterceptor('shell', {})).toBe(null);
 
   // When planMode is false, all tools should pass through
   planMode = false;
-  t.is(await capturedInterceptor('create_file', {}), null);
-  t.is(await capturedInterceptor('search_replace', {}), null);
-  t.is(await capturedInterceptor('apply_patch', {}), null);
-  t.is(await capturedInterceptor('run_subagent', {}), null);
-  t.is(await capturedInterceptor('read_file', {}), null);
+  expect(await capturedInterceptor('create_file', {})).toBe(null);
+  expect(await capturedInterceptor('search_replace', {})).toBe(null);
+  expect(await capturedInterceptor('apply_patch', {})).toBe(null);
+  expect(await capturedInterceptor('run_subagent', {})).toBe(null);
+  expect(await capturedInterceptor('read_file', {})).toBe(null);
 });

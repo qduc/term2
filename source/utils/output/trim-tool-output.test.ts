@@ -1,15 +1,15 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { trimToolOutput } from './trim-tool-output.js';
 
-test('trimToolOutput trims plain string output by characters', (t) => {
+it('trimToolOutput trims plain string output by characters', () => {
   const output = 'a'.repeat(200);
   const result = trimToolOutput(output, undefined, 50);
 
-  t.true(result.includes('characters trimmed'));
-  t.true(result.length < output.length);
+  expect(result.includes('characters trimmed')).toBe(true);
+  expect(result.length < output.length).toBe(true);
 });
 
-test('trimToolOutput trims string fields inside JSON output', (t) => {
+it('trimToolOutput trims string fields inside JSON output', () => {
   const payload = JSON.stringify({
     output: 'b'.repeat(200),
     other: 'ok',
@@ -18,11 +18,11 @@ test('trimToolOutput trims string fields inside JSON output', (t) => {
   const result = trimToolOutput(payload, undefined, 50);
   const parsed = JSON.parse(result);
 
-  t.true(parsed.output.includes('characters trimmed'));
-  t.is(parsed.other, 'ok');
+  expect(parsed.output.includes('characters trimmed')).toBe(true);
+  expect(parsed.other).toBe('ok');
 });
 
-test('trimToolOutput trims nested JSON output arrays', (t) => {
+it('trimToolOutput trims nested JSON output arrays', () => {
   const payload = JSON.stringify({
     output: [
       {
@@ -35,5 +35,5 @@ test('trimToolOutput trims nested JSON output arrays', (t) => {
   const result = trimToolOutput(payload, undefined, 50);
   const parsed = JSON.parse(result);
 
-  t.true(parsed.output[0].message.includes('characters trimmed'));
+  expect(parsed.output[0].message.includes('characters trimmed')).toBe(true);
 });

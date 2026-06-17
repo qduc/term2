@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { AgentConfiguration, type AgentConfigurationDeps } from './agent-configuration.js';
 import { registerProvider } from '../providers/registry.js';
 import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
@@ -107,7 +107,7 @@ function ensureProviderRegistered() {
 
 // ========== Tests ==========
 
-test.serial('constructor with agentOverride uses the override', (t) => {
+it.sequential('constructor with agentOverride uses the override', () => {
   ensureProviderRegistered();
 
   const { deps } = createDeps();
@@ -119,53 +119,53 @@ test.serial('constructor with agentOverride uses the override', (t) => {
 
   const config = new AgentConfiguration({ agentOverride: overrideAgent, model: 'override-model' }, deps);
 
-  t.is(config.getAgent(), overrideAgent, 'getAgent() returns the override agent');
-  t.is(config.getModel(), 'override-model', 'getModel returns the override model');
-  t.true(config.isTransientClient, 'isTransientClient is true');
+  expect(config.getAgent(), 'getAgent() returns the override agent').toBe(overrideAgent);
+  expect(config.getModel(), 'getModel returns the override model').toBe('override-model');
+  expect(config.isTransientClient).toBe(true);
 });
 
-test.serial('constructor without agentOverride builds agent from settings', (t) => {
+it.sequential('constructor without agentOverride builds agent from settings', () => {
   ensureProviderRegistered();
 
   const { deps } = createDeps();
   const config = new AgentConfiguration({}, deps);
 
   const agent = config.getAgent();
-  t.truthy(agent, 'getAgent() returns a built agent');
-  t.is(agent?.name, 'Terminal Assistant', 'agent name matches default');
-  t.false(config.isTransientClient, 'isTransientClient is false');
+  expect(agent).toBeTruthy();
+  expect(agent?.name, 'agent name matches default').toBe('Terminal Assistant');
+  expect(config.isTransientClient).toBe(false);
 });
 
-test.serial('getProvider returns the configured provider', (t) => {
+it.sequential('getProvider returns the configured provider', () => {
   ensureProviderRegistered();
 
   const { deps } = createDeps();
   const config = new AgentConfiguration({}, deps);
 
-  t.is(config.getProvider(), 'mock-provider-for-config', 'getProvider returns settings provider');
+  expect(config.getProvider(), 'getProvider returns settings provider').toBe('mock-provider-for-config');
 });
 
-test.serial('getProvider returns override provider when provided', (t) => {
+it.sequential('getProvider returns override provider when provided', () => {
   ensureProviderRegistered();
 
   const { deps } = createDeps();
   const config = new AgentConfiguration({ providerOverride: 'mock-provider-for-config' }, deps);
 
-  t.is(config.getProvider(), 'mock-provider-for-config', 'getProvider returns the override');
+  expect(config.getProvider(), 'getProvider returns the override').toBe('mock-provider-for-config');
 });
 
-test.serial('getModel returns the resolved model', (t) => {
+it.sequential('getModel returns the resolved model', () => {
   ensureProviderRegistered();
 
   const { deps } = createDeps();
   const config = new AgentConfiguration({ model: 'gpt-4o' }, deps);
 
   const resolvedModel = config.getModel();
-  t.truthy(resolvedModel, 'getModel returns a non-empty string');
-  t.is(resolvedModel, 'gpt-4o', 'getModel returns the resolved model');
+  expect(resolvedModel).toBeTruthy();
+  expect(resolvedModel, 'getModel returns the resolved model').toBe('gpt-4o');
 });
 
-test.serial('rebuildAgent updates agent and model after setModel', (t) => {
+it.sequential('rebuildAgent updates agent and model after setModel', () => {
   ensureProviderRegistered();
 
   const { deps } = createDeps();
@@ -181,11 +181,11 @@ test.serial('rebuildAgent updates agent and model after setModel', (t) => {
   const newAgent = config.getAgent();
   const newModel = config.getModel();
 
-  t.not(newAgent, originalAgent, 'agent reference changed after rebuild');
-  t.is(newModel, 'gpt-4o-mini', 'model was updated');
+  expect(newAgent, 'agent reference changed after rebuild').not.toBe(originalAgent);
+  expect(newModel, 'model was updated').toBe('gpt-4o-mini');
 });
 
-test.serial('rebuildAgent is no-op for transient client', (t) => {
+it.sequential('rebuildAgent is no-op for transient client', () => {
   ensureProviderRegistered();
 
   const { deps } = createDeps();
@@ -200,11 +200,11 @@ test.serial('rebuildAgent is no-op for transient client', (t) => {
   config.setModel('different-model');
   config.rebuildAgent();
 
-  t.is(config.getAgent(), overrideAgent, 'agent still returns the override');
-  t.is(config.getModel(), 'different-model', 'setModel updated the model string');
+  expect(config.getAgent(), 'agent still returns the override').toBe(overrideAgent);
+  expect(config.getModel(), 'setModel updated the model string').toBe('different-model');
 });
 
-test.serial('getAgent with sessionId clones agent for providers with prompt cache support', (t) => {
+it.sequential('getAgent with sessionId clones agent for providers with prompt cache support', () => {
   ensureProviderRegistered();
 
   // Register a provider with prompt cache key support
@@ -231,81 +231,81 @@ test.serial('getAgent with sessionId clones agent for providers with prompt cach
   const config = new AgentConfiguration({ model: 'gpt-4o' }, deps);
 
   const agentWithSession = config.getAgent('test-session-123');
-  t.truthy(agentWithSession, 'getAgent with sessionId returns an agent');
+  expect(agentWithSession).toBeTruthy();
 
   // The base agent should not be the same as the one with sessionId
   const baseAgent = config.getAgent();
   // For providers with prompt cache support, agent.clone() might return a different
   // object. We just verify that both return valid agents.
-  t.truthy(baseAgent, 'base agent is truthy');
-  t.truthy(agentWithSession, 'session agent is truthy');
+  expect(baseAgent).toBeTruthy();
+  expect(agentWithSession).toBeTruthy();
 });
 
-test.serial('maxTurns reads from settings', (t) => {
+it.sequential('maxTurns reads from settings', () => {
   ensureProviderRegistered();
 
   const { deps } = createDeps({ settingsValues: { 'agent.maxTurns': 42 } });
   const config = new AgentConfiguration({}, deps);
 
-  t.is(config.maxTurns, 42, 'maxTurns reads from settings');
+  expect(config.maxTurns, 'maxTurns reads from settings').toBe(42);
 });
 
-test.serial('maxTurns defaults to 20', (t) => {
+it.sequential('maxTurns defaults to 20', () => {
   ensureProviderRegistered();
 
   const { deps } = createDeps({ settingsValues: { 'agent.maxTurns': undefined } });
   const config = new AgentConfiguration({}, deps);
 
-  t.is(config.maxTurns, 20, 'maxTurns defaults to 20 when settings value is undefined');
+  expect(config.maxTurns, 'maxTurns defaults to 20 when settings value is undefined').toBe(20);
 });
 
-test.serial('serviceTierOverride getter/setter works', (t) => {
+it.sequential('serviceTierOverride getter/setter works', () => {
   ensureProviderRegistered();
 
   const { deps } = createDeps();
   const config = new AgentConfiguration({}, deps);
 
-  t.is(config.serviceTierOverrideForNextRequest, null, 'defaults to null');
+  expect(config.serviceTierOverrideForNextRequest, 'defaults to null').toBe(null);
 
   config.serviceTierOverrideForNextRequest = 'standard';
-  t.is(config.serviceTierOverrideForNextRequest, 'standard', 'setter updates value');
+  expect(config.serviceTierOverrideForNextRequest, 'setter updates value').toBe('standard');
 
   config.serviceTierOverrideForNextRequest = null;
-  t.is(config.serviceTierOverrideForNextRequest, null, 'resets to null');
+  expect(config.serviceTierOverrideForNextRequest, 'resets to null').toBe(null);
 });
 
-test.serial('getBuildFactoryDeps returns correct shape', (t) => {
+it.sequential('getBuildFactoryDeps returns correct shape', () => {
   ensureProviderRegistered();
 
   const { deps } = createDeps();
   const config = new AgentConfiguration({}, deps);
 
   const factoryDeps = config.getBuildFactoryDeps();
-  t.truthy(factoryDeps, 'getBuildFactoryDeps returns something');
-  t.is(typeof factoryDeps.settings, 'object', 'has settings');
-  t.is(typeof factoryDeps.logger, 'object', 'has logger');
-  t.is(typeof factoryDeps.editor, 'object', 'has editor');
-  t.is(typeof factoryDeps.createMentor, 'function', 'has createMentor');
-  t.is(typeof factoryDeps.runSubagent, 'function', 'has runSubagent');
-  t.is(typeof factoryDeps.getAskUserAnswer, 'function', 'has getAskUserAnswer');
-  t.is(typeof factoryDeps.checkToolInterceptors, 'function', 'has checkToolInterceptors');
+  expect(factoryDeps).toBeTruthy();
+  expect(typeof factoryDeps.settings, 'has settings').toBe('object');
+  expect(typeof factoryDeps.logger, 'has logger').toBe('object');
+  expect(typeof factoryDeps.editor, 'has editor').toBe('object');
+  expect(typeof factoryDeps.createMentor, 'has createMentor').toBe('function');
+  expect(typeof factoryDeps.runSubagent, 'has runSubagent').toBe('function');
+  expect(typeof factoryDeps.getAskUserAnswer, 'has getAskUserAnswer').toBe('function');
+  expect(typeof factoryDeps.checkToolInterceptors, 'has checkToolInterceptors').toBe('function');
 });
 
-test.serial('subscribeToSettings installs onChange handler', (t) => {
+it.sequential('subscribeToSettings installs onChange handler', () => {
   ensureProviderRegistered();
 
   const result = createDeps();
   const settings = result.settings as ReturnType<typeof createMockSettings>;
   const config = new AgentConfiguration({}, result.deps);
 
-  t.is(settings._listeners.length, 0, 'no listeners before subscribeToSettings');
+  expect(settings._listeners.length, 'no listeners before subscribeToSettings').toBe(0);
 
   config.subscribeToSettings();
 
-  t.is(settings._listeners.length, 1, 'one listener after subscribeToSettings');
+  expect(settings._listeners.length, 'one listener after subscribeToSettings').toBe(1);
 });
 
-test.serial('subscribeToSettings is no-op for transient client', (t) => {
+it.sequential('subscribeToSettings is no-op for transient client', () => {
   ensureProviderRegistered();
 
   const result = createDeps();
@@ -320,10 +320,10 @@ test.serial('subscribeToSettings is no-op for transient client', (t) => {
 
   config.subscribeToSettings();
 
-  t.is(settings._listeners.length, 0, 'no listeners for transient client');
+  expect(settings._listeners.length, 'no listeners for transient client').toBe(0);
 });
 
-test.serial('refreshAgent calls onConfigChanged callback', (t) => {
+it.sequential('refreshAgent calls onConfigChanged callback', () => {
   ensureProviderRegistered();
 
   let changedKeyResult: string | undefined = 'not-called';
@@ -337,26 +337,26 @@ test.serial('refreshAgent calls onConfigChanged callback', (t) => {
   changedKeyResult = 'not-called';
   config.refreshAgent();
 
-  t.falsy(changedKeyResult, 'onConfigChanged was called (changedKeyResult is falsy)');
-  t.truthy(config.getAgent(), 'agent still valid after refresh');
+  expect(changedKeyResult).toBeFalsy();
+  expect(config.getAgent()).toBeTruthy();
 });
 
-test.serial('setProvider persists to settings', (t) => {
+it.sequential('setProvider persists to settings', () => {
   ensureProviderRegistered();
 
   const result = createDeps();
   const settings = result.settings as ReturnType<typeof createMockSettings>;
   const config = new AgentConfiguration({}, result.deps);
 
-  t.is(config.getProvider(), 'mock-provider-for-config', 'starts with default provider');
+  expect(config.getProvider(), 'starts with default provider').toBe('mock-provider-for-config');
 
   config.setProvider('mock-provider-cache');
 
-  t.is(config.getProvider(), 'mock-provider-cache', 'provider updated');
-  t.is(settings.get('agent.provider'), 'mock-provider-cache', 'settings updated');
+  expect(config.getProvider(), 'provider updated').toBe('mock-provider-cache');
+  expect(settings.get('agent.provider'), 'settings updated').toBe('mock-provider-cache');
 });
 
-test.serial('settings change triggers rebuild via subscribeToSettings', (t) => {
+it.sequential('settings change triggers rebuild via subscribeToSettings', () => {
   ensureProviderRegistered();
 
   const result = createDeps();
@@ -371,10 +371,10 @@ test.serial('settings change triggers rebuild via subscribeToSettings', (t) => {
   settings._triggerChange('agent.model');
 
   const newAgent = config.getAgent();
-  t.not(newAgent, originalAgent, 'agent was rebuilt after settings change');
+  expect(newAgent, 'agent was rebuilt after settings change').not.toBe(originalAgent);
 });
 
-test.serial('settings change with non-rebuild key does not trigger rebuild', (t) => {
+it.sequential('settings change with non-rebuild key does not trigger rebuild', () => {
   ensureProviderRegistered();
 
   const result = createDeps();
@@ -389,10 +389,10 @@ test.serial('settings change with non-rebuild key does not trigger rebuild', (t)
   settings._triggerChange('app.someRandomSetting');
 
   const agentAfter = config.getAgent();
-  t.is(agentAfter, originalAgent, 'agent was NOT rebuilt for non-rebuild key');
+  expect(agentAfter, 'agent was NOT rebuilt for non-rebuild key').toBe(originalAgent);
 });
 
-test.serial('settings change triggers onConfigChanged via subscribeToSettings', (t) => {
+it.sequential('settings change triggers onConfigChanged via subscribeToSettings', () => {
   ensureProviderRegistered();
 
   let calledWithKey: string | undefined;
@@ -408,10 +408,10 @@ test.serial('settings change triggers onConfigChanged via subscribeToSettings', 
 
   settings._triggerChange('agent.model');
 
-  t.is(calledWithKey, 'agent.model', 'onConfigChanged called with changed key');
+  expect(calledWithKey, 'onConfigChanged called with changed key').toBe('agent.model');
 });
 
-test.serial('refreshAgent is no-op for transient client', (t) => {
+it.sequential('refreshAgent is no-op for transient client', () => {
   ensureProviderRegistered();
 
   let callbackCalled = false;
@@ -430,6 +430,6 @@ test.serial('refreshAgent is no-op for transient client', (t) => {
 
   config.refreshAgent();
 
-  t.false(callbackCalled, 'onConfigChanged was not called for transient client');
-  t.is(config.getAgent(), overrideAgent, 'agent still returns the override');
+  expect(callbackCalled).toBe(false);
+  expect(config.getAgent(), 'agent still returns the override').toBe(overrideAgent);
 });

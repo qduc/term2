@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ContinuationStreamCycle } from './continuation-stream-cycle.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
 
@@ -20,7 +20,7 @@ function createMockState() {
   } as any;
 }
 
-test('returns stale when finalization is stale', async (t) => {
+it('returns stale when finalization is stale', async () => {
   const stream = createMockStream();
   const cycle = new ContinuationStreamCycle({
     agentClient: {
@@ -52,10 +52,10 @@ test('returns stale when finalization is stale', async (t) => {
   while (!next.done) {
     next = await iterator.next();
   }
-  t.is((next.value as any).kind, 'stale');
+  expect((next.value as any).kind).toBe('stale');
 });
 
-test('returns completed response after stream processing', async (t) => {
+it('returns completed response after stream processing', async () => {
   const stream = createMockStream();
   stream.finalOutput = 'done';
 
@@ -93,14 +93,14 @@ test('returns completed response after stream processing', async (t) => {
     next = await iterator.next();
   }
 
-  t.deepEqual(events, [{ type: 'text_delta', delta: 'done' }]);
-  t.is((next.value as any).kind, 'completed');
+  expect(events).toEqual([{ type: 'text_delta', delta: 'done' }]);
+  expect((next.value as any).kind).toBe('completed');
   if ((next.value as any).kind === 'completed') {
-    t.is((next.value as any).outcome.kind, 'response');
+    expect((next.value as any).outcome.kind).toBe('response');
   }
 });
 
-test('accumulates command messages from stream', async (t) => {
+it('accumulates command messages from stream', async () => {
   const stream = createMockStream();
   stream.newItems = [
     { type: 'function_call_output', id: 'msg-1', name: 'shell', output: { command: 'ls', output: 'a' } },
@@ -143,8 +143,8 @@ test('accumulates command messages from stream', async (t) => {
   const value = next.value as any;
   if (value.kind === 'completed') {
     const msgs = value.nextCumulativeMessages;
-    t.is(msgs.length, 2);
-    t.is(msgs[0].id, 'msg-0');
-    t.is(msgs[1].toolName, 'shell');
+    expect(msgs.length).toBe(2);
+    expect(msgs[0].id).toBe('msg-0');
+    expect(msgs[1].toolName).toBe('shell');
   }
 });

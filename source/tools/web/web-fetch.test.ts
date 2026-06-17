@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import { createWebFetchToolDefinition } from './web-fetch.js';
 import { ISettingsService, ILoggingService } from '../../services/service-interfaces.js';
@@ -17,12 +17,12 @@ const webFetchTool = createWebFetchToolDefinition({
   loggingService: mockLoggingService,
 });
 
-test('needsApproval: returns false', async (t) => {
+it('needsApproval: returns false', async () => {
   const result = await webFetchTool.needsApproval({ url: 'https://example.com' });
-  t.false(result);
+  expect(result).toBe(false);
 });
 
-test.serial('execute: fetches and converts to markdown', async (t) => {
+it.sequential('execute: fetches and converts to markdown', async () => {
   // Mock global fetch
   const originalFetch = global.fetch;
   global.fetch = async () => {
@@ -51,15 +51,15 @@ test.serial('execute: fetches and converts to markdown', async (t) => {
 
   try {
     const result = await webFetchTool.execute({ url: 'https://example.com' });
-    t.true(result.includes('# Hello World'));
-    t.true(result.includes('This is a test.'));
-    t.true(result.includes('Table of Contents'));
+    expect(result.includes('# Hello World')).toBe(true);
+    expect(result.includes('This is a test.')).toBe(true);
+    expect(result.includes('Table of Contents')).toBe(true);
   } finally {
     global.fetch = originalFetch;
   }
 });
 
-test.serial('execute: handles fetch errors', async (t) => {
+it.sequential('execute: handles fetch errors', async () => {
   const originalFetch = global.fetch;
   global.fetch = async () => {
     return {
@@ -71,14 +71,14 @@ test.serial('execute: handles fetch errors', async (t) => {
 
   try {
     const result = await webFetchTool.execute({ url: 'https://example.com/404' });
-    t.true(result.includes('Error'));
-    t.true(result.includes('404'));
+    expect(result.includes('Error')).toBe(true);
+    expect(result.includes('404')).toBe(true);
   } finally {
     global.fetch = originalFetch;
   }
 });
 
-test.serial('execute: converts github blob links to raw links', async (t) => {
+it.sequential('execute: converts github blob links to raw links', async () => {
   const originalFetch = global.fetch;
   let fetchedUrl = '';
   global.fetch = async (url: string | URL | Request) => {
@@ -94,13 +94,13 @@ test.serial('execute: converts github blob links to raw links', async (t) => {
   try {
     const githubUrl = 'https://github.com/qduc/term2/blob/main/package.json';
     await webFetchTool.execute({ url: githubUrl });
-    t.is(fetchedUrl, 'https://raw.githubusercontent.com/qduc/term2/main/package.json');
+    expect(fetchedUrl).toBe('https://raw.githubusercontent.com/qduc/term2/main/package.json');
   } finally {
     global.fetch = originalFetch;
   }
 });
 
-test.serial('execute: saves full content to temp file when content exceeds max_chars', async (t) => {
+it.sequential('execute: saves full content to temp file when content exceeds max_chars', async () => {
   const originalFetch = global.fetch;
 
   // Generate enough HTML to produce > 200 chars of markdown
@@ -123,8 +123,8 @@ test.serial('execute: saves full content to temp file when content exceeds max_c
   try {
     const result = await webFetchTool.execute({ url: 'https://example.com/long', max_chars: 200 });
 
-    t.true(result.includes('Content truncated at 200 characters'));
-    t.true(result.includes('Full content saved to temp file:'));
+    expect(result.includes('Content truncated at 200 characters')).toBe(true);
+    expect(result.includes('Full content saved to temp file:')).toBe(true);
 
     // Extract the temp file path from the output and clean up
     const match = result.match(/`([^`]+\.md)`/);
@@ -139,7 +139,7 @@ test.serial('execute: saves full content to temp file when content exceeds max_c
   }
 });
 
-test.serial('execute: does not save temp file when content fits within max_chars', async (t) => {
+it.sequential('execute: does not save temp file when content fits within max_chars', async () => {
   const originalFetch = global.fetch;
   const shortHtml = '<html><body><h1>Short Page</h1><p>Small content.</p></body></html>';
 
@@ -154,13 +154,13 @@ test.serial('execute: does not save temp file when content fits within max_chars
 
   try {
     const result = await webFetchTool.execute({ url: 'https://example.com/short' });
-    t.false(result.includes('Full content saved to temp file:'));
+    expect(result.includes('Full content saved to temp file:')).toBe(false);
   } finally {
     global.fetch = originalFetch;
   }
 });
 
-test.serial('execute: does not save temp file on continuation request', async (t) => {
+it.sequential('execute: does not save temp file on continuation request', async () => {
   // Continuation requests should skip the temp file logic entirely,
   // even if a valid result were returned.
   const result = await webFetchTool.execute({
@@ -170,6 +170,6 @@ test.serial('execute: does not save temp file on continuation request', async (t
   });
   // The call will error because the token doesn't exist in the cache,
   // but it should never try to save a temp file.
-  t.true(result.startsWith('Error:'));
-  t.false(result.includes('Full content saved to temp file:'));
+  expect(result.startsWith('Error:')).toBe(true);
+  expect(result.includes('Full content saved to temp file:')).toBe(false);
 });

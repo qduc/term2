@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
 
 function createMockState(overrides: any = {}) {
@@ -22,7 +22,7 @@ function createMockState(overrides: any = {}) {
   };
 }
 
-test('returns terminated for unrecoverable error', async (t) => {
+it('returns terminated for unrecoverable error', async () => {
   const handler = new ContinuationRecoveryHandler({
     logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
     sessionId: 'test',
@@ -45,11 +45,11 @@ test('returns terminated for unrecoverable error', async (t) => {
     next = await iterator.next();
   }
 
-  t.is(events.length, 0);
-  t.is((next.value as any).kind, 'terminated');
+  expect(events.length).toBe(0);
+  expect((next.value as any).kind).toBe('terminated');
 });
 
-test('returns stale when generation guard is not current after presentation', async (t) => {
+it('returns stale when generation guard is not current after presentation', async () => {
   const handler = new ContinuationRecoveryHandler({
     logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
     sessionId: 'test',
@@ -74,11 +74,11 @@ test('returns stale when generation guard is not current after presentation', as
     next = await iterator.next();
   }
 
-  t.is(events.length, 1);
-  t.is((next.value as any).kind, 'stale');
+  expect(events.length).toBe(1);
+  expect((next.value as any).kind).toBe('stale');
 });
 
-test('returns fresh_start when recovery executor signals fresh start', async (t) => {
+it('returns fresh_start when recovery executor signals fresh start', async () => {
   const handler = new ContinuationRecoveryHandler({
     logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
     sessionId: 'test',
@@ -108,13 +108,13 @@ test('returns fresh_start when recovery executor signals fresh start', async (t)
     next = await iterator.next();
   }
 
-  t.is(events.length, 1);
+  expect(events.length).toBe(1);
   const value = next.value as any;
-  t.is(value.kind, 'fresh_start');
-  t.is(value.delayMs, 500);
+  expect(value.kind).toBe('fresh_start');
+  expect(value.delayMs).toBe(500);
 });
 
-test('returns resume when recovery executor signals resume', async (t) => {
+it('returns resume when recovery executor signals resume', async () => {
   const handler = new ContinuationRecoveryHandler({
     logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
     sessionId: 'test',
@@ -147,9 +147,9 @@ test('returns resume when recovery executor signals resume', async (t) => {
     next = await iterator.next();
   }
 
-  t.is(events.length, 1);
+  expect(events.length).toBe(1);
   const value = next.value as any;
-  t.is(value.kind, 'resume');
-  t.is(state.currentState.id, 'run-2');
-  t.deepEqual(state.currentCallIds, []);
+  expect(value.kind).toBe('resume');
+  expect(state.currentState.id).toBe('run-2');
+  expect(state.currentCallIds).toEqual([]);
 });

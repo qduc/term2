@@ -1,37 +1,35 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { useEffect } from 'react';
 import { Box, Text } from 'ink';
-import { renderInAct, rerenderInAct, toVisibleText } from './ink-testing.js';
+import { renderInAct, rerenderInAct, runTeardowns, toVisibleText } from './ink-testing.js';
 
-test('toVisibleText removes terminal styling without changing visible content', (t) => {
-  t.is(toVisibleText('\u001B[32m▶ \u001B[1magent.model\u001B[0m'), '▶ agent.model');
+it('toVisibleText removes terminal styling without changing visible content', () => {
+  expect(toVisibleText('\u001B[32m▶ \u001B[1magent.model\u001B[0m')).toBe('▶ agent.model');
 });
 
-test.serial('renderInAct renders ink output inside act', async (t) => {
+it.sequential('renderInAct renders ink output inside act', async () => {
   const { lastFrame } = await renderInAct(
     <Box>
       <Text>Hello</Text>
     </Box>,
-    t,
   );
 
-  t.is(lastFrame(), 'Hello');
+  expect(lastFrame()).toBe('Hello');
 });
 
-test.serial('rerenderInAct updates ink output inside act', async (t) => {
-  const view = await renderInAct(<Text>Before</Text>, t);
+it.sequential('rerenderInAct updates ink output inside act', async () => {
+  const view = await renderInAct(<Text>Before</Text>);
 
   await rerenderInAct(view, <Text>After</Text>);
 
-  t.is(view.lastFrame(), 'After');
+  expect(view.lastFrame()).toBe('After');
 });
 
 let cleanupCount = 0;
 
-test.serial('renderInAct registers an act-wrapped teardown when given the test context', async (t) => {
+it.sequential('renderInAct registers an act-wrapped teardown when given the test context', async () => {
   const TestComponent = () => {
     useEffect(
       () => () => {
@@ -40,13 +38,14 @@ test.serial('renderInAct registers an act-wrapped teardown when given the test c
       [],
     );
 
-    return <Text>Hello</Text>;
+    return null;
   };
 
-  await renderInAct(<TestComponent />, t);
-  t.is(cleanupCount, 0);
+  await renderInAct(<TestComponent />);
+  expect(cleanupCount).toBe(0);
 });
 
-test.serial('renderInAct runs the registered teardown after the test', (t) => {
-  t.is(cleanupCount, 1);
+it.sequential('renderInAct runs the registered teardown after the test', async () => {
+  await runTeardowns();
+  expect(cleanupCount).toBe(1);
 });

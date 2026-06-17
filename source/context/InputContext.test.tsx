@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { act, useEffect } from 'react';
 import { Text } from 'ink';
 import { InputProvider, useInputContext } from './InputContext.js';
@@ -37,19 +36,19 @@ const TestComponentInsideProvider = ({ onMount }: { onMount: (ctx: any) => void 
   return null;
 };
 
-test.serial('useInputContext throws error when used outside InputProvider', async (t) => {
+it.sequential('useInputContext throws error when used outside InputProvider', async () => {
   // Suppress console.error for React hook warnings/errors
   const originalError = console.error;
   console.error = () => {};
 
-  await renderInAct(<TestComponentOutsideProvider />, t);
-  t.truthy(thrownError);
-  t.is(thrownError!.message, 'useInputContext must be used within an InputProvider');
+  await renderInAct(<TestComponentOutsideProvider />);
+  expect(thrownError).toBeTruthy();
+  expect(thrownError!.message).toBe('useInputContext must be used within an InputProvider');
 
   console.error = originalError;
 });
 
-test.serial('InputProvider provides context with default values', async (t) => {
+it.sequential('InputProvider provides context with default values', async () => {
   let capturedContext: any;
 
   await renderInAct(
@@ -60,17 +59,16 @@ test.serial('InputProvider provides context with default values', async (t) => {
         }}
       />
     </InputProvider>,
-    t,
   );
 
-  t.truthy(capturedContext);
-  t.is(capturedContext.input, '');
-  t.is(capturedContext.mode, 'text');
-  t.is(capturedContext.cursorOffset, 0);
-  t.is(capturedContext.triggerIndex, null);
+  expect(capturedContext).toBeTruthy();
+  expect(capturedContext.input).toBe('');
+  expect(capturedContext.mode).toBe('text');
+  expect(capturedContext.cursorOffset).toBe(0);
+  expect(capturedContext.triggerIndex).toBe(null);
 });
 
-test.serial('InputProvider provides all required setter functions', async (t) => {
+it.sequential('InputProvider provides all required setter functions', async () => {
   let capturedContext: any;
 
   await renderInAct(
@@ -81,17 +79,16 @@ test.serial('InputProvider provides all required setter functions', async (t) =>
         }}
       />
     </InputProvider>,
-    t,
   );
 
-  t.truthy(capturedContext);
-  t.is(typeof capturedContext.setInput, 'function');
-  t.is(typeof capturedContext.setMode, 'function');
-  t.is(typeof capturedContext.setCursorOffset, 'function');
-  t.is(typeof capturedContext.setTriggerIndex, 'function');
+  expect(capturedContext).toBeTruthy();
+  expect(typeof capturedContext.setInput).toBe('function');
+  expect(typeof capturedContext.setMode).toBe('function');
+  expect(typeof capturedContext.setCursorOffset).toBe('function');
+  expect(typeof capturedContext.setTriggerIndex).toBe('function');
 });
 
-test.serial('setInput updates input value', async (t) => {
+it.sequential('setInput updates input value', async () => {
   const TestUpdater = () => {
     const { input, setInput } = useInputContext();
 
@@ -106,17 +103,16 @@ test.serial('setInput updates input value', async (t) => {
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
-    t,
   );
 
   await flushReactUpdates(5);
 
   const output = lastFrame();
-  t.truthy(output);
-  t.true(output!.includes('hello world'));
+  expect(output).toBeTruthy();
+  expect(output!.includes('hello world')).toBe(true);
 });
 
-test.serial('setInput accepts empty strings', async (t) => {
+it.sequential('setInput accepts empty strings', async () => {
   const TestUpdater = () => {
     const { input, setInput } = useInputContext();
 
@@ -131,15 +127,14 @@ test.serial('setInput accepts empty strings', async (t) => {
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
-    t,
   );
 
   await flushReactUpdates(5);
 
-  t.true(lastFrame()!.includes('EMPTY'));
+  expect(lastFrame()!.includes('EMPTY')).toBe(true);
 });
 
-test.serial('setInput accepts strings with special characters', async (t) => {
+it.sequential('setInput accepts strings with special characters', async () => {
   const TestUpdater = () => {
     const { input, setInput } = useInputContext();
 
@@ -154,16 +149,15 @@ test.serial('setInput accepts strings with special characters', async (t) => {
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
-    t,
   );
 
   await flushReactUpdates(5);
 
-  t.truthy(lastFrame());
-  t.true(lastFrame()!.includes('/settings @path/to/file.ts'));
+  expect(lastFrame()).toBeTruthy();
+  expect(lastFrame()!.includes('/settings @path/to/file.ts')).toBe(true);
 });
 
-test.serial('setMode accepts all mode values', async (t) => {
+it.sequential('setMode accepts all mode values', async () => {
   const TestUpdater = () => {
     const { mode, setMode } = useInputContext();
 
@@ -181,16 +175,15 @@ test.serial('setMode accepts all mode values', async (t) => {
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
-    t,
   );
 
   await flushReactUpdates(5);
 
-  t.truthy(lastFrame());
-  t.true(lastFrame()!.includes('text'));
+  expect(lastFrame()).toBeTruthy();
+  expect(lastFrame()!.includes('text')).toBe(true);
 });
 
-test.serial('setCursorOffset accepts positive values', async (t) => {
+it.sequential('setCursorOffset accepts positive values', async () => {
   const TestUpdater = () => {
     const { cursorOffset, setCursorOffset } = useInputContext();
 
@@ -205,15 +198,14 @@ test.serial('setCursorOffset accepts positive values', async (t) => {
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
-    t,
   );
 
   await flushReactUpdates(5);
 
-  t.true(lastFrame()!.includes('42'));
+  expect(lastFrame()!.includes('42')).toBe(true);
 });
 
-test.serial('setCursorOffset accepts zero', async (t) => {
+it.sequential('setCursorOffset accepts zero', async () => {
   const TestUpdater = () => {
     const { cursorOffset, setCursorOffset } = useInputContext();
 
@@ -228,15 +220,14 @@ test.serial('setCursorOffset accepts zero', async (t) => {
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
-    t,
   );
 
   await flushReactUpdates(5);
 
-  t.true(lastFrame()!.includes('0'));
+  expect(lastFrame()!.includes('0')).toBe(true);
 });
 
-test.serial('setTriggerIndex accepts null value', async (t) => {
+it.sequential('setTriggerIndex accepts null value', async () => {
   const TestUpdater = () => {
     const { triggerIndex, setTriggerIndex } = useInputContext();
 
@@ -251,15 +242,14 @@ test.serial('setTriggerIndex accepts null value', async (t) => {
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
-    t,
   );
 
   await flushReactUpdates(5);
 
-  t.true(lastFrame()!.includes('NULL'));
+  expect(lastFrame()!.includes('NULL')).toBe(true);
 });
 
-test.serial('setTriggerIndex accepts index values', async (t) => {
+it.sequential('setTriggerIndex accepts index values', async () => {
   const TestUpdater = () => {
     const { triggerIndex, setTriggerIndex } = useInputContext();
 
@@ -274,15 +264,14 @@ test.serial('setTriggerIndex accepts index values', async (t) => {
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
-    t,
   );
 
   await flushReactUpdates(5);
 
-  t.true(lastFrame()!.includes('10'));
+  expect(lastFrame()!.includes('10')).toBe(true);
 });
 
-test.serial('Multiple components can use the context', async (t) => {
+it.sequential('Multiple components can use the context', async () => {
   const Component1 = () => {
     const { input } = useInputContext();
     return <Text>{input || 'C1'}</Text>;
@@ -298,9 +287,8 @@ test.serial('Multiple components can use the context', async (t) => {
       <Component1 />
       <Component2 />
     </InputProvider>,
-    t,
   );
 
-  t.truthy(lastFrame());
-  t.pass();
+  expect(lastFrame()).toBeTruthy();
+  expect(true).toBe(true);
 });

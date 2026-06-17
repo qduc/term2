@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { useEffect, useRef, act } from 'react';
 import { Box, Text } from 'ink';
 import InputBox, { getProviderWizardPromptLabel } from './InputBox.js';
@@ -171,35 +170,35 @@ const writeInput = async (stdin: { write: (input: string) => void }, input: stri
   });
 };
 
-test.serial('InputBox shows the input prompt', async (t) => {
-  const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} />, t);
+it.sequential('InputBox shows the input prompt', async () => {
+  const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} />);
   const output = lastFrame();
   // Should show the prompt character
-  t.true(output!.includes('❯'));
+  expect(output!.includes('❯')).toBe(true);
 });
 
-test.serial('InputBox shows the shell prompt when in shell mode', async (t) => {
-  const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} isShellMode />, t);
+it.sequential('InputBox shows the shell prompt when in shell mode', async () => {
+  const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} isShellMode />);
   const output = lastFrame();
-  t.truthy(output);
-  t.true(output!.includes('$'));
+  expect(output).toBeTruthy();
+  expect(output!.includes('$')).toBe(true);
 });
 
-test.serial('getProviderWizardPromptLabel maps provider wizard phases to prompt labels', (t) => {
-  t.is(getProviderWizardPromptLabel('wizard_name'), 'Enter Provider Name: ');
-  t.is(getProviderWizardPromptLabel('wizard_url'), 'Enter Base API URL: ');
-  t.is(getProviderWizardPromptLabel('wizard_key'), 'Enter API Key: ');
-  t.is(getProviderWizardPromptLabel('list' as any), undefined);
+it.sequential('getProviderWizardPromptLabel maps provider wizard phases to prompt labels', () => {
+  expect(getProviderWizardPromptLabel('wizard_name')).toBe('Enter Provider Name: ');
+  expect(getProviderWizardPromptLabel('wizard_url')).toBe('Enter Base API URL: ');
+  expect(getProviderWizardPromptLabel('wizard_key')).toBe('Enter API Key: ');
+  expect(getProviderWizardPromptLabel('list' as any)).toBe(undefined);
 });
 
-test.serial('InputBox renders the provided prompt label', async (t) => {
-  const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} promptLabel="Enter Provider Name: " />, t);
+it.sequential('InputBox renders the provided prompt label', async () => {
+  const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} promptLabel="Enter Provider Name: " />);
   const output = lastFrame();
-  t.truthy(output);
-  t.true(output!.includes('Enter Provider Name:'));
+  expect(output).toBeTruthy();
+  expect(output!.includes('Enter Provider Name:')).toBe(true);
 });
 
-test.serial('InputBox onSubmit is not called on empty input when allowEmptySubmit is false', async (t) => {
+it.sequential('InputBox onSubmit is not called on empty input when allowEmptySubmit is false', async () => {
   let submitted = false;
   const onSubmit = () => {
     submitted = true;
@@ -207,15 +206,14 @@ test.serial('InputBox onSubmit is not called on empty input when allowEmptySubmi
 
   const { stdin } = await renderAndFlush(
     <TestInputBox {...defaultProps} onSubmit={onSubmit} allowEmptySubmit={false} />,
-    t,
   );
 
   await writeInput(stdin, '\r');
 
-  t.false(submitted);
+  expect(submitted).toBe(false);
 });
 
-test.serial('InputBox onSubmit is called on empty input when allowEmptySubmit is true', async (t) => {
+it.sequential('InputBox onSubmit is called on empty input when allowEmptySubmit is true', async () => {
   let submitted = false;
   let submittedTurn: any = null;
   const onSubmit = (turn: any) => {
@@ -225,16 +223,15 @@ test.serial('InputBox onSubmit is called on empty input when allowEmptySubmit is
 
   const { stdin } = await renderAndFlush(
     <TestInputBox {...defaultProps} onSubmit={onSubmit} allowEmptySubmit={true} />,
-    t,
   );
 
   await writeInput(stdin, '\r');
 
-  t.true(submitted);
-  t.deepEqual(submittedTurn, { text: '' });
+  expect(submitted).toBe(true);
+  expect(submittedTurn).toEqual({ text: '' });
 });
 
-test.serial('InputBox keeps cursor fixed when left arrow switches model provider', async (t) => {
+it.sequential('InputBox keeps cursor fixed when left arrow switches model provider', async () => {
   const initialValue = '/model gpt-5';
   const { lastFrame, stdin } = await renderAndFlush(
     <TestInputBoxWithCursorState
@@ -249,13 +246,12 @@ test.serial('InputBox keeps cursor fixed when left arrow switches model provider
         },
       ]}
     />,
-    t,
   );
   await writeInput(stdin, initialValue);
   const beforeCursor = getCursorFromFrame(lastFrame());
   await writeInput(stdin, '\u001B[D');
 
-  t.is(getCursorFromFrame(lastFrame()), beforeCursor, lastFrame());
+  expect(getCursorFromFrame(lastFrame()), lastFrame()).toBe(beforeCursor);
 });
 
 const StateDisplay = () => {
@@ -409,17 +405,13 @@ const SettingsValueCommitHarness = ({
   );
 };
 
-test.serial('settings-backed model selection restores settings menu after submit', async (t) => {
+it.sequential('settings-backed model selection restores settings menu after submit', async () => {
   clearModelCache();
   const mockProviderId = `mock-provider-${Date.now()}-${Math.random()}`;
   registerProvider({
     id: mockProviderId,
     label: 'Mock Provider',
     fetchModels: async () => [{ id: 'gpt-test', name: 'GPT Test' }],
-  });
-  t.teardown(() => {
-    clearModelCache();
-    unregisterProvider(mockProviderId);
   });
 
   const settingsService = createMockSettingsService({
@@ -434,29 +426,28 @@ test.serial('settings-backed model selection restores settings menu after submit
         onSubmit={() => {}}
       />
     </InputProvider>,
-    t,
   );
 
   const frame = await waitFor(lastFrame, (f) => f.includes('agent.model'));
   const visibleFrame = toVisibleText(frame);
 
-  t.is(settingsService.get('agent.model'), 'gpt-test');
-  t.is(settingsService.get('agent.provider'), mockProviderId);
-  t.true(visibleFrame.includes('Input:/settings '), `Input should be restored to settings trigger, got: ${frame}`);
-  t.true(visibleFrame.includes('▶ agent.model'), `Selection should target agent.model, got: ${frame}`);
+  expect(settingsService.get('agent.model')).toBe('gpt-test');
+  expect(settingsService.get('agent.provider')).toBe(mockProviderId);
+  expect(visibleFrame.includes('Input:/settings ')).toBe(true);
+  expect(visibleFrame.includes('▶ agent.model')).toBe(true);
+
+  // Cleanup after test
+  clearModelCache();
+  unregisterProvider(mockProviderId);
 });
 
-test.serial('command-backed model selection still submits after selection', async (t) => {
+it.sequential('command-backed model selection still submits after selection', async () => {
   clearModelCache();
   const mockProviderId = `mock-provider-2-${Date.now()}-${Math.random()}`;
   registerProvider({
     id: mockProviderId,
     label: 'Mock Provider 2',
     fetchModels: async () => [{ id: 'gpt-test-2', name: 'GPT Test 2' }],
-  });
-  t.teardown(() => {
-    clearModelCache();
-    unregisterProvider(mockProviderId);
   });
 
   let submitted = false;
@@ -474,7 +465,6 @@ test.serial('command-backed model selection still submits after selection', asyn
         }}
       />
     </InputProvider>,
-    t,
   );
 
   await waitForCondition(
@@ -482,11 +472,15 @@ test.serial('command-backed model selection still submits after selection', asyn
     (v) => v,
   );
 
-  t.true(submitted, 'onSubmit should be called for command-backed model selection');
-  t.is(settingsService.get('agent.provider'), mockProviderId);
+  expect(submitted).toBe(true);
+  expect(settingsService.get('agent.provider')).toBe(mockProviderId);
+
+  // Cleanup after test
+  clearModelCache();
+  unregisterProvider(mockProviderId);
 });
 
-test.serial('settings value completion saves setting and reopens settings menu targeting the saved key', async (t) => {
+it.sequential('settings value completion saves setting and reopens settings menu targeting the saved key', async () => {
   const settingsService = createMockSettingsService({
     'shell.timeout': 120000,
   });
@@ -495,46 +489,47 @@ test.serial('settings value completion saves setting and reopens settings menu t
     <InputProvider>
       <SettingsValueCommitHarness settingsService={settingsService} reset={false} />
     </InputProvider>,
-    t,
   );
 
   const frame = await waitFor(lastFrame, (f) => f.includes('shell.timeout'));
   const visibleFrame = toVisibleText(frame);
 
   // The setting should be updated to 60000
-  t.is(settingsService.get('shell.timeout'), 60000);
+  expect(settingsService.get('shell.timeout')).toBe(60000);
 
   // The menu should be restored targeting 'shell.timeout'
-  t.true(visibleFrame.includes('Input:/settings'), `Input should be restored to settings trigger, got: ${frame}`);
-  t.true(visibleFrame.includes('▶ shell.timeout'), `Selection should remain on shell.timeout, got: ${frame}`);
+  expect(visibleFrame.includes('Input:/settings')).toBe(true);
+  expect(visibleFrame.includes('▶ shell.timeout')).toBe(true);
 });
 
-test.serial('settings value completion resets setting and reopens settings menu targeting the reset key', async (t) => {
-  const settingsService = createMockSettingsService({
-    'shell.timeout': 60000,
-  });
+it.sequential(
+  'settings value completion resets setting and reopens settings menu targeting the reset key',
+  async () => {
+    const settingsService = createMockSettingsService({
+      'shell.timeout': 60000,
+    });
 
-  const { lastFrame } = await renderAndFlush(
-    <InputProvider>
-      <SettingsValueCommitHarness settingsService={settingsService} reset={true} />
-    </InputProvider>,
-    t,
-  );
+    const { lastFrame } = await renderAndFlush(
+      <InputProvider>
+        <SettingsValueCommitHarness settingsService={settingsService} reset={true} />
+      </InputProvider>,
+    );
 
-  const frame = await waitFor(lastFrame, (f) => f.includes('shell.timeout'));
-  const visibleFrame = toVisibleText(frame);
+    const frame = await waitFor(lastFrame, (f) => f.includes('shell.timeout'));
+    const visibleFrame = toVisibleText(frame);
 
-  // The setting should be reset to default (120000)
-  t.is(settingsService.get('shell.timeout'), 120000);
+    // The setting should be reset to default (120000)
+    expect(settingsService.get('shell.timeout')).toBe(120000);
 
-  // The menu should be restored targeting 'shell.timeout'
-  t.true(visibleFrame.includes('Input:/settings'), `Input should be restored to settings trigger, got: ${frame}`);
-  t.true(visibleFrame.includes('▶ shell.timeout'), `Selection should remain on shell.timeout, got: ${frame}`);
-});
+    // The menu should be restored targeting 'shell.timeout'
+    expect(visibleFrame.includes('Input:/settings')).toBe(true);
+    expect(visibleFrame.includes('▶ shell.timeout')).toBe(true);
+  },
+);
 
-test.serial(
+it.sequential(
   'settings value completion prefers typed custom numeric value over the selected current value',
-  async (t) => {
+  async () => {
     const settingsService = createMockSettingsService({
       'shell.timeout': 120000,
     });
@@ -558,7 +553,6 @@ test.serial(
           slashCommands={[...mockSlashCommands, mockSettingsCommand]}
         />
       </InputProvider>,
-      t,
     );
 
     await writeInput(stdin, '/settings shell.timeout 60000');
@@ -569,11 +563,11 @@ test.serial(
       (v) => v === 60000,
     );
 
-    t.is(settingsService.get('shell.timeout'), 60000);
+    expect(settingsService.get('shell.timeout')).toBe(60000);
   },
 );
 
-test.serial('settings value completion persists startup-only settings for the next session', async (t) => {
+it.sequential('settings value completion persists startup-only settings for the next session', async () => {
   const settingsService = createMockSettingsService({
     'agent.maxTurns': 100,
   });
@@ -597,7 +591,6 @@ test.serial('settings value completion persists startup-only settings for the ne
         slashCommands={[...mockSlashCommands, mockSettingsCommand]}
       />
     </InputProvider>,
-    t,
   );
 
   await writeInput(stdin, '/settings agent.maxTurns 30');
@@ -608,10 +601,10 @@ test.serial('settings value completion persists startup-only settings for the ne
     (v) => v === 30,
   );
 
-  t.is(settingsService.get('agent.maxTurns'), 30);
+  expect(settingsService.get('agent.maxTurns')).toBe(30);
 });
 
-test.serial('settings value completion shows restart notice for startup-only settings', async (t) => {
+it.sequential('settings value completion shows restart notice for startup-only settings', async () => {
   const settingsService = createMockSettingsService({
     'agent.maxTurns': 100,
   });
@@ -639,7 +632,6 @@ test.serial('settings value completion shows restart notice for startup-only set
         }}
       />
     </InputProvider>,
-    t,
   );
 
   await writeInput(stdin, '/settings agent.maxTurns 30');
@@ -650,10 +642,10 @@ test.serial('settings value completion shows restart notice for startup-only set
     (msgs) => msgs.length > 0,
   );
 
-  t.deepEqual(systemMessages, ['Saved agent.maxTurns = 30. This setting applies after restart.']);
+  expect(systemMessages).toEqual(['Saved agent.maxTurns = 30. This setting applies after restart.']);
 });
 
-test.serial('InputBox ignores focus sequences when not in text mode', async (t) => {
+it.sequential('InputBox ignores focus sequences when not in text mode', async () => {
   const TestHarness = () => (
     <InputProvider>
       <StateDisplay />
@@ -661,28 +653,28 @@ test.serial('InputBox ignores focus sequences when not in text mode', async (t) 
     </InputProvider>
   );
 
-  const { lastFrame, stdin } = await renderAndFlush(<TestHarness />, t);
+  const { lastFrame, stdin } = await renderAndFlush(<TestHarness />);
 
   // Trigger slash commands mode by writing "/"
   await writeInput(stdin, '/');
   let frame = await waitFor(lastFrame, (f) => f.includes('slash_commands'));
-  t.true(frame.includes('Input:/|Mode:slash_commands'), frame);
+  expect(frame.includes('Input:/|Mode:slash_commands')).toBe(true);
 
   // Write focus-in sequence — should be ignored
   await writeInput(stdin, '\x1b[I');
   await flushReactUpdates(10);
   frame = lastFrame() ?? '';
-  t.true(frame.includes('Input:/|Mode:slash_commands'), frame);
+  expect(frame.includes('Input:/|Mode:slash_commands')).toBe(true);
 
   // Write focus-out sequence — should be ignored
   await writeInput(stdin, '\x1b[O');
   await flushReactUpdates(10);
   frame = lastFrame() ?? '';
   // Input should still be "/"
-  t.true(frame.includes('Input:/|Mode:slash_commands'), frame);
+  expect(frame.includes('Input:/|Mode:slash_commands')).toBe(true);
 });
 
-test.serial('InputBox ignores focus sequences when in text mode', async (t) => {
+it.sequential('InputBox ignores focus sequences when in text mode', async () => {
   const TestHarness = () => (
     <InputProvider>
       <StateDisplay />
@@ -690,31 +682,31 @@ test.serial('InputBox ignores focus sequences when in text mode', async (t) => {
     </InputProvider>
   );
 
-  const { lastFrame, stdin } = await renderAndFlush(<TestHarness />, t);
+  const { lastFrame, stdin } = await renderAndFlush(<TestHarness />);
   let frame = lastFrame() ?? '';
-  t.true(frame.includes('Input:|Mode:text'), frame);
+  expect(frame.includes('Input:|Mode:text')).toBe(true);
 
   // Write focus-in sequence — should be ignored
   await writeInput(stdin, '\x1b[I');
   await flushReactUpdates(10);
   frame = lastFrame() ?? '';
   // Input should still be empty
-  t.true(frame.includes('Input:|Mode:text'), frame);
+  expect(frame.includes('Input:|Mode:text')).toBe(true);
 
   // Write focus-out sequence — should be ignored
   await writeInput(stdin, '\x1b[O');
   await flushReactUpdates(10);
   frame = lastFrame() ?? '';
   // Input should still be empty
-  t.true(frame.includes('Input:|Mode:text'), frame);
+  expect(frame.includes('Input:|Mode:text')).toBe(true);
 });
 
-test.serial('settings value completion shows current custom settings value in suggestions list', async (t) => {
+it.sequential('settings value completion shows current custom settings value in suggestions list', async () => {
   const originalColumns = process.stdout.columns;
   process.stdout.columns = 80;
-  t.teardown(() => {
-    process.stdout.columns = originalColumns;
-  });
+
+  // Cleanup after test
+  process.stdout.columns = originalColumns;
 
   const settingsService = createMockSettingsService({
     'agent.maxTurns': 35,
@@ -739,7 +731,6 @@ test.serial('settings value completion shows current custom settings value in su
         slashCommands={[...mockSlashCommands, mockSettingsCommand]}
       />
     </InputProvider>,
-    t,
   );
 
   // Write trigger value to enter settings value completion mode
@@ -747,13 +738,10 @@ test.serial('settings value completion shows current custom settings value in su
   const frame = await waitFor(lastFrame, (f) => f.includes('Current value'), { timeoutMs: 5000 });
   const visibleFrame = toVisibleText(frame);
 
-  t.true(
-    visibleFrame.includes('35 — Current value'),
-    `Should show current custom value in completion list, got:\n${frame}`,
-  );
+  expect(visibleFrame.includes('35 — Current value')).toBe(true);
 });
 
-test.serial('InputBox allows backspace and delete keys to modify input in provider wizard phases', async (t) => {
+it.sequential('InputBox allows backspace and delete keys to modify input in provider wizard phases', async () => {
   const providersMenuRef = { current: null as any };
   const settingsService = createMockSettingsService();
 
@@ -762,7 +750,6 @@ test.serial('InputBox allows backspace and delete keys to modify input in provid
       <StateDisplay />
       <InputBox {...defaultProps} settingsService={settingsService} providersMenuRef={providersMenuRef} />
     </InputProvider>,
-    t,
   );
 
   const pressKey = async (keyStr: string) => {
@@ -786,27 +773,27 @@ test.serial('InputBox allows backspace and delete keys to modify input in provid
   await pressKey('\r'); // Enter
 
   let frame = await waitFor(lastFrame, (f) => f.includes('provider_selection'));
-  t.true(frame.includes('Mode:provider_selection'), `Mode should be provider_selection, got:\n${frame}`);
-  t.true(frame.includes('Step 1: Provider Name'), `Phase should be wizard_name, got:\n${frame}`);
+  expect(frame.includes('Mode:provider_selection')).toBe(true);
+  expect(frame.includes('Step 1: Provider Name')).toBe(true);
 
   // Type character 'a'
   await pressKey('a');
   frame = lastFrame() ?? '';
-  t.true(frame.includes('Input:a'), `Input should contain 'a', got:\n${frame}`);
+  expect(frame.includes('Input:a')).toBe(true);
 
   // Press Backspace (\x7f)
   await pressKey('\x7f');
   frame = lastFrame() ?? '';
-  t.true(frame.includes('Input:|'), `Input should be empty after backspace, got:\n${frame}`);
+  expect(frame.includes('Input:|')).toBe(true);
 
   // Type character 'b'
   await pressKey('b');
   frame = lastFrame() ?? '';
-  t.true(frame.includes('Input:b'), `Input should contain 'b', got:\n${frame}`);
+  expect(frame.includes('Input:b')).toBe(true);
 
   // Move cursor left (\u001B[D) and press Delete (\u001B[3~)
   await pressKey('\u001B[D'); // Left arrow
   await pressKey('\u001B[3~'); // Delete
   frame = lastFrame() ?? '';
-  t.true(frame.includes('Input:|'), `Input should be empty after delete, got:\n${frame}`);
+  expect(frame.includes('Input:|')).toBe(true);
 });

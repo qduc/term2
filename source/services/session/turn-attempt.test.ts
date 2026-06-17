@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { TurnAttempt } from './turn-attempt.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
@@ -24,7 +24,7 @@ const mockRetryCounts: RetryCounts = {
   transportDowngradeCount: 0,
 };
 
-test('TurnAttempt construction and getters', (t) => {
+it('TurnAttempt construction and getters', () => {
   const attempt = new TurnAttempt({
     turn: mockTurn,
     token: 42,
@@ -34,21 +34,21 @@ test('TurnAttempt construction and getters', (t) => {
     maxModelRetries: 5,
   });
 
-  t.is(attempt.turn, mockTurn);
-  t.is(attempt.token, 42);
-  t.deepEqual(attempt.initialRetryCounts, mockRetryCounts);
-  t.deepEqual(attempt.initialLedgerSnapshot, mockLedger);
-  t.is(attempt.maxTransientRetries, 3);
-  t.is(attempt.maxModelRetries, 5);
-  t.deepEqual(attempt.retryCounts, mockRetryCounts);
-  t.is(attempt.stream, null);
-  t.is(attempt.streamInput, undefined);
-  t.is(attempt.inputMode, undefined);
-  t.is(attempt.addedUserMessage, false);
-  t.is(attempt.closed, false);
+  expect(attempt.turn).toBe(mockTurn);
+  expect(attempt.token).toBe(42);
+  expect(attempt.initialRetryCounts).toEqual(mockRetryCounts);
+  expect(attempt.initialLedgerSnapshot).toEqual(mockLedger);
+  expect(attempt.maxTransientRetries).toBe(3);
+  expect(attempt.maxModelRetries).toBe(5);
+  expect(attempt.retryCounts).toEqual(mockRetryCounts);
+  expect(attempt.stream).toBe(null);
+  expect(attempt.streamInput).toBe(undefined);
+  expect(attempt.inputMode).toBe(undefined);
+  expect(attempt.addedUserMessage).toBe(false);
+  expect(attempt.closed).toBe(false);
 });
 
-test('markUserMessageAdded sets addedUserMessage to true', (t) => {
+it('markUserMessageAdded sets addedUserMessage to true', () => {
   const attempt = new TurnAttempt({
     turn: mockTurn,
     token: 1,
@@ -57,12 +57,12 @@ test('markUserMessageAdded sets addedUserMessage to true', (t) => {
     maxTransientRetries: 3,
   });
 
-  t.is(attempt.addedUserMessage, false);
+  expect(attempt.addedUserMessage).toBe(false);
   attempt.markUserMessageAdded();
-  t.is(attempt.addedUserMessage, true);
+  expect(attempt.addedUserMessage).toBe(true);
 });
 
-test('attachInput sets streamInput and inputMode', (t) => {
+it('attachInput sets streamInput and inputMode', () => {
   const attempt = new TurnAttempt({
     turn: mockTurn,
     token: 1,
@@ -77,11 +77,11 @@ test('attachInput sets streamInput and inputMode', (t) => {
     effectiveTurn: mockTurn,
   });
 
-  t.is(attempt.streamInput, 'planned-input');
-  t.is(attempt.inputMode, 'delta');
+  expect(attempt.streamInput).toBe('planned-input');
+  expect(attempt.inputMode).toBe('delta');
 });
 
-test('attachStream updates the current stream reference', (t) => {
+it('attachStream updates the current stream reference', () => {
   const attempt = new TurnAttempt({
     turn: mockTurn,
     token: 1,
@@ -92,13 +92,13 @@ test('attachStream updates the current stream reference', (t) => {
 
   const stream = new MockStream([]) as unknown as AgentStream;
   attempt.attachStream(stream);
-  t.is(attempt.stream, stream);
+  expect(attempt.stream).toBe(stream);
 
   attempt.attachStream(null);
-  t.is(attempt.stream, null);
+  expect(attempt.stream).toBe(null);
 });
 
-test('advanceRetry updates retryCounts without replacing initial snapshot', (t) => {
+it('advanceRetry updates retryCounts without replacing initial snapshot', () => {
   const attempt = new TurnAttempt({
     turn: mockTurn,
     token: 1,
@@ -116,12 +116,12 @@ test('advanceRetry updates retryCounts without replacing initial snapshot', (t) 
 
   attempt.advanceRetry(nextCounts);
 
-  t.deepEqual(attempt.retryCounts, nextCounts);
-  t.deepEqual(attempt.initialRetryCounts, mockRetryCounts);
-  t.deepEqual(attempt.initialLedgerSnapshot, mockLedger);
+  expect(attempt.retryCounts).toEqual(nextCounts);
+  expect(attempt.initialRetryCounts).toEqual(mockRetryCounts);
+  expect(attempt.initialLedgerSnapshot).toEqual(mockLedger);
 });
 
-test('close is idempotent and removes abort listener', (t) => {
+it('close is idempotent and removes abort listener', () => {
   let abortCalledCount = 0;
   const controller = new AbortController();
   const attempt = new TurnAttempt({
@@ -136,48 +136,45 @@ test('close is idempotent and removes abort listener', (t) => {
     },
   });
 
-  t.is(attempt.closed, false);
+  expect(attempt.closed).toBe(false);
 
   // Close the attempt
   attempt.close();
-  t.is(attempt.closed, true);
+  expect(attempt.closed).toBe(true);
 
   // Trigger abort after close
   controller.abort();
-  t.is(abortCalledCount, 0, 'onAbort should not be called after close()');
+  expect(abortCalledCount, 'onAbort should not be called after close()').toBe(0);
 
   // Idempotent close - should not throw or change anything
-  t.notThrows(() => attempt.close());
-  t.is(attempt.closed, true);
+  expect(() => attempt.close());
+  expect(attempt.closed).toBe(true);
 });
 
-test('constructor throws AbortError for already-aborted signal', (t) => {
+it('constructor throws AbortError for already-aborted signal', () => {
   const controller = new AbortController();
   controller.abort();
 
   let abortCalledCount = 0;
 
-  t.throws(
-    () => {
-      new TurnAttempt({
-        turn: mockTurn,
-        token: 1,
-        initialRetryCounts: mockRetryCounts,
-        initialLedgerSnapshot: [],
-        maxTransientRetries: 3,
-        signal: controller.signal,
-        onAbort: () => {
-          abortCalledCount++;
-        },
-      });
-    },
-    { name: 'AbortError', message: 'Operation aborted' },
-  );
+  expect(() => {
+    new TurnAttempt({
+      turn: mockTurn,
+      token: 1,
+      initialRetryCounts: mockRetryCounts,
+      initialLedgerSnapshot: [],
+      maxTransientRetries: 3,
+      signal: controller.signal,
+      onAbort: () => {
+        abortCalledCount++;
+      },
+    });
+  }).toThrow('Operation aborted');
 
-  t.is(abortCalledCount, 1, 'onAbort should be called if already aborted');
+  expect(abortCalledCount, 'onAbort should be called if already aborted').toBe(1);
 });
 
-test('onAbort is called when signal is aborted later', (t) => {
+it('onAbort is called when signal is aborted later', () => {
   const controller = new AbortController();
   let abortCalledCount = 0;
 
@@ -193,9 +190,9 @@ test('onAbort is called when signal is aborted later', (t) => {
     },
   });
 
-  t.is(abortCalledCount, 0);
+  expect(abortCalledCount).toBe(0);
   controller.abort();
-  t.is(abortCalledCount, 1);
+  expect(abortCalledCount).toBe(1);
 
   attempt.close();
 });

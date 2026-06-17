@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ModelBehaviorError } from '@openai/agents';
 import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
 import { OpenRouterError, OpenAICompatibleError } from '../../providers/common/provider-errors.js';
@@ -10,208 +10,216 @@ import {
   MAX_HALLUCINATION_RETRIES,
 } from './conversation-retry-policy.js';
 
-test('isRecoverableModelError: non-ModelBehaviorError returns false', (t) => {
-  t.false(isRecoverableModelError(new Error('boom')));
-  t.false(isRecoverableModelError('boom'));
-  t.false(isRecoverableModelError(null));
+it('isRecoverableModelError: non-ModelBehaviorError returns false', () => {
+  expect(isRecoverableModelError(new Error('boom'))).toBe(false);
+  expect(isRecoverableModelError('boom')).toBe(false);
+  expect(isRecoverableModelError(null)).toBe(false);
 });
 
-test('isRecoverableModelError: hallucination message returns true', (t) => {
-  t.true(isRecoverableModelError(new ModelBehaviorError('Tool fake_tool not found')));
+it('isRecoverableModelError: hallucination message returns true', () => {
+  expect(isRecoverableModelError(new ModelBehaviorError('Tool fake_tool not found'))).toBe(true);
 });
 
-test('isRecoverableModelError: parsing tool arguments returns true', (t) => {
-  t.true(isRecoverableModelError(new ModelBehaviorError('Error parsing tool arguments')));
+it('isRecoverableModelError: parsing tool arguments returns true', () => {
+  expect(isRecoverableModelError(new ModelBehaviorError('Error parsing tool arguments'))).toBe(true);
 });
 
-test('isRecoverableModelError: valid json returns true', (t) => {
-  t.true(isRecoverableModelError(new ModelBehaviorError('arguments must be valid json')));
+it('isRecoverableModelError: valid json returns true', () => {
+  expect(isRecoverableModelError(new ModelBehaviorError('arguments must be valid json'))).toBe(true);
 });
 
-test('isRecoverableModelError: model did not produce a final response returns true', (t) => {
-  t.true(isRecoverableModelError(new ModelBehaviorError('Model did not produce a final response')));
+it('isRecoverableModelError: model did not produce a final response returns true', () => {
+  expect(isRecoverableModelError(new ModelBehaviorError('Model did not produce a final response'))).toBe(true);
 });
 
-test('isRecoverableModelError: unrelated ModelBehaviorError returns false', (t) => {
-  t.false(isRecoverableModelError(new ModelBehaviorError('something else')));
+it('isRecoverableModelError: unrelated ModelBehaviorError returns false', () => {
+  expect(isRecoverableModelError(new ModelBehaviorError('something else'))).toBe(false);
 });
 
-test('decideRetry: non-recoverable error returns no_retry', (t) => {
+it('decideRetry: non-recoverable error returns no_retry', () => {
   const decision = decideRetry(new Error('boom'), 0, true, 0);
-  t.is(decision.kind, 'no_retry');
+  expect(decision.kind).toBe('no_retry');
 });
 
-test('decideRetry: at MAX attempts returns no_retry', (t) => {
+it('decideRetry: at MAX attempts returns no_retry', () => {
   const decision = decideRetry(new ModelBehaviorError('Tool x not found'), MAX_HALLUCINATION_RETRIES, true, 0);
-  t.is(decision.kind, 'no_retry');
+  expect(decision.kind).toBe('no_retry');
 });
 
-test('decideRetry: hallucination at attempt 0 returns retry with tool name extracted', (t) => {
+it('decideRetry: hallucination at attempt 0 returns retry with tool name extracted', () => {
   const decision = decideRetry(new ModelBehaviorError('Tool fake_tool not found'), 0, true, 5);
-  t.is(decision.kind, 'retry');
+  expect(decision.kind).toBe('retry');
   if (decision.kind !== 'retry') return;
-  t.is(decision.retryEvent.toolName, 'fake_tool');
-  t.is(decision.retryEvent.attempt, 1);
-  t.is(decision.logPayload.retryType, 'hallucination');
-  t.is(decision.logPayload.toolName, 'fake_tool');
-  t.true(decision.hadStream);
-  t.false(decision.shouldInjectErrorContext);
-  t.deepEqual(decision.nextRunOptions, { retries: { hallucinationRetryCount: 1 }, skipUserMessage: true });
+  expect(decision.retryEvent.toolName).toBe('fake_tool');
+  expect(decision.retryEvent.attempt).toBe(1);
+  expect(decision.logPayload.retryType).toBe('hallucination');
+  expect(decision.logPayload.toolName).toBe('fake_tool');
+  expect(decision.hadStream).toBe(true);
+  expect(decision.shouldInjectErrorContext).toBe(false);
+  expect(decision.nextRunOptions).toEqual({ retries: { hallucinationRetryCount: 1 }, skipUserMessage: true });
 });
 
-test('decideRetry: parsing error returns retry with toolName=model and parsing_error type', (t) => {
+it('decideRetry: parsing error returns retry with toolName=model and parsing_error type', () => {
   const decision = decideRetry(new ModelBehaviorError('Error parsing tool arguments'), 0, true, 0);
-  t.is(decision.kind, 'retry');
+  expect(decision.kind).toBe('retry');
   if (decision.kind !== 'retry') return;
-  t.is(decision.retryEvent.toolName, 'model');
-  t.is(decision.logPayload.retryType, 'parsing_error');
-  t.is(decision.logPayload.toolName, 'unknown');
+  expect(decision.retryEvent.toolName).toBe('model');
+  expect(decision.logPayload.retryType).toBe('parsing_error');
+  expect(decision.logPayload.toolName).toBe('unknown');
 });
 
-test('decideRetry: behavior (model did not produce) returns retry with behavior type', (t) => {
+it('decideRetry: behavior (model did not produce) returns retry with behavior type', () => {
   const decision = decideRetry(new ModelBehaviorError('Model did not produce a final response'), 1, true, 3);
-  t.is(decision.kind, 'retry');
+  expect(decision.kind).toBe('retry');
   if (decision.kind !== 'retry') return;
-  t.is(decision.logPayload.retryType, 'behavior');
-  t.is(decision.attempt, 2);
+  expect(decision.logPayload.retryType).toBe('behavior');
+  expect(decision.attempt).toBe(2);
 });
 
-test('decideRetry: with stream and empty history sets shouldInjectErrorContext', (t) => {
+it('decideRetry: with stream and empty history sets shouldInjectErrorContext', () => {
   const decision = decideRetry(new ModelBehaviorError('Tool x not found'), 0, true, 0);
-  t.is(decision.kind, 'retry');
+  expect(decision.kind).toBe('retry');
   if (decision.kind !== 'retry') return;
-  t.true(decision.shouldInjectErrorContext);
-  t.true(decision.errorContextMessage.includes('Previous attempt failed'));
+  expect(decision.shouldInjectErrorContext).toBe(true);
+  expect(decision.errorContextMessage.includes('Previous attempt failed')).toBe(true);
 });
 
-test('decideRetry: without stream returns retry with skipUserMessage=false', async (t) => {
+it('decideRetry: without stream returns retry with skipUserMessage=false', async () => {
   const decision = decideRetry(new ModelBehaviorError('Tool x not found'), 0, false, 0);
-  t.is(decision.kind, 'retry');
+  expect(decision.kind).toBe('retry');
   if (decision.kind !== 'retry') return;
-  t.false(decision.hadStream);
-  t.false(decision.shouldInjectErrorContext);
-  t.deepEqual(decision.nextRunOptions, { retries: { hallucinationRetryCount: 1 }, skipUserMessage: false });
+  expect(decision.hadStream).toBe(false);
+  expect(decision.shouldInjectErrorContext).toBe(false);
+  expect(decision.nextRunOptions).toEqual({ retries: { hallucinationRetryCount: 1 }, skipUserMessage: false });
 });
 
 // ========== decideRecoverableModelRetry (shared helper) ==========
 
-test('decideRecoverableModelRetry: hallucinated tool extracts tool name', (t) => {
+it('decideRecoverableModelRetry: hallucinated tool extracts tool name', () => {
   const decision = decideRecoverableModelRetry(new ModelBehaviorError('Tool bash not found in agent Explorer.'), 0);
-  t.is(decision.kind, 'retry');
+  expect(decision.kind).toBe('retry');
   if (decision.kind !== 'retry') return;
-  t.is(decision.toolName, 'bash');
-  t.is(decision.retryType, 'hallucination');
-  t.is(decision.attempt, 1);
-  t.is(decision.maxRetries, MAX_HALLUCINATION_RETRIES);
-  t.truthy(decision.message.includes('bash'));
+  expect(decision.toolName).toBe('bash');
+  expect(decision.retryType).toBe('hallucination');
+  expect(decision.attempt).toBe(1);
+  expect(decision.maxRetries).toBe(MAX_HALLUCINATION_RETRIES);
+  expect(decision.message.includes('bash')).toBeTruthy();
 });
 
-test('decideRecoverableModelRetry: parsing error classifies as parsing_error', (t) => {
+it('decideRecoverableModelRetry: parsing error classifies as parsing_error', () => {
   const decision = decideRecoverableModelRetry(new ModelBehaviorError('Error parsing tool arguments'), 0);
-  t.is(decision.kind, 'retry');
+  expect(decision.kind).toBe('retry');
   if (decision.kind !== 'retry') return;
-  t.is(decision.retryType, 'parsing_error');
-  t.is(decision.toolName, 'unknown');
-  t.is(decision.attempt, 1);
+  expect(decision.retryType).toBe('parsing_error');
+  expect(decision.toolName).toBe('unknown');
+  expect(decision.attempt).toBe(1);
 });
 
-test('decideRecoverableModelRetry: behavior error classifies as behavior', (t) => {
+it('decideRecoverableModelRetry: behavior error classifies as behavior', () => {
   const decision = decideRecoverableModelRetry(new ModelBehaviorError('Model did not produce a final response'), 0);
-  t.is(decision.kind, 'retry');
+  expect(decision.kind).toBe('retry');
   if (decision.kind !== 'retry') return;
-  t.is(decision.retryType, 'behavior');
-  t.is(decision.toolName, 'unknown');
-  t.is(decision.attempt, 1);
+  expect(decision.retryType).toBe('behavior');
+  expect(decision.toolName).toBe('unknown');
+  expect(decision.attempt).toBe(1);
 });
 
-test('decideRecoverableModelRetry: max attempts returns no_retry', (t) => {
+it('decideRecoverableModelRetry: max attempts returns no_retry', () => {
   const decision = decideRecoverableModelRetry(
     new ModelBehaviorError('Tool bash not found'),
     MAX_HALLUCINATION_RETRIES,
   );
-  t.is(decision.kind, 'no_retry');
+  expect(decision.kind).toBe('no_retry');
 });
 
-test('decideRecoverableModelRetry: non-recoverable error returns no_retry', (t) => {
-  t.is(decideRecoverableModelRetry(new Error('regular error'), 0).kind, 'no_retry');
-  t.is(decideRecoverableModelRetry(new ModelBehaviorError('unrelated error'), 0).kind, 'no_retry');
+it('decideRecoverableModelRetry: non-recoverable error returns no_retry', () => {
+  expect(decideRecoverableModelRetry(new Error('regular error'), 0).kind).toBe('no_retry');
+  expect(decideRecoverableModelRetry(new ModelBehaviorError('unrelated error'), 0).kind).toBe('no_retry');
 });
 
-test('decideRecoverableModelRetry: respects custom maxRetries=1 and returns no_retry at attempt 1', (t) => {
+it('decideRecoverableModelRetry: respects custom maxRetries=1 and returns no_retry at attempt 1', () => {
   const stillRetry = decideRecoverableModelRetry(new ModelBehaviorError('Tool bash not found'), 0, 1);
-  t.is(stillRetry.kind, 'retry');
+  expect(stillRetry.kind).toBe('retry');
   if (stillRetry.kind !== 'retry') return;
-  t.is(stillRetry.maxRetries, 1);
+  expect(stillRetry.maxRetries).toBe(1);
 
   const exhausted = decideRecoverableModelRetry(new ModelBehaviorError('Tool bash not found'), 1, 1);
-  t.is(exhausted.kind, 'no_retry');
+  expect(exhausted.kind).toBe('no_retry');
 });
 
 function asInstanceOf<T extends object>(prototype: object, props: Partial<T>): T {
   return Object.assign(Object.create(prototype), props) as T;
 }
 
-test('isTransientRetryableError: OpenAI SDK errors are retryable', (t) => {
-  t.true(isTransientRetryableError(asInstanceOf(APIConnectionError.prototype, { message: 'conn error' })));
-  t.true(isTransientRetryableError(asInstanceOf(APIConnectionTimeoutError.prototype, { message: 'timeout' })));
-  t.true(isTransientRetryableError(asInstanceOf(InternalServerError.prototype, { message: 'ise', status: 500 })));
-  t.true(isTransientRetryableError(asInstanceOf(RateLimitError.prototype, { message: 'rate limit', status: 429 })));
+it('isTransientRetryableError: OpenAI SDK errors are retryable', () => {
+  expect(isTransientRetryableError(asInstanceOf(APIConnectionError.prototype, { message: 'conn error' }))).toBe(true);
+  expect(isTransientRetryableError(asInstanceOf(APIConnectionTimeoutError.prototype, { message: 'timeout' }))).toBe(
+    true,
+  );
+  expect(isTransientRetryableError(asInstanceOf(InternalServerError.prototype, { message: 'ise', status: 500 }))).toBe(
+    true,
+  );
+  expect(
+    isTransientRetryableError(asInstanceOf(RateLimitError.prototype, { message: 'rate limit', status: 429 })),
+  ).toBe(true);
 });
 
-test('isTransientRetryableError: OpenRouter 429/5xx are retryable', (t) => {
-  t.true(isTransientRetryableError(new OpenRouterError('rate limited', 429, {})));
-  t.true(isTransientRetryableError(new OpenRouterError('server error', 500, {})));
-  t.true(isTransientRetryableError(new OpenRouterError('bad gateway', 502, {})));
-  t.false(isTransientRetryableError(new OpenRouterError('not found', 404, {})));
+it('isTransientRetryableError: OpenRouter 429/5xx are retryable', () => {
+  expect(isTransientRetryableError(new OpenRouterError('rate limited', 429, {}))).toBe(true);
+  expect(isTransientRetryableError(new OpenRouterError('server error', 500, {}))).toBe(true);
+  expect(isTransientRetryableError(new OpenRouterError('bad gateway', 502, {}))).toBe(true);
+  expect(isTransientRetryableError(new OpenRouterError('not found', 404, {}))).toBe(false);
 });
 
-test('isTransientRetryableError: OpenAI-compatible 429/5xx are retryable', (t) => {
-  t.true(isTransientRetryableError(new OpenAICompatibleError('rate limited', 429, {})));
-  t.true(isTransientRetryableError(new OpenAICompatibleError('server error', 503, {})));
-  t.false(isTransientRetryableError(new OpenAICompatibleError('bad request', 400, {})));
+it('isTransientRetryableError: OpenAI-compatible 429/5xx are retryable', () => {
+  expect(isTransientRetryableError(new OpenAICompatibleError('rate limited', 429, {}))).toBe(true);
+  expect(isTransientRetryableError(new OpenAICompatibleError('server error', 503, {}))).toBe(true);
+  expect(isTransientRetryableError(new OpenAICompatibleError('bad request', 400, {}))).toBe(false);
 });
 
-test('isTransientRetryableError: generic errors with 429/5xx status are retryable', (t) => {
+it('isTransientRetryableError: generic errors with 429/5xx status are retryable', () => {
   const err429 = new Error('too many requests');
   (err429 as any).status = 429;
-  t.true(isTransientRetryableError(err429));
+  expect(isTransientRetryableError(err429)).toBe(true);
 
   const err503 = new Error('service unavailable');
   (err503 as any).statusCode = 503;
-  t.true(isTransientRetryableError(err503));
+  expect(isTransientRetryableError(err503)).toBe(true);
 });
 
-test('isTransientRetryableError: generic errors with rate-limit message are retryable', (t) => {
-  t.true(
+it('isTransientRetryableError: generic errors with rate-limit message are retryable', () => {
+  expect(
     isTransientRetryableError(new Error("We're currently processing too many requests — please try again later.")),
-  );
-  t.true(isTransientRetryableError(new Error('Rate limit exceeded')));
-  t.true(isTransientRetryableError(new Error('rate_limit retry after 10s')));
+  ).toBe(true);
+  expect(isTransientRetryableError(new Error('Rate limit exceeded'))).toBe(true);
+  expect(isTransientRetryableError(new Error('rate_limit retry after 10s'))).toBe(true);
 });
 
-test('isTransientRetryableError: websocket response completion closes are retryable unless policy close code is present', (t) => {
-  t.true(isTransientRetryableError(new Error('WebSocket connection closed before response completed')));
-  t.true(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1006)')));
-  t.false(
+it('isTransientRetryableError: websocket response completion closes are retryable unless policy close code is present', () => {
+  expect(isTransientRetryableError(new Error('WebSocket connection closed before response completed'))).toBe(true);
+  expect(
+    isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1006)')),
+  ).toBe(true);
+  expect(
     isTransientRetryableError(
       new Error('WebSocket connection closed before response completed (code=1008, reason="rate limit exceeded")'),
     ),
-  );
+  ).toBe(false);
 });
 
-test('isTransientRetryableError: terminated errors are retryable', (t) => {
-  t.true(isTransientRetryableError('terminated'));
-  t.true(isTransientRetryableError('terminated: other side closed'));
-  t.true(isTransientRetryableError(new Error('terminated')));
-  t.true(isTransientRetryableError(new Error('terminated: other side closed')));
+it('isTransientRetryableError: terminated errors are retryable', () => {
+  expect(isTransientRetryableError('terminated')).toBe(true);
+  expect(isTransientRetryableError('terminated: other side closed')).toBe(true);
+  expect(isTransientRetryableError(new Error('terminated'))).toBe(true);
+  expect(isTransientRetryableError(new Error('terminated: other side closed'))).toBe(true);
 });
 
-test('isTransientRetryableError: non-retryable errors return false', (t) => {
-  t.false(isTransientRetryableError(new Error('something else')));
-  t.false(isTransientRetryableError(new ModelBehaviorError('Tool x not found')));
-  t.false(isTransientRetryableError(null));
-  t.false(isTransientRetryableError('string error'));
-  t.false(isTransientRetryableError('unterminated string'));
-  t.false(isTransientRetryableError(new Error('unterminated string')));
-  t.false(isTransientRetryableError(42));
+it('isTransientRetryableError: non-retryable errors return false', () => {
+  expect(isTransientRetryableError(new Error('something else'))).toBe(false);
+  expect(isTransientRetryableError(new ModelBehaviorError('Tool x not found'))).toBe(false);
+  expect(isTransientRetryableError(null)).toBe(false);
+  expect(isTransientRetryableError('string error')).toBe(false);
+  expect(isTransientRetryableError('unterminated string')).toBe(false);
+  expect(isTransientRetryableError(new Error('unterminated string'))).toBe(false);
+  expect(isTransientRetryableError(42)).toBe(false);
 });

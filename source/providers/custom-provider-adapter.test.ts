@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { withTrace } from '@openai/agents-core';
 import { OpenAIProvider, OpenAIChatCompletionsModel, OpenAIResponsesModel } from '@openai/agents-openai';
 
@@ -17,18 +17,18 @@ const baseConfig = {
   apiKey: 'test-key',
 } satisfies CustomProviderConfig;
 
-test('createCustomProviderModelProvider uses native chat-completions OpenAIProvider by default', async (t) => {
+it('createCustomProviderModelProvider uses native chat-completions OpenAIProvider by default', async () => {
   const provider = createCustomProviderModelProvider(baseConfig, {
     defaultModel: 'model-a',
     fetch: async () => new Response('{}'),
   });
 
-  t.true(provider instanceof OpenAIProvider);
+  expect(provider instanceof OpenAIProvider).toBe(true);
   const model = await (provider as OpenAIProvider).getModel('model-a');
-  t.true(model instanceof OpenAIChatCompletionsModel, 'default branch must resolve to chat-completions, not responses');
+  expect(model instanceof OpenAIChatCompletionsModel).toBe(true);
 });
 
-test('createCustomProviderModelProvider uses native responses OpenAIProvider for openai type', async (t) => {
+it('createCustomProviderModelProvider uses native responses OpenAIProvider for openai type', async () => {
   const provider = createCustomProviderModelProvider(
     {
       ...baseConfig,
@@ -40,12 +40,12 @@ test('createCustomProviderModelProvider uses native responses OpenAIProvider for
     },
   );
 
-  t.true(provider instanceof OpenAIProvider);
+  expect(provider instanceof OpenAIProvider).toBe(true);
   const model = await (provider as OpenAIProvider).getModel('model-a');
-  t.true(model instanceof OpenAIResponsesModel, 'openai type must use the Responses API');
+  expect(model instanceof OpenAIResponsesModel).toBe(true);
 });
 
-test('sanitizeResponsesApiBody preserves empty replayed response messages that still carry reasoning', (t) => {
+it('sanitizeResponsesApiBody preserves empty replayed response messages that still carry reasoning', () => {
   const body = sanitizeResponsesApiBody({
     input: [
       { role: 'user', type: 'message', content: 'start' },
@@ -62,7 +62,7 @@ test('sanitizeResponsesApiBody preserves empty replayed response messages that s
     ],
   });
 
-  t.deepEqual(body.input, [
+  expect(body.input).toEqual([
     { role: 'user', type: 'message', content: 'start' },
     {
       role: 'assistant',
@@ -77,7 +77,7 @@ test('sanitizeResponsesApiBody preserves empty replayed response messages that s
   ]);
 });
 
-test('createCustomProviderModelProvider uses Anthropic adapter for anthropic type', (t) => {
+it('createCustomProviderModelProvider uses Anthropic adapter for anthropic type', () => {
   const provider = createCustomProviderModelProvider(
     {
       ...baseConfig,
@@ -89,10 +89,10 @@ test('createCustomProviderModelProvider uses Anthropic adapter for anthropic typ
     },
   );
 
-  t.true(provider instanceof AiSdkAnthropicProvider);
+  expect(provider instanceof AiSdkAnthropicProvider).toBe(true);
 });
 
-test('createCustomProviderModelProvider uses Google adapter for google type', (t) => {
+it('createCustomProviderModelProvider uses Google adapter for google type', () => {
   const provider = createCustomProviderModelProvider(
     {
       ...baseConfig,
@@ -104,10 +104,10 @@ test('createCustomProviderModelProvider uses Google adapter for google type', (t
     },
   );
 
-  t.true(provider instanceof AiSdkGoogleProvider);
+  expect(provider instanceof AiSdkGoogleProvider).toBe(true);
 });
 
-test('createCustomProviderModelProvider Google type gets logging fetch wrapper', async (t) => {
+it('createCustomProviderModelProvider Google type gets logging fetch wrapper', async () => {
   const loggedEvents: any[] = [];
   const dummyLoggingService = {
     debug: (msg: string, meta?: any) => {
@@ -158,7 +158,7 @@ test('createCustomProviderModelProvider Google type gets logging fetch wrapper',
     },
   );
 
-  t.true(provider instanceof AiSdkGoogleProvider);
+  expect(provider instanceof AiSdkGoogleProvider).toBe(true);
 
   const model = await provider.getModel('gemini-test');
   await withTrace('test', () =>
@@ -174,12 +174,12 @@ test('createCustomProviderModelProvider Google type gets logging fetch wrapper',
 
   // Verify that the request started event was logged by the logging middleware
   const requestStartedEvent = loggedEvents.find((e) => e.meta?.eventType === 'provider.request.started');
-  t.truthy(requestStartedEvent);
-  t.is(requestStartedEvent.meta.provider, 'custom-provider');
-  t.is(requestStartedEvent.meta.model, 'gemini-test');
+  expect(requestStartedEvent).toBeTruthy();
+  expect(requestStartedEvent.meta.provider).toBe('custom-provider');
+  expect(requestStartedEvent.meta.model).toBe('gemini-test');
 });
 
-test('createCustomProviderModelProvider uses OpencodeAnthropicFormatProvider for opencode type', async (t) => {
+it('createCustomProviderModelProvider uses OpencodeAnthropicFormatProvider for opencode type', async () => {
   const provider = createCustomProviderModelProvider(
     {
       ...baseConfig,
@@ -191,13 +191,13 @@ test('createCustomProviderModelProvider uses OpencodeAnthropicFormatProvider for
     },
   );
 
-  t.true(provider instanceof OpencodeAnthropicFormatProvider);
+  expect(provider instanceof OpencodeAnthropicFormatProvider).toBe(true);
 
   // When model name contains minimax (case-insensitive), it should return model not using OpenAIProvider
   const minimaxModel = await provider.getModel('Minimax-3.5-Turbo');
-  t.false(minimaxModel instanceof OpenAIChatCompletionsModel, 'minimax model should use Anthropic provider');
+  expect(minimaxModel instanceof OpenAIChatCompletionsModel).toBe(false);
 
   // When model name does NOT contain minimax, it should return OpenAIChatCompletionsModel from OpenAIProvider
   const otherModel = await provider.getModel('other-model-name');
-  t.true(otherModel instanceof OpenAIChatCompletionsModel, 'other model should use standard OpenAIProvider');
+  expect(otherModel instanceof OpenAIChatCompletionsModel).toBe(true);
 });

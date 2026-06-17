@@ -1,52 +1,52 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ProviderContinuity } from './provider-continuity.js';
 
-test('initial state is clear', (t) => {
+it('initial state is clear', () => {
   const pc = new ProviderContinuity();
-  t.is(pc.previousResponseId, null);
-  t.false(pc.chainingBroken);
-  t.false(pc.isChainingAvailable(2));
-  t.true(pc.isChainingAvailable(1));
+  expect(pc.previousResponseId).toBe(null);
+  expect(pc.chainingBroken).toBe(false);
+  expect(pc.isChainingAvailable(2)).toBe(false);
+  expect(pc.isChainingAvailable(1)).toBe(true);
 });
 
-test('update sets previousResponseId', (t) => {
+it('update sets previousResponseId', () => {
   const pc = new ProviderContinuity();
   pc.update('resp-1');
-  t.is(pc.previousResponseId, 'resp-1');
-  t.false(pc.chainingBroken);
+  expect(pc.previousResponseId).toBe('resp-1');
+  expect(pc.chainingBroken).toBe(false);
 });
 
-test('clear resets previousResponseId', (t) => {
+it('clear resets previousResponseId', () => {
   const pc = new ProviderContinuity();
   pc.update('resp-1');
   pc.clear();
-  t.is(pc.previousResponseId, null);
+  expect(pc.previousResponseId).toBe(null);
 });
 
-test('breakChaining marks chaining broken and clears previousResponseId', (t) => {
+it('breakChaining marks chaining broken and clears previousResponseId', () => {
   const pc = new ProviderContinuity();
   pc.update('resp-1');
   pc.breakChaining();
-  t.is(pc.previousResponseId, null);
-  t.true(pc.chainingBroken);
+  expect(pc.previousResponseId).toBe(null);
+  expect(pc.chainingBroken).toBe(true);
 });
 
-test('isChainingAvailable requires previousResponseId or short history and unbroken chaining', (t) => {
+it('isChainingAvailable requires previousResponseId or short history and unbroken chaining', () => {
   const pc = new ProviderContinuity();
-  t.false(pc.isChainingAvailable(2));
-  t.true(pc.isChainingAvailable(1));
+  expect(pc.isChainingAvailable(2)).toBe(false);
+  expect(pc.isChainingAvailable(1)).toBe(true);
   pc.update('resp-1');
-  t.true(pc.isChainingAvailable(2));
+  expect(pc.isChainingAvailable(2)).toBe(true);
   pc.breakChaining();
-  t.false(pc.isChainingAvailable(1));
-  t.false(pc.isChainingAvailable(2));
+  expect(pc.isChainingAvailable(1)).toBe(false);
+  expect(pc.isChainingAvailable(2)).toBe(false);
 });
 
-test('update after breakChaining keeps chaining broken', (t) => {
+it('update after breakChaining keeps chaining broken', () => {
   const pc = new ProviderContinuity();
   pc.breakChaining();
   pc.update('resp-2');
-  t.is(pc.previousResponseId, 'resp-2');
-  t.true(pc.chainingBroken);
-  t.false(pc.isChainingAvailable());
+  expect(pc.previousResponseId).toBe('resp-2');
+  expect(pc.chainingBroken).toBe(true);
+  expect(pc.isChainingAvailable()).toBe(false);
 });

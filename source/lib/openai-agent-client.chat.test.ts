@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { AgentClient } from './agent-client.js';
 import { registerProvider } from '../providers/registry.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
@@ -45,7 +45,7 @@ class MockRunner {
   }
 }
 
-test.before(() => {
+beforeAll(() => {
   registerProvider({
     id: 'mock-provider-chat',
     label: 'Mock Provider Chat',
@@ -68,7 +68,7 @@ test.before(() => {
   });
 });
 
-test.serial('OpenAIAgentClient.chatJson passes outputType into the temporary Agent', async (t) => {
+it.sequential('OpenAIAgentClient.chatJson passes outputType into the temporary Agent', async () => {
   lastRunAgent = null;
 
   const client = new AgentClient({
@@ -95,8 +95,8 @@ test.serial('OpenAIAgentClient.chatJson passes outputType into the temporary Age
     },
   });
 
-  t.truthy(lastRunAgent);
-  t.deepEqual(lastRunAgent.outputType, {
+  expect(lastRunAgent).toBeTruthy();
+  expect(lastRunAgent.outputType).toEqual({
     type: 'json_schema',
     name: 'test_output',
     strict: true,
@@ -111,7 +111,7 @@ test.serial('OpenAIAgentClient.chatJson passes outputType into the temporary Age
   });
 });
 
-test.serial('OpenAIAgentClient.chat falls back to messages if finalOutput is missing', async (t) => {
+it.sequential('OpenAIAgentClient.chat falls back to messages if finalOutput is missing', async () => {
   const client = new AgentClient({
     deps: {
       logger: mockLogger,
@@ -121,10 +121,10 @@ test.serial('OpenAIAgentClient.chat falls back to messages if finalOutput is mis
   });
 
   const response = await client.chat('Hello');
-  t.is(response, 'Fallback content');
+  expect(response).toBe('Fallback content');
 });
 
-test.serial('disables Agents SDK tracing for non-OpenAI providers', async (t) => {
+it.sequential('disables Agents SDK tracing for non-OpenAI providers', async () => {
   lastRunOptions = null;
 
   const client = new AgentClient({
@@ -136,11 +136,11 @@ test.serial('disables Agents SDK tracing for non-OpenAI providers', async (t) =>
   });
 
   await client.chat('Hello again');
-  t.truthy(lastRunOptions);
-  t.is(lastRunOptions.tracingDisabled, true);
+  expect(lastRunOptions).toBeTruthy();
+  expect(lastRunOptions.tracingDisabled).toBe(true);
 });
 
-test.serial('keeps Agents SDK tracing enabled when provider supports it', async (t) => {
+it.sequential('keeps Agents SDK tracing enabled when provider supports it', async () => {
   lastRunOptions = null;
 
   const client = new AgentClient({
@@ -152,6 +152,6 @@ test.serial('keeps Agents SDK tracing enabled when provider supports it', async 
   });
 
   await client.chat('Hello tracing');
-  t.truthy(lastRunOptions);
-  t.false(!!lastRunOptions.tracingDisabled);
+  expect(lastRunOptions).toBeTruthy();
+  expect(!!lastRunOptions.tracingDisabled).toBe(false);
 });

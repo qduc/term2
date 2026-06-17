@@ -1,12 +1,12 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { DEFAULT_SETTINGS } from './settings-schema.js';
 import { flattenSettings, mergeSettings, trackSettingSources } from './settings-merger.js';
 
-test('flattenSettings: flattens nested objects into dot notation', (t) => {
-  t.deepEqual(flattenSettings({ a: { b: 1 }, c: 2 }), { 'a.b': 1, c: 2 });
+it('flattenSettings: flattens nested objects into dot notation', () => {
+  expect(flattenSettings({ a: { b: 1 }, c: 2 })).toEqual({ 'a.b': 1, c: 2 });
 });
 
-test('mergeSettings: cli > env > config > defaults precedence', (t) => {
+it('mergeSettings: cli > env > config > defaults precedence', () => {
   const defaults = DEFAULT_SETTINGS;
 
   const config = { agent: { model: 'from-config' } } as any;
@@ -14,10 +14,10 @@ test('mergeSettings: cli > env > config > defaults precedence', (t) => {
   const cli = { agent: { model: 'from-cli' } } as any;
 
   const merged = mergeSettings(defaults, config, env, cli, { disableLogging: true });
-  t.is(merged.agent.model, 'from-cli');
+  expect(merged.agent.model).toBe('from-cli');
 });
 
-test('trackSettingSources: reports correct source for overridden keys', (t) => {
+it('trackSettingSources: reports correct source for overridden keys', () => {
   const defaults = DEFAULT_SETTINGS;
 
   const config = { agent: { model: 'from-config' } } as any;
@@ -26,8 +26,8 @@ test('trackSettingSources: reports correct source for overridden keys', (t) => {
 
   const sources = trackSettingSources(defaults, config, env, cli);
 
-  t.is(sources.get('agent.model'), 'config');
-  t.is(sources.get('agent.reasoningEffort'), 'env');
-  t.is(sources.get('shell.timeout'), 'cli');
-  t.is(sources.get('ui.historySize'), 'default');
+  expect(sources.get('agent.model')).toBe('config');
+  expect(sources.get('agent.reasoningEffort')).toBe('env');
+  expect(sources.get('shell.timeout')).toBe('cli');
+  expect(sources.get('ui.historySize')).toBe('default');
 });

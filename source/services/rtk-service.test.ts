@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -17,9 +17,10 @@ import type { ILoggingService } from './service-interfaces.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function makeTmpDir(t: any): string {
+function makeTmpDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-rtk-test-'));
-  t.teardown(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(dir, { recursive: true, force: true })) needs manual try/finally conversion;
   return dir;
 }
 
@@ -38,19 +39,19 @@ function noopLogger(): ILoggingService {
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
-test('RTK_VERSION and RTK_REPO are set', (t) => {
-  t.is(typeof RTK_VERSION, 'string');
-  t.true(RTK_VERSION.startsWith('v'));
-  t.is(RTK_REPO, 'rtk-ai/rtk');
+it('RTK_VERSION and RTK_REPO are set', () => {
+  expect(typeof RTK_VERSION).toBe('string');
+  expect(RTK_VERSION.startsWith('v')).toBe(true);
+  expect(RTK_REPO).toBe('rtk-ai/rtk');
 });
 
 // ── resolveRtkAsset ──────────────────────────────────────────────────────────
 
-test('resolveRtkAsset maps linux x64 correctly', (t) => {
-  t.is(resolveRtkAsset('linux', 'x64'), 'rtk-x86_64-unknown-linux-musl.tar.gz');
+it('resolveRtkAsset maps linux x64 correctly', () => {
+  expect(resolveRtkAsset('linux', 'x64')).toBe('rtk-x86_64-unknown-linux-musl.tar.gz');
 });
 
-test('RTK_ASSET_CHECKSUMS includes checksum for every supported asset', (t) => {
+it('RTK_ASSET_CHECKSUMS includes checksum for every supported asset', () => {
   const supportedAssets = [
     resolveRtkAsset('linux', 'x64'),
     resolveRtkAsset('linux', 'arm64'),
@@ -59,42 +60,42 @@ test('RTK_ASSET_CHECKSUMS includes checksum for every supported asset', (t) => {
   ];
 
   for (const asset of supportedAssets) {
-    t.truthy(asset);
-    t.regex(RTK_ASSET_CHECKSUMS[asset!], /^[0-9a-f]{64}$/);
+    expect(asset).toBeTruthy();
+    expect(RTK_ASSET_CHECKSUMS[asset!]).toMatch(/^[0-9a-f]{64}$/);
   }
 });
 
-test('resolveRtkAsset maps linux arm64 correctly', (t) => {
-  t.is(resolveRtkAsset('linux', 'arm64'), 'rtk-aarch64-unknown-linux-gnu.tar.gz');
+it('resolveRtkAsset maps linux arm64 correctly', () => {
+  expect(resolveRtkAsset('linux', 'arm64')).toBe('rtk-aarch64-unknown-linux-gnu.tar.gz');
 });
 
-test('resolveRtkAsset maps darwin x64 correctly', (t) => {
-  t.is(resolveRtkAsset('darwin', 'x64'), 'rtk-x86_64-apple-darwin.tar.gz');
+it('resolveRtkAsset maps darwin x64 correctly', () => {
+  expect(resolveRtkAsset('darwin', 'x64')).toBe('rtk-x86_64-apple-darwin.tar.gz');
 });
 
-test('resolveRtkAsset maps darwin arm64 correctly', (t) => {
-  t.is(resolveRtkAsset('darwin', 'arm64'), 'rtk-aarch64-apple-darwin.tar.gz');
+it('resolveRtkAsset maps darwin arm64 correctly', () => {
+  expect(resolveRtkAsset('darwin', 'arm64')).toBe('rtk-aarch64-apple-darwin.tar.gz');
 });
 
-test('resolveRtkAsset returns null for win32', (t) => {
-  t.is(resolveRtkAsset('win32', 'x64'), null);
+it('resolveRtkAsset returns null for win32', () => {
+  expect(resolveRtkAsset('win32', 'x64')).toBe(null);
 });
 
-test('resolveRtkAsset returns null for unknown arch', (t) => {
-  t.is(resolveRtkAsset('linux', 'mips'), null);
+it('resolveRtkAsset returns null for unknown arch', () => {
+  expect(resolveRtkAsset('linux', 'mips')).toBe(null);
 });
 
-test('resolveRtkAsset returns null for unknown platform', (t) => {
-  t.is(resolveRtkAsset('freebsd' as any, 'x64'), null);
+it('resolveRtkAsset returns null for unknown platform', () => {
+  expect(resolveRtkAsset('freebsd' as any, 'x64')).toBe(null);
 });
 
 // ── getRtkBinaryPath ─────────────────────────────────────────────────────────
 
-test('getRtkBinaryPath includes version and rtk binary name', (t) => {
+it('getRtkBinaryPath includes version and rtk binary name', () => {
   const p = getRtkBinaryPath({ cacheDir: '/fake/cache' });
-  t.true(p.includes(RTK_VERSION), 'path should include version');
-  t.true(p.endsWith('rtk'), 'path should end with rtk');
-  t.true(p.startsWith('/fake/cache'), 'path should start with cacheDir');
+  expect(p.includes(RTK_VERSION)).toBe(true);
+  expect(p.endsWith('rtk')).toBe(true);
+  expect(p.startsWith('/fake/cache')).toBe(true);
 });
 
 // ── isRtkSupportedCommand ────────────────────────────────────────────────────
@@ -102,109 +103,109 @@ test('getRtkBinaryPath includes version and rtk binary name', (t) => {
 const ALLOWLISTED = ['git', 'npm', 'pnpm', 'yarn', 'cargo', 'pytest', 'go', 'rg', 'grep', 'cat', 'ls'];
 
 for (const cmd of ALLOWLISTED) {
-  test(`isRtkSupportedCommand: '${cmd}' alone is supported`, (t) => {
-    t.true(isRtkSupportedCommand(cmd));
+  it(`isRtkSupportedCommand: '${cmd}' alone is supported`, () => {
+    expect(isRtkSupportedCommand(cmd)).toBe(true);
   });
 
-  test(`isRtkSupportedCommand: '${cmd} with args' is supported`, (t) => {
-    t.true(isRtkSupportedCommand(`${cmd} status --short`));
+  it(`isRtkSupportedCommand: '${cmd} with args' is supported`, () => {
+    expect(isRtkSupportedCommand(`${cmd} status --short`)).toBe(true);
   });
 }
 
-test('isRtkSupportedCommand: non-allowlisted command is rejected', (t) => {
-  t.false(isRtkSupportedCommand('curl https://example.com'));
-  t.false(isRtkSupportedCommand('printf hello'));
+it('isRtkSupportedCommand: non-allowlisted command is rejected', () => {
+  expect(isRtkSupportedCommand('curl https://example.com')).toBe(false);
+  expect(isRtkSupportedCommand('printf hello')).toBe(false);
 });
 
-test('isRtkSupportedCommand: supported when at least one top-level command is eligible', (t) => {
-  t.true(isRtkSupportedCommand('git status && git log'));
-  t.true(isRtkSupportedCommand('npm test || cat error.log'));
-  t.true(isRtkSupportedCommand('git status; git log'));
-  t.true(isRtkSupportedCommand('git log $(date)'));
+it('isRtkSupportedCommand: supported when at least one top-level command is eligible', () => {
+  expect(isRtkSupportedCommand('git status && git log')).toBe(true);
+  expect(isRtkSupportedCommand('npm test || cat error.log')).toBe(true);
+  expect(isRtkSupportedCommand('git status; git log')).toBe(true);
+  expect(isRtkSupportedCommand('git log $(date)')).toBe(true);
 });
 
-test('isRtkSupportedCommand: supported when a chain mixes eligible and ineligible commands', (t) => {
-  t.true(isRtkSupportedCommand('curl https://x && git log'));
-  t.true(isRtkSupportedCommand('npm run dev & npm test'));
+it('isRtkSupportedCommand: supported when a chain mixes eligible and ineligible commands', () => {
+  expect(isRtkSupportedCommand('curl https://x && git log')).toBe(true);
+  expect(isRtkSupportedCommand('npm run dev & npm test')).toBe(true);
 });
 
-test('isRtkSupportedCommand: rejected when no top-level command is eligible', (t) => {
-  t.false(isRtkSupportedCommand('curl https://example.com'));
-  t.false(isRtkSupportedCommand('git status > out.txt'));
-  t.false(isRtkSupportedCommand('git log 2>&1'));
-  t.false(isRtkSupportedCommand('grep pattern < file.txt'));
-  t.false(isRtkSupportedCommand('npm install &'));
+it('isRtkSupportedCommand: rejected when no top-level command is eligible', () => {
+  expect(isRtkSupportedCommand('curl https://example.com')).toBe(false);
+  expect(isRtkSupportedCommand('git status > out.txt')).toBe(false);
+  expect(isRtkSupportedCommand('git log 2>&1')).toBe(false);
+  expect(isRtkSupportedCommand('grep pattern < file.txt')).toBe(false);
+  expect(isRtkSupportedCommand('npm install &')).toBe(false);
 });
 
-test('isRtkSupportedCommand: does not descend into subshells', (t) => {
-  t.false(isRtkSupportedCommand('(cd src && git log)'));
+it('isRtkSupportedCommand: does not descend into subshells', () => {
+  expect(isRtkSupportedCommand('(cd src && git log)')).toBe(false);
 });
 
-test('isRtkSupportedCommand: empty command is rejected', (t) => {
-  t.false(isRtkSupportedCommand(''));
-  t.false(isRtkSupportedCommand('   '));
+it('isRtkSupportedCommand: empty command is rejected', () => {
+  expect(isRtkSupportedCommand('')).toBe(false);
+  expect(isRtkSupportedCommand('   ')).toBe(false);
 });
 
-test('isRtkSupportedCommand: malformed command does not throw and is rejected', (t) => {
-  t.notThrows(() => isRtkSupportedCommand('git log ('));
-  t.false(isRtkSupportedCommand('git log ('));
+it('isRtkSupportedCommand: malformed command does not throw and is rejected', () => {
+  expect(() => isRtkSupportedCommand('git log ('));
+  expect(isRtkSupportedCommand('git log (')).toBe(false);
 });
 
 // ── wrapWithRtk ───────────────────────────────────────────────────────────────
 
-test('wrapWithRtk prefixes a single command with quoted rtkPath', (t) => {
-  t.is(wrapWithRtk('git status', '/path/to/rtk'), '"/path/to/rtk" git status');
+it('wrapWithRtk prefixes a single command with quoted rtkPath', () => {
+  expect(wrapWithRtk('git status', '/path/to/rtk')).toBe('"/path/to/rtk" git status');
 });
 
-test('wrapWithRtk handles path with spaces via quoting', (t) => {
-  t.is(wrapWithRtk('ls -la', '/path with spaces/rtk'), '"/path with spaces/rtk" ls -la');
+it('wrapWithRtk handles path with spaces via quoting', () => {
+  expect(wrapWithRtk('ls -la', '/path with spaces/rtk')).toBe('"/path with spaces/rtk" ls -la');
 });
 
-test('wrapWithRtk wraps every eligible command in a logical/sequence chain', (t) => {
-  t.is(wrapWithRtk('npm run build && npm test', '/r'), '"/r" npm run build && "/r" npm test');
-  t.is(wrapWithRtk('git status; git log', '/r'), '"/r" git status; "/r" git log');
+it('wrapWithRtk wraps every eligible command in a logical/sequence chain', () => {
+  expect(wrapWithRtk('npm run build && npm test', '/r')).toBe('"/r" npm run build && "/r" npm test');
+  expect(wrapWithRtk('git status; git log', '/r')).toBe('"/r" git status; "/r" git log');
 });
 
-test('wrapWithRtk never wraps any command in a pipeline', (t) => {
+it('wrapWithRtk never wraps any command in a pipeline', () => {
   // The producer's stdout is the next command's stdin; altering it would
   // change the consumer's input. The whole pipeline is left untouched.
-  t.is(wrapWithRtk('git log | grep foo', '/r'), 'git log | grep foo');
-  t.is(wrapWithRtk('git log | grep x | head', '/r'), 'git log | grep x | head');
-  t.is(wrapWithRtk('git log | tee out.txt', '/r'), 'git log | tee out.txt');
-  t.is(wrapWithRtk('git log | grep x > out.txt', '/r'), 'git log | grep x > out.txt');
+  expect(wrapWithRtk('git log | grep foo', '/r')).toBe('git log | grep foo');
+  expect(wrapWithRtk('git log | grep x | head', '/r')).toBe('git log | grep x | head');
+  expect(wrapWithRtk('git log | tee out.txt', '/r')).toBe('git log | tee out.txt');
+  expect(wrapWithRtk('git log | grep x > out.txt', '/r')).toBe('git log | grep x > out.txt');
 });
 
-test('wrapWithRtk wraps eligible commands around a pipeline but not within it', (t) => {
-  t.is(wrapWithRtk('git status && git log | grep x', '/r'), '"/r" git status && git log | grep x');
+it('wrapWithRtk wraps eligible commands around a pipeline but not within it', () => {
+  expect(wrapWithRtk('git status && git log | grep x', '/r')).toBe('"/r" git status && git log | grep x');
 });
 
-test('isRtkSupportedCommand rejects standalone pipelines', (t) => {
-  t.false(isRtkSupportedCommand('git log | grep foo'));
-  t.false(isRtkSupportedCommand('git log | tee out.txt'));
-  t.false(isRtkSupportedCommand('git log | grep x > out.txt'));
+it('isRtkSupportedCommand rejects standalone pipelines', () => {
+  expect(isRtkSupportedCommand('git log | grep foo')).toBe(false);
+  expect(isRtkSupportedCommand('git log | tee out.txt')).toBe(false);
+  expect(isRtkSupportedCommand('git log | grep x > out.txt')).toBe(false);
 });
 
-test('wrapWithRtk leaves ineligible commands in a chain untouched', (t) => {
-  t.is(wrapWithRtk('curl https://x && git log', '/r'), 'curl https://x && "/r" git log');
-  t.is(wrapWithRtk('npm run dev & npm test', '/r'), 'npm run dev & "/r" npm test');
+it('wrapWithRtk leaves ineligible commands in a chain untouched', () => {
+  expect(wrapWithRtk('curl https://x && git log', '/r')).toBe('curl https://x && "/r" git log');
+  expect(wrapWithRtk('npm run dev & npm test', '/r')).toBe('npm run dev & "/r" npm test');
   // A redirect on one branch must not block wrapping a sibling branch.
-  t.is(wrapWithRtk('git diff > f && git log', '/r'), 'git diff > f && "/r" git log');
+  expect(wrapWithRtk('git diff > f && git log', '/r')).toBe('git diff > f && "/r" git log');
 });
 
-test('wrapWithRtk does not descend into command substitution or subshells', (t) => {
-  t.is(wrapWithRtk('git log $(date)', '/r'), '"/r" git log $(date)');
-  t.is(wrapWithRtk('(cd src && git log)', '/r'), '(cd src && git log)');
+it('wrapWithRtk does not descend into command substitution or subshells', () => {
+  expect(wrapWithRtk('git log $(date)', '/r')).toBe('"/r" git log $(date)');
+  expect(wrapWithRtk('(cd src && git log)', '/r')).toBe('(cd src && git log)');
 });
 
-test('wrapWithRtk returns the command unchanged when nothing is eligible', (t) => {
-  t.is(wrapWithRtk('git status > out.txt', '/r'), 'git status > out.txt');
-  t.is(wrapWithRtk('git log (', '/r'), 'git log (');
+it('wrapWithRtk returns the command unchanged when nothing is eligible', () => {
+  expect(wrapWithRtk('git status > out.txt', '/r')).toBe('git status > out.txt');
+  expect(wrapWithRtk('git log (', '/r')).toBe('git log (');
 });
 
 // ── ensureRtkInstalled ────────────────────────────────────────────────────────
 
-test.serial('ensureRtkInstalled returns path when binary already exists', async (t) => {
-  const cacheDir = makeTmpDir(t);
+it.sequential('ensureRtkInstalled returns path when binary already exists', async () => {
+  const cacheDir = makeTmpDir();
   const binaryPath = getRtkBinaryPath({ cacheDir });
   fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
   fs.writeFileSync(binaryPath, 'fake-binary');
@@ -222,12 +223,12 @@ test.serial('ensureRtkInstalled returns path when binary already exists', async 
     },
   });
 
-  t.is(result, binaryPath);
-  t.false(fetchCalled, 'fetch should not be called when binary exists');
+  expect(result).toBe(binaryPath);
+  expect(fetchCalled, 'fetch should not be called when binary exists').toBe(false);
 });
 
-test.serial('ensureRtkInstalled returns null for unsupported platform', async (t) => {
-  const cacheDir = makeTmpDir(t);
+it.sequential('ensureRtkInstalled returns null for unsupported platform', async () => {
+  const cacheDir = makeTmpDir();
   const warnMessages: string[] = [];
 
   const result = await ensureRtkInstalled({
@@ -237,12 +238,12 @@ test.serial('ensureRtkInstalled returns null for unsupported platform', async (t
     arch: 'x64',
   });
 
-  t.is(result, null);
-  t.true(warnMessages.some((m) => m.includes('rtk')));
+  expect(result).toBe(null);
+  expect(warnMessages.some((m) => m.includes('rtk'))).toBe(true);
 });
 
-test.serial('ensureRtkInstalled returns null when fetch fails with non-ok response', async (t) => {
-  const cacheDir = makeTmpDir(t);
+it.sequential('ensureRtkInstalled returns null when fetch fails with non-ok response', async () => {
+  const cacheDir = makeTmpDir();
   const warnMessages: string[] = [];
 
   const result = await ensureRtkInstalled({
@@ -253,12 +254,12 @@ test.serial('ensureRtkInstalled returns null when fetch fails with non-ok respon
     fetchImpl: async () => new Response('Not Found', { status: 404 }),
   });
 
-  t.is(result, null);
-  t.true(warnMessages.some((m) => m.includes('rtk')));
+  expect(result).toBe(null);
+  expect(warnMessages.some((m) => m.includes('rtk'))).toBe(true);
 });
 
-test.serial('ensureRtkInstalled returns null when fetch throws', async (t) => {
-  const cacheDir = makeTmpDir(t);
+it.sequential('ensureRtkInstalled returns null when fetch throws', async () => {
+  const cacheDir = makeTmpDir();
   const warnMessages: string[] = [];
 
   const result = await ensureRtkInstalled({
@@ -271,12 +272,12 @@ test.serial('ensureRtkInstalled returns null when fetch throws', async (t) => {
     },
   });
 
-  t.is(result, null);
-  t.true(warnMessages.some((m) => m.includes('rtk')));
+  expect(result).toBe(null);
+  expect(warnMessages.some((m) => m.includes('rtk'))).toBe(true);
 });
 
-test.serial('ensureRtkInstalled returns null when extraction fails', async (t) => {
-  const cacheDir = makeTmpDir(t);
+it.sequential('ensureRtkInstalled returns null when extraction fails', async () => {
+  const cacheDir = makeTmpDir();
   const warnMessages: string[] = [];
 
   const result = await ensureRtkInstalled({
@@ -288,12 +289,12 @@ test.serial('ensureRtkInstalled returns null when extraction fails', async (t) =
     extractImpl: () => ({ status: 1 }),
   });
 
-  t.is(result, null);
-  t.true(warnMessages.some((m) => m.includes('rtk')));
+  expect(result).toBe(null);
+  expect(warnMessages.some((m) => m.includes('rtk'))).toBe(true);
 });
 
-test.serial('ensureRtkInstalled returns null and does not install when checksum does not match', async (t) => {
-  const cacheDir = makeTmpDir(t);
+it.sequential('ensureRtkInstalled returns null and does not install when checksum does not match', async () => {
+  const cacheDir = makeTmpDir();
   const warnMessages: string[] = [];
   const fakeBytes = Buffer.from('fake tarball content');
 
@@ -307,18 +308,18 @@ test.serial('ensureRtkInstalled returns null and does not install when checksum 
       'rtk-x86_64-unknown-linux-musl.tar.gz': '0'.repeat(64),
     },
     extractImpl: () => {
-      t.fail('extract should not run when checksum verification fails');
+      throw new Error('extract should not run when checksum verification fails');
       return { status: 0 };
     },
   });
 
-  t.is(result, null);
-  t.false(fs.existsSync(getRtkBinaryPath({ cacheDir })));
-  t.true(warnMessages.some((m) => m.includes('checksum')));
+  expect(result).toBe(null);
+  expect(fs.existsSync(getRtkBinaryPath({ cacheDir }))).toBe(false);
+  expect(warnMessages.some((m) => m.includes('checksum'))).toBe(true);
 });
 
-test.serial('ensureRtkInstalled returns binary path on successful install', async (t) => {
-  const cacheDir = makeTmpDir(t);
+it.sequential('ensureRtkInstalled returns binary path on successful install', async () => {
+  const cacheDir = makeTmpDir();
   const fakeBytes = Buffer.from('fake tarball content');
   const checksum = createHash('sha256').update(fakeBytes).digest('hex');
 
@@ -337,7 +338,7 @@ test.serial('ensureRtkInstalled returns binary path on successful install', asyn
     },
   });
 
-  t.truthy(result);
-  t.true(result!.endsWith('rtk'));
-  t.true(fs.existsSync(result!));
+  expect(result).toBeTruthy();
+  expect(result!.endsWith('rtk')).toBe(true);
+  expect(fs.existsSync(result!)).toBe(true);
 });

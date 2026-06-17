@@ -1,8 +1,8 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { analyzePathRisk } from './command-safety/path-analysis.js';
 import { classifyCommand, SafetyStatus } from './command-safety/index.js';
 
-test('ambiguous command families are YELLOW instead of RED', (t) => {
+it('ambiguous command families are YELLOW instead of RED', () => {
   const commands = [
     'npm install',
     'curl https://example.com',
@@ -14,30 +14,30 @@ test('ambiguous command families are YELLOW instead of RED', (t) => {
   ];
 
   for (const command of commands) {
-    t.is(classifyCommand(command), SafetyStatus.YELLOW, `"${command}" should let the model decide`);
+    expect(classifyCommand(command), `"${command}" should let the model decide`).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('inherently dangerous direct commands remain RED', (t) => {
+it('inherently dangerous direct commands remain RED', () => {
   const commands = ['rm -rf /', 'mkfs /dev/sda', 'dd if=/dev/zero of=/dev/sda', 'sudo rm -rf /', 'shutdown now'];
 
   for (const command of commands) {
-    t.is(classifyCommand(command), SafetyStatus.RED, `"${command}" should be hard-blocked`);
+    expect(classifyCommand(command), `"${command}" should be hard-blocked`).toBe(SafetyStatus.RED);
   }
 });
 
-test('read-only risky paths are YELLOW, not hard-blocked', (t) => {
+it('read-only risky paths are YELLOW, not hard-blocked', () => {
   const paths = ['/etc/passwd', '/var/log/system.log', '../secrets.json'];
 
   for (const path of paths) {
-    t.is(analyzePathRisk(path), SafetyStatus.YELLOW, `"${path}" should require model/user review`);
+    expect(analyzePathRisk(path), `"${path}" should require model/user review`).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('workspace-scale edit commands are YELLOW instead of RED', (t) => {
+it('workspace-scale edit commands are YELLOW instead of RED', () => {
   const commands = ['sed -i "s/foo/bar/" source.txt', 'find . -exec cp {} /tmp/backup \\;'];
 
   for (const command of commands) {
-    t.is(classifyCommand(command), SafetyStatus.YELLOW, `"${command}" should let the model decide`);
+    expect(classifyCommand(command), `"${command}" should let the model decide`).toBe(SafetyStatus.YELLOW);
   }
 });

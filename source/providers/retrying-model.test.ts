@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { Model, ModelRequest, StreamEvent } from '@openai/agents-core';
 import { RetryingModel } from './retrying-model.js';
 
@@ -8,7 +8,7 @@ function retryableError(): Error {
   return Object.assign(new Error('upstream unavailable'), { status: 503 });
 }
 
-test('getResponse retries the same request on the same model until exhausted', async (t) => {
+it('getResponse retries the same request on the same model until exhausted', async () => {
   const seen: ModelRequest[] = [];
   const underlying = {
     async getResponse(seenRequest: ModelRequest) {
@@ -19,12 +19,12 @@ test('getResponse retries the same request on the same model until exhausted', a
   } as unknown as Model;
   const model = new RetryingModel(underlying, { retryAttempts: 2, sleep: async () => {} });
 
-  await t.throwsAsync(() => model.getResponse(request), { message: 'upstream unavailable' });
-  t.is(seen.length, 3);
-  t.true(seen.every((item) => item === request));
+  await expect(model.getResponse(request)).rejects.toThrow('upstream unavailable');
+  expect(seen.length).toBe(3);
+  expect(seen.every((item) => item === request)).toBe(true);
 });
 
-test('getResponse fails immediately for non-retryable errors', async (t) => {
+it('getResponse fails immediately for non-retryable errors', async () => {
   let calls = 0;
   const underlying = {
     async getResponse() {
@@ -35,11 +35,11 @@ test('getResponse fails immediately for non-retryable errors', async (t) => {
   } as unknown as Model;
   const model = new RetryingModel(underlying, { retryAttempts: 3, sleep: async () => {} });
 
-  await t.throwsAsync(() => model.getResponse(request), { message: 'invalid request' });
-  t.is(calls, 1);
+  await expect(model.getResponse(request)).rejects.toThrow('invalid request');
+  expect(calls).toBe(1);
 });
 
-test('getStreamedResponse retries only before the first event', async (t) => {
+it('getStreamedResponse retries only before the first event', async () => {
   let calls = 0;
   const event = { type: 'response_started' } as unknown as StreamEvent;
   const underlying = {
@@ -47,7 +47,7 @@ test('getStreamedResponse retries only before the first event', async (t) => {
       throw new Error('unused');
     },
     async *getStreamedResponse(seenRequest: ModelRequest) {
-      t.is(seenRequest, request);
+      expect(seenRequest).toBe(request);
       calls++;
       if (calls === 1) throw retryableError();
       yield event;
@@ -59,11 +59,11 @@ test('getStreamedResponse retries only before the first event', async (t) => {
   for await (const streamedEvent of model.getStreamedResponse(request)) {
     events.push(streamedEvent);
   }
-  t.deepEqual(events, [event]);
-  t.is(calls, 2);
+  expect(events).toEqual([event]);
+  expect(calls).toBe(2);
 });
 
-test('getStreamedResponse does not retry after an event commits', async (t) => {
+it('getStreamedResponse does not retry after an event commits', async () => {
   let calls = 0;
   const event = { type: 'response_started' } as unknown as StreamEvent;
   const underlying = {
@@ -79,12 +79,13 @@ test('getStreamedResponse does not retry after an event commits', async (t) => {
   const model = new RetryingModel(underlying, { retryAttempts: 2, sleep: async () => {} });
 
   const iterator = model.getStreamedResponse(request)[Symbol.asyncIterator]();
-  t.deepEqual(await iterator.next(), { done: false, value: event });
-  await t.throwsAsync(() => iterator.next(), { message: 'upstream unavailable' });
-  t.is(calls, 1);
+  expect(await iterator.next()).toEqual({ done: false, value: event });
+
+  await expect(iterator.next()).rejects.toThrow('upstream unavailable');
+  expect(calls).toBe(1);
 });
 
-test('getResponse uses the larger upstream backoff schedule for retries', async (t) => {
+it('getResponse uses the larger upstream backoff schedule for retries', async () => {
   const delays: number[] = [];
   let calls = 0;
   const randomValues = [0.4, 0.2, 0.5, 0.8];
@@ -108,7 +109,7 @@ test('getResponse uses the larger upstream backoff schedule for retries', async 
     },
   });
 
-  await t.throwsAsync(() => model.getResponse(request), { message: 'upstream unavailable' });
-  t.is(calls, 3);
-  t.deepEqual(delays, [3000, 24000]);
+  await expect(model.getResponse(request)).rejects.toThrow('upstream unavailable');
+  expect(calls).toBe(3);
+  expect(delays).toEqual([3000, 24000]);
 });

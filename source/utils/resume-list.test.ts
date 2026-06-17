@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { formatResumeList } from './resume-list.js';
 
 // Strip ANSI escape codes to simplify string matching in assertions
@@ -6,12 +6,12 @@ function stripAnsi(str: string): string {
   return str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
 }
 
-test('formatResumeList: handles empty list', (t) => {
+it('formatResumeList: handles empty list', () => {
   const result = formatResumeList([]);
-  t.is(result, 'No saved conversations found.');
+  expect(result).toBe('No saved conversations found.');
 });
 
-test('formatResumeList: formats a local conversation', (t) => {
+it('formatResumeList: formats a local conversation', () => {
   const entries = [
     {
       id: 'local-conv-id-123',
@@ -21,15 +21,15 @@ test('formatResumeList: formats a local conversation', (t) => {
   ];
 
   const result = stripAnsi(formatResumeList(entries));
-  t.true(result.includes('Recent Conversations (last 10):'));
-  t.true(result.includes('1. local-conv-id-123'));
-  t.true(result.includes('Updated: 2026-05-28')); // Just check date format part
-  t.true(result.includes('local'));
-  t.false(result.includes('Project:'));
-  t.true(result.includes('Resume:  term2 --resume local-conv-id-123'));
+  expect(result.includes('Recent Conversations (last 10):')).toBe(true);
+  expect(result.includes('1. local-conv-id-123')).toBe(true);
+  expect(result.includes('Updated: 2026-05-28')).toBe(true); // Just check date format part
+  expect(result.includes('local')).toBe(true);
+  expect(result.includes('Project:')).toBe(false);
+  expect(result.includes('Resume:  term2 --resume local-conv-id-123')).toBe(true);
 });
 
-test('formatResumeList: formats a remote/SSH conversation', (t) => {
+it('formatResumeList: formats a remote/SSH conversation', () => {
   const entries = [
     {
       id: 'ssh-conv-id-456',
@@ -40,15 +40,15 @@ test('formatResumeList: formats a remote/SSH conversation', (t) => {
   ];
 
   const result = stripAnsi(formatResumeList(entries));
-  t.true(result.includes('1. ssh-conv-id-456'));
-  t.true(result.includes('SSH: my-remote-server'));
-  t.false(result.includes('Project:'));
-  t.true(
+  expect(result.includes('1. ssh-conv-id-456')).toBe(true);
+  expect(result.includes('SSH: my-remote-server')).toBe(true);
+  expect(result.includes('Project:')).toBe(false);
+  expect(
     result.includes('Resume:  term2 --ssh my-remote-server --remote-dir /home/user/term2 --resume ssh-conv-id-456'),
-  );
+  ).toBe(true);
 });
 
-test('formatResumeList: handles multiple conversations with correct index', (t) => {
+it('formatResumeList: handles multiple conversations with correct index', () => {
   const entries = [
     {
       id: 'id-1',
@@ -62,13 +62,13 @@ test('formatResumeList: handles multiple conversations with correct index', (t) 
   ];
 
   const result = stripAnsi(formatResumeList(entries));
-  t.true(result.includes('1. id-1'));
-  t.true(result.includes('2. id-2'));
-  t.true(result.includes('Resume:  term2 --resume id-1'));
-  t.true(result.includes('Resume:  term2 --ssh another-host --resume id-2'));
+  expect(result.includes('1. id-1')).toBe(true);
+  expect(result.includes('2. id-2')).toBe(true);
+  expect(result.includes('Resume:  term2 --resume id-1')).toBe(true);
+  expect(result.includes('Resume:  term2 --ssh another-host --resume id-2')).toBe(true);
 });
 
-test('formatResumeList: formats a local conversation with prompt, model, and mode metadata', (t) => {
+it('formatResumeList: formats a local conversation with prompt, model, and mode metadata', () => {
   const entries = [
     {
       id: 'local-conv-id-123',
@@ -87,14 +87,14 @@ test('formatResumeList: formats a local conversation with prompt, model, and mod
   ];
 
   const result = stripAnsi(formatResumeList(entries));
-  t.true(result.includes('Recent Conversations (last 10):'));
-  t.true(result.includes('1. local-conv-id-123'));
-  t.true(result.includes('Updated: 2026-05-28'));
-  t.true(result.includes('local'));
-  t.true(result.includes('5 messages'));
-  t.true(result.includes('model: gemini-3.5-flash'));
-  t.true(result.includes('mode: lite'));
-  t.false(result.includes('Project:'));
-  t.true(result.includes('Prompt:  "hello dear agent"'));
-  t.true(result.includes('Resume:  term2 --resume local-conv-id-123'));
+  expect(result.includes('Recent Conversations (last 10):')).toBe(true);
+  expect(result.includes('1. local-conv-id-123')).toBe(true);
+  expect(result.includes('Updated: 2026-05-28')).toBe(true);
+  expect(result.includes('local')).toBe(true);
+  expect(result.includes('5 messages')).toBe(true);
+  expect(result.includes('model: gemini-3.5-flash')).toBe(true);
+  expect(result.includes('mode: lite')).toBe(true);
+  expect(result.includes('Project:')).toBe(false);
+  expect(result.includes('Prompt:  "hello dear agent"')).toBe(true);
+  expect(result.includes('Resume:  term2 --resume local-conv-id-123')).toBe(true);
 });

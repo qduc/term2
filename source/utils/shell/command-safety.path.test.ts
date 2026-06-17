@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { analyzePathRisk } from './command-safety/path-analysis.js';
 import { SafetyStatus } from './command-safety/index.js';
 
@@ -6,7 +6,7 @@ import { SafetyStatus } from './command-safety/index.js';
 // GREEN: Safe JSON files - common project configuration
 // ============================================================================
 
-test('JSON files - safe project config files (GREEN)', (t) => {
+it('JSON files - safe project config files (GREEN)', () => {
   const safePaths = [
     'package.json',
     'package-lock.json',
@@ -32,20 +32,20 @@ test('JSON files - safe project config files (GREEN)', (t) => {
 
   for (const path of safePaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.GREEN, `"${path}" should be GREEN`);
+    expect(result, `"${path}" should be GREEN`).toBe(SafetyStatus.GREEN);
   }
 });
 
-test('JSON files - safe project configs with paths (GREEN)', (t) => {
+it('JSON files - safe project configs with paths (GREEN)', () => {
   const safePaths = ['./package.json', 'src/tsconfig.json', 'packages/app/package.json', 'config/jest.config.json'];
 
   for (const path of safePaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.GREEN, `"${path}" should be GREEN`);
+    expect(result, `"${path}" should be GREEN`).toBe(SafetyStatus.GREEN);
   }
 });
 
-test('JSON files - regular unrecognized JSON files (GREEN)', (t) => {
+it('JSON files - regular unrecognized JSON files (GREEN)', () => {
   const regularPaths = [
     'data.json',
     'config.json',
@@ -60,7 +60,7 @@ test('JSON files - regular unrecognized JSON files (GREEN)', (t) => {
 
   for (const path of regularPaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.GREEN, `"${path}" should be GREEN (permissive for unrecognized JSON)`);
+    expect(result, `"${path}" should be GREEN (permissive for unrecognized JSON)`).toBe(SafetyStatus.GREEN);
   }
 });
 
@@ -68,7 +68,7 @@ test('JSON files - regular unrecognized JSON files (GREEN)', (t) => {
 // YELLOW: Suspicious JSON files - credentials and secrets
 // ============================================================================
 
-test('JSON files - explicit secrets and credentials (YELLOW)', (t) => {
+it('JSON files - explicit secrets and credentials (YELLOW)', () => {
   const suspiciousPaths = [
     'secrets.json',
     'secret.json',
@@ -88,11 +88,11 @@ test('JSON files - explicit secrets and credentials (YELLOW)', (t) => {
 
   for (const path of suspiciousPaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW`);
+    expect(result, `"${path}" should be YELLOW`).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('JSON files - cloud provider credentials (YELLOW)', (t) => {
+it('JSON files - cloud provider credentials (YELLOW)', () => {
   const cloudCredPaths = [
     'firebase-adminsdk-abc123.json',
     'firebase-adminsdk.json',
@@ -115,11 +115,11 @@ test('JSON files - cloud provider credentials (YELLOW)', (t) => {
 
   for (const path of cloudCredPaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW`);
+    expect(result, `"${path}" should be YELLOW`).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('JSON files - private keys and keystores (YELLOW)', (t) => {
+it('JSON files - private keys and keystores (YELLOW)', () => {
   const keyPaths = [
     'private.json',
     'private-key.json',
@@ -135,11 +135,11 @@ test('JSON files - private keys and keystores (YELLOW)', (t) => {
 
   for (const path of keyPaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW`);
+    expect(result, `"${path}" should be YELLOW`).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('JSON files - SSO and authentication providers (YELLOW)', (t) => {
+it('JSON files - SSO and authentication providers (YELLOW)', () => {
   const ssoPaths = [
     'okta-config.json',
     'okta-credentials.json',
@@ -151,11 +151,11 @@ test('JSON files - SSO and authentication providers (YELLOW)', (t) => {
 
   for (const path of ssoPaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW`);
+    expect(result, `"${path}" should be YELLOW`).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('JSON files - monitoring service credentials (YELLOW)', (t) => {
+it('JSON files - monitoring service credentials (YELLOW)', () => {
   const monitoringPaths = [
     'sentry-config.json',
     'sentry-dsn.json',
@@ -167,20 +167,20 @@ test('JSON files - monitoring service credentials (YELLOW)', (t) => {
 
   for (const path of monitoringPaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW`);
+    expect(result, `"${path}" should be YELLOW`).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('JSON files - vault and secret management (YELLOW)', (t) => {
+it('JSON files - vault and secret management (YELLOW)', () => {
   const vaultPaths = ['vault-keys.json', 'vault-config.json', 'vault-tokens.json'];
 
   for (const path of vaultPaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW`);
+    expect(result, `"${path}" should be YELLOW`).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('JSON files - case insensitive matching (YELLOW)', (t) => {
+it('JSON files - case insensitive matching (YELLOW)', () => {
   const caseVariations = [
     'Secrets.json',
     'SECRETS.JSON',
@@ -192,11 +192,11 @@ test('JSON files - case insensitive matching (YELLOW)', (t) => {
 
   for (const path of caseVariations) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (case insensitive)`);
+    expect(result, `"${path}" should be YELLOW (case insensitive)`).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('JSON files - suspicious files with paths (YELLOW)', (t) => {
+it('JSON files - suspicious files with paths (YELLOW)', (t) => {
   const pathsWithDirs = [
     './secrets.json',
     'config/credentials.json',
@@ -208,7 +208,7 @@ test('JSON files - suspicious files with paths (YELLOW)', (t) => {
     // Note: '../credentials.json' will be RED due to directory traversal,
     // but we're testing that the JSON pattern matching still applies
     const result = analyzePathRisk(path);
-    t.true(result === SafetyStatus.YELLOW || result === SafetyStatus.RED, `"${path}" should be at least YELLOW`);
+    expect(result === SafetyStatus.YELLOW || result === SafetyStatus.RED).toBe(true);
   }
 });
 
@@ -216,7 +216,7 @@ test('JSON files - suspicious files with paths (YELLOW)', (t) => {
 // YELLOW: Other sensitive extensions (non-JSON)
 // ============================================================================
 
-test('Sensitive extensions - env, pem, key files (YELLOW)', (t) => {
+it('Sensitive extensions - env, pem, key files (YELLOW)', () => {
   const sensitivePaths = [
     '.env',
     '.env.local',
@@ -229,7 +229,7 @@ test('Sensitive extensions - env, pem, key files (YELLOW)', (t) => {
 
   for (const path of sensitivePaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW`);
+    expect(result).toBe(SafetyStatus.YELLOW);
   }
 });
 
@@ -237,23 +237,23 @@ test('Sensitive extensions - env, pem, key files (YELLOW)', (t) => {
 // Edge Cases and False Positives
 // ============================================================================
 
-test('JSON files - avoid false positives in safe filenames (GREEN)', (t) => {
+it('JSON files - avoid false positives in safe filenames (GREEN)', () => {
   // Files that contain words like "secret" or "key" but are clearly safe configs
   const falsPositives = ['webpack.config.json', 'typescript.json', 'settings.json', 'manifest.json', 'launch.json'];
 
   for (const path of falsPositives) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.GREEN, `"${path}" should be GREEN (false positive avoidance)`);
+    expect(result).toBe(SafetyStatus.GREEN);
   }
 });
 
-test('JSON files - files ending with .json extension only (GREEN)', (t) => {
+it('JSON files - files ending with .json extension only (GREEN)', () => {
   // Make sure we only match .json extension, not similar patterns
   const edgeCases = ['test.json', 'output.json', 'data.json'];
 
   for (const path of edgeCases) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.GREEN, `"${path}" should be GREEN`);
+    expect(result).toBe(SafetyStatus.GREEN);
   }
 });
 
@@ -261,7 +261,7 @@ test('JSON files - files ending with .json extension only (GREEN)', (t) => {
 // RED: Sensitive home paths
 // ============================================================================
 
-test('Path risk - directory traversal (YELLOW)', (t) => {
+it('Path risk - directory traversal (YELLOW)', () => {
   const traversalPaths = [
     '../secrets.json',
     '../../.env',
@@ -271,11 +271,11 @@ test('Path risk - directory traversal (YELLOW)', (t) => {
 
   for (const path of traversalPaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (directory traversal)`);
+    expect(result).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('Path risk - home directory paths (RED)', (t) => {
+it('Path risk - home directory paths (RED)', () => {
   const homePaths = [
     '~/.aws/credentials',
     '~/secrets.json',
@@ -286,29 +286,29 @@ test('Path risk - home directory paths (RED)', (t) => {
 
   for (const path of homePaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.RED, `"${path}" should be RED (home directory)`);
+    expect(result).toBe(SafetyStatus.RED);
   }
 });
 
-test('Path risk - absolute system paths (YELLOW)', (t) => {
+it('Path risk - absolute system paths (YELLOW)', () => {
   const systemPaths = ['/etc/passwd', '/var/log/system.log', '/usr/bin/node', '/boot/grub/grub.cfg'];
 
   for (const path of systemPaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (system path)`);
+    expect(result).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('Path risk - hidden files (YELLOW)', (t) => {
+it('Path risk - hidden files (YELLOW)', () => {
   const hiddenPaths = ['.hidden', '.secret', '.config', 'src/.hidden-file'];
 
   for (const path of hiddenPaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (hidden file)`);
+    expect(result).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('Path risk - sensitive hidden directories inside project (YELLOW)', (t) => {
+it('Path risk - sensitive hidden directories inside project (YELLOW)', () => {
   const sensitivePaths = [
     '.ssh/id_rsa',
     'src/.aws/credentials',
@@ -320,16 +320,16 @@ test('Path risk - sensitive hidden directories inside project (YELLOW)', (t) => 
 
   for (const path of sensitivePaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (sensitive hidden directory)`);
+    expect(result).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('Path risk - empty or undefined paths (GREEN)', (t) => {
+it('Path risk - empty or undefined paths (GREEN)', () => {
   const emptyPaths = [undefined, '', '   '];
 
   for (const path of emptyPaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.GREEN, `"${path}" should be GREEN (empty/undefined)`);
+    expect(result).toBe(SafetyStatus.GREEN);
   }
 });
 
@@ -337,7 +337,7 @@ test('Path risk - empty or undefined paths (GREEN)', (t) => {
 // NEW: Absolute paths within current project should be treated as local paths
 // ============================================================================
 
-test('Path risk - absolute paths within project (GREEN for safe files)', (t) => {
+it('Path risk - absolute paths within project (GREEN for safe files)', () => {
   const cwd = process.cwd();
   // These are safe files that should be GREEN when referenced with absolute paths within project
   const paths = [
@@ -349,64 +349,64 @@ test('Path risk - absolute paths within project (GREEN for safe files)', (t) => 
 
   for (const path of paths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.GREEN, `"${path}" should be GREEN (safe file within project)`);
+    expect(result).toBe(SafetyStatus.GREEN);
   }
 });
 
-test('Path risk - absolute paths within project (YELLOW for hidden files)', (t) => {
+it('Path risk - absolute paths within project (YELLOW for hidden files)', () => {
   const cwd = process.cwd();
   // Hidden files should still be YELLOW even within project
   const paths = [`${cwd}/.env`, `${cwd}/src/.hidden`];
 
   for (const path of paths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (hidden file within project)`);
+    expect(result).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('Path risk - absolute paths within project (YELLOW for sensitive extensions)', (t) => {
+it('Path risk - absolute paths within project (YELLOW for sensitive extensions)', () => {
   const cwd = process.cwd();
   // Sensitive extensions are still YELLOW even within project
   const paths = [`${cwd}/.env`, `${cwd}/key.pem`, `${cwd}/cert.key`];
 
   for (const path of paths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (sensitive extension within project)`);
+    expect(result).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('Path risk - absolute paths outside project (YELLOW)', (t) => {
+it('Path risk - absolute paths outside project (YELLOW)', () => {
   const paths = ['/opt/app.log', '/home/other/file.txt'];
 
   for (const path of paths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (outside project)`);
+    expect(result).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('Path risk - absolute paths under temporary directory (GREEN for safe files)', (t) => {
+it('Path risk - absolute paths under temporary directory (GREEN for safe files)', () => {
   const paths = ['/tmp/test.txt', '/private/tmp/test.txt', '/tmp/sub/dir/file.log'];
 
   for (const path of paths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.GREEN, `"${path}" should be GREEN (temporary directory)`);
+    expect(result).toBe(SafetyStatus.GREEN);
   }
 });
 
-test('Path risk - absolute paths under temporary directory (YELLOW for hidden/sensitive files)', (t) => {
+it('Path risk - absolute paths under temporary directory (YELLOW for hidden/sensitive files)', () => {
   const paths = ['/tmp/.env', '/tmp/secret.pem', '/tmp/.hidden'];
 
   for (const path of paths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (hidden/sensitive file under temporary directory)`);
+    expect(result).toBe(SafetyStatus.YELLOW);
   }
 });
 
-test('Path risk - absolute system paths remain YELLOW regardless of project', (t) => {
+it('Path risk - absolute system paths remain YELLOW regardless of project', () => {
   const paths = ['/etc/passwd', '/var/log/system.log', '/usr/bin/node'];
 
   for (const path of paths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (system path)`);
+    expect(result).toBe(SafetyStatus.YELLOW);
   }
 });

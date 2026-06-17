@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   buildSettingsList,
   filterSettingsByQuery,
@@ -68,7 +68,7 @@ const MOCK_DESCRIPTIONS: Record<string, string> = {
 };
 
 // buildSettingsList tests
-test('buildSettingsList - creates list from keys and descriptions', (t) => {
+it('buildSettingsList - creates list from keys and descriptions', () => {
   const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
   const excludedKeys = new Set([
@@ -86,28 +86,28 @@ test('buildSettingsList - creates list from keys and descriptions', (t) => {
     'debug.debugBashTool',
   ]);
   const expectedCount = Object.values(MOCK_SETTING_KEYS).filter((key) => !excludedKeys.has(key)).length;
-  t.is(result.length, expectedCount);
-  t.true(result.every(() => true));
-  t.true(result.every((item) => item.description !== undefined));
+  expect(result.length).toBe(expectedCount);
+  expect(result.every(() => true)).toBe(true);
+  expect(result.every((item) => item.description !== undefined)).toBe(true);
 });
 
-test('buildSettingsList - excludes sensitive settings by default', (t) => {
+it('buildSettingsList - excludes sensitive settings by default', () => {
   const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
   const keys = new Set(result.map((item) => item.key));
 
   // Should not include sensitive settings
-  t.false(keys.has('agent.openrouter.apiKey'));
-  t.false(keys.has('agent.openrouter.baseUrl'));
-  t.false(keys.has('agent.openrouter.referrer'));
-  t.false(keys.has('agent.openrouter.title'));
-  t.false(keys.has('app.shellPath'));
+  expect(keys.has('agent.openrouter.apiKey')).toBe(false);
+  expect(keys.has('agent.openrouter.baseUrl')).toBe(false);
+  expect(keys.has('agent.openrouter.referrer')).toBe(false);
+  expect(keys.has('agent.openrouter.title')).toBe(false);
+  expect(keys.has('app.shellPath')).toBe(false);
 
   // Should include non-sensitive settings
-  t.true(keys.has('agent.model'));
-  t.true(keys.has('shell.timeout'));
+  expect(keys.has('agent.model')).toBe(true);
+  expect(keys.has('shell.timeout')).toBe(true);
 });
 
-test('buildSettingsList - can include sensitive settings when requested', (t) => {
+it('buildSettingsList - can include sensitive settings when requested', () => {
   const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS, false);
   const keys = new Set(result.map((item) => item.key));
 
@@ -124,14 +124,14 @@ test('buildSettingsList - can include sensitive settings when requested', (t) =>
   const expectedCount = Object.values(MOCK_SETTING_KEYS).filter((key) => !hiddenKeys.has(key)).length;
 
   // Should include all settings except UI-hidden ones when excludeSensitive is false
-  t.is(result.length, expectedCount);
-  t.true(keys.has('agent.openrouter.apiKey'));
-  t.false(keys.has('app.shellPath'));
+  expect(result.length).toBe(expectedCount);
+  expect(keys.has('agent.openrouter.apiKey')).toBe(true);
+  expect(keys.has('app.shellPath')).toBe(false);
   // Hidden settings should still be excluded
-  t.false(keys.has('agent.provider'));
+  expect(keys.has('agent.provider')).toBe(false);
 });
 
-test('buildSettingsList - includes all non-sensitive setting keys', (t) => {
+it('buildSettingsList - includes all non-sensitive setting keys', () => {
   const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
   const keys = result.map((item) => item.key);
 
@@ -146,19 +146,19 @@ test('buildSettingsList - includes all non-sensitive setting keys', (t) => {
   ];
 
   for (const settingKey of nonSensitiveKeys) {
-    t.true(keys.includes(settingKey), `Missing key: ${settingKey}`);
+    expect(keys.includes(settingKey)).toBe(true);
   }
 });
 
-test('buildSettingsList - maps descriptions correctly', (t) => {
+it('buildSettingsList - maps descriptions correctly', () => {
   const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
   for (const item of result) {
-    t.is(item.description, MOCK_DESCRIPTIONS[item.key]);
+    expect(item.description).toBe(MOCK_DESCRIPTIONS[item.key]);
   }
 });
 
-test('buildSettingsList - includes current values when provided', (t) => {
+it('buildSettingsList - includes current values when provided', () => {
   const mockGetCurrentValue = (key: string): string | number | boolean => {
     const values: Record<string, string | number | boolean> = {
       'agent.model': 'gpt-4o',
@@ -174,12 +174,12 @@ test('buildSettingsList - includes current values when provided', (t) => {
   const shellTimeout = result.find((item) => item.key === 'shell.timeout');
   const logLevel = result.find((item) => item.key === 'logging.logLevel');
 
-  t.is(agentModel?.currentValue, 'gpt-4o');
-  t.is(shellTimeout?.currentValue, 120000);
-  t.is(logLevel?.currentValue, 'info');
+  expect(agentModel?.currentValue).toBe('gpt-4o');
+  expect(shellTimeout?.currentValue).toBe(120000);
+  expect(logLevel?.currentValue).toBe('info');
 });
 
-test('buildSettingsList - handles missing current values', (t) => {
+it('buildSettingsList - handles missing current values', () => {
   const mockGetCurrentValue = (key: string): string | number | boolean | undefined => {
     if (key === 'agent.model') {
       return 'gpt-4o';
@@ -192,11 +192,11 @@ test('buildSettingsList - handles missing current values', (t) => {
   const agentModel = result.find((item) => item.key === 'agent.model');
   const shellTimeout = result.find((item) => item.key === 'shell.timeout');
 
-  t.is(agentModel?.currentValue, 'gpt-4o');
-  t.is(shellTimeout?.currentValue, undefined);
+  expect(agentModel?.currentValue).toBe('gpt-4o');
+  expect(shellTimeout?.currentValue).toBe(undefined);
 });
 
-test('buildSettingsList - handles missing descriptions with empty string', (t) => {
+it('buildSettingsList - handles missing descriptions with empty string', () => {
   const incompleteDescriptions = {
     'agent.model': 'Model description',
   };
@@ -206,11 +206,11 @@ test('buildSettingsList - handles missing descriptions with empty string', (t) =
   const agentModel = result.find((item) => item.key === 'agent.model');
   const shellTimeout = result.find((item) => item.key === 'shell.timeout');
 
-  t.is(agentModel?.description, 'Model description');
-  t.is(shellTimeout?.description, '');
+  expect(agentModel?.description).toBe('Model description');
+  expect(shellTimeout?.description).toBe('');
 });
 
-test('buildSettingsList - handles empty descriptions object', (t) => {
+it('buildSettingsList - handles empty descriptions object', () => {
   const result = buildSettingsList(MOCK_SETTING_KEYS, {});
 
   const excludedKeys = new Set([
@@ -228,72 +228,69 @@ test('buildSettingsList - handles empty descriptions object', (t) => {
     'debug.debugBashTool',
   ]);
   const expectedCount = Object.values(MOCK_SETTING_KEYS).filter((key) => !excludedKeys.has(key)).length;
-  t.is(result.length, expectedCount);
-  t.true(result.every((item) => item.description === ''));
+  expect(result.length).toBe(expectedCount);
+  expect(result.every((item) => item.description === '')).toBe(true);
 });
 
-test('buildSettingsList - no duplicate keys', (t) => {
+it('buildSettingsList - no duplicate keys', () => {
   const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
   const keys = result.map((item) => item.key);
   const uniqueKeys = new Set(keys);
 
-  t.is(keys.length, uniqueKeys.size, 'Duplicate keys found');
+  expect(keys.length, 'Duplicate keys found').toBe(uniqueKeys.size);
 });
 
-test('getSettingCategory - groups settings by task-oriented menu tabs', (t) => {
+it('getSettingCategory - groups settings by task-oriented menu tabs', () => {
   const categoryIds = new Set(SETTINGS_CATEGORIES.map((c) => c.id));
 
   // Check that the returned category is always a valid category in SETTINGS_CATEGORIES
-  t.true(categoryIds.has(getSettingCategory('agent.model').id));
-  t.true(categoryIds.has(getSettingCategory('shell.timeout').id));
-  t.true(categoryIds.has(getSettingCategory('app.planMode').id));
+  expect(categoryIds.has(getSettingCategory('agent.model').id)).toBe(true);
+  expect(categoryIds.has(getSettingCategory('shell.timeout').id)).toBe(true);
+  expect(categoryIds.has(getSettingCategory('app.planMode').id)).toBe(true);
 
   // Verify specific expected mappings for key settings
-  t.is(getSettingCategory('agent.model').id, 'model');
-  t.is(getSettingCategory('agent.mentorModel').id, 'model');
-  t.is(getSettingCategory('shell.autoApproveMode').id, 'approvals');
-  t.is(getSettingCategory('shell.timeout').id, 'shell');
-  t.is(getSettingCategory('app.searchViaShell').id, 'search');
-  t.is(getSettingCategory('agent.maxParallelToolCalls').id, 'advanced');
-  t.is(getSettingCategory('agent.subagentWorkerModel').id, 'subagents');
-  t.is(getSettingCategory('ui.pasteThreshold').id, 'uiLogging');
+  expect(getSettingCategory('agent.model').id).toBe('model');
+  expect(getSettingCategory('agent.mentorModel').id).toBe('model');
+  expect(getSettingCategory('shell.autoApproveMode').id).toBe('approvals');
+  expect(getSettingCategory('shell.timeout').id).toBe('shell');
+  expect(getSettingCategory('app.searchViaShell').id).toBe('search');
+  expect(getSettingCategory('agent.maxParallelToolCalls').id).toBe('advanced');
+  expect(getSettingCategory('agent.subagentWorkerModel').id).toBe('subagents');
+  expect(getSettingCategory('ui.pasteThreshold').id).toBe('uiLogging');
 });
 
-test('filterSettingsByCategory - limits visible settings to the active task tab', (t) => {
+it('filterSettingsByCategory - limits visible settings to the active task tab', () => {
   const settings = [{ key: 'agent.model' }, { key: 'shell.timeout' }, { key: 'webSearch.provider' }];
 
   const result = filterSettingsByCategory(settings, 'shell');
 
-  t.deepEqual(
-    result.map((item) => item.key),
-    ['shell.timeout'],
-  );
+  expect(result.map((item) => item.key)).toEqual(['shell.timeout']);
 });
 
 // filterSettingsByQuery tests
-test('filterSettingsByQuery - empty query returns limited settings', (t) => {
+it('filterSettingsByQuery - empty query returns limited settings', () => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
   const result = filterSettingsByQuery(settings, '', 3);
-  t.is(result.length, 3);
+  expect(result.length).toBe(3);
 });
 
-test('filterSettingsByQuery - whitespace-only query returns limited settings', (t) => {
+it('filterSettingsByQuery - whitespace-only query returns limited settings', () => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
   const result = filterSettingsByQuery(settings, '   ', 3);
-  t.is(result.length, 3);
+  expect(result.length).toBe(3);
 });
 
-test('filterSettingsByQuery - exact key match returns result', (t) => {
+it('filterSettingsByQuery - exact key match returns result', () => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
   const result = filterSettingsByQuery(settings, 'agent.model', 10);
-  t.true(result.length > 0);
-  t.true(result.some((item) => item.key === 'agent.model'));
+  expect(result.length > 0).toBe(true);
+  expect(result.some((item) => item.key === 'agent.model')).toBe(true);
 });
 
-test('filterSettingsByQuery - partial key match returns results', (t) => {
+it('filterSettingsByQuery - partial key match returns results', () => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
   const cases = [
@@ -304,15 +301,12 @@ test('filterSettingsByQuery - partial key match returns results', (t) => {
 
   for (const { query, expectedKeySubstring } of cases) {
     const result = filterSettingsByQuery(settings, query, 10);
-    t.true(result.length > 0, `Query "${query}" should return results`);
-    t.true(
-      result.some((item) => item.key.includes(expectedKeySubstring)),
-      `Query "${query}" should match key containing "${expectedKeySubstring}"`,
-    );
+    expect(result.length > 0).toBe(true);
+    expect(result.some((item) => item.key.includes(expectedKeySubstring))).toBe(true);
   }
 });
 
-test('filterSettingsByQuery - search by description returns results', (t) => {
+it('filterSettingsByQuery - search by description returns results', () => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
   const cases = [
@@ -323,65 +317,62 @@ test('filterSettingsByQuery - search by description returns results', (t) => {
 
   for (const { query, expectedKey } of cases) {
     const result = filterSettingsByQuery(settings, query, 10);
-    t.true(result.length > 0, `Query "${query}" should return results`);
-    t.true(
-      result.some((item) => item.key === expectedKey),
-      `Query "${query}" should find key "${expectedKey}"`,
-    );
+    expect(result.length > 0).toBe(true);
+    expect(result.some((item) => item.key === expectedKey)).toBe(true);
   }
 });
 
-test('filterSettingsByQuery - respects maxResults parameter for search queries', (t) => {
+it('filterSettingsByQuery - respects maxResults parameter for search queries', () => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
   // Use a broad query that matches multiple settings
   const result1 = filterSettingsByQuery(settings, 'agent', 2);
-  t.true(result1.length <= 2);
+  expect(result1.length <= 2).toBe(true);
 
   const result2 = filterSettingsByQuery(settings, 'agent', 4);
-  t.true(result2.length <= 4);
+  expect(result2.length <= 4).toBe(true);
 
   const result3 = filterSettingsByQuery(settings, 'agent', 100);
-  t.true(result3.length <= settings.length);
+  expect(result3.length <= settings.length).toBe(true);
 });
 
-test('filterSettingsByQuery - case insensitive search', (t) => {
+it('filterSettingsByQuery - case insensitive search', () => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
   const lowerCase = filterSettingsByQuery(settings, 'agent', 10);
   const upperCase = filterSettingsByQuery(settings, 'AGENT', 10);
   const mixedCase = filterSettingsByQuery(settings, 'AgEnT', 10);
 
-  t.true(lowerCase.length > 0);
-  t.true(upperCase.length > 0);
-  t.true(mixedCase.length > 0);
-  t.is(lowerCase.length, upperCase.length);
-  t.is(lowerCase.length, mixedCase.length);
+  expect(lowerCase.length > 0).toBe(true);
+  expect(upperCase.length > 0).toBe(true);
+  expect(mixedCase.length > 0).toBe(true);
+  expect(lowerCase.length).toBe(upperCase.length);
+  expect(lowerCase.length).toBe(mixedCase.length);
 });
 
-test('filterSettingsByQuery - handles query with no matches', (t) => {
+it('filterSettingsByQuery - handles query with no matches', () => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
   const result = filterSettingsByQuery(settings, 'xyzzzznonexistent', 10);
-  t.is(result.length, 0);
+  expect(result.length).toBe(0);
 });
 
-test('filterSettingsByQuery - trims query before searching', (t) => {
+it('filterSettingsByQuery - trims query before searching', () => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
   const trimmed = filterSettingsByQuery(settings, 'agent', 10);
   const withSpaces = filterSettingsByQuery(settings, '  agent  ', 10);
 
-  t.true(trimmed.length > 0);
-  t.is(trimmed.length, withSpaces.length);
+  expect(trimmed.length > 0).toBe(true);
+  expect(trimmed.length).toBe(withSpaces.length);
 });
 
-test('filterSettingsByQuery - handles empty settings array', (t) => {
+it('filterSettingsByQuery - handles empty settings array', () => {
   const result = filterSettingsByQuery([], 'agent', 10);
-  t.is(result.length, 0);
+  expect(result.length).toBe(0);
 });
 
-test('filterSettingsByQuery - description matching requires substring match, not loose subsequence', (t) => {
+it('filterSettingsByQuery - description matching requires substring match, not loose subsequence', () => {
   const settings = [
     {
       key: 'app.searchViaShell',
@@ -391,22 +382,22 @@ test('filterSettingsByQuery - description matching requires substring match, not
 
   // "model" is a subsequence in the description but not a substring
   const result = filterSettingsByQuery(settings, 'model', 10);
-  t.is(result.length, 0);
+  expect(result.length).toBe(0);
 
   // "shell" is a substring in the description
   const result2 = filterSettingsByQuery(settings, 'shell', 10);
-  t.is(result2.length, 1);
-  t.is(result2[0].key, 'app.searchViaShell');
+  expect(result2.length).toBe(1);
+  expect(result2[0].key).toBe('app.searchViaShell');
 });
 
 // clampIndex tests
-test('clampIndex - returns 0 when array is empty', (t) => {
-  t.is(clampIndex(0, 0), 0);
-  t.is(clampIndex(5, 0), 0);
-  t.is(clampIndex(100, 0), 0);
+it('clampIndex - returns 0 when array is empty', () => {
+  expect(clampIndex(0, 0)).toBe(0);
+  expect(clampIndex(5, 0)).toBe(0);
+  expect(clampIndex(100, 0)).toBe(0);
 });
 
-test('clampIndex - returns same index when within bounds', (t) => {
+it('clampIndex - returns same index when within bounds', () => {
   const cases = [
     { index: 0, length: 5, expected: 0 },
     { index: 2, length: 5, expected: 2 },
@@ -414,11 +405,11 @@ test('clampIndex - returns same index when within bounds', (t) => {
   ];
 
   for (const { index, length, expected } of cases) {
-    t.is(clampIndex(index, length), expected, `Index ${index} in length ${length}`);
+    expect(clampIndex(index, length), `Index ${index} in length ${length}`).toBe(expected);
   }
 });
 
-test('clampIndex - clamps to max index when out of bounds', (t) => {
+it('clampIndex - clamps to max index when out of bounds', () => {
   const cases = [
     { index: 5, length: 5, expected: 4 },
     { index: 10, length: 5, expected: 4 },
@@ -426,37 +417,37 @@ test('clampIndex - clamps to max index when out of bounds', (t) => {
   ];
 
   for (const { index, length, expected } of cases) {
-    t.is(clampIndex(index, length), expected, `Index ${index} clamped in length ${length}`);
+    expect(clampIndex(index, length), `Index ${index} clamped in length ${length}`).toBe(expected);
   }
 });
 
-test('clampIndex - handles length of 1', (t) => {
-  t.is(clampIndex(0, 1), 0);
-  t.is(clampIndex(1, 1), 0);
-  t.is(clampIndex(10, 1), 0);
+it('clampIndex - handles length of 1', () => {
+  expect(clampIndex(0, 1)).toBe(0);
+  expect(clampIndex(1, 1)).toBe(0);
+  expect(clampIndex(10, 1)).toBe(0);
 });
 
-test('clampIndex - clamps negative index to first item', (t) => {
-  t.is(clampIndex(-1, 5), 0);
+it('clampIndex - clamps negative index to first item', () => {
+  expect(clampIndex(-1, 5)).toBe(0);
 });
 
 // Integration tests
-test('Integration - buildSettingsList and filterSettingsByQuery work together', (t) => {
+it('Integration - buildSettingsList and filterSettingsByQuery work together', () => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
   // Search for "model" should find agent.model
   const result = filterSettingsByQuery(settings, 'model', 10);
-  t.true(result.some((item) => item.key === 'agent.model'));
-  t.true(result.some((item) => item.description?.includes('model')));
+  expect(result.some((item) => item.key === 'agent.model')).toBe(true);
+  expect(result.some((item) => item.description?.includes('model'))).toBe(true);
 });
 
-test('Integration - clampIndex with filtered results', (t) => {
+it('Integration - clampIndex with filtered results', () => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
   // Get filtered results
   const filtered = filterSettingsByQuery(settings, 'agent', 3);
 
   // Clamp selection index to filtered results
-  t.is(clampIndex(0, filtered.length), 0);
-  t.is(clampIndex(10, filtered.length), filtered.length - 1);
+  expect(clampIndex(0, filtered.length)).toBe(0);
+  expect(clampIndex(10, filtered.length)).toBe(filtered.length - 1);
 });

@@ -1,22 +1,22 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { parseModelProviderArg } from './model-provider-arg.js';
 
-test('parseModelProviderArg returns model when provider flag is absent', (t) => {
-  t.deepEqual(parseModelProviderArg('gpt-4o'), {
+it('parseModelProviderArg returns model when provider flag is absent', () => {
+  expect(parseModelProviderArg('gpt-4o')).toEqual({
     modelId: 'gpt-4o',
     provider: undefined,
   });
 });
 
-test('parseModelProviderArg parses provider with spaces', (t) => {
-  t.deepEqual(parseModelProviderArg('deepseek-v4-flash --provider=opencode go'), {
+it('parseModelProviderArg parses provider with spaces', () => {
+  expect(parseModelProviderArg('deepseek-v4-flash --provider=opencode go')).toEqual({
     modelId: 'deepseek-v4-flash',
     provider: 'opencode go',
   });
 });
 
-test('parseModelProviderArg trims surrounding whitespace', (t) => {
-  t.deepEqual(parseModelProviderArg('  gpt-4o-mini   --provider=openrouter   '), {
+it('parseModelProviderArg trims surrounding whitespace', () => {
+  expect(parseModelProviderArg('  gpt-4o-mini   --provider=openrouter   ')).toEqual({
     modelId: 'gpt-4o-mini',
     provider: 'openrouter',
   });

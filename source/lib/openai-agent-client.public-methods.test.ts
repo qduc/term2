@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { AgentClient } from './agent-client.js';
 import { registerProvider } from '../providers/registry.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
@@ -270,7 +270,7 @@ function ensureFailingProviderRegistered() {
   }
 }
 
-test.beforeEach(() => {
+beforeEach(() => {
   runnerCalls = [];
   ensureProviderRegistered();
   ensureMentorProvidersRegistered();
@@ -289,7 +289,7 @@ test.beforeEach(() => {
 
 // ========== setModel tests ==========
 
-test.serial('setModel updates the internal model', async (t) => {
+it.sequential('setModel updates the internal model', async () => {
   const settings = createMockSettings();
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
@@ -301,35 +301,35 @@ test.serial('setModel updates the internal model', async (t) => {
   // Trigger a chat to see what model is used
   await client.chat('test');
 
-  t.is(runnerCalls.length, 1);
+  expect(runnerCalls.length).toBe(1);
   // The agent should have the updated model
   const agent = runnerCalls[0].agent;
-  t.truthy(agent);
+  expect(agent).toBeTruthy();
 });
 
 // ========== setProvider / getProvider tests ==========
 
-test.serial('getProvider returns current provider', (t) => {
+it.sequential('getProvider returns current provider', () => {
   const settings = createMockSettings({ 'agent.provider': 'mock-provider-public-methods' });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
-  t.is(client.getProvider(), 'mock-provider-public-methods');
+  expect(client.getProvider()).toBe('mock-provider-public-methods');
 });
 
-test.serial('setProvider updates provider and persists to settings', (t) => {
+it.sequential('setProvider updates provider and persists to settings', () => {
   const settings = createMockSettings({ 'agent.provider': 'mock-provider-public-methods' });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   client.setProvider('openai');
-  t.is(client.getProvider(), 'openai');
-  t.is(settings.get('agent.provider'), 'openai');
+  expect(client.getProvider()).toBe('openai');
+  expect(settings.get('agent.provider')).toBe('openai');
 });
 
-test.serial('setProvider does not initialize provider credentials eagerly', async (t) => {
+it.sequential('setProvider does not initialize provider credentials eagerly', async () => {
   const settings = createMockSettings({ 'agent.provider': 'mock-provider-public-methods' });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
@@ -337,14 +337,13 @@ test.serial('setProvider does not initialize provider credentials eagerly', asyn
 
   client.setProvider('mock-missing-creds');
 
-  t.is(client.getProvider(), 'mock-missing-creds');
-  t.is(settings.get('agent.provider'), 'mock-missing-creds');
+  expect(client.getProvider()).toBe('mock-missing-creds');
+  expect(settings.get('agent.provider')).toBe('mock-missing-creds');
 
-  const error = await t.throwsAsync(async () => client.chat('test'));
-  t.is(error?.message, 'Missing credentials');
+  await expect(async () => client.chat('test')).rejects.toThrow('Missing credentials');
 });
 
-test.serial('startStream only passes previousResponseId when provider supports chaining', async (t) => {
+it.sequential('startStream only passes previousResponseId when provider supports chaining', async () => {
   const settings = createMockSettings({
     'agent.provider': 'mock-chaining-false',
   });
@@ -353,18 +352,18 @@ test.serial('startStream only passes previousResponseId when provider supports c
   });
 
   await client.startStream('Hello', { previousResponseId: 'prev-1' });
-  t.is(chainingRunnerCalls.length, 1);
-  t.false('previousResponseId' in chainingRunnerCalls[0].options);
+  expect(chainingRunnerCalls.length).toBe(1);
+  expect('previousResponseId' in chainingRunnerCalls[0].options).toBe(false);
 
   client.setProvider('mock-chaining-true');
   await client.startStream('Hello', { previousResponseId: 'prev-2' });
-  t.is(chainingRunnerCalls.length, 2);
-  t.is(chainingRunnerCalls[1].options.previousResponseId, 'prev-2');
+  expect(chainingRunnerCalls.length).toBe(2);
+  expect(chainingRunnerCalls[1].options.previousResponseId).toBe('prev-2');
 });
 
-test.serial(
+it.sequential(
   'continueRunStream filters replayed history to delta input when chaining from previousResponseId',
-  async (t) => {
+  async () => {
     const settings = createMockSettings({
       'agent.provider': 'mock-chaining-true',
     });
@@ -382,10 +381,10 @@ test.serial(
 
     await client.continueRunStream(state as any, { previousResponseId: 'resp-prev' });
 
-    t.is(chainingRunnerCalls.length, 1);
+    expect(chainingRunnerCalls.length).toBe(1);
     const call = chainingRunnerCalls[0];
-    t.is(call.input, state);
-    t.is(call.options.previousResponseId, 'resp-prev');
+    expect(call.input).toBe(state);
+    expect(call.options.previousResponseId).toBe('resp-prev');
 
     const filtered = call.options.callModelInputFilter({
       context: { turnCount: 0 },
@@ -400,14 +399,14 @@ test.serial(
       },
     });
 
-    t.deepEqual(filtered.input, [{ type: 'function_call_output', callId: 'call-read', output: 'done' }]);
-    t.is(filtered.instructions, 'system');
+    expect(filtered.input).toEqual([{ type: 'function_call_output', callId: 'call-read', output: 'done' }]);
+    expect(filtered.instructions).toBe('system');
   },
 );
 
-test.serial(
+it.sequential(
   'continueRunStream filters replayed history to delta input with function_call_output_result and tool_call_output_item',
-  async (t) => {
+  async () => {
     const settings = createMockSettings({
       'agent.provider': 'mock-chaining-true',
     });
@@ -433,41 +432,44 @@ test.serial(
       },
     });
 
-    t.deepEqual(filtered.input, [
+    expect(filtered.input).toEqual([
       { type: 'function_call_output_result', callId: 'call-read', output: 'done' },
       { type: 'tool_call_output_item', callId: 'call-read', output: 'done' },
     ]);
   },
 );
 
-test.serial('continueRunStream keeps the latest user item when chained model input replays full history', async (t) => {
-  const settings = createMockSettings({
-    'agent.provider': 'mock-chaining-true',
-  });
-  const client = new AgentClient({
-    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
-  });
+it.sequential(
+  'continueRunStream keeps the latest user item when chained model input replays full history',
+  async () => {
+    const settings = createMockSettings({
+      'agent.provider': 'mock-chaining-true',
+    });
+    const client = new AgentClient({
+      deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+    });
 
-  await client.continueRunStream({ _context: { context: { turnCount: 0 } } } as any, {
-    previousResponseId: 'resp-prev',
-  });
+    await client.continueRunStream({ _context: { context: { turnCount: 0 } } } as any, {
+      previousResponseId: 'resp-prev',
+    });
 
-  const filtered = chainingRunnerCalls[0].options.callModelInputFilter({
-    context: { turnCount: 0 },
-    modelData: {
-      input: [
-        { role: 'user', type: 'message', content: 'first' },
-        { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first response' }] },
-        { role: 'user', type: 'message', content: 'second' },
-      ],
-      instructions: 'system',
-    },
-  });
+    const filtered = chainingRunnerCalls[0].options.callModelInputFilter({
+      context: { turnCount: 0 },
+      modelData: {
+        input: [
+          { role: 'user', type: 'message', content: 'first' },
+          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first response' }] },
+          { role: 'user', type: 'message', content: 'second' },
+        ],
+        instructions: 'system',
+      },
+    });
 
-  t.deepEqual(filtered.input, [{ role: 'user', type: 'message', content: 'second' }]);
-});
+    expect(filtered.input).toEqual([{ role: 'user', type: 'message', content: 'second' }]);
+  },
+);
 
-test.serial('startStream filters replayed history to delta input when chaining from previousResponseId', async (t) => {
+it.sequential('startStream filters replayed history to delta input when chaining from previousResponseId', async () => {
   const settings = createMockSettings({
     'agent.provider': 'mock-chaining-true',
   });
@@ -477,9 +479,9 @@ test.serial('startStream filters replayed history to delta input when chaining f
 
   await client.startStream('inspect file', { previousResponseId: 'resp-prev' });
 
-  t.is(chainingRunnerCalls.length, 1);
+  expect(chainingRunnerCalls.length).toBe(1);
   const call = chainingRunnerCalls[0];
-  t.is(call.options.previousResponseId, 'resp-prev');
+  expect(call.options.previousResponseId).toBe('resp-prev');
 
   const filtered = call.options.callModelInputFilter({
     context: { turnCount: 0 },
@@ -494,11 +496,11 @@ test.serial('startStream filters replayed history to delta input when chaining f
     },
   });
 
-  t.deepEqual(filtered.input, [{ type: 'function_call_output', callId: 'call-read', output: 'done' }]);
-  t.is(filtered.instructions, 'system');
+  expect(filtered.input).toEqual([{ type: 'function_call_output', callId: 'call-read', output: 'done' }]);
+  expect(filtered.instructions).toBe('system');
 });
 
-test.serial('continueRunStream keeps only expected approved tool outputs when chaining', async (t) => {
+it.sequential('continueRunStream keeps only expected approved tool outputs when chaining', async () => {
   const settings = createMockSettings({
     'agent.provider': 'mock-chaining-true',
   });
@@ -523,10 +525,10 @@ test.serial('continueRunStream keeps only expected approved tool outputs when ch
     },
   });
 
-  t.deepEqual(filtered.input, [{ type: 'function_call_output', callId: 'call-current', output: 'current' }]);
+  expect(filtered.input).toEqual([{ type: 'function_call_output', callId: 'call-current', output: 'current' }]);
 });
 
-test.serial('continueRunStream warns when chained delta input item count spikes', async (t) => {
+it.sequential('continueRunStream warns when chained delta input item count spikes', async () => {
   const warnings: any[] = [];
   const logger = {
     ...createMockLogger(),
@@ -565,12 +567,12 @@ test.serial('continueRunStream warns when chained delta input item count spikes'
   });
 
   const warning = warnings.find((entry) => entry.meta?.eventType === 'provider.chained_delta_input_spike');
-  t.truthy(warning);
-  t.is(warning.meta.previousInputItems, 3);
-  t.is(warning.meta.inputItems, 23);
+  expect(warning).toBeTruthy();
+  expect(warning.meta.previousInputItems).toBe(3);
+  expect(warning.meta.inputItems).toBe(23);
 });
 
-test.serial('continueRunStream filters and keeps user message even with custom type', async (t) => {
+it.sequential('continueRunStream filters and keeps user message even with custom type', async () => {
   const settings = createMockSettings({
     'agent.provider': 'mock-chaining-true',
   });
@@ -594,12 +596,12 @@ test.serial('continueRunStream filters and keeps user message even with custom t
     },
   });
 
-  t.deepEqual(filtered.input, [{ role: 'user', type: 'custom_input_type', content: 'second' }]);
+  expect(filtered.input).toEqual([{ role: 'user', type: 'custom_input_type', content: 'second' }]);
 });
 
 // ========== Characterization tests for stream lifecycle ==========
 
-test.serial('startStream with chaining and input filtering', async (t) => {
+it.sequential('startStream with chaining and input filtering', async () => {
   const settings = createMockSettings({
     'agent.provider': 'mock-chaining-true',
   });
@@ -609,12 +611,12 @@ test.serial('startStream with chaining and input filtering', async (t) => {
 
   await client.startStream('Hello', { previousResponseId: 'prev-1' });
 
-  t.is(chainingRunnerCalls.length, 1);
-  t.is(chainingRunnerCalls[0].options.previousResponseId, 'prev-1');
-  t.is(typeof chainingRunnerCalls[0].options.callModelInputFilter, 'function');
+  expect(chainingRunnerCalls.length).toBe(1);
+  expect(chainingRunnerCalls[0].options.previousResponseId).toBe('prev-1');
+  expect(typeof chainingRunnerCalls[0].options.callModelInputFilter).toBe('function');
 });
 
-test.serial('continueRunStream resuming from a RunState with chaining', async (t) => {
+it.sequential('continueRunStream resuming from a RunState with chaining', async () => {
   const settings = createMockSettings({
     'agent.provider': 'mock-chaining-true',
   });
@@ -626,14 +628,14 @@ test.serial('continueRunStream resuming from a RunState with chaining', async (t
 
   await client.continueRunStream(state as any, { previousResponseId: 'resp-prev' });
 
-  t.is(chainingRunnerCalls.length, 1);
-  t.is(chainingRunnerCalls[0].input, state);
-  t.is(chainingRunnerCalls[0].options.previousResponseId, 'resp-prev');
-  t.true(chainingRunnerCalls[0].options.stream);
-  t.is(typeof chainingRunnerCalls[0].options.callModelInputFilter, 'function');
+  expect(chainingRunnerCalls.length).toBe(1);
+  expect(chainingRunnerCalls[0].input).toBe(state);
+  expect(chainingRunnerCalls[0].options.previousResponseId).toBe('resp-prev');
+  expect(chainingRunnerCalls[0].options.stream).toBe(true);
+  expect(typeof chainingRunnerCalls[0].options.callModelInputFilter).toBe('function');
 });
 
-test.serial('abort during an active startStream', async (t) => {
+it.sequential('abort during an active startStream', async () => {
   let capturedSignal: AbortSignal | undefined;
   const testProviderId = 'mock-abort-active-stream';
 
@@ -683,20 +685,20 @@ test.serial('abort during an active startStream', async (t) => {
   const streamPromise = client.startStream('Hello');
 
   // capturedSignal is set synchronously before startStream awaits the runner
-  t.truthy(correlationId, 'correlation ID should be set when stream starts');
-  t.truthy(capturedSignal, 'abort signal should be captured');
-  t.false(capturedSignal!.aborted, 'signal should not be aborted yet');
+  expect(correlationId).toBeTruthy();
+  expect(capturedSignal).toBeTruthy();
+  expect(capturedSignal!.aborted).toBe(false);
 
   // Abort
   client.abort();
 
   await streamPromise;
 
-  t.true(capturedSignal!.aborted, 'signal should be aborted after abort()');
-  t.falsy(correlationId, 'correlation ID should be cleared after abort');
+  expect(capturedSignal!.aborted).toBe(true);
+  expect(correlationId).toBeFalsy();
 });
 
-test.serial('clearConversations resets chained delta state', async (t) => {
+it.sequential('clearConversations resets chained delta state', async () => {
   const warnings: any[] = [];
   const logger = {
     ...createMockLogger(),
@@ -736,10 +738,10 @@ test.serial('clearConversations resets chained delta state', async (t) => {
   // After clearConversations, #lastChainedDeltaInputItems is null,
   // so a large jump should NOT trigger the spike warning
   const spikeWarnings = warnings.filter((w) => w.meta?.eventType === 'provider.chained_delta_input_spike');
-  t.is(spikeWarnings.length, 0, 'should not warn about spike after clearConversations resets state');
+  expect(spikeWarnings.length, 'should not warn about spike after clearConversations resets state').toBe(0);
 });
 
-test.serial('chat and chatJson with temp provider/reasoning-effort overrides', async (t) => {
+it.sequential('chat and chatJson with temp provider/reasoning-effort overrides', async () => {
   const chatRunnerCalls: any[] = [];
   registerProvider({
     id: 'mock-chat-override-test',
@@ -769,16 +771,16 @@ test.serial('chat and chatJson with temp provider/reasoning-effort overrides', a
     reasoningEffort: 'high',
   });
 
-  t.is(chatResult, 'mock chat response');
-  t.is(chatRunnerCalls.length, 1, 'chat should use the override provider');
-  t.is(chatRunnerCalls[0].agent.name, 'Chat');
-  t.is(chatRunnerCalls[0].agent.model, 'chat-override-model');
-  t.is(chatRunnerCalls[0].agent.modelSettings?.reasoning?.effort, 'high');
-  t.is(chatRunnerCalls[0].input, 'Hello');
-  t.false(chatRunnerCalls[0].options.stream, 'chat should not use streaming');
+  expect(chatResult).toBe('mock chat response');
+  expect(chatRunnerCalls.length, 'chat should use the override provider').toBe(1);
+  expect(chatRunnerCalls[0].agent.name).toBe('Chat');
+  expect(chatRunnerCalls[0].agent.model).toBe('chat-override-model');
+  expect(chatRunnerCalls[0].agent.modelSettings?.reasoning?.effort).toBe('high');
+  expect(chatRunnerCalls[0].input).toBe('Hello');
+  expect(chatRunnerCalls[0].options.stream).toBe(false);
 
   // The default provider should not have been used
-  t.is(runnerCalls.length, 0, 'default provider runner should not be called for chat with override');
+  expect(runnerCalls.length, 'default provider runner should not be called for chat with override').toBe(0);
 
   // Now call chatJson with different reasoningEffort
   const chatJsonResult = await client.chatJson('Hello structured', {
@@ -798,20 +800,20 @@ test.serial('chat and chatJson with temp provider/reasoning-effort overrides', a
     },
   });
 
-  t.is(chatJsonResult, 'mock chat response');
-  t.is(chatRunnerCalls.length, 2, 'chatJson should use the override provider');
-  t.is(chatRunnerCalls[1].agent.name, 'Chat');
-  t.is(chatRunnerCalls[1].agent.model, 'chat-override-model');
-  t.is(chatRunnerCalls[1].agent.modelSettings?.reasoning?.effort, 'medium');
-  t.is(chatRunnerCalls[1].input, 'Hello structured');
-  t.false(chatRunnerCalls[1].options.stream, 'chatJson should not use streaming');
-  t.truthy(chatRunnerCalls[1].agent.outputType, 'chatJson agent should have outputType');
+  expect(chatJsonResult).toBe('mock chat response');
+  expect(chatRunnerCalls.length, 'chatJson should use the override provider').toBe(2);
+  expect(chatRunnerCalls[1].agent.name).toBe('Chat');
+  expect(chatRunnerCalls[1].agent.model).toBe('chat-override-model');
+  expect(chatRunnerCalls[1].agent.modelSettings?.reasoning?.effort).toBe('medium');
+  expect(chatRunnerCalls[1].input).toBe('Hello structured');
+  expect(chatRunnerCalls[1].options.stream).toBe(false);
+  expect(chatRunnerCalls[1].agent.outputType).toBeTruthy();
 
   // Default provider still not called
-  t.is(runnerCalls.length, 0, 'default provider runner should still not be called');
+  expect(runnerCalls.length, 'default provider runner should still not be called').toBe(0);
 });
 
-test.serial('codex startStream puts prompt_cache_key on agent modelSettings, not run options', async (t) => {
+it.sequential('codex startStream puts prompt_cache_key on agent modelSettings, not run options', async () => {
   const settings = createMockSettings({
     'agent.provider': 'codex',
   });
@@ -821,12 +823,12 @@ test.serial('codex startStream puts prompt_cache_key on agent modelSettings, not
 
   await client.startStream('Hello', { sessionId: 'session-123' });
 
-  t.is(codexRunnerCalls.length, 1);
-  t.is(codexRunnerCalls[0].agent.modelSettings.prompt_cache_key, 'session-123');
-  t.false('modelSettings' in codexRunnerCalls[0].options);
+  expect(codexRunnerCalls.length).toBe(1);
+  expect(codexRunnerCalls[0].agent.modelSettings.prompt_cache_key).toBe('session-123');
+  expect('modelSettings' in codexRunnerCalls[0].options).toBe(false);
 });
 
-test.serial('openai startStream puts prompt_cache_key on agent modelSettings, not run options', async (t) => {
+it.sequential('openai startStream puts prompt_cache_key on agent modelSettings, not run options', async () => {
   const settings = createMockSettings({
     'agent.provider': 'openai',
   });
@@ -836,12 +838,12 @@ test.serial('openai startStream puts prompt_cache_key on agent modelSettings, no
 
   await client.startStream('Hello', { sessionId: 'session-456' });
 
-  t.is(openaiRunnerCalls.length, 1);
-  t.is(openaiRunnerCalls[0].agent.modelSettings.prompt_cache_key, 'session-456');
-  t.false('modelSettings' in openaiRunnerCalls[0].options);
+  expect(openaiRunnerCalls.length).toBe(1);
+  expect(openaiRunnerCalls[0].agent.modelSettings.prompt_cache_key).toBe('session-456');
+  expect('modelSettings' in openaiRunnerCalls[0].options).toBe(false);
 });
 
-test.serial('startStream omits prompt_cache_key when provider does not support it', async (t) => {
+it.sequential('startStream omits prompt_cache_key when provider does not support it', async () => {
   const settings = createMockSettings({
     'agent.provider': 'mock-provider-public-methods',
   });
@@ -851,11 +853,11 @@ test.serial('startStream omits prompt_cache_key when provider does not support i
 
   await client.startStream('Hello', { sessionId: 'session-789' });
 
-  t.is(runnerCalls.length, 1);
-  t.falsy(runnerCalls[0].agent.modelSettings?.prompt_cache_key);
+  expect(runnerCalls.length).toBe(1);
+  expect(runnerCalls[0].agent.modelSettings?.prompt_cache_key).toBeFalsy();
 });
 
-test.serial('abort logs with active trace id before clearing correlation', async (t) => {
+it.sequential('abort logs with active trace id before clearing correlation', async () => {
   const debugLogs: Array<{ message: string; meta?: Record<string, unknown> }> = [];
   let correlationId: string | undefined;
   const logger: ILoggingService = {
@@ -884,20 +886,20 @@ test.serial('abort logs with active trace id before clearing correlation', async
 
   await client.startStream('Hello');
   const activeCorrelationId = correlationId;
-  t.truthy(activeCorrelationId);
+  expect(activeCorrelationId).toBeTruthy();
 
   client.abort();
 
   const abortLogs = debugLogs.filter((entry) => entry.message === 'Agent operation aborted');
-  t.true(abortLogs.length > 0);
+  expect(abortLogs.length > 0).toBe(true);
   const latestAbortLog = abortLogs[abortLogs.length - 1];
-  t.is(latestAbortLog.meta?.traceId, activeCorrelationId);
-  t.is(correlationId, undefined);
+  expect(latestAbortLog.meta?.traceId).toBe(activeCorrelationId);
+  expect(correlationId).toBe(undefined);
 });
 
 // ========== addToolInterceptor tests ==========
 
-test.serial('addToolInterceptor returns removal function', (t) => {
+it.sequential('addToolInterceptor returns removal function', () => {
   const settings = createMockSettings();
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
@@ -907,13 +909,13 @@ test.serial('addToolInterceptor returns removal function', (t) => {
     return null;
   });
 
-  t.is(typeof remove, 'function');
+  expect(typeof remove).toBe('function');
   // Calling remove should work without error
   remove();
-  t.pass();
+  expect(true).toBe(true);
 });
 
-test.serial('addToolInterceptor can be removed', (t) => {
+it.sequential('addToolInterceptor can be removed', () => {
   const settings = createMockSettings();
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
@@ -928,98 +930,97 @@ test.serial('addToolInterceptor can be removed', (t) => {
 
   // After removal, the interceptor should not be called
   // (We can't directly test this without more complex setup)
-  t.pass();
 });
 
 // ========== abort tests ==========
 
-test.serial('abort does not throw when called without active operation', (t) => {
+it.sequential('abort does not throw when called without active operation', () => {
   const settings = createMockSettings();
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   // Should not throw
-  t.notThrows(() => client.abort());
+  expect(() => client.abort()).not.toThrow();
 });
 
-test.serial('abort can be called multiple times', (t) => {
+it.sequential('abort can be called multiple times', () => {
   const settings = createMockSettings();
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
-  t.notThrows(() => {
+  expect(() => {
     client.abort();
     client.abort();
     client.abort();
-  });
+  }).not.toThrow();
 });
 
 // ========== clearConversations tests ==========
 
-test.serial('clearConversations does not throw', (t) => {
+it.sequential('clearConversations does not throw', () => {
   const settings = createMockSettings();
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
-  t.notThrows(() => client.clearConversations());
+  expect(() => client.clearConversations()).not.toThrow();
 });
 
-test.serial('clearConversations can be called multiple times', (t) => {
+it.sequential('clearConversations can be called multiple times', () => {
   const settings = createMockSettings();
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
-  t.notThrows(() => {
+  expect(() => {
     client.clearConversations();
     client.clearConversations();
-  });
+  }).not.toThrow();
 });
 
 // ========== setReasoningEffort tests ==========
 
-test.serial('setReasoningEffort accepts valid effort levels', (t) => {
+it.sequential('setReasoningEffort accepts valid effort levels', () => {
   const settings = createMockSettings();
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
-  t.notThrows(() => client.setReasoningEffort('high'));
-  t.notThrows(() => client.setReasoningEffort('medium'));
-  t.notThrows(() => client.setReasoningEffort('low'));
-  t.notThrows(() => client.setReasoningEffort('default'));
-  t.notThrows(() => client.setReasoningEffort(undefined));
+  expect(() => client.setReasoningEffort('high')).not.toThrow();
+  expect(() => client.setReasoningEffort('medium')).not.toThrow();
+  expect(() => client.setReasoningEffort('low')).not.toThrow();
+  expect(() => client.setReasoningEffort('default')).not.toThrow();
+  expect(() => client.setReasoningEffort(undefined)).not.toThrow();
 });
 
 // ========== setTemperature tests ==========
 
-test.serial('setTemperature accepts numeric values', (t) => {
+it.sequential('setTemperature accepts numeric values', () => {
   const settings = createMockSettings();
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
-  t.notThrows(() => client.setTemperature(0.5));
-  t.notThrows(() => client.setTemperature(1.0));
-  t.notThrows(() => client.setTemperature(0));
-  t.notThrows(() => client.setTemperature(undefined));
+  expect(() => client.setTemperature(0.5)).not.toThrow();
+  expect(() => client.setTemperature(1.0)).not.toThrow();
+  expect(() => client.setTemperature(0)).not.toThrow();
+  expect(() => client.setTemperature(undefined)).not.toThrow();
 });
 
 // ========== setRetryCallback tests ==========
 
-test.serial('setRetryCallback accepts callback function', (t) => {
+it.sequential('setRetryCallback accepts callback function', () => {
   const settings = createMockSettings();
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
-  t.notThrows(() => client.setRetryCallback(() => {}));
+  expect(() => client.setRetryCallback(() => {})).not.toThrow();
 });
 
-test.serial('setRetryCallback is forwarded to the provider runner', async (t) => {
+it.sequential('setRetryCallback is forwarded to the provider runner', async () => {
   const providerId = 'mock-retry-callback-provider';
   let providerRetryHook: (() => void) | undefined;
   let retryCount = 0;
@@ -1057,11 +1058,11 @@ test.serial('setRetryCallback is forwarded to the provider runner', async (t) =>
 
   await client.chat('trigger retry hook');
 
-  t.truthy(providerRetryHook);
-  t.is(retryCount, 1);
+  expect(providerRetryHook).toBeTruthy();
+  expect(retryCount).toBe(1);
 });
 
-test.serial('setAskUserAnswer stores and consumes answers by call id', (t) => {
+it.sequential('setAskUserAnswer stores and consumes answers by call id', () => {
   const settings = createMockSettings();
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
@@ -1069,21 +1070,21 @@ test.serial('setAskUserAnswer stores and consumes answers by call id', (t) => {
 
   client.setAskUserAnswer('call-1', 'Use the existing config');
 
-  t.is(client.getAskUserAnswer('call-1'), 'Use the existing config');
-  t.is(client.getAskUserAnswer('call-1'), undefined);
+  expect(client.getAskUserAnswer('call-1')).toBe('Use the existing config');
+  expect(client.getAskUserAnswer('call-1')).toBeUndefined();
 });
 
-test.serial('getAskUserAnswer returns undefined for unknown call ids', (t) => {
+it.sequential('getAskUserAnswer returns undefined for unknown call ids', () => {
   const settings = createMockSettings();
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
-  t.is(client.getAskUserAnswer('missing-call'), undefined);
-  t.is(client.getAskUserAnswer(), undefined);
+  expect(client.getAskUserAnswer('missing-call')).toBeUndefined();
+  expect(client.getAskUserAnswer()).toBeUndefined();
 });
 
-test.serial('ask_user tool executes using the stored approval answer', async (t) => {
+it.sequential('ask_user tool executes using the stored approval answer', async (t) => {
   const settings = createMockSettings({
     'agent.provider': 'mock-main-mentor-refresh',
     'agent.model': 'mock-model',
@@ -1096,8 +1097,8 @@ test.serial('ask_user tool executes using the stored approval answer', async (t)
   await client.chat('prime tools');
 
   const askUserTool = capturedMainAgentForMentorTest?.tools?.find((tool: any) => tool?.name === 'ask_user');
-  t.truthy(askUserTool);
-  t.is(typeof askUserTool?.invoke, 'function');
+  expect(askUserTool).toBeTruthy();
+  expect(typeof askUserTool?.invoke).toBe('function');
 
   client.setAskUserAnswer('call-bridge', 'Use the safe option');
 
@@ -1109,11 +1110,11 @@ test.serial('ask_user tool executes using the stored approval answer', async (t)
     { toolCall: { callId: 'call-bridge' } },
   );
 
-  t.is(result, 'Use the safe option');
-  t.is(client.getAskUserAnswer('call-bridge'), undefined);
+  expect(result).toBe('Use the safe option');
+  expect(client.getAskUserAnswer('call-bridge')).toBeUndefined();
 });
 
-test.serial('setModel resets mentor conversation chain used by ask_mentor', async (t) => {
+it.sequential('setModel resets mentor conversation chain used by ask_mentor', async () => {
   const settings = createMockSettings({
     'agent.provider': 'mock-main-mentor-refresh',
     'agent.model': 'mock-model',
@@ -1128,28 +1129,28 @@ test.serial('setModel resets mentor conversation chain used by ask_mentor', asyn
   await client.chat('prime tools');
 
   const askMentorTool = capturedMainAgentForMentorTest?.tools?.find((tool: any) => tool?.name === 'ask_mentor');
-  t.truthy(askMentorTool);
-  t.is(typeof askMentorTool?.invoke, 'function');
+  expect(askMentorTool).toBeTruthy();
+  expect(typeof askMentorTool?.invoke).toBe('function');
 
   await askMentorTool.invoke({}, JSON.stringify({ question: 'first' }), { toolCall: { callId: 'call-1' } });
   await askMentorTool.invoke({}, JSON.stringify({ question: 'second' }), { toolCall: { callId: 'call-2' } });
 
-  t.is(mentorInputs.length, 2);
-  t.true(Array.isArray(mentorInputs[0]));
-  t.true(Array.isArray(mentorInputs[1]));
-  t.is(mentorInputs[0].length, 1);
-  t.true(mentorInputs[1].length > 1);
+  expect(mentorInputs.length).toBe(2);
+  expect(Array.isArray(mentorInputs[0])).toBe(true);
+  expect(Array.isArray(mentorInputs[1])).toBe(true);
+  expect(mentorInputs[0].length).toBe(1);
+  expect(mentorInputs[1].length > 1).toBe(true);
 
   client.setModel('mock-model-v2');
 
   await askMentorTool.invoke({}, JSON.stringify({ question: 'third' }), { toolCall: { callId: 'call-3' } });
 
-  t.is(mentorInputs.length, 3);
-  t.true(Array.isArray(mentorInputs[2]));
-  t.is(mentorInputs[2].length, 1);
+  expect(mentorInputs.length).toBe(3);
+  expect(Array.isArray(mentorInputs[2])).toBe(true);
+  expect(mentorInputs[2].length).toBe(1);
 });
 
-test.serial('ask_mentor resets conversation chain when mentor provider changes', async (t) => {
+it.sequential('ask_mentor resets conversation chain when mentor provider changes', async () => {
   const settings = createMockSettings({
     'agent.provider': 'mock-main-mentor-refresh',
     'agent.model': 'mock-model',
@@ -1164,28 +1165,28 @@ test.serial('ask_mentor resets conversation chain when mentor provider changes',
   await client.chat('prime tools');
 
   const askMentorTool = capturedMainAgentForMentorTest?.tools?.find((tool: any) => tool?.name === 'ask_mentor');
-  t.truthy(askMentorTool);
-  t.is(typeof askMentorTool?.invoke, 'function');
+  expect(askMentorTool).toBeTruthy();
+  expect(typeof askMentorTool?.invoke).toBe('function');
 
   await askMentorTool.invoke({}, JSON.stringify({ question: 'first' }), { toolCall: { callId: 'call-1' } });
   await askMentorTool.invoke({}, JSON.stringify({ question: 'second' }), { toolCall: { callId: 'call-2' } });
 
-  t.is(mentorInputs.length, 2);
-  t.true(Array.isArray(mentorInputs[0]));
-  t.true(Array.isArray(mentorInputs[1]));
-  t.is(mentorInputs[0].length, 1);
-  t.true(mentorInputs[1].length > 1);
+  expect(mentorInputs.length).toBe(2);
+  expect(Array.isArray(mentorInputs[0])).toBe(true);
+  expect(Array.isArray(mentorInputs[1])).toBe(true);
+  expect(mentorInputs[0].length).toBe(1);
+  expect(mentorInputs[1].length > 1).toBe(true);
 
   settings.set('agent.mentorProvider', 'mock-mentor-refresh-alt');
 
   await askMentorTool.invoke({}, JSON.stringify({ question: 'third' }), { toolCall: { callId: 'call-3' } });
 
-  t.is(mentorInputsAltProvider.length, 1);
-  t.true(Array.isArray(mentorInputsAltProvider[0]));
-  t.is(mentorInputsAltProvider[0].length, 1);
+  expect(mentorInputsAltProvider.length).toBe(1);
+  expect(Array.isArray(mentorInputsAltProvider[0])).toBe(true);
+  expect(mentorInputsAltProvider[0].length).toBe(1);
 });
 
-test.serial('setSubagentEventSink defers cleanup to null when subagents are active', async (t) => {
+it.sequential('setSubagentEventSink defers cleanup to null when subagents are active', async () => {
   let subagentPromiseResolve: (() => void) | null = null;
   registerProvider({
     id: 'mock-deferred-sink-provider',
@@ -1221,7 +1222,7 @@ test.serial('setSubagentEventSink defers cleanup to null when subagents are acti
   await client.chat('prime tools');
 
   const askMentorTool = capturedMainAgentForMentorTest?.tools?.find((tool: any) => tool?.name === 'ask_mentor');
-  t.truthy(askMentorTool);
+  expect(askMentorTool).toBeTruthy();
 
   let eventCount = 0;
   const dummySink = () => {
@@ -1248,10 +1249,10 @@ test.serial('setSubagentEventSink defers cleanup to null when subagents are acti
   await invokePromise;
 
   // The event sink should have been kept active until the end of the run
-  t.true(eventCount > 0, 'Should have received events during the active run even after setting sink to null');
+  expect(eventCount > 0).toBe(true);
 });
 
-test.serial('codex resolves default_reasoning_level if agent.reasoningEffort is default', async (t) => {
+it.sequential('codex resolves default_reasoning_level if agent.reasoningEffort is default', async () => {
   const settings = createMockSettings({
     'agent.provider': 'codex',
     'agent.model': 'gpt-5.3-codex',
@@ -1288,14 +1289,14 @@ test.serial('codex resolves default_reasoning_level if agent.reasoningEffort is 
 
   await client.startStream('Hello');
 
-  t.is(codexRunnerCalls.length, 1);
+  expect(codexRunnerCalls.length).toBe(1);
   const agent = codexRunnerCalls[0].agent;
-  t.truthy(agent);
-  t.is(agent.modelSettings?.reasoning?.effort, 'medium');
-  t.is(agent.defaultRunOptions?.reasoning?.effort, 'medium');
+  expect(agent).toBeTruthy();
+  expect(agent.modelSettings?.reasoning?.effort).toBe('medium');
+  expect(agent.defaultRunOptions?.reasoning?.effort).toBe('medium');
 });
 
-test.serial('codex chat resolves default_reasoning_level if agent.reasoningEffort is default', async (t) => {
+it.sequential('codex chat resolves default_reasoning_level if agent.reasoningEffort is default', async () => {
   const settings = createMockSettings({
     'agent.provider': 'codex',
     'agent.model': 'gpt-5.3-codex',
@@ -1332,13 +1333,13 @@ test.serial('codex chat resolves default_reasoning_level if agent.reasoningEffor
 
   await client.chat('Hello', { provider: 'codex', model: 'gpt-5.3-codex', reasoningEffort: 'default' });
 
-  t.is(codexRunnerCalls.length, 1);
+  expect(codexRunnerCalls.length).toBe(1);
   const agent = codexRunnerCalls[0].agent;
-  t.truthy(agent);
-  t.is(agent.modelSettings?.reasoning?.effort, 'medium');
+  expect(agent).toBeTruthy();
+  expect(agent.modelSettings?.reasoning?.effort).toBe('medium');
 });
 
-test.serial('main agent client injects warning into tool output when turns left <= 5', async (t) => {
+it.sequential('main agent client injects warning into tool output when turns left <= 5', async () => {
   let executeOutput: string | null = null;
 
   registerProvider({
@@ -1395,7 +1396,7 @@ test.serial('main agent client injects warning into tool output when turns left 
   // Trigger startStream to initiate the provider run with correct context
   await client.startStream('Hello');
 
-  t.truthy(executeOutput);
-  t.true(executeOutput!.includes('approaching the maximum turn limit'), 'should contain max turns warning');
-  t.true(executeOutput!.includes('4 turns left'), 'should indicate correct number of turns left');
+  expect(executeOutput).toBeTruthy();
+  expect(executeOutput!.includes('approaching the maximum turn limit')).toBe(true);
+  expect(executeOutput!.includes('4 turns left')).toBe(true);
 });

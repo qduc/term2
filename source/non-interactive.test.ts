@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { Writable } from 'node:stream';
 import { runWithSession, createNonInteractiveSessionId } from './non-interactive.js';
 
@@ -17,7 +17,7 @@ const createStringWritable = () => {
   };
 };
 
-test('streams text_delta events to stdout and appends newline', async (t) => {
+it('streams text_delta events to stdout and appends newline', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();
 
@@ -29,7 +29,7 @@ test('streams text_delta events to stdout and appends newline', async (t) => {
       return { type: 'response', finalText: 'Hello world', commandMessages: [] };
     },
     async handleApprovalDecision() {
-      t.fail('handleApprovalDecision should not be called');
+      expect(true).toBe(false);
       return null;
     },
   };
@@ -41,12 +41,12 @@ test('streams text_delta events to stdout and appends newline', async (t) => {
     stderr: stderr.stream,
   });
 
-  t.is(exitCode, 0);
-  t.is(stdout.getOutput(), 'Hello world\n');
-  t.is(stderr.getOutput(), 'Hello world\n');
+  expect(exitCode).toBe(0);
+  expect(stdout.getOutput()).toBe('Hello world\n');
+  expect(stderr.getOutput()).toBe('Hello world\n');
 });
 
-test('streams reasoning_delta events to stderr only', async (t) => {
+it('streams reasoning_delta events to stderr only', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();
 
@@ -58,7 +58,7 @@ test('streams reasoning_delta events to stderr only', async (t) => {
       return { type: 'response', finalText: 'OK', commandMessages: [] };
     },
     async handleApprovalDecision() {
-      t.fail('handleApprovalDecision should not be called');
+      expect(true).toBe(false);
       return null;
     },
   };
@@ -70,12 +70,12 @@ test('streams reasoning_delta events to stderr only', async (t) => {
     stderr: stderr.stream,
   });
 
-  t.is(exitCode, 0);
-  t.is(stdout.getOutput(), 'OK\n');
-  t.is(stderr.getOutput(), 'Thinking hardOK\n');
+  expect(exitCode).toBe(0);
+  expect(stdout.getOutput()).toBe('OK\n');
+  expect(stderr.getOutput()).toBe('Thinking hardOK\n');
 });
 
-test('returns exit code 1 on error event', async (t) => {
+it('returns exit code 1 on error event', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();
 
@@ -85,7 +85,7 @@ test('returns exit code 1 on error event', async (t) => {
       throw new Error('boom');
     },
     async handleApprovalDecision() {
-      t.fail('handleApprovalDecision should not be called');
+      expect(true).toBe(false);
       return null;
     },
   };
@@ -97,12 +97,12 @@ test('returns exit code 1 on error event', async (t) => {
     stderr: stderr.stream,
   });
 
-  t.is(exitCode, 1);
-  t.is(stdout.getOutput(), '');
-  t.true(stderr.getOutput().includes('boom'));
+  expect(exitCode).toBe(1);
+  expect(stdout.getOutput()).toBe('');
+  expect(stderr.getOutput().includes('boom')).toBe(true);
 });
 
-test('with autoApprove=true: approves on approval_required', async (t) => {
+it('with autoApprove=true: approves on approval_required', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();
 
@@ -132,12 +132,12 @@ test('with autoApprove=true: approves on approval_required', async (t) => {
     stderr: stderr.stream,
   });
 
-  t.is(exitCode, 0);
-  t.deepEqual(calls, [{ answer: 'y', rejectionReason: undefined }]);
-  t.true(stderr.getOutput().toLowerCase().includes('auto-approve'));
+  expect(exitCode).toBe(0);
+  expect(calls).toEqual([{ answer: 'y', rejectionReason: undefined }]);
+  expect(stderr.getOutput().toLowerCase().includes('auto-approve')).toBe(true);
 });
 
-test('with autoApprove=false: rejects on approval_required with explanation', async (t) => {
+it('with autoApprove=false: rejects on approval_required with explanation', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();
 
@@ -167,17 +167,17 @@ test('with autoApprove=false: rejects on approval_required with explanation', as
     stderr: stderr.stream,
   });
 
-  t.is(exitCode, 0);
-  t.deepEqual(calls, [
+  expect(exitCode).toBe(0);
+  expect(calls).toEqual([
     {
       answer: 'n',
       rejectionReason: 'Non-interactive mode: use --auto-approve to allow tool execution',
     },
   ]);
-  t.is(stdout.getOutput(), '\n');
+  expect(stdout.getOutput()).toBe('\n');
 });
 
-test('writes parent and subagent tool summaries to stderr only', async (t) => {
+it('writes parent and subagent tool summaries to stderr only', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();
 
@@ -211,7 +211,7 @@ test('writes parent and subagent tool summaries to stderr only', async (t) => {
       return { type: 'response', finalText: 'OK', commandMessages: [] };
     },
     async handleApprovalDecision() {
-      t.fail('handleApprovalDecision should not be called');
+      expect(true).toBe(false);
       return null;
     },
   };
@@ -223,19 +223,19 @@ test('writes parent and subagent tool summaries to stderr only', async (t) => {
     stderr: stderr.stream,
   });
 
-  t.is(exitCode, 0);
-  t.is(stdout.getOutput(), 'OK\n');
+  expect(exitCode).toBe(0);
+  expect(stdout.getOutput()).toBe('OK\n');
 
   const err = stderr.getOutput();
-  t.true(err.includes('tool_started'));
-  t.true(err.includes('subagent_tool_started worker'));
-  t.true(err.includes('bash'));
-  t.true(err.includes('command_message'));
-  t.true(err.includes('ls'));
-  t.true(err.includes('OK\n'));
+  expect(err.includes('tool_started')).toBe(true);
+  expect(err.includes('subagent_tool_started worker')).toBe(true);
+  expect(err.includes('bash')).toBe(true);
+  expect(err.includes('command_message')).toBe(true);
+  expect(err.includes('ls')).toBe(true);
+  expect(err.includes('OK\n')).toBe(true);
 });
 
-test('handles multiple consecutive approval rounds', async (t) => {
+it('handles multiple consecutive approval rounds', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();
 
@@ -252,7 +252,7 @@ test('handles multiple consecutive approval rounds', async (t) => {
       };
     },
     async handleApprovalDecision(answer: string) {
-      t.is(answer, 'y');
+      expect(answer).toBe('y');
       approvals++;
       if (approvals === 1) {
         return {
@@ -275,11 +275,11 @@ test('handles multiple consecutive approval rounds', async (t) => {
     stderr: stderr.stream,
   });
 
-  t.is(exitCode, 0);
-  t.is(approvals, 2);
+  expect(exitCode).toBe(0);
+  expect(approvals).toBe(2);
 });
 
-test('with autoApprove=true: auto-approves GREEN commands without LLM check', async (t) => {
+it('with autoApprove=true: auto-approves GREEN commands without LLM check', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();
   const calls: any[] = [];
@@ -308,11 +308,11 @@ test('with autoApprove=true: auto-approves GREEN commands without LLM check', as
     stderr: stderr.stream,
   });
 
-  t.is(exitCode, 0);
-  t.deepEqual(calls, [{ answer: 'y', rejectionReason: undefined }]);
+  expect(exitCode).toBe(0);
+  expect(calls).toEqual([{ answer: 'y', rejectionReason: undefined }]);
 });
 
-test('with autoApprove=true: strictly rejects RED commands', async (t) => {
+it('with autoApprove=true: strictly rejects RED commands', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();
   const calls: any[] = [];
@@ -341,22 +341,22 @@ test('with autoApprove=true: strictly rejects RED commands', async (t) => {
     stderr: stderr.stream,
   });
 
-  t.is(exitCode, 0);
-  t.is(calls.length, 1);
-  t.is(calls[0].answer, 'n');
-  t.regex(calls[0].rejectionReason ?? '', /RED/);
+  expect(exitCode).toBe(0);
+  expect(calls.length).toBe(1);
+  expect(calls[0].answer).toBe('n');
+  expect(calls[0].rejectionReason ?? '').toMatch(/RED/);
 });
 
-test('createNonInteractiveSessionId returns unique invocation-scoped ids', (t) => {
+it('createNonInteractiveSessionId returns unique invocation-scoped ids', () => {
   const first = createNonInteractiveSessionId();
   const second = createNonInteractiveSessionId();
 
-  t.not(first, second);
-  t.true(first.startsWith('non-interactive-'));
-  t.true(second.startsWith('non-interactive-'));
+  expect(first).not.toBe(second);
+  expect(first.startsWith('non-interactive-')).toBe(true);
+  expect(second.startsWith('non-interactive-')).toBe(true);
 });
 
-test('with autoApprove=true: rejects YELLOW command if no auto-approve model configured', async (t) => {
+it('with autoApprove=true: rejects YELLOW command if no auto-approve model configured', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();
   const calls: any[] = [];
@@ -393,13 +393,13 @@ test('with autoApprove=true: rejects YELLOW command if no auto-approve model con
     settingsService,
   });
 
-  t.is(exitCode, 0);
-  t.is(calls.length, 1);
-  t.is(calls[0].answer, 'n');
-  t.regex(calls[0].rejectionReason ?? '', /YELLOW/);
+  expect(exitCode).toBe(0);
+  expect(calls.length).toBe(1);
+  expect(calls[0].answer).toBe('n');
+  expect(calls[0].rejectionReason ?? '').toMatch(/YELLOW/);
 });
 
-test('with autoApprove=true: uses LLM to evaluate YELLOW commands', async (t) => {
+it('with autoApprove=true: uses LLM to evaluate YELLOW commands', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();
   const calls: any[] = [];
@@ -449,7 +449,7 @@ test('with autoApprove=true: uses LLM to evaluate YELLOW commands', async (t) =>
     agentClient,
   });
 
-  t.is(exitCode, 0);
-  t.true(chatCalled);
-  t.deepEqual(calls, [{ answer: 'y', rejectionReason: undefined }]);
+  expect(exitCode).toBe(0);
+  expect(chatCalled).toBe(true);
+  expect(calls).toEqual([{ answer: 'y', rejectionReason: undefined }]);
 });

@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { AgentRunOrchestrator, type AgentRunOrchestratorDeps } from './agent-run-orchestrator.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { registerProvider } from '../providers/registry.js';
@@ -123,7 +123,7 @@ function createOrchestrator(overrides: Partial<AgentRunOrchestratorDeps> = {}): 
 
 // ========== Set up providers for chaining tests ==========
 
-test.before(() => {
+beforeAll(() => {
   // Register a provider that supports conversation chaining
   registerProvider({
     id: 'mock-orch-chaining-true',
@@ -181,29 +181,26 @@ test.before(() => {
 
 // ========== Tests ==========
 
-test('abort clears abort controller and correlation ID', (t) => {
+it('abort clears abort controller and correlation ID', () => {
   const logger = createMockLogger();
   const orchestrator = createOrchestrator({ logger: logger as any });
 
   // Calling abort with no active operation should not throw
-  t.notThrows(() => orchestrator.abort());
+  expect(() => orchestrator.abort()).not.toThrow();
 
   // Should log the abort event
-  t.true(
-    logger.debugCalls.some((call: any[]) => call[1]?.eventType === 'stream.aborted'),
-    'abort should log stream.aborted event',
-  );
+  expect(logger.debugCalls.some((call: any[]) => call[1]?.eventType === 'stream.aborted')).toBe(true);
 });
 
-test('abort can be called multiple times', (t) => {
+it('abort can be called multiple times', () => {
   const orchestrator = createOrchestrator();
 
-  t.notThrows(() => orchestrator.abort());
-  t.notThrows(() => orchestrator.abort());
-  t.notThrows(() => orchestrator.abort());
+  expect(() => orchestrator.abort()).not.toThrow();
+  expect(() => orchestrator.abort()).not.toThrow();
+  expect(() => orchestrator.abort()).not.toThrow();
 });
 
-test('supportsConversationChaining returns false for openai with http transport', (t) => {
+it('supportsConversationChaining returns false for openai with http transport', () => {
   const agentConfig = createMockAgentConfig();
   agentConfig.setProvider('openai');
   const settings = createMockSettings({ 'agent.transport': 'http' });
@@ -212,10 +209,10 @@ test('supportsConversationChaining returns false for openai with http transport'
     settings: settings as any,
   });
 
-  t.false(orchestrator.supportsConversationChaining());
+  expect(orchestrator.supportsConversationChaining()).toBe(false);
 });
 
-test('supportsConversationChaining returns false for codex with http transport', (t) => {
+it('supportsConversationChaining returns false for codex with http transport', () => {
   const agentConfig = createMockAgentConfig();
   agentConfig.setProvider('codex');
   const settings = createMockSettings({ 'agent.transport': 'http' });
@@ -224,30 +221,30 @@ test('supportsConversationChaining returns false for codex with http transport',
     settings: settings as any,
   });
 
-  t.false(orchestrator.supportsConversationChaining());
+  expect(orchestrator.supportsConversationChaining()).toBe(false);
 });
 
-test('supportsConversationChaining returns true for providers that support it', (t) => {
+it('supportsConversationChaining returns true for providers that support it', () => {
   const agentConfig = createMockAgentConfig();
   agentConfig.setProvider('mock-orch-chaining-true');
   const orchestrator = createOrchestrator({
     agentConfig: agentConfig as any,
   });
 
-  t.true(orchestrator.supportsConversationChaining());
+  expect(orchestrator.supportsConversationChaining()).toBe(true);
 });
 
-test('supportsConversationChaining returns false for providers that do not support it', (t) => {
+it('supportsConversationChaining returns false for providers that do not support it', () => {
   const agentConfig = createMockAgentConfig();
   agentConfig.setProvider('mock-orch-chaining-false');
   const orchestrator = createOrchestrator({
     agentConfig: agentConfig as any,
   });
 
-  t.false(orchestrator.supportsConversationChaining());
+  expect(orchestrator.supportsConversationChaining()).toBe(false);
 });
 
-test('clearConversations resets chained delta state and logs', (t) => {
+it('clearConversations resets chained delta state and logs', () => {
   const logger = createMockLogger();
   let refreshCalled = false;
   const agentConfig = {
@@ -266,14 +263,11 @@ test('clearConversations resets chained delta state and logs', (t) => {
 
   orchestrator.clearConversations();
 
-  t.true(refreshCalled, 'refreshAgent should be called');
-  t.true(
-    logger.debugCalls.some((call: any[]) => call[0] === 'Conversation and agent refreshed'),
-    'should log conversation refreshed message',
-  );
+  expect(refreshCalled).toBe(true);
+  expect(logger.debugCalls.some((call: any[]) => call[0] === 'Conversation and agent refreshed')).toBe(true);
 });
 
-test('clearConversations can be called multiple times', (t) => {
+it('clearConversations can be called multiple times', () => {
   const logger = createMockLogger();
   let refreshCount = 0;
   const agentConfig = {
@@ -290,9 +284,9 @@ test('clearConversations can be called multiple times', (t) => {
     logger: logger as any,
   });
 
-  t.notThrows(() => orchestrator.clearConversations());
-  t.notThrows(() => orchestrator.clearConversations());
-  t.notThrows(() => orchestrator.clearConversations());
+  expect(() => orchestrator.clearConversations()).not.toThrow();
+  expect(() => orchestrator.clearConversations()).not.toThrow();
+  expect(() => orchestrator.clearConversations()).not.toThrow();
 
-  t.is(refreshCount, 3);
+  expect(refreshCount).toBe(3);
 });

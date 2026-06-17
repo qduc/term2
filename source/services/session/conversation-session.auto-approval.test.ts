@@ -1,4 +1,4 @@
-import test, { type ExecutionContext, type Macro } from 'ava';
+import { describe, it, expect } from 'vitest';
 import { type ConversationEvent } from '../conversation/conversation-events.js';
 import { type ConversationTerminal } from '../../contracts/conversation.js';
 import { createConversationSession } from './session-composition.js';
@@ -105,9 +105,9 @@ const createFinalStream = (finalOutput = 'Done.') => {
   return stream;
 };
 
-const getApprovalResult = (t: ExecutionContext, result: ConversationTerminal | null): ApprovalRequiredResult => {
-  t.truthy(result);
-  t.is(result?.type, 'approval_required');
+const getApprovalResult = (result: ConversationTerminal | null): ApprovalRequiredResult => {
+  expect(result).toBeTruthy();
+  expect(result?.type).toBe('approval_required');
   if (!result || result.type !== 'approval_required') {
     throw new Error('Expected approval_required result');
   }
@@ -115,9 +115,9 @@ const getApprovalResult = (t: ExecutionContext, result: ConversationTerminal | n
   return result;
 };
 
-const getResponseResult = (t: ExecutionContext, result: ConversationTerminal | null): ResponseResult => {
-  t.truthy(result);
-  t.is(result?.type, 'response');
+const getResponseResult = (result: ConversationTerminal | null): ResponseResult => {
+  expect(result).toBeTruthy();
+  expect(result?.type).toBe('response');
   if (!result || result.type !== 'response') {
     throw new Error('Expected response result');
   }
@@ -189,40 +189,35 @@ const createSessionHarness = ({
   return { bundle, chatCalls, askUserAnswerCalls };
 };
 
-const malformedResponseMacro: Macro<
-  [
-    {
-      llmResponse: string;
-      expectedReasoning: string;
-    },
-  ]
-> = {
-  exec: async (t, { llmResponse, expectedReasoning }) => {
-    const initialStream = createInterruptedStream([
-      createShellInterruption({ callId: 'call-safe', command: 'ls source' }),
-    ]);
-    const { bundle, chatCalls } = createSessionHarness({
-      startStreams: [initialStream],
-      chatImpl: async () => llmResponse,
-    });
+const testMalformedResponse = async ({
+  llmResponse,
+  expectedReasoning,
+}: {
+  llmResponse: string;
+  expectedReasoning: string;
+}) => {
+  const initialStream = createInterruptedStream([
+    createShellInterruption({ callId: 'call-safe', command: 'ls source' }),
+  ]);
+  const { bundle, chatCalls } = createSessionHarness({
+    startStreams: [initialStream],
+    chatImpl: async () => llmResponse,
+  });
 
-    const result = await bundle.terminalAdapter.sendMessage('inspect the source tree');
-    const approval = getApprovalResult(t, result).approval;
+  const result = await bundle.terminalAdapter.sendMessage('inspect the source tree');
+  const approval = getApprovalResult(result).approval;
 
-    t.deepEqual(approval.llmAdvisory, {
-      model: 'test-auto-model',
-      reasoning: expectedReasoning,
-      approved: false,
-      source: 'llm',
-    });
-    t.is(chatCalls.length, 2);
-    t.true(chatCalls[1].prompt.includes('The previous shell auto-approval response was invalid.'));
-  },
-  title: (providedTitle = 'malformed LLM advisory response', { llmResponse }) =>
-    `${providedTitle}: ${llmResponse.slice(0, 40)}`,
+  expect(approval.llmAdvisory).toEqual({
+    model: 'test-auto-model',
+    reasoning: expectedReasoning,
+    approved: false,
+    source: 'llm',
+  });
+  expect(chatCalls.length).toBe(2);
+  expect(chatCalls[1].prompt.includes('The previous shell auto-approval response was invalid.')).toBe(true);
 };
 
-test('shell auto-approval off skips advisory evaluation and omits llmAdvisory', async (t) => {
+it('shell auto-approval off skips advisory evaluation and omits llmAdvisory', async () => {
   const first = createShellInterruption({ callId: 'call-off-1', command: 'ls source' });
   const second = createShellInterruption({ callId: 'call-off-2', command: 'pwd' });
 
@@ -236,21 +231,21 @@ test('shell auto-approval off skips advisory evaluation and omits llmAdvisory', 
   });
 
   const firstResult = await bundle.terminalAdapter.sendMessage('inspect the project');
-  const firstApproval = getApprovalResult(t, firstResult).approval;
-  t.is(firstApproval.llmAdvisory, undefined);
+  const firstApproval = getApprovalResult(firstResult).approval;
+  expect(firstApproval.llmAdvisory).toBe(undefined);
 
   const secondResult = await bundle.terminalAdapter.handleApprovalDecision('y');
-  const secondApproval = getApprovalResult(t, secondResult).approval;
-  t.is(secondApproval.llmAdvisory, undefined);
-  t.is(chatCalls.length, 0);
+  const secondApproval = getApprovalResult(secondResult).approval;
+  expect(secondApproval.llmAdvisory).toBe(undefined);
+  expect(chatCalls.length).toBe(0);
 });
 
-test('RED-classified shell command includes LLM rationale but remains a system rejection advisory', async (t) => {
+it('RED-classified shell command includes LLM rationale but remains a system rejection advisory', async () => {
   const initialStream = createInterruptedStream([createShellInterruption({ callId: 'call-red', command: 'rm -rf /' })]);
   const { bundle, chatCalls } = createSessionHarness({
     startStreams: [initialStream],
     chatImpl: async (prompt) => {
-      t.true(prompt.includes('rm -rf /'));
+      expect(prompt.includes('rm -rf /')).toBe(true);
       return JSON.stringify({
         results: [
           {
@@ -264,19 +259,19 @@ test('RED-classified shell command includes LLM rationale but remains a system r
   });
 
   const result = await bundle.terminalAdapter.sendMessage('clean up the machine');
-  const approval = getApprovalResult(t, result).approval;
+  const approval = getApprovalResult(result).approval;
 
   const llmAdvisory = approval.llmAdvisory;
-  t.truthy(llmAdvisory);
-  t.is(llmAdvisory?.approved, false);
-  t.is(llmAdvisory?.model, 'test-auto-model');
-  t.is(llmAdvisory?.source, 'system');
-  t.regex(llmAdvisory?.reasoning ?? '', /Blocked by safety heuristics \(RED\):/);
-  t.regex(llmAdvisory?.reasoning ?? '', /Model advisory: This command recursively deletes files/);
-  t.is(chatCalls.length, 1);
+  expect(llmAdvisory).toBeTruthy();
+  expect(llmAdvisory?.approved).toBe(false);
+  expect(llmAdvisory?.model).toBe('test-auto-model');
+  expect(llmAdvisory?.source).toBe('system');
+  expect(llmAdvisory?.reasoning ?? '').toMatch(/Blocked by safety heuristics \(RED\):/);
+  expect(llmAdvisory?.reasoning ?? '').toMatch(/Model advisory: This command recursively deletes files/);
+  expect(chatCalls.length).toBe(1);
 });
 
-test('single safe shell command calls the LLM once and attaches its advisory', async (t) => {
+it('single safe shell command calls the LLM once and attaches its advisory', async () => {
   const initialStream = createInterruptedStream([
     createShellInterruption({ callId: 'call-safe-1', command: 'ls source' }),
   ]);
@@ -295,23 +290,23 @@ test('single safe shell command calls the LLM once and attaches its advisory', a
   });
 
   const result = await bundle.terminalAdapter.sendMessage('inspect the source tree');
-  const approval = getApprovalResult(t, result).approval;
+  const approval = getApprovalResult(result).approval;
 
-  t.deepEqual(approval.llmAdvisory, {
+  expect(approval.llmAdvisory).toEqual({
     model: 'test-auto-model',
     reasoning: 'Listing the source folder is read-only and matches the request.',
     approved: true,
     source: 'llm',
   });
-  t.is(chatCalls.length, 1);
-  t.true(chatCalls[0].prompt.includes('ls source'));
-  t.true(chatCalls[0].prompt.includes('inspect the source tree'));
-  t.is(chatCalls[0].options.model, 'test-auto-model');
-  t.is(chatCalls[0].options.provider, 'test-auto-provider');
-  t.is(chatCalls[0].options.reasoningEffort, 'none');
+  expect(chatCalls.length).toBe(1);
+  expect(chatCalls[0].prompt.includes('ls source')).toBe(true);
+  expect(chatCalls[0].prompt.includes('inspect the source tree')).toBe(true);
+  expect(chatCalls[0].options.model).toBe('test-auto-model');
+  expect(chatCalls[0].options.provider).toBe('test-auto-provider');
+  expect(chatCalls[0].options.reasoningEffort).toBe('none');
 });
 
-test('batch evaluation calls the LLM once and reuses cached advisories across sequential approvals', async (t) => {
+it('batch evaluation calls the LLM once and reuses cached advisories across sequential approvals', async () => {
   const first = createShellInterruption({ callId: 'call-batch-1', command: 'ls source' });
   const second = createShellInterruption({ callId: 'call-batch-2', command: 'pwd' });
   const third = createShellInterruption({ callId: 'call-batch-3', command: 'git status' });
@@ -335,38 +330,38 @@ test('batch evaluation calls the LLM once and reuses cached advisories across se
   });
 
   const firstResult = await bundle.terminalAdapter.sendMessage('inspect the repository');
-  t.deepEqual(getApprovalResult(t, firstResult).approval.llmAdvisory, {
+  expect(getApprovalResult(firstResult).approval.llmAdvisory).toEqual({
     model: 'test-auto-model',
     reasoning: 'Listing files is safe.',
     approved: true,
     source: 'llm',
   });
-  t.is(chatCalls.length, 1);
+  expect(chatCalls.length).toBe(1);
 
   const secondResult = await bundle.terminalAdapter.handleApprovalDecision('y');
-  t.deepEqual(getApprovalResult(t, secondResult).approval.llmAdvisory, {
+  expect(getApprovalResult(secondResult).approval.llmAdvisory).toEqual({
     model: 'test-auto-model',
     reasoning: 'Printing the working directory is safe.',
     approved: true,
     source: 'llm',
   });
-  t.is(chatCalls.length, 1);
+  expect(chatCalls.length).toBe(1);
 
   const thirdResult = await bundle.terminalAdapter.handleApprovalDecision('y');
-  t.deepEqual(getApprovalResult(t, thirdResult).approval.llmAdvisory, {
+  expect(getApprovalResult(thirdResult).approval.llmAdvisory).toEqual({
     model: 'test-auto-model',
     reasoning: 'Reading git status is safe.',
     approved: true,
     source: 'llm',
   });
-  t.is(chatCalls.length, 1);
+  expect(chatCalls.length).toBe(1);
 
   const finalResult = await bundle.terminalAdapter.handleApprovalDecision('y');
-  t.is(getResponseResult(t, finalResult).finalText, 'All commands handled.');
-  t.is(chatCalls.length, 1);
+  expect(getResponseResult(finalResult).finalText).toBe('All commands handled.');
+  expect(chatCalls.length).toBe(1);
 });
 
-test('handleApprovalDecision forwards approval answers to the ask_user bridge', async (t) => {
+it('handleApprovalDecision forwards approval answers to the ask_user bridge', async () => {
   const initialStream = createInterruptedStream([
     createShellInterruption({ callId: 'call-ask-user', command: 'echo awaiting approval' }),
   ]);
@@ -378,16 +373,16 @@ test('handleApprovalDecision forwards approval answers to the ask_user bridge', 
   });
 
   const firstResult = await bundle.terminalAdapter.sendMessage('please continue');
-  getApprovalResult(t, firstResult);
+  getApprovalResult(firstResult);
 
   const finalResult = await bundle.terminalAdapter.handleApprovalDecision('y', undefined, {
     approvalAnswer: 'Use option B',
   });
-  t.is(getResponseResult(t, finalResult).finalText, 'Approved command completed.');
-  t.deepEqual(askUserAnswerCalls, [{ callId: 'call-ask-user', answer: 'Use option B' }]);
+  expect(getResponseResult(finalResult).finalText).toBe('Approved command completed.');
+  expect(askUserAnswerCalls).toEqual([{ callId: 'call-ask-user', answer: 'Use option B' }]);
 });
 
-test('mixed RED and non-RED batch evaluates both while RED remains system rejected', async (t) => {
+it('mixed RED and non-RED batch evaluates both while RED remains system rejected', async () => {
   const red = createShellInterruption({ callId: 'call-mixed-red', command: 'rm -rf /' });
   const safe = createShellInterruption({ callId: 'call-mixed-safe', command: 'ls source' });
 
@@ -398,8 +393,8 @@ test('mixed RED and non-RED batch evaluates both while RED remains system reject
     startStreams: [initialStream],
     continuationStreams: [continuationStream],
     chatImpl: async (prompt) => {
-      t.true(prompt.includes('rm -rf /'));
-      t.true(prompt.includes('ls source'));
+      expect(prompt.includes('rm -rf /')).toBe(true);
+      expect(prompt.includes('ls source')).toBe(true);
       return JSON.stringify({
         results: [
           {
@@ -418,47 +413,47 @@ test('mixed RED and non-RED batch evaluates both while RED remains system reject
   });
 
   const firstResult = await bundle.terminalAdapter.sendMessage('inspect the repository');
-  const mixedAdvisory = getApprovalResult(t, firstResult).approval.llmAdvisory;
-  t.truthy(mixedAdvisory);
-  t.is(mixedAdvisory?.approved, false);
-  t.is(mixedAdvisory?.model, 'test-auto-model');
-  t.is(mixedAdvisory?.source, 'system');
-  t.regex(mixedAdvisory?.reasoning ?? '', /Blocked by safety heuristics \(RED\):/);
-  t.regex(mixedAdvisory?.reasoning ?? '', /Model advisory: Recursive forced deletion from root/);
-  t.is(chatCalls.length, 1);
+  const mixedAdvisory = getApprovalResult(firstResult).approval.llmAdvisory;
+  expect(mixedAdvisory).toBeTruthy();
+  expect(mixedAdvisory?.approved).toBe(false);
+  expect(mixedAdvisory?.model).toBe('test-auto-model');
+  expect(mixedAdvisory?.source).toBe('system');
+  expect(mixedAdvisory?.reasoning ?? '').toMatch(/Blocked by safety heuristics \(RED\):/);
+  expect(mixedAdvisory?.reasoning ?? '').toMatch(/Model advisory: Recursive forced deletion from root/);
+  expect(chatCalls.length).toBe(1);
 
   const secondResult = await bundle.terminalAdapter.handleApprovalDecision('y');
-  t.deepEqual(getApprovalResult(t, secondResult).approval.llmAdvisory, {
+  expect(getApprovalResult(secondResult).approval.llmAdvisory).toEqual({
     model: 'test-auto-model',
     reasoning: 'Listing source files is safe.',
     approved: true,
     source: 'llm',
   });
-  t.is(chatCalls.length, 1);
+  expect(chatCalls.length).toBe(1);
 });
 
-for (const scenario of [
-  {
+it('malformed LLM advisory response: not valid json at all', () =>
+  testMalformedResponse({
     llmResponse: 'not valid json at all',
     expectedReasoning: 'LLM did not provide a valid ordered evaluation for this command.',
-  },
-  {
+  }));
+it('malformed LLM advisory response: {"results":{}}', () =>
+  testMalformedResponse({
     llmResponse: JSON.stringify({ results: {} }),
     expectedReasoning: 'LLM did not provide a valid ordered evaluation for this command.',
-  },
-  {
+  }));
+it('malformed LLM advisory response: missing approved field', () =>
+  testMalformedResponse({
     llmResponse: JSON.stringify({ results: [{ id: 'call-safe', reasoning: 'Missing approved field' }] }),
     expectedReasoning: 'LLM did not provide a valid ordered evaluation for this command.',
-  },
-  {
+  }));
+it('malformed LLM advisory response: empty results', () =>
+  testMalformedResponse({
     llmResponse: JSON.stringify({ results: [] }),
     expectedReasoning: 'LLM did not provide a valid ordered evaluation for this command.',
-  },
-]) {
-  test(malformedResponseMacro, scenario);
-}
+  }));
 
-test('LLM evaluation errors return the safe-default advisory for every pending command in the batch', async (t) => {
+it('LLM evaluation errors return the safe-default advisory for every pending command in the batch', async () => {
   const first = createShellInterruption({ callId: 'call-error-1', command: 'ls source' });
   const second = createShellInterruption({ callId: 'call-error-2', command: 'pwd' });
 
@@ -474,27 +469,27 @@ test('LLM evaluation errors return the safe-default advisory for every pending c
   });
 
   const firstResult = await bundle.terminalAdapter.sendMessage('inspect the repository');
-  t.deepEqual(getApprovalResult(t, firstResult).approval.llmAdvisory, {
+  expect(getApprovalResult(firstResult).approval.llmAdvisory).toEqual({
     model: 'test-auto-model',
     reasoning: 'LLM evaluation encountered an error.',
     approved: false,
     source: 'llm',
     isError: true,
   });
-  t.is(chatCalls.length, 1);
+  expect(chatCalls.length).toBe(1);
 
   const secondResult = await bundle.terminalAdapter.handleApprovalDecision('y');
-  t.deepEqual(getApprovalResult(t, secondResult).approval.llmAdvisory, {
+  expect(getApprovalResult(secondResult).approval.llmAdvisory).toEqual({
     model: 'test-auto-model',
     reasoning: 'LLM evaluation encountered an error.',
     approved: false,
     source: 'llm',
     isError: true,
   });
-  t.is(chatCalls.length, 1);
+  expect(chatCalls.length).toBe(1);
 });
 
-test('interruption without callId uses inline evaluation and does not reuse a cached advisory', async (t) => {
+it('interruption without callId uses inline evaluation and does not reuse a cached advisory', async () => {
   const first = createShellInterruption({ command: 'ls source' });
   const second = createShellInterruption({ command: 'pwd' });
 
@@ -516,25 +511,25 @@ test('interruption without callId uses inline evaluation and does not reuse a ca
   });
 
   const firstResult = await bundle.terminalAdapter.sendMessage('inspect the repository');
-  t.deepEqual(getApprovalResult(t, firstResult).approval.llmAdvisory, {
+  expect(getApprovalResult(firstResult).approval.llmAdvisory).toEqual({
     model: 'test-auto-model',
     reasoning: 'Listing files is safe.',
     approved: true,
     source: 'llm',
   });
-  t.is(chatCalls.length, 1);
+  expect(chatCalls.length).toBe(1);
 
   const secondResult = await bundle.terminalAdapter.handleApprovalDecision('y');
-  t.deepEqual(getApprovalResult(t, secondResult).approval.llmAdvisory, {
+  expect(getApprovalResult(secondResult).approval.llmAdvisory).toEqual({
     model: 'test-auto-model',
     reasoning: 'Printing the working directory is safe.',
     approved: true,
     source: 'llm',
   });
-  t.is(chatCalls.length, 2);
+  expect(chatCalls.length).toBe(2);
 });
 
-test('reset clears cached advisories before the next approval turn', async (t) => {
+it('reset clears cached advisories before the next approval turn', async () => {
   const firstTurn = createInterruptedStream([createShellInterruption({ callId: 'call-reset', command: 'ls source' })]);
   const secondTurn = createInterruptedStream([createShellInterruption({ callId: 'call-reset', command: 'ls source' })]);
 
@@ -550,27 +545,27 @@ test('reset clears cached advisories before the next approval turn', async (t) =
   });
 
   const firstResult = await bundle.terminalAdapter.sendMessage('inspect the repository');
-  t.deepEqual(getApprovalResult(t, firstResult).approval.llmAdvisory, {
+  expect(getApprovalResult(firstResult).approval.llmAdvisory).toEqual({
     model: 'test-auto-model',
     reasoning: 'First advisory.',
     approved: true,
     source: 'llm',
   });
-  t.is(chatCalls.length, 1);
+  expect(chatCalls.length).toBe(1);
 
   bundle.stateFacade.reset();
 
   const secondResult = await bundle.terminalAdapter.sendMessage('inspect the repository again');
-  t.deepEqual(getApprovalResult(t, secondResult).approval.llmAdvisory, {
+  expect(getApprovalResult(secondResult).approval.llmAdvisory).toEqual({
     model: 'test-auto-model',
     reasoning: 'Second advisory after reset.',
     approved: false,
     source: 'llm',
   });
-  t.is(chatCalls.length, 2);
+  expect(chatCalls.length).toBe(2);
 });
 
-test('turn completion clears cached advisories so a new turn gets a fresh evaluation', async (t) => {
+it('turn completion clears cached advisories so a new turn gets a fresh evaluation', async () => {
   const firstTurn = createInterruptedStream([createShellInterruption({ callId: 'call-turn', command: 'ls source' })]);
   const firstTurnFinal = createFinalStream('First turn done.');
   const secondTurn = createInterruptedStream([createShellInterruption({ callId: 'call-turn', command: 'ls source' })]);
@@ -588,28 +583,28 @@ test('turn completion clears cached advisories so a new turn gets a fresh evalua
   });
 
   const firstResult = await bundle.terminalAdapter.sendMessage('inspect the repository');
-  t.deepEqual(getApprovalResult(t, firstResult).approval.llmAdvisory, {
+  expect(getApprovalResult(firstResult).approval.llmAdvisory).toEqual({
     model: 'test-auto-model',
     reasoning: 'First turn advisory.',
     approved: true,
     source: 'llm',
   });
-  t.is(chatCalls.length, 1);
+  expect(chatCalls.length).toBe(1);
 
   const completedTurn = await bundle.terminalAdapter.handleApprovalDecision('y');
-  t.is(getResponseResult(t, completedTurn).finalText, 'First turn done.');
+  expect(getResponseResult(completedTurn).finalText).toBe('First turn done.');
 
   const secondResult = await bundle.terminalAdapter.sendMessage('inspect the repository again');
-  t.deepEqual(getApprovalResult(t, secondResult).approval.llmAdvisory, {
+  expect(getApprovalResult(secondResult).approval.llmAdvisory).toEqual({
     model: 'test-auto-model',
     reasoning: 'Second turn advisory.',
     approved: false,
     source: 'llm',
   });
-  t.is(chatCalls.length, 2);
+  expect(chatCalls.length).toBe(2);
 });
 
-test('non-shell tools do not trigger advisory evaluation or attach llmAdvisory', async (t) => {
+it('non-shell tools do not trigger advisory evaluation or attach llmAdvisory', async () => {
   const initialStream = createInterruptedStream([
     createNonShellInterruption({
       callId: 'call-patch',
@@ -622,16 +617,16 @@ test('non-shell tools do not trigger advisory evaluation or attach llmAdvisory',
   });
 
   const result = await bundle.terminalAdapter.sendMessage('apply the patch');
-  const approval = getApprovalResult(t, result).approval;
+  const approval = getApprovalResult(result).approval;
 
-  t.is(approval.toolName, 'apply_patch');
-  t.is(approval.llmAdvisory, undefined);
-  t.is(chatCalls.length, 0);
+  expect(approval.toolName).toBe('apply_patch');
+  expect(approval.llmAdvisory).toBe(undefined);
+  expect(chatCalls.length).toBe(0);
 });
 
 // Phase 2: Full Auto-Approval tests
 
-test('auto mode: LLM-approved safe command skips approval_required and returns final response', async (t) => {
+it('auto mode: LLM-approved safe command skips approval_required and returns final response', async () => {
   const initialStream = createInterruptedStream([
     createShellInterruption({ callId: 'call-auto-1', command: 'ls source' }),
   ]);
@@ -648,13 +643,13 @@ test('auto mode: LLM-approved safe command skips approval_required and returns f
   });
 
   const result = await bundle.terminalAdapter.sendMessage('list the source files');
-  t.is(result?.type, 'response');
+  expect(result?.type).toBe('response');
   if (result?.type !== 'response') throw new Error('Expected response');
-  t.is(result.finalText, 'Files listed.');
-  t.is(chatCalls.length, 1);
+  expect(result.finalText).toBe('Files listed.');
+  expect(chatCalls.length).toBe(1);
 });
 
-test('auto mode: approved continuation emits tool_started before streamed output and final', async (t) => {
+it('auto mode: approved continuation emits tool_started before streamed output and final', async () => {
   const initialStream = createInterruptedStream([
     createShellInterruption({ callId: 'call-auto-sequence', command: 'ls source' }),
   ]);
@@ -676,7 +671,7 @@ test('auto mode: approved continuation emits tool_started before streamed output
     events.push(event);
   }
 
-  t.deepEqual(
+  expect(
     events.map((event) =>
       event.type === 'tool_started'
         ? { type: event.type, callId: event.toolCallId, toolName: event.toolName }
@@ -684,15 +679,14 @@ test('auto mode: approved continuation emits tool_started before streamed output
         ? { type: event.type, text: event.type === 'text_delta' ? event.delta : event.finalText }
         : { type: event.type },
     ),
-    [
-      { type: 'tool_started', callId: 'call-auto-sequence', toolName: 'shell' },
-      { type: 'text_delta', text: 'Files listed.' },
-      { type: 'final', text: 'Files listed.' },
-    ],
-  );
+  ).toEqual([
+    { type: 'tool_started', callId: 'call-auto-sequence', toolName: 'shell' },
+    { type: 'text_delta', text: 'Files listed.' },
+    { type: 'final', text: 'Files listed.' },
+  ]);
 });
 
-test('auto mode: LLM-rejected command still prompts user with advisory', async (t) => {
+it('auto mode: LLM-rejected command still prompts user with advisory', async () => {
   const initialStream = createInterruptedStream([
     // Use a YELLOW command (not RED) so heuristics pass and the LLM makes the rejection call
     createShellInterruption({ callId: 'call-auto-reject', command: 'git log --all --format="%H"' }),
@@ -714,13 +708,13 @@ test('auto mode: LLM-rejected command still prompts user with advisory', async (
   });
 
   const result = await bundle.terminalAdapter.sendMessage('run the installer');
-  const approval = getApprovalResult(t, result).approval;
-  t.is(approval.llmAdvisory?.approved, false);
-  t.is(approval.llmAdvisory?.source, 'llm');
-  t.is(chatCalls.length, 1);
+  const approval = getApprovalResult(result).approval;
+  expect(approval.llmAdvisory?.approved).toBe(false);
+  expect(approval.llmAdvisory?.source).toBe('llm');
+  expect(chatCalls.length).toBe(1);
 });
 
-test('auto mode: RED command (source=system) is never auto-approved', async (t) => {
+it('auto mode: RED command (source=system) is never auto-approved', async () => {
   const initialStream = createInterruptedStream([
     createShellInterruption({ callId: 'call-auto-red', command: 'rm -rf /' }),
   ]);
@@ -737,14 +731,16 @@ test('auto mode: RED command (source=system) is never auto-approved', async (t) 
   });
 
   const result = await bundle.terminalAdapter.sendMessage('clean the system');
-  const approval = getApprovalResult(t, result).approval;
-  t.is(approval.llmAdvisory?.approved, false);
-  t.is(approval.llmAdvisory?.source, 'system');
-  t.regex(approval.llmAdvisory?.reasoning ?? '', /Model advisory: The model explanation should not auto-approve RED\./);
-  t.is(chatCalls.length, 1);
+  const approval = getApprovalResult(result).approval;
+  expect(approval.llmAdvisory?.approved).toBe(false);
+  expect(approval.llmAdvisory?.source).toBe('system');
+  expect(approval.llmAdvisory?.reasoning ?? '').toMatch(
+    /Model advisory: The model explanation should not auto-approve RED\./,
+  );
+  expect(chatCalls.length).toBe(1);
 });
 
-test('advisory mode: LLM-approved command still prompts the user (Phase 1 behavior preserved)', async (t) => {
+it('advisory mode: LLM-approved command still prompts the user (Phase 1 behavior preserved)', async () => {
   const initialStream = createInterruptedStream([
     createShellInterruption({ callId: 'call-advisory', command: 'ls source' }),
   ]);
@@ -759,13 +755,13 @@ test('advisory mode: LLM-approved command still prompts the user (Phase 1 behavi
   });
 
   const result = await bundle.terminalAdapter.sendMessage('list the source files');
-  const approval = getApprovalResult(t, result).approval;
-  t.is(approval.llmAdvisory?.approved, true);
-  t.is(approval.llmAdvisory?.source, 'llm');
-  t.is(chatCalls.length, 1);
+  const approval = getApprovalResult(result).approval;
+  expect(approval.llmAdvisory?.approved).toBe(true);
+  expect(approval.llmAdvisory?.source).toBe('llm');
+  expect(chatCalls.length).toBe(1);
 });
 
-test('auto mode: batch of two commands — first auto-approved, second triggers prompt when rejected', async (t) => {
+it('auto mode: batch of two commands — first auto-approved, second triggers prompt when rejected', async () => {
   const first = createShellInterruption({ callId: 'call-batch-auto-1', command: 'ls source' });
   // Use a YELLOW (non-RED) command so heuristics pass and LLM makes the rejection call
   const second = createShellInterruption({ callId: 'call-batch-auto-2', command: 'git log --all --format="%H"' });
@@ -793,14 +789,14 @@ test('auto mode: batch of two commands — first auto-approved, second triggers 
 
   // First command is auto-approved, continuation hits the second which is rejected by LLM
   const result = await bundle.terminalAdapter.sendMessage('inspect repository and dump history');
-  const approval = getApprovalResult(t, result).approval;
-  t.is(approval.toolName, 'shell');
-  t.is(approval.llmAdvisory?.approved, false);
-  t.is(approval.llmAdvisory?.source, 'llm');
-  t.is(chatCalls.length, 1);
+  const approval = getApprovalResult(result).approval;
+  expect(approval.toolName).toBe('shell');
+  expect(approval.llmAdvisory?.approved).toBe(false);
+  expect(approval.llmAdvisory?.source).toBe('llm');
+  expect(chatCalls.length).toBe(1);
 });
 
-test('auto mode: response usage includes the auto-approved first turn, not just the continuation', async (t) => {
+it('auto mode: response usage includes the auto-approved first turn, not just the continuation', async () => {
   const initialStream = createInterruptedStream([
     createShellInterruption({ callId: 'call-usage-1', command: 'ls source' }),
   ]);
@@ -821,16 +817,16 @@ test('auto mode: response usage includes the auto-approved first turn, not just 
       }),
   });
 
-  const result = getResponseResult(t, await bundle.terminalAdapter.sendMessage('list the source files'));
+  const result = getResponseResult(await bundle.terminalAdapter.sendMessage('list the source files'));
 
   // The auto-approved first turn must be reflected in the reported usage. The
   // SDK run-state accumulator already includes it (300 in / 50 out cumulative);
   // it must be reported verbatim, not added on top of the first turn again.
-  t.is(result.usage?.prompt_tokens, 300);
-  t.is(result.usage?.completion_tokens, 50);
+  expect(result.usage?.prompt_tokens).toBe(300);
+  expect(result.usage?.completion_tokens).toBe(50);
 });
 
-test('auto mode: approval_required usage includes the auto-approved first turn', async (t) => {
+it('auto mode: approval_required usage includes the auto-approved first turn', async () => {
   const first = createShellInterruption({ callId: 'call-usage-batch-1', command: 'ls source' });
   const second = createShellInterruption({ callId: 'call-usage-batch-2', command: 'git log --all --format="%H"' });
 
@@ -860,15 +856,14 @@ test('auto mode: approval_required usage includes the auto-approved first turn',
   });
 
   const approvalResult = getApprovalResult(
-    t,
     await bundle.terminalAdapter.sendMessage('inspect repository and dump history'),
   );
 
-  t.is(approvalResult.usage?.prompt_tokens, 300);
-  t.is(approvalResult.usage?.completion_tokens, 50);
+  expect(approvalResult.usage?.prompt_tokens).toBe(300);
+  expect(approvalResult.usage?.completion_tokens).toBe(50);
 });
 
-test('auto mode: evaluator error falls back to prompt without crashing', async (t) => {
+it('auto mode: evaluator error falls back to prompt without crashing', async () => {
   const initialStream = createInterruptedStream([
     createShellInterruption({ callId: 'call-auto-err', command: 'ls source' }),
   ]);
@@ -882,8 +877,8 @@ test('auto mode: evaluator error falls back to prompt without crashing', async (
   });
 
   const result = await bundle.terminalAdapter.sendMessage('list files');
-  const approval = getApprovalResult(t, result).approval;
-  t.is(approval.llmAdvisory?.approved, false);
-  t.is(approval.llmAdvisory?.source, 'llm');
-  t.is(chatCalls.length, 1);
+  const approval = getApprovalResult(result).approval;
+  expect(approval.llmAdvisory?.approved).toBe(false);
+  expect(approval.llmAdvisory?.source).toBe('llm');
+  expect(chatCalls.length).toBe(1);
 });

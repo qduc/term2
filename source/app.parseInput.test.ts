@@ -1,7 +1,7 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { parseInput, ParsedInput } from './utils/input-parser.js';
 
-test('parseInput - regular messages', (t) => {
+it('parseInput - regular messages', () => {
   const cases: Array<{ input: string; expected: ParsedInput }> = [
     {
       input: 'hello world',
@@ -15,11 +15,11 @@ test('parseInput - regular messages', (t) => {
   ];
 
   for (const { input, expected } of cases) {
-    t.deepEqual(parseInput(input), expected, `Failed for input: "${input}"`);
+    expect(parseInput(input), `Failed for input: "${input}"`).toEqual(expected);
   }
 });
 
-test('parseInput - slash commands without args', (t) => {
+it('parseInput - slash commands without args', () => {
   const cases: Array<{ input: string; expected: ParsedInput }> = [
     {
       input: '/clear',
@@ -36,11 +36,11 @@ test('parseInput - slash commands without args', (t) => {
   ];
 
   for (const { input, expected } of cases) {
-    t.deepEqual(parseInput(input), expected, `Failed for input: "${input}"`);
+    expect(parseInput(input), `Failed for input: "${input}"`).toEqual(expected);
   }
 });
 
-test('parseInput - slash commands with args', (t) => {
+it('parseInput - slash commands with args', () => {
   const cases: Array<{ input: string; expected: ParsedInput }> = [
     {
       input: '/model gpt-4',
@@ -69,27 +69,27 @@ test('parseInput - slash commands with args', (t) => {
   ];
 
   for (const { input, expected } of cases) {
-    t.deepEqual(parseInput(input), expected, `Failed for input: "${input}"`);
+    expect(parseInput(input), `Failed for input: "${input}"`).toEqual(expected);
   }
 });
 
-test('parseInput - edge cases', (t) => {
+it('parseInput - edge cases', () => {
   // Multiple spaces are collapsed by split (which is fine)
-  t.deepEqual(parseInput('/model   gpt-4'), {
+  expect(parseInput('/model   gpt-4')).toEqual({
     type: 'slash-command',
     commandName: 'model',
     args: 'gpt-4',
   });
 
   // Empty args when command has trailing spaces
-  t.deepEqual(parseInput('/clear   '), {
+  expect(parseInput('/clear   ')).toEqual({
     type: 'slash-command',
     commandName: 'clear',
     args: '',
   });
 
   // Command with special characters in args
-  t.deepEqual(parseInput('/settings agent.model gpt-4.5-turbo'), {
+  expect(parseInput('/settings agent.model gpt-4.5-turbo')).toEqual({
     type: 'slash-command',
     commandName: 'settings',
     args: 'agent.model gpt-4.5-turbo',

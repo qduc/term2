@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -27,7 +27,7 @@ const mockProject = path.join(TEMP_TEST_DIR, 'mock-project');
 
 let originalHomedir: () => string;
 
-test.serial.before(() => {
+beforeAll(() => {
   originalHomedir = os.homedir;
   Object.defineProperty(os, 'homedir', {
     value: () => mockHome,
@@ -36,7 +36,7 @@ test.serial.before(() => {
   });
 });
 
-test.serial.after.always(() => {
+afterAll(() => {
   Object.defineProperty(os, 'homedir', {
     value: originalHomedir,
     configurable: true,
@@ -44,7 +44,7 @@ test.serial.after.always(() => {
   });
 });
 
-test.serial.beforeEach(() => {
+beforeEach(() => {
   if (fs.existsSync(TEMP_TEST_DIR)) {
     fs.rmSync(TEMP_TEST_DIR, { recursive: true, force: true });
   }
@@ -53,13 +53,13 @@ test.serial.beforeEach(() => {
   fs.mkdirSync(mockProject, { recursive: true });
 });
 
-test.serial.afterEach.always(() => {
+afterEach(() => {
   if (fs.existsSync(TEMP_TEST_DIR)) {
     fs.rmSync(TEMP_TEST_DIR, { recursive: true, force: true });
   }
 });
 
-test.serial('SkillsService parses correct YAML frontmatter and strips body', (t) => {
+it.sequential('SkillsService parses correct YAML frontmatter and strips body', () => {
   const { logger } = createMockLogger();
   const skillDir = path.join(mockProject, '.agents', 'skills', 'test-skill');
   fs.mkdirSync(skillDir, { recursive: true });
@@ -78,14 +78,14 @@ This is the markdown body.
   service.discoverSkills();
 
   const skills = service.getAvailableSkills();
-  t.is(skills.length, 1);
-  t.is(skills[0]?.name, 'test-skill');
-  t.is(skills[0]?.description, 'A mock skill for testing');
-  t.false(skills[0]?.disableModelInvocation);
-  t.is(skills[0]?.body, '# Test Skill Body\nThis is the markdown body.');
+  expect(skills.length).toBe(1);
+  expect(skills[0]?.name).toBe('test-skill');
+  expect(skills[0]?.description).toBe('A mock skill for testing');
+  expect(skills[0]?.disableModelInvocation).toBe(false);
+  expect(skills[0]?.body).toBe('# Test Skill Body\nThis is the markdown body.');
 });
 
-test.serial('SkillsService handles lenient validation - derives missing name from parent directory', (t) => {
+it.sequential('SkillsService handles lenient validation - derives missing name from parent directory', () => {
   const { logger, warnings } = createMockLogger();
   const skillDir = path.join(mockProject, '.agents', 'skills', 'parent-name-skill');
   fs.mkdirSync(skillDir, { recursive: true });
@@ -101,12 +101,12 @@ description: Missing name property in frontmatter
   service.discoverSkills();
 
   const skills = service.getAvailableSkills();
-  t.is(skills.length, 1);
-  t.is(skills[0]?.name, 'parent-name-skill');
-  t.true(warnings.some((w) => w.includes('is missing a name. Deriving from parent directory')));
+  expect(skills.length).toBe(1);
+  expect(skills[0]?.name).toBe('parent-name-skill');
+  expect(warnings.some((w) => w.includes('is missing a name. Deriving from parent directory'))).toBe(true);
 });
 
-test.serial('SkillsService skips skill with missing description', (t) => {
+it.sequential('SkillsService skips skill with missing description', () => {
   const { logger, errors } = createMockLogger();
   const skillDir = path.join(mockProject, '.agents', 'skills', 'invalid-skill');
   fs.mkdirSync(skillDir, { recursive: true });
@@ -122,11 +122,11 @@ name: invalid-skill
   service.discoverSkills();
 
   const skills = service.getAvailableSkills();
-  t.is(skills.length, 0);
-  t.true(errors.some((e) => e.includes('is missing a description. Skipping.')));
+  expect(skills.length).toBe(0);
+  expect(errors.some((e) => e.includes('is missing a description. Skipping.'))).toBe(true);
 });
 
-test.serial('SkillsService handles unquoted colons and quotes in frontmatter values', (t) => {
+it.sequential('SkillsService handles unquoted colons and quotes in frontmatter values', () => {
   const { logger } = createMockLogger();
   const skillDir = path.join(mockProject, '.agents', 'skills', 'colon-skill');
   fs.mkdirSync(skillDir, { recursive: true });
@@ -143,12 +143,12 @@ description: Use this skill when: handling colon tests
   service.discoverSkills();
 
   const skills = service.getAvailableSkills();
-  t.is(skills.length, 1);
-  t.is(skills[0]?.name, 'colon-skill');
-  t.is(skills[0]?.description, 'Use this skill when: handling colon tests');
+  expect(skills.length).toBe(1);
+  expect(skills[0]?.name).toBe('colon-skill');
+  expect(skills[0]?.description).toBe('Use this skill when: handling colon tests');
 });
 
-test.serial('SkillsService project-level skills override user-level skills', (t) => {
+it.sequential('SkillsService project-level skills override user-level skills', () => {
   const { logger, warnings } = createMockLogger();
 
   // User-level skill
@@ -179,13 +179,13 @@ Project Body`,
   service.discoverSkills();
 
   const skills = service.getAvailableSkills();
-  t.is(skills.length, 1);
-  t.is(skills[0]?.description, 'Project level description');
-  t.is(skills[0]?.body, 'Project Body');
-  t.true(warnings.some((w) => w.includes('overrides user-level')));
+  expect(skills.length).toBe(1);
+  expect(skills[0]?.description).toBe('Project level description');
+  expect(skills[0]?.body).toBe('Project Body');
+  expect(warnings.some((w) => w.includes('overrides user-level'))).toBe(true);
 });
 
-test.serial('SkillsService filter/disable model invocation', (t) => {
+it.sequential('SkillsService filter/disable model invocation', () => {
   const { logger } = createMockLogger();
   const skillDir = path.join(mockProject, '.agents', 'skills', 'disabled-skill');
   fs.mkdirSync(skillDir, { recursive: true });
@@ -202,12 +202,12 @@ disable-model-invocation: true
   const service = new SkillsService(logger, mockProject);
   service.discoverSkills();
 
-  t.is(service.getAvailableSkills().length, 1);
-  t.is(service.getAvailableSkillsForModel().length, 0);
-  t.is(service.getSkillCatalog(), '');
+  expect(service.getAvailableSkills().length).toBe(1);
+  expect(service.getAvailableSkillsForModel().length).toBe(0);
+  expect(service.getSkillCatalog()).toBe('');
 });
 
-test.serial('SkillsService generates catalog XML correctly', (t) => {
+it.sequential('SkillsService generates catalog XML correctly', () => {
   const { logger } = createMockLogger();
   const skillDir = path.join(mockProject, '.agents', 'skills', 'catalog-skill');
   fs.mkdirSync(skillDir, { recursive: true });
@@ -225,8 +225,8 @@ Body`,
   service.discoverSkills();
 
   const catalog = service.getSkillCatalog();
-  t.true(catalog.includes('<available_skills>'));
-  t.true(catalog.includes('<name>catalog-skill</name>'));
-  t.true(catalog.includes('<description>Catalog description</description>'));
-  t.true(catalog.includes(`<location>${path.join(skillDir, 'SKILL.md')}</location>`));
+  expect(catalog.includes('<available_skills>')).toBe(true);
+  expect(catalog.includes('<name>catalog-skill</name>')).toBe(true);
+  expect(catalog.includes('<description>Catalog description</description>')).toBe(true);
+  expect(catalog.includes(`<location>${path.join(skillDir, 'SKILL.md')}</location>`)).toBe(true);
 });

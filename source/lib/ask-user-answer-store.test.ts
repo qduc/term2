@@ -1,47 +1,47 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { AskUserAnswerStore } from './ask-user-answer-store.js';
 
-test('set and consume stores and retrieves an answer', (t) => {
+it('set and consume stores and retrieves an answer', () => {
   const store = new AskUserAnswerStore();
   store.set('call-1', 'yes');
-  t.is(store.consume('call-1'), 'yes');
+  expect(store.consume('call-1')).toBe('yes');
 });
 
-test('consume deletes the answer after reading', (t) => {
+it('consume deletes the answer after reading', () => {
   const store = new AskUserAnswerStore();
   store.set('call-1', 'yes');
   store.consume('call-1');
-  t.is(store.consume('call-1'), undefined);
+  expect(store.consume('call-1')).toBe(undefined);
 });
 
-test('consume returns undefined for unknown callId', (t) => {
+it('consume returns undefined for unknown callId', () => {
   const store = new AskUserAnswerStore();
-  t.is(store.consume('unknown'), undefined);
+  expect(store.consume('unknown')).toBe(undefined);
 });
 
-test('peek reads without deleting', (t) => {
+it('peek reads without deleting', () => {
   const store = new AskUserAnswerStore();
   store.set('call-1', 'yes');
-  t.is(store.peek('call-1'), 'yes');
-  t.is(store.peek('call-1'), 'yes');
+  expect(store.peek('call-1')).toBe('yes');
+  expect(store.peek('call-1')).toBe('yes');
 });
 
-test('peek returns undefined for unknown callId', (t) => {
+it('peek returns undefined for unknown callId', () => {
   const store = new AskUserAnswerStore();
-  t.is(store.peek('unknown'), undefined);
+  expect(store.peek('unknown')).toBe(undefined);
 });
 
-test('set overwrites a previous answer', (t) => {
+it('set overwrites a previous answer', () => {
   const store = new AskUserAnswerStore();
   store.set('call-1', 'first');
   store.set('call-1', 'second');
-  t.is(store.consume('call-1'), 'second');
+  expect(store.consume('call-1')).toBe('second');
 });
 
-test('multiple entries are independent', (t) => {
+it('multiple entries are independent', () => {
   const store = new AskUserAnswerStore();
   store.set('call-1', 'answer-1');
   store.set('call-2', 'answer-2');
   store.consume('call-1');
-  t.is(store.consume('call-2'), 'answer-2');
+  expect(store.consume('call-2')).toBe('answer-2');
 });

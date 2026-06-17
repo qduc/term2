@@ -1,13 +1,13 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { trimOutput, setTrimConfig, getTrimConfig, DEFAULT_TRIM_CONFIG } from './output-trim.js';
 
-test('returns output unchanged when below both limits', (t) => {
+it('returns output unchanged when below both limits', () => {
   const output = 'line1\nline2\nline3';
   const result = trimOutput(output);
-  t.is(result, output);
+  expect(result).toBe(output);
 });
 
-test('trims output when exceeding line limit', (t) => {
+it('trims output when exceeding line limit', () => {
   // Create output with more than default max lines (1000)
   const lines = Array<string>();
   for (let i = 1; i <= 1200; i++) {
@@ -17,39 +17,39 @@ test('trims output when exceeding line limit', (t) => {
   const result = trimOutput(output);
 
   // Should contain trimmed message
-  t.true(result.includes('lines trimmed'));
+  expect(result.includes('lines trimmed')).toBe(true);
   // Should have first 40% of lines (400 lines)
-  t.true(result.includes('line 1'));
-  t.true(result.includes('line 400'));
+  expect(result.includes('line 1')).toBe(true);
+  expect(result.includes('line 400')).toBe(true);
   // Should have last 40% of lines (400 lines)
-  t.true(result.includes('line 801'));
-  t.true(result.includes('line 1200'));
+  expect(result.includes('line 801')).toBe(true);
+  expect(result.includes('line 1200')).toBe(true);
   // Middle section should be missing
-  t.false(result.includes('line 600'));
+  expect(result.includes('line 600')).toBe(false);
 });
 
-test('trims output when exceeding character limit', (t) => {
+it('trims output when exceeding character limit', () => {
   // Create output that exceeds character limit but not line limit
   const output = 'a'.repeat(15000);
   const result = trimOutput(output);
 
-  t.true(result.includes('characters trimmed'));
-  t.true(result.length < output.length);
+  expect(result.includes('characters trimmed')).toBe(true);
+  expect(result.length < output.length).toBe(true);
 });
 
-test('trims few-line output with one very long line by character limit', (t) => {
+it('trims few-line output with one very long line by character limit', () => {
   const lines = Array.from({ length: 21 }, (_, index) =>
     index === 18 ? `huge:${'a'.repeat(15000)}` : `line ${index + 1}`,
   );
   const output = lines.join('\n');
   const result = trimOutput(output, 50, 1000);
 
-  t.true(result.includes('characters trimmed'));
-  t.true(result.length < 2000);
-  t.false(result.includes('a'.repeat(5000)));
+  expect(result.includes('characters trimmed')).toBe(true);
+  expect(result.length < 2000).toBe(true);
+  expect(result.includes('a'.repeat(5000))).toBe(false);
 });
 
-test('respects maxLines override parameter', (t) => {
+it('respects maxLines override parameter', () => {
   const lines = Array<string>();
   for (let i = 1; i <= 100; i++) {
     lines.push(`line ${i}`);
@@ -59,26 +59,26 @@ test('respects maxLines override parameter', (t) => {
   // Override to max 50 lines
   const result = trimOutput(output, 50, undefined);
 
-  t.true(result.includes('lines trimmed'));
+  expect(result.includes('lines trimmed')).toBe(true);
   // Should keep 40% from start (20 lines) and 40% from end (20 lines)
-  t.true(result.includes('line 1'));
-  t.true(result.includes('line 20'));
-  t.true(result.includes('line 81'));
-  t.true(result.includes('line 100'));
+  expect(result.includes('line 1')).toBe(true);
+  expect(result.includes('line 20')).toBe(true);
+  expect(result.includes('line 81')).toBe(true);
+  expect(result.includes('line 100')).toBe(true);
 });
 
-test('respects maxCharacters override parameter', (t) => {
+it('respects maxCharacters override parameter', () => {
   // Create output with 1000 characters (single line)
   const output = 'a'.repeat(1000);
 
   // Override to max 500 characters
   const result = trimOutput(output, undefined, 500);
 
-  t.true(result.includes('characters trimmed'));
-  t.true(result.length < output.length);
+  expect(result.includes('characters trimmed')).toBe(true);
+  expect(result.length < output.length).toBe(true);
 });
 
-test('does not trim when lines are equal to keepLines * 2', (t) => {
+it('does not trim when lines are equal to keepLines * 2', () => {
   // With default maxLines 1000, keepLines = 400
   // Create exactly 800 lines (keepLines * 2)
   const lines = Array<string>();
@@ -89,10 +89,10 @@ test('does not trim when lines are equal to keepLines * 2', (t) => {
   const result = trimOutput(output);
 
   // Should not trim when lines <= effectiveKeepLines * 2
-  t.is(result, output);
+  expect(result).toBe(output);
 });
 
-test('ensures minimum of 10 lines are kept', (t) => {
+it('ensures minimum of 10 lines are kept', () => {
   // Set very small limits
   const lines = Array<string>();
   for (let i = 1; i <= 50; i++) {
@@ -104,13 +104,13 @@ test('ensures minimum of 10 lines are kept', (t) => {
   const result = trimOutput(output, 5, undefined);
 
   // Should keep at least 10 lines at start and 10 at end (total 20+)
-  t.true(result.includes('line 1'));
-  t.true(result.includes('line 10'));
-  t.true(result.includes('line 41'));
-  t.true(result.includes('line 50'));
+  expect(result.includes('line 1')).toBe(true);
+  expect(result.includes('line 10')).toBe(true);
+  expect(result.includes('line 41')).toBe(true);
+  expect(result.includes('line 50')).toBe(true);
 });
 
-test('shows correct trimmed count in message', (t) => {
+it('shows correct trimmed count in message', () => {
   const lines = Array<string>();
   for (let i = 1; i <= 1100; i++) {
     lines.push(`line ${i}`);
@@ -119,10 +119,10 @@ test('shows correct trimmed count in message', (t) => {
   const result = trimOutput(output);
 
   // With 1100 lines and default max 1000, keeps 400 at start + 400 at end = 300 trimmed
-  t.true(result.includes('[300 lines trimmed]'));
+  expect(result.includes('[300 lines trimmed]')).toBe(true);
 });
 
-test('setTrimConfig updates configuration', (t) => {
+it('setTrimConfig updates configuration', () => {
   // Save original config
   const original = getTrimConfig();
 
@@ -130,15 +130,15 @@ test('setTrimConfig updates configuration', (t) => {
     setTrimConfig({ maxLines: 500, maxCharacters: 5000 });
     const config = getTrimConfig();
 
-    t.is(config.maxLines, 500);
-    t.is(config.maxCharacters, 5000);
+    expect(config.maxLines).toBe(500);
+    expect(config.maxCharacters).toBe(5000);
   } finally {
     // Restore original config
     setTrimConfig(original);
   }
 });
 
-test('setTrimConfig accepts partial configuration', (t) => {
+it('setTrimConfig accepts partial configuration', () => {
   // Save original config
   const original = getTrimConfig();
 
@@ -146,30 +146,30 @@ test('setTrimConfig accepts partial configuration', (t) => {
     setTrimConfig({ maxLines: 300 });
     const config = getTrimConfig();
 
-    t.is(config.maxLines, 300);
+    expect(config.maxLines).toBe(300);
     // maxCharacters should remain at default
-    t.is(config.maxCharacters, DEFAULT_TRIM_CONFIG.maxCharacters);
+    expect(config.maxCharacters).toBe(DEFAULT_TRIM_CONFIG.maxCharacters);
   } finally {
     // Restore original config
     setTrimConfig(original);
   }
 });
 
-test('getTrimConfig returns copy of config', (t) => {
+it('getTrimConfig returns copy of config', () => {
   const config1 = getTrimConfig();
   const config2 = getTrimConfig();
 
   // Should be equal but not same reference
-  t.deepEqual(config1, config2);
-  t.not(config1, config2);
+  expect(config1).toEqual(config2);
+  expect(config1).not.toBe(config2);
 });
 
-test('DEFAULT_TRIM_CONFIG has expected values', (t) => {
-  t.is(DEFAULT_TRIM_CONFIG.maxLines, 1000);
-  t.is(DEFAULT_TRIM_CONFIG.maxCharacters, 10000);
+it('DEFAULT_TRIM_CONFIG has expected values', () => {
+  expect(DEFAULT_TRIM_CONFIG.maxLines).toBe(1000);
+  expect(DEFAULT_TRIM_CONFIG.maxCharacters).toBe(10000);
 });
 
-test('trimOutput uses updated config after setTrimConfig', (t) => {
+it('trimOutput uses updated config after setTrimConfig', () => {
   // Save original config
   const original = getTrimConfig();
 
@@ -185,24 +185,24 @@ test('trimOutput uses updated config after setTrimConfig', (t) => {
     const result = trimOutput(output);
 
     // Should trim with new config
-    t.true(result.includes('lines trimmed'));
+    expect(result.includes('lines trimmed')).toBe(true);
   } finally {
     // Restore original config
     setTrimConfig(original);
   }
 });
 
-test('handles empty string', (t) => {
+it('handles empty string', () => {
   const result = trimOutput('');
-  t.is(result, '');
+  expect(result).toBe('');
 });
 
-test('handles single line', (t) => {
+it('handles single line', () => {
   const result = trimOutput('single line');
-  t.is(result, 'single line');
+  expect(result).toBe('single line');
 });
 
-test('preserves newlines in trimmed output', (t) => {
+it('preserves newlines in trimmed output', () => {
   const lines = Array<string>();
   for (let i = 1; i <= 100; i++) {
     lines.push(`line ${i}`);
@@ -212,7 +212,7 @@ test('preserves newlines in trimmed output', (t) => {
 
   // Should have newlines preserved
   const resultLines = result.split('\n');
-  t.true(resultLines.length > 0);
+  expect(resultLines.length > 0).toBe(true);
   // Should have trim message as a separate element
-  t.true(resultLines.some((line) => line.includes('lines trimmed')));
+  expect(resultLines.some((line) => line.includes('lines trimmed'))).toBe(true);
 });

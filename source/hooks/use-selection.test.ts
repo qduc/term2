@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import { useSelection } from './use-selection.js';
@@ -25,7 +24,7 @@ const TestComponent = ({
   return null;
 };
 
-test('useSelection - handles up and down wraps', (t) => {
+it('useSelection - handles up and down wraps', () => {
   const items = ['a', 'b', 'c'];
   let currentSelection: ReturnType<typeof useSelection<string>> | undefined;
   let renderer: any;
@@ -41,41 +40,41 @@ test('useSelection - handles up and down wraps', (t) => {
     );
   });
 
-  t.true(currentSelection !== undefined);
+  expect(currentSelection).toBeDefined();
 
   // Initial index should be 0
-  t.is(currentSelection!.selectedIndex, 0);
+  expect(currentSelection!.selectedIndex).toBe(0);
 
   // Move down goes to 1
   act(() => {
     currentSelection!.moveDown();
   });
-  t.is(currentSelection!.selectedIndex, 1);
+  expect(currentSelection!.selectedIndex).toBe(1);
 
   // Move down to 2
   act(() => {
     currentSelection!.moveDown();
   });
-  t.is(currentSelection!.selectedIndex, 2);
+  expect(currentSelection!.selectedIndex).toBe(2);
 
   // Move down wraps to 0
   act(() => {
     currentSelection!.moveDown();
   });
-  t.is(currentSelection!.selectedIndex, 0);
+  expect(currentSelection!.selectedIndex).toBe(0);
 
   // Move up wraps to 2
   act(() => {
     currentSelection!.moveUp();
   });
-  t.is(currentSelection!.selectedIndex, 2);
+  expect(currentSelection!.selectedIndex).toBe(2);
 
   act(() => {
     renderer.unmount();
   });
 });
 
-test('useSelection - handles home and end keys', (t) => {
+it('useSelection - handles home and end keys', () => {
   const items = ['a', 'b', 'c', 'd', 'e'];
   let currentSelection: ReturnType<typeof useSelection<string>> | undefined;
   let renderer: any;
@@ -91,29 +90,29 @@ test('useSelection - handles home and end keys', (t) => {
     );
   });
 
-  t.true(currentSelection !== undefined);
+  expect(currentSelection).toBeDefined();
 
   // Initial index should be 0
-  t.is(currentSelection!.selectedIndex, 0);
+  expect(currentSelection!.selectedIndex).toBe(0);
 
   // Move to end (index 4)
   act(() => {
     currentSelection!.moveEnd();
   });
-  t.is(currentSelection!.selectedIndex, 4);
+  expect(currentSelection!.selectedIndex).toBe(4);
 
   // Move to home (index 0)
   act(() => {
     currentSelection!.moveHome();
   });
-  t.is(currentSelection!.selectedIndex, 0);
+  expect(currentSelection!.selectedIndex).toBe(0);
 
   act(() => {
     renderer.unmount();
   });
 });
 
-test('useSelection - pageUp and pageDown navigation', (t) => {
+it('useSelection - pageUp and pageDown navigation', () => {
   const items = Array.from({ length: 25 }, (_, i) => `item-${i}`);
   let currentSelection: ReturnType<typeof useSelection<string>> | undefined;
   let renderer: any;
@@ -129,53 +128,53 @@ test('useSelection - pageUp and pageDown navigation', (t) => {
     );
   });
 
-  t.true(currentSelection !== undefined);
+  expect(currentSelection).toBeDefined();
 
   // Initial index should be 0
-  t.is(currentSelection!.selectedIndex, 0);
+  expect(currentSelection!.selectedIndex).toBe(0);
 
   // Page down moves by 10 (index 10)
   act(() => {
     currentSelection!.pageDown();
   });
-  t.is(currentSelection!.selectedIndex, 10);
+  expect(currentSelection!.selectedIndex).toBe(10);
 
   // Page down moves by 10 (index 20)
   act(() => {
     currentSelection!.pageDown();
   });
-  t.is(currentSelection!.selectedIndex, 20);
+  expect(currentSelection!.selectedIndex).toBe(20);
 
   // Page down clamped at 24
   act(() => {
     currentSelection!.pageDown();
   });
-  t.is(currentSelection!.selectedIndex, 24);
+  expect(currentSelection!.selectedIndex).toBe(24);
 
   // Page up moves by 10 (index 14)
   act(() => {
     currentSelection!.pageUp();
   });
-  t.is(currentSelection!.selectedIndex, 14);
+  expect(currentSelection!.selectedIndex).toBe(14);
 
   // Page up moves by 10 (index 4)
   act(() => {
     currentSelection!.pageUp();
   });
-  t.is(currentSelection!.selectedIndex, 4);
+  expect(currentSelection!.selectedIndex).toBe(4);
 
   // Page up clamped at 0
   act(() => {
     currentSelection!.pageUp();
   });
-  t.is(currentSelection!.selectedIndex, 0);
+  expect(currentSelection!.selectedIndex).toBe(0);
 
   act(() => {
     renderer.unmount();
   });
 });
 
-test('useSelection - skips inactive items on moveUp and moveDown', (t) => {
+it('useSelection - skips inactive items on moveUp and moveDown', () => {
   const items = ['a', 'b', 'c', 'd', 'e'];
   const isInactive = (item: string) => item === 'b' || item === 'd';
   let currentSelection: ReturnType<typeof useSelection<string>> | undefined;
@@ -193,47 +192,47 @@ test('useSelection - skips inactive items on moveUp and moveDown', (t) => {
     );
   });
 
-  t.true(currentSelection !== undefined);
+  expect(currentSelection).toBeDefined();
 
   // Initial index should adjust to 0 ('a') as it is active
-  t.is(currentSelection!.selectedIndex, 0);
+  expect(currentSelection!.selectedIndex).toBe(0);
 
   // Move down should skip 'b' (index 1) and land on 'c' (index 2)
   act(() => {
     currentSelection!.moveDown();
   });
-  t.is(currentSelection!.selectedIndex, 2);
+  expect(currentSelection!.selectedIndex).toBe(2);
 
   // Move down should skip 'd' (index 3) and land on 'e' (index 4)
   act(() => {
     currentSelection!.moveDown();
   });
-  t.is(currentSelection!.selectedIndex, 4);
+  expect(currentSelection!.selectedIndex).toBe(4);
 
   // Move down should wrap around to 0 ('a')
   act(() => {
     currentSelection!.moveDown();
   });
-  t.is(currentSelection!.selectedIndex, 0);
+  expect(currentSelection!.selectedIndex).toBe(0);
 
   // Move up should wrap around, skip 'd' (index 3) and land on 'e' (index 4)
   act(() => {
     currentSelection!.moveUp();
   });
-  t.is(currentSelection!.selectedIndex, 4);
+  expect(currentSelection!.selectedIndex).toBe(4);
 
   // Move up should skip 'd' and land on 'c' (index 2)
   act(() => {
     currentSelection!.moveUp();
   });
-  t.is(currentSelection!.selectedIndex, 2);
+  expect(currentSelection!.selectedIndex).toBe(2);
 
   act(() => {
     renderer.unmount();
   });
 });
 
-test('useSelection - skips inactive items on pageUp, pageDown, moveHome, and moveEnd', (t) => {
+it('useSelection - skips inactive items on pageUp, pageDown, moveHome, and moveEnd', () => {
   const items = Array.from({ length: 15 }, (_, i) => `item-${i}`);
   // Mark item-10, item-11, item-14 as inactive
   const isInactive = (item: string) => item === 'item-10' || item === 'item-11' || item === 'item-14';
@@ -252,20 +251,20 @@ test('useSelection - skips inactive items on pageUp, pageDown, moveHome, and mov
     );
   });
 
-  t.true(currentSelection !== undefined);
-  t.is(currentSelection!.selectedIndex, 0);
+  expect(currentSelection).toBeDefined();
+  expect(currentSelection!.selectedIndex).toBe(0);
 
   // Move to end: should be item-13 (index 13) since item-14 is inactive
   act(() => {
     currentSelection!.moveEnd();
   });
-  t.is(currentSelection!.selectedIndex, 13);
+  expect(currentSelection!.selectedIndex).toBe(13);
 
   // Move to home: should be item-0 (index 0)
   act(() => {
     currentSelection!.moveHome();
   });
-  t.is(currentSelection!.selectedIndex, 0);
+  expect(currentSelection!.selectedIndex).toBe(0);
 
   // Page down by 10 active items from index 0.
   // Active items: item-0 (0), item-1 (1), item-2 (2), item-3 (3), item-4 (4),
@@ -275,7 +274,7 @@ test('useSelection - skips inactive items on pageUp, pageDown, moveHome, and mov
   act(() => {
     currentSelection!.pageDown();
   });
-  t.is(currentSelection!.selectedIndex, 12);
+  expect(currentSelection!.selectedIndex).toBe(12);
 
   // Page up by 10 active items from index 12.
   // Active items going backward: item-9 (1), item-8 (2), item-7 (3), item-6 (4),
@@ -284,7 +283,7 @@ test('useSelection - skips inactive items on pageUp, pageDown, moveHome, and mov
   act(() => {
     currentSelection!.pageUp();
   });
-  t.is(currentSelection!.selectedIndex, 0);
+  expect(currentSelection!.selectedIndex).toBe(0);
 
   act(() => {
     renderer.unmount();

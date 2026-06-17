@@ -1,85 +1,83 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { validateCommandSafety } from './command-safety/index.js';
 
-test('throws on empty command', (t) => {
-  t.throws(() => validateCommandSafety(''), {
-    message: /Command cannot be empty/,
-  });
+it('throws on empty command', () => {
+  expect(() => validateCommandSafety('')).toThrow(/Command cannot be empty/);
 });
 
-test('malformed trailing syntax is yellow (approval required)', (t) => {
-  t.true(validateCommandSafety('git log ('));
+it('malformed trailing syntax is yellow (approval required)', () => {
+  expect(validateCommandSafety('git log (')).toBe(true);
 });
 
-test('flags dangerous direct command', (t) => {
-  t.true(validateCommandSafety('rm -rf /'));
+it('flags dangerous direct command', () => {
+  expect(validateCommandSafety('rm -rf /')).toBe(true);
 });
 
-test('flags nested dangerous command in substitution', (t) => {
-  t.true(validateCommandSafety('echo $(rm -rf /)'));
+it('flags nested dangerous command in substitution', () => {
+  expect(validateCommandSafety('echo $(rm -rf /)')).toBe(true);
 });
 
-test('does not flag namespaced filenames', (t) => {
-  t.false(validateCommandSafety('echo firmware.rm'));
+it('does not flag namespaced filenames', () => {
+  expect(validateCommandSafety('echo firmware.rm')).toBe(false);
 });
 
-test('flags hidden sensitive files as yellow (approval required)', (t) => {
-  t.true(validateCommandSafety('cat .env'));
+it('flags hidden sensitive files as yellow (approval required)', () => {
+  expect(validateCommandSafety('cat .env')).toBe(true);
 });
 
-test('absolute system paths are red (now yellow-ish, needs approval)', (t) => {
-  t.true(validateCommandSafety('cat /etc/passwd'));
+it('absolute system paths are red (now yellow-ish, needs approval)', () => {
+  expect(validateCommandSafety('cat /etc/passwd')).toBe(true);
 });
 
-test('unknown commands are yellow (audit)', (t) => {
-  t.true(validateCommandSafety('python script.py'));
+it('unknown commands are yellow (audit)', () => {
+  expect(validateCommandSafety('python script.py')).toBe(true);
 });
 
-test('tilde ssh key is red (needs approval)', (t) => {
-  t.true(validateCommandSafety('cat ~/.ssh/id_rsa'));
+it('tilde ssh key is red (needs approval)', () => {
+  expect(validateCommandSafety('cat ~/.ssh/id_rsa')).toBe(true);
 });
 
-test('home env file via $HOME is red (needs approval)', (t) => {
-  t.true(validateCommandSafety('cat $HOME/.env'));
+it('home env file via $HOME is red (needs approval)', () => {
+  expect(validateCommandSafety('cat $HOME/.env')).toBe(true);
 });
 
-test('absolute home dotfile is red (needs approval)', (t) => {
-  t.true(validateCommandSafety('cat /home/test/.gitconfig'));
+it('absolute home dotfile is red (needs approval)', () => {
+  expect(validateCommandSafety('cat /home/test/.gitconfig')).toBe(true);
 });
 
-test('redirect reading system file is red (needs approval)', (t) => {
-  t.true(validateCommandSafety('cat < /etc/passwd'));
+it('redirect reading system file is red (needs approval)', () => {
+  expect(validateCommandSafety('cat < /etc/passwd')).toBe(true);
 });
 
-test('redirect writing system file is red (needs approval)', (t) => {
-  t.true(validateCommandSafety('echo hi > /etc/hosts'));
+it('redirect writing system file is red (needs approval)', () => {
+  expect(validateCommandSafety('echo hi > /etc/hosts')).toBe(true);
 });
 
 // Sed command tests
-test('sed in-place edit is red (needs approval)', (t) => {
-  t.true(validateCommandSafety('sed -i "s/foo/bar/" file.txt'));
+it('sed in-place edit is red (needs approval)', () => {
+  expect(validateCommandSafety('sed -i "s/foo/bar/" file.txt')).toBe(true);
 });
 
-test('sed in-place edit with backup is red (needs approval)', (t) => {
-  t.true(validateCommandSafety('sed -i.bak "s/foo/bar/" file.txt'));
+it('sed in-place edit with backup is red (needs approval)', () => {
+  expect(validateCommandSafety('sed -i.bak "s/foo/bar/" file.txt')).toBe(true);
 });
 
-test('sed with output redirect is yellow (requires approval)', (t) => {
-  t.true(validateCommandSafety('sed "s/foo/bar/" input.txt > output.txt'));
+it('sed with output redirect is yellow (requires approval)', () => {
+  expect(validateCommandSafety('sed "s/foo/bar/" input.txt > output.txt')).toBe(true);
 });
 
-test('sed read-only with file argument is green (safe)', (t) => {
-  t.false(validateCommandSafety('sed -n "1,10p" file.txt'));
+it('sed read-only with file argument is green (safe)', () => {
+  expect(validateCommandSafety('sed -n "1,10p" file.txt')).toBe(false);
 });
 
-test('sed read-only transformation is green (safe)', (t) => {
-  t.false(validateCommandSafety('sed "s/foo/bar/" file.txt'));
+it('sed read-only transformation is green (safe)', () => {
+  expect(validateCommandSafety('sed "s/foo/bar/" file.txt')).toBe(false);
 });
 
-test('sed with stdin piped is green (safe)', (t) => {
-  t.false(validateCommandSafety('echo "test" | sed "s/foo/bar/"'));
+it('sed with stdin piped is green (safe)', () => {
+  expect(validateCommandSafety('echo "test" | sed "s/foo/bar/"')).toBe(false);
 });
 
-test('sed reading from redirect is green (safe)', (t) => {
-  t.false(validateCommandSafety('sed "s/foo/bar/" < input.txt'));
+it('sed reading from redirect is green (safe)', () => {
+  expect(validateCommandSafety('sed "s/foo/bar/" < input.txt')).toBe(false);
 });

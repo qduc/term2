@@ -1,34 +1,34 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { extractReasoningDelta, extractTextDelta } from './stream-event-parsing.js';
 
-test('extractTextDelta: returns delta string for output_text events', (t) => {
+it('extractTextDelta: returns delta string for output_text events', () => {
   const payload = {
     type: 'response.output_text.delta',
     delta: 'Hello',
   };
 
-  t.is(extractTextDelta(payload), 'Hello');
+  expect(extractTextDelta(payload)).toBe('Hello');
 });
 
-test('extractTextDelta: joins array output_text entries', (t) => {
+it('extractTextDelta: joins array output_text entries', () => {
   const payload = {
     type: 'response.output_text.delta',
     output_text: [{ text: 'Hello' }, { text: ' world' }],
   };
 
-  t.is(extractTextDelta(payload), 'Hello world');
+  expect(extractTextDelta(payload)).toBe('Hello world');
 });
 
-test('extractTextDelta: ignores done events', (t) => {
+it('extractTextDelta: ignores done events', () => {
   const payload = {
     type: 'response.output_text.done',
     text: 'Hello world',
   };
 
-  t.is(extractTextDelta(payload), null);
+  expect(extractTextDelta(payload)).toBe(null);
 });
 
-test('extractReasoningDelta: extracts OpenAI reasoning summary deltas', (t) => {
+it('extractReasoningDelta: extracts OpenAI reasoning summary deltas', () => {
   const event = {
     data: {
       type: 'model',
@@ -39,10 +39,10 @@ test('extractReasoningDelta: extracts OpenAI reasoning summary deltas', (t) => {
     },
   };
 
-  t.is(extractReasoningDelta(event), 'think');
+  expect(extractReasoningDelta(event)).toBe('think');
 });
 
-test('extractReasoningDelta: extracts model reasoning-delta events', (t) => {
+it('extractReasoningDelta: extracts model reasoning-delta events', () => {
   const event = {
     data: {
       type: 'model',
@@ -54,10 +54,10 @@ test('extractReasoningDelta: extracts model reasoning-delta events', (t) => {
     },
   };
 
-  t.is(extractReasoningDelta(event), 'The');
+  expect(extractReasoningDelta(event)).toBe('The');
 });
 
-test('extractReasoningDelta: extracts OpenRouter reasoning delta fields', (t) => {
+it('extractReasoningDelta: extracts OpenRouter reasoning delta fields', () => {
   const reasoningEvent = {
     data: {
       event: {
@@ -86,6 +86,6 @@ test('extractReasoningDelta: extracts OpenRouter reasoning delta fields', (t) =>
     },
   };
 
-  t.is(extractReasoningDelta(reasoningEvent), 'plan');
-  t.is(extractReasoningDelta(reasoningContentEvent), 'execute');
+  expect(extractReasoningDelta(reasoningEvent)).toBe('plan');
+  expect(extractReasoningDelta(reasoningContentEvent)).toBe('execute');
 });

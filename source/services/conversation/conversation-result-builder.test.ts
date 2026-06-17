@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { buildConversationResult, toTerminalEvent } from './conversation-result-builder.js';
 import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import { ApprovalState } from '../approval/approval-state.js';
@@ -10,13 +10,13 @@ import { clearToolFormatters, registerToolFormatters } from '../../tools/command
 import { formatShellCommandMessage } from '../../tools/system/shell.js';
 import { clearApprovalRejectionMarkers } from '../../utils/streaming/extract-command-messages.js';
 
-test.beforeEach(() => {
+beforeEach(() => {
   clearToolFormatters();
   registerToolFormatters([{ name: 'shell', formatCommandMessage: formatShellCommandMessage }]);
   clearApprovalRejectionMarkers();
 });
 
-test.afterEach(() => {
+afterEach(() => {
   clearToolFormatters();
   clearApprovalRejectionMarkers();
 });
@@ -57,7 +57,7 @@ const makeDeps = (mode: 'off' | 'advisory' | 'auto' = 'off') => {
   return { approvalFlow, shellAutoApproval, logger, sessionId: 's1' };
 };
 
-test('response outcome when stream has no interruptions', async (t) => {
+it('response outcome when stream has no interruptions', async () => {
   const stream = makeStream({
     finalOutput: 'Done.',
     history: [],
@@ -73,14 +73,14 @@ test('response outcome when stream has no interruptions', async (t) => {
     makeDeps(),
   );
 
-  t.is(outcome.kind, 'response');
+  expect(outcome.kind).toBe('response');
   if (outcome.kind === 'response') {
-    t.is(outcome.result.finalText, 'Hello');
-    t.deepEqual(outcome.result.commandMessages, []);
+    expect(outcome.result.finalText).toBe('Hello');
+    expect(outcome.result.commandMessages).toEqual([]);
   }
 });
 
-test('response outcome uses completed final output when it extends streamed output', async (t) => {
+it('response outcome uses completed final output when it extends streamed output', async () => {
   const stream = makeStream({
     finalOutput: 'Intro\n\n## Missing Header\n\nBody',
     history: [],
@@ -96,13 +96,13 @@ test('response outcome uses completed final output when it extends streamed outp
     makeDeps(),
   );
 
-  t.is(outcome.kind, 'response');
+  expect(outcome.kind).toBe('response');
   if (outcome.kind === 'response') {
-    t.is(outcome.result.finalText, 'Intro\n\n## Missing Header\n\nBody');
+    expect(outcome.result.finalText).toBe('Intro\n\n## Missing Header\n\nBody');
   }
 });
 
-test('response outcome uses completed final output when it corrects streamed text with the same length', async (t) => {
+it('response outcome uses completed final output when it corrects streamed text with the same length', async () => {
   const stream = makeStream({
     finalOutput: 'Hello world',
     history: [],
@@ -118,13 +118,13 @@ test('response outcome uses completed final output when it corrects streamed tex
     makeDeps(),
   );
 
-  t.is(outcome.kind, 'response');
+  expect(outcome.kind).toBe('response');
   if (outcome.kind === 'response') {
-    t.is(outcome.result.finalText, 'Hello world');
+    expect(outcome.result.finalText).toBe('Hello world');
   }
 });
 
-test('response outcome uses completed final output when it shortens streamed text', async (t) => {
+it('response outcome uses completed final output when it shortens streamed text', async () => {
   const stream = makeStream({
     finalOutput: 'The answer is 42.',
     history: [],
@@ -140,13 +140,13 @@ test('response outcome uses completed final output when it shortens streamed tex
     makeDeps(),
   );
 
-  t.is(outcome.kind, 'response');
+  expect(outcome.kind).toBe('response');
   if (outcome.kind === 'response') {
-    t.is(outcome.result.finalText, 'The answer is 42.');
+    expect(outcome.result.finalText).toBe('The answer is 42.');
   }
 });
 
-test('approval_required outcome when stream has interruptions', async (t) => {
+it('approval_required outcome when stream has interruptions', async () => {
   const stream = makeStream({
     interruptions: [
       {
@@ -160,15 +160,15 @@ test('approval_required outcome when stream has interruptions', async (t) => {
   });
   const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, makeDeps('off'));
 
-  t.is(outcome.kind, 'approval_required');
+  expect(outcome.kind).toBe('approval_required');
   if (outcome.kind === 'approval_required') {
-    t.is(outcome.result.approval.toolName, 'shell');
-    t.is(outcome.result.approval.callId, 'c1');
-    t.is(outcome.result.approval.agentName, 'TestAgent');
+    expect(outcome.result.approval.toolName).toBe('shell');
+    expect(outcome.result.approval.callId).toBe('c1');
+    expect(outcome.result.approval.agentName).toBe('TestAgent');
   }
 });
 
-test('approval_required records the matching nested subagent owner', async (t) => {
+it('approval_required records the matching nested subagent owner', async () => {
   const deps = makeDeps('off');
   const stream = makeStream({
     interruptions: [
@@ -197,15 +197,15 @@ test('approval_required records the matching nested subagent owner', async (t) =
 
   const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
 
-  t.is(outcome.kind, 'approval_required');
-  t.deepEqual(deps.approvalFlow.getPending()?.owner, {
+  expect(outcome.kind).toBe('approval_required');
+  expect(deps.approvalFlow.getPending()?.owner).toEqual({
     kind: 'subagent',
     agentId: 'worker-1',
     role: 'worker',
   });
 });
 
-test('approval_required matches the correct owner when multiple subagents are pending', async (t) => {
+it('approval_required matches the correct owner when multiple subagents are pending', async () => {
   const deps = makeDeps('off');
   const nestedState = (agentId: string, role: string, callId: string) =>
     JSON.stringify({
@@ -234,14 +234,14 @@ test('approval_required matches the correct owner when multiple subagents are pe
 
   await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
 
-  t.deepEqual(deps.approvalFlow.getPending()?.owner, {
+  expect(deps.approvalFlow.getPending()?.owner).toEqual({
     kind: 'subagent',
     agentId: 'explorer-1',
     role: 'explorer',
   });
 });
 
-test('approval_required defaults to parent owner for malformed nested state', async (t) => {
+it('approval_required defaults to parent owner for malformed nested state', async () => {
   const deps = makeDeps('off');
   const stream = makeStream({
     interruptions: [
@@ -259,10 +259,10 @@ test('approval_required defaults to parent owner for malformed nested state', as
 
   await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
 
-  t.deepEqual(deps.approvalFlow.getPending()?.owner, { kind: 'parent' });
+  expect(deps.approvalFlow.getPending()?.owner).toEqual({ kind: 'parent' });
 });
 
-test('approval_required outcome preserves usage from model turn', async (t) => {
+it('approval_required outcome preserves usage from model turn', async () => {
   const stream = makeStream({
     interruptions: [
       {
@@ -280,13 +280,13 @@ test('approval_required outcome preserves usage from model turn', async (t) => {
     makeDeps(),
   );
 
-  t.is(outcome.kind, 'approval_required');
+  expect(outcome.kind).toBe('approval_required');
   if (outcome.kind === 'approval_required') {
-    t.deepEqual(outcome.result.usage, usage);
+    expect(outcome.result.usage).toEqual(usage);
   }
 });
 
-test('auto_approve outcome when LLM advises approval and mode=auto', async (t) => {
+it('auto_approve outcome when LLM advises approval and mode=auto', async () => {
   const stream = makeStream({
     interruptions: [
       {
@@ -327,15 +327,15 @@ test('auto_approve outcome when LLM advises approval and mode=auto', async (t) =
     { approvalFlow, shellAutoApproval, logger, sessionId: 's1' },
   );
 
-  t.is(outcome.kind, 'auto_approve');
+  expect(outcome.kind).toBe('auto_approve');
   if (outcome.kind === 'auto_approve') {
-    t.is(outcome.callId, 'c1');
-    t.is(outcome.argumentsText, 'ls');
-    t.is(outcome.advisory.approved, true);
+    expect(outcome.callId).toBe('c1');
+    expect(outcome.argumentsText).toBe('ls');
+    expect(outcome.advisory.approved).toBe(true);
   }
 });
 
-test('command messages dedup against emittedCommandIds', async (t) => {
+it('command messages dedup against emittedCommandIds', async () => {
   const stream = makeStream({
     history: [
       { type: 'function_call_output', call_id: 'a', output: '{"text":"x","metadata":{"messageId":"m-a"}}' },
@@ -351,14 +351,14 @@ test('command messages dedup against emittedCommandIds', async (t) => {
     makeDeps(),
   );
 
-  t.is(outcome.kind, 'response');
+  expect(outcome.kind).toBe('response');
   if (outcome.kind === 'response') {
     const ids = (outcome.result.commandMessages ?? []).map((m) => m.id);
-    t.false(ids.includes('m-a'));
+    expect(ids.includes('m-a')).toBe(false);
   }
 });
 
-test('response outcome derives turnItems from provider items with metadata and reasoning ordering', async (t) => {
+it('response outcome derives turnItems from provider items with metadata and reasoning ordering', async () => {
   const stream = makeStream({
     history: [],
     newItems: [
@@ -402,9 +402,9 @@ test('response outcome derives turnItems from provider items with metadata and r
     makeDeps(),
   );
 
-  t.is(outcome.kind, 'response');
+  expect(outcome.kind).toBe('response');
   if (outcome.kind === 'response') {
-    t.deepEqual(outcome.result.turnItems, [
+    expect(outcome.result.turnItems).toEqual([
       {
         type: 'reasoning',
         text: 'I should run date.',
@@ -465,19 +465,19 @@ test('response outcome derives turnItems from provider items with metadata and r
   }
 });
 
-test('toTerminalEvent shapes response into final event', (t) => {
+it('toTerminalEvent shapes response into final event', () => {
   const event = toTerminalEvent({
     type: 'response',
     commandMessages: [],
     finalText: 'Done',
   });
-  t.is(event.type, 'final');
+  expect(event.type).toBe('final');
   if (event.type === 'final') {
-    t.is(event.finalText, 'Done');
+    expect(event.finalText).toBe('Done');
   }
 });
 
-test('toTerminalEvent shapes approval_required with optional fields', (t) => {
+it('toTerminalEvent shapes approval_required with optional fields', () => {
   const event = toTerminalEvent({
     type: 'approval_required',
     approval: {
@@ -489,15 +489,15 @@ test('toTerminalEvent shapes approval_required with optional fields', (t) => {
     },
     usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
   });
-  t.is(event.type, 'approval_required');
+  expect(event.type).toBe('approval_required');
   if (event.type === 'approval_required') {
-    t.is(event.approval.callId, 'c1');
-    t.is(event.approval.toolName, 'shell');
-    t.deepEqual(event.usage, { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 });
+    expect(event.approval.callId).toBe('c1');
+    expect(event.approval.toolName).toBe('shell');
+    expect(event.usage).toEqual({ prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 });
   }
 });
 
-test('response outcome preserves approval-rejected command messages for rendering', async (t) => {
+it('response outcome preserves approval-rejected command messages for rendering', async () => {
   // Regression test: when shell approval is denied, the command message with the rejection
   // message must still appear in commandMessages so the UI can render it.
   // Previously these were filtered out silently, leaving the user without feedback.
@@ -530,24 +530,18 @@ test('response outcome preserves approval-rejected command messages for renderin
   });
   const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, makeDeps());
 
-  t.is(outcome.kind, 'response');
+  expect(outcome.kind).toBe('response');
   if (outcome.kind === 'response') {
     // Previously this assertion would fail because isApprovalRejection messages were filtered out.
-    t.true(
-      (outcome.result.commandMessages ?? []).length > 0,
-      'Expected at least one command message to be preserved after approval rejection',
-    );
+    expect((outcome.result.commandMessages ?? []).length).toBeGreaterThan(0);
     const rejectedMsg = (outcome.result.commandMessages ?? []).find((m) => m.isApprovalRejection);
-    t.truthy(rejectedMsg, 'Expected a command message with isApprovalRejection=true');
-    t.is(rejectedMsg!.toolName, 'shell', 'Expected toolName to be preserved for shell command');
-    t.true(
-      rejectedMsg!.output.includes('not approved'),
-      'Expected rejection message in output, but got: ' + rejectedMsg!.output,
-    );
+    expect(rejectedMsg).toBeTruthy();
+    expect(rejectedMsg!.toolName).toBe('shell');
+    expect(rejectedMsg!.output.includes('not approved')).toBe(true);
   }
 });
 
-test('buildConversationResult and toTerminalEvent preserve turnItems', async (t) => {
+it('buildConversationResult and toTerminalEvent preserve turnItems', async () => {
   const stream = makeStream({
     finalOutput: 'Done.',
     history: [],
@@ -566,14 +560,14 @@ test('buildConversationResult and toTerminalEvent preserve turnItems', async (t)
     makeDeps(),
   );
 
-  t.is(outcome.kind, 'response');
+  expect(outcome.kind).toBe('response');
   if (outcome.kind === 'response') {
-    t.deepEqual(outcome.result.turnItems, turnItems);
+    expect(outcome.result.turnItems).toEqual(turnItems);
 
     const event = toTerminalEvent(outcome.result);
-    t.is(event.type, 'final');
+    expect(event.type).toBe('final');
     if (event.type === 'final') {
-      t.deepEqual(event.turnItems, turnItems);
+      expect(event.turnItems).toEqual(turnItems);
     }
   }
 });

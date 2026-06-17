@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ModelBehaviorError } from '@openai/agents';
@@ -239,7 +239,7 @@ function ensureExplorerProviderRegistered() {
   }
 }
 
-test.beforeEach(() => {
+beforeEach(() => {
   mentorManagerRunnerCalls = [];
   mentorManagerResponseCounter = 0;
   explorerRunnerCalls = [];
@@ -249,7 +249,7 @@ test.beforeEach(() => {
 
 // ========== run() with unknown role ==========
 
-test.serial('run() returns failed result for unknown role', async (t) => {
+it.sequential('run() returns failed result for unknown role', async () => {
   const settings = createMockSettings({
     'agent.model': MODEL_MOCK,
     'agent.provider': PROVIDER_MENTOR_MANAGER,
@@ -262,14 +262,14 @@ test.serial('run() returns failed result for unknown role', async (t) => {
 
   const result = await manager.run({ role: ROLE_UNKNOWN, task: 'do something' });
 
-  t.is(result.status, 'failed');
-  t.truthy(result.error);
-  t.true(result.error!.includes(UNKNOWN_ROLE_ERROR_FRAGMENT));
+  expect(result.status).toBe('failed');
+  expect(result.error).toBeTruthy();
+  expect(result.error!.includes(UNKNOWN_ROLE_ERROR_FRAGMENT)).toBe(true);
 });
 
 // ========== Mentor role ==========
 
-test.serial('run() with mentor role uses mentorModel setting', async (t) => {
+it.sequential('run() with mentor role uses mentorModel setting', async () => {
   const settings = createMockSettings({
     'agent.model': MODEL_MAIN,
     'agent.provider': PROVIDER_MENTOR_MANAGER,
@@ -284,14 +284,14 @@ test.serial('run() with mentor role uses mentorModel setting', async (t) => {
 
   const result = await manager.run({ role: ROLE_MENTOR, task: TASK_ADVISE_ME });
 
-  t.is(result.status, 'completed');
-  t.is(result.role, ROLE_MENTOR);
-  t.true(result.finalText.includes('mentor-response'));
-  t.is(mentorManagerRunnerCalls.length, 1);
-  t.is(mentorManagerRunnerCalls[0].agent.model, MODEL_MENTOR);
+  expect(result.status).toBe('completed');
+  expect(result.role).toBe(ROLE_MENTOR);
+  expect(result.finalText.includes('mentor-response')).toBe(true);
+  expect(mentorManagerRunnerCalls.length).toBe(1);
+  expect(mentorManagerRunnerCalls[0].agent.model).toBe(MODEL_MENTOR);
 });
 
-test.serial('run() with mentor role fails when mentorModel is not set', async (t) => {
+it.sequential('run() with mentor role fails when mentorModel is not set', async () => {
   const settings = createMockSettings({
     'agent.model': MODEL_MAIN,
     'agent.provider': PROVIDER_MENTOR_MANAGER,
@@ -304,11 +304,11 @@ test.serial('run() with mentor role fails when mentorModel is not set', async (t
 
   const result = await manager.run({ role: ROLE_MENTOR, task: TASK_ADVISE_ME });
 
-  t.is(result.status, 'failed');
-  t.true(result.error!.includes(MENTOR_MODEL_NOT_CONFIGURED_ERROR));
+  expect(result.status).toBe('failed');
+  expect(result.error!.includes(MENTOR_MODEL_NOT_CONFIGURED_ERROR)).toBe(true);
 });
 
-test.serial('run() mentor maintains conversation history across calls', async (t) => {
+it.sequential('run() mentor maintains conversation history across calls', async () => {
   const settings = createMockSettings({
     'agent.model': MODEL_MAIN,
     'agent.provider': PROVIDER_MENTOR_MANAGER,
@@ -324,13 +324,13 @@ test.serial('run() mentor maintains conversation history across calls', async (t
   await manager.run({ role: ROLE_MENTOR, task: TASK_FIRST_QUESTION });
   await manager.run({ role: ROLE_MENTOR, task: TASK_SECOND_QUESTION });
 
-  t.is(mentorManagerRunnerCalls.length, 2);
+  expect(mentorManagerRunnerCalls.length).toBe(2);
   // Second call should have history (array with previous messages)
-  t.true(Array.isArray(mentorManagerRunnerCalls[1].input));
-  t.true(mentorManagerRunnerCalls[1].input.length > 1);
+  expect(Array.isArray(mentorManagerRunnerCalls[1].input)).toBe(true);
+  expect(mentorManagerRunnerCalls[1].input.length > 1).toBe(true);
 });
 
-test.serial('resetMentorSession() clears conversation history', async (t) => {
+it.sequential('resetMentorSession() clears conversation history', async () => {
   const settings = createMockSettings({
     'agent.model': MODEL_MAIN,
     'agent.provider': PROVIDER_MENTOR_MANAGER,
@@ -344,18 +344,18 @@ test.serial('resetMentorSession() clears conversation history', async (t) => {
   });
 
   await manager.run({ role: ROLE_MENTOR, task: TASK_FIRST_QUESTION });
-  t.true(mentorManagerRunnerCalls[0].input.length >= 1);
+  expect(mentorManagerRunnerCalls[0].input.length >= 1).toBe(true);
 
   manager.resetMentorSession();
 
   await manager.run({ role: ROLE_MENTOR, task: TASK_FRESH_QUESTION });
   // After reset, second call should have only 1 message (fresh start)
-  t.is(mentorManagerRunnerCalls[1].input.length, 1);
+  expect(mentorManagerRunnerCalls[1].input.length).toBe(1);
 });
 
 // ========== Explorer role ==========
 
-test.serial('run() with explorer role returns SubagentResult', async (t) => {
+it.sequential('run() with explorer role returns SubagentResult', async () => {
   const settings = createMockSettings({
     'agent.model': MODEL_MOCK,
     'agent.provider': PROVIDER_EXPLORER,
@@ -368,14 +368,14 @@ test.serial('run() with explorer role returns SubagentResult', async (t) => {
 
   const result = await manager.run({ role: ROLE_EXPLORER, task: TASK_FIND_TS_FILES });
 
-  t.is(result.status, 'completed');
-  t.is(result.role, ROLE_EXPLORER);
-  t.truthy(result.agentId);
-  t.is(result.filesChanged.length, 0);
-  t.truthy(result.finalText);
+  expect(result.status).toBe('completed');
+  expect(result.role).toBe(ROLE_EXPLORER);
+  expect(result.agentId).toBeTruthy();
+  expect(result.filesChanged.length).toBe(0);
+  expect(result.finalText).toBeTruthy();
 });
 
-test.serial('run() passes parent abort signal into the delegated provider run', async (t) => {
+it.sequential('run() passes parent abort signal into the delegated provider run', async () => {
   const settings = createMockSettings({
     'agent.model': MODEL_MOCK,
     'agent.provider': PROVIDER_EXPLORER,
@@ -393,10 +393,10 @@ test.serial('run() passes parent abort signal into the delegated provider run', 
     signal: abortController.signal,
   });
 
-  t.pass();
+  expect(true).toBe(true);
 });
 
-test.serial('run() cancels a delegated provider run when the parent signal aborts', async (t) => {
+it.sequential('run() cancels a delegated provider run when the parent signal aborts', async () => {
   // ConversationSession threads the parent signal through agentClient.abort(),
   // which aborts the internal AbortController whose signal reaches the runner
   // via startStream(). The mock listens on options.signal (the internal AC).
@@ -437,11 +437,11 @@ test.serial('run() cancels a delegated provider run when the parent signal abort
   queueMicrotask(() => abortController.abort());
   const result = await resultPromise;
 
-  t.is(result.status, 'cancelled');
-  t.true(result.error?.includes('aborted') ?? false);
+  expect(result.status).toBe('cancelled');
+  expect(result.error?.includes('aborted') ?? false).toBe(true);
 });
 
-test.serial('explorer shell tool executes GREEN commands and blocks YELLOW and RED commands', async (t) => {
+it.sequential('explorer shell tool executes GREEN commands and blocks YELLOW and RED commands', async () => {
   const settings = createMockSettings({
     'agent.model': MODEL_MOCK,
     'agent.provider': PROVIDER_EXPLORER,
@@ -454,37 +454,38 @@ test.serial('explorer shell tool executes GREEN commands and blocks YELLOW and R
 
   await manager.run({ role: ROLE_EXPLORER, task: TASK_INSPECT_WORKSPACE });
 
-  t.is(explorerRunnerCalls.length, 1);
+  expect(explorerRunnerCalls.length).toBe(1);
   const agent = explorerRunnerCalls[0].agent;
   const shell = getAgentTool(agent, 'shell');
-  t.truthy(shell);
-  t.is(await shell.needsApproval({}, { command: 'pwd' }), false);
+  expect(shell).toBeTruthy();
+  expect(await shell.needsApproval({}, { command: 'pwd' })).toBe(false);
 
   const invokeShell = async (command: string) => shell.invoke({}, JSON.stringify({ command }), {});
   for (const command of GREEN_SHELL_COMMANDS) {
     const output = await invokeShell(command);
-    t.true(output.includes('exit 0'), `expected GREEN command to execute: ${command}`);
-    t.false(output.startsWith(EXPLORER_BLOCKED_PREFIX), `expected GREEN command to not be blocked: ${command}`);
+    expect(output.includes('exit 0')).toBe(true);
+    expect(output.startsWith(EXPLORER_BLOCKED_PREFIX)).toBe(false);
   }
 
   for (const command of YELLOW_SHELL_COMMANDS) {
     const output = await invokeShell(command);
-    t.true(output.startsWith(EXPLORER_BLOCKED_PREFIX), `expected YELLOW command to be blocked: ${command}`);
-    t.true(output.includes(command), `blocked output should mention the command: ${command}`);
+    expect(output.startsWith(EXPLORER_BLOCKED_PREFIX)).toBe(true);
+    expect(output.includes(command)).toBe(true);
   }
 
   for (const command of RED_SHELL_COMMANDS) {
     const output = await invokeShell(command);
-    t.true(output.startsWith(EXPLORER_BLOCKED_PREFIX), `expected RED command to be blocked: ${command}`);
-    t.true(output.includes(command), `blocked output should mention the command: ${command}`);
+    expect(output.startsWith(EXPLORER_BLOCKED_PREFIX)).toBe(true);
+    expect(output.includes(command)).toBe(true);
   }
 });
 
-test.serial(
+it.sequential(
   'explorer shell tool blocks write-like shell commands without creating files in a temp workspace',
   async (t) => {
     const tmpDir = fs.mkdtempSync(path.join('/tmp', TEMP_WORKSPACE_PREFIX));
-    t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+    // TODO: // TODO: t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true })) needs manual try/finally conversion;
     fs.writeFileSync(path.join(tmpDir, TEMP_SOURCE_FILE), 'source content');
 
     const settings = createMockSettings({
@@ -506,17 +507,17 @@ test.serial(
 
     const agent = explorerRunnerCalls[explorerRunnerCalls.length - 1].agent;
     const shell = getAgentTool(agent, 'shell');
-    t.truthy(shell);
+    expect(shell).toBeTruthy();
 
     for (const { command, path: relativePath } of TEMP_BLOCKED_CASES) {
       const output = await shell.invoke({}, JSON.stringify({ command }), {});
-      t.true(output.startsWith(EXPLORER_BLOCKED_PREFIX), `expected command to be blocked: ${command}`);
-      t.false(fs.existsSync(path.join(tmpDir, relativePath)), `expected no file to be created: ${relativePath}`);
+      expect(output.startsWith(EXPLORER_BLOCKED_PREFIX)).toBe(true);
+      expect(fs.existsSync(path.join(tmpDir, relativePath))).toBe(false);
     }
   },
 );
 
-test.serial('run() with explorer role uses read-only tools only', async (t) => {
+it.sequential('run() with explorer role uses read-only tools only', async () => {
   const settings = createMockSettings({
     'agent.model': MODEL_MOCK,
     'agent.provider': PROVIDER_EXPLORER,
@@ -529,24 +530,24 @@ test.serial('run() with explorer role uses read-only tools only', async (t) => {
 
   await manager.run({ role: ROLE_EXPLORER, task: TASK_FIND_FILES });
 
-  t.is(explorerRunnerCalls.length, 1);
+  expect(explorerRunnerCalls.length).toBe(1);
   const agent = explorerRunnerCalls[0].agent;
   const toolNames: string[] = agent.tools.map((t: any) => t.name);
 
   // Explorer should have read tools
-  t.true(toolNames.includes('read_file'));
-  t.true(toolNames.includes('grep'));
-  t.true(toolNames.includes('find_files'));
+  expect(toolNames.includes('read_file')).toBe(true);
+  expect(toolNames.includes('grep')).toBe(true);
+  expect(toolNames.includes('find_files')).toBe(true);
 
   // Explorer should NOT have write tools
-  t.false(toolNames.includes('apply_patch'));
-  t.false(toolNames.includes('search_replace'));
-  t.false(toolNames.includes('create_file'));
+  expect(toolNames.includes('apply_patch')).toBe(false);
+  expect(toolNames.includes('search_replace')).toBe(false);
+  expect(toolNames.includes('create_file')).toBe(false);
 
   // Explorer should NOT have web tools by default
-  t.false(toolNames.includes('web_search'));
-  t.false(toolNames.includes('web_fetch'));
-  t.true(toolNames.includes('shell'));
+  expect(toolNames.includes('web_search')).toBe(false);
+  expect(toolNames.includes('web_fetch')).toBe(false);
+  expect(toolNames.includes('shell')).toBe(true);
 });
 
 // ========== Researcher role ==========
@@ -578,12 +579,12 @@ function ensureResearcherProviderRegistered() {
   }
 }
 
-test.beforeEach(() => {
+beforeEach(() => {
   researcherRunnerCalls = [];
   ensureResearcherProviderRegistered();
 });
 
-test.serial('run() with researcher role includes web tools', async (t) => {
+it.sequential('run() with researcher role includes web tools', async () => {
   const settings = createMockSettings({
     'agent.model': 'mock-model',
     'agent.provider': 'mock-researcher-provider',
@@ -596,17 +597,17 @@ test.serial('run() with researcher role includes web tools', async (t) => {
 
   await manager.run({ role: 'researcher', task: 'look up the latest TypeScript release' });
 
-  t.is(researcherRunnerCalls.length, 1);
+  expect(researcherRunnerCalls.length).toBe(1);
   const agent = researcherRunnerCalls[0].agent;
   const toolNames: string[] = agent.tools.map((t: any) => t.name);
 
   // Researcher should have read and web tools
-  t.true(toolNames.includes('read_file'));
-  t.true(toolNames.includes('web_search'));
-  t.true(toolNames.includes('web_fetch'));
+  expect(toolNames.includes('read_file')).toBe(true);
+  expect(toolNames.includes('web_search')).toBe(true);
+  expect(toolNames.includes('web_fetch')).toBe(true);
 
   // But not write tools
-  t.false(toolNames.includes('apply_patch'));
+  expect(toolNames.includes('apply_patch')).toBe(false);
 });
 
 // ========== Worker role ==========
@@ -638,12 +639,12 @@ function ensureWorkerProviderRegistered() {
   }
 }
 
-test.beforeEach(() => {
+beforeEach(() => {
   workerRunnerCalls = [];
   ensureWorkerProviderRegistered();
 });
 
-test.serial('run() with worker role includes write and shell tools for non-gpt model', async (t) => {
+it.sequential('run() with worker role includes write and shell tools for non-gpt model', async () => {
   const settings = createMockSettings({
     'agent.model': 'mock-model',
     'agent.provider': 'mock-worker-provider',
@@ -656,22 +657,22 @@ test.serial('run() with worker role includes write and shell tools for non-gpt m
 
   await manager.run({ role: 'worker', task: 'update the README.md file' });
 
-  t.is(workerRunnerCalls.length, 1);
+  expect(workerRunnerCalls.length).toBe(1);
   const agent = workerRunnerCalls[0].agent;
   const toolNames: string[] = agent.tools.map((t: any) => t.name);
 
   // Worker should have read, non-gpt write tools, and shell
-  t.true(toolNames.includes('read_file'));
-  t.true(toolNames.includes('search_replace'));
-  t.true(toolNames.includes('create_file'));
-  t.true(toolNames.includes('shell'));
+  expect(toolNames.includes('read_file')).toBe(true);
+  expect(toolNames.includes('search_replace')).toBe(true);
+  expect(toolNames.includes('create_file')).toBe(true);
+  expect(toolNames.includes('shell')).toBe(true);
 
   // Should NOT have apply_patch or web tools
-  t.false(toolNames.includes('apply_patch'));
-  t.false(toolNames.includes('web_search'));
+  expect(toolNames.includes('apply_patch')).toBe(false);
+  expect(toolNames.includes('web_search')).toBe(false);
 });
 
-test.serial('run() with worker role includes write and shell tools for gpt model', async (t) => {
+it.sequential('run() with worker role includes write and shell tools for gpt model', async () => {
   const settings = createMockSettings({
     'agent.model': 'gpt-5',
     'agent.provider': 'mock-worker-provider',
@@ -684,22 +685,22 @@ test.serial('run() with worker role includes write and shell tools for gpt model
 
   await manager.run({ role: 'worker', task: 'update the README.md file' });
 
-  t.is(workerRunnerCalls.length, 1);
+  expect(workerRunnerCalls.length).toBe(1);
   const agent = workerRunnerCalls[0].agent;
   const toolNames: string[] = agent.tools.map((t: any) => t.name);
 
   // Worker should have read, gpt write tools (apply_patch), and shell
-  t.true(toolNames.includes('read_file'));
-  t.true(toolNames.includes('apply_patch'));
-  t.true(toolNames.includes('shell'));
+  expect(toolNames.includes('read_file')).toBe(true);
+  expect(toolNames.includes('apply_patch')).toBe(true);
+  expect(toolNames.includes('shell')).toBe(true);
 
   // Should NOT have search_replace, create_file, or web tools
-  t.false(toolNames.includes('search_replace'));
-  t.false(toolNames.includes('create_file'));
-  t.false(toolNames.includes('web_search'));
+  expect(toolNames.includes('search_replace')).toBe(false);
+  expect(toolNames.includes('create_file')).toBe(false);
+  expect(toolNames.includes('web_search')).toBe(false);
 });
 
-test.serial('run() result contains agentId and correct role', async (t) => {
+it.sequential('run() result contains agentId and correct role', async () => {
   const settings = createMockSettings({
     'agent.model': 'mock-model',
     'agent.provider': 'mock-worker-provider',
@@ -708,14 +709,14 @@ test.serial('run() result contains agentId and correct role', async (t) => {
 
   const result = await manager.run({ role: 'worker', task: 'do some work' });
 
-  t.is(result.role, 'worker');
-  t.truthy(result.agentId);
-  t.true(result.agentId.length > 0);
-  t.is(result.filesChanged.length, 0);
-  t.is(result.status, 'completed');
+  expect(result.role).toBe('worker');
+  expect(result.agentId).toBeTruthy();
+  expect(result.agentId.length > 0).toBe(true);
+  expect(result.filesChanged.length).toBe(0);
+  expect(result.status).toBe('completed');
 });
 
-test.serial('getRoleAgentTool caches one internal agent tool per role', (t) => {
+it.sequential('getRoleAgentTool caches one internal agent tool per role', () => {
   const manager = new SubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
@@ -728,12 +729,12 @@ test.serial('getRoleAgentTool caches one internal agent tool per role', (t) => {
   const second = manager.getRoleAgentTool('worker');
   const explorer = manager.getRoleAgentTool('explorer');
 
-  t.is(first, second);
-  t.not(first, explorer);
-  t.is(first.name, 'run_subagent_worker');
+  expect(first).toBe(second);
+  expect(first).not.toBe(explorer);
+  expect(first.name).toBe('run_subagent_worker');
 });
 
-test.serial('clearCache rebuilds cached role agent tools', (t) => {
+it.sequential('clearCache rebuilds cached role agent tools', () => {
   const manager = new SubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
@@ -746,12 +747,13 @@ test.serial('clearCache rebuilds cached role agent tools', (t) => {
   manager.clearCache();
   const rebuilt = manager.getRoleAgentTool('worker');
 
-  t.not(first, rebuilt);
+  expect(first).not.toBe(rebuilt);
 });
 
-test.serial('cached worker agent preserves native approval checks for nested tools', async (t) => {
+it.sequential('cached worker agent preserves native approval checks for nested tools', async () => {
   const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-nested-worker-approval-'));
-  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true })) needs manual try/finally conversion;
   const manager = new SubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
@@ -769,9 +771,9 @@ test.serial('cached worker agent preserves native approval checks for nested too
   const shell = getAgentTool(worker, 'shell');
   const createFile = getAgentTool(worker, 'create_file');
 
-  t.true(await shell.needsApproval({}, { command: 'touch nested-approval.txt' }));
-  t.false(await createFile.needsApproval({}, { path: 'inside.txt', content: 'ok' }));
-  t.false(await createFile.needsApproval({}, { path: '../outside.txt', content: 'blocked' }));
+  expect(await shell.needsApproval({}, { command: 'touch nested-approval.txt' })).toBe(true);
+  expect(await createFile.needsApproval({}, { path: 'inside.txt', content: 'ok' })).toBe(false);
+  expect(await createFile.needsApproval({}, { path: '../outside.txt', content: 'blocked' })).toBe(false);
 });
 
 // ========== Write boundary enforcement ==========
@@ -803,14 +805,15 @@ function ensureBoundaryWorkerProviderRegistered() {
   }
 }
 
-test.beforeEach(() => {
+beforeEach(() => {
   boundaryWorkerCalls = [];
   ensureBoundaryWorkerProviderRegistered();
 });
 
-test.serial('worker write tool rejects paths outside workspace', async (t) => {
+it.sequential('worker write tool rejects paths outside workspace', async () => {
   const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-boundary-'));
-  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true })) needs manual try/finally conversion;
 
   const mockExecutionContext = {
     getCwd: () => tmpDir,
@@ -834,11 +837,11 @@ test.serial('worker write tool rejects paths outside workspace', async (t) => {
     task: 'update a file',
   });
 
-  t.is(boundaryWorkerCalls.length, 1);
+  expect(boundaryWorkerCalls.length).toBe(1);
   const agentGpt = boundaryWorkerCalls[0].agent;
   const applyPatch = agentGpt.tools.find((t: any) => t.name === 'apply_patch');
-  t.truthy(applyPatch);
-  t.falsy(agentGpt.tools.find((t: any) => t.name === 'search_replace'));
+  expect(applyPatch).toBeTruthy();
+  expect(agentGpt.tools.find((t: any) => t.name === 'search_replace')).toBeFalsy();
 
   // Call with a path inside the boundary — should NOT be rejected for boundary violation
   const insideResult = await applyPatch.invoke(
@@ -851,7 +854,7 @@ test.serial('worker write tool rejects paths outside workspace', async (t) => {
     {},
   );
   const insideError = insideResult.startsWith('Error:') ? insideResult : undefined;
-  t.true(!insideError || !insideError.includes('outside the allowed write boundary'));
+  expect(!insideError || !insideError.includes('outside the allowed write boundary')).toBe(true);
 
   // Call with a path outside the boundary — should be rejected
   const outsideResult = await applyPatch.invoke(
@@ -863,8 +866,8 @@ test.serial('worker write tool rejects paths outside workspace', async (t) => {
     }),
     {},
   );
-  t.true(outsideResult.includes('outside the allowed write boundary'));
-  t.true(outsideResult.startsWith('Error:'));
+  expect(outsideResult.includes('outside the allowed write boundary')).toBe(true);
+  expect(outsideResult.startsWith('Error:')).toBe(true);
 
   const outsideNeedsApproval = await applyPatch.needsApproval(
     {},
@@ -874,7 +877,7 @@ test.serial('worker write tool rejects paths outside workspace', async (t) => {
       diff: '+hello\n',
     },
   );
-  t.is(outsideNeedsApproval, false);
+  expect(outsideNeedsApproval).toBe(false);
 
   // 2. Test search_replace tool under non-gpt model
   const settingsNonGpt = createMockSettings({
@@ -893,11 +896,11 @@ test.serial('worker write tool rejects paths outside workspace', async (t) => {
     task: 'update a file',
   });
 
-  t.is(boundaryWorkerCalls.length, 1);
+  expect(boundaryWorkerCalls.length).toBe(1);
   const agentNonGpt = boundaryWorkerCalls[0].agent;
   const searchReplace = agentNonGpt.tools.find((t: any) => t.name === 'search_replace');
-  t.truthy(searchReplace);
-  t.falsy(agentNonGpt.tools.find((t: any) => t.name === 'apply_patch'));
+  expect(searchReplace).toBeTruthy();
+  expect(agentNonGpt.tools.find((t: any) => t.name === 'apply_patch')).toBeFalsy();
 
   const batchOutsideResult = await searchReplace.invoke(
     {},
@@ -912,13 +915,14 @@ test.serial('worker write tool rejects paths outside workspace', async (t) => {
     }),
     {},
   );
-  t.true(batchOutsideResult.includes('outside the allowed write boundary'));
-  t.true(batchOutsideResult.startsWith('Error:'));
+  expect(batchOutsideResult.includes('outside the allowed write boundary')).toBe(true);
+  expect(batchOutsideResult.startsWith('Error:')).toBe(true);
 });
 
-test.serial('worker writes are auto-approved within the workspace', async (t) => {
+it.sequential('worker writes are auto-approved within the workspace', async () => {
   const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-worker-approval-'));
-  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true })) needs manual try/finally conversion;
 
   const mockExecutionContext = {
     getCwd: () => tmpDir,
@@ -942,26 +946,27 @@ test.serial('worker writes are auto-approved within the workspace', async (t) =>
     task: 'update files',
   });
 
-  t.is(boundaryWorkerCalls.length, 1);
+  expect(boundaryWorkerCalls.length).toBe(1);
   const agent = boundaryWorkerCalls[0].agent;
   const createFile = agent.tools.find((tool: any) => tool.name === 'create_file');
-  t.truthy(createFile);
+  expect(createFile).toBeTruthy();
 
   // In-boundary writes require no interactive approval (there is no foreground
   // approval channel for a subagent running inside a blocked parent tool call).
   // Standard mode is off but the write still does not need approval.
   const inBoundaryNeedsApproval = await createFile.needsApproval({}, { path: 'a.ts', content: 'x' });
-  t.is(inBoundaryNeedsApproval, false);
+  expect(inBoundaryNeedsApproval).toBe(false);
 
   // Out-of-boundary writes are also not surfaced for approval; they are
   // rejected deterministically by execute() instead.
   const outBoundaryNeedsApproval = await createFile.needsApproval({}, { path: '../escape.ts', content: 'x' });
-  t.is(outBoundaryNeedsApproval, false);
+  expect(outBoundaryNeedsApproval).toBe(false);
 });
 
-test.serial('worker cannot write outside the workspace', async (t) => {
+it.sequential('worker cannot write outside the workspace', async () => {
   const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-worker-default-boundary-'));
-  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true })) needs manual try/finally conversion;
 
   const mockExecutionContext = {
     getCwd: () => tmpDir,
@@ -984,16 +989,17 @@ test.serial('worker cannot write outside the workspace', async (t) => {
 
   const agent = boundaryWorkerCalls[boundaryWorkerCalls.length - 1].agent;
   const createFile = agent.tools.find((tool: any) => tool.name === 'create_file');
-  t.truthy(createFile);
+  expect(createFile).toBeTruthy();
 
   const outsideResult = await createFile.invoke({}, JSON.stringify({ path: '../outside.ts', content: 'x' }), {});
-  t.true(outsideResult.includes('outside the allowed write boundary'));
-  t.true(outsideResult.startsWith('Error:'));
+  expect(outsideResult.includes('outside the allowed write boundary')).toBe(true);
+  expect(outsideResult.startsWith('Error:')).toBe(true);
 });
 
-test.serial('worker filesChanged tracks only successful writes for batch operations', async (t) => {
+it.sequential('worker filesChanged tracks only successful writes for batch operations', async () => {
   const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-worker-files-changed-'));
-  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true })) needs manual try/finally conversion;
 
   registerProvider({
     id: 'mock-worker-files-changed-provider',
@@ -1063,7 +1069,7 @@ test.serial('worker filesChanged tracks only successful writes for batch operati
   });
 
   const resultGpt = await managerGpt.run({ role: 'worker', task: 'do mixed writes' });
-  t.deepEqual(new Set(resultGpt.filesChanged), new Set(['a.txt']));
+  expect(new Set(resultGpt.filesChanged)).toEqual(new Set(['a.txt']));
 
   // 2. Test with non-GPT-5 model (using search_replace)
   const managerNonGpt = new SubagentManager({
@@ -1080,12 +1086,13 @@ test.serial('worker filesChanged tracks only successful writes for batch operati
   });
 
   const resultNonGpt = await managerNonGpt.run({ role: 'worker', task: 'do mixed writes' });
-  t.deepEqual(new Set(resultNonGpt.filesChanged), new Set(['b.txt']));
+  expect(new Set(resultNonGpt.filesChanged)).toEqual(new Set(['b.txt']));
 });
 
-test.serial('worker write lock rejects concurrent create_file for same path without waiting', async (t) => {
+it.sequential('worker write lock rejects concurrent create_file for same path without waiting', async () => {
   const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-worker-lock-'));
-  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true })) needs manual try/finally conversion;
 
   registerProvider({
     id: 'mock-worker-lock-provider',
@@ -1147,12 +1154,12 @@ test.serial('worker write lock rejects concurrent create_file for same path with
   const allErrors = [first, second]
     .filter((text: string) => typeof text === 'string' && text.startsWith('Error:'))
     .join(' ');
-  t.true(allErrors.includes('already being modified'));
+  expect(allErrors.includes('already being modified')).toBe(true);
 });
 
 // ========== Session isolation ==========
 
-test.serial('run() creates isolated sessions for each subagent call', async (t) => {
+it.sequential('run() creates isolated sessions for each subagent call', async () => {
   const settings = createMockSettings({
     'agent.model': 'mock-model',
     'agent.provider': 'mock-explorer-provider',
@@ -1164,9 +1171,9 @@ test.serial('run() creates isolated sessions for each subagent call', async (t) 
     manager.run({ role: 'explorer', task: 'task 2' }),
   ]);
 
-  t.is(result1.status, 'completed');
-  t.is(result2.status, 'completed');
-  t.not(result1.agentId, result2.agentId);
+  expect(result1.status).toBe('completed');
+  expect(result2.status).toBe('completed');
+  expect(result1.agentId).not.toBe(result2.agentId);
 });
 
 // ========== Real-time events ==========
@@ -1198,7 +1205,7 @@ function ensureEventToolProviderRegistered() {
   }
 }
 
-test.serial('run() emits started and completed events', async (t) => {
+it.sequential('run() emits started and completed events', async () => {
   ensureEventToolProviderRegistered();
   const settings = createMockSettings({
     'agent.model': 'mock-model',
@@ -1215,17 +1222,17 @@ test.serial('run() emits started and completed events', async (t) => {
   const result = await manager.run({ role: 'explorer', task: 'search the code' });
 
   const started = events.find((e) => e.type === 'subagent_started');
-  t.truthy(started);
-  t.is(started.role, 'explorer');
-  t.is(started.task, 'search the code');
-  t.is(started.agentId, result.agentId);
+  expect(started).toBeTruthy();
+  expect(started.role).toBe('explorer');
+  expect(started.task).toBe('search the code');
+  expect(started.agentId).toBe(result.agentId);
 
   const completed = events.find((e) => e.type === 'subagent_completed');
-  t.truthy(completed);
-  t.is(completed.result.agentId, result.agentId);
+  expect(completed).toBeTruthy();
+  expect(completed.result.agentId).toBe(result.agentId);
 });
 
-test.serial('run() emits a completed event even when the role is unknown', async (t) => {
+it.sequential('run() emits a completed event even when the role is unknown', async () => {
   const settings = createMockSettings({ 'agent.model': 'mock-model' });
   const events: any[] = [];
   const manager = new SubagentManager({
@@ -1237,15 +1244,15 @@ test.serial('run() emits a completed event even when the role is unknown', async
 
   await manager.run({ role: 'definitely-not-a-role', task: 'x' });
 
-  t.truthy(events.find((e) => e.type === 'subagent_started'));
+  expect(events.find((e) => e.type === 'subagent_started')).toBeTruthy();
   const completed = events.find((e) => e.type === 'subagent_completed');
-  t.truthy(completed);
-  t.is(completed.result.status, 'failed');
+  expect(completed).toBeTruthy();
+  expect(completed.result.status).toBe('failed');
 });
 
 // ========== Mentor role definition sourced from markdown ==========
 
-test.serial('mentor base instructions come from the mentor role markdown', async (t) => {
+it.sequential('mentor base instructions come from the mentor role markdown', async () => {
   const settings = createMockSettings({
     'agent.model': 'main-model',
     'agent.provider': 'mock-mentor-manager',
@@ -1261,7 +1268,7 @@ test.serial('mentor base instructions come from the mentor role markdown', async
 
   await manager.run({ role: 'mentor', task: 'advise me' });
 
-  t.is(mentorManagerRunnerCalls.length, 1);
+  expect(mentorManagerRunnerCalls.length).toBe(1);
   const instructions: string = mentorManagerRunnerCalls[0].agent.instructions;
 
   // Dynamically load the mentor role markdown to verify integration without brittle hardcoding
@@ -1270,7 +1277,7 @@ test.serial('mentor base instructions come from the mentor role markdown', async
   const parts = mentorContent.split('---');
   const expectedBody = parts[parts.length - 1].trim();
 
-  t.true(instructions.includes(expectedBody), 'Agent instructions should include the parsed body of mentor.md');
+  expect(instructions.includes(expectedBody)).toBe(true);
 });
 
 // ========== finalText excludes pre-tool narration ==========
@@ -1307,7 +1314,7 @@ function ensurePostToolProviderRegistered() {
   }
 }
 
-test.serial('finalText is the assistant message after the last tool item', async (t) => {
+it.sequential('finalText is the assistant message after the last tool item', async () => {
   ensurePostToolProviderRegistered();
   const settings = createMockSettings({
     'agent.model': 'mock-model',
@@ -1321,15 +1328,16 @@ test.serial('finalText is the assistant message after the last tool item', async
 
   const result = await manager.run({ role: 'explorer', task: 'where is it' });
 
-  t.is(result.finalText, 'Final answer: it is in foo.ts.');
-  t.false(result.finalText.includes('Let me look into this first.'));
+  expect(result.finalText).toBe('Final answer: it is in foo.ts.');
+  expect(result.finalText.includes('Let me look into this first.')).toBe(false);
 });
 
 // ========== Worker shell tool — safety gating ==========
 
-test.serial('worker shell tool executes safe command without triggering approval UI', async (t) => {
+it.sequential('worker shell tool executes safe command without triggering approval UI', async () => {
   const tmpDir = fs.mkdtempSync(path.join(process.env['TMPDIR'] ?? '/tmp', 'term2-test-worker-shell-safe-'));
-  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true })) needs manual try/finally conversion;
 
   let shellResult: string | null = null;
 
@@ -1342,7 +1350,7 @@ test.serial('worker shell tool executes safe command without triggering approval
           const shellTool = agent.tools.find((tool: any) => tool.name === 'shell');
           // needsApproval must be false for safe commands — no approval UI in workers
           const needsApproval = await shellTool.needsApproval({}, { command: 'ls .' });
-          t.is(needsApproval, false, 'worker shell tool must never require approval');
+          expect(needsApproval, 'worker shell tool must never require approval').toBe(false);
 
           shellResult = await shellTool.invoke({}, JSON.stringify({ command: 'echo hello' }), {});
           const result = {
@@ -1374,13 +1382,14 @@ test.serial('worker shell tool executes safe command without triggering approval
   await manager.run({ role: 'worker', task: 'list files' });
 
   // The shell tool should have executed and returned output (not an error block)
-  t.truthy(shellResult);
-  t.false(shellResult!.includes('blocked for safety'), 'safe command should not be blocked');
+  expect(shellResult).toBeTruthy();
+  expect(shellResult!.includes('blocked for safety')).toBe(false);
 });
 
-test.serial('worker shell tool blocks dangerous/destructive commands and returns error string', async (t) => {
+it.sequential('worker shell tool blocks dangerous/destructive commands and returns error string', async () => {
   const tmpDir = fs.mkdtempSync(path.join(process.env['TMPDIR'] ?? '/tmp', 'term2-test-worker-shell-dangerous-'));
-  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true })) needs manual try/finally conversion;
 
   let shellResult: string | null = null;
 
@@ -1393,7 +1402,7 @@ test.serial('worker shell tool blocks dangerous/destructive commands and returns
           const shellTool = agent.tools.find((tool: any) => tool.name === 'shell');
           // needsApproval must always be false — dangerous commands are blocked by execute(), not approval
           const needsApproval = await shellTool.needsApproval({}, { command: 'rm -rf /tmp/something' });
-          t.is(needsApproval, false, 'worker shell must never trigger approval UI even for dangerous commands');
+          expect(needsApproval, 'worker shell must never trigger approval UI even for dangerous commands').toBe(false);
 
           shellResult = await shellTool.invoke({}, JSON.stringify({ command: 'rm -rf /tmp/something' }), {});
           const result = {
@@ -1425,14 +1434,15 @@ test.serial('worker shell tool blocks dangerous/destructive commands and returns
   await manager.run({ role: 'worker', task: 'delete stuff' });
 
   // The shell tool should have returned a blocked-for-safety error string, not executed
-  t.truthy(shellResult);
-  t.true(shellResult!.includes('blocked for safety'), 'dangerous command must be blocked');
-  t.false(shellResult!.includes('exit 0'), 'dangerous command must not execute');
+  expect(shellResult).toBeTruthy();
+  expect(shellResult!.includes('blocked for safety')).toBe(true);
+  expect(shellResult!.includes('exit 0')).toBe(false);
 });
 
-test.serial('worker shell tool allows YELLOW command when auto-approval evaluator approves', async (t) => {
+it.sequential('worker shell tool allows YELLOW command when auto-approval evaluator approves', async () => {
   const tmpDir = fs.mkdtempSync(path.join(process.env['TMPDIR'] ?? '/tmp', 'term2-test-worker-shell-yellow-ok-'));
-  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true })) needs manual try/finally conversion;
 
   let shellResult: string | null = null;
   let chatCalls = 0;
@@ -1484,15 +1494,16 @@ test.serial('worker shell tool allows YELLOW command when auto-approval evaluato
 
   await manager.run({ role: 'worker', task: 'run help for tests in this repository' });
 
-  t.is(chatCalls, 1);
-  t.true(evaluatorPrompt.includes('run help for tests in this repository'));
-  t.truthy(shellResult);
-  t.false(shellResult!.includes('blocked for safety'), 'approved YELLOW command should execute');
+  expect(chatCalls).toBe(1);
+  expect(evaluatorPrompt.includes('run help for tests in this repository')).toBe(true);
+  expect(shellResult).toBeTruthy();
+  expect(shellResult!.includes('blocked for safety')).toBe(false);
 });
 
-test.serial('worker shell tool blocks YELLOW command when auto-approval evaluator rejects', async (t) => {
+it.sequential('worker shell tool blocks YELLOW command when auto-approval evaluator rejects', async () => {
   const tmpDir = fs.mkdtempSync(path.join(process.env['TMPDIR'] ?? '/tmp', 'term2-test-worker-shell-yellow-no-'));
-  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true })) needs manual try/finally conversion;
 
   let shellResult: string | null = null;
   let chatCalls = 0;
@@ -1542,12 +1553,12 @@ test.serial('worker shell tool blocks YELLOW command when auto-approval evaluato
 
   await manager.run({ role: 'worker', task: 'run help for tests' });
 
-  t.is(chatCalls, 1);
-  t.truthy(shellResult);
-  t.true(shellResult!.includes('blocked for safety'), 'rejected YELLOW command should stay blocked');
+  expect(chatCalls).toBe(1);
+  expect(shellResult).toBeTruthy();
+  expect(shellResult!.includes('blocked for safety')).toBe(true);
 });
 
-test.serial('run() extracts usage from error.state.usage when subagent run fails', async (t) => {
+it.sequential('run() extracts usage from error.state.usage when subagent run fails', async () => {
   registerProvider({
     id: 'mock-failed-usage-provider',
     label: 'Mock Failed Usage Provider',
@@ -1581,8 +1592,8 @@ test.serial('run() extracts usage from error.state.usage when subagent run fails
     task: 'find files',
   });
 
-  t.is(result.status, 'failed');
-  t.deepEqual(result.usage, {
+  expect(result.status).toBe('failed');
+  expect(result.usage).toEqual({
     prompt_tokens: 15,
     completion_tokens: 25,
     total_tokens: 40,
@@ -1591,9 +1602,9 @@ test.serial('run() extracts usage from error.state.usage when subagent run fails
 
 // ========== Model error retry ==========
 
-test.serial(
+it.sequential(
   'run() retries on recoverable model error (hallucinated tool) and succeeds on second attempt',
-  async (t) => {
+  async () => {
     let runCount = 0;
     const events: any[] = [];
     const logWarnCalls: any[] = [];
@@ -1638,21 +1649,21 @@ test.serial(
 
     const result = await manager.run({ role: 'explorer', task: 'find all files' });
 
-    t.is(result.status, 'completed');
-    t.is(runCount, 2);
+    expect(result.status).toBe('completed');
+    expect(runCount).toBe(2);
     const retryEvent = events.find((e) => e.type === 'retry');
-    t.truthy(retryEvent, 'should emit retry event');
-    t.is(retryEvent.toolName, 'bash');
-    t.is(retryEvent.retryType, 'hallucination');
-    t.is(retryEvent.attempt, 1);
-    t.is(retryEvent.maxRetries, MAX_SUBAGENT_MODEL_RETRIES);
+    expect(retryEvent).toBeTruthy();
+    expect(retryEvent.toolName).toBe('bash');
+    expect(retryEvent.retryType).toBe('hallucination');
+    expect(retryEvent.attempt).toBe(1);
+    expect(retryEvent.maxRetries).toBe(MAX_SUBAGENT_MODEL_RETRIES);
 
     const retryLog = logWarnCalls.find((c) => c.meta?.eventType === 'retry.model_error');
-    t.truthy(retryLog, 'should log subagent model error retry');
+    expect(retryLog).toBeTruthy();
   },
 );
 
-test.serial('run() exhausts retries on repeated recoverable model errors and returns failed result', async (t) => {
+it.sequential('run() exhausts retries on repeated recoverable model errors and returns failed result', async () => {
   let runCount = 0;
   const events: any[] = [];
 
@@ -1682,16 +1693,16 @@ test.serial('run() exhausts retries on repeated recoverable model errors and ret
 
   const result = await manager.run({ role: 'explorer', task: 'find all files' });
 
-  t.is(result.status, 'failed');
-  t.truthy(result.error);
-  t.true(result.error!.includes('bash'));
+  expect(result.status).toBe('failed');
+  expect(result.error).toBeTruthy();
+  expect(result.error!.includes('bash')).toBe(true);
   // Should have tried: initial + MAX_SUBAGENT_MODEL_RETRIES retries.
-  t.is(runCount, 1 + MAX_SUBAGENT_MODEL_RETRIES);
+  expect(runCount).toBe(1 + MAX_SUBAGENT_MODEL_RETRIES);
   const retryEvents = events.filter((e) => e.type === 'retry');
-  t.is(retryEvents.length, MAX_SUBAGENT_MODEL_RETRIES, 'should emit one retry event per retry attempt');
+  expect(retryEvents.length, 'should emit one retry event per retry attempt').toBe(MAX_SUBAGENT_MODEL_RETRIES);
 });
 
-test.serial('run() does not retry on non-recoverable ModelBehaviorError', async (t) => {
+it.sequential('run() does not retry on non-recoverable ModelBehaviorError', async () => {
   let runCount = 0;
   const events: any[] = [];
 
@@ -1721,13 +1732,13 @@ test.serial('run() does not retry on non-recoverable ModelBehaviorError', async 
 
   const result = await manager.run({ role: 'explorer', task: 'find all files' });
 
-  t.is(result.status, 'failed');
-  t.is(runCount, 1, 'no retry should be attempted');
+  expect(result.status).toBe('failed');
+  expect(runCount, 'no retry should be attempted').toBe(1);
   const retryEvents = events.filter((e) => e.type === 'retry');
-  t.is(retryEvents.length, 0);
+  expect(retryEvents.length).toBe(0);
 });
 
-test.serial('run() aborted subagent returns cancelled status without model-error retry', async (t) => {
+it.sequential('run() aborted subagent returns cancelled status without model-error retry', async () => {
   const events: any[] = [];
 
   registerProvider({
@@ -1757,14 +1768,14 @@ test.serial('run() aborted subagent returns cancelled status without model-error
 
   const result = await manager.run({ role: 'explorer', task: 'find all files' });
 
-  t.is(result.status, 'cancelled');
+  expect(result.status).toBe('cancelled');
   const retryEvents = events.filter((e) => e.type === 'retry');
-  t.is(retryEvents.length, 0, 'abort errors should not trigger model-error retries');
+  expect(retryEvents.length, 'abort errors should not trigger model-error retries').toBe(0);
 });
 
-test.serial(
+it.sequential(
   'run() does not restart read-only subagent from the beginning after a recoverable model error',
-  async (t) => {
+  async () => {
     let runCount = 0;
     const events: any[] = [];
 
@@ -1803,14 +1814,14 @@ test.serial(
 
     const result = await manager.run({ role: 'explorer', task: 'search for something' });
 
-    t.is(result.status, 'failed');
-    t.true(result.error?.includes('bash'));
-    t.is(runCount, 1, 'subagent must not restart from the beginning when no resumable stream exists');
-    t.is(events.filter((event) => event.type === 'retry').length, 0);
+    expect(result.status).toBe('failed');
+    expect(result.error?.includes('bash')).toBe(true);
+    expect(runCount, 'subagent must not restart from the beginning when no resumable stream exists').toBe(1);
+    expect(events.filter((event) => event.type === 'retry').length).toBe(0);
   },
 );
 
-test.serial('subagent run injects warning into tool output when turns left <= 5', async (t) => {
+it.sequential('subagent run injects warning into tool output when turns left <= 5', async () => {
   let executeOutput: string | null = null;
 
   registerProvider({
@@ -1866,117 +1877,120 @@ test.serial('subagent run injects warning into tool output when turns left <= 5'
 
   await manager.run({ role: 'explorer', task: 'mock task' });
 
-  t.truthy(executeOutput);
-  t.true(executeOutput!.includes('approaching the maximum turn limit'), 'should contain max turns warning');
-  t.true(executeOutput!.includes('4 turns left'), 'should indicate correct number of turns left');
+  expect(executeOutput).toBeTruthy();
+  expect(executeOutput!.includes('approaching the maximum turn limit')).toBe(true);
+  expect(executeOutput!.includes('4 turns left')).toBe(true);
 });
 
-test.serial('execution subagents select subagent-safe model-family prompts and append role instructions', async (t) => {
-  let constructedAgentExplorer: any = null;
-  let constructedAgentWorker: any = null;
-  let constructedAgentResearcher: any = null;
+it.sequential(
+  'execution subagents select subagent-safe model-family prompts and append role instructions',
+  async () => {
+    let constructedAgentExplorer: any = null;
+    let constructedAgentWorker: any = null;
+    let constructedAgentResearcher: any = null;
 
-  registerProvider({
-    id: 'mock-prompt-test-provider-gpt-5-codex',
-    label: 'Mock Prompt Test Provider GPT-5 Codex',
-    createRunner: () =>
-      ({
-        run: async (agent: any) => {
-          constructedAgentExplorer = agent;
-          const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
-        },
-      } as any),
-    fetchModels: async () => [{ id: 'gpt-5-codex' }],
-  });
+    registerProvider({
+      id: 'mock-prompt-test-provider-gpt-5-codex',
+      label: 'Mock Prompt Test Provider GPT-5 Codex',
+      createRunner: () =>
+        ({
+          run: async (agent: any) => {
+            constructedAgentExplorer = agent;
+            const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+            return wrapResultAsAgentStream(result);
+          },
+        } as any),
+      fetchModels: async () => [{ id: 'gpt-5-codex' }],
+    });
 
-  registerProvider({
-    id: 'mock-prompt-test-provider-claude-3-sonnet',
-    label: 'Mock Prompt Test Provider Claude 3 Sonnet',
-    createRunner: () =>
-      ({
-        run: async (agent: any) => {
-          constructedAgentWorker = agent;
-          const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
-        },
-      } as any),
-    fetchModels: async () => [{ id: 'claude-3-sonnet' }],
-  });
+    registerProvider({
+      id: 'mock-prompt-test-provider-claude-3-sonnet',
+      label: 'Mock Prompt Test Provider Claude 3 Sonnet',
+      createRunner: () =>
+        ({
+          run: async (agent: any) => {
+            constructedAgentWorker = agent;
+            const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+            return wrapResultAsAgentStream(result);
+          },
+        } as any),
+      fetchModels: async () => [{ id: 'claude-3-sonnet' }],
+    });
 
-  registerProvider({
-    id: 'mock-prompt-test-provider-gpt-5-modern',
-    label: 'Mock Prompt Test Provider GPT-5 Modern',
-    createRunner: () =>
-      ({
-        run: async (agent: any) => {
-          constructedAgentResearcher = agent;
-          const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
-        },
-      } as any),
-    fetchModels: async () => [{ id: 'gpt-5' }],
-  });
+    registerProvider({
+      id: 'mock-prompt-test-provider-gpt-5-modern',
+      label: 'Mock Prompt Test Provider GPT-5 Modern',
+      createRunner: () =>
+        ({
+          run: async (agent: any) => {
+            constructedAgentResearcher = agent;
+            const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+            return wrapResultAsAgentStream(result);
+          },
+        } as any),
+      fetchModels: async () => [{ id: 'gpt-5' }],
+    });
 
-  // 1. Run explorer subagent with gpt-5-codex
-  const managerExplorer = new SubagentManager({
-    logger: createMockLogger(),
-    settings: createMockSettings({
-      'agent.model': 'gpt-5-codex',
-      'agent.provider': 'mock-prompt-test-provider-gpt-5-codex',
-    }),
-    sessionContextService: createSessionContextService() as any,
-  });
+    // 1. Run explorer subagent with gpt-5-codex
+    const managerExplorer = new SubagentManager({
+      logger: createMockLogger(),
+      settings: createMockSettings({
+        'agent.model': 'gpt-5-codex',
+        'agent.provider': 'mock-prompt-test-provider-gpt-5-codex',
+      }),
+      sessionContextService: createSessionContextService() as any,
+    });
 
-  await managerExplorer.run({ role: 'explorer', task: 'explorer task' });
+    await managerExplorer.run({ role: 'explorer', task: 'explorer task' });
 
-  t.truthy(constructedAgentExplorer);
-  t.true(constructedAgentExplorer.instructions.includes('nested Codex-family subagent'));
-  t.true(constructedAgentExplorer.instructions.includes('You are an explorer subagent.'));
-  t.true(constructedAgentExplorer.instructions.includes('## Worktree Hygiene'));
-  t.true(constructedAgentExplorer.instructions.includes('## Available Tool Guidance'));
+    expect(constructedAgentExplorer).toBeTruthy();
+    expect(constructedAgentExplorer.instructions.includes('nested Codex-family subagent')).toBe(true);
+    expect(constructedAgentExplorer.instructions.includes('You are an explorer subagent.')).toBe(true);
+    expect(constructedAgentExplorer.instructions.includes('## Worktree Hygiene')).toBe(true);
+    expect(constructedAgentExplorer.instructions.includes('## Available Tool Guidance')).toBe(true);
 
-  const codexIdx = constructedAgentExplorer.instructions.indexOf('nested Codex-family subagent');
-  const explorerIdx = constructedAgentExplorer.instructions.indexOf('You are an explorer subagent');
-  t.true(codexIdx < explorerIdx, 'Model prompt must come before role prompt');
+    const codexIdx = constructedAgentExplorer.instructions.indexOf('nested Codex-family subagent');
+    const explorerIdx = constructedAgentExplorer.instructions.indexOf('You are an explorer subagent');
+    expect(codexIdx < explorerIdx).toBe(true);
 
-  // 2. Run worker subagent with claude-3-sonnet
-  const managerWorker = new SubagentManager({
-    logger: createMockLogger(),
-    settings: createMockSettings({
-      'agent.model': 'claude-3-sonnet',
-      'agent.provider': 'mock-prompt-test-provider-claude-3-sonnet',
-    }),
-    sessionContextService: createSessionContextService() as any,
-  });
+    // 2. Run worker subagent with claude-3-sonnet
+    const managerWorker = new SubagentManager({
+      logger: createMockLogger(),
+      settings: createMockSettings({
+        'agent.model': 'claude-3-sonnet',
+        'agent.provider': 'mock-prompt-test-provider-claude-3-sonnet',
+      }),
+      sessionContextService: createSessionContextService() as any,
+    });
 
-  await managerWorker.run({ role: 'worker', task: 'worker task' });
+    await managerWorker.run({ role: 'worker', task: 'worker task' });
 
-  t.truthy(constructedAgentWorker);
-  t.true(constructedAgentWorker.instructions.includes('nested Anthropic-family subagent'));
-  t.true(constructedAgentWorker.instructions.includes('You are a worker subagent.'));
+    expect(constructedAgentWorker).toBeTruthy();
+    expect(constructedAgentWorker.instructions.includes('nested Anthropic-family subagent')).toBe(true);
+    expect(constructedAgentWorker.instructions.includes('You are a worker subagent.')).toBe(true);
 
-  const sonnetIdx = constructedAgentWorker.instructions.indexOf('nested Anthropic-family subagent');
-  const workerIdx = constructedAgentWorker.instructions.indexOf('You are a worker subagent');
-  t.true(sonnetIdx < workerIdx, 'Model prompt must come before role prompt');
+    const sonnetIdx = constructedAgentWorker.instructions.indexOf('nested Anthropic-family subagent');
+    const workerIdx = constructedAgentWorker.instructions.indexOf('You are a worker subagent');
+    expect(sonnetIdx < workerIdx).toBe(true);
 
-  const managerResearcher = new SubagentManager({
-    logger: createMockLogger(),
-    settings: createMockSettings({
-      'agent.model': 'gpt-5',
-      'agent.provider': 'mock-prompt-test-provider-gpt-5-modern',
-    }),
-    sessionContextService: createSessionContextService() as any,
-  });
+    const managerResearcher = new SubagentManager({
+      logger: createMockLogger(),
+      settings: createMockSettings({
+        'agent.model': 'gpt-5',
+        'agent.provider': 'mock-prompt-test-provider-gpt-5-modern',
+      }),
+      sessionContextService: createSessionContextService() as any,
+    });
 
-  await managerResearcher.run({ role: 'researcher', task: 'research task' });
+    await managerResearcher.run({ role: 'researcher', task: 'research task' });
 
-  t.truthy(constructedAgentResearcher);
-  t.true(constructedAgentResearcher.instructions.includes('nested GPT-5-family subagent'));
-  t.true(constructedAgentResearcher.instructions.includes('You are a researcher subagent.'));
-});
+    expect(constructedAgentResearcher).toBeTruthy();
+    expect(constructedAgentResearcher.instructions.includes('nested GPT-5-family subagent')).toBe(true);
+    expect(constructedAgentResearcher.instructions.includes('You are a researcher subagent.')).toBe(true);
+  },
+);
 
-test.serial('execution subagent prompts exclude top-level-only prompt content', async (t) => {
+it.sequential('execution subagent prompts exclude top-level-only prompt content', async () => {
   let constructedAgent: any = null;
 
   registerProvider({
@@ -2004,15 +2018,15 @@ test.serial('execution subagent prompts exclude top-level-only prompt content', 
 
   await manager.run({ role: 'worker', task: 'worker task' });
 
-  t.truthy(constructedAgent);
-  t.false(constructedAgent.instructions.includes('commentary channel'));
-  t.false(constructedAgent.instructions.includes('final channel'));
-  t.false(constructedAgent.instructions.includes('Intermediary updates'));
-  t.false(constructedAgent.instructions.includes('Plan Mode Workflow'));
-  t.false(constructedAgent.instructions.includes('You are Codex, a coding agent based on GPT-5.'));
+  expect(constructedAgent).toBeTruthy();
+  expect(constructedAgent.instructions.includes('commentary channel')).toBe(false);
+  expect(constructedAgent.instructions.includes('final channel')).toBe(false);
+  expect(constructedAgent.instructions.includes('Intermediary updates')).toBe(false);
+  expect(constructedAgent.instructions.includes('Plan Mode Workflow')).toBe(false);
+  expect(constructedAgent.instructions.includes('You are Codex, a coding agent based on GPT-5.')).toBe(false);
 });
 
-test.serial('mentor subagent is NOT affected by prompt profiles', async (t) => {
+it.sequential('mentor subagent is NOT affected by prompt profiles', async () => {
   let mentorAgent: any = null;
 
   registerProvider({
@@ -2043,15 +2057,15 @@ test.serial('mentor subagent is NOT affected by prompt profiles', async (t) => {
 
   await manager.run({ role: 'mentor', task: 'advise me' });
 
-  t.truthy(mentorAgent);
-  t.false(mentorAgent.instructions.includes('You are Codex, a coding agent based on GPT-5.'));
-  t.false(mentorAgent.instructions.includes('nested Codex-family subagent'));
-  t.false(mentorAgent.instructions.includes('## Available Tool Guidance'));
-  t.false(mentorAgent.instructions.includes('## Worktree Hygiene'));
-  t.true(mentorAgent.instructions.includes('You are a senior architect'));
+  expect(mentorAgent).toBeTruthy();
+  expect(mentorAgent.instructions.includes('You are Codex, a coding agent based on GPT-5.')).toBe(false);
+  expect(mentorAgent.instructions.includes('nested Codex-family subagent')).toBe(false);
+  expect(mentorAgent.instructions.includes('## Available Tool Guidance')).toBe(false);
+  expect(mentorAgent.instructions.includes('## Worktree Hygiene')).toBe(false);
+  expect(mentorAgent.instructions.includes('You are a senior architect')).toBe(true);
 });
 
-test.serial('subagent tool definitions conditional registration for search tools', async (t) => {
+it.sequential('subagent tool definitions conditional registration for search tools', async () => {
   let workerAgentShellTrue: any = null;
   let workerAgentShellFalse: any = null;
 
@@ -2097,23 +2111,19 @@ test.serial('subagent tool definitions conditional registration for search tools
 
   await managerShellTrue.run({ role: 'worker', task: 'some task' });
 
-  t.truthy(workerAgentShellTrue);
+  expect(workerAgentShellTrue).toBeTruthy();
   const toolNamesShellTrue: string[] = workerAgentShellTrue.tools.map((tool: any) => tool.name);
-  t.false(
-    toolNamesShellTrue.includes('grep'),
-    'grep tool should be omitted when searchViaShell is active and canRunShell is true',
+  expect(toolNamesShellTrue.includes('grep')).toBe(false);
+  expect(toolNamesShellTrue.includes('find_files')).toBe(false);
+  expect(toolNamesShellTrue.includes('shell')).toBe(true);
+  expect(workerAgentShellTrue.instructions.includes('Registered tools:')).toBe(true);
+  expect(workerAgentShellTrue.instructions.includes('use `shell` with commands like `rg`')).toBe(true);
+  expect(workerAgentShellTrue.instructions.includes('`fd` for file search')).toBe(true);
+  expect(workerAgentShellTrue.instructions.includes('Use `grep` to search')).toBe(false);
+  expect(workerAgentShellTrue.instructions.includes('Use `find_files` to locate')).toBe(false);
+  expect(workerAgentShellTrue.instructions.includes('For workspace search, use the dedicated search tools')).toBe(
+    false,
   );
-  t.false(
-    toolNamesShellTrue.includes('find_files'),
-    'find_files tool should be omitted when searchViaShell is active and canRunShell is true',
-  );
-  t.true(toolNamesShellTrue.includes('shell'), 'shell tool must be registered');
-  t.true(workerAgentShellTrue.instructions.includes('Registered tools:'));
-  t.true(workerAgentShellTrue.instructions.includes('use `shell` with commands like `rg`'));
-  t.true(workerAgentShellTrue.instructions.includes('`fd` for file search'));
-  t.false(workerAgentShellTrue.instructions.includes('Use `grep` to search'));
-  t.false(workerAgentShellTrue.instructions.includes('Use `find_files` to locate'));
-  t.false(workerAgentShellTrue.instructions.includes('For workspace search, use the dedicated search tools'));
 
   // 2. Model: gpt-4o (searchViaShell is false by default), canRunShell: true
   // Tools should include dedicated grep and find_files.
@@ -2129,18 +2139,17 @@ test.serial('subagent tool definitions conditional registration for search tools
 
   await managerShellFalse.run({ role: 'worker', task: 'some task' });
 
-  t.truthy(workerAgentShellFalse);
+  expect(workerAgentShellFalse).toBeTruthy();
   const toolNamesShellFalse: string[] = workerAgentShellFalse.tools.map((tool: any) => tool.name);
-  t.true(toolNamesShellFalse.includes('grep'), 'grep tool should be registered when searchViaShell is inactive');
-  t.true(
-    toolNamesShellFalse.includes('find_files'),
-    'find_files tool should be registered when searchViaShell is inactive',
+  expect(toolNamesShellFalse.includes('grep')).toBe(true);
+  expect(toolNamesShellFalse.includes('find_files')).toBe(true);
+  expect(toolNamesShellFalse.includes('shell')).toBe(true);
+  expect(workerAgentShellFalse.instructions.includes('For workspace search, use the dedicated search tools')).toBe(
+    true,
   );
-  t.true(toolNamesShellFalse.includes('shell'), 'shell tool must be registered');
-  t.true(workerAgentShellFalse.instructions.includes('For workspace search, use the dedicated search tools'));
-  t.true(workerAgentShellFalse.instructions.includes('`grep`'));
-  t.true(workerAgentShellFalse.instructions.includes('`find_files`'));
-  t.false(workerAgentShellFalse.instructions.includes('use `shell` with commands like `rg`'));
+  expect(workerAgentShellFalse.instructions.includes('`grep`')).toBe(true);
+  expect(workerAgentShellFalse.instructions.includes('`find_files`')).toBe(true);
+  expect(workerAgentShellFalse.instructions.includes('use `shell` with commands like `rg`')).toBe(false);
 
   // 3. Model: gpt-5 with searchViaShell explicitly disabled still keeps dedicated search tools.
   const managerShellOff = new SubagentManager({
@@ -2156,17 +2165,14 @@ test.serial('subagent tool definitions conditional registration for search tools
   await managerShellOff.run({ role: 'worker', task: 'some task' });
 
   const toolNamesShellOff: string[] = workerAgentShellTrue.tools.map((tool: any) => tool.name);
-  t.true(toolNamesShellOff.includes('grep'), 'grep tool should remain registered when searchViaShell is off');
-  t.true(
-    toolNamesShellOff.includes('find_files'),
-    'find_files tool should remain registered when searchViaShell is off',
-  );
-  t.true(toolNamesShellOff.includes('shell'), 'shell tool must still be registered');
-  t.true(workerAgentShellTrue.instructions.includes('For workspace search, use the dedicated search tools'));
-  t.false(workerAgentShellTrue.instructions.includes('use `shell` with commands like `rg`'));
+  expect(toolNamesShellOff.includes('grep')).toBe(true);
+  expect(toolNamesShellOff.includes('find_files')).toBe(true);
+  expect(toolNamesShellOff.includes('shell')).toBe(true);
+  expect(workerAgentShellTrue.instructions.includes('For workspace search, use the dedicated search tools')).toBe(true);
+  expect(workerAgentShellTrue.instructions.includes('use `shell` with commands like `rg`')).toBe(false);
 });
 
-test.serial('explorer uses shell search when available and researcher keeps dedicated search tools', async (t) => {
+it.sequential('explorer uses shell search when available and researcher keeps dedicated search tools', async () => {
   let explorerAgent: any = null;
   let researcherAgent: any = null;
 
@@ -2218,24 +2224,24 @@ test.serial('explorer uses shell search when available and researcher keeps dedi
     sessionContextService: createSessionContextService() as any,
   }).run({ role: 'researcher', task: 'research files' });
 
-  t.truthy(explorerAgent);
+  expect(explorerAgent).toBeTruthy();
   let toolNames: string[] = explorerAgent.tools.map((tool: any) => tool.name);
-  t.true(toolNames.includes('shell'));
-  t.false(toolNames.includes('grep'));
-  t.false(toolNames.includes('find_files'));
-  t.true(explorerAgent.instructions.includes('For workspace search, use `shell` with commands like `rg`'));
-  t.false(explorerAgent.instructions.includes('For workspace search, use the dedicated search tools'));
+  expect(toolNames.includes('shell')).toBe(true);
+  expect(toolNames.includes('grep')).toBe(false);
+  expect(toolNames.includes('find_files')).toBe(false);
+  expect(explorerAgent.instructions.includes('For workspace search, use `shell` with commands like `rg`')).toBe(true);
+  expect(explorerAgent.instructions.includes('For workspace search, use the dedicated search tools')).toBe(false);
 
-  t.truthy(researcherAgent);
+  expect(researcherAgent).toBeTruthy();
   toolNames = researcherAgent.tools.map((tool: any) => tool.name);
-  t.false(toolNames.includes('shell'));
-  t.true(toolNames.includes('grep'));
-  t.true(toolNames.includes('find_files'));
-  t.true(researcherAgent.instructions.includes('For workspace search, use the dedicated search tools'));
-  t.false(researcherAgent.instructions.includes('use `shell` with commands like `rg`'));
+  expect(toolNames.includes('shell')).toBe(false);
+  expect(toolNames.includes('grep')).toBe(true);
+  expect(toolNames.includes('find_files')).toBe(true);
+  expect(researcherAgent.instructions.includes('For workspace search, use the dedicated search tools')).toBe(true);
+  expect(researcherAgent.instructions.includes('use `shell` with commands like `rg`')).toBe(false);
 });
 
-test.serial('remote execution disables code-context tools and guidance', async (t) => {
+it.sequential('remote execution disables code-context tools and guidance', async () => {
   let remoteAgent: any = null;
 
   registerProvider({
@@ -2268,17 +2274,18 @@ test.serial('remote execution disables code-context tools and guidance', async (
 
   await manager.run({ role: 'explorer', task: 'inspect remote files' });
 
-  t.truthy(remoteAgent);
+  expect(remoteAgent).toBeTruthy();
   const toolNames: string[] = remoteAgent.tools.map((tool: any) => tool.name);
-  t.false(toolNames.includes('read_code_outline'));
-  t.false(toolNames.includes('code_context_search'));
-  t.true(remoteAgent.instructions.includes('Code-context tools are not available in this run.'));
-  t.false(remoteAgent.instructions.includes('For code structure and symbol context, use:'));
+  expect(toolNames.includes('read_code_outline')).toBe(false);
+  expect(toolNames.includes('code_context_search')).toBe(false);
+  expect(remoteAgent.instructions.includes('Code-context tools are not available in this run.')).toBe(true);
+  expect(remoteAgent.instructions.includes('For code structure and symbol context, use:')).toBe(false);
 });
 
-test.serial('run() aborted subagent retains toolsUsed and filesChanged', async (t) => {
+it.sequential('run() aborted subagent retains toolsUsed and filesChanged', async () => {
   const tmpDir = fs.mkdtempSync(path.join(process.env['TMPDIR'] ?? '/tmp', 'term2-test-abort-'));
-  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true })) needs manual try/finally conversion;
 
   registerProvider({
     id: 'mock-abort-retain-provider',
@@ -2315,13 +2322,13 @@ test.serial('run() aborted subagent retains toolsUsed and filesChanged', async (
 
   const result = await manager.run({ role: 'worker', task: 'find all files' });
 
-  t.is(result.status, 'cancelled');
-  t.is(result.toolsUsed.length, 1);
-  t.is(result.toolsUsed[0].toolName, 'create_file');
-  t.deepEqual(result.filesChanged, ['test.ts']);
+  expect(result.status).toBe('cancelled');
+  expect(result.toolsUsed.length).toBe(1);
+  expect(result.toolsUsed[0].toolName).toBe('create_file');
+  expect(result.filesChanged).toEqual(['test.ts']);
 });
 
-test.serial('run() returns failed result when createClient factory is not provided', async (t) => {
+it.sequential('run() returns failed result when createClient factory is not provided', async () => {
   const manager = new RealSubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
@@ -2332,6 +2339,6 @@ test.serial('run() returns failed result when createClient factory is not provid
   });
 
   const result = await manager.run({ role: 'explorer', task: 'some task' });
-  t.is(result.status, 'failed');
-  t.is(result.error, 'SubagentManager: createClient factory not provided');
+  expect(result.status).toBe('failed');
+  expect(result.error).toBe('SubagentManager: createClient factory not provided');
 });

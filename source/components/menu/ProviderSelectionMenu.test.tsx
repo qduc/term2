@@ -1,12 +1,11 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 import ProviderSelectionMenu from './ProviderSelectionMenu.js';
 
-test.serial('ProviderSelectionMenu shows the type step numbering consistently', async (t) => {
+it.sequential('ProviderSelectionMenu shows the type step numbering consistently', async () => {
   const { lastFrame } = await renderInAct(
     <ProviderSelectionMenu
       phase="wizard_type"
@@ -20,14 +19,13 @@ test.serial('ProviderSelectionMenu shows the type step numbering consistently', 
       selectedProviderName={undefined}
       draft={{ name: 'local', type: 'openai-compatible' }}
     />,
-    t,
   );
 
   const frame = lastFrame()!;
-  t.true(frame.includes('Step 2: Provider Type'));
+  expect(frame.includes('Step 2: Provider Type')).toBe(true);
 });
 
-test.serial('ProviderSelectionMenu renders structured provider items without built-in/custom suffixes', async (t) => {
+it.sequential('ProviderSelectionMenu renders structured provider items without built-in/custom suffixes', async () => {
   const { lastFrame } = await renderInAct(
     <ProviderSelectionMenu
       phase="list"
@@ -42,17 +40,16 @@ test.serial('ProviderSelectionMenu renders structured provider items without bui
       selectedProviderName={undefined}
       draft={null}
     />,
-    t,
   );
 
   const frame = lastFrame()!;
-  t.true(frame.includes('OpenAI'));
-  t.true(frame.includes('Add Custom Provider'));
-  t.false(frame.includes('(built-in)'));
-  t.false(frame.includes('(custom)'));
+  expect(frame.includes('OpenAI')).toBe(true);
+  expect(frame.includes('Add Custom Provider')).toBe(true);
+  expect(frame.includes('(built-in)')).toBe(false);
+  expect(frame.includes('(custom)')).toBe(false);
 });
 
-test.serial('ProviderSelectionMenu highlights destructive delete confirmation text', async (t) => {
+it.sequential('ProviderSelectionMenu highlights destructive delete confirmation text', async () => {
   const { lastFrame } = await renderInAct(
     <ProviderSelectionMenu
       phase="confirm_delete"
@@ -66,15 +63,14 @@ test.serial('ProviderSelectionMenu highlights destructive delete confirmation te
       selectedProviderName="custom-ollama"
       draft={null}
     />,
-    t,
   );
 
   const frame = lastFrame()!;
-  t.true(frame.includes('× Yes, delete this provider'));
-  t.true(frame.includes('No, keep it'));
+  expect(frame.includes('× Yes, delete this provider')).toBe(true);
+  expect(frame.includes('No, keep it')).toBe(true);
 });
 
-test.serial('ProviderSelectionMenu renders inline field errors in edit_fields', async (t) => {
+it.sequential('ProviderSelectionMenu renders inline field errors in edit_fields', async () => {
   const { lastFrame } = await renderInAct(
     <ProviderSelectionMenu
       phase="edit_fields"
@@ -92,15 +88,14 @@ test.serial('ProviderSelectionMenu renders inline field errors in edit_fields', 
       selectedProviderName={undefined}
       draft={{ name: 'bad name', type: 'openai-compatible', baseUrl: 'http://localhost:11434/v1' }}
     />,
-    t,
   );
 
   const frame = lastFrame()!;
-  t.true(frame.includes('⚠ Name must start with a letter or number'));
-  t.true(frame.includes("⚠ Base URL is required for provider type 'openai-compatible'."));
+  expect(frame.includes('⚠ Name must start with a letter or number')).toBe(true);
+  expect(frame.includes("⚠ Base URL is required for provider type 'openai-compatible'.")).toBe(true);
 });
 
-test.serial('ProviderSelectionMenu renders the confirm discard warning', async (t) => {
+it.sequential('ProviderSelectionMenu renders the confirm discard warning', async () => {
   const { lastFrame } = await renderInAct(
     <ProviderSelectionMenu
       phase="confirm_discard"
@@ -114,16 +109,15 @@ test.serial('ProviderSelectionMenu renders the confirm discard warning', async (
       selectedProviderName={undefined}
       draft={{ name: 'test-provider', type: 'openai-compatible' }}
     />,
-    t,
   );
 
   const frame = lastFrame()!;
-  t.true(frame.includes('Discard Changes?'));
-  t.true(frame.includes('⚠ You have unsaved changes. Discard them?'));
-  t.true(frame.includes('No, keep editing'));
+  expect(frame.includes('Discard Changes?')).toBe(true);
+  expect(frame.includes('⚠ You have unsaved changes. Discard them?')).toBe(true);
+  expect(frame.includes('No, keep editing')).toBe(true);
 });
 
-test.serial('ProviderSelectionMenu renders reorder phase with provider items', async (t) => {
+it.sequential('ProviderSelectionMenu renders reorder phase with provider items', async () => {
   const { lastFrame } = await renderInAct(
     <ProviderSelectionMenu
       phase="reorder"
@@ -138,12 +132,11 @@ test.serial('ProviderSelectionMenu renders reorder phase with provider items', a
       selectedProviderName={undefined}
       draft={null}
     />,
-    t,
   );
 
   const frame = lastFrame()!;
-  t.true(frame.includes('Reorder Providers'));
-  t.true(frame.includes('OpenAI'));
-  t.true(frame.includes('OpenRouter'));
-  t.true(frame.includes('Codex'));
+  expect(frame.includes('Reorder Providers')).toBe(true);
+  expect(frame.includes('OpenAI')).toBe(true);
+  expect(frame.includes('OpenRouter')).toBe(true);
+  expect(frame.includes('Codex')).toBe(true);
 });

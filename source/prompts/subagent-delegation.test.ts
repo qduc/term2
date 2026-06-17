@@ -1,58 +1,58 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { getSubagentDelegationAddendum } from './subagent-delegation.js';
 
-test('getSubagentDelegationAddendum returns non-empty delegation guidance', (t) => {
+it('getSubagentDelegationAddendum returns non-empty delegation guidance', () => {
   const result = getSubagentDelegationAddendum();
 
-  t.is(typeof result, 'string');
-  t.true(result.length > 0);
-  t.true(result.includes('Delegating to subagents'));
-  t.true(result.includes('run_subagent'));
+  expect(typeof result).toBe('string');
+  expect(result.length > 0).toBe(true);
+  expect(result.includes('Delegating to subagents')).toBe(true);
+  expect(result.includes('run_subagent')).toBe(true);
 });
 
-test('getSubagentDelegationAddendum includes orchestrator-specific text when orchestratorMode is true', (t) => {
+it('getSubagentDelegationAddendum includes orchestrator-specific text when orchestratorMode is true', () => {
   const result = getSubagentDelegationAddendum({ orchestratorMode: true });
 
-  t.true(result.includes('Orchestrator mode'));
-  t.true(result.includes('Delegate workspace inspection'));
+  expect(result.includes('Orchestrator mode')).toBe(true);
+  expect(result.includes('Delegate workspace inspection')).toBe(true);
 });
 
-test('getSubagentDelegationAddendum includes self-service fallback when orchestratorMode is false', (t) => {
+it('getSubagentDelegationAddendum includes self-service fallback when orchestratorMode is false', () => {
   const result = getSubagentDelegationAddendum({ orchestratorMode: false });
 
-  t.true(result.includes('just do it yourself'));
+  expect(result.includes('just do it yourself')).toBe(true);
 });
 
-test('orchestrator mode includes safe coordination guidance', (t) => {
+it('orchestrator mode includes safe coordination guidance', () => {
   const result = getSubagentDelegationAddendum({ orchestratorMode: true });
-  t.true(result.includes('safe coordination over maximum parallelism'));
+  expect(result.includes('safe coordination over maximum parallelism')).toBe(true);
 });
 
-test('orchestrator mode includes coupled or multi-worker language', (t) => {
+it('orchestrator mode includes coupled or multi-worker language', () => {
   const result = getSubagentDelegationAddendum({ orchestratorMode: true });
-  t.true(result.includes('coupled or multi-worker'));
+  expect(result.includes('coupled or multi-worker')).toBe(true);
 });
 
-test('orchestrator mode includes ownership language', (t) => {
+it('orchestrator mode includes ownership language', () => {
   const result = getSubagentDelegationAddendum({ orchestratorMode: true });
-  t.true(result.includes('Which worker owns'));
+  expect(result.includes('Which worker owns')).toBe(true);
 });
 
-test('orchestrator mode says not to over-process simple single-worker tasks', (t) => {
+it('orchestrator mode says not to over-process simple single-worker tasks', () => {
   const result = getSubagentDelegationAddendum({ orchestratorMode: true });
-  t.true(result.includes('Do not over-process'));
+  expect(result.includes('Do not over-process')).toBe(true);
 });
 
-test('non-orchestrator mode does not include coordination checklist', (t) => {
+it('non-orchestrator mode does not include coordination checklist', () => {
   const result = getSubagentDelegationAddendum({ orchestratorMode: false });
-  t.false(result.includes('coupled or multi-worker'));
-  t.false(result.includes('Coordination checklist'));
+  expect(result.includes('coupled or multi-worker')).toBe(false);
+  expect(result.includes('Coordination checklist')).toBe(false);
 });
 
-test('includes task framing guidance about autonomous workers', (t) => {
+it('includes task framing guidance about autonomous workers', () => {
   const result = getSubagentDelegationAddendum();
-  t.true(result.includes('Task framing'));
-  t.true(result.includes('autonomous agents'));
-  t.true(result.includes('goal, relevant context, and constraints'));
-  t.true(result.includes('not implementation steps'));
+  expect(result.includes('Task framing')).toBe(true);
+  expect(result.includes('autonomous agents')).toBe(true);
+  expect(result.includes('goal, relevant context, and constraints')).toBe(true);
+  expect(result.includes('not implementation steps')).toBe(true);
 });

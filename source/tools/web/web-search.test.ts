@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createWebSearchToolDefinition, formatResultsAsMarkdown, formatWebSearchCommandMessage } from './web-search.js';
 import type { WebSearchResponse } from '../../providers/web-search/index.js';
 
@@ -24,7 +24,7 @@ const createMockLoggingService = () => {
   };
 };
 
-test('createWebSearchToolDefinition defines tool correctly', (t) => {
+it('createWebSearchToolDefinition defines tool correctly', () => {
   const settings = createMockSettingsService();
   const logging = createMockLoggingService();
 
@@ -33,13 +33,13 @@ test('createWebSearchToolDefinition defines tool correctly', (t) => {
     loggingService: logging,
   });
 
-  t.is(tool.name, 'web_search');
-  t.true(tool.description.includes('Search the web'));
-  t.is(typeof tool.execute, 'function');
-  t.is(typeof tool.formatCommandMessage, 'function');
+  expect(tool.name).toBe('web_search');
+  expect(tool.description.includes('Search the web')).toBe(true);
+  expect(typeof tool.execute).toBe('function');
+  expect(typeof tool.formatCommandMessage).toBe('function');
 });
 
-test('needsApproval returns false (read-only operation)', (t) => {
+it('needsApproval returns false (read-only operation)', () => {
   const settings = createMockSettingsService();
   const logging = createMockLoggingService();
 
@@ -49,10 +49,10 @@ test('needsApproval returns false (read-only operation)', (t) => {
   });
 
   const result = tool.needsApproval({ query: 'test' }, undefined);
-  t.is(result, false);
+  expect(result).toBe(false);
 });
 
-test('execute returns error when provider not configured', async (t) => {
+it('execute returns error when provider not configured', async () => {
   const settings = createMockSettingsService({
     'webSearch.provider': 'tavily',
     // No API key set
@@ -66,12 +66,12 @@ test('execute returns error when provider not configured', async (t) => {
 
   const result = await tool.execute({ query: 'test' }, undefined);
 
-  t.true(typeof result === 'string');
-  t.true((result as string).includes('Error:'));
-  t.true((result as string).includes('not properly configured'));
+  expect(typeof result === 'string').toBe(true);
+  expect((result as string).includes('Error:')).toBe(true);
+  expect((result as string).includes('not properly configured')).toBe(true);
 });
 
-test('formatResultsAsMarkdown formats results correctly', (t) => {
+it('formatResultsAsMarkdown formats results correctly', () => {
   const response: WebSearchResponse = {
     query: 'test query',
     results: [
@@ -92,15 +92,15 @@ test('formatResultsAsMarkdown formats results correctly', (t) => {
 
   const markdown = formatResultsAsMarkdown(response);
 
-  t.true(markdown.includes('## Search Results'));
-  t.true(markdown.includes('### 1. Test Result 1'));
-  t.true(markdown.includes('**URL:** https://example.com/1'));
-  t.true(markdown.includes('This is the first result content.'));
-  t.true(markdown.includes('### 2. Test Result 2'));
-  t.true(markdown.includes('**Published:** 2024-01-15'));
+  expect(markdown.includes('## Search Results')).toBe(true);
+  expect(markdown.includes('### 1. Test Result 1')).toBe(true);
+  expect(markdown.includes('**URL:** https://example.com/1')).toBe(true);
+  expect(markdown.includes('This is the first result content.')).toBe(true);
+  expect(markdown.includes('### 2. Test Result 2')).toBe(true);
+  expect(markdown.includes('**Published:** 2024-01-15')).toBe(true);
 });
 
-test('formatResultsAsMarkdown handles empty results', (t) => {
+it('formatResultsAsMarkdown handles empty results', () => {
   const response: WebSearchResponse = {
     query: 'no results query',
     results: [],
@@ -108,10 +108,10 @@ test('formatResultsAsMarkdown handles empty results', (t) => {
 
   const markdown = formatResultsAsMarkdown(response);
 
-  t.true(markdown.includes('No results found'));
+  expect(markdown.includes('No results found')).toBe(true);
 });
 
-test('formatResultsAsMarkdown includes answer box when available', (t) => {
+it('formatResultsAsMarkdown includes answer box when available', () => {
   const response: WebSearchResponse = {
     query: 'what is the capital of France',
     results: [],
@@ -120,11 +120,11 @@ test('formatResultsAsMarkdown includes answer box when available', (t) => {
 
   const markdown = formatResultsAsMarkdown(response);
 
-  t.true(markdown.includes('## Answer'));
-  t.true(markdown.includes('The capital of France is Paris.'));
+  expect(markdown.includes('## Answer')).toBe(true);
+  expect(markdown.includes('The capital of France is Paris.')).toBe(true);
 });
 
-test('formatResultsAsMarkdown includes both answer box and results', (t) => {
+it('formatResultsAsMarkdown includes both answer box and results', () => {
   const response: WebSearchResponse = {
     query: 'test',
     results: [
@@ -139,13 +139,13 @@ test('formatResultsAsMarkdown includes both answer box and results', (t) => {
 
   const markdown = formatResultsAsMarkdown(response);
 
-  t.true(markdown.includes('## Answer'));
-  t.true(markdown.includes('Direct answer.'));
-  t.true(markdown.includes('## Search Results'));
-  t.true(markdown.includes('Result'));
+  expect(markdown.includes('## Answer')).toBe(true);
+  expect(markdown.includes('Direct answer.')).toBe(true);
+  expect(markdown.includes('## Search Results')).toBe(true);
+  expect(markdown.includes('Result')).toBe(true);
 });
 
-test('formatWebSearchCommandMessage extracts query correctly', (t) => {
+it('formatWebSearchCommandMessage extracts query correctly', () => {
   const item = {
     rawItem: {
       arguments: JSON.stringify({ query: 'test search' }),
@@ -155,13 +155,13 @@ test('formatWebSearchCommandMessage extracts query correctly', (t) => {
 
   const messages = formatWebSearchCommandMessage(item, 0, new Map());
 
-  t.is(messages.length, 1);
-  t.is(messages[0].command, 'web_search: "test search"');
-  t.is(messages[0].toolName, 'web_search');
-  t.is(messages[0].sender, 'command');
+  expect(messages.length).toBe(1);
+  expect(messages[0].command).toBe('web_search: "test search"');
+  expect(messages[0].toolName).toBe('web_search');
+  expect(messages[0].sender).toBe('command');
 });
 
-test('formatWebSearchCommandMessage handles missing query', (t) => {
+it('formatWebSearchCommandMessage handles missing query', () => {
   const item = {
     rawItem: {},
     output: 'Some output',
@@ -169,11 +169,11 @@ test('formatWebSearchCommandMessage handles missing query', (t) => {
 
   const messages = formatWebSearchCommandMessage(item, 0, new Map());
 
-  t.is(messages.length, 1);
-  t.is(messages[0].command, 'web_search: "unknown query"');
+  expect(messages.length).toBe(1);
+  expect(messages[0].command).toBe('web_search: "unknown query"');
 });
 
-test('formatWebSearchCommandMessage detects success from output', (t) => {
+it('formatWebSearchCommandMessage detects success from output', () => {
   const successItem = {
     rawItem: {
       arguments: JSON.stringify({ query: 'test' }),
@@ -191,11 +191,11 @@ test('formatWebSearchCommandMessage detects success from output', (t) => {
   const successMessages = formatWebSearchCommandMessage(successItem, 0, new Map());
   const errorMessages = formatWebSearchCommandMessage(errorItem, 0, new Map());
 
-  t.true(successMessages[0].success);
-  t.false(errorMessages[0].success);
+  expect(successMessages[0].success).toBe(true);
+  expect(errorMessages[0].success).toBe(false);
 });
 
-test('formatWebSearchCommandMessage uses fallback args from map', (t) => {
+it('formatWebSearchCommandMessage uses fallback args from map', () => {
   const callId = 'call-123';
   const item = {
     rawItem: {
@@ -207,5 +207,5 @@ test('formatWebSearchCommandMessage uses fallback args from map', (t) => {
 
   const messages = formatWebSearchCommandMessage(item, 0, argsMap);
 
-  t.is(messages[0].command, 'web_search: "fallback query"');
+  expect(messages[0].command).toBe('web_search: "fallback query"');
 });

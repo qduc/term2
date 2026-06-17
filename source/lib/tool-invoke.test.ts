@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { tool as createTool, RunContext } from '@openai/agents';
 import { z } from 'zod';
 import {
@@ -13,185 +13,185 @@ import {
 // repairJson – pass-through for valid / empty input
 // ---------------------------------------------------------------------------
 
-test('repairJson returns empty string as-is', (t) => {
-  t.is(repairJson(''), '');
+it('repairJson returns empty string as-is', () => {
+  expect(repairJson('')).toBe('');
 });
 
-test('repairJson returns whitespace-only string as-is', (t) => {
-  t.is(repairJson('   '), '   ');
+it('repairJson returns whitespace-only string as-is', () => {
+  expect(repairJson('   ')).toBe('   ');
 });
 
-test('repairJson returns null/undefined input as-is', (t) => {
+it('repairJson returns null/undefined input as-is', () => {
   // @ts-expect-error – testing runtime guard
-  t.is(repairJson(null), null);
+  expect(repairJson(null)).toBe(null);
   // @ts-expect-error – testing runtime guard
-  t.is(repairJson(undefined), undefined);
+  expect(repairJson(undefined)).toBe(undefined);
 });
 
-test('repairJson does not modify already-valid JSON', (t) => {
+it('repairJson does not modify already-valid JSON', () => {
   const valid = '{"key": "value", "nested": {"a": 1}}';
-  t.is(repairJson(valid), valid);
+  expect(repairJson(valid)).toBe(valid);
 });
 
-test('repairJson does not modify valid JSON with escaped quotes', (t) => {
+it('repairJson does not modify valid JSON with escaped quotes', () => {
   const valid = '{"key": "value with \\"escaped\\" quotes"}';
-  t.is(repairJson(valid), valid);
+  expect(repairJson(valid)).toBe(valid);
 });
 
-test('repairJson does not modify valid JSON arrays', (t) => {
+it('repairJson does not modify valid JSON arrays', () => {
   const valid = '[1, 2, {"a": "b"}]';
-  t.is(repairJson(valid), valid);
+  expect(repairJson(valid)).toBe(valid);
 });
 
 // ---------------------------------------------------------------------------
 // repairJson – unescaped double quotes inside values
 // ---------------------------------------------------------------------------
 
-test('repairJson fixes unescaped double quotes in a single value', (t) => {
+it('repairJson fixes unescaped double quotes in a single value', () => {
   const broken = '{"search_content": "No results for "searchQuery" found"}';
   const result = repairJson(broken);
-  t.notThrows(() => JSON.parse(result));
+  expect(() => JSON.parse(result)).not.toThrow();
   const parsed = JSON.parse(result);
-  t.is(parsed.search_content, 'No results for "searchQuery" found');
+  expect(parsed.search_content).toBe('No results for "searchQuery" found');
 });
 
-test('repairJson fixes unescaped quotes across multiple keys', (t) => {
+it('repairJson fixes unescaped quotes across multiple keys', () => {
   const broken = '{"a": "he said "hi"", "b": "ok"}';
   const result = repairJson(broken);
-  t.notThrows(() => JSON.parse(result));
+  expect(() => JSON.parse(result)).not.toThrow();
 });
 
 // ---------------------------------------------------------------------------
 // repairJson – trailing commas
 // ---------------------------------------------------------------------------
 
-test('repairJson removes trailing comma in object', (t) => {
+it('repairJson removes trailing comma in object', () => {
   const broken = '{"a": 1, "b": 2,}';
   const result = repairJson(broken);
-  t.notThrows(() => JSON.parse(result));
-  t.deepEqual(JSON.parse(result), { a: 1, b: 2 });
+  expect(() => JSON.parse(result)).not.toThrow();
+  expect(JSON.parse(result)).toEqual({ a: 1, b: 2 });
 });
 
-test('repairJson removes trailing comma in array', (t) => {
+it('repairJson removes trailing comma in array', () => {
   const broken = '[1, 2, 3,]';
   const result = repairJson(broken);
-  t.notThrows(() => JSON.parse(result));
-  t.deepEqual(JSON.parse(result), [1, 2, 3]);
+  expect(() => JSON.parse(result)).not.toThrow();
+  expect(JSON.parse(result)).toEqual([1, 2, 3]);
 });
 
 // ---------------------------------------------------------------------------
 // repairJson – markdown code fences
 // ---------------------------------------------------------------------------
 
-test('repairJson strips ```json code fences', (t) => {
+it('repairJson strips ```json code fences', () => {
   const broken = '```json\n{"command": "ls"}\n```';
   const result = repairJson(broken);
-  t.notThrows(() => JSON.parse(result));
-  t.deepEqual(JSON.parse(result), { command: 'ls' });
+  expect(() => JSON.parse(result)).not.toThrow();
+  expect(JSON.parse(result)).toEqual({ command: 'ls' });
 });
 
-test('repairJson strips ``` code fences without language tag', (t) => {
+it('repairJson strips ``` code fences without language tag', () => {
   const broken = '```\n{"command": "ls"}\n```';
   const result = repairJson(broken);
-  t.notThrows(() => JSON.parse(result));
-  t.deepEqual(JSON.parse(result), { command: 'ls' });
+  expect(() => JSON.parse(result)).not.toThrow();
+  expect(JSON.parse(result)).toEqual({ command: 'ls' });
 });
 
 // ---------------------------------------------------------------------------
 // repairJson – JSON extraction from surrounding prose
 // ---------------------------------------------------------------------------
 
-test('repairJson extracts JSON from surrounding text', (t) => {
+it('repairJson extracts JSON from surrounding text', () => {
   const broken = 'Sure! Here is the tool call:\n{"command": "ls -la"}\nLet me know if you need anything else.';
   const result = repairJson(broken);
-  t.notThrows(() => JSON.parse(result));
-  t.deepEqual(JSON.parse(result), { command: 'ls -la' });
+  expect(() => JSON.parse(result)).not.toThrow();
+  expect(JSON.parse(result)).toEqual({ command: 'ls -la' });
 });
 
-test('repairJson extracts JSON array from surrounding text', (t) => {
+it('repairJson extracts JSON array from surrounding text', () => {
   const broken = 'The result is: [1, 2, 3] as expected.';
   const result = repairJson(broken);
-  t.notThrows(() => JSON.parse(result));
-  t.deepEqual(JSON.parse(result), [1, 2, 3]);
+  expect(() => JSON.parse(result)).not.toThrow();
+  expect(JSON.parse(result)).toEqual([1, 2, 3]);
 });
 
 // ---------------------------------------------------------------------------
 // repairJson – combined fixes
 // ---------------------------------------------------------------------------
 
-test('repairJson handles markdown fence + trailing comma', (t) => {
+it('repairJson handles markdown fence + trailing comma', () => {
   const broken = '```json\n{"a": 1, "b": 2,}\n```';
   const result = repairJson(broken);
-  t.notThrows(() => JSON.parse(result));
-  t.deepEqual(JSON.parse(result), { a: 1, b: 2 });
+  expect(() => JSON.parse(result)).not.toThrow();
+  expect(JSON.parse(result)).toEqual({ a: 1, b: 2 });
 });
 
-test('repairJson escapes raw newlines inside multiline tool arguments', (t) => {
+it('repairJson escapes raw newlines inside multiline tool arguments', () => {
   const broken = '{"type":"create_file","path":"notes.txt","diff":"+line 1\n+line 2\n"}';
-  t.throws(() => JSON.parse(broken));
+  expect(() => JSON.parse(broken)).toThrow();
 
   const result = repairJson(broken);
 
-  t.notThrows(() => JSON.parse(result));
-  t.deepEqual(JSON.parse(result), {
+  expect(() => JSON.parse(result)).not.toThrow();
+  expect(JSON.parse(result)).toEqual({
     type: 'create_file',
     path: 'notes.txt',
     diff: '+line 1\n+line 2\n',
   });
 });
 
-test('repairJson handles prose + unescaped quotes', (t) => {
+it('repairJson handles prose + unescaped quotes', () => {
   const broken = 'Here you go: {"content": "No results for "query" found"}';
   const result = repairJson(broken);
-  t.notThrows(() => JSON.parse(result));
+  expect(() => JSON.parse(result)).not.toThrow();
   const parsed = JSON.parse(result);
-  t.is(parsed.content, 'No results for "query" found');
+  expect(parsed.content).toBe('No results for "query" found');
 });
 
 // ---------------------------------------------------------------------------
 // repairJson – size guard
 // ---------------------------------------------------------------------------
 
-test('repairJson skips repair for payloads exceeding max length', (t) => {
+it('repairJson skips repair for payloads exceeding max length', () => {
   // Create a broken JSON string that's very large
   const bigContent = 'x'.repeat(200_001);
   const broken = `{"key": "${bigContent}"}`;
   // Should return as-is without attempting repair
-  t.is(repairJson(broken), broken);
+  expect(repairJson(broken)).toBe(broken);
 });
 
 // ---------------------------------------------------------------------------
 // normalizeToolInput
 // ---------------------------------------------------------------------------
 
-test('normalizeToolInput returns repaired JSON for string input', (t) => {
+it('normalizeToolInput returns repaired JSON for string input', () => {
   const broken = '{"key": "bad "quote" here"}';
   const result = normalizeToolInput(broken);
-  t.notThrows(() => JSON.parse(result));
+  expect(() => JSON.parse(result)).not.toThrow();
 });
 
-test('normalizeToolInput stringifies object input', (t) => {
+it('normalizeToolInput stringifies object input', () => {
   const result = normalizeToolInput({ a: 1 });
-  t.is(result, '{"a":1}');
+  expect(result).toBe('{"a":1}');
 });
 
-test('normalizeToolInput returns {} for un-serializable input', (t) => {
+it('normalizeToolInput returns {} for un-serializable input', () => {
   const circular: any = {};
   circular.self = circular;
   const result = normalizeToolInput(circular);
-  t.is(result, '{}');
+  expect(result).toBe('{}');
 });
 
-test('normalizeToolInput passes through valid JSON strings', (t) => {
+it('normalizeToolInput passes through valid JSON strings', () => {
   const valid = '{"key": "value"}';
-  t.is(normalizeToolInput(valid), valid);
+  expect(normalizeToolInput(valid)).toBe(valid);
 });
 
 // ---------------------------------------------------------------------------
 // wrapToolInvoke
 // ---------------------------------------------------------------------------
 
-test('wrapToolInvoke stringifies object inputs for tool invocations', async (t) => {
+it('wrapToolInvoke stringifies object inputs for tool invocations', async () => {
   const rawTool = createTool({
     name: 'echo_tool',
     description: 'A test tool that echoes the input value',
@@ -205,10 +205,10 @@ test('wrapToolInvoke stringifies object inputs for tool invocations', async (t) 
   const wrappedTool = wrapToolInvoke(rawTool);
   const result = await wrappedTool.invoke({} as RunContext, '{"value":"hi"}');
 
-  t.is(result, 'ok:hi');
+  expect(result).toBe('ok:hi');
 });
 
-test('wrapToolInvoke repairs multiline string arguments before SDK validation', async (t) => {
+it('wrapToolInvoke repairs multiline string arguments before SDK validation', async () => {
   const rawTool = createTool({
     name: 'patch_like_tool',
     description: 'A test tool with a multiline diff argument',
@@ -222,10 +222,10 @@ test('wrapToolInvoke repairs multiline string arguments before SDK validation', 
   const wrappedTool = wrapToolInvoke(rawTool);
   const result = await wrappedTool.invoke({} as RunContext, '{"diff":"+line 1\n+line 2\n"}');
 
-  t.is(result, '+line 1\n+line 2\n');
+  expect(result).toBe('+line 1\n+line 2\n');
 });
 
-test('wrapToolInvoke strict parsing does not repair invalid JSON escapes', async (t) => {
+it('wrapToolInvoke strict parsing does not repair invalid JSON escapes', async () => {
   const parametersSchema = z.object({
     pattern: z.string(),
   });
@@ -240,11 +240,11 @@ test('wrapToolInvoke strict parsing does not repair invalid JSON escapes', async
   const wrappedTool = wrapToolInvoke(rawTool, parametersSchema, { argumentParsing: 'strict' });
   const result = await wrappedTool.invoke({} as RunContext, String.raw`{"pattern":"\w"}`);
 
-  t.regex(result, /Tool input did not match schema for grep|Tool input was invalid for this tool/);
-  t.regex(result, /Retry with/);
+  expect(result).toMatch(/Tool input did not match schema for grep|Tool input was invalid for this tool/);
+  expect(result).toMatch(/Retry with/);
 });
 
-test('wrapToolInvoke strict parsing accepts standard JSON regex escaping', async (t) => {
+it('wrapToolInvoke strict parsing accepts standard JSON regex escaping', async () => {
   const parametersSchema = z.object({
     pattern: z.string(),
   });
@@ -259,10 +259,10 @@ test('wrapToolInvoke strict parsing accepts standard JSON regex escaping', async
   const wrappedTool = wrapToolInvoke(rawTool, parametersSchema, { argumentParsing: 'strict' });
   const result = await wrappedTool.invoke({} as RunContext, String.raw`{"pattern":"\\w"}`);
 
-  t.is(result, String.raw`\w`);
+  expect(result).toBe(String.raw`\w`);
 });
 
-test('normalizeToolInput with schema filters sentinel values for optional fields', (t) => {
+it('normalizeToolInput with schema filters sentinel values for optional fields', () => {
   const schema = z.object({
     path: z.string(),
     start_line: z.number().optional(),
@@ -278,10 +278,10 @@ test('normalizeToolInput with schema filters sentinel values for optional fields
   };
 
   const result = normalizeToolInput(input, schema);
-  t.deepEqual(JSON.parse(result), { path: 'README.md' });
+  expect(JSON.parse(result)).toEqual({ path: 'README.md' });
 });
 
-test('normalizeToolInput with schema coerces boolean string inputs', (t) => {
+it('normalizeToolInput with schema coerces boolean string inputs', () => {
   const schema = z.object({
     pattern: z.string(),
     no_ignore: z.boolean().optional(),
@@ -295,7 +295,7 @@ test('normalizeToolInput with schema coerces boolean string inputs', (t) => {
   };
 
   const result = normalizeToolInput(input, schema);
-  t.deepEqual(JSON.parse(result), {
+  expect(JSON.parse(result)).toEqual({
     pattern: 'test',
     no_ignore: false,
     case_sensitive: true,
@@ -305,7 +305,7 @@ test('normalizeToolInput with schema coerces boolean string inputs', (t) => {
 // Integration: real createTool + errorFunction + wrapToolInvoke path. When the
 // SDK fails schema validation, the diagnostics are surfaced as a NON-FATAL
 // result string (not thrown) so the model can self-correct within the turn.
-test('wrapToolInvoke surfaces schema diagnostics as a non-fatal result for invalid input', async (t) => {
+it('wrapToolInvoke surfaces schema diagnostics as a non-fatal result for invalid input', async () => {
   const parametersSchema = z.object({
     pattern: z.string(),
     no_ignore: z.boolean().optional(),
@@ -321,15 +321,14 @@ test('wrapToolInvoke surfaces schema diagnostics as a non-fatal result for inval
   const wrappedTool = wrapToolInvoke(rawTool, parametersSchema);
   const result = await wrappedTool.invoke({} as RunContext, '{"pattern": "test", "no_ignore": "not-a-bool"}');
 
-  t.is(
-    result,
+  expect(result).toBe(
     'Tool input did not match schema for grep: no_ignore must be boolean, got string "not-a-bool". Retry with valid JSON arguments.',
   );
 });
 
 // Regression: tool output that merely *mentions* the validation error must be
 // returned verbatim and must NOT be re-interpreted as a validation failure.
-test('wrapToolInvoke returns tool output verbatim even when it mentions InvalidToolInputError', async (t) => {
+it('wrapToolInvoke returns tool output verbatim even when it mentions InvalidToolInputError', async () => {
   const parametersSchema = z.object({ path: z.string() });
   const toolOutput = 'File contents: throw new InvalidToolInputError("Invalid JSON input for tool")';
   const rawTool = createTool({
@@ -343,21 +342,21 @@ test('wrapToolInvoke returns tool output verbatim even when it mentions InvalidT
   const wrappedTool = wrapToolInvoke(rawTool, parametersSchema);
   const result = await wrappedTool.invoke({} as RunContext, '{"path": "notes.md"}');
 
-  t.is(result, toolOutput);
+  expect(result).toBe(toolOutput);
 });
 
-test('toolErrorFunction rethrows schema-validation errors for diagnostics handling', (t) => {
+it('toolErrorFunction rethrows schema-validation errors for diagnostics handling', () => {
   const err = new Error('Invalid JSON input for tool');
   err.name = 'InvalidToolInputError';
-  t.throws(() => toolErrorFunction({} as RunContext, err), { is: err });
+  expect(() => toolErrorFunction({} as RunContext, err)).toThrow(err);
 });
 
-test('toolErrorFunction returns a non-fatal message for other runtime errors', (t) => {
+it('toolErrorFunction returns a non-fatal message for other runtime errors', () => {
   const result = toolErrorFunction({} as RunContext, new Error('disk on fire'));
-  t.is(result, 'An error occurred while running the tool. Please try again. Error: Error: disk on fire');
+  expect(result).toBe('An error occurred while running the tool. Please try again. Error: Error: disk on fire');
 });
 
-test('normalizeToolInput with schema coerces stringified array and object inputs', (t) => {
+it('normalizeToolInput with schema coerces stringified array and object inputs', () => {
   const schema = z.object({
     tags: z.array(z.string()).optional(),
     config: z
@@ -373,13 +372,13 @@ test('normalizeToolInput with schema coerces stringified array and object inputs
   };
 
   const result = normalizeToolInput(input, schema);
-  t.deepEqual(JSON.parse(result), {
+  expect(JSON.parse(result)).toEqual({
     tags: ['src', 'tests'],
     config: { debug: true },
   });
 });
 
-test('normalizeToolInput with schema coerces empty stringified array', (t) => {
+it('normalizeToolInput with schema coerces empty stringified array', () => {
   const schema = z.object({
     tags: z.array(z.string()).optional(),
   });
@@ -389,7 +388,7 @@ test('normalizeToolInput with schema coerces empty stringified array', (t) => {
   };
 
   const result = normalizeToolInput(input, schema);
-  t.deepEqual(JSON.parse(result), {
+  expect(JSON.parse(result)).toEqual({
     tags: [],
   });
 });
@@ -398,78 +397,78 @@ test('normalizeToolInput with schema coerces empty stringified array', (t) => {
 // normalizeObjectParams
 // ---------------------------------------------------------------------------
 
-test('normalizeObjectParams returns null/undefined/non-object unchanged', (t) => {
-  t.is(normalizeObjectParams(null), null);
-  t.is(normalizeObjectParams(undefined), undefined);
-  t.is(normalizeObjectParams('hello'), 'hello');
-  t.deepEqual(normalizeObjectParams([1, 2]), [1, 2]);
+it('normalizeObjectParams returns null/undefined/non-object unchanged', () => {
+  expect(normalizeObjectParams(null)).toBe(null);
+  expect(normalizeObjectParams(undefined)).toBe(undefined);
+  expect(normalizeObjectParams('hello')).toBe('hello');
+  expect(normalizeObjectParams([1, 2])).toEqual([1, 2]);
 });
 
-test('normalizeObjectParams returns object unchanged when no schema provided', (t) => {
+it('normalizeObjectParams returns object unchanged when no schema provided', () => {
   const obj = { a: 1 };
-  t.is(normalizeObjectParams(obj), obj); // same reference
+  expect(normalizeObjectParams(obj)).toBe(obj); // same reference
 });
 
-test('normalizeObjectParams filters null sentinels on optional fields', (t) => {
+it('normalizeObjectParams filters null sentinels on optional fields', () => {
   const schema = z.object({
     name: z.string(),
     count: z.number().optional(),
   });
 
   const result = normalizeObjectParams({ name: 'test', count: null }, schema) as Record<string, unknown>;
-  t.deepEqual(result, { name: 'test' });
-  t.false('count' in (result as object));
+  expect(result).toEqual({ name: 'test' });
+  expect('count' in (result as object)).toBe(false);
 });
 
-test('normalizeObjectParams coerces boolean strings', (t) => {
+it('normalizeObjectParams coerces boolean strings', () => {
   const schema = z.object({
     flag: z.boolean(),
   });
 
   const result = normalizeObjectParams({ flag: 'true' }, schema) as Record<string, unknown>;
-  t.is(result.flag, true);
+  expect(result.flag).toBe(true);
 });
 
-test('normalizeObjectParams coerces stringified arrays', (t) => {
+it('normalizeObjectParams coerces stringified arrays', () => {
   const schema = z.object({
     tags: z.array(z.string()),
   });
 
   const result = normalizeObjectParams({ tags: '["a","b"]' }, schema) as Record<string, unknown>;
-  t.deepEqual(result.tags, ['a', 'b']);
+  expect(result.tags).toEqual(['a', 'b']);
 });
 
-test('normalizeObjectParams coerces stringified objects', (t) => {
+it('normalizeObjectParams coerces stringified objects', () => {
   const schema = z.object({
     config: z.object({ key: z.string() }),
   });
 
   const result = normalizeObjectParams({ config: '{"key":"val"}' }, schema) as Record<string, unknown>;
-  t.deepEqual(result.config, { key: 'val' });
+  expect(result.config).toEqual({ key: 'val' });
 });
 
-test('normalizeObjectParams returns same reference when no modifications needed', (t) => {
+it('normalizeObjectParams returns same reference when no modifications needed', () => {
   const schema = z.object({ name: z.string() });
   const obj = { name: 'test' };
-  t.is(normalizeObjectParams(obj, schema), obj);
+  expect(normalizeObjectParams(obj, schema)).toBe(obj);
 });
 
-test('normalizeObjectParams filters string sentinels on optional fields', (t) => {
+it('normalizeObjectParams filters string sentinels on optional fields', () => {
   const schema = z.object({
     path: z.string(),
     start: z.number().optional(),
   });
 
   const result = normalizeObjectParams({ path: '/a', start: 'None' }, schema) as Record<string, unknown>;
-  t.false('start' in (result as object));
+  expect('start' in (result as object)).toBe(false);
 });
 
-test('normalizeObjectParams filters "undefined" string sentinel on optional fields', (t) => {
+it('normalizeObjectParams filters "undefined" string sentinel on optional fields', () => {
   const schema = z.object({
     path: z.string(),
     code: z.string().optional(),
   });
 
   const result = normalizeObjectParams({ path: '/a', code: 'undefined' }, schema) as Record<string, unknown>;
-  t.false('code' in (result as object));
+  expect('code' in (result as object)).toBe(false);
 });

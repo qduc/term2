@@ -1,48 +1,48 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { SessionContextService } from './session-context-service.js';
 
-test('getContext returns null outside runWithContext', (t) => {
+it('getContext returns null outside runWithContext', () => {
   const service = new SessionContextService();
 
-  t.is(service.getContext(), null);
+  expect(service.getContext()).toBe(null);
 });
 
-test('context is visible inside runWithContext', (t) => {
+it('context is visible inside runWithContext', () => {
   const service = new SessionContextService();
   const context = { sessionId: 'session-1', sessionStartedAt: '2025-01-01T00:00:00.000Z' };
 
   const result = service.runWithContext(context, () => {
-    t.deepEqual(service.getContext(), context);
+    expect(service.getContext()).toEqual(context);
     return 'ok';
   });
 
-  t.is(result, 'ok');
+  expect(result).toBe('ok');
 });
 
-test('context survives across an awaited promise', async (t) => {
+it('context survives across an awaited promise', async () => {
   const service = new SessionContextService();
   const context = { sessionId: 'session-2', sessionStartedAt: '2025-01-02T00:00:00.000Z', traceId: 'trace-1' };
 
   await service.runWithContext(context, async () => {
     await Promise.resolve();
-    t.deepEqual(service.getContext(), context);
+    expect(service.getContext()).toEqual(context);
   });
 });
 
-test('nested runWithContext restores the outer context after inner completes', async (t) => {
+it('nested runWithContext restores the outer context after inner completes', async () => {
   const service = new SessionContextService();
   const outer = { sessionId: 'outer', sessionStartedAt: '2025-01-03T00:00:00.000Z' };
   const inner = { sessionId: 'inner', sessionStartedAt: '2025-01-04T00:00:00.000Z', evaluator: true as const };
 
   await service.runWithContext(outer, async () => {
-    t.deepEqual(service.getContext(), outer);
+    expect(service.getContext()).toEqual(outer);
 
     await service.runWithContext(inner, async () => {
-      t.deepEqual(service.getContext(), inner);
+      expect(service.getContext()).toEqual(inner);
       await Promise.resolve();
-      t.deepEqual(service.getContext(), inner);
+      expect(service.getContext()).toEqual(inner);
     });
 
-    t.deepEqual(service.getContext(), outer);
+    expect(service.getContext()).toEqual(outer);
   });
 });

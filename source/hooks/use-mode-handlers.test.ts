@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { act, useEffect } from 'react';
 import { render } from 'ink-testing-library';
 import { useModeHandlers } from './use-mode-handlers.js';
@@ -87,7 +86,7 @@ const TestComponent = ({
   return null;
 };
 
-test('provider_selection submit uses text submit for wizard phases', async (t) => {
+it('provider_selection submit uses text submit for wizard phases', async () => {
   const handleTextInputSubmitCalls: string[] = [];
   const selectItemCalls: number[] = [];
 
@@ -129,9 +128,9 @@ test('provider_selection submit uses text submit for wizard phases', async (t) =
     result = onSubmit('my-custom-provider');
   });
 
-  t.is(result, 'handled');
-  t.deepEqual(handleTextInputSubmitCalls, ['my-custom-provider']);
-  t.deepEqual(selectItemCalls, []);
+  expect(result).toBe('handled');
+  expect(handleTextInputSubmitCalls).toEqual(['my-custom-provider']);
+  expect(selectItemCalls).toEqual([]);
 
   await act(async () => {
     renderer.unmount();

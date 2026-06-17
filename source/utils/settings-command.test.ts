@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createSettingsCommand, formatSettingsSummary, parseSettingValue } from './settings-command.js';
 import { unregisterProvider, upsertProvider } from '../providers/index.js';
 import type { SettingsWithSources } from '../services/settings/settings-schema.js';
@@ -71,16 +71,16 @@ const createDeps = (
   };
 };
 
-test('formatSettingsSummary renders values with sources', (t) => {
+it('formatSettingsSummary renders values with sources', () => {
   const summary = formatSettingsSummary(baseSettings);
 
-  t.true(summary.includes('agent.model: gpt-5.1 (default)'));
-  t.true(summary.includes('shell.timeout: 120000 (default)'));
-  t.true(summary.includes('logging.logLevel: info (default)'));
-  t.true(summary.includes('agent.maxParallelToolCalls: 3 (default)'));
+  expect(summary.includes('agent.model: gpt-5.1 (default)')).toBe(true);
+  expect(summary.includes('shell.timeout: 120000 (default)')).toBe(true);
+  expect(summary.includes('logging.logLevel: info (default)')).toBe(true);
+  expect(summary.includes('agent.maxParallelToolCalls: 3 (default)')).toBe(true);
 });
 
-test('viewing all settings with no args prompts for autocomplete', (t) => {
+it('viewing all settings with no args prompts for autocomplete', () => {
   const deps = createDeps();
   let inputValue = '';
   deps.setInput = (value) => {
@@ -90,12 +90,12 @@ test('viewing all settings with no args prompts for autocomplete', (t) => {
   const result = command.action();
 
   // Should set input to '/settings ' and return false to keep input active
-  t.is(result, false);
-  t.is(inputValue, '/settings ');
-  t.is(deps.messages.length, 0); // No message sent
+  expect(result).toBe(false);
+  expect(inputValue).toBe('/settings ');
+  expect(deps.messages.length).toBe(0); // No message sent
 });
 
-test('viewing a single setting shows value and source', (t) => {
+it('viewing a single setting shows value and source', () => {
   const deps = createDeps({
     values: { 'agent.model': 'gpt-4o' },
     sources: { 'agent.model': 'cli' },
@@ -103,156 +103,157 @@ test('viewing a single setting shows value and source', (t) => {
   const command = createSettingsCommand(deps);
   command.action('agent.model');
 
-  t.is(deps.messages.length, 1);
-  t.true(deps.messages[0].includes('agent.model: gpt-4o (cli)'));
+  expect(deps.messages.length).toBe(1);
+  expect(deps.messages[0].includes('agent.model: gpt-4o (cli)')).toBe(true);
 });
 
-test('setting runtime-modifiable values updates service and applies runtime hook', (t) => {
+it('setting runtime-modifiable values updates service and applies runtime hook', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
   command.action('agent.model gpt-4o');
 
-  t.deepEqual(deps.setCalls, [{ key: 'agent.model', value: 'gpt-4o' }]);
-  t.deepEqual(deps.applied, [{ key: 'agent.model', value: 'gpt-4o' }]);
-  t.true(deps.messages[0].includes('Set agent.model to gpt-4o'));
+  expect(deps.setCalls).toEqual([{ key: 'agent.model', value: 'gpt-4o' }]);
+  expect(deps.applied).toEqual([{ key: 'agent.model', value: 'gpt-4o' }]);
+  expect(deps.messages[0].includes('Set agent.model to gpt-4o')).toBe(true);
 });
 
-test('setting agent.maxParallelToolCalls validates positive integers', (t) => {
+it('setting agent.maxParallelToolCalls validates positive integers', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
   command.action('agent.maxParallelToolCalls 0');
 
-  t.deepEqual(deps.setCalls, []);
-  t.deepEqual(deps.applied, []);
-  t.true(deps.messages[0].includes('greater than or equal to 1'));
+  expect(deps.setCalls).toEqual([]);
+  expect(deps.applied).toEqual([]);
+  expect(deps.messages[0].includes('greater than or equal to 1')).toBe(true);
 });
 
-test('setting agent.maxParallelToolCalls reports that the new limit applies on the next request', (t) => {
+it('setting agent.maxParallelToolCalls reports that the new limit applies on the next request', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
   command.action('agent.maxParallelToolCalls 5');
 
-  t.deepEqual(deps.setCalls, [{ key: 'agent.maxParallelToolCalls', value: 5 }]);
-  t.deepEqual(deps.applied, [{ key: 'agent.maxParallelToolCalls', value: 5 }]);
-  t.true(deps.messages.some((msg) => msg.includes('takes effect on the next request')));
+  expect(deps.setCalls).toEqual([{ key: 'agent.maxParallelToolCalls', value: 5 }]);
+  expect(deps.applied).toEqual([{ key: 'agent.maxParallelToolCalls', value: 5 }]);
+  expect(deps.messages.some((msg) => msg.includes('takes effect on the next request'))).toBe(true);
 });
 
-test('resetting agent.maxParallelToolCalls reports that the default applies on the next request', (t) => {
+it('resetting agent.maxParallelToolCalls reports that the default applies on the next request', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
   command.action('reset agent.maxParallelToolCalls');
 
-  t.deepEqual(deps.resetCalls, ['agent.maxParallelToolCalls']);
-  t.deepEqual(deps.applied, [{ key: 'agent.maxParallelToolCalls', value: 'value-for-agent.maxParallelToolCalls' }]);
-  t.true(deps.messages.some((msg) => msg.includes('takes effect on the next request')));
+  expect(deps.resetCalls).toEqual(['agent.maxParallelToolCalls']);
+  expect(deps.applied).toEqual([{ key: 'agent.maxParallelToolCalls', value: 'value-for-agent.maxParallelToolCalls' }]);
+  expect(deps.messages.some((msg) => msg.includes('takes effect on the next request'))).toBe(true);
 });
 
-test('refuses to set startup-only values at runtime', (t) => {
+it('refuses to set startup-only values at runtime', () => {
   const deps = createDeps({
     isRuntimeModifiable: (key) => key !== 'agent.maxTurns',
   });
   const command = createSettingsCommand(deps);
   command.action('agent.maxTurns 40');
 
-  t.deepEqual(deps.setCalls, []);
-  t.deepEqual(deps.applied, []);
-  t.true(deps.messages[0].toLowerCase().includes('restart'));
+  expect(deps.setCalls).toEqual([]);
+  expect(deps.applied).toEqual([]);
+  expect(deps.messages[0].toLowerCase().includes('restart')).toBe(true);
 });
 
-test('reset restores defaults and reports action', (t) => {
+it('reset restores defaults and reports action', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
   command.action('reset shell.timeout');
 
-  t.deepEqual(deps.resetCalls, ['shell.timeout']);
-  t.true(deps.messages[0].includes('Reset shell.timeout'));
+  expect(deps.resetCalls).toEqual(['shell.timeout']);
+  expect(deps.messages[0].includes('Reset shell.timeout')).toBe(true);
 });
 
-test('parseSettingValue converts common primitives', (t) => {
-  t.is(parseSettingValue('42'), 42);
-  t.is(parseSettingValue('true'), true);
-  t.is(parseSettingValue('false'), false);
-  t.is(parseSettingValue('gpt-4o'), 'gpt-4o');
+it('parseSettingValue converts common primitives', () => {
+  expect(parseSettingValue('42')).toBe(42);
+  expect(parseSettingValue('true')).toBe(true);
+  expect(parseSettingValue('false')).toBe(false);
+  expect(parseSettingValue('gpt-4o')).toBe('gpt-4o');
 });
 
-test('setting agent.model strips --provider flag from value', (t) => {
+it('setting agent.model strips --provider flag from value', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
   command.action('agent.model mistralai/devstral-2512:free --provider=openrouter');
 
   // Should save the provider and the model ID
-  t.deepEqual(deps.setCalls, [
+  expect(deps.setCalls).toEqual([
     { key: 'agent.provider', value: 'openrouter' },
     { key: 'agent.model', value: 'mistralai/devstral-2512:free' },
   ]);
-  t.deepEqual(deps.applied, [
+  expect(deps.applied).toEqual([
     { key: 'agent.provider', value: 'openrouter' },
     { key: 'agent.model', value: 'mistralai/devstral-2512:free' },
   ]);
-  t.true(deps.messages[0].includes('Set agent.model to mistralai/devstral-2512:free'));
+  expect(deps.messages[0].includes('Set agent.model to mistralai/devstral-2512:free')).toBe(true);
 });
 
-test('setting agent.model strips --provider=openai flag from value', (t) => {
+it('setting agent.model strips --provider=openai flag from value', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
   command.action('agent.model gpt-4o --provider=openai');
 
   // Should save the provider and the model ID
-  t.deepEqual(deps.setCalls, [
+  expect(deps.setCalls).toEqual([
     { key: 'agent.provider', value: 'openai' },
     { key: 'agent.model', value: 'gpt-4o' },
   ]);
-  t.deepEqual(deps.applied, [
+  expect(deps.applied).toEqual([
     { key: 'agent.provider', value: 'openai' },
     { key: 'agent.model', value: 'gpt-4o' },
   ]);
-  t.true(deps.messages[0].includes('Set agent.model to gpt-4o'));
+  expect(deps.messages[0].includes('Set agent.model to gpt-4o')).toBe(true);
 });
 
-test('setting agent.model without provider flag works normally', (t) => {
+it('setting agent.model without provider flag works normally', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
   command.action('agent.model gpt-5.1');
 
   // Should save the model ID as-is
-  t.deepEqual(deps.setCalls, [{ key: 'agent.model', value: 'gpt-5.1' }]);
-  t.deepEqual(deps.applied, [{ key: 'agent.model', value: 'gpt-5.1' }]);
-  t.true(deps.messages[0].includes('Set agent.model to gpt-5.1'));
+  expect(deps.setCalls).toEqual([{ key: 'agent.model', value: 'gpt-5.1' }]);
+  expect(deps.applied).toEqual([{ key: 'agent.model', value: 'gpt-5.1' }]);
+  expect(deps.messages[0].includes('Set agent.model to gpt-5.1')).toBe(true);
 });
 
-test('setting agent.mentorModel strips --provider flag and saves mentor provider', (t) => {
+it('setting agent.mentorModel strips --provider flag and saves mentor provider', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
   command.action('agent.mentorModel some/mentor-model --provider=openrouter');
 
-  t.deepEqual(deps.setCalls, [
+  expect(deps.setCalls).toEqual([
     { key: 'agent.mentorProvider', value: 'openrouter' },
     { key: 'agent.mentorModel', value: 'some/mentor-model' },
   ]);
-  t.deepEqual(deps.applied, [
+  expect(deps.applied).toEqual([
     { key: 'agent.mentorProvider', value: 'openrouter' },
     { key: 'agent.mentorModel', value: 'some/mentor-model' },
   ]);
 });
 
-test('setting tools.editHealingModel strips --provider flag and saves edit healing provider', (t) => {
+it('setting tools.editHealingModel strips --provider flag and saves edit healing provider', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
   command.action('tools.editHealingModel fast-healer --provider=openrouter');
 
-  t.deepEqual(deps.setCalls, [
+  expect(deps.setCalls).toEqual([
     { key: 'tools.editHealingProvider', value: 'openrouter' },
     { key: 'tools.editHealingModel', value: 'fast-healer' },
   ]);
-  t.deepEqual(deps.applied, [
+  expect(deps.applied).toEqual([
     { key: 'tools.editHealingProvider', value: 'openrouter' },
     { key: 'tools.editHealingModel', value: 'fast-healer' },
   ]);
 });
 
-test('setting agent.model accepts provider names with spaces', (t) => {
+it('setting agent.model accepts provider names with spaces', () => {
   const providerId = 'opencode go settings command test';
-  t.teardown(() => unregisterProvider(providerId));
+
+  // TODO: // TODO: t.teardown(() => unregisterProvider(providerId)) needs manual try/finally conversion;
   upsertProvider({
     id: providerId,
     label: providerId,
@@ -262,11 +263,11 @@ test('setting agent.model accepts provider names with spaces', (t) => {
   const command = createSettingsCommand(deps);
   command.action(`agent.model deepseek-v4-flash --provider=${providerId}`);
 
-  t.deepEqual(deps.setCalls, [
+  expect(deps.setCalls).toEqual([
     { key: 'agent.provider', value: providerId },
     { key: 'agent.model', value: 'deepseek-v4-flash' },
   ]);
-  t.deepEqual(deps.applied, [
+  expect(deps.applied).toEqual([
     { key: 'agent.provider', value: providerId },
     { key: 'agent.model', value: 'deepseek-v4-flash' },
   ]);

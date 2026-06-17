@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { SubagentBridge } from './subagent-bridge.js';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 
@@ -80,7 +80,7 @@ function makeBridge(subagentManager: Record<string, any> | null) {
 // Tests
 // ---------------------------------------------------------------------------
 
-test('setEventSink stores the sink', (t) => {
+it('setEventSink stores the sink', () => {
   const { manager } = createMockManager();
   const bridge = makeBridge(manager);
 
@@ -89,10 +89,10 @@ test('setEventSink stores the sink', (t) => {
 
   // Clearing when count is 0 works immediately (no deferral).
   bridge.setEventSink(null);
-  t.pass();
+  expect(true).toBe(true);
 });
 
-test('setEventSink defers clear when subagents are active', async (t) => {
+it('setEventSink defers clear when subagents are active', async () => {
   const { manager } = createMockManager();
   const bridge = makeBridge(manager);
 
@@ -107,54 +107,52 @@ test('setEventSink defers clear when subagents are active', async (t) => {
   // After completion, setting a new sink should work cleanly
   bridge.setEventSink((_event: ConversationEvent) => {});
   bridge.setEventSink(null);
-  t.pass();
+  expect(true).toBe(true);
 });
 
-test('clearSubagentCache delegates to SubagentManager.resetMentorSession', (t) => {
+it('clearSubagentCache delegates to SubagentManager.resetMentorSession', () => {
   const { manager, trackReset } = createMockManager();
   const bridge = makeBridge(manager);
 
   bridge.clearSubagentCache();
-  t.is(trackReset.callCount, 1);
+  expect(trackReset.callCount).toBe(1);
 
   bridge.clearSubagentCache();
-  t.is(trackReset.callCount, 2);
+  expect(trackReset.callCount).toBe(2);
 });
 
-test('clearCache delegates to SubagentManager.clearCache', (t) => {
+it('clearCache delegates to SubagentManager.clearCache', () => {
   const { manager, trackClearCache } = createMockManager();
   const bridge = makeBridge(manager);
 
   (bridge as any).clearCache();
-  t.is(trackClearCache.callCount, 1);
+  expect(trackClearCache.callCount).toBe(1);
 
   (bridge as any).clearCache();
-  t.is(trackClearCache.callCount, 2);
+  expect(trackClearCache.callCount).toBe(2);
 });
 
-test('createMentor calls SubagentManager.run with role mentor', async (t) => {
+it('createMentor calls SubagentManager.run with role mentor', async () => {
   const { manager, trackRun } = createMockManager();
   const bridge = makeBridge(manager);
 
   const result = await bridge.createMentor('help me');
 
-  t.is(trackRun.callCount, 1);
-  t.truthy(trackRun.lastArgs);
-  t.is(trackRun.lastArgs.role, 'mentor');
-  t.is(trackRun.lastArgs.task, 'help me');
-  t.is(trackRun.lastArgs.parentTool, 'ask_mentor');
-  t.is(result, 'mock-result');
+  expect(trackRun.callCount).toBe(1);
+  expect(trackRun.lastArgs).toBeTruthy();
+  expect(trackRun.lastArgs.role).toBe('mentor');
+  expect(trackRun.lastArgs.task).toBe('help me');
+  expect(trackRun.lastArgs.parentTool).toBe('ask_mentor');
+  expect(result).toBe('mock-result');
 });
 
-test('createMentor throws when SubagentManager is null', async (t) => {
+it('createMentor throws when SubagentManager is null', async () => {
   const bridge = makeBridge(null);
 
-  await t.throwsAsync(() => bridge.createMentor('test'), {
-    message: /Transient agent clients cannot spawn subagents/,
-  });
+  await expect(() => bridge.createMentor('test')).rejects.toThrow(/Transient agent clients cannot spawn subagents/);
 });
 
-test('createMentor throws when result status is failed', async (t) => {
+it('createMentor throws when result status is failed', async () => {
   const { manager, trackRun } = createMockManager();
   // Override run to return a failed result
   manager.run = async () => ({
@@ -169,35 +167,33 @@ test('createMentor throws when result status is failed', async (t) => {
 
   const bridge = makeBridge(manager);
 
-  await t.throwsAsync(() => bridge.createMentor('test'), {
-    message: /Something went wrong/,
-  });
+  await expect(() => bridge.createMentor('test')).rejects.toThrow(/Something went wrong/);
 });
 
-test('runSubagent calls SubagentManager.runAsTool', async (t) => {
+it('runSubagent calls SubagentManager.runAsTool', async () => {
   const { manager, trackRunAsTool } = createMockManager();
   const bridge = makeBridge(manager);
 
   const params = { role: 'worker', task: 'do something' };
   const result = await bridge.runSubagent(params, undefined, undefined);
 
-  t.is(trackRunAsTool.callCount, 1);
-  t.truthy(trackRunAsTool.lastArgs);
-  t.is(trackRunAsTool.lastArgs.args.role, 'worker');
-  t.is(trackRunAsTool.lastArgs.args.task, 'do something');
-  t.is(trackRunAsTool.lastArgs.args.parentTool, 'run_subagent');
-  t.is(result.finalText, 'mock-tool-result');
+  expect(trackRunAsTool.callCount).toBe(1);
+  expect(trackRunAsTool.lastArgs).toBeTruthy();
+  expect(trackRunAsTool.lastArgs.args.role).toBe('worker');
+  expect(trackRunAsTool.lastArgs.args.task).toBe('do something');
+  expect(trackRunAsTool.lastArgs.args.parentTool).toBe('run_subagent');
+  expect(result.finalText).toBe('mock-tool-result');
 });
 
-test('runSubagent throws when SubagentManager is null', async (t) => {
+it('runSubagent throws when SubagentManager is null', async () => {
   const bridge = makeBridge(null);
 
-  await t.throwsAsync(() => bridge.runSubagent({ role: 'worker', task: 'test' }), {
-    message: /Transient agent clients cannot spawn subagents/,
-  });
+  await expect(() => bridge.runSubagent({ role: 'worker', task: 'test' })).rejects.toThrow(
+    /Transient agent clients cannot spawn subagents/,
+  );
 });
 
-test('runSubagent forwards resumeState from details', async (t) => {
+it('runSubagent forwards resumeState from details', async () => {
   const { manager, trackRunAsTool } = createMockManager();
   const bridge = makeBridge(manager);
 
@@ -205,25 +201,25 @@ test('runSubagent forwards resumeState from details', async (t) => {
   const details = { resumeState: 'test-state', signal: undefined, toolCall: { callId: 'call-1' } };
   await bridge.runSubagent(params, undefined, details);
 
-  t.truthy(trackRunAsTool.lastArgs);
-  t.is(trackRunAsTool.lastArgs.args.resumeState, 'test-state');
+  expect(trackRunAsTool.lastArgs).toBeTruthy();
+  expect(trackRunAsTool.lastArgs.args.resumeState).toBe('test-state');
 });
 
-test('activeSubagentsCount tracks active subagent runs', async (t) => {
+it('activeSubagentsCount tracks active subagent runs', async () => {
   const { manager } = createMockManager();
   const bridge = makeBridge(manager);
 
-  t.is(bridge.activeSubagentsCount, 0);
+  expect(bridge.activeSubagentsCount).toBe(0);
 
   // Start a mentor run (doesn't complete yet)
   const mentorPromise = bridge.createMentor('test');
-  t.is(bridge.activeSubagentsCount, 1);
+  expect(bridge.activeSubagentsCount).toBe(1);
 
   await mentorPromise;
-  t.is(bridge.activeSubagentsCount, 0);
+  expect(bridge.activeSubagentsCount).toBe(0);
 });
 
-test('deferred sink clear is applied after active subagents complete', async (t) => {
+it('deferred sink clear is applied after active subagents complete', async () => {
   const { manager } = createMockManager();
   const bridge = makeBridge(manager);
 
@@ -243,5 +239,4 @@ test('deferred sink clear is applied after active subagents complete', async (t)
   // Setting a new sink should work without crashing
   bridge.setEventSink((_event: ConversationEvent) => {});
   bridge.setEventSink(null);
-  t.pass();
 });

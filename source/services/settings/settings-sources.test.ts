@@ -1,8 +1,8 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { DEFAULT_SETTINGS, type SettingsData, type SettingSource } from './settings-schema.js';
 import { buildSettingsWithSources } from './settings-sources.js';
 
-test('buildSettingsWithSources maps nested values and sources including optional undefined fields', (t) => {
+it('buildSettingsWithSources maps nested values and sources including optional undefined fields', () => {
   const settings: SettingsData = {
     ...DEFAULT_SETTINGS,
     agent: {
@@ -29,17 +29,17 @@ test('buildSettingsWithSources maps nested values and sources including optional
 
   const result = buildSettingsWithSources(settings, getSource);
 
-  t.is(result.agent.model.value, settings.agent.model);
-  t.is(result.agent.model.source, 'cli');
-  t.is(result.agent.temperature.value, undefined);
-  t.is(result.agent.temperature.source, 'default');
-  t.is(result.webSearch.tavily.value, undefined);
-  t.is(result.webSearch.tavily.source, 'env');
-  t.deepEqual(result.webSearch.provider.value, settings.webSearch.provider);
-  t.is(result.app.planMode.value, settings.app.planMode);
-  t.is(result.app.planMode.source, 'default');
-  t.is(result.app.orchestratorMode.value, settings.app.orchestratorMode);
-  t.is(result.app.orchestratorMode.source, 'default');
-  t.is(result.agent.maxParallelToolCalls.value, settings.agent.maxParallelToolCalls);
-  t.is(result.agent.maxParallelToolCalls.source, 'default');
+  expect(result.agent.model.value).toBe(settings.agent.model);
+  expect(result.agent.model.source).toBe('cli');
+  expect(result.agent.temperature.value).toBe(undefined);
+  expect(result.agent.temperature.source).toBe('default');
+  expect(result.webSearch.tavily.value).toBe(undefined);
+  expect(result.webSearch.tavily.source).toBe('env');
+  expect(result.webSearch.provider.value).toEqual(settings.webSearch.provider);
+  expect(result.app.planMode.value).toBe(settings.app.planMode);
+  expect(result.app.planMode.source).toBe('default');
+  expect(result.app.orchestratorMode.value).toBe(settings.app.orchestratorMode);
+  expect(result.app.orchestratorMode.source).toBe('default');
+  expect(result.agent.maxParallelToolCalls.value).toBe(settings.agent.maxParallelToolCalls);
+  expect(result.agent.maxParallelToolCalls.source).toBe('default');
 });

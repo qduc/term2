@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,7 +11,7 @@ import {
   stripSensitiveSettings,
 } from './settings-persistence.js';
 
-test('stripSensitiveSettings: removes shellPath and openrouter secrets, preserving apiKey', (t) => {
+it('stripSensitiveSettings: removes shellPath and openrouter secrets, preserving apiKey', () => {
   const settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
   settings.app.shellPath = '/bin/zsh';
   settings.agent.openrouter = {
@@ -22,19 +22,20 @@ test('stripSensitiveSettings: removes shellPath and openrouter secrets, preservi
   };
 
   const cleaned = stripSensitiveSettings(settings);
-  t.is((cleaned as any).app?.shellPath, undefined);
-  t.deepEqual((cleaned as any).agent?.openrouter, { apiKey: 'secret' });
+  expect((cleaned as any).app?.shellPath).toBe(undefined);
+  expect((cleaned as any).agent?.openrouter).toEqual({ apiKey: 'secret' });
 });
 
-test('hasMissingKeys: true when defaults introduce new key', (t) => {
+it('hasMissingKeys: true when defaults introduce new key', () => {
   const target = { a: { b: 1 } };
   const source = { a: { b: 1, c: 2 } };
-  t.true(hasMissingKeys(target, source, new Set()));
+  expect(hasMissingKeys(target, source, new Set())).toBe(true);
 });
 
-test('loadSettingsFromFile: preserves valid sections when another section has an invalid value', (t) => {
+it('loadSettingsFromFile: preserves valid sections when another section has an invalid value', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
-  t.teardown(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(dir, { recursive: true, force: true })) needs manual try/finally conversion;
 
   // agent section is invalid (maxTurns must be positive); app section is valid
   const raw = { agent: { maxTurns: -1 }, app: { liteMode: true } };
@@ -47,15 +48,16 @@ test('loadSettingsFromFile: preserves valid sections when another section has an
   });
 
   // Valid app section is preserved; invalid agent section is omitted (falls back to defaults)
-  t.is((out.validated as any)?.app?.liteMode, true);
-  t.is((out.validated as any)?.agent, undefined);
-  t.true(out.hadErrors);
-  t.deepEqual(out.raw, raw);
+  expect((out.validated as any)?.app?.liteMode).toBe(true);
+  expect((out.validated as any)?.agent).toBe(undefined);
+  expect(out.hadErrors).toBe(true);
+  expect(out.raw).toEqual(raw);
 });
 
-test('loadSettingsFromFile: falls back to default for a section containing invalid array items', (t) => {
+it('loadSettingsFromFile: falls back to default for a section containing invalid array items', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
-  t.teardown(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(dir, { recursive: true, force: true })) needs manual try/finally conversion;
 
   // providers array is invalid (one item has unknown type); app section is valid
   const raw = {
@@ -74,15 +76,16 @@ test('loadSettingsFromFile: falls back to default for a section containing inval
   });
 
   // Entire providers section falls back to default; valid app section is preserved
-  t.is((out.validated as any)?.providers, undefined);
-  t.is((out.validated as any)?.app?.liteMode, true);
-  t.true(out.hadErrors);
-  t.deepEqual(out.raw, raw);
+  expect((out.validated as any)?.providers).toBe(undefined);
+  expect((out.validated as any)?.app?.liteMode).toBe(true);
+  expect(out.hadErrors).toBe(true);
+  expect(out.raw).toEqual(raw);
 });
 
-test('loadSettingsFromFile: returns empty validated when top-level value is not an object', (t) => {
+it('loadSettingsFromFile: returns empty validated when top-level value is not an object', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
-  t.teardown(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(dir, { recursive: true, force: true })) needs manual try/finally conversion;
 
   fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify('not-an-object'), 'utf-8');
 
@@ -92,14 +95,15 @@ test('loadSettingsFromFile: returns empty validated when top-level value is not 
     disableLogging: true,
   });
 
-  t.deepEqual(out.validated, {});
-  t.true(out.hadErrors);
-  t.is(out.raw, 'not-an-object');
+  expect(out.validated).toEqual({});
+  expect(out.hadErrors).toBe(true);
+  expect(out.raw).toBe('not-an-object');
 });
 
-test('loadSettingsFromFile: hadErrors is false when file is valid', (t) => {
+it('loadSettingsFromFile: hadErrors is false when file is valid', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
-  t.teardown(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(dir, { recursive: true, force: true })) needs manual try/finally conversion;
 
   fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ app: { liteMode: true } }, null, 2), 'utf-8');
 
@@ -109,12 +113,13 @@ test('loadSettingsFromFile: hadErrors is false when file is valid', (t) => {
     disableLogging: true,
   });
 
-  t.false(out.hadErrors);
+  expect(out.hadErrors).toBe(false);
 });
 
-test('saveSettingsToFile: writes stripped settings', (t) => {
+it('saveSettingsToFile: writes stripped settings', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
-  t.teardown(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  // TODO: // TODO: t.teardown(() => fs.rmSync(dir, { recursive: true, force: true })) needs manual try/finally conversion;
 
   const settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
   settings.app.shellPath = '/bin/zsh';
@@ -127,5 +132,5 @@ test('saveSettingsToFile: writes stripped settings', (t) => {
   });
 
   const written = JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf-8'));
-  t.is(written.app?.shellPath, undefined);
+  expect(written.app?.shellPath).toBe(undefined);
 });

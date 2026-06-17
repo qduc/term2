@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,12 +16,12 @@ const stubLogger = {
 
 let testDir = '';
 
-test.beforeEach(() => {
+beforeEach(() => {
   testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-cli-clear-test-'));
   persistenceModule.setConversationsDirForTest(testDir);
 });
 
-test.afterEach.always(() => {
+afterEach(() => {
   if (testDir && fs.existsSync(testDir)) {
     fs.rmSync(testDir, { recursive: true, force: true });
   }
@@ -29,7 +29,7 @@ test.afterEach.always(() => {
   testDir = '';
 });
 
-test.serial('clear rotates writer: old session file remains, new file begins fresh', async (t) => {
+it.sequential('clear rotates writer: old session file remains, new file begins fresh', async () => {
   const oldId = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: oldId, dir: testDir, logger: stubLogger });
   writer.init({ id: oldId, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/test/project' });
@@ -41,7 +41,7 @@ test.serial('clear rotates writer: old session file remains, new file begins fre
   });
 
   const oldPath = path.join(testDir, `${oldId}.jsonl`);
-  t.true(fs.existsSync(oldPath));
+  expect(fs.existsSync(oldPath)).toBe(true);
 
   // Rotate (simulates /clear)
   const newId = persistenceModule.generateId();
@@ -49,18 +49,18 @@ test.serial('clear rotates writer: old session file remains, new file begins fre
   writer.rotate(newId, { id: newId, createdAt: '2026-05-26T00:01:00.000Z' });
 
   const newPath = path.join(testDir, `${newId}.jsonl`);
-  t.true(fs.existsSync(newPath));
-  t.true(fs.existsSync(oldPath));
+  expect(fs.existsSync(newPath)).toBe(true);
+  expect(fs.existsSync(oldPath)).toBe(true);
 
   // Old session is resumable
   const restored = persistenceModule.loadConversation(oldId);
-  t.truthy(restored);
-  t.is(restored!.previousResponseId, 'r1');
+  expect(restored).toBeTruthy();
+  expect(restored!.previousResponseId).toBe('r1');
 
   // New file has no assistant turn yet → empty restored state
   const newRestored = persistenceModule.loadConversation(newId);
-  t.is(newRestored!.previousResponseId, null);
-  t.is(newRestored!.messages.length, 0);
+  expect(newRestored!.previousResponseId).toBe(null);
+  expect(newRestored!.messages.length).toBe(0);
 
   await writer.close();
 });

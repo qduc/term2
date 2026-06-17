@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   annotateApprovedCommandMessage,
   filterPendingCommandMessagesForApproval,
@@ -10,7 +10,7 @@ const allowAllCapabilities = () => ({
   hidePendingDuringPrompt: true,
 });
 
-test('filterPendingCommandMessagesForApproval prioritizes callId over toolName', (t) => {
+it('filterPendingCommandMessagesForApproval prioritizes callId over toolName', () => {
   const messages = [
     {
       id: 'call-1-running',
@@ -38,11 +38,11 @@ test('filterPendingCommandMessagesForApproval prioritizes callId over toolName',
     allowAllCapabilities,
   );
 
-  t.is(out.length, 1);
-  t.is(out[0].callId, 'call-1');
+  expect(out.length).toBe(1);
+  expect(out[0].callId).toBe('call-1');
 });
 
-test('filterPendingCommandMessagesForApproval falls back to toolName when callId missing', (t) => {
+it('filterPendingCommandMessagesForApproval falls back to toolName when callId missing', () => {
   const messages = [
     {
       id: 'apply-running',
@@ -64,11 +64,11 @@ test('filterPendingCommandMessagesForApproval falls back to toolName when callId
 
   const out = filterPendingCommandMessagesForApproval(messages, { toolName: 'apply_patch' }, allowAllCapabilities);
 
-  t.is(out.length, 1);
-  t.is(out[0].toolName, 'grep');
+  expect(out.length).toBe(1);
+  expect(out[0].toolName).toBe('grep');
 });
 
-test('annotateApprovedCommandMessage uses capability metadata instead of tool-name checks', (t) => {
+it('annotateApprovedCommandMessage uses capability metadata instead of tool-name checks', () => {
   const context: ApprovedToolContext = {
     callId: 'call-annotate-1',
     toolName: 'custom_tool',
@@ -91,6 +91,6 @@ test('annotateApprovedCommandMessage uses capability metadata instead of tool-na
         : { annotateCommandMessage: false, hidePendingDuringPrompt: false },
   );
 
-  t.truthy(output);
-  t.true(output.hadApproval === true);
+  expect(output).toBeTruthy();
+  expect(output.hadApproval === true).toBe(true);
 });

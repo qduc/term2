@@ -1,7 +1,7 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { adaptAiSdkModelForAgents, withForwardedReasoningSettings } from './ai-sdk-agents-adapter.js';
 
-test('withForwardedReasoningSettings forwards reasoning into providerData for non-stream requests', async (t) => {
+it('withForwardedReasoningSettings forwards reasoning into providerData for non-stream requests', async () => {
   let seenRequest: any;
   const model = withForwardedReasoningSettings({
     async getResponse(request: any) {
@@ -21,14 +21,14 @@ test('withForwardedReasoningSettings forwards reasoning into providerData for no
 
   await model.getResponse(originalRequest as any);
 
-  t.deepEqual(seenRequest.modelSettings.providerData, {
+  expect(seenRequest.modelSettings.providerData).toEqual({
     service_tier: 'flex',
     reasoning: { effort: 'high', summary: 'auto' },
   });
-  t.deepEqual(originalRequest.modelSettings.providerData, { service_tier: 'flex' });
+  expect(originalRequest.modelSettings.providerData).toEqual({ service_tier: 'flex' });
 });
 
-test('withForwardedReasoningSettings forwards reasoning into providerData for streamed requests', async (t) => {
+it('withForwardedReasoningSettings forwards reasoning into providerData for streamed requests', async () => {
   let seenRequest: any;
   const model = withForwardedReasoningSettings({
     async getResponse() {
@@ -48,12 +48,12 @@ test('withForwardedReasoningSettings forwards reasoning into providerData for st
     // Consume the stream.
   }
 
-  t.deepEqual(seenRequest.modelSettings.providerData, {
+  expect(seenRequest.modelSettings.providerData).toEqual({
     reasoning: { effort: 'low', summary: 'auto' },
   });
 });
 
-test('withForwardedReasoningSettings preserves explicit providerData reasoning', async (t) => {
+it('withForwardedReasoningSettings preserves explicit providerData reasoning', async () => {
   let seenRequest: any;
   const providerReasoning = { effort: 'medium' };
   const model = withForwardedReasoningSettings({
@@ -72,10 +72,10 @@ test('withForwardedReasoningSettings preserves explicit providerData reasoning',
     },
   } as any);
 
-  t.is(seenRequest.modelSettings.providerData.reasoning, providerReasoning);
+  expect(seenRequest.modelSettings.providerData.reasoning).toBe(providerReasoning);
 });
 
-test('adaptAiSdkModelForAgents makes reasoning visible to AI SDK doStream options', async (t) => {
+it('adaptAiSdkModelForAgents makes reasoning visible to AI SDK doStream options', async () => {
   let seenOptions: any;
   const model = adaptAiSdkModelForAgents({
     provider: 'example',
@@ -103,10 +103,10 @@ test('adaptAiSdkModelForAgents makes reasoning visible to AI SDK doStream option
     // Consume the stream.
   }
 
-  t.deepEqual(seenOptions.reasoning, { effort: 'high', summary: 'auto' });
+  expect(seenOptions.reasoning).toEqual({ effort: 'high', summary: 'auto' });
 });
 
-test('adaptAiSdkModelForAgents forwards OpenRouter reasoning through providerOptions', async (t) => {
+it('adaptAiSdkModelForAgents forwards OpenRouter reasoning through providerOptions', async () => {
   let seenOptions: any;
   const model = adaptAiSdkModelForAgents({
     provider: 'openrouter.chat',
@@ -135,15 +135,15 @@ test('adaptAiSdkModelForAgents forwards OpenRouter reasoning through providerOpt
     // Consume the stream.
   }
 
-  t.deepEqual(seenOptions.providerOptions.openrouter.reasoning, {
+  expect(seenOptions.providerOptions.openrouter.reasoning).toEqual({
     effort: 'none',
     summary: 'auto',
   });
-  t.is(seenOptions.providerOptions.openrouter.service_tier, 'flex');
-  t.is(seenOptions.service_tier, 'flex');
+  expect(seenOptions.providerOptions.openrouter.service_tier).toBe('flex');
+  expect(seenOptions.service_tier).toBe('flex');
 });
 
-test('adaptAiSdkModelForAgents forwards OpenRouter service tier without reasoning', async (t) => {
+it('adaptAiSdkModelForAgents forwards OpenRouter service tier without reasoning', async () => {
   let seenOptions: any;
   const model = adaptAiSdkModelForAgents({
     provider: 'openrouter.chat',
@@ -171,6 +171,6 @@ test('adaptAiSdkModelForAgents forwards OpenRouter service tier without reasonin
     // Consume the stream.
   }
 
-  t.is(seenOptions.providerOptions.openrouter.service_tier, 'flex');
-  t.false('reasoning' in seenOptions.providerOptions.openrouter);
+  expect(seenOptions.providerOptions.openrouter.service_tier).toBe('flex');
+  expect('reasoning' in seenOptions.providerOptions.openrouter).toBe(false);
 });

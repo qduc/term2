@@ -1,11 +1,11 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   addAnthropicPromptCachingToMessages,
   AiSdkAnthropicProvider,
   getMaxOutputTokens,
 } from './ai-sdk-anthropic.provider.js';
 
-test('addAnthropicPromptCachingToMessages adds cacheControl to the last Anthropic message only', (t) => {
+it('addAnthropicPromptCachingToMessages adds cacheControl to the last Anthropic message only', () => {
   const messages = [
     { role: 'system', content: 'system' },
     { role: 'user', content: 'first' },
@@ -14,23 +14,23 @@ test('addAnthropicPromptCachingToMessages adds cacheControl to the last Anthropi
 
   const result = addAnthropicPromptCachingToMessages(messages, 'claude-sonnet-4-5');
 
-  t.not(result[0], messages[0]);
-  t.deepEqual(result[1], messages[1]);
-  t.not(result[2], messages[2]);
-  t.deepEqual(result[0].providerOptions, {
+  expect(result[0]).not.toBe(messages[0]);
+  expect(result[1]).toEqual(messages[1]);
+  expect(result[2]).not.toBe(messages[2]);
+  expect(result[0].providerOptions).toEqual({
     anthropic: {
       cacheControl: { type: 'ephemeral' },
     },
   });
-  t.is(result[1].providerOptions, undefined);
-  t.deepEqual(result[2].providerOptions, {
+  expect(result[1].providerOptions).toBe(undefined);
+  expect(result[2].providerOptions).toEqual({
     anthropic: {
       cacheControl: { type: 'ephemeral' },
     },
   });
 });
 
-test('addAnthropicPromptCachingToMessages adds cacheControl to last system user and tool messages', (t) => {
+it('addAnthropicPromptCachingToMessages adds cacheControl to last system user and tool messages', () => {
   const messages = [
     { role: 'system', content: 'system 1' },
     { role: 'user', content: 'user 1' },
@@ -43,22 +43,22 @@ test('addAnthropicPromptCachingToMessages adds cacheControl to last system user 
 
   const result = addAnthropicPromptCachingToMessages(messages, 'claude-sonnet-4-5');
 
-  t.deepEqual(result[4].providerOptions, {
+  expect(result[4].providerOptions).toEqual({
     anthropic: { cacheControl: { type: 'ephemeral' } },
   });
-  t.deepEqual(result[5].providerOptions, {
+  expect(result[5].providerOptions).toEqual({
     anthropic: { cacheControl: { type: 'ephemeral' } },
   });
-  t.deepEqual(result[6].providerOptions, {
+  expect(result[6].providerOptions).toEqual({
     anthropic: { cacheControl: { type: 'ephemeral' } },
   });
-  t.is(result[0].providerOptions, undefined);
-  t.is(result[1].providerOptions, undefined);
-  t.is(result[2].providerOptions, undefined);
-  t.is(result[3].providerOptions, undefined);
+  expect(result[0].providerOptions).toBe(undefined);
+  expect(result[1].providerOptions).toBe(undefined);
+  expect(result[2].providerOptions).toBe(undefined);
+  expect(result[3].providerOptions).toBe(undefined);
 });
 
-test('addAnthropicPromptCachingToMessages preserves existing Anthropic providerOptions', (t) => {
+it('addAnthropicPromptCachingToMessages preserves existing Anthropic providerOptions', () => {
   const messages = [
     { role: 'user', content: 'hello' },
     {
@@ -73,7 +73,7 @@ test('addAnthropicPromptCachingToMessages preserves existing Anthropic providerO
 
   const result = addAnthropicPromptCachingToMessages(messages, 'anthropic/claude-3-5-sonnet');
 
-  t.deepEqual(result[1].providerOptions, {
+  expect(result[1].providerOptions).toEqual({
     anthropic: {
       topK: 5,
       cacheControl: { type: 'ephemeral' },
@@ -82,35 +82,35 @@ test('addAnthropicPromptCachingToMessages preserves existing Anthropic providerO
   });
 });
 
-test('addAnthropicPromptCachingToMessages leaves non-Anthropic models unchanged', (t) => {
+it('addAnthropicPromptCachingToMessages leaves non-Anthropic models unchanged', () => {
   const messages = [{ role: 'user', content: 'hello' }];
 
   const result = addAnthropicPromptCachingToMessages(messages, 'gpt-4.1');
 
-  t.is(result, messages);
+  expect(result).toBe(messages);
 });
 
-test('addAnthropicPromptCachingToMessages leaves qwen models unchanged by default', (t) => {
+it('addAnthropicPromptCachingToMessages leaves qwen models unchanged by default', () => {
   const messages = [{ role: 'user', content: 'hello' }];
 
   const result = addAnthropicPromptCachingToMessages(messages, 'qwen3-coder');
 
-  t.is(result, messages);
+  expect(result).toBe(messages);
 });
 
-test('addAnthropicPromptCachingToMessages supports provider-specific caching predicates', (t) => {
+it('addAnthropicPromptCachingToMessages supports provider-specific caching predicates', () => {
   const messages = [{ role: 'user', content: 'hello' }];
 
   const result = addAnthropicPromptCachingToMessages(messages, 'qwen3-coder', (modelId) => modelId.includes('qwen'));
 
-  t.deepEqual(result[0].providerOptions, {
+  expect(result[0].providerOptions).toEqual({
     anthropic: {
       cacheControl: { type: 'ephemeral' },
     },
   });
 });
 
-test('AiSdkAnthropicProvider can be instantiated for Anthropic models', (t) => {
+it('AiSdkAnthropicProvider can be instantiated for Anthropic models', () => {
   const provider = new AiSdkAnthropicProvider({
     defaultModel: 'claude-sonnet-4-5',
     resolveConfig: () => ({
@@ -120,15 +120,15 @@ test('AiSdkAnthropicProvider can be instantiated for Anthropic models', (t) => {
     createProvider: () => ((modelId: string) => ({ modelId })) as any,
   });
 
-  t.truthy(provider);
+  expect(provider).toBeTruthy();
 });
 
-test('getMaxOutputTokens maps models correctly and defaults to 65536', (t) => {
-  t.is(getMaxOutputTokens('minimax-m3'), 131072);
-  t.is(getMaxOutputTokens('qwen3.5-plus'), 65536);
-  t.is(getMaxOutputTokens('deepseek-v4-flash'), 384000);
-  t.is(getMaxOutputTokens('glm-5.1'), 32768);
-  t.is(getMaxOutputTokens('anthropic/mimo-v2-omni'), 128000);
-  t.is(getMaxOutputTokens('unknown-model'), 65536);
-  t.is(getMaxOutputTokens(''), 65536);
+it('getMaxOutputTokens maps models correctly and defaults to 65536', () => {
+  expect(getMaxOutputTokens('minimax-m3')).toBe(131072);
+  expect(getMaxOutputTokens('qwen3.5-plus')).toBe(65536);
+  expect(getMaxOutputTokens('deepseek-v4-flash')).toBe(384000);
+  expect(getMaxOutputTokens('glm-5.1')).toBe(32768);
+  expect(getMaxOutputTokens('anthropic/mimo-v2-omni')).toBe(128000);
+  expect(getMaxOutputTokens('unknown-model')).toBe(65536);
+  expect(getMaxOutputTokens('')).toBe(65536);
 });

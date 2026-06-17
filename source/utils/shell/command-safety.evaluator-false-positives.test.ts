@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { classifyCommand, SafetyStatus } from './command-safety/index.js';
 import { analyzePathRisk } from './command-safety/path-analysis.js';
 
@@ -6,7 +6,7 @@ import { analyzePathRisk } from './command-safety/path-analysis.js';
 // Item 1: pure-safe / read-only commands should be GREEN (not "unlisted")
 // ============================================================================
 
-test('read-only and output-only commands classify GREEN', (t) => {
+it('read-only and output-only commands classify GREEN', () => {
   const greenCommands = [
     'cd source',
     "printf 'hello world'",
@@ -29,19 +29,19 @@ test('read-only and output-only commands classify GREEN', (t) => {
   ];
 
   for (const command of greenCommands) {
-    t.is(classifyCommand(command), SafetyStatus.GREEN, `"${command}" should be GREEN`);
+    expect(classifyCommand(command), `"${command}" should be GREEN`).toBe(SafetyStatus.GREEN);
   }
 });
 
-test('compound of newly-allowed safe commands stays GREEN', (t) => {
-  t.is(classifyCommand("cd source && printf 'done'"), SafetyStatus.GREEN);
-  t.is(classifyCommand('cd source && ls'), SafetyStatus.GREEN);
+it('compound of newly-allowed safe commands stays GREEN', () => {
+  expect(classifyCommand("cd source && printf 'done'")).toBe(SafetyStatus.GREEN);
+  expect(classifyCommand('cd source && ls')).toBe(SafetyStatus.GREEN);
 });
 
-test('dual-use commands are still NOT auto-allowed (remain YELLOW)', (t) => {
+it('dual-use commands are still NOT auto-allowed (remain YELLOW)', () => {
   // These genuinely need the evaluator/human and must not be allow-listed.
   for (const command of ['npm test', 'npx tsc', 'node script.js', 'cp a b']) {
-    t.is(classifyCommand(command), SafetyStatus.YELLOW, `"${command}" should remain YELLOW`);
+    expect(classifyCommand(command), `"${command}" should remain YELLOW`).toBe(SafetyStatus.YELLOW);
   }
 });
 
@@ -49,14 +49,14 @@ test('dual-use commands are still NOT auto-allowed (remain YELLOW)', (t) => {
 // Item 2: the current directory "." should not be treated as a hidden file
 // ============================================================================
 
-test('current-directory path args are GREEN', (t) => {
-  t.is(analyzePathRisk('.'), SafetyStatus.GREEN, '"." should be GREEN');
-  t.is(analyzePathRisk('./'), SafetyStatus.GREEN, '"./" should be GREEN');
+it('current-directory path args are GREEN', () => {
+  expect(analyzePathRisk('.'), '"." should be GREEN').toBe(SafetyStatus.GREEN);
+  expect(analyzePathRisk('./'), '"./" should be GREEN').toBe(SafetyStatus.GREEN);
 });
 
-test('search tools over the current directory classify GREEN', (t) => {
-  t.is(classifyCommand('rg -n "pattern" .'), SafetyStatus.GREEN);
-  t.is(classifyCommand('grep -rn "foo" .'), SafetyStatus.GREEN);
+it('search tools over the current directory classify GREEN', () => {
+  expect(classifyCommand('rg -n "pattern" .')).toBe(SafetyStatus.GREEN);
+  expect(classifyCommand('grep -rn "foo" .')).toBe(SafetyStatus.GREEN);
 });
 
 // ============================================================================
@@ -64,7 +64,7 @@ test('search tools over the current directory classify GREEN', (t) => {
 //         subcommand (e.g. `git -C <path> status`).
 // ============================================================================
 
-test('git global flags before a safe subcommand stay GREEN', (t) => {
+it('git global flags before a safe subcommand stay GREEN', () => {
   const greenGit = [
     'git -C /some/repo status',
     'git -c user.name=alice log --oneline',
@@ -72,11 +72,11 @@ test('git global flags before a safe subcommand stay GREEN', (t) => {
     'git -C source diff',
   ];
   for (const command of greenGit) {
-    t.is(classifyCommand(command), SafetyStatus.GREEN, `"${command}" should be GREEN`);
+    expect(classifyCommand(command), `"${command}" should be GREEN`).toBe(SafetyStatus.GREEN);
   }
 });
 
-test('git global flags before a write subcommand stay YELLOW', (t) => {
-  t.is(classifyCommand('git -C /some/repo commit -m wip'), SafetyStatus.YELLOW);
-  t.is(classifyCommand('git -C /some/repo reset --hard'), SafetyStatus.YELLOW);
+it('git global flags before a write subcommand stay YELLOW', () => {
+  expect(classifyCommand('git -C /some/repo commit -m wip')).toBe(SafetyStatus.YELLOW);
+  expect(classifyCommand('git -C /some/repo reset --hard')).toBe(SafetyStatus.YELLOW);
 });

@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,34 +36,34 @@ const findMainLogFile = (logDir: string) => {
   return files.find((f) => f.endsWith('.log') && f.startsWith('term2-') && !f.includes('openrouter'));
 };
 
-test.before(() => {
+beforeAll(() => {
   cleanupLogs();
 });
 
-test.after.always(() => {
+afterAll(() => {
   cleanupLogs();
 });
 
-test.serial('LoggingService initializes without error', async (t) => {
+it.sequential('LoggingService initializes without error', async () => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
     disableLogging: false,
   });
-  t.truthy(logger);
+  expect(logger).toBeTruthy();
 });
 
-test.serial('creates log directory if it does not exist', async (t) => {
+it.sequential('creates log directory if it does not exist', async () => {
   const logDir = getTestLogDir();
   new LoggingService({ logDir, disableLogging: false });
 
   // Give it a moment to create the directory
   await new Promise((resolve) => setTimeout(resolve, 100));
 
-  t.true(fs.existsSync(logDir));
+  expect(fs.existsSync(logDir)).toBe(true);
 });
 
-test.serial('respects DISABLE_LOGGING flag', async (t) => {
+it.sequential('respects DISABLE_LOGGING flag', async () => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -76,10 +76,10 @@ test.serial('respects DISABLE_LOGGING flag', async (t) => {
   await new Promise((resolve) => setTimeout(resolve, 100));
 
   // No error should occur, and no files should be created
-  t.pass();
+  expect(true).toBe(true);
 });
 
-test.serial('uses DISABLE_LOGGING env when disableLogging is omitted', async (t) => {
+it.sequential('uses DISABLE_LOGGING env when disableLogging is omitted', async () => {
   const logDir = getTestLogDir();
   const originalDisableLogging = process.env.DISABLE_LOGGING;
   process.env.DISABLE_LOGGING = '1';
@@ -90,7 +90,7 @@ test.serial('uses DISABLE_LOGGING env when disableLogging is omitted', async (t)
     // Give it a moment
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    t.false(fs.existsSync(logDir));
+    expect(fs.existsSync(logDir)).toBe(false);
   } finally {
     if (originalDisableLogging === undefined) {
       delete process.env.DISABLE_LOGGING;
@@ -100,7 +100,7 @@ test.serial('uses DISABLE_LOGGING env when disableLogging is omitted', async (t)
   }
 });
 
-test.serial('logs messages with correct format', async (t) => {
+it.sequential('logs messages with correct format', async () => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -118,10 +118,10 @@ test.serial('logs messages with correct format', async (t) => {
   const files = fs.readdirSync(logDir);
   const logFiles = files.filter((f) => f.endsWith('.log') && f.startsWith('term2-') && !f.includes('openrouter'));
 
-  t.true(logFiles.length > 0, 'log file should exist');
+  expect(logFiles.length > 0).toBe(true);
 
   if (logFiles.length === 0) {
-    t.fail('No log files created');
+    expect(true).toBe(false);
     return;
   }
 
@@ -130,15 +130,15 @@ test.serial('logs messages with correct format', async (t) => {
   const content = fs.readFileSync(logFile, 'utf8');
   const lines = content.split('\n').filter((l) => l.trim());
 
-  t.true(lines.length > 0, 'log file should have entries');
+  expect(lines.length > 0).toBe(true);
 
   // Verify JSON format
   const firstLog = JSON.parse(lines[0]);
-  t.is(firstLog.message, 'test info message');
-  t.is(firstLog.context, 'test');
+  expect(firstLog.message).toBe('test info message');
+  expect(firstLog.context).toBe('test');
 });
 
-test.serial('supports custom log levels including security', async (t) => {
+it.sequential('supports custom log levels including security', async () => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -155,10 +155,10 @@ test.serial('supports custom log levels including security', async (t) => {
   // Give async writes time
   await new Promise((resolve) => setTimeout(resolve, 200));
 
-  t.pass();
+  expect(true).toBe(true);
 });
 
-test.serial('automatically writes provider traffic artifacts for sent and received payloads', async (t) => {
+it.sequential('automatically writes provider traffic artifacts for sent and received payloads', async () => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -205,19 +205,19 @@ test.serial('automatically writes provider traffic artifacts for sent and receiv
   await new Promise((resolve) => setTimeout(resolve, 200));
 
   const providerRoot = path.join(logDir, 'provider-traffic');
-  t.true(fs.existsSync(providerRoot));
+  expect(fs.existsSync(providerRoot)).toBe(true);
 
   const dayDirs = fs
     .readdirSync(providerRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
-  t.true(dayDirs.length > 0);
+  expect(dayDirs.length > 0).toBe(true);
 
   const dayDir = path.join(providerRoot, dayDirs[0]);
   const sessionDirs = fs.readdirSync(dayDir, { withFileTypes: true }).filter((entry) => entry.isDirectory());
-  t.true(sessionDirs.length > 0);
+  expect(sessionDirs.length > 0).toBe(true);
   const requestFiles = fs.readdirSync(path.join(dayDir, sessionDirs[0].name)).filter((name) => name.endsWith('.jsonl'));
-  t.true(requestFiles.length > 0);
+  expect(requestFiles.length > 0).toBe(true);
   const trafficFile = path.join(dayDir, sessionDirs[0].name, requestFiles[0]);
 
   const entries = fs
@@ -226,31 +226,31 @@ test.serial('automatically writes provider traffic artifacts for sent and receiv
     .filter((line) => line.trim())
     .map((line) => JSON.parse(line));
 
-  t.true(entries.length >= 2);
+  expect(entries.length >= 2).toBe(true);
 
   const sent = entries.find((entry) => entry.direction === 'sent');
   const received = entries.find((entry) => entry.direction === 'received');
 
-  t.truthy(sent);
-  t.truthy(received);
+  expect(sent).toBeTruthy();
+  expect(received).toBeTruthy();
   if (!sent || !received) {
-    t.fail('expected sent and received provider traffic records in the same daily file');
+    expect(true).toBe(false);
     return;
   }
 
-  t.is(sent.direction, 'sent');
-  t.is(sent.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
-  t.is(sent.modelWrapperClass, 'FallbackResponsesModel');
-  t.deepEqual(sent.headers, { host: 'api.openrouter.ai', authorization: '[REDACTED]' });
-  t.deepEqual(sent.body.messages, [{ role: 'system' }, { role: 'user', content: 'hello' }]);
-  t.deepEqual(sent.body.tools, ['read_file']);
-  t.is(received.direction, 'received');
-  t.is(received.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
-  t.is(received.modelWrapperClass, 'FallbackResponsesModel');
-  t.is(received.summary.outputText, 'hi');
+  expect(sent.direction).toBe('sent');
+  expect(sent.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
+  expect(sent.modelWrapperClass).toBe('FallbackResponsesModel');
+  expect(sent.headers).toEqual({ host: 'api.openrouter.ai', authorization: '[REDACTED]' });
+  expect(sent.body.messages).toEqual([{ role: 'system' }, { role: 'user', content: 'hello' }]);
+  expect(sent.body.tools).toEqual(['read_file']);
+  expect(received.direction).toBe('received');
+  expect(received.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
+  expect(received.modelWrapperClass).toBe('FallbackResponsesModel');
+  expect(received.summary.outputText).toBe('hi');
 });
 
-test.serial('cleans up old provider traffic files and directories by date', async (t) => {
+it.sequential('cleans up old provider traffic files and directories by date', async () => {
   const logDir = getTestLogDir();
   const providerRoot = path.join(logDir, 'provider-traffic');
   const oldFile = path.join(providerRoot, `traffic-${formatDateDaysAgo(40)}.log`);
@@ -273,13 +273,13 @@ test.serial('cleans up old provider traffic files and directories by date', asyn
     disableLogging: false,
   });
 
-  t.false(fs.existsSync(oldFile));
-  t.true(fs.existsSync(recentFile));
-  t.false(fs.existsSync(oldDir));
-  t.true(fs.existsSync(recentDir));
+  expect(fs.existsSync(oldFile)).toBe(false);
+  expect(fs.existsSync(recentFile)).toBe(true);
+  expect(fs.existsSync(oldDir)).toBe(false);
+  expect(fs.existsSync(recentDir)).toBe(true);
 });
 
-test.serial('suppresses console output when configured', async (t) => {
+it.sequential('suppresses console output when configured', async () => {
   const logDir = getTestLogDir();
   const originalConsoleError = console.error;
   const calls: any[][] = [];
@@ -298,13 +298,13 @@ test.serial('suppresses console output when configured', async (t) => {
 
     logger.setLogLevel('not-a-level');
 
-    t.is(calls.length, 0);
+    expect(calls.length).toBe(0);
   } finally {
     console.error = originalConsoleError;
   }
 });
 
-test.serial('tracks correlation IDs', async (t) => {
+it.sequential('tracks correlation IDs', async () => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -324,7 +324,7 @@ test.serial('tracks correlation IDs', async (t) => {
   const logFiles = files.filter((f) => f.endsWith('.log') && f.startsWith('term2-') && !f.includes('openrouter'));
 
   if (logFiles.length === 0) {
-    t.fail('No log files created');
+    expect(true).toBe(false);
     return;
   }
 
@@ -333,7 +333,7 @@ test.serial('tracks correlation IDs', async (t) => {
   const lines = content.split('\n').filter((l) => l.trim());
 
   const log = JSON.parse(lines[lines.length - 1] || lines[0]);
-  t.is(log.correlationId, correlationId);
+  expect(log.correlationId).toBe(correlationId);
 
   logger.clearCorrelationId();
   logger.info('message without correlation', {});
@@ -344,10 +344,10 @@ test.serial('tracks correlation IDs', async (t) => {
   const lines2 = content2.split('\n').filter((l) => l.trim());
 
   const log2 = JSON.parse(lines2[lines2.length - 1]);
-  t.is(log2.correlationId, undefined);
+  expect(log2.correlationId).toBe(undefined);
 });
 
-test.serial('gracefully degrades on write errors', async (t) => {
+it.sequential('gracefully degrades on write errors', async () => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -358,10 +358,10 @@ test.serial('gracefully degrades on write errors', async (t) => {
   logger.info('test', {});
   logger.error('error', {});
 
-  t.pass();
+  expect(true).toBe(true);
 });
 
-test.serial('emits canonical contract fields on logs', async (t) => {
+it.sequential('emits canonical contract fields on logs', async () => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -382,9 +382,9 @@ test.serial('emits canonical contract fields on logs', async (t) => {
 
   fs.mkdirSync(logDir, { recursive: true });
   const mainLogFile = findMainLogFile(logDir);
-  t.truthy(mainLogFile);
+  expect(mainLogFile).toBeTruthy();
   if (!mainLogFile) {
-    t.fail('No main log file created');
+    expect(true).toBe(false);
     return;
   }
   const logFile = path.join(logDir, mainLogFile);
@@ -392,16 +392,16 @@ test.serial('emits canonical contract fields on logs', async (t) => {
   const lines = content.split('\n').filter(Boolean);
   const entry = JSON.parse(lines[lines.length - 1]);
 
-  t.truthy(entry.timestamp);
-  t.is(entry.eventType, 'stream.started');
-  t.is(entry.sessionId, 'session-contract');
-  t.is(entry.provider, 'openai');
-  t.is(entry.model, 'gpt-5');
-  t.false('phase' in entry, 'phase field removed');
-  t.false('category' in entry, 'category field removed');
+  expect(entry.timestamp).toBeTruthy();
+  expect(entry.eventType).toBe('stream.started');
+  expect(entry.sessionId).toBe('session-contract');
+  expect(entry.provider).toBe('openai');
+  expect(entry.model).toBe('gpt-5');
+  expect('phase' in entry).toBe(false);
+  expect('category' in entry).toBe(false);
 });
 
-test.serial('truncates base64 image data in provider.request.started', async (t) => {
+it.sequential('truncates base64 image data in provider.request.started', async () => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -432,11 +432,11 @@ test.serial('truncates base64 image data in provider.request.started', async (t)
   const entry = JSON.parse(lines[lines.length - 1]);
 
   const image = entry.messages[0].content[1].image;
-  t.true(image.length < 500, 'Image data should be truncated');
-  t.true(image.endsWith('... (truncated)'), 'Truncated data should have suffix');
+  expect(image.length < 500).toBe(true);
+  expect(image.endsWith('... (truncated)')).toBe(true);
 });
 
-test.serial('does not truncate base64 image data outside provider.request.started', async (t) => {
+it.sequential('does not truncate base64 image data outside provider.request.started', async () => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -461,9 +461,9 @@ test.serial('does not truncate base64 image data outside provider.request.starte
 
   fs.mkdirSync(logDir, { recursive: true });
   const mainLogFile = findMainLogFile(logDir);
-  t.truthy(mainLogFile);
+  expect(mainLogFile).toBeTruthy();
   if (!mainLogFile) {
-    t.fail('No main log file created');
+    expect(true).toBe(false);
     return;
   }
   const logFile = path.join(logDir, mainLogFile);
@@ -471,10 +471,10 @@ test.serial('does not truncate base64 image data outside provider.request.starte
   const lines = content.split('\n').filter(Boolean);
   const entry = JSON.parse(lines[lines.length - 1]);
 
-  t.is(entry.messages[0].content[1].image, longBase64);
+  expect(entry.messages[0].content[1].image).toBe(longBase64);
 });
 
-test.serial('truncates long provider response text in file logs', async (t) => {
+it.sequential('truncates long provider response text in file logs', async () => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -495,9 +495,9 @@ test.serial('truncates long provider response text in file logs', async (t) => {
 
   fs.mkdirSync(logDir, { recursive: true });
   const mainLogFile = findMainLogFile(logDir);
-  t.truthy(mainLogFile);
+  expect(mainLogFile).toBeTruthy();
   if (!mainLogFile) {
-    t.fail('No main log file created');
+    expect(true).toBe(false);
     return;
   }
 
@@ -506,15 +506,15 @@ test.serial('truncates long provider response text in file logs', async (t) => {
   const lines = content.split('\n').filter(Boolean);
   const entry = JSON.parse(lines[lines.length - 1]);
 
-  t.true(entry.text.length < longText.length);
-  t.true(entry.text.startsWith(': OPENROUTER PROCESSING'));
-  t.true(entry.text.endsWith('data: {"tail":"preserved"}'));
-  t.true(entry.payload.raw.length < longText.length);
-  t.true(entry.payload.raw.startsWith(': OPENROUTER PROCESSING'));
-  t.true(entry.payload.raw.endsWith('data: {"tail":"preserved"}'));
+  expect(entry.text.length < longText.length).toBe(true);
+  expect(entry.text.startsWith(': OPENROUTER PROCESSING')).toBe(true);
+  expect(entry.text.endsWith('data: {"tail":"preserved"}')).toBe(true);
+  expect(entry.payload.raw.length < longText.length).toBe(true);
+  expect(entry.payload.raw.startsWith(': OPENROUTER PROCESSING')).toBe(true);
+  expect(entry.payload.raw.endsWith('data: {"tail":"preserved"}')).toBe(true);
 });
 
-test.serial('respects LOG_CATEGORIES filter while preserving errors', async (t) => {
+it.sequential('respects LOG_CATEGORIES filter while preserving errors', async () => {
   const originalCategories = process.env.LOG_CATEGORIES;
   process.env.LOG_CATEGORIES = 'retry';
 
@@ -534,9 +534,9 @@ test.serial('respects LOG_CATEGORIES filter while preserving errors', async (t) 
 
     fs.mkdirSync(logDir, { recursive: true });
     const mainLogFile = findMainLogFile(logDir);
-    t.truthy(mainLogFile);
+    expect(mainLogFile).toBeTruthy();
     if (!mainLogFile) {
-      t.fail('No main log file created');
+      expect(true).toBe(false);
       return;
     }
     const logFile = path.join(logDir, mainLogFile);
@@ -546,9 +546,9 @@ test.serial('respects LOG_CATEGORIES filter while preserving errors', async (t) 
       .filter(Boolean)
       .map((line) => JSON.parse(line));
 
-    t.true(entries.some((entry) => entry.eventType === 'retry.upstream'));
-    t.true(entries.some((entry) => entry.eventType === 'stream.failed'));
-    t.false(entries.some((entry) => entry.eventType === 'tool_call.execution_started'));
+    expect(entries.some((entry) => entry.eventType === 'retry.upstream')).toBe(true);
+    expect(entries.some((entry) => entry.eventType === 'stream.failed')).toBe(true);
+    expect(entries.some((entry) => entry.eventType === 'tool_call.execution_started')).toBe(false);
   } finally {
     if (originalCategories === undefined) {
       delete process.env.LOG_CATEGORIES;

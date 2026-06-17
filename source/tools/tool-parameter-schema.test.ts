@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createFindFilesToolDefinition } from './file/find-files.js';
 import { createReadFileToolDefinition } from './file/read-file.js';
 import { createShellToolDefinition } from './system/shell.js';
@@ -21,62 +21,62 @@ const loggingService: ILoggingService = {
   clearCorrelationId: () => {},
 };
 
-test('find_files schema uses optional params instead of nullable', (t) => {
+it('find_files schema uses optional params instead of nullable', () => {
   const tool = createFindFilesToolDefinition();
 
-  t.true(tool.parameters.safeParse({ pattern: '*.ts' }).success);
-  t.false(tool.parameters.safeParse({ pattern: '*.ts', path: null }).success);
-  t.false(tool.parameters.safeParse({ pattern: '*.ts', max_results: null }).success);
+  expect(tool.parameters.safeParse({ pattern: '*.ts' }).success).toBe(true);
+  expect(tool.parameters.safeParse({ pattern: '*.ts', path: null }).success).toBe(false);
+  expect(tool.parameters.safeParse({ pattern: '*.ts', max_results: null }).success).toBe(false);
 });
 
-test('read_file schema uses optional line params instead of nullable', (t) => {
+it('read_file schema uses optional line params instead of nullable', () => {
   const tool = createReadFileToolDefinition();
 
-  t.true(tool.parameters.safeParse({ path: 'README.md' }).success);
-  t.false(tool.parameters.safeParse({ path: 'README.md', start_line: null }).success);
-  t.false(tool.parameters.safeParse({ path: 'README.md', end_line: null }).success);
+  expect(tool.parameters.safeParse({ path: 'README.md' }).success).toBe(true);
+  expect(tool.parameters.safeParse({ path: 'README.md', start_line: null }).success).toBe(false);
+  expect(tool.parameters.safeParse({ path: 'README.md', end_line: null }).success).toBe(false);
 });
 
-test('shell schema uses optional params instead of nullable', (t) => {
+it('shell schema uses optional params instead of nullable', () => {
   const tool = createShellToolDefinition({
     loggingService,
     settingsService: createMockSettingsService(),
   });
 
-  t.true(tool.parameters.safeParse({ command: 'echo hi' }).success);
-  t.false(tool.parameters.safeParse({ command: 'echo hi', timeout_ms: null }).success);
-  t.false(tool.parameters.safeParse({ command: 'echo hi', max_output_length: null }).success);
+  expect(tool.parameters.safeParse({ command: 'echo hi' }).success).toBe(true);
+  expect(tool.parameters.safeParse({ command: 'echo hi', timeout_ms: null }).success).toBe(false);
+  expect(tool.parameters.safeParse({ command: 'echo hi', max_output_length: null }).success).toBe(false);
 });
 
-test('grep schema uses optional file_pattern instead of nullable', (t) => {
+it('grep schema uses optional file_pattern instead of nullable', () => {
   const tool = createGrepToolDefinition();
 
-  t.true(tool.parameters.safeParse({ pattern: 'foo', path: '.' }).success);
-  t.false(tool.parameters.safeParse({ pattern: 'foo', path: '.', file_pattern: null }).success);
+  expect(tool.parameters.safeParse({ pattern: 'foo', path: '.' }).success).toBe(true);
+  expect(tool.parameters.safeParse({ pattern: 'foo', path: '.', file_pattern: null }).success).toBe(false);
 });
 
-test('web_fetch schema uses optional continuation_token instead of nullable', (t) => {
+it('web_fetch schema uses optional continuation_token instead of nullable', () => {
   const tool = createWebFetchToolDefinition({
     settingsService: createMockSettingsService(),
     loggingService,
   });
 
-  t.true(tool.parameters.safeParse({ url: 'https://example.com' }).success);
-  t.true(tool.parameters.safeParse({ url: 'https://example.com', max_chars: 5000 }).success);
-  t.false(tool.parameters.safeParse({ url: 'https://example.com', max_chars: null }).success);
-  t.true(tool.parameters.safeParse({ url: 'https://example.com', heading: ['Intro'] }).success);
-  t.false(tool.parameters.safeParse({ url: 'https://example.com', heading: null }).success);
-  t.false(tool.parameters.safeParse({ url: 'https://example.com', continuation_token: null }).success);
+  expect(tool.parameters.safeParse({ url: 'https://example.com' }).success).toBe(true);
+  expect(tool.parameters.safeParse({ url: 'https://example.com', max_chars: 5000 }).success).toBe(true);
+  expect(tool.parameters.safeParse({ url: 'https://example.com', max_chars: null }).success).toBe(false);
+  expect(tool.parameters.safeParse({ url: 'https://example.com', heading: ['Intro'] }).success).toBe(true);
+  expect(tool.parameters.safeParse({ url: 'https://example.com', heading: null }).success).toBe(false);
+  expect(tool.parameters.safeParse({ url: 'https://example.com', continuation_token: null }).success).toBe(false);
 });
 
-test('ask_mentor schema uses optional context instead of nullable', (t) => {
+it('ask_mentor schema uses optional context instead of nullable', () => {
   const tool = createAskMentorToolDefinition(async () => 'ok');
 
-  t.true(tool.parameters.safeParse({ question: 'How?' }).success);
-  t.false(tool.parameters.safeParse({ question: 'How?', context: null }).success);
+  expect(tool.parameters.safeParse({ question: 'How?' }).success).toBe(true);
+  expect(tool.parameters.safeParse({ question: 'How?', context: null }).success).toBe(false);
 });
 
-test('search_replace schema validates path and replacements array structure', (t) => {
+it('search_replace schema validates path and replacements array structure', () => {
   const tool = createSearchReplaceToolDefinition({
     loggingService,
     settingsService: createMockSettingsService(),
@@ -86,56 +86,60 @@ test('search_replace schema validates path and replacements array structure', (t
     path: 'a.ts',
     replacements: [{ search_content: 'old', replace_content: 'new' }],
   });
-  t.true(omittedMatchAll.success);
+  expect(omittedMatchAll.success).toBe(true);
   if (omittedMatchAll.success) {
     const parsed = omittedMatchAll.data as {
       replacements: Array<{ match_all: boolean }>;
     };
-    t.false(parsed.replacements[0].match_all);
+    expect(parsed.replacements[0].match_all).toBe(false);
   }
-  t.true(
+  expect(
     tool.parameters.safeParse({
       path: 'a.ts',
       replacements: [{ search_content: 'old', replace_content: 'new', match_all: true }],
     }).success,
-  );
-  t.false(
+  ).toBe(true);
+  expect(
     tool.parameters.safeParse({
       path: 'a.ts',
       replacements: [],
     }).success,
-  );
-  t.false(
+  ).toBe(false);
+  expect(
     tool.parameters.safeParse({
       path: 'a.ts',
       replacements: [{ search_content: null, replace_content: 'new' }],
     }).success,
-  );
-  t.false(
+  ).toBe(false);
+  expect(
     tool.parameters.safeParse({
       path: 'a.ts',
       replacements: [{ search_content: 'old', replace_content: 'new', match_all: null }],
     }).success,
-  );
+  ).toBe(false);
 });
 
-test('read_code_outline schema requires path and rejects null', (t) => {
+it('read_code_outline schema requires path and rejects null', () => {
   const tool = createReadCodeOutlineToolDefinition();
 
-  t.true(tool.parameters.safeParse({ path: 'source/app.tsx' }).success);
-  t.false(tool.parameters.safeParse({}).success);
-  t.false(tool.parameters.safeParse({ path: null }).success);
+  expect(tool.parameters.safeParse({ path: 'source/app.tsx' }).success).toBe(true);
+  expect(tool.parameters.safeParse({}).success).toBe(false);
+  expect(tool.parameters.safeParse({ path: null }).success).toBe(false);
 });
 
-test('code_context_search schema uses query-specific optional params instead of nullable', (t) => {
+it('code_context_search schema uses query-specific optional params instead of nullable', () => {
   const tool = createCodeContextSearchToolDefinition();
 
-  t.true(tool.parameters.safeParse({ query_type: 'related', path: 'source/app.tsx' }).success);
-  t.false(tool.parameters.safeParse({ query_type: 'related' }).success);
-  t.false(tool.parameters.safeParse({ query_type: 'related', path: null }).success);
-  t.false(tool.parameters.safeParse({ query_type: 'related', path: 'source/app.tsx', max_results: null }).success);
-  t.true(tool.parameters.safeParse({ query_type: 'symbol', symbol: 'getAgentDefinition' }).success);
-  t.false(tool.parameters.safeParse({ query_type: 'symbol' }).success);
-  t.false(tool.parameters.safeParse({ query_type: 'symbol', symbol: null }).success);
-  t.false(tool.parameters.safeParse({ query_type: 'symbol', symbol: 'getAgentDefinition', max_results: null }).success);
+  expect(tool.parameters.safeParse({ query_type: 'related', path: 'source/app.tsx' }).success).toBe(true);
+  expect(tool.parameters.safeParse({ query_type: 'related' }).success).toBe(false);
+  expect(tool.parameters.safeParse({ query_type: 'related', path: null }).success).toBe(false);
+  expect(tool.parameters.safeParse({ query_type: 'related', path: 'source/app.tsx', max_results: null }).success).toBe(
+    false,
+  );
+  expect(tool.parameters.safeParse({ query_type: 'symbol', symbol: 'getAgentDefinition' }).success).toBe(true);
+  expect(tool.parameters.safeParse({ query_type: 'symbol' }).success).toBe(false);
+  expect(tool.parameters.safeParse({ query_type: 'symbol', symbol: null }).success).toBe(false);
+  expect(
+    tool.parameters.safeParse({ query_type: 'symbol', symbol: 'getAgentDefinition', max_results: null }).success,
+  ).toBe(false);
 });

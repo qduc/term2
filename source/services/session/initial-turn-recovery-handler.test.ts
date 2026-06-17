@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
 import { TurnAttempt } from './turn-attempt.js';
 
@@ -17,7 +17,7 @@ function createAttempt() {
   });
 }
 
-test('presents and applies a recoverable retry decision', async (t) => {
+it('presents and applies a recoverable retry decision', async () => {
   const nextCounts = {
     transientRetryCount: 1,
     serviceTierFallbackCount: 0,
@@ -67,15 +67,15 @@ test('presents and applies a recoverable retry decision', async (t) => {
     next = await iterator.next();
   }
 
-  t.deepEqual(events, [{ type: 'retry', attempt: 1, maxAttempts: 3, delayMs: 25 }]);
-  t.is(next.value.kind, 'run');
+  expect(events).toEqual([{ type: 'retry', attempt: 1, maxAttempts: 3, delayMs: 25 }]);
+  expect(next.value.kind).toBe('run');
   if (next.value.kind === 'run') {
-    t.is(next.value.delayMs, 25);
+    expect(next.value.delayMs).toBe(25);
   }
-  t.deepEqual(attempt.retryCounts, nextCounts);
+  expect(attempt.retryCounts).toEqual(nextCounts);
 });
 
-test('returns stale before classifying when the generation is outdated', async (t) => {
+it('returns stale before classifying when the generation is outdated', async () => {
   const handler = new InitialTurnRecoveryHandler({
     conversationStore: {} as any,
     freshStartRetriesAllowed: true,
@@ -84,7 +84,7 @@ test('returns stale before classifying when the generation is outdated', async (
     logger: {} as any,
     recoveryExecutor: {} as any,
     recoveryPolicy: {} as any,
-    retryClassifier: { classify: () => t.fail() } as any,
+    retryClassifier: { classify: () => expect(true).toBe(false) } as any,
     retryEventPresenter: {} as any,
     sessionId: 'session-1',
   });
@@ -92,6 +92,6 @@ test('returns stale before classifying when the generation is outdated', async (
   const iterator = handler.handle({ error: new Error('stale'), attempt: createAttempt(), stream: null });
   const result = await iterator.next();
 
-  t.true(result.done);
-  t.deepEqual(result.value, { kind: 'stale' });
+  expect(result.done).toBe(true);
+  expect(result.value).toEqual({ kind: 'stale' });
 });

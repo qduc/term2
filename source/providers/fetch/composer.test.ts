@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { composeFetch, FetchMiddleware } from './compose.js';
 import { createLoggingMiddleware, CreateLoggingMiddlewareOptions } from './logging-middleware.js';
 import { createProviderFetch } from './composer.js';
@@ -10,7 +10,7 @@ import type { ISessionContextService } from '../../services/service-interfaces.j
 // composeFetch tests
 // ---------------------------------------------------------------------------
 
-test('composeFetch runs middlewares in correct order', async (t) => {
+it('composeFetch runs middlewares in correct order', async () => {
   const order: string[] = [];
 
   const middleware1: FetchMiddleware = async (ctx, next) => {
@@ -34,17 +34,17 @@ test('composeFetch runs middlewares in correct order', async (t) => {
   const composed = composeFetch(baseFetch, [middleware1, middleware2]);
 
   const res = await composed('https://example.test/');
-  t.is(res.status, 200);
-  t.deepEqual(order, ['mw1 enter', 'mw2 enter', 'baseFetch', 'mw2 exit', 'mw1 exit']);
+  expect(res.status).toBe(200);
+  expect(order).toEqual(['mw1 enter', 'mw2 enter', 'baseFetch', 'mw2 exit', 'mw1 exit']);
 });
 
-test('composeFetch with no middlewares returns baseFetch unchanged', async (t) => {
+it('composeFetch with no middlewares returns baseFetch unchanged', async () => {
   const baseFetch: typeof fetch = async () => new Response('ok', { status: 200 });
   const composed = composeFetch(baseFetch, []);
-  t.is(await composed('https://example.test/').then((r) => r.text()), 'ok');
+  expect(await composed('https://example.test/').then((r) => r.text())).toBe('ok');
 });
 
-test('composeFetch allows middlewares to mutate ctx (url and init)', async (t) => {
+it('composeFetch allows middlewares to mutate ctx (url and init)', async () => {
   const captured: Array<{ url: RequestInfo | URL; init?: RequestInit }> = [];
 
   const urlRewriter: FetchMiddleware = async (ctx, next) => {
@@ -65,13 +65,13 @@ test('composeFetch allows middlewares to mutate ctx (url and init)', async (t) =
   const composed = composeFetch(baseFetch, [urlRewriter, headerInjector]);
   await composed('https://original.test/', { method: 'POST' });
 
-  t.is(captured.length, 1);
-  t.is(captured[0]!.url, 'https://rewritten.test/');
-  t.deepEqual(captured[0]!.init?.headers, { 'x-custom': 'yes' });
-  t.is(captured[0]!.init?.method, 'POST');
+  expect(captured.length).toBe(1);
+  expect(captured[0]!.url).toBe('https://rewritten.test/');
+  expect(captured[0]!.init?.headers).toEqual({ 'x-custom': 'yes' });
+  expect(captured[0]!.init?.method).toBe('POST');
 });
 
-test('composeFetch propagates error from middleware', async (t) => {
+it('composeFetch propagates error from middleware', async () => {
   const errorMw: FetchMiddleware = async () => {
     throw new Error('middleware error');
   };
@@ -79,38 +79,35 @@ test('composeFetch propagates error from middleware', async (t) => {
   const baseFetch: typeof fetch = async () => new Response('ok', { status: 200 });
   const composed = composeFetch(baseFetch, [errorMw]);
 
-  await t.throwsAsync(() => composed('https://example.test/'), {
-    message: 'middleware error',
-  });
+  await expect(() => composed('https://example.test/')).rejects.toThrow('middleware error');
 });
 
-test('composeFetch propagates error from baseFetch', async (t) => {
+it('composeFetch propagates error from baseFetch', async () => {
   const baseFetch: typeof fetch = async () => {
     throw new Error('base fetch error');
   };
 
   const composed = composeFetch(baseFetch, []);
-  await t.throwsAsync(() => composed('https://example.test/'), {
-    message: 'base fetch error',
-  });
+
+  await expect(() => composed('https://example.test/')).rejects.toThrow('base fetch error');
 });
 
 // ---------------------------------------------------------------------------
 // createRateLimitMiddleware tests
 // ---------------------------------------------------------------------------
 
-test('createRateLimitMiddleware passes through non-429 responses', async (t) => {
+it('createRateLimitMiddleware passes through non-429 responses', async () => {
   const middleware = createRateLimitMiddleware();
 
   const baseFetch: typeof fetch = async () => new Response('ok', { status: 200 });
   const composed = composeFetch(baseFetch, [middleware]);
 
   const res = await composed('https://example.test/');
-  t.is(res.status, 200);
-  t.is(await res.text(), 'ok');
+  expect(res.status).toBe(200);
+  expect(await res.text()).toBe('ok');
 });
 
-test('createRateLimitMiddleware passes through 429 with retry-after <= 60s', async (t) => {
+it('createRateLimitMiddleware passes through 429 with retry-after <= 60s', async () => {
   const middleware = createRateLimitMiddleware();
 
   const baseFetch: typeof fetch = async () =>
@@ -118,21 +115,21 @@ test('createRateLimitMiddleware passes through 429 with retry-after <= 60s', asy
   const composed = composeFetch(baseFetch, [middleware]);
 
   const res = await composed('https://example.test/');
-  t.is(res.status, 429);
-  t.is(await res.text(), 'rate limited');
+  expect(res.status).toBe(429);
+  expect(await res.text()).toBe('rate limited');
 });
 
-test('createRateLimitMiddleware passes through 429 with no retry-after header', async (t) => {
+it('createRateLimitMiddleware passes through 429 with no retry-after header', async () => {
   const middleware = createRateLimitMiddleware();
 
   const baseFetch: typeof fetch = async () => new Response('rate limited', { status: 429 });
   const composed = composeFetch(baseFetch, [middleware]);
 
   const res = await composed('https://example.test/');
-  t.is(res.status, 429);
+  expect(res.status).toBe(429);
 });
 
-test('createRateLimitMiddleware returns 429 with x-should-retry: false when retry-after > 60s (seconds)', async (t) => {
+it('createRateLimitMiddleware returns 429 with x-should-retry: false when retry-after > 60s (seconds)', async () => {
   const middleware = createRateLimitMiddleware();
 
   const baseFetch: typeof fetch = async () =>
@@ -140,11 +137,11 @@ test('createRateLimitMiddleware returns 429 with x-should-retry: false when retr
   const composed = composeFetch(baseFetch, [middleware]);
 
   const res = await composed('https://example.test/');
-  t.is(res.status, 429);
-  t.is(res.headers.get('x-should-retry'), 'false');
+  expect(res.status).toBe(429);
+  expect(res.headers.get('x-should-retry')).toBe('false');
 });
 
-test('createRateLimitMiddleware returns 429 with x-should-retry: false when retry-after > 60s (HTTP-date)', async (t) => {
+it('createRateLimitMiddleware returns 429 with x-should-retry: false when retry-after > 60s (HTTP-date)', async () => {
   const middleware = createRateLimitMiddleware();
 
   const futureDate = new Date(Date.now() + 90_000); // 90s from now
@@ -156,11 +153,11 @@ test('createRateLimitMiddleware returns 429 with x-should-retry: false when retr
   const composed = composeFetch(baseFetch, [middleware]);
 
   const res = await composed('https://example.test/');
-  t.is(res.status, 429);
-  t.is(res.headers.get('x-should-retry'), 'false');
+  expect(res.status).toBe(429);
+  expect(res.headers.get('x-should-retry')).toBe('false');
 });
 
-test('createRateLimitMiddleware passes through 429 with invalid retry-after', async (t) => {
+it('createRateLimitMiddleware passes through 429 with invalid retry-after', async () => {
   const middleware = createRateLimitMiddleware();
 
   const baseFetch: typeof fetch = async () =>
@@ -168,11 +165,11 @@ test('createRateLimitMiddleware passes through 429 with invalid retry-after', as
   const composed = composeFetch(baseFetch, [middleware]);
 
   const res = await composed('https://example.test/');
-  t.is(res.status, 429);
-  t.is(await res.text(), 'rate limited');
+  expect(res.status).toBe(429);
+  expect(await res.text()).toBe('rate limited');
 });
 
-test('createProviderFetch with rate-limit middleware returns 429 with x-should-retry: false on retry-after > 60s', async (t) => {
+it('createProviderFetch with rate-limit middleware returns 429 with x-should-retry: false on retry-after > 60s', async () => {
   const composed = createProviderFetch({
     providerId: 'openai',
     defaultModel: 'gpt-4',
@@ -187,11 +184,11 @@ test('createProviderFetch with rate-limit middleware returns 429 with x-should-r
     method: 'POST',
     body: JSON.stringify({ model: 'gpt-4', messages: [] }),
   });
-  t.is(res.status, 429);
-  t.is(res.headers.get('x-should-retry'), 'false');
+  expect(res.status).toBe(429);
+  expect(res.headers.get('x-should-retry')).toBe('false');
 });
 
-test('createProviderFetch long retry-after 429 is logged and response returned with x-should-retry: false', async (t) => {
+it('createProviderFetch long retry-after 429 is logged and response returned with x-should-retry: false', async () => {
   const logs: Array<{ message: string; meta: any }> = [];
 
   const composed = createProviderFetch({
@@ -215,14 +212,14 @@ test('createProviderFetch long retry-after 429 is logged and response returned w
     method: 'POST',
     body: JSON.stringify({ model: 'gpt-4', messages: [] }),
   });
-  t.is(res.status, 429);
-  t.is(res.headers.get('x-should-retry'), 'false');
+  expect(res.status).toBe(429);
+  expect(res.headers.get('x-should-retry')).toBe('false');
 
   // Allow fire-and-forget to flush
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   const requestLog = logs.find((l) => l.message === 'openai ai sdk request');
-  t.truthy(requestLog);
+  expect(requestLog).toBeTruthy();
 });
 
 // ---------------------------------------------------------------------------
@@ -247,7 +244,7 @@ function makeSessionContextService(context: ReturnType<ISessionContextService['g
   };
 }
 
-test('createLoggingMiddleware logs request started and response received', async (t) => {
+it('createLoggingMiddleware logs request started and response received', async () => {
   const logs: Array<{ message: string; meta: any }> = [];
 
   const middleware = createLoggingMiddleware({
@@ -292,15 +289,15 @@ test('createLoggingMiddleware logs request started and response received', async
     }),
   });
 
-  t.is(response.status, 200);
+  expect(response.status).toBe(200);
   await response.text();
   // Allow fire-and-forget log to flush
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  t.is(logs.length, 2, 'expected request + response log');
+  expect(logs.length, 'expected request + response log').toBe(2);
 
   // Check request log
-  t.like(logs[0], {
+  expect(logs[0]).toMatchObject({
     message: 'openrouter ai sdk request',
     meta: {
       eventType: 'provider.request.started',
@@ -312,15 +309,15 @@ test('createLoggingMiddleware logs request started and response received', async
       toolsCount: 1,
     },
   });
-  t.deepEqual(logs[0].meta.messages, [{ role: 'user', content: 'hi' }]);
-  t.deepEqual(logs[0].meta.headers, {
+  expect(logs[0].meta.messages).toEqual([{ role: 'user', content: 'hi' }]);
+  expect(logs[0].meta.headers).toEqual({
     'content-type': 'application/json',
     authorization: '[REDACTED]',
     'x-custom-test': 'ok',
   });
 
   // Check response log
-  t.like(logs[1], {
+  expect(logs[1]).toMatchObject({
     message: 'openrouter ai sdk response',
     meta: {
       eventType: 'provider.response.received',
@@ -331,12 +328,12 @@ test('createLoggingMiddleware logs request started and response received', async
       status: 200,
     },
   });
-  t.is(logs[1].meta.text, 'hello');
-  t.truthy(logs[0].meta.requestId);
-  t.is(logs[0].meta.requestId, logs[1].meta.requestId);
+  expect(logs[1].meta.text).toBe('hello');
+  expect(logs[0].meta.requestId).toBeTruthy();
+  expect(logs[0].meta.requestId).toBe(logs[1].meta.requestId);
 });
 
-test('createLoggingMiddleware logs response failed on error', async (t) => {
+it('createLoggingMiddleware logs response failed on error', async () => {
   const logs: Array<{ message: string; meta: any }> = [];
 
   const middleware = createLoggingMiddleware({
@@ -364,23 +361,21 @@ test('createLoggingMiddleware logs response failed on error', async (t) => {
 
   const composed = composeFetch(baseFetch, [middleware]);
 
-  await t.throwsAsync(
-    () =>
-      composed('https://api.example.test/chat/completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'test-model',
-          messages: [{ role: 'user', content: 'hi' }],
-        }),
+  await expect(() =>
+    composed('https://api.example.test/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({
+        model: 'test-model',
+        messages: [{ role: 'user', content: 'hi' }],
       }),
-    { instanceOf: TypeError },
-  );
+    }),
+  ).rejects.toThrow(TypeError);
 
   // Allow fire-and-forget to flush (nothing expected after error, but let it settle)
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  t.is(logs.length, 2);
-  t.like(logs[0], {
+  expect(logs.length).toBe(2);
+  expect(logs[0]).toMatchObject({
     message: 'openrouter ai sdk request',
     meta: {
       eventType: 'provider.request.started',
@@ -388,7 +383,7 @@ test('createLoggingMiddleware logs response failed on error', async (t) => {
       model: 'test-model',
     },
   });
-  t.like(logs[1], {
+  expect(logs[1]).toMatchObject({
     message: 'openrouter ai sdk request failed',
     meta: {
       eventType: 'provider.response.failed',
@@ -396,10 +391,10 @@ test('createLoggingMiddleware logs response failed on error', async (t) => {
       model: 'test-model',
     },
   });
-  t.is(logs[0].meta.requestId, logs[1].meta.requestId);
+  expect(logs[0].meta.requestId).toBe(logs[1].meta.requestId);
 });
 
-test('createLoggingMiddleware uses evaluator event prefix when traffic context has evaluator flag', async (t) => {
+it('createLoggingMiddleware uses evaluator event prefix when traffic context has evaluator flag', async () => {
   const logs: Array<{ message: string; meta: any }> = [];
 
   const middleware = createLoggingMiddleware({
@@ -428,11 +423,11 @@ test('createLoggingMiddleware uses evaluator event prefix when traffic context h
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  t.is(logs[0].meta.eventType, 'evaluator.request.started');
-  t.is(logs[1].meta.eventType, 'evaluator.response.received');
+  expect(logs[0].meta.eventType).toBe('evaluator.request.started');
+  expect(logs[1].meta.eventType).toBe('evaluator.response.received');
 });
 
-test('createLoggingMiddleware uses request model from body over default model', async (t) => {
+it('createLoggingMiddleware uses request model from body over default model', async () => {
   const logs: Array<{ message: string; meta: any }> = [];
 
   const middleware = createLoggingMiddleware({
@@ -464,15 +459,15 @@ test('createLoggingMiddleware uses request model from body over default model', 
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  t.is(logs[0].meta.model, 'gpt-4');
-  t.is(logs[1].meta.model, 'gpt-4');
+  expect(logs[0].meta.model).toBe('gpt-4');
+  expect(logs[1].meta.model).toBe('gpt-4');
 });
 
 // ---------------------------------------------------------------------------
 // createProviderFetch tests
 // ---------------------------------------------------------------------------
 
-test('createProviderFetch injects the logging and rate-limit middlewares', async (t) => {
+it('createProviderFetch injects the logging and rate-limit middlewares', async () => {
   const logs: Array<{ message: string; meta: any }> = [];
   const mwOrder: string[] = [];
 
@@ -515,16 +510,16 @@ test('createProviderFetch injects the logging and rate-limit middlewares', async
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   // Custom middleware ran before logging (outermost runs first)
-  t.deepEqual(mwOrder, ['custom']);
+  expect(mwOrder).toEqual(['custom']);
 
   // Logging still fires
-  t.true(logs.length >= 2);
-  t.like(logs[0], {
+  expect(logs.length >= 2).toBe(true);
+  expect(logs[0]).toMatchObject({
     message: 'openrouter ai sdk request',
   });
 });
 
-test('createProviderFetch with dynamic header injection middleware', async (t) => {
+it('createProviderFetch with dynamic header injection middleware', async () => {
   let capturedHeaders: any = null;
 
   const headerInjector: FetchMiddleware = async (ctx, next) => {
@@ -561,7 +556,7 @@ test('createProviderFetch with dynamic header injection middleware', async (t) =
     body: JSON.stringify({ model: 'gpt-4', messages: [] }),
   });
 
-  t.truthy(capturedHeaders);
+  expect(capturedHeaders).toBeTruthy();
   // Normalize headers to record
   const headersRecord: Record<string, string> = {};
   if (capturedHeaders instanceof Headers) {
@@ -576,11 +571,11 @@ test('createProviderFetch with dynamic header injection middleware', async (t) =
     Object.assign(headersRecord, capturedHeaders);
   }
 
-  t.is(headersRecord['x-dynamic'], 'injected');
-  t.is(headersRecord['existing-header'], 'keep');
+  expect(headersRecord['x-dynamic']).toBe('injected');
+  expect(headersRecord['existing-header']).toBe('keep');
 });
 
-test('createProviderFetch fetchImpl parameter works', async (t) => {
+it('createProviderFetch fetchImpl parameter works', async () => {
   let called = false;
 
   const mockFetch: typeof fetch = async () => {
@@ -603,12 +598,12 @@ test('createProviderFetch fetchImpl parameter works', async (t) => {
     body: JSON.stringify({ model: 'gpt-4', messages: [] }),
   });
 
-  t.true(called);
-  t.is(res.status, 201);
-  t.is(await res.text(), 'mock');
+  expect(called).toBe(true);
+  expect(res.status).toBe(201);
+  expect(await res.text()).toBe('mock');
 });
 
-test('createProviderFetch exposes logging middleware types correctly', async (t) => {
+it('createProviderFetch exposes logging middleware types correctly', async () => {
   // Type-level test: ensure the options type is compatible
   const loggingService: CreateLoggingMiddlewareOptions['loggingService'] = {
     debug: () => {},
@@ -624,10 +619,10 @@ test('createProviderFetch exposes logging middleware types correctly', async (t)
   });
 
   const res = await composed('https://example.test/');
-  t.is(res.status, 200);
+  expect(res.status).toBe(200);
 });
 
-test('createProviderFetch handles null session context gracefully', async (t) => {
+it('createProviderFetch handles null session context gracefully', async () => {
   const composed = createProviderFetch({
     providerId: 'test',
     defaultModel: 'test-model',
@@ -650,10 +645,10 @@ test('createProviderFetch handles null session context gracefully', async (t) =>
     method: 'POST',
     body: JSON.stringify({ model: 'test-model', messages: [] }),
   });
-  t.is(res.status, 200);
+  expect(res.status).toBe(200);
 });
 
-test('createLoggingMiddleware handles error in fire-and-forget logging gracefully', async (t) => {
+it('createLoggingMiddleware handles error in fire-and-forget logging gracefully', async () => {
   const logs: Array<{ message: string; meta: any }> = [];
 
   // Middleware with a logging service that returns a broken response that
@@ -693,14 +688,14 @@ test('createLoggingMiddleware handles error in fire-and-forget logging gracefull
     method: 'POST',
     body: JSON.stringify({ model: 'test-model', messages: [] }),
   });
-  t.is(res.status, 200);
+  expect(res.status).toBe(200);
 
   // Allow fire-and-forget to flush
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   // The request log should be present
-  t.true(logs.length >= 1);
-  t.like(logs[0], {
+  expect(logs.length >= 1).toBe(true);
+  expect(logs[0]).toMatchObject({
     message: 'openai ai sdk request',
   });
 });

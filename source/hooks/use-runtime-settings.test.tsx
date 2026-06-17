@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -13,7 +13,7 @@ const flushEffects = async () => {
   await Promise.resolve();
 };
 
-test.serial('useRuntimeSettings routes agent.provider changes through switchProvider', async (t) => {
+it.sequential('useRuntimeSettings routes agent.provider changes through switchProvider', async () => {
   const calls: string[] = [];
   const settingsService = createMockSettingsService({
     'agent.provider': 'openai',
@@ -43,8 +43,8 @@ test.serial('useRuntimeSettings routes agent.provider changes through switchProv
     return <Text>runtime</Text>;
   };
 
-  await renderInAct(<Harness />, t);
+  await renderInAct(<Harness />);
   await flushEffects();
 
-  t.deepEqual(calls, ['switch:openrouter']);
+  expect(calls).toEqual(['switch:openrouter']);
 });

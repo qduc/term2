@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,22 +11,20 @@ import {
   validateRunnerOptions,
 } from './runner-utils.js';
 
-test('getReportPath produces a distinct markdown path for json and extensionless outputs', (t) => {
-  t.is(getReportPath('eval/auto-approval/results.json'), 'eval/auto-approval/results.md');
-  t.is(getReportPath('eval/auto-approval/results'), 'eval/auto-approval/results.md');
+it('getReportPath produces a distinct markdown path for json and extensionless outputs', () => {
+  expect(getReportPath('eval/auto-approval/results.json')).toBe('eval/auto-approval/results.md');
+  expect(getReportPath('eval/auto-approval/results')).toBe('eval/auto-approval/results.md');
 });
 
-test('validateRunnerOptions rejects non-positive concurrency and repeat values', (t) => {
-  t.notThrows(() => validateRunnerOptions({ concurrency: 1, repeat: 1 }));
-  t.throws(() => validateRunnerOptions({ concurrency: 0, repeat: 1 }), {
-    message: /--concurrency/,
-  });
-  t.throws(() => validateRunnerOptions({ concurrency: 1, repeat: 0 }), {
-    message: /--repeat/,
-  });
+it('validateRunnerOptions rejects non-positive concurrency and repeat values', () => {
+  expect(() => validateRunnerOptions({ concurrency: 1, repeat: 1 }));
+
+  expect(() => validateRunnerOptions({ concurrency: 0, repeat: 1 })).toThrow(/--concurrency/);
+
+  expect(() => validateRunnerOptions({ concurrency: 1, repeat: 0 })).toThrow(/--repeat/);
 });
 
-test('createCacheKey includes evaluator version to invalidate stale cached decisions', (t) => {
+it('createCacheKey includes evaluator version to invalidate stale cached decisions', () => {
   const key = createCacheKey({
     model: 'gpt-4o-mini',
     provider: 'openai',
@@ -35,11 +33,11 @@ test('createCacheKey includes evaluator version to invalidate stale cached decis
     history: [{ role: 'user', content: 'list files' }],
   });
 
-  t.is(key.version, EVAL_CACHE_VERSION);
-  t.is(key.promptVersion, 'auto-approval-prompt-v1');
+  expect(key.version).toBe(EVAL_CACHE_VERSION);
+  expect(key.promptVersion).toBe('auto-approval-prompt-v1');
 });
 
-test('createCacheKey changes when prompt version changes', (t) => {
+it('createCacheKey changes when prompt version changes', () => {
   const base = {
     model: 'gpt-4o-mini',
     provider: 'openai',
@@ -47,13 +45,12 @@ test('createCacheKey changes when prompt version changes', (t) => {
     history: [{ role: 'user', content: 'list files' }],
   };
 
-  t.notDeepEqual(
-    createCacheKey({ ...base, promptVersion: 'auto-approval-prompt-v1' }),
+  expect(createCacheKey({ ...base, promptVersion: 'auto-approval-prompt-v1' })).not.toEqual(
     createCacheKey({ ...base, promptVersion: 'auto-approval-prompt-v2' }),
   );
 });
 
-test('loadModelRunsFromYaml expands provider keys into ordered provider/model pairs', (t) => {
+it('loadModelRunsFromYaml expands provider keys into ordered provider/model pairs', () => {
   const dir = mkdtempSync(join(tmpdir(), 'term2-eval-'));
   const yamlPath = join(dir, 'models.yaml');
 
@@ -68,14 +65,14 @@ openrouter:
 `,
   );
 
-  t.deepEqual(loadModelRunsFromYaml(yamlPath), [
+  expect(loadModelRunsFromYaml(yamlPath)).toEqual([
     { provider: 'openai', model: 'gpt-4o' },
     { provider: 'openai', model: 'gpt-4o-mini' },
     { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet' },
   ]);
 });
 
-test('loadModelRunsFromYaml rejects providers without a model list', (t) => {
+it('loadModelRunsFromYaml rejects providers without a model list', () => {
   const dir = mkdtempSync(join(tmpdir(), 'term2-eval-'));
   const yamlPath = join(dir, 'models.yaml');
 
@@ -86,12 +83,10 @@ openai: gpt-4o
 `,
   );
 
-  t.throws(() => loadModelRunsFromYaml(yamlPath), {
-    message: /must map to a list of models/,
-  });
+  expect(() => loadModelRunsFromYaml(yamlPath)).toThrow(/must map to a list of models/);
 });
 
-test('retryOnRateLimit retries twice and respects x-ratelimit-reset before succeeding', async (t) => {
+it('retryOnRateLimit retries twice and respects x-ratelimit-reset before succeeding', async () => {
   let attempts = 0;
   const sleepCalls: number[] = [];
   const now = 1_741_305_599_000;
@@ -117,16 +112,16 @@ test('retryOnRateLimit retries twice and respects x-ratelimit-reset before succe
     now: () => now,
   });
 
-  t.is(result, 'ok');
-  t.is(attempts, 3);
-  t.deepEqual(sleepCalls, [1500, 1500]);
+  expect(result).toBe('ok');
+  expect(attempts).toBe(3);
+  expect(sleepCalls).toEqual([1500, 1500]);
 });
 
-test('retryOnRateLimit rethrows after exhausting retries', async (t) => {
+it('retryOnRateLimit rethrows after exhausting retries', async () => {
   let attempts = 0;
   const sleepCalls: number[] = [];
 
-  const error = await t.throwsAsync(() =>
+  await expect(() =>
     retryOnRateLimit({
       operation: async () => {
         attempts++;
@@ -148,17 +143,16 @@ test('retryOnRateLimit rethrows after exhausting retries', async (t) => {
       },
       now: () => 1_741_305_599_000,
     }),
-  );
+  ).rejects.toThrow();
 
-  t.truthy(error);
-  t.is(attempts, 3);
-  t.deepEqual(sleepCalls, [1000, 1000]);
+  expect(attempts).toBe(3);
+  expect(sleepCalls).toEqual([1000, 1000]);
 });
 
-test('retryOnRateLimit does not retry non-rate-limit errors', async (t) => {
+it('retryOnRateLimit does not retry non-rate-limit errors', async () => {
   let attempts = 0;
 
-  const error = await t.throwsAsync(() =>
+  await expect(() =>
     retryOnRateLimit({
       operation: async () => {
         attempts++;
@@ -169,8 +163,7 @@ test('retryOnRateLimit does not retry non-rate-limit errors', async (t) => {
       maxRetries: 2,
       sleep: async () => {},
     }),
-  );
+  ).rejects.toThrow();
 
-  t.truthy(error);
-  t.is(attempts, 1);
+  expect(attempts).toBe(1);
 });

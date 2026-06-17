@@ -1,5 +1,4 @@
-import test from 'ava';
-
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   AgentSettingsSchema,
   CustomProviderSchema,
@@ -12,23 +11,24 @@ import {
   normalizeAppModes,
 } from './settings-schema.js';
 
-test('agent transport defaults to websocket and is runtime modifiable', (t) => {
-  t.is(DEFAULT_SETTINGS.agent.transport, 'websocket');
-  t.true(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_TRANSPORT));
-  t.is(AgentSettingsSchema.parse({}).transport, 'websocket');
-  t.throws(() => AgentSettingsSchema.parse({ transport: 'fallback' }));
+it('agent transport defaults to websocket and is runtime modifiable', () => {
+  expect(DEFAULT_SETTINGS.agent.transport).toBe('websocket');
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_TRANSPORT)).toBe(true);
+  expect(AgentSettingsSchema.parse({}).transport).toBe('websocket');
+
+  expect(() => AgentSettingsSchema.parse({ transport: 'fallback' })).toThrow();
 });
 
-test('CustomProviderSchema defaults provider type for legacy configs', (t) => {
+it('CustomProviderSchema defaults provider type for legacy configs', () => {
   const parsed = CustomProviderSchema.parse({
     name: 'local',
     baseUrl: 'http://localhost:11434/v1',
   });
 
-  t.is(parsed.type, 'openai-compatible');
+  expect(parsed.type).toBe('openai-compatible');
 });
 
-test('CustomProviderSchema accepts known provider types', (t) => {
+it('CustomProviderSchema accepts known provider types', () => {
   for (const providerType of KNOWN_CUSTOM_PROVIDER_TYPES) {
     const parsed = CustomProviderSchema.parse({
       name: `provider-${providerType}`,
@@ -36,124 +36,116 @@ test('CustomProviderSchema accepts known provider types', (t) => {
       baseUrl: 'http://localhost:11434/v1',
     });
 
-    t.is(parsed.type, providerType);
-    t.true(isKnownCustomProviderType(providerType));
+    expect(parsed.type).toBe(providerType);
+    expect(isKnownCustomProviderType(providerType)).toBe(true);
   }
 });
 
-test('CustomProviderSchema accepts llama.cpp as an OpenAI-compatible provider variant', (t) => {
+it('CustomProviderSchema accepts llama.cpp as an OpenAI-compatible provider variant', () => {
   const parsed = CustomProviderSchema.parse({
     name: 'local',
     type: 'llama.cpp',
     baseUrl: 'http://localhost:11434/v1',
   });
 
-  t.is(parsed.type, 'llama.cpp');
-  t.true(isKnownCustomProviderType('llama.cpp'));
+  expect(parsed.type).toBe('llama.cpp');
+  expect(isKnownCustomProviderType('llama.cpp')).toBe(true);
 });
 
-test('CustomProviderSchema rejects provider types outside the known list', (t) => {
-  const error = t.throws(() =>
+it('CustomProviderSchema rejects provider types outside the known list', () => {
+  expect(() =>
     CustomProviderSchema.parse({
       name: 'local',
       type: 'unknown-provider',
       baseUrl: 'http://localhost:11434/v1',
     }),
-  );
-
-  t.truthy(error);
-  t.false(isKnownCustomProviderType('unknown-provider'));
+  ).toThrow();
+  expect(isKnownCustomProviderType('unknown-provider')).toBe(false);
 });
 
-test('CustomProviderSchema rejects invalid provider type format', (t) => {
-  const error = t.throws(() =>
+it('CustomProviderSchema rejects invalid provider type format', () => {
+  expect(() =>
     CustomProviderSchema.parse({
       name: 'local',
       type: 'bad type!',
       baseUrl: 'http://localhost:11434/v1',
     }),
-  );
-
-  t.truthy(error);
+  ).toThrow();
 });
 
-test('CustomProviderSchema allows anthropic type without baseUrl', (t) => {
+it('CustomProviderSchema allows anthropic type without baseUrl', () => {
   const parsed = CustomProviderSchema.parse({
     name: 'my-anthropic',
     type: 'anthropic',
   });
 
-  t.is(parsed.type, 'anthropic');
-  t.is(parsed.baseUrl, undefined);
+  expect(parsed.type).toBe('anthropic');
+  expect(parsed.baseUrl).toBe(undefined);
 });
 
-test('CustomProviderSchema allows google type without baseUrl', (t) => {
+it('CustomProviderSchema allows google type without baseUrl', () => {
   const parsed = CustomProviderSchema.parse({
     name: 'my-google',
     type: 'google',
   });
 
-  t.is(parsed.type, 'google');
-  t.is(parsed.baseUrl, undefined);
+  expect(parsed.type).toBe('google');
+  expect(parsed.baseUrl).toBe(undefined);
 });
 
-test('CustomProviderSchema rejects openai-compatible type without baseUrl', (t) => {
-  const error = t.throws(() =>
+it('CustomProviderSchema rejects openai-compatible type without baseUrl', () => {
+  expect(() =>
     CustomProviderSchema.parse({
       name: 'local',
       type: 'openai-compatible',
     }),
-  );
-
-  t.truthy(error);
+  ).toThrow();
 });
 
-test('CustomProviderSchema rejects openai type without baseUrl', (t) => {
-  const error = t.throws(() =>
+it('CustomProviderSchema rejects openai type without baseUrl', () => {
+  expect(() =>
     CustomProviderSchema.parse({
       name: 'local',
       type: 'openai',
     }),
-  );
-
-  t.truthy(error);
+  ).toThrow();
 });
 
-test('SettingsSchema includes app.planMode, which defaults to false and is modifiable at runtime', (t) => {
+it('SettingsSchema includes app.planMode, which defaults to false and is modifiable at runtime', () => {
   const parsed = SettingsSchema.parse({ app: {} });
-  t.is(parsed.app?.planMode, false);
+  expect(parsed.app?.planMode).toBe(false);
 
   const parsedTrue = SettingsSchema.parse({ app: { planMode: true } });
-  t.is(parsedTrue.app?.planMode, true);
+  expect(parsedTrue.app?.planMode).toBe(true);
 
-  t.true(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.APP_PLAN_MODE));
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.APP_PLAN_MODE)).toBe(true);
 });
 
-test('SettingsSchema includes app.orchestratorMode, which defaults to false and is modifiable at runtime', (t) => {
+it('SettingsSchema includes app.orchestratorMode, which defaults to false and is modifiable at runtime', () => {
   const parsed = SettingsSchema.parse({ app: {} });
-  t.is(parsed.app?.orchestratorMode, false);
+  expect(parsed.app?.orchestratorMode).toBe(false);
 
   const parsedTrue = SettingsSchema.parse({ app: { orchestratorMode: true } });
-  t.is(parsedTrue.app?.orchestratorMode, true);
+  expect(parsedTrue.app?.orchestratorMode).toBe(true);
 
-  t.true(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.APP_ORCHESTRATOR_MODE));
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.APP_ORCHESTRATOR_MODE)).toBe(true);
 });
 
-test('SettingsSchema includes agent.maxParallelToolCalls, which defaults to 3 and is modifiable at runtime', (t) => {
+it('SettingsSchema includes agent.maxParallelToolCalls, which defaults to 3 and is modifiable at runtime', () => {
   const parsed = SettingsSchema.parse({ agent: {} });
-  t.is(parsed.agent?.maxParallelToolCalls, 3);
+  expect(parsed.agent?.maxParallelToolCalls).toBe(3);
 
   const parsedValue = SettingsSchema.parse({ agent: { maxParallelToolCalls: 6 } });
-  t.is(parsedValue.agent?.maxParallelToolCalls, 6);
+  expect(parsedValue.agent?.maxParallelToolCalls).toBe(6);
 
-  t.true(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS));
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS)).toBe(true);
 });
 
-test('SettingsSchema rejects non-positive agent.maxParallelToolCalls values', (t) => {
-  t.throws(() => SettingsSchema.parse({ agent: { maxParallelToolCalls: 0 } }));
+it('SettingsSchema rejects non-positive agent.maxParallelToolCalls values', () => {
+  expect(() => SettingsSchema.parse({ agent: { maxParallelToolCalls: 0 } })).toThrow();
 });
 
-test('startup normalization: persisted orchestratorMode=true with implicit lite (positional prompt) does not produce liteMode=true', (t) => {
+it('startup normalization: persisted orchestratorMode=true with implicit lite (positional prompt) does not produce liteMode=true', () => {
   // Simulate the cli.tsx startup logic:
   // - persisted/resumed settings have orchestratorMode: true
   // - a positional prompt is provided (hasPositionalPrompt=true, autoApprove=false)
@@ -170,8 +162,8 @@ test('startup normalization: persisted orchestratorMode=true with implicit lite 
     mentorMode: false,
   });
 
-  t.true(result.orchestratorMode, 'orchestratorMode must remain true');
-  t.false(result.liteMode, 'liteMode must be false when orchestratorMode wins');
-  t.false(result.planMode);
-  t.false(result.mentorMode);
+  expect(result.orchestratorMode).toBe(true);
+  expect(result.liteMode).toBe(false);
+  expect(result.planMode).toBe(false);
+  expect(result.mentorMode).toBe(false);
 });

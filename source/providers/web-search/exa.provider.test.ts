@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { exaProvider, isExaConfigured } from './exa.provider.js';
 
 // Helper to create a mock settings service
@@ -19,72 +19,68 @@ const createMockLoggingService = () => ({
   clearCorrelationId: () => {},
 });
 
-test('exaProvider has correct id and label', (t) => {
-  t.is(exaProvider.id, 'exa');
-  t.is(exaProvider.label, 'Exa');
+it('exaProvider has correct id and label', () => {
+  expect(exaProvider.id).toBe('exa');
+  expect(exaProvider.label).toBe('Exa');
 });
 
-test('exaProvider has required methods', (t) => {
-  t.is(typeof exaProvider.search, 'function');
-  t.is(typeof exaProvider.isConfigured, 'function');
+it('exaProvider has required methods', () => {
+  expect(typeof exaProvider.search).toBe('function');
+  expect(typeof exaProvider.isConfigured).toBe('function');
 });
 
-test('exaProvider has sensitiveSettingKeys', (t) => {
-  t.true(Array.isArray(exaProvider.sensitiveSettingKeys));
-  t.true(exaProvider.sensitiveSettingKeys?.includes('webSearch.exa.apiKey'));
+it('exaProvider has sensitiveSettingKeys', () => {
+  expect(Array.isArray(exaProvider.sensitiveSettingKeys)).toBe(true);
+  expect(exaProvider.sensitiveSettingKeys?.includes('webSearch.exa.apiKey')).toBe(true);
 });
 
-test('isConfigured returns true when API key is set', (t) => {
+it('isConfigured returns true when API key is set', () => {
   const settings = createMockSettingsService({
     'webSearch.exa.apiKey': 'exa-test-key',
   });
 
   const result = isExaConfigured({ settingsService: settings });
-  t.true(result);
+  expect(result).toBe(true);
 });
 
-test('isConfigured returns false when API key is missing', (t) => {
+it('isConfigured returns false when API key is missing', () => {
   const settings = createMockSettingsService({});
 
   const result = isExaConfigured({ settingsService: settings });
-  t.false(result);
+  expect(result).toBe(false);
 });
 
-test('isConfigured returns false when API key is empty string', (t) => {
+it('isConfigured returns false when API key is empty string', () => {
   const settings = createMockSettingsService({
     'webSearch.exa.apiKey': '',
   });
 
   const result = isExaConfigured({ settingsService: settings });
-  t.false(result);
+  expect(result).toBe(false);
 });
 
-test('search throws error when API key is missing', async (t) => {
+it('search throws error when API key is missing', async () => {
   const settings = createMockSettingsService({});
   const logging = createMockLoggingService();
 
-  const error = await t.throwsAsync(
+  await expect(
     exaProvider.search('test query', {
       settingsService: settings,
       loggingService: logging,
     }),
-  );
-
-  t.true(error?.message.includes('Exa API key is not configured'));
+  ).rejects.toThrow(/Exa API key is not configured/);
 });
 
-test('exaProvider.isConfigured uses the same logic as isExaConfigured', (t) => {
+it('exaProvider.isConfigured uses the same logic as isExaConfigured', () => {
   const settingsWithKey = createMockSettingsService({
     'webSearch.exa.apiKey': 'exa-test-key',
   });
   const settingsWithoutKey = createMockSettingsService({});
 
-  t.is(
-    exaProvider.isConfigured({ settingsService: settingsWithKey }),
+  expect(exaProvider.isConfigured({ settingsService: settingsWithKey })).toBe(
     isExaConfigured({ settingsService: settingsWithKey }),
   );
-  t.is(
-    exaProvider.isConfigured({ settingsService: settingsWithoutKey }),
+  expect(exaProvider.isConfigured({ settingsService: settingsWithoutKey })).toBe(
     isExaConfigured({ settingsService: settingsWithoutKey }),
   );
 });

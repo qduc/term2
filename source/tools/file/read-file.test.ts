@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -27,24 +27,24 @@ async function withTempDir(run: (dir: string) => Promise<void>) {
   }
 }
 
-test.serial('needsApproval: returns false for read-only operation', async (t) => {
+it.sequential('needsApproval: returns false for read-only operation', async () => {
   await withTempDir(async () => {
     const result = await readFileToolDefinition.needsApproval({
       path: 'test.txt',
     });
-    t.false(result);
+    expect(result).toBe(false);
   });
 });
 
-test.serial('schema: optional line params can be omitted and null is rejected', async (t) => {
+it.sequential('schema: optional line params can be omitted and null is rejected', async () => {
   await withTempDir(async () => {
-    t.true(readFileToolDefinition.parameters.safeParse({ path: 'test.txt' }).success);
-    t.false(readFileToolDefinition.parameters.safeParse({ path: 'test.txt', start_line: null }).success);
-    t.false(readFileToolDefinition.parameters.safeParse({ path: 'test.txt', end_line: null }).success);
+    expect(readFileToolDefinition.parameters.safeParse({ path: 'test.txt' }).success).toBe(true);
+    expect(readFileToolDefinition.parameters.safeParse({ path: 'test.txt', start_line: null }).success).toBe(false);
+    expect(readFileToolDefinition.parameters.safeParse({ path: 'test.txt', end_line: null }).success).toBe(false);
   });
 });
 
-test.serial('execute: successfully reads a file', async (t) => {
+it.sequential('execute: successfully reads a file', async () => {
   await withTempDir(async (dir) => {
     const filePath = 'test.txt';
     const content = 'Hello\nWorld\nFrom\nFile';
@@ -55,16 +55,16 @@ test.serial('execute: successfully reads a file', async (t) => {
     });
 
     // Result should include header and content
-    t.true(result.includes('File: test.txt'));
-    t.true(result.includes('4 lines'));
-    t.true(result.includes('Hello'));
-    t.true(result.includes('World'));
-    t.true(result.includes('From'));
-    t.true(result.includes('File'));
+    expect(result.includes('File: test.txt')).toBe(true);
+    expect(result.includes('4 lines')).toBe(true);
+    expect(result.includes('Hello')).toBe(true);
+    expect(result.includes('World')).toBe(true);
+    expect(result.includes('From')).toBe(true);
+    expect(result.includes('File')).toBe(true);
   });
 });
 
-test.serial('execute: reads file with line range', async (t) => {
+it.sequential('execute: reads file with line range', async () => {
   await withTempDir(async (dir) => {
     const filePath = 'test.txt';
     const content = 'Line 1\nLine 2\nLine 3\nLine 4\nLine 5';
@@ -77,16 +77,16 @@ test.serial('execute: reads file with line range', async (t) => {
     });
 
     // Should only include lines 2-4
-    t.true(result.includes('[lines 2-4]'));
-    t.false(result.includes('Line 1'));
-    t.true(result.includes('Line 2'));
-    t.true(result.includes('Line 3'));
-    t.true(result.includes('Line 4'));
-    t.false(result.includes('Line 5'));
+    expect(result.includes('[lines 2-4]')).toBe(true);
+    expect(result.includes('Line 1')).toBe(false);
+    expect(result.includes('Line 2')).toBe(true);
+    expect(result.includes('Line 3')).toBe(true);
+    expect(result.includes('Line 4')).toBe(true);
+    expect(result.includes('Line 5')).toBe(false);
   });
 });
 
-test.serial('execute: reads file from start_line to end', async (t) => {
+it.sequential('execute: reads file from start_line to end', async () => {
   await withTempDir(async (dir) => {
     const filePath = 'test.txt';
     const content = 'Line 1\nLine 2\nLine 3\nLine 4\nLine 5';
@@ -98,27 +98,27 @@ test.serial('execute: reads file from start_line to end', async (t) => {
     });
 
     // Should include lines 3-5
-    t.true(result.includes('[lines 3-5]'));
-    t.false(result.includes('Line 1'));
-    t.false(result.includes('Line 2'));
-    t.true(result.includes('Line 3'));
-    t.true(result.includes('Line 4'));
-    t.true(result.includes('Line 5'));
+    expect(result.includes('[lines 3-5]')).toBe(true);
+    expect(result.includes('Line 1')).toBe(false);
+    expect(result.includes('Line 2')).toBe(false);
+    expect(result.includes('Line 3')).toBe(true);
+    expect(result.includes('Line 4')).toBe(true);
+    expect(result.includes('Line 5')).toBe(true);
   });
 });
 
-test.serial('execute: rejects path outside workspace', async (t) => {
+it.sequential('execute: rejects path outside workspace', async () => {
   await withTempDir(async () => {
     const result = await readFileToolDefinition.execute({
       path: '/etc/outside.txt',
     });
 
-    t.true(result.includes('Error'));
-    t.true(result.includes('outside workspace'));
+    expect(result.includes('Error')).toBe(true);
+    expect(result.includes('outside workspace')).toBe(true);
   });
 });
 
-test.serial('execute: in allowOutsideWorkspace mode, can read outside workspace', async (t) => {
+it.sequential('execute: in allowOutsideWorkspace mode, can read outside workspace', async () => {
   await withTempDir(async (dir) => {
     const outsidePath = path.join(dir, '..', 'outside.txt');
     await fs.writeFile(outsidePath, 'outside\ncontent');
@@ -127,14 +127,14 @@ test.serial('execute: in allowOutsideWorkspace mode, can read outside workspace'
       path: '../outside.txt',
     });
 
-    t.true(result.includes('outside'));
-    t.true(result.includes('content'));
-    t.true(result.includes('content'));
-    t.false(result.includes('outside workspace'));
+    expect(result.includes('outside')).toBe(true);
+    expect(result.includes('content')).toBe(true);
+    expect(result.includes('content')).toBe(true);
+    expect(result.includes('outside workspace')).toBe(false);
   });
 });
 
-test.serial('execute: expands ~ to home directory in allowOutsideWorkspace mode', async (t) => {
+it.sequential('execute: expands ~ to home directory in allowOutsideWorkspace mode', async () => {
   await withTempDir(async () => {
     // We try to read ~/.ssh/config or something likely to exist,
     // but better to just mock homedir if we could.
@@ -145,23 +145,23 @@ test.serial('execute: expands ~ to home directory in allowOutsideWorkspace mode'
     });
 
     // Should not fail with "Operation outside workspace" if expansion worked
-    t.false(result.includes('Operation outside workspace'));
-    t.true(result.includes('Error: File not found') || result.includes('ENOENT'));
+    expect(result.includes('Operation outside workspace')).toBe(false);
+    expect(result.includes('Error: File not found') || result.includes('ENOENT')).toBe(true);
   });
 });
 
-test.serial('execute: handles file not found', async (t) => {
+it.sequential('execute: handles file not found', async () => {
   await withTempDir(async () => {
     const result = await readFileToolDefinition.execute({
       path: 'nonexistent.txt',
     });
 
-    t.true(result.includes('Error'));
-    t.true(result.includes('ENOENT') || result.includes('not found'));
+    expect(result.includes('Error')).toBe(true);
+    expect(result.includes('ENOENT') || result.includes('not found')).toBe(true);
   });
 });
 
-test.serial('execute: handles empty file', async (t) => {
+it.sequential('execute: handles empty file', async () => {
   await withTempDir(async (dir) => {
     const filePath = 'empty.txt';
     await fs.writeFile(path.join(dir, filePath), '');
@@ -170,11 +170,11 @@ test.serial('execute: handles empty file', async (t) => {
       path: filePath,
     });
 
-    t.is(result.trim(), '');
+    expect(result.trim()).toBe('');
   });
 });
 
-test.serial('execute: handles line range beyond file length', async (t) => {
+it.sequential('execute: handles line range beyond file length', async () => {
   await withTempDir(async (dir) => {
     const filePath = 'short.txt';
     const content = 'Line 1\nLine 2';
@@ -187,8 +187,8 @@ test.serial('execute: handles line range beyond file length', async (t) => {
     });
 
     // Should only include available lines
-    t.true(result.includes('Line 1'));
-    t.true(result.includes('Line 2'));
-    t.true(result.includes('2 lines'));
+    expect(result.includes('Line 1')).toBe(true);
+    expect(result.includes('Line 2')).toBe(true);
+    expect(result.includes('2 lines')).toBe(true);
   });
 });

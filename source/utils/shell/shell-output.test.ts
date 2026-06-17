@@ -1,9 +1,9 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { formatShellExecutionOutput } from './shell-output.js';
 
-test('formatShellExecutionOutput saves the full output when truncation occurs', async (t) => {
+it('formatShellExecutionOutput saves the full output when truncation occurs', async () => {
   const stdout = `${'x'.repeat(6000)}FULL-ONLY-SENTINEL${'y'.repeat(6000)}`;
 
   const result = await formatShellExecutionOutput({
@@ -17,32 +17,32 @@ test('formatShellExecutionOutput saves the full output when truncation occurs', 
     durationMs: 1234,
   });
 
-  t.true(result.truncated);
-  t.truthy(result.artifactPath);
-  t.true(result.text.includes('exit 0'));
-  t.true(result.text.includes('Runtime: 1234ms'));
-  t.true(result.text.includes('Full shell output saved to'));
-  t.true(
+  expect(result.truncated).toBe(true);
+  expect(result.artifactPath).toBeTruthy();
+  expect(result.text.includes('exit 0')).toBe(true);
+  expect(result.text.includes('Runtime: 1234ms')).toBe(true);
+  expect(result.text.includes('Full shell output saved to')).toBe(true);
+  expect(
     result.text.includes(
       'Search that file for what you need instead of rerunning the command or changing the filter criteria with a `| grep` pipeline.',
     ),
-  );
-  t.false(result.text.includes('FULL-ONLY-SENTINEL'));
+  ).toBe(true);
+  expect(result.text.includes('FULL-ONLY-SENTINEL')).toBe(false);
 
   const artifactPath = result.artifactPath as string;
   const artifactContents = fs.readFileSync(artifactPath, 'utf8');
 
-  t.true(artifactContents.includes('Command: demo --long-output'));
-  t.true(artifactContents.includes('Working directory: /workspace'));
-  t.true(artifactContents.includes('Runtime: 1234ms'));
-  t.true(artifactContents.includes('STDOUT:'));
-  t.true(artifactContents.includes('STDERR:'));
-  t.true(artifactContents.includes('FULL-ONLY-SENTINEL'));
+  expect(artifactContents.includes('Command: demo --long-output')).toBe(true);
+  expect(artifactContents.includes('Working directory: /workspace')).toBe(true);
+  expect(artifactContents.includes('Runtime: 1234ms')).toBe(true);
+  expect(artifactContents.includes('STDOUT:')).toBe(true);
+  expect(artifactContents.includes('STDERR:')).toBe(true);
+  expect(artifactContents.includes('FULL-ONLY-SENTINEL')).toBe(true);
 
-  t.teardown(() => fs.rmSync(path.dirname(artifactPath), { recursive: true, force: true }));
+  // TODO: // TODO: t.teardown(() => fs.rmSync(path.dirname(artifactPath), { recursive: true, force: true })) needs manual try/finally conversion;
 });
 
-test('formatShellExecutionOutput leaves short output unchanged', async (t) => {
+it('formatShellExecutionOutput leaves short output unchanged', async () => {
   const result = await formatShellExecutionOutput({
     command: 'printf hello',
     cwd: '/workspace',
@@ -54,8 +54,8 @@ test('formatShellExecutionOutput leaves short output unchanged', async (t) => {
     durationMs: 42,
   });
 
-  t.false(result.truncated);
-  t.is(result.artifactPath, undefined);
-  t.false(result.text.includes('Full shell output saved to'));
-  t.is(result.text, 'exit 0\nRuntime: 42ms\nhello');
+  expect(result.truncated).toBe(false);
+  expect(result.artifactPath).toBe(undefined);
+  expect(result.text.includes('Full shell output saved to')).toBe(false);
+  expect(result.text).toBe('exit 0\nRuntime: 42ms\nhello');
 });

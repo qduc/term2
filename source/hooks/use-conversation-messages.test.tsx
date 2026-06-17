@@ -1,7 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { useConversationMessages } from './use-conversation-messages.js';
 import type { Message } from '../types/message.js';
@@ -12,7 +11,7 @@ type HookResult = ReturnType<typeof useConversationMessages>;
 
 // Box holds a fresh reference on every render so the caller always sees the
 // latest hook return value. Tests are serial to avoid overlapping act() calls.
-const renderHarness = async (t: Parameters<typeof renderInAct>[1], props: HarnessProps = {}) => {
+const renderHarness = async (props: HarnessProps = {}) => {
   const box: { current: HookResult | null } = { current: null };
   const Harness = () => {
     box.current = useConversationMessages({
@@ -21,7 +20,7 @@ const renderHarness = async (t: Parameters<typeof renderInAct>[1], props: Harnes
     });
     return null;
   };
-  await renderInAct(<Harness />, t);
+  await renderInAct(<Harness />);
   if (!box.current) {
     throw new Error('Hook did not mount in time');
   }
@@ -38,44 +37,44 @@ const run = async (callback: () => void) => {
   });
 };
 
-test.serial('initializes with empty messages by default', async (t) => {
-  const box = await renderHarness(t);
-  t.is(box.current.messages.length, 0);
+it.sequential('initializes with empty messages by default', async () => {
+  const box = await renderHarness();
+  expect(box.current.messages.length).toBe(0);
 });
 
-test.serial('initializes with provided initial messages', async (t) => {
-  const box = await renderHarness(t, {
+it.sequential('initializes with provided initial messages', async () => {
+  const box = await renderHarness({
     initialMessages: [
       { id: '1', sender: 'user', text: 'hello' } as Message,
       { id: '2', sender: 'bot', text: 'hi there' } as Message,
     ],
   });
-  t.is(box.current.messages.length, 2);
+  expect(box.current.messages.length).toBe(2);
 });
 
-test.serial('appendMessages adds messages', async (t) => {
-  const box = await renderHarness(t);
+it.sequential('appendMessages adds messages', async () => {
+  const box = await renderHarness();
 
   await run(() => {
     box.current.appendMessages([{ id: '1', sender: 'user', text: 'hello' } as Message]);
   });
 
-  t.is(box.current.messages.length, 1);
-  t.is(box.current.messages[0].sender, 'user');
+  expect(box.current.messages.length).toBe(1);
+  expect(box.current.messages[0].sender).toBe('user');
 });
 
-test.serial('appendMessages ignores empty additions', async (t) => {
-  const box = await renderHarness(t);
+it.sequential('appendMessages ignores empty additions', async () => {
+  const box = await renderHarness();
 
   await run(() => {
     box.current.appendMessages([]);
   });
 
-  t.is(box.current.messages.length, 0);
+  expect(box.current.messages.length).toBe(0);
 });
 
-test.serial('trimMessages enforces maxMessageCount', async (t) => {
-  const box = await renderHarness(t, { maxMessageCount: 3 });
+it.sequential('trimMessages enforces maxMessageCount', async () => {
+  const box = await renderHarness({ maxMessageCount: 3 });
 
   await run(() => {
     box.current.appendMessages([
@@ -86,78 +85,78 @@ test.serial('trimMessages enforces maxMessageCount', async (t) => {
     ]);
   });
 
-  t.is(box.current.messages.length, 3);
-  t.is(box.current.messages[0].id, '2');
+  expect(box.current.messages.length).toBe(3);
+  expect(box.current.messages[0].id).toBe('2');
 });
 
-test.serial('addSystemMessage adds a system message', async (t) => {
-  const box = await renderHarness(t);
+it.sequential('addSystemMessage adds a system message', async () => {
+  const box = await renderHarness();
 
   await run(() => {
     box.current.addSystemMessage('system instruction');
   });
 
-  t.is(box.current.messages.length, 1);
-  t.is(box.current.messages[0].sender, 'system');
-  t.is((box.current.messages[0] as any).text, 'system instruction');
+  expect(box.current.messages.length).toBe(1);
+  expect(box.current.messages[0].sender).toBe('system');
+  expect((box.current.messages[0] as any).text).toBe('system instruction');
 });
 
-test.serial('addShellMessage adds a completed command message', async (t) => {
-  const box = await renderHarness(t);
+it.sequential('addShellMessage adds a completed command message', async () => {
+  const box = await renderHarness();
 
   await run(() => {
     box.current.addShellMessage('echo hi', 'hi', 0, false);
   });
 
-  t.is(box.current.messages.length, 1);
+  expect(box.current.messages.length).toBe(1);
   const msg = box.current.messages[0] as any;
-  t.is(msg.sender, 'command');
-  t.is(msg.status, 'completed');
-  t.is(msg.command, 'echo hi');
-  t.is(msg.output, 'hi');
-  t.is(msg.success, true);
-  t.is(msg.failureReason, undefined);
+  expect(msg.sender).toBe('command');
+  expect(msg.status).toBe('completed');
+  expect(msg.command).toBe('echo hi');
+  expect(msg.output).toBe('hi');
+  expect(msg.success).toBe(true);
+  expect(msg.failureReason).toBe(undefined);
 });
 
-test.serial('addShellMessage adds a failed command message', async (t) => {
-  const box = await renderHarness(t);
+it.sequential('addShellMessage adds a failed command message', async () => {
+  const box = await renderHarness();
 
   await run(() => {
     box.current.addShellMessage('false', '', 1, false);
   });
 
   const msg = box.current.messages[0] as any;
-  t.is(msg.status, 'failed');
-  t.is(msg.success, false);
-  t.is(msg.failureReason, 'exit 1');
+  expect(msg.status).toBe('failed');
+  expect(msg.success).toBe(false);
+  expect(msg.failureReason).toBe('exit 1');
 });
 
-test.serial('addShellMessage adds a timed-out command message', async (t) => {
-  const box = await renderHarness(t);
+it.sequential('addShellMessage adds a timed-out command message', async () => {
+  const box = await renderHarness();
 
   await run(() => {
     box.current.addShellMessage('sleep 100', '', null, true);
   });
 
   const msg = box.current.messages[0] as any;
-  t.is(msg.status, 'failed');
-  t.is(msg.success, false);
-  t.is(msg.failureReason, 'timeout');
+  expect(msg.status).toBe('failed');
+  expect(msg.success).toBe(false);
+  expect(msg.failureReason).toBe('timeout');
 });
 
-test.serial('addShellMessage handles null exitCode (error)', async (t) => {
-  const box = await renderHarness(t);
+it.sequential('addShellMessage handles null exitCode (error)', async () => {
+  const box = await renderHarness();
 
   await run(() => {
     box.current.addShellMessage('bad-cmd', '', null, false);
   });
 
   const msg = box.current.messages[0] as any;
-  t.is(msg.failureReason, 'error');
+  expect(msg.failureReason).toBe('error');
 });
 
-test.serial('getUserMessages returns user messages with indices', async (t) => {
-  const box = await renderHarness(t, {
+it.sequential('getUserMessages returns user messages with indices', async () => {
+  const box = await renderHarness({
     initialMessages: [
       { id: '1', sender: 'user', text: 'first' } as Message,
       { id: '2', sender: 'bot', text: 'response' } as Message,
@@ -166,28 +165,28 @@ test.serial('getUserMessages returns user messages with indices', async (t) => {
   });
 
   const entries = box.current.getUserMessages();
-  t.is(entries.length, 2);
-  t.is(entries[0].uiIndex, 0);
-  t.is(entries[0].text, 'first');
-  t.is(entries[1].uiIndex, 2);
-  t.is(entries[1].text, 'second');
+  expect(entries.length).toBe(2);
+  expect(entries[0].uiIndex).toBe(0);
+  expect(entries[0].text).toBe('first');
+  expect(entries[1].uiIndex).toBe(2);
+  expect(entries[1].text).toBe('second');
 });
 
-test.serial('getUserMessages returns empty for no user messages', async (t) => {
-  const box = await renderHarness(t, {
+it.sequential('getUserMessages returns empty for no user messages', async () => {
+  const box = await renderHarness({
     initialMessages: [{ id: '1', sender: 'bot', text: 'only bot' } as Message],
   });
 
-  t.is(box.current.getUserMessages().length, 0);
+  expect(box.current.getUserMessages().length).toBe(0);
 });
 
-test.serial('setMessages updates messages directly', async (t) => {
-  const box = await renderHarness(t);
+it.sequential('setMessages updates messages directly', async () => {
+  const box = await renderHarness();
 
   await run(() => {
     box.current.setMessages([{ id: '1', sender: 'user', text: 'direct' } as Message]);
   });
 
-  t.is(box.current.messages.length, 1);
-  t.is(box.current.messages[0].sender, 'user');
+  expect(box.current.messages.length).toBe(1);
+  expect(box.current.messages[0].sender).toBe('user');
 });

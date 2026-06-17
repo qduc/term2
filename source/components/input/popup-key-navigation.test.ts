@@ -1,8 +1,8 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { getPopupNavigationCursor } from './popup-key-navigation.js';
 
-test('left/right move cursor in popup mode when mode has no custom left/right handler', (t) => {
-  t.is(
+it('left/right move cursor in popup mode when mode has no custom left/right handler', () => {
+  expect(
     getPopupNavigationCursor({
       input: '',
       key: { leftArrow: true },
@@ -11,10 +11,9 @@ test('left/right move cursor in popup mode when mode has no custom left/right ha
       hasModeLeftHandler: false,
       hasModeRightHandler: false,
     }),
-    2,
-  );
+  ).toBe(2);
 
-  t.is(
+  expect(
     getPopupNavigationCursor({
       input: '',
       key: { rightArrow: true },
@@ -23,12 +22,11 @@ test('left/right move cursor in popup mode when mode has no custom left/right ha
       hasModeLeftHandler: false,
       hasModeRightHandler: false,
     }),
-    4,
-  );
+  ).toBe(4);
 });
 
-test('left/right do not override mode-specific handlers', (t) => {
-  t.is(
+it('left/right do not override mode-specific handlers', () => {
+  expect(
     getPopupNavigationCursor({
       input: '',
       key: { leftArrow: true },
@@ -37,10 +35,9 @@ test('left/right do not override mode-specific handlers', (t) => {
       hasModeLeftHandler: true,
       hasModeRightHandler: false,
     }),
-    null,
-  );
+  ).toBe(null);
 
-  t.is(
+  expect(
     getPopupNavigationCursor({
       input: '',
       key: { rightArrow: true },
@@ -49,12 +46,11 @@ test('left/right do not override mode-specific handlers', (t) => {
       hasModeLeftHandler: false,
       hasModeRightHandler: true,
     }),
-    null,
-  );
+  ).toBe(null);
 });
 
-test('home/end keys return null (fall through) in popup mode', (t) => {
-  t.is(
+it('home/end keys return null (fall through) in popup mode', () => {
+  expect(
     getPopupNavigationCursor({
       input: '',
       key: { home: true },
@@ -63,10 +59,9 @@ test('home/end keys return null (fall through) in popup mode', (t) => {
       hasModeLeftHandler: false,
       hasModeRightHandler: false,
     }),
-    null,
-  );
+  ).toBe(null);
 
-  t.is(
+  expect(
     getPopupNavigationCursor({
       input: '',
       key: { end: true },
@@ -75,12 +70,11 @@ test('home/end keys return null (fall through) in popup mode', (t) => {
       hasModeLeftHandler: false,
       hasModeRightHandler: false,
     }),
-    null,
-  );
+  ).toBe(null);
 });
 
-test('ctrl+a/ctrl+e move cursor in popup mode', (t) => {
-  t.is(
+it('ctrl+a/ctrl+e move cursor in popup mode', () => {
+  expect(
     getPopupNavigationCursor({
       input: 'a',
       key: { ctrl: true },
@@ -89,10 +83,9 @@ test('ctrl+a/ctrl+e move cursor in popup mode', (t) => {
       hasModeLeftHandler: false,
       hasModeRightHandler: false,
     }),
-    0,
-  );
+  ).toBe(0);
 
-  t.is(
+  expect(
     getPopupNavigationCursor({
       input: 'e',
       key: { ctrl: true },
@@ -101,6 +94,5 @@ test('ctrl+a/ctrl+e move cursor in popup mode', (t) => {
       hasModeLeftHandler: false,
       hasModeRightHandler: false,
     }),
-    10,
-  );
+  ).toBe(10);
 });

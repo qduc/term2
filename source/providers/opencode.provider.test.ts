@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { isOpencodeProvider } from './opencode.provider.js';
 import { createOpencodeSessionInjector, generateOpencodeSessionId } from './opencode-session.js';
 import { selectOpencodeModelTransport, shouldApplyOpencodeAnthropicPromptCaching } from './opencode-routing.js';
@@ -12,46 +12,46 @@ const makeSessionContextService = (sessionId?: string) => ({
 // createOpencodeSessionInjector
 // ---------------------------------------------------------------------------
 
-test('createOpencodeSessionInjector returns null for non-opencode provider', (t) => {
+it('createOpencodeSessionInjector returns null for non-opencode provider', () => {
   const injector = createOpencodeSessionInjector({ type: 'anthropic', baseUrl: 'https://api.anthropic.com' });
-  t.is(injector, null);
+  expect(injector).toBe(null);
 });
 
-test('createOpencodeSessionInjector returns injector for opencode type', (t) => {
+it('createOpencodeSessionInjector returns injector for opencode type', () => {
   const injector = createOpencodeSessionInjector({ type: 'opencode' });
-  t.not(injector, null);
+  expect(injector).not.toBe(null);
 });
 
-test('createOpencodeSessionInjector returns injector when baseUrl contains opencode.ai', (t) => {
+it('createOpencodeSessionInjector returns injector when baseUrl contains opencode.ai', () => {
   const injector = createOpencodeSessionInjector({ type: 'anthropic', baseUrl: 'https://opencode.ai/v1' });
-  t.not(injector, null);
+  expect(injector).not.toBe(null);
 });
 
-test('createOpencodeSessionInjector returns injector when baseUrl contains OPENCODE.AI case-insensitively', (t) => {
+it('createOpencodeSessionInjector returns injector when baseUrl contains OPENCODE.AI case-insensitively', () => {
   const injector = createOpencodeSessionInjector({ type: 'anthropic', baseUrl: 'https://OPENCODE.AI/v1' });
-  t.not(injector, null);
+  expect(injector).not.toBe(null);
 });
 
-test('createOpencodeSessionInjector returns injector when name is opencode', (t) => {
+it('createOpencodeSessionInjector returns injector when name is opencode', () => {
   const injector = createOpencodeSessionInjector({ name: 'opencode' });
-  t.not(injector, null);
+  expect(injector).not.toBe(null);
 });
 
-test('createOpencodeSessionInjector injects x-opencode-session header', (t) => {
+it('createOpencodeSessionInjector injects x-opencode-session header', () => {
   const injector = createOpencodeSessionInjector({ type: 'opencode' })!;
   const result = injector({ headers: { 'Content-Type': 'application/json' } });
 
-  t.not(result, null);
-  t.truthy(result?.headers);
+  expect(result).not.toBe(null);
+  expect(result?.headers).toBeTruthy();
   // Find x-opencode-session in the headers
   const rawHeaders = result!.headers as Record<string, string>;
   const keys = Object.keys(rawHeaders);
   const sessionHeader = keys.find((k) => k.toLowerCase() === 'x-opencode-session');
-  t.truthy(sessionHeader, 'should have x-opencode-session header');
-  t.regex(rawHeaders[sessionHeader!], /^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/);
+  expect(sessionHeader).toBeTruthy();
+  expect(rawHeaders[sessionHeader!]).toMatch(/^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/);
 });
 
-test('createOpencodeSessionInjector session ID is stable across multiple calls', (t) => {
+it('createOpencodeSessionInjector session ID is stable across multiple calls', () => {
   const injector = createOpencodeSessionInjector({ type: 'opencode' })!;
 
   const first = injector({});
@@ -62,22 +62,22 @@ test('createOpencodeSessionInjector session ID is stable across multiple calls',
     return Object.values(h).find((v) => v.startsWith('ses_'));
   };
 
-  t.is(getHeader(first), getHeader(second), 'session ID should be stable');
+  expect(getHeader(first), 'session ID should be stable').toBe(getHeader(second));
 });
 
-test('createOpencodeSessionInjector preserves existing headers', (t) => {
+it('createOpencodeSessionInjector preserves existing headers', () => {
   const injector = createOpencodeSessionInjector({ type: 'opencode' })!;
   const result = injector({
     headers: { 'anthropic-version': '2023-06-01', 'x-api-key': 'sk-test' },
   });
 
   const h = result!.headers as Record<string, string>;
-  t.is(h['anthropic-version'], '2023-06-01');
-  t.is(h['x-api-key'], 'sk-test');
-  t.truthy(Object.keys(h).find((k) => k.toLowerCase() === 'x-opencode-session'));
+  expect(h['anthropic-version']).toBe('2023-06-01');
+  expect(h['x-api-key']).toBe('sk-test');
+  expect(Object.keys(h).find((k) => k.toLowerCase() === 'x-opencode-session')).toBeTruthy();
 });
 
-test('createOpencodeSessionInjector uses fallbackSessionIdOverride when provided', (t) => {
+it('createOpencodeSessionInjector uses fallbackSessionIdOverride when provided', () => {
   const injector = createOpencodeSessionInjector(
     { type: 'opencode' },
     { fallbackSessionIdOverride: 'ses_123456789012abcABC0abcABC0ab' },
@@ -86,10 +86,10 @@ test('createOpencodeSessionInjector uses fallbackSessionIdOverride when provided
   const result = injector({});
   const h = result!.headers as Record<string, string>;
   const sessionKey = Object.keys(h).find((k) => k.toLowerCase() === 'x-opencode-session')!;
-  t.is(h[sessionKey], 'ses_123456789012abcABC0abcABC0ab');
+  expect(h[sessionKey]).toBe('ses_123456789012abcABC0abcABC0ab');
 });
 
-test('createOpencodeSessionInjector generated fallback takes precedence over traffic context session ID', (t) => {
+it('createOpencodeSessionInjector generated fallback takes precedence over traffic context session ID', () => {
   const injector = createOpencodeSessionInjector(
     { type: 'opencode' },
     { sessionContextService: makeSessionContextService('conversation-session-abc') },
@@ -100,11 +100,11 @@ test('createOpencodeSessionInjector generated fallback takes precedence over tra
   const sessionKey = Object.keys(h).find((k) => k.toLowerCase() === 'x-opencode-session')!;
   // The injector always generates a fresh fallback ID for opencode providers,
   // so we should get a generated ses_* ID, not the traffic context one.
-  t.not(h[sessionKey], 'conversation-session-abc');
-  t.regex(h[sessionKey], /^ses_/);
+  expect(h[sessionKey]).not.toBe('conversation-session-abc');
+  expect(h[sessionKey]).toMatch(/^ses_/);
 });
 
-test('createOpencodeSessionInjector generated ID is stable for same traffic context sessionId', (t) => {
+it('createOpencodeSessionInjector generated ID is stable for same traffic context sessionId', () => {
   let trafficSessionId = 'stable-session-id';
   const sessionContextService = {
     runWithContext: <T>(_context: any, fn: () => T) => fn(),
@@ -123,16 +123,16 @@ test('createOpencodeSessionInjector generated ID is stable for same traffic cont
   const key1 = Object.keys(h1).find((k) => k.toLowerCase() === 'x-opencode-session')!;
   const key2 = Object.keys(h2).find((k) => k.toLowerCase() === 'x-opencode-session')!;
 
-  t.is(h1[key1], h2[key2], 'Session IDs generated for the same traffic context sessionId should be equal');
+  expect(h1[key1], 'Session IDs generated for the same traffic context sessionId should be equal').toBe(h2[key2]);
 
   // Change trafficSessionId
   trafficSessionId = 'different-session-id';
   const h3 = injector1({})!.headers as Record<string, string>;
   const key3 = Object.keys(h3).find((k) => k.toLowerCase() === 'x-opencode-session')!;
-  t.not(h1[key1], h3[key3], 'Session IDs for different traffic context sessionIds should be different');
+  expect(h1[key1], 'Session IDs for different traffic context sessionIds should be different').not.toBe(h3[key3]);
 });
 
-test('createOpencodeSessionInjector fallbackSessionIdOverride takes precedence over traffic context', (t) => {
+it('createOpencodeSessionInjector fallbackSessionIdOverride takes precedence over traffic context', () => {
   const injector = createOpencodeSessionInjector(
     { type: 'opencode' },
     {
@@ -144,10 +144,10 @@ test('createOpencodeSessionInjector fallbackSessionIdOverride takes precedence o
   const result = injector({});
   const h = result!.headers as Record<string, string>;
   const sessionKey = Object.keys(h).find((k) => k.toLowerCase() === 'x-opencode-session')!;
-  t.is(h[sessionKey], 'ses_overridden1234567890123456');
+  expect(h[sessionKey]).toBe('ses_overridden1234567890123456');
 });
 
-test('createOpencodeSessionInjector preserves existing body and other init fields', (t) => {
+it('createOpencodeSessionInjector preserves existing body and other init fields', () => {
   const injector = createOpencodeSessionInjector({ type: 'opencode' })!;
 
   const result = injector({
@@ -156,85 +156,85 @@ test('createOpencodeSessionInjector preserves existing body and other init field
     headers: { 'content-type': 'application/json' },
   });
 
-  t.is(result?.method, 'POST');
-  t.is(result?.body, JSON.stringify({ model: 'claude-sonnet-4-5', messages: [] }));
+  expect(result?.method).toBe('POST');
+  expect(result?.body).toBe(JSON.stringify({ model: 'claude-sonnet-4-5', messages: [] }));
 });
 
 // ---------------------------------------------------------------------------
 // generateOpencodeSessionId
 // ---------------------------------------------------------------------------
 
-test('generateOpencodeSessionId produces a 30-char session ID', (t) => {
+it('generateOpencodeSessionId produces a 30-char session ID', () => {
   const id = generateOpencodeSessionId();
-  t.regex(id, /^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/);
-  t.is(id.length, 30);
+  expect(id).toMatch(/^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/);
+  expect(id.length).toBe(30);
 });
 
-test('generateOpencodeSessionId produces unique values', (t) => {
+it('generateOpencodeSessionId produces unique values', () => {
   const ids = new Set(Array.from({ length: 100 }, () => generateOpencodeSessionId()));
-  t.is(ids.size, 100);
+  expect(ids.size).toBe(100);
 });
 
-test('generateOpencodeSessionId is deterministic for same effectiveSessionId', (t) => {
+it('generateOpencodeSessionId is deterministic for same effectiveSessionId', () => {
   const id1 = generateOpencodeSessionId('session-123');
   const id2 = generateOpencodeSessionId('session-123');
-  t.is(id1, id2);
+  expect(id1).toBe(id2);
 });
 
-test('generateOpencodeSessionId is different for different effectiveSessionIds', (t) => {
+it('generateOpencodeSessionId is different for different effectiveSessionIds', () => {
   const id1 = generateOpencodeSessionId('session-123');
   const id2 = generateOpencodeSessionId('session-456');
-  t.not(id1, id2);
+  expect(id1).not.toBe(id2);
 });
 
-test('generateOpencodeSessionId matches length and character pools for deterministic generation', (t) => {
+it('generateOpencodeSessionId matches length and character pools for deterministic generation', () => {
   const id = generateOpencodeSessionId('some-test-session-id-with-long-length-and-special-chars-!@#');
-  t.regex(id, /^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/);
-  t.is(id.length, 30);
+  expect(id).toMatch(/^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/);
+  expect(id.length).toBe(30);
 });
 
 // ---------------------------------------------------------------------------
 // isOpencodeProvider
 // ---------------------------------------------------------------------------
 
-test('isOpencodeProvider detects opencode type', (t) => {
-  t.true(isOpencodeProvider({ type: 'opencode' }));
+it('isOpencodeProvider detects opencode type', () => {
+  expect(isOpencodeProvider({ type: 'opencode' })).toBe(true);
 });
 
-test('isOpencodeProvider detects opencode name', (t) => {
-  t.true(isOpencodeProvider({ name: 'opencode' }));
+it('isOpencodeProvider detects opencode name', () => {
+  expect(isOpencodeProvider({ name: 'opencode' })).toBe(true);
 });
 
-test('isOpencodeProvider detects opencode.ai in baseUrl', (t) => {
-  t.true(isOpencodeProvider({ baseUrl: 'https://opencode.ai/v1' }));
+it('isOpencodeProvider detects opencode.ai in baseUrl', () => {
+  expect(isOpencodeProvider({ baseUrl: 'https://opencode.ai/v1' })).toBe(true);
 });
 
-test('isOpencodeProvider detects OPENCODE.AI case-insensitively', (t) => {
-  t.true(isOpencodeProvider({ baseUrl: 'https://OPENCODE.AI/v1' }));
+it('isOpencodeProvider detects OPENCODE.AI case-insensitively', () => {
+  expect(isOpencodeProvider({ baseUrl: 'https://OPENCODE.AI/v1' })).toBe(true);
 });
 
-test('isOpencodeProvider returns false for non-opencode providers', (t) => {
-  t.false(isOpencodeProvider({ type: 'anthropic', baseUrl: 'https://api.anthropic.com' }));
-  t.false(isOpencodeProvider({ type: 'openai', baseUrl: 'https://api.openai.com' }));
-  t.false(isOpencodeProvider({}));
+it('isOpencodeProvider returns false for non-opencode providers', () => {
+  expect(isOpencodeProvider({ type: 'anthropic', baseUrl: 'https://api.anthropic.com' })).toBe(false);
+  expect(isOpencodeProvider({ type: 'openai', baseUrl: 'https://api.openai.com' })).toBe(false);
+  expect(isOpencodeProvider({})).toBe(false);
 });
 
 // ---------------------------------------------------------------------------
 // selectOpencodeModelTransport
 // ---------------------------------------------------------------------------
 
-test('selectOpencodeModelTransport routes minimax and qwen models through Anthropic messages', (t) => {
-  t.is(selectOpencodeModelTransport('Minimax-3.5-Turbo'), 'anthropic-messages');
-  t.is(selectOpencodeModelTransport('qwen3-coder'), 'anthropic-messages');
+it('selectOpencodeModelTransport routes minimax and qwen models through Anthropic messages', () => {
+  expect(selectOpencodeModelTransport('Minimax-3.5-Turbo')).toBe('anthropic-messages');
+  expect(selectOpencodeModelTransport('qwen3-coder')).toBe('anthropic-messages');
 });
 
-test('selectOpencodeModelTransport routes other models through OpenAI chat completions', (t) => {
-  t.is(selectOpencodeModelTransport('gpt-oss-120b'), 'openai-chat-completions');
+it('selectOpencodeModelTransport routes other models through OpenAI chat completions', () => {
+  expect(selectOpencodeModelTransport('gpt-oss-120b')).toBe('openai-chat-completions');
 });
 
-test('shouldApplyOpencodeAnthropicPromptCaching applies only to Anthropic Claude and qwen model IDs', (t) => {
-  t.true(shouldApplyOpencodeAnthropicPromptCaching('claude-sonnet-4-5'));
-  t.true(shouldApplyOpencodeAnthropicPromptCaching('qwen3-coder'));
-  t.false(shouldApplyOpencodeAnthropicPromptCaching('Minimax-3.5-Turbo'));
-  t.false(shouldApplyOpencodeAnthropicPromptCaching('gpt-oss-120b'));
+it('shouldApplyOpencodeAnthropicPromptCaching applies only to Anthropic Claude and qwen model IDs', () => {
+  expect(shouldApplyOpencodeAnthropicPromptCaching('claude-sonnet-4-5')).toBe(true);
+  expect(shouldApplyOpencodeAnthropicPromptCaching('qwen3-coder')).toBe(true);
+  expect(shouldApplyOpencodeAnthropicPromptCaching('Minimax-3.5-Turbo')).toBe(false);
+  expect(shouldApplyOpencodeAnthropicPromptCaching('gpt-oss-120b')).toBe(false);
 });

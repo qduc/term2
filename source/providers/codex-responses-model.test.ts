@@ -1,4 +1,4 @@
-import test from 'ava';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { withTrace } from '@openai/agents-core';
 import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
 import { CodexResponsesModel, CodexResponsesWSModel, wrapCodexStream } from './codex-responses-model.js';
@@ -22,7 +22,7 @@ async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   return out;
 }
 
-test('wrapCodexStream reconstructs response.completed.output from streamed output_item.done items', async (t) => {
+it('wrapCodexStream reconstructs response.completed.output from streamed output_item.done items', async () => {
   const item = {
     type: 'message',
     id: 'msg_1',
@@ -52,12 +52,12 @@ test('wrapCodexStream reconstructs response.completed.output from streamed outpu
   );
 
   const completed = events.find((e: any) => e.type === 'response.completed') as any;
-  t.truthy(completed);
-  t.is(completed.response.output.length, 1);
-  t.is(completed.response.output[0], item);
+  expect(completed).toBeTruthy();
+  expect(completed.response.output.length).toBe(1);
+  expect(completed.response.output[0]).toBe(item);
 });
 
-test('wrapCodexStream reconstructs missing terminal response.output from streamed output_item.done items', async (t) => {
+it('wrapCodexStream reconstructs missing terminal response.output from streamed output_item.done items', async () => {
   const item = {
     type: 'message',
     id: 'msg_missing_output',
@@ -82,11 +82,11 @@ test('wrapCodexStream reconstructs missing terminal response.output from streame
   );
 
   const completed = events.find((e: any) => e.type === 'response.completed') as any;
-  t.truthy(completed);
-  t.deepEqual(completed.response.output, [item]);
+  expect(completed).toBeTruthy();
+  expect(completed.response.output).toEqual([item]);
 });
 
-test('wrapCodexStream reconstructs missing output for non-completed terminal frames', async (t) => {
+it('wrapCodexStream reconstructs missing output for non-completed terminal frames', async () => {
   const item = {
     type: 'message',
     id: 'msg_incomplete',
@@ -111,11 +111,11 @@ test('wrapCodexStream reconstructs missing output for non-completed terminal fra
   );
 
   const incomplete = events.find((e: any) => e.type === 'response.incomplete') as any;
-  t.truthy(incomplete);
-  t.deepEqual(incomplete.response.output, [item]);
+  expect(incomplete).toBeTruthy();
+  expect(incomplete.response.output).toEqual([item]);
 });
 
-test('wrapCodexStream leaves non-empty output untouched', async (t) => {
+it('wrapCodexStream leaves non-empty output untouched', async () => {
   const serverItem = { type: 'message', id: 'msg_real' };
   const streamedItem = { type: 'message', id: 'msg_accum' };
 
@@ -132,11 +132,11 @@ test('wrapCodexStream leaves non-empty output untouched', async (t) => {
   );
 
   const completed = events.find((e: any) => e.type === 'response.completed') as any;
-  t.is(completed.response.output.length, 1);
-  t.is(completed.response.output[0], serverItem);
+  expect(completed.response.output.length).toBe(1);
+  expect(completed.response.output[0]).toBe(serverItem);
 });
 
-test('wrapCodexStream reconstructs each completed response from only its own streamed items', async (t) => {
+it('wrapCodexStream reconstructs each completed response from only its own streamed items', async () => {
   const firstItem = { type: 'function_call', id: 'fc_1', call_id: 'call_1' };
   const secondItem = { type: 'message', id: 'msg_2', role: 'assistant' };
 
@@ -154,12 +154,12 @@ test('wrapCodexStream reconstructs each completed response from only its own str
   );
 
   const completed = events.filter((e: any) => e.type === 'response.completed') as any[];
-  t.is(completed.length, 2);
-  t.deepEqual(completed[0].response.output, [firstItem]);
-  t.deepEqual(completed[1].response.output, [secondItem]);
+  expect(completed.length).toBe(2);
+  expect(completed[0].response.output).toEqual([firstItem]);
+  expect(completed[1].response.output).toEqual([secondItem]);
 });
 
-test('wrapCodexStream keeps empty output empty when no items were streamed', async (t) => {
+it('wrapCodexStream keeps empty output empty when no items were streamed', async () => {
   const events = await collect(
     wrapCodexStream(
       makeStream([
@@ -171,10 +171,10 @@ test('wrapCodexStream keeps empty output empty when no items were streamed', asy
     ),
   );
   const completed = events.find((e: any) => e.type === 'response.completed') as any;
-  t.is(completed.response.output.length, 0);
+  expect(completed.response.output.length).toBe(0);
 });
 
-test('wrapCodexStream backfills function_call call_id from function_call_arguments.done event', async (t) => {
+it('wrapCodexStream backfills function_call call_id from function_call_arguments.done event', async () => {
   const expectedCallId = 'call_backfilled';
 
   // Simulate Codex sending function_call_arguments.done with the call_id
@@ -212,17 +212,13 @@ test('wrapCodexStream backfills function_call call_id from function_call_argumen
   );
 
   const completed = events.find((e: any) => e.type === 'response.completed') as any;
-  t.truthy(completed);
-  t.is(completed.response.output.length, 1);
-  t.is(
-    completed.response.output[0].call_id,
-    expectedCallId,
-    'call_id should be backfilled from function_call_arguments.done',
-  );
-  t.is(completed.response.output[0].id, 'fc_backfill');
+  expect(completed).toBeTruthy();
+  expect(completed.response.output.length).toBe(1);
+  expect(completed.response.output[0].call_id).toBe(expectedCallId);
+  expect(completed.response.output[0].id).toBe('fc_backfill');
 });
 
-test('wrapCodexStream survives a frozen response object by cloning', async (t) => {
+it('wrapCodexStream survives a frozen response object by cloning', async () => {
   const item = { type: 'message', id: 'msg_frozen' };
   const frozenResponse = Object.freeze({ id: 'resp_f', output: [], usage: {} });
 
@@ -236,11 +232,11 @@ test('wrapCodexStream survives a frozen response object by cloning', async (t) =
   );
 
   const completed = events.find((e: any) => e.type === 'response.completed') as any;
-  t.is(completed.response.output.length, 1);
-  t.is(completed.response.output[0], item);
+  expect(completed.response.output.length).toBe(1);
+  expect(completed.response.output[0]).toBe(item);
 });
 
-test('wrapCodexStream warns with metadata when reconstructed output is suspiciously large', async (t) => {
+it('wrapCodexStream warns with metadata when reconstructed output is suspiciously large', async () => {
   const warnings: any[] = [];
   const items = Array.from({ length: 21 }, (_, index) => ({
     type: index % 2 === 0 ? 'function_call' : 'function_call_output',
@@ -260,14 +256,14 @@ test('wrapCodexStream warns with metadata when reconstructed output is suspiciou
   );
 
   const completed = events.find((e: any) => e.type === 'response.completed') as any;
-  t.is(completed.response.output.length, 21);
-  t.is(warnings.length, 1);
-  t.is(warnings[0].eventType, 'codex.reconstructed_output.suspicious');
-  t.is(warnings[0].responseId, 'resp_large');
-  t.is(warnings[0].itemCount, 21);
-  t.is(warnings[0].firstItemId, 'item_0');
-  t.is(warnings[0].lastItemId, 'item_20');
-  t.false('output' in warnings[0]);
+  expect(completed.response.output.length).toBe(21);
+  expect(warnings.length).toBe(1);
+  expect(warnings[0].eventType).toBe('codex.reconstructed_output.suspicious');
+  expect(warnings[0].responseId).toBe('resp_large');
+  expect(warnings[0].itemCount).toBe(21);
+  expect(warnings[0].firstItemId).toBe('item_0');
+  expect(warnings[0].lastItemId).toBe('item_20');
+  expect('output' in warnings[0]).toBe(false);
 });
 
 // Integration check: confirm CodexResponsesModel.getStreamedResponse threads
@@ -276,7 +272,7 @@ test('wrapCodexStream warns with metadata when reconstructed output is suspiciou
 // parent's `_fetchResponse` on the prototype so our subclass override (which
 // delegates to super) sees a controlled stream without needing a real OpenAI
 // client.
-test.serial('CodexResponsesModel.getStreamedResponse yields response_done with reconstructed output', async (t) => {
+it.sequential('CodexResponsesModel.getStreamedResponse yields response_done with reconstructed output', async () => {
   const original = (OpenAIResponsesModel.prototype as any)._fetchResponse;
   (OpenAIResponsesModel.prototype as any)._fetchResponse = async function () {
     return makeStream([
@@ -309,17 +305,17 @@ test.serial('CodexResponsesModel.getStreamedResponse yields response_done with r
     const events = await collect(model.getStreamedResponse(request));
 
     const done = events.find((e: any) => e.type === 'response_done') as any;
-    t.truthy(done, 'expected a response_done event');
-    t.is(done.response.output.length, 1);
-    t.is(done.response.output[0].type, 'message');
-    t.is(done.response.output[0].id, 'msg_1');
-    t.is(done.response.output[0].role, 'assistant');
+    expect(done).toBeTruthy();
+    expect(done.response.output.length).toBe(1);
+    expect(done.response.output[0].type).toBe('message');
+    expect(done.response.output[0].id).toBe('msg_1');
+    expect(done.response.output[0].role).toBe('assistant');
   } finally {
     (OpenAIResponsesModel.prototype as any)._fetchResponse = original;
   }
 });
 
-test.serial('CodexResponsesModel.getStreamedResponse tolerates missing terminal response.output', async (t) => {
+it.sequential('CodexResponsesModel.getStreamedResponse tolerates missing terminal response.output', async () => {
   const original = (OpenAIResponsesModel.prototype as any)._fetchResponse;
   (OpenAIResponsesModel.prototype as any)._fetchResponse = async function () {
     return makeStream([
@@ -351,17 +347,17 @@ test.serial('CodexResponsesModel.getStreamedResponse tolerates missing terminal 
     const events = await collect(model.getStreamedResponse(request));
 
     const done = events.find((e: any) => e.type === 'response_done') as any;
-    t.truthy(done, 'expected a response_done event');
-    t.is(done.response.output.length, 1);
-    t.is(done.response.output[0].id, 'msg_missing_output');
+    expect(done).toBeTruthy();
+    expect(done.response.output.length).toBe(1);
+    expect(done.response.output[0].id).toBe('msg_missing_output');
   } finally {
     (OpenAIResponsesModel.prototype as any)._fetchResponse = original;
   }
 });
 
-test.serial(
+it.sequential(
   'CodexResponsesModel._buildResponsesCreateRequest merges modelSettings.include into requestData.include',
-  (t) => {
+  () => {
     const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
     (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
       return {
@@ -384,14 +380,14 @@ test.serial(
         true,
       );
 
-      t.deepEqual(built.requestData.include, ['file_search_call.results', 'reasoning.encrypted_content']);
+      expect(built.requestData.include).toEqual(['file_search_call.results', 'reasoning.encrypted_content']);
     } finally {
       (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
     }
   },
 );
 
-test.serial('CodexResponsesModel._buildResponsesCreateRequest strips temperature from requestData', (t) => {
+it.sequential('CodexResponsesModel._buildResponsesCreateRequest strips temperature from requestData', () => {
   const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
   (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
     return {
@@ -407,13 +403,13 @@ test.serial('CodexResponsesModel._buildResponsesCreateRequest strips temperature
     const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
     const built = (model as any)._buildResponsesCreateRequest({ modelSettings: { temperature: 0.2 } }, true);
 
-    t.false('temperature' in built.requestData);
+    expect('temperature' in built.requestData).toBe(false);
   } finally {
     (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
   }
 });
 
-test.serial('CodexResponsesModel._buildResponsesCreateRequest forwards prompt_cache_key from modelSettings', (t) => {
+it.sequential('CodexResponsesModel._buildResponsesCreateRequest forwards prompt_cache_key from modelSettings', () => {
   const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
   (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
     return {
@@ -437,14 +433,14 @@ test.serial('CodexResponsesModel._buildResponsesCreateRequest forwards prompt_ca
       true,
     );
 
-    t.is(built.requestData.prompt_cache_key, 'conv_123');
-    t.false('temperature' in built.requestData);
+    expect(built.requestData.prompt_cache_key).toBe('conv_123');
+    expect('temperature' in built.requestData).toBe(false);
   } finally {
     (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
   }
 });
 
-test.serial('CodexResponsesModel._buildResponsesCreateRequest strips replay item ids from input', (t) => {
+it.sequential('CodexResponsesModel._buildResponsesCreateRequest strips replay item ids from input', () => {
   const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
   (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
     return {
@@ -466,18 +462,18 @@ test.serial('CodexResponsesModel._buildResponsesCreateRequest strips replay item
     const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
     const built = (model as any)._buildResponsesCreateRequest({ modelSettings: {} }, true);
 
-    t.false('id' in built.requestData.input[0]);
-    t.false('id' in built.requestData.input[1]);
-    t.false('id' in built.requestData.input[2]);
-    t.is(built.requestData.input[2].call_id, 'call_1');
-    t.false('id' in built.requestData.input[3]);
-    t.is(built.requestData.input[4].id, 'ig_1');
+    expect('id' in built.requestData.input[0]).toBe(false);
+    expect('id' in built.requestData.input[1]).toBe(false);
+    expect('id' in built.requestData.input[2]).toBe(false);
+    expect(built.requestData.input[2].call_id).toBe('call_1');
+    expect('id' in built.requestData.input[3]).toBe(false);
+    expect(built.requestData.input[4].id).toBe('ig_1');
   } finally {
     (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
   }
 });
 
-test('CodexResponsesWSModel extends OpenAIResponsesWSModel', (t) => {
+it('CodexResponsesWSModel extends OpenAIResponsesWSModel', () => {
   const mockClient = {
     baseURL: 'https://api.openai.com',
     apiKey: 'test-key',
@@ -490,10 +486,10 @@ test('CodexResponsesWSModel extends OpenAIResponsesWSModel', (t) => {
 
   const model = new CodexResponsesWSModel(mockClient as any, 'gpt-5-codex', tokenManager as any);
 
-  t.true(model instanceof OpenAIResponsesWSModel);
+  expect(model instanceof OpenAIResponsesWSModel).toBe(true);
 });
 
-test.serial('CodexResponsesWSModel emits traffic logs for websocket streamed responses', async (t) => {
+it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed responses', async () => {
   const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
   const logs: Array<{ level: string; message: string; meta?: any }> = [];
 
@@ -555,23 +551,23 @@ test.serial('CodexResponsesWSModel emits traffic logs for websocket streamed res
 
     const events = await collect(model.getStreamedResponse(request));
 
-    t.is((events[events.length - 1] as any).event?.type, 'response.completed');
-    t.is(logs.length, 2);
-    t.is(logs[0].meta.eventType, 'provider.request.started');
-    t.is(logs[1].meta.eventType, 'provider.response.received');
-    t.is(logs[0].meta.requestId, logs[1].meta.requestId);
-    t.is(logs[0].meta.sessionId, 'sess_ws_1');
-    t.is(logs[0].meta.headers.authorization, '[REDACTED]');
-    t.is(logs[1].meta.payload.transport, 'websocket');
-    t.is(logs[1].meta.payload.responseId, 'resp_ws_traffic');
+    expect((events[events.length - 1] as any).event?.type).toBe('response.completed');
+    expect(logs.length).toBe(2);
+    expect(logs[0].meta.eventType).toBe('provider.request.started');
+    expect(logs[1].meta.eventType).toBe('provider.response.received');
+    expect(logs[0].meta.requestId).toBe(logs[1].meta.requestId);
+    expect(logs[0].meta.sessionId).toBe('sess_ws_1');
+    expect(logs[0].meta.headers.authorization).toBe('[REDACTED]');
+    expect(logs[1].meta.payload.transport).toBe('websocket');
+    expect(logs[1].meta.payload.responseId).toBe('resp_ws_traffic');
   } finally {
     (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
   }
 });
 
-test.serial(
+it.sequential(
   'CodexResponsesWSModel logs reasoning and tool calls in choice payload matching HTTP/SSE logs',
-  async (t) => {
+  async () => {
     const logs: any[] = [];
     const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
 
@@ -643,21 +639,21 @@ test.serial(
 
       await collect(model.getStreamedResponse(request));
 
-      t.is(logs.length, 2);
+      expect(logs.length).toBe(2);
       const receivedPayload = logs[1].meta.payload;
-      t.is(receivedPayload.transport, 'websocket');
-      t.is(receivedPayload.responseId, 'resp_ws_reasoning_tool');
-      t.deepEqual(receivedPayload.outputTypes, ['reasoning', 'function_call']);
+      expect(receivedPayload.transport).toBe('websocket');
+      expect(receivedPayload.responseId).toBe('resp_ws_reasoning_tool');
+      expect(receivedPayload.outputTypes).toEqual(['reasoning', 'function_call']);
 
       // Check unified payload matching HTTP/SSE structure
-      t.truthy(receivedPayload.payload);
-      t.is(receivedPayload.payload.id, 'resp_ws_reasoning_tool');
-      t.deepEqual(receivedPayload.payload.usage, { input_tokens: 5, output_tokens: 6, total_tokens: 11 });
-      t.is(receivedPayload.payload.choices.length, 1);
+      expect(receivedPayload.payload).toBeTruthy();
+      expect(receivedPayload.payload.id).toBe('resp_ws_reasoning_tool');
+      expect(receivedPayload.payload.usage).toEqual({ input_tokens: 5, output_tokens: 6, total_tokens: 11 });
+      expect(receivedPayload.payload.choices.length).toBe(1);
 
       const delta = receivedPayload.payload.choices[0].delta;
-      t.is(delta.reasoning, 'Let me think about this request.');
-      t.deepEqual(delta.tool_calls, [
+      expect(delta.reasoning).toBe('Let me think about this request.');
+      expect(delta.tool_calls).toEqual([
         {
           id: 'call_123',
           type: 'function',
@@ -673,7 +669,7 @@ test.serial(
   },
 );
 
-test.serial('CodexResponsesModel.getResponse (unary) intercepts and runs as stream under the hood', async (t) => {
+it.sequential('CodexResponsesModel.getResponse (unary) intercepts and runs as stream under the hood', async () => {
   const original = (OpenAIResponsesModel.prototype as any)._fetchResponse;
   let receivedStreamArg = false;
 
@@ -710,17 +706,17 @@ test.serial('CodexResponsesModel.getResponse (unary) intercepts and runs as stre
     // Call getResponse which defaults to stream: false
     const response = await withTrace('test', () => model.getResponse(request));
 
-    t.true(receivedStreamArg, 'should have forced stream: true internally');
-    t.is(response.responseId, 'resp_unary');
-    t.is(response.output.length, 1);
-    t.is(response.output[0].id, 'msg_unary');
-    t.is(response.usage.totalTokens, 5);
+    expect(receivedStreamArg).toBe(true);
+    expect(response.responseId).toBe('resp_unary');
+    expect(response.output.length).toBe(1);
+    expect(response.output[0].id).toBe('msg_unary');
+    expect(response.usage.totalTokens).toBe(5);
   } finally {
     (OpenAIResponsesModel.prototype as any)._fetchResponse = original;
   }
 });
 
-test.serial('CodexResponsesWSModel.getResponse (unary) intercepts and runs as stream under the hood', async (t) => {
+it.sequential('CodexResponsesWSModel.getResponse (unary) intercepts and runs as stream under the hood', async () => {
   const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
   let receivedStreamArg = false;
 
@@ -767,42 +763,36 @@ test.serial('CodexResponsesWSModel.getResponse (unary) intercepts and runs as st
     // Call getResponse which defaults to stream: false
     const response = await model.getResponse(request);
 
-    t.true(receivedStreamArg, 'should have forced stream: true internally');
-    t.is(response.responseId, 'resp_ws_unary');
-    t.is(response.output.length, 1);
-    t.is(response.output[0].id, 'msg_ws_unary');
-    t.is(response.usage.totalTokens, 7);
+    expect(receivedStreamArg).toBe(true);
+    expect(response.responseId).toBe('resp_ws_unary');
+    expect(response.output.length).toBe(1);
+    expect(response.output[0].id).toBe('msg_ws_unary');
+    expect(response.usage.totalTokens).toBe(7);
   } finally {
     (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
   }
 });
 
-test('wrapCodexStream throws a detailed stream error when receiving response.error event', async (t) => {
+it('wrapCodexStream throws a detailed stream error when receiving response.error event', async () => {
   const errorObj = { message: 'Some specific API error description' };
   const eventStream = wrapCodexStream(makeStream([{ type: 'response.error', error: errorObj }]));
 
-  const error = await t.throwsAsync(async () => {
+  await expect(async () => {
     for await (const _ of eventStream) {
     }
-  });
-
-  t.true(error instanceof Error);
-  t.is(error.message, 'Codex provider stream error: Some specific API error description');
+  }).rejects.toThrow('Codex provider stream error: Some specific API error description');
 });
 
-test('wrapCodexStream throws when receiving response.error event without error field', async (t) => {
+it('wrapCodexStream throws when receiving response.error event without error field', async () => {
   const eventStream = wrapCodexStream(makeStream([{ type: 'response.error' }]));
 
-  const error = await t.throwsAsync(async () => {
+  await expect(async () => {
     for await (const _ of eventStream) {
     }
-  });
-
-  t.true(error instanceof Error);
-  t.true(error.message.startsWith('Codex provider stream error:'));
+  }).rejects.toThrow(/^Codex provider stream error:/);
 });
 
-test('wrapCodexStream throws a detailed provider error when receiving a failed response status', async (t) => {
+it('wrapCodexStream throws a detailed provider error when receiving a failed response status', async () => {
   const errorObj = { message: 'Model context length exceeded' };
   const eventStream = wrapCodexStream(
     makeStream([
@@ -818,13 +808,10 @@ test('wrapCodexStream throws a detailed provider error when receiving a failed r
     ]),
   );
 
-  const error = await t.throwsAsync(async () => {
+  await expect(async () => {
     for await (const _ of eventStream) {
     }
-  });
-
-  t.true(error instanceof Error);
-  t.is(error.message, 'Codex provider error: Model context length exceeded');
+  }).rejects.toThrow('Codex provider error: Model context length exceeded');
 });
 
 function createSleepRecorder() {
@@ -839,9 +826,9 @@ function createSleepRecorder() {
 
 const DEFAULT_STREAM_MAX_RETRIES = 5;
 
-test.serial(
+it.sequential(
   'CodexResponsesWSModel injects Codex previous response id and trims replayed tool-continuation input',
-  async (t) => {
+  async () => {
     const seenRequests: any[] = [];
     const toolOutput = {
       type: 'function_call_result',
@@ -895,11 +882,11 @@ test.serial(
       } as any)) {
       }
 
-      t.is(seenRequests.length, 2);
-      t.is(seenRequests[0].modelSettings.providerData?.generate, false);
-      t.deepEqual(seenRequests[0].input, []);
-      t.is(seenRequests[1].previousResponseId, 'resp-1');
-      t.deepEqual(seenRequests[1].input, [{ role: 'user', type: 'message', content: 'inspect' }]);
+      expect(seenRequests.length).toBe(2);
+      expect(seenRequests[0].modelSettings.providerData?.generate).toBe(false);
+      expect(seenRequests[0].input).toEqual([]);
+      expect(seenRequests[1].previousResponseId).toBe('resp-1');
+      expect(seenRequests[1].input).toEqual([{ role: 'user', type: 'message', content: 'inspect' }]);
 
       for await (const _event of model.getStreamedResponse({
         input: [
@@ -914,9 +901,9 @@ test.serial(
       } as any)) {
       }
 
-      t.is(seenRequests.length, 3);
-      t.is(seenRequests[2].previousResponseId, 'resp-2');
-      t.deepEqual(seenRequests[2].input, [toolOutput]);
+      expect(seenRequests.length).toBe(3);
+      expect(seenRequests[2].previousResponseId).toBe('resp-2');
+      expect(seenRequests[2].input).toEqual([toolOutput]);
 
       const latestUser = { role: 'user', type: 'message', content: 'summarize' };
       for await (const _event of model.getStreamedResponse({
@@ -932,18 +919,18 @@ test.serial(
       } as any)) {
       }
 
-      t.is(seenRequests.length, 4);
-      t.is(seenRequests[3].previousResponseId, 'resp-explicit');
-      t.deepEqual(seenRequests[3].input, [latestUser]);
+      expect(seenRequests.length).toBe(4);
+      expect(seenRequests[3].previousResponseId).toBe('resp-explicit');
+      expect(seenRequests[3].input).toEqual([latestUser]);
     } finally {
       (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
     }
   },
 );
 
-test.serial(
+it.sequential(
   'CodexResponsesWSModel keeps every interleaved parallel tool output when trimming a tool-continuation delta',
-  async (t) => {
+  async () => {
     const seenRequests: any[] = [];
 
     const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
@@ -1016,18 +1003,18 @@ test.serial(
       } as any)) {
       }
 
-      t.is(seenRequests.length, 1);
-      t.is(seenRequests[0].previousResponseId, 'resp-prev');
-      t.deepEqual(seenRequests[0].input, [...parallelReads.map((pair) => pair.output), shellPair.output]);
+      expect(seenRequests.length).toBe(1);
+      expect(seenRequests[0].previousResponseId).toBe('resp-prev');
+      expect(seenRequests[0].input).toEqual([...parallelReads.map((pair) => pair.output), shellPair.output]);
     } finally {
       (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
     }
   },
 );
 
-test.serial(
+it.sequential(
   'CodexResponsesWSModel drops interleaved tool calls from an already-trimmed tool-continuation delta',
-  async (t) => {
+  async () => {
     const seenRequests: any[] = [];
 
     const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
@@ -1081,19 +1068,16 @@ test.serial(
       } as any)) {
       }
 
-      t.is(seenRequests.length, 1);
-      t.is(seenRequests[0].previousResponseId, 'resp-prev');
-      t.deepEqual(
-        seenRequests[0].input,
-        pairs.map((pair) => pair.output),
-      );
+      expect(seenRequests.length).toBe(1);
+      expect(seenRequests[0].previousResponseId).toBe('resp-prev');
+      expect(seenRequests[0].input).toEqual(pairs.map((pair) => pair.output));
     } finally {
       (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
     }
   },
 );
 
-test.serial('CodexResponsesWSModel keeps interleaved outputs when function calls only carry item ids', async (t) => {
+it.sequential('CodexResponsesWSModel keeps interleaved outputs when function calls only carry item ids', async () => {
   const seenRequests: any[] = [];
 
   const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
@@ -1147,20 +1131,17 @@ test.serial('CodexResponsesWSModel keeps interleaved outputs when function calls
     } as any)) {
     }
 
-    t.is(seenRequests.length, 1);
-    t.is(seenRequests[0].previousResponseId, 'resp-prev');
-    t.deepEqual(
-      seenRequests[0].input,
-      pairs.map((pair) => pair.output),
-    );
+    expect(seenRequests.length).toBe(1);
+    expect(seenRequests[0].previousResponseId).toBe('resp-prev');
+    expect(seenRequests[0].input).toEqual(pairs.map((pair) => pair.output));
   } finally {
     (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
   }
 });
 
-test.serial(
+it.sequential(
   'CodexResponsesWSModel retries safe Codex warm-up failures before chaining the delta request',
-  async (t) => {
+  async () => {
     const seenRequests: any[] = [];
     const sleep = createSleepRecorder();
     const safeWarmupError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
@@ -1224,23 +1205,23 @@ test.serial(
         handoffs: [],
       } as any);
 
-      t.is(seenRequests.length, 3);
-      t.is(sleep.delays.length, 1);
-      t.true(sleep.delays[0] > 0);
-      t.is(seenRequests[0].modelSettings.providerData?.generate, false);
-      t.is(seenRequests[1].modelSettings.providerData?.generate, false);
-      t.deepEqual(seenRequests[0].input, seenRequests[1].input);
-      t.is(seenRequests[2].previousResponseId, 'resp-warmup');
-      t.deepEqual(seenRequests[2].input, [latestUser]);
+      expect(seenRequests.length).toBe(3);
+      expect(sleep.delays.length).toBe(1);
+      expect(sleep.delays[0] > 0).toBe(true);
+      expect(seenRequests[0].modelSettings.providerData?.generate).toBe(false);
+      expect(seenRequests[1].modelSettings.providerData?.generate).toBe(false);
+      expect(seenRequests[0].input).toEqual(seenRequests[1].input);
+      expect(seenRequests[2].previousResponseId).toBe('resp-warmup');
+      expect(seenRequests[2].input).toEqual([latestUser]);
     } finally {
       (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
     }
   },
 );
 
-test.serial(
+it.sequential(
   'CodexResponsesWSModel falls back to full history without previous response id when safe Codex warm-up retries are exhausted',
-  async (t) => {
+  async () => {
     const seenRequests: any[] = [];
     const sleep = createSleepRecorder();
     const safeWarmupError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
@@ -1306,17 +1287,17 @@ test.serial(
       }
 
       const expectedTotalAttempts = DEFAULT_STREAM_MAX_RETRIES + 2;
-      t.is(seenRequests.length, expectedTotalAttempts);
-      t.is(sleep.delays.length, DEFAULT_STREAM_MAX_RETRIES);
-      t.true(sleep.delays.every((delayMs) => delayMs > 0));
-      t.true(
+      expect(seenRequests.length).toBe(expectedTotalAttempts);
+      expect(sleep.delays.length).toBe(DEFAULT_STREAM_MAX_RETRIES);
+      expect(sleep.delays.every((delayMs) => delayMs > 0)).toBe(true);
+      expect(
         seenRequests
           .slice(0, expectedTotalAttempts - 1)
           .every((request) => request.modelSettings.providerData?.generate === false),
-      );
-      t.deepEqual(seenRequests[expectedTotalAttempts - 1].input, fullInput);
-      t.is(seenRequests[expectedTotalAttempts - 1].previousResponseId, undefined);
-      t.is(seenRequests[expectedTotalAttempts - 1].modelSettings.providerData?.generate, undefined);
+      ).toBe(true);
+      expect(seenRequests[expectedTotalAttempts - 1].input).toEqual(fullInput);
+      expect(seenRequests[expectedTotalAttempts - 1].previousResponseId).toBe(undefined);
+      expect(seenRequests[expectedTotalAttempts - 1].modelSettings.providerData?.generate).toBe(undefined);
     } finally {
       (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
     }

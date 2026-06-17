@@ -594,7 +594,7 @@ test.serial(
           item: {
             type: 'function_call',
             id: 'fc_123',
-            call_id: 'fc_123',
+            call_id: 'call_123',
             name: 'shell',
             arguments: '{"command":"ls"}',
           },
@@ -659,7 +659,7 @@ test.serial(
       t.is(delta.reasoning, 'Let me think about this request.');
       t.deepEqual(delta.tool_calls, [
         {
-          id: 'fc_123',
+          id: 'call_123',
           type: 'function',
           function: {
             name: 'shell',
@@ -940,6 +940,223 @@ test.serial(
     }
   },
 );
+
+test.serial(
+  'CodexResponsesWSModel keeps every interleaved parallel tool output when trimming a tool-continuation delta',
+  async (t) => {
+    const seenRequests: any[] = [];
+
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+      seenRequests.push(request);
+      return makeStream([
+        {
+          type: 'response.completed',
+          response: {
+            id: 'resp-paired',
+            output: [],
+            usage: {},
+          },
+        } as any,
+      ]);
+    };
+
+    const mockClient = {
+      baseURL: 'https://api.openai.com',
+      apiKey: 'test-key',
+      _options: {},
+    };
+    const tokenManager = {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'acc_123',
+    };
+
+    // A prior Codex response issued five parallel function calls — four
+    // read_code_outline calls plus a shell. The reconstructed continuation
+    // history pairs each call with its result, and the shell pair lands last
+    // (it ran after the reads). Only that final result forms a contiguous
+    // trailing run, so the legacy delta trim kept just the shell output and
+    // dropped the four read outputs, which the server rejected with a 400
+    // ("No tool output found for function call …"). The fix must keep every
+    // output whose call was produced by the previous response.
+    const parallelReads = [1, 2, 3, 4].map((n) => ({
+      call: { type: 'function_call', call_id: `call-read-${n}`, name: 'read_code_outline', arguments: '{}' },
+      output: { type: 'function_call_result', callId: `call-read-${n}`, output: `outline-${n}` },
+    }));
+    const shellPair = {
+      call: { type: 'function_call', call_id: 'call-shell', name: 'shell', arguments: '{}' },
+      output: { type: 'function_call_result', callId: 'call-shell', output: 'grep result' },
+    };
+
+    try {
+      const model = new CodexResponsesWSModel(
+        mockClient as any,
+        'gpt-5-codex',
+        tokenManager as any,
+        undefined,
+        undefined,
+        {
+          getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
+          runWithContext: <T>(_context: any, fn: () => T) => fn(),
+        },
+      );
+
+      for await (const _event of model.getStreamedResponse({
+        previousResponseId: 'resp-prev',
+        input: [
+          { role: 'user', type: 'message', content: 'inspect the repo' },
+          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'I will inspect it.' }] },
+          ...parallelReads.flatMap((pair) => [pair.call, pair.output]),
+          shellPair.call,
+          shellPair.output,
+        ],
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any)) {
+      }
+
+      t.is(seenRequests.length, 1);
+      t.is(seenRequests[0].previousResponseId, 'resp-prev');
+      t.deepEqual(seenRequests[0].input, [...parallelReads.map((pair) => pair.output), shellPair.output]);
+    } finally {
+      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    }
+  },
+);
+
+test.serial(
+  'CodexResponsesWSModel drops interleaved tool calls from an already-trimmed tool-continuation delta',
+  async (t) => {
+    const seenRequests: any[] = [];
+
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+      seenRequests.push(request);
+      return makeStream([
+        {
+          type: 'response.completed',
+          response: {
+            id: 'resp-trimmed-paired',
+            output: [],
+            usage: {},
+          },
+        } as any,
+      ]);
+    };
+
+    const mockClient = {
+      baseURL: 'https://api.openai.com',
+      apiKey: 'test-key',
+      _options: {},
+    };
+    const tokenManager = {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'acc_123',
+    };
+    const pairs = [1, 2].map((n) => ({
+      call: { type: 'function_call', call_id: `call-${n}`, name: 'read_code_outline', arguments: '{}' },
+      output: { type: 'function_call_result', callId: `call-${n}`, output: `outline-${n}` },
+    }));
+
+    try {
+      const model = new CodexResponsesWSModel(
+        mockClient as any,
+        'gpt-5-codex',
+        tokenManager as any,
+        undefined,
+        undefined,
+        {
+          getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
+          runWithContext: <T>(_context: any, fn: () => T) => fn(),
+        },
+      );
+
+      for await (const _event of model.getStreamedResponse({
+        previousResponseId: 'resp-prev',
+        input: pairs.flatMap((pair) => [pair.call, pair.output]),
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any)) {
+      }
+
+      t.is(seenRequests.length, 1);
+      t.is(seenRequests[0].previousResponseId, 'resp-prev');
+      t.deepEqual(
+        seenRequests[0].input,
+        pairs.map((pair) => pair.output),
+      );
+    } finally {
+      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    }
+  },
+);
+
+test.serial('CodexResponsesWSModel keeps interleaved outputs when function calls only carry item ids', async (t) => {
+  const seenRequests: any[] = [];
+
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: 'resp-item-id-paired',
+          output: [],
+          usage: {},
+        },
+      } as any,
+    ]);
+  };
+
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+  const pairs = [1, 2, 3].map((n) => ({
+    call: { type: 'function_call', id: `fc-${n}`, name: 'shell', arguments: '{}' },
+    output: { type: 'function_call_result', callId: `call-${n}`, output: `result-${n}` },
+  }));
+
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5-codex',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+    );
+
+    for await (const _event of model.getStreamedResponse({
+      previousResponseId: 'resp-prev',
+      input: pairs.flatMap((pair) => [pair.call, pair.output]),
+      modelSettings: {},
+      tools: [],
+      handoffs: [],
+    } as any)) {
+    }
+
+    t.is(seenRequests.length, 1);
+    t.is(seenRequests[0].previousResponseId, 'resp-prev');
+    t.deepEqual(
+      seenRequests[0].input,
+      pairs.map((pair) => pair.output),
+    );
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+  }
+});
 
 test.serial(
   'CodexResponsesWSModel retries safe Codex warm-up failures before chaining the delta request',

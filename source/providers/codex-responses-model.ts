@@ -167,7 +167,7 @@ const summarizeWebsocketResponse = (response: unknown): Record<string, unknown> 
       const name = stringValue(itemRec.name);
       const args = stringValue(itemRec.arguments) ?? '{}';
       toolCalls.push({
-        id: stringValue(itemRec.id) ?? stringValue(itemRec.call_id),
+        id: stringValue(itemRec.call_id) ?? stringValue(itemRec.id),
         type: 'function',
         function: {
           ...(name !== undefined ? { name } : {}),
@@ -242,11 +242,45 @@ const CODEX_SERVER_HISTORY_TOOL_RESULT_TYPES = new Set([
   'apply_patch_call_output',
 ]);
 
+type CodexServerHistoryItem = {
+  type?: string;
+  itemId?: string;
+  callId?: string;
+  isFunctionCall: boolean;
+  isToolResult: boolean;
+};
+
+const normalizeCodexServerHistoryItem = (item: unknown): CodexServerHistoryItem => {
+  const record = asRecord(item);
+  const type = stringValue(record?.type);
+  const itemId = stringValue(record?.id);
+  const callId = stringValue(record?.call_id) ?? stringValue(record?.callId) ?? stringValue(record?.tool_call_id);
+
+  return {
+    type,
+    itemId,
+    callId,
+    isFunctionCall: type === 'function_call',
+    isToolResult: typeof type === 'string' && CODEX_SERVER_HISTORY_TOOL_RESULT_TYPES.has(type),
+  };
+};
+
 const isUserInputMessage = (item: unknown): boolean => asRecord(item)?.role === 'user';
 
-const isToolResultItem = (item: unknown): boolean => {
-  const type = asRecord(item)?.type;
-  return typeof type === 'string' && CODEX_SERVER_HISTORY_TOOL_RESULT_TYPES.has(type);
+const isToolResultItem = (item: unknown): boolean => normalizeCodexServerHistoryItem(item).isToolResult;
+
+const isToolContinuationItem = (item: unknown): boolean => {
+  const normalized = normalizeCodexServerHistoryItem(item);
+  if (normalized.isToolResult || normalized.callId) {
+    return true;
+  }
+
+  // Some Codex websocket function_call items arrive in reconstructed history
+  // with only their Responses item id (`fc_...`) even though their paired
+  // outputs carry the separate `call_...` invocation id. Treat those calls as
+  // part of the paired continuation region so earlier parallel outputs are not
+  // trimmed away.
+  return normalized.isFunctionCall && Boolean(normalized.itemId);
 };
 
 const findServerManagedDeltaStart = (input: unknown[]): number => {
@@ -272,6 +306,36 @@ const filterServerManagedInput = (input: unknown): unknown => {
     return input;
   }
 
+  // When previous_response_id is reused, the server already holds the
+  // previous response's output items (assistant message, reasoning, and the
+  // function calls it issued). The request only needs the *new* items
+  // produced since then.
+
+  // Tool continuation: the input ends with a tool-call output answering the
+  // previous response's function call(s). A previous response may issue
+  // several parallel calls, and the reconstructed history pairs each call
+  // with its result (fc₁,fco₁,fc₂,fco₂,…) instead of grouping every output
+  // in one trailing block. Collect EVERY trailing tool-result item — walking
+  // back across tool results and their interleaved function calls (everything
+  // carrying a call id) — so the outputs for the earlier parallel calls are
+  // not dropped. Stopping at the first interleaved function call would send
+  // only the trailing output and the server rejects the request with a 400
+  // ("No tool output found for function call …"). The interleaved
+  // function-call items are then dropped because the server already holds
+  // them via previous_response_id.
+  if (isToolResultItem(input[input.length - 1])) {
+    let start = input.length - 1;
+    while (start > 0 && isToolContinuationItem(input[start - 1])) {
+      start--;
+    }
+    const trailing = input.slice(start);
+    // A clean run of tool results (grouped layout) needs no filtering; for
+    // the paired layout, drop the interleaved function-call items.
+    return trailing.every(isToolResultItem) ? trailing : trailing.filter(isToolResultItem);
+  }
+
+  // Fresh user turn with no trailing tool output: the delta is the latest
+  // user message onward.
   const deltaStart = findServerManagedDeltaStart(input);
   return deltaStart > 0 ? input.slice(deltaStart) : input;
 };

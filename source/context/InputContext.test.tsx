@@ -292,3 +292,51 @@ it.sequential('Multiple components can use the context', async () => {
   expect(lastFrame()).toBeTruthy();
   expect(true).toBe(true);
 });
+
+it.sequential('setInputAndCursor updates input, cursorOffset, and cursorOverride', async () => {
+  const TestUpdater = () => {
+    const { input, cursorOffset, cursorOverride, setInputAndCursor } = useInputContext();
+
+    useEffect(() => {
+      setInputAndCursor('hello world', 5, 8);
+    }, [setInputAndCursor]);
+
+    return (
+      <Text>
+        {input}:{cursorOffset}:{cursorOverride ?? 'null'}
+      </Text>
+    );
+  };
+
+  const { lastFrame } = await renderInAct(
+    <InputProvider>
+      <TestUpdater />
+    </InputProvider>,
+  );
+
+  await flushReactUpdates(5);
+
+  expect(lastFrame()!.includes('hello world:5:8')).toBe(true);
+});
+
+it.sequential('setCursorOverride updates cursorOverride state', async () => {
+  const TestUpdater = () => {
+    const { cursorOverride, setCursorOverride } = useInputContext();
+
+    useEffect(() => {
+      setCursorOverride(42);
+    }, [setCursorOverride]);
+
+    return <Text>{cursorOverride === null ? 'null' : cursorOverride.toString()}</Text>;
+  };
+
+  const { lastFrame } = await renderInAct(
+    <InputProvider>
+      <TestUpdater />
+    </InputProvider>,
+  );
+
+  await flushReactUpdates(5);
+
+  expect(lastFrame()!.includes('42')).toBe(true);
+});

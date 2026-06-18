@@ -13,6 +13,7 @@ type ExecuteSlashCommandSelectionArgs = {
   command: SlashCommand | undefined;
   filter: string;
   setInput: (value: string) => void;
+  setCursorOverride: (offset: number | null) => void;
   close: () => void;
 };
 
@@ -68,18 +69,22 @@ export function executeSlashCommandSelection({
   command,
   filter,
   setInput,
+  setCursorOverride,
   close,
 }: ExecuteSlashCommandSelectionArgs): void {
   if (!command) return;
 
   if (shouldAutocomplete(command, filter)) {
-    setInput(`/${command.name} `);
+    const nextValue = `/${command.name} `;
+    setInput(nextValue);
+    setCursorOverride(nextValue.length);
     // Close slash menu first so mode-changing actions (e.g. /undo opening
     // undo_selection) can take effect; later setMode calls win.
     close();
     const shouldClose = command.action();
     if (shouldClose !== false) {
       setInput('');
+      setCursorOverride(null);
     }
     return;
   }
@@ -91,11 +96,12 @@ export function executeSlashCommandSelection({
   const shouldClose = command.action(args || undefined);
   if (shouldClose !== false) {
     setInput('');
+    setCursorOverride(null);
   }
 }
 
 export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions) => {
-  const { mode, setMode, input, setInput } = useInputContext();
+  const { mode, setMode, input, setInput, setInputAndCursor, setCursorOverride } = useInputContext();
 
   const isOpen = mode === 'slash_commands';
 
@@ -146,16 +152,18 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
       command: getSelectedItem(),
       filter,
       setInput,
+      setCursorOverride,
       close,
     });
-  }, [getSelectedItem, close, filter, setInput]);
+  }, [getSelectedItem, close, filter, setInput, setCursorOverride]);
 
   const completeSelected = useCallback(() => {
     const command = getSelectedItem();
     if (command) {
-      setInput(`/${command.name} `);
+      const nextValue = `/${command.name} `;
+      setInputAndCursor(nextValue, nextValue.length, nextValue.length);
     }
-  }, [getSelectedItem, setInput]);
+  }, [getSelectedItem, setInputAndCursor]);
 
   return {
     isOpen,

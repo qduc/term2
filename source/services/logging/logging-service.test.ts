@@ -236,8 +236,11 @@ it.sequential('automatically writes provider traffic artifacts for sent and rece
   expect(sent.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
   expect(sent.modelWrapperClass).toBe('FallbackResponsesModel');
   expect(sent.headers).toEqual({ host: 'api.openrouter.ai', authorization: '[REDACTED]' });
-  expect(sent.body.messages).toEqual([{ role: 'system' }, { role: 'user', content: 'hello' }]);
-  expect(sent.body.tools).toEqual(['read_file']);
+
+  const body = sent.body as Record<string, unknown>;
+  expect(body.messages).toEqual([{ role: 'system' }, { role: 'user', content: 'hello' }]);
+  expect(body.tools).toEqual(['read_file']);
+
   expect(received.direction).toBe('received');
   expect(received.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
   expect(received.modelWrapperClass).toBe('FallbackResponsesModel');

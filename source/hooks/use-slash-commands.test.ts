@@ -296,6 +296,7 @@ it('Integration - filter and execute flow for command without args', () => {
 
 it('executeSlashCommandSelection clears input after successful command execution', () => {
   let input = '/cle';
+  let cursorOverride: number | null = 4;
   let closed = false;
   let actionCalled = false;
 
@@ -312,6 +313,9 @@ it('executeSlashCommandSelection clears input after successful command execution
     setInput: (next) => {
       input = next;
     },
+    setCursorOverride: (next) => {
+      cursorOverride = next;
+    },
     close: () => {
       closed = true;
     },
@@ -320,10 +324,12 @@ it('executeSlashCommandSelection clears input after successful command execution
   expect(actionCalled).toBe(true);
   expect(closed).toBe(true);
   expect(input).toBe('');
+  expect(cursorOverride).toBe(null);
 });
 
 it('executeSlashCommandSelection autocompletes and executes for expectsArgs commands', () => {
   let input = '/mod';
+  let cursorOverride: number | null = null;
   let closed = false;
   let actionCalled = false;
 
@@ -342,6 +348,9 @@ it('executeSlashCommandSelection autocompletes and executes for expectsArgs comm
     setInput: (next) => {
       input = next;
     },
+    setCursorOverride: (next) => {
+      cursorOverride = next;
+    },
     close: () => {
       closed = true;
     },
@@ -350,10 +359,12 @@ it('executeSlashCommandSelection autocompletes and executes for expectsArgs comm
   expect(actionCalled).toBe(true);
   expect(closed).toBe(true);
   expect(input).toBe('/model ');
+  expect(cursorOverride).toBe(7);
 });
 
 it('executeSlashCommandSelection executes undo command after autocomplete', () => {
   let input = '/un';
+  let cursorOverride: number | null = null;
   let closed = false;
   let undoMenuOpened = false;
 
@@ -372,6 +383,9 @@ it('executeSlashCommandSelection executes undo command after autocomplete', () =
     setInput: (next) => {
       input = next;
     },
+    setCursorOverride: (next) => {
+      cursorOverride = next;
+    },
     close: () => {
       closed = true;
     },
@@ -379,6 +393,6 @@ it('executeSlashCommandSelection executes undo command after autocomplete', () =
 
   expect(undoMenuOpened).toBe(true);
   expect(closed).toBe(true);
-  // Action returns true → setInput('') clears the input
   expect(input).toBe('');
+  expect(cursorOverride).toBe(null);
 });

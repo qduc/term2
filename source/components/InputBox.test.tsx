@@ -1,6 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import React, { useEffect, useRef, act } from 'react';
 import { Box, Text } from 'ink';
 import InputBox, { getProviderWizardPromptLabel } from './InputBox.js';
@@ -19,6 +19,18 @@ import { clearModelCache } from '../services/model-service.js';
 import { useModelSelection } from '../hooks/use-model-selection.js';
 import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
 import { renderInAct, toVisibleText } from '../test-helpers/ink-testing.js';
+
+vi.mock('../services/file-service.js', () => ({
+  getWorkspaceEntries: vi.fn(async () => [{ path: 'mock/path', type: 'file' }]),
+  refreshWorkspaceEntries: vi.fn(async () => [{ path: 'mock/path', type: 'file' }]),
+  getWorkspaceEntriesMeta: vi.fn(() => ({
+    lastLoadedAt: null,
+    totalEntries: 1,
+    truncated: false,
+    truncatedByTotalLimit: false,
+    limit: 10_000,
+  })),
+}));
 
 // Mock slash commands
 const mockSlashCommands: SlashCommand[] = [
@@ -252,6 +264,49 @@ it.sequential('InputBox keeps cursor fixed when left arrow switches model provid
   await writeInput(stdin, '\u001B[D');
 
   expect(getCursorFromFrame(lastFrame()), lastFrame()).toBe(beforeCursor);
+});
+
+const PathCompletionHarness = () => {
+  const { setInput, setMode, setCursorOffset, setTriggerIndex, mode } = useInputContext();
+  const didSetupRef = useRef(false);
+
+  useEffect(() => {
+    if (didSetupRef.current) return;
+    didSetupRef.current = true;
+    setInput('before @after');
+    setCursorOffset(8);
+    setTriggerIndex(7);
+    setMode('path_completion');
+  }, [setInput, setCursorOffset, setTriggerIndex, setMode]);
+
+  // Keep the harness rendered until insertion completes so it does not re-run setup.
+  return <Text>{mode}</Text>;
+};
+
+it.sequential('path completion keeps cursor at end of inserted path in middle of input', async () => {
+  const { lastFrame, stdin } = await renderAndFlush(
+    <InputProvider>
+      <CursorState />
+      <InputBox {...defaultProps} />
+      <PathCompletionHarness />
+    </InputProvider>,
+  );
+
+  // Wait for path completion popup and the mocked entry to load.
+  await waitFor(lastFrame, (f) => f.includes('mock/path'), { timeoutMs: 3000 });
+  await flushReactUpdates(10);
+
+  // Press Enter to insert the selected path with a trailing space.
+  await writeInput(stdin, '\r');
+
+  // Wait for the popup to close and cursor to stabilize.
+  await waitFor(lastFrame, (f) => !f.includes('mock/path'), { timeoutMs: 3000 });
+  await flushReactUpdates(10);
+
+  // "before /mock/path after" -> cursor should be at 17 (after inserted path + trailing space),
+  // not at the end of the input (22).
+  const cursor = getCursorFromFrame(lastFrame());
+  expect(cursor).toBe(17);
 });
 
 const StateDisplay = () => {

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useMemo, useState, useCallback, ReactNode } from 'react';
 import type { ImageRef } from 'ink-prompt';
 
 export type InputMode =
@@ -18,6 +18,7 @@ interface InputState {
   cursorOffset: number;
   triggerIndex: number | null;
   images: ImageRef[];
+  cursorOverride: number | null;
 }
 
 interface InputActions {
@@ -26,6 +27,8 @@ interface InputActions {
   setCursorOffset: (offset: number) => void;
   setTriggerIndex: (index: number | null) => void;
   setImages: React.Dispatch<React.SetStateAction<ImageRef[]>>;
+  setInputAndCursor: (value: string, cursorOffset: number, cursorOverride?: number | null) => void;
+  setCursorOverride: (offset: number | null) => void;
 }
 
 const InputStateContext = createContext<InputState | undefined>(undefined);
@@ -37,13 +40,31 @@ export const InputProvider = ({ children }: { children: ReactNode }) => {
   const [cursorOffset, setCursorOffset] = useState(0);
   const [triggerIndex, setTriggerIndex] = useState<number | null>(null);
   const [images, setImages] = useState<ImageRef[]>([]);
+  const [cursorOverride, setCursorOverride] = useState<number | null>(null);
+
+  const setInputAndCursor = useCallback((value: string, offset: number, override: number | null = null) => {
+    setInput(value);
+    setCursorOffset(offset);
+    setCursorOverride(override);
+  }, []);
 
   const state = useMemo<InputState>(
-    () => ({ input, mode, cursorOffset, triggerIndex, images }),
-    [input, mode, cursorOffset, triggerIndex, images],
+    () => ({ input, mode, cursorOffset, triggerIndex, images, cursorOverride }),
+    [input, mode, cursorOffset, triggerIndex, images, cursorOverride],
   );
 
-  const actions = useMemo<InputActions>(() => ({ setInput, setMode, setCursorOffset, setTriggerIndex, setImages }), []);
+  const actions = useMemo<InputActions>(
+    () => ({
+      setInput,
+      setMode,
+      setCursorOffset,
+      setTriggerIndex,
+      setImages,
+      setInputAndCursor,
+      setCursorOverride,
+    }),
+    [setInputAndCursor],
+  );
 
   return (
     <InputStateContext.Provider value={state}>

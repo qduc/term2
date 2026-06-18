@@ -128,14 +128,20 @@ const InputBox: FC<Props> = ({
     setCursorOffset,
     images,
     setImages,
+    cursorOverride,
+    setCursorOverride,
   } = useInputContext();
 
   const dismissedCompletionRef = useRef<CompletionDismissal>(null);
   const inputRevisionRef = useRef(0);
   const cursorOffsetRef = useRef(cursorOffset);
   const lockedCursorRef = useRef<number | null>(null);
-  const [cursorOverride, setCursorOverride] = useState<number | null>(null);
   const settingsFilterRef = useRef('');
+  // Stores a cursor position that should be applied *after* a popup menu closes
+  // and the new value has already been synced to MultilineInput. Updating both
+  // value and cursorOverride in the same render is overwritten by ink-prompt's
+  // value-sync effect, so we defer the cursor override to a separate commit.
+  const pendingCursorOverrideRef = useRef<{ value: string; cursor: number } | null>(null);
 
   // Hooks
   const slash = useSlashCommands({
@@ -214,6 +220,12 @@ const InputBox: FC<Props> = ({
   }, []);
   const handleCursorChange = useCallback(
     (nextOffset: number) => {
+      // When a popup menu is open MultilineInput is inactive. The only cursor
+      // changes it reports come from the value-sync effect (setText resets
+      // cursor to end), which would overwrite our correct cursorOffset. Ignore
+      // all cursor changes in non-text mode.
+      if (mode !== 'text') return;
+
       const lockedCursor = lockedCursorRef.current;
       if (lockedCursor !== null) {
         if (nextOffset !== lockedCursor) {
@@ -229,7 +241,7 @@ const InputBox: FC<Props> = ({
       cursorOffsetRef.current = nextOffset;
       setCursorOffset(nextOffset);
     },
-    [remountInput, setCursorOffset],
+    [mode, remountInput, setCursorOffset],
   );
   const handleImagesChange = useCallback((nextImages: ImageRef[]) => {
     setImages((prevImages) => (areImagesEqual(prevImages, nextImages) ? prevImages : nextImages));
@@ -253,7 +265,7 @@ const InputBox: FC<Props> = ({
       });
       if (!result) return false;
       onChange(result.nextValue);
-      setCursorOverride(result.nextCursor);
+      pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
       path.close();
       return true;
     },
@@ -265,7 +277,7 @@ const InputBox: FC<Props> = ({
     if (!result) return false;
     settingsFilterRef.current = settings.query;
     onChange(result.nextValue);
-    setCursorOverride(result.nextCursor);
+    pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
     settings.close();
     return true;
   }, [settings, value, onChange]);
@@ -330,11 +342,20 @@ const InputBox: FC<Props> = ({
       });
       if (!result) return false;
       onChange(result.nextValue);
-      setCursorOverride(result.nextCursor);
+      pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
       settingsValue.close();
       return true;
     },
-    [settingsValue, value, onChange, cursorOffset, settingsService, onSettingChange, onSystemMessage],
+    [
+      settingsValue,
+      value,
+      onChange,
+      cursorOffset,
+      settingsService,
+      onSettingChange,
+      onSystemMessage,
+      reopenSettingsMenu,
+    ],
   );
 
   const insertSelectedModel = useCallback(
@@ -370,12 +391,16 @@ const InputBox: FC<Props> = ({
         return true;
       }
 
-      onChange(result.nextValue);
-      setCursorOverride(result.nextCursor);
-      models.close();
       if (submitAfterInsert) {
+        onChange(result.nextValue);
+        models.close();
         submitTextOnly(result.nextValue);
+        return true;
       }
+
+      onChange(result.nextValue);
+      pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
+      models.close();
       return true;
     },
     [models, value, onChange, submitTextOnly, settingsService, onSettingChange],
@@ -392,11 +417,16 @@ const InputBox: FC<Props> = ({
       });
       if (!result) return false;
 
-      onChange(result.nextValue);
-      skills.close();
       if (submitAfterInsert) {
+        onChange(result.nextValue);
+        skills.close();
         submitTextOnly(result.nextValue);
+        return true;
       }
+
+      onChange(result.nextValue);
+      pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
+      skills.close();
       return true;
     },
     [skills, value, cursorOffset, onChange, submitTextOnly],
@@ -470,11 +500,35 @@ const InputBox: FC<Props> = ({
     inputRevisionRef,
   });
 
+  // When a non-text mode is active (popup menu), keep cursorOverride in sync so
+  // MultilineInput always knows the cursor position when it becomes active again.
   useEffect(() => {
-    if (cursorOverride !== null && cursorOverride === cursorOffset) {
+    if (mode !== 'text' && cursorOverride !== cursorOffset) {
+      setCursorOverride(cursorOffset);
+    }
+  }, [mode, cursorOffset, cursorOverride, setCursorOverride]);
+
+  // Only clear cursorOverride in text mode to avoid losing cursor position
+  // when a popup menu handles character input and leaves MultilineInput inactive.
+  useEffect(() => {
+    if (cursorOverride !== null && cursorOverride === cursorOffset && mode === 'text') {
       setCursorOverride(null);
     }
-  }, [cursorOverride, cursorOffset]);
+  }, [cursorOverride, cursorOffset, mode]);
+
+  // After a popup menu closes and the new value has been synced to
+  // MultilineInput, apply any pending cursor override. We intentionally defer
+  // this to a separate commit so the value-sync effect (which resets the cursor
+  // to the end) does not overwrite the override.
+  useEffect(() => {
+    if (mode === 'text' && pendingCursorOverrideRef.current !== null) {
+      const { value: expectedValue, cursor } = pendingCursorOverrideRef.current;
+      pendingCursorOverrideRef.current = null;
+      if (value === expectedValue) {
+        setCursorOverride(cursor);
+      }
+    }
+  }, [mode, value, setCursorOverride]);
 
   useTriggerDetection({
     value,
@@ -592,7 +646,8 @@ const InputBox: FC<Props> = ({
       changeInput(nextValue);
       cursorOffsetRef.current = nextCursor;
       updateCursorOffset(nextCursor);
-      overrideCursor(nextCursor);
+      // Don't call overrideCursor here for the same reason as char insertion
+      // — see comment above.
       return;
     }
     if (key.delete) {
@@ -636,7 +691,10 @@ const InputBox: FC<Props> = ({
       changeInput(nextValue);
       cursorOffsetRef.current = nextCursor;
       updateCursorOffset(nextCursor);
-      overrideCursor(nextCursor);
+      // Do NOT call overrideCursor here — when a popup menu is open,
+      // MultilineInput applies cursorOverride BEFORE value sync (setText
+      // resets cursor to end). Instead, the sync effect below re-applies
+      // cursorOverride after MultilineInput's value sync has run.
     }
   });
 

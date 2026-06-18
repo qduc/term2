@@ -72,7 +72,7 @@ const getFirstParagraph = (output: string | undefined): string => {
 
 const CommandMessage: FC<Props> = ({
   command,
-  output,
+  output: rawOutput,
   status,
   success,
   failureReason,
@@ -86,6 +86,21 @@ const CommandMessage: FC<Props> = ({
 }) => {
   const isRunning = status === 'pending' || status === 'running';
   const [isVisible, setIsVisible] = useState(!isRunning);
+
+  const { output, runtime } = useMemo(() => {
+    const isShell = !toolName || toolName === 'shell';
+    if (isShell && rawOutput) {
+      const match = rawOutput.match(/(?:^|\r?\n)Runtime:\s*(\d+ms)(?:\r?\n|$)/);
+      if (match) {
+        const cleaned = rawOutput.replace(/(?:^|\r?\n)Runtime:\s*\d+ms(?:\r?\n|$)/, '\n').trim();
+        return {
+          output: cleaned,
+          runtime: match[1],
+        };
+      }
+    }
+    return { output: rawOutput || '', runtime: undefined };
+  }, [toolName, rawOutput]);
 
   const diff = useMemo(() => {
     if (toolName !== TOOL_NAME_SEARCH_REPLACE || !toolArgs) return '';
@@ -193,6 +208,7 @@ const CommandMessage: FC<Props> = ({
         return (
           <>
             <Text color={COLOR_MUTED}>$</Text> <Text>{command}</Text>
+            {runtime && <Text color={COLOR_MUTED}> ({runtime})</Text>}
           </>
         );
       }
@@ -950,6 +966,7 @@ const CommandMessage: FC<Props> = ({
       <Text color={success === false ? COLOR_ERROR : isRunning ? COLOR_WARNING : COLOR_INFO}>
         $ <Text bold>{command}</Text>
         {isRunning && formattedArgs && command === toolName && <Text color={COLOR_WARNING}> {formattedArgs}</Text>}
+        {runtime && <Text color={COLOR_MUTED}> ({runtime})</Text>}
       </Text>
       {failureReason && <Text color={COLOR_ERROR}>Error: {failureReason}</Text>}
       <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>

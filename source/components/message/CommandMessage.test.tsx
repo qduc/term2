@@ -1166,3 +1166,44 @@ it('CommandMessage renders approval rejection with ✖ when isSubagent is true',
   expect(lines.length, `Expected exactly 1 line, got: ${output}`).toBe(1);
   expect(lines[0]!.includes('✖')).toBe(true);
 });
+
+it('CommandMessage extracts runtime from shell tool output and displays it in standard mode', async () => {
+  const props = {
+    command: 'echo "Hello"',
+    toolName: 'shell',
+    toolArgs: { command: 'echo "Hello"' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'standard' as const,
+    output: 'Runtime: 12ms\nHello',
+  };
+
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  expect(output.includes('echo "Hello"')).toBe(true);
+  expect(output.includes('(12ms)')).toBe(true);
+  expect(output.includes('Hello')).toBe(true);
+  expect(output.includes('Runtime: 12ms')).toBe(false);
+});
+
+it('CommandMessage extracts runtime from shell tool output and displays it in concise mode', async () => {
+  const props = {
+    command: 'echo "World"',
+    toolName: 'shell',
+    toolArgs: { command: 'echo "World"' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: 'Runtime: 12ms\nHello',
+  };
+
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  expect(output.includes('✔')).toBe(true);
+  expect(output.includes('echo "World"')).toBe(true);
+  expect(output.includes('(12ms)')).toBe(true);
+  expect(output.includes('Hello')).toBe(false);
+  expect(output.includes('Runtime: 12ms')).toBe(false);
+});

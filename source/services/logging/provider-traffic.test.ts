@@ -434,12 +434,12 @@ it('ProviderTrafficArtifactStore writes per-day per-session request files and da
 
   const dayDir = path.join(rootDir, '2026-05-22');
   const sessionDir = path.join(dayDir, '09-14-31_sessi');
-  const requestFile = path.join(sessionDir, '09-14-35.044Z_req-1.jsonl');
+  const requestFile = path.join(sessionDir, '09-14-35.044Z_req-1.json');
 
   expect(fs.existsSync(dayDir)).toBe(true);
   expect(fs.existsSync(sessionDir)).toBe(true);
   expect(fs.existsSync(requestFile)).toBe(true);
-  expect(path.basename(requestFile)).toBe('09-14-35.044Z_req-1.jsonl');
+  expect(path.basename(requestFile)).toBe('09-14-35.044Z_req-1.json');
   expect(path.basename(requestFile).includes('session-123')).toBe(false);
 
   const requestRecord = readRequestFile(requestFile);
@@ -541,7 +541,7 @@ it('ProviderTrafficArtifactStore appends received line, upserts newest-first ind
     sentBody: { input: [{ role: 'user', content: 'resumed later' }] },
   });
 
-  const requestFile = path.join(rootDir, '2026-05-22', '09-14-31_sessi', '09-14-35.044Z_req-1.jsonl');
+  const requestFile = path.join(rootDir, '2026-05-22', '09-14-31_sessi', '09-14-35.044Z_req-1.json');
   const requestRecord = readRequestFile(requestFile);
   expect((requestRecord.sent as Record<string, unknown>)?.direction).toBe('sent');
   expect((requestRecord.received as Record<string, unknown>)?.direction).toBe('received');
@@ -553,7 +553,7 @@ it('ProviderTrafficArtifactStore appends received line, upserts newest-first ind
   );
   expect((requestRecord.received as Record<string, unknown>)?.modelWrapperClass).toBe('RetryingModel');
 
-  const failureFile = path.join(rootDir, '2026-05-22', '10-00-00_sessi', '10-00-00.000Z_req-2.jsonl');
+  const failureFile = path.join(rootDir, '2026-05-22', '10-00-00_sessi', '10-00-00.000Z_req-2.json');
   const failureRecord = readRequestFile(failureFile);
   expect(((failureRecord.received as Record<string, unknown>)?.error as any)?.message).toBe('fetch failed');
   expect((failureRecord.sent as Record<string, unknown>)?.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
@@ -572,7 +572,7 @@ it('ProviderTrafficArtifactStore appends received line, upserts newest-first ind
   expect(indexEntries[0].providersSeen).toEqual(['openrouter']);
   expect(indexEntries[1].modelsSeen).toEqual(['gpt-5']);
 
-  expect(fs.existsSync(path.join(rootDir, '2026-05-23', '00-00-00_sessi', '00-00-01.000Z_req-3.jsonl'))).toBe(true);
+  expect(fs.existsSync(path.join(rootDir, '2026-05-23', '00-00-00_sessi', '00-00-01.000Z_req-3.json'))).toBe(true);
   expect(fs.readFileSync(legacyFile, 'utf8')).toBe('{"legacy":true}\n');
 });
 
@@ -609,7 +609,7 @@ it('ProviderTrafficArtifactStore places evaluator requests under evaluator subfo
 
   const dayDir = path.join(rootDir, '2026-05-22');
   const sessionDir = path.join(dayDir, '09-14-31_sessi');
-  const requestFile = path.join(sessionDir, 'evaluator_09-14-35.044Z_eval-.jsonl');
+  const requestFile = path.join(sessionDir, 'evaluator_09-14-35.044Z_eval-.json');
 
   expect(fs.existsSync(dayDir)).toBe(true);
   expect(fs.existsSync(sessionDir)).toBe(true);
@@ -669,13 +669,13 @@ it('recordRequestComplete removes completed request path from map so a second co
   const sessionDir = path.join(dayDir, '10-00-00_sessi');
 
   // The file created by recordRequestStart is rewritten in place with sent + first received.
-  const startFile = path.join(sessionDir, '10-00-01.000Z_test-.jsonl');
+  const startFile = path.join(sessionDir, '10-00-01.000Z_test-.json');
   expect(fs.existsSync(startFile)).toBe(true);
   expect((readRequestFile(startFile).sent as Record<string, unknown>)?.direction).toBe('sent');
   expect((readRequestFile(startFile).received as Record<string, unknown>)?.direction).toBe('received');
 
   // The second completion MUST write to a NEW file, not reuse the stored path
-  const secondFile = path.join(sessionDir, '10-00-10.000Z_test-.jsonl');
+  const secondFile = path.join(sessionDir, '10-00-10.000Z_test-.json');
   expect(fs.existsSync(secondFile)).toBe(true);
   const secondRecords = readRequestFile(secondFile);
   expect((secondRecords.sent as Record<string, unknown>) ?? {}).toEqual({});

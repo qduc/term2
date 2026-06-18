@@ -216,20 +216,14 @@ it.sequential('automatically writes provider traffic artifacts for sent and rece
   const dayDir = path.join(providerRoot, dayDirs[0]);
   const sessionDirs = fs.readdirSync(dayDir, { withFileTypes: true }).filter((entry) => entry.isDirectory());
   expect(sessionDirs.length > 0).toBe(true);
-  const requestFiles = fs.readdirSync(path.join(dayDir, sessionDirs[0].name)).filter((name) => name.endsWith('.jsonl'));
+  const requestFiles = fs.readdirSync(path.join(dayDir, sessionDirs[0].name)).filter((name) => name.endsWith('.json'));
   expect(requestFiles.length > 0).toBe(true);
   const trafficFile = path.join(dayDir, sessionDirs[0].name, requestFiles[0]);
 
-  const entries = fs
-    .readFileSync(trafficFile, 'utf8')
-    .split(/\r?\n\r?\n/)
-    .filter((line) => line.trim())
-    .map((line) => JSON.parse(line));
-
-  expect(entries.length >= 2).toBe(true);
-
-  const sent = entries.find((entry) => entry.direction === 'sent');
-  const received = entries.find((entry) => entry.direction === 'received');
+  // The request file is a single JSON object envelope { sent, received }.
+  const envelope = JSON.parse(fs.readFileSync(trafficFile, 'utf8')) as Record<string, unknown>;
+  const sent = envelope.sent as Record<string, unknown> | undefined;
+  const received = envelope.received as Record<string, unknown> | undefined;
 
   expect(sent).toBeTruthy();
   expect(received).toBeTruthy();
@@ -247,7 +241,7 @@ it.sequential('automatically writes provider traffic artifacts for sent and rece
   expect(received.direction).toBe('received');
   expect(received.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
   expect(received.modelWrapperClass).toBe('FallbackResponsesModel');
-  expect(received.summary.outputText).toBe('hi');
+  expect((received.summary as Record<string, unknown>)?.outputText).toBe('hi');
 });
 
 it.sequential('cleans up old provider traffic files and directories by date', async () => {

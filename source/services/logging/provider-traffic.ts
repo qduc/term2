@@ -735,7 +735,7 @@ export class ProviderTrafficArtifactStore {
     const sessionDir = `${dayDir}/${sessionDirName}`;
     const requestTimePart = timePartForPath(input.timestamp);
     const requestIdShort = safePathSegment(input.requestId).substring(0, 5);
-    const requestFileName = `${input.evaluator ? 'evaluator_' : ''}${requestTimePart}_${requestIdShort}.jsonl`;
+    const requestFileName = `${input.evaluator ? 'evaluator_' : ''}${requestTimePart}_${requestIdShort}.json`;
     const requestPath = `${sessionDir}/${requestFileName}`;
     return { dayDir, sessionDir, requestPath, sessionDirName };
   }

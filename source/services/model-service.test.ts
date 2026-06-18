@@ -218,8 +218,8 @@ it.sequential('fetchModels uses Google auth headers for custom google provider',
 
   expect(models.map((m) => m.id)).toEqual(['gemini-test-1', 'gemini-test-2']);
   expect(calls.length).toBe(1);
-  expect(calls[0].url).toBe('https://generativelanguage.googleapis.com/v1beta/models');
-  expect(calls[0].options?.headers?.['x-goog-api-key']).toBe('google-key');
+  expect(calls[0].url).toBe('https://generativelanguage.googleapis.com/v1beta/models?key=google-key');
+  expect(calls[0].options?.headers?.['x-goog-api-key']).toBeUndefined();
 });
 
 it('filterModels matches by id or name and limits results', () => {

@@ -638,23 +638,18 @@ const App: FC<AppProps> = ({
       case 'message':
         // Regular message, send to AI agent
         {
-          // Prepend pending skill content if one was activated
+          // Attach pending skill if one was activated
           const pendingSkill = pendingSkillRef.current;
           if (pendingSkill) {
             pendingSkillRef.current = null;
-            const wrapped = [
-              '<system-notice>',
-              'The user wants you to use this skill for the following request',
-              '</system-notice>',
-              '<skill>',
-              pendingSkill.body,
-              '</skill>',
-              '',
-              '---',
-              '',
-              'User request as usual....',
-            ].join('\n');
-            turn = { ...turn, text: turn.text ? `${wrapped}\n\n${turn.text}` : wrapped };
+            turn = {
+              ...turn,
+              skill: {
+                name: pendingSkill.name,
+                description: pendingSkill.description,
+                body: pendingSkill.body,
+              },
+            };
           }
 
           const surgePreview = conversationService.previewInputSurge(turn);

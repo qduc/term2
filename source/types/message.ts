@@ -1,5 +1,6 @@
 import type { CommandMessage as BaseCommandMessage } from '../tools/types.js';
 import type { NormalizedUsage } from '../utils/ai/token-usage.js';
+import type { SkillAttachment } from '../types/user-turn.js';
 
 export interface UserMessage {
   id: string;
@@ -11,6 +12,7 @@ export interface UserMessage {
    * undo selection menu must skip these so UI and store stay aligned.
    */
   consumedForAbort?: boolean;
+  skill?: SkillAttachment;
 }
 
 export interface BotMessage {

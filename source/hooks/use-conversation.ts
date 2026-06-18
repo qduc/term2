@@ -22,7 +22,13 @@ import {
   filterPendingCommandMessagesForApproval,
   type ApprovedToolContext,
 } from '../services/approval/approval-presentation-policy.js';
-import { formatUserTurnForDisplay, hasUserTurnContent, normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
+import {
+  formatUserTurnForDisplay,
+  hasUserTurnContent,
+  injectSkillIntoTurn,
+  normalizeUserTurn,
+  type UserTurn,
+} from '../types/user-turn.js';
 import { conversationUIReducer, createInitialUIState } from './conversation-ui-reducer.js';
 
 export type {
@@ -265,6 +271,7 @@ export const useConversation = ({
         id: createMessageId(),
         sender: 'user',
         text: formatUserTurnForDisplay(turn),
+        ...(turn.skill ? { skill: turn.skill } : {}),
       };
       appendMessages([userMessage]);
       logWriter?.append({ type: 'user_message', message: userMessage });
@@ -293,7 +300,9 @@ export const useConversation = ({
       };
 
       try {
-        const result = await conversationService.sendMessage(turn, {
+        // Inject skill content into the turn text before sending to AI
+        const turnToSend = turn.skill ? injectSkillIntoTurn(turn) : turn;
+        const result = await conversationService.sendMessage(turnToSend, {
           onEvent: createOnEventWithSubagentTracking(wrappedOnEvent),
           bypassInputSurgeGuard: options?.bypassInputSurgeGuard,
         });

@@ -621,6 +621,7 @@ const conversationService = new ConversationService({
     logger: logger,
     settingsService: settings,
     sessionContextService,
+    skillsService,
   },
 });
 

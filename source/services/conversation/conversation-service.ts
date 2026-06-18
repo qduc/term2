@@ -4,6 +4,7 @@ import type { SavedToolExecution } from '../tool-execution-ledger.js';
 import type { LogEvent, StateSnapshot } from '../logging/conversation-log-events.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
+import type { SkillsService } from '../skills/skills-service.js';
 import type { SendMessageOptions, HandleApprovalDecisionOptions } from './conversation-adapter.js';
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 import type { InputSurgeDecision } from '../input-surge-guard.js';
@@ -24,6 +25,7 @@ export class ConversationService {
     logger: ILoggingService;
     settingsService?: ISettingsService;
     sessionContextService: ISessionContextService;
+    skillsService?: SkillsService;
   };
 
   constructor({
@@ -37,6 +39,7 @@ export class ConversationService {
       logger: ILoggingService;
       settingsService?: ISettingsService;
       sessionContextService: ISessionContextService;
+      skillsService?: SkillsService;
     };
     sessionId?: string;
     sessionStartedAt?: string;
@@ -54,6 +57,7 @@ export class ConversationService {
     const previousLogSink = this.#logSink;
     this.#bundle.stateFacade.reset();
     this.#bundle.dispose();
+    this.#deps.skillsService?.discoverSkills();
     this.#bundle = createConversationSession({
       agentClient: this.#agentClient,
       deps: this.#deps,

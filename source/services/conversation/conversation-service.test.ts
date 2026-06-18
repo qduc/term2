@@ -860,6 +860,24 @@ it('resetWithNewId() clears provider conversations when supported', async () => 
   expect(clearCalls).toBe(1);
 });
 
+it('resetWithNewId() rediscover skills when skills service is available', async () => {
+  let discoverCalls = 0;
+  const mockSkillsService = {
+    discoverSkills() {
+      discoverCalls++;
+    },
+  } as any;
+
+  const service = new ConversationService({
+    agentClient: partialClient(),
+    deps: { logger: mockLogger, sessionContextService, skillsService: mockSkillsService },
+  });
+
+  service.resetWithNewId('new-id');
+
+  expect(discoverCalls).toBe(1);
+});
+
 it('setModel() delegates to agent client', () => {
   let setModelCalledWith: any = null;
   const mockClient = partialClient({

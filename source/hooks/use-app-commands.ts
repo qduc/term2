@@ -138,7 +138,7 @@ export const useAppCommands = ({
         },
       },
       createQuitSlashCommand(exit),
-      createSkillsSlashCommand({ skillsService, onSkillSelected, addSystemMessage }),
+      createSkillsSlashCommand({ skillsService, onSkillSelected, addSystemMessage, setInput }),
     ],
     [
       addSystemMessage,

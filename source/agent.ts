@@ -205,7 +205,7 @@ export function getEnvInfo(
 
   if (lite) {
     // Minimal env info for lite mode
-    return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd: ${cwd}; date: ${now}`;
+    return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd (you're already here, don't \`cd\` to it): ${cwd}; date: ${now}`;
   }
 
   // For remote sessions, we might not be able to list top-level entries efficiently or at all easily here synchronously
@@ -217,7 +217,7 @@ export function getEnvInfo(
     topLevel = `${getProjectTreeForPrompt(cwd)}`;
   }
 
-  return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd: ${cwd}; date: ${now}\n${topLevel}\n\n`;
+  return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd (you're already here, don't \`cd\` to it): ${cwd}; date: ${now}\n${topLevel}\n\n`;
 }
 
 export function getAgentsInstructions(cwd: string): string {

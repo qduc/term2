@@ -1140,6 +1140,95 @@ it.sequential('CodexResponsesWSModel keeps interleaved outputs when function cal
 });
 
 it.sequential(
+  'CodexResponsesWSModel warms interleaved tool continuations into history before sending the delta',
+  async () => {
+    const seenRequests: any[] = [];
+
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+      seenRequests.push(request);
+      return makeStream([
+        {
+          type: 'response.completed',
+          response: {
+            id: seenRequests.length === 1 ? 'resp-warmup' : 'resp-main',
+            output: [],
+            usage: {},
+          },
+        } as any,
+      ]);
+    };
+
+    const mockClient = {
+      baseURL: 'https://api.openai.com',
+      apiKey: 'test-key',
+      _options: {},
+    };
+    const tokenManager = {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'acc_123',
+    };
+
+    const openingUser = { role: 'user', type: 'message', content: 'inspect the repo' };
+    const openingAssistant = {
+      role: 'assistant',
+      type: 'message',
+      content: [{ type: 'output_text', text: 'I will inspect it.' }],
+    };
+    const parallelReads = [1, 2].map((n) => ({
+      call: { type: 'function_call', call_id: `call-read-${n}`, name: 'read_code_outline', arguments: '{}' },
+      output: { type: 'function_call_result', callId: `call-read-${n}`, output: `outline-${n}` },
+    }));
+    const shellPair = {
+      call: { type: 'function_call', call_id: 'call-shell', name: 'shell', arguments: '{}' },
+      output: { type: 'function_call_result', callId: 'call-shell', output: 'grep result' },
+    };
+
+    try {
+      const model = new CodexResponsesWSModel(
+        mockClient as any,
+        'gpt-5-codex',
+        tokenManager as any,
+        undefined,
+        undefined,
+        {
+          getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
+          runWithContext: <T>(_context: any, fn: () => T) => fn(),
+        },
+      );
+
+      for await (const _event of model.getStreamedResponse({
+        input: [
+          openingUser,
+          openingAssistant,
+          ...parallelReads.flatMap((pair) => [pair.call, pair.output]),
+          shellPair.call,
+          shellPair.output,
+        ],
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any)) {
+      }
+
+      expect(seenRequests.length).toBe(2);
+      expect(seenRequests[0].modelSettings.providerData?.generate).toBe(false);
+      expect(seenRequests[0].previousResponseId).toBe(undefined);
+      expect(seenRequests[0].input).toEqual([
+        openingUser,
+        openingAssistant,
+        ...parallelReads.map((pair) => pair.call),
+        shellPair.call,
+      ]);
+      expect(seenRequests[1].previousResponseId).toBe('resp-warmup');
+      expect(seenRequests[1].input).toEqual([...parallelReads.map((pair) => pair.output), shellPair.output]);
+    } finally {
+      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    }
+  },
+);
+
+it.sequential(
   'CodexResponsesWSModel retries safe Codex warm-up failures before chaining the delta request',
   async () => {
     const seenRequests: any[] = [];

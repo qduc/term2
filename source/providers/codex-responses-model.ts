@@ -285,7 +285,12 @@ const isToolContinuationItem = (item: unknown): boolean => {
 
 const findServerManagedDeltaStart = (input: unknown[]): number => {
   let trailingToolResultStart = input.length;
-  while (trailingToolResultStart > 0 && isToolResultItem(input[trailingToolResultStart - 1])) {
+  // Walk backward through tool-continuation items (tool results and
+  // their interleaved function calls) so parallel outputs from the same
+  // model response stay together in the delta instead of leaking into
+  // the warmup. Items without a call id (user messages, assistant
+  // messages, reasoning) naturally stop the walk.
+  while (trailingToolResultStart > 0 && isToolContinuationItem(input[trailingToolResultStart - 1])) {
     trailingToolResultStart--;
   }
   if (trailingToolResultStart < input.length) {
@@ -633,13 +638,30 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     }
 
     const deltaStart = findServerManagedDeltaStart(input);
-    const warmupInput = deltaStart > 0 ? input.slice(0, deltaStart) : [];
-    const deltaInput = deltaStart > 0 ? input.slice(deltaStart) : input;
+    const warmupItems: unknown[] = deltaStart > 0 ? [...input.slice(0, deltaStart)] : [];
+    const rawDelta = deltaStart > 0 ? input.slice(deltaStart) : [...input];
+
+    // The trailing walk collects interleaved function-call items alongside
+    // their tool results to keep parallel outputs together.  Move those
+    // function-call items back to the warmup so the server receives them
+    // as history (generate: false) and can pair them with the tool results
+    // that arrive in the delta request.
+    const deltaInput: unknown[] = [];
+    for (const item of rawDelta) {
+      if (isToolResultItem(item)) {
+        deltaInput.push(item);
+      } else if (isToolContinuationItem(item)) {
+        warmupItems.push(item);
+      } else {
+        deltaInput.push(item);
+      }
+    }
+
     return {
       warmupRequest: withProviderData(
         {
           ...request,
-          input: warmupInput,
+          input: warmupItems,
         },
         { generate: false },
       ),

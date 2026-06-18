@@ -770,6 +770,7 @@ const App: FC<AppProps> = ({
             onApprove={handleApprove}
             onReject={handleReject}
             onTypeAnswer={onTypeAnswer}
+            onNavigateQuestion={handleNavigateQuestion}
             sshInfo={sshInfo}
             lastCodexRateLimit={lastCodexRateLimit}
             undoMenuRef={undoMenuRef}

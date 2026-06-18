@@ -1,7 +1,12 @@
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { sendNotification } from './services/notification-service.js';
 import { useInputActions, useInputState } from './context/InputContext.js';
 import { parseModelProviderArg } from './utils/ai/model-provider-arg.js';
+import {
+  appendStartupBannerId,
+  clearTerminalForRedraw,
+  estimateLastTurnTokens,
+  hasConversationContent,
+} from './app-helpers.js';
 
 import { Box, useApp, useInput, useStdout } from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
@@ -21,36 +26,21 @@ import { parseInput } from './utils/input-parser.js';
 import { useRuntimeSettings } from './hooks/use-runtime-settings.js';
 import { useShellMode, SSHInfo } from './hooks/use-shell-mode.js';
 import { useAppCommands } from './hooks/use-app-commands.js';
+import { useTerminalFocusNotifier } from './hooks/use-terminal-focus-notifier.js';
 import { hasUserTurnContent, type UserTurn } from './types/user-turn.js';
 import type { Message } from './types/message.js';
 import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumulator } from './utils/ai/token-usage.js';
 import type { UndoItem } from './hooks/use-undo-selection.js';
 import { resolveSlashCommand } from './slash-commands.js';
-import { getSerializedInputBytes } from './services/large-uncached-input-guard.js';
 import type { SkillsService, SkillInfo } from './services/skills/skills-service.js';
 
-const estimateLastTurnTokens = (turn: UserTurn): number => {
-  const images = turn.images ?? [];
-  let inputItem: unknown;
-  if (images.length === 0) {
-    inputItem = turn.text ?? '';
-  } else {
-    const content: any[] = [];
-    if (turn.text) {
-      content.push({ type: 'input_text', text: turn.text });
-    }
-    for (const image of images) {
-      content.push({
-        type: 'input_image',
-        image: `data:${image.mimeType};base64,${image.data}`,
-        detail: 'auto',
-      });
-    }
-    inputItem = { role: 'user', type: 'message', content };
-  }
-  const bytes = getSerializedInputBytes(inputItem);
-  return Math.ceil(bytes / 4);
-};
+export {
+  appendStartupBannerId,
+  clearTerminalForRedraw,
+  hasConversationContent,
+  scheduleExitSideEffects,
+  TERMINAL_REDRAW_CLEAR,
+} from './app-helpers.js';
 
 interface AppProps {
   conversationService: ConversationService;
@@ -73,32 +63,6 @@ interface AppProps {
   onHasConversationContent?: (hasContent: boolean) => void;
   skillsService?: SkillsService;
 }
-
-export const appendStartupBannerId = (ids: string[]): string[] => [...ids, `startup-banner-${ids.length}`];
-
-export const hasConversationContent = (messages: Message[]): boolean => messages.some((msg) => msg.sender !== 'system');
-
-export const TERMINAL_REDRAW_CLEAR = '\u001B[2J\u001B[3J\u001B[H';
-
-type TerminalWriter = {
-  write: (value: string) => unknown;
-};
-
-export const clearTerminalForRedraw = (stdout: TerminalWriter): void => {
-  stdout.write(TERMINAL_REDRAW_CLEAR);
-};
-
-type ScheduleCallback = (callback: () => void, delay: number) => unknown;
-
-export const scheduleExitSideEffects = (
-  _messages: Message[],
-  onExitUsage?: () => void,
-  schedule: ScheduleCallback = setTimeout,
-): void => {
-  schedule(() => {
-    onExitUsage?.();
-  }, 0);
-};
 
 export type HandoffStage = 'entering_message' | 'confirm_model' | 'selecting_model';
 export interface HandoffState {
@@ -148,80 +112,7 @@ const App: FC<AppProps> = ({
   const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);
   const pendingSkillRef = useRef<SkillInfo | null>(null);
 
-  // ── Focus tracking ──────────────────────────────────────────────────────────
-  // Default to "focused" so we stay silent when focus state is unknown.
-  // DEC mode ?1004 focus-reporting sends ESC[I (focus in) / ESC[O (focus out).
-  const focusedRef = useRef(true);
-
-  // Enable terminal focus-reporting on mount; disable on unmount.
-  useEffect(() => {
-    stdout.write('\x1b[?1004h');
-    return () => {
-      stdout.write('\x1b[?1004l');
-    };
-  }, [stdout]);
-
-  // Track focus state from CSI focus-in/out sequences delivered by Ink.
-  useInput((rawInput: string) => {
-    loggingService.debug('Received terminal raw input sequence', {
-      rawInput: JSON.stringify(rawInput),
-      length: rawInput.length,
-    });
-
-    if (rawInput === '\x1b[I' || rawInput === '[I') {
-      loggingService.debug('Terminal focus changed to IN (focused)', {
-        prevFocused: focusedRef.current,
-      });
-      focusedRef.current = true;
-      return;
-    }
-    if (rawInput === '\x1b[O' || rawInput === '[O') {
-      loggingService.debug('Terminal focus changed to OUT (unfocused)', {
-        prevFocused: focusedRef.current,
-      });
-      focusedRef.current = false;
-      return;
-    }
-
-    // Heuristic: If we receive any key input from the user while marked as unfocused,
-    // they must have focused the window to type.
-    if (!focusedRef.current) {
-      loggingService.debug('Terminal focus restored via user input heuristic', {
-        rawInput: JSON.stringify(rawInput),
-      });
-      focusedRef.current = true;
-    }
-  });
-
-  // Notifier passed into useConversation to fire desktop notifications when
-  // the terminal is unfocused.
-  const notifier = useMemo(
-    () => ({
-      approvalNeeded() {
-        loggingService.debug('notifier.approvalNeeded check', {
-          focused: focusedRef.current,
-          appNotifications: settingsService.get<boolean>('app.notifications'),
-          appNotificationsOnApproval: settingsService.get<boolean>('app.notificationsOnApproval'),
-        });
-        if (focusedRef.current) return;
-        if (!settingsService.get<boolean>('app.notifications')) return;
-        if (!settingsService.get<boolean>('app.notificationsOnApproval')) return;
-        sendNotification('Approval needed', 'Agent is waiting for your approval', { logger: loggingService });
-      },
-      turnComplete() {
-        loggingService.debug('notifier.turnComplete check', {
-          focused: focusedRef.current,
-          appNotifications: settingsService.get<boolean>('app.notifications'),
-          appNotificationsOnComplete: settingsService.get<boolean>('app.notificationsOnComplete'),
-        });
-        if (focusedRef.current) return;
-        if (!settingsService.get<boolean>('app.notifications')) return;
-        if (!settingsService.get<boolean>('app.notificationsOnComplete')) return;
-        sendNotification('Response ready', 'Agent has finished responding', { logger: loggingService });
-      },
-    }),
-    [settingsService, loggingService],
-  );
+  const notifier = useTerminalFocusNotifier({ stdout, settingsService, loggingService });
 
   // Compute largeUncachedWarning in real-time as the user types
   const largeUncachedWarning = useMemo(() => {

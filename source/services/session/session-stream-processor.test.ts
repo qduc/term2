@@ -465,6 +465,52 @@ it('SessionStreamProcessor.finalize() prefers full replay history when full-hist
   expect(conversationStore.getHistory()).toEqual(fullHistory);
 });
 
+it('SessionStreamProcessor.finalize() keeps canonical history when full-history replay snapshot contains only tool outputs', () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.addUserMessage('Initial request');
+  conversationStore.appendOutput([
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Baseline response' }],
+    } as any,
+  ]);
+
+  const baselineHistory = conversationStore.getHistory();
+  const toolTracker = new SessionToolTracker(conversationStore);
+  const conversationLogger = {} as unknown as ConversationLogger;
+  const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger,
+    providerContinuity,
+    generationGuard,
+  });
+
+  const token = generationGuard.capture();
+  const stream = makeStream([], {
+    interruptions: [],
+    lastResponseId: 'resp-456',
+  });
+  (stream as any).history = [
+    { type: 'function_call_output', callId: 'call-1', output: 'tool result 1' },
+    { type: 'function_call_output', callId: 'call-2', output: 'tool result 2' },
+  ];
+  (stream as any).output = [{ type: 'function_call_output', callId: 'call-2', output: 'tool result 2' }];
+  (stream as any).newItems = [];
+
+  const result = processor.finalize(stream, token, 'full_history', 'continueRunStream');
+
+  expect(result).toEqual({ kind: 'committed' });
+  expect(conversationStore.getHistory()).toEqual(baselineHistory);
+});
+
 it('SessionStreamProcessor.finalize() - stale finalization mutates neither continuity nor history and returns stale', () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);

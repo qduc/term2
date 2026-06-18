@@ -242,12 +242,8 @@ export class SessionStreamProcessor {
             this.deps.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
           } else if (hasConversationMessageItems(snapshot.newItems)) {
             this.deps.conversationStore.appendOutput(snapshot.newItems as AgentInputItem[]);
-          } else if (snapshot.history.length > 0) {
+          } else if (hasConversationMessageItems(snapshot.history)) {
             this.deps.conversationStore.replaceHistory(snapshot.history as AgentInputItem[]);
-          } else if (snapshot.output.length > 0) {
-            this.deps.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
-          } else if (snapshot.newItems.length > 0) {
-            this.deps.conversationStore.appendOutput(snapshot.newItems as AgentInputItem[]);
           }
         }
         result = { kind: 'committed' };

@@ -68,6 +68,8 @@ export type ConversationUIAction =
   | { type: 'ask_user/answer_submitted'; answer: string | string[] }
   /** Advance to the next ask_user question. */
   | { type: 'ask_user/advance_to_next'; nextIndex: number }
+  /** Go back to the previous ask_user question. */
+  | { type: 'ask_user/go_back' }
   /** Show the rejection reason input. */
   | { type: 'rejection/set_waiting' }
   /** Clear the rejection reason input. */
@@ -200,6 +202,14 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
       return {
         ...state,
         currentAskUserQuestionIndex: action.nextIndex,
+        waitingForAskUserAnswer: false,
+      };
+
+    case 'ask_user/go_back':
+      return {
+        ...state,
+        currentAskUserQuestionIndex: Math.max(0, state.currentAskUserQuestionIndex - 1),
+        askUserAnswers: state.askUserAnswers.slice(0, -1),
         waitingForAskUserAnswer: false,
       };
 

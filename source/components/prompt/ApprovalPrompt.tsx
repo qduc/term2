@@ -7,6 +7,9 @@ import {
   ASK_USER_CUSTOM_ANSWER_LABEL,
   ASK_USER_DECLINE_LABEL,
   ASK_USER_DECLINE_RESULT,
+  ASK_USER_SUBMIT_LABEL,
+  ASK_USER_PREV_QUESTION_LABEL,
+  ASK_USER_NEXT_QUESTION_LABEL,
 } from '../../tools/agent/ask-user-constants.js';
 import DiffView from '../layout/DiffView.js';
 
@@ -15,6 +18,7 @@ type Props = {
   onApprove: (answer?: string) => void;
   onReject: () => void;
   onTypeAnswer?: () => void;
+  onNavigateQuestion?: (direction: 'prev' | 'next') => void;
   currentQuestionIndex?: number;
   waitingForAskUserAnswer?: boolean;
 };
@@ -167,6 +171,7 @@ const ApprovalPrompt: FC<Props> = ({
   onApprove,
   onReject,
   onTypeAnswer,
+  onNavigateQuestion,
   currentQuestionIndex = 0,
   waitingForAskUserAnswer = false,
 }) => {
@@ -196,18 +201,25 @@ const ApprovalPrompt: FC<Props> = ({
   const currentQuestionItem = questionsList[currentQuestionIndex] || questionsList[0];
   const isMultiSelect = !!currentQuestionItem?.is_multi_select;
   const askUserOptions = currentQuestionItem?.options ?? [];
-
-  const CONFIRM_SELECTIONS_LABEL = '[Confirm selections]';
+  const hasMultipleQuestions = questionsList.length > 1;
 
   const askUserMenuItems = React.useMemo(() => {
     if (!isAskUser) {
       return ['Approve', 'Reject'];
     }
-    if (isMultiSelect) {
-      return [...askUserOptions, CONFIRM_SELECTIONS_LABEL, ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_DECLINE_LABEL];
+
+    const items = isMultiSelect
+      ? [...askUserOptions, ASK_USER_SUBMIT_LABEL, ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_DECLINE_LABEL]
+      : [...askUserOptions, ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_DECLINE_LABEL];
+
+    // Add navigation items only when there are multiple questions
+    if (hasMultipleQuestions) {
+      items.push(ASK_USER_PREV_QUESTION_LABEL);
+      items.push(ASK_USER_NEXT_QUESTION_LABEL);
     }
-    return [...askUserOptions, ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_DECLINE_LABEL];
-  }, [isAskUser, isMultiSelect, askUserOptions]);
+
+    return items;
+  }, [isAskUser, isMultiSelect, askUserOptions, hasMultipleQuestions]);
 
   React.useEffect(() => {
     setSelectedIndex(0);
@@ -227,6 +239,22 @@ const ApprovalPrompt: FC<Props> = ({
       setSelectedIndex((prev) => (prev === askUserMenuItems.length - 1 ? 0 : prev + 1));
     }
 
+    // Spacebar for multi-select toggle
+    if (input === ' ' && isMultiSelect) {
+      // Only toggle if it's an actual option (not a navigation/submit/custom/decline item)
+      if (selectedIndex < askUserOptions.length) {
+        setSelectedIndices((prev) => {
+          const next = new Set(prev);
+          if (next.has(selectedIndex)) {
+            next.delete(selectedIndex);
+          } else {
+            next.add(selectedIndex);
+          }
+          return next;
+        });
+      }
+    }
+
     if (key.return) {
       if (isAskUser) {
         const selected = askUserMenuItems[selectedIndex];
@@ -235,18 +263,22 @@ const ApprovalPrompt: FC<Props> = ({
           onTypeAnswer?.();
         } else if (selected === ASK_USER_DECLINE_LABEL) {
           onApprove(ASK_USER_DECLINE_RESULT);
+        } else if (selected === ASK_USER_PREV_QUESTION_LABEL) {
+          onNavigateQuestion?.('prev');
+        } else if (selected === ASK_USER_NEXT_QUESTION_LABEL) {
+          onNavigateQuestion?.('next');
         } else if (isMultiSelect) {
-          if (selected === CONFIRM_SELECTIONS_LABEL) {
+          if (selected === ASK_USER_SUBMIT_LABEL) {
             const chosen = Array.from(selectedIndices).map((idx) => askUserOptions[idx]);
             onApprove(JSON.stringify(chosen));
-          } else {
-            const idx = selectedIndex;
+          } else if (selectedIndex < askUserOptions.length) {
+            // Toggle checkbox for actual options
             setSelectedIndices((prev) => {
               const next = new Set(prev);
-              if (next.has(idx)) {
-                next.delete(idx);
+              if (next.has(selectedIndex)) {
+                next.delete(selectedIndex);
               } else {
-                next.add(idx);
+                next.add(selectedIndex);
               }
               return next;
             });
@@ -349,32 +381,33 @@ const ApprovalPrompt: FC<Props> = ({
             {askUserMenuItems.map((item, idx) => {
               const isOption = idx < askUserOptions.length;
               const isRecommended = idx === 0 && isOption;
-              const isConfirm = item === CONFIRM_SELECTIONS_LABEL;
+              const isNavigation = item === ASK_USER_PREV_QUESTION_LABEL || item === ASK_USER_NEXT_QUESTION_LABEL;
 
               let label = item;
               if (item === ASK_USER_CUSTOM_ANSWER_LABEL || item === ASK_USER_DECLINE_LABEL) {
                 // leave as is
-              } else if (isConfirm) {
+              } else if (isNavigation) {
                 // leave as is
+              } else if (isMultiSelect && isOption) {
+                const checkbox = selectedIndices.has(idx) ? '[x] ' : '[ ] ';
+                label = checkbox + item + (isRecommended ? ' (recommended)' : '');
               } else {
-                if (isMultiSelect) {
-                  const checkbox = selectedIndices.has(idx) ? '[x] ' : '[ ] ';
-                  label = checkbox + item + (isRecommended ? ' (recommended)' : '');
-                } else {
-                  label = item + (isRecommended ? ' (recommended)' : '');
-                }
+                label = item + (isRecommended ? ' (recommended)' : '');
               }
 
-              const color =
-                selectedIndex === idx
-                  ? item === ASK_USER_DECLINE_LABEL
-                    ? 'red'
-                    : item === ASK_USER_CUSTOM_ANSWER_LABEL
-                    ? 'cyan'
-                    : 'green'
-                  : isRecommended
-                  ? 'yellow'
-                  : undefined;
+              const color = isNavigation
+                ? selectedIndex === idx
+                  ? 'cyan'
+                  : undefined
+                : selectedIndex === idx
+                ? item === ASK_USER_DECLINE_LABEL
+                  ? 'red'
+                  : item === ASK_USER_CUSTOM_ANSWER_LABEL
+                  ? 'cyan'
+                  : 'green'
+                : isRecommended
+                ? 'yellow'
+                : undefined;
 
               return (
                 <Text key={item} color={color}>

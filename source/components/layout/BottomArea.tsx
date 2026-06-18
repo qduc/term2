@@ -39,6 +39,7 @@ export type BottomAreaProps = {
   onApprove: (answer?: string) => void;
   onReject: () => void;
   onTypeAnswer?: () => void;
+  onNavigateQuestion?: (direction: 'prev' | 'next') => void;
   sshInfo?: SSHInfo;
   undoMenuRef?: React.MutableRefObject<{ open: (items: UndoItem[]) => void } | null>;
   onUndoSelect?: (item: UndoItem) => void;
@@ -80,6 +81,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   onApprove,
   onReject,
   onTypeAnswer,
+  onNavigateQuestion,
   sshInfo,
   lastUsage,
   lastCodexRateLimit,
@@ -183,6 +185,7 @@ const BottomArea: FC<BottomAreaProps> = ({
                 onApprove={onApprove}
                 onReject={onReject}
                 onTypeAnswer={onTypeAnswer}
+                onNavigateQuestion={onNavigateQuestion}
                 currentQuestionIndex={currentAskUserQuestionIndex}
                 waitingForAskUserAnswer={waitingForAskUserAnswer}
               />

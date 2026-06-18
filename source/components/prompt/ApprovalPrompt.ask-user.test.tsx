@@ -197,10 +197,10 @@ it.sequential('ApprovalPrompt renders multi-select options with checkboxes', asy
   expect(output.includes('[ ] git')).toBe(true);
   expect(output.includes('[ ] npm')).toBe(true);
   expect(output.includes('[ ] cargo')).toBe(true);
-  expect(output.includes('[Confirm selections]')).toBe(true);
+  expect(output.includes('Submit answer')).toBe(true);
 });
 
-it.sequential('ApprovalPrompt toggles multi-select options and submits on Confirm', async () => {
+it.sequential('ApprovalPrompt toggles multi-select options and submits on Submit', async () => {
   const approval: ApprovalDescriptor = {
     agentName: 'Agent',
     toolName: 'ask_user',
@@ -228,15 +228,15 @@ it.sequential('ApprovalPrompt toggles multi-select options and submits on Confir
     />,
   );
 
-  // Toggle first option (git)
-  await writeInput(stdin, '\r');
+  // Toggle first option (git) with spacebar
+  await writeInput(stdin, ' ');
   expect((lastFrame() ?? '').includes('[x] git')).toBe(true);
-  // Move down to second option (npm) and toggle it
+  // Move down to second option (npm) and toggle it with spacebar
   await writeInput(stdin, '\u001b[B');
-  await writeInput(stdin, '\r');
+  await writeInput(stdin, ' ');
   expect((lastFrame() ?? '').includes('[x] npm')).toBe(true);
 
-  // Move down to "[Confirm selections]" (which is at index 3: git at 0, npm at 1, cargo at 2, Confirm selections at 3)
+  // Move down to "Submit answer" (which is at index 3: git at 0, npm at 1, cargo at 2, Submit answer at 3)
   // Currently we are at index 1 (npm). Move down twice to reach index 3.
   await writeInput(stdin, '\u001b[B');
   await writeInput(stdin, '\u001b[B');
@@ -245,12 +245,43 @@ it.sequential('ApprovalPrompt toggles multi-select options and submits on Confir
   expect(JSON.parse(approved || '[]')).toEqual(['git', 'npm']);
 });
 
+it.sequential('ApprovalPrompt toggles multi-select options with Enter key', async () => {
+  const approval: ApprovalDescriptor = {
+    agentName: 'Agent',
+    toolName: 'ask_user',
+    argumentsText: JSON.stringify({
+      questions: [
+        {
+          question: 'Select tools to use',
+          options: ['git', 'npm', 'cargo'],
+          is_multi_select: true,
+        },
+      ],
+    }),
+    rawInterruption: { type: 'ask_user' },
+  };
+
+  const { lastFrame, stdin } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
+  );
+
+  // Toggle first option (git) with Enter
+  await writeInput(stdin, '\r');
+  expect((lastFrame() ?? '').includes('[x] git')).toBe(true);
+  // Toggle again to deselect
+  await writeInput(stdin, '\r');
+  expect((lastFrame() ?? '').includes('[ ] git')).toBe(true);
+});
+
 it.sequential('ApprovalPrompt renders question index prefix for multiple questions', async () => {
   const approval: ApprovalDescriptor = {
     agentName: 'Agent',
     toolName: 'ask_user',
     argumentsText: JSON.stringify({
-      questions: [{ question: 'First question' }, { question: 'Second question' }],
+      questions: [
+        { question: 'First question', options: ['A', 'B'] },
+        { question: 'Second question', options: ['C', 'D'] },
+      ],
     }),
     rawInterruption: { type: 'ask_user' },
   };
@@ -267,6 +298,105 @@ it.sequential('ApprovalPrompt renders question index prefix for multiple questio
 
   const output = lastFrame() ?? '';
   expect(output.includes('[Question 2/2] Second question')).toBe(true);
+  // Navigation items should be present for multiple questions
+  expect(output.includes('◀ Previous question')).toBe(true);
+  expect(output.includes('Next question ▶')).toBe(true);
+});
+
+it.sequential('ApprovalPrompt calls onNavigateQuestion when Previous is selected', async () => {
+  const approval: ApprovalDescriptor = {
+    agentName: 'Agent',
+    toolName: 'ask_user',
+    argumentsText: JSON.stringify({
+      questions: [
+        { question: 'First question', options: ['A', 'B'] },
+        { question: 'Second question', options: ['C', 'D'] },
+      ],
+    }),
+    rawInterruption: { type: 'ask_user' },
+  };
+
+  let navigated: 'prev' | 'next' | undefined;
+  const { stdin } = await renderInAct(
+    <ApprovalPrompt
+      approval={approval}
+      onApprove={() => {}}
+      onReject={() => {}}
+      onTypeAnswer={() => {}}
+      onNavigateQuestion={(direction) => {
+        navigated = direction;
+      }}
+      currentQuestionIndex={1}
+    />,
+  );
+
+  // Navigate to "Previous question" (last item before "Next question")
+  // Menu: C (0), D (1), Custom answer (2), Decline (3), Previous (4), Next (5)
+  await writeInput(stdin, '\u001b[B'); // D
+  await writeInput(stdin, '\u001b[B'); // Custom answer
+  await writeInput(stdin, '\u001b[B'); // Decline
+  await writeInput(stdin, '\u001b[B'); // Previous
+  await writeInput(stdin, '\r');
+
+  expect(navigated).toBe('prev');
+});
+
+it.sequential('ApprovalPrompt calls onNavigateQuestion when Next is selected', async () => {
+  const approval: ApprovalDescriptor = {
+    agentName: 'Agent',
+    toolName: 'ask_user',
+    argumentsText: JSON.stringify({
+      questions: [
+        { question: 'First question', options: ['A', 'B'] },
+        { question: 'Second question', options: ['C', 'D'] },
+      ],
+    }),
+    rawInterruption: { type: 'ask_user' },
+  };
+
+  let navigated: 'prev' | 'next' | undefined;
+  const { stdin } = await renderInAct(
+    <ApprovalPrompt
+      approval={approval}
+      onApprove={() => {}}
+      onReject={() => {}}
+      onTypeAnswer={() => {}}
+      onNavigateQuestion={(direction) => {
+        navigated = direction;
+      }}
+      currentQuestionIndex={0}
+    />,
+  );
+
+  // Navigate to "Next question" (last item)
+  // Menu: A (0), B (1), Custom answer (2), Decline (3), Previous (4), Next (5)
+  await writeInput(stdin, '\u001b[B'); // B
+  await writeInput(stdin, '\u001b[B'); // Custom answer
+  await writeInput(stdin, '\u001b[B'); // Decline
+  await writeInput(stdin, '\u001b[B'); // Previous
+  await writeInput(stdin, '\u001b[B'); // Next
+  await writeInput(stdin, '\r');
+
+  expect(navigated).toBe('next');
+});
+
+it.sequential('ApprovalPrompt does not show navigation items for single question', async () => {
+  const approval: ApprovalDescriptor = {
+    agentName: 'Agent',
+    toolName: 'ask_user',
+    argumentsText: JSON.stringify({
+      questions: [{ question: 'Single question', options: ['A', 'B'] }],
+    }),
+    rawInterruption: { type: 'ask_user' },
+  };
+
+  const { lastFrame } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
+  );
+
+  const output = lastFrame() ?? '';
+  expect(output.includes('◀ Previous question')).toBe(false);
+  expect(output.includes('Next question ▶')).toBe(false);
 });
 
 it.sequential(

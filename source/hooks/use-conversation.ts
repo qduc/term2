@@ -135,6 +135,13 @@ export const useConversation = ({
   } = uiState;
   const approvedContextRef = useRef<ApprovedToolContext | null>(null);
 
+  // Use a ref to keep askUserAnswers current for the handleApprovalDecision callback
+  // This fixes the stale closure bug in multi-question ask_user flows
+  const askUserAnswersRef = useRef(askUserAnswers);
+  useEffect(() => {
+    askUserAnswersRef.current = askUserAnswers;
+  }, [askUserAnswers]);
+
   const provider = useSetting<string>(settingsService || dummySettingsService, 'agent.provider') ?? 'openai';
 
   useEffect(() => {
@@ -412,7 +419,7 @@ export const useConversation = ({
 
         // Only JSON-parse multi-select arrays; single-select answers are plain strings
         let parsedAns: any = approvalAnswer ?? '';
-        const currentQuestion = questions[askUserAnswers.length];
+        const currentQuestion = questions[askUserAnswersRef.current.length];
         if (currentQuestion?.is_multi_select) {
           try {
             const maybeArray = JSON.parse(approvalAnswer ?? '');
@@ -424,7 +431,7 @@ export const useConversation = ({
           }
         }
 
-        const nextAnswers = [...askUserAnswers, parsedAns];
+        const nextAnswers = [...askUserAnswersRef.current, parsedAns];
 
         if (nextAnswers.length < questions.length) {
           // More questions to answer!
@@ -552,7 +559,6 @@ export const useConversation = ({
       conversationService,
       waitingForApproval,
       pendingApproval,
-      askUserAnswers,
       appendMessages,
       trimMessages,
       loggingService,
@@ -634,6 +640,21 @@ export const useConversation = ({
     dispatch({ type: value ? 'ask_user/set_waiting' : 'ask_user/clear_waiting' });
   }, []);
 
+  const goToPreviousQuestion = useCallback(() => {
+    if (currentAskUserQuestionIndex > 0) {
+      dispatch({
+        type: 'ask_user/go_back',
+      });
+    }
+  }, [currentAskUserQuestionIndex]);
+
+  const goToNextQuestion = useCallback(() => {
+    dispatch({
+      type: 'ask_user/advance_to_next',
+      nextIndex: currentAskUserQuestionIndex + 1,
+    });
+  }, [currentAskUserQuestionIndex]);
+
   const getSubagentUsage = useCallback(() => subagentUsageAccumulator?.get() ?? null, [subagentUsageAccumulator]);
 
   return {
@@ -665,5 +686,7 @@ export const useConversation = ({
     addSystemMessage,
     addShellMessage,
     getSubagentUsage,
+    goToPreviousQuestion,
+    goToNextQuestion,
   };
 };

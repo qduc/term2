@@ -264,6 +264,8 @@ const App: FC<AppProps> = ({
     setTemperature,
     addShellMessage,
     getSubagentUsage,
+    goToPreviousQuestion,
+    goToNextQuestion,
   } = useConversation({
     conversationService,
     loggingService,
@@ -531,6 +533,17 @@ const App: FC<AppProps> = ({
   const handleReject = useCallback(() => {
     setWaitingForRejectionReason(true);
   }, [setWaitingForRejectionReason]);
+
+  const handleNavigateQuestion = useCallback(
+    (direction: 'prev' | 'next') => {
+      if (direction === 'prev') {
+        goToPreviousQuestion();
+      } else {
+        goToNextQuestion();
+      }
+    },
+    [goToPreviousQuestion, goToNextQuestion],
+  );
 
   // Switch between Standard and Plan modes with Shift+Tab
   useInput((input: string, key) => {

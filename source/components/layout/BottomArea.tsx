@@ -17,6 +17,7 @@ import type { CodexRateLimitInfo } from '../../services/conversation/conversatio
 import type { PendingApproval } from '../../contracts/conversation.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { UndoItem } from '../../hooks/use-undo-selection.js';
+import type { SkillsService } from '../../services/skills/skills-service.js';
 
 export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;
@@ -58,6 +59,7 @@ export type BottomAreaProps = {
   onSurgeApprove?: () => void;
   onSurgeDecline?: () => void;
   onSlashTabComplete?: (command: SlashCommand) => boolean;
+  skillsService?: SkillsService;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -100,6 +102,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   onSurgeApprove,
   onSurgeDecline,
   onSlashTabComplete,
+  skillsService,
 }) => {
   const [dotCount, setDotCount] = useState(1);
   const [thinkingElapsedSeconds, setThinkingElapsedSeconds] = useState(() =>
@@ -211,6 +214,7 @@ const BottomArea: FC<BottomAreaProps> = ({
                 onSettingChange={onSettingChange}
                 onSystemMessage={onSystemMessage}
                 onSlashTabComplete={onSlashTabComplete}
+                skillsService={skillsService}
                 promptLabel={
                   waitingForAskUserAnswer
                     ? 'Answer: '

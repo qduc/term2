@@ -27,6 +27,7 @@ import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumula
 import type { UndoItem } from './hooks/use-undo-selection.js';
 import { resolveSlashCommand } from './slash-commands.js';
 import { getSerializedInputBytes } from './services/large-uncached-input-guard.js';
+import type { SkillsService, SkillInfo } from './services/skills/skills-service.js';
 
 const estimateLastTurnTokens = (turn: UserTurn): number => {
   const images = turn.images ?? [];
@@ -70,6 +71,7 @@ interface AppProps {
   generateId: () => string;
   onSessionIdChange?: (newId: string, createdAt: string) => void;
   onHasConversationContent?: (hasContent: boolean) => void;
+  skillsService?: SkillsService;
 }
 
 export const appendStartupBannerId = (ids: string[]): string[] => [...ids, `startup-banner-${ids.length}`];
@@ -124,6 +126,7 @@ const App: FC<AppProps> = ({
   generateId,
   onSessionIdChange,
   onHasConversationContent,
+  skillsService,
 }) => {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -143,6 +146,7 @@ const App: FC<AppProps> = ({
   const subagentUsage = useMemo(() => subagentUsageAccumulator ?? createUsageAccumulator(), [subagentUsageAccumulator]);
   const [sessionId, setSessionId] = useState(initialSessionId);
   const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);
+  const pendingSkillRef = useRef<SkillInfo | null>(null);
 
   // ── Focus tracking ──────────────────────────────────────────────────────────
   // Default to "focused" so we stay silent when focus state is unknown.
@@ -427,6 +431,10 @@ const App: FC<AppProps> = ({
     setHandoffState({ capturedText, stage: 'entering_message' });
   }, []);
 
+  const handleSkillSelected = useCallback((skill: SkillInfo) => {
+    pendingSkillRef.current = skill;
+  }, []);
+
   const { slashCommands, cycleAppModes } = useAppCommands({
     settingsService,
     addSystemMessage,
@@ -457,6 +465,8 @@ const App: FC<AppProps> = ({
     onHandoff: handleHandoff,
     sendUserMessage,
     listUserTurns: () => conversationService.listUserTurns(),
+    skillsService: skillsService ?? ({ getAvailableSkills: () => [] } as unknown as SkillsService),
+    onSkillSelected: handleSkillSelected,
   });
 
   const handleUndoSelect = useCallback(
@@ -479,6 +489,12 @@ const App: FC<AppProps> = ({
 
   // Handle Esc to stop processing or cancel rejection reason or handoff
   useInput((_input: string, key) => {
+    if (key.escape && pendingSkillRef.current) {
+      pendingSkillRef.current = null;
+      addSystemMessage('Skill activation cancelled.');
+      return;
+    }
+
     if (key.escape && waitingForAskUserAnswer) {
       setWaitingForAskUserAnswer(false);
       setInput('');
@@ -622,6 +638,25 @@ const App: FC<AppProps> = ({
       case 'message':
         // Regular message, send to AI agent
         {
+          // Prepend pending skill content if one was activated
+          const pendingSkill = pendingSkillRef.current;
+          if (pendingSkill) {
+            pendingSkillRef.current = null;
+            const wrapped = [
+              '<system-notice>',
+              'The user wants you to use this skill for the following request',
+              '</system-notice>',
+              '<skill>',
+              pendingSkill.body,
+              '</skill>',
+              '',
+              '---',
+              '',
+              'User request as usual....',
+            ].join('\n');
+            turn = { ...turn, text: turn.text ? `${wrapped}\n\n${turn.text}` : wrapped };
+          }
+
           const surgePreview = conversationService.previewInputSurge(turn);
           if (surgePreview.action === 'block') {
             setPendingSurgeTurn(turn);
@@ -720,6 +755,7 @@ const App: FC<AppProps> = ({
             lastUsage={lastUsage}
             onSubmit={handleSubmit}
             slashCommands={slashCommands}
+            skillsService={skillsService}
             settingsService={settingsService}
             loggingService={loggingService}
             historyService={historyService}

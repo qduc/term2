@@ -7,6 +7,7 @@ import type { useSettingsValueCompletion } from '../../hooks/use-settings-value-
 import type { useModelSelection } from '../../hooks/use-model-selection.js';
 import type { useUndoSelection } from '../../hooks/use-undo-selection.js';
 import type { useProviderSelection } from '../../hooks/use-provider-selection.js';
+import type { useSkillSelection } from '../../hooks/use-skill-selection.js';
 
 type PopupProps = ComponentProps<typeof PopupManager>;
 
@@ -16,6 +17,7 @@ type Sources = {
   settings: ReturnType<typeof useSettingsCompletion>;
   settingsValue: ReturnType<typeof useSettingsValueCompletion>;
   models: ReturnType<typeof useModelSelection>;
+  skills: ReturnType<typeof useSkillSelection>;
   undo: ReturnType<typeof useUndoSelection>;
   providers: ReturnType<typeof useProviderSelection>;
 };
@@ -26,6 +28,7 @@ export const toPopupProps = ({
   settings,
   settingsValue,
   models,
+  skills,
   undo,
   providers,
 }: Sources): Omit<PopupProps, 'settingsService'> => ({
@@ -80,6 +83,13 @@ export const toPopupProps = ({
     items: undo.items,
     selectedIndex: undo.selectedIndex,
     scrollOffset: undo.scrollOffset,
+  },
+  skills: {
+    isOpen: skills.isOpen,
+    items: skills.skills,
+    selectedIndex: skills.selectedIndex,
+    scrollOffset: skills.scrollOffset,
+    query: skills.query,
   },
   providers: {
     isOpen: providers.isOpen,

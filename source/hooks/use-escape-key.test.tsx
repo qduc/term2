@@ -215,6 +215,49 @@ it.sequential('pressing ESC in slash_commands mode clears input and switches to 
   expect(frame.includes('/cle'), 'Input trigger text should be cleared').toBe(false);
 });
 
+it.sequential('pressing ESC in skill_selection mode keeps input and switches to text mode', async () => {
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
+  const SkillSelectionTestComponent = () => {
+    const [value, onChange] = useState('/skills ');
+    const [mode, setMode] = useState<InputMode>('skill_selection');
+    const dismissedCompletionRef = { current: null } as any;
+    const inputRevisionRef = { current: 0 };
+    const [, setCursorOverride] = useState<number | null>(null);
+    useCaptureInputEmitter((emitter) => {
+      inputEmitter = emitter;
+    });
+
+    useEscapeKey({
+      mode,
+      setMode,
+      value,
+      onChange,
+      settings: { open: () => {} } as any,
+      settingsValue: { settingKey: null, close: () => {} } as any,
+      setCursorOverride,
+      dismissedCompletionRef,
+      inputRevisionRef,
+    });
+
+    return (
+      <Box flexDirection="column">
+        <Text>Mode: {mode}</Text>
+        <Text>Value: {value}</Text>
+      </Box>
+    );
+  };
+
+  const { lastFrame } = await renderAndFlush(<SkillSelectionTestComponent />);
+
+  expect(lastFrame()!.includes('Mode: skill_selection'), 'Initial mode should be skill_selection').toBe(true);
+
+  await pressEscape(inputEmitter!);
+
+  const frame = lastFrame()!;
+  expect(frame.includes('Mode: text'), 'Mode should switch to text').toBe(true);
+  expect(frame.includes('/skills'), 'Skill trigger text should remain').toBe(true);
+});
+
 it.sequential('pressing ESC in path_completion mode keeps input and switches to text mode', async () => {
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   const PathTestComponent = () => {

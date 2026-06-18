@@ -14,6 +14,7 @@ type PathHandle = { open: (start: number) => void; close: () => void };
 type SettingsHandle = { open: (start: number, initialKey?: string) => void; close: () => void };
 type SettingsValueHandle = { open: (key: string, start: number) => void; close: () => void };
 type ModelsHandle = { open: (start: number) => void; close: () => void };
+type SkillsHandle = { open: (start: number) => void; close: () => void };
 
 type Options = {
   value: string;
@@ -26,6 +27,7 @@ type Options = {
   settings: SettingsHandle;
   settingsValue: SettingsValueHandle;
   models: ModelsHandle;
+  skills: SkillsHandle;
   slashCommands: SlashCommand[];
 };
 
@@ -45,6 +47,7 @@ export const useTriggerDetection = ({
   settings,
   settingsValue,
   models,
+  skills,
   slashCommands,
 }: Options): void => {
   const previousValueRef = useRef(value);
@@ -69,14 +72,14 @@ export const useTriggerDetection = ({
 
     switch (active.type) {
       case 'model':
-        closeAll([slash, path, settings, settingsValue]);
+        closeAll([slash, path, settings, settingsValue, skills]);
         if (mode !== 'model_selection') {
           models.open(active.startIndex);
         }
         return;
 
       case 'settings':
-        closeAll([slash, path, settingsValue, models]);
+        closeAll([slash, path, settingsValue, models, skills]);
         if (mode !== 'settings_completion') {
           settings.open(active.startIndex);
         }
@@ -91,15 +94,29 @@ export const useTriggerDetection = ({
           return;
         }
 
-        closeAll([slash, path, settings, models]);
+        closeAll([slash, path, settings, models, skills]);
         if (mode !== 'settings_value_completion') {
           settingsValue.open(active.key, active.startIndex);
         }
         return;
       }
 
+      case 'skills':
+        if (
+          dismissedCompletionRef.current?.type === 'skill_selection' &&
+          dismissedCompletionRef.current.inputRevision === inputRevisionRef.current
+        ) {
+          return;
+        }
+
+        closeAll([slash, path, settings, settingsValue, models]);
+        if (mode !== 'skill_selection') {
+          skills.open(active.startIndex);
+        }
+        return;
+
       case 'slash':
-        closeAll([path, settings, settingsValue, models]);
+        closeAll([path, settings, settingsValue, models, skills]);
         if (mode !== 'slash_commands') {
           slash.open();
         }
@@ -114,7 +131,7 @@ export const useTriggerDetection = ({
           return;
         }
 
-        closeAll([slash, settings, settingsValue, models]);
+        closeAll([slash, settings, settingsValue, models, skills]);
         if (mode !== 'path_completion') {
           path.open(active.trigger.start);
         }
@@ -125,11 +142,11 @@ export const useTriggerDetection = ({
         if (mode === 'model_selection') {
           const activeAtEnd = determineActiveMenu(value, value.length, slashCommands);
           if (activeAtEnd.type === 'model') {
-            closeAll([slash, path, settings, settingsValue]);
+            closeAll([slash, path, settings, settingsValue, skills]);
             return;
           }
         }
-        closeAll([slash, path, settings, settingsValue, models]);
+        closeAll([slash, path, settings, settingsValue, models, skills]);
         return;
     }
   }, [
@@ -141,6 +158,7 @@ export const useTriggerDetection = ({
     settings,
     settingsValue,
     models,
+    skills,
     slashCommands,
     dismissedCompletionRef,
     inputRevisionRef,

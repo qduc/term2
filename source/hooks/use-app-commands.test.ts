@@ -294,6 +294,8 @@ const TestHookWrapper = ({
     openProvidersMenu: () => {},
     sendUserMessage: async () => {},
     listUserTurns: () => [],
+    skillsService: { getAvailableSkills: () => [] } as any,
+    onSkillSelected: () => {},
   });
 
   onHookResult(hookResult);
@@ -592,6 +594,8 @@ it.sequential(
         },
         sendUserMessage: async () => {},
         listUserTurns: () => [],
+        skillsService: { getAvailableSkills: () => [] } as any,
+        onSkillSelected: () => {},
       });
       return null;
     };

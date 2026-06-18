@@ -74,6 +74,13 @@ it('toPopupProps forwards slash scrollOffset', () => {
       selectedProvider: null,
       draft: null,
     } as any,
+    skills: {
+      isOpen: false,
+      skills: [],
+      selectedIndex: 0,
+      scrollOffset: 0,
+      query: '',
+    } as any,
   });
 
   expect(props.slash.scrollOffset).toBe(3);

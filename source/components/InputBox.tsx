@@ -13,6 +13,8 @@ import { useModelSelection } from '../hooks/use-model-selection.js';
 import { useUndoSelection } from '../hooks/use-undo-selection.js';
 import { useProviderSelection } from '../hooks/use-provider-selection.js';
 import type { ProviderSelectionPhase } from '../hooks/use-provider-selection.js';
+import { useSkillSelection } from '../hooks/use-skill-selection.js';
+import type { SkillsService } from '../services/skills/skills-service.js';
 import { PopupManager } from './input/PopupManager.js';
 import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
@@ -26,6 +28,7 @@ import {
   computeSettingInsertion,
   computeSettingValueInsertion,
   computeModelInsertion,
+  computeSkillInsertion,
 } from './input/insertions.js';
 import { SETTINGS_TRIGGER } from './input/triggers.js';
 import { parseSettingValue } from '../utils/settings-command.js';
@@ -70,6 +73,7 @@ type Props = {
   onSlashTabComplete?: (command: SlashCommand) => boolean;
   promptLabel?: string;
   allowEmptySubmit?: boolean;
+  skillsService?: SkillsService;
 };
 
 const isFocusReportingSequence = (input: string): boolean => {
@@ -113,6 +117,7 @@ const InputBox: FC<Props> = ({
   onSlashTabComplete,
   promptLabel,
   allowEmptySubmit = false,
+  skillsService,
 }) => {
   const {
     input: value,
@@ -161,6 +166,10 @@ const InputBox: FC<Props> = ({
   });
   const undo = useUndoSelection();
   const providers = useProviderSelection(settingsService);
+
+  const skills = useSkillSelection(
+    skillsService ? { skillsService } : { skillsService: { getAvailableSkills: () => [] } as unknown as SkillsService },
+  );
 
   const providerWizardPromptLabel = getProviderWizardPromptLabel(providers.phase);
   const activePromptLabel = providerWizardPromptLabel ?? promptLabel;
@@ -372,12 +381,41 @@ const InputBox: FC<Props> = ({
     [models, value, onChange, submitTextOnly, settingsService, onSettingChange],
   );
 
+  const insertSelectedSkill = useCallback(
+    (submitAfterInsert: boolean): boolean => {
+      const result = computeSkillInsertion({
+        selection: skills.getSelectedItem(),
+        triggerIndex: skills.triggerIndex,
+        value,
+        cursorOffset,
+        appendTrailingSpace: true,
+      });
+      if (!result) return false;
+
+      onChange(result.nextValue);
+      skills.close();
+      if (submitAfterInsert) {
+        submitTextOnly(result.nextValue);
+      }
+      return true;
+    },
+    [skills, value, cursorOffset, onChange, submitTextOnly],
+  );
+
   const modeHandlers = useModeHandlers({
     slash,
     path,
     settings,
     settingsValue,
     models,
+    skills: {
+      moveUp: skills.moveUp,
+      moveDown: skills.moveDown,
+      moveHome: skills.moveHome,
+      moveEnd: skills.moveEnd,
+      pageUp: skills.pageUp,
+      pageDown: skills.pageDown,
+    },
     undo,
     providers,
     insertSelectedPath,
@@ -385,6 +423,7 @@ const InputBox: FC<Props> = ({
     insertSelectedSettingValue,
     resetSettingValue: settingsValue.resetCurrentSetting,
     insertSelectedModel,
+    insertSelectedSkill,
     onSubmit: submitTextOnly,
     onSlashCommandRemount: remountInput,
     onSlashTabComplete,
@@ -448,6 +487,7 @@ const InputBox: FC<Props> = ({
     settings,
     settingsValue,
     models,
+    skills,
     slashCommands,
   });
 
@@ -655,7 +695,7 @@ const InputBox: FC<Props> = ({
   return (
     <Box flexDirection="column">
       <PopupManager
-        {...toPopupProps({ slash, path, settings, settingsValue, models, undo, providers })}
+        {...toPopupProps({ slash, path, settings, settingsValue, models, skills, undo, providers })}
         settingsService={settingsService}
       />
 

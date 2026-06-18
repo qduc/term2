@@ -117,7 +117,7 @@ export class LoggingService {
           filename: 'term2-%DATE%.log',
           datePattern: 'YYYY-MM-DD',
           maxSize: '10m',
-          maxFiles: '14d',
+          maxFiles: '7d',
           format: winston.format.json(),
           level: logLevel,
         });

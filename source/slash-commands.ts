@@ -1,7 +1,8 @@
 export type SlashCommandCompletion =
   | { type: 'model'; trigger: string }
   | { type: 'settings'; trigger: string; resetTrigger: string }
-  | { type: 'setting-value'; trigger: string; settingKey: string };
+  | { type: 'setting-value'; trigger: string; settingKey: string }
+  | { type: 'skills'; trigger: string };
 
 export interface SlashCommand {
   name: string;

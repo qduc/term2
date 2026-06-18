@@ -2,6 +2,7 @@ import type { PathCompletionItem } from '../../hooks/use-path-completion.js';
 import type { SettingCompletionItem } from '../../hooks/use-settings-completion.js';
 import type { SettingValueSuggestion } from '../../hooks/use-settings-value-completion.js';
 import type { ModelInfo } from '../../services/model-service.js';
+import type { SkillInfo } from '../../services/skills/skills-service.js';
 import { SETTINGS_TRIGGER, SETTINGS_RESET_TRIGGER, AUTO_APPROVE_TRIGGER, EFFORT_TRIGGER } from './triggers.js';
 
 export type Insertion = { nextValue: string; nextCursor: number };
@@ -74,4 +75,22 @@ export const computeModelInsertion = (args: {
   const insertion = `${selection.id} --provider=${currentProvider}`;
   const nextValue = `${before}${insertion}${appendTrailingSpace ? ' ' : ''}`;
   return { nextValue, nextCursor: nextValue.length };
+};
+
+export const computeSkillInsertion = (args: {
+  selection: SkillInfo | undefined;
+  triggerIndex: number | null;
+  value: string;
+  cursorOffset: number;
+  appendTrailingSpace: boolean;
+}): Insertion | null => {
+  const { selection, triggerIndex, value, cursorOffset, appendTrailingSpace } = args;
+  if (!selection || triggerIndex === null) return null;
+  const safeCursor = Math.min(cursorOffset, value.length);
+  const before = value.slice(0, triggerIndex);
+  const after = value.slice(safeCursor);
+  const suffix = appendTrailingSpace && (after.length === 0 || !/^\s/.test(after)) ? ' ' : '';
+  const nextValue = `${before}${selection.name}${suffix}${after}`;
+  const nextCursor = before.length + selection.name.length + suffix.length;
+  return { nextValue, nextCursor };
 };

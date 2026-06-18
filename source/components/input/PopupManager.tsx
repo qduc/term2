@@ -7,6 +7,8 @@ import SettingsValueSelectionMenu from '../menu/SettingsValueSelectionMenu.js';
 import ModelSelectionMenu from '../menu/ModelSelectionMenu.js';
 import UndoSelectionMenu from '../menu/UndoSelectionMenu.js';
 import ProviderSelectionMenu from '../menu/ProviderSelectionMenu.js';
+import SkillSelectionMenu from '../menu/SkillSelectionMenu.js';
+import type { SkillInfo } from '../../services/skills/skills-service.js';
 import type { PathCompletionItem } from '../../hooks/use-path-completion.js';
 import type { SettingCompletionItem, SettingsCategory } from '../../hooks/use-settings-completion.js';
 import type { SettingValueSuggestion } from '../../hooks/use-settings-value-completion.js';
@@ -70,6 +72,13 @@ interface PopupManagerProps {
     selectedIndex: number;
     scrollOffset?: number;
   };
+  skills: {
+    isOpen: boolean;
+    items: SkillInfo[];
+    selectedIndex: number;
+    scrollOffset?: number;
+    query: string;
+  };
   providers: {
     isOpen: boolean;
     phase: import('../../hooks/use-provider-selection.js').ProviderSelectionPhase;
@@ -91,6 +100,7 @@ export const PopupManager: FC<PopupManagerProps> = ({
   settings,
   settingsValue,
   undo,
+  skills,
   providers,
   settingsService,
 }) => {
@@ -151,6 +161,14 @@ export const PopupManager: FC<PopupManagerProps> = ({
       )}
       {undo.isOpen && (
         <UndoSelectionMenu items={undo.items} selectedIndex={undo.selectedIndex} scrollOffset={undo.scrollOffset} />
+      )}
+      {skills?.isOpen && (
+        <SkillSelectionMenu
+          items={skills.items}
+          selectedIndex={skills.selectedIndex}
+          scrollOffset={skills.scrollOffset}
+          query={skills.query}
+        />
       )}
       {providers.isOpen && (
         <ProviderSelectionMenu

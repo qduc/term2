@@ -5,7 +5,7 @@ import type { MutableRefObject } from 'react';
 import { SETTINGS_TRIGGER } from '../components/input/triggers.js';
 
 export type CompletionDismissal = {
-  type: 'path' | 'settings_value';
+  type: 'path' | 'settings_value' | 'skill_selection';
   inputRevision: number;
 } | null;
 
@@ -121,6 +121,15 @@ export const useEscapeKey = ({
 
       if (currentMode === 'slash_commands' || currentMode === 'settings_completion') {
         onChange('');
+        setMode('text');
+        return;
+      }
+
+      if (currentMode === 'skill_selection') {
+        dismissedCompletionRef.current = {
+          type: 'skill_selection',
+          inputRevision: inputRevisionRef.current,
+        };
         setMode('text');
         return;
       }

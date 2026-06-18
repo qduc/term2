@@ -8,6 +8,7 @@ export type InputMode =
   | 'settings_completion'
   | 'settings_value_completion'
   | 'model_selection'
+  | 'skill_selection'
   | 'undo_selection'
   | 'provider_selection';
 

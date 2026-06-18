@@ -62,6 +62,7 @@ type Options = {
   settings: Settings;
   settingsValue: Movable;
   models: Models;
+  skills: Movable;
   undo: Undo;
   providers: Providers;
   insertSelectedPath: (appendTrailingSpace: boolean) => boolean;
@@ -69,6 +70,7 @@ type Options = {
   insertSelectedSettingValue: (submitAfterInsert: boolean, typedValue?: string) => boolean;
   resetSettingValue: () => void;
   insertSelectedModel: (submitAfterInsert: boolean) => boolean;
+  insertSelectedSkill: (submitAfterInsert: boolean) => boolean;
   onSubmit: (value: string) => void;
   onSlashCommandRemount: () => void;
   onSlashTabComplete?: (command: SlashCommand) => boolean;
@@ -81,6 +83,7 @@ export const useModeHandlers = ({
   settings,
   settingsValue,
   models,
+  skills,
   undo,
   providers,
   insertSelectedPath,
@@ -88,6 +91,7 @@ export const useModeHandlers = ({
   insertSelectedSettingValue,
   resetSettingValue,
   insertSelectedModel,
+  insertSelectedSkill,
   onSubmit,
   onSlashCommandRemount,
   onSlashTabComplete,
@@ -195,6 +199,15 @@ export const useModeHandlers = ({
         },
         onSubmit: () => (insertSelectedModel(true) ? 'handled' : 'fallthrough'),
       },
+      skill_selection: {
+        moveUp: skills.moveUp,
+        moveDown: skills.moveDown,
+        pageUp: skills.pageUp,
+        pageDown: skills.pageDown,
+        moveHome: skills.moveHome,
+        moveEnd: skills.moveEnd,
+        onSubmit: () => (insertSelectedSkill(true) ? 'handled' : 'fallthrough'),
+      },
       undo_selection: {
         moveUp: undo.moveUp,
         moveDown: undo.moveDown,
@@ -249,6 +262,7 @@ export const useModeHandlers = ({
       settings,
       settingsValue,
       models,
+      skills,
       undo,
       providers,
       insertSelectedPath,
@@ -256,6 +270,7 @@ export const useModeHandlers = ({
       insertSelectedSettingValue,
       resetSettingValue,
       insertSelectedModel,
+      insertSelectedSkill,
       onSubmit,
       onSlashCommandRemount,
       onSlashTabComplete,

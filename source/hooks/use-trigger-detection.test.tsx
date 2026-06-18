@@ -36,6 +36,7 @@ const TestComponent = ({ counts, mode, value, cursorOffset, slashCommands = [] }
         close: () => count(counts, 'settingsValue.close'),
       },
       models: { open: () => count(counts, 'models.open'), close: () => count(counts, 'models.close') },
+      skills: { open: () => count(counts, 'skills.open'), close: () => count(counts, 'skills.close') },
     }),
     [counts],
   );
@@ -51,6 +52,7 @@ const TestComponent = ({ counts, mode, value, cursorOffset, slashCommands = [] }
     settings: handles.settings,
     settingsValue: handles.settingsValue,
     models: handles.models,
+    skills: handles.skills,
     slashCommands,
   });
 
@@ -88,4 +90,57 @@ it.sequential('useTriggerDetection closes model selection on none outside model 
   await renderInAct(<TestComponent counts={counts} mode="text" value="/model gpt-5" cursorOffset={1} />);
 
   expect(counts['models.close']).toBe(1);
+});
+
+it.sequential('useTriggerDetection respects dismissed skill_selection completion', async () => {
+  const counts: Counts = {};
+
+  const DismissedSkillComponent = () => {
+    const handles = useMemo(
+      () => ({
+        slash: { open: () => count(counts, 'slash.open'), close: () => count(counts, 'slash.close') },
+        path: { open: () => count(counts, 'path.open'), close: () => count(counts, 'path.close') },
+        settings: {
+          open: () => count(counts, 'settings.open'),
+          close: () => count(counts, 'settings.close'),
+        },
+        settingsValue: {
+          open: () => count(counts, 'settingsValue.open'),
+          close: () => count(counts, 'settingsValue.close'),
+        },
+        models: { open: () => count(counts, 'models.open'), close: () => count(counts, 'models.close') },
+        skills: { open: () => count(counts, 'skills.open'), close: () => count(counts, 'skills.close') },
+      }),
+      [counts],
+    );
+
+    useTriggerDetection({
+      value: '/skills ',
+      cursorOffset: '/skills '.length,
+      mode: 'text',
+      dismissedCompletionRef: { current: { type: 'skill_selection', inputRevision: 0 } } as any,
+      inputRevisionRef: { current: 0 },
+      slash: handles.slash,
+      path: handles.path,
+      settings: handles.settings,
+      settingsValue: handles.settingsValue,
+      models: handles.models,
+      skills: handles.skills,
+      slashCommands: [
+        {
+          name: 'skills',
+          description: 'Activate a skill',
+          expectsArgs: true,
+          completion: { type: 'skills', trigger: '/skills ' },
+          action: () => {},
+        },
+      ],
+    });
+
+    return <Text>test</Text>;
+  };
+
+  await renderInAct(<DismissedSkillComponent />);
+
+  expect(counts['skills.open'] ?? 0).toBe(0);
 });

@@ -14,6 +14,8 @@ import { createAutoApproveSlashCommand } from '../commands/auto-approve-command.
 import { createEffortSlashCommand } from '../commands/effort-command.js';
 import { createHandoffSlashCommand } from '../commands/handoff-command.js';
 import { createGuardedSettingsCommand } from '../commands/guarded-settings-command.js';
+import { createSkillsSlashCommand } from '../commands/skills-command.js';
+import type { SkillsService, SkillInfo } from '../services/skills/skills-service.js';
 import type { Message } from '../types/message.js';
 
 interface UseAppCommandsProps {
@@ -33,6 +35,8 @@ interface UseAppCommandsProps {
   onHandoff?: (capturedText: string) => void;
   sendUserMessage: (input: string | UserTurn) => Promise<void>;
   listUserTurns: () => { index: number; text: string; imageCount: number }[];
+  skillsService: SkillsService;
+  onSkillSelected: (skill: SkillInfo) => void;
 }
 
 // Re-export for backward compat
@@ -58,6 +62,8 @@ export const useAppCommands = ({
   onHandoff,
   sendUserMessage,
   listUserTurns,
+  skillsService,
+  onSkillSelected,
 }: UseAppCommandsProps) => {
   const { disableOtherModes, togglePlanMode, cycleAppModes } = useModeHelpers({
     settingsService,
@@ -132,6 +138,7 @@ export const useAppCommands = ({
         },
       },
       createQuitSlashCommand(exit),
+      createSkillsSlashCommand({ skillsService, onSkillSelected, addSystemMessage }),
     ],
     [
       addSystemMessage,
@@ -151,6 +158,8 @@ export const useAppCommands = ({
       sendUserMessage,
       listUserTurns,
       togglePlanMode,
+      skillsService,
+      onSkillSelected,
     ],
   );
 

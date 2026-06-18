@@ -2,6 +2,7 @@ import { it, expect } from 'vitest';
 import { findPathTrigger } from './input/triggers.js';
 import { determineActiveMenu, type ActiveMenu } from './input/determine-active-menu.js';
 import type { SlashCommand } from '../slash-commands.js';
+import { SKILLS_TRIGGER } from './input/triggers.js';
 import {
   MODEL_TRIGGER,
   MENTOR_TRIGGER,
@@ -32,6 +33,13 @@ const commandMetadata: SlashCommand[] = [
     description: 'Shell approval',
     expectsArgs: true,
     completion: { type: 'setting-value', trigger: '/auto-approve ', settingKey: 'shell.autoApproveMode' },
+    action: () => {},
+  },
+  {
+    name: 'skills',
+    description: 'Activate a skill',
+    expectsArgs: true,
+    completion: { type: 'skills', trigger: SKILLS_TRIGGER },
     action: () => {},
   },
 ];
@@ -215,4 +223,16 @@ it('findPathTrigger - basic behavior preserved', () => {
   expect(findPathTrigger('hello', 5)).toBe(null);
   // Whitespace inside the query invalidates the trigger.
   expect(findPathTrigger('@foo bar', 8)).toBe(null);
+});
+
+it('determineActiveMenu - skills trigger (priority 2, beats slash)', () => {
+  expect(determine(SKILLS_TRIGGER)).toEqual({ type: 'skills', startIndex: SKILLS_TRIGGER.length });
+  expect(determine('/skills codebase', 15)).toEqual({ type: 'skills', startIndex: SKILLS_TRIGGER.length });
+  // Cursor not past trigger returns none (slash is not detected because value contains a space)
+  expect(determine('/skills ', 3)).toEqual({ type: 'none' });
+});
+
+it('determineActiveMenu - skills does not activate when no space after /skills', () => {
+  // Without trailing space, it's a slash command (since no space yet)
+  expect(determine('/skills')).toEqual({ type: 'slash' });
 });

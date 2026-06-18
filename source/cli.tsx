@@ -709,6 +709,7 @@ const { waitUntilExit } = render(
         settingsService={settings}
         historyService={history}
         loggingService={logger}
+        skillsService={skillsService}
         sshInfo={sshInfo}
         sshService={sshService}
         usageAccumulator={sessionUsageAccumulator}

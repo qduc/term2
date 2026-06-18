@@ -26,6 +26,7 @@ export type ActiveMenu =
   | { type: 'settings'; startIndex: number }
   | { type: 'settings_value'; key: string; startIndex: number }
   | { type: 'model'; startIndex: number }
+  | { type: 'skills'; startIndex: number }
   | { type: 'path'; trigger: { start: number; query: string } };
 
 const hasCompletion = (completion: SlashCommandCompletion | undefined): completion is SlashCommandCompletion =>
@@ -86,12 +87,20 @@ export const determineActiveMenu = (value: string, cursorOffset: number, command
     }
   }
 
-  // Priority 2: slash command (only when no space typed yet and cursor has moved past '/').
+  // Priority 2: skills selection (after settings triggers, before slash).
+  for (const completion of commandCompletions) {
+    if (completion.type !== 'skills') continue;
+    if (value.startsWith(completion.trigger) && cursorOffset >= completion.trigger.length) {
+      return { type: 'skills', startIndex: completion.trigger.length };
+    }
+  }
+
+  // Priority 3: slash command (only when no space typed yet and cursor has moved past '/').
   if (value.startsWith('/') && !value.slice(1).includes(' ') && cursorOffset > 0) {
     return { type: 'slash' };
   }
 
-  // Priority 3: @path completion.
+  // Priority 4: @path completion.
   const pathTrigger = findPathTrigger(value, cursorOffset);
   if (pathTrigger) {
     return { type: 'path', trigger: pathTrigger };

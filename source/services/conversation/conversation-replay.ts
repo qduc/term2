@@ -695,6 +695,7 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
           return {
             ...msg,
             status: event.result.status,
+            finalText: event.result.finalText,
           };
         }
         return msg;

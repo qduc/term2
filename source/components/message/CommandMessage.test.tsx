@@ -1008,6 +1008,53 @@ it('CommandMessage renders ask_user declined answer in second line in concise mo
   expect(lines[1]!.includes('Response: User declined to answer.')).toBe(true);
 });
 
+it('CommandMessage renders ask_mentor first paragraph in second line in concise mode when completed', async () => {
+  const props = {
+    command: 'ask_mentor',
+    toolName: 'ask_mentor',
+    toolArgs: {
+      question: 'How does this work?',
+    },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: 'This is the first paragraph.\n\nThis is the second paragraph.\nAnd the third.',
+  };
+
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  const lines = output.trim().split('\n');
+  expect(lines.length >= 2).toBe(true);
+  expect(lines[0]!.includes('✔')).toBe(true);
+  expect(lines[0]!.includes('Asked mentor "How does this work?"')).toBe(true);
+  expect(lines[1]!.includes('Response: This is the first paragraph.')).toBe(true);
+  expect(lines[1]!.includes('This is the second paragraph.')).toBe(false);
+});
+
+it('CommandMessage renders ask_mentor entire output if only one paragraph in concise mode when completed', async () => {
+  const props = {
+    command: 'ask_mentor',
+    toolName: 'ask_mentor',
+    toolArgs: {
+      question: 'How does this work?',
+    },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: 'Line 1\nLine 2',
+  };
+
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  const lines = output.trim().split('\n');
+  expect(lines.length >= 2).toBe(true);
+  expect(lines[0]!.includes('✔')).toBe(true);
+  expect(lines[1]!.includes('Response: Line 1')).toBe(true);
+  expect(lines[2]!.includes('Line 2')).toBe(true);
+});
+
 it('CommandMessage renders in a single, muted line when isSubagent is true', async () => {
   const props = {
     command: 'create_file "src/test.txt"',

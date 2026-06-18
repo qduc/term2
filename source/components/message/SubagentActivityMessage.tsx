@@ -9,6 +9,7 @@ type Props = {
     task?: string;
     status?: string;
     tools?: (string | any)[];
+    finalText?: string;
   };
 };
 
@@ -23,14 +24,16 @@ const truncate = (value: string, maxLength: number) => {
   return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
 };
 
+const getFirstParagraph = (text: string | undefined): string => {
+  if (!text) return '';
+  const trimmed = text.trim();
+  const paragraphs = trimmed.split(/\n\s*\n/);
+  return paragraphs[0]?.trim() || '';
+};
+
 const buildTitle = (role: string | undefined, task: string | undefined): string => {
   const roleLabel = role ? `[${role}]` : '';
-  const firstParagraph =
-    task
-      ?.split(/\n\s*\n/)[0]
-      ?.replace(/\s+/g, ' ')
-      .trim() || '';
-  const taskPreview = truncate(firstParagraph, MAX_TASK_LENGTH);
+  const taskPreview = truncate(getFirstParagraph(task).replace(/\s+/g, ' '), MAX_TASK_LENGTH);
   return ['run_subagent', roleLabel, taskPreview].filter(Boolean).join(' ');
 };
 
@@ -79,33 +82,37 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
         $ {title}
         {statusSuffix}
       </Text>
-      {tools.map((tool, index) => {
-        if (tool && typeof tool === 'object') {
+      {msg.status === 'completed' && msg.finalText ? (
+        <Text color={COLOR_MUTED}> Response: {getFirstParagraph(msg.finalText)}</Text>
+      ) : (
+        tools.map((tool, index) => {
+          if (tool && typeof tool === 'object') {
+            return (
+              <Box key={index}>
+                <CommandMessage
+                  command={tool.command}
+                  output={tool.output}
+                  status={tool.status}
+                  success={tool.success}
+                  failureReason={tool.failureReason}
+                  toolName={tool.toolName}
+                  toolArgs={tool.toolArgs}
+                  isApprovalRejection={tool.isApprovalRejection}
+                  hadApproval={tool.hadApproval}
+                  displayMode="concise"
+                  textColor="#64748b"
+                  isSubagent={true}
+                />
+              </Box>
+            );
+          }
           return (
-            <Box key={index}>
-              <CommandMessage
-                command={tool.command}
-                output={tool.output}
-                status={tool.status}
-                success={tool.success}
-                failureReason={tool.failureReason}
-                toolName={tool.toolName}
-                toolArgs={tool.toolArgs}
-                isApprovalRejection={tool.isApprovalRejection}
-                hadApproval={tool.hadApproval}
-                displayMode="concise"
-                textColor="#64748b"
-                isSubagent={true}
-              />
-            </Box>
+            <Text key={`${tool}-${index}`} color={COLOR_MUTED}>
+              {truncate(formatSubagentStringTool(tool as string, msg.status), MAX_TOOL_LENGTH)}
+            </Text>
           );
-        }
-        return (
-          <Text key={`${tool}-${index}`} color={COLOR_MUTED}>
-            {truncate(formatSubagentStringTool(tool as string, msg.status), MAX_TOOL_LENGTH)}
-          </Text>
-        );
-      })}
+        })
+      )}
     </Box>
   );
 };

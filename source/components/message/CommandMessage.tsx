@@ -63,6 +63,13 @@ const getConciseAskUserResponse = (output: string | undefined): string => {
   return output;
 };
 
+const getFirstParagraph = (output: string | undefined): string => {
+  if (!output) return '';
+  const trimmed = output.trim();
+  const paragraphs = trimmed.split(/\n\s*\n/);
+  return paragraphs[0]?.trim() || '';
+};
+
 const CommandMessage: FC<Props> = ({
   command,
   output,
@@ -312,6 +319,21 @@ const CommandMessage: FC<Props> = ({
             {displayAction}
           </Text>
           <Text color={textColor || COLOR_SUCCESS}> Response: {responseText}</Text>
+        </Box>
+      );
+    }
+
+    if (toolName === 'ask_mentor') {
+      const firstParagraph = getFirstParagraph(output);
+      return (
+        <Box flexDirection="column">
+          <Text color={textColor || COLOR_SUCCESS}>
+            <Text color={'green'} bold>
+              ✔
+            </Text>{' '}
+            {displayAction}
+          </Text>
+          <Text color={textColor || COLOR_SUCCESS}> Response: {firstParagraph}</Text>
         </Box>
       );
     }

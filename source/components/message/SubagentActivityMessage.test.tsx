@@ -207,3 +207,26 @@ it.sequential('SubagentActivityMessage does not misparse embedded (Failed: in ar
   expect(output.includes('\u2714')).toBe(true);
   expect(output.includes('write_file "notes (Failed: old).txt"')).toBe(true);
 });
+
+it.sequential(
+  'SubagentActivityMessage replaces tool timeline with first paragraph of finalText when completed',
+  async () => {
+    const props = {
+      msg: {
+        role: 'explorer',
+        task: 'find x',
+        status: 'completed',
+        tools: ['read_file "source/app.tsx" (Success)'],
+        finalText: 'Here is the subagent answer.\n\nThis is the second paragraph of the answer.',
+      },
+    };
+
+    const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
+    const output = toVisibleText(lastFrame() ?? '');
+
+    expect(output.includes('run_subagent [explorer] find x')).toBe(true);
+    expect(output.includes('Response: Here is the subagent answer.')).toBe(true);
+    expect(output.includes('This is the second paragraph of the answer.')).toBe(false);
+    expect(output.includes('read_file')).toBe(false);
+  },
+);

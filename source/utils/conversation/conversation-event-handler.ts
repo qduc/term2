@@ -539,6 +539,7 @@ export function createConversationEventHandler(
                 return {
                   ...msg,
                   status: event.result.status,
+                  finalText: event.result.finalText,
                 };
               }
               return msg;

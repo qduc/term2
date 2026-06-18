@@ -50,6 +50,11 @@ export type DailySessionIndexEntry = {
   modesSeen: string[];
 };
 
+type TrafficEnvelope = {
+  sent: Record<string, unknown>;
+  received: Record<string, unknown>;
+};
+
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -134,6 +139,45 @@ const sanitizeMessageContent = (message: Record<string, unknown>): Record<string
     return { ...sanitizedMessage, content: sanitizeContentArray(content) };
   }
   return { ...sanitizedMessage, content: sanitizeInstructionLikeValue(content) };
+};
+
+const emptyTrafficRecord = (): Record<string, unknown> => ({});
+
+const parseTrafficEnvelope = (requestPath: string): TrafficEnvelope => {
+  if (!fs.existsSync(requestPath)) {
+    return { sent: emptyTrafficRecord(), received: emptyTrafficRecord() };
+  }
+
+  const raw = fs.readFileSync(requestPath, 'utf8').trim();
+  if (!raw) {
+    return { sent: emptyTrafficRecord(), received: emptyTrafficRecord() };
+  }
+
+  const parsed = asRecord(tryParseJson(raw));
+  if (
+    parsed &&
+    (Object.prototype.hasOwnProperty.call(parsed, 'sent') || Object.prototype.hasOwnProperty.call(parsed, 'received'))
+  ) {
+    return {
+      sent: asRecord(parsed.sent) ?? emptyTrafficRecord(),
+      received: asRecord(parsed.received) ?? emptyTrafficRecord(),
+    };
+  }
+
+  const legacyBlocks = raw
+    .split(/\n\n+/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  return {
+    sent: asRecord(tryParseJson(legacyBlocks[0] ?? '')) ?? emptyTrafficRecord(),
+    received: asRecord(tryParseJson(legacyBlocks[1] ?? '')) ?? emptyTrafficRecord(),
+  };
+};
+
+const writeTrafficEnvelope = (requestPath: string, envelope: TrafficEnvelope): void => {
+  fs.mkdirSync(path.dirname(requestPath), { recursive: true });
+  fs.writeFileSync(requestPath, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
 };
 
 export const sanitizeSentTrafficBody = (body: Record<string, unknown>): Record<string, unknown> => {
@@ -609,7 +653,6 @@ export class ProviderTrafficArtifactStore {
 
   recordRequestStart(input: RequestStartInput): void {
     const { dayDir, requestPath, sessionDirName } = this.#pathsFor(input);
-    fs.mkdirSync(path.dirname(requestPath), { recursive: true });
     this.#requestPaths.set(input.requestId, requestPath);
     const sentRecord = {
       direction: 'sent',
@@ -624,7 +667,7 @@ export class ProviderTrafficArtifactStore {
       ...(input.headers ? { headers: input.headers } : {}),
       body: sanitizeSentTrafficBody(input.sentBody),
     };
-    fs.writeFileSync(requestPath, `${JSON.stringify(sentRecord, null, 2)}\n`, 'utf8');
+    writeTrafficEnvelope(requestPath, { sent: sentRecord, received: emptyTrafficRecord() });
     this.#upsertDailyIndex(dayDir, {
       sessionId: input.sessionId,
       sessionDir: sessionDirName,
@@ -657,8 +700,11 @@ export class ProviderTrafficArtifactStore {
       ...(input.receivedSummary ? { summary: input.receivedSummary } : {}),
       ...(input.error ? { error: input.error } : {}),
     };
-    fs.mkdirSync(path.dirname(requestPath), { recursive: true });
-    fs.appendFileSync(requestPath, `\n${JSON.stringify(receivedRecord, null, 2)}\n`, 'utf8');
+    const envelope = parseTrafficEnvelope(requestPath);
+    writeTrafficEnvelope(requestPath, {
+      sent: envelope.sent,
+      received: receivedRecord,
+    });
     this.#requestPaths.delete(input.requestId);
     this.#touchDailyIndex(dayDir, {
       sessionId: input.sessionId,

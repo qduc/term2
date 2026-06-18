@@ -11,12 +11,8 @@ import {
 
 const makeTempDir = (): string => fs.mkdtempSync(path.join(os.tmpdir(), 'term2-provider-traffic-'));
 
-const readRequestFile = (filePath: string): Record<string, unknown>[] =>
-  fs
-    .readFileSync(filePath, 'utf8')
-    .split(/\n\n/)
-    .filter((block) => block.trim())
-    .map((block) => JSON.parse(block) as Record<string, unknown>);
+const readRequestFile = (filePath: string): Record<string, unknown> =>
+  JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>;
 
 const expectedTruncation = (length: number): string => `[omitted ${length - TRAFFIC_TEXT_LIMIT} chars]`;
 
@@ -446,11 +442,15 @@ it('ProviderTrafficArtifactStore writes per-day per-session request files and da
   expect(path.basename(requestFile)).toBe('09-14-35.044Z_req-1.jsonl');
   expect(path.basename(requestFile).includes('session-123')).toBe(false);
 
-  const firstRecord = readRequestFile(requestFile)[0];
-  expect(firstRecord?.direction).toBe('sent');
-  expect(firstRecord?.headers).toEqual({ host: 'api.openrouter.ai', authorization: '[REDACTED]' });
-  expect(firstRecord?.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
-  expect(firstRecord?.modelWrapperClass).toBe('RetryingModel');
+  const requestRecord = readRequestFile(requestFile);
+  expect((requestRecord.sent as Record<string, unknown>)?.direction).toBe('sent');
+  expect((requestRecord.sent as Record<string, unknown>)?.headers).toEqual({
+    host: 'api.openrouter.ai',
+    authorization: '[REDACTED]',
+  });
+  expect((requestRecord.sent as Record<string, unknown>)?.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
+  expect((requestRecord.sent as Record<string, unknown>)?.modelWrapperClass).toBe('RetryingModel');
+  expect(requestRecord.received).toEqual({});
 
   const indexPath = path.join(dayDir, 'index.jsonl');
   const indexEntries = fs
@@ -542,19 +542,24 @@ it('ProviderTrafficArtifactStore appends received line, upserts newest-first ind
   });
 
   const requestFile = path.join(rootDir, '2026-05-22', '09-14-31_sessi', '09-14-35.044Z_req-1.jsonl');
-  const requestRecords = readRequestFile(requestFile);
-  expect(requestRecords.length).toBe(2);
-  expect(requestRecords[1]?.direction).toBe('received');
-  expect((requestRecords[1]?.summary as any)?.outputText).toBe('done');
-  expect(requestRecords[0]?.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
-  expect(requestRecords[0]?.modelWrapperClass).toBe('RetryingModel');
-  expect(requestRecords[1]?.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
-  expect(requestRecords[1]?.modelWrapperClass).toBe('RetryingModel');
+  const requestRecord = readRequestFile(requestFile);
+  expect((requestRecord.sent as Record<string, unknown>)?.direction).toBe('sent');
+  expect((requestRecord.received as Record<string, unknown>)?.direction).toBe('received');
+  expect(((requestRecord.received as Record<string, unknown>)?.summary as any)?.outputText).toBe('done');
+  expect((requestRecord.sent as Record<string, unknown>)?.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
+  expect((requestRecord.sent as Record<string, unknown>)?.modelWrapperClass).toBe('RetryingModel');
+  expect((requestRecord.received as Record<string, unknown>)?.modelClass).toBe(
+    'OpenAIResponsesWSModelWithPromptCacheKey',
+  );
+  expect((requestRecord.received as Record<string, unknown>)?.modelWrapperClass).toBe('RetryingModel');
 
   const failureFile = path.join(rootDir, '2026-05-22', '10-00-00_sessi', '10-00-00.000Z_req-2.jsonl');
-  expect((readRequestFile(failureFile)[1]?.error as any)?.message).toBe('fetch failed');
-  expect(readRequestFile(failureFile)[0]?.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
-  expect(readRequestFile(failureFile)[1]?.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
+  const failureRecord = readRequestFile(failureFile);
+  expect(((failureRecord.received as Record<string, unknown>)?.error as any)?.message).toBe('fetch failed');
+  expect((failureRecord.sent as Record<string, unknown>)?.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
+  expect((failureRecord.received as Record<string, unknown>)?.modelClass).toBe(
+    'OpenAIResponsesWSModelWithPromptCacheKey',
+  );
 
   const indexEntries = fs
     .readFileSync(path.join(rootDir, '2026-05-22', 'index.jsonl'), 'utf8')
@@ -611,11 +616,10 @@ it('ProviderTrafficArtifactStore places evaluator requests under evaluator subfo
   expect(fs.existsSync(requestFile)).toBe(true);
 
   const records = readRequestFile(requestFile);
-  expect(records.length).toBe(2);
-  expect(records[0]?.direction).toBe('sent');
-  expect(records[1]?.direction).toBe('received');
-  expect(records[0]?.modelClass).toBe('CodexResponsesWSModel');
-  expect(records[1]?.modelClass).toBe('CodexResponsesWSModel');
+  expect((records.sent as Record<string, unknown>)?.direction).toBe('sent');
+  expect((records.received as Record<string, unknown>)?.direction).toBe('received');
+  expect((records.sent as Record<string, unknown>)?.modelClass).toBe('CodexResponsesWSModel');
+  expect((records.received as Record<string, unknown>)?.modelClass).toBe('CodexResponsesWSModel');
 });
 
 it('recordRequestComplete removes completed request path from map so a second completion without a fresh start gets a new path', () => {
@@ -664,15 +668,16 @@ it('recordRequestComplete removes completed request path from map so a second co
   const dayDir = path.join(rootDir, '2026-06-01');
   const sessionDir = path.join(dayDir, '10-00-00_sessi');
 
-  // The file created by recordRequestStart holds sent + first received (2 records)
+  // The file created by recordRequestStart is rewritten in place with sent + first received.
   const startFile = path.join(sessionDir, '10-00-01.000Z_test-.jsonl');
   expect(fs.existsSync(startFile)).toBe(true);
-  expect(readRequestFile(startFile).length, 'start file should have sent + first received').toBe(2);
+  expect((readRequestFile(startFile).sent as Record<string, unknown>)?.direction).toBe('sent');
+  expect((readRequestFile(startFile).received as Record<string, unknown>)?.direction).toBe('received');
 
   // The second completion MUST write to a NEW file, not reuse the stored path
   const secondFile = path.join(sessionDir, '10-00-10.000Z_test-.jsonl');
   expect(fs.existsSync(secondFile)).toBe(true);
   const secondRecords = readRequestFile(secondFile);
-  expect(secondRecords.length, 'new file should have exactly one received record').toBe(1);
-  expect(secondRecords[0]?.timestamp).toBe('2026-06-01T10:00:10.000Z');
+  expect((secondRecords.sent as Record<string, unknown>) ?? {}).toEqual({});
+  expect((secondRecords.received as Record<string, unknown>)?.timestamp).toBe('2026-06-01T10:00:10.000Z');
 });

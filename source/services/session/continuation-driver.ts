@@ -247,6 +247,7 @@ export class ContinuationDriver {
         nextPlan.pendingApprovalContext.state,
         nextPlan.pendingApprovalContext.interruption,
         state.currentCallIds,
+        true,
       );
     }
 
@@ -394,6 +395,7 @@ export class ContinuationDriver {
     runState: unknown,
     primaryInterruption: unknown,
     fallbackCallIds: readonly string[],
+    preserveFallback = false,
   ): string[] {
     const callIds = new Set<string>();
     const addCallId = (callId: unknown): void => {
@@ -401,6 +403,12 @@ export class ContinuationDriver {
         callIds.add(callId);
       }
     };
+
+    if (preserveFallback) {
+      for (const callId of fallbackCallIds) {
+        addCallId(callId);
+      }
+    }
 
     const interruptions = getMethod<[], unknown>(runState, 'getInterruptions')?.();
     if (Array.isArray(interruptions)) {

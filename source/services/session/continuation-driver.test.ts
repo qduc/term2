@@ -56,6 +56,14 @@ function createDriver(deps: any) {
       applyNextPlan: async function* () {},
       recordPendingApproval: () => {},
     } as any,
+    shellAutoApproval: {
+      shouldAutoApprove: () => true,
+      resolveAdvisoryForInterruption: async () => ({
+        shouldApprove: true,
+        model: 'test-model',
+        reasoning: 'test approval',
+      }),
+    } as any,
     streamCycle: {
       async *execute(_state: any) {
         return {
@@ -144,6 +152,89 @@ it('drive yields error event when continuation stream throws unrecoverable error
   const errorEvents = events.filter((e) => e.type === 'error');
   expect(errorEvents.length).toBe(1);
   expect(errorEvents[0]?.message).toBe('stream boom');
+});
+
+it('drive preserves already-approved parallel call ids when staging remaining approvals', async () => {
+  const callA = { callId: 'call-a', name: 'shell', arguments: '{"command":"git status --short"}' };
+  const callB = { callId: 'call-b', name: 'shell', arguments: '{"command":"rg options source"}' };
+  const approved = new Set<string>();
+  let retargeted: any = null;
+  const seenCallIds: string[][] = [];
+
+  const makeState = (interruptions: any[]) => ({
+    getInterruptions: () => interruptions,
+    _context: {
+      isToolApproved: ({ callId }: { callId: string }) => (approved.has(callId) ? true : undefined),
+    },
+  });
+
+  const driver = createDriver({
+    approvalFlow: {
+      getPending: () => null,
+      retargetPendingInterruption: (interruption: any) => {
+        retargeted = interruption;
+      },
+      prepareContinuation: () => {
+        if (!retargeted) return null;
+        approved.add(retargeted.callId);
+        const remaining = [callA, callB].filter((interruption) => !approved.has(interruption.callId));
+        return {
+          pendingApprovalContext: {
+            state: makeState(remaining),
+            interruption: retargeted,
+            toolCallArgumentsById: new Map(),
+            emittedCommandIds: new Set(),
+            inputMode: 'delta',
+          },
+          removeInterceptor: () => {},
+        };
+      },
+      prepareAbortResolution: () => ({ removeInterceptor: () => {} }),
+    } as any,
+    planApplier: {
+      prepareInit: (init: any) => ({
+        state: makeState([callA, callB]),
+        interruption: callA,
+        toolCallArgumentsById: new Map(),
+        previouslyEmittedCommandIds: new Set(),
+        removeInterceptor: () => {},
+        source: 'continueRunStream',
+        token: init.generation,
+        inputMode: 'delta',
+      }),
+      applyInitialSetup: async function* () {},
+      applyNextPlan: async function* (nextPlan: any, state: any, mergedEmittedIds: Set<string>) {
+        state.advanceFromPlan(
+          nextPlan.pendingApprovalContext.state,
+          nextPlan.pendingApprovalContext.interruption,
+          nextPlan.pendingApprovalContext.inputMode,
+          mergedEmittedIds,
+          [],
+          state.currentCallIds,
+        );
+      },
+      recordPendingApproval: () => {},
+    } as any,
+    streamCycle: {
+      async *execute(state: any) {
+        seenCallIds.push([...state.currentCallIds]);
+        return {
+          kind: 'completed',
+          outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
+          nextCumulativeMessages: [],
+          nextCumulativeTurnItems: [],
+          mergedEmittedIds: new Set(),
+        };
+      },
+    } as any,
+  });
+
+  const { result } = await collectResult(
+    driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, { decide: async () => 'approve' }),
+  );
+
+  expect(result.kind).toBe('response');
+  expect(seenCallIds).toEqual([['call-a', 'call-b']]);
 });
 
 // ── continuation from rejection ───────────────────────────────

@@ -4,6 +4,7 @@ import {
   classifySearchKind,
   countDiffStats,
   formatToolArgs,
+  getFirstParagraph,
   getMatchCount,
   parseCodeContextSearchOutput,
   parseCodeOutlineOutput,
@@ -217,6 +218,12 @@ it('parseWebFetchOutput separates table of contents, notes, temp file, and conte
     notes: '**Note: Content still truncated.**',
     content: 'Body text',
   });
+});
+
+it('getFirstParagraph returns the first paragraph from multiline text', () => {
+  expect(getFirstParagraph('Line one\n\nLine two')).toBe('Line one');
+  expect(getFirstParagraph('  leading and trailing  ')).toBe('leading and trailing');
+  expect(getFirstParagraph(undefined)).toBe('');
 });
 
 it('parseCodeOutlineOutput groups imports exports and declarations', () => {

@@ -18,6 +18,34 @@ export const stripRgErrorLines = (output: string | undefined): string => {
     .join('\n');
 };
 
+export const getFirstParagraph = (text: string | undefined, minChars = 0): string => {
+  if (!text) return '';
+  const trimmed = text.trim();
+  if (minChars <= 0) {
+    const paragraphs = trimmed.split(/\n\s*\n/);
+    return paragraphs[0]?.trim() || '';
+  }
+
+  const paragraphs = trimmed
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (paragraphs.length === 0) return '';
+
+  let result = paragraphs[0] || '';
+  let i = 1;
+  while (result.length < minChars && i < paragraphs.length) {
+    // separate paragraphs with a blank line to preserve paragraph boundaries
+    result = `${result}\n\n${paragraphs[i]}`;
+    i += 1;
+  }
+
+  // If still shorter than minChars, fall back to returning the whole trimmed text
+  if (result.length < minChars) return trimmed;
+
+  return result.trim();
+};
+
 export const isSearchLikeTool = (toolName: string | undefined, command: string): boolean => {
   if (toolName && SEARCH_TOOL_NAMES.has(toolName)) return true;
   if (toolName === 'shell' || !toolName) {

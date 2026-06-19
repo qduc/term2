@@ -5,6 +5,7 @@ import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE 
 import {
   countDiffStats,
   formatToolArgs,
+  getFirstParagraph,
   getMatchCount,
   isSearchLikeTool,
   parseCodeContextSearchOutput,
@@ -61,13 +62,6 @@ const getConciseAskUserResponse = (output: string | undefined): string => {
     return answers.join(', ');
   }
   return output;
-};
-
-const getFirstParagraph = (output: string | undefined): string => {
-  if (!output) return '';
-  const trimmed = output.trim();
-  const paragraphs = trimmed.split(/\n\s*\n/);
-  return paragraphs[0]?.trim() || '';
 };
 
 const CommandMessage: FC<Props> = ({
@@ -340,7 +334,7 @@ const CommandMessage: FC<Props> = ({
     }
 
     if (toolName === 'ask_mentor') {
-      const firstParagraph = getFirstParagraph(output);
+      const firstParagraph = getFirstParagraph(output, 500);
       return (
         <Box flexDirection="column">
           <Text color={textColor || COLOR_SUCCESS}>

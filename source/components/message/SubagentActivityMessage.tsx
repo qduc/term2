@@ -1,6 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import CommandMessage from './CommandMessage.js';
+import { getFirstParagraph } from './command-message-helpers.js';
 import { COLOR_MUTED } from '../theme.js';
 
 type Props = {
@@ -24,16 +25,9 @@ const truncate = (value: string, maxLength: number) => {
   return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
 };
 
-const getFirstParagraph = (text: string | undefined): string => {
-  if (!text) return '';
-  const trimmed = text.trim();
-  const paragraphs = trimmed.split(/\n\s*\n/);
-  return paragraphs[0]?.trim() || '';
-};
-
 const buildTitle = (role: string | undefined, task: string | undefined): string => {
   const roleLabel = role ? `[${role}]` : '';
-  const taskPreview = truncate(getFirstParagraph(task).replace(/\s+/g, ' '), MAX_TASK_LENGTH);
+  const taskPreview = truncate(getFirstParagraph(task, 500).replace(/\s+/g, ' '), MAX_TASK_LENGTH);
   return ['run_subagent', roleLabel, taskPreview].filter(Boolean).join(' ');
 };
 
@@ -83,7 +77,7 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
         {statusSuffix}
       </Text>
       {msg.status === 'completed' && msg.finalText ? (
-        <Text color={COLOR_MUTED}> Response: {getFirstParagraph(msg.finalText)}</Text>
+        <Text color={COLOR_MUTED}>{getFirstParagraph(msg.finalText, 500)}</Text>
       ) : (
         tools.map((tool, index) => {
           if (tool && typeof tool === 'object') {

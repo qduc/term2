@@ -29,6 +29,7 @@ import {
   computeSettingValueInsertion,
   computeModelInsertion,
   computeSkillInsertion,
+  type Insertion,
 } from './input/insertions.js';
 import { SETTINGS_TRIGGER } from './input/triggers.js';
 import { parseSettingValue } from '../utils/settings-command.js';
@@ -253,6 +254,15 @@ const InputBox: FC<Props> = ({
     },
     [onSubmit],
   );
+  const applyAutocompleteInsertion = useCallback(
+    (result: Insertion) => {
+      onChange(result.nextValue);
+      cursorOffsetRef.current = result.nextCursor;
+      setCursorOffset(result.nextCursor);
+      pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
+    },
+    [onChange, setCursorOffset],
+  );
 
   const insertSelectedPath = useCallback(
     (appendTrailingSpace: boolean): boolean => {
@@ -264,26 +274,21 @@ const InputBox: FC<Props> = ({
         appendTrailingSpace,
       });
       if (!result) return false;
-      onChange(result.nextValue);
-      setCursorOffset(result.nextCursor);
-      pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
+      applyAutocompleteInsertion(result);
       path.close();
       return true;
     },
-    [path, cursorOffset, value, onChange, setCursorOffset],
+    [path, cursorOffset, value, applyAutocompleteInsertion],
   );
 
   const insertSelectedSetting = useCallback((): boolean => {
     const result = computeSettingInsertion({ selection: settings.getSelectedItem(), value });
     if (!result) return false;
     settingsFilterRef.current = settings.query;
-    onChange(result.nextValue);
-    cursorOffsetRef.current = result.nextCursor;
-    setCursorOffset(result.nextCursor);
-    pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
+    applyAutocompleteInsertion(result);
     settings.close();
     return true;
-  }, [settings, value, onChange, setCursorOffset]);
+  }, [settings, value, applyAutocompleteInsertion]);
 
   const insertSelectedSettingValue = useCallback(
     (submitAfterInsert: boolean, typedValue?: string): boolean => {
@@ -344,9 +349,7 @@ const InputBox: FC<Props> = ({
         cursorOffset,
       });
       if (!result) return false;
-      onChange(result.nextValue);
-      setCursorOffset(result.nextCursor);
-      pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
+      applyAutocompleteInsertion(result);
       settingsValue.close();
       return true;
     },
@@ -355,11 +358,11 @@ const InputBox: FC<Props> = ({
       value,
       onChange,
       cursorOffset,
+      applyAutocompleteInsertion,
       settingsService,
       onSettingChange,
       onSystemMessage,
       reopenSettingsMenu,
-      setCursorOffset,
     ],
   );
 
@@ -403,13 +406,11 @@ const InputBox: FC<Props> = ({
         return true;
       }
 
-      onChange(result.nextValue);
-      setCursorOffset(result.nextCursor);
-      pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
+      applyAutocompleteInsertion(result);
       models.close();
       return true;
     },
-    [models, value, onChange, submitTextOnly, settingsService, onSettingChange, setCursorOffset],
+    [models, value, onChange, submitTextOnly, settingsService, onSettingChange, applyAutocompleteInsertion],
   );
 
   const insertSelectedSkill = useCallback(
@@ -430,13 +431,11 @@ const InputBox: FC<Props> = ({
         return true;
       }
 
-      onChange(result.nextValue);
-      setCursorOffset(result.nextCursor);
-      pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
+      applyAutocompleteInsertion(result);
       skills.close();
       return true;
     },
-    [skills, value, cursorOffset, onChange, submitTextOnly, setCursorOffset],
+    [skills, value, cursorOffset, onChange, submitTextOnly, applyAutocompleteInsertion],
   );
 
   const modeHandlers = useModeHandlers({

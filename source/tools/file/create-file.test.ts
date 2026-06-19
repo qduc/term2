@@ -460,3 +460,29 @@ it.sequential('needsApproval requires approval and handles error when path is ou
     expect(result).toBe(true);
   });
 });
+
+it.sequential('execute writes outside workspace when the call has been approved', async () => {
+  // Use a workspace dir outside /tmp so the /tmp exception in resolveWorkspacePath
+  // does not mask the workspace boundary check.
+  const workspaceDir = await fs.mkdtemp(path.join(os.homedir(), '.term2-create-file-'));
+  const originalCwd = process.cwd;
+  process.cwd = () => workspaceDir;
+  try {
+    const tool = createTool(createMockSettingsService());
+    const outsidePath = path.join(path.dirname(workspaceDir), 'outside-approved.txt');
+    await fs.rm(outsidePath, { force: true });
+
+    const result = await tool.execute({
+      path: '../outside-approved.txt',
+      content: 'approved content',
+    });
+
+    expect(result).not.toContain('outside workspace');
+    expect(result).toBe('Created ../outside-approved.txt');
+    expect(await fs.readFile(outsidePath, 'utf8')).toBe('approved content');
+  } finally {
+    process.cwd = originalCwd;
+    await fs.rm(workspaceDir, { recursive: true, force: true });
+    await fs.rm(path.join(path.dirname(workspaceDir), 'outside-approved.txt'), { force: true });
+  }
+});

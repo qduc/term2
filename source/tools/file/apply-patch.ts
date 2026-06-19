@@ -339,7 +339,10 @@ export function createApplyPatchToolDefinition(deps: {
       };
 
       const runOperation = async ({ type, path: filePath, diff }: ApplyPatchOperation) => {
-        const targetPath = resolveWorkspacePath(filePath, cwd);
+        // The workspace boundary was already enforced by `needsApproval` (which
+        // returns true and pauses the SDK for an out-of-workspace path). If we
+        // reach `execute` after the user approved, the write must proceed.
+        const targetPath = resolveWorkspacePath(filePath, cwd, { allowOutsideWorkspace: true });
 
         if (enableFileLogging) {
           loggingService.debug(`File operation started: ${type}`, {

@@ -1523,3 +1523,36 @@ it.sequential('execute gap match works with normalized whitespace within lines',
     expect(updated).toBe('if (condition) {\n  return false;\n}\n');
   });
 });
+
+it.sequential('execute updates an existing file outside workspace when the call has been approved', async () => {
+  // Use a workspace dir outside /tmp so the /tmp exception in resolveWorkspacePath
+  // does not mask the workspace boundary check.
+  const workspaceDir = await fs.mkdtemp(path.join(os.homedir(), '.term2-search-replace-'));
+  const originalCwd = process.cwd;
+  process.cwd = () => workspaceDir;
+  try {
+    const outsidePath = path.join(path.dirname(workspaceDir), 'outside-approved.txt');
+    await fs.writeFile(outsidePath, 'old content\n');
+
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+
+    const result = await tool.execute({
+      path: '../outside-approved.txt',
+      replacements: [
+        {
+          search_content: 'old content',
+          replace_content: 'new content',
+        },
+      ],
+    });
+
+    expect(result).not.toContain('outside workspace');
+    const parsed = parsePlainResult(result);
+    expect(parsed.output[0].success).toBe(true);
+    expect(await fs.readFile(outsidePath, 'utf8')).toBe('new content\n');
+  } finally {
+    process.cwd = originalCwd;
+    await fs.rm(workspaceDir, { recursive: true, force: true });
+    await fs.rm(path.join(path.dirname(workspaceDir), 'outside-approved.txt'), { force: true });
+  }
+});

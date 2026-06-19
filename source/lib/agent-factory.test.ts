@@ -132,6 +132,32 @@ it.sequential('buildAgent includes native applyPatchTool for supported models', 
   expect(logger.debugCalls.some(([message]) => message === 'Using native applyPatchTool from SDK')).toBe(true);
 });
 
+it.sequential('native apply_patch needsApproval requires approval for paths outside the workspace', async () => {
+  const { deps } = createDeps({ providerId: 'openai' });
+
+  const result = buildAgent({ model: 'gpt-5.1' }, deps);
+  const applyPatch = result.agent.tools.find((tool: any) => tool.name === 'apply_patch') as any;
+
+  expect(applyPatch).toBeTruthy();
+  expect(typeof applyPatch.needsApproval).toBe('function');
+
+  // Path inside the workspace => no approval needed
+  const insideResult = await applyPatch.needsApproval(undefined, {
+    type: 'create_file',
+    path: 'inside.txt',
+    diff: '@@ -0,0 +1 @@\n+x',
+  });
+  expect(insideResult).toBe(false);
+
+  // Path outside the workspace => approval required
+  const outsideResult = await applyPatch.needsApproval(undefined, {
+    type: 'create_file',
+    path: '../outside.txt',
+    diff: '@@ -0,0 +1 @@\n+x',
+  });
+  expect(outsideResult).toBe(true);
+});
+
 it.sequential('buildAgent resolves codex default_reasoning_level', async () => {
   clearModelCache();
 

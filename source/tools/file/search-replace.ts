@@ -511,7 +511,10 @@ export function createSearchReplaceToolDefinition(deps: {
         const indexedOperations = operations.map((operation, index) => ({
           operation,
           index,
-          targetPath: resolveWorkspacePath(operation.path, cwd),
+          // The workspace boundary was already enforced by `needsApproval` (which
+          // returns true and pauses the SDK for an out-of-workspace path). If we
+          // reach `execute` after the user approved, the write must proceed.
+          targetPath: resolveWorkspacePath(operation.path, cwd, { allowOutsideWorkspace: true }),
         }));
         const groups = new Map<string, typeof indexedOperations>();
         for (const indexedOperation of indexedOperations) {

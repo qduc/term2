@@ -351,3 +351,32 @@ it.sequential('execute: detailed error for context block mismatch', async () => 
     expect(parsed2.output[0].error.includes('Mismatch details')).toBe(true);
   });
 });
+
+it.sequential('execute: create_file writes outside workspace when the call has been approved', async () => {
+  // Use a workspace dir outside /tmp so the /tmp exception in resolveWorkspacePath
+  // does not mask the workspace boundary check.
+  const workspaceDir = await fs.mkdtemp(path.join(os.homedir(), '.term2-apply-patch-'));
+  const originalCwd = process.cwd;
+  process.cwd = () => workspaceDir;
+  try {
+    const tool = createTool();
+    const outsidePath = path.join(path.dirname(workspaceDir), 'outside-approved.txt');
+    await fs.rm(outsidePath, { force: true });
+
+    const result = await tool.execute({
+      type: 'create_file',
+      path: '../outside-approved.txt',
+      diff: '@@ -0,0 +1 @@\n+approved content',
+    });
+
+    expect(result).not.toContain('outside workspace');
+    const parsed = parsePlainResult(result);
+    expect(parsed.output[0].success).toBe(true);
+    expect(parsed.output[0].message!.startsWith('Created')).toBe(true);
+    expect((await fs.readFile(outsidePath, 'utf8')).trim()).toBe('approved content');
+  } finally {
+    process.cwd = originalCwd;
+    await fs.rm(workspaceDir, { recursive: true, force: true });
+    await fs.rm(path.join(path.dirname(workspaceDir), 'outside-approved.txt'), { force: true });
+  }
+});

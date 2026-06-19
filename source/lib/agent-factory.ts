@@ -1,3 +1,4 @@
+import path from 'path';
 import { Agent, tool as createTool, applyPatchTool, type Tool } from '@openai/agents';
 import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import { getAgentDefinition } from '../agent.js';
@@ -127,7 +128,19 @@ function buildAgentTools({
   if (shouldUseNativePatchTool) {
     const nativePatchTool = applyPatchTool({
       editor: deps.editor,
-      needsApproval: false, // Default to auto-approve for now
+      // Require approval for any path that escapes the workspace. Mirrors the
+      // boundary check in `editor-impl.resolveWorkspacePath` so the SDK pauses
+      // for user input before the editor's `createFile` / `updateFile` /
+      // `deleteFile` is invoked. The user-approved path is later permitted
+      // by the editor's `allowOutsideWorkspace` plumbing if/when added.
+      needsApproval: async (_runContext, operation) => {
+        const cwd = deps.executionContext?.getCwd() || process.cwd();
+        const workspaceRoot = path.resolve(cwd);
+        const resolved = path.resolve(workspaceRoot, operation.path);
+        const rootPrefix = workspaceRoot.endsWith(path.sep) ? workspaceRoot : workspaceRoot + path.sep;
+        const isInside = resolved === workspaceRoot || resolved.startsWith(rootPrefix);
+        return !isInside;
+      },
     }) as any; // Type assertion needed as invoke is not in public API
 
     // Wrap the native tool's invoke function to apply interceptor check

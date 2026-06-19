@@ -6,11 +6,25 @@ import type { ILoggingService, ISettingsService } from '../services/service-inte
 import { ExecutionContext } from '../services/execution-context.js';
 
 /**
- * Resolves a relative path and ensures it's within the workspace
+ * Resolves a relative path and ensures it's within the workspace, unless the
+ * caller opts out via `allowOutsideWorkspace: true`. Opting out is reserved
+ * for paths that have already cleared the workspace boundary upstream
+ * (e.g. via the SDK's `needsApproval` gate). Matches the same option in
+ * `source/tools/utils.resolveWorkspacePath`.
  */
-function resolveWorkspacePath(relativePath: string, baseDir: string = process.cwd()): string {
+function resolveWorkspacePath(
+  relativePath: string,
+  baseDir: string = process.cwd(),
+  options?: { allowOutsideWorkspace?: boolean },
+): string {
+  const allowOutsideWorkspace = options?.allowOutsideWorkspace ?? false;
   const workspaceRoot = path.resolve(baseDir);
   const resolved = path.resolve(workspaceRoot, relativePath);
+
+  if (allowOutsideWorkspace) {
+    return resolved;
+  }
+
   const rootPrefix = workspaceRoot.endsWith(path.sep) ? workspaceRoot : workspaceRoot + path.sep;
   const isInside = resolved === workspaceRoot || resolved.startsWith(rootPrefix);
 
@@ -41,7 +55,10 @@ export function createEditorImpl(deps: {
       const isRemote = executionContext?.isRemote() && !!sshService;
 
       try {
-        const targetPath = resolveWorkspacePath(filePath, cwd);
+        // The workspace boundary was already enforced upstream by the SDK's
+        // `needsApproval` gate (see `source/lib/agent-factory.ts`). If we reach this
+        // method, the user has approved the operation, so the write must proceed.
+        const targetPath = resolveWorkspacePath(filePath, cwd, { allowOutsideWorkspace: true });
 
         if (enableFileLogging) {
           loggingService.debug('File operation started: create_file', {
@@ -116,7 +133,10 @@ export function createEditorImpl(deps: {
       const isRemote = executionContext?.isRemote() && !!sshService;
 
       try {
-        const targetPath = resolveWorkspacePath(filePath, cwd);
+        // The workspace boundary was already enforced upstream by the SDK's
+        // `needsApproval` gate (see `source/lib/agent-factory.ts`). If we reach this
+        // method, the user has approved the operation, so the write must proceed.
+        const targetPath = resolveWorkspacePath(filePath, cwd, { allowOutsideWorkspace: true });
 
         if (enableFileLogging) {
           loggingService.debug('File operation started: update_file', {
@@ -208,7 +228,10 @@ export function createEditorImpl(deps: {
       const isRemote = executionContext?.isRemote() && !!sshService;
 
       try {
-        const targetPath = resolveWorkspacePath(filePath, cwd);
+        // The workspace boundary was already enforced upstream by the SDK's
+        // `needsApproval` gate (see `source/lib/agent-factory.ts`). If we reach this
+        // method, the user has approved the operation, so the write must proceed.
+        const targetPath = resolveWorkspacePath(filePath, cwd, { allowOutsideWorkspace: true });
 
         if (enableFileLogging) {
           loggingService.debug('File operation started: delete_file', {

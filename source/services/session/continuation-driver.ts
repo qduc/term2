@@ -10,7 +10,7 @@ import type { SessionInputPlanner } from './session-input-planner.js';
 import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
 import { describeError } from '../../utils/error-helpers.js';
-import type { RetryCounts, RecoveryInstructions } from '../retry/retry-contracts.js';
+import type { ContinuingTurnOutcome } from './turn-transition.js';
 import {
   asRecord,
   getCallIdFromObject,
@@ -41,11 +41,7 @@ export type ContinuationInit =
       generation: number;
     };
 
-export type ContinuationDriveResult =
-  | { kind: 'approval_required'; terminal: ConversationTerminal }
-  | { kind: 'response'; terminal: ConversationTerminal }
-  | ({ kind: 'fresh_start_required'; retryCounts: RetryCounts } & RecoveryInstructions)
-  | { kind: 'stale' };
+export type ContinuationDriveResult = ContinuingTurnOutcome;
 
 export interface ContinuationDriverDeps {
   generationGuard: GenerationGuard;

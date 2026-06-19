@@ -1,5 +1,4 @@
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import type { ConversationTerminal } from '../../contracts/conversation.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
@@ -13,26 +12,10 @@ import type { InitialTurnRunOptions, TurnAttemptFactory } from './turn-attempt-f
 import type { InitialInputPreparer } from './initial-input-preparer.js';
 import type { InitialStreamCycle } from './initial-stream-cycle.js';
 import type { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
-import type { AbortedApprovalContext } from '../approval/approval-state.js';
 import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
+import type { InitialTurnControlOutcome, StreamingTurnOutcome } from './turn-transition.js';
 
-export type InitialTurnOutcome =
-  | { kind: 'response'; terminal: ConversationTerminal }
-  | { kind: 'approval_required'; terminal: ConversationTerminal }
-  | { kind: 'failed' }
-  | { kind: 'stale' }
-  | {
-      kind: 'abort_resolution_required';
-      abortedContext: AbortedApprovalContext;
-      userText: string;
-      generation: number;
-    }
-  | {
-      kind: 'auto_approval_required';
-      generation: number;
-      callId?: string;
-      command?: string;
-    };
+export type InitialTurnOutcome = StreamingTurnOutcome | InitialTurnControlOutcome;
 
 export interface InitialTurnRunnerDeps {
   agentClient: ConversationAgentClient;

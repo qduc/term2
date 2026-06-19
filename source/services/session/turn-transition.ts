@@ -1,4 +1,5 @@
 import type { ConversationTerminal } from '../../contracts/conversation.js';
+import type { AbortedApprovalContext } from '../approval/approval-state.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
 
 // ── Types ──────────────────────────────────────────────────────
@@ -14,6 +15,20 @@ export type TurnOutcome =
 
 export type StreamingTurnOutcome = Exclude<TurnOutcome, { kind: 'fresh_start_required' }>;
 export type ContinuingTurnOutcome = Exclude<TurnOutcome, { kind: 'failed' }>;
+
+export type InitialTurnControlOutcome =
+  | {
+      kind: 'abort_resolution_required';
+      abortedContext: AbortedApprovalContext;
+      userText: string;
+      generation: number;
+    }
+  | {
+      kind: 'auto_approval_required';
+      generation: number;
+      callId?: string;
+      command?: string;
+    };
 
 export type TurnCommand =
   | { kind: 'emit_terminal'; terminal: ConversationTerminal }

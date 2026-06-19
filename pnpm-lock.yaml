@@ -259,8 +259,8 @@ importers:
         specifier: ^7.0.1
         version: 7.0.1(@types/react@19.2.7)(react@19.2.0)
       ink-prompt:
-        specifier: ^0.3.1
-        version: 0.3.1(ink@7.0.1(@types/react@19.2.7)(react@19.2.0))(react@19.2.0)
+        specifier: ^0.3.2
+        version: 0.3.2(ink@7.0.1(@types/react@19.2.7)(react@19.2.0))(react@19.2.0)
       jsdom:
         specifier: ^27.4.0
         version: 27.4.0
@@ -1950,8 +1950,8 @@ packages:
   inherits@2.0.4:
     resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
 
-  ink-prompt@0.3.1:
-    resolution: {integrity: sha512-KrM8xiaeGpvuhDsLZmmRJEkwIkZBJ9sxUmb1r02hm6ohKADjy7DtusEUAV3ykyuleEJx6Fc2JRsK3QmFoX5RUQ==}
+  ink-prompt@0.3.2:
+    resolution: {integrity: sha512-oEzF7risrt9TTIW19bvtCNaeOiuNeKaz3jBbBMasbp+7sd1tTzbdB/Tv9BOB0Ygtdre/nTzo2HwKzLhid8oTKw==}
     peerDependencies:
       ink: ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0
       react: ^18.0.0 || ^19.0.0
@@ -5104,7 +5104,7 @@ snapshots:
 
   inherits@2.0.4: {}
 
-  ink-prompt@0.3.1(ink@7.0.1(@types/react@19.2.7)(react@19.2.0))(react@19.2.0):
+  ink-prompt@0.3.2(ink@7.0.1(@types/react@19.2.7)(react@19.2.0))(react@19.2.0):
     dependencies:
       ink: 7.0.1(@types/react@19.2.7)(react@19.2.0)
       react: 19.2.0

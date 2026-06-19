@@ -420,6 +420,15 @@ const StateDisplay = () => {
   );
 };
 
+const InputCursorStateDisplay = () => {
+  const { input, mode, cursorOffset } = useInputContext();
+  return (
+    <Text>
+      Input:{input}|Mode:{mode}|Cursor:{cursorOffset}
+    </Text>
+  );
+};
+
 const noopLoggingService = createMockLoggingService();
 
 const ModelSelectionSubmitHarness = ({
@@ -657,6 +666,40 @@ it.sequential('settings value completion saves setting and reopens settings menu
   // The menu should be restored targeting 'shell.timeout'
   expect(visibleFrame.includes('Input:/settings')).toBe(true);
   expect(visibleFrame.includes('▶ shell.timeout')).toBe(true);
+});
+
+it.sequential('settings key insertion advances cursor before reopening value completion', async () => {
+  const settingsService = createMockSettingsService();
+  const mockSettingsCommand: SlashCommand = {
+    name: '/settings',
+    description: 'Settings',
+    action: () => {},
+    completion: {
+      type: 'settings',
+      trigger: '/settings ',
+      resetTrigger: '/settings reset ',
+    },
+  };
+
+  const { lastFrame, stdin } = await renderAndFlush(
+    <InputProvider>
+      <InputCursorStateDisplay />
+      <InputBox
+        {...defaultProps}
+        settingsService={settingsService}
+        slashCommands={[...mockSlashCommands, mockSettingsCommand]}
+      />
+    </InputProvider>,
+  );
+
+  await writeInput(stdin, '/settings shell.timeout');
+  await writeInput(stdin, '\r');
+
+  const expectedInput = '/settings shell.timeout ';
+  const frame = await waitFor(lastFrame, (f) => f.includes(`Input:${expectedInput}`), { timeoutMs: 3000 });
+
+  expect(frame.includes('Mode:settings_value_completion'), frame).toBe(true);
+  expect(frame.includes(`Cursor:${expectedInput.length}`), frame).toBe(true);
 });
 
 it.sequential(

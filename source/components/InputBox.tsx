@@ -278,6 +278,7 @@ const InputBox: FC<Props> = ({
     if (!result) return false;
     settingsFilterRef.current = settings.query;
     onChange(result.nextValue);
+    cursorOffsetRef.current = result.nextCursor;
     setCursorOffset(result.nextCursor);
     pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
     settings.close();

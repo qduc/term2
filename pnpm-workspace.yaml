@@ -2,3 +2,5 @@ allowBuilds:
   cpu-features: true
   esbuild: true
   ssh2: true
+minimumReleaseAgeExclude:
+  - ink-prompt@0.3.2

@@ -25,7 +25,10 @@ const baseApproval: ApprovalDescriptor = {
     questions: [
       {
         question: 'Which option should I use?',
-        options: ['Use the safe default', 'Use the faster option'],
+        options: [
+          { label: 'Use the safe default', description: 'Recommended by the agent' },
+          { label: 'Use the faster option', description: 'Optimizes for speed' },
+        ],
       },
     ],
   }),
@@ -41,7 +44,9 @@ it.sequential('ApprovalPrompt renders ask_user question and options', async () =
   const output = lastFrame() ?? '';
   expect(output.includes('Which option should I use?')).toBe(true);
   expect(output.includes('Use the safe default')).toBe(true);
+  expect(output.includes('Recommended by the agent')).toBe(true);
   expect(output.includes('Use the faster option')).toBe(true);
+  expect(output.includes('Optimizes for speed')).toBe(true);
   expect(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL)).toBe(true);
   expect(output.includes(ASK_USER_DECLINE_LABEL)).toBe(true);
   expect(output.includes('Allow this action?')).toBe(false);
@@ -104,7 +109,10 @@ it.sequential('ApprovalPrompt ask_user Enter on Type custom answer calls onTypeA
       questions: [
         {
           question: 'Which option should I use?',
-          options: ['Use the safe default', 'Use the faster option'],
+          options: [
+            { label: 'Use the safe default', description: 'Recommended by the agent' },
+            { label: 'Use the faster option', description: 'Optimizes for speed' },
+          ],
         },
       ],
     }),
@@ -181,7 +189,11 @@ it.sequential('ApprovalPrompt renders multi-select options with checkboxes', asy
       questions: [
         {
           question: 'Select tools to use',
-          options: ['git', 'npm', 'cargo'],
+          options: [
+            { label: 'git', description: 'Version control' },
+            { label: 'npm', description: 'JavaScript package manager' },
+            { label: 'cargo', description: 'Rust package manager' },
+          ],
           is_multi_select: true,
         },
       ],
@@ -195,8 +207,11 @@ it.sequential('ApprovalPrompt renders multi-select options with checkboxes', asy
 
   const output = lastFrame() ?? '';
   expect(output.includes('[ ] git')).toBe(true);
+  expect(output.includes('Version control')).toBe(true);
   expect(output.includes('[ ] npm')).toBe(true);
+  expect(output.includes('JavaScript package manager')).toBe(true);
   expect(output.includes('[ ] cargo')).toBe(true);
+  expect(output.includes('Rust package manager')).toBe(true);
   expect(output.includes('Submit answer')).toBe(true);
 });
 
@@ -208,7 +223,11 @@ it.sequential('ApprovalPrompt toggles multi-select options and submits on Submit
       questions: [
         {
           question: 'Select tools to use',
-          options: ['git', 'npm', 'cargo'],
+          options: [
+            { label: 'git', description: 'Version control' },
+            { label: 'npm', description: 'JavaScript package manager' },
+            { label: 'cargo', description: 'Rust package manager' },
+          ],
           is_multi_select: true,
         },
       ],
@@ -253,7 +272,11 @@ it.sequential('ApprovalPrompt toggles multi-select options with Enter key', asyn
       questions: [
         {
           question: 'Select tools to use',
-          options: ['git', 'npm', 'cargo'],
+          options: [
+            { label: 'git', description: 'Version control' },
+            { label: 'npm', description: 'JavaScript package manager' },
+            { label: 'cargo', description: 'Rust package manager' },
+          ],
           is_multi_select: true,
         },
       ],
@@ -279,8 +302,8 @@ it.sequential('ApprovalPrompt renders question index prefix for multiple questio
     toolName: 'ask_user',
     argumentsText: JSON.stringify({
       questions: [
-        { question: 'First question', options: ['A', 'B'] },
-        { question: 'Second question', options: ['C', 'D'] },
+        { question: 'First question', options: [{ label: 'A' }, { label: 'B' }] },
+        { question: 'Second question', options: [{ label: 'C' }, { label: 'D' }] },
       ],
     }),
     rawInterruption: { type: 'ask_user' },
@@ -309,8 +332,8 @@ it.sequential('ApprovalPrompt calls onNavigateQuestion when Previous is selected
     toolName: 'ask_user',
     argumentsText: JSON.stringify({
       questions: [
-        { question: 'First question', options: ['A', 'B'] },
-        { question: 'Second question', options: ['C', 'D'] },
+        { question: 'First question', options: [{ label: 'A' }, { label: 'B' }] },
+        { question: 'Second question', options: [{ label: 'C' }, { label: 'D' }] },
       ],
     }),
     rawInterruption: { type: 'ask_user' },
@@ -347,8 +370,8 @@ it.sequential('ApprovalPrompt calls onNavigateQuestion when Next is selected', a
     toolName: 'ask_user',
     argumentsText: JSON.stringify({
       questions: [
-        { question: 'First question', options: ['A', 'B'] },
-        { question: 'Second question', options: ['C', 'D'] },
+        { question: 'First question', options: [{ label: 'A' }, { label: 'B' }] },
+        { question: 'Second question', options: [{ label: 'C' }, { label: 'D' }] },
       ],
     }),
     rawInterruption: { type: 'ask_user' },
@@ -385,7 +408,7 @@ it.sequential('ApprovalPrompt does not show navigation items for single question
     agentName: 'Agent',
     toolName: 'ask_user',
     argumentsText: JSON.stringify({
-      questions: [{ question: 'Single question', options: ['A', 'B'] }],
+      questions: [{ question: 'Single question', options: [{ label: 'A' }, { label: 'B' }] }],
     }),
     rawInterruption: { type: 'ask_user' },
   };

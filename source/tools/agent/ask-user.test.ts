@@ -38,27 +38,47 @@ it('createAskUserToolDefinition schema validates question and options', () => {
       questions: [
         {
           question: 'Pick one',
-          options: ['Use the safe default', 'Ask later'],
+          options: [
+            { label: 'Use the safe default', description: 'Best chance of success' },
+            { label: 'Ask later', description: 'Defer the decision' },
+          ],
         },
       ],
     }).success,
   ).toBe(true);
   expect(tool.parameters.safeParse({ questions: [{ question: '' }] }).success).toBe(false);
   expect(tool.parameters.safeParse({ questions: [{ question: '   ' }] }).success).toBe(false);
-  expect(tool.parameters.safeParse({ questions: [{ question: 'Pick one', options: ['   '] }] }).success).toBe(false);
   expect(
-    tool.parameters.safeParse({ questions: [{ question: 'Pick one', options: [ASK_USER_CUSTOM_ANSWER_LABEL] }] })
-      .success,
+    tool.parameters.safeParse({
+      questions: [{ question: 'Pick one', options: [{ label: '   ', description: 'Invalid' }] }],
+    }).success,
   ).toBe(false);
   expect(
-    tool.parameters.safeParse({ questions: [{ question: 'Pick one', options: [ASK_USER_DECLINE_LABEL] }] }).success,
+    tool.parameters.safeParse({
+      questions: [{ question: 'Pick one', options: [{ label: ASK_USER_CUSTOM_ANSWER_LABEL }] }],
+    }).success,
+  ).toBe(false);
+  expect(
+    tool.parameters.safeParse({
+      questions: [{ question: 'Pick one', options: [{ label: ASK_USER_DECLINE_LABEL }] }],
+    }).success,
   ).toBe(false);
   expect(
     tool.parameters.safeParse({
       questions: [
         {
           question: 'Pick one',
-          options: ['1', '2', '3', '4', '5', '6', '7', '8', '9'],
+          options: [
+            { label: '1' },
+            { label: '2' },
+            { label: '3' },
+            { label: '4' },
+            { label: '5' },
+            { label: '6' },
+            { label: '7' },
+            { label: '8' },
+            { label: '9' },
+          ],
         },
       ],
     }).success,
@@ -69,7 +89,7 @@ it('createAskUserToolDefinition schema validates question and options', () => {
       questions: [
         {
           question: 'Pick one',
-          options: ['Just one'],
+          options: [{ label: 'Just one' }],
         },
       ],
     }).success,
@@ -91,7 +111,7 @@ it('createAskUserToolDefinition schema validates question and options', () => {
       questions: [
         {
           question: 'Pick many',
-          options: ['A', 'B'],
+          options: [{ label: 'A' }, { label: 'B' }],
           is_multi_select: true,
         },
       ],
@@ -129,7 +149,7 @@ it('createAskUserToolDefinition returns fallback text when no answer is provided
 
   const result = await tool.execute(
     {
-      questions: [{ question: 'Choose one', options: ['Use safe default', 'Ask later'] }],
+      questions: [{ question: 'Choose one', options: [{ label: 'Use safe default' }, { label: 'Ask later' }] }],
     },
     undefined,
     {
@@ -172,7 +192,10 @@ it('formatAskUserCommandMessage handles fallback arguments', () => {
         questions: [
           {
             question: 'Pick a safe default',
-            options: ['Use safe default', 'Ask later'],
+            options: [
+              { label: 'Use safe default', description: 'Preferred path' },
+              { label: 'Ask later', description: 'Need more context' },
+            ],
           },
         ],
       }),
@@ -188,7 +211,10 @@ it('formatAskUserCommandMessage handles fallback arguments', () => {
     questions: [
       {
         question: 'Pick a safe default',
-        options: ['Use safe default', 'Ask later'],
+        options: [
+          { label: 'Use safe default', description: 'Preferred path' },
+          { label: 'Ask later', description: 'Need more context' },
+        ],
       },
     ],
   });
@@ -240,4 +266,23 @@ it('formatAskUserCommandMessage formats array answers with mismatched length', (
   expect(messages[0].output.includes('a')).toBe(true);
   expect(messages[0].output.includes('b')).toBe(true);
   expect(messages[0].success).toBe(true);
+});
+
+it('createAskUserToolDefinition allows options with labels and descriptions', () => {
+  const mockGetAskUserAnswer = fn();
+  const tool = createAskUserToolDefinition(mockGetAskUserAnswer);
+
+  expect(
+    tool.parameters.safeParse({
+      questions: [
+        {
+          question: 'Pick one',
+          options: [
+            { label: 'OAuth', description: 'Google/GitHub login' },
+            { label: 'JWT', description: 'Token-based authentication' },
+          ],
+        },
+      ],
+    }).success,
+  ).toBe(true);
 });

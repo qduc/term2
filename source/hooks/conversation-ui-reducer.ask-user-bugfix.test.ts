@@ -11,12 +11,12 @@ describe('conversationUIReducer - multi-select bug fix', () => {
         questions: [
           {
             question: 'First question (single-select)',
-            options: ['Option A', 'Option B'],
+            options: [{ label: 'Option A' }, { label: 'Option B' }],
             is_multi_select: false,
           },
           {
             question: 'Second question (multi-select)',
-            options: ['Tool X', 'Tool Y', 'Tool Z'],
+            options: [{ label: 'Tool X' }, { label: 'Tool Y' }, { label: 'Tool Z' }],
             is_multi_select: true,
           },
         ],
@@ -76,17 +76,17 @@ describe('conversationUIReducer - multi-select bug fix', () => {
         questions: [
           {
             question: 'First (single)',
-            options: ['A', 'B'],
+            options: [{ label: 'A' }, { label: 'B' }],
             is_multi_select: false,
           },
           {
             question: 'Second (multi)',
-            options: ['X', 'Y', 'Z'],
+            options: [{ label: 'X' }, { label: 'Y' }, { label: 'Z' }],
             is_multi_select: true,
           },
           {
             question: 'Third (single)',
-            options: ['P', 'Q'],
+            options: [{ label: 'P' }, { label: 'Q' }],
             is_multi_select: false,
           },
         ],
@@ -145,12 +145,12 @@ describe('conversationUIReducer - multi-select bug fix', () => {
         questions: [
           {
             question: 'Q1 (single)',
-            options: ['A', 'B'],
+            options: [{ label: 'A' }, { label: 'B' }],
             is_multi_select: false,
           },
           {
             question: 'Q2 (multi)',
-            options: ['X', 'Y'],
+            options: [{ label: 'X' }, { label: 'Y' }],
             is_multi_select: true,
           },
         ],

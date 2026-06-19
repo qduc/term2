@@ -13,14 +13,17 @@ const ASK_USER_DESCRIPTION =
   'Use this when you need a decision, preference, or missing detail from the user before you can proceed correctly. ' +
   'Do NOT use this for information you can find yourself with tools. ' +
   'Returns the answers selected/entered by the user. ' +
-  'Example: { questions: [{ question: "Which approach?", options: ["Option A", "Option B"] }, { question: "Any other notes?" }] }';
+  'Example: { questions: [{ question: "Which approach?", options: [{ label: "Option A", description: "Safer" }, { label: "Option B", description: "Faster" }] }, { question: "Any other notes?" }] }';
 
 const reservedOptionLabels = new Set<string>(ASK_USER_RESERVED_OPTION_LABELS);
 
 const askUserTextSchema = z.string().trim().min(1);
 
-const askUserOptionSchema = askUserTextSchema.refine((value) => !reservedOptionLabels.has(value), {
-  message: 'Option label is reserved by the ask_user UI.',
+const askUserOptionSchema = z.object({
+  label: askUserTextSchema.refine((value) => !reservedOptionLabels.has(value), {
+    message: 'Option label is reserved by the ask_user UI.',
+  }),
+  description: askUserTextSchema.optional(),
 });
 
 const questionItemSchema = z

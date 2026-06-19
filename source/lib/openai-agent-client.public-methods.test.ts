@@ -1105,7 +1105,15 @@ it.sequential('ask_user tool executes using the stored approval answer', async (
   const result = await askUserTool.invoke(
     {},
     JSON.stringify({
-      questions: [{ question: 'Which option should I use?', options: ['Use the safe option', 'Ask later'] }],
+      questions: [
+        {
+          question: 'Which option should I use?',
+          options: [
+            { label: 'Use the safe option', description: 'Default behavior' },
+            { label: 'Ask later', description: 'Defer the decision' },
+          ],
+        },
+      ],
     }),
     { toolCall: { callId: 'call-bridge' } },
   );

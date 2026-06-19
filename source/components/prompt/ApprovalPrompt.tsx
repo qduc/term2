@@ -25,7 +25,10 @@ type Props = {
 
 type QuestionItem = {
   question: string;
-  options?: string[];
+  options?: {
+    label: string;
+    description?: string;
+  }[];
   is_multi_select?: boolean;
 };
 
@@ -201,6 +204,7 @@ const ApprovalPrompt: FC<Props> = ({
   const currentQuestionItem = questionsList[currentQuestionIndex] || questionsList[0];
   const isMultiSelect = !!currentQuestionItem?.is_multi_select;
   const askUserOptions = currentQuestionItem?.options ?? [];
+  const askUserOptionLabels = askUserOptions.map((option) => option.label);
   const hasMultipleQuestions = questionsList.length > 1;
 
   const askUserMenuItems = React.useMemo(() => {
@@ -209,8 +213,8 @@ const ApprovalPrompt: FC<Props> = ({
     }
 
     const items = isMultiSelect
-      ? [...askUserOptions, ASK_USER_SUBMIT_LABEL, ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_DECLINE_LABEL]
-      : [...askUserOptions, ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_DECLINE_LABEL];
+      ? [...askUserOptionLabels, ASK_USER_SUBMIT_LABEL, ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_DECLINE_LABEL]
+      : [...askUserOptionLabels, ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_DECLINE_LABEL];
 
     // Add navigation items only when there are multiple questions
     if (hasMultipleQuestions) {
@@ -269,7 +273,9 @@ const ApprovalPrompt: FC<Props> = ({
           onNavigateQuestion?.('next');
         } else if (isMultiSelect) {
           if (selected === ASK_USER_SUBMIT_LABEL) {
-            const chosen = Array.from(selectedIndices).map((idx) => askUserOptions[idx]);
+            const chosen = Array.from(selectedIndices)
+              .map((idx) => askUserOptions[idx]?.label)
+              .filter((label): label is string => typeof label === 'string');
             onApprove(JSON.stringify(chosen));
           } else if (selectedIndex < askUserOptions.length) {
             // Toggle checkbox for actual options
@@ -382,6 +388,7 @@ const ApprovalPrompt: FC<Props> = ({
               const isOption = idx < askUserOptions.length;
               const isRecommended = idx === 0 && isOption;
               const isNavigation = item === ASK_USER_PREV_QUESTION_LABEL || item === ASK_USER_NEXT_QUESTION_LABEL;
+              const option = isOption ? askUserOptions[idx] : undefined;
 
               let label = item;
               if (item === ASK_USER_CUSTOM_ANSWER_LABEL || item === ASK_USER_DECLINE_LABEL) {
@@ -413,6 +420,7 @@ const ApprovalPrompt: FC<Props> = ({
                 <Text key={item} color={color}>
                   {selectedIndex === idx ? '❯ ' : '  '}
                   {label}
+                  {option?.description ? <Text color="#64748b"> - {option.description}</Text> : null}
                 </Text>
               );
             })}

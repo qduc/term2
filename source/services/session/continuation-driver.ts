@@ -417,6 +417,38 @@ export class ContinuationDriver {
       }
     }
 
+    const consumedCallIds = new Set<string>();
+    for (const item of this.deps.conversationStore.getHistory()) {
+      const record = asRecord(item);
+      const type = record?.type;
+      if (type !== 'function_call' && type !== 'tool_call') {
+        const callId = getCallIdFromObject(item);
+        if (callId) {
+          consumedCallIds.add(callId);
+        }
+      }
+    }
+
+    const generatedItems = asRecord(runState)?._generatedItems;
+    if (Array.isArray(generatedItems)) {
+      for (const item of generatedItems) {
+        const raw = asRecord(item)?.rawItem;
+        const typeSource = asRecord(raw) ?? asRecord(item);
+        const type = typeof typeSource?.type === 'string' ? typeSource.type : '';
+        if (
+          type === 'function_call_result' ||
+          type === 'function_call_output' ||
+          type === 'function_call_output_result' ||
+          type === 'tool_call_output_item'
+        ) {
+          const callId = callIdOf(item);
+          if (callId && !consumedCallIds.has(callId)) {
+            addCallId(callId);
+          }
+        }
+      }
+    }
+
     addCallId(getCallIdFromObject(primaryInterruption));
 
     if (callIds.size > 0) {

@@ -581,6 +581,115 @@ it('continuation derives currentCallIds from the current response cycle, not the
   expect(resumedCallIds).toEqual(['call-current']);
 });
 
+it('continuation derives currentCallIds including completed parallel tool calls from _generatedItems', async () => {
+  const conversationStore = new ConversationStore();
+  const toolTracker = new SessionToolTracker(conversationStore);
+  toolTracker.beginTurn();
+
+  let resumedCallIds: string[] | undefined;
+  const runState = {
+    getInterruptions: () => [{ callId: 'call-interrupted', name: 'shell', arguments: '{}' }],
+    _generatedItems: [{ type: 'function_call_output', callId: 'call-completed-parallel', output: 'ok' }],
+  };
+  const driver = createDriver({
+    toolTracker,
+    planApplier: {
+      prepareInit: (init: any) => ({
+        state: runState,
+        interruption: { callId: 'call-interrupted' },
+        toolCallArgumentsById: new Map(),
+        previouslyEmittedCommandIds: new Set(),
+        removeInterceptor: () => {},
+        source: 'continueRunStream',
+        token: init.generation,
+        inputMode: 'delta',
+      }),
+      applyInitialSetup: async function* () {},
+      applyNextPlan: async function* () {},
+      recordPendingApproval: () => {},
+    } as any,
+    streamCycle: {
+      async *execute(state: any) {
+        resumedCallIds = [...state.currentCallIds];
+        return {
+          kind: 'completed',
+          outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
+          nextCumulativeMessages: [],
+          nextCumulativeTurnItems: [],
+          mergedEmittedIds: new Set(),
+        };
+      },
+    } as any,
+  });
+
+  const { result } = await collectResult(
+    driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, new ManualApprovalDecisionPolicy()),
+  );
+
+  expect(result.kind).toBe('response');
+  expect(resumedCallIds?.sort()).toEqual(['call-completed-parallel', 'call-interrupted']);
+});
+
+it('continuation derives currentCallIds excluding already consumed tool calls in history', async () => {
+  const conversationStore = new ConversationStore();
+  // Add a consumed tool call result to the history
+  conversationStore.replaceHistory([
+    { role: 'user', type: 'message', content: 'hello' },
+    { type: 'function_call', callId: 'call-consumed', name: 'shell', arguments: '{}' },
+    { type: 'function_call_output', callId: 'call-consumed', output: 'already sent' },
+  ] as any);
+
+  const toolTracker = new SessionToolTracker(conversationStore);
+  toolTracker.beginTurn();
+
+  let resumedCallIds: string[] | undefined;
+  const runState = {
+    getInterruptions: () => [{ callId: 'call-interrupted', name: 'shell', arguments: '{}' }],
+    _generatedItems: [
+      { type: 'function_call_output', callId: 'call-consumed', output: 'already sent' },
+      { type: 'function_call_output', callId: 'call-new-parallel', output: 'new' },
+    ],
+  };
+  const driver = createDriver({
+    toolTracker,
+    conversationStore,
+    planApplier: {
+      prepareInit: (init: any) => ({
+        state: runState,
+        interruption: { callId: 'call-interrupted' },
+        toolCallArgumentsById: new Map(),
+        previouslyEmittedCommandIds: new Set(),
+        removeInterceptor: () => {},
+        source: 'continueRunStream',
+        token: init.generation,
+        inputMode: 'delta',
+      }),
+      applyInitialSetup: async function* () {},
+      applyNextPlan: async function* () {},
+      recordPendingApproval: () => {},
+    } as any,
+    streamCycle: {
+      async *execute(state: any) {
+        resumedCallIds = [...state.currentCallIds];
+        return {
+          kind: 'completed',
+          outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
+          nextCumulativeMessages: [],
+          nextCumulativeTurnItems: [],
+          mergedEmittedIds: new Set(),
+        };
+      },
+    } as any,
+  });
+
+  const { result } = await collectResult(
+    driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, new ManualApprovalDecisionPolicy()),
+  );
+
+  expect(result.kind).toBe('response');
+  expect(resumedCallIds?.sort()).toEqual(['call-interrupted', 'call-new-parallel']);
+});
+
 it('auto-approved follow-up continuations keep only the next response cycle call IDs', async () => {
   let cycleCount = 0;
   const firstRunState = {

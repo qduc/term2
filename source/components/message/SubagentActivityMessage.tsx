@@ -27,7 +27,7 @@ const truncate = (value: string, maxLength: number) => {
 
 const buildTitle = (role: string | undefined, task: string | undefined): string => {
   const roleLabel = role ? `[${role}]` : '';
-  const taskPreview = truncate(getFirstParagraph(task, 500).replace(/\s+/g, ' '), MAX_TASK_LENGTH);
+  const taskPreview = truncate(getFirstParagraph(task, 200).replace(/\s+/g, ' '), MAX_TASK_LENGTH);
   return ['run_subagent', roleLabel, taskPreview].filter(Boolean).join(' ');
 };
 

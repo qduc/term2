@@ -334,7 +334,7 @@ const CommandMessage: FC<Props> = ({
     }
 
     if (toolName === 'ask_mentor') {
-      const firstParagraph = getFirstParagraph(output, 500);
+      const firstParagraph = getFirstParagraph(output, 200);
       return (
         <Box flexDirection="column">
           <Text color={textColor || COLOR_SUCCESS}>

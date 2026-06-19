@@ -6,7 +6,7 @@ import StatusBar from './StatusBar.js';
 import HandoffConfirmationPrompt from '../prompt/HandoffConfirmationPrompt.js';
 import LargeUncachedConfirmationPrompt from '../prompt/LargeUncachedConfirmationPrompt.js';
 import InputSurgeConfirmationPrompt from '../prompt/InputSurgeConfirmationPrompt.js';
-import type { HandoffState } from '../../app.js';
+import type { HandoffState } from '../../hooks/use-handoff-flow.js';
 import type { SlashCommand } from '../../slash-commands.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { LoggingService } from '../../services/logging/logging-service.js';

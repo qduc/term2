@@ -125,6 +125,33 @@ vi.mock('./hooks/use-app-commands.js', () => ({
   }),
 }));
 
+vi.mock('./hooks/use-pending-turn-guards.js', () => ({
+  usePendingTurnGuards: () => ({
+    largeUncachedWarning: null,
+    pendingLargeUncachedTurn: null,
+    pendingLargeUncachedTokens: 0,
+    pendingSurgeTurn: null,
+    pendingSurgeReason: '',
+    guardTurn: vi.fn(),
+    sendGuardedTurn: vi.fn(async () => true),
+    handleLargeUncachedApprove: vi.fn(async () => {}),
+    handleLargeUncachedDecline: vi.fn(),
+    handleSurgeApprove: vi.fn(async () => {}),
+    handleSurgeDecline: vi.fn(),
+  }),
+}));
+
+vi.mock('./hooks/use-handoff-flow.js', () => ({
+  useHandoffFlow: () => ({
+    handoffState: null,
+    startHandoff: vi.fn(),
+    confirmHandoff: vi.fn(async () => {}),
+    declineHandoff: vi.fn(async () => {}),
+    cancelHandoff: vi.fn(),
+    submitHandoffInput: vi.fn(async () => false),
+  }),
+}));
+
 vi.mock('./services/notification-service.js', () => ({
   sendNotification: vi.fn(),
 }));

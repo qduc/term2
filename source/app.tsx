@@ -1,12 +1,6 @@
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useInputActions, useInputState } from './context/InputContext.js';
-import { parseModelProviderArg } from './utils/ai/model-provider-arg.js';
-import {
-  appendStartupBannerId,
-  clearTerminalForRedraw,
-  estimateLastTurnTokens,
-  hasConversationContent,
-} from './app-helpers.js';
+import { appendStartupBannerId, clearTerminalForRedraw, messagesHaveNonSystemContent } from './app-helpers.js';
 
 import { Box, useApp, useInput, useStdout } from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
@@ -26,6 +20,8 @@ import { parseInput } from './utils/input-parser.js';
 import { useRuntimeSettings } from './hooks/use-runtime-settings.js';
 import { useShellMode, SSHInfo } from './hooks/use-shell-mode.js';
 import { useAppCommands } from './hooks/use-app-commands.js';
+import { useHandoffFlow } from './hooks/use-handoff-flow.js';
+import { usePendingTurnGuards } from './hooks/use-pending-turn-guards.js';
 import { useTerminalFocusNotifier } from './hooks/use-terminal-focus-notifier.js';
 import { hasUserTurnContent, type UserTurn } from './types/user-turn.js';
 import type { Message } from './types/message.js';
@@ -37,7 +33,7 @@ import type { SkillsService, SkillInfo } from './services/skills/skills-service.
 export {
   appendStartupBannerId,
   clearTerminalForRedraw,
-  hasConversationContent,
+  messagesHaveNonSystemContent,
   scheduleExitSideEffects,
   TERMINAL_REDRAW_CLEAR,
 } from './app-helpers.js';
@@ -62,13 +58,6 @@ interface AppProps {
   onSessionIdChange?: (newId: string, createdAt: string) => void;
   onHasConversationContent?: (hasContent: boolean) => void;
   skillsService?: SkillsService;
-}
-
-export type HandoffStage = 'entering_message' | 'confirm_model' | 'selecting_model';
-export interface HandoffState {
-  capturedText: string;
-  stage: HandoffStage;
-  handoffMessage?: string;
 }
 
 const App: FC<AppProps> = ({
@@ -96,11 +85,6 @@ const App: FC<AppProps> = ({
   const { stdout } = useStdout();
   const { setInput, setMode, setTriggerIndex, setImages } = useInputActions();
   const { input, mode, images } = useInputState();
-  const [handoffState, setHandoffState] = useState<HandoffState | null>(null);
-  const [pendingLargeUncachedTurn, setPendingLargeUncachedTurn] = useState<UserTurn | null>(null);
-  const [pendingLargeUncachedTokens, setPendingLargeUncachedTokens] = useState<number>(0);
-  const [pendingSurgeTurn, setPendingSurgeTurn] = useState<UserTurn | null>(null);
-  const [pendingSurgeReason, setPendingSurgeReason] = useState<string>('');
   const undoMenuRef = useRef<{ open: (items: UndoItem[]) => void } | null>(null);
   const providersMenuRef = useRef<{ open: () => void } | null>(null);
   const [messageListEpoch, setMessageListEpoch] = useState(0);
@@ -113,19 +97,6 @@ const App: FC<AppProps> = ({
   const pendingSkillRef = useRef<SkillInfo | null>(null);
 
   const notifier = useTerminalFocusNotifier({ stdout, settingsService, loggingService });
-
-  // Compute largeUncachedWarning in real-time as the user types
-  const largeUncachedWarning = useMemo(() => {
-    if (!input || mode !== 'text' || input.startsWith('/')) return null;
-    const preview = conversationService.previewLargeUncachedInput({ text: input }, Date.now());
-    if (preview.action === 'warn') {
-      return {
-        ...preview,
-        estimatedTokens: estimateLastTurnTokens({ text: input, images }),
-      };
-    }
-    return null;
-  }, [input, mode, conversationService, images]);
 
   const {
     messages,
@@ -178,7 +149,7 @@ const App: FC<AppProps> = ({
   // Notify cli.tsx when the conversation has content so it can decide whether
   // to show the "To resume this conversation" message.
   useEffect(() => {
-    onHasConversationContent?.(hasConversationContent(messages));
+    onHasConversationContent?.(messagesHaveNonSystemContent(messages));
   }, [messages, onHasConversationContent]);
 
   const handleClearConversation = useCallback(async () => {
@@ -201,16 +172,6 @@ const App: FC<AppProps> = ({
   useEffect(() => {
     conversationService.setRetryCallback(() => addSystemMessage('Retrying due to upstream error...'));
   }, [conversationService, addSystemMessage]);
-
-  useEffect(() => {
-    if (handoffState?.stage === 'selecting_model' && mode === 'text') {
-      const handoffMsg = handoffState.handoffMessage || 'Implement this';
-      const text = handoffState.capturedText;
-      setHandoffState(null);
-      setInput('');
-      void sendUserMessage({ text: `${handoffMsg}:\n\n${text}` });
-    }
-  }, [mode, sendUserMessage, setInput, handoffState]);
 
   const applyRuntimeSetting = useRuntimeSettings({
     setModel,
@@ -240,6 +201,31 @@ const App: FC<AppProps> = ({
     refreshStartupBanner();
   }, [clearConversation, onPrintUsage, refreshStartupBanner]);
 
+  const handoff = useHandoffFlow({
+    clearConversationAndRefreshBanner,
+    addSystemMessage,
+    sendUserMessage,
+    setInput,
+    setMode,
+    setTriggerIndex,
+    mode,
+    settingsService,
+    applyRuntimeSetting,
+    setModel,
+  });
+
+  const pendingGuards = usePendingTurnGuards({
+    input,
+    mode,
+    images,
+    conversationService,
+    historyService,
+    loggingService,
+    sendUserMessage,
+    setInput,
+    setImages,
+  });
+
   const redrawMessageList = useCallback(() => {
     clearTerminalForRedraw(stdout);
     setMessageListEpoch((epoch) => epoch + 1);
@@ -254,75 +240,6 @@ const App: FC<AppProps> = ({
     exit();
     onExitUsage?.();
   }, [exit, onExitUsage]);
-
-  const handleHandoffConfirm = useCallback(async () => {
-    await clearConversationAndRefreshBanner();
-    setHandoffState((prev) => (prev ? { ...prev, stage: 'selecting_model' } : null));
-    setInput('/model ');
-    setMode('model_selection');
-    setTriggerIndex('/model '.length);
-  }, [clearConversationAndRefreshBanner, setInput, setMode, setTriggerIndex]);
-
-  const handleHandoffDecline = useCallback(async () => {
-    const text = handoffState?.capturedText;
-    const handoffMsg = handoffState?.handoffMessage || 'Implement this';
-    await clearConversationAndRefreshBanner();
-    setHandoffState(null);
-    setInput('');
-    if (text) {
-      await sendUserMessage({ text: `${handoffMsg}:\n\n${text}` });
-    }
-  }, [handoffState, clearConversationAndRefreshBanner, sendUserMessage, setInput]);
-
-  const handleHandoffCancel = useCallback(() => {
-    setHandoffState(null);
-    setInput('');
-    addSystemMessage('Handoff cancelled');
-  }, [addSystemMessage, setInput]);
-
-  const handleLargeUncachedApprove = useCallback(async () => {
-    const turn = pendingLargeUncachedTurn;
-    if (!turn) return;
-    setPendingLargeUncachedTurn(null);
-    setPendingLargeUncachedTokens(0);
-    setImages([]);
-    historyService.addMessage(turn);
-    setInput('');
-    await sendUserMessage(turn);
-  }, [pendingLargeUncachedTurn, historyService, sendUserMessage, setImages, setInput]);
-
-  const handleLargeUncachedDecline = useCallback(() => {
-    const turn = pendingLargeUncachedTurn;
-    if (!turn) return;
-    setPendingLargeUncachedTurn(null);
-    setPendingLargeUncachedTokens(0);
-    // Restore the text to the input box
-    queueMicrotask(() => setInput(turn.text || ''));
-  }, [pendingLargeUncachedTurn, setInput]);
-
-  const handleSurgeApprove = useCallback(async () => {
-    const turn = pendingSurgeTurn;
-    if (!turn) return;
-    setPendingSurgeTurn(null);
-    setPendingSurgeReason('');
-    setImages([]);
-    historyService.addMessage(turn);
-    setInput('');
-    await sendUserMessage(turn, { bypassInputSurgeGuard: true });
-  }, [pendingSurgeTurn, historyService, sendUserMessage, setImages, setInput]);
-
-  const handleSurgeDecline = useCallback(() => {
-    const turn = pendingSurgeTurn;
-    if (!turn) return;
-    setPendingSurgeTurn(null);
-    setPendingSurgeReason('');
-    // Restore the text to the input box
-    queueMicrotask(() => setInput(turn.text || ''));
-  }, [pendingSurgeTurn, setInput]);
-
-  const handleHandoff = useCallback((capturedText: string) => {
-    setHandoffState({ capturedText, stage: 'entering_message' });
-  }, []);
 
   const handleSkillSelected = useCallback((skill: SkillInfo) => {
     pendingSkillRef.current = skill;
@@ -355,7 +272,7 @@ const App: FC<AppProps> = ({
         providersMenuRef.current.open();
       }
     },
-    onHandoff: handleHandoff,
+    onHandoff: handoff.startHandoff,
     sendUserMessage,
     listUserTurns: () => conversationService.listUserTurns(),
     skillsService: skillsService ?? ({ getAvailableSkills: () => [] } as unknown as SkillsService),
@@ -381,38 +298,53 @@ const App: FC<AppProps> = ({
   });
 
   // Handle Esc to stop processing or cancel rejection reason or handoff
-  useInput((_input: string, key) => {
-    if (key.escape && pendingSkillRef.current) {
-      pendingSkillRef.current = null;
-      addSystemMessage('Skill activation cancelled.');
-      return;
-    }
+  useInput(
+    (_input: string, key) => {
+      if (key.escape && pendingSkillRef.current) {
+        pendingSkillRef.current = null;
+        addSystemMessage('Skill activation cancelled.');
+        return;
+      }
 
-    if (key.escape && waitingForAskUserAnswer) {
-      setWaitingForAskUserAnswer(false);
-      setInput('');
-      return;
-    }
+      if (key.escape && waitingForAskUserAnswer) {
+        setWaitingForAskUserAnswer(false);
+        setInput('');
+        return;
+      }
 
-    if (key.escape && waitingForRejectionReason) {
-      // Cancel rejection reason input and return to approval prompt
-      setWaitingForRejectionReason(false);
-      setInput('');
-      return;
-    }
+      if (key.escape && waitingForRejectionReason) {
+        // Cancel rejection reason input and return to approval prompt
+        setWaitingForRejectionReason(false);
+        setInput('');
+        return;
+      }
 
-    if (key.escape && (isProcessing || waitingForApproval)) {
-      stopProcessing();
-      addSystemMessage('Stopped');
-      setWaitingForRejectionReason(false);
-      return;
-    }
+      if (key.escape && (isProcessing || waitingForApproval)) {
+        stopProcessing();
+        addSystemMessage('Stopped');
+        setWaitingForRejectionReason(false);
+        return;
+      }
 
-    if (key.escape && handoffState && handoffState.stage === 'entering_message') {
-      handleHandoffCancel();
-      return;
-    }
-  });
+      if (key.escape && handoff.handoffState && handoff.handoffState.stage === 'entering_message') {
+        handoff.cancelHandoff();
+        return;
+      }
+    },
+    [
+      addSystemMessage,
+      handoff,
+      isProcessing,
+      pendingSkillRef,
+      setInput,
+      setWaitingForAskUserAnswer,
+      setWaitingForRejectionReason,
+      stopProcessing,
+      waitingForApproval,
+      waitingForAskUserAnswer,
+      waitingForRejectionReason,
+    ],
+  );
 
   const handleApprove = useCallback(
     async (answer?: string) => {
@@ -437,21 +369,24 @@ const App: FC<AppProps> = ({
   );
 
   // Switch between Standard and Plan modes with Shift+Tab
-  useInput((input: string, key) => {
-    const isShiftTab = (key.shift && key.tab) || input === '\u001b[Z';
-    if (!isShiftTab) return;
+  useInput(
+    (input: string, key) => {
+      const isShiftTab = (key.shift && key.tab) || input === '\u001b[Z';
+      if (!isShiftTab) return;
 
-    if (pendingLargeUncachedTurn) {
-      return;
-    }
+      if (pendingGuards.pendingLargeUncachedTurn) {
+        return;
+      }
 
-    if (liteMode) {
-      toggleShellMode();
-      return;
-    }
+      if (liteMode) {
+        toggleShellMode();
+        return;
+      }
 
-    cycleAppModes();
-  });
+      cycleAppModes();
+    },
+    [cycleAppModes, liteMode, pendingGuards.pendingLargeUncachedTurn, toggleShellMode],
+  );
 
   const handleSubmit = async (turn: UserTurn): Promise<void> => {
     const value = turn.text;
@@ -462,7 +397,7 @@ const App: FC<AppProps> = ({
       await handleApprovalDecision('y', undefined, value);
       return;
     }
-    if (!hasUserTurnContent(turn) && handoffState?.stage !== 'entering_message') return;
+    if (!hasUserTurnContent(turn) && handoff.handoffState?.stage !== 'entering_message') return;
 
     // If waiting for rejection reason, handle it
     if (waitingForRejectionReason) {
@@ -480,43 +415,27 @@ const App: FC<AppProps> = ({
       return;
     }
 
-    // Handoff flow interception
-    if (handoffState) {
-      if (handoffState.stage === 'entering_message') {
-        const handoffMessage = value.trim() || 'Implement this';
-        setHandoffState({
-          ...handoffState,
-          handoffMessage,
-          stage: 'confirm_model',
-        });
-        setInput('');
-        return;
-      }
-      if (handoffState.stage === 'selecting_model') {
-        // Model was selected from popup → model text submitted as message
-        const parsedInput = parseInput(value);
-        const modelArg = parsedInput.type === 'slash-command' ? parsedInput.args : value;
-        const { modelId, provider } = parseModelProviderArg(modelArg);
-        if (modelId) {
-          settingsService.set('agent.model', modelId);
-          if (provider) {
-            settingsService.set('agent.provider', provider);
-            applyRuntimeSetting('agent.provider', provider);
-          }
-          applyRuntimeSetting('agent.model', modelId);
-          setModel(modelId);
-        }
-        const text = handoffState.capturedText;
-        const handoffMsg = handoffState.handoffMessage || 'Implement this';
-        setHandoffState(null);
-        setInput('');
-        await sendUserMessage({ text: `${handoffMsg}:\n\n${text}` });
-        return;
-      }
+    if (await handoff.submitHandoffInput(turn)) {
+      return;
     }
 
-    // Parse the input to determine what to do
     const parsed = parseInput(value);
+    const attachPendingSkill = (baseTurn: UserTurn): UserTurn => {
+      const pendingSkill = pendingSkillRef.current;
+      if (!pendingSkill) {
+        return baseTurn;
+      }
+
+      pendingSkillRef.current = null;
+      return {
+        ...baseTurn,
+        skill: {
+          name: pendingSkill.name,
+          description: pendingSkill.description,
+          body: pendingSkill.body,
+        },
+      };
+    };
 
     switch (parsed.type) {
       case 'slash-command': {
@@ -540,88 +459,11 @@ const App: FC<AppProps> = ({
       }
 
       case 'message':
-        // Regular message, send to AI agent
-        {
-          // Attach pending skill if one was activated
-          const pendingSkill = pendingSkillRef.current;
-          if (pendingSkill) {
-            pendingSkillRef.current = null;
-            turn = {
-              ...turn,
-              skill: {
-                name: pendingSkill.name,
-                description: pendingSkill.description,
-                body: pendingSkill.body,
-              },
-            };
-          }
-
-          const surgePreview = conversationService.previewInputSurge(turn);
-          if (surgePreview.action === 'block') {
-            setPendingSurgeTurn(turn);
-            setPendingSurgeReason(surgePreview.reason || 'Input surge detected');
-            loggingService.debug('Input surge warning shown', {
-              eventType: 'input_surge_warning_shown',
-              category: 'provider',
-              reason: surgePreview.reason,
-              stats: surgePreview.stats,
-              previousStats: surgePreview.previousStats,
-            });
-            return;
-          }
-
-          const preview = conversationService.previewLargeUncachedInput(turn, Date.now());
-          if (preview.action === 'warn') {
-            setPendingLargeUncachedTurn(turn);
-            setPendingLargeUncachedTokens(estimateLastTurnTokens(turn));
-            loggingService.debug('Large uncached input warning shown', {
-              eventType: 'large_uncached_input_warning_shown',
-              category: 'provider',
-              estimatedTokens: preview.estimatedTokens,
-              estimatedBytes: preview.estimatedBytes,
-              reasons: preview.reasons,
-            });
-            return;
-          }
-        }
-        historyService.addMessage(turn);
-        setInput('');
-        await sendUserMessage(turn);
+        await pendingGuards.sendGuardedTurn(attachPendingSkill(turn));
         return;
     }
 
-    // Fallback: unknown slash command, send as message
-    {
-      const surgePreview = conversationService.previewInputSurge(turn);
-      if (surgePreview.action === 'block') {
-        setPendingSurgeTurn(turn);
-        setPendingSurgeReason(surgePreview.reason || 'Input surge detected');
-        loggingService.debug('Input surge warning shown', {
-          eventType: 'input_surge_warning_shown',
-          category: 'provider',
-          reason: surgePreview.reason,
-          stats: surgePreview.stats,
-          previousStats: surgePreview.previousStats,
-        });
-        return;
-      }
-
-      const preview = conversationService.previewLargeUncachedInput(turn, Date.now());
-      if (preview.action === 'warn') {
-        setPendingLargeUncachedTurn(turn);
-        setPendingLargeUncachedTokens(estimateLastTurnTokens(turn));
-        loggingService.debug('Large uncached input warning shown', {
-          eventType: 'large_uncached_input_warning_shown',
-          category: 'provider',
-          estimatedTokens: preview.estimatedTokens,
-          estimatedBytes: preview.estimatedBytes,
-          reasons: preview.reasons,
-        });
-        return;
-      }
-    }
-    setInput('');
-    await sendUserMessage(turn);
+    await pendingGuards.sendGuardedTurn(attachPendingSkill(turn));
   };
 
   return (
@@ -669,19 +511,19 @@ const App: FC<AppProps> = ({
             providersMenuRef={providersMenuRef}
             onSettingChange={applyRuntimeSetting}
             onSystemMessage={addSystemMessage}
-            handoffState={handoffState}
-            onHandoffConfirm={handleHandoffConfirm}
-            onHandoffDecline={handleHandoffDecline}
-            onHandoffCancel={handleHandoffCancel}
-            largeUncachedWarning={largeUncachedWarning}
-            pendingLargeUncachedTurn={pendingLargeUncachedTurn}
-            pendingLargeUncachedTokens={pendingLargeUncachedTokens}
-            onLargeUncachedApprove={handleLargeUncachedApprove}
-            onLargeUncachedDecline={handleLargeUncachedDecline}
-            pendingSurgeTurn={pendingSurgeTurn}
-            pendingSurgeReason={pendingSurgeReason}
-            onSurgeApprove={handleSurgeApprove}
-            onSurgeDecline={handleSurgeDecline}
+            handoffState={handoff.handoffState}
+            onHandoffConfirm={handoff.confirmHandoff}
+            onHandoffDecline={handoff.declineHandoff}
+            onHandoffCancel={handoff.cancelHandoff}
+            largeUncachedWarning={pendingGuards.largeUncachedWarning}
+            pendingLargeUncachedTurn={pendingGuards.pendingLargeUncachedTurn}
+            pendingLargeUncachedTokens={pendingGuards.pendingLargeUncachedTokens}
+            onLargeUncachedApprove={pendingGuards.handleLargeUncachedApprove}
+            onLargeUncachedDecline={pendingGuards.handleLargeUncachedDecline}
+            pendingSurgeTurn={pendingGuards.pendingSurgeTurn}
+            pendingSurgeReason={pendingGuards.pendingSurgeReason}
+            onSurgeApprove={pendingGuards.handleSurgeApprove}
+            onSurgeDecline={pendingGuards.handleSurgeDecline}
             onSlashTabComplete={(command) => {
               if (command.name === 'undo') {
                 const userMessages = getUserMessages().map((m) => ({ uiIndex: m.uiIndex, text: m.text }));

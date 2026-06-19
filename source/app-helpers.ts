@@ -1,6 +1,7 @@
 import type { Message } from './types/message.js';
 import type { UserTurn } from './types/user-turn.js';
 import { getSerializedInputBytes } from './services/large-uncached-input-guard.js';
+import type { TerminalWriter } from './types/terminal.js';
 
 export const estimateLastTurnTokens = (turn: UserTurn): number => {
   const images = turn.images ?? [];
@@ -27,13 +28,10 @@ export const estimateLastTurnTokens = (turn: UserTurn): number => {
 
 export const appendStartupBannerId = (ids: string[]): string[] => [...ids, `startup-banner-${ids.length}`];
 
-export const hasConversationContent = (messages: Message[]): boolean => messages.some((msg) => msg.sender !== 'system');
+export const messagesHaveNonSystemContent = (messages: Message[]): boolean =>
+  messages.some((msg) => msg.sender !== 'system');
 
 export const TERMINAL_REDRAW_CLEAR = '\u001B[2J\u001B[3J\u001B[H';
-
-type TerminalWriter = {
-  write: (value: string) => unknown;
-};
 
 export const clearTerminalForRedraw = (stdout: TerminalWriter): void => {
   stdout.write(TERMINAL_REDRAW_CLEAR);

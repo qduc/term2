@@ -3,13 +3,13 @@ import type { ILoggingService, ISettingsService, ISessionContextService } from '
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentRequest, SubagentDefinition, SubagentResult } from './types.js';
 import type { SubagentToolFactory } from './tool-policy.js';
-import { createConversationSession } from '../session/session-composition.js';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
 import { isAbortLike, aggregateToolUsage, safeEmit } from './utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
 import { buildInstructions, resolveSubagentSearchViaShell } from './role-loader.js';
 import type { ISubagentClientFactory } from './subagent-client-types.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
+import { createSessionRuntime } from '../session/session-composition.js';
 
 export class ExecutionSubagentRunner {
   #logger: ILoggingService;
@@ -92,7 +92,7 @@ export class ExecutionSubagentRunner {
       retryAttempts: this.#settings.get<number>('agent.retryAttempts') ?? 2,
     });
 
-    const turnCoordinator = createConversationSession({
+    const runtime = createSessionRuntime({
       sessionId: `subagent-${agentId}`,
       agentClient: subClient,
       deps: {
@@ -103,7 +103,7 @@ export class ExecutionSubagentRunner {
       retryOptions: {
         allowFreshStartRetries: false,
       },
-    }).turnCoordinator;
+    });
 
     const userTurn = { text: request.task, images: [] as any[] };
     let finalText = '';
@@ -113,7 +113,7 @@ export class ExecutionSubagentRunner {
     let loopProcessedError = false;
 
     try {
-      for await (const event of turnCoordinator.start(userTurn, {
+      for await (const event of runtime.turns.start(userTurn, {
         signal: request.signal,
         maxModelRetries: MAX_SUBAGENT_MODEL_RETRIES,
       })) {
@@ -174,6 +174,8 @@ export class ExecutionSubagentRunner {
       if (!usage) {
         usage = normalizeAgentRunUsage(err?.state?.usage) ?? extractUsage(err);
       }
+    } finally {
+      runtime.dispose();
     }
 
     if (error) {

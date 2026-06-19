@@ -5,10 +5,11 @@ import type { LogEvent, StateSnapshot } from '../logging/conversation-log-events
 import type { UserTurn } from '../../types/user-turn.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { SkillsService } from '../skills/skills-service.js';
-import type { SendMessageOptions, HandleApprovalDecisionOptions } from './conversation-adapter.js';
+import type { SendMessageOptions, HandleApprovalDecisionOptions, ConversationAdapter } from './conversation-adapter.js';
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 import type { InputSurgeDecision } from '../input-surge-guard.js';
-import { createConversationSession, type ConversationSessionBundle } from '../session/session-composition.js';
+import type { SessionRuntime } from '../session/session-composition.js';
+import { createConversationRuntime } from './conversation-runtime-factory.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../../contracts/conversation.js';
 export type { CommandMessage } from '../../tools/types.js';
@@ -19,7 +20,8 @@ export type { CommandMessage } from '../../tools/types.js';
  * Phase 3: the session owns the conversation state; the service is a thin wrapper.
  */
 export class ConversationService {
-  #bundle: ConversationSessionBundle;
+  #runtime: SessionRuntime;
+  #adapter: ConversationAdapter;
   readonly #agentClient: ConversationAgentClient;
   readonly #deps: {
     logger: ILoggingService;
@@ -46,25 +48,34 @@ export class ConversationService {
   }) {
     this.#agentClient = agentClient;
     this.#deps = deps;
-    this.#bundle = createConversationSession({ agentClient, deps, sessionId, sessionStartedAt });
+    const { runtime, adapter } = createConversationRuntime({
+      agentClient,
+      deps,
+      sessionId: sessionId ?? 'default',
+      sessionStartedAt,
+    });
+    this.#runtime = runtime;
+    this.#adapter = adapter;
   }
 
   get sessionId(): string {
-    return this.#bundle.sessionId;
+    return this.#runtime.sessionId;
   }
 
   resetWithNewId(newId: string): void {
     const previousLogSink = this.#logSink;
-    this.#bundle.stateFacade.reset();
-    this.#bundle.dispose();
+    this.#runtime.state.reset();
+    this.#runtime.dispose();
     this.#deps.skillsService?.discoverSkills();
-    this.#bundle = createConversationSession({
+    const { runtime, adapter } = createConversationRuntime({
       agentClient: this.#agentClient,
       deps: this.#deps,
       sessionId: newId,
     });
+    this.#runtime = runtime;
+    this.#adapter = adapter;
     if (previousLogSink) {
-      this.#bundle.conversationLogger.setLogSink(previousLogSink);
+      this.#runtime.logs.setLogSink(previousLogSink);
     }
   }
 
@@ -72,74 +83,71 @@ export class ConversationService {
 
   setLogSink(sink: ((event: LogEvent) => void) | null): void {
     this.#logSink = sink;
-    this.#bundle.conversationLogger.setLogSink(sink);
-    if (sink && this.#bundle.ensureJournal) {
-      this.#bundle.ensureJournal(sink);
-    }
+    this.#runtime.logs.setLogSink(sink);
   }
 
   getCurrentSnapshot(): StateSnapshot {
-    return this.#bundle.stateFacade.getCurrentSnapshot();
+    return this.#runtime.state.getCurrentSnapshot();
   }
 
   undoLastUserTurn(): { text: string; images?: UserTurn['images'] } | null {
-    return this.#bundle.stateFacade.undoLastUserTurn();
+    return this.#runtime.state.undoLastUserTurn();
   }
 
   listUserTurns(): { index: number; text: string; imageCount: number }[] {
-    return this.#bundle.stateFacade.listUserTurns();
+    return this.#runtime.state.listUserTurns();
   }
 
   undoNUserTurns(n: number): { text: string; images?: UserTurn['images'] } | null {
-    return this.#bundle.stateFacade.undoNUserTurns(n);
+    return this.#runtime.state.undoNUserTurns(n);
   }
 
   setModel(model: string): void {
-    this.#bundle.runtimeController.setModel(model);
+    this.#runtime.settings.setModel(model);
   }
 
   setReasoningEffort(effort: ReasoningEffortSetting): void {
-    this.#bundle.runtimeController.setReasoningEffort(effort);
+    this.#runtime.settings.setReasoningEffort(effort);
   }
 
   setTemperature(temperature?: number): void {
-    this.#bundle.runtimeController.setTemperature(temperature);
+    this.#runtime.settings.setTemperature(temperature);
   }
 
   setProvider(provider: string): void {
-    this.#bundle.runtimeController.setProvider(provider);
+    this.#runtime.settings.setProvider(provider);
   }
 
   switchProvider(provider: string): void {
-    this.#bundle.runtimeController.switchProvider(provider);
+    this.#runtime.settings.switchProvider(provider);
   }
 
   setRetryCallback(callback: () => void): void {
-    this.#bundle.runtimeController.setRetryCallback(callback);
+    this.#runtime.settings.setRetryCallback(callback);
   }
 
   addShellContext(historyText: string): void {
-    this.#bundle.stateFacade.addShellContext(historyText);
+    this.#runtime.state.addShellContext(historyText);
   }
 
   queueModeNotice(text: string): void {
-    this.#bundle.stateFacade.queueModeNotice(text);
+    this.#runtime.state.queueModeNotice(text);
   }
 
   abort(): void {
-    this.#bundle.turnCoordinator.abort();
+    this.#runtime.turns.abort();
   }
 
   sendMessage(input: string | UserTurn, options?: SendMessageOptions): Promise<ConversationTerminal> {
-    return this.#bundle.terminalAdapter.sendMessage(input, options);
+    return this.#adapter.sendMessage(input, options);
   }
 
   previewLargeUncachedInput(input: string | UserTurn, now?: number): LargeUncachedInputDecision {
-    return this.#bundle.stateFacade.previewLargeUncachedInput(input, now);
+    return this.#runtime.state.previewLargeUncachedInput(input, now);
   }
 
   previewInputSurge(input: string | UserTurn): InputSurgeDecision {
-    return this.#bundle.stateFacade.previewInputSurge(input);
+    return this.#runtime.state.previewInputSurge(input);
   }
 
   handleApprovalDecision(
@@ -147,7 +155,7 @@ export class ConversationService {
     rejectionReason?: string,
     options?: HandleApprovalDecisionOptions,
   ): Promise<ConversationTerminal | null> {
-    return this.#bundle.terminalAdapter.handleApprovalDecision(answer, rejectionReason, options);
+    return this.#adapter.handleApprovalDecision(answer, rejectionReason, options);
   }
 
   exportState(): {
@@ -155,7 +163,7 @@ export class ConversationService {
     previousResponseId: string | null;
     toolLedger: SavedToolExecution[];
   } {
-    return this.#bundle.stateFacade.exportState();
+    return this.#runtime.state.exportState();
   }
 
   importState(state: {
@@ -164,6 +172,6 @@ export class ConversationService {
     toolLedger?: SavedToolExecution[];
     updatedAt?: string;
   }): void {
-    this.#bundle.stateFacade.importState(state);
+    this.#runtime.state.importState(state);
   }
 }

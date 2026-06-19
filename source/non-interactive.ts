@@ -1,6 +1,6 @@
 import type { AgentClient } from './lib/agent-client.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from './services/service-interfaces.js';
-import { createConversationSession } from './services/session/session-composition.js';
+import { createConversationRuntime } from './services/conversation/conversation-runtime-factory.js';
 import { SessionContextService } from './services/session/session-context-service.js';
 import type { ConversationEvent } from './services/conversation/conversation-events.js';
 import type { UserTurn } from './types/user-turn.js';
@@ -209,7 +209,7 @@ export async function runNonInteractive(
   },
 ): Promise<number> {
   const sessionContextService = config.sessionContextService ?? new SessionContextService();
-  const { terminalAdapter, dispose } = createConversationSession({
+  const { runtime, adapter } = createConversationRuntime({
     sessionId: createNonInteractiveSessionId(),
     agentClient: config.agentClient,
     deps: {
@@ -220,8 +220,8 @@ export async function runNonInteractive(
   });
 
   try {
-    return await runWithSession(terminalAdapter, { ...config, sessionContextService });
+    return await runWithSession(adapter, { ...config, sessionContextService });
   } finally {
-    dispose();
+    runtime.dispose();
   }
 }

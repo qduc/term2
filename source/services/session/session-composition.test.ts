@@ -1,5 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { it, expect } from 'vitest';
-import { createConversationSession, createConversationSessionComposition } from './session-composition.js';
+import {
+  createConversationSession,
+  createConversationSessionComposition,
+  createSessionRuntime,
+} from './session-composition.js';
+import { createConversationRuntime } from '../conversation/conversation-runtime-factory.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 
 const noop = () => {};
@@ -93,14 +99,37 @@ it('createConversationSession returns bundle with auto sessionStartedAt when not
   expect(sessionStartedAt <= after).toBe(true);
 });
 
-it('createConversationSession returns a terminalAdapter with sendMessage', () => {
-  const { terminalAdapter } = createConversationSession({
+it('createSessionRuntime exposes runtime capabilities without conversation adapter construction details', () => {
+  const runtime = createSessionRuntime({
+    sessionId: 'runtime-test',
+    agentClient: makeMockClient(),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+
+  expect(runtime.sessionId).toBe('runtime-test');
+  expect(typeof runtime.turns.start).toBe('function');
+  expect(typeof runtime.turns.continueAfterApproval).toBe('function');
+  expect(typeof runtime.turns.abort).toBe('function');
+  expect(typeof runtime.state.getCurrentSnapshot).toBe('function');
+  expect(typeof runtime.settings.setModel).toBe('function');
+  expect(typeof runtime.logs.setLogSink).toBe('function');
+  expect('terminalAdapter' in runtime).toBe(false);
+  runtime.dispose();
+});
+
+it('session composition does not import the conversation adapter', () => {
+  const source = readFileSync(new URL('./session-composition.ts', import.meta.url), 'utf8');
+  expect(source).not.toContain('../conversation/conversation-adapter.js');
+});
+
+it('createConversationRuntime returns a bundle with adapter.sendMessage', () => {
+  const { adapter } = createConversationRuntime({
     sessionId: 'ta-test',
     agentClient: makeMockClient(),
     deps: { logger: makeLogger(), sessionContextService },
   });
-  expect(typeof terminalAdapter.sendMessage).toBe('function');
-  expect(typeof terminalAdapter.handleApprovalDecision).toBe('function');
+  expect(typeof adapter.sendMessage).toBe('function');
+  expect(typeof adapter.handleApprovalDecision).toBe('function');
 });
 
 it('createConversationSessionComposition composes a plain appState object with a statusMachine', () => {
@@ -213,14 +242,14 @@ it('turnCoordinator.abort() does not throw', () => {
 
 // ── Non-interactive path ──────────────────────────────────────────
 
-it('createConversationSession can be used as ConversationSessionLike', () => {
-  const { terminalAdapter } = createConversationSession({
+it('createConversationRuntime adapter can be used as ConversationSessionLike', () => {
+  const { adapter } = createConversationRuntime({
     sessionId: 'ni-test',
     agentClient: makeMockClient(),
     deps: { logger: makeLogger(), sessionContextService },
   });
 
   // Verify the shape matches what runWithSession expects
-  expect(typeof terminalAdapter.sendMessage).toBe('function');
-  expect(typeof terminalAdapter.handleApprovalDecision).toBe('function');
+  expect(typeof adapter.sendMessage).toBe('function');
+  expect(typeof adapter.handleApprovalDecision).toBe('function');
 });

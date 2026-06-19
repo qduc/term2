@@ -13,6 +13,9 @@ import type {
   ConversationAgentClient,
   SubagentEventSinkHost,
 } from '../conversation-agent-client.js';
+import type { UserTurn } from '../../types/user-turn.js';
+import type { ConversationEvent } from '../conversation/conversation-events.js';
+import { ConversationAdapter } from './session-adapter-bridge.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { SessionLifecycle } from './session-lifecycle.js';
 import { ProviderContinuity } from '../provider-continuity.js';
@@ -20,7 +23,6 @@ import { TurnCoordinator } from './turn-coordinator.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
 import { SessionManager } from './session-manager.js';
 import { SessionRuntimeController } from './session-runtime-controller.js';
-import { ConversationAdapter } from '../conversation/conversation-adapter.js';
 import { ContinuationDriver } from './continuation-driver.js';
 import { ContinuationPlanApplier } from './continuation-plan-applier.js';
 import { ContinuationStreamCycle } from './continuation-stream-cycle.js';
@@ -99,6 +101,10 @@ export type ConversationSessionComposition = {
    * available. Idempotent: subsequent calls return the same journal.
    */
   ensureJournal: (sink: (event: LogEvent) => void) => AssistantTurnJournal;
+  /** @internal Resolved ask-user-answer sink (derived from option or agent client). */
+  resolvedAskUserAnswerSink: AskUserAnswerSink | null;
+  /** @internal Resolved subagent event sink host (derived from option or agent client). */
+  resolvedSubagentEventSinkHost: SubagentEventSinkHost | null;
 };
 
 // ── Options for the composition factory ──────────────────────────
@@ -136,6 +142,50 @@ export type ConversationSessionBundle = Pick<
   | 'dispose'
   | 'ensureJournal'
 >;
+
+// ── Session Runtime (public) ───────────────────────────────────────
+
+/**
+ * Clean public interface for a session runtime, exposing only the
+ * capabilities needed by callers without leaking internal composition
+ * details.
+ */
+export type SessionRuntime = {
+  sessionId: string;
+  sessionStartedAt: string;
+  turns: {
+    start: (
+      input: string | UserTurn,
+      options?: {
+        skipUserMessage?: boolean;
+        retries?: any;
+        maxModelRetries?: number;
+        signal?: AbortSignal;
+        resumeState?: any;
+        resumePreviousResponseId?: string | null;
+        bypassInputSurgeGuard?: boolean;
+      },
+    ) => AsyncIterable<ConversationEvent>;
+    continueAfterApproval: (options: { answer: string; rejectionReason?: string }) => AsyncIterable<ConversationEvent>;
+    abort: () => void;
+  };
+  /** Facade for state/persistence/undo/snapshot operations. */
+  state: SessionManager;
+  /** Controller for runtime model/provider/retry settings. */
+  settings: SessionRuntimeController;
+  logs: {
+    /**
+     * Set the persistent log sink. When a non-null sink is provided,
+     * also lazily initialises the assistant turn journal.
+     */
+    setLogSink: (sink: ((event: LogEvent) => void) | null) => void;
+  };
+  /**
+   * Idempotent disposal: aborts active SDK work, invalidates the active
+   * generation, unsubscribes downgrade listeners, clears per-turn state.
+   */
+  dispose: () => void;
+};
 
 // ── Composition factory ───────────────────────────────────────────
 
@@ -481,8 +531,53 @@ export function createConversationSessionComposition(
     initialTurnRunner,
     freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
     ensureJournal,
+    resolvedAskUserAnswerSink,
+    resolvedSubagentEventSinkHost,
   };
 }
 
 export const createConversationSession: (options: CreateConversationSessionOptions) => ConversationSessionBundle =
   createConversationSessionComposition;
+
+// ── Session Runtime Factory ───────────────────────────────────────
+
+/**
+ * Creates a session runtime with a clean public API, without constructing
+ * a {@link ConversationAdapter}. Internal composition details remain private.
+ *
+ * The returned object exposes:
+ * - `turns` – start, continueAfterApproval, abort
+ * - `state` – SessionManager facade
+ * - `settings` – SessionRuntimeController
+ * - `logs.setLogSink` – wires up the conversation logger and journal
+ * - `dispose` – clean up
+ */
+export function createSessionRuntime(options: CreateConversationSessionOptions): SessionRuntime {
+  const composition = createConversationSessionComposition({
+    ...options,
+    turnAccumulator: undefined,
+  });
+
+  const { turnCoordinator, stateFacade, runtimeController, conversationLogger, ensureJournal, dispose } = composition;
+
+  return {
+    sessionId: composition.sessionId,
+    sessionStartedAt: composition.sessionStartedAt,
+    turns: {
+      start: turnCoordinator.start.bind(turnCoordinator),
+      continueAfterApproval: turnCoordinator.continueAfterApproval.bind(turnCoordinator),
+      abort: turnCoordinator.abort.bind(turnCoordinator),
+    },
+    state: stateFacade,
+    settings: runtimeController,
+    logs: {
+      setLogSink: (sink) => {
+        conversationLogger.setLogSink(sink);
+        if (sink) {
+          ensureJournal(sink);
+        }
+      },
+    },
+    dispose,
+  };
+}

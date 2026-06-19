@@ -207,6 +207,32 @@ disable-model-invocation: true
   expect(service.getSkillCatalog()).toBe('');
 });
 
+it.sequential('SkillsService does not warn when same path appears in both user and project scopes', () => {
+  // Reproduces the false-positive: project root IS the home directory, so the same
+  // physical SKILL.md is scanned once as user-level and once as project-level.
+  const { logger, warnings } = createMockLogger();
+
+  // Place the skill under the mock home, and use mockHome as the project root too.
+  const skillDir = path.join(mockHome, '.agents', 'skills', 'shared-skill');
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(skillDir, 'SKILL.md'),
+    `---
+name: shared-skill
+description: A skill whose root is both user and project scope
+---
+Body`,
+  );
+
+  // projectRoot === homeDir → same paths in both user and project scope arrays
+  const service = new SkillsService(logger, mockHome);
+  service.discoverSkills();
+
+  const skills = service.getAvailableSkills();
+  expect(skills.length).toBe(1);
+  expect(warnings.filter((w) => w.includes('collision'))).toHaveLength(0);
+});
+
 it.sequential('SkillsService generates catalog XML correctly', () => {
   const { logger } = createMockLogger();
   const skillDir = path.join(mockProject, '.agents', 'skills', 'catalog-skill');

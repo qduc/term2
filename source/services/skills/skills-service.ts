@@ -95,7 +95,10 @@ export class SkillsService {
         if (skill) {
           const existing = this.skills.get(skill.name);
           if (existing) {
-            if (existing.isProjectLevel === isProjectLevel) {
+            // Same physical file scanned under both user and project scopes — not a real collision.
+            if (existing.location === skill.location) {
+              // no-op: already registered
+            } else if (existing.isProjectLevel === isProjectLevel) {
               this.logger.warn(
                 `Skill name collision: '${skill.name}' is defined at both '${existing.location}' and '${skill.location}'. Using the former.`,
               );

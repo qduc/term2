@@ -309,6 +309,108 @@ it.sequential('path completion keeps cursor at end of inserted path in middle of
   expect(cursor).toBe(17);
 });
 
+const SettingsCompletionHarness = () => {
+  const { setInput, setMode, setCursorOffset, setTriggerIndex, mode } = useInputContext();
+  const didSetupRef = useRef(false);
+
+  useEffect(() => {
+    if (didSetupRef.current) return;
+    didSetupRef.current = true;
+    const initial = '/settings logging.logLevel';
+    setInput(initial);
+    setCursorOffset(initial.length);
+    setTriggerIndex(SETTINGS_TRIGGER.length);
+    setMode('settings_completion');
+  }, [setInput, setMode, setCursorOffset, setTriggerIndex]);
+
+  return <Text>{mode}</Text>;
+};
+
+it.sequential('settings completion keeps cursor at end of inserted key + trailing space', async () => {
+  const settingsSlashCommand: SlashCommand = {
+    name: '/settings',
+    description: 'Settings',
+    expectsArgs: true,
+    action: () => {},
+    completion: { type: 'settings', trigger: SETTINGS_TRIGGER, resetTrigger: '/settings reset ' },
+  };
+  const slashCommands = [...mockSlashCommands, settingsSlashCommand];
+
+  const { lastFrame, stdin } = await renderAndFlush(
+    <InputProvider>
+      <CursorState />
+      <InputBox {...defaultProps} slashCommands={slashCommands} />
+      <SettingsCompletionHarness />
+    </InputProvider>,
+  );
+
+  // Wait for the settings completion popup to show logging.logLevel.
+  await waitFor(lastFrame, (f) => f.includes('logging.logLevel'), { timeoutMs: 3000 });
+  await flushReactUpdates(10);
+
+  // Press Enter to insert the selected setting key.
+  await writeInput(stdin, '\r');
+
+  // Wait for the cursor to move to the end of the inserted key + trailing space.
+  const expectedValue = '/settings logging.logLevel ';
+  const cursor = await waitForCondition(
+    () => getCursorFromFrame(lastFrame()),
+    (c) => c === expectedValue.length,
+    { timeoutMs: 3000 },
+  );
+  expect(cursor).toBe(expectedValue.length);
+});
+
+const SettingsValueTriggerHarness = () => {
+  const { setInput, setCursorOffset } = useInputContext();
+  const didSetupRef = useRef(false);
+
+  useEffect(() => {
+    if (didSetupRef.current) return;
+    didSetupRef.current = true;
+    const initial = '/settings agent.reasoningEffort ';
+    setInput(initial);
+    setCursorOffset(initial.length);
+  }, [setInput, setCursorOffset]);
+
+  return null;
+};
+
+it.sequential('settings value completion keeps cursor at end of inserted value', async () => {
+  const settingsSlashCommand: SlashCommand = {
+    name: '/settings',
+    description: 'Settings',
+    expectsArgs: true,
+    action: () => {},
+    completion: { type: 'settings', trigger: SETTINGS_TRIGGER, resetTrigger: '/settings reset ' },
+  };
+  const slashCommands = [...mockSlashCommands, settingsSlashCommand];
+
+  const { lastFrame, stdin } = await renderAndFlush(
+    <InputProvider>
+      <CursorState />
+      <InputBox {...defaultProps} slashCommands={slashCommands} />
+      <SettingsValueTriggerHarness />
+    </InputProvider>,
+  );
+
+  // Wait for the value menu to open with the current value (default) selected.
+  await waitFor(lastFrame, (f) => f.includes('default'), { timeoutMs: 3000 });
+  await flushReactUpdates(10);
+
+  // Press Tab to insert the selected value.
+  await writeInput(stdin, '\t');
+
+  // Wait for the cursor to move to the end of the inserted value.
+  const expectedValue = '/settings agent.reasoningEffort default';
+  const cursor = await waitForCondition(
+    () => getCursorFromFrame(lastFrame()),
+    (c) => c === expectedValue.length,
+    { timeoutMs: 3000 },
+  );
+  expect(cursor).toBe(expectedValue.length);
+});
+
 const StateDisplay = () => {
   const { input, mode } = useInputContext();
   return (

@@ -265,11 +265,12 @@ const InputBox: FC<Props> = ({
       });
       if (!result) return false;
       onChange(result.nextValue);
+      setCursorOffset(result.nextCursor);
       pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
       path.close();
       return true;
     },
-    [path, cursorOffset, value, onChange],
+    [path, cursorOffset, value, onChange, setCursorOffset],
   );
 
   const insertSelectedSetting = useCallback((): boolean => {
@@ -277,10 +278,11 @@ const InputBox: FC<Props> = ({
     if (!result) return false;
     settingsFilterRef.current = settings.query;
     onChange(result.nextValue);
+    setCursorOffset(result.nextCursor);
     pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
     settings.close();
     return true;
-  }, [settings, value, onChange]);
+  }, [settings, value, onChange, setCursorOffset]);
 
   const insertSelectedSettingValue = useCallback(
     (submitAfterInsert: boolean, typedValue?: string): boolean => {
@@ -342,6 +344,7 @@ const InputBox: FC<Props> = ({
       });
       if (!result) return false;
       onChange(result.nextValue);
+      setCursorOffset(result.nextCursor);
       pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
       settingsValue.close();
       return true;
@@ -355,6 +358,7 @@ const InputBox: FC<Props> = ({
       onSettingChange,
       onSystemMessage,
       reopenSettingsMenu,
+      setCursorOffset,
     ],
   );
 
@@ -399,11 +403,12 @@ const InputBox: FC<Props> = ({
       }
 
       onChange(result.nextValue);
+      setCursorOffset(result.nextCursor);
       pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
       models.close();
       return true;
     },
-    [models, value, onChange, submitTextOnly, settingsService, onSettingChange],
+    [models, value, onChange, submitTextOnly, settingsService, onSettingChange, setCursorOffset],
   );
 
   const insertSelectedSkill = useCallback(
@@ -425,11 +430,12 @@ const InputBox: FC<Props> = ({
       }
 
       onChange(result.nextValue);
+      setCursorOffset(result.nextCursor);
       pendingCursorOverrideRef.current = { value: result.nextValue, cursor: result.nextCursor };
       skills.close();
       return true;
     },
-    [skills, value, cursorOffset, onChange, submitTextOnly],
+    [skills, value, cursorOffset, onChange, submitTextOnly, setCursorOffset],
   );
 
   const modeHandlers = useModeHandlers({

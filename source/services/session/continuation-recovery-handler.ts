@@ -106,7 +106,6 @@ export class ContinuationRecoveryHandler {
         }
       }
       state.currentState = recoveryResult.instruction.resumeState;
-      state.currentCallIds = this.deps.toolTracker.activeCallIdsForCurrentTurn();
       state.setResumePreviousResponseId(recoveryResult.instruction.resumePreviousResponseId);
       return { kind: 'resume' };
     }

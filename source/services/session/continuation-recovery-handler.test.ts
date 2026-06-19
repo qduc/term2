@@ -117,7 +117,7 @@ it('returns fresh_start when recovery executor signals fresh start', async () =>
   expect(value.delayMs).toBe(500);
 });
 
-it('returns resume when recovery executor signals resume', async () => {
+it('returns resume without widening currentCallIds back to the whole turn ledger', async () => {
   const handler = new ContinuationRecoveryHandler({
     logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
     sessionId: 'test',
@@ -139,11 +139,11 @@ it('returns resume when recovery executor signals resume', async () => {
       present: () => ({ event: { type: 'retry_scheduled' }, logMessage: 'retry', logFields: {} }),
     } as any,
     resolveRetryLimit: () => 2,
-    toolTracker: { activeCallIdsForCurrentTurn: () => ['call-1'] } as any,
+    toolTracker: { activeCallIdsForCurrentTurn: () => ['call-old', 'call-1'] } as any,
   });
 
   const events: any[] = [];
-  const state = createMockState();
+  const state = createMockState({ currentCallIds: ['call-1'] });
   const iterator = handler.handle({ error: new Error('rate limit'), state });
   let next = await iterator.next();
   while (!next.done) {
@@ -155,6 +155,5 @@ it('returns resume when recovery executor signals resume', async () => {
   const value = next.value as any;
   expect(value.kind).toBe('resume');
   expect(state.currentState.id).toBe('run-2');
-  // After resume, currentCallIds is re-derived from the ledger rather than cleared.
   expect(state.currentCallIds).toEqual(['call-1']);
 });

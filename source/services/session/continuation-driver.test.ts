@@ -431,25 +431,32 @@ it('driver preserves the initial ledger snapshot and records a prompted approval
 // the continuation driver runs must appear in currentCallIds. The ledger is
 // populated synchronously during stream iteration, which completes before
 // ContinuationDriver.drive() reads it, so a fresh read captures them.
-it('continuation derives currentCallIds from the ledger (calls recorded before the driver runs)', async () => {
+it('continuation derives currentCallIds from the current response cycle, not the whole turn ledger', async () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
-  // Simulate the prior stream cycle recording the tool calls for this turn.
+  // Simulate earlier response cycles in the same assistant turn. These call IDs
+  // must not be sent again when previous_response_id chaining continues.
   toolTracker.beginTurn();
   toolTracker.recordFunctionCall({
-    rawItem: { type: 'function_call', id: 'fc_1', callId: 'call-pre-1', name: 'read_file', arguments: '{}' },
+    rawItem: { type: 'function_call', id: 'fc_old_1', callId: 'call-old-1', name: 'read_file', arguments: '{}' },
   });
   toolTracker.recordFunctionCall({
-    rawItem: { type: 'function_call', id: 'fc_2', callId: 'call-pre-2', name: 'shell', arguments: '{}' },
+    rawItem: { type: 'function_call', id: 'fc_old_2', callId: 'call-old-2', name: 'shell', arguments: '{}' },
+  });
+  toolTracker.recordFunctionCall({
+    rawItem: { type: 'function_call', id: 'fc_current', callId: 'call-current', name: 'apply_patch', arguments: '{}' },
   });
 
   let resumedCallIds: string[] | undefined;
+  const runState = {
+    getInterruptions: () => [{ callId: 'call-current', name: 'apply_patch', arguments: '{}' }],
+  };
   const driver = createDriver({
     toolTracker,
     planApplier: {
       prepareInit: (init: any) => ({
-        state: {},
-        interruption: { callId: 'call-pre-1' },
+        state: runState,
+        interruption: { callId: 'call-current' },
         toolCallArgumentsById: new Map(),
         previouslyEmittedCommandIds: new Set(),
         removeInterceptor: () => {},
@@ -480,7 +487,92 @@ it('continuation derives currentCallIds from the ledger (calls recorded before t
   );
 
   expect(result.kind).toBe('response');
-  expect(resumedCallIds).toEqual(['call-pre-1', 'call-pre-2']);
+  expect(resumedCallIds).toEqual(['call-current']);
+});
+
+it('auto-approved follow-up continuations keep only the next response cycle call IDs', async () => {
+  let cycleCount = 0;
+  const firstRunState = {
+    getInterruptions: () => [{ callId: 'call-first', name: 'shell', arguments: '{}' }],
+  };
+  const secondRunState = {
+    getInterruptions: () => [{ callId: 'call-second', name: 'apply_patch', arguments: '{}' }],
+  };
+  const driver = createDriver({
+    toolTracker: {
+      activeCallIdsForCurrentTurn: () => ['call-old', 'call-first', 'call-second'],
+      export: () => [],
+    } as any,
+    approvalFlow: {
+      prepareContinuation: () => ({
+        pendingApprovalContext: {
+          state: secondRunState,
+          interruption: { callId: 'call-second' },
+          toolCallArgumentsById: new Map(),
+          emittedCommandIds: new Set(),
+          inputMode: 'delta',
+        },
+        removeInterceptor: () => {},
+      }),
+      getPending: () => null,
+    } as any,
+    planApplier: {
+      prepareInit: (init: any) => ({
+        state: firstRunState,
+        interruption: { callId: 'call-first' },
+        toolCallArgumentsById: new Map(),
+        previouslyEmittedCommandIds: new Set(),
+        removeInterceptor: () => {},
+        source: 'continueRunStream',
+        token: init.generation,
+        inputMode: 'delta',
+      }),
+      applyInitialSetup: async function* () {},
+      applyNextPlan: async function* (_nextPlan: any, state: any) {
+        state.currentState = secondRunState;
+        state.currentCallIds = ['call-old', 'call-first', 'call-second'];
+      },
+      recordPendingApproval: () => {},
+    } as any,
+    streamCycle: {
+      async *execute(state: any) {
+        cycleCount++;
+        if (cycleCount === 1) {
+          expect(state.currentCallIds).toEqual(['call-first']);
+          return {
+            kind: 'completed',
+            outcome: {
+              kind: 'auto_approve',
+              advisory: { model: 'm', reasoning: 'safe', approved: true, source: 'llm' },
+              callId: 'call-second',
+              argumentsText: '{}',
+            },
+            nextCumulativeMessages: [],
+            nextCumulativeTurnItems: [],
+            mergedEmittedIds: new Set(),
+          };
+        }
+        expect(state.currentCallIds).toEqual(['call-second']);
+        return {
+          kind: 'completed',
+          outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
+          nextCumulativeMessages: [],
+          nextCumulativeTurnItems: [],
+          mergedEmittedIds: new Set(),
+        };
+      },
+    } as any,
+  });
+
+  const { result } = await collectResult(
+    driver.drive(
+      { kind: 'approval_decision', answer: 'y', generation: 1 },
+      new ShellAutoApprovalDecisionPolicy(driver as any),
+    ),
+  );
+
+  expect(result.kind).toBe('response');
+  expect(cycleCount).toBe(2);
 });
 
 // ── multiple auto-approved interruptions ─────────────────────

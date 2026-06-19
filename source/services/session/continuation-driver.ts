@@ -25,7 +25,7 @@ import type { ContinuationStreamCycle } from './continuation-stream-cycle.js';
 import type { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import { callIdOf } from '../tool-execution-ledger.js';
-import { ContinuationState } from './continuation-state.js';
+import { ContinuationState, type PreparedContinuation } from './continuation-state.js';
 
 export type ContinuationInit =
   | {
@@ -76,7 +76,7 @@ export class ContinuationDriver {
 
     const prepared = this.deps.planApplier.prepareInit(init);
     const state = new ContinuationState(init.generation);
-    state.initializeFrom(prepared, this.#activeCallIdsForInit(init));
+    state.initializeFrom(prepared, this.#activeCallIdsForInit(init, prepared));
 
     try {
       yield* this.deps.planApplier.applyInitialSetup(prepared, state);
@@ -129,6 +129,11 @@ export class ContinuationDriver {
               state,
               mergedEmittedIds,
               approvalResult.isApproved,
+            );
+            state.currentCallIds = this.#activeCallIdsForResponseCycle(
+              approvalResult.nextPlan.pendingApprovalContext.state,
+              approvalResult.nextPlan.pendingApprovalContext.interruption,
+              state.currentCallIds,
             );
           }
           continue;
@@ -238,11 +243,11 @@ export class ContinuationDriver {
       }
       yield* this.deps.planApplier.applyNextPlan(nextPlan, state, state.previouslyEmittedIds, decision === 'approve');
 
-      // Re-derive the complete in-flight set from the ledger after each sibling
-      // decision. The ledger is cumulative — it retains every entry for the
-      // turn, including previously-completed and newly-aborted calls — so a
-      // fresh read captures the full parallel batch regardless of order.
-      state.currentCallIds = this.deps.toolTracker.activeCallIdsForCurrentTurn();
+      state.currentCallIds = this.#activeCallIdsForResponseCycle(
+        nextPlan.pendingApprovalContext.state,
+        nextPlan.pendingApprovalContext.interruption,
+        state.currentCallIds,
+      );
     }
 
     return { kind: 'ready' };
@@ -374,11 +379,43 @@ export class ContinuationDriver {
    * interruption is included as a fallback so the abort record itself still
    * anchors the replay when the state snapshot is sparse.
    */
-  #activeCallIdsForInit(init: ContinuationInit): string[] {
+  #activeCallIdsForInit(init: ContinuationInit, prepared: PreparedContinuation): string[] {
     if (init.kind === 'abort_resolution') {
       return this.#activeCallIdsForAbortedContext(init.abortedContext);
     }
-    return this.deps.toolTracker.activeCallIdsForCurrentTurn();
+    return this.#activeCallIdsForResponseCycle(
+      prepared.state,
+      prepared.interruption,
+      this.deps.toolTracker.activeCallIdsForCurrentTurn(),
+    );
+  }
+
+  #activeCallIdsForResponseCycle(
+    runState: unknown,
+    primaryInterruption: unknown,
+    fallbackCallIds: readonly string[],
+  ): string[] {
+    const callIds = new Set<string>();
+    const addCallId = (callId: unknown): void => {
+      if (typeof callId === 'string' && callId.length > 0) {
+        callIds.add(callId);
+      }
+    };
+
+    const interruptions = getMethod<[], unknown>(runState, 'getInterruptions')?.();
+    if (Array.isArray(interruptions)) {
+      for (const interruption of interruptions) {
+        addCallId(getCallIdFromObject(interruption));
+      }
+    }
+
+    addCallId(getCallIdFromObject(primaryInterruption));
+
+    if (callIds.size > 0) {
+      return [...callIds];
+    }
+
+    return [...fallbackCallIds];
   }
 
   #activeCallIdsForAbortedContext(abortedContext: AbortedApprovalContext): string[] {

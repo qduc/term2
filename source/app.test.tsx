@@ -36,9 +36,9 @@ const mocks = vi.hoisted(() => ({
   clearConversation: vi.fn(),
   pendingGuards: {
     largeUncachedWarning: null,
-    pendingLargeUncachedTurn: null,
+    pendingLargeUncachedTurn: null as import('./types/user-turn.js').UserTurn | null,
     pendingLargeUncachedTokens: 0,
-    pendingSurgeTurn: null,
+    pendingSurgeTurn: null as import('./types/user-turn.js').UserTurn | null,
     pendingSurgeReason: '',
     guardTurn: vi.fn(),
     sendGuardedTurn: vi.fn(async () => true),

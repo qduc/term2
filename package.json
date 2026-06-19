@@ -39,7 +39,7 @@
   "scripts": {
     "start": "node dist/cli.js",
     "build": "tsc --project tsconfig.build.json && pnpm run post-build",
-    "dev": "tsc --watch",
+    "dev": "tsc --project tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --reporter=minimal",
     "test:verbose": "vitest run",

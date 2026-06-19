@@ -3,6 +3,7 @@ import { parseInput } from '../utils/input-parser.js';
 import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import type { UserTurn } from '../types/user-turn.js';
+import type { InputMode } from '../context/InputContext.js';
 
 export type HandoffStage = 'entering_message' | 'confirm_model' | 'selecting_model';
 
@@ -17,7 +18,7 @@ export type UseHandoffFlowOptions = {
   addSystemMessage: (text: string) => void;
   sendUserMessage: (turn: UserTurn) => Promise<void>;
   setInput: (value: string) => void;
-  setMode: (mode: 'text' | string) => void;
+  setMode: (mode: InputMode) => void;
   setTriggerIndex: (index: number | null) => void;
   mode: string;
   settingsService: SettingsService;

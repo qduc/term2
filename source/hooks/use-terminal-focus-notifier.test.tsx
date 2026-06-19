@@ -2,7 +2,7 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { it, expect, vi } from 'vitest';
 import React, { act, useEffect } from 'react';
-import { useInput, useStdin } from 'ink';
+import { useStdin } from 'ink';
 import { renderInAct } from '../test-helpers/ink-testing.js';
 import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 import { useTerminalFocusNotifier } from './use-terminal-focus-notifier.js';

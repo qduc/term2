@@ -5,11 +5,12 @@ import type { HistoryService } from '../services/history-service.js';
 import type { LoggingService } from '../services/logging/logging-service.js';
 import type { LargeUncachedInputDecision } from '../services/large-uncached-input-guard.js';
 import type { UserTurn } from '../types/user-turn.js';
+import type { ImageRef } from 'ink-prompt';
 
 export type PendingTurnGuardResult = { status: 'ready'; turn: UserTurn } | { status: 'blocked' };
 
 type SendUserMessage = (turn: UserTurn, options?: { bypassInputSurgeGuard?: boolean }) => Promise<void>;
-type ImageSetter = (images: UserTurn['images']) => void;
+type ImageSetter = (images: ImageRef[]) => void;
 
 export type UsePendingTurnGuardsOptions = {
   input: string;

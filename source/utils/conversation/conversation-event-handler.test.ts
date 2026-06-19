@@ -874,6 +874,7 @@ it('subagent_completed updates the status of the live peek', () => {
       agentId: 'agent-1',
       role: 'worker',
       task: 'make the change',
+      finalText: 'done',
       tools: ['apply_patch'],
     },
   ]);

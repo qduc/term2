@@ -298,53 +298,38 @@ const App: FC<AppProps> = ({
   });
 
   // Handle Esc to stop processing or cancel rejection reason or handoff
-  useInput(
-    (_input: string, key) => {
-      if (key.escape && pendingSkillRef.current) {
-        pendingSkillRef.current = null;
-        addSystemMessage('Skill activation cancelled.');
-        return;
-      }
+  useInput((_input: string, key) => {
+    if (key.escape && pendingSkillRef.current) {
+      pendingSkillRef.current = null;
+      addSystemMessage('Skill activation cancelled.');
+      return;
+    }
 
-      if (key.escape && waitingForAskUserAnswer) {
-        setWaitingForAskUserAnswer(false);
-        setInput('');
-        return;
-      }
+    if (key.escape && waitingForAskUserAnswer) {
+      setWaitingForAskUserAnswer(false);
+      setInput('');
+      return;
+    }
 
-      if (key.escape && waitingForRejectionReason) {
-        // Cancel rejection reason input and return to approval prompt
-        setWaitingForRejectionReason(false);
-        setInput('');
-        return;
-      }
+    if (key.escape && waitingForRejectionReason) {
+      // Cancel rejection reason input and return to approval prompt
+      setWaitingForRejectionReason(false);
+      setInput('');
+      return;
+    }
 
-      if (key.escape && (isProcessing || waitingForApproval)) {
-        stopProcessing();
-        addSystemMessage('Stopped');
-        setWaitingForRejectionReason(false);
-        return;
-      }
+    if (key.escape && (isProcessing || waitingForApproval)) {
+      stopProcessing();
+      addSystemMessage('Stopped');
+      setWaitingForRejectionReason(false);
+      return;
+    }
 
-      if (key.escape && handoff.handoffState && handoff.handoffState.stage === 'entering_message') {
-        handoff.cancelHandoff();
-        return;
-      }
-    },
-    [
-      addSystemMessage,
-      handoff,
-      isProcessing,
-      pendingSkillRef,
-      setInput,
-      setWaitingForAskUserAnswer,
-      setWaitingForRejectionReason,
-      stopProcessing,
-      waitingForApproval,
-      waitingForAskUserAnswer,
-      waitingForRejectionReason,
-    ],
-  );
+    if (key.escape && handoff.handoffState && handoff.handoffState.stage === 'entering_message') {
+      handoff.cancelHandoff();
+      return;
+    }
+  });
 
   const handleApprove = useCallback(
     async (answer?: string) => {
@@ -369,24 +354,21 @@ const App: FC<AppProps> = ({
   );
 
   // Switch between Standard and Plan modes with Shift+Tab
-  useInput(
-    (input: string, key) => {
-      const isShiftTab = (key.shift && key.tab) || input === '\u001b[Z';
-      if (!isShiftTab) return;
+  useInput((input: string, key) => {
+    const isShiftTab = (key.shift && key.tab) || input === '\u001b[Z';
+    if (!isShiftTab) return;
 
-      if (pendingGuards.pendingLargeUncachedTurn) {
-        return;
-      }
+    if (pendingGuards.pendingLargeUncachedTurn) {
+      return;
+    }
 
-      if (liteMode) {
-        toggleShellMode();
-        return;
-      }
+    if (liteMode) {
+      toggleShellMode();
+      return;
+    }
 
-      cycleAppModes();
-    },
-    [cycleAppModes, liteMode, pendingGuards.pendingLargeUncachedTurn, toggleShellMode],
-  );
+    cycleAppModes();
+  });
 
   const handleSubmit = async (turn: UserTurn): Promise<void> => {
     const value = turn.text;

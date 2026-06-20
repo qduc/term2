@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
+import { isAbortLike } from '../../services/subagents/utils.js';
 
 const ASK_MENTOR_DESCRIPTION =
   'Ask a mentor model for advice or clarification on a hard problem. ' +
@@ -51,6 +52,9 @@ export const createAskMentorToolDefinition = (
       const answer = await askMentor(prompt);
       return answer;
     } catch (error: any) {
+      if (isAbortLike(error?.message, error)) {
+        throw error;
+      }
       return `Failed to ask mentor: ${error.message}. Ensure mentor model is configured in settings.`;
     }
   },

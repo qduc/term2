@@ -275,8 +275,22 @@ it('abort aborts active subagent runs', async () => {
 
   bridge.abort();
 
-  await mentorPromise;
+  await expect(mentorPromise).rejects.toMatchObject({ name: 'AbortError' });
   expect(capturedSignal?.aborted).toBe(true);
+});
+
+it('createMentor rejects cancelled manager results as AbortError', async () => {
+  const { manager } = createMockManager();
+  manager.run = async () => ({
+    status: 'cancelled',
+    finalText: '',
+    filesChanged: [],
+    toolsUsed: [],
+  });
+
+  const bridge = makeBridge(manager);
+
+  await expect(bridge.createMentor('test')).rejects.toMatchObject({ name: 'AbortError' });
 });
 
 it('resetAbortController replaces the shared abort controller', () => {

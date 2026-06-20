@@ -3,6 +3,7 @@ import type { ConversationEvent } from '../services/conversation/conversation-ev
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import type { ExecutionContext } from '../services/execution-context.js';
 import type { SubagentResult } from '../services/subagents/types.js';
+import { createAbortError } from '../services/subagents/utils.js';
 
 export interface SubagentBridgeDeps {
   logger: ILoggingService;
@@ -111,6 +112,9 @@ export class SubagentBridge {
       });
       if (result.status === 'failed') {
         throw new Error(result.error || 'Mentor consultation failed');
+      }
+      if (result.status === 'cancelled') {
+        throw createAbortError('The mentor consultation was aborted.');
       }
       return result.finalText;
     } catch (error) {

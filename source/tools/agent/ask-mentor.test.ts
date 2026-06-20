@@ -67,3 +67,13 @@ it('createAskMentorToolDefinition handles errors', async () => {
 
   expect((result as string).includes('Failed to ask mentor: API Error')).toBe(true);
 });
+
+it('createAskMentorToolDefinition propagates abort errors', async () => {
+  const abortError = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+  const mockAskMentor = fn(async () => {
+    throw abortError;
+  });
+  const tool = createAskMentorToolDefinition(mockAskMentor);
+
+  await expect(tool.execute({ question: 'fail' }, undefined)).rejects.toBe(abortError);
+});

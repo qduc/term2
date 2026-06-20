@@ -62,6 +62,15 @@ it('execute returns failed result as plain text on error', async () => {
   expect(raw.startsWith('{')).toBe(false);
 });
 
+it('execute propagates abort errors', async () => {
+  const abortError = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+  const tool = createRunSubagentToolDefinition(async () => {
+    throw abortError;
+  });
+
+  await expect(tool.execute({ role: 'explorer', task: 'find files' })).rejects.toBe(abortError);
+});
+
 it('execute passes tool invocation details to subagent runner', async () => {
   let capturedDetails: unknown;
   const tool = createRunSubagentToolDefinition(async (_params, _context, details) => {

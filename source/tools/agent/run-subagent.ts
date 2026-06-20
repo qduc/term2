@@ -10,6 +10,7 @@ import {
   safeJsonParse,
 } from '../format-helpers.js';
 import type { SubagentResult } from '../../services/subagents/types.js';
+import { isAbortLike } from '../../services/subagents/utils.js';
 
 const RUN_SUBAGENT_DESCRIPTION =
   'Delegate a bounded task to a specialized subagent. The subagent runs synchronously and returns a structured result. ' +
@@ -222,6 +223,9 @@ export const createRunSubagentToolDefinition = (
       const result = await runSubagent(params, context, details);
       return formatSubagentResult(result);
     } catch (error: any) {
+      if (isAbortLike(error?.message, error)) {
+        throw error;
+      }
       const errorResult: SubagentResult = {
         agentId: 'error',
         role: params.role,

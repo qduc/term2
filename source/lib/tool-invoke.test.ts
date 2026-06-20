@@ -406,6 +406,11 @@ it('toolErrorFunction rethrows schema-validation errors for diagnostics handling
   expect(() => toolErrorFunction({} as RunContext, err)).toThrow(err);
 });
 
+it('toolErrorFunction rethrows abort errors', () => {
+  const err = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+  expect(() => toolErrorFunction({} as RunContext, err)).toThrow(err);
+});
+
 it('toolErrorFunction returns a non-fatal message for other runtime errors', () => {
   const result = toolErrorFunction({} as RunContext, new Error('disk on fire'));
   expect(result).toBe('An error occurred while running the tool. Please try again. Error: Error: disk on fire');

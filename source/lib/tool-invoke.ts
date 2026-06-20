@@ -1,5 +1,6 @@
 import type { Tool, FunctionTool } from '@openai/agents';
 import { z } from 'zod';
+import { isAbortLike } from '../services/subagents/utils.js';
 
 /**
  * Maximum payload size (in characters) for which JSON repair is attempted.
@@ -343,6 +344,9 @@ export const isInvalidToolInputError = (error: any): boolean => {
  */
 export const toolErrorFunction = (_context: unknown, error: unknown): string => {
   if (isInvalidToolInputError(error)) {
+    throw error;
+  }
+  if (isAbortLike(error instanceof Error ? error.message : undefined, error)) {
     throw error;
   }
   const details = error instanceof Error ? error.toString() : String(error);

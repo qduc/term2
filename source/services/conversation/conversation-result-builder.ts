@@ -17,13 +17,14 @@ import { buildPersistedAssistantTurnItems } from './conversation-turn-items.js';
 import { type GenerationToken } from '../generation-guard.js';
 import { type CommandMessage } from '../../tools/types.js';
 import { resolveToolOwner } from '../approval/tool-owner.js';
+import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 
 export type BuildResultOutcome =
   | { kind: 'response'; result: Extract<ConversationTerminal, { type: 'response' }> }
   | { kind: 'approval_required'; result: Extract<ConversationTerminal, { type: 'approval_required' }> }
   | {
       kind: 'auto_approve';
-      advisory: LLMAdvisory;
+      advisory?: LLMAdvisory;
       callId: string | undefined;
       argumentsText: string;
     };
@@ -118,17 +119,44 @@ export async function buildConversationResult(
     approvalFlow.recordPending({
       state: result.state,
       interruption,
+      interruptions: result.interruptions,
+      decisionsByCallId: new Map(),
+      promptedCallId: callId,
       emittedCommandIds: emittedCommandIds ?? new Set(),
       toolCallArgumentsById: new Map(toolCallArgumentsById),
       owner: resolveToolOwner(result.state, interruption, logger),
       token: input.token,
       inputMode: input.inputMode,
-      cumulativeUsage: input.cumulativeUsage,
+      cumulativeUsage: input.cumulativeUsage ?? usage ?? extractUsage(result),
       cumulativeCommandMessages: input.cumulativeCommandMessages,
       cumulativeTurnItems: input.cumulativeTurnItems,
     });
 
     const agent = asRecord(interruptionRecord?.agent);
+    const runContext = asRecord(asRecord(result.state)?._context);
+
+    const registryDecision = await toolApprovalPolicyRegistry.evaluate({
+      toolName,
+      args: parseResult.arguments,
+      context: runContext,
+    });
+
+    if (registryDecision.kind === 'auto_approve') {
+      logger.debug('Tool auto-approved by original tool policy', {
+        eventType: 'approval.auto_approved',
+        category: 'approval',
+        phase: 'approval',
+        sessionId,
+        callId,
+        toolName,
+      });
+
+      return {
+        kind: 'auto_approve',
+        callId,
+        argumentsText,
+      };
+    }
 
     let llmAdvisory: LLMAdvisory | undefined;
     if (toolName === 'shell' || toolName === 'bash') {

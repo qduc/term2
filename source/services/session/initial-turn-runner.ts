@@ -140,8 +140,8 @@ export class InitialTurnRunner {
               traceId: this.deps.logger.getCorrelationId(),
               callId: outcome.callId,
               command: outcome.argumentsText,
-              model: outcome.advisory.model,
-              reasoning: outcome.advisory.reasoning,
+              model: outcome.advisory?.model,
+              reasoning: outcome.advisory?.reasoning,
             });
 
             // Return outcome instead of calling ContinuationDriver

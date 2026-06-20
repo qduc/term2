@@ -9,16 +9,19 @@ import type { AgentStream } from '../agent-stream.js';
 import { clearToolFormatters, registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { formatShellCommandMessage } from '../../tools/system/shell.js';
 import { clearApprovalRejectionMarkers } from '../../utils/streaming/extract-command-messages.js';
+import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 
 beforeEach(() => {
   clearToolFormatters();
   registerToolFormatters([{ name: 'shell', formatCommandMessage: formatShellCommandMessage }]);
   clearApprovalRejectionMarkers();
+  toolApprovalPolicyRegistry.clear();
 });
 
 afterEach(() => {
   clearToolFormatters();
   clearApprovalRejectionMarkers();
+  toolApprovalPolicyRegistry.clear();
 });
 
 const logger = new LoggingService({ disableLogging: true });
@@ -165,6 +168,32 @@ it('approval_required outcome when stream has interruptions', async () => {
     expect(outcome.result.approval.toolName).toBe('shell');
     expect(outcome.result.approval.callId).toBe('c1');
     expect(outcome.result.approval.agentName).toBe('TestAgent');
+  }
+});
+
+it('auto_approve outcome for valid read-only interruptions registered with the policy registry', async () => {
+  toolApprovalPolicyRegistry.register({
+    toolName: 'read_file',
+    needsApproval: async () => false,
+  });
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'read_file',
+        callId: 'read-1',
+        arguments: { path: 'README.md' },
+        agent: { name: 'TestAgent' },
+      },
+    ],
+    state: { id: 'state-1' },
+  });
+
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, makeDeps('off'));
+
+  expect(outcome.kind).toBe('auto_approve');
+  if (outcome.kind === 'auto_approve') {
+    expect(outcome.callId).toBe('read-1');
+    expect(outcome.advisory).toBeUndefined();
   }
 });
 
@@ -331,7 +360,7 @@ it('auto_approve outcome when LLM advises approval and mode=auto', async () => {
   if (outcome.kind === 'auto_approve') {
     expect(outcome.callId).toBe('c1');
     expect(outcome.argumentsText).toBe('ls');
-    expect(outcome.advisory.approved).toBe(true);
+    expect(outcome.advisory?.approved).toBe(true);
   }
 });
 

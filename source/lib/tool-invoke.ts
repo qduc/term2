@@ -432,6 +432,7 @@ export const wrapToolInvoke = <T extends Tool>(
  */
 export function wrapNeedsApproval(
   definition: {
+    name?: string;
     parameters: { safeParse: (v: unknown) => { success: boolean } };
     needsApproval: (params: unknown, context?: unknown) => Promise<boolean> | boolean;
   },
@@ -439,8 +440,25 @@ export function wrapNeedsApproval(
     // When an interceptor (e.g. plan mode) would reject this call, the approval
     // prompt must be suppressed — execute() returns the rejection to the model.
     checkInterceptors?: (params: unknown) => Promise<string | null>;
+    toolName?: string;
+    registry?: {
+      register: (registration: {
+        toolName: string;
+        parameters?: unknown;
+        needsApproval: (params: unknown, context?: unknown) => Promise<boolean> | boolean;
+      }) => void;
+    };
   },
 ): (context: unknown, params: unknown) => Promise<boolean> {
+  const registeredToolName = options?.toolName ?? definition.name;
+  if (registeredToolName && options?.registry) {
+    options.registry.register({
+      toolName: registeredToolName,
+      parameters: definition.parameters,
+      needsApproval: definition.needsApproval,
+    });
+  }
+
   return async (context, params) => {
     if (options?.checkInterceptors) {
       try {
@@ -473,10 +491,17 @@ export function wrapNeedsApproval(
       return false;
     }
     try {
-      return await definition.needsApproval(normalized, context);
-    } catch (error) {
-      // If needsApproval throws, fail-safe to requiring approval
-      return true;
+      const originalDecision = await definition.needsApproval(normalized, context);
+      if (!options?.registry) {
+        return originalDecision;
+      }
+    } catch {
+      // The SDK should still interrupt valid calls when the original policy is
+      // inconclusive; the batch coordinator will fail safe to prompting.
+      if (!options?.registry) {
+        return true;
+      }
     }
+    return true;
   };
 }

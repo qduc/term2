@@ -312,13 +312,11 @@ it('batch evaluation calls the LLM once and reuses cached advisories across sequ
   const third = createShellInterruption({ callId: 'call-batch-3', command: 'git status' });
 
   const initialStream = createInterruptedStream([first, second, third]);
-  const continuationOne = createInterruptedStream([second, third]);
-  const continuationTwo = createInterruptedStream([third]);
   const finalContinuation = createFinalStream('All commands handled.');
 
   const { bundle, chatCalls } = createSessionHarness({
     startStreams: [initialStream],
-    continuationStreams: [continuationOne, continuationTwo, finalContinuation],
+    continuationStreams: [finalContinuation],
     chatImpl: async () =>
       JSON.stringify({
         results: [
@@ -833,8 +831,8 @@ it('auto mode: approval_required usage includes the auto-approved first turn', a
   const initialStream = createInterruptedStream([first, second]);
   (initialStream.state as any).usage = { inputTokens: 100, outputTokens: 20, totalTokens: 120 };
 
-  // Continuation reuses the same RunState; its accumulator is cumulative and
-  // already includes the auto-approved first turn (300 in / 50 out).
+  // The batch barrier must not consume this continuation until the manual
+  // sibling is approved.
   const continuationAfterFirst = createInterruptedStream([second]);
   (continuationAfterFirst.state as any).usage = { inputTokens: 300, outputTokens: 50, totalTokens: 350 };
 
@@ -859,8 +857,8 @@ it('auto mode: approval_required usage includes the auto-approved first turn', a
     await bundle.terminalAdapter.sendMessage('inspect repository and dump history'),
   );
 
-  expect(approvalResult.usage?.prompt_tokens).toBe(300);
-  expect(approvalResult.usage?.completion_tokens).toBe(50);
+  expect(approvalResult.usage?.prompt_tokens).toBe(100);
+  expect(approvalResult.usage?.completion_tokens).toBe(20);
 });
 
 it('auto mode: evaluator error falls back to prompt without crashing', async () => {

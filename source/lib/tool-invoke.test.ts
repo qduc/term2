@@ -6,8 +6,10 @@ import {
   normalizeObjectParams,
   normalizeToolInput,
   toolErrorFunction,
+  wrapNeedsApproval,
   wrapToolInvoke,
 } from './tool-invoke.js';
+import { toolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 
 // ---------------------------------------------------------------------------
 // repairJson – pass-through for valid / empty input
@@ -185,6 +187,59 @@ it('normalizeToolInput returns {} for un-serializable input', () => {
 it('normalizeToolInput passes through valid JSON strings', () => {
   const valid = '{"key": "value"}';
   expect(normalizeToolInput(valid)).toBe(valid);
+});
+
+it('wrapNeedsApproval interrupts valid calls while registry preserves the original read-only policy', async () => {
+  toolApprovalPolicyRegistry.clear();
+  const definition = {
+    name: 'read_file',
+    parameters: z.object({ path: z.string() }),
+    needsApproval: async () => false,
+  };
+
+  const wrapped = wrapNeedsApproval(definition, {
+    toolName: definition.name,
+    registry: toolApprovalPolicyRegistry,
+  });
+
+  await expect(wrapped({}, { path: 'README.md' })).resolves.toBe(true);
+  await expect(
+    toolApprovalPolicyRegistry.evaluate({
+      toolName: 'read_file',
+      args: { path: 'README.md' },
+      context: {},
+    }),
+  ).resolves.toEqual({ kind: 'auto_approve' });
+});
+
+it('wrapNeedsApproval still bypasses approval for invalid tool args', async () => {
+  const wrapped = wrapNeedsApproval({
+    name: 'read_file',
+    parameters: z.object({ path: z.string() }),
+    needsApproval: async () => false,
+  });
+
+  await expect(wrapped({}, { path: 123 })).resolves.toBe(false);
+});
+
+it('wrapNeedsApproval still bypasses approval when an interceptor rejects execution', async () => {
+  let originalPolicyCalled = false;
+  const wrapped = wrapNeedsApproval(
+    {
+      name: 'shell',
+      parameters: z.object({ command: z.string() }),
+      needsApproval: async () => {
+        originalPolicyCalled = true;
+        return true;
+      },
+    },
+    {
+      checkInterceptors: async () => 'plan mode blocked this call',
+    },
+  );
+
+  await expect(wrapped({}, { command: 'touch blocked.txt' })).resolves.toBe(false);
+  expect(originalPolicyCalled).toBe(false);
 });
 
 // ---------------------------------------------------------------------------

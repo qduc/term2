@@ -1012,6 +1012,98 @@ it.sequential(
   },
 );
 
+it.sequential('CodexResponsesWSModel drops tool outputs already consumed by the previous response', async () => {
+  const seenRequests: any[] = [];
+
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    const responseIds = ['resp-after-first-batch', 'resp-after-second-batch', 'resp-after-third-batch'];
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: responseIds[seenRequests.length - 1],
+          output: [],
+          usage: {},
+        },
+      } as any,
+    ]);
+  };
+
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+
+  const firstBatch = [1, 2].map((n) => ({
+    type: 'function_call_result',
+    callId: `call-already-sent-${n}`,
+    output: `old-${n}`,
+  }));
+  const nextOutput = {
+    type: 'function_call_result',
+    callId: 'call-current',
+    output: 'current',
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5-codex',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({ sessionId: 'session-consumed-tool-outputs', traceId: 'trace-1' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+    );
+
+    for await (const _event of model.getStreamedResponse({
+      previousResponseId: 'resp-tool-calls-1',
+      input: firstBatch,
+      modelSettings: {},
+      tools: [],
+      handoffs: [],
+    } as any)) {
+    }
+
+    for await (const _event of model.getStreamedResponse({
+      previousResponseId: 'resp-after-first-batch',
+      input: [...firstBatch, nextOutput],
+      modelSettings: {},
+      tools: [],
+      handoffs: [],
+    } as any)) {
+    }
+
+    for await (const _event of model.getStreamedResponse({
+      previousResponseId: 'resp-after-second-batch',
+      input: [nextOutput],
+      modelSettings: {},
+      tools: [],
+      handoffs: [],
+    } as any)) {
+    }
+
+    expect(seenRequests.length).toBe(3);
+    expect(seenRequests[0].previousResponseId).toBe('resp-tool-calls-1');
+    expect(seenRequests[0].input).toEqual(firstBatch);
+    expect(seenRequests[1].previousResponseId).toBe('resp-after-first-batch');
+    expect(seenRequests[1].input).toEqual([nextOutput]);
+    expect(seenRequests[2].previousResponseId).toBe('resp-after-second-batch');
+    expect(seenRequests[2].input).toEqual([]);
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+  }
+});
+
 it.sequential(
   'CodexResponsesWSModel drops interleaved tool calls from an already-trimmed tool-continuation delta',
   async () => {

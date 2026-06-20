@@ -98,3 +98,29 @@ it('abortPending carries forward removeInterceptor when set', () => {
   aborted?.removeInterceptor?.();
   expect(interceptorCalled).toBe(true);
 });
+
+it('abortPending carries forward batch decisions and the prompted call', () => {
+  const state = new ApprovalState();
+  const interruptions = [
+    { name: 'read_file', callId: 'read-1' },
+    { name: 'shell', callId: 'shell-1' },
+  ];
+  const decisionsByCallId = new Map([['read-1', 'approved' as const]]);
+
+  state.setPending({
+    state: { id: 'state' } as any,
+    interruption: interruptions[1],
+    interruptions,
+    decisionsByCallId,
+    promptedCallId: 'shell-1',
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+
+  state.abortPending();
+
+  const aborted = state.consumeAborted();
+  expect(aborted?.interruptions).toBe(interruptions);
+  expect(aborted?.decisionsByCallId).toBe(decisionsByCallId);
+  expect(aborted?.promptedCallId).toBe('shell-1');
+});

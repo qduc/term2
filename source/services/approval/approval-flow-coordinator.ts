@@ -88,6 +88,10 @@ export class ApprovalFlowCoordinator {
     markToolCallAsApprovalRejection(expectedCallId);
 
     abortedContext.state.reject(abortedContext.interruption as any, { message: rejectionMessage });
+    abortedContext.decisionsByCallId ??= new Map();
+    if (expectedCallId) {
+      abortedContext.decisionsByCallId.set(expectedCallId, 'rejected');
+    }
 
     return { abortedContext, removeInterceptor: noop };
   }
@@ -104,6 +108,8 @@ export class ApprovalFlowCoordinator {
     }
 
     const { state, interruption } = pendingApprovalContext;
+    const decisionCallId = getCallIdFromObject(interruption);
+    pendingApprovalContext.decisionsByCallId ??= new Map();
 
     let toolStartedEvent: ConversationEvent | undefined;
 
@@ -117,7 +123,7 @@ export class ApprovalFlowCoordinator {
       });
 
       const { toolName, rawArguments } = getToolInfoFromInterruption(interruption);
-      const callId = getCallIdFromObject(interruption);
+      const callId = decisionCallId;
 
       const parseResult = parseToolCallArguments(rawArguments, {
         callId: callId ?? String(Date.now()),
@@ -154,8 +160,11 @@ export class ApprovalFlowCoordinator {
             };
 
       state.approve(interruption as any);
+      if (callId) {
+        pendingApprovalContext.decisionsByCallId.set(callId, 'approved');
+      }
     } else {
-      const expectedCallId = getCallIdFromObject(interruption);
+      const expectedCallId = decisionCallId;
       const rejectionMessage = rejectionReason
         ? `Tool execution was not approved. User's reason: ${rejectionReason}`
         : 'Tool execution was not approved.';
@@ -163,6 +172,9 @@ export class ApprovalFlowCoordinator {
       markToolCallAsApprovalRejection(expectedCallId);
 
       state.reject?.(interruption as any, { message: rejectionMessage });
+      if (expectedCallId) {
+        pendingApprovalContext.decisionsByCallId.set(expectedCallId, 'rejected');
+      }
 
       this.deps.logger.debug('Tool approval rejected', {
         eventType: 'approval.rejected',
@@ -203,6 +215,7 @@ export class ApprovalFlowCoordinator {
     this.deps.approvalState.setPending({
       ...pending,
       interruption,
+      promptedCallId: getCallIdFromObject(interruption),
       owner: resolveToolOwner(pending.state, interruption, this.deps.logger),
     });
     return this.deps.approvalState.getPending();

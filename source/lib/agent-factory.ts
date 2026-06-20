@@ -16,6 +16,7 @@ import {
   shouldUseStrictToolSchema,
 } from './tool-selection-policy.js';
 import { getModelDefaultReasoningLevel } from '../services/model-service.js';
+import { toolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
@@ -90,6 +91,8 @@ function buildAgentTools({
           errorFunction: toolErrorFunction,
           needsApproval: wrapNeedsApproval(definition, {
             checkInterceptors: (params) => deps.checkToolInterceptors(definition.name, params),
+            toolName: definition.name,
+            registry: toolApprovalPolicyRegistry,
           }),
           execute: async (params, _context, details) => {
             const maxOutputLengthValue = deps.settings.get<number | undefined>('shell.maxOutputChars');

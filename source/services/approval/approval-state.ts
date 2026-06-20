@@ -5,9 +5,14 @@ import { type CommandMessage } from '../../tools/types.js';
 import { type PersistedAssistantTurnItem } from '../conversation/conversation-persistence-types.js';
 import { PARENT_TOOL_OWNER, type ToolOwner } from './tool-owner.js';
 
+export type ApprovalBatchDecision = 'approved' | 'rejected';
+
 export type PendingApprovalContext = {
   state: RunState<any, any>;
   interruption: unknown;
+  interruptions?: unknown[];
+  decisionsByCallId?: Map<string, ApprovalBatchDecision>;
+  promptedCallId?: string;
   emittedCommandIds: Set<string>;
   toolCallArgumentsById: Map<string, unknown>;
   removeInterceptor?: () => void;
@@ -22,6 +27,9 @@ export type PendingApprovalContext = {
 export type AbortedApprovalContext = {
   state: RunState<any, any>;
   interruption: unknown;
+  interruptions?: unknown[];
+  decisionsByCallId?: Map<string, ApprovalBatchDecision>;
+  promptedCallId?: string;
   emittedCommandIds: Set<string>;
   toolCallArgumentsById: Map<string, unknown>;
   removeInterceptor?: () => void;
@@ -69,6 +77,9 @@ export class ApprovalState {
     this.aborted = {
       state: this.pending.state,
       interruption: this.pending.interruption,
+      interruptions: this.pending.interruptions,
+      decisionsByCallId: this.pending.decisionsByCallId,
+      promptedCallId: this.pending.promptedCallId,
       emittedCommandIds: this.pending.emittedCommandIds,
       toolCallArgumentsById: this.pending.toolCallArgumentsById,
       removeInterceptor: this.pending.removeInterceptor,

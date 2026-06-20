@@ -269,6 +269,11 @@ const isUserInputMessage = (item: unknown): boolean => asRecord(item)?.role === 
 
 const isToolResultItem = (item: unknown): boolean => normalizeCodexServerHistoryItem(item).isToolResult;
 
+const getToolResultCallId = (item: unknown): string | undefined => {
+  const normalized = normalizeCodexServerHistoryItem(item);
+  return normalized.isToolResult ? normalized.callId : undefined;
+};
+
 const isToolContinuationItem = (item: unknown): boolean => {
   const normalized = normalizeCodexServerHistoryItem(item);
   if (normalized.isToolResult || normalized.callId) {
@@ -306,9 +311,40 @@ const findServerManagedDeltaStart = (input: unknown[]): number => {
   return 0;
 };
 
-const filterServerManagedInput = (input: unknown): unknown => {
-  if (!Array.isArray(input) || input.length <= 1) {
+const filterConsumedToolResults = (items: unknown[], consumedToolResultCallIds?: ReadonlySet<string>): unknown[] => {
+  if (!consumedToolResultCallIds || consumedToolResultCallIds.size === 0) {
+    return items;
+  }
+
+  return items.filter((item) => {
+    const callId = getToolResultCallId(item);
+    return !callId || !consumedToolResultCallIds.has(callId);
+  });
+};
+
+const collectToolResultCallIds = (input: unknown): string[] => {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const ids: string[] = [];
+  for (const item of input) {
+    const callId = getToolResultCallId(item);
+    if (callId) {
+      ids.push(callId);
+    }
+  }
+  return ids;
+};
+
+const filterServerManagedInput = (input: unknown, consumedToolResultCallIds?: ReadonlySet<string>): unknown => {
+  if (!Array.isArray(input)) {
     return input;
+  }
+  if (input.length <= 1) {
+    return input.length === 1 && isToolResultItem(input[0])
+      ? filterConsumedToolResults(input, consumedToolResultCallIds)
+      : input;
   }
 
   // When previous_response_id is reused, the server already holds the
@@ -336,7 +372,8 @@ const filterServerManagedInput = (input: unknown): unknown => {
     const trailing = input.slice(start);
     // A clean run of tool results (grouped layout) needs no filtering; for
     // the paired layout, drop the interleaved function-call items.
-    return trailing.every(isToolResultItem) ? trailing : trailing.filter(isToolResultItem);
+    const toolResults = trailing.every(isToolResultItem) ? trailing : trailing.filter(isToolResultItem);
+    return filterConsumedToolResults(toolResults, consumedToolResultCallIds);
   }
 
   // Fresh user turn with no trailing tool output: the delta is the latest
@@ -385,6 +422,7 @@ const DEFAULT_STREAM_MAX_RETRIES = 5;
 
 export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   private readonly codexPreviousResponseIds = new Map<string, string>();
+  private readonly codexConsumedToolResultCallIdsByResponseId = new Map<string, Set<string>>();
   private readonly warmupSleep: (delayMs: number) => Promise<void>;
   private readonly warmupRandom: () => number;
   #serverHistoryReuseDisabled = false;
@@ -591,7 +629,9 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       return request;
     }
 
-    const filteredInput = filterServerManagedInput(input);
+    const consumedToolResultCallIds = this.#getConsumedToolResultCallIds(previousResponseId);
+    const filteredInput = filterServerManagedInput(input, consumedToolResultCallIds);
+    this.#warnIfConsumedToolResultsWereDropped(previousResponseId, input, filteredInput, consumedToolResultCallIds);
     if (request.previousResponseId === previousResponseId && filteredInput === input) {
       return request;
     }
@@ -695,9 +735,60 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     }
   }
 
+  #getConsumedToolResultCallIds(responseId: string | undefined): ReadonlySet<string> | undefined {
+    if (!responseId) {
+      return undefined;
+    }
+    return this.codexConsumedToolResultCallIdsByResponseId.get(responseId);
+  }
+
+  #warnIfConsumedToolResultsWereDropped(
+    previousResponseId: string,
+    input: unknown,
+    filteredInput: unknown,
+    consumedToolResultCallIds: ReadonlySet<string> | undefined,
+  ): void {
+    if (!consumedToolResultCallIds || consumedToolResultCallIds.size === 0 || filteredInput === input) {
+      return;
+    }
+
+    const filteredCallIds = new Set(collectToolResultCallIds(filteredInput));
+    const droppedCallIds = collectToolResultCallIds(input).filter(
+      (callId) => consumedToolResultCallIds.has(callId) && !filteredCallIds.has(callId),
+    );
+    if (droppedCallIds.length === 0) {
+      return;
+    }
+
+    this.diagnosticLogger?.warn?.('Codex provider dropped already-consumed tool outputs before continuation', {
+      eventType: 'codex.tool_outputs.dropped_consumed',
+      category: 'provider',
+      phase: 'request_prepare',
+      previousResponseId,
+      droppedCallIds,
+    });
+  }
+
+  #rememberConsumedToolResultCallIds(
+    responseId: string | undefined,
+    previousResponseId: string | undefined,
+    input: unknown,
+  ): void {
+    if (!responseId) {
+      return;
+    }
+
+    const consumed = new Set(this.#getConsumedToolResultCallIds(previousResponseId));
+    for (const callId of collectToolResultCallIds(input)) {
+      consumed.add(callId);
+    }
+    this.codexConsumedToolResultCallIdsByResponseId.set(responseId, consumed);
+  }
+
   #forgetCodexResponseId(): void {
     this.#serverHistoryReuseDisabled = true;
     this.codexPreviousResponseIds.clear();
+    this.codexConsumedToolResultCallIdsByResponseId.clear();
   }
 
   #getCodexServerHistoryKey(): string | null {
@@ -727,7 +818,13 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
 
         const response = await super.getResponse(effectiveRequest);
-        this.#rememberCodexResponseId(getResponseIdFromResponse(response));
+        const responseId = getResponseIdFromResponse(response);
+        this.#rememberCodexResponseId(responseId);
+        this.#rememberConsumedToolResultCallIds(
+          responseId,
+          effectiveRequest.previousResponseId,
+          effectiveRequest.input,
+        );
         return response;
       } catch (error) {
         const message =
@@ -756,10 +853,13 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       const warmupResponseId = await this.#warmupCodexStream(preparedRequest.warmupRequest);
       const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
 
+      let responseId: string | undefined;
       for await (const event of super.getStreamedResponse(effectiveRequest)) {
-        this.#rememberCodexResponseId(getResponseIdFromStreamEvent(event));
+        responseId = getResponseIdFromStreamEvent(event) ?? responseId;
+        this.#rememberCodexResponseId(responseId);
         yield event;
       }
+      this.#rememberConsumedToolResultCallIds(responseId, effectiveRequest.previousResponseId, effectiveRequest.input);
     } catch (error) {
       const message =
         typeof error === 'string'

@@ -11,21 +11,16 @@ import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordina
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
 import { describeError } from '../../utils/error-helpers.js';
 import type { ContinuingTurnOutcome } from './turn-transition.js';
-import {
-  asRecord,
-  getCallIdFromObject,
-  getMethod,
-  getString,
-  getToolInfoFromInterruption,
-} from '../interruption-info.js';
+import { asRecord, getCallIdFromObject, getMethod, getToolInfoFromInterruption } from '../interruption-info.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
-import { createApprovalRequiredTerminal } from '../conversation/conversation-result-builder.js';
 import type { ContinuationPlanApplier } from './continuation-plan-applier.js';
 import type { ContinuationStreamCycle } from './continuation-stream-cycle.js';
 import type { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import { callIdOf } from '../tool-execution-ledger.js';
 import { ContinuationState, type PreparedContinuation } from './continuation-state.js';
+import { ToolApprovalBatchCoordinator } from '../approval/tool-approval-batch-coordinator.js';
+import { createApprovalRequiredTerminal } from '../conversation/conversation-result-builder.js';
 
 export type ContinuationInit =
   | {
@@ -55,10 +50,24 @@ export interface ContinuationDriverDeps {
   streamCycle: ContinuationStreamCycle;
   recoveryHandler: ContinuationRecoveryHandler;
   toolTracker: SessionToolTracker;
+  batchCoordinator?: ToolApprovalBatchCoordinator;
 }
 
 export class ContinuationDriver {
-  constructor(private readonly deps: ContinuationDriverDeps) {}
+  readonly #batchCoordinator: ToolApprovalBatchCoordinator;
+
+  constructor(private readonly deps: ContinuationDriverDeps) {
+    this.#batchCoordinator =
+      deps.batchCoordinator ??
+      new ToolApprovalBatchCoordinator({
+        approvalFlow: deps.approvalFlow,
+        planApplier: deps.planApplier,
+        shellAutoApproval: deps.shellAutoApproval,
+        logger: deps.logger,
+        sessionId: deps.sessionId,
+        isCurrent: (token) => deps.generationGuard.isCurrent(token),
+      });
+  }
 
   async *drive(
     init: ContinuationInit,
@@ -84,6 +93,9 @@ export class ContinuationDriver {
 
         try {
           const batchDecision = yield* this.#stagePendingParallelApprovals(state, activePolicy);
+          if (batchDecision.kind === 'stale') {
+            return { kind: 'stale' };
+          }
           if (batchDecision.kind === 'approval_required') {
             return { kind: 'approval_required', terminal: batchDecision.terminal };
           }
@@ -178,76 +190,27 @@ export class ContinuationDriver {
     activePolicy: ApprovalDecisionPolicy,
   ): AsyncGenerator<
     ConversationEvent,
-    { kind: 'ready' } | { kind: 'approval_required'; terminal: ConversationTerminal },
+    { kind: 'ready' } | { kind: 'approval_required'; terminal: ConversationTerminal } | { kind: 'stale' },
     void
   > {
-    const getInterruptions = getMethod<[], unknown>(state.currentState, 'getInterruptions');
-    const siblings = getInterruptions?.();
-    if (!Array.isArray(siblings) || siblings.length <= 1) {
-      return { kind: 'ready' };
+    const result = yield* this.#batchCoordinator.stageBatch({
+      state,
+      policy: activePolicy,
+      token: state.token,
+    });
+    if (result.kind === 'stale') {
+      return { kind: 'stale' };
     }
-
-    const runContext = asRecord(asRecord(state.currentState)?._context);
-    const isToolApproved = getMethod<[{ toolName: string; callId: string }], boolean | undefined>(
-      runContext,
-      'isToolApproved',
-    );
-    if (!isToolApproved) {
-      return { kind: 'ready' };
-    }
-
-    for (const interruption of siblings) {
-      const callId = getCallIdFromObject(interruption);
-      const { toolName, argumentsText } = getToolInfoFromInterruption(interruption);
-      if (!callId || isToolApproved({ toolName, callId }) !== undefined) {
-        continue;
-      }
-
-      const llmAdvisory =
-        toolName === 'shell' || toolName === 'bash'
-          ? await this.deps.shellAutoApproval.resolveAdvisoryForInterruption({
-              interruption,
-              siblings,
-            })
-          : undefined;
-      const approvalContext = { toolName, argumentsText, callId, llmAdvisory };
-      const decision = await activePolicy.decide(approvalContext);
-
-      this.deps.approvalFlow.retargetPendingInterruption(interruption);
-      if (decision === 'prompt') {
-        this.deps.planApplier.recordPendingApproval(approvalContext);
-        const interruptionRecord = asRecord(interruption);
-        const agent = asRecord(interruptionRecord?.agent);
-        return {
-          kind: 'approval_required',
-          terminal: createApprovalRequiredTerminal({
-            agentName: getString(agent, 'name') ?? 'Agent',
-            toolName,
-            argumentsText,
-            rawInterruption: interruption,
-            callId,
-            llmAdvisory,
-            usage: state.cumulativeUsage,
-          }),
-        };
-      }
-
-      const answer = decision === 'approve' ? 'y' : 'n';
-      const nextPlan = this.deps.approvalFlow.prepareContinuation(answer, undefined);
-      if (!nextPlan) {
-        throw new Error('Parallel approval batch lost its pending approval context');
-      }
-      yield* this.deps.planApplier.applyNextPlan(nextPlan, state, state.previouslyEmittedIds, decision === 'approve');
-
+    if (result.kind === 'ready') {
+      const pending = this.deps.approvalFlow.getPending?.();
       state.currentCallIds = this.#activeCallIdsForResponseCycle(
-        nextPlan.pendingApprovalContext.state,
-        nextPlan.pendingApprovalContext.interruption,
+        state.currentState,
+        pending?.interruption,
         state.currentCallIds,
         true,
       );
     }
-
-    return { kind: 'ready' };
+    return result;
   }
 
   async *#handleRecovery(

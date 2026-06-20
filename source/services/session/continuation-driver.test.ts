@@ -33,7 +33,6 @@ function createDriver(deps: any) {
     generationGuard: { isCurrent: () => true } as any,
     logger: { debug: () => {}, getCorrelationId: () => undefined, error: () => {}, warn: () => {} } as any,
     sessionId: 'test-session',
-    shellAutoApproval: { shouldAutoApprove: () => false } as any,
     inputPlanner: { recordSuccess: () => {} } as any,
     conversationStore: { getHistory: () => [] } as any,
     approvalFlow: {

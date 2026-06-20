@@ -16,6 +16,8 @@ import {
 import { truncateLogText, sanitizeLogMetadata } from '../../utils/output/log-truncation.js';
 import { ProviderTrafficArtifactStore } from './provider-traffic.js';
 
+const LOG_RETENTION_DAYS = 7;
+
 const LOG_LEVELS = {
   error: 0,
   warn: 1,
@@ -117,7 +119,7 @@ export class LoggingService {
           filename: 'term2-%DATE%.log',
           datePattern: 'YYYY-MM-DD',
           maxSize: '10m',
-          maxFiles: '7d',
+          maxFiles: `${LOG_RETENTION_DAYS}d`,
           format: winston.format.json(),
           level: logLevel,
         });
@@ -264,7 +266,7 @@ export class LoggingService {
   /**
    * Remove provider and evaluator traffic logs older than maxFiles (default 30d)
    */
-  private cleanupProviderTraffic(maxDays = 30): void {
+  private cleanupProviderTraffic(maxDays = LOG_RETENTION_DAYS): void {
     this.cleanupTrafficDir(this.providerTrafficDir, maxDays);
     this.cleanupTrafficDir(this.evaluatorTrafficDir, maxDays);
   }

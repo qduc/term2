@@ -774,6 +774,92 @@ it('auto-approved follow-up continuations keep only the next response cycle call
   expect(cycleCount).toBe(2);
 });
 
+// ── auto-approved continuation without advisory ─────────────────────
+
+it('auto-approved continuation works without advisory', async () => {
+  let cycleCount = 0;
+  const firstRunState = {
+    getInterruptions: () => [{ callId: 'call-first', name: 'shell', arguments: '{}' }],
+  };
+  const secondRunState = {
+    getInterruptions: () => [{ callId: 'call-second', name: 'apply_patch', arguments: '{}' }],
+  };
+  const driver = createDriver({
+    toolTracker: {
+      activeCallIdsForCurrentTurn: () => ['call-old', 'call-first', 'call-second'],
+      export: () => [],
+    } as any,
+    approvalFlow: {
+      prepareContinuation: () => ({
+        pendingApprovalContext: {
+          state: secondRunState,
+          interruption: { callId: 'call-second' },
+          toolCallArgumentsById: new Map(),
+          emittedCommandIds: new Set(),
+          inputMode: 'delta',
+        },
+        removeInterceptor: () => {},
+      }),
+      getPending: () => null,
+    } as any,
+    planApplier: {
+      prepareInit: (init: any) => ({
+        state: firstRunState,
+        interruption: { callId: 'call-first' },
+        toolCallArgumentsById: new Map(),
+        previouslyEmittedCommandIds: new Set(),
+        removeInterceptor: () => {},
+        source: 'continueRunStream',
+        token: init.generation,
+        inputMode: 'delta',
+      }),
+      applyInitialSetup: async function* () {},
+      applyNextPlan: async function* (_nextPlan: any, state: any) {
+        state.currentState = secondRunState;
+        state.currentCallIds = ['call-old', 'call-first', 'call-second'];
+      },
+      recordPendingApproval: () => {},
+    } as any,
+    streamCycle: {
+      async *execute(state: any) {
+        cycleCount++;
+        if (cycleCount === 1) {
+          expect(state.currentCallIds).toEqual(['call-first']);
+          return {
+            kind: 'completed',
+            outcome: {
+              kind: 'auto_approve',
+              callId: 'call-second',
+              argumentsText: '{}',
+            },
+            nextCumulativeMessages: [],
+            nextCumulativeTurnItems: [],
+            mergedEmittedIds: new Set(),
+          };
+        }
+        expect(state.currentCallIds).toEqual(['call-second']);
+        return {
+          kind: 'completed',
+          outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
+          nextCumulativeMessages: [],
+          nextCumulativeTurnItems: [],
+          mergedEmittedIds: new Set(),
+        };
+      },
+    } as any,
+  });
+
+  const { result } = await collectResult(
+    driver.drive(
+      { kind: 'approval_decision', answer: 'y', generation: 1 },
+      new ShellAutoApprovalDecisionPolicy(driver as any),
+    ),
+  );
+
+  expect(result.kind).toBe('response');
+  expect(cycleCount).toBe(2);
+});
+
 // ── multiple auto-approved interruptions ─────────────────────
 
 it('multiple auto-approved interruptions followed by manual approval', async () => {

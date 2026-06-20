@@ -262,8 +262,8 @@ export class ContinuationDriver {
         traceId: this.deps.logger.getCorrelationId(),
         callId: outcome.callId,
         command: outcome.argumentsText,
-        model: outcome.advisory.model,
-        reasoning: outcome.advisory.reasoning,
+        model: outcome.advisory?.model,
+        reasoning: outcome.advisory?.reasoning,
       });
 
       const nextPlan = this.deps.approvalFlow.prepareContinuation('y', undefined);

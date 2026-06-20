@@ -269,11 +269,14 @@ const CommandMessage: FC<Props> = ({
     if (isApprovalRejection) {
       return (
         <Box flexDirection="column">
-          <Text color={COLOR_ERROR}>
-            <Text bold>✖</Text> {displayAction}
+          <Text color={textColor || COLOR_SUCCESS}>
+            <Text color={COLOR_ERROR} bold>
+              ✖
+            </Text>{' '}
+            {displayAction}
             {changeStatsElement}
           </Text>
-          <Text color={COLOR_ERROR}> → DENIED: {denialReason}</Text>
+          <Text color={textColor || COLOR_SUCCESS}> → DENIED: {denialReason}</Text>
         </Box>
       );
     }
@@ -307,12 +310,15 @@ const CommandMessage: FC<Props> = ({
       })();
       return (
         <Box flexDirection="column">
-          <Text color={COLOR_ERROR}>
-            <Text bold>✖</Text> {displayAction}
+          <Text color={textColor || COLOR_SUCCESS}>
+            <Text color={COLOR_ERROR} bold>
+              ✖
+            </Text>{' '}
+            {displayAction}
             {changeStatsElement}
           </Text>
           {matchCountElement}
-          <Text color={COLOR_ERROR}>{truncatedError}</Text>
+          {matchCount === 0 && <Text color={textColor || COLOR_SUCCESS}>{truncatedError}</Text>}
         </Box>
       );
     }

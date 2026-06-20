@@ -147,8 +147,8 @@ else
 
     # 2.5 Run tests and build to ensure health
     echo -e "${BLUE}Running tests and building to ensure health...${NC}"
-    pnpm test
     pnpm run build
+    pnpm test
 
     # 3. Select bump type
     echo "Select release type:"
@@ -263,8 +263,7 @@ if [[ "$COMMIT_DONE" == "true" ]]; then
     echo -e "${YELLOW}Skipping verification (release commit already exists)${NC}"
 else
     # Final verification before commit
-    echo -e "${BLUE}Running final verification tests for v$NEW_VERSION...${NC}"
-    pnpm test
+    echo -e "${BLUE}Building for v$NEW_VERSION...${NC}"
     pnpm run build
 
     # Commit

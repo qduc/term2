@@ -48,7 +48,6 @@
     "lint": "prettier --check .",
     "lint-fix": "prettier --write .",
     "post-build": "cp -r source/prompts dist/",
-    "prepublishOnly": "pnpm run build && pnpm test",
     "release": "./scripts/release.sh",
     "logs": "node tools/log_viewer/src/server.js",
     "eval:auto-approval": "tsc --project tsconfig.build.json && RUN_LIVE_EVAL=1 node dist/scripts/eval-auto-approval/runner.js",

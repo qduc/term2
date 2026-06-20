@@ -217,40 +217,54 @@ it.sequential('cancelHandoff clears state and reports cancellation', async () =>
   });
 });
 
-it.sequential('submitHandoffInput in selecting_model updates model and provider settings before sending', async () => {
-  const { deps, getSnapshot, renderer } = await renderHarness();
+it.sequential(
+  'submitHandoffInput in selecting_model updates model and provider settings before transitioning to selecting_effort',
+  async () => {
+    const { deps, getSnapshot, renderer } = await renderHarness();
 
-  await act(async () => {
-    getSnapshot().hook.startHandoff('Captured text');
-  });
-  await flush();
+    await act(async () => {
+      getSnapshot().hook.startHandoff('Captured text');
+    });
+    await flush();
 
-  await act(async () => {
-    await getSnapshot().hook.submitHandoffInput({ text: 'Implement this' } as any);
-  });
-  await flush();
+    await act(async () => {
+      await getSnapshot().hook.submitHandoffInput({ text: 'Implement this' } as any);
+    });
+    await flush();
 
-  await act(async () => {
-    await getSnapshot().hook.confirmHandoff();
-  });
-  await flush();
+    await act(async () => {
+      await getSnapshot().hook.confirmHandoff();
+    });
+    await flush();
 
-  await act(async () => {
-    await getSnapshot().hook.submitHandoffInput({ text: '/model gpt-4 --provider=anthropic' } as any);
-  });
-  await flush();
+    await act(async () => {
+      await getSnapshot().hook.submitHandoffInput({ text: '/model gpt-4 --provider=anthropic' } as any);
+    });
+    await flush();
 
-  expect(deps.settingsService.set).toHaveBeenNthCalledWith(1, 'agent.model', 'gpt-4');
-  expect(deps.settingsService.set).toHaveBeenNthCalledWith(2, 'agent.provider', 'anthropic');
-  expect(deps.applyRuntimeSetting).toHaveBeenNthCalledWith(1, 'agent.provider', 'anthropic');
-  expect(deps.applyRuntimeSetting).toHaveBeenNthCalledWith(2, 'agent.model', 'gpt-4');
-  expect(deps.setModel).toHaveBeenCalledWith('gpt-4');
-  expect(deps.sendUserMessage).toHaveBeenCalledWith({ text: 'Implement this:\n\nCaptured text' });
+    expect(deps.settingsService.set).toHaveBeenNthCalledWith(1, 'agent.model', 'gpt-4');
+    expect(deps.settingsService.set).toHaveBeenNthCalledWith(2, 'agent.provider', 'anthropic');
+    expect(deps.applyRuntimeSetting).toHaveBeenNthCalledWith(1, 'agent.provider', 'anthropic');
+    expect(deps.applyRuntimeSetting).toHaveBeenNthCalledWith(2, 'agent.model', 'gpt-4');
+    expect(deps.setModel).toHaveBeenCalledWith('gpt-4');
+    expect(getSnapshot().handoffState?.stage).toBe('selecting_effort');
+    expect(getSnapshot().input).toBe('/effort ');
 
-  await act(async () => {
-    renderer.unmount();
-  });
-});
+    // Complete effort selection
+    await act(async () => {
+      await getSnapshot().hook.completeHandoffWithEffort('medium');
+    });
+    await flush();
+
+    expect(deps.settingsService.set).toHaveBeenNthCalledWith(3, 'agent.reasoningEffort', 'medium');
+    expect(deps.applyRuntimeSetting).toHaveBeenNthCalledWith(3, 'agent.reasoningEffort', 'medium');
+    expect(deps.sendUserMessage).toHaveBeenCalledWith({ text: 'Implement this:\n\nCaptured text' });
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  },
+);
 
 it.sequential('submitHandoffInput in selecting_model sends once even after mode returns to text', async () => {
   const { deps, getSnapshot, renderer } = await renderHarness();
@@ -272,6 +286,20 @@ it.sequential('submitHandoffInput in selecting_model sends once even after mode 
 
   await act(async () => {
     await getSnapshot().hook.submitHandoffInput({ text: '/model gpt-4' } as any);
+  });
+  await flush();
+
+  expect(deps.sendUserMessage).toHaveBeenCalledTimes(0);
+  expect(getSnapshot().handoffState?.stage).toBe('selecting_effort');
+
+  // Simulate useTriggerDetection opening settings value completion
+  await act(async () => {
+    getSnapshot().setMode('settings_value_completion');
+  });
+  await flush();
+
+  await act(async () => {
+    getSnapshot().setMode('text');
   });
   await flush();
 
@@ -314,6 +342,19 @@ it.sequential('submitHandoffInput in selecting_model sends the handoff even with
 
   expect(deps.settingsService.set).not.toHaveBeenCalled();
   expect(deps.setModel).not.toHaveBeenCalled();
+  expect(getSnapshot().handoffState?.stage).toBe('selecting_effort');
+
+  // Simulate useTriggerDetection opening settings value completion
+  await act(async () => {
+    getSnapshot().setMode('settings_value_completion');
+  });
+  await flush();
+
+  await act(async () => {
+    getSnapshot().setMode('text');
+  });
+  await flush();
+
   expect(deps.sendUserMessage).toHaveBeenCalledWith({ text: 'Implement this:\n\nCaptured text' });
   expect(deps.sendUserMessage).toHaveBeenCalledTimes(1);
 
@@ -408,7 +449,7 @@ it.sequential('when in plan mode, confirmStandardMode disables plan mode and sen
 });
 
 it.sequential(
-  'when in plan mode, selecting model transitions to confirm_standard_mode instead of sending',
+  'when in plan mode, selecting model transitions to selecting_effort, and then completing effort transitions to confirm_standard_mode',
   async () => {
     const { deps, getSnapshot, renderer } = await renderHarness();
     deps.settingsService.get.mockImplementation((key: string) => {
@@ -433,6 +474,19 @@ it.sequential(
 
     await act(async () => {
       await getSnapshot().hook.submitHandoffInput({ text: '/model gpt-4' } as any);
+    });
+    await flush();
+
+    expect(getSnapshot().handoffState?.stage).toBe('selecting_effort');
+
+    // Simulate useTriggerDetection opening settings value completion
+    await act(async () => {
+      getSnapshot().setMode('settings_value_completion');
+    });
+    await flush();
+
+    await act(async () => {
+      getSnapshot().setMode('text');
     });
     await flush();
 

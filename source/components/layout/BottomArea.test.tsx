@@ -278,3 +278,33 @@ it.sequential(
     });
   },
 );
+
+it.sequential('BottomArea shows select model prompt when handoffState is selecting_model', async () => {
+  const { lastFrame, unmount } = await renderBottomArea({
+    ...baseProps,
+    handoffState: {
+      capturedText: 'some test code',
+      stage: 'selecting_model',
+    },
+  });
+  const output = lastFrame() ?? '';
+  expect(output.includes('Select model for handoff:')).toBe(true);
+  act(() => {
+    unmount();
+  });
+});
+
+it.sequential('BottomArea shows select reasoning effort prompt when handoffState is selecting_effort', async () => {
+  const { lastFrame, unmount } = await renderBottomArea({
+    ...baseProps,
+    handoffState: {
+      capturedText: 'some test code',
+      stage: 'selecting_effort',
+    },
+  });
+  const output = lastFrame() ?? '';
+  expect(output.includes('Select reasoning effort level:')).toBe(true);
+  act(() => {
+    unmount();
+  });
+});

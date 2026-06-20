@@ -237,6 +237,10 @@ const BottomArea: FC<BottomAreaProps> = ({
                     ? 'Answer: '
                     : handoffState?.stage === 'entering_message'
                     ? 'Handoff message (enter to use default message): '
+                    : handoffState?.stage === 'selecting_model'
+                    ? 'Select model for handoff: '
+                    : handoffState?.stage === 'selecting_effort'
+                    ? 'Select reasoning effort level: '
                     : undefined
                 }
                 allowEmptySubmit={handoffState?.stage === 'entering_message' || waitingForAskUserAnswer}

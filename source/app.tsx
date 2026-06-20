@@ -448,6 +448,16 @@ const App: FC<AppProps> = ({
     await pendingGuards.sendGuardedTurn(attachPendingSkill(turn));
   };
 
+  const handleSettingChange = useCallback(
+    (key: string, value: any) => {
+      applyRuntimeSetting(key, value);
+      if (handoff.handoffState?.stage === 'selecting_effort' && key === 'agent.reasoningEffort') {
+        void handoff.completeHandoffWithEffort(value);
+      }
+    },
+    [applyRuntimeSetting, handoff],
+  );
+
   return (
     <ErrorBoundary loggingService={loggingService}>
       <Box flexDirection="column" flexGrow={1}>
@@ -491,7 +501,7 @@ const App: FC<AppProps> = ({
             undoMenuRef={undoMenuRef}
             onUndoSelect={handleUndoSelect}
             providersMenuRef={providersMenuRef}
-            onSettingChange={applyRuntimeSetting}
+            onSettingChange={handleSettingChange}
             onSystemMessage={addSystemMessage}
             handoffState={handoff.handoffState}
             onHandoffConfirm={handoff.confirmHandoff}

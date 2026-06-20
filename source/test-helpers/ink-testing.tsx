@@ -1,4 +1,5 @@
 import React, { act } from 'react';
+import { afterEach } from 'vitest';
 import { render } from 'ink-testing-library';
 import { stripVTControlCharacters } from 'node:util';
 
@@ -19,6 +20,13 @@ export const runTeardowns = async (): Promise<void> => {
     await cb();
   }
 };
+
+// Auto-drain queued teardowns after every test in any file that imports this
+// module. Registered at module load so the hook is in place before the first
+// test runs; vitest ignores `afterEach` calls that happen inside a test body.
+afterEach(async () => {
+  await runTeardowns();
+});
 
 export const toVisibleText = (value: string): string => stripVTControlCharacters(value);
 

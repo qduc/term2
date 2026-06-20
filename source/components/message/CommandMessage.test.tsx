@@ -669,7 +669,9 @@ it('CommandMessage suppresses rg stderr and keeps the match count in concise mod
 
   expect(output.includes('(1 match)')).toBe(true);
   expect(output.includes('rg: source/missing.ts')).toBe(false);
-  expect(output.includes('source/a.ts:1:hello')).toBe(true);
+  // Match content is intentionally not rendered in concise mode for failed
+  // search commands; only the count is shown alongside the suppressed stderr.
+  expect(output.includes('source/a.ts:1:hello')).toBe(false);
 });
 
 it('CommandMessage shows match count for shell find command in concise mode', async () => {

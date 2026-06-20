@@ -3,7 +3,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { it, expect } from 'vitest';
 import React, { useEffect } from 'react';
 import { Box, Text } from 'ink';
-import { renderInAct, rerenderInAct, runTeardowns, toVisibleText } from './ink-testing.js';
+import { renderInAct, rerenderInAct, toVisibleText } from './ink-testing.js';
 
 it('toVisibleText removes terminal styling without changing visible content', () => {
   expect(toVisibleText('\u001B[32m▶ \u001B[1magent.model\u001B[0m')).toBe('▶ agent.model');
@@ -46,6 +46,5 @@ it.sequential('renderInAct registers an act-wrapped teardown when given the test
 });
 
 it.sequential('renderInAct runs the registered teardown after the test', async () => {
-  await runTeardowns();
   expect(cleanupCount).toBe(1);
 });

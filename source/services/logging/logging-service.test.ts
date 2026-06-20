@@ -1,14 +1,13 @@
 import { it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { LoggingService } from './logging-service.js';
 
 // Set NODE_ENV to test for simple file logging
 process.env.NODE_ENV = 'test';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TEST_BASE_DIR = path.join(__dirname, '../../test-logs');
+const TEST_BASE_DIR = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-logging-test-')));
 
 let testCounter = 0;
 

@@ -1,6 +1,6 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { it, expect, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import type { Message } from './use-conversation.js';
@@ -11,11 +11,7 @@ import { createUsageSlashCommand } from '../commands/usage-command.js';
 import { useAppCommands } from './use-app-commands.js';
 import { getLastFinalAssistantText } from '../utils/conversation/message-utils.js';
 import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
-import { renderInAct, runTeardowns } from '../test-helpers/ink-testing.js';
-
-afterEach(async () => {
-  await runTeardowns();
-});
+import { renderInAct } from '../test-helpers/ink-testing.js';
 
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();

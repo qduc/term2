@@ -46,7 +46,7 @@ it.sequential('ApprovalPrompt renders ask_user question and options', async () =
   expect(output.includes('Use the safe default')).toBe(true);
   expect(output.includes('Recommended by the agent')).toBe(true);
   expect(output.includes('Use the faster option')).toBe(true);
-  expect(output.includes('Optimizes for speed')).toBe(true);
+  expect(output.includes('Optimizes for speed')).toBe(false);
   expect(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL)).toBe(true);
   expect(output.includes(ASK_USER_DECLINE_LABEL)).toBe(true);
   expect(output.includes('Allow this action?')).toBe(false);
@@ -209,9 +209,9 @@ it.sequential('ApprovalPrompt renders multi-select options with checkboxes', asy
   expect(output.includes('[ ] git')).toBe(true);
   expect(output.includes('Version control')).toBe(true);
   expect(output.includes('[ ] npm')).toBe(true);
-  expect(output.includes('JavaScript package manager')).toBe(true);
+  expect(output.includes('JavaScript package manager')).toBe(false);
   expect(output.includes('[ ] cargo')).toBe(true);
-  expect(output.includes('Rust package manager')).toBe(true);
+  expect(output.includes('Rust package manager')).toBe(false);
   expect(output.includes('Submit answer')).toBe(true);
 });
 
@@ -447,3 +447,23 @@ it.sequential(
     expect(approved).toBe(undefined);
   },
 );
+
+it.sequential('ApprovalPrompt dynamically updates description on navigation', async () => {
+  const { lastFrame, stdin } = await renderInAct(
+    <ApprovalPrompt approval={baseApproval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
+  );
+
+  // Initially, option 0 is highlighted (safe default description)
+  expect((lastFrame() ?? '').includes('Recommended by the agent')).toBe(true);
+  expect((lastFrame() ?? '').includes('Optimizes for speed')).toBe(false);
+
+  // Down arrow to option 1 (faster option description)
+  await writeInput(stdin, '\u001b[B');
+  expect((lastFrame() ?? '').includes('Recommended by the agent')).toBe(false);
+  expect((lastFrame() ?? '').includes('Optimizes for speed')).toBe(true);
+
+  // Down arrow to Custom Answer (default custom description)
+  await writeInput(stdin, '\u001b[B');
+  expect((lastFrame() ?? '').includes('Optimizes for speed')).toBe(false);
+  expect((lastFrame() ?? '').includes('Type a custom write-in response.')).toBe(true);
+});

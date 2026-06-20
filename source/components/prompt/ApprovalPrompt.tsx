@@ -370,6 +370,49 @@ const ApprovalPrompt: FC<Props> = ({
     const questionText = currentQuestionItem?.question || 'Unknown question';
     const totalQuestions = questionsList.length;
 
+    // Get the highlighted option and its description
+    const highlightedMenuItem = askUserMenuItems[selectedIndex];
+    const isOptionHighlighted = selectedIndex < askUserOptions.length;
+    const highlightedOption = isOptionHighlighted ? askUserOptions[selectedIndex] : undefined;
+
+    let highlightedDescription = highlightedOption?.description || '';
+
+    // Provide default descriptions for built-in actions
+    if (!highlightedDescription) {
+      if (highlightedMenuItem === ASK_USER_CUSTOM_ANSWER_LABEL) {
+        highlightedDescription = 'Type a custom write-in response.';
+      } else if (highlightedMenuItem === ASK_USER_DECLINE_LABEL) {
+        highlightedDescription = 'Decline to answer and skip this question.';
+      } else if (highlightedMenuItem === ASK_USER_SUBMIT_LABEL) {
+        highlightedDescription = 'Submit the selected options.';
+      } else if (highlightedMenuItem === ASK_USER_PREV_QUESTION_LABEL) {
+        highlightedDescription = 'Navigate to the previous question.';
+      } else if (highlightedMenuItem === ASK_USER_NEXT_QUESTION_LABEL) {
+        highlightedDescription = 'Navigate to the next question.';
+      }
+    }
+
+    // Calculate dynamic left column width
+    const leftColWidth = Math.max(
+      ...askUserMenuItems.map((item, idx) => {
+        const isOption = idx < askUserOptions.length;
+        const isRecommended = idx === 0 && isOption;
+        const isNavigation = item === ASK_USER_PREV_QUESTION_LABEL || item === ASK_USER_NEXT_QUESTION_LABEL;
+
+        let label = item;
+        if (item === ASK_USER_CUSTOM_ANSWER_LABEL || item === ASK_USER_DECLINE_LABEL || isNavigation) {
+          // leave as is
+        } else if (isMultiSelect && isOption) {
+          const checkbox = selectedIndices.has(idx) ? '[x] ' : '[ ] ';
+          label = checkbox + item + (isRecommended ? ' (recommended)' : '');
+        } else {
+          label = item + (isRecommended ? ' (recommended)' : '');
+        }
+        return label.length + 4; // Add padding/arrow prefix
+      }),
+      40, // minimum width
+    );
+
     content = (
       <Box flexDirection="column">
         <Box borderStyle="round" borderColor="yellow" paddingX={1} paddingY={0}>
@@ -383,47 +426,74 @@ const ApprovalPrompt: FC<Props> = ({
             <Text color="cyan">❯ Type your custom answer in the prompt below...</Text>
           </Box>
         ) : (
-          <Box flexDirection="column" marginTop={1}>
-            {askUserMenuItems.map((item, idx) => {
-              const isOption = idx < askUserOptions.length;
-              const isRecommended = idx === 0 && isOption;
-              const isNavigation = item === ASK_USER_PREV_QUESTION_LABEL || item === ASK_USER_NEXT_QUESTION_LABEL;
-              const option = isOption ? askUserOptions[idx] : undefined;
+          <Box flexDirection="row" width="100%" marginTop={1}>
+            {/* Left Column: Menu Items */}
+            <Box flexDirection="column" width={leftColWidth}>
+              {askUserMenuItems.map((item, idx) => {
+                const isOption = idx < askUserOptions.length;
+                const isRecommended = idx === 0 && isOption;
+                const isNavigation = item === ASK_USER_PREV_QUESTION_LABEL || item === ASK_USER_NEXT_QUESTION_LABEL;
 
-              let label = item;
-              if (item === ASK_USER_CUSTOM_ANSWER_LABEL || item === ASK_USER_DECLINE_LABEL) {
-                // leave as is
-              } else if (isNavigation) {
-                // leave as is
-              } else if (isMultiSelect && isOption) {
-                const checkbox = selectedIndices.has(idx) ? '[x] ' : '[ ] ';
-                label = checkbox + item + (isRecommended ? ' (recommended)' : '');
-              } else {
-                label = item + (isRecommended ? ' (recommended)' : '');
-              }
+                let label = item;
+                if (item === ASK_USER_CUSTOM_ANSWER_LABEL || item === ASK_USER_DECLINE_LABEL) {
+                  // leave as is
+                } else if (isNavigation) {
+                  // leave as is
+                } else if (isMultiSelect && isOption) {
+                  const checkbox = selectedIndices.has(idx) ? '[x] ' : '[ ] ';
+                  label = checkbox + item + (isRecommended ? ' (recommended)' : '');
+                } else {
+                  label = item + (isRecommended ? ' (recommended)' : '');
+                }
 
-              const color = isNavigation
-                ? selectedIndex === idx
-                  ? 'cyan'
-                  : undefined
-                : selectedIndex === idx
-                ? item === ASK_USER_DECLINE_LABEL
-                  ? 'red'
-                  : item === ASK_USER_CUSTOM_ANSWER_LABEL
-                  ? 'cyan'
-                  : 'green'
-                : isRecommended
-                ? 'yellow'
-                : undefined;
+                const color = isNavigation
+                  ? selectedIndex === idx
+                    ? 'cyan'
+                    : undefined
+                  : selectedIndex === idx
+                  ? item === ASK_USER_DECLINE_LABEL
+                    ? 'red'
+                    : item === ASK_USER_CUSTOM_ANSWER_LABEL
+                    ? 'cyan'
+                    : 'green'
+                  : isRecommended
+                  ? 'yellow'
+                  : undefined;
 
-              return (
-                <Text key={item} color={color}>
-                  {selectedIndex === idx ? '❯ ' : '  '}
-                  {label}
-                  {option?.description ? <Text color="#64748b"> - {option.description}</Text> : null}
-                </Text>
-              );
-            })}
+                return (
+                  <Text key={item} color={color}>
+                    {selectedIndex === idx ? '❯ ' : '  '}
+                    {label}
+                  </Text>
+                );
+              })}
+            </Box>
+
+            {/* Right Column: Description of Highlighted Option */}
+            <Box
+              flexDirection="column"
+              flexGrow={1}
+              paddingLeft={2}
+              borderStyle="single"
+              borderTop={false}
+              borderBottom={false}
+              borderRight={false}
+              borderLeft={true}
+              borderColor="#334155"
+            >
+              <Text bold color="yellow">
+                HELP & DETAILS
+              </Text>
+              <Box marginTop={1}>
+                {highlightedDescription ? (
+                  <Text color="white">{highlightedDescription}</Text>
+                ) : (
+                  <Text color="#64748b" italic>
+                    No description available.
+                  </Text>
+                )}
+              </Box>
+            </Box>
           </Box>
         )}
       </Box>

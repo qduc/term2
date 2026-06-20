@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { conversationUIReducer, createInitialUIState } from './conversation-ui-reducer.js';
+import { conversationUIReducer, createInitialUIState, getConversationUIFlags } from './conversation-ui-reducer.js';
 import type { ApprovalDescriptor } from '../contracts/conversation.js';
 
 describe('conversationUIReducer - multi-select bug fix', () => {
@@ -32,9 +32,10 @@ describe('conversationUIReducer - multi-select bug fix', () => {
       approval,
     });
 
-    expect(state.waitingForApproval).toBe(true);
-    expect(state.currentAskUserQuestionIndex).toBe(0);
-    expect(state.askUserAnswers).toEqual([]);
+    let flags = getConversationUIFlags(state);
+    expect(flags.waitingForApproval).toBe(true);
+    expect(flags.currentAskUserQuestionIndex).toBe(0);
+    expect(flags.askUserAnswers).toEqual([]);
 
     // Answer first question (single-select)
     state = conversationUIReducer(state, {
@@ -42,7 +43,8 @@ describe('conversationUIReducer - multi-select bug fix', () => {
       answer: 'Option A',
     });
 
-    expect(state.askUserAnswers).toEqual(['Option A']);
+    flags = getConversationUIFlags(state);
+    expect(flags.askUserAnswers).toEqual(['Option A']);
 
     // Advance to second question
     state = conversationUIReducer(state, {
@@ -50,7 +52,8 @@ describe('conversationUIReducer - multi-select bug fix', () => {
       nextIndex: 1,
     });
 
-    expect(state.currentAskUserQuestionIndex).toBe(1);
+    flags = getConversationUIFlags(state);
+    expect(flags.currentAskUserQuestionIndex).toBe(1);
 
     // Answer second question (multi-select)
     // The reducer should store the array as-is, not as a JSON string
@@ -62,10 +65,11 @@ describe('conversationUIReducer - multi-select bug fix', () => {
     // BUG FIX VERIFICATION:
     // Before the fix, the answer would be stored as '["Tool X","Tool Z"]' (string)
     // After the fix, it should be stored as ['Tool X', 'Tool Z'] (array)
-    expect(state.askUserAnswers).toHaveLength(2);
-    expect(state.askUserAnswers[0]).toBe('Option A');
-    expect(Array.isArray(state.askUserAnswers[1])).toBe(true);
-    expect(state.askUserAnswers[1]).toEqual(['Tool X', 'Tool Z']);
+    flags = getConversationUIFlags(state);
+    expect(flags.askUserAnswers).toHaveLength(2);
+    expect(flags.askUserAnswers[0]).toBe('Option A');
+    expect(Array.isArray(flags.askUserAnswers[1])).toBe(true);
+    expect(flags.askUserAnswers[1]).toEqual(['Tool X', 'Tool Z']);
   });
 
   it('should handle three questions with mixed select types: single -> multi -> single', () => {
@@ -112,8 +116,9 @@ describe('conversationUIReducer - multi-select bug fix', () => {
       nextIndex: 1,
     });
 
-    expect(state.askUserAnswers).toEqual(['B']);
-    expect(state.currentAskUserQuestionIndex).toBe(1);
+    let flags = getConversationUIFlags(state);
+    expect(flags.askUserAnswers).toEqual(['B']);
+    expect(flags.currentAskUserQuestionIndex).toBe(1);
 
     // Answer Q2: multi-select
     state = conversationUIReducer(state, {
@@ -125,8 +130,9 @@ describe('conversationUIReducer - multi-select bug fix', () => {
       nextIndex: 2,
     });
 
-    expect(state.askUserAnswers).toEqual(['B', ['X', 'Z']]);
-    expect(state.currentAskUserQuestionIndex).toBe(2);
+    flags = getConversationUIFlags(state);
+    expect(flags.askUserAnswers).toEqual(['B', ['X', 'Z']]);
+    expect(flags.currentAskUserQuestionIndex).toBe(2);
 
     // Answer Q3: single-select
     state = conversationUIReducer(state, {
@@ -134,7 +140,8 @@ describe('conversationUIReducer - multi-select bug fix', () => {
       answer: 'Q',
     });
 
-    expect(state.askUserAnswers).toEqual(['B', ['X', 'Z'], 'Q']);
+    flags = getConversationUIFlags(state);
+    expect(flags.askUserAnswers).toEqual(['B', ['X', 'Z'], 'Q']);
   });
 
   it('should correctly identify which question is current based on askUserAnswers length', () => {
@@ -166,7 +173,8 @@ describe('conversationUIReducer - multi-select bug fix', () => {
     });
 
     // When askUserAnswers.length is 0, we're on question 0 (single-select)
-    expect(state.askUserAnswers.length).toBe(0);
+    let flags = getConversationUIFlags(state);
+    expect(flags.askUserAnswers.length).toBe(0);
 
     // Answer Q1
     state = conversationUIReducer(state, {
@@ -179,7 +187,8 @@ describe('conversationUIReducer - multi-select bug fix', () => {
     });
 
     // When askUserAnswers.length is 1, we're on question 1 (multi-select)
-    expect(state.askUserAnswers.length).toBe(1);
-    expect(state.currentAskUserQuestionIndex).toBe(1);
+    flags = getConversationUIFlags(state);
+    expect(flags.askUserAnswers.length).toBe(1);
+    expect(flags.currentAskUserQuestionIndex).toBe(1);
   });
 });

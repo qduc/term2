@@ -20,19 +20,35 @@ import type { PendingApproval } from '../contracts/conversation.js';
 // State shape
 // ---------------------------------------------------------------------------
 
-export interface ConversationUIState {
-  // Processing lifecycle
-  isProcessing: boolean;
-  thinkingStartedAt: number | null;
-  toolCallStreamingInfo: { toolName?: string; argumentCharCount: number } | null;
+export type AskUserAnswer = string | string[];
 
-  // Approval flow
+type ApprovalInteraction =
+  | { kind: 'prompt'; askUserAnswers?: AskUserAnswer[]; currentAskUserQuestionIndex?: number }
+  | { kind: 'rejection_reason'; askUserAnswers?: AskUserAnswer[]; currentAskUserQuestionIndex?: number }
+  | { kind: 'ask_user_answer'; askUserAnswers: AskUserAnswer[]; currentAskUserQuestionIndex: number };
+
+export type TurnPhase =
+  | { kind: 'idle' }
+  | { kind: 'processing' }
+  | { kind: 'processing_awaiting_approval'; approval: PendingApproval; interaction: ApprovalInteraction }
+  | { kind: 'awaiting_approval'; approval: PendingApproval; interaction: ApprovalInteraction };
+
+export interface ConversationUIFlags {
+  isProcessing: boolean;
   waitingForApproval: boolean;
   waitingForRejectionReason: boolean;
   waitingForAskUserAnswer: boolean;
-  askUserAnswers: (string | string[])[];
+  askUserAnswers: AskUserAnswer[];
   currentAskUserQuestionIndex: number;
   pendingApproval: PendingApproval | null;
+}
+
+export interface ConversationUIState {
+  turnPhase: TurnPhase;
+
+  // Streaming indicators
+  thinkingStartedAt: number | null;
+  toolCallStreamingInfo: { toolName?: string; argumentCharCount: number } | null;
 
   // Usage (included here so reset_all can clear them atomically)
   lastUsage: NormalizedUsage | null;
@@ -65,7 +81,7 @@ export type ConversationUIAction =
   /** Clear the ask_user waiting state without resolving approval. */
   | { type: 'ask_user/clear_waiting' }
   /** User submitted an answer to the current ask_user question. */
-  | { type: 'ask_user/answer_submitted'; answer: string | string[] }
+  | { type: 'ask_user/answer_submitted'; answer: AskUserAnswer }
   /** Advance to the next ask_user question. */
   | { type: 'ask_user/advance_to_next'; nextIndex: number }
   /** Go back to the previous ask_user question. */
@@ -99,35 +115,94 @@ export type ConversationUIAction =
 
 export function createInitialUIState(initialUsage: NormalizedUsage | null): ConversationUIState {
   return {
-    isProcessing: false,
+    turnPhase: { kind: 'idle' },
     thinkingStartedAt: null,
     toolCallStreamingInfo: null,
-    waitingForApproval: false,
-    waitingForRejectionReason: false,
-    waitingForAskUserAnswer: false,
-    askUserAnswers: [],
-    currentAskUserQuestionIndex: 0,
-    pendingApproval: null,
     lastUsage: initialUsage,
     lastCodexRateLimit: null,
   };
 }
 
-// ---------------------------------------------------------------------------
-// Default sub-states for compound resets
-// ---------------------------------------------------------------------------
+function isApprovalPhase(
+  phase: TurnPhase,
+): phase is Extract<TurnPhase, { kind: 'processing_awaiting_approval' | 'awaiting_approval' }> {
+  return phase.kind === 'processing_awaiting_approval' || phase.kind === 'awaiting_approval';
+}
 
-const TRANSIENT_DEFAULTS: Omit<ConversationUIState, 'lastUsage' | 'lastCodexRateLimit'> = {
-  isProcessing: false,
-  thinkingStartedAt: null,
-  toolCallStreamingInfo: null,
-  waitingForApproval: false,
-  waitingForRejectionReason: false,
-  waitingForAskUserAnswer: false,
-  askUserAnswers: [],
-  currentAskUserQuestionIndex: 0,
-  pendingApproval: null,
-};
+function isProcessingPhase(phase: TurnPhase): boolean {
+  return phase.kind === 'processing' || phase.kind === 'processing_awaiting_approval';
+}
+
+function getAskUserState(interaction: ApprovalInteraction): {
+  askUserAnswers: AskUserAnswer[];
+  currentAskUserQuestionIndex: number;
+} {
+  if (interaction.kind === 'ask_user_answer') {
+    return {
+      askUserAnswers: interaction.askUserAnswers,
+      currentAskUserQuestionIndex: interaction.currentAskUserQuestionIndex,
+    };
+  }
+
+  return {
+    askUserAnswers: interaction.askUserAnswers ?? [],
+    currentAskUserQuestionIndex: interaction.currentAskUserQuestionIndex ?? 0,
+  };
+}
+
+function toPromptInteraction(interaction: ApprovalInteraction): ApprovalInteraction {
+  const { askUserAnswers, currentAskUserQuestionIndex } = getAskUserState(interaction);
+  return { kind: 'prompt', askUserAnswers, currentAskUserQuestionIndex };
+}
+
+function withInteraction(phase: TurnPhase, interaction: ApprovalInteraction): TurnPhase {
+  if (!isApprovalPhase(phase)) {
+    return phase;
+  }
+
+  return { ...phase, interaction };
+}
+
+function createApprovalInteraction(approval: PendingApproval): ApprovalInteraction {
+  if (approval.toolName === 'ask_user') {
+    return { kind: 'prompt', askUserAnswers: [], currentAskUserQuestionIndex: 0 };
+  }
+
+  return { kind: 'prompt' };
+}
+
+function createApprovalPhase(current: TurnPhase, approval: PendingApproval): TurnPhase {
+  const interaction = createApprovalInteraction(approval);
+  return isProcessingPhase(current)
+    ? { kind: 'processing_awaiting_approval', approval, interaction }
+    : { kind: 'awaiting_approval', approval, interaction };
+}
+
+export function getConversationUIFlags(state: ConversationUIState): ConversationUIFlags {
+  const phase = state.turnPhase;
+  if (!isApprovalPhase(phase)) {
+    return {
+      isProcessing: phase.kind === 'processing',
+      waitingForApproval: false,
+      waitingForRejectionReason: false,
+      waitingForAskUserAnswer: false,
+      askUserAnswers: [],
+      currentAskUserQuestionIndex: 0,
+      pendingApproval: null,
+    };
+  }
+
+  const askUserState = getAskUserState(phase.interaction);
+  return {
+    isProcessing: phase.kind === 'processing_awaiting_approval',
+    waitingForApproval: true,
+    waitingForRejectionReason: phase.interaction.kind === 'rejection_reason',
+    waitingForAskUserAnswer: phase.interaction.kind === 'ask_user_answer',
+    askUserAnswers: askUserState.askUserAnswers,
+    currentAskUserQuestionIndex: askUserState.currentAskUserQuestionIndex,
+    pendingApproval: phase.approval,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Reducer
@@ -137,19 +212,35 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
   switch (action.type) {
     // --- Turn lifecycle ---
     case 'turn/started':
+      if (state.turnPhase.kind !== 'idle') {
+        return state;
+      }
+
       return {
         ...state,
-        isProcessing: true,
+        turnPhase: { kind: 'processing' },
         thinkingStartedAt: null,
         toolCallStreamingInfo: null,
       };
 
-    case 'turn/completed':
+    case 'turn/completed': {
+      const nextPhase =
+        state.turnPhase.kind === 'processing'
+          ? { kind: 'idle' as const }
+          : state.turnPhase.kind === 'processing_awaiting_approval'
+          ? {
+              kind: 'awaiting_approval' as const,
+              approval: state.turnPhase.approval,
+              interaction: state.turnPhase.interaction,
+            }
+          : state.turnPhase;
+
       return {
         ...state,
-        isProcessing: false,
+        turnPhase: nextPhase,
         thinkingStartedAt: null,
       };
+    }
 
     // --- Streaming indicators ---
     case 'streaming/thinking_started':
@@ -169,68 +260,123 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
     case 'approval/requested':
       return {
         ...state,
-        waitingForApproval: true,
-        pendingApproval: action.approval,
-        waitingForAskUserAnswer: false,
-        // If this is a new ask_user approval, reset ask_user state
-        ...(action.approval.toolName === 'ask_user' ? { askUserAnswers: [], currentAskUserQuestionIndex: 0 } : {}),
+        turnPhase: createApprovalPhase(state.turnPhase, action.approval),
       };
 
     case 'approval/resolved':
       return {
         ...state,
-        waitingForApproval: false,
-        pendingApproval: null,
-        waitingForAskUserAnswer: false,
-        askUserAnswers: [],
-        currentAskUserQuestionIndex: 0,
+        turnPhase: isProcessingPhase(state.turnPhase) ? { kind: 'processing' } : { kind: 'idle' },
       };
 
-    case 'ask_user/set_waiting':
-      return { ...state, waitingForAskUserAnswer: true };
+    case 'ask_user/set_waiting': {
+      if (!isApprovalPhase(state.turnPhase) || state.turnPhase.approval.toolName !== 'ask_user') {
+        return state;
+      }
+
+      const askUserState = getAskUserState(state.turnPhase.interaction);
+      return {
+        ...state,
+        turnPhase: withInteraction(state.turnPhase, { kind: 'ask_user_answer', ...askUserState }),
+      };
+    }
 
     case 'ask_user/clear_waiting':
-      return { ...state, waitingForAskUserAnswer: false };
+      if (!isApprovalPhase(state.turnPhase) || state.turnPhase.interaction.kind !== 'ask_user_answer') {
+        return state;
+      }
 
-    case 'ask_user/answer_submitted':
       return {
         ...state,
-        askUserAnswers: [...state.askUserAnswers, action.answer],
+        turnPhase: withInteraction(state.turnPhase, toPromptInteraction(state.turnPhase.interaction)),
       };
 
-    case 'ask_user/advance_to_next':
-      return {
-        ...state,
-        currentAskUserQuestionIndex: action.nextIndex,
-        waitingForAskUserAnswer: false,
-      };
+    case 'ask_user/answer_submitted': {
+      if (!isApprovalPhase(state.turnPhase) || state.turnPhase.approval.toolName !== 'ask_user') {
+        return state;
+      }
 
-    case 'ask_user/go_back':
+      const askUserState = getAskUserState(state.turnPhase.interaction);
       return {
         ...state,
-        currentAskUserQuestionIndex: Math.max(0, state.currentAskUserQuestionIndex - 1),
-        askUserAnswers: state.askUserAnswers.slice(0, -1),
-        waitingForAskUserAnswer: false,
+        turnPhase: withInteraction(state.turnPhase, {
+          kind: 'ask_user_answer',
+          askUserAnswers: [...askUserState.askUserAnswers, action.answer],
+          currentAskUserQuestionIndex: askUserState.currentAskUserQuestionIndex,
+        }),
       };
+    }
+
+    case 'ask_user/advance_to_next': {
+      if (!isApprovalPhase(state.turnPhase) || state.turnPhase.approval.toolName !== 'ask_user') {
+        return state;
+      }
+
+      const askUserState = getAskUserState(state.turnPhase.interaction);
+      return {
+        ...state,
+        turnPhase: withInteraction(state.turnPhase, {
+          kind: 'prompt',
+          askUserAnswers: askUserState.askUserAnswers,
+          currentAskUserQuestionIndex: action.nextIndex,
+        }),
+      };
+    }
+
+    case 'ask_user/go_back': {
+      if (!isApprovalPhase(state.turnPhase) || state.turnPhase.approval.toolName !== 'ask_user') {
+        return state;
+      }
+
+      const askUserState = getAskUserState(state.turnPhase.interaction);
+      return {
+        ...state,
+        turnPhase: withInteraction(state.turnPhase, {
+          kind: 'prompt',
+          currentAskUserQuestionIndex: Math.max(0, askUserState.currentAskUserQuestionIndex - 1),
+          askUserAnswers: askUserState.askUserAnswers.slice(0, -1),
+        }),
+      };
+    }
 
     case 'rejection/set_waiting':
-      return { ...state, waitingForRejectionReason: true };
+      if (!isApprovalPhase(state.turnPhase)) {
+        return state;
+      }
+
+      return {
+        ...state,
+        turnPhase: withInteraction(state.turnPhase, {
+          ...getAskUserState(state.turnPhase.interaction),
+          kind: 'rejection_reason',
+        }),
+      };
 
     case 'rejection/cleared':
-      return { ...state, waitingForRejectionReason: false };
+      if (!isApprovalPhase(state.turnPhase) || state.turnPhase.interaction.kind !== 'rejection_reason') {
+        return state;
+      }
+
+      return {
+        ...state,
+        turnPhase: withInteraction(state.turnPhase, toPromptInteraction(state.turnPhase.interaction)),
+      };
 
     // --- Max turns ---
     case 'max_turns/approved':
       return {
         ...state,
-        ...TRANSIENT_DEFAULTS,
-        isProcessing: true,
+        turnPhase: { kind: 'processing' },
+        thinkingStartedAt: null,
+        toolCallStreamingInfo: null,
       };
 
     case 'max_turns/declined':
       return {
         ...state,
-        ...TRANSIENT_DEFAULTS,
+        turnPhase: { kind: 'idle' },
+        thinkingStartedAt: null,
+        toolCallStreamingInfo: null,
       };
 
     // --- Usage ---
@@ -248,7 +394,12 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
 
     // --- Compound resets ---
     case 'reset_transient':
-      return { ...state, ...TRANSIENT_DEFAULTS };
+      return {
+        ...state,
+        turnPhase: { kind: 'idle' },
+        thinkingStartedAt: null,
+        toolCallStreamingInfo: null,
+      };
 
     case 'reset_all':
       return createInitialUIState(null);

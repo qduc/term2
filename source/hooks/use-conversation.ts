@@ -29,7 +29,7 @@ import {
   normalizeUserTurn,
   type UserTurn,
 } from '../types/user-turn.js';
-import { conversationUIReducer, createInitialUIState } from './conversation-ui-reducer.js';
+import { conversationUIReducer, createInitialUIState, getConversationUIFlags } from './conversation-ui-reducer.js';
 
 export type {
   BotMessage,
@@ -119,20 +119,16 @@ export const useConversation = ({
   const [uiState, dispatch] = useReducer(conversationUIReducer, initialMessages, (init) =>
     createInitialUIState(getInitialLastUsage(init)),
   );
-  // Destructure for convenient access — keeps downstream code unchanged.
+  const { thinkingStartedAt, toolCallStreamingInfo, lastUsage, lastCodexRateLimit } = uiState;
   const {
     isProcessing,
-    thinkingStartedAt,
-    toolCallStreamingInfo,
     waitingForApproval,
     waitingForRejectionReason,
     waitingForAskUserAnswer,
     askUserAnswers,
     currentAskUserQuestionIndex,
     pendingApproval,
-    lastUsage,
-    lastCodexRateLimit,
-  } = uiState;
+  } = getConversationUIFlags(uiState);
   const approvedContextRef = useRef<ApprovedToolContext | null>(null);
 
   // Use a ref to keep askUserAnswers current for the handleApprovalDecision callback

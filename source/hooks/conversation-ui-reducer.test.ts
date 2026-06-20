@@ -1,6 +1,11 @@
 import { it, expect } from 'vitest';
 import type { PendingApproval } from '../contracts/conversation.js';
-import { conversationUIReducer, createInitialUIState, type ConversationUIState } from './conversation-ui-reducer.js';
+import {
+  conversationUIReducer,
+  createInitialUIState,
+  getConversationUIFlags,
+  type ConversationUIState,
+} from './conversation-ui-reducer.js';
 
 const approvalFixture: PendingApproval = {
   agentName: 'System',
@@ -22,12 +27,13 @@ const askUserApprovalFixture: PendingApproval = {
 
 it('createInitialUIState returns all defaults', () => {
   const state = createInitialUIState(null);
-  expect(state.isProcessing).toBe(false);
+  const flags = getConversationUIFlags(state);
+  expect(flags.isProcessing).toBe(false);
   expect(state.thinkingStartedAt).toBe(null);
   expect(state.toolCallStreamingInfo).toBe(null);
-  expect(state.waitingForApproval).toBe(false);
-  expect(state.pendingApproval).toBe(null);
-  expect(state.askUserAnswers.length).toBe(0);
+  expect(flags.waitingForApproval).toBe(false);
+  expect(flags.pendingApproval).toBe(null);
+  expect(flags.askUserAnswers.length).toBe(0);
   expect(state.lastUsage).toBe(null);
   expect(state.lastCodexRateLimit).toBe(null);
 });
@@ -45,25 +51,51 @@ it('createInitialUIState preserves initial usage', () => {
 it('turn/started sets processing and clears indicators', () => {
   const prev: ConversationUIState = {
     ...createInitialUIState(null),
-    isProcessing: false,
     thinkingStartedAt: 1000,
     toolCallStreamingInfo: { toolName: 'shell', argumentCharCount: 5 },
   };
   const next = conversationUIReducer(prev, { type: 'turn/started' });
-  expect(next.isProcessing).toBe(true);
+  expect(getConversationUIFlags(next).isProcessing).toBe(true);
   expect(next.thinkingStartedAt).toBe(null);
   expect(next.toolCallStreamingInfo).toBe(null);
 });
 
 it('turn/completed clears processing and thinking', () => {
-  const prev: ConversationUIState = {
-    ...createInitialUIState(null),
-    isProcessing: true,
+  const prev = {
+    ...conversationUIReducer(createInitialUIState(null), { type: 'turn/started' }),
     thinkingStartedAt: 2000,
   };
   const next = conversationUIReducer(prev, { type: 'turn/completed' });
-  expect(next.isProcessing).toBe(false);
+  expect(getConversationUIFlags(next).isProcessing).toBe(false);
   expect(next.thinkingStartedAt).toBe(null);
+});
+
+it('turn/completed preserves approval requested while processing', () => {
+  let state = createInitialUIState(null);
+  state = conversationUIReducer(state, { type: 'turn/started' });
+  state = conversationUIReducer(state, { type: 'approval/requested', approval: approvalFixture });
+
+  let flags = getConversationUIFlags(state);
+  expect(flags.isProcessing).toBe(true);
+  expect(flags.waitingForApproval).toBe(true);
+
+  state = conversationUIReducer(state, { type: 'turn/completed' });
+
+  flags = getConversationUIFlags(state);
+  expect(flags.isProcessing).toBe(false);
+  expect(flags.waitingForApproval).toBe(true);
+  expect(flags.pendingApproval).toEqual(approvalFixture);
+});
+
+it('turn/started is ignored while already processing', () => {
+  let state = createInitialUIState(null);
+  state = conversationUIReducer(state, { type: 'turn/started' });
+  state = conversationUIReducer(state, { type: 'streaming/thinking_started', timestamp: 1000 });
+  state = conversationUIReducer(state, { type: 'turn/started' });
+
+  const flags = getConversationUIFlags(state);
+  expect(flags.isProcessing).toBe(true);
+  expect(state.thinkingStartedAt).toBe(1000);
 });
 
 // ---------------------------------------------------------------------------
@@ -116,41 +148,60 @@ it('approval/requested sets approval state', () => {
     type: 'approval/requested',
     approval: approvalFixture,
   });
-  expect(next.waitingForApproval).toBe(true);
-  expect(next.pendingApproval).toEqual(approvalFixture);
-  expect(next.waitingForAskUserAnswer).toBe(false);
+  const flags = getConversationUIFlags(next);
+  expect(flags.waitingForApproval).toBe(true);
+  expect(flags.pendingApproval).toEqual(approvalFixture);
+  expect(flags.waitingForAskUserAnswer).toBe(false);
 });
 
 it('approval/requested for ask_user resets ask_user state', () => {
-  const prev: ConversationUIState = {
-    ...createInitialUIState(null),
-    askUserAnswers: ['old'],
-    currentAskUserQuestionIndex: 5,
-    waitingForAskUserAnswer: true,
-  };
+  let prev = conversationUIReducer(createInitialUIState(null), {
+    type: 'approval/requested',
+    approval: askUserApprovalFixture,
+  });
+  prev = conversationUIReducer(prev, { type: 'ask_user/answer_submitted', answer: 'old' });
+  prev = conversationUIReducer(prev, { type: 'ask_user/advance_to_next', nextIndex: 5 });
+  prev = conversationUIReducer(prev, { type: 'ask_user/set_waiting' });
   const next = conversationUIReducer(prev, {
     type: 'approval/requested',
     approval: askUserApprovalFixture,
   });
-  expect(next.askUserAnswers).toEqual([]);
-  expect(next.currentAskUserQuestionIndex).toBe(0);
+  const flags = getConversationUIFlags(next);
+  expect(flags.askUserAnswers).toEqual([]);
+  expect(flags.currentAskUserQuestionIndex).toBe(0);
 });
 
 it('approval/resolved clears all approval state', () => {
-  const prev: ConversationUIState = {
-    ...createInitialUIState(null),
-    waitingForApproval: true,
-    pendingApproval: approvalFixture,
-    waitingForAskUserAnswer: true,
-    askUserAnswers: ['a'],
-    currentAskUserQuestionIndex: 1,
-  };
+  let prev = conversationUIReducer(createInitialUIState(null), {
+    type: 'approval/requested',
+    approval: askUserApprovalFixture,
+  });
+  prev = conversationUIReducer(prev, { type: 'ask_user/answer_submitted', answer: 'a' });
+  prev = conversationUIReducer(prev, { type: 'ask_user/advance_to_next', nextIndex: 1 });
+  prev = conversationUIReducer(prev, { type: 'ask_user/set_waiting' });
   const next = conversationUIReducer(prev, { type: 'approval/resolved' });
-  expect(next.waitingForApproval).toBe(false);
-  expect(next.pendingApproval).toBe(null);
-  expect(next.waitingForAskUserAnswer).toBe(false);
-  expect(next.askUserAnswers).toEqual([]);
-  expect(next.currentAskUserQuestionIndex).toBe(0);
+  const flags = getConversationUIFlags(next);
+  expect(flags.waitingForApproval).toBe(false);
+  expect(flags.pendingApproval).toBe(null);
+  expect(flags.waitingForAskUserAnswer).toBe(false);
+  expect(flags.askUserAnswers).toEqual([]);
+  expect(flags.currentAskUserQuestionIndex).toBe(0);
+});
+
+it('ask_user/set_waiting is ignored without an active ask_user approval', () => {
+  let state = createInitialUIState(null);
+  state = conversationUIReducer(state, { type: 'ask_user/set_waiting' });
+  expect(getConversationUIFlags(state).waitingForAskUserAnswer).toBe(false);
+
+  state = conversationUIReducer(state, { type: 'approval/requested', approval: approvalFixture });
+  state = conversationUIReducer(state, { type: 'ask_user/set_waiting' });
+  expect(getConversationUIFlags(state).waitingForAskUserAnswer).toBe(false);
+});
+
+it('rejection/set_waiting is ignored without an active approval', () => {
+  let state = createInitialUIState(null);
+  state = conversationUIReducer(state, { type: 'rejection/set_waiting' });
+  expect(getConversationUIFlags(state).waitingForRejectionReason).toBe(false);
 });
 
 // ---------------------------------------------------------------------------
@@ -158,29 +209,34 @@ it('approval/resolved clears all approval state', () => {
 // ---------------------------------------------------------------------------
 
 it('ask_user/set_waiting enables waiting', () => {
-  const state = createInitialUIState(null);
+  const state = conversationUIReducer(createInitialUIState(null), {
+    type: 'approval/requested',
+    approval: askUserApprovalFixture,
+  });
   const next = conversationUIReducer(state, { type: 'ask_user/set_waiting' });
-  expect(next.waitingForAskUserAnswer).toBe(true);
+  expect(getConversationUIFlags(next).waitingForAskUserAnswer).toBe(true);
 });
 
 it('ask_user/answer_submitted appends answer', () => {
-  const prev: ConversationUIState = {
-    ...createInitialUIState(null),
-    askUserAnswers: ['first'],
-  };
+  let prev = conversationUIReducer(createInitialUIState(null), {
+    type: 'approval/requested',
+    approval: askUserApprovalFixture,
+  });
+  prev = conversationUIReducer(prev, { type: 'ask_user/answer_submitted', answer: 'first' });
   const next = conversationUIReducer(prev, { type: 'ask_user/answer_submitted', answer: 'second' });
-  expect(next.askUserAnswers).toEqual(['first', 'second']);
+  expect(getConversationUIFlags(next).askUserAnswers).toEqual(['first', 'second']);
 });
 
 it('ask_user/advance_to_next updates index and clears waiting', () => {
-  const prev: ConversationUIState = {
-    ...createInitialUIState(null),
-    currentAskUserQuestionIndex: 0,
-    waitingForAskUserAnswer: true,
-  };
+  let prev = conversationUIReducer(createInitialUIState(null), {
+    type: 'approval/requested',
+    approval: askUserApprovalFixture,
+  });
+  prev = conversationUIReducer(prev, { type: 'ask_user/set_waiting' });
   const next = conversationUIReducer(prev, { type: 'ask_user/advance_to_next', nextIndex: 1 });
-  expect(next.currentAskUserQuestionIndex).toBe(1);
-  expect(next.waitingForAskUserAnswer).toBe(false);
+  const flags = getConversationUIFlags(next);
+  expect(flags.currentAskUserQuestionIndex).toBe(1);
+  expect(flags.waitingForAskUserAnswer).toBe(false);
 });
 
 // ---------------------------------------------------------------------------
@@ -188,27 +244,27 @@ it('ask_user/advance_to_next updates index and clears waiting', () => {
 // ---------------------------------------------------------------------------
 
 it('max_turns/approved clears approval and starts processing', () => {
-  const prev: ConversationUIState = {
-    ...createInitialUIState(null),
-    waitingForApproval: true,
-    pendingApproval: { ...approvalFixture, isMaxTurnsPrompt: true },
-  };
+  const prev = conversationUIReducer(createInitialUIState(null), {
+    type: 'approval/requested',
+    approval: { ...approvalFixture, isMaxTurnsPrompt: true },
+  });
   const next = conversationUIReducer(prev, { type: 'max_turns/approved' });
-  expect(next.isProcessing).toBe(true);
-  expect(next.waitingForApproval).toBe(false);
-  expect(next.pendingApproval).toBe(null);
+  const flags = getConversationUIFlags(next);
+  expect(flags.isProcessing).toBe(true);
+  expect(flags.waitingForApproval).toBe(false);
+  expect(flags.pendingApproval).toBe(null);
 });
 
 it('max_turns/declined clears approval without starting processing', () => {
-  const prev: ConversationUIState = {
-    ...createInitialUIState(null),
-    waitingForApproval: true,
-    pendingApproval: { ...approvalFixture, isMaxTurnsPrompt: true },
-  };
+  const prev = conversationUIReducer(createInitialUIState(null), {
+    type: 'approval/requested',
+    approval: { ...approvalFixture, isMaxTurnsPrompt: true },
+  });
   const next = conversationUIReducer(prev, { type: 'max_turns/declined' });
-  expect(next.isProcessing).toBe(false);
-  expect(next.waitingForApproval).toBe(false);
-  expect(next.pendingApproval).toBe(null);
+  const flags = getConversationUIFlags(next);
+  expect(flags.isProcessing).toBe(false);
+  expect(flags.waitingForApproval).toBe(false);
+  expect(flags.pendingApproval).toBe(null);
 });
 
 // ---------------------------------------------------------------------------
@@ -252,29 +308,28 @@ it('rate_limit/cleared resets rate limit', () => {
 // ---------------------------------------------------------------------------
 
 it('reset_transient clears all transient state but preserves usage', () => {
-  const prev: ConversationUIState = {
-    isProcessing: true,
+  let prev: ConversationUIState = {
+    ...createInitialUIState({ prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }),
     thinkingStartedAt: 1000,
     toolCallStreamingInfo: { toolName: 'shell', argumentCharCount: 5 },
-    waitingForApproval: true,
-    pendingApproval: approvalFixture,
-    waitingForRejectionReason: true,
-    waitingForAskUserAnswer: true,
-    askUserAnswers: ['a'],
-    currentAskUserQuestionIndex: 1,
-    lastUsage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
     lastCodexRateLimit: { allowed: true, limit_reached: false },
   };
+  prev = conversationUIReducer(prev, { type: 'turn/started' });
+  prev = conversationUIReducer(prev, { type: 'approval/requested', approval: askUserApprovalFixture });
+  prev = conversationUIReducer(prev, { type: 'ask_user/answer_submitted', answer: 'a' });
+  prev = conversationUIReducer(prev, { type: 'ask_user/advance_to_next', nextIndex: 1 });
+  prev = conversationUIReducer(prev, { type: 'ask_user/set_waiting' });
   const next = conversationUIReducer(prev, { type: 'reset_transient' });
-  expect(next.isProcessing).toBe(false);
+  const flags = getConversationUIFlags(next);
+  expect(flags.isProcessing).toBe(false);
   expect(next.thinkingStartedAt).toBe(null);
   expect(next.toolCallStreamingInfo).toBe(null);
-  expect(next.waitingForApproval).toBe(false);
-  expect(next.pendingApproval).toBe(null);
-  expect(next.waitingForRejectionReason).toBe(false);
-  expect(next.waitingForAskUserAnswer).toBe(false);
-  expect(next.askUserAnswers).toEqual([]);
-  expect(next.currentAskUserQuestionIndex).toBe(0);
+  expect(flags.waitingForApproval).toBe(false);
+  expect(flags.pendingApproval).toBe(null);
+  expect(flags.waitingForRejectionReason).toBe(false);
+  expect(flags.waitingForAskUserAnswer).toBe(false);
+  expect(flags.askUserAnswers).toEqual([]);
+  expect(flags.currentAskUserQuestionIndex).toBe(0);
   // Usage preserved
   expect(next.lastUsage).toEqual(prev.lastUsage);
   expect(next.lastCodexRateLimit).toEqual(prev.lastCodexRateLimit);
@@ -282,24 +337,18 @@ it('reset_transient clears all transient state but preserves usage', () => {
 
 it('reset_all clears everything including usage', () => {
   const prev: ConversationUIState = {
-    isProcessing: true,
+    ...createInitialUIState({ prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }),
     thinkingStartedAt: 1000,
     toolCallStreamingInfo: { toolName: 'shell', argumentCharCount: 5 },
-    waitingForApproval: true,
-    pendingApproval: approvalFixture,
-    waitingForRejectionReason: true,
-    waitingForAskUserAnswer: true,
-    askUserAnswers: ['a'],
-    currentAskUserQuestionIndex: 1,
-    lastUsage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
     lastCodexRateLimit: { allowed: true, limit_reached: false },
   };
   const next = conversationUIReducer(prev, { type: 'reset_all' });
-  expect(next.isProcessing).toBe(false);
+  const flags = getConversationUIFlags(next);
+  expect(flags.isProcessing).toBe(false);
   expect(next.thinkingStartedAt).toBe(null);
   expect(next.toolCallStreamingInfo).toBe(null);
-  expect(next.waitingForApproval).toBe(false);
-  expect(next.pendingApproval).toBe(null);
+  expect(flags.waitingForApproval).toBe(false);
+  expect(flags.pendingApproval).toBe(null);
   expect(next.lastUsage).toBe(null);
   expect(next.lastCodexRateLimit).toBe(null);
 });

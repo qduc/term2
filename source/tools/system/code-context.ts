@@ -47,7 +47,12 @@ const codeContextSearchParametersSchema = z
   .object({
     query_type: z.enum(['related', 'symbol']).describe('Search mode: related files by path or declarations by symbol.'),
     path: z.string().optional().describe('Target file path. Required when query_type is related.'),
-    symbol: z.string().optional().describe('Identifier to search for. Required when query_type is symbol.'),
+    symbol: z
+      .string()
+      .optional()
+      .describe(
+        'Identifier to search for. Must be a valid JavaScript/TypeScript identifier name (consisting only of letters, numbers, underscores, and dollar signs, and cannot start with a number). Required when query_type is symbol.',
+      ),
     max_results: relaxedNumber.int().positive().optional().describe('Maximum number of results. Defaults to 20.'),
   })
   .superRefine((value, context) => {
@@ -80,6 +85,7 @@ const READ_CODE_OUTLINE_DESCRIPTION =
 const CODE_CONTEXT_SEARCH_DESCRIPTION =
   'Find related files for a given path or declarations for a symbol name. ' +
   'Use this to discover code that depends on or is related to a file, or to locate where a symbol is declared. ' +
+  'Note: symbol must be a valid identifier-safe name (letters, numbers, underscores, and dollar signs, and cannot start with a number). ' +
   'Do NOT use this for plain text search across files (use grep) or for listing files by name (use find_files). ' +
   'Returns up to max_results related files or symbol declarations with relation tokens.';
 

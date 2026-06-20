@@ -1,22 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { parseInput } from '../utils/input-parser.js';
 import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import type { UserTurn } from '../types/user-turn.js';
 import type { InputMode } from '../context/InputContext.js';
+import {
+  handoffFlowReducer,
+  createInitialHandoffState,
+  composeHandoffMessage,
+  type HandoffStage,
+  type HandoffState,
+} from './handoff-flow-reducer.js';
 
-export type HandoffStage =
-  | 'entering_message'
-  | 'confirm_model'
-  | 'selecting_model'
-  | 'selecting_effort'
-  | 'confirm_standard_mode';
-
-export interface HandoffState {
-  capturedText: string;
-  stage: HandoffStage;
-  handoffMessage?: string;
-}
+export type { HandoffStage, HandoffState };
 
 export type UseHandoffFlowOptions = {
   clearConversationAndRefreshBanner: () => Promise<void>;
@@ -57,38 +53,29 @@ export const useHandoffFlow = ({
   applyRuntimeSetting,
   setModel,
 }: UseHandoffFlowOptions): UseHandoffFlowReturn => {
-  const [handoffState, setHandoffState] = useState<HandoffState | null>(null);
-  const selectedModelSendInFlightRef = useRef(false);
-  const isTransitioningRef = useRef(false);
+  const [handoffState, dispatch] = useReducer(handoffFlowReducer, null, createInitialHandoffState);
+
+  // Previous render's mode/handoffState, used by the auto-send effect to
+  // distinguish a genuine user abandonment of model/effort selection (only
+  // `mode` returns to 'text') from a programmatic transition driven by
+  // `submitHandoffInput` (which changes `handoffState` in the same batch).
+  const prevRef = useRef<{ mode: string; handoffState: HandoffState | null }>({ mode, handoffState });
 
   const sendCapturedHandoff = useCallback(
-    async (state: HandoffState) => {
-      if (selectedModelSendInFlightRef.current) {
-        return false;
-      }
-
-      selectedModelSendInFlightRef.current = true;
-      try {
-        const isPlanMode = settingsService.get<boolean>('app.planMode') || false;
-        if (isPlanMode) {
-          setHandoffState({
-            ...state,
-            stage: 'confirm_standard_mode',
-          });
-          setInput('');
-          return true;
-        }
-
-        setHandoffState(null);
+    async (state: HandoffState): Promise<boolean> => {
+      if (state.stage !== 'selecting_model' && state.stage !== 'selecting_effort') return false;
+      const isPlanMode = settingsService.get<boolean>('app.planMode') || false;
+      if (isPlanMode) {
+        dispatch({ type: 'handoff/standard_mode_requested' });
         setInput('');
-        const handoffMsg = state.handoffMessage || 'Implement this';
-        await sendUserMessage({ text: `${handoffMsg}:\n\n${state.capturedText}` });
         return true;
-      } finally {
-        selectedModelSendInFlightRef.current = false;
       }
+      dispatch({ type: 'handoff/sent' });
+      setInput('');
+      await sendUserMessage({ text: composeHandoffMessage(state) });
+      return true;
     },
-    [sendUserMessage, setInput, settingsService],
+    [settingsService, sendUserMessage, setInput],
   );
 
   const completeHandoffWithEffort = useCallback(
@@ -103,26 +90,29 @@ export const useHandoffFlow = ({
   );
 
   useEffect(() => {
+    const prev = prevRef.current;
+    prevRef.current = { mode, handoffState };
     if (mode !== 'text') return;
-    if (handoffState?.stage !== 'selecting_model' && handoffState?.stage !== 'selecting_effort') return;
-
-    if (isTransitioningRef.current) {
-      isTransitioningRef.current = false;
-      return;
-    }
-
+    if (handoffState === null) return;
+    if (handoffState.stage !== 'selecting_model' && handoffState.stage !== 'selecting_effort') return;
+    // Only act on a real return-to-text from a non-text mode. This guards
+    // against callback-identity re-runs and post-send re-runs.
+    if (prev.mode === 'text') return;
+    // A programmatic transition (submitHandoffInput) changes handoffState in
+    // the same render batch; a true abandonment leaves it unchanged.
+    if (prev.handoffState !== handoffState) return;
     void sendCapturedHandoff(handoffState);
   }, [handoffState, mode, sendCapturedHandoff]);
 
   const startHandoff = useCallback((capturedText: string) => {
-    setHandoffState({ capturedText, stage: 'entering_message' });
+    dispatch({ type: 'handoff/started', capturedText });
   }, []);
 
   const confirmHandoff = useCallback(async () => {
     if (!handoffState) return;
 
     await clearConversationAndRefreshBanner();
-    setHandoffState((prev) => (prev ? { ...prev, stage: 'selecting_model' } : null));
+    dispatch({ type: 'handoff/model_confirmed' });
     setInput(MODEL_TRIGGER);
     setMode('model_selection');
     setTriggerIndex(MODEL_TRIGGER.length);
@@ -132,27 +122,24 @@ export const useHandoffFlow = ({
     const state = handoffState;
     if (!state) return;
 
-    const text = state.capturedText;
-    const handoffMsg = state.handoffMessage || 'Implement this';
-
     const isPlanMode = settingsService.get<boolean>('app.planMode') || false;
     if (isPlanMode) {
       await clearConversationAndRefreshBanner();
-      setHandoffState((prev) => (prev ? { ...prev, stage: 'confirm_standard_mode' } : null));
+      dispatch({ type: 'handoff/standard_mode_requested' });
       setInput('');
       return;
     }
 
     await clearConversationAndRefreshBanner();
-    setHandoffState(null);
+    dispatch({ type: 'handoff/sent' });
     setInput('');
-    if (text) {
-      await sendUserMessage({ text: `${handoffMsg}:\n\n${text}` });
+    if (state.capturedText) {
+      await sendUserMessage({ text: composeHandoffMessage(state) });
     }
   }, [clearConversationAndRefreshBanner, handoffState, sendUserMessage, setInput, settingsService]);
 
   const cancelHandoff = useCallback(() => {
-    setHandoffState(null);
+    dispatch({ type: 'handoff/cancelled' });
     setInput('');
     addSystemMessage('Handoff cancelled');
   }, [addSystemMessage, setInput]);
@@ -165,11 +152,10 @@ export const useHandoffFlow = ({
     applyRuntimeSetting('app.planMode', false);
     addSystemMessage('Plan mode disabled - switched to Standard mode');
 
-    setHandoffState(null);
+    dispatch({ type: 'handoff/sent' });
     setInput('');
-    const handoffMsg = state.handoffMessage || 'Implement this';
     if (state.capturedText) {
-      await sendUserMessage({ text: `${handoffMsg}:\n\n${state.capturedText}` });
+      await sendUserMessage({ text: composeHandoffMessage(state) });
     }
   }, [handoffState, settingsService, applyRuntimeSetting, addSystemMessage, sendUserMessage, setInput]);
 
@@ -177,11 +163,10 @@ export const useHandoffFlow = ({
     const state = handoffState;
     if (!state) return;
 
-    setHandoffState(null);
+    dispatch({ type: 'handoff/sent' });
     setInput('');
-    const handoffMsg = state.handoffMessage || 'Implement this';
     if (state.capturedText) {
-      await sendUserMessage({ text: `${handoffMsg}:\n\n${state.capturedText}` });
+      await sendUserMessage({ text: composeHandoffMessage(state) });
     }
   }, [handoffState, sendUserMessage, setInput]);
 
@@ -192,11 +177,7 @@ export const useHandoffFlow = ({
 
       if (state.stage === 'entering_message') {
         const handoffMessage = turn.text.trim() || 'Implement this';
-        setHandoffState({
-          ...state,
-          handoffMessage,
-          stage: 'confirm_model',
-        });
+        dispatch({ type: 'handoff/message_captured', handoffMessage });
         setInput('');
         return true;
       }
@@ -216,14 +197,10 @@ export const useHandoffFlow = ({
           setModel(modelId);
         }
 
-        setHandoffState({
-          ...state,
-          stage: 'selecting_effort',
-        });
+        dispatch({ type: 'handoff/model_selected' });
         setInput('/effort ');
         setMode('text');
         setTriggerIndex(null);
-        isTransitioningRef.current = true;
         return true;
       }
 

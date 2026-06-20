@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest';
 import { GenerationGuard } from './generation-guard.js';
-import { createConversationSessionComposition } from './session/session-composition.js';
+import { createSessionRuntimeInternals } from './session/session-composition.js';
 import { TurnItemAccumulator } from './session/turn-item-accumulator.js';
 import { MockStream } from './test-helpers/mock-stream.js';
 
@@ -104,7 +104,7 @@ const createShellInterruption = ({ callId, command }: { callId?: string; command
 });
 
 function setupSession(mockClient: any) {
-  const composition = createConversationSessionComposition({
+  const composition = createSessionRuntimeInternals({
     sessionId: 'test-session',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },

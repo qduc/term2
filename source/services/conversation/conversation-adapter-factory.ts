@@ -1,5 +1,5 @@
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../service-interfaces.js';
-import type { ConversationSessionComposition } from '../session/session-composition.js';
+import type { SessionRuntime } from '../session/session-composition.js';
 import { ConversationAdapter } from './conversation-adapter.js';
 
 export type CreateConversationAdapterOptions = {
@@ -10,22 +10,22 @@ export type CreateConversationAdapterOptions = {
   };
 };
 
-export function createConversationAdapterForComposition(
-  composition: ConversationSessionComposition,
+export function createConversationAdapterForRuntime(
+  runtime: SessionRuntime,
   { deps }: CreateConversationAdapterOptions,
 ): ConversationAdapter {
   const { logger, settingsService, sessionContextService } = deps;
   return new ConversationAdapter({
-    sessionId: composition.sessionId,
-    startedAt: composition.sessionStartedAt,
-    askUserAnswerSink: composition.resolvedAskUserAnswerSink,
-    subagentEventSinkHost: composition.resolvedSubagentEventSinkHost,
+    sessionId: runtime.sessionId,
+    startedAt: runtime.sessionStartedAt,
+    askUserAnswerSink: runtime.sinks.askUserAnswer,
+    subagentEventSinkHost: runtime.sinks.subagentEvents,
     logger,
     settingsService,
     sessionContextService,
-    conversationStore: composition.conversationStore,
-    conversationLogger: composition.conversationLogger,
-    approvalFlow: composition.approvalFlow,
-    turnFlow: composition.turnCoordinator,
+    userTurns: runtime.state,
+    logs: runtime.logs,
+    approval: runtime.approval,
+    turnFlow: runtime.turns,
   });
 }

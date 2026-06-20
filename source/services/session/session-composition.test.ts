@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { it, expect } from 'vitest';
 import {
   createConversationSession,
-  createConversationSessionComposition,
+  createSessionRuntimeInternals,
   createSessionRuntime,
 } from './session-composition.js';
 import { createConversationRuntime } from '../conversation/conversation-runtime-factory.js';
@@ -73,7 +73,7 @@ it('createConversationSession returns bundle with correct sessionId', () => {
 });
 
 it('createConversationSession is the public name for the session composition root', () => {
-  expect(createConversationSession).toBe(createConversationSessionComposition);
+  expect(createConversationSession).toBe(createSessionRuntimeInternals);
 });
 
 it('createConversationSession returns bundle with correct sessionStartedAt when provided', () => {
@@ -113,7 +113,17 @@ it('createSessionRuntime exposes runtime capabilities without conversation adapt
   expect(typeof runtime.state.getCurrentSnapshot).toBe('function');
   expect(typeof runtime.settings.setModel).toBe('function');
   expect(typeof runtime.logs.setLogSink).toBe('function');
+  expect(typeof runtime.logs.dispatchEventToLog).toBe('function');
+  expect(typeof runtime.logs.log).toBe('function');
+  expect(typeof runtime.approval.getPending).toBe('function');
+  expect(typeof runtime.approval.getPendingInterruption).toBe('function');
+  expect(runtime.sinks).toHaveProperty('askUserAnswer');
+  expect(runtime.sinks).toHaveProperty('subagentEvents');
   expect('terminalAdapter' in runtime).toBe(false);
+  expect('initialTurnRunner' in runtime).toBe(false);
+  expect('generationGuard' in runtime).toBe(false);
+  expect('streamProcessor' in runtime).toBe(false);
+  expect('conversationStore' in runtime).toBe(false);
   runtime.dispose();
 });
 
@@ -134,8 +144,23 @@ it('createConversationRuntime returns a bundle with adapter.sendMessage', () => 
   expect(typeof adapter.handleApprovalDecision).toBe('function');
 });
 
-it('createConversationSessionComposition composes a plain appState object with a statusMachine', () => {
-  const { appState } = createConversationSessionComposition({
+it('production conversation factory does not import the internal seam', () => {
+  const runtimeFactorySource = readFileSync(
+    new URL('../conversation/conversation-runtime-factory.ts', import.meta.url),
+    'utf8',
+  );
+  const adapterFactorySource = readFileSync(
+    new URL('../conversation/conversation-adapter-factory.ts', import.meta.url),
+    'utf8',
+  );
+  expect(runtimeFactorySource).not.toContain('SessionRuntimeInternals');
+  expect(runtimeFactorySource).not.toContain('createSessionRuntimeInternals');
+  expect(adapterFactorySource).not.toContain('SessionRuntimeInternals');
+  expect(adapterFactorySource).not.toContain('createSessionRuntimeInternals');
+});
+
+it('createSessionRuntimeInternals composes a plain appState object with a statusMachine', () => {
+  const { appState } = createSessionRuntimeInternals({
     sessionId: 'app-state-test',
     agentClient: makeMockClient(),
     deps: { logger: makeLogger(), sessionContextService },

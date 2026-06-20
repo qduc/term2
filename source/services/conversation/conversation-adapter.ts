@@ -5,11 +5,9 @@ import type { ConversationTerminal } from '../../contracts/conversation.js';
 import { collectTerminalResult } from '../session/terminal-result-collector.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
-import type { ConversationLogger } from '../logging/conversation-logger.js';
-import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
+import type { SessionRuntime, SessionLogs, SessionApprovalQuery } from '../session/session-composition.js';
+import type { SessionManager } from '../session/session-manager.js';
 import type { AskUserAnswerSink, SubagentEventSinkHost } from '../conversation-agent-client.js';
-import type { ConversationStore } from './conversation-store.js';
-import type { TurnCoordinator } from '../session/turn-coordinator.js';
 
 export type SendMessageOptions = {
   onTextChunk?: (fullText: string, chunk: string) => void;
@@ -28,7 +26,7 @@ export type HandleApprovalDecisionOptions = {
   approvalAnswer?: string;
 };
 
-export type TurnFlow = Pick<TurnCoordinator, 'start' | 'continueAfterApproval'>;
+export type TurnFlow = Pick<SessionRuntime['turns'], 'start' | 'continueAfterApproval'>;
 
 export class ConversationAdapter {
   #sessionId: string;
@@ -38,9 +36,9 @@ export class ConversationAdapter {
   #logger: ILoggingService;
   #settingsService?: ISettingsService;
   #sessionContextService: ISessionContextService;
-  #conversationStore: ConversationStore;
-  #conversationLogger: ConversationLogger;
-  #approvalFlow: ApprovalFlowCoordinator;
+  #userTurns: Pick<SessionManager, 'listUserTurns'>;
+  #logs: SessionLogs;
+  #approval: SessionApprovalQuery;
   #turnFlow: TurnFlow;
 
   constructor(deps: {
@@ -51,9 +49,9 @@ export class ConversationAdapter {
     logger: ILoggingService;
     settingsService?: ISettingsService;
     sessionContextService: ISessionContextService;
-    conversationStore: ConversationStore;
-    conversationLogger: ConversationLogger;
-    approvalFlow: ApprovalFlowCoordinator;
+    userTurns: Pick<SessionManager, 'listUserTurns'>;
+    logs: SessionLogs;
+    approval: SessionApprovalQuery;
     turnFlow: TurnFlow;
   }) {
     this.#sessionId = deps.sessionId;
@@ -63,14 +61,14 @@ export class ConversationAdapter {
     this.#logger = deps.logger;
     this.#settingsService = deps.settingsService;
     this.#sessionContextService = deps.sessionContextService;
-    this.#conversationStore = deps.conversationStore;
-    this.#conversationLogger = deps.conversationLogger;
-    this.#approvalFlow = deps.approvalFlow;
+    this.#userTurns = deps.userTurns;
+    this.#logs = deps.logs;
+    this.#approval = deps.approval;
     this.#turnFlow = deps.turnFlow;
   }
 
   #getFirstUserMessagePreview(currentTurn?: string): string {
-    const [firstTurn] = this.#conversationStore.listUserTurns();
+    const [firstTurn] = this.#userTurns.listUserTurns();
     return firstTurn?.text ?? currentTurn ?? '';
   }
 
@@ -111,7 +109,7 @@ export class ConversationAdapter {
     const turn = normalizeUserTurn(input);
     return this.#withTrafficContext(turn.text, async () => {
       const wrappedOnEvent = (event: ConversationEvent) => {
-        this.#conversationLogger.dispatchEventToLog(event);
+        this.#logs.dispatchEventToLog(event);
         onEvent?.(event);
       };
       this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
@@ -126,7 +124,7 @@ export class ConversationAdapter {
           onReasoningChunk,
           onCommandMessage,
           onEvent: wrappedOnEvent,
-          getRawInterruption: () => this.#approvalFlow.getPendingInterruption(),
+          getRawInterruption: () => this.#approval.getPendingInterruption(),
           onFinalEvent: (event) => {
             this.#logger.debug('sendMessage received final event', {
               sessionId: this.#sessionId,
@@ -156,26 +154,26 @@ export class ConversationAdapter {
     rejectionReason?: string,
     { onTextChunk, onReasoningChunk, onCommandMessage, onEvent, approvalAnswer }: HandleApprovalDecisionOptions = {},
   ): Promise<ConversationTerminal | null> {
-    if (!this.#approvalFlow.getPending()) {
+    if (!this.#approval.getPending()) {
       return null;
     }
 
     if (answer === 'y' && approvalAnswer) {
-      const pending = this.#approvalFlow.getPending();
+      const pending = this.#approval.getPending();
       const callId = pending ? getCallIdFromObject(pending.interruption) : undefined;
       if (callId) {
         this.#askUserAnswerSink?.setAskUserAnswer(callId, approvalAnswer);
       }
     }
 
-    this.#conversationLogger.log({
+    this.#logs.log({
       type: 'approval_resolved',
       answer: answer === 'y' ? 'y' : 'n',
       ...(rejectionReason ? { rejectionReason } : {}),
     });
     return this.#withTrafficContext(undefined, async () => {
       const wrappedOnEvent = (event: ConversationEvent) => {
-        this.#conversationLogger.dispatchEventToLog(event);
+        this.#logs.dispatchEventToLog(event);
         onEvent?.(event);
       };
       this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
@@ -186,7 +184,7 @@ export class ConversationAdapter {
           onReasoningChunk,
           onCommandMessage,
           onEvent: wrappedOnEvent,
-          getRawInterruption: () => this.#approvalFlow.getPendingInterruption(),
+          getRawInterruption: () => this.#approval.getPendingInterruption(),
           onFinalEvent: (event) => {
             this.#logger.debug('handleApprovalDecision received final event', {
               sessionId: this.#sessionId,

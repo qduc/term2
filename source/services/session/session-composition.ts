@@ -1,6 +1,6 @@
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../service-interfaces.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
-import { ApprovalState } from '../approval/approval-state.js';
+import { ApprovalState, type PendingApprovalContext } from '../approval/approval-state.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import { getMethod } from '../interruption-info.js';
 import { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
@@ -57,8 +57,8 @@ export type ConversationSessionRetryOptions = {
   allowFreshStartRetries?: boolean;
 };
 
-/** All collaborator instances created by the composition factory. */
-export type ConversationSessionComposition = {
+/** @internal Full collaborator graph; used only by tests + the test helper. */
+export type SessionRuntimeInternals = {
   sessionId: string;
   sessionStartedAt: string;
   conversationStore: ConversationStore;
@@ -106,7 +106,8 @@ export type ConversationSessionComposition = {
 
 // ── Options for the composition factory ──────────────────────────
 
-export type CreateConversationSessionCompositionOptions = {
+/** @internal Options for the internal composition factory. */
+export type CreateSessionRuntimeInternalsOptions = {
   sessionId: string;
   /** ISO timestamp; defaults to now. */
   sessionStartedAt?: string;
@@ -122,9 +123,9 @@ export type CreateConversationSessionCompositionOptions = {
   turnAccumulator?: TurnItemAccumulator;
 };
 
-export type CreateConversationSessionOptions = Omit<CreateConversationSessionCompositionOptions, 'turnAccumulator'>;
+export type CreateConversationSessionOptions = Omit<CreateSessionRuntimeInternalsOptions, 'turnAccumulator'>;
 export type ConversationSessionBundle = Pick<
-  ConversationSessionComposition,
+  SessionRuntimeInternals,
   | 'sessionId'
   | 'sessionStartedAt'
   | 'turnCoordinator'
@@ -138,6 +139,22 @@ export type ConversationSessionBundle = Pick<
   | 'dispose'
   | 'ensureJournal'
 >;
+
+export type SessionApprovalQuery = {
+  getPending(): PendingApprovalContext | null;
+  getPendingInterruption(): unknown;
+};
+
+export type SessionLogs = {
+  setLogSink(sink: ((event: LogEvent) => void) | null): void;
+  dispatchEventToLog(event: ConversationEvent): void;
+  log(event: LogEvent): void;
+};
+
+export type SessionSinks = {
+  askUserAnswer: AskUserAnswerSink | null;
+  subagentEvents: SubagentEventSinkHost | null;
+};
 
 // ── Session Runtime (public) ───────────────────────────────────────
 
@@ -169,13 +186,9 @@ export type SessionRuntime = {
   state: SessionManager;
   /** Controller for runtime model/provider/retry settings. */
   settings: SessionRuntimeController;
-  logs: {
-    /**
-     * Set the persistent log sink. When a non-null sink is provided,
-     * also lazily initialises the assistant turn journal.
-     */
-    setLogSink: (sink: ((event: LogEvent) => void) | null) => void;
-  };
+  logs: SessionLogs;
+  approval: SessionApprovalQuery;
+  sinks: SessionSinks;
   /**
    * Idempotent disposal: aborts active SDK work, invalidates the active
    * generation, unsubscribes downgrade listeners, clears per-turn state.
@@ -185,9 +198,7 @@ export type SessionRuntime = {
 
 // ── Composition factory ───────────────────────────────────────────
 
-export function createConversationSessionComposition(
-  options: CreateConversationSessionCompositionOptions,
-): ConversationSessionComposition {
+export function createSessionRuntimeInternals(options: CreateSessionRuntimeInternalsOptions): SessionRuntimeInternals {
   const {
     sessionId: id,
     sessionStartedAt,
@@ -516,33 +527,29 @@ export function createConversationSessionComposition(
   };
 }
 
+/** @internal Alias that keeps the narrow {@link ConversationSessionBundle} return type. */
 export const createConversationSession: (options: CreateConversationSessionOptions) => ConversationSessionBundle =
-  createConversationSessionComposition;
+  createSessionRuntimeInternals;
 
 // ── Session Runtime Factory ───────────────────────────────────────
 
-/**
- * Creates a session runtime with a clean public API, without constructing
- * the conversation-layer adapter. Internal composition details remain private.
- *
- * The returned object exposes:
- * - `turns` – start, continueAfterApproval, abort
- * - `state` – SessionManager facade
- * - `settings` – SessionRuntimeController
- * - `logs.setLogSink` – wires up the conversation logger and journal
- * - `dispose` – clean up
- */
-export function createSessionRuntime(options: CreateConversationSessionOptions): SessionRuntime {
-  const composition = createConversationSessionComposition({
-    ...options,
-    turnAccumulator: undefined,
-  });
-
-  const { turnCoordinator, stateFacade, runtimeController, conversationLogger, ensureJournal, dispose } = composition;
+/** @internal Wraps a shared internals instance into the closed runtime. */
+export function buildSessionRuntime(internals: SessionRuntimeInternals): SessionRuntime {
+  const {
+    turnCoordinator,
+    stateFacade,
+    runtimeController,
+    conversationLogger,
+    ensureJournal,
+    dispose,
+    approvalFlow,
+    resolvedAskUserAnswerSink,
+    resolvedSubagentEventSinkHost,
+  } = internals;
 
   return {
-    sessionId: composition.sessionId,
-    sessionStartedAt: composition.sessionStartedAt,
+    sessionId: internals.sessionId,
+    sessionStartedAt: internals.sessionStartedAt,
     turns: {
       start: turnCoordinator.start.bind(turnCoordinator),
       continueAfterApproval: turnCoordinator.continueAfterApproval.bind(turnCoordinator),
@@ -557,7 +564,30 @@ export function createSessionRuntime(options: CreateConversationSessionOptions):
           ensureJournal(sink);
         }
       },
+      dispatchEventToLog: conversationLogger.dispatchEventToLog.bind(conversationLogger),
+      log: conversationLogger.log.bind(conversationLogger),
+    },
+    approval: {
+      getPending: approvalFlow.getPending.bind(approvalFlow),
+      getPendingInterruption: approvalFlow.getPendingInterruption.bind(approvalFlow),
+    },
+    sinks: {
+      askUserAnswer: resolvedAskUserAnswerSink,
+      subagentEvents: resolvedSubagentEventSinkHost,
     },
     dispose,
   };
+}
+
+/**
+ * Creates a session runtime with a clean public API, without constructing
+ * the conversation-layer adapter. Internal composition details remain private.
+ */
+export function createSessionRuntime(options: CreateConversationSessionOptions): SessionRuntime {
+  return buildSessionRuntime(
+    createSessionRuntimeInternals({
+      ...options,
+      turnAccumulator: undefined,
+    }),
+  );
 }

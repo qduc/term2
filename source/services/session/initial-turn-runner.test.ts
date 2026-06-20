@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import { createConversationSessionComposition } from './session-composition.js';
+import { createSessionRuntimeInternals } from './session-composition.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
 import { TurnAttempt } from './turn-attempt.js';
@@ -29,7 +29,7 @@ const createSessionContextService = () => {
 };
 
 function setupRunner(mockClient: any, retryOptions?: any) {
-  const composition = createConversationSessionComposition({
+  const composition = createSessionRuntimeInternals({
     sessionId: 'test-session',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },

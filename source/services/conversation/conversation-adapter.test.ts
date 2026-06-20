@@ -1,8 +1,8 @@
 import { it, expect } from 'vitest';
 import { ConversationAdapter } from './conversation-adapter.js';
-import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
-import type { ConversationLogger } from '../logging/conversation-logger.js';
-import type { ConversationStore } from './conversation-store.js';
+import type { SessionLogs, SessionApprovalQuery } from '../session/session-composition.js';
+import type { UserTurn } from '../../types/user-turn.js';
+import type { SessionManager } from '../session/session-manager.js';
 import type { FinalTerminal } from '../../contracts/conversation.js';
 
 const noop = () => {};
@@ -26,7 +26,7 @@ const sessionContextService = {
 it('ConversationAdapter delegates turn execution through an explicit turnFlow dependency', async () => {
   const calls: Array<{ method: string; input?: any; options?: any }> = [];
   const turnFlow = {
-    async *start(input: string, options?: any) {
+    async *start(input: string | UserTurn, options?: any) {
       calls.push({ method: 'start', input, options });
       yield { type: 'final' as const, finalText: 'started' };
     },
@@ -35,23 +35,26 @@ it('ConversationAdapter delegates turn execution through an explicit turnFlow de
       yield { type: 'final' as const, finalText: 'continued' };
     },
   };
-  const approvalFlow = {
+  const approval = {
     getPending: () => ({ interruption: {}, token: 1 }),
     getPendingInterruption: () => ({}),
-  } as unknown as ApprovalFlowCoordinator;
+  } as unknown as SessionApprovalQuery;
+  const logs = {
+    dispatchEventToLog: noop,
+    log: noop,
+    setLogSink: noop,
+  } as unknown as SessionLogs;
+  const userTurns = {
+    listUserTurns: () => [],
+  } as unknown as Pick<SessionManager, 'listUserTurns'>;
   const adapter = new ConversationAdapter({
     sessionId: 'session-1',
     startedAt: '2026-06-12T00:00:00.000Z',
     logger,
     sessionContextService,
-    conversationStore: {
-      listUserTurns: () => [],
-    } as unknown as ConversationStore,
-    conversationLogger: {
-      dispatchEventToLog: noop,
-      log: noop,
-    } as unknown as ConversationLogger,
-    approvalFlow,
+    userTurns,
+    logs,
+    approval,
     turnFlow,
   });
 

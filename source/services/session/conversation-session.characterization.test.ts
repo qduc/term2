@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import { createConversationSessionComposition } from './session-composition.js';
+import { createSessionRuntimeInternals } from './session-composition.js';
 import { createConversationSession } from '../../test-helpers/conversation-session-with-adapter.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
@@ -1206,7 +1206,7 @@ it('characterization - undo while an approval is pending invalidates pending app
     },
   });
 
-  const composition = createConversationSessionComposition({
+  const composition = createSessionRuntimeInternals({
     sessionId: 'undo-pending-test',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
@@ -1250,7 +1250,7 @@ it('characterization - reset while an approval is pending invalidates pending ap
     },
   });
 
-  const composition = createConversationSessionComposition({
+  const composition = createSessionRuntimeInternals({
     sessionId: 'reset-pending-test',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
@@ -1489,7 +1489,7 @@ it('characterization - abort during pending approval clears state and prevents c
     abort() {},
   });
 
-  const composition = createConversationSessionComposition({
+  const composition = createSessionRuntimeInternals({
     sessionId: 'abort-chain-test',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },

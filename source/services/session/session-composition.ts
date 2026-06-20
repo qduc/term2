@@ -32,6 +32,7 @@ import { GenerationGuard } from '../generation-guard.js';
 import { DefaultRetryClassifier } from '../retry/retry-classifier.js';
 import { RetryEventPresenter } from '../retry/retry-event-presenter.js';
 import { InitialTurnRunner } from './initial-turn-runner.js';
+import { DefaultTurnExecutor, type TurnExecutor } from './turn-executor.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
 import { TurnAttemptFactory } from './turn-attempt-factory.js';
 import { InitialInputPreparer } from './initial-input-preparer.js';
@@ -73,6 +74,7 @@ export type SessionRuntimeInternals = {
   streamProcessor: SessionStreamProcessor;
   appState: { statusMachine: TurnStatusMachine };
   turnCoordinator: TurnCoordinator;
+  turnExecutor: TurnExecutor;
   /** Facade for state/persistence/undo/snapshot operations. */
   stateFacade: SessionManager;
   /** Controller for runtime model/provider/retry settings. */
@@ -437,12 +439,16 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     getJournal: () => journal ?? undefined,
   });
 
-  const turnCoordinator = new TurnCoordinator({
-    statusMachine: appState.statusMachine,
+  const turnExecutor = new DefaultTurnExecutor({
     initialTurnRunner,
     continuationDriver,
-    approvalFlow,
     shellAutoApproval,
+  });
+
+  const turnCoordinator = new TurnCoordinator({
+    statusMachine: appState.statusMachine,
+    turnExecutor,
+    approvalFlow,
   });
 
   const stateFacade = new SessionManager({
@@ -507,6 +513,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     streamProcessor,
     appState,
     turnCoordinator,
+    turnExecutor,
     stateFacade,
     runtimeController,
     dispose,

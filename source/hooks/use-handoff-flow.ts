@@ -5,7 +5,7 @@ import type { SettingsService } from '../services/settings/settings-service.js';
 import type { UserTurn } from '../types/user-turn.js';
 import type { InputMode } from '../context/InputContext.js';
 
-export type HandoffStage = 'entering_message' | 'confirm_model' | 'selecting_model';
+export type HandoffStage = 'entering_message' | 'confirm_model' | 'selecting_model' | 'confirm_standard_mode';
 
 export interface HandoffState {
   capturedText: string;
@@ -33,6 +33,8 @@ export type UseHandoffFlowReturn = {
   declineHandoff: () => Promise<void>;
   cancelHandoff: () => void;
   submitHandoffInput: (turn: UserTurn) => Promise<boolean>;
+  confirmStandardMode: () => Promise<void>;
+  declineStandardMode: () => Promise<void>;
 };
 
 const MODEL_TRIGGER = '/model ';
@@ -60,6 +62,16 @@ export const useHandoffFlow = ({
 
       selectedModelSendInFlightRef.current = true;
       try {
+        const isPlanMode = settingsService.get<boolean>('app.planMode') || false;
+        if (isPlanMode) {
+          setHandoffState({
+            ...state,
+            stage: 'confirm_standard_mode',
+          });
+          setInput('');
+          return true;
+        }
+
         setHandoffState(null);
         setInput('');
         const handoffMsg = state.handoffMessage || 'Implement this';
@@ -69,7 +81,7 @@ export const useHandoffFlow = ({
         selectedModelSendInFlightRef.current = false;
       }
     },
-    [sendUserMessage, setInput],
+    [sendUserMessage, setInput, settingsService],
   );
 
   const sendSelectedModelHandoff = useCallback(
@@ -92,6 +104,16 @@ export const useHandoffFlow = ({
           }
           applyRuntimeSetting('agent.model', modelId);
           setModel(modelId);
+        }
+
+        const isPlanMode = settingsService.get<boolean>('app.planMode') || false;
+        if (isPlanMode) {
+          setHandoffState({
+            ...state,
+            stage: 'confirm_standard_mode',
+          });
+          setInput('');
+          return true;
         }
 
         setHandoffState(null);
@@ -133,19 +155,56 @@ export const useHandoffFlow = ({
 
     const text = state.capturedText;
     const handoffMsg = state.handoffMessage || 'Implement this';
+
+    const isPlanMode = settingsService.get<boolean>('app.planMode') || false;
+    if (isPlanMode) {
+      await clearConversationAndRefreshBanner();
+      setHandoffState((prev) => (prev ? { ...prev, stage: 'confirm_standard_mode' } : null));
+      setInput('');
+      return;
+    }
+
     await clearConversationAndRefreshBanner();
     setHandoffState(null);
     setInput('');
     if (text) {
       await sendUserMessage({ text: `${handoffMsg}:\n\n${text}` });
     }
-  }, [clearConversationAndRefreshBanner, handoffState, sendUserMessage, setInput]);
+  }, [clearConversationAndRefreshBanner, handoffState, sendUserMessage, setInput, settingsService]);
 
   const cancelHandoff = useCallback(() => {
     setHandoffState(null);
     setInput('');
     addSystemMessage('Handoff cancelled');
   }, [addSystemMessage, setInput]);
+
+  const confirmStandardMode = useCallback(async () => {
+    const state = handoffState;
+    if (!state) return;
+
+    settingsService.set('app.planMode', false);
+    applyRuntimeSetting('app.planMode', false);
+    addSystemMessage('Plan mode disabled - switched to Standard mode');
+
+    setHandoffState(null);
+    setInput('');
+    const handoffMsg = state.handoffMessage || 'Implement this';
+    if (state.capturedText) {
+      await sendUserMessage({ text: `${handoffMsg}:\n\n${state.capturedText}` });
+    }
+  }, [handoffState, settingsService, applyRuntimeSetting, addSystemMessage, sendUserMessage, setInput]);
+
+  const declineStandardMode = useCallback(async () => {
+    const state = handoffState;
+    if (!state) return;
+
+    setHandoffState(null);
+    setInput('');
+    const handoffMsg = state.handoffMessage || 'Implement this';
+    if (state.capturedText) {
+      await sendUserMessage({ text: `${handoffMsg}:\n\n${state.capturedText}` });
+    }
+  }, [handoffState, sendUserMessage, setInput]);
 
   const submitHandoffInput = useCallback(
     async (turn: UserTurn): Promise<boolean> => {
@@ -179,5 +238,7 @@ export const useHandoffFlow = ({
     declineHandoff,
     cancelHandoff,
     submitHandoffInput,
+    confirmStandardMode,
+    declineStandardMode,
   };
 };

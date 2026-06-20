@@ -149,6 +149,8 @@ vi.mock('./hooks/use-handoff-flow.js', () => ({
     declineHandoff: vi.fn(async () => {}),
     cancelHandoff: vi.fn(),
     submitHandoffInput: vi.fn(async () => false),
+    confirmStandardMode: vi.fn(async () => {}),
+    declineStandardMode: vi.fn(async () => {}),
   }),
 }));
 

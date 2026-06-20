@@ -4,6 +4,7 @@ import ApprovalPrompt from '../prompt/ApprovalPrompt.js';
 import InputBox from '../InputBox.js';
 import StatusBar from './StatusBar.js';
 import HandoffConfirmationPrompt from '../prompt/HandoffConfirmationPrompt.js';
+import StandardModeConfirmationPrompt from '../prompt/StandardModeConfirmationPrompt.js';
 import LargeUncachedConfirmationPrompt from '../prompt/LargeUncachedConfirmationPrompt.js';
 import InputSurgeConfirmationPrompt from '../prompt/InputSurgeConfirmationPrompt.js';
 import type { HandoffState } from '../../hooks/use-handoff-flow.js';
@@ -50,6 +51,8 @@ export type BottomAreaProps = {
   onHandoffConfirm?: () => void;
   onHandoffDecline?: () => void;
   onHandoffCancel?: () => void;
+  onStandardModeConfirm?: () => void;
+  onStandardModeDecline?: () => void;
   largeUncachedWarning?: import('../../services/large-uncached-input-guard.js').LargeUncachedInputDecision | null;
   pendingLargeUncachedTurn?: UserTurn | null;
   pendingLargeUncachedTokens?: number;
@@ -94,6 +97,8 @@ const BottomArea: FC<BottomAreaProps> = ({
   onHandoffConfirm,
   onHandoffDecline,
   onHandoffCancel,
+  onStandardModeConfirm,
+  onStandardModeDecline,
   largeUncachedWarning,
   pendingLargeUncachedTurn,
   pendingLargeUncachedTokens = 0,
@@ -140,10 +145,12 @@ const BottomArea: FC<BottomAreaProps> = ({
   }, [thinkingStartedAt]);
 
   const showHandoffConfirm = handoffState?.stage === 'confirm_model';
+  const showStandardModeConfirm = handoffState?.stage === 'confirm_standard_mode';
   const showSurgePrompt = Boolean(pendingSurgeTurn);
   const showLargeUncachedPrompt = Boolean(pendingLargeUncachedTurn);
   const showApprovalPrompt =
     !showHandoffConfirm &&
+    !showStandardModeConfirm &&
     !showLargeUncachedPrompt &&
     !showSurgePrompt &&
     waitingForApproval &&
@@ -152,6 +159,7 @@ const BottomArea: FC<BottomAreaProps> = ({
     pendingApproval;
   const showInput =
     !showHandoffConfirm &&
+    !showStandardModeConfirm &&
     !showLargeUncachedPrompt &&
     !showSurgePrompt &&
     ((!isProcessing && !waitingForApproval) || waitingForRejectionReason || waitingForAskUserAnswer);
@@ -163,6 +171,12 @@ const BottomArea: FC<BottomAreaProps> = ({
           <HandoffConfirmationPrompt
             onConfirm={onHandoffConfirm || (() => {})}
             onDecline={onHandoffDecline || (() => {})}
+            onCancel={onHandoffCancel || (() => {})}
+          />
+        ) : showStandardModeConfirm ? (
+          <StandardModeConfirmationPrompt
+            onConfirm={onStandardModeConfirm || (() => {})}
+            onDecline={onStandardModeDecline || (() => {})}
             onCancel={onHandoffCancel || (() => {})}
           />
         ) : showSurgePrompt ? (

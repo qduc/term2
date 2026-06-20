@@ -258,3 +258,23 @@ it.sequential('BottomArea shows input surge confirmation prompt when pending sur
     unmount();
   });
 });
+
+it.sequential(
+  'BottomArea shows standard mode confirmation prompt when handoffState is confirm_standard_mode',
+  async () => {
+    const { lastFrame, unmount } = await renderBottomArea({
+      ...baseProps,
+      handoffState: {
+        capturedText: 'some test code',
+        stage: 'confirm_standard_mode',
+      },
+    });
+    const output = lastFrame() ?? '';
+    expect(output.includes('📋 Switch to standard mode?')).toBe(true);
+    expect(output.includes('Yes')).toBe(true);
+    expect(output.includes('No')).toBe(true);
+    act(() => {
+      unmount();
+    });
+  },
+);

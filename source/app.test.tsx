@@ -54,6 +54,8 @@ const mocks = vi.hoisted(() => ({
     declineHandoff: vi.fn(async () => {}),
     cancelHandoff: vi.fn(),
     submitHandoffInput: vi.fn(async () => false),
+    confirmStandardMode: vi.fn(async () => {}),
+    declineStandardMode: vi.fn(async () => {}),
   },
   slashCommands: [] as any[],
   slashActionReturnValue: undefined as boolean | void | undefined,
@@ -288,6 +290,8 @@ beforeEach(() => {
   mocks.handoff.cancelHandoff.mockReset();
   mocks.handoff.submitHandoffInput.mockReset();
   mocks.handoff.submitHandoffInput.mockResolvedValue(false);
+  mocks.handoff.confirmStandardMode.mockReset();
+  mocks.handoff.declineStandardMode.mockReset();
   mocks.slashCommands = [];
   mocks.slashActionReturnValue = undefined;
   mocks.selectedSkill = null;

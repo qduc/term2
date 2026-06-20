@@ -321,3 +321,164 @@ it.sequential('submitHandoffInput in selecting_model sends the handoff even with
     renderer.unmount();
   });
 });
+
+it.sequential('when in plan mode, declineHandoff transitions to confirm_standard_mode stage', async () => {
+  const { deps, getSnapshot, renderer } = await renderHarness();
+  deps.settingsService.get.mockImplementation((key: string) => {
+    if (key === 'app.planMode') return true;
+    return undefined;
+  });
+
+  await act(async () => {
+    getSnapshot().hook.startHandoff('Captured text');
+  });
+  await flush();
+
+  await act(async () => {
+    await getSnapshot().hook.submitHandoffInput({ text: 'Implement this' } as any);
+  });
+  await flush();
+
+  await act(async () => {
+    await getSnapshot().hook.declineHandoff();
+  });
+  await flush();
+
+  expect(deps.clearConversationAndRefreshBanner).toHaveBeenCalledTimes(1);
+  expect(deps.sendUserMessage).not.toHaveBeenCalled();
+  expect(getSnapshot().handoffState?.stage).toBe('confirm_standard_mode');
+
+  // Test confirmStandardMode
+  await act(async () => {
+    await getSnapshot().hook.confirmStandardMode();
+  });
+  await flush();
+
+  expect(deps.settingsService.set).toHaveBeenCalledWith('app.planMode', false);
+  expect(deps.applyRuntimeSetting).toHaveBeenCalledWith('app.planMode', false);
+  expect(deps.addSystemMessage).toHaveBeenCalledWith('Plan mode disabled - switched to Standard mode');
+  expect(deps.sendUserMessage).toHaveBeenCalledWith({ text: 'Implement this:\n\nCaptured text' });
+  expect(getSnapshot().handoffState).toBeNull();
+
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+it.sequential('when in plan mode, confirmStandardMode disables plan mode and sends handoff', async () => {
+  const { deps, getSnapshot, renderer } = await renderHarness();
+  deps.settingsService.get.mockImplementation((key: string) => {
+    if (key === 'app.planMode') return true;
+    return undefined;
+  });
+
+  await act(async () => {
+    getSnapshot().hook.startHandoff('Captured text');
+  });
+  await flush();
+
+  await act(async () => {
+    await getSnapshot().hook.submitHandoffInput({ text: 'Implement this' } as any);
+  });
+  await flush();
+
+  await act(async () => {
+    await getSnapshot().hook.declineHandoff();
+  });
+  await flush();
+
+  // Test declineStandardMode (keeps plan mode enabled but sends)
+  deps.settingsService.set.mockClear();
+  deps.applyRuntimeSetting.mockClear();
+  deps.addSystemMessage.mockClear();
+
+  await act(async () => {
+    await getSnapshot().hook.declineStandardMode();
+  });
+  await flush();
+
+  expect(deps.settingsService.set).not.toHaveBeenCalled();
+  expect(deps.applyRuntimeSetting).not.toHaveBeenCalled();
+  expect(deps.sendUserMessage).toHaveBeenCalledWith({ text: 'Implement this:\n\nCaptured text' });
+  expect(getSnapshot().handoffState).toBeNull();
+
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+it.sequential(
+  'when in plan mode, selecting model transitions to confirm_standard_mode instead of sending',
+  async () => {
+    const { deps, getSnapshot, renderer } = await renderHarness();
+    deps.settingsService.get.mockImplementation((key: string) => {
+      if (key === 'app.planMode') return true;
+      return undefined;
+    });
+
+    await act(async () => {
+      getSnapshot().hook.startHandoff('Captured text');
+    });
+    await flush();
+
+    await act(async () => {
+      await getSnapshot().hook.submitHandoffInput({ text: 'Implement this' } as any);
+    });
+    await flush();
+
+    await act(async () => {
+      await getSnapshot().hook.confirmHandoff();
+    });
+    await flush();
+
+    await act(async () => {
+      await getSnapshot().hook.submitHandoffInput({ text: '/model gpt-4' } as any);
+    });
+    await flush();
+
+    expect(deps.sendUserMessage).not.toHaveBeenCalled();
+    expect(getSnapshot().handoffState?.stage).toBe('confirm_standard_mode');
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  },
+);
+
+it.sequential(
+  'when in plan mode, cancelling model selection transitions to confirm_standard_mode instead of sending',
+  async () => {
+    const { deps, getSnapshot, renderer } = await renderHarness();
+    deps.settingsService.get.mockImplementation((key: string) => {
+      if (key === 'app.planMode') return true;
+      return undefined;
+    });
+
+    await act(async () => {
+      getSnapshot().hook.startHandoff('Captured text');
+    });
+    await flush();
+
+    await act(async () => {
+      await getSnapshot().hook.submitHandoffInput({ text: 'Implement this' } as any);
+    });
+    await flush();
+
+    await act(async () => {
+      await getSnapshot().hook.confirmHandoff();
+    });
+    await flush();
+
+    await act(async () => {
+      getSnapshot().setMode('text');
+    });
+    await flush();
+
+    expect(deps.sendUserMessage).not.toHaveBeenCalled();
+    expect(getSnapshot().handoffState?.stage).toBe('confirm_standard_mode');
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  },
+);

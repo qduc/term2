@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Runner } from '@openai/agents';
 import { getDefaultModel, ModelProvider, Model } from '@openai/agents-core';
 import OpenAI from 'openai';
@@ -12,7 +11,7 @@ import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { injectHeaders, installationVersion } from './fetch/logging-middleware.js';
-import type { ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
+import type { ISessionContextService } from '../services/service-interfaces.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -413,66 +412,6 @@ async function fetchCodexModels(
     .filter(Boolean) as Array<{ id: string; name?: string; default_reasoning_level?: string }>;
 }
 
-export function writeProviderTrafficArtifact(
-  loggingService: Pick<ILoggingService, 'debug' | 'error' | 'getCorrelationId'> | undefined,
-  sessionContextService: ISessionContextService | undefined,
-  provider: string,
-  model: string,
-  modelClass: string,
-  modelWrapperClass: string,
-  event: 'request.started' | 'response.received' | 'response.failed',
-  meta?: Record<string, unknown>,
-): void {
-  if (!loggingService) return;
-
-  const trafficContext = sessionContextService?.getContext() ?? null;
-  const isEvaluator = trafficContext?.evaluator === true;
-  const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
-
-  const baseMeta: Record<string, unknown> = {
-    requestId: meta?.requestId ?? randomUUID(),
-    traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),
-    sessionId: trafficContext?.sessionId,
-    sessionStartedAt: trafficContext?.sessionStartedAt,
-    firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
-    mode: trafficContext?.mode,
-    provider,
-    model,
-    modelClass,
-    modelWrapperClass,
-  };
-
-  const eventType = event === 'response.failed' ? 'provider.response.failed' : `${eventPrefix}.${event}`;
-
-  if (event === 'request.started') {
-    loggingService.debug(`${provider} ws request start`, {
-      eventType,
-      category: 'provider',
-      phase: 'request_start',
-      direction: 'sent',
-      ...baseMeta,
-      ...meta,
-    });
-  } else if (event === 'response.received') {
-    loggingService.debug(`${provider} ws response received`, {
-      eventType,
-      category: 'provider',
-      phase: 'provider_response',
-      direction: 'received',
-      ...baseMeta,
-      ...meta,
-    });
-  } else if (event === 'response.failed') {
-    loggingService.error(`${provider} ws request failed`, {
-      eventType,
-      category: 'provider',
-      phase: 'provider_response',
-      ...baseMeta,
-      ...meta,
-    });
-  }
-}
-
 class CodexProvider implements ModelProvider {
   private readonly models = new Map<string, RetryingModel>();
 
@@ -501,7 +440,7 @@ class CodexProvider implements ModelProvider {
             resolvedModel,
             this.tokenManager,
             this.loggingService,
-            this.loggingService,
+            this.loggingService?.providerTraffic,
             this.sessionContextService,
           );
     const retryingModel = new RetryingModel(selectedModel, {

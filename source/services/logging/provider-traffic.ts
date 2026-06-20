@@ -5,6 +5,13 @@ export const TRAFFIC_TEXT_LIMIT = 100;
 const PREVIEW_LIMIT = 160;
 
 export type { SessionTrafficContext } from '../service-interfaces.js';
+import type {
+  ILoggingService,
+  ISessionContextService,
+  IProviderTraffic,
+  ProviderTrafficRequest,
+  ProviderTrafficResponse,
+} from '../service-interfaces.js';
 
 export type SentTrafficRecord = {
   requestId: string;
@@ -21,7 +28,7 @@ export type SentTrafficRecord = {
 };
 
 export type ReceivedTrafficSummary = {
-  transport: 'json' | 'sse' | 'text' | 'unknown';
+  transport: 'json' | 'sse' | 'websocket' | 'text' | 'unknown';
   status: number;
   errorFrames: Array<Record<string, unknown>>;
   malformedFrames: Array<{ raw: string; error: string }>;
@@ -792,5 +799,416 @@ export class ProviderTrafficArtifactStore {
       modesSeen: [...new Set([...current.modesSeen, update.latestMode])],
     };
     this.#writeDailyIndex(dayDir, entries);
+  }
+}
+
+export const extractResponseText = (body: Record<string, unknown> | null | undefined): string | undefined => {
+  if (!body) return undefined;
+  if (typeof body.output_text === 'string') {
+    return body.output_text;
+  }
+  if (typeof body.text === 'string') {
+    return body.text;
+  }
+
+  const choices = body.choices;
+  if (Array.isArray(choices)) {
+    const firstChoice = asRecord(choices[0]);
+    const message = asRecord(firstChoice?.message);
+    if (typeof message?.content === 'string') {
+      return message.content;
+    }
+    const delta = asRecord(firstChoice?.delta);
+    if (typeof delta?.content === 'string') {
+      return delta.content;
+    }
+    if (typeof firstChoice?.text === 'string') {
+      return firstChoice.text;
+    }
+  }
+
+  return undefined;
+};
+
+export const extractToolCalls = (body: Record<string, unknown> | null | undefined): unknown => {
+  if (!body) return undefined;
+  const choices = body.choices;
+  if (!Array.isArray(choices)) {
+    return undefined;
+  }
+
+  const firstChoice = asRecord(choices[0]);
+  const message = asRecord(firstChoice?.message);
+  const delta = asRecord(firstChoice?.delta);
+  return message?.tool_calls ?? delta?.tool_calls;
+};
+
+const stringValue = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined);
+
+/**
+ * Summarize a websocket response (non-Response payload with output items)
+ * into a ReceivedTrafficSummary with transport: 'websocket'.
+ */
+export function summarizeWebsocketResponse(response: unknown): ReceivedTrafficSummary {
+  const record = asRecord(response) ?? {};
+
+  // Some callers pass a normalized ModelResponse that wraps provider-specific
+  // data. Unwrap providerData while keeping the output items for extraction.
+  const providerDataRecord = asRecord(record.providerData);
+  const effectiveRecord = providerDataRecord ? { ...record, ...providerDataRecord } : record;
+  const output = Array.isArray(effectiveRecord.output) ? effectiveRecord.output : [];
+
+  // Extract text content from assistant message items
+  const messageTexts: string[] = [];
+  for (const item of output) {
+    const itemRec = asRecord(item);
+    if (itemRec?.type === 'message' && (itemRec.role === 'assistant' || itemRec.role === undefined)) {
+      const content = itemRec.content;
+      if (Array.isArray(content)) {
+        for (const part of content) {
+          const partRec = asRecord(part);
+          if ((partRec?.type === 'output_text' || partRec?.type === 'text') && typeof partRec.text === 'string') {
+            messageTexts.push(partRec.text);
+          }
+        }
+      } else if (typeof content === 'string') {
+        messageTexts.push(content);
+      }
+    }
+  }
+  const text = messageTexts.length > 0 ? messageTexts.join('\n') : undefined;
+
+  // Extract reasoning content from reasoning items
+  const reasoningTexts: string[] = [];
+  for (const item of output) {
+    const itemRec = asRecord(item);
+    if (itemRec?.type === 'reasoning') {
+      const reasoningVal =
+        stringValue(itemRec.text) ??
+        stringValue(itemRec.delta) ??
+        stringValue(itemRec.summary) ??
+        stringValue(itemRec.reasoning_content);
+      if (reasoningVal) {
+        reasoningTexts.push(reasoningVal);
+      }
+    }
+  }
+  const reasoning = reasoningTexts.length > 0 ? reasoningTexts.join('\n') : undefined;
+
+  // Extract tool calls
+  const toolCalls: any[] = [];
+  for (const item of output) {
+    const itemRec = asRecord(item);
+    if (itemRec?.type === 'function_call') {
+      const name = stringValue(itemRec.name);
+      const args = stringValue(itemRec.arguments) ?? '{}';
+      toolCalls.push({
+        id: stringValue(itemRec.call_id) ?? stringValue(itemRec.id),
+        type: 'function',
+        function: {
+          ...(name !== undefined ? { name } : {}),
+          arguments: args,
+        },
+      });
+    }
+  }
+
+  const payload: Record<string, unknown> = {
+    choices: [
+      {
+        delta: {
+          ...(text !== undefined ? { content: text } : {}),
+          ...(reasoning !== undefined ? { reasoning } : {}),
+          ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+        },
+      },
+    ],
+  };
+
+  const responseId = stringValue(effectiveRecord.id);
+  if (responseId) {
+    payload.id = responseId;
+  }
+  if (effectiveRecord.usage) {
+    payload.usage = effectiveRecord.usage;
+  }
+
+  return {
+    transport: 'websocket',
+    status: 200,
+    errorFrames: [],
+    malformedFrames: [],
+    unknownFrames: [],
+    payload,
+    ...(text ? { text } : {}),
+    ...(responseId ? { responseId } : {}),
+  };
+}
+
+export class ProviderTraffic implements IProviderTraffic {
+  constructor(
+    private readonly loggingService: Pick<ILoggingService, 'debug' | 'error' | 'getCorrelationId'>,
+    private readonly sessionContextService: ISessionContextService,
+    private readonly store: ProviderTrafficArtifactStore,
+  ) {}
+
+  recordRequestStart(input: ProviderTrafficRequest): void {
+    const trafficContext = this.sessionContextService.getContext() ?? null;
+    const isEvaluator = trafficContext?.evaluator === true;
+    const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+
+    const timestamp = new Date().toISOString();
+    const sessionId = trafficContext?.sessionId ?? 'unknown';
+    const sessionStartedAt = trafficContext?.sessionStartedAt ?? timestamp;
+    const mode = trafficContext?.mode ?? 'unknown';
+    const firstUserMessagePreview = trafficContext?.firstUserMessagePreview;
+
+    // 1. Write the sent request to artifact store directly
+    this.store.recordRequestStart({
+      requestId: input.requestId,
+      timestamp,
+      provider: input.provider,
+      model: input.model,
+      modelClass: input.modelClass,
+      modelWrapperClass: input.modelWrapperClass,
+      sessionId,
+      sessionStartedAt,
+      mode,
+      firstUserMessagePreview,
+      sentBody: input.sentBody,
+      headers: input.headers,
+      evaluator: isEvaluator,
+    });
+
+    const baseMeta = {
+      requestId: input.requestId,
+      traceId: trafficContext?.traceId ?? this.loggingService.getCorrelationId?.(),
+      sessionId,
+      sessionStartedAt,
+      firstUserMessagePreview,
+      mode,
+      provider: input.provider,
+      model: input.model,
+      modelClass: input.modelClass,
+      modelWrapperClass: input.modelWrapperClass,
+    };
+
+    // 2. Log request start via logging service for winston
+    this.loggingService.debug(`${input.provider} request start`, {
+      eventType: `${eventPrefix}.request.started`,
+      category: 'provider',
+      phase: 'request_start',
+      direction: 'sent',
+      ...baseMeta,
+      messageCount: Array.isArray(input.sentBody?.messages) ? input.sentBody.messages.length : undefined,
+      messages: input.sentBody?.messages,
+      toolsCount: Array.isArray(input.sentBody?.tools) ? input.sentBody.tools.length : undefined,
+      payload: input.sentBody,
+      headers: input.headers,
+    });
+  }
+
+  async recordResponseReceived(input: ProviderTrafficResponse): Promise<void> {
+    const trafficContext = this.sessionContextService.getContext() ?? null;
+    const isEvaluator = trafficContext?.evaluator === true;
+    const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+
+    const timestamp = new Date().toISOString();
+    const sessionId = trafficContext?.sessionId ?? 'unknown';
+    const sessionStartedAt = trafficContext?.sessionStartedAt ?? timestamp;
+    const mode = trafficContext?.mode ?? 'unknown';
+    const firstUserMessagePreview = trafficContext?.firstUserMessagePreview;
+
+    const baseMeta = {
+      requestId: input.requestId,
+      traceId: trafficContext?.traceId ?? this.loggingService.getCorrelationId?.(),
+      sessionId,
+      sessionStartedAt,
+      firstUserMessagePreview,
+      mode,
+      provider: input.provider,
+      model: input.model,
+      modelClass: input.modelClass,
+      modelWrapperClass: input.modelWrapperClass,
+    };
+
+    if (input.error) {
+      // 1. Write failure to artifact store
+      this.store.recordRequestComplete({
+        requestId: input.requestId,
+        timestamp,
+        provider: input.provider,
+        model: input.model,
+        modelClass: input.modelClass,
+        modelWrapperClass: input.modelWrapperClass,
+        sessionId,
+        sessionStartedAt,
+        mode,
+        error: input.error,
+        evaluator: isEvaluator,
+      });
+
+      // 2. Log failure to winston
+      this.loggingService.error(`${input.provider} request failed`, {
+        eventType: 'provider.response.failed',
+        category: 'provider',
+        phase: 'provider_response',
+        ...baseMeta,
+        error: input.error,
+      });
+      return;
+    }
+
+    // Process response
+    let summary: ReceivedTrafficSummary;
+    if (input.response instanceof Response) {
+      summary = await summarizeReceivedTraffic(input.response.clone());
+      // Override transport if explicit value was provided
+      if (input.transport) {
+        summary = { ...summary, transport: input.transport };
+      }
+    } else if (input.transport === 'websocket') {
+      summary = summarizeWebsocketResponse(input.response);
+    } else {
+      // It's a WS/JSON response payload, let's summarize it
+      let payload = input.response ?? {};
+      let text: string | undefined;
+
+      if (payload && typeof payload === 'object' && 'providerData' in payload && payload.providerData) {
+        const modelResponse = payload as any;
+        if (Array.isArray(modelResponse.output)) {
+          const firstOutput = modelResponse.output[0];
+          if (firstOutput?.type === 'message' && Array.isArray(firstOutput.content)) {
+            const firstContent = firstOutput.content[0];
+            if (firstContent?.type === 'output_text' && typeof firstContent.text === 'string') {
+              text = firstContent.text;
+            }
+          }
+        }
+        payload = modelResponse.providerData;
+      } else {
+        const summaryPayload = asRecord(payload);
+        const output = (summaryPayload as any)?.output;
+        text = Array.isArray(output) && output[0]?.type === 'message' ? output[0]?.content?.[0]?.text : undefined;
+      }
+
+      summary = {
+        transport: 'json',
+        status: input.status,
+        errorFrames: [],
+        malformedFrames: [],
+        unknownFrames: [],
+        payload,
+        ...(text ? { text } : {}),
+      };
+    }
+
+    // 1. Write complete payload to artifact store
+    this.store.recordRequestComplete({
+      requestId: input.requestId,
+      timestamp,
+      provider: input.provider,
+      model: input.model,
+      modelClass: input.modelClass,
+      modelWrapperClass: input.modelWrapperClass,
+      sessionId,
+      sessionStartedAt,
+      mode,
+      receivedSummary: summary,
+      evaluator: isEvaluator,
+    });
+
+    // 2. Log response received via logging service for winston
+    const summaryPayload = asRecord(summary.payload);
+    const responseText = summaryPayload
+      ? extractResponseText(summaryPayload)
+      : typeof summary.fallbackBody === 'string'
+      ? summary.fallbackBody
+      : undefined;
+    const toolCalls = extractToolCalls(summaryPayload);
+
+    this.loggingService.debug(`${input.provider} response received`, {
+      eventType: `${eventPrefix}.response.received`,
+      category: 'provider',
+      phase: 'provider_response',
+      direction: 'received',
+      ...baseMeta,
+      status: input.status,
+      text: responseText,
+      toolCalls,
+      payload: summary,
+    });
+  }
+
+  recordRequestFailed(input: {
+    requestId: string;
+    provider: string;
+    model: string;
+    error: unknown;
+    modelClass?: string;
+    modelWrapperClass?: string;
+    wsAttempt?: number;
+    wsMaxAttempts?: number;
+  }): void {
+    const trafficContext = this.sessionContextService.getContext() ?? null;
+    const isEvaluator = trafficContext?.evaluator === true;
+
+    const timestamp = new Date().toISOString();
+    const sessionId = trafficContext?.sessionId ?? 'unknown';
+    const sessionStartedAt = trafficContext?.sessionStartedAt ?? timestamp;
+    const mode = trafficContext?.mode ?? 'unknown';
+    const firstUserMessagePreview = trafficContext?.firstUserMessagePreview;
+
+    const baseMeta = {
+      requestId: input.requestId,
+      traceId: trafficContext?.traceId ?? this.loggingService.getCorrelationId?.(),
+      sessionId,
+      sessionStartedAt,
+      firstUserMessagePreview,
+      mode,
+      provider: input.provider,
+      model: input.model,
+      modelClass: input.modelClass,
+      modelWrapperClass: input.modelWrapperClass,
+    };
+
+    const errorDetails: Record<string, any> = {
+      message:
+        typeof input.error === 'object' && input.error && 'message' in (input.error as any)
+          ? String((input.error as any).message)
+          : String(input.error),
+    };
+    if (input.wsAttempt !== undefined) {
+      errorDetails.wsAttempt = input.wsAttempt;
+    }
+    if (input.wsMaxAttempts !== undefined) {
+      errorDetails.wsMaxAttempts = input.wsMaxAttempts;
+    }
+
+    // 1. Write failure to artifact store
+    this.store.recordRequestComplete({
+      requestId: input.requestId,
+      timestamp,
+      provider: input.provider,
+      model: input.model,
+      modelClass: input.modelClass,
+      modelWrapperClass: input.modelWrapperClass,
+      sessionId,
+      sessionStartedAt,
+      mode,
+      error: errorDetails,
+      evaluator: isEvaluator,
+    });
+
+    // 2. Log failure to winston
+    this.loggingService.error(`${input.provider} request failed`, {
+      eventType: 'provider.response.failed',
+      category: 'provider',
+      phase: 'provider_response',
+      ...baseMeta,
+      error: errorDetails.message,
+      wsAttempt: input.wsAttempt,
+      wsMaxAttempts: input.wsMaxAttempts,
+    });
   }
 }

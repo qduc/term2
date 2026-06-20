@@ -16,6 +16,44 @@ export interface ILoggingService {
   setCorrelationId(id: string | undefined): void;
   getCorrelationId(): string | undefined;
   clearCorrelationId(): void;
+  providerTraffic?: IProviderTraffic;
+}
+
+export interface ProviderTrafficRequest {
+  requestId: string;
+  provider: string;
+  model: string;
+  sentBody: Record<string, unknown>;
+  headers?: Record<string, string>;
+  modelClass?: string;
+  modelWrapperClass?: string;
+}
+
+export interface ProviderTrafficResponse {
+  requestId: string;
+  provider: string;
+  model: string;
+  status: number;
+  response: any; // Response or Record<string, unknown>
+  error?: Record<string, unknown>;
+  modelClass?: string;
+  modelWrapperClass?: string;
+  transport?: 'websocket';
+}
+
+export interface IProviderTraffic {
+  recordRequestStart(input: ProviderTrafficRequest): void;
+  recordResponseReceived(input: ProviderTrafficResponse): Promise<void>;
+  recordRequestFailed(input: {
+    requestId: string;
+    provider: string;
+    model: string;
+    error: unknown;
+    modelClass?: string;
+    modelWrapperClass?: string;
+    wsAttempt?: number;
+    wsMaxAttempts?: number;
+  }): void;
 }
 
 export interface ISessionContextService {

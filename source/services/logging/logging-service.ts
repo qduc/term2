@@ -14,7 +14,9 @@ import {
   type LogCategory,
 } from './logging-contract.js';
 import { truncateLogText, sanitizeLogMetadata } from '../../utils/output/log-truncation.js';
-import { ProviderTrafficArtifactStore } from './provider-traffic.js';
+import { ProviderTraffic, ProviderTrafficArtifactStore } from './provider-traffic.js';
+import type { ISessionContextService } from '../service-interfaces.js';
+import { NULL_SESSION_CONTEXT_SERVICE } from '../session/session-context-service.js';
 
 const LOG_RETENTION_DAYS = 7;
 
@@ -42,6 +44,7 @@ interface LoggingServiceConfig {
   console?: boolean;
   debugLogging?: boolean;
   suppressConsoleOutput?: boolean;
+  sessionContextService?: ISessionContextService;
 }
 
 /**
@@ -66,6 +69,7 @@ export class LoggingService {
   private verbosePayloads: boolean;
   private sampleRate: number;
   private providerTrafficStore: ProviderTrafficArtifactStore;
+  readonly providerTraffic: ProviderTraffic;
 
   constructor(config: LoggingServiceConfig = {}) {
     const {
@@ -94,6 +98,11 @@ export class LoggingService {
     this.providerTrafficDir = path.join(finalLogDir, 'provider-traffic');
     this.evaluatorTrafficDir = path.join(finalLogDir, 'evaluator-traffic');
     this.providerTrafficStore = new ProviderTrafficArtifactStore({ rootDir: this.providerTrafficDir });
+    this.providerTraffic = new ProviderTraffic(
+      this,
+      config.sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE,
+      this.providerTrafficStore,
+    );
 
     // Create log directory if needed and logging is enabled
     if (!resolvedDisableLogging) {
@@ -351,8 +360,6 @@ export class LoggingService {
         meta: metadata,
       });
 
-      this.writeProviderTrafficArtifact(runtimeRecord, message);
-
       // Strip internal wiring fields that leak into runtime logs
       delete runtimeRecord.modelClass;
       delete runtimeRecord.modelWrapperClass;
@@ -398,100 +405,6 @@ export class LoggingService {
 
   #log(level: string, message: string, meta?: Record<string, any>): void {
     this.log(level, message, meta);
-  }
-
-  private writeProviderTrafficArtifact(runtimeRecord: Record<string, unknown>, _message: string): void {
-    const eventType = typeof runtimeRecord.eventType === 'string' ? runtimeRecord.eventType : '';
-    const requestId = typeof runtimeRecord.requestId === 'string' ? runtimeRecord.requestId : undefined;
-    const sessionId = typeof runtimeRecord.sessionId === 'string' ? runtimeRecord.sessionId : undefined;
-    const sessionStartedAt =
-      typeof runtimeRecord.sessionStartedAt === 'string' ? runtimeRecord.sessionStartedAt : undefined;
-    if (!requestId || !sessionId || !sessionStartedAt) {
-      return;
-    }
-
-    const timestamp =
-      typeof runtimeRecord.timestamp === 'string' && runtimeRecord.timestamp
-        ? runtimeRecord.timestamp
-        : new Date().toISOString();
-    const provider = typeof runtimeRecord.provider === 'string' ? runtimeRecord.provider : 'unknown';
-    const model = typeof runtimeRecord.model === 'string' ? runtimeRecord.model : 'unknown';
-    const modelClass = typeof runtimeRecord.modelClass === 'string' ? runtimeRecord.modelClass : undefined;
-    const modelWrapperClass =
-      typeof runtimeRecord.modelWrapperClass === 'string' ? runtimeRecord.modelWrapperClass : undefined;
-    const mode = typeof runtimeRecord.mode === 'string' ? runtimeRecord.mode : 'unknown';
-    const firstUserMessagePreview =
-      typeof runtimeRecord.firstUserMessagePreview === 'string' ? runtimeRecord.firstUserMessagePreview : undefined;
-
-    try {
-      if (eventType === 'provider.request.started' || eventType === 'evaluator.request.started') {
-        const payload = runtimeRecord.payload;
-        const headers = runtimeRecord.headers;
-        if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-          this.providerTrafficStore.recordRequestStart({
-            requestId,
-            timestamp,
-            provider,
-            model,
-            ...(modelClass ? { modelClass } : {}),
-            ...(modelWrapperClass ? { modelWrapperClass } : {}),
-            sessionId,
-            sessionStartedAt,
-            mode,
-            firstUserMessagePreview,
-            sentBody: payload as Record<string, unknown>,
-            headers:
-              headers && typeof headers === 'object' && !Array.isArray(headers)
-                ? (headers as Record<string, string>)
-                : undefined,
-            evaluator: eventType === 'evaluator.request.started',
-          });
-        }
-        return;
-      }
-
-      if (eventType === 'provider.response.received' || eventType === 'evaluator.response.received') {
-        const summary = runtimeRecord.payload;
-        this.providerTrafficStore.recordRequestComplete({
-          requestId,
-          timestamp,
-          provider,
-          model,
-          ...(modelClass ? { modelClass } : {}),
-          ...(modelWrapperClass ? { modelWrapperClass } : {}),
-          sessionId,
-          sessionStartedAt,
-          mode,
-          receivedSummary: summary && typeof summary === 'object' && !Array.isArray(summary) ? (summary as any) : {},
-          evaluator: eventType === 'evaluator.response.received',
-        });
-        return;
-      }
-
-      if (eventType === 'provider.response.failed' || eventType === 'provider.response.log_failed') {
-        this.providerTrafficStore.recordRequestComplete({
-          requestId,
-          timestamp,
-          provider,
-          model,
-          ...(modelClass ? { modelClass } : {}),
-          ...(modelWrapperClass ? { modelWrapperClass } : {}),
-          sessionId,
-          sessionStartedAt,
-          mode,
-          error: {
-            message:
-              typeof runtimeRecord.error === 'string'
-                ? runtimeRecord.error
-                : typeof runtimeRecord.errorMessage === 'string'
-                ? runtimeRecord.errorMessage
-                : 'unknown_error',
-          },
-        });
-      }
-    } catch (error: any) {
-      this.emitConsoleError(`[LoggingService] Failed to write provider traffic artifact: ${error.message}`);
-    }
   }
 
   private emitConsoleError(message: string): void {

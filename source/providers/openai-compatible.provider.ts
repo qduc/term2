@@ -79,11 +79,18 @@ function buildProviderFetch(
     providerId: config.name,
     defaultModel: deps.defaultModel,
     deps: {
-      loggingService: deps.loggingService || {
-        debug: () => {},
-        error: () => {},
-        getCorrelationId: () => undefined,
-      },
+      loggingService:
+        deps.loggingService ||
+        ({
+          debug: () => {},
+          error: () => {},
+          getCorrelationId: () => undefined,
+          info: () => {},
+          warn: () => {},
+          security: () => {},
+          setCorrelationId: () => {},
+          clearCorrelationId: () => {},
+        } as ILoggingService),
       sessionContextService,
     },
     middlewares,

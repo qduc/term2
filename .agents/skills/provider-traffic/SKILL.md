@@ -64,7 +64,7 @@ Each request file is `{ "sent": {...}, "received": {...} }`.
 
 | field | meaning |
 |---|---|
-| `transport` | `"json"` \| `"sse"` \| `"text"` \| `"unknown"` — how the response was parsed |
+| `transport` | `"json"` \| `"sse"` \| `"websocket"` \| `"text"` \| `"unknown"` — how the response was parsed |
 | `status` | HTTP status code |
 | `errorFrames[]` | provider error objects embedded in the stream/body |
 | `malformedFrames[]` | `{raw,error}` — frames that failed to parse as JSON |

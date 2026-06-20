@@ -166,40 +166,27 @@ it.sequential('automatically writes provider traffic artifacts for sent and rece
     logLevel: 'info',
   });
 
-  logger.debug('OpenRouter request start', {
-    eventType: 'provider.request.started',
-    direction: 'sent',
+  logger.providerTraffic.recordRequestStart({
     requestId: 'req-1',
-    sessionId: 'session-1',
-    sessionStartedAt: '2026-05-22T09:14:31.125Z',
-    firstUserMessagePreview: 'hello',
-    mode: 'standard',
     provider: 'openrouter',
     model: 'moonshotai/kimi-k2.5',
-    modelClass: 'OpenAIResponsesWSModelWithPromptCacheKey',
-    modelWrapperClass: 'FallbackResponsesModel',
-    headers: { host: 'api.openrouter.ai', authorization: '[REDACTED]' },
-    payload: {
+    sentBody: {
       messages: [{ role: 'system' }, { role: 'user', content: 'hello' }],
       tools: [{ type: 'function', function: { name: 'read_file', parameters: { type: 'object' } } }],
     },
-    timestamp: '2026-05-22T09:14:35.044Z',
-  });
-
-  logger.debug('OpenRouter response received', {
-    eventType: 'provider.response.received',
-    direction: 'received',
-    requestId: 'req-1',
-    sessionId: 'session-1',
-    sessionStartedAt: '2026-05-22T09:14:31.125Z',
-    firstUserMessagePreview: 'hello',
-    mode: 'standard',
-    provider: 'openrouter',
-    model: 'moonshotai/kimi-k2.5',
+    headers: { host: 'api.openrouter.ai', authorization: '[REDACTED]' },
     modelClass: 'OpenAIResponsesWSModelWithPromptCacheKey',
     modelWrapperClass: 'FallbackResponsesModel',
-    payload: { outputText: 'hi', toolCalls: [] },
-    timestamp: '2026-05-22T09:14:36.000Z',
+  });
+
+  await logger.providerTraffic.recordResponseReceived({
+    requestId: 'req-1',
+    provider: 'openrouter',
+    model: 'moonshotai/kimi-k2.5',
+    status: 200,
+    response: { outputText: 'hi', toolCalls: [] },
+    modelClass: 'OpenAIResponsesWSModelWithPromptCacheKey',
+    modelWrapperClass: 'FallbackResponsesModel',
   });
 
   await new Promise((resolve) => setTimeout(resolve, 200));
@@ -244,7 +231,7 @@ it.sequential('automatically writes provider traffic artifacts for sent and rece
   expect(received.direction).toBe('received');
   expect(received.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
   expect(received.modelWrapperClass).toBe('FallbackResponsesModel');
-  expect((received.summary as Record<string, unknown>)?.outputText).toBe('hi');
+  expect(((received.summary as Record<string, unknown>)?.payload as any)?.outputText).toBe('hi');
 });
 
 it.sequential('cleans up old provider traffic files and directories by date', async () => {

@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import { withTrace } from '@openai/agents-core';
 import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
+import type { IProviderTraffic } from '../services/service-interfaces.js';
 import { CodexResponsesModel, CodexResponsesWSModel, wrapCodexStream } from './codex-responses-model.js';
 
 // Fixture mirrors the SSE shape that codex's responses endpoint emits: deltas
@@ -491,7 +492,19 @@ it('CodexResponsesWSModel extends OpenAIResponsesWSModel', () => {
 
 it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed responses', async () => {
   const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-  const logs: Array<{ level: string; message: string; meta?: any }> = [];
+  const trafficCalls: Array<{ method: string; args: any }> = [];
+
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficCalls.push({ method: 'recordRequestStart', args: input });
+    },
+    async recordResponseReceived(input) {
+      trafficCalls.push({ method: 'recordResponseReceived', args: input });
+    },
+    recordRequestFailed(input) {
+      trafficCalls.push({ method: 'recordRequestFailed', args: input });
+    },
+  };
 
   (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function () {
     return makeStream([
@@ -518,11 +531,6 @@ it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed r
     ]);
   };
 
-  const loggingService = {
-    debug: (message: string, meta?: any) => logs.push({ level: 'debug', message, meta }),
-    error: (message: string, meta?: any) => logs.push({ level: 'error', message, meta }),
-    getCorrelationId: () => 'trace-log-1',
-  };
   const sessionContextService = {
     getContext: () => ({
       sessionId: 'sess_ws_1',
@@ -544,7 +552,7 @@ it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed r
       'gpt-5-codex',
       tokenManager as any,
       undefined,
-      loggingService as any,
+      mockProviderTraffic as any,
       sessionContextService as any,
     );
     const request: any = { input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] };
@@ -552,14 +560,13 @@ it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed r
     const events = await collect(model.getStreamedResponse(request));
 
     expect((events[events.length - 1] as any).event?.type).toBe('response.completed');
-    expect(logs.length).toBe(2);
-    expect(logs[0].meta.eventType).toBe('provider.request.started');
-    expect(logs[1].meta.eventType).toBe('provider.response.received');
-    expect(logs[0].meta.requestId).toBe(logs[1].meta.requestId);
-    expect(logs[0].meta.sessionId).toBe('sess_ws_1');
-    expect(logs[0].meta.headers.authorization).toBe('[REDACTED]');
-    expect(logs[1].meta.payload.transport).toBe('websocket');
-    expect(logs[1].meta.payload.responseId).toBe('resp_ws_traffic');
+    expect(trafficCalls.length).toBe(2);
+    expect(trafficCalls[0].method).toBe('recordRequestStart');
+    expect(trafficCalls[1].method).toBe('recordResponseReceived');
+    expect(trafficCalls[0].args.requestId).toBe(trafficCalls[1].args.requestId);
+    expect(trafficCalls[0].args.sessionId).toBeUndefined(); // Codex model doesn't pass sessionId directly
+    expect(trafficCalls[0].args.headers.authorization).toBe('[REDACTED]');
+    expect(trafficCalls[1].args.transport).toBe('websocket');
   } finally {
     (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
   }
@@ -568,8 +575,20 @@ it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed r
 it.sequential(
   'CodexResponsesWSModel logs reasoning and tool calls in choice payload matching HTTP/SSE logs',
   async () => {
-    const logs: any[] = [];
+    const trafficCalls: Array<{ method: string; args: any }> = [];
     const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+
+    const mockProviderTraffic: IProviderTraffic = {
+      recordRequestStart(input) {
+        trafficCalls.push({ method: 'recordRequestStart', args: input });
+      },
+      async recordResponseReceived(input) {
+        trafficCalls.push({ method: 'recordResponseReceived', args: input });
+      },
+      recordRequestFailed(input) {
+        trafficCalls.push({ method: 'recordRequestFailed', args: input });
+      },
+    };
 
     (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function () {
       return makeStream([
@@ -606,11 +625,6 @@ it.sequential(
       ]);
     };
 
-    const loggingService = {
-      debug: (message: string, meta?: any) => logs.push({ level: 'debug', message, meta }),
-      error: (message: string, meta?: any) => logs.push({ level: 'error', message, meta }),
-      getCorrelationId: () => 'trace-log-2',
-    };
     const sessionContextService = {
       getContext: () => ({
         sessionId: 'sess_ws_2',
@@ -632,37 +646,23 @@ it.sequential(
         'gpt-5-codex',
         tokenManager as any,
         undefined,
-        loggingService as any,
+        mockProviderTraffic as any,
         sessionContextService as any,
       );
       const request: any = { input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] };
 
       await collect(model.getStreamedResponse(request));
 
-      expect(logs.length).toBe(2);
-      const receivedPayload = logs[1].meta.payload;
-      expect(receivedPayload.transport).toBe('websocket');
-      expect(receivedPayload.responseId).toBe('resp_ws_reasoning_tool');
-      expect(receivedPayload.outputTypes).toEqual(['reasoning', 'function_call']);
+      expect(trafficCalls.length).toBe(2);
+      expect(trafficCalls[0].method).toBe('recordRequestStart');
+      expect(trafficCalls[1].method).toBe('recordResponseReceived');
 
-      // Check unified payload matching HTTP/SSE structure
-      expect(receivedPayload.payload).toBeTruthy();
-      expect(receivedPayload.payload.id).toBe('resp_ws_reasoning_tool');
-      expect(receivedPayload.payload.usage).toEqual({ input_tokens: 5, output_tokens: 6, total_tokens: 11 });
-      expect(receivedPayload.payload.choices.length).toBe(1);
-
-      const delta = receivedPayload.payload.choices[0].delta;
-      expect(delta.reasoning).toBe('Let me think about this request.');
-      expect(delta.tool_calls).toEqual([
-        {
-          id: 'call_123',
-          type: 'function',
-          function: {
-            name: 'shell',
-            arguments: '{"command":"ls"}',
-          },
-        },
-      ]);
+      const receivedInput = trafficCalls[1].args;
+      expect(receivedInput.transport).toBe('websocket');
+      expect(receivedInput.response).toBeTruthy();
+      expect(receivedInput.response.id).toBe('resp_ws_reasoning_tool');
+      expect(receivedInput.response.usage).toEqual({ input_tokens: 5, output_tokens: 6, total_tokens: 11 });
+      expect(Array.isArray(receivedInput.response.output)).toBe(true);
     } finally {
       (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
     }

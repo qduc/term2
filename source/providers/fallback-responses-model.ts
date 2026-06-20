@@ -1,8 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents-core';
-import { describeError } from '../utils/error-helpers.js';
-import { summarizeReceivedTraffic } from '../services/logging/provider-traffic.js';
-import type { ISessionContextService } from '../services/service-interfaces.js';
+import type { ISessionContextService, IProviderTraffic } from '../services/service-interfaces.js';
+
+const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
+  recordRequestStart() {},
+  async recordResponseReceived() {},
+  recordRequestFailed() {},
+};
 import { sanitizeHeaders } from '../utils/header-sanitizer.js';
 import { isRetryableTransportError } from '../services/retry/retry-error-classification.js';
 import { computeUpstreamRetryDelayMs } from '../services/retry/upstream-retry-policy.js';
@@ -53,6 +57,7 @@ function isWsResponseOutputMissing(err: unknown): boolean {
 export class FallbackResponsesModel implements Model {
   private readonly warmupSleep: (delayMs: number) => Promise<void>;
   private readonly warmupRandom: () => number;
+  private readonly providerTraffic: IProviderTraffic;
 
   constructor(
     private readonly wsModel: Model,
@@ -61,7 +66,7 @@ export class FallbackResponsesModel implements Model {
     private readonly onDowngrade?: (error: unknown) => void,
     private readonly loggingService?: any,
     private readonly providerId?: string,
-    private readonly sessionContextService?: ISessionContextService,
+    _sessionContextService?: ISessionContextService,
     warmupRetryDependencies?: RetryDependencies,
   ) {
     this.state.forceDowngrade = (error: unknown) => this.#notifyDowngrade(error);
@@ -72,6 +77,7 @@ export class FallbackResponsesModel implements Model {
           setTimeout(resolve, delayMs);
         }));
     this.warmupRandom = warmupRetryDependencies?.random ?? Math.random;
+    this.providerTraffic = loggingService?.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
   }
 
   /** Flip downgrade state and notify listeners. */
@@ -95,53 +101,32 @@ export class FallbackResponsesModel implements Model {
 
     const requestId = randomUUID();
     const model = request.modelSettings?.providerData?.model || (this.wsModel as any)._model || 'unknown';
-    const trafficContext = this.sessionContextService?.getContext() ?? null;
     const modelClass = (this.wsModel as any)?.constructor?.name || 'UnknownModel';
-    const baseMeta = {
-      requestId,
-      traceId: trafficContext?.traceId ?? this.loggingService?.getCorrelationId?.(),
-      sessionId: trafficContext?.sessionId,
-      sessionStartedAt: trafficContext?.sessionStartedAt,
-      firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
-      mode: trafficContext?.mode,
-      provider: this.providerId || 'unknown',
-      model,
-      modelClass,
-      modelWrapperClass: this.constructor.name,
-    };
-
-    const isEvaluator = trafficContext?.evaluator === true;
-    const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
 
     // Log request start
-    if (this.loggingService && this.providerId) {
-      let sentBody: any = request;
-      let sanitizedHeaders: Record<string, string> | undefined;
-      try {
-        if (typeof (this.wsModel as any)._buildResponsesCreateRequest === 'function') {
-          const built = (this.wsModel as any)._buildResponsesCreateRequest(request, false);
-          sentBody = built.requestData;
-          if (built.sdkRequestHeaders) {
-            sanitizedHeaders = sanitizeHeaders(built.sdkRequestHeaders);
-          }
+    let sentBody: any = request;
+    let sanitizedHeaders: Record<string, string> | undefined;
+    try {
+      if (typeof (this.wsModel as any)._buildResponsesCreateRequest === 'function') {
+        const built = (this.wsModel as any)._buildResponsesCreateRequest(request, false);
+        sentBody = built.requestData;
+        if (built.sdkRequestHeaders) {
+          sanitizedHeaders = sanitizeHeaders(built.sdkRequestHeaders);
         }
-      } catch {
-        // fallback
       }
-
-      this.loggingService.debug(`${this.providerId} ws request start`, {
-        eventType: `${eventPrefix}.request.started`,
-        category: 'provider',
-        phase: 'request_start',
-        direction: 'sent',
-        ...baseMeta,
-        messageCount: Array.isArray(sentBody?.messages) ? sentBody.messages.length : undefined,
-        messages: sentBody?.messages,
-        toolsCount: Array.isArray(sentBody?.tools) ? sentBody.tools.length : undefined,
-        payload: sentBody,
-        headers: sanitizedHeaders,
-      });
+    } catch {
+      // fallback
     }
+
+    this.providerTraffic.recordRequestStart({
+      requestId,
+      provider: this.providerId || 'unknown',
+      model,
+      sentBody,
+      headers: sanitizedHeaders,
+      modelClass,
+      modelWrapperClass: this.constructor.name,
+    });
 
     // Retry WS transport errors before falling back to HTTP.
     const maxWsAttempts = DEFAULT_STREAM_MAX_RETRIES + 1;
@@ -151,27 +136,16 @@ export class FallbackResponsesModel implements Model {
         const response = await this.wsModel.getResponse(request);
 
         // Log response complete
-        if (this.loggingService && this.providerId) {
-          const summary = {
-            transport: 'json' as const,
-            status: 200,
-            errorFrames: [],
-            malformedFrames: [],
-            unknownFrames: [],
-            payload: response.providerData || response,
-          };
-
-          this.loggingService.debug(`${this.providerId} ws response received`, {
-            eventType: `${eventPrefix}.response.received`,
-            category: 'provider',
-            phase: 'provider_response',
-            direction: 'received',
-            ...baseMeta,
-            status: 200,
-            text: response.output?.[0]?.type === 'message' ? (response.output[0] as any).content?.[0]?.text : undefined,
-            payload: summary,
-          });
-        }
+        await this.providerTraffic.recordResponseReceived({
+          requestId,
+          provider: this.providerId || 'unknown',
+          model,
+          status: 200,
+          response,
+          transport: 'websocket',
+          modelClass,
+          modelWrapperClass: this.constructor.name,
+        });
 
         return response;
       } catch (error) {
@@ -192,17 +166,16 @@ export class FallbackResponsesModel implements Model {
           throw error;
         }
 
-        if (this.loggingService && this.providerId) {
-          this.loggingService.error(`${this.providerId} ws request failed`, {
-            eventType: 'provider.response.failed',
-            category: 'provider',
-            phase: 'provider_response',
-            ...baseMeta,
-            error: describeError(error),
-            wsAttempt,
-            wsMaxAttempts: maxWsAttempts,
-          });
-        }
+        this.providerTraffic.recordRequestFailed({
+          requestId,
+          provider: this.providerId || 'unknown',
+          model,
+          error,
+          modelClass,
+          modelWrapperClass: this.constructor.name,
+          wsAttempt,
+          wsMaxAttempts: maxWsAttempts,
+        });
 
         lastTransportError = error;
         if (wsAttempt < maxWsAttempts) {
@@ -235,53 +208,32 @@ export class FallbackResponsesModel implements Model {
 
     const requestId = randomUUID();
     const model = request.modelSettings?.providerData?.model || (this.wsModel as any)._model || 'unknown';
-    const trafficContext = this.sessionContextService?.getContext() ?? null;
     const modelClass = (this.wsModel as any)?.constructor?.name || 'UnknownModel';
-    const baseMeta = {
-      requestId,
-      traceId: trafficContext?.traceId ?? this.loggingService?.getCorrelationId?.(),
-      sessionId: trafficContext?.sessionId,
-      sessionStartedAt: trafficContext?.sessionStartedAt,
-      firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
-      mode: trafficContext?.mode,
-      provider: this.providerId || 'unknown',
-      model,
-      modelClass,
-      modelWrapperClass: this.constructor.name,
-    };
-
-    const isEvaluator = trafficContext?.evaluator === true;
-    const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
 
     // Log request start
-    if (this.loggingService && this.providerId) {
-      let sentBody: any = request;
-      let sanitizedHeaders: Record<string, string> | undefined;
-      try {
-        if (typeof (this.wsModel as any)._buildResponsesCreateRequest === 'function') {
-          const built = (this.wsModel as any)._buildResponsesCreateRequest(request, true);
-          sentBody = built.requestData;
-          if (built.sdkRequestHeaders) {
-            sanitizedHeaders = sanitizeHeaders(built.sdkRequestHeaders);
-          }
+    let sentBody: any = request;
+    let sanitizedHeaders: Record<string, string> | undefined;
+    try {
+      if (typeof (this.wsModel as any)._buildResponsesCreateRequest === 'function') {
+        const built = (this.wsModel as any)._buildResponsesCreateRequest(request, true);
+        sentBody = built.requestData;
+        if (built.sdkRequestHeaders) {
+          sanitizedHeaders = sanitizeHeaders(built.sdkRequestHeaders);
         }
-      } catch {
-        // fallback
       }
-
-      this.loggingService.debug(`${this.providerId} ws stream request start`, {
-        eventType: `${eventPrefix}.request.started`,
-        category: 'provider',
-        phase: 'request_start',
-        direction: 'sent',
-        ...baseMeta,
-        messageCount: Array.isArray(sentBody?.messages) ? sentBody.messages.length : undefined,
-        messages: sentBody?.messages,
-        toolsCount: Array.isArray(sentBody?.tools) ? sentBody.tools.length : undefined,
-        payload: sentBody,
-        headers: sanitizedHeaders,
-      });
+    } catch {
+      // fallback
     }
+
+    this.providerTraffic.recordRequestStart({
+      requestId,
+      provider: this.providerId || 'unknown',
+      model,
+      sentBody,
+      headers: sanitizedHeaders,
+      modelClass,
+      modelWrapperClass: this.constructor.name,
+    });
 
     // Retry WS transport errors before falling back to HTTP.
     // We can only retry while no events have been yielded — once the
@@ -302,29 +254,24 @@ export class FallbackResponsesModel implements Model {
         }
 
         // Log response complete
-        if (this.loggingService && this.providerId && sseEvents.length > 0) {
-          const sseText = sseEvents.map((ev) => `data: ${JSON.stringify(ev)}`).join('\n\n');
+        if (sseEvents.length > 0) {
+          const terminalEvent = [...sseEvents]
+            .reverse()
+            .find(
+              (ev) =>
+                ev && typeof ev === 'object' && (ev.type === 'response.completed' || ev.type === 'response.incomplete'),
+            );
+          const responsePayload = terminalEvent?.response ?? sseEvents;
 
-          const fakeResponse = new Response(sseText, {
+          await this.providerTraffic.recordResponseReceived({
+            requestId,
+            provider: this.providerId || 'unknown',
+            model,
             status: 200,
-            headers: { 'Content-Type': 'text/event-stream' },
-          });
-
-          const summary = await summarizeReceivedTraffic(fakeResponse);
-          const summaryPayload = summary.payload as any;
-          const responseText = summaryPayload?.choices?.[0]?.delta?.content;
-          const toolCalls = summaryPayload?.choices?.[0]?.delta?.tool_calls;
-
-          this.loggingService.debug(`${this.providerId} ws stream response received`, {
-            eventType: `${eventPrefix}.response.received`,
-            category: 'provider',
-            phase: 'provider_response',
-            direction: 'received',
-            ...baseMeta,
-            status: 200,
-            text: responseText,
-            toolCalls,
-            payload: summary,
+            response: responsePayload,
+            transport: 'websocket',
+            modelClass,
+            modelWrapperClass: this.constructor.name,
           });
         }
         return;
@@ -333,17 +280,16 @@ export class FallbackResponsesModel implements Model {
           throw error;
         }
 
-        if (this.loggingService && this.providerId) {
-          this.loggingService.error(`${this.providerId} ws stream request failed`, {
-            eventType: 'provider.response.failed',
-            category: 'provider',
-            phase: 'provider_response',
-            ...baseMeta,
-            error: describeError(error),
-            wsAttempt,
-            wsMaxAttempts: maxWsAttempts,
-          });
-        }
+        this.providerTraffic.recordRequestFailed({
+          requestId,
+          provider: this.providerId || 'unknown',
+          model,
+          error,
+          modelClass,
+          modelWrapperClass: this.constructor.name,
+          wsAttempt,
+          wsMaxAttempts: maxWsAttempts,
+        });
 
         // Mid-stream failures are retried by the session layer from repaired
         // history. Do not downgrade to HTTP or retry — the consumer has

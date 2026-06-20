@@ -6,6 +6,7 @@ import {
   ChainingTransportDowngradeError,
   DEFAULT_STREAM_MAX_RETRIES,
 } from './fallback-responses-model.js';
+import { summarizeReceivedTraffic, summarizeWebsocketResponse } from '../services/logging/provider-traffic.js';
 
 function makeMockModel(
   options: {
@@ -33,6 +34,148 @@ function createSleepRecorder() {
     delays,
     sleep: async (delayMs: number) => {
       delays.push(delayMs);
+    },
+  };
+}
+
+function makeMockProviderTraffic(loggingService: any, sessionContextService?: any): any {
+  return {
+    recordRequestStart(input: any) {
+      const trafficContext = sessionContextService?.getContext() ?? null;
+      const isEvaluator = trafficContext?.evaluator === true;
+      const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+      loggingService.debug(`${input.provider} ai sdk request started`, {
+        eventType: `${eventPrefix}.request.started`,
+        category: 'provider',
+        phase: 'provider_request',
+        direction: 'sent',
+        requestId: input.requestId,
+        traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),
+        sessionId: trafficContext?.sessionId,
+        sessionStartedAt: trafficContext?.sessionStartedAt,
+        firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
+        mode: trafficContext?.mode,
+        provider: input.provider,
+        model: input.model,
+        modelClass: input.modelClass,
+        modelWrapperClass: input.modelWrapperClass,
+        payload: input.sentBody,
+        headers: input.headers,
+      });
+    },
+    async recordResponseReceived(input: any) {
+      const trafficContext = sessionContextService?.getContext() ?? null;
+      const isEvaluator = trafficContext?.evaluator === true;
+      const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+
+      const asRecordObj = (v: any) => (v && typeof v === 'object' && !Array.isArray(v) ? v : undefined);
+
+      let summary: any;
+      let text: string | undefined;
+      let toolCalls: any;
+
+      if (input.response instanceof Response) {
+        summary = await summarizeReceivedTraffic(input.response.clone());
+        text = summary.text;
+        if (summary.payload && typeof summary.payload === 'object') {
+          const choices = summary.payload.choices;
+          text = text ?? choices?.[0]?.message?.content ?? choices?.[0]?.delta?.content;
+          toolCalls = choices?.[0]?.message?.tool_calls ?? choices?.[0]?.delta?.tool_calls;
+        }
+      } else if (input.transport === 'websocket') {
+        summary = summarizeWebsocketResponse(input.response);
+        text = summary.text;
+        if (summary.payload && typeof summary.payload === 'object') {
+          const choices = summary.payload.choices;
+          text = text ?? choices?.[0]?.delta?.content;
+          toolCalls = choices?.[0]?.delta?.tool_calls;
+        }
+      } else {
+        let payload = input.response ?? {};
+        if (payload && typeof payload === 'object' && 'providerData' in payload && payload.providerData) {
+          const modelResponse = payload as any;
+          if (Array.isArray(modelResponse.output)) {
+            const firstOutput = modelResponse.output[0];
+            if (firstOutput?.type === 'message' && Array.isArray(firstOutput.content)) {
+              const firstContent = firstOutput.content[0];
+              if (firstContent?.type === 'output_text' && typeof firstContent.text === 'string') {
+                text = firstContent.text;
+              }
+            }
+          }
+          payload = modelResponse.providerData;
+        } else {
+          const summaryPayload = asRecordObj(payload);
+          text = summaryPayload
+            ? summaryPayload.output?.[0]?.type === 'message'
+              ? (summaryPayload.output[0] as any).content?.[0]?.text
+              : undefined
+            : undefined;
+        }
+
+        if (payload && typeof payload === 'object') {
+          const choices = (payload as any)?.choices;
+          text = text ?? choices?.[0]?.message?.content ?? choices?.[0]?.delta?.content;
+          toolCalls = choices?.[0]?.message?.tool_calls ?? choices?.[0]?.delta?.tool_calls;
+        }
+
+        summary = {
+          transport: 'json',
+          status: input.status,
+          errorFrames: [],
+          malformedFrames: [],
+          unknownFrames: [],
+          payload,
+          ...(text ? { text } : {}),
+        };
+      }
+
+      loggingService.debug(`${input.provider} ai sdk response`, {
+        eventType: `${eventPrefix}.response.received`,
+        category: 'provider',
+        phase: 'provider_response',
+        direction: 'received',
+        requestId: input.requestId,
+        traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),
+        sessionId: trafficContext?.sessionId,
+        sessionStartedAt: trafficContext?.sessionStartedAt,
+        firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
+        mode: trafficContext?.mode,
+        provider: input.provider,
+        model: input.model,
+        modelClass: input.modelClass,
+        modelWrapperClass: input.modelWrapperClass,
+        status: input.status,
+        text,
+        toolCalls,
+        payload: summary,
+      });
+    },
+    recordRequestFailed(input: any) {
+      const trafficContext = sessionContextService?.getContext() ?? null;
+      const isEvaluator = trafficContext?.evaluator === true;
+      const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+      loggingService.error(`${input.provider} request failed`, {
+        eventType: `${eventPrefix}.response.failed`,
+        category: 'provider',
+        phase: 'provider_response',
+        requestId: input.requestId,
+        traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),
+        sessionId: trafficContext?.sessionId,
+        sessionStartedAt: trafficContext?.sessionStartedAt,
+        firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
+        mode: trafficContext?.mode,
+        provider: input.provider,
+        model: input.model,
+        modelClass: input.modelClass,
+        modelWrapperClass: input.modelWrapperClass,
+        error:
+          typeof input.error === 'object' && input.error && 'message' in (input.error as any)
+            ? String((input.error as any).message)
+            : String(input.error),
+        wsAttempt: input.wsAttempt,
+        wsMaxAttempts: input.wsMaxAttempts,
+      });
     },
   };
 }
@@ -314,7 +457,7 @@ it('FallbackResponsesModel logs unary WS request start, success, and failure eve
   const state = { isDowngraded: false };
 
   const logs: any[] = [];
-  const mockLogging = {
+  const mockLogging: any = {
     getCorrelationId: () => 'corr-123',
     debug: (msg: string, meta: any) => {
       logs.push({ level: 'debug', msg, meta });
@@ -327,6 +470,7 @@ it('FallbackResponsesModel logs unary WS request start, success, and failure eve
     getContext: () => ({ sessionId: 'sess-123', sessionStartedAt: '2026-05-24T12:00:00Z' }),
     runWithContext: <T>(_context: any, fn: () => T) => fn(),
   };
+  mockLogging.providerTraffic = makeMockProviderTraffic(mockLogging, mockSessionContext);
 
   const model = new FallbackResponsesModel(
     wsModel,
@@ -364,7 +508,7 @@ it('FallbackResponsesModel logs unary WS request start, success, and failure eve
   expect(logs[1].level).toBe('debug');
   expect(logs[1].meta.eventType).toBe('provider.response.received');
   expect(logs[1].meta.text).toBe('Hello back');
-  expect(logs[1].meta.payload.transport).toBe('json');
+  expect(logs[1].meta.payload.transport).toBe('websocket');
   expect(logs[1].meta.payload.payload.id).toBe('resp_ws_123');
 
   // Test failure logging
@@ -480,7 +624,7 @@ it('FallbackResponsesModel logs streaming WS request start and response completi
   const state = { isDowngraded: false };
 
   const logs: any[] = [];
-  const mockLogging = {
+  const mockLogging: any = {
     getCorrelationId: () => 'corr-123',
     debug: (msg: string, meta: any) => {
       logs.push({ level: 'debug', msg, meta });
@@ -490,6 +634,7 @@ it('FallbackResponsesModel logs streaming WS request start and response completi
     getContext: () => ({ sessionId: 'sess-123', sessionStartedAt: '2026-05-24T12:00:00Z' }),
     runWithContext: <T>(_context: any, fn: () => T) => fn(),
   };
+  mockLogging.providerTraffic = makeMockProviderTraffic(mockLogging, mockSessionContext);
 
   const model = new FallbackResponsesModel(
     wsModel,
@@ -520,7 +665,7 @@ it('FallbackResponsesModel logs streaming WS request start and response completi
   expect(logs[0].meta.modelWrapperClass).toBe('FallbackResponsesModel');
   expect(logs[1].meta.eventType).toBe('provider.response.received');
   expect(logs[1].meta.text).toBe('Hello'); // parsed delta content
-  expect(logs[1].meta.payload.transport).toBe('sse'); // parsed as text/event-stream sse
+  expect(logs[1].meta.payload.transport).toBe('websocket');
   expect(logs[1].meta.payload.payload.id).toBe('resp_ws_stream_123');
 });
 

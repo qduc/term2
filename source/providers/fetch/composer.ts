@@ -1,13 +1,20 @@
 import { composeFetch, FetchMiddleware } from './compose.js';
-import { createLoggingMiddleware, CreateLoggingMiddlewareOptions } from './logging-middleware.js';
+import { createLoggingMiddleware } from './logging-middleware.js';
 import { createRateLimitMiddleware } from './rate-limit-middleware.js';
+import type { ILoggingService, IProviderTraffic } from '../../services/service-interfaces.js';
+
+const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
+  recordRequestStart() {},
+  async recordResponseReceived() {},
+  recordRequestFailed() {},
+};
 
 export type CreateProviderFetchOptions = {
   providerId: string;
   defaultModel: string;
   deps: {
-    loggingService: CreateLoggingMiddlewareOptions['loggingService'];
-    sessionContextService: CreateLoggingMiddlewareOptions['sessionContextService'];
+    loggingService: ILoggingService;
+    sessionContextService?: any;
   };
   middlewares?: FetchMiddleware[];
   fetchImpl?: typeof fetch;
@@ -27,8 +34,7 @@ export function createProviderFetch({
     createLoggingMiddleware({
       provider: providerId,
       model: defaultModel,
-      loggingService: deps.loggingService,
-      sessionContextService: deps.sessionContextService,
+      providerTraffic: deps.loggingService.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC,
     }),
     // Rate-limit runs innermost so it checks the raw response and throws before
     // the SDK can process a 429 with retry-after > 60s

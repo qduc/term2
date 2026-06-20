@@ -376,11 +376,13 @@ if (validatedReasoningEffort) {
   };
 }
 
+const sessionContextService = new SessionContextService();
+
 // Create LoggingService instance
 const logger = new LoggingService({
   disableLogging: false,
+  sessionContextService,
 });
-const sessionContextService = new SessionContextService();
 
 // Build settings with CLI overrides applied first so we can read persisted
 // exclusive modes before deciding the implicit lite default.

@@ -1,13 +1,16 @@
 import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
 import { getCurrentTrace, withTrace } from '@openai/agents-core';
 import { randomUUID } from 'node:crypto';
-import { describeError } from '../utils/error-helpers.js';
 import { sanitizeHeaders } from '../utils/header-sanitizer.js';
-import type { ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
+import type { ISessionContextService, IProviderTraffic } from '../services/service-interfaces.js';
+
+const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
+  recordRequestStart() {},
+  async recordResponseReceived() {},
+  recordRequestFailed() {},
+};
 import { isPreviousResponseNotFoundError } from '../services/retry/retry-error-classification.js';
 import { computeUpstreamRetryDelayMs } from '../services/retry/upstream-retry-policy.js';
-
-type TrafficLogger = Pick<ILoggingService, 'debug' | 'error' | 'getCorrelationId'>;
 
 type DiagnosticLogger = {
   warn?: (message: string, meta?: Record<string, unknown>) => void;
@@ -113,105 +116,6 @@ const summarizeReconstructedItems = (items: unknown[]): Record<string, unknown> 
     lastItemId: stringValue(last?.id),
     lastItemCallId: stringValue(last?.call_id) ?? stringValue(last?.callId),
   };
-};
-
-const summarizeWebsocketResponse = (response: unknown): Record<string, unknown> => {
-  const record = asRecord(response) ?? {};
-  const output = Array.isArray(record.output) ? record.output : [];
-  const outputTypes = output
-    .map((item) => stringValue(asRecord(item)?.type) ?? 'unknown')
-    .filter((type, index, array) => array.indexOf(type) === index);
-
-  // Extract text content from assistant message items
-  const messageTexts: string[] = [];
-  for (const item of output) {
-    const itemRec = asRecord(item);
-    if (itemRec?.type === 'message' && itemRec.role === 'assistant') {
-      const content = itemRec.content;
-      if (Array.isArray(content)) {
-        for (const part of content) {
-          const partRec = asRecord(part);
-          if ((partRec?.type === 'output_text' || partRec?.type === 'text') && typeof partRec.text === 'string') {
-            messageTexts.push(partRec.text);
-          }
-        }
-      } else if (typeof content === 'string') {
-        messageTexts.push(content);
-      }
-    }
-  }
-  const text = messageTexts.length > 0 ? messageTexts.join('\n') : undefined;
-
-  // Extract reasoning content from reasoning items
-  const reasoningTexts: string[] = [];
-  for (const item of output) {
-    const itemRec = asRecord(item);
-    if (itemRec?.type === 'reasoning') {
-      const reasoningVal =
-        stringValue(itemRec.text) ??
-        stringValue(itemRec.delta) ??
-        stringValue(itemRec.summary) ??
-        stringValue(itemRec.reasoning_content);
-      if (reasoningVal) {
-        reasoningTexts.push(reasoningVal);
-      }
-    }
-  }
-  const reasoning = reasoningTexts.length > 0 ? reasoningTexts.join('\n') : undefined;
-
-  // Extract tool calls
-  const toolCalls: any[] = [];
-  for (const item of output) {
-    const itemRec = asRecord(item);
-    if (itemRec?.type === 'function_call') {
-      const name = stringValue(itemRec.name);
-      const args = stringValue(itemRec.arguments) ?? '{}';
-      toolCalls.push({
-        id: stringValue(itemRec.call_id) ?? stringValue(itemRec.id),
-        type: 'function',
-        function: {
-          ...(name !== undefined ? { name } : {}),
-          arguments: args,
-        },
-      });
-    }
-  }
-
-  const payload: Record<string, unknown> = {
-    choices: [
-      {
-        delta: {
-          ...(text !== undefined ? { content: text } : {}),
-          ...(reasoning !== undefined ? { reasoning } : {}),
-          ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
-        },
-      },
-    ],
-  };
-
-  const responseId = stringValue(record.id);
-  if (responseId) {
-    payload.id = responseId;
-  }
-  if (record.usage) {
-    payload.usage = record.usage;
-  }
-
-  return {
-    transport: 'websocket',
-    status: stringValue(record.status) ?? 'completed',
-    responseId: responseId,
-    outputCount: output.length,
-    outputTypes,
-    payload,
-    ...(text ? { text } : {}),
-    ...(record.usage ? { usage: record.usage } : {}),
-  };
-};
-
-const getTrafficEventPrefix = (sessionContextService?: ISessionContextService): 'provider' | 'evaluator' => {
-  const trafficContext = sessionContextService?.getContext() ?? null;
-  return trafficContext?.evaluator === true ? 'evaluator' : 'provider';
 };
 
 // Codex's `/backend-api/codex/responses` endpoint can ship terminal response
@@ -427,12 +331,14 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   private readonly warmupRandom: () => number;
   #serverHistoryReuseDisabled = false;
 
+  private readonly providerTraffic: IProviderTraffic;
+
   constructor(
     client: any,
     model: string,
     private readonly tokenManager: any,
     private readonly diagnosticLogger?: DiagnosticLogger,
-    private readonly trafficLogger?: TrafficLogger,
+    providerTraffic?: IProviderTraffic,
     private readonly sessionContextService?: ISessionContextService,
     warmupRetryDependencies?: {
       sleep?: (delayMs: number) => Promise<void>;
@@ -447,24 +353,8 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
           setTimeout(resolve, delayMs);
         }));
     this.warmupRandom = warmupRetryDependencies?.random ?? Math.random;
-  }
 
-  #buildTrafficMeta(requestId: string, requestData: Record<string, unknown>): Record<string, unknown> {
-    const trafficContext = this.sessionContextService?.getContext() ?? null;
-    const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
-
-    return {
-      requestId,
-      traceId: trafficContext?.traceId ?? this.trafficLogger?.getCorrelationId?.(),
-      sessionId: trafficContext?.sessionId,
-      sessionStartedAt: trafficContext?.sessionStartedAt,
-      firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
-      mode: trafficContext?.mode,
-      provider: 'codex',
-      model,
-      modelClass: WS_RESPONSE_MODEL_CLASS,
-      modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
-    };
+    this.providerTraffic = providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
   }
 
   #modelNameFallback(): string {
@@ -472,44 +362,48 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   }
 
   #logTrafficStarted(requestId: string, requestData: Record<string, unknown>, headers?: HeadersInit): void {
-    if (!this.trafficLogger) return;
-    const eventPrefix = getTrafficEventPrefix(this.sessionContextService);
+    const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
+    const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
+    const sanitizedHeaders = headers ? sanitizeHeaders(headers) : undefined;
 
-    this.trafficLogger.debug('Codex websocket request start', {
-      eventType: `${eventPrefix}.request.started`,
-      category: 'provider',
-      phase: 'request_start',
-      direction: 'sent',
-      ...this.#buildTrafficMeta(requestId, requestData),
-      payload: requestData,
-      ...(headers ? { headers: sanitizeHeaders(headers) } : {}),
+    providerTraffic.recordRequestStart({
+      requestId,
+      provider: 'codex',
+      model,
+      sentBody: requestData,
+      headers: sanitizedHeaders,
+      modelClass: WS_RESPONSE_MODEL_CLASS,
+      modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
     });
   }
 
   #logTrafficReceived(requestId: string, requestData: Record<string, unknown>, response: unknown): void {
-    if (!this.trafficLogger) return;
-    const eventPrefix = getTrafficEventPrefix(this.sessionContextService);
+    const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
+    const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
 
-    this.trafficLogger.debug('Codex websocket response received', {
-      eventType: `${eventPrefix}.response.received`,
-      category: 'provider',
-      phase: 'provider_response',
-      direction: 'received',
-      ...this.#buildTrafficMeta(requestId, requestData),
-      payload: summarizeWebsocketResponse(response),
+    providerTraffic.recordResponseReceived({
+      requestId,
+      provider: 'codex',
+      model,
+      status: 200,
+      response: response as any,
+      transport: 'websocket',
+      modelClass: WS_RESPONSE_MODEL_CLASS,
+      modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
     });
   }
 
   #logTrafficFailed(requestId: string, requestData: Record<string, unknown>, error: unknown): void {
-    if (!this.trafficLogger) return;
-    const eventPrefix = getTrafficEventPrefix(this.sessionContextService);
+    const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
+    const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
 
-    this.trafficLogger.error('Codex websocket request failed', {
-      eventType: `${eventPrefix}.response.failed`,
-      category: 'provider',
-      phase: 'provider_response',
-      ...this.#buildTrafficMeta(requestId, requestData),
-      error: describeError(error),
+    providerTraffic.recordRequestFailed({
+      requestId,
+      provider: 'codex',
+      model,
+      error,
+      modelClass: WS_RESPONSE_MODEL_CLASS,
+      modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
     });
   }
 

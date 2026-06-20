@@ -1,10 +1,10 @@
 import { it, expect } from 'vitest';
 import { composeFetch, FetchMiddleware } from './compose.js';
-import { createLoggingMiddleware, CreateLoggingMiddlewareOptions } from './logging-middleware.js';
+import { createLoggingMiddleware } from './logging-middleware.js';
 import { createProviderFetch } from './composer.js';
 import { createRateLimitMiddleware } from './rate-limit-middleware.js';
 
-import type { ISessionContextService } from '../../services/service-interfaces.js';
+import type { ILoggingService, ISessionContextService } from '../../services/service-interfaces.js';
 
 // ---------------------------------------------------------------------------
 // composeFetch tests
@@ -195,14 +195,17 @@ it('createProviderFetch long retry-after 429 is logged and response returned wit
     providerId: 'openai',
     defaultModel: 'gpt-4',
     deps: {
-      loggingService: makeLoggingService({
-        debug: (message: string, meta?: any) => {
-          logs.push({ message, meta });
+      loggingService: makeLoggingService(
+        {
+          debug: (message: string, meta?: any) => {
+            logs.push({ message, meta });
+          },
+          error: (message: string, meta?: any) => {
+            logs.push({ message, meta });
+          },
         },
-        error: (message: string, meta?: any) => {
-          logs.push({ message, meta });
-        },
-      }),
+        makeSessionContextService(null),
+      ),
       sessionContextService: makeSessionContextService(null),
     },
     fetchImpl: async () => new Response('rate limited', { status: 429, headers: { 'retry-after': '180' } }),
@@ -226,15 +229,100 @@ it('createProviderFetch long retry-after 429 is logged and response returned wit
 // Logging middleware tests
 // ---------------------------------------------------------------------------
 
-function makeLoggingService(
-  overrides: Partial<CreateLoggingMiddlewareOptions['loggingService']> = {},
-): CreateLoggingMiddlewareOptions['loggingService'] {
+import type { IProviderTraffic } from '../../services/service-interfaces.js';
+
+function makeMockProviderTraffic(loggingService: any, sessionContextService?: any): IProviderTraffic {
   return {
+    recordRequestStart(input) {
+      const trafficContext = sessionContextService?.getContext() ?? null;
+      const isEvaluator = trafficContext?.evaluator === true;
+      const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+      loggingService.debug(`${input.provider} ai sdk request`, {
+        eventType: `${eventPrefix}.request.started`,
+        category: 'provider',
+        phase: 'request_start',
+        direction: 'sent',
+        requestId: input.requestId,
+        traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),
+        sessionId: trafficContext?.sessionId,
+        sessionStartedAt: trafficContext?.sessionStartedAt,
+        firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
+        mode: trafficContext?.mode,
+        provider: input.provider,
+        model: input.model,
+        messageCount: Array.isArray(input.sentBody?.messages) ? input.sentBody.messages.length : undefined,
+        messages: input.sentBody?.messages,
+        toolsCount: Array.isArray(input.sentBody?.tools) ? input.sentBody.tools.length : undefined,
+        payload: input.sentBody,
+        headers: input.headers,
+      });
+    },
+    async recordResponseReceived(input) {
+      const trafficContext = sessionContextService?.getContext() ?? null;
+      const isEvaluator = trafficContext?.evaluator === true;
+      const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+
+      let payload = input.response;
+      if (input.response instanceof Response) {
+        payload = JSON.parse(await input.response.clone().text());
+      }
+      const choices = (payload as any)?.choices;
+      const responseText = choices?.[0]?.message?.content ?? choices?.[0]?.delta?.content;
+      const toolCalls = choices?.[0]?.message?.tool_calls ?? choices?.[0]?.delta?.tool_calls;
+
+      loggingService.debug(`${input.provider} ai sdk response`, {
+        eventType: `${eventPrefix}.response.received`,
+        category: 'provider',
+        phase: 'provider_response',
+        direction: 'received',
+        requestId: input.requestId,
+        traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),
+        sessionId: trafficContext?.sessionId,
+        sessionStartedAt: trafficContext?.sessionStartedAt,
+        firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
+        mode: trafficContext?.mode,
+        provider: input.provider,
+        model: input.model,
+        status: input.status,
+        text: responseText,
+        toolCalls,
+        payload: payload,
+      });
+    },
+    recordRequestFailed(input) {
+      const trafficContext = sessionContextService?.getContext() ?? null;
+      const isEvaluator = trafficContext?.evaluator === true;
+      const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+      loggingService.error(`${input.provider} ai sdk request failed`, {
+        eventType: `${eventPrefix}.response.failed`,
+        category: 'provider',
+        phase: 'provider_response',
+        requestId: input.requestId,
+        traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),
+        sessionId: trafficContext?.sessionId,
+        sessionStartedAt: trafficContext?.sessionStartedAt,
+        firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
+        mode: trafficContext?.mode,
+        provider: input.provider,
+        model: input.model,
+        error:
+          typeof input.error === 'object' && input.error && 'message' in (input.error as any)
+            ? String((input.error as any).message)
+            : String(input.error),
+      });
+    },
+  };
+}
+
+function makeLoggingService(overrides: Partial<any> = {}, sessionContextService?: ISessionContextService): any {
+  const logger: any = {
     debug: () => {},
     error: () => {},
     getCorrelationId: () => 'trace-test',
     ...overrides,
   };
+  logger.providerTraffic = makeMockProviderTraffic(logger, sessionContextService);
+  return logger;
 }
 
 function makeSessionContextService(context: ReturnType<ISessionContextService['getContext']>): ISessionContextService {
@@ -247,23 +335,28 @@ function makeSessionContextService(context: ReturnType<ISessionContextService['g
 it('createLoggingMiddleware logs request started and response received', async () => {
   const logs: Array<{ message: string; meta: any }> = [];
 
-  const middleware = createLoggingMiddleware({
-    provider: 'openrouter',
-    model: 'test-model',
-    loggingService: makeLoggingService({
+  const sessionContextService = makeSessionContextService({
+    sessionId: 'session-123',
+    sessionStartedAt: '2026-05-22T09:14:31.125Z',
+    firstUserMessagePreview: 'hi',
+    mode: 'standard',
+  });
+  const loggingService = makeLoggingService(
+    {
       debug: (message: string, meta?: any) => {
         logs.push({ message, meta });
       },
       error: (message: string, meta?: any) => {
         logs.push({ message, meta });
       },
-    }),
-    sessionContextService: makeSessionContextService({
-      sessionId: 'session-123',
-      sessionStartedAt: '2026-05-22T09:14:31.125Z',
-      firstUserMessagePreview: 'hi',
-      mode: 'standard',
-    }),
+    },
+    sessionContextService,
+  );
+
+  const middleware = createLoggingMiddleware({
+    provider: 'openrouter',
+    model: 'test-model',
+    providerTraffic: loggingService.providerTraffic,
   });
 
   const baseFetch: typeof fetch = async () =>
@@ -336,23 +429,28 @@ it('createLoggingMiddleware logs request started and response received', async (
 it('createLoggingMiddleware logs response failed on error', async () => {
   const logs: Array<{ message: string; meta: any }> = [];
 
-  const middleware = createLoggingMiddleware({
-    provider: 'openrouter',
-    model: 'test-model',
-    loggingService: makeLoggingService({
+  const sessionContextService = makeSessionContextService({
+    sessionId: 'session-123',
+    sessionStartedAt: '2026-05-22T09:14:31.125Z',
+    firstUserMessagePreview: 'hi',
+    mode: 'standard',
+  });
+  const loggingService = makeLoggingService(
+    {
       debug: (message: string, meta?: any) => {
         logs.push({ message, meta });
       },
       error: (message: string, meta?: any) => {
         logs.push({ message, meta });
       },
-    }),
-    sessionContextService: makeSessionContextService({
-      sessionId: 'session-123',
-      sessionStartedAt: '2026-05-22T09:14:31.125Z',
-      firstUserMessagePreview: 'hi',
-      mode: 'standard',
-    }),
+    },
+    sessionContextService,
+  );
+
+  const middleware = createLoggingMiddleware({
+    provider: 'openrouter',
+    model: 'test-model',
+    providerTraffic: loggingService.providerTraffic,
   });
 
   const baseFetch: typeof fetch = async () => {
@@ -397,21 +495,26 @@ it('createLoggingMiddleware logs response failed on error', async () => {
 it('createLoggingMiddleware uses evaluator event prefix when traffic context has evaluator flag', async () => {
   const logs: Array<{ message: string; meta: any }> = [];
 
-  const middleware = createLoggingMiddleware({
-    provider: 'openrouter',
-    model: 'test-model',
-    loggingService: makeLoggingService({
+  const sessionContextService = makeSessionContextService({
+    sessionId: 'session-eval',
+    sessionStartedAt: '2026-05-22T09:14:31.125Z',
+    firstUserMessagePreview: 'hi',
+    mode: 'standard',
+    evaluator: true,
+  });
+  const loggingService = makeLoggingService(
+    {
       debug: (message: string, meta?: any) => {
         logs.push({ message, meta });
       },
-    }),
-    sessionContextService: makeSessionContextService({
-      sessionId: 'session-eval',
-      sessionStartedAt: '2026-05-22T09:14:31.125Z',
-      firstUserMessagePreview: 'hi',
-      mode: 'standard',
-      evaluator: true,
-    }),
+    },
+    sessionContextService,
+  );
+
+  const middleware = createLoggingMiddleware({
+    provider: 'openrouter',
+    model: 'test-model',
+    providerTraffic: loggingService.providerTraffic,
   });
 
   const baseFetch: typeof fetch = async () => new Response(JSON.stringify({}), { status: 200 });
@@ -430,20 +533,25 @@ it('createLoggingMiddleware uses evaluator event prefix when traffic context has
 it('createLoggingMiddleware uses request model from body over default model', async () => {
   const logs: Array<{ message: string; meta: any }> = [];
 
-  const middleware = createLoggingMiddleware({
-    provider: 'openai',
-    model: 'default-model',
-    loggingService: makeLoggingService({
+  const sessionContextService = makeSessionContextService({
+    sessionId: 'session-123',
+    sessionStartedAt: '2026-05-22T09:14:31.125Z',
+    firstUserMessagePreview: 'hi',
+    mode: 'standard',
+  });
+  const loggingService = makeLoggingService(
+    {
       debug: (message: string, meta?: any) => {
         logs.push({ message, meta });
       },
-    }),
-    sessionContextService: makeSessionContextService({
-      sessionId: 'session-123',
-      sessionStartedAt: '2026-05-22T09:14:31.125Z',
-      firstUserMessagePreview: 'hi',
-      mode: 'standard',
-    }),
+    },
+    sessionContextService,
+  );
+
+  const middleware = createLoggingMiddleware({
+    provider: 'openai',
+    model: 'default-model',
+    providerTraffic: loggingService.providerTraffic,
   });
 
   const baseFetch: typeof fetch = async () =>
@@ -476,24 +584,29 @@ it('createProviderFetch injects the logging and rate-limit middlewares', async (
     return next(ctx);
   };
 
+  const sessionCtx = makeSessionContextService({
+    sessionId: 'session-123',
+    sessionStartedAt: '2026-05-22T09:14:31.125Z',
+    firstUserMessagePreview: 'hi',
+    mode: 'standard',
+  });
+
   const composed = createProviderFetch({
     providerId: 'openrouter',
     defaultModel: 'test-model',
     deps: {
-      loggingService: makeLoggingService({
-        debug: (message: string, meta?: any) => {
-          logs.push({ message, meta });
+      loggingService: makeLoggingService(
+        {
+          debug: (message: string, meta?: any) => {
+            logs.push({ message, meta });
+          },
+          error: (message: string, meta?: any) => {
+            logs.push({ message, meta });
+          },
         },
-        error: (message: string, meta?: any) => {
-          logs.push({ message, meta });
-        },
-      }),
-      sessionContextService: makeSessionContextService({
-        sessionId: 'session-123',
-        sessionStartedAt: '2026-05-22T09:14:31.125Z',
-        firstUserMessagePreview: 'hi',
-        mode: 'standard',
-      }),
+        sessionCtx,
+      ),
+      sessionContextService: sessionCtx,
     },
     middlewares: [customMiddleware],
     fetchImpl: async () =>
@@ -605,10 +718,15 @@ it('createProviderFetch fetchImpl parameter works', async () => {
 
 it('createProviderFetch exposes logging middleware types correctly', async () => {
   // Type-level test: ensure the options type is compatible
-  const loggingService: CreateLoggingMiddlewareOptions['loggingService'] = {
+  const loggingService: ILoggingService = {
     debug: () => {},
     error: () => {},
     getCorrelationId: () => 'trace',
+    info: () => {},
+    warn: () => {},
+    security: () => {},
+    setCorrelationId: () => {},
+    clearCorrelationId: () => {},
   };
 
   const composed = createProviderFetch({
@@ -631,7 +749,12 @@ it('createProviderFetch handles null session context gracefully', async () => {
         debug: () => {},
         error: () => {},
         getCorrelationId: () => undefined,
-      },
+        info: () => {},
+        warn: () => {},
+        security: () => {},
+        setCorrelationId: () => {},
+        clearCorrelationId: () => {},
+      } as ILoggingService,
       sessionContextService: makeSessionContextService(null),
     },
     fetchImpl: async () =>
@@ -653,23 +776,28 @@ it('createLoggingMiddleware handles error in fire-and-forget logging gracefully'
 
   // Middleware with a logging service that returns a broken response that
   // will cause summarizeReceivedTraffic to fail
-  const middleware = createLoggingMiddleware({
-    provider: 'openai',
-    model: 'test-model',
-    loggingService: makeLoggingService({
+  const sessionContextService = makeSessionContextService({
+    sessionId: 'session-123',
+    sessionStartedAt: '2026-05-22T09:14:31.125Z',
+    firstUserMessagePreview: 'hi',
+    mode: 'standard',
+  });
+  const loggingService = makeLoggingService(
+    {
       debug: (message: string, meta?: any) => {
         logs.push({ message, meta });
       },
       error: (message: string, meta?: any) => {
         logs.push({ message, meta });
       },
-    }),
-    sessionContextService: makeSessionContextService({
-      sessionId: 'session-123',
-      sessionStartedAt: '2026-05-22T09:14:31.125Z',
-      firstUserMessagePreview: 'hi',
-      mode: 'standard',
-    }),
+    },
+    sessionContextService,
+  );
+
+  const middleware = createLoggingMiddleware({
+    provider: 'openai',
+    model: 'test-model',
+    providerTraffic: loggingService.providerTraffic,
   });
 
   // A response that will cause summarizeReceivedTraffic to throw

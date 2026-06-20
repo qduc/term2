@@ -17,6 +17,96 @@ const baseConfig = {
   apiKey: 'test-key',
 } satisfies CustomProviderConfig;
 
+function makeMockProviderTraffic(loggingService: any, sessionContextService?: any): any {
+  return {
+    recordRequestStart(input: any) {
+      const trafficContext = sessionContextService?.getContext() ?? null;
+      const isEvaluator = trafficContext?.evaluator === true;
+      const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+      loggingService.debug(`${input.provider} ai sdk request started`, {
+        eventType: `${eventPrefix}.request.started`,
+        category: 'provider',
+        phase: 'provider_request',
+        direction: 'sent',
+        requestId: input.requestId,
+        traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),
+        sessionId: trafficContext?.sessionId,
+        sessionStartedAt: trafficContext?.sessionStartedAt,
+        firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
+        mode: trafficContext?.mode,
+        provider: input.provider,
+        model: input.model,
+        modelClass: input.modelClass,
+        modelWrapperClass: input.modelWrapperClass,
+        payload: input.sentBody,
+        headers: input.headers,
+      });
+    },
+    async recordResponseReceived(input: any) {
+      const trafficContext = sessionContextService?.getContext() ?? null;
+      const isEvaluator = trafficContext?.evaluator === true;
+      const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+
+      let payload = input.response;
+      if (input.response instanceof Response) {
+        try {
+          payload = JSON.parse(await input.response.clone().text());
+        } catch {
+          // ignore
+        }
+      }
+      const choices = (payload as any)?.choices;
+      const responseText = choices?.[0]?.message?.content ?? choices?.[0]?.delta?.content;
+      const toolCalls = choices?.[0]?.message?.tool_calls ?? choices?.[0]?.delta?.tool_calls;
+
+      loggingService.debug(`${input.provider} ai sdk response`, {
+        eventType: `${eventPrefix}.response.received`,
+        category: 'provider',
+        phase: 'provider_response',
+        direction: 'received',
+        requestId: input.requestId,
+        traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),
+        sessionId: trafficContext?.sessionId,
+        sessionStartedAt: trafficContext?.sessionStartedAt,
+        firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
+        mode: trafficContext?.mode,
+        provider: input.provider,
+        model: input.model,
+        modelClass: input.modelClass,
+        modelWrapperClass: input.modelWrapperClass,
+        status: input.status,
+        text: responseText,
+        toolCalls,
+        payload: payload,
+      });
+    },
+    recordRequestFailed(input: any) {
+      const trafficContext = sessionContextService?.getContext() ?? null;
+      const isEvaluator = trafficContext?.evaluator === true;
+      const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+      loggingService.error(`${input.provider} request failed`, {
+        eventType: `${eventPrefix}.response.failed`,
+        category: 'provider',
+        phase: 'provider_response',
+        requestId: input.requestId,
+        traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),
+        sessionId: trafficContext?.sessionId,
+        sessionStartedAt: trafficContext?.sessionStartedAt,
+        firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
+        mode: trafficContext?.mode,
+        provider: input.provider,
+        model: input.model,
+        modelClass: input.modelClass,
+        modelWrapperClass: input.modelWrapperClass,
+        error:
+          typeof input.error === 'object' && input.error && 'message' in (input.error as any)
+            ? String((input.error as any).message)
+            : String(input.error),
+      });
+    },
+  };
+}
+
 it('createCustomProviderModelProvider uses native chat-completions OpenAIProvider by default', async () => {
   const provider = createCustomProviderModelProvider(baseConfig, {
     defaultModel: 'model-a',
@@ -109,7 +199,7 @@ it('createCustomProviderModelProvider uses Google adapter for google type', () =
 
 it('createCustomProviderModelProvider Google type gets logging fetch wrapper', async () => {
   const loggedEvents: any[] = [];
-  const dummyLoggingService = {
+  const dummyLoggingService: any = {
     debug: (msg: string, meta?: any) => {
       loggedEvents.push({ msg, meta });
     },
@@ -126,6 +216,7 @@ it('createCustomProviderModelProvider Google type gets logging fetch wrapper', a
     }),
     runWithContext: <T>(_context: any, fn: () => T) => fn(),
   };
+  dummyLoggingService.providerTraffic = makeMockProviderTraffic(dummyLoggingService, dummySessionContextService);
 
   const provider = createCustomProviderModelProvider(
     {

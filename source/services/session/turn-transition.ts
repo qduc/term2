@@ -11,12 +11,7 @@ export type TurnOutcome =
   | { kind: 'approval_required'; terminal: ConversationTerminal }
   | { kind: 'stale' }
   | { kind: 'failed' }
-  | { kind: 'fresh_start_required'; retryCounts: RetryCounts; delayMs?: number; useStandardServiceTier?: boolean };
-
-export type StreamingTurnOutcome = Exclude<TurnOutcome, { kind: 'fresh_start_required' }>;
-export type ContinuingTurnOutcome = Exclude<TurnOutcome, { kind: 'failed' }>;
-
-export type InitialTurnControlOutcome =
+  | { kind: 'fresh_start_required'; retryCounts: RetryCounts; delayMs?: number; useStandardServiceTier?: boolean }
   | {
       kind: 'abort_resolution_required';
       abortedContext: AbortedApprovalContext;
@@ -56,10 +51,10 @@ const assertNever = (value: never): never => {
  * Throws on invalid state/outcome combinations (e.g. outcomes
  * received while in `idle` or `awaiting_approval`).
  */
-export function decideTurnTransition(current: 'streaming', outcome: StreamingTurnOutcome): TurnTransition;
-export function decideTurnTransition(current: 'continuing', outcome: ContinuingTurnOutcome): TurnTransition;
-export function decideTurnTransition(current: 'idle' | 'awaiting_approval', outcome: TurnOutcome): never;
 export function decideTurnTransition(current: TurnState, outcome: TurnOutcome): TurnTransition {
+  if (outcome.kind === 'abort_resolution_required' || outcome.kind === 'auto_approval_required') {
+    throw new Error(`Invalid transition: outcome ${outcome.kind} is not allowed in transition rules`);
+  }
   switch (current) {
     case 'idle':
     case 'awaiting_approval':

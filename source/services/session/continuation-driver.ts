@@ -10,7 +10,7 @@ import type { SessionInputPlanner } from './session-input-planner.js';
 import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
 import { describeError } from '../../utils/error-helpers.js';
-import type { ContinuingTurnOutcome } from './turn-transition.js';
+import type { TurnOutcome } from './turn-transition.js';
 import { asRecord, getCallIdFromObject, getMethod, getToolInfoFromInterruption } from '../interruption-info.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { ContinuationPlanApplier } from './continuation-plan-applier.js';
@@ -35,8 +35,6 @@ export type ContinuationInit =
       userText: string;
       generation: number;
     };
-
-export type ContinuationDriveResult = ContinuingTurnOutcome;
 
 export interface ContinuationDriverDeps {
   generationGuard: GenerationGuard;
@@ -72,7 +70,7 @@ export class ContinuationDriver {
   async *drive(
     init: ContinuationInit,
     policy?: ApprovalDecisionPolicy,
-  ): AsyncGenerator<ConversationEvent, ContinuationDriveResult, void> {
+  ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
     const activePolicy = policy ?? new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval);
 
     if (!this.deps.generationGuard.isCurrent(init.generation)) {
@@ -247,7 +245,7 @@ export class ContinuationDriver {
     nextCumulativeUsage?: NormalizedUsage,
     previousInputForSurge?: unknown,
   ): Promise<
-    | { action: 'return'; result: ContinuationDriveResult }
+    | { action: 'return'; result: TurnOutcome }
     | { action: 'loop'; nextPlan: any; isApproved: boolean }
     | { action: 'continue' }
   > {

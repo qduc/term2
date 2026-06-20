@@ -3,16 +3,12 @@ import { toTerminalEvent } from '../conversation/conversation-result-builder.js'
 import { type UserTurn } from '../../types/user-turn.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
 import { ContinuationDriver } from './continuation-driver.js';
-import { InitialTurnRunner, type InitialTurnOutcome } from './initial-turn-runner.js';
+import { InitialTurnRunner } from './initial-turn-runner.js';
 import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
 import { ShellAutoApprovalDecisionPolicy } from '../approval/approval-decision-policy.js';
-import { decideTurnTransition } from './turn-transition.js';
-import type { ContinuingTurnOutcome, StreamingTurnOutcome, TurnCommand, TurnState } from './turn-transition.js';
+import { decideTurnTransition, type TurnCommand, type TurnState, type TurnOutcome } from './turn-transition.js';
 import type { InitialTurnRunOptions } from './turn-attempt-factory.js';
-
-const isStreamingTurnOutcome = (outcome: InitialTurnOutcome): outcome is StreamingTurnOutcome =>
-  outcome.kind !== 'abort_resolution_required' && outcome.kind !== 'auto_approval_required';
 
 export interface TurnCoordinatorDeps {
   statusMachine: TurnStatusMachine;
@@ -160,7 +156,7 @@ export class TurnCoordinator {
   async *#runInitialTurn(
     input: string | UserTurn,
     options: InitialTurnRunOptions,
-  ): AsyncGenerator<ConversationEvent, StreamingTurnOutcome, void> {
+  ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
     let currentInput = input;
     let currentOptions = options;
 
@@ -173,12 +169,12 @@ export class TurnCoordinator {
       }
       const initialOutcome = res.value;
 
-      if (isStreamingTurnOutcome(initialOutcome)) {
+      if (initialOutcome.kind !== 'abort_resolution_required' && initialOutcome.kind !== 'auto_approval_required') {
         return initialOutcome;
       }
 
       const generation = initialOutcome.generation;
-      let driveResult: ContinuingTurnOutcome;
+      let driveResult: TurnOutcome;
       if (initialOutcome.kind === 'abort_resolution_required') {
         driveResult = yield* this.deps.continuationDriver.drive(
           {

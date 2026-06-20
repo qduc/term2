@@ -13,9 +13,7 @@ import type { InitialInputPreparer } from './initial-input-preparer.js';
 import type { InitialStreamCycle } from './initial-stream-cycle.js';
 import type { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
 import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
-import type { InitialTurnControlOutcome, StreamingTurnOutcome } from './turn-transition.js';
-
-export type InitialTurnOutcome = StreamingTurnOutcome | InitialTurnControlOutcome;
+import type { TurnOutcome } from './turn-transition.js';
 
 export interface InitialTurnRunnerDeps {
   agentClient: ConversationAgentClient;
@@ -38,7 +36,7 @@ export class InitialTurnRunner {
   async *run(
     attemptOrInput: TurnAttempt | string | UserTurn,
     options: InitialTurnRunOptions = {},
-  ): AsyncGenerator<ConversationEvent, InitialTurnOutcome, void> {
+  ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
     let attempt: TurnAttempt;
     if (attemptOrInput instanceof TurnAttempt) {
       attempt = attemptOrInput;

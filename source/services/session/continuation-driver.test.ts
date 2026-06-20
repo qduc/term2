@@ -8,15 +8,15 @@ import { ContinuationPlanApplier } from './continuation-plan-applier.js';
 const collectResult = async (
   gen: AsyncGenerator<
     import('../conversation/conversation-events.js').ConversationEvent,
-    import('./continuation-driver.js').ContinuationDriveResult,
+    import('./turn-transition.js').TurnOutcome,
     void
   >,
 ): Promise<{
   events: import('../conversation/conversation-events.js').ConversationEvent[];
-  result: import('./continuation-driver.js').ContinuationDriveResult;
+  result: import('./turn-transition.js').TurnOutcome;
 }> => {
   const events: import('../conversation/conversation-events.js').ConversationEvent[] = [];
-  let result: import('./continuation-driver.js').ContinuationDriveResult;
+  let result: import('./turn-transition.js').TurnOutcome;
   while (true) {
     const next = await gen.next();
     if (next.done) {

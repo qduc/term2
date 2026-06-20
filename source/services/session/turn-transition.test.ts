@@ -143,17 +143,39 @@ it('awaiting_approval + any outcome throws', () => {
   );
 });
 
-// ── Invalid outcome for state (compile-time checks) ───────────
+// ── Invalid outcome for state ──────────────────────────────────
 
 it('streaming + fresh_start_required throws', () => {
   expect(() =>
     decideTurnTransition('streaming', {
       kind: 'fresh_start_required',
       retryCounts: defaultRetryCounts,
-    } as any),
+    }),
   ).toThrow();
 });
 
 it('continuing + failed throws', () => {
-  expect(() => decideTurnTransition('continuing', { kind: 'failed' } as any)).toThrow();
+  expect(() => decideTurnTransition('continuing', { kind: 'failed' })).toThrow();
+});
+
+it('any state + abort_resolution_required throws', () => {
+  const controlOutcome = {
+    kind: 'abort_resolution_required' as const,
+    abortedContext: { token: 1, method: 'confirm' as const } as any,
+    userText: 'cancel',
+    generation: 1,
+  };
+  expect(() => decideTurnTransition('streaming', controlOutcome)).toThrow(/is not allowed in transition rules/);
+  expect(() => decideTurnTransition('continuing', controlOutcome)).toThrow(/is not allowed in transition rules/);
+  expect(() => decideTurnTransition('idle', controlOutcome)).toThrow(/is not allowed in transition rules/);
+});
+
+it('any state + auto_approval_required throws', () => {
+  const controlOutcome = {
+    kind: 'auto_approval_required' as const,
+    generation: 1,
+  };
+  expect(() => decideTurnTransition('streaming', controlOutcome)).toThrow(/is not allowed in transition rules/);
+  expect(() => decideTurnTransition('continuing', controlOutcome)).toThrow(/is not allowed in transition rules/);
+  expect(() => decideTurnTransition('idle', controlOutcome)).toThrow(/is not allowed in transition rules/);
 });

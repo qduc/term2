@@ -15,7 +15,6 @@ import type {
 } from '../conversation-agent-client.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import { ConversationAdapter } from './session-adapter-bridge.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { SessionLifecycle } from './session-lifecycle.js';
 import { ProviderContinuity } from '../provider-continuity.js';
@@ -74,8 +73,6 @@ export type ConversationSessionComposition = {
   streamProcessor: SessionStreamProcessor;
   appState: { statusMachine: TurnStatusMachine };
   turnCoordinator: TurnCoordinator;
-  /** Adapter that provides the legacy sendMessage/handleApprovalDecision surface. */
-  terminalAdapter: ConversationAdapter;
   /** Facade for state/persistence/undo/snapshot operations. */
   stateFacade: SessionManager;
   /** Controller for runtime model/provider/retry settings. */
@@ -131,7 +128,6 @@ export type ConversationSessionBundle = Pick<
   | 'sessionId'
   | 'sessionStartedAt'
   | 'turnCoordinator'
-  | 'terminalAdapter'
   | 'stateFacade'
   | 'runtimeController'
   | 'conversationLogger'
@@ -473,21 +469,6 @@ export function createConversationSessionComposition(
     state,
   });
 
-  // terminalAdapter wires directly to turnCoordinator — no callback through ConversationSession.
-  const terminalAdapter = new ConversationAdapter({
-    sessionId: id,
-    startedAt,
-    askUserAnswerSink: resolvedAskUserAnswerSink,
-    subagentEventSinkHost: resolvedSubagentEventSinkHost,
-    logger,
-    settingsService,
-    sessionContextService,
-    conversationStore,
-    conversationLogger,
-    approvalFlow,
-    turnFlow: turnCoordinator,
-  });
-
   let disposed = false;
   const dispose = (): void => {
     if (disposed) return;
@@ -515,7 +496,6 @@ export function createConversationSessionComposition(
     streamProcessor,
     appState,
     turnCoordinator,
-    terminalAdapter,
     stateFacade,
     runtimeController,
     dispose,
@@ -543,7 +523,7 @@ export const createConversationSession: (options: CreateConversationSessionOptio
 
 /**
  * Creates a session runtime with a clean public API, without constructing
- * a {@link ConversationAdapter}. Internal composition details remain private.
+ * the conversation-layer adapter. Internal composition details remain private.
  *
  * The returned object exposes:
  * - `turns` – start, continueAfterApproval, abort

@@ -120,6 +120,8 @@ it('createSessionRuntime exposes runtime capabilities without conversation adapt
 it('session composition does not import the conversation adapter', () => {
   const source = readFileSync(new URL('./session-composition.ts', import.meta.url), 'utf8');
   expect(source).not.toContain('../conversation/conversation-adapter.js');
+  expect(source).not.toContain('session-adapter-bridge');
+  expect(source).not.toContain('ConversationAdapter');
 });
 
 it('createConversationRuntime returns a bundle with adapter.sendMessage', () => {

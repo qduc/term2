@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import { createConversationSession } from './session-composition.js';
+import { createConversationSession } from '../../test-helpers/conversation-session-with-adapter.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
 
 const mockLogger = {

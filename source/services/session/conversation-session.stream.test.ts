@@ -1,7 +1,7 @@
 import { it, expect } from 'vitest';
 import { ModelBehaviorError } from '@openai/agents';
 import type { RunState } from '@openai/agents';
-import { createConversationSession } from './session-composition.js';
+import { createConversationSession } from '../../test-helpers/conversation-session-with-adapter.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../service-interfaces.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';

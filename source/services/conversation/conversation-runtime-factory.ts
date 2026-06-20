@@ -9,6 +9,7 @@ import {
   type ConversationSessionComposition,
   type SessionRuntime,
 } from '../session/session-composition.js';
+import { createConversationAdapterForComposition } from './conversation-adapter-factory.js';
 
 export type ConversationRuntimeBundle = {
   /** The clean session runtime (no adapter). */
@@ -34,17 +35,16 @@ export type CreateConversationRuntimeOptions = {
 /**
  * Factory that assembles a session runtime and a ConversationAdapter.
  *
- * - Calls {@link createConversationSessionComposition} to build the full
- *   internal composition graph once (which includes the adapter).
+ * - Calls {@link createConversationSessionComposition} to build the session
+ *   internal composition graph once.
  * - Wraps the composition into a public {@link SessionRuntime} object.
- * - Returns the composition's pre-built adapter alongside the runtime.
+ * - Constructs the legacy adapter in the conversation layer.
  *
  * Returns `{ runtime, adapter }` so callers can use whichever layer suits them.
  */
 export function createConversationRuntime(options: CreateConversationRuntimeOptions): ConversationRuntimeBundle {
   const { sessionId, sessionStartedAt, agentClient, deps } = options;
 
-  // The composition already constructs the ConversationAdapter.
   const composition = createConversationSessionComposition({
     sessionId,
     sessionStartedAt,
@@ -55,10 +55,10 @@ export function createConversationRuntime(options: CreateConversationRuntimeOpti
     turnAccumulator: undefined,
   });
 
-  // Build the public SessionRuntime from the composition.
   const runtime: SessionRuntime = buildRuntimeFromComposition(composition);
+  const adapter = createConversationAdapterForComposition(composition, { deps });
 
-  return { runtime, adapter: composition.terminalAdapter };
+  return { runtime, adapter };
 }
 
 // ── Internal helper ──────────────────────────────────────────────

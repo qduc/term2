@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest';
 import { type ConversationTerminal } from '../../contracts/conversation.js';
-import { createConversationSession } from './session-composition.js';
+import { createConversationSession } from '../../test-helpers/conversation-session-with-adapter.js';
 
 type ApprovalRequiredResult = Extract<ConversationTerminal, { type: 'approval_required' }>;
 type ResponseResult = Extract<ConversationTerminal, { type: 'response' }>;

@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest';
-import { createConversationSession, createConversationSessionComposition } from './session-composition.js';
+import { createConversationSessionComposition } from './session-composition.js';
+import { createConversationSession } from '../../test-helpers/conversation-session-with-adapter.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';

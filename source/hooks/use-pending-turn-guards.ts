@@ -38,6 +38,11 @@ export type UsePendingTurnGuardsReturn = {
   handleSurgeDecline: () => void;
 };
 
+type PendingState =
+  | { kind: 'idle' }
+  | { kind: 'pending_surge'; turn: UserTurn; reason: string }
+  | { kind: 'pending_large_uncached'; turn: UserTurn; tokens: number };
+
 export const usePendingTurnGuards = ({
   input,
   mode,
@@ -49,10 +54,12 @@ export const usePendingTurnGuards = ({
   setInput,
   setImages,
 }: UsePendingTurnGuardsOptions): UsePendingTurnGuardsReturn => {
-  const [pendingLargeUncachedTurn, setPendingLargeUncachedTurn] = useState<UserTurn | null>(null);
-  const [pendingLargeUncachedTokens, setPendingLargeUncachedTokens] = useState(0);
-  const [pendingSurgeTurn, setPendingSurgeTurn] = useState<UserTurn | null>(null);
-  const [pendingSurgeReason, setPendingSurgeReason] = useState('');
+  const [pendingState, setPendingState] = useState<PendingState>({ kind: 'idle' });
+
+  const pendingLargeUncachedTurn = pendingState.kind === 'pending_large_uncached' ? pendingState.turn : null;
+  const pendingLargeUncachedTokens = pendingState.kind === 'pending_large_uncached' ? pendingState.tokens : 0;
+  const pendingSurgeTurn = pendingState.kind === 'pending_surge' ? pendingState.turn : null;
+  const pendingSurgeReason = pendingState.kind === 'pending_surge' ? pendingState.reason : '';
 
   const largeUncachedWarning = useMemo(() => {
     if (!input || mode !== 'text' || input.startsWith('/')) {
@@ -81,8 +88,11 @@ export const usePendingTurnGuards = ({
     (turn: UserTurn): PendingTurnGuardResult => {
       const surgePreview = conversationService.previewInputSurge(turn);
       if (surgePreview.action === 'block') {
-        setPendingSurgeTurn(turn);
-        setPendingSurgeReason(surgePreview.reason || 'Input surge detected');
+        setPendingState({
+          kind: 'pending_surge',
+          turn,
+          reason: surgePreview.reason || 'Input surge detected',
+        });
         loggingService.debug('Input surge warning shown', {
           eventType: 'input_surge_warning_shown',
           category: 'provider',
@@ -95,8 +105,11 @@ export const usePendingTurnGuards = ({
 
       const preview = conversationService.previewLargeUncachedInput(turn, Date.now());
       if (preview.action === 'warn') {
-        setPendingLargeUncachedTurn(turn);
-        setPendingLargeUncachedTokens(estimateLastTurnTokens(turn));
+        setPendingState({
+          kind: 'pending_large_uncached',
+          turn,
+          tokens: estimateLastTurnTokens(turn),
+        });
         loggingService.debug('Large uncached input warning shown', {
           eventType: 'large_uncached_input_warning_shown',
           category: 'provider',
@@ -126,54 +139,50 @@ export const usePendingTurnGuards = ({
   );
 
   const handleLargeUncachedApprove = useCallback(async () => {
-    const turn = pendingLargeUncachedTurn;
-    if (!turn) {
+    if (pendingState.kind !== 'pending_large_uncached') {
       return;
     }
+    const { turn } = pendingState;
 
-    setPendingLargeUncachedTurn(null);
-    setPendingLargeUncachedTokens(0);
+    setPendingState({ kind: 'idle' });
     setImages?.([]);
     await sendReadyTurn(turn);
-  }, [pendingLargeUncachedTurn, sendReadyTurn, setImages]);
+  }, [pendingState, sendReadyTurn, setImages]);
 
   const handleLargeUncachedDecline = useCallback(() => {
-    const turn = pendingLargeUncachedTurn;
-    if (!turn) {
+    if (pendingState.kind !== 'pending_large_uncached') {
       return;
     }
+    const { turn } = pendingState;
 
-    setPendingLargeUncachedTurn(null);
-    setPendingLargeUncachedTokens(0);
+    setPendingState({ kind: 'idle' });
     queueMicrotask(() => {
       setInput(turn.text || '');
     });
-  }, [pendingLargeUncachedTurn, setInput]);
+  }, [pendingState, setInput]);
 
   const handleSurgeApprove = useCallback(async () => {
-    const turn = pendingSurgeTurn;
-    if (!turn) {
+    if (pendingState.kind !== 'pending_surge') {
       return;
     }
+    const { turn } = pendingState;
 
-    setPendingSurgeTurn(null);
-    setPendingSurgeReason('');
+    setPendingState({ kind: 'idle' });
     setImages?.([]);
     await sendReadyTurn(turn, { bypassInputSurgeGuard: true });
-  }, [pendingSurgeTurn, sendReadyTurn, setImages]);
+  }, [pendingState, sendReadyTurn, setImages]);
 
   const handleSurgeDecline = useCallback(() => {
-    const turn = pendingSurgeTurn;
-    if (!turn) {
+    if (pendingState.kind !== 'pending_surge') {
       return;
     }
+    const { turn } = pendingState;
 
-    setPendingSurgeTurn(null);
-    setPendingSurgeReason('');
+    setPendingState({ kind: 'idle' });
     queueMicrotask(() => {
       setInput(turn.text || '');
     });
-  }, [pendingSurgeTurn, setInput]);
+  }, [pendingState, setInput]);
 
   return {
     largeUncachedWarning,

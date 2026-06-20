@@ -146,6 +146,36 @@ it('createMentor calls SubagentManager.run with role mentor', async () => {
   expect(result).toBe('mock-result');
 });
 
+it('createMentor passes the bridge abort signal to SubagentManager.run', async () => {
+  const { manager, trackRun } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  await bridge.createMentor('help me');
+
+  expect(trackRun.lastArgs.signal).toBe(bridge.signal);
+});
+
+it('runSubagent passes the bridge abort signal to SubagentManager.runAsTool', async () => {
+  const { manager, trackRunAsTool } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  await bridge.runSubagent({ role: 'worker', task: 'do something' });
+
+  expect(trackRunAsTool.lastArgs.args.signal).toBe(bridge.signal);
+});
+
+it('runSubagent still forwards resumeState from details', async () => {
+  const { manager, trackRunAsTool } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  const params = { role: 'worker', task: 'task' };
+  const details = { resumeState: 'test-state', signal: undefined, toolCall: { callId: 'call-1' } };
+  await bridge.runSubagent(params, undefined, details);
+
+  expect(trackRunAsTool.lastArgs.args.resumeState).toBe('test-state');
+  expect(trackRunAsTool.lastArgs.args.signal).toBe(bridge.signal);
+});
+
 it('createMentor throws when SubagentManager is null', async () => {
   const bridge = makeBridge(null);
 
@@ -217,6 +247,48 @@ it('activeSubagentsCount tracks active subagent runs', async () => {
 
   await mentorPromise;
   expect(bridge.activeSubagentsCount).toBe(0);
+});
+
+it('abort aborts active subagent runs', async () => {
+  const { manager } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  let capturedSignal: AbortSignal | undefined;
+  manager.run = async (args: any) => {
+    capturedSignal = args.signal;
+    return new Promise((resolve) => {
+      const listener = () => {
+        resolve({
+          status: 'cancelled',
+          finalText: '',
+          toolsUsed: [],
+          filesChanged: [],
+          error: 'aborted',
+        });
+      };
+      args.signal?.addEventListener('abort', listener, { once: true });
+    });
+  };
+
+  const mentorPromise = bridge.createMentor('test');
+  expect(bridge.signal.aborted).toBe(false);
+
+  bridge.abort();
+
+  await mentorPromise;
+  expect(capturedSignal?.aborted).toBe(true);
+});
+
+it('resetAbortController replaces the shared abort controller', () => {
+  const { manager } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  const firstSignal = bridge.signal;
+  bridge.resetAbortController();
+  const secondSignal = bridge.signal;
+
+  expect(secondSignal).not.toBe(firstSignal);
+  expect(secondSignal.aborted).toBe(false);
 });
 
 it('deferred sink clear is applied after active subagents complete', async () => {

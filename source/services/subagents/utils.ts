@@ -92,3 +92,56 @@ export function safeEmit(logger: any, onEvent: any, event: any): void {
     logger.debug('Subagent event emit failed', { error: error?.message });
   }
 }
+
+/**
+ * Combines multiple abort signals into one signal that aborts when any source
+ * aborts. Returns undefined when no signals are provided. When only one signal
+ * is provided it is returned directly. The returned cleanup function removes
+ * any listeners that were added to the source signals.
+ */
+export function createCompositeAbortSignal(
+  ...signals: (AbortSignal | undefined | null)[]
+): { signal: AbortSignal; cleanup: () => void } | undefined {
+  const validSignals = signals.filter((signal): signal is AbortSignal => signal != null);
+  if (validSignals.length === 0) {
+    return undefined;
+  }
+
+  const anyAborted = validSignals.some((signal) => signal.aborted);
+  if (anyAborted) {
+    const controller = new AbortController();
+    controller.abort();
+    return { signal: controller.signal, cleanup: () => {} };
+  }
+
+  if (validSignals.length === 1) {
+    return { signal: validSignals[0], cleanup: () => {} };
+  }
+
+  const controller = new AbortController();
+  const listeners = new Map<AbortSignal, () => void>();
+
+  const cleanup = (): void => {
+    for (const [signal, listener] of listeners) {
+      signal.removeEventListener('abort', listener);
+    }
+    listeners.clear();
+  };
+
+  for (const signal of validSignals) {
+    const listener = (): void => {
+      controller.abort();
+      cleanup();
+    };
+    signal.addEventListener('abort', listener, { once: true });
+    listeners.set(signal, listener);
+  }
+
+  return { signal: controller.signal, cleanup };
+}
+
+export function createAbortError(message = 'The subagent run was aborted.'): Error {
+  const error = new Error(message);
+  error.name = 'AbortError';
+  return error;
+}

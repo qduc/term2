@@ -62,6 +62,7 @@ export class AgentClient {
     agentOverride,
     providerOverride,
     deps,
+    subagentBridge,
   }: {
     model?: string;
     reasoningEffort?: ModelSettingsReasoningEffort | 'default';
@@ -76,6 +77,8 @@ export class AgentClient {
       sessionContextService: ISessionContextService;
       skillsService?: SkillsService;
     };
+    /** Test seam: inject a pre-built SubagentBridge instead of creating one. */
+    subagentBridge?: SubagentBridge;
   }) {
     this.#logger = deps.logger;
     this.#toolInterceptorRegistry = new ToolInterceptorRegistry({ logger: this.#logger });
@@ -134,7 +137,9 @@ export class AgentClient {
       logger: deps.logger,
     });
 
-    if (!agentOverride) {
+    if (subagentBridge) {
+      this.#subagentBridge = subagentBridge;
+    } else if (!agentOverride) {
       this.#subagentBridge = new SubagentBridge({
         logger: deps.logger,
         settings: deps.settings,
@@ -243,6 +248,7 @@ export class AgentClient {
    */
   abort(): void {
     this.#runOrchestrator.abort();
+    this.#subagentBridge?.abort();
   }
 
   clearConversations(): void {
@@ -253,6 +259,7 @@ export class AgentClient {
     userInput: string | AgentInputItem | AgentInputItem[],
     options: ChainedRunOptions = {},
   ): Promise<StreamedRunResult<any, any>> {
+    this.#subagentBridge?.resetAbortController();
     return this.#runOrchestrator.startStream(userInput, options);
   }
 
@@ -260,6 +267,7 @@ export class AgentClient {
     state: RunState<any, any>,
     options: ChainedRunOptions = {},
   ): Promise<StreamedRunResult<any, any>> {
+    this.#subagentBridge?.resetAbortController();
     return this.#runOrchestrator.continueRunStream(state, options);
   }
 

@@ -520,6 +520,129 @@ it.sequential('NestedSubagentRunner.runAsTool handles cancellation via abort sig
   expect(thrown?.message).toMatch(/aborted/i);
 });
 
+it.sequential('NestedSubagentRunner.runAsTool propagates request.signal to nested tool invoke', async () => {
+  const settings = createMockSettings({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+  });
+  const logger = createMockLogger();
+  const sessionContextService = createSessionContextService() as any;
+
+  const toolPolicy = new SubagentToolPolicy({
+    settings,
+    logger,
+    sessionContextService,
+  });
+
+  const toolFactory = new SubagentToolFactory({
+    settings,
+    logger,
+    toolPolicy,
+  });
+
+  const roleToolCache = new Map<SupportedSubagentRole, CachedRoleTool>();
+
+  const runner = new NestedSubagentRunner({
+    logger,
+    settings,
+    sessionContextService,
+    toolFactory,
+    roleToolCache,
+  });
+
+  const bridgeController = new AbortController();
+  const request = {
+    role: 'explorer' as SupportedSubagentRole,
+    task: 'task',
+    signal: bridgeController.signal,
+  };
+
+  const tool = runner.getRoleAgentTool('explorer');
+  let capturedDetailsSignal: AbortSignal | undefined;
+
+  (tool as any).invoke = async (contextParam: any, _input: any, details: any) => {
+    capturedDetailsSignal = details?.signal;
+    return JSON.stringify({
+      agentId: contextParam.toJSON().context.agentId,
+      role: 'explorer',
+      status: 'completed',
+      finalText: 'Done.',
+      filesChanged: [],
+      toolsUsed: [],
+    });
+  };
+
+  await runner.runAsTool(request, undefined, undefined);
+
+  expect(capturedDetailsSignal).toBeDefined();
+  expect(capturedDetailsSignal?.aborted).toBe(false);
+});
+
+it.sequential('NestedSubagentRunner.runAsTool cancels when request.signal aborts mid-run', async () => {
+  const settings = createMockSettings({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+  });
+  const logger = createMockLogger();
+  const sessionContextService = createSessionContextService() as any;
+
+  const toolPolicy = new SubagentToolPolicy({
+    settings,
+    logger,
+    sessionContextService,
+  });
+
+  const toolFactory = new SubagentToolFactory({
+    settings,
+    logger,
+    toolPolicy,
+  });
+
+  const roleToolCache = new Map<SupportedSubagentRole, CachedRoleTool>();
+
+  const runner = new NestedSubagentRunner({
+    logger,
+    settings,
+    sessionContextService,
+    toolFactory,
+    roleToolCache,
+  });
+
+  const bridgeController = new AbortController();
+  const request = {
+    role: 'explorer' as SupportedSubagentRole,
+    task: 'task',
+    signal: bridgeController.signal,
+  };
+
+  const tool = runner.getRoleAgentTool('explorer');
+
+  (tool as any).invoke = async (_contextParam: any, _input: any, _details: any) => {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    return JSON.stringify({
+      agentId: 'should-not-reach',
+      role: 'explorer',
+      status: 'completed',
+      finalText: 'Done.',
+      filesChanged: [],
+      toolsUsed: [],
+    });
+  };
+
+  const runPromise = runner.runAsTool(request, undefined, undefined);
+  queueMicrotask(() => bridgeController.abort());
+
+  let thrown: Error | undefined;
+  try {
+    await runPromise;
+  } catch (e) {
+    thrown = e as Error;
+  }
+
+  expect(thrown?.name).toBe('AbortError');
+  expect(thrown?.message).toMatch(/aborted/i);
+});
+
 it.sequential('NestedSubagentRunner resumes a real Agent.asTool run after nested approval', async () => {
   const providerId = `nested-approval-${randomUUID()}`;
   const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-nested-approval-'));

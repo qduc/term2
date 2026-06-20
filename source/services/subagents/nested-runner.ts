@@ -17,7 +17,13 @@ import {
 } from './role-loader.js';
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import { getProvider } from '../../providers/index.js';
-import { extractFinalText, aggregateContextToolUsage, safeEmit } from './utils.js';
+import {
+  extractFinalText,
+  aggregateContextToolUsage,
+  safeEmit,
+  createCompositeAbortSignal,
+  createAbortError,
+} from './utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 
@@ -267,11 +273,10 @@ export class NestedSubagentRunner {
     const detailsRecord = details as
       | { resumeState?: string; signal?: AbortSignal; toolCall?: { callId?: string } }
       | undefined;
-    const signal = detailsRecord?.signal ?? request.signal;
+    const composite = createCompositeAbortSignal(detailsRecord?.signal, request.signal);
+    const signal = composite?.signal;
     if (signal?.aborted) {
-      const error = new Error('The nested subagent run was aborted.');
-      error.name = 'AbortError';
-      throw error;
+      throw createAbortError('The nested subagent run was aborted.');
     }
     const restoredContext = this.#restoreRunContext(detailsRecord?.resumeState);
     const agentId = restoredContext?.agentId ?? detailsRecord?.toolCall?.callId ?? randomUUID();
@@ -303,9 +308,25 @@ export class NestedSubagentRunner {
       (nestedContext as any)._mergeApprovals(parentContext.toJSON().approvals);
     }
 
+    let abortListener: (() => void) | undefined;
     try {
       const tool = this.#getOrCreateRoleTool(role).tool as any;
-      const raw = await tool.invoke(nestedContext, JSON.stringify({ role, task: request.task }), details);
+      const effectiveDetails = signal ? { ...detailsRecord, signal } : detailsRecord;
+
+      const abortPromise = signal
+        ? new Promise<never>((_, reject) => {
+            abortListener = () => reject(createAbortError('The nested subagent run was aborted.'));
+            signal.addEventListener('abort', abortListener, { once: true });
+          })
+        : null;
+
+      const promises: Array<Promise<any>> = [
+        tool.invoke(nestedContext, JSON.stringify({ role, task: request.task }), effectiveDetails),
+      ];
+      if (abortPromise) {
+        promises.push(abortPromise);
+      }
+      const raw = await Promise.race(promises);
       const parsed = parseNestedSubagentResult(raw);
       if (!parsed.interrupted) {
         safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result: parsed });
@@ -318,6 +339,11 @@ export class NestedSubagentRunner {
         error: error?.message || String(error),
       });
       throw error;
+    } finally {
+      if (abortListener && signal) {
+        signal.removeEventListener('abort', abortListener);
+      }
+      composite?.cleanup();
     }
   }
 }

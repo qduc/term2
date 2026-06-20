@@ -1,6 +1,7 @@
-import { it, expect, beforeEach } from 'vitest';
+import { it, expect, beforeEach, vi } from 'vitest';
 import { AgentClient } from './agent-client.js';
 import { registerProvider } from '../providers/registry.js';
+import { SubagentBridge } from './subagent-bridge.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 
 const createSessionContextService = () => ({
@@ -1345,6 +1346,48 @@ it.sequential('codex chat resolves default_reasoning_level if agent.reasoningEff
   const agent = codexRunnerCalls[0].agent;
   expect(agent).toBeTruthy();
   expect(agent.modelSettings?.reasoning?.effort).toBe('medium');
+});
+
+it.sequential('AgentClient.abort aborts the injected SubagentBridge', () => {
+  const settings = createMockSettings();
+  const mockBridge = new SubagentBridge({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+    chat: async () => '',
+    createClient: () => ({} as any),
+  });
+  const abortSpy = vi.spyOn(mockBridge, 'abort');
+
+  const client = new AgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+    subagentBridge: mockBridge,
+  });
+
+  client.abort();
+
+  expect(abortSpy).toHaveBeenCalledTimes(1);
+});
+
+it.sequential('AgentClient.startStream resets the SubagentBridge abort controller', async () => {
+  const settings = createMockSettings();
+  const mockBridge = new SubagentBridge({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+    chat: async () => '',
+    createClient: () => ({} as any),
+  });
+  const resetSpy = vi.spyOn(mockBridge, 'resetAbortController');
+
+  const client = new AgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+    subagentBridge: mockBridge,
+  });
+
+  await client.startStream('hello');
+
+  expect(resetSpy).toHaveBeenCalledTimes(1);
 });
 
 it.sequential('main agent client injects warning into tool output when turns left <= 5', async () => {

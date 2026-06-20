@@ -26,6 +26,7 @@ export class SubagentBridge {
   #activeSubagentsCount = 0;
   #pendingClearSink = false;
   #logger: ILoggingService;
+  #abortController = new AbortController();
 
   constructor(deps: SubagentBridgeDeps) {
     this.#logger = deps.logger;
@@ -68,6 +69,22 @@ export class SubagentBridge {
     return this.#activeSubagentsCount;
   }
 
+  /** Abort signal shared by all subagent runs spawned through this bridge. */
+  get signal(): AbortSignal {
+    return this.#abortController.signal;
+  }
+
+  /** Replace the shared abort controller so a new parent run starts fresh. */
+  resetAbortController(): void {
+    this.#abortController = new AbortController();
+  }
+
+  /** Abort all active subagent runs and prepare a fresh controller. */
+  abort(): void {
+    this.#abortController.abort();
+    this.#abortController = new AbortController();
+  }
+
   /** Increment active count and return a disposer that decrements + handles pending sink clear */
   #beginSubagentRun(): () => void {
     this.#activeSubagentsCount++;
@@ -90,6 +107,7 @@ export class SubagentBridge {
         role: 'mentor',
         task: question,
         parentTool: 'ask_mentor',
+        signal: this.signal,
       });
       if (result.status === 'failed') {
         throw new Error(result.error || 'Mentor consultation failed');
@@ -119,7 +137,7 @@ export class SubagentBridge {
       ...params,
       parentTool: 'run_subagent',
       ...(detailsRecord?.resumeState ? { resumeState: detailsRecord.resumeState } : {}),
-      ...(detailsRecord?.signal ? { signal: detailsRecord.signal } : {}),
+      signal: this.signal,
     };
 
     const endRun = this.#beginSubagentRun();

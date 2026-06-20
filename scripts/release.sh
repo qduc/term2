@@ -73,7 +73,7 @@ release_commit_exists() {
 is_published_on_npm() {
     local pkg_name
     pkg_name=$(node -p "require('./package.json').name")
-    npm view "${pkg_name}@$1" version >/dev/null 2>&1
+    pnpm view "${pkg_name}@$1" version >/dev/null 2>&1
 }
 
 # 1. Check for uncommitted changes (skip in resume mode with appropriate conditions)
@@ -147,8 +147,8 @@ else
 
     # 2.5 Run tests and build to ensure health
     echo -e "${BLUE}Running tests and building to ensure health...${NC}"
-    npm test
-    npm run build
+    pnpm test
+    pnpm run build
 
     # 3. Select bump type
     echo "Select release type:"
@@ -157,32 +157,32 @@ else
     do
         case $opt in
             "Patch")
-                ver_output=$(npm version patch --no-git-tag-version --no-commit-hooks)
-                NEW_VERSION=${ver_output#v}
+                pnpm version patch --no-git-tag-version --no-commit-hooks > /dev/null
+                NEW_VERSION=$(node -p "require('./package.json').version")
                 break
                 ;;
             "Minor")
-                ver_output=$(npm version minor --no-git-tag-version --no-commit-hooks)
-                NEW_VERSION=${ver_output#v}
+                pnpm version minor --no-git-tag-version --no-commit-hooks > /dev/null
+                NEW_VERSION=$(node -p "require('./package.json').version")
                 break
                 ;;
             "Major")
-                ver_output=$(npm version major --no-git-tag-version --no-commit-hooks)
-                NEW_VERSION=${ver_output#v}
+                pnpm version major --no-git-tag-version --no-commit-hooks > /dev/null
+                NEW_VERSION=$(node -p "require('./package.json').version")
                 break
                 ;;
             "Custom")
                 read -p "Enter version: " NEW_VERSION
-                # validate version format if possible, or trust npm version to fail later if invalid
-                npm version $NEW_VERSION --no-git-tag-version --no-commit-hooks > /dev/null
+                # validate version format if possible, or trust pnpm version to fail later if invalid
+                pnpm version $NEW_VERSION --no-git-tag-version --no-commit-hooks > /dev/null
                 break
                 ;;
             *) echo "Invalid option";;
         esac
     done
 
-    # Revert the npm version change for now, we will apply it properly later with changelog
-    git checkout package.json package-lock.json
+    # Revert the pnpm version change for now, we will apply it properly later with changelog
+    git checkout package.json
 fi
 
 echo -e "Preparing release for version: ${GREEN}$NEW_VERSION${NC}"
@@ -196,7 +196,7 @@ fi
 if [[ "$CHANGELOG_DONE" == "true" ]]; then
     echo -e "${YELLOW}Skipping changelog generation (already has v$NEW_VERSION entry)${NC}"
 else
-    echo -e "${BLUE}Generating changelog with Claude...${NC}"
+    echo -e "${BLUE}Generating changelog with term2...${NC}"
 
     LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
@@ -223,13 +223,14 @@ else
         CRITICAL: Output ONLY the raw markdown content. Do NOT wrap in markdown code blocks (e.g., no \`\`\`markdown). Do not include any introductory or concluding remarks.
         Example format:
         ## [1.2.3] - 2023-01-01
+
         ### Features
         - ...
         "
 
-        # Call Claude and fail fast if it does not run successfully
-        if ! CHANGELOG_ENTRY=$(echo "$PROMPT" | claude --model sonnet --effort low | sed -E '/^ *```/d' | sed -E 's/<\!--.*-->//g'); then
-            echo -e "${RED}Error: Failed to generate changelog with Claude.${NC}"
+        # Call term2 and fail fast if it does not run successfully
+        if ! CHANGELOG_ENTRY=$(term2 -l -m gpt-5.4-mini -p openai "$PROMPT" 2> /dev/null | sed -E '/^ *```/d' | sed -E 's/<\!--.*-->//g'); then
+            echo -e "${RED}Error: Failed to generate changelog with term2.${NC}"
             exit 1
         fi
 
@@ -255,7 +256,7 @@ fi
 
 # Bump version (uses --allow-same-version for idempotency)
 echo -e "${BLUE}Setting version to $NEW_VERSION...${NC}"
-npm version $NEW_VERSION --no-git-tag-version --allow-same-version
+pnpm version $NEW_VERSION --no-git-tag-version --allow-same-version
 
 # Skip verification if commit already exists (tests passed before)
 if [[ "$COMMIT_DONE" == "true" ]]; then
@@ -263,12 +264,12 @@ if [[ "$COMMIT_DONE" == "true" ]]; then
 else
     # Final verification before commit
     echo -e "${BLUE}Running final verification tests for v$NEW_VERSION...${NC}"
-    npm test
-    npm run build
+    pnpm test
+    pnpm run build
 
     # Commit
     echo -e "${BLUE}Committing changes...${NC}"
-    git add package.json package-lock.json CHANGELOG.md
+    git add package.json CHANGELOG.md
     git commit -m "chore(release): v$NEW_VERSION"
 fi
 
@@ -287,22 +288,22 @@ else
     read -p "Do you want to publish to npm now? (y/N) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        # Check if npm session is valid
-        echo -e "${BLUE}Checking npm authentication...${NC}"
-        if ! npm whoami &>/dev/null; then
+        # Check if pnpm session is valid
+        echo -e "${BLUE}Checking pnpm authentication...${NC}"
+        if ! pnpm whoami &>/dev/null; then
             echo -e "${YELLOW}Not logged in to npm. Please log in:${NC}"
-            npm login
-            if ! npm whoami &>/dev/null; then
-                echo -e "${RED}npm login failed. Skipping publish.${NC}"
+            pnpm login
+            if ! pnpm whoami &>/dev/null; then
+                echo -e "${RED}pnpm login failed. Skipping publish.${NC}"
             else
                 echo -e "${BLUE}Publishing to npm...${NC}"
-                npm publish
+                pnpm publish
             fi
         else
-            NPM_USER=$(npm whoami)
+            NPM_USER=$(pnpm whoami)
             echo -e "${GREEN}Logged in as: $NPM_USER${NC}"
             echo -e "${BLUE}Publishing to npm...${NC}"
-            npm publish
+            pnpm publish
         fi
     fi
 fi

@@ -1,3 +1,47 @@
+## [0.8.0] - 2026-06-20
+
+### Features
+- Add skills support with `/skills` command to browse and manage available skills
+- Implement batch-barrier approval flow for parallel tool calls
+- Add structured `ask_user` tool with multi-question navigation, multi-select choices, typed answers, and decline option
+- Add reasoning effort selection in handoff flow
+- Add plan mode exit reminder when running handoff command
+- Add concise display mode for compact tool output rendering
+- Add UI indicator for tool call streaming
+- Add shell output formatting with truncation handling and execution duration tracking
+- Display first paragraph of tool output when commands complete
+- Add rate-limit middleware to handle 429 responses with excessive `retry-after` headers
+- Add WebSocket-to-HTTP downgrade support for conversation chaining
+- Add `overwrite` parameter to `create_file` tool
+- Add `match_all` parameter to `search_replace` tool
+- Add reasoning metadata retention in message processing and WebSocket response payloads
+- Add `PROVIDER_ORDER` support in settings with provider reordering functionality
+- Add resume state handling for continuation of streaming conversations
+- Add `grep` case sensitivity, regex/literal mode options, and strict JSON parsing
+
+### Bug Fixes
+- Fix inability to write outside workspace after approval
+- Fix missing tool output in response to Codex API
+- Fix missing `reasoning_content` after interrupted turns
+- Fix `undefined` value handling for `confirmOverwriteCode` in `create_file` tool
+- Fix fetch models error for Gemini
+- Fix out-of-order rendering and duplication of committed messages
+- Fix prompt-cache prefix break after `max_turns_exceeded` continuation for full-history providers
+- Fix completed subagent messages disappearing in UI while waiting for parallel subagents
+- Fix tool call streaming indicator missing for Anthropic/Gemini providers
+- Fix concise mode regression where query patterns failed to render
+- Fix chaining request not working properly for Codex
+- Fix tool chaining and input filtering for conversation continuity
+- Fix non-string/object JSON array items handling in tool output warnings
+- Fix input surge guard false positive block on approval continuation retries
+- Fix cursor position issues in input when value and cursor override change simultaneously
+- Fix wrong cursor position when selecting setting items
+- Fix text color handling for approval rejections and error messages
+- Fix interleaved tool outputs and delta filtering in Codex responses
+- Fix missing `turnId` in conversation sessions
+- Fix subagent turn count increment in context handling
+- Fix transient retry handling to preserve conversation chaining instead of permanently disabling it
+
 ## [0.7.3] - 2026-06-04
 
 ### Features

@@ -43,7 +43,7 @@ it('streams text_delta events to stdout and appends newline', async () => {
 
   expect(exitCode).toBe(0);
   expect(stdout.getOutput()).toBe('Hello world\n');
-  expect(stderr.getOutput()).toBe('Hello world\n');
+  expect(stderr.getOutput()).toBe('');
 });
 
 it('streams reasoning_delta events to stderr only', async () => {
@@ -72,7 +72,7 @@ it('streams reasoning_delta events to stderr only', async () => {
 
   expect(exitCode).toBe(0);
   expect(stdout.getOutput()).toBe('OK\n');
-  expect(stderr.getOutput()).toBe('Thinking hardOK\n');
+  expect(stderr.getOutput()).toBe('Thinking hard');
 });
 
 it('returns exit code 1 on error event', async () => {
@@ -232,7 +232,7 @@ it('writes parent and subagent tool summaries to stderr only', async () => {
   expect(err.includes('bash')).toBe(true);
   expect(err.includes('command_message')).toBe(true);
   expect(err.includes('ls')).toBe(true);
-  expect(err.includes('OK\n')).toBe(true);
+  expect(err.includes('OK')).toBe(false);
 });
 
 it('handles multiple consecutive approval rounds', async () => {

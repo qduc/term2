@@ -25,12 +25,7 @@ const runSubagentSchema = z.object({
   role: z
     .enum(['explorer', 'worker', 'researcher', 'mentor'])
     .describe('The subagent role to use: "explorer", "worker", "researcher", or "mentor".'),
-  task: z
-    .string()
-    .describe(
-      'The full task description. Include all relevant context, constraints, and the expected output format. ' +
-        'The subagent has no access to your conversation history or reasoning.',
-    ),
+  task: z.string().describe('The full task description.'),
 });
 
 export type RunSubagentParams = z.infer<typeof runSubagentSchema>;

@@ -20,29 +20,15 @@ import {
 const execPromise = util.promisify(exec);
 
 const searchParametersSchema = z.object({
-  pattern: z
-    .string()
-    .describe(
-      'Search pattern using normal JSON string escaping. In regex mode, this is passed to ripgrep/grep as a regex, so use "\\\\w" for regex \\w and "\\\\." for a literal dot. In literal mode, the pattern is matched exactly.',
-    ),
+  pattern: z.string().describe('Search pattern using normal JSON string escaping.'),
   path: z.string().describe('The directory or file to search in. Use "." for current directory.'),
-  mode: z
-    .enum(['regex', 'literal'])
-    .optional()
-    .describe(
-      'Search mode. "regex" is the default and treats pattern as a regex. "literal" uses fixed-string matching.',
-    ),
-  case_sensitive: z
-    .boolean()
-    .optional()
-    .describe('Set false for case-insensitive matching. Defaults to true, matching ripgrep behavior.'),
+  mode: z.enum(['regex', 'literal']).optional().describe('Search mode. Defaults to regex.'),
+  case_sensitive: z.boolean().optional().describe('Set false for case-insensitive matching.'),
   file_pattern: z.string().optional().describe('Glob pattern for files to include (e.g., "*.ts").'),
   no_ignore: z
     .boolean()
     .optional()
-    .describe(
-      'Set true to search files normally skipped by .gitignore/.ignore (e.g., node_modules, vendor, build output). Defaults to false.',
-    ),
+    .describe('Set true to search files skipped by .gitignore/.ignore (e.g., node_modules, vendor, build output).'),
 });
 
 export type SearchToolParams = z.infer<typeof searchParametersSchema>;

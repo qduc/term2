@@ -20,175 +20,17 @@ import type { ToolDefinition } from './tools/types.js';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import { default as createIgnore, type Ignore } from 'ignore';
 import type { ISettingsService, ILoggingService } from './services/service-interfaces.js';
 import { ExecutionContext } from './services/execution-context.js';
 import { buildPromptSpec } from './prompts/prompt-constructor.js';
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { SkillsService } from './services/skills/skills-service.js';
 import { createActivateSkillToolDefinition } from './tools/agent/activate-skill.js';
+import { getProjectTreeForPrompt } from './utils/project-tree.js';
+
+export { getProjectTreeForPrompt } from './utils/project-tree.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
-
-type ProjectTreeOptions = {
-  maxDepth?: number;
-  maxEntriesPerDir?: number;
-  maxTotalEntries?: number;
-  includeFiles?: boolean;
-  ignoredNames?: Set<string>;
-};
-
-const ALWAYS_IGNORE = ['.git', 'node_modules', 'dist', 'build', '.next', '.turbo', 'coverage', '.cache', '.DS_Store'];
-
-const ALWAYS_INCLUDE = new Set([
-  'package.json',
-  'tsconfig.json',
-  'README.md',
-  'readme.md',
-  '.gitignore',
-  '.env.example',
-]);
-
-const SENSITIVE_PATTERNS = [/^\.env$/, /^\.env\./, /secret/i, /private/i, /credential/i, /token/i];
-
-function isSensitiveFile(name: string) {
-  return SENSITIVE_PATTERNS.some((pattern) => pattern.test(name));
-}
-
-function createProjectIgnore(cwd: string) {
-  const ig = (createIgnore as unknown as () => Ignore)();
-
-  ig.add(ALWAYS_IGNORE);
-
-  const gitignorePath = path.join(cwd, '.gitignore');
-
-  try {
-    if (fs.existsSync(gitignorePath)) {
-      ig.add(fs.readFileSync(gitignorePath, 'utf8'));
-    }
-  } catch {
-    // If .gitignore cannot be read, continue with default ignores.
-  }
-
-  return {
-    ignores(relativePath: string, basename: string) {
-      const normalized = relativePath.split(path.sep).join('/');
-
-      if (ALWAYS_INCLUDE.has(basename)) {
-        return false;
-      }
-
-      return ig.ignores(normalized);
-    },
-  };
-}
-
-export function getProjectTreeForPrompt(cwd: string, options: ProjectTreeOptions = {}): string {
-  const { maxDepth = 3, maxEntriesPerDir = 50, maxTotalEntries = 250, includeFiles = true } = options;
-
-  let totalEntries = 0;
-  let omittedByLimit = 0;
-
-  const projectIgnore = createProjectIgnore(cwd);
-
-  function walk(dir: string, depth: number, prefix: string): string[] {
-    if (depth > maxDepth || totalEntries >= maxTotalEntries) return [];
-
-    let entries: fs.Dirent[];
-
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch (e: any) {
-      return [`${prefix}└─ [failed to read: ${e.message}]`];
-    }
-
-    const filtered = entries
-      .filter((entry) => {
-        const absolutePath = path.join(dir, entry.name);
-        const relativePath = path.relative(cwd, absolutePath).split(path.sep).join('/');
-
-        if (isSensitiveFile(entry.name)) {
-          return false;
-        }
-
-        if (projectIgnore.ignores(relativePath, entry.name)) {
-          return false;
-        }
-
-        if (!includeFiles && !entry.isDirectory()) {
-          return false;
-        }
-
-        return true;
-      })
-      .sort((a, b) => {
-        if (a.isDirectory() && !b.isDirectory()) return -1;
-        if (!a.isDirectory() && b.isDirectory()) return 1;
-        return a.name.localeCompare(b.name);
-      });
-
-    const shown = filtered.slice(0, maxEntriesPerDir);
-    omittedByLimit += Math.max(0, filtered.length - shown.length);
-
-    const lines: string[] = [];
-    const subdirs: Array<{ path: string; depth: number; prefix: string }> = [];
-
-    // BFS: render all children at this level first, then recurse into subdirs.
-    // This guarantees breadth-first budget allocation — shallower entries
-    // always take priority over deeper ones.
-    for (let index = 0; index < shown.length; index++) {
-      if (totalEntries >= maxTotalEntries) {
-        omittedByLimit += shown.length - index;
-        break;
-      }
-
-      const entry = shown[index];
-      totalEntries++;
-
-      const isLast = index === shown.length - 1;
-      const connector = isLast ? '└─ ' : '├─ ';
-      const childPrefix = prefix + (isLast ? '   ' : '│  ');
-      const displayName = entry.isDirectory() ? `${entry.name}/` : entry.name;
-
-      lines.push(`${prefix}${connector}${displayName}`);
-
-      if (entry.isDirectory()) {
-        if (depth >= maxDepth) {
-          lines.push(`${childPrefix}└─ …`);
-        } else {
-          subdirs.push({
-            path: path.join(dir, entry.name),
-            depth: depth + 1,
-            prefix: childPrefix,
-          });
-        }
-      }
-    }
-
-    // Now recurse into collected subdirs (BFS step 2: children of children).
-    // Each subdir call starts a new breadth-first pass, but since they are
-    // processed after all current-level siblings are rendered, the budget
-    // naturally fills shallower levels first.
-    for (const subdir of subdirs) {
-      if (totalEntries >= maxTotalEntries) break;
-      lines.push(...walk(subdir.path, subdir.depth, subdir.prefix));
-    }
-
-    return lines;
-  }
-
-  try {
-    const lines = ['Project structure:', '.', ...walk(cwd, 1, ''), ''];
-
-    if (omittedByLimit > 0) {
-      lines.push(`- Omitted due to limits: ${omittedByLimit}`);
-    }
-
-    return lines.join('\n');
-  } catch (e: any) {
-    return `Project structure:\n[failed to read ${cwd}: ${e.message}]`;
-  }
-}
 
 export function getEnvInfo(
   settingsService: ISettingsService,

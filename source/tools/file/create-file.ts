@@ -18,12 +18,7 @@ const createFileParametersSchema = z.object({
   path: z.string().describe('The absolute or relative path to the new file.'),
   content: z.string().describe('The initial content for the new file.'),
   overwrite: z.boolean().optional().default(false).describe('Whether to overwrite an existing file.'),
-  confirmOverwriteCode: z
-    .string()
-    .optional()
-    .describe(
-      'The confirmation code from a previous failed attempt. Only use this param when you have received an error telling you to set it.',
-    ),
+  confirmOverwriteCode: z.string().optional().describe('Confirmation code from a previous failed attempt.'),
 });
 
 export type CreateFileToolParams = z.input<typeof createFileParametersSchema>;

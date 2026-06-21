@@ -12,8 +12,7 @@ const ASK_USER_DESCRIPTION =
   'Ask the user clarifying questions when missing user decisions block correct progress. ' +
   'Use this when you need a decision, preference, or missing detail from the user before you can proceed correctly. ' +
   'Do NOT use this for information you can find yourself with tools. ' +
-  'Returns the answers selected/entered by the user. ' +
-  'Example: { questions: [{ question: "Which approach?", options: [{ label: "Option A", description: "Safer" }, { label: "Option B", description: "Faster" }] }, { question: "Any other notes?" }] }';
+  'Returns the answers selected/entered by the user.';
 
 const reservedOptionLabels = new Set<string>(ASK_USER_RESERVED_OPTION_LABELS);
 
@@ -34,31 +33,15 @@ const questionItemSchema = z
       .min(2)
       .max(8)
       .optional()
-      .describe(
-        'Predefined choices for the user to pick from. Omit for an open-ended free-text question. ' +
-          'When provided, must have between 2 and 8 options. The first option should be the recommended/default choice.',
-      ),
-    is_multi_select: z
-      .boolean()
-      .optional()
-      .describe(
-        'If true, the user can select multiple options instead of just one. ' +
-          'Only valid when `options` is also provided with at least 2 choices.',
-      ),
+      .describe('Predefined choices. Omit for an open-ended free-text question.'),
+    is_multi_select: z.boolean().optional().describe('If true, the user can select multiple options.'),
   })
   .refine((data) => !data.is_multi_select || (data.options !== undefined && data.options.length >= 2), {
     message: 'is_multi_select requires at least 2 options',
   });
 
 const askUserSchema = z.object({
-  questions: z
-    .array(questionItemSchema)
-    .min(1)
-    .max(5)
-    .describe(
-      'A list of clarifying questions to ask the user. Always wrap questions in this array, even for a single question. ' +
-        'Each item is either an open-ended question (no options) or a choice question (with options).',
-    ),
+  questions: z.array(questionItemSchema).min(1).max(5).describe('Clarifying questions to ask the user.'),
 });
 
 export type AskUserParams = z.infer<typeof askUserSchema>;

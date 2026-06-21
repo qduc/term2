@@ -57,11 +57,6 @@ it.sequential('shell execute appends spill-file guidance when output is truncate
 
   expect(output.includes('Full shell output saved to')).toBe(true);
   expect(/Runtime: \d+ms/.test(output)).toBe(true);
-  expect(
-    output.includes(
-      'Search that file for what you need instead of rerunning the command or changing the filter criteria with a `| grep` pipeline.',
-    ),
-  ).toBe(true);
   expect(output.includes('FULL-ONLY-SENTINEL')).toBe(false);
 });
 
@@ -72,9 +67,6 @@ it('shell description mentions saved long output and avoiding reruns', () => {
   });
 
   expect(tool.description.includes('Long output is saved to a file')).toBe(true);
-  expect(
-    tool.description.includes('instead of rerunning the command just to change filters or add a `| grep` pipeline'),
-  ).toBe(true);
 });
 
 it.sequential('shell execute restores previous correlation id after command execution', async () => {

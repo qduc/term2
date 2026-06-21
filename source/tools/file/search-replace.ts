@@ -47,11 +47,7 @@ function detectSummarizationMarkers(content: string): string | null {
 }
 
 const searchReplaceOperationSchema = z.object({
-  search_content: z
-    .string()
-    .describe(
-      'The exact content to search for. Put <...> on its own line to match (and replace) everything between a head anchor and a tail anchor — lets you edit or delete a large block without reproducing it. The whole span between anchors is replaced, so use distinctive multi-line anchors (never a single generic line) to avoid deleting the wrong region. Omit the anchors from replace_content to delete them too.',
-    ),
+  search_content: z.string().describe('The exact content to search for. <...> on its own line acts as a gap anchor.'),
   replace_content: z.string().describe('The content to replace the matched search_content with.'),
   match_all: z
     .boolean()

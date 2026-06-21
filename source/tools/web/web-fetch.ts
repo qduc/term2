@@ -24,7 +24,7 @@ const webFetchSchema = z.object({
     .max(MAX_CHARS_LIMIT)
     .optional()
     .default(DEFAULT_MAX_CHARS)
-    .describe(`Maximum number of characters to return (default: ${DEFAULT_MAX_CHARS}).`),
+    .describe('Maximum number of characters to return.'),
   heading: z
     .array(z.union([z.string(), z.number()]))
     .optional()

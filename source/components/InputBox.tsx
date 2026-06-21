@@ -159,10 +159,11 @@ const InputBox: FC<Props> = ({
       const filter = settingsFilterRef.current;
       const restoredInput = SETTINGS_TRIGGER + filter;
       onChange(restoredInput);
+      setCursorOffset(restoredInput.length);
       setCursorOverride(restoredInput.length);
       settings.open(SETTINGS_TRIGGER.length, key);
     },
-    [onChange, settings, setCursorOverride],
+    [onChange, setCursorOffset, setCursorOverride, settings],
   );
   const settingsValue = useSettingsValueCompletion(settingsService, {
     onReset: reopenSettingsMenu,

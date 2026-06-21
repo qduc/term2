@@ -1054,3 +1054,64 @@ it.sequential('InputBox allows backspace and delete keys to modify input in prov
   frame = lastFrame() ?? '';
   expect(frame.includes('Input:|')).toBe(true);
 });
+
+it.sequential('backspace works after committing a setting value and returning to settings menu', async () => {
+  const settingsService = createMockSettingsService({
+    'ui.historySize': 50,
+  });
+
+  const mockSettingsCommand: SlashCommand = {
+    name: '/settings',
+    description: 'Settings',
+    expectsArgs: true,
+    action: () => {},
+    completion: {
+      type: 'settings',
+      trigger: '/settings ',
+      resetTrigger: '/settings reset ',
+    },
+  };
+
+  const { lastFrame, stdin } = await renderAndFlush(
+    <InputProvider>
+      <InputCursorStateDisplay />
+      <InputBox
+        {...defaultProps}
+        settingsService={settingsService}
+        slashCommands={[...mockSlashCommands, mockSettingsCommand]}
+      />
+    </InputProvider>,
+  );
+
+  // Type "/settings ui.historySize " to enter settings_value_completion.
+  // The trailing space after the key name triggers the value menu via
+  // determineActiveMenu.
+  await writeInput(stdin, '/settings ui.historySize ');
+
+  // Wait for settings_value_completion mode
+  await waitFor(lastFrame, (f) => f.includes('Mode:settings_value_completion'), { timeoutMs: 3000 });
+
+  // Press Enter to commit the currently-selected value (50).
+  // This triggers insertSelectedSettingValue → reopenSettingsMenu,
+  // restoring the input to "/settings" with settings_completion mode.
+  await writeInput(stdin, '\r');
+
+  // Wait for settings_completion to re-open
+  const reopenFrame = await waitFor(lastFrame, (f) => f.includes('Mode:settings_completion'), { timeoutMs: 3000 });
+  // After reopen the input should be restored to '/settings '
+  expect(reopenFrame.includes('Input:/settings')).toBe(true);
+
+  // Press backspace — cursor is at the end of '/settings ' (10 chars),
+  // so backspace should delete the trailing space leaving '/settings'.
+  // After deletion, the trigger detection re-classifies the input as a slash
+  // command (/settings without trailing space), so mode becomes slash_commands.
+  await writeInput(stdin, '\x7f');
+
+  // Wait for the backspace to take effect: input changes from '/settings '
+  // to '/settings' (one character shorter), and the mode transitions to
+  // slash_commands since '/settings' without trailing space is interpreted
+  // as a slash command prefix.
+  const frame = await waitFor(lastFrame, (f) => f.includes('Input:/settings|Mode:slash_commands'), { timeoutMs: 3000 });
+  // The cursor has moved back by one: '/settings' is 9 chars, cursor at 9.
+  expect(frame.includes('Cursor:9')).toBe(true);
+});

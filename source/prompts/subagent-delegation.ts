@@ -15,7 +15,7 @@ You have a \`run_subagent\` tool. A subagent runs in its own context and returns
 
   const triggers = `**Delegate when:**
 - Spans more than ~2 files, or "where is / how does X work" → \`explorer\`.
-- Needs out-of-repo info (library docs, current best practices, version-specific behavior) → \`researcher\`.
+- Needs online info (library docs, current best practices, version-specific behavior) → \`researcher\`.
 - About to commit to a non-trivial plan or tricky debugging direction and want it pressure-tested → \`mentor\`.
 - Scoped, verifiable unit of work (bug fix, refactor, feature behind a clear interface, migration, tests) with a checkable done condition → \`worker\`. If you don't yet know *where* the change goes, send an \`explorer\` first.${
     orchestratorMode

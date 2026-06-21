@@ -176,3 +176,33 @@ it.sequential('StatusBar renders Confirm Cache Miss using pendingLargeUncachedTo
   // Math.round(20_000 / 1000) = 20
   expect(output.includes('Confirm Cache Miss: ~20k')).toBe(true);
 });
+
+it.sequential('StatusBar shows Sandbox: ON when sandbox.enabled is true, replacing Auto: ...', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'auto',
+    'sandbox.enabled': true,
+  });
+
+  const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
+  const output = lastFrame() ?? '';
+
+  expect(output.includes('Sandbox:')).toBe(true);
+  expect(output.includes('Approve:')).toBe(false);
+});
+
+it.sequential('StatusBar shows Approve: ... when sandbox.enabled is false', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'auto',
+    'sandbox.enabled': false,
+  });
+
+  const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
+  const output = lastFrame() ?? '';
+
+  expect(output.includes('Approve:')).toBe(true);
+  expect(output.includes('Sandbox:')).toBe(false);
+});

@@ -59,7 +59,7 @@ export function createSandboxRuntimeConfig(cwd: string): SandboxRuntimeConfig {
     filesystem: {
       denyRead: credentialFiles,
       allowWrite: [workspace],
-      denyWrite: ['/etc', '/var', '/usr', '/opt', '/System', '/Library', home].filter((entry) => entry !== workspace),
+      denyWrite: [],
       allowGitConfig: false,
     },
     credentials: {

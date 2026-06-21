@@ -176,6 +176,7 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'advisory', description: 'LLM provides safety analysis' },
     { value: 'auto', description: 'Full auto-approval (CAUTION)' },
   ],
+  'sandbox.enabled': [{ value: 'true' }, { value: 'false' }],
   'webSearch.provider': [
     { value: 'tavily', description: 'Tavily Search API' },
     { value: 'exa', description: 'Exa (formerly Metaphor) Search API' },

@@ -38,6 +38,7 @@ const StatusBar: FC<StatusBarProps> = ({
   const reasoningEffort = useSetting<string>(settingsService, 'agent.reasoningEffort') ?? 'default';
   const autoApproveMode = useSetting<string>(settingsService, 'shell.autoApproveMode') ?? 'off';
   const autoApproveModel = useSetting<string>(settingsService, 'agent.autoApproveModel');
+  const sandboxEnabled = useSetting<boolean>(settingsService, 'sandbox.enabled') ?? false;
 
   const providerDef = getProvider(providerKey);
   const providerLabel = providerDef?.label || providerKey;
@@ -190,14 +191,23 @@ const StatusBar: FC<StatusBarProps> = ({
       {/* Row 2: Status & Metrics */}
       <Box width="100%">
         <Box flexGrow={1}>
-          {autoApproveMode !== 'off' && (
+          {sandboxEnabled ? (
             <Box marginRight={1}>
-              <Text color={slate}>Auto: </Text>
-              <Text color={autoApproveMode === 'auto' ? '#10b981' : '#f97316'} bold>
-                {autoApproveMode}
+              <Text color={slate}>Sandbox: </Text>
+              <Text color="#10b981" bold>
+                ON
               </Text>
-              {autoApproveModel && <Text color={slate}> ({autoApproveModel})</Text>}
             </Box>
+          ) : (
+            autoApproveMode !== 'off' && (
+              <Box marginRight={1}>
+                <Text color={slate}>Approve: </Text>
+                <Text color={autoApproveMode === 'auto' ? '#10b981' : '#f97316'} bold>
+                  {autoApproveMode}
+                </Text>
+                {autoApproveModel && <Text color={slate}> ({autoApproveModel})</Text>}
+              </Box>
+            )
           )}
         </Box>
 

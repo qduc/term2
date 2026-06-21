@@ -19,6 +19,7 @@ export type UseHandoffFlowOptions = {
   addSystemMessage: (text: string) => void;
   sendUserMessage: (turn: UserTurn) => Promise<void>;
   setInput: (value: string) => void;
+  setInputAndCursor: (value: string, cursorOffset: number, cursorOverride?: number | null) => void;
   setMode: (mode: InputMode) => void;
   setTriggerIndex: (index: number | null) => void;
   mode: string;
@@ -41,18 +42,21 @@ export type UseHandoffFlowReturn = {
 
 const MODEL_TRIGGER = '/model ';
 
-export const useHandoffFlow = ({
-  clearConversationAndRefreshBanner,
-  addSystemMessage,
-  sendUserMessage,
-  setInput,
-  setMode,
-  setTriggerIndex,
-  mode,
-  settingsService,
-  applyRuntimeSetting,
-  setModel,
-}: UseHandoffFlowOptions): UseHandoffFlowReturn => {
+export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowReturn => {
+  const {
+    clearConversationAndRefreshBanner,
+    addSystemMessage,
+    sendUserMessage,
+    setInput,
+    setInputAndCursor,
+    setMode,
+    setTriggerIndex,
+    mode,
+    settingsService,
+    applyRuntimeSetting,
+    setModel,
+  } = deps;
+
   const [handoffState, dispatch] = useReducer(handoffFlowReducer, null, createInitialHandoffState);
 
   // Previous render's mode/handoffState, used by the auto-send effect to
@@ -113,10 +117,10 @@ export const useHandoffFlow = ({
 
     await clearConversationAndRefreshBanner();
     dispatch({ type: 'handoff/model_confirmed' });
-    setInput(MODEL_TRIGGER);
+    setInputAndCursor(MODEL_TRIGGER, MODEL_TRIGGER.length, MODEL_TRIGGER.length);
     setMode('model_selection');
     setTriggerIndex(MODEL_TRIGGER.length);
-  }, [clearConversationAndRefreshBanner, handoffState, setInput, setMode, setTriggerIndex]);
+  }, [clearConversationAndRefreshBanner, handoffState, setInputAndCursor, setMode, setTriggerIndex]);
 
   const declineHandoff = useCallback(async () => {
     const state = handoffState;
@@ -198,7 +202,7 @@ export const useHandoffFlow = ({
         }
 
         dispatch({ type: 'handoff/model_selected' });
-        setInput('/effort ');
+        setInputAndCursor('/effort ', '/effort '.length, '/effort '.length);
         setMode('text');
         setTriggerIndex(null);
         return true;
@@ -206,7 +210,16 @@ export const useHandoffFlow = ({
 
       return false;
     },
-    [applyRuntimeSetting, handoffState, setInput, setMode, setModel, setTriggerIndex, settingsService],
+    [
+      applyRuntimeSetting,
+      handoffState,
+      setInput,
+      setInputAndCursor,
+      setMode,
+      setModel,
+      setTriggerIndex,
+      settingsService,
+    ],
   );
 
   return {

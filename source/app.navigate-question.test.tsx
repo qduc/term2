@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   setMode: vi.fn(),
   setTriggerIndex: vi.fn(),
   setImages: vi.fn(),
+  setInputAndCursor: vi.fn(),
   toggleShellMode: vi.fn(),
   handleShellSubmit: vi.fn(),
   cycleAppModes: vi.fn(),
@@ -56,6 +57,7 @@ vi.mock('./context/InputContext.js', () => ({
     setMode: mocks.setMode,
     setTriggerIndex: mocks.setTriggerIndex,
     setImages: mocks.setImages,
+    setInputAndCursor: mocks.setInputAndCursor,
   }),
   useInputState: () => ({
     input: '',

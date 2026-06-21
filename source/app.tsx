@@ -83,7 +83,7 @@ const App: FC<AppProps> = ({
 }) => {
   const { exit } = useApp();
   const { stdout } = useStdout();
-  const { setInput, setMode, setTriggerIndex, setImages } = useInputActions();
+  const { setInput, setMode, setTriggerIndex, setImages, setInputAndCursor } = useInputActions();
   const { input, mode, images } = useInputState();
   const undoMenuRef = useRef<{ open: (items: UndoItem[]) => void } | null>(null);
   const providersMenuRef = useRef<{ open: () => void } | null>(null);
@@ -206,6 +206,7 @@ const App: FC<AppProps> = ({
     addSystemMessage,
     sendUserMessage,
     setInput,
+    setInputAndCursor,
     setMode,
     setTriggerIndex,
     mode,

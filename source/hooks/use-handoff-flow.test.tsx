@@ -23,6 +23,7 @@ type HarnessProps = {
   settingsService: { set: (key: string, value: unknown) => void; get: (key: string) => unknown };
   applyRuntimeSetting: (key: string, value: unknown) => void;
   setModel: (model: string) => void;
+  setInputAndCursorSpy?: (value: string, cursorOffset: number, cursorOverride?: number | null) => void;
 };
 
 const flush = async () => {
@@ -42,6 +43,7 @@ const createDeps = () => {
   };
   const applyRuntimeSetting = vi.fn();
   const setModel = vi.fn();
+  const setInputAndCursorSpy = vi.fn();
 
   return {
     clearConversationAndRefreshBanner,
@@ -50,6 +52,7 @@ const createDeps = () => {
     settingsService,
     applyRuntimeSetting,
     setModel,
+    setInputAndCursorSpy,
   };
 };
 
@@ -61,15 +64,21 @@ const Harness = ({
   settingsService,
   applyRuntimeSetting,
   setModel,
+  setInputAndCursorSpy,
 }: HarnessProps) => {
   const [mode, setMode] = useState('text');
   const [input, setInput] = useState('');
   const [triggerIndex, setTriggerIndex] = useState<number | null>(null);
+  const setInputAndCursor = (value: string, cursorOffset: number, cursorOverride?: number | null) => {
+    setInput(value);
+    setInputAndCursorSpy?.(value, cursorOffset, cursorOverride);
+  };
   const hook = useHandoffFlow({
     clearConversationAndRefreshBanner,
     addSystemMessage,
     sendUserMessage,
     setInput,
+    setInputAndCursor,
     setMode,
     setTriggerIndex,
     mode,
@@ -157,6 +166,7 @@ it.sequential('confirmHandoff clears conversation and opens model selection', as
   await flush();
 
   expect(deps.clearConversationAndRefreshBanner).toHaveBeenCalledTimes(1);
+  expect(deps.setInputAndCursorSpy).toHaveBeenCalledWith('/model ', '/model '.length, '/model '.length);
   expect(getSnapshot().handoffState?.stage).toBe('selecting_model');
   expect(getSnapshot().mode).toBe('model_selection');
   expect(getSnapshot().input).toBe('/model ');
@@ -247,6 +257,7 @@ it.sequential(
     expect(deps.applyRuntimeSetting).toHaveBeenNthCalledWith(1, 'agent.provider', 'anthropic');
     expect(deps.applyRuntimeSetting).toHaveBeenNthCalledWith(2, 'agent.model', 'gpt-4');
     expect(deps.setModel).toHaveBeenCalledWith('gpt-4');
+    expect(deps.setInputAndCursorSpy).toHaveBeenLastCalledWith('/effort ', '/effort '.length, '/effort '.length);
     expect(getSnapshot().handoffState?.stage).toBe('selecting_effort');
     expect(getSnapshot().input).toBe('/effort ');
 

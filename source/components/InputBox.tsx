@@ -368,8 +368,13 @@ const InputBox: FC<Props> = ({
 
   const insertSelectedModel = useCallback(
     (submitAfterInsert: boolean): boolean => {
+      const selectedModel = models.getSelectedItem();
+      const typedModelId = models.query.trim();
+      const resolvedModelId = selectedModel?.id ?? (submitAfterInsert ? typedModelId : undefined);
+
       const result = computeModelInsertion({
-        selection: models.getSelectedItem(),
+        selection: selectedModel,
+        modelId: resolvedModelId,
         triggerIndex: models.triggerIndex,
         provider: models.provider,
         value,
@@ -378,7 +383,7 @@ const InputBox: FC<Props> = ({
       if (!result) return false;
 
       if (submitAfterInsert && models.modelSettingConfig) {
-        const modelId = models.getSelectedItem()?.id;
+        const modelId = resolvedModelId;
         if (!modelId) return false;
 
         const provider = models.provider;

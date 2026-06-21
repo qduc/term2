@@ -646,6 +646,63 @@ it.sequential('command-backed model selection still submits after selection', as
   unregisterProvider(mockProviderId);
 });
 
+it.sequential('settings-backed model selection saves a typed custom model when no menu item matches', async () => {
+  clearModelCache();
+  const mockProviderId = `mock-provider-custom-${Date.now()}-${Math.random()}`;
+  registerProvider({
+    id: mockProviderId,
+    label: 'Mock Provider Custom',
+    fetchModels: async () => [{ id: 'gpt-test', name: 'GPT Test' }],
+  });
+
+  const settingsService = createMockSettingsService({
+    'agent.provider': mockProviderId,
+  });
+
+  const settingsSlashCommand: SlashCommand = {
+    name: '/settings',
+    description: 'Settings',
+    action: () => {},
+    completion: {
+      type: 'settings',
+      trigger: '/settings ',
+      resetTrigger: '/settings reset ',
+    },
+  };
+
+  const { lastFrame, stdin } = await renderAndFlush(
+    <InputProvider>
+      <StateDisplay />
+      <InputBox
+        {...defaultProps}
+        settingsService={settingsService}
+        slashCommands={[...mockSlashCommands, settingsSlashCommand]}
+      />
+    </InputProvider>,
+  );
+
+  await writeInput(stdin, '/settings agent.model custom-model');
+
+  await waitFor(lastFrame, (f) => f.includes('No models match "custom-model"'), { timeoutMs: 3000 });
+
+  await writeInput(stdin, '\r');
+
+  await waitForCondition(
+    () => settingsService.get('agent.model'),
+    (value) => value === 'custom-model',
+    { timeoutMs: 3000 },
+  );
+
+  expect(settingsService.get('agent.model')).toBe('custom-model');
+  expect(settingsService.get('agent.provider')).toBe(mockProviderId);
+
+  const frame = await waitFor(lastFrame, (f) => f.includes('Mode:settings_completion'), { timeoutMs: 3000 });
+  expect(frame.includes('Input:/settings '), frame).toBe(true);
+
+  clearModelCache();
+  unregisterProvider(mockProviderId);
+});
+
 it.sequential('settings value completion saves setting and reopens settings menu targeting the saved key', async () => {
   const settingsService = createMockSettingsService({
     'shell.timeout': 120000,

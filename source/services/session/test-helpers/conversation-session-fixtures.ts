@@ -1,6 +1,6 @@
 import { MockStream } from '../../test-helpers/mock-stream.js';
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../../service-interfaces.js';
-import type { ConversationAgentClient } from '../conversation-agent-client.js';
+import type { ConversationAgentClient } from '../../conversation-agent-client.js';
 
 export const mockLogger: ILoggingService = {
   info: () => {},

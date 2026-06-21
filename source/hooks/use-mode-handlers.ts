@@ -195,7 +195,7 @@ export const useModeHandlers = ({
           if (models.canSwitchProvider) models.toggleProvider('next');
         },
         onTab: () => {
-          if (models.canSwitchProvider) models.toggleProvider();
+          insertSelectedModel(false);
         },
         onSubmit: () => (insertSelectedModel(true) ? 'handled' : 'fallthrough'),
       },

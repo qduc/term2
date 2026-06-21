@@ -61,18 +61,21 @@ export const computeSettingValueInsertion = (args: {
 
 export const computeModelInsertion = (args: {
   selection: ModelInfo | undefined;
+  modelId?: string;
   triggerIndex: number | null;
   provider: string | null | undefined;
   value: string;
   appendTrailingSpace: boolean;
 }): Insertion | null => {
-  const { selection, triggerIndex, provider, value, appendTrailingSpace } = args;
-  if (!selection || triggerIndex === null) return null;
+  const { selection, modelId, triggerIndex, provider, value, appendTrailingSpace } = args;
+  if (triggerIndex === null) return null;
+  const resolvedModelId = modelId?.trim() || selection?.id;
+  if (!resolvedModelId) return null;
   const before = value.slice(0, triggerIndex);
   // Use the current provider state instead of selection.provider to avoid stale data when
   // the user presses Enter immediately after toggling providers.
   const currentProvider = provider || 'openai';
-  const insertion = `${selection.id} --provider=${currentProvider}`;
+  const insertion = `${resolvedModelId} --provider=${currentProvider}`;
   const nextValue = `${before}${insertion}${appendTrailingSpace ? ' ' : ''}`;
   return { nextValue, nextCursor: nextValue.length };
 };

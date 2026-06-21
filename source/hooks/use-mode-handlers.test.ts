@@ -9,9 +9,13 @@ import type { ProviderSelectionPhase } from './use-provider-selection.js';
 const TestComponent = ({
   providers,
   onHookResult,
+  models,
+  insertSelectedModel,
 }: {
   providers: any;
   onHookResult: (hook: ReturnType<typeof useModeHandlers>) => void;
+  models?: any;
+  insertSelectedModel?: (submitAfterInsert: boolean) => boolean;
 }) => {
   const hook = useModeHandlers({
     slash: {
@@ -50,7 +54,7 @@ const TestComponent = ({
       pageUp: () => {},
       pageDown: () => {},
     } as any,
-    models: {
+    models: (models ?? {
       moveUp: () => {},
       moveDown: () => {},
       moveHome: () => {},
@@ -59,7 +63,7 @@ const TestComponent = ({
       pageDown: () => {},
       canSwitchProvider: false,
       toggleProvider: () => {},
-    } as any,
+    }) as any,
     undo: {
       moveUp: () => {},
       moveDown: () => {},
@@ -82,7 +86,7 @@ const TestComponent = ({
     insertSelectedSetting: () => false,
     insertSelectedSettingValue: () => false,
     resetSettingValue: () => {},
-    insertSelectedModel: () => false,
+    insertSelectedModel: insertSelectedModel ?? (() => false),
     insertSelectedSkill: () => false,
     onSubmit: () => {},
     onSlashCommandRemount: () => {},
@@ -140,6 +144,71 @@ it('provider_selection submit uses text submit for wizard phases', async () => {
   expect(result).toBe('handled');
   expect(handleTextInputSubmitCalls).toEqual(['my-custom-provider']);
   expect(selectItemCalls).toEqual([]);
+
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+it('model_selection Tab autocompletes highlighted model and does not switch provider', async () => {
+  const insertSelectedModelCalls: boolean[] = [];
+  const toggleProviderCalls: Array<'next' | 'prev' | undefined> = [];
+
+  let renderer: any;
+  let hook: ReturnType<typeof useModeHandlers> | undefined;
+
+  await act(async () => {
+    renderer = render(
+      React.createElement(TestComponent, {
+        providers: {
+          phase: 'list' as ProviderSelectionPhase,
+          moveUp: () => {},
+          moveDown: () => {},
+          selectItem: () => {},
+          goBack: () => {},
+          requestDelete: () => {},
+          handleTextInputSubmit: () => false,
+          moveProviderUp: () => {},
+          moveProviderDown: () => {},
+        },
+        models: {
+          moveUp: () => {},
+          moveDown: () => {},
+          moveHome: () => {},
+          moveEnd: () => {},
+          pageUp: () => {},
+          pageDown: () => {},
+          canSwitchProvider: true,
+          toggleProvider: (direction?: 'next' | 'prev') => {
+            toggleProviderCalls.push(direction);
+          },
+        },
+        insertSelectedModel: (submitAfterInsert: boolean) => {
+          insertSelectedModelCalls.push(submitAfterInsert);
+          return true;
+        },
+        onHookResult: (nextHook) => {
+          hook = nextHook;
+        },
+      }),
+    );
+  });
+
+  if (!hook) {
+    throw new Error('Expected hook result');
+  }
+
+  const onTab = hook.model_selection.onTab;
+  if (!onTab) {
+    throw new Error('Expected model_selection onTab handler');
+  }
+
+  await act(async () => {
+    onTab();
+  });
+
+  expect(insertSelectedModelCalls).toEqual([false]);
+  expect(toggleProviderCalls).toEqual([]);
 
   await act(async () => {
     renderer.unmount();

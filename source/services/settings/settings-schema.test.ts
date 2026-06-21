@@ -11,6 +11,17 @@ import {
   normalizeAppModes,
 } from './settings-schema.js';
 
+it('SettingsSchema includes sandbox.enabled, which defaults to true and can be disabled', () => {
+  const parsed = SettingsSchema.parse({ sandbox: {} });
+  expect(parsed.sandbox?.enabled).toBe(true);
+
+  const parsedDisabled = SettingsSchema.parse({ sandbox: { enabled: false } });
+  expect(parsedDisabled.sandbox?.enabled).toBe(false);
+
+  expect(DEFAULT_SETTINGS.sandbox.enabled).toBe(true);
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.SANDBOX_ENABLED)).toBe(true);
+});
+
 it('agent transport defaults to websocket and is runtime modifiable', () => {
   expect(DEFAULT_SETTINGS.agent.transport).toBe('websocket');
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_TRANSPORT)).toBe(true);

@@ -112,6 +112,10 @@ export const ShellSettingsSchema = z.object({
   useRtkCompression: z.boolean().optional().default(false).describe('Use RTK to compress shell command output'),
 });
 
+export const SandboxSettingsSchema = z.object({
+  enabled: z.boolean().optional().default(true),
+});
+
 export const UISettingsSchema = z.object({
   historySize: z.number().int().positive().default(1000),
   pasteThreshold: z
@@ -266,6 +270,7 @@ export const SettingsSchema = z.object({
     .describe('Preferred order of provider IDs for display in model selection tab bar'),
   agent: AgentSettingsSchema.optional(),
   shell: ShellSettingsSchema.optional(),
+  sandbox: SandboxSettingsSchema.optional(),
   ui: UISettingsSchema.optional(),
   logging: LoggingSettingsSchema.optional(),
   environment: EnvironmentSettingsSchema.optional(),
@@ -282,6 +287,7 @@ export interface SettingsData {
   providerOrder: string[];
   agent: z.infer<typeof AgentSettingsSchema>;
   shell: z.infer<typeof ShellSettingsSchema>;
+  sandbox: z.infer<typeof SandboxSettingsSchema>;
   ui: z.infer<typeof UISettingsSchema>;
   logging: z.infer<typeof LoggingSettingsSchema>;
   environment: z.infer<typeof EnvironmentSettingsSchema>;
@@ -333,6 +339,9 @@ export interface SettingsWithSources {
     maxOutputChars: SettingWithSource<number>;
     autoApproveMode: SettingWithSource<'off' | 'advisory' | 'auto'>;
     useRtkCompression: SettingWithSource<boolean>;
+  };
+  sandbox: {
+    enabled: SettingWithSource<boolean>;
   };
   ui: {
     historySize: SettingWithSource<number>;
@@ -409,6 +418,7 @@ export const SETTING_KEYS = {
   SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
   SHELL_AUTO_APPROVE_MODE: 'shell.autoApproveMode',
   SHELL_USE_RTK_COMPRESSION: 'shell.useRtkCompression',
+  SANDBOX_ENABLED: 'sandbox.enabled',
   AGENT_AUTO_APPROVE_MODEL: 'agent.autoApproveModel',
   AGENT_AUTO_APPROVE_PROVIDER: 'agent.autoApproveProvider',
   AGENT_SUBAGENT_EXPLORER_MODEL: 'agent.subagentExplorerModel',
@@ -483,6 +493,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.APP_SEARCH_VIA_SHELL,
   SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
   SETTING_KEYS.SHELL_USE_RTK_COMPRESSION,
+  SETTING_KEYS.SANDBOX_ENABLED,
   SETTING_KEYS.UI_PASTE_THRESHOLD,
   SETTING_KEYS.UI_DISPLAY_MODE,
   SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
@@ -579,6 +590,9 @@ export const DEFAULT_SETTINGS: SettingsData = {
     maxOutputChars: 40000,
     autoApproveMode: 'off',
     useRtkCompression: false,
+  },
+  sandbox: {
+    enabled: true,
   },
   ui: {
     historySize: 1000,

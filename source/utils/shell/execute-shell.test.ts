@@ -46,6 +46,23 @@ it('executeShellCommand reports timeouts', async () => {
   expect(result.timedOut).toBe(true);
 });
 
+it('executeShellCommand passes env to exec implementation', async () => {
+  let receivedEnv: NodeJS.ProcessEnv | undefined;
+  const env = { PATH: '/bin', TERM: 'xterm-256color' };
+
+  const result = await executeShellCommand('uses-env', {
+    env,
+    execImpl: (_command, options, callback) => {
+      receivedEnv = options.env;
+      queueMicrotask(() => callback(null, 'ok', ''));
+      return createFakeChildProcess();
+    },
+  });
+
+  expect(result.exitCode).toBe(0);
+  expect(receivedEnv).toBe(env);
+});
+
 it('executeShellCommand closes child stdin immediately', async () => {
   let stdinEnded = false;
 

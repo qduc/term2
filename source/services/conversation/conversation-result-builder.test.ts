@@ -197,6 +197,31 @@ it('auto_approve outcome for valid read-only interruptions registered with the p
   }
 });
 
+it('unsandboxed shell is not auto-approved by the policy registry', async () => {
+  toolApprovalPolicyRegistry.register({
+    toolName: 'shell',
+    needsApproval: async () => false,
+  });
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'shell',
+        callId: 'shell-unsandboxed',
+        arguments: { command: 'curl https://example.com', sandbox: 'unsandboxed' },
+        agent: { name: 'TestAgent' },
+      },
+    ],
+    state: { id: 'state-1' },
+  });
+
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, makeDeps('off'));
+
+  expect(outcome.kind).toBe('approval_required');
+  if (outcome.kind === 'approval_required') {
+    expect(outcome.result.approval.callId).toBe('shell-unsandboxed');
+  }
+});
+
 it('approval_required records the matching nested subagent owner', async () => {
   const deps = makeDeps('off');
   const stream = makeStream({
@@ -361,6 +386,55 @@ it('auto_approve outcome when LLM advises approval and mode=auto', async () => {
     expect(outcome.callId).toBe('c1');
     expect(outcome.argumentsText).toBe('ls');
     expect(outcome.advisory?.approved).toBe(true);
+  }
+});
+
+it('unsandboxed shell is not auto-approved by LLM advisory mode', async () => {
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'shell',
+        callId: 'c-unsandboxed',
+        arguments: { command: 'curl https://example.com', sandbox: 'unsandboxed' },
+      },
+    ],
+    state: {},
+  });
+  const conversationStore = new ConversationStore();
+  const agentClient: any = {
+    chat: async () => '{"results":[{"id":"c-unsandboxed","reasoning":"safe","approved":true}]}',
+  };
+  const settingsService: any = {
+    get: <T>(key: string): T | undefined => (key === 'shell.autoApproveMode' ? ('auto' as unknown as T) : undefined),
+  };
+  const shellAutoApproval = new ShellAutoApprovalResolver({
+    conversationStore,
+    agentClient,
+    logger,
+    settingsService,
+    sessionContextService: {
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      getContext: () => null,
+    },
+  });
+  const approvalFlow = new ApprovalFlowCoordinator({
+    agentClient,
+    approvalState: new ApprovalState(),
+    logger,
+    sessionId: 's1',
+    toolTracker: { recordAbortedApproval: () => {}, export: () => [] } as any,
+    generationGuard: { isCurrent: () => true } as any,
+  });
+
+  const outcome = await buildConversationResult(
+    { result: stream, toolCallArgumentsById: new Map() },
+    { approvalFlow, shellAutoApproval, logger, sessionId: 's1' },
+  );
+
+  expect(outcome.kind).toBe('approval_required');
+  if (outcome.kind === 'approval_required') {
+    expect(outcome.result.approval.callId).toBe('c-unsandboxed');
+    expect(outcome.result.approval.llmAdvisory).toBeUndefined();
   }
 });
 

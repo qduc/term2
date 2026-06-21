@@ -18,6 +18,7 @@ import { type GenerationToken } from '../generation-guard.js';
 import { type CommandMessage } from '../../tools/types.js';
 import { resolveToolOwner } from '../approval/tool-owner.js';
 import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
+import { isUnsandboxedShell } from '../approval/shell-sandbox-approval.js';
 
 export type BuildResultOutcome =
   | { kind: 'response'; result: Extract<ConversationTerminal, { type: 'response' }> }
@@ -116,6 +117,8 @@ export async function buildConversationResult(
       throw new ModelBehaviorError(`Error parsing tool arguments for ${toolName}: arguments must be valid JSON.`);
     }
 
+    const forceHumanApproval = isUnsandboxedShell(toolName, parseResult.arguments);
+
     approvalFlow.recordPending({
       state: result.state,
       interruption,
@@ -141,7 +144,7 @@ export async function buildConversationResult(
       context: runContext,
     });
 
-    if (registryDecision.kind === 'auto_approve') {
+    if (!forceHumanApproval && registryDecision.kind === 'auto_approve') {
       logger.debug('Tool auto-approved by original tool policy', {
         eventType: 'approval.auto_approved',
         category: 'approval',
@@ -159,7 +162,7 @@ export async function buildConversationResult(
     }
 
     let llmAdvisory: LLMAdvisory | undefined;
-    if (toolName === 'shell' || toolName === 'bash') {
+    if ((toolName === 'shell' || toolName === 'bash') && !forceHumanApproval) {
       llmAdvisory = await shellAutoApproval.resolveAdvisoryForInterruption({
         interruption,
         siblings: result.interruptions || [],

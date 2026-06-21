@@ -20,6 +20,51 @@ import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
 import { ModelBehaviorError } from '@openai/agents';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
+import { SubagentToolPolicy } from './tool-policy.js';
+import type { ToolDefinition } from '../../tools/types.js';
+
+const shellDefinition: ToolDefinition = {
+  name: 'shell',
+  description: 'shell',
+  parameters: {} as any,
+  needsApproval: async () => false,
+  execute: async () => 'ran',
+  formatCommandMessage: () => [],
+};
+
+function createToolPolicy(): SubagentToolPolicy {
+  return new SubagentToolPolicy({
+    settings: createMockSettings(),
+    logger: createMockLogger(),
+    sessionContextService: createSessionContextService(),
+  });
+}
+
+describe('unsandboxed shell enforcement', () => {
+  it('worker shell wrapper rejects unsandboxed execution', async () => {
+    const tool = createToolPolicy().wrapShellTool(shellDefinition, process.cwd(), [], 'task');
+
+    const result = await tool.execute({ command: 'curl https://example.com', sandbox: 'unsandboxed' });
+
+    expect(result).toContain('unsandboxed shell execution is not available to subagents');
+  });
+
+  it('nested shell wrapper rejects unsandboxed execution', async () => {
+    const tool = createToolPolicy().wrapNestedShellTool(shellDefinition, process.cwd());
+
+    const result = await tool.execute({ command: 'curl https://example.com', sandbox: 'unsandboxed' });
+
+    expect(result).toContain('unsandboxed shell execution is not available to subagents');
+  });
+
+  it('read-only shell wrapper rejects unsandboxed execution', async () => {
+    const tool = createToolPolicy().wrapReadOnlyShellTool(shellDefinition);
+
+    const result = await tool.execute({ command: 'curl https://example.com', sandbox: 'unsandboxed' });
+
+    expect(result).toContain('unsandboxed shell execution is not available to subagents');
+  });
+});
 
 // ========== Write boundary enforcement ==========
 

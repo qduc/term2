@@ -231,6 +231,9 @@ importers:
       '@ai-sdk/provider':
         specifier: ^3.0.10
         version: 3.0.10
+      '@anthropic-ai/sandbox-runtime':
+        specifier: ^0.0.56
+        version: 0.0.56
       '@mozilla/readability':
         specifier: ^0.6.0
         version: 0.6.0
@@ -434,6 +437,12 @@ packages:
     resolution:
       { integrity: sha512-p+CMKJ93HFmLkjXKlXiVGlMQEuRb6H0MokBSwUsX+S6BRX8eV5naFZpQJFfJHjRZY0Hmnqy1/r6UWl3x+19zYA== }
     engines: { node: '>=18' }
+
+  '@anthropic-ai/sandbox-runtime@0.0.56':
+    resolution:
+      { integrity: sha512-WUz+F1oZL7ISpZUwEjN5XwzmJ+IS0mfmUti6vVPXCNFieTQfs7eRIEfroBSb7z0uwVVALAzfHV2SeE0/K3EfiA== }
+    engines: { node: '>=18.0.0' }
+    hasBin: true
 
   '@asamuzakjp/css-color@4.1.1':
     resolution:
@@ -1089,6 +1098,10 @@ packages:
     resolution:
       { integrity: sha512-KzkdCd6Uxqnf6l3HOw1xfatAlUURA0g14cvBYFyJ5SaNOQbOUvBr9PKArcPcrNIeRsBdgcUzOGrhKveVpvOIGA== }
 
+  '@pondwader/socks5-server@1.0.10':
+    resolution:
+      { integrity: sha512-bQY06wzzR8D2+vVCUoBsr5QS2U6UgPUQRmErNwtsuI6vLcyRKkafjkr3KxbtGFf9aBBIV2mcvlsKD1UYaIV+sg== }
+
   '@qduc/web-fetch@0.1.0':
     resolution:
       { integrity: sha512-i+m51KEwitH2xvRG08k5zkQoAZZUiDJB9ckZJ5ZPoEf5HqGLfEo9DYiURykMaoj7wy2N7rgXCc9fIQtvsz3iew== }
@@ -1737,6 +1750,11 @@ packages:
   colorette@2.0.20:
     resolution:
       { integrity: sha512-IfEDxwoWIjkeXL1eXcDiow4UbKjhLdq6/EuSVR9GMN7KVH3r9gQ83e73hsz1Nd1T3ijd5xv1wcWRYO+D6kCI2w== }
+
+  commander@12.1.0:
+    resolution:
+      { integrity: sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA== }
+    engines: { node: '>=18' }
 
   commander@14.0.3:
     resolution:
@@ -3084,6 +3102,11 @@ packages:
       { integrity: sha512-8Ofs/AUQh8MaEcrlq5xOX0CQ9ypTF5dl78mjlMNfOK08fzpgTHQRQPBxcPlEtIw0yRpws+Zo/3r+5WRby7u3Gg== }
     engines: { node: '>= 0.6' }
 
+  node-forge@1.4.0:
+    resolution:
+      { integrity: sha512-LarFH0+6VfriEhqMMcLX2F7SwSXeWwnEAJEsYm5QKWchiVYVvJyV9v7UDvUv+w5HO23ZpQTXDv/GxdDdMyOuoQ== }
+    engines: { node: '>= 6.13.0' }
+
   node-releases@2.0.27:
     resolution:
       { integrity: sha512-nmh3lCkYZ3grZvqcCH+fjmQ7X+H0OeZgP40OierEaAptX4XofMh5kwNbWh7lBduUzCcV/8kZ+NDLCwm2iorIlA== }
@@ -3568,6 +3591,11 @@ packages:
     resolution:
       { integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A== }
     engines: { node: '>=8' }
+
+  shell-quote@1.8.4:
+    resolution:
+      { integrity: sha512-VsC6n6vz1ihYYyZZwX7YZSF5l5x36ca17OC+a69h94YqB7X6XLwf+5MOgynYir2SLFUbl8gIYvBo8K8RoNQ6bQ== }
+    engines: { node: '>= 0.4' }
 
   side-channel-list@1.0.0:
     resolution:
@@ -4203,6 +4231,10 @@ packages:
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
 
+  zod@3.25.76:
+    resolution:
+      { integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ== }
+
   zod@4.1.13:
     resolution:
       { integrity: sha512-AvvthqfqrAhNH9dnfmrfKzX5upOdjUVJYFqNSlkmGf64gRaTzlPwz99IHYnVs28qYAybvAlBV+H7pn0saFY4Ig== }
@@ -4244,6 +4276,14 @@ snapshots:
     dependencies:
       ansi-styles: 6.2.3
       is-fullwidth-code-point: 5.1.0
+
+  '@anthropic-ai/sandbox-runtime@0.0.56':
+    dependencies:
+      '@pondwader/socks5-server': 1.0.10
+      commander: 12.1.0
+      node-forge: 1.4.0
+      shell-quote: 1.8.4
+      zod: 3.25.76
 
   '@asamuzakjp/css-color@4.1.1':
     dependencies:
@@ -4775,6 +4815,8 @@ snapshots:
   '@opentelemetry/api@1.9.0': {}
 
   '@oxc-project/types@0.133.0': {}
+
+  '@pondwader/socks5-server@1.0.10': {}
 
   '@qduc/web-fetch@0.1.0':
     dependencies:
@@ -5352,6 +5394,8 @@ snapshots:
       color-string: 2.1.4
 
   colorette@2.0.20: {}
+
+  commander@12.1.0: {}
 
   commander@14.0.3: {}
 
@@ -6592,6 +6636,8 @@ snapshots:
   negotiator@1.0.0:
     optional: true
 
+  node-forge@1.4.0: {}
+
   node-releases@2.0.27: {}
 
   normalize-package-data@3.0.3:
@@ -7026,6 +7072,8 @@ snapshots:
       shebang-regex: 3.0.0
 
   shebang-regex@3.0.0: {}
+
+  shell-quote@1.8.4: {}
 
   side-channel-list@1.0.0:
     dependencies:
@@ -7541,5 +7589,7 @@ snapshots:
   zod-validation-error@4.0.2(zod@4.1.13):
     dependencies:
       zod: 4.1.13
+
+  zod@3.25.76: {}
 
   zod@4.1.13: {}

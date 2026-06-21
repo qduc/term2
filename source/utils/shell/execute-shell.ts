@@ -5,7 +5,7 @@ type ExecCallback = (error: any, stdout: string | Buffer, stderr: string | Buffe
 
 type ExecImpl = (
   command: string,
-  options: { cwd?: string; timeout?: number; maxBuffer?: number; detached?: boolean },
+  options: { cwd?: string; timeout?: number; maxBuffer?: number; detached?: boolean; env?: NodeJS.ProcessEnv },
   callback: ExecCallback,
 ) => ChildProcess;
 
@@ -24,6 +24,7 @@ export interface ExecuteShellOptions {
   cwd?: string;
   timeout?: number;
   maxBuffer?: number;
+  env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
   sshService?: ISSHService;
   execImpl?: ExecImpl;
@@ -46,7 +47,7 @@ export async function executeShellCommand(
   command: string,
   options: ExecuteShellOptions = {},
 ): Promise<ShellExecutionResult> {
-  const { cwd = process.cwd(), timeout, maxBuffer, signal, sshService, execImpl = defaultExecImpl } = options;
+  const { cwd = process.cwd(), timeout, maxBuffer, env, signal, sshService, execImpl = defaultExecImpl } = options;
 
   if (sshService) {
     return sshService.executeCommand(command, { cwd });
@@ -60,6 +61,7 @@ export async function executeShellCommand(
           cwd,
           timeout,
           maxBuffer,
+          env,
           detached: process.platform !== 'win32',
         },
         (error, stdout, stderr) => {

@@ -60,6 +60,7 @@
     "@ai-sdk/anthropic": "^3.0.76",
     "@ai-sdk/google": "^3.0.72",
     "@ai-sdk/provider": "^3.0.10",
+    "@anthropic-ai/sandbox-runtime": "^0.0.56",
     "@mozilla/readability": "^0.6.0",
     "@openai/agents": "^0.11.4",
     "@openai/agents-core": "^0.11.4",

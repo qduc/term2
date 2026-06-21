@@ -7,6 +7,15 @@ import { createMockSettingsService } from '../../services/settings/settings-serv
 import { ExecutionContext } from '../../services/execution-context.js';
 import type { ILoggingService, ISSHService } from '../../services/service-interfaces.js';
 
+function createFakeSandboxRunner(overrides: Partial<any> = {}): any {
+  return {
+    availability: async () => ({ type: 'available' }),
+    wrap: async (command: string) => ({ command: `sandboxed(${command})` }),
+    annotateFailure: (_command: string, stderr: string) => stderr,
+    ...overrides,
+  };
+}
+
 function createNoopLogger(overrides: Partial<ILoggingService> = {}): ILoggingService {
   return {
     info: () => {},
@@ -67,6 +76,27 @@ it('shell description mentions saved long output and avoiding reruns', () => {
   });
 
   expect(tool.description.includes('Long output is saved to a file')).toBe(true);
+});
+
+it('shell schema accepts omitted, default, and unsandboxed sandbox modes', () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService(),
+  });
+
+  expect(tool.parameters.parse({ command: 'pwd' }).sandbox).toBe('default');
+  expect(tool.parameters.parse({ command: 'pwd', sandbox: 'default' }).sandbox).toBe('default');
+  expect(tool.parameters.parse({ command: 'pwd', sandbox: 'unsandboxed' }).sandbox).toBe('unsandboxed');
+  expect(() => tool.parameters.parse({ command: 'pwd', sandbox: 'off' })).toThrow();
+});
+
+it('shell needsApproval always prompts for unsandboxed execution', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService(),
+  });
+
+  expect(await tool.needsApproval({ command: 'ls', sandbox: 'unsandboxed' })).toBe(true);
 });
 
 it.sequential('shell execute restores previous correlation id after command execution', async () => {
@@ -222,7 +252,7 @@ it.sequential('shell execute does not install RTK for allowlisted commands in a 
 
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
-    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true }),
+    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true, 'sandbox.enabled': false }),
     rtkInstaller: async () => {
       installCalled = true;
       return createFakeRtk();
@@ -247,7 +277,7 @@ it.sequential('shell execute does not install RTK for allowlisted commands redir
 
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
-    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true }),
+    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true, 'sandbox.enabled': false }),
     rtkInstaller: async () => {
       installCalled = true;
       return createFakeRtk();
@@ -309,6 +339,164 @@ it.sequential('shell execute bypasses RTK for SSH commands', async () => {
   expect(installCalled).toBe(false);
 });
 
+it.sequential('shell execute wraps local default commands with the sandbox when enabled and available', async () => {
+  let executedCommand: string | undefined;
+  let receivedEnv: NodeJS.ProcessEnv | undefined;
+  let wrappedCommand: string | undefined;
+  const runner = createFakeSandboxRunner({
+    wrap: async (command: string) => {
+      wrappedCommand = command;
+      return { command: `sandboxed(${command})`, diagnostics: ['sandbox active'] };
+    },
+  });
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    shellSandboxRunner: runner,
+    executeShellCommandImpl: async (command, options) => {
+      executedCommand = command;
+      receivedEnv = options?.env;
+      return { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
+    },
+  });
+
+  const output = await tool.execute({ command: 'pwd', sandbox: 'default' });
+
+  expect(wrappedCommand).toBe('pwd');
+  expect(executedCommand).toBe('sandboxed(pwd)');
+  expect(receivedEnv).toBeTruthy();
+  expect(output.includes('ok')).toBe(true);
+});
+
+it.sequential('shell execute bypasses sandbox for SSH commands', async () => {
+  let sandboxWrapped = false;
+  let executedCommand: string | undefined;
+  const sshService: ISSHService = {
+    connect: async () => {},
+    disconnect: async () => {},
+    isConnected: () => true,
+    executeCommand: async (cmd: string) => {
+      executedCommand = cmd;
+      return { stdout: 'remote', stderr: '', exitCode: 0, timedOut: false };
+    },
+    readFile: async () => '',
+    writeFile: async () => {},
+    mkdir: async () => {},
+  };
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    executionContext: new ExecutionContext(sshService, '/remote/workspace'),
+    shellSandboxRunner: createFakeSandboxRunner({
+      wrap: async () => {
+        sandboxWrapped = true;
+        return { command: 'sandboxed' };
+      },
+    }),
+  });
+
+  const output = await tool.execute({ command: 'pwd', sandbox: 'default' });
+
+  expect(sandboxWrapped).toBe(false);
+  expect(executedCommand).toBe('pwd');
+  expect(output.includes('remote')).toBe(true);
+});
+
+it.sequential('shell execute bypasses sandbox when disabled', async () => {
+  let sandboxWrapped = false;
+  let executedCommand: string | undefined;
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+    shellSandboxRunner: createFakeSandboxRunner({
+      wrap: async () => {
+        sandboxWrapped = true;
+        return { command: 'sandboxed' };
+      },
+    }),
+    executeShellCommandImpl: async (command) => {
+      executedCommand = command;
+      return { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
+    },
+  });
+
+  await tool.execute({ command: 'pwd', sandbox: 'default' });
+
+  expect(sandboxWrapped).toBe(false);
+  expect(executedCommand).toBe('pwd');
+});
+
+it.sequential('shell execute falls back when sandbox is unavailable', async () => {
+  let sandboxWrapped = false;
+  let executedCommand: string | undefined;
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    shellSandboxRunner: createFakeSandboxRunner({
+      availability: async () => ({ type: 'unsupported_platform', reason: 'not supported' }),
+      wrap: async () => {
+        sandboxWrapped = true;
+        return { command: 'sandboxed' };
+      },
+    }),
+    executeShellCommandImpl: async (command) => {
+      executedCommand = command;
+      return { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
+    },
+  });
+
+  await tool.execute({ command: 'pwd', sandbox: 'default' });
+
+  expect(sandboxWrapped).toBe(false);
+  expect(executedCommand).toBe('pwd');
+});
+
+it.sequential('shell execute falls back when sandbox wrapping fails', async () => {
+  let executedCommand: string | undefined;
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    shellSandboxRunner: createFakeSandboxRunner({
+      wrap: async () => {
+        throw new Error('init failed');
+      },
+    }),
+    executeShellCommandImpl: async (command) => {
+      executedCommand = command;
+      return { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
+    },
+  });
+
+  const output = await tool.execute({ command: 'pwd', sandbox: 'default' });
+
+  expect(executedCommand).toBe('pwd');
+  expect(output.includes('ok')).toBe(true);
+});
+
+it.sequential('shell execute appends retry instruction when sandbox annotates a denial', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    shellSandboxRunner: createFakeSandboxRunner({
+      annotateFailure: (_command: string, stderr: string) => `${stderr}\nSandbox violation: network denied`,
+    }),
+    executeShellCommandImpl: async () => ({
+      stdout: '',
+      stderr: 'curl: failed',
+      exitCode: 1,
+      timedOut: false,
+    }),
+  });
+
+  const output = await tool.execute({ command: 'curl https://example.com', sandbox: 'default' });
+
+  expect(output.includes('Sandbox violation: network denied')).toBe(true);
+  expect(output.includes('Sandbox blocked this command')).toBe(true);
+  expect(output.includes('sandbox="unsandboxed"')).toBe(true);
+});
+
 it.sequential('shell execute in plan mode blocks mutating commands but runs green commands', async () => {
   const settingsService = createMockSettingsService({
     'app.planMode': true,
@@ -343,6 +531,7 @@ it.sequential('shell execute in plan mode blocks mutating commands but runs gree
 it.sequential('shell needsApproval classifications in planMode false', async () => {
   const settingsService = createMockSettingsService({
     'app.planMode': false,
+    'sandbox.enabled': false,
   });
 
   const tool = createShellToolDefinition({

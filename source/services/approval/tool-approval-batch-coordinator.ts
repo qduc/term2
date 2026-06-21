@@ -16,6 +16,7 @@ import {
 import { parseToolCallArguments } from '../tool-call-arguments.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import { toolApprovalPolicyRegistry, type ToolApprovalPolicyRegistry } from './tool-approval-policy-registry.js';
+import { isUnsandboxedShell } from './shell-sandbox-approval.js';
 
 export type BatchStageResult =
   | { kind: 'ready' }
@@ -98,6 +99,7 @@ export class ToolApprovalBatchCoordinator {
         sessionId: this.deps.sessionId,
         traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
       });
+      const forceHumanApproval = isUnsandboxedShell(toolName, parseResult.arguments);
 
       const registryDecision = await this.#policyRegistry.evaluate({
         toolName,
@@ -107,11 +109,11 @@ export class ToolApprovalBatchCoordinator {
 
       let decision: 'approve' | 'reject' | 'prompt';
       let llmAdvisory;
-      if (registryDecision.kind === 'auto_approve') {
+      if (!forceHumanApproval && registryDecision.kind === 'auto_approve') {
         decision = 'approve';
       } else {
         llmAdvisory =
-          toolName === 'shell' || toolName === 'bash'
+          (toolName === 'shell' || toolName === 'bash') && !forceHumanApproval
             ? await this.deps.shellAutoApproval.resolveAdvisoryForInterruption({
                 interruption,
                 siblings,

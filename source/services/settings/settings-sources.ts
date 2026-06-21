@@ -27,6 +27,9 @@ const SETTINGS_SOURCE_KEYS = {
     autoApproveMode: 'shell.autoApproveMode',
     useRtkCompression: 'shell.useRtkCompression',
   },
+  sandbox: {
+    enabled: 'sandbox.enabled',
+  },
   ui: {
     historySize: 'ui.historySize',
   },

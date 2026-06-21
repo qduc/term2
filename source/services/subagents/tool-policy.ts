@@ -97,6 +97,13 @@ export function formatRunningCommandMessages(definition: ToolDefinition, params:
   ];
 }
 
+function rejectUnsandboxedSubagentShell(params: unknown): string | undefined {
+  if (params && typeof params === 'object' && (params as Record<string, unknown>).sandbox === 'unsandboxed') {
+    return 'Error: unsandboxed shell execution is not available to subagents. Report the need to the main agent.';
+  }
+  return undefined;
+}
+
 export class SubagentToolPolicy {
   #settings: ISettingsService;
   #logger: ILoggingService;
@@ -232,6 +239,11 @@ export class SubagentToolPolicy {
       ...definition,
       needsApproval: () => false,
       execute: async (params: any, context?: unknown, details?: unknown) => {
+        const unsandboxedError = rejectUnsandboxedSubagentShell(params);
+        if (unsandboxedError) {
+          return unsandboxedError;
+        }
+
         const command: string = typeof params?.command === 'string' ? params.command : '';
         if (!command) {
           return originalExecute(params, context, details);
@@ -280,6 +292,11 @@ export class SubagentToolPolicy {
     return {
       ...definition,
       execute: async (params: any, context?: unknown, details?: unknown) => {
+        const unsandboxedError = rejectUnsandboxedSubagentShell(params);
+        if (unsandboxedError) {
+          return unsandboxedError;
+        }
+
         const command: string = typeof params?.command === 'string' ? params.command : '';
         const extractedPaths = command ? this.extractPathsFromCommand(command, cwd) : [];
         for (const filePath of extractedPaths) {
@@ -312,6 +329,11 @@ export class SubagentToolPolicy {
       ...definition,
       needsApproval: () => false,
       execute: async (params: any, context?: unknown, details?: unknown) => {
+        const unsandboxedError = rejectUnsandboxedSubagentShell(params);
+        if (unsandboxedError) {
+          return unsandboxedError;
+        }
+
         const command: string = typeof params?.command === 'string' ? params.command : '';
         if (!command) {
           return originalExecute(params, context, details);

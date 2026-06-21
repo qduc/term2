@@ -24,6 +24,15 @@ import {
 } from '../format-helpers.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import { ensureRtkInstalled, isRtkSupportedCommand, wrapWithRtk } from '../../services/rtk-service.js';
+import { createSandboxEnvironment } from '../../utils/shell/sandbox/sandbox-env.js';
+import {
+  SANDBOX_ESCAPE_INSTRUCTION,
+  type SandboxAvailability,
+  type ShellSandboxRunner,
+} from '../../utils/shell/sandbox/sandbox-policy.js';
+import { getDefaultShellSandboxRunner } from '../../utils/shell/sandbox/shell-sandbox-runner.js';
+
+const shellSandboxModeSchema = z.enum(['default', 'unsandboxed']).optional().default('default');
 
 const shellParametersSchema = z.object({
   command: z.string().min(1).describe('Single shell command to execute.'),
@@ -39,9 +48,14 @@ const shellParametersSchema = z.object({
     .describe(
       'Optional maximum output length in characters for each command. Outputs exceeding this length will be trimmed. Defaults to 40000 characters if not specified.',
     ),
+  sandbox: shellSandboxModeSchema.describe(
+    'Run mode. default runs inside the sandbox when available. unsandboxed requires explicit user approval.',
+  ),
 });
 
-export type ShellToolParams = z.infer<typeof shellParametersSchema>;
+export type ShellToolParams = Omit<z.infer<typeof shellParametersSchema>, 'sandbox'> & {
+  sandbox?: 'default' | 'unsandboxed';
+};
 
 // Re-export trim utilities for backwards compatibility
 export { setTrimConfig, getTrimConfig, DEFAULT_TRIM_CONFIG, type OutputTrimConfig };
@@ -194,12 +208,13 @@ export const formatShellCommandMessage: FormatCommandMessage = (item, index, too
 };
 
 const SHELL_DESCRIPTION =
-  'Execute a single shell command. Use this to run tests, check git status, install dependencies, inspect system state, or run one-off scripts. ' +
+  'Execute a single shell command. By default, local shell commands run inside the sandbox when available. Use sandbox: "unsandboxed" only when a command needs network or outside-host access; unsandboxed commands require explicit user approval and must be run by the main agent, not delegated. ' +
+  'Use this to run tests, check git status, install dependencies, inspect system state, or run one-off scripts. ' +
   'Long output is saved to a file; ' +
   'Do NOT write multi-line inline scripts, it is prone to escaping mistakes. Use create_file to write the script then use this tool to run it. ' +
   'Do NOT use this for complex multi-step edits or broad codebase exploration; use run_subagent instead.';
 const SHELL_DESCRIPTION_ORCHESTRATOR =
-  "Execute a single shell command to verify state (e.g., run tests, check git status, or verify a subagent's work). Long output is saved to a file; " +
+  'Execute a single shell command to verify state (e.g., run tests, check git status, or verify a subagent\'s work). By default, local shell commands run inside the sandbox when available. Use sandbox: "unsandboxed" only for network or outside-host access; it requires explicit user approval and must be run by the main agent. Long output is saved to a file; ' +
   'For performing complex operations or making changes, prefer delegating to a `worker` subagent via `run_subagent`.';
 
 export function createShellToolDefinition(deps: {
@@ -208,6 +223,7 @@ export function createShellToolDefinition(deps: {
   executionContext?: ExecutionContext;
   rtkInstaller?: typeof ensureRtkInstalled;
   executeShellCommandImpl?: typeof executeShellCommand;
+  shellSandboxRunner?: ShellSandboxRunner;
   orchestratorMode?: boolean;
 }): ToolDefinition<ShellToolParams> {
   const {
@@ -216,6 +232,7 @@ export function createShellToolDefinition(deps: {
     executionContext,
     rtkInstaller = ensureRtkInstalled,
     executeShellCommandImpl = executeShellCommand,
+    shellSandboxRunner = getDefaultShellSandboxRunner(),
     orchestratorMode = false,
   } = deps;
 
@@ -230,7 +247,20 @@ export function createShellToolDefinition(deps: {
     parameters: shellParametersSchema,
     needsApproval: async (params) => {
       try {
+        if (params.sandbox === 'unsandboxed') {
+          return true;
+        }
+
         const cwd = executionContext?.getCwd() || process.cwd();
+        const sshService = executionContext?.getSSHService();
+        const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled') !== false;
+        if (!sshService && sandboxEnabled) {
+          const availability = await shellSandboxRunner.availability();
+          if (availability.type === 'available') {
+            return false;
+          }
+        }
+
         const isDangerous = isMutatingCommand(params.command, cwd, loggingService);
 
         // Log security event for all shell commands with dangerous flag
@@ -251,7 +281,7 @@ export function createShellToolDefinition(deps: {
         return true; // fail-safe: require approval on validation errors
       }
     },
-    execute: async ({ command, timeout_ms, max_output_length }, _context, details) => {
+    execute: async ({ command, timeout_ms, max_output_length, sandbox = 'default' }, _context, details) => {
       const cwd = executionContext?.getCwd() || process.cwd();
       if (settingsService.get<boolean>('app.planMode') && isMutatingCommand(command, cwd, loggingService)) {
         return `Error: plan mode is read-only. Command not executed: ${command}`;
@@ -290,6 +320,8 @@ export function createShellToolDefinition(deps: {
         }
 
         let commandToRun = optimizedCommand;
+        let sandboxed = false;
+        let sandboxAvailability: SandboxAvailability | undefined;
         if (
           !sshService &&
           settingsService.get<boolean>('shell.useRtkCompression') &&
@@ -302,16 +334,49 @@ export function createShellToolDefinition(deps: {
           }
         }
 
+        const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled') !== false;
+        if (!sshService && sandbox === 'default' && sandboxEnabled) {
+          sandboxAvailability = await shellSandboxRunner.availability();
+          if (sandboxAvailability.type === 'available') {
+            try {
+              const wrapped = await shellSandboxRunner.wrap(commandToRun, {
+                cwd,
+                signal: (details as { signal?: AbortSignal } | undefined)?.signal,
+              });
+              commandToRun = wrapped.command;
+              sandboxed = true;
+              if (wrapped.diagnostics?.length) {
+                loggingService.debug('Shell sandbox diagnostics', { diagnostics: wrapped.diagnostics });
+              }
+            } catch (error) {
+              loggingService.warn('Shell sandbox initialization failed; running command without sandbox', {
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+          } else if (sandboxAvailability.type !== 'disabled') {
+            loggingService.warn('Shell sandbox unavailable; running command without sandbox', {
+              availability: sandboxAvailability.type,
+              reason: 'reason' in sandboxAvailability ? sandboxAvailability.reason : undefined,
+            });
+          }
+        }
+
         const result = await executeShellCommandImpl(commandToRun, {
           cwd,
           timeout,
           maxBuffer: 1024 * 1024, // 1MB max buffer
+          env: sandboxed ? createSandboxEnvironment() : undefined,
           signal: (details as { signal?: AbortSignal } | undefined)?.signal,
           sshService,
         });
 
         const stdout = result.stdout ?? '';
-        const stderr = stripRtkWarning(result.stderr ?? '');
+        const rawStderr = stripRtkWarning(result.stderr ?? '');
+        const annotatedStderr = sandboxed ? shellSandboxRunner.annotateFailure(optimizedCommand, rawStderr) : rawStderr;
+        const stderr =
+          sandboxed && annotatedStderr !== rawStderr
+            ? `${annotatedStderr}\n\n${SANDBOX_ESCAPE_INSTRUCTION}`
+            : annotatedStderr;
         const exitCode = result.exitCode ?? null;
         const outcome: ShellCommandResult['outcome'] = result.timedOut
           ? { type: 'timeout' }

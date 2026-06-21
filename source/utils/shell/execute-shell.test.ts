@@ -2,6 +2,7 @@ import { it, expect } from 'vitest';
 import { PassThrough, Writable } from 'stream';
 import type { ChildProcess } from 'child_process';
 import { executeShellCommand } from './execute-shell.js';
+import { SANDBOX_TEMP_DIR } from './temp-dir.js';
 
 it('executeShellCommand returns stdout and exit code for successful command', async () => {
   const result = await executeShellCommand("printf 'hello'", {
@@ -46,7 +47,7 @@ it('executeShellCommand reports timeouts', async () => {
   expect(result.timedOut).toBe(true);
 });
 
-it('executeShellCommand passes env to exec implementation', async () => {
+it('executeShellCommand merges env for exec implementation and sets TMPDIR', async () => {
   let receivedEnv: NodeJS.ProcessEnv | undefined;
   const env = { PATH: '/bin', TERM: 'xterm-256color' };
 
@@ -60,7 +61,23 @@ it('executeShellCommand passes env to exec implementation', async () => {
   });
 
   expect(result.exitCode).toBe(0);
-  expect(receivedEnv).toBe(env);
+  expect(receivedEnv).toMatchObject(env);
+  expect(receivedEnv?.TMPDIR).toBe(SANDBOX_TEMP_DIR);
+});
+
+it('executeShellCommand sets TMPDIR when env is omitted', async () => {
+  let receivedEnv: NodeJS.ProcessEnv | undefined;
+
+  const result = await executeShellCommand('uses-default-env', {
+    execImpl: (_command, options, callback) => {
+      receivedEnv = options.env;
+      queueMicrotask(() => callback(null, 'ok', ''));
+      return createFakeChildProcess();
+    },
+  });
+
+  expect(result.exitCode).toBe(0);
+  expect(receivedEnv?.TMPDIR).toBe(SANDBOX_TEMP_DIR);
 });
 
 it('executeShellCommand closes child stdin immediately', async () => {

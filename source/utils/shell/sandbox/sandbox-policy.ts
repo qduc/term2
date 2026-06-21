@@ -1,6 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import type { SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
+import { SANDBOX_TEMP_DIR } from '../temp-dir.js';
 
 export type ShellSandboxMode = 'default' | 'unsandboxed';
 
@@ -26,6 +27,7 @@ export interface ShellSandboxRunner {
 export function createSandboxRuntimeConfig(cwd: string): SandboxRuntimeConfig {
   const workspace = path.resolve(cwd);
   const home = os.homedir();
+  const tmpDir = SANDBOX_TEMP_DIR;
   const credentialFiles = [
     path.join(home, '.ssh'),
     path.join(home, '.aws'),
@@ -58,7 +60,7 @@ export function createSandboxRuntimeConfig(cwd: string): SandboxRuntimeConfig {
     },
     filesystem: {
       denyRead: credentialFiles,
-      allowWrite: [workspace],
+      allowWrite: [workspace, tmpDir],
       denyWrite: [],
       allowGitConfig: false,
     },

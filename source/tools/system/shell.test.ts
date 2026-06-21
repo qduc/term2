@@ -64,7 +64,7 @@ it.sequential('shell execute appends spill-file guidance when output is truncate
     max_output_length: 120,
   });
 
-  expect(output.includes('Full shell output saved to')).toBe(true);
+  expect(output.includes('Full output saved to')).toBe(true);
   expect(/Runtime: \d+ms/.test(output)).toBe(true);
   expect(output.includes('FULL-ONLY-SENTINEL')).toBe(false);
 });

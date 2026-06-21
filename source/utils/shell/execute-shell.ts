@@ -1,5 +1,6 @@
 import { exec, type ChildProcess } from 'child_process';
 import process from 'process';
+import { SANDBOX_TEMP_DIR } from './temp-dir.js';
 
 type ExecCallback = (error: any, stdout: string | Buffer, stderr: string | Buffer) => void;
 
@@ -53,6 +54,11 @@ export async function executeShellCommand(
     return sshService.executeCommand(command, { cwd });
   }
 
+  const childEnv: NodeJS.ProcessEnv = {
+    ...(env ?? process.env),
+    TMPDIR: SANDBOX_TEMP_DIR,
+  };
+
   try {
     const result = await new Promise<{ stdout?: string | Buffer; stderr?: string | Buffer }>((resolve, reject) => {
       const child = execImpl(
@@ -61,7 +67,7 @@ export async function executeShellCommand(
           cwd,
           timeout,
           maxBuffer,
-          env,
+          env: childEnv,
           detached: process.platform !== 'win32',
         },
         (error, stdout, stderr) => {

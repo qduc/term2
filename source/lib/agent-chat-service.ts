@@ -104,7 +104,7 @@ export class AgentChatService {
       try {
         await fetchModels({ settingsService: settings, loggingService: logger }, 'codex');
         agentConfig.refreshAgent();
-      } catch (err) {
+      } catch (_err) {
         // ignore
       }
     }
@@ -187,7 +187,7 @@ export class AgentChatService {
       try {
         await fetchModels({ settingsService: settings, loggingService: logger }, 'codex');
         agentConfig.refreshAgent();
-      } catch (err) {
+      } catch (_err) {
         // ignore
       }
     }

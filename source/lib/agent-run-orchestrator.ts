@@ -144,7 +144,7 @@ export class AgentRunOrchestrator {
         await fetchModels({ settingsService: this.#settings, loggingService: this.#logger }, 'codex');
         this.#agentConfig.refreshAgent();
         agentRefreshed = true;
-      } catch (err) {
+      } catch (_err) {
         // ignore
       }
     }

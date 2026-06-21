@@ -133,7 +133,7 @@ it('drive yields error event when continuation stream throws unrecoverable error
     } as any,
   });
 
-  let events: import('../conversation/conversation-events.js').ConversationEvent[] = [];
+  const events: import('../conversation/conversation-events.js').ConversationEvent[] = [];
   const gen = driver.drive(
     { kind: 'approval_decision', answer: 'y', generation: 1 },
     new ManualApprovalDecisionPolicy(),

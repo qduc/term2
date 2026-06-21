@@ -33,7 +33,7 @@ function sanitizeOpenAICompatibleMessages(messages: any[]): any[] {
       } else {
         newContent = message.content.map((part: any) => {
           if (!part || typeof part !== 'object') return part;
-          const { annotations, ...rest } = part;
+          const { annotations: _, ...rest } = part;
           return rest;
         });
       }

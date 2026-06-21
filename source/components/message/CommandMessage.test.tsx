@@ -436,7 +436,7 @@ it('CommandMessage renders shell approval rejection with [DENIED] and denial mes
     command: 'rm -rf /dangerous',
     toolName: 'shell',
     toolArgs: { command: 'rm -rf /dangerous' },
-    status: 'completed' as 'completed',
+    status: 'completed' as const,
     success: false,
     isApprovalRejection: true,
     output: "Tool execution was not approved. User's reason: too risky",
@@ -452,7 +452,7 @@ it('CommandMessage renders shell approval rejection with [DENIED] and denial mes
 it('CommandMessage renders shell approval rejection without command in output when only command field is provided', async () => {
   const props = {
     command: 'shell: rm -rf /',
-    status: 'completed' as 'completed',
+    status: 'completed' as const,
     success: false,
     isApprovalRejection: true,
     output: "Tool execution was not approved. User's reason: not safe",

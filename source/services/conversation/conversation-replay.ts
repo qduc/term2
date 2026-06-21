@@ -875,7 +875,7 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
         if (historyItem != null) {
           state.history.push(historyItem as AgentInputItem);
         }
-        let existing = state.toolLedger.find((entry) => entry.callId === item.callId);
+        const existing = state.toolLedger.find((entry) => entry.callId === item.callId);
         if (!existing) {
           state.toolLedger.push({
             turnId: journal.turnId ?? `turn-${journal.userTurnIndex}`,

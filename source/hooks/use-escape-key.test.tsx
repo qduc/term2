@@ -121,8 +121,8 @@ it.sequential('useInput fires ESC in non-text mode', async () => {
 });
 
 it.sequential('pressing ESC in model_selection mode clears input and switches to text mode', async () => {
-  let modes: InputMode[] = [];
-  let values: string[] = [];
+  const modes: InputMode[] = [];
+  const values: string[] = [];
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
 
   const ModelSelectionTestComponent = () => {
@@ -352,7 +352,7 @@ it.sequential(
   async () => {
     let settingsOpenArgs: { startIndex: number; initialSelectionKey: string } | null = null;
     let modelsClosed = false;
-    let cursorOverrides: (number | null)[] = [];
+    const cursorOverrides: (number | null)[] = [];
     let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
 
     const SettingsBackedModelComponent = () => {

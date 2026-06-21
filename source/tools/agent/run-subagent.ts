@@ -198,7 +198,7 @@ export function getSubagentsRolesSection(): string {
     if (roles.length > 0) {
       return '## Roles\n' + roles.join('\n') + '\n\n';
     }
-  } catch (error) {
+  } catch (_error) {
     // Fallback on error
   }
 

@@ -116,7 +116,7 @@ export function createCreateFileToolDefinition(deps: {
           return false;
         }
         return true;
-      } catch (error) {
+      } catch (_error) {
         // Outside workspace or other error => require approval
         return true;
       }

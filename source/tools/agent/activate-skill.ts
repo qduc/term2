@@ -66,7 +66,7 @@ export const createActivateSkillToolDefinition = (skillsService: SkillsService):
               .join('\n')}\n</skill_resources>`;
           }
         }
-      } catch (e: any) {
+      } catch (_e: any) {
         // Ignore or log error
       }
 

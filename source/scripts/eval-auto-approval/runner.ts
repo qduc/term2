@@ -222,7 +222,7 @@ async function run() {
         history: c.history,
       });
 
-      let cachedAdvisory = flags.cache ? cache.get(cacheKey) : null;
+      const cachedAdvisory = flags.cache ? cache.get(cacheKey) : null;
       let result: any;
       let error: string | undefined;
       let latencyMs = 0;

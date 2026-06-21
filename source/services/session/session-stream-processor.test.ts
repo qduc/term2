@@ -33,7 +33,7 @@ it('SessionStreamProcessor.process() streams events and updates toolTracker', as
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
 
-  let loggedEvents: any[] = [];
+  const loggedEvents: any[] = [];
   const conversationLogger = {
     hasSink: () => true,
     log: (event: any) => loggedEvents.push(event),
@@ -182,7 +182,7 @@ it('SessionStreamProcessor.process() does not log tool results for startStream s
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
 
-  let loggedEvents: any[] = [];
+  const loggedEvents: any[] = [];
   const conversationLogger = {
     hasSink: () => true,
     log: (event: any) => loggedEvents.push(event),

@@ -21,7 +21,7 @@ export const gitHandler: CommandHandler = {
   handle(node: any, helpers: CommandHandlerHelpers): CommandHandlerResult {
     const { extractWordText } = helpers;
     const reasons: string[] = [];
-    let status: SafetyStatus = SafetyStatus.GREEN;
+    const status: SafetyStatus = SafetyStatus.GREEN;
 
     // Extract the git subcommand (first non-flag argument), skipping global
     // options and any values they consume.

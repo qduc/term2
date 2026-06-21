@@ -7,6 +7,7 @@ import { AgentClient } from '../../../lib/agent-client.js';
 import { registerProvider, unregisterProvider, type ProviderDefinition } from '../../../providers/registry.js';
 import { ExecutionContext } from '../../execution-context.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../service-interfaces.js';
+import type { ISubagentClient, ISubagentClientFactory } from '../subagent-client-types.js';
 import { SubagentManager as RealSubagentManager } from '../subagent-manager.js';
 
 const ROLE_MENTOR = 'mentor';
@@ -30,9 +31,8 @@ afterEach(() => {
 export type MockRunner = (agent: any, input: any, options: any) => any;
 
 export function registerTestProvider(
-  partial: Omit<ProviderDefinition, 'id' | 'createRunner'> & {
+  partial: Partial<Omit<ProviderDefinition, 'id'>> & {
     id?: string;
-    createRunner: () => { run: MockRunner };
   },
 ): string {
   const id = partial.id ?? `test-provider-${randomUUID()}`;
@@ -57,7 +57,6 @@ export function createMockLogger(): ILoggingService {
     setCorrelationId: () => {},
     clearCorrelationId: () => {},
     getCorrelationId: () => undefined,
-    log: () => {},
   };
 }
 
@@ -174,12 +173,18 @@ export class TestSubagentManager extends RealSubagentManager {
     executionContext?: ExecutionContext;
     sessionContextService?: ISessionContextService;
     onEvent?: (event: any) => void;
-    agentClient?: any;
+    agentClient?: ISubagentClient;
+    createClient?: ISubagentClientFactory['createClient'];
   }) {
+    const logger = deps.logger ?? createMockLogger();
     const sessionContextService = deps.sessionContextService ?? createSessionContextService();
     super({
-      ...deps,
+      logger,
+      settings: deps.settings,
+      executionContext: deps.executionContext,
       sessionContextService,
+      onEvent: deps.onEvent,
+      agentClient: deps.agentClient,
       createClient:
         deps.createClient ??
         (({ agent, provider, maxTurns, retryAttempts }: any) =>
@@ -188,7 +193,7 @@ export class TestSubagentManager extends RealSubagentManager {
             maxTurns,
             retryAttempts,
             deps: {
-              logger: deps.logger ?? createMockLogger(),
+              logger,
               settings: deps.settings,
               executionContext: deps.executionContext,
               sessionContextService,

@@ -181,7 +181,7 @@ export class LoggingService {
   getLogLevel(): string {
     try {
       return (this.logger as any).level || 'info';
-    } catch (error: any) {
+    } catch (_error: any) {
       return 'info';
     }
   }
@@ -207,7 +207,7 @@ export class LoggingService {
       this.logger.transports.forEach((t: any) => {
         try {
           t.level = level;
-        } catch (err: any) {
+        } catch (_err: any) {
           // ignore
         }
       });

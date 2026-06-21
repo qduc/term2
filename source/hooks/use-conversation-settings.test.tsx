@@ -16,7 +16,7 @@ function createMockConversationService() {
   } as unknown as ConversationService;
 }
 
-let outerBox: { current: HookResult | null } = { current: null };
+const outerBox: { current: HookResult | null } = { current: null };
 
 const Harness = ({ service }: { service: ConversationService }) => {
   outerBox.current = useConversationSettings({ conversationService: service });

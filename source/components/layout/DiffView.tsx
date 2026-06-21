@@ -87,7 +87,7 @@ export const DiffView: FC<DiffViewProps> = ({ diff }) => {
         {truncated && lastLine !== null && renderLine(lastLine, 'last')}
       </Box>
     );
-  } catch (error) {
+  } catch (_error) {
     return (
       <Box flexDirection="column" marginLeft={2}>
         <Text color="red">[Failed to render diff preview]</Text>

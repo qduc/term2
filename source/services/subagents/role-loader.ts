@@ -43,7 +43,7 @@ export function parseFrontmatter(content: string): { frontmatter: Record<string,
     const colonIdx = line.indexOf(':');
     if (colonIdx === -1) continue;
     const key = line.slice(0, colonIdx).trim();
-    let raw = line.slice(colonIdx + 1).trim();
+    const raw = line.slice(colonIdx + 1).trim();
 
     const quoted =
       raw.length >= 2 && ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'")));

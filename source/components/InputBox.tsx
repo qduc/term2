@@ -754,7 +754,6 @@ const InputBox: FC<Props> = ({
   // delivers DEC mode ?1004 events and MultilineInput doesn't recognise them.
   const handleMultilineChange = useCallback(
     (newValue: string) => {
-      // eslint-disable-next-line no-control-regex
       const filtered = newValue.replace(/\x1b\[I|\x1b\[O/g, '');
       onChange(filtered);
     },

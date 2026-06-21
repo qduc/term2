@@ -127,7 +127,7 @@ it('run() emits a completed event even when the role is unknown', async () => {
 // ========== Mentor role definition sourced from markdown ==========
 
 it('mentor base instructions come from the mentor role markdown', async () => {
-  let mentorManagerRunnerCalls: any[] = [];
+  const mentorManagerRunnerCalls: any[] = [];
   let mentorManagerResponseCounter = 0;
 
   const providerId = registerTestProvider({

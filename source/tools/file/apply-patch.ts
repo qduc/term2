@@ -377,7 +377,7 @@ export function createApplyPatchToolDefinition(deps: {
                     path: filePath,
                     contentLength: content.length,
                   });
-                } catch (error) {
+                } catch (_error) {
                   // Ignore logging errors to prevent operation failure
                 }
               }
@@ -437,7 +437,7 @@ export function createApplyPatchToolDefinition(deps: {
                     originalLength: original.length,
                     patchedLength: patched.length,
                   });
-                } catch (error) {
+                } catch (_error) {
                   // Ignore logging errors to prevent operation failure
                 }
               }

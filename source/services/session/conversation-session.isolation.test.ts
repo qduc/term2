@@ -136,7 +136,7 @@ it('queueModeNotice prefixes the next user message in stream input (chaining pro
   mockStream.lastResponseId = 'resp-notice';
   mockStream.finalOutput = 'Ack';
 
-  let currentProvider = 'openai';
+  const currentProvider = 'openai';
 
   const mockClient = {
     getProvider() {

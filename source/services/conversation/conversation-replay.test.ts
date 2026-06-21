@@ -650,7 +650,7 @@ it('replayEvents: assistant_turn falls through to JSON pretty-print for unknown 
   const restored = replayEvents(envelopes);
   const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
   // No error/message/path/summary keys; pretty-printed JSON is the contract.
-  expect(command?.output as string).toMatch(/^\{\n  "unexpected": \{/);
+  expect(command?.output as string).toMatch(/^\{\n {2}"unexpected": \{/);
 });
 
 it('replayEvents: assistant_turn unwraps AI-SDK style { type: text, text } wrapper from JSON string', () => {

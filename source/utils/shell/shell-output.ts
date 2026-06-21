@@ -1,4 +1,5 @@
 import { mkdtemp, writeFile } from 'fs/promises';
+import { randomBytes } from 'crypto';
 import os from 'os';
 import path from 'path';
 import { trimOutput } from '../output/output-trim.js';
@@ -21,6 +22,7 @@ export interface FormatShellExecutionOutputResult {
 }
 
 const TRUNCATED_NOTE_PREFIX = 'Full output saved to';
+let shellOutputTempDirPromise: Promise<string> | undefined;
 
 function buildArtifactContents(params: {
   command: string;
@@ -50,8 +52,10 @@ function buildArtifactContents(params: {
 }
 
 async function saveShellOutputArtifact(contents: string): Promise<string> {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'term2-shell-output-'));
-  const artifactPath = path.join(tempDir, 'output.txt');
+  shellOutputTempDirPromise ??= mkdtemp(path.join(os.tmpdir(), 'term2-shell-output-'));
+  const tempDir = await shellOutputTempDirPromise;
+  const suffix = randomBytes(3).toString('hex');
+  const artifactPath = path.join(tempDir, `output-${suffix}.txt`);
   await writeFile(artifactPath, contents, 'utf8');
   return artifactPath;
 }

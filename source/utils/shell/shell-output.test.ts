@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest';
 import fs from 'fs';
+import path from 'path';
 import { formatShellExecutionOutput } from './shell-output.js';
 
 it('formatShellExecutionOutput saves the full output when truncation occurs', async () => {
@@ -20,12 +21,8 @@ it('formatShellExecutionOutput saves the full output when truncation occurs', as
   expect(result.artifactPath).toBeTruthy();
   expect(result.text.includes('exit 0')).toBe(true);
   expect(result.text.includes('Runtime: 1234ms')).toBe(true);
-  expect(result.text.includes('Full shell output saved to')).toBe(true);
-  expect(
-    result.text.includes(
-      'Search that file for what you need instead of rerunning the command or changing the filter criteria with a `| grep` pipeline.',
-    ),
-  ).toBe(true);
+  expect(result.text.includes('Full output saved to')).toBe(true);
+  expect(result.text.includes('trimmed')).toBe(true);
   expect(result.text.includes('FULL-ONLY-SENTINEL')).toBe(false);
 
   const artifactPath = result.artifactPath as string;
@@ -55,6 +52,43 @@ it('formatShellExecutionOutput leaves short output unchanged', async () => {
 
   expect(result.truncated).toBe(false);
   expect(result.artifactPath).toBe(undefined);
-  expect(result.text.includes('Full shell output saved to')).toBe(false);
+  expect(result.text.includes('Full output saved to')).toBe(false);
   expect(result.text).toBe('exit 0\nRuntime: 42ms\nhello');
+});
+
+it('formatShellExecutionOutput reuses one temp directory and randomizes artifact filenames', async () => {
+  const longOutput = 'x'.repeat(8000);
+
+  const first = await formatShellExecutionOutput({
+    command: 'demo one',
+    cwd: '/workspace',
+    stdout: longOutput,
+    stderr: '',
+    exitCode: 0,
+    timedOut: false,
+    maxOutputLength: 100,
+  });
+
+  const second = await formatShellExecutionOutput({
+    command: 'demo two',
+    cwd: '/workspace',
+    stdout: longOutput,
+    stderr: '',
+    exitCode: 0,
+    timedOut: false,
+    maxOutputLength: 100,
+  });
+
+  expect(first.truncated).toBe(true);
+  expect(second.truncated).toBe(true);
+  expect(first.artifactPath).toBeTruthy();
+  expect(second.artifactPath).toBeTruthy();
+
+  const firstPath = first.artifactPath as string;
+  const secondPath = second.artifactPath as string;
+
+  expect(path.dirname(firstPath)).toBe(path.dirname(secondPath));
+  expect(path.basename(firstPath)).not.toBe(path.basename(secondPath));
+  expect(path.basename(firstPath)).toMatch(/^output-[a-f0-9]{6}\.txt$/);
+  expect(path.basename(secondPath)).toMatch(/^output-[a-f0-9]{6}\.txt$/);
 });

@@ -23,6 +23,7 @@ export interface SubagentBridgeDeps {
 
 export class SubagentBridge {
   #subagentManager: SubagentManager | null;
+  #sessionContextService: ISessionContextService;
   #subagentEventSink: ((event: ConversationEvent) => void) | null = null;
   #activeSubagentsCount = 0;
   #pendingClearSink = false;
@@ -31,6 +32,7 @@ export class SubagentBridge {
 
   constructor(deps: SubagentBridgeDeps) {
     this.#logger = deps.logger;
+    this.#sessionContextService = deps.sessionContextService;
 
     if (deps.subagentManager !== undefined) {
       this.#subagentManager = deps.subagentManager;
@@ -98,18 +100,35 @@ export class SubagentBridge {
     };
   }
 
+  #withSubagentTrafficContext<T>(preview: string, fn: () => T): T {
+    const currentContext = this.#sessionContextService.getContext();
+    if (!currentContext) {
+      return fn();
+    }
+
+    return this.#sessionContextService.runWithContext(
+      {
+        ...currentContext,
+        firstUserMessagePreview: preview,
+      },
+      fn,
+    );
+  }
+
   createMentor = async (question: string): Promise<string> => {
     if (!this.#subagentManager) {
       throw new Error('Transient agent clients cannot spawn subagents.');
     }
     const endRun = this.#beginSubagentRun();
     try {
-      const result = await this.#subagentManager.run({
-        role: 'mentor',
-        task: question,
-        parentTool: 'ask_mentor',
-        signal: this.signal,
-      });
+      const result = await this.#withSubagentTrafficContext(question, () =>
+        this.#subagentManager!.run({
+          role: 'mentor',
+          task: question,
+          parentTool: 'ask_mentor',
+          signal: this.signal,
+        }),
+      );
       if (result.status === 'failed') {
         throw new Error(result.error || 'Mentor consultation failed');
       }
@@ -146,7 +165,9 @@ export class SubagentBridge {
 
     const endRun = this.#beginSubagentRun();
     try {
-      return await this.#subagentManager.runAsTool(request, _context, details);
+      return await this.#withSubagentTrafficContext(params.task, () =>
+        this.#subagentManager!.runAsTool(request, _context, details),
+      );
     } finally {
       endRun();
     }

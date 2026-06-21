@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest';
 import { SubagentBridge } from './subagent-bridge.js';
+import { SessionContextService } from '../services/session/session-context-service.js';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 
 // ---------------------------------------------------------------------------
@@ -27,6 +28,17 @@ const noopSessionContextService = {
   runWithContext: <T>(_context: unknown, fn: () => T) => fn(),
   getContext: () => null,
 };
+
+function makeTrafficContext(overrides: Record<string, unknown> = {}) {
+  return {
+    sessionId: 'session-1',
+    sessionStartedAt: '2026-06-21T14:20:00.000Z',
+    firstUserMessagePreview: 'main agent prompt',
+    mode: 'standard',
+    traceId: 'trace-1',
+    ...overrides,
+  };
+}
 
 /** Creates a mock SubagentManager-shaped object with per-instance tracked calls. */
 function createMockManager():
@@ -174,6 +186,45 @@ it('runSubagent still forwards resumeState from details', async () => {
 
   expect(trackRunAsTool.lastArgs.args.resumeState).toBe('test-state');
   expect(trackRunAsTool.lastArgs.args.signal).toBe(bridge.signal);
+});
+
+it('runSubagent scopes traffic context to the subagent task preview', async () => {
+  const sessionContextService = new SessionContextService();
+  const seenContexts: Array<Record<string, unknown> | null> = [];
+
+  const manager = {
+    run: async () => ({ finalText: 'mock-result', status: 'completed', toolsUsed: [], filesChanged: [] }),
+    runAsTool: async (_args: any, _context?: unknown, _details?: unknown) => {
+      seenContexts.push(sessionContextService.getContext());
+      return { finalText: 'mock-tool-result', status: 'completed', toolsUsed: [], filesChanged: [] };
+    },
+    resetMentorSession: () => {},
+    clearCache: () => {},
+  };
+
+  const bridge = new SubagentBridge({
+    logger: noopLogger as any,
+    settings: noopSettings as any,
+    sessionContextService: sessionContextService as any,
+    chat: async () => '',
+    createClient: () => ({}),
+    subagentManager: manager as any,
+  });
+
+  const parentContext = makeTrafficContext();
+  await sessionContextService.runWithContext(parentContext as any, async () => {
+    await bridge.runSubagent({ role: 'worker', task: 'inspect the repository' });
+  });
+
+  expect(seenContexts).toEqual([
+    expect.objectContaining({
+      sessionId: 'session-1',
+      sessionStartedAt: '2026-06-21T14:20:00.000Z',
+      firstUserMessagePreview: 'inspect the repository',
+      mode: 'standard',
+      traceId: 'trace-1',
+    }),
+  ]);
 });
 
 it('createMentor throws when SubagentManager is null', async () => {

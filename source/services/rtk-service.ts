@@ -258,7 +258,9 @@ export async function ensureRtkInstalled(deps: RtkServiceDeps): Promise<string |
 
       try {
         fs.unlinkSync(tmpTar);
-      } catch {}
+      } catch {
+        // noop
+      }
 
       if (extractResult.status !== 0) {
         loggingService.warn('rtk: extraction failed', { status: extractResult.status });
@@ -279,7 +281,9 @@ export async function ensureRtkInstalled(deps: RtkServiceDeps): Promise<string |
     } finally {
       try {
         fs.rmSync(tmpExtractDir, { recursive: true, force: true });
-      } catch {}
+      } catch {
+        // noop
+      }
     }
   } catch (error) {
     loggingService.warn('rtk: installation failed', { error: String(error) });

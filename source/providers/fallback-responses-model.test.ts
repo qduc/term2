@@ -347,6 +347,7 @@ it('FallbackResponsesModel.getStreamedResponse falls back seamlessly if error oc
   const wsError = new Error('Responses websocket connection closed before opening.');
   const wsModel = makeMockModel({
     getStreamedResponse: async function* () {
+      yield* [];
       wsCalled++;
       throw wsError;
     } as any,
@@ -828,6 +829,7 @@ it('FallbackResponsesModel.getStreamedResponse falls back after exhausting WS re
   const firstFrameError = new Error('WebSocket first frame timeout after 5000ms');
   const wsModel = makeMockModel({
     getStreamedResponse: async function* () {
+      yield* [];
       wsCalled++;
       throw firstFrameError;
     } as any,
@@ -874,6 +876,7 @@ it('FallbackResponsesModel.getStreamedResponse falls back after exhausting WS re
   const abnormalCloseError = new Error('WebSocket connection closed before response completed (code=1006)');
   const wsModel = makeMockModel({
     getStreamedResponse: async function* () {
+      yield* [];
       wsCalled++;
       throw abnormalCloseError;
     } as any,
@@ -980,6 +983,7 @@ it('FallbackResponsesModel.getStreamedResponse falls back after exhausting WS re
   const idleError = new Error('WebSocket idle timeout after 300000ms');
   const wsModel = makeMockModel({
     getStreamedResponse: async function* () {
+      yield* [];
       wsCalled++;
       throw idleError;
     } as any,
@@ -1068,6 +1072,7 @@ it('Codex getStreamedResponse throws ChainingTransportDowngradeError when WS fai
 
   const wsModel = makeMockModel({
     getStreamedResponse: async function* () {
+      yield* [];
       wsCalled++;
       throw wsError;
     } as any,
@@ -1076,6 +1081,7 @@ it('Codex getStreamedResponse throws ChainingTransportDowngradeError when WS fai
   const httpModel = makeMockModel({
     getStreamedResponse: async function* () {
       httpCalled++;
+      yield* [];
     } as any,
   });
 
@@ -1124,6 +1130,7 @@ it('Codex getStreamedResponse still falls back to HTTP when WS fails on a non-ch
 
   const wsModel = makeMockModel({
     getStreamedResponse: async function* () {
+      yield* [];
       wsCalled++;
       throw wsError;
     } as any,

@@ -46,7 +46,7 @@ type PendingState =
 export const usePendingTurnGuards = ({
   input,
   mode,
-  images,
+  images: _images,
   conversationService,
   historyService,
   loggingService,
@@ -68,7 +68,7 @@ export const usePendingTurnGuards = ({
 
     const preview = conversationService.previewLargeUncachedInput({ text: input }, Date.now());
     return preview.action === 'warn' ? preview : null;
-  }, [conversationService, images, input, mode]);
+  }, [conversationService, input, mode]);
 
   const sendReadyTurn = useCallback(
     async (turn: UserTurn, options?: { bypassInputSurgeGuard?: boolean }) => {

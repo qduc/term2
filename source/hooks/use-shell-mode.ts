@@ -84,10 +84,12 @@ export const useShellMode = ({
   }, [flushShellHistory]);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (!liteMode && isShellMode) {
       setIsShellMode(false);
       flushShellHistory();
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [liteMode, isShellMode, flushShellHistory]);
 
   const handleShellSubmit = useCallback(

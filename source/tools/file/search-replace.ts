@@ -413,6 +413,7 @@ export function createSearchReplaceToolDefinition(deps: {
         let matchTypeAfterHealing: MatchInfo['type'] = 'none';
         let healingFailureReason: string | undefined;
 
+        // eslint-disable-next-line prefer-const -- eol is not reassigned but normalizedSearchContent and matchInfo are
         let { eol, normalizedSearchContent, matchInfo } = prepareMatchContext(operation, content, editCache);
 
         if (matchInfo.type === 'none') {

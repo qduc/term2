@@ -36,6 +36,7 @@ it('withForwardedReasoningSettings forwards reasoning into providerData for stre
     },
     async *getStreamedResponse(request: any) {
       seenRequest = request;
+      yield;
     },
   } as any);
 

@@ -114,7 +114,7 @@ export function hasFindSuspiciousFlags(args: any[]): {
         const permValue = extractWordText(args[nextIdx]);
         if (permValue) {
           // Numeric SUID/SGID patterns (e.g., -4000, /6000)
-          const hasNumericSuid = /[-\/]?[2467]000/.test(permValue);
+          const hasNumericSuid = /[-/]?[2467]000/.test(permValue);
           // Symbolic SUID/SGID patterns (e.g., -u+s, /g+s, +s)
           const hasSymbolicSuid = /[ug]?\+s/.test(permValue);
 

@@ -1,4 +1,4 @@
-// @ts-ignore
+// @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { it, expect } from 'vitest';
 import React, { act, useState } from 'react';
@@ -45,8 +45,7 @@ it.sequential('useConversation triggers onClear and resets messages/sessionId', 
     );
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
-  ({ lastFrame } = await renderInAct(<Harness />));
+  const { lastFrame } = await renderInAct(<Harness />);
   expect(lastFrame).toBeTruthy();
   expect(lastFrame!()).toBe('old-session-id|1');
 
@@ -82,8 +81,7 @@ it.sequential('useConversation fallback clear resets with a fresh session id', a
     return <Text>{messages.length}</Text>;
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
-  ({ lastFrame } = await renderInAct(<Harness />));
+  const { lastFrame } = await renderInAct(<Harness />);
   expect(lastFrame).toBeTruthy();
   expect(lastFrame!()).toBe('1');
 
@@ -175,8 +173,7 @@ it.sequential('useConversation exposes transient thinking state only while hidde
     return <Text>{thinkingStartedAt === null ? 'idle' : 'thinking'}</Text>;
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
-  ({ lastFrame } = await renderInAct(<Harness />));
+  const { lastFrame } = await renderInAct(<Harness />);
 
   expect(lastFrame!()).toBe('idle');
 

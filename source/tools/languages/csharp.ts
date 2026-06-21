@@ -130,7 +130,7 @@ function parseCsharpDeclaration(line: string, lineNumber: number): DeclEntry | n
 
   // Method
   const methodMatch = line.match(
-    /^\s*(public|protected|private|internal|protected\s+internal|private\s+protected)?(?:\s+(?:static|sealed|abstract|virtual|override|async|unsafe|extern|new|partial))*?\s+(?:<[\w\s,<>?\[\]]+>\s+)?([\w<>?\[\].,_]+)\s+([A-Za-z_$][\w$]*)\s*\(/,
+    /^\s*(public|protected|private|internal|protected\s+internal|private\s+protected)?(?:\s+(?:static|sealed|abstract|virtual|override|async|unsafe|extern|new|partial))*?\s+(?:<[\w\s,<>?[\]]+>\s+)?([\w<>?[\].,_]+)\s+([A-Za-z_$][\w$]*)\s*\(/,
   );
   if (methodMatch) {
     const visibility = methodMatch[1];

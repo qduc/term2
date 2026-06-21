@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-// @ts-ignore
+// @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import React, { act, useEffect, useMemo, useRef } from 'react';

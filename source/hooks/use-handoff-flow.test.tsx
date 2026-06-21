@@ -1,4 +1,4 @@
-// @ts-ignore
+// @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import { it, expect, vi } from 'vitest';
@@ -87,7 +87,7 @@ const Harness = ({
       hook,
       setMode,
     });
-  });
+  }, [onSnapshot, hook, input, mode, triggerIndex, setMode]);
 
   return null;
 };

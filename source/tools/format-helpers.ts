@@ -142,7 +142,7 @@ export const getOutputText = (item: ToolResultItem | null | undefined): string =
  * flow in — the `any` only escapes on the return path where the caller
  * narrows with type guards or `as` assertions.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export const safeJsonParse = (payload: unknown): any => {
   if (typeof payload !== 'string') {
     return undefined;
@@ -168,7 +168,7 @@ export const safeJsonParse = (payload: unknown): any => {
  * The input parameter is typed `unknown` — the `any` only escapes on the
  * return path, which is the narrowest possible `any` surface.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export const normalizeToolArguments = (value: unknown): any => {
   if (!value) {
     return null;

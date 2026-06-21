@@ -242,7 +242,7 @@ export const useConversation = ({
         dispatch({ type: 'usage/updated', usage: latestStreamedUsage ?? result.usage });
       }
     },
-    [annotateCommandMessage, trimMessages, usageAccumulator, notifier],
+    [annotateCommandMessage, trimMessages, usageAccumulator, notifier, setMessages],
   );
 
   const createTurnSession = useCallback(
@@ -388,10 +388,12 @@ export const useConversation = ({
       conversationService,
       applyServiceResult,
       appendMessages,
-      trimMessages,
       loggingService,
       createOnEventWithSubagentTracking,
       onRestoreInput,
+      createTurnSession,
+      logWriter,
+      setMessages,
     ],
   );
 
@@ -411,7 +413,9 @@ export const useConversation = ({
         try {
           const parsed = JSON.parse(pendingApproval.argumentsText);
           questions = parsed.questions || [];
-        } catch {}
+        } catch {
+          // noop
+        }
 
         // Only JSON-parse multi-select arrays; single-select answers are plain strings
         let parsedAns: any = approvalAnswer ?? '';
@@ -556,9 +560,9 @@ export const useConversation = ({
       waitingForApproval,
       pendingApproval,
       appendMessages,
-      trimMessages,
       loggingService,
       createOnEventWithSubagentTracking,
+      createTurnSession,
     ],
   );
 
@@ -577,7 +581,7 @@ export const useConversation = ({
     dispatch({ type: 'reset_all' });
     usageAccumulator?.reset();
     subagentUsageAccumulator?.reset();
-  }, [conversationService, usageAccumulator, subagentUsageAccumulator, onClear]);
+  }, [conversationService, usageAccumulator, subagentUsageAccumulator, onClear, setMessages]);
 
   const stopProcessing = useCallback(() => {
     conversationService.abort();
@@ -601,7 +605,7 @@ export const useConversation = ({
     dispatch({ type: 'reset_transient' });
 
     return restored;
-  }, [messages, conversationService]);
+  }, [messages, conversationService, setMessages]);
 
   const undoToUserMessage = useCallback(
     (uiIndex: number): string | null => {
@@ -624,7 +628,7 @@ export const useConversation = ({
 
       return restored;
     },
-    [messages, conversationService],
+    [messages, conversationService, setMessages],
   );
 
   // Compatibility wrappers for app.tsx — these dispatch domain actions.

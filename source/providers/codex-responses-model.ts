@@ -412,7 +412,8 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     requestId: string,
     requestData: Record<string, unknown>,
   ): Promise<AsyncIterable<any>> {
-    const self = this;
+    const logReceived = this.#logTrafficReceived.bind(this);
+    const logFailed = this.#logTrafficFailed.bind(this);
 
     async function* wrapped(): AsyncIterable<any> {
       try {
@@ -424,12 +425,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
             (event as any).response
           ) {
             const response = (event as any).response;
-            self.#logTrafficReceived(requestId, requestData, response);
+            logReceived(requestId, requestData, response);
           }
           yield event;
         }
       } catch (error) {
-        self.#logTrafficFailed(requestId, requestData, error);
+        logFailed(requestId, requestData, error);
         throw error;
       }
     }

@@ -163,7 +163,7 @@ export function hasMissingKeys(
   prefix: string = '',
 ): boolean {
   for (const key in source) {
-    if (!source.hasOwnProperty(key)) continue;
+    if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
 
     const pathKey = prefix ? `${prefix}.${key}` : key;
 

@@ -1,4 +1,4 @@
-// @ts-ignore
+// @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { it, expect } from 'vitest';
 import React, { useMemo } from 'react';
@@ -111,7 +111,9 @@ it.sequential('useTriggerDetection respects dismissed skill_selection completion
         models: { open: () => count(counts, 'models.open'), close: () => count(counts, 'models.close') },
         skills: { open: () => count(counts, 'skills.open'), close: () => count(counts, 'skills.close') },
       }),
-      [counts],
+      // counts is a mutable outer-scope object; mutations don't trigger
+      // re-renders so it must not appear in the dependency array.
+      [],
     );
 
     useTriggerDetection({

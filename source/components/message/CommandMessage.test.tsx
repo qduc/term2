@@ -1,4 +1,4 @@
-// @ts-ignore
+// @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { it, expect, beforeAll, afterAll } from 'vitest';
 import React, { act } from 'react';
@@ -175,8 +175,7 @@ it('CommandMessage renders create_file with [CREATE] header and file path', asyn
     success: true,
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
-  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />));
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = lastFrame?.() ?? '';
 
   expect(output.includes('[CREATE]')).toBe(true);
@@ -192,8 +191,7 @@ it('CommandMessage renders create_file content as diff with + prefix', async () 
     success: true,
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
-  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />));
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = lastFrame?.() ?? '';
 
   expect(output.includes('+line 1')).toBe(true);
@@ -211,8 +209,7 @@ it('CommandMessage renders apply_patch update_file with [PATCH] header and diff'
     output: 'Updated src/file.ts',
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
-  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />));
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = lastFrame?.() ?? '';
 
   expect(output.includes('[PATCH]')).toBe(true);
@@ -299,8 +296,7 @@ it('CommandMessage renders apply_patch create_file with [CREATE FILE] header and
     output: 'Created src/new.ts',
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
-  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />));
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = lastFrame?.() ?? '';
 
   expect(output.includes('[CREATE FILE]')).toBe(true);
@@ -320,8 +316,7 @@ it('CommandMessage renders apply_patch with only output when hadApproval is true
     hadApproval: true,
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
-  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />));
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = lastFrame?.() ?? '';
 
   expect(output.includes('[PATCH]')).toBe(false);
@@ -338,8 +333,7 @@ it('CommandMessage renders create_file failure in red', async () => {
     output: 'Error: File already exists at src/existing.ts.',
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
-  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />));
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = lastFrame?.() ?? '';
 
   expect(output.includes('[CREATE]')).toBe(true);
@@ -356,8 +350,7 @@ it('CommandMessage truncates output and shows the last line when output is longe
     output: 'line 1\nline 2\nline 3\nline 4\nline 5\nline 6',
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
-  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />));
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = lastFrame?.() ?? '';
 
   expect(output.includes('line 1')).toBe(true);
@@ -379,8 +372,7 @@ it('CommandMessage does not truncate output and shows all lines when output is e
     output: 'line 1\nline 2\nline 3\nline 4',
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
-  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />));
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = lastFrame?.() ?? '';
 
   expect(output.includes('line 1')).toBe(true);

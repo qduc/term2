@@ -189,6 +189,7 @@ it('stale leaves status untouched because lifecycle operation resolved it', asyn
     // during the run, concurrent operation invalidates and starts new turn
     statusMachine.complete(); // back to idle
     statusMachine.beginTurn(); // new turn streaming
+    yield* [];
     return { kind: 'stale' };
   };
 
@@ -221,6 +222,7 @@ it('stale continuation leaves a newer turn status untouched', async () => {
   turnExecutor.executeContinuation = async function* () {
     statusMachine.abort();
     statusMachine.beginTurn();
+    yield* [];
     return { kind: 'stale' };
   };
 

@@ -171,10 +171,11 @@ const padContent = (content: string, width: number, align: string): string => {
   const padding = width - contentLength;
 
   switch (align) {
-    case 'center':
+    case 'center': {
       const leftPad = Math.floor(padding / 2);
       const rightPad = padding - leftPad;
       return ' '.repeat(leftPad) + content + ' '.repeat(rightPad);
+    }
     case 'right':
       return ' '.repeat(padding) + content;
     case 'left':

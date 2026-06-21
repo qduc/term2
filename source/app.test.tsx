@@ -1,4 +1,4 @@
-// @ts-ignore
+// @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import React from 'react';
 import { act } from 'react';

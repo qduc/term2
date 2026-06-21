@@ -66,7 +66,7 @@ function parseJavaDeclaration(line: string, lineNumber: number): DeclEntry | nul
 
   // Method
   const methodMatch = line.match(
-    /^\s*(public|protected|private)?(?:\s+(?:static|final|abstract|synchronized|default|native))*?\s+(?:<[\w\s,<>?\[\]]+>\s+)?([\w<>?\[\].,]+)\s+([A-Za-z_$][\w$]*)\s*\(/,
+    /^\s*(public|protected|private)?(?:\s+(?:static|final|abstract|synchronized|default|native))*?\s+(?:<[\w\s,<>?[\]]+>\s+)?([\w<>?[\].,]+)\s+([A-Za-z_$][\w$]*)\s*\(/,
   );
   if (methodMatch) {
     const visibility = methodMatch[1];

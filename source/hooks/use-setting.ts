@@ -9,12 +9,8 @@ export function useSetting<T>(settingsService: SettingsService, key: string): T 
   const [value, setValue] = useState<T>(() => settingsService.get<T>(key));
 
   useEffect(() => {
-    // Ensure we have the latest value on mount/update
-    const currentValue = settingsService.get<T>(key);
-    if (currentValue !== value) {
-      setValue(currentValue);
-    }
-
+    // Sync with external settings service — subscribe to changes so the
+    // component re-renders when the relevant key is updated elsewhere.
     const unsubscribe = settingsService.onChange((changedKey) => {
       // optimized: only update if the relevant key changed
       // simpler version: just check if the value actually changed
@@ -31,6 +27,7 @@ export function useSetting<T>(settingsService: SettingsService, key: string): T 
     });
 
     return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
   return value;

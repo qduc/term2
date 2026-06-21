@@ -88,6 +88,7 @@ it('returns stale without building a result when finalization is stale', async (
     shellAutoApproval: {} as any,
     streamProcessor: {
       async *process() {
+        yield* [];
         return {
           finalOutput: '',
           reasoningOutput: '',

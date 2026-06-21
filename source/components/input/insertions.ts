@@ -66,8 +66,9 @@ export const computeModelInsertion = (args: {
   provider: string | null | undefined;
   value: string;
   appendTrailingSpace: boolean;
+  includeProvider?: boolean;
 }): Insertion | null => {
-  const { selection, modelId, triggerIndex, provider, value, appendTrailingSpace } = args;
+  const { selection, modelId, triggerIndex, provider, value, appendTrailingSpace, includeProvider = true } = args;
   if (triggerIndex === null) return null;
   const resolvedModelId = modelId?.trim() || selection?.id;
   if (!resolvedModelId) return null;
@@ -75,7 +76,7 @@ export const computeModelInsertion = (args: {
   // Use the current provider state instead of selection.provider to avoid stale data when
   // the user presses Enter immediately after toggling providers.
   const currentProvider = provider || 'openai';
-  const insertion = `${resolvedModelId} --provider=${currentProvider}`;
+  const insertion = includeProvider ? `${resolvedModelId} --provider=${currentProvider}` : resolvedModelId;
   const nextValue = `${before}${insertion}${appendTrailingSpace ? ' ' : ''}`;
   return { nextValue, nextCursor: nextValue.length };
 };

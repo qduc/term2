@@ -11,7 +11,7 @@ export const useSkillSelection = (deps: { skillsService: SkillsService }) => {
 
   const isOpen = mode === 'skill_selection';
 
-  const allSkills = useMemo(() => skillsService.getAvailableSkills(), [skillsService, isOpen]);
+  const allSkills = useMemo(() => skillsService.getAvailableSkills(), [skillsService]);
 
   const query = useMemo(() => {
     if (!isOpen || triggerIndex === null) return '';
@@ -34,12 +34,12 @@ export const useSkillSelection = (deps: { skillsService: SkillsService }) => {
   const [scrollOffset, setScrollOffset] = useState(0);
 
   useEffect(() => {
-    setScrollOffset(0);
+    setScrollOffset(0); // eslint-disable-line react-hooks/set-state-in-effect
   }, [query]);
 
   useEffect(() => {
     if (selectedIndex < scrollOffset) {
-      setScrollOffset(selectedIndex);
+      setScrollOffset(selectedIndex); // eslint-disable-line react-hooks/set-state-in-effect
     } else if (selectedIndex >= scrollOffset + MAX_VISIBLE_ITEMS) {
       setScrollOffset(selectedIndex - MAX_VISIBLE_ITEMS + 1);
     }

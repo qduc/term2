@@ -223,9 +223,11 @@ const ApprovalPrompt: FC<Props> = ({
     }
 
     return items;
-  }, [isAskUser, isMultiSelect, askUserOptions, hasMultipleQuestions]);
+  }, [isAskUser, isMultiSelect, askUserOptions, askUserOptionLabels, hasMultipleQuestions]);
 
+  // reset selection when question/approval changes; cannot derive user-controlled arrow-key state from props
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset selection on question/approval change
     setSelectedIndex(0);
     setSelectedIndices(new Set());
   }, [currentQuestionIndex, approval.argumentsText, approval.toolName]);
@@ -338,33 +340,46 @@ const ApprovalPrompt: FC<Props> = ({
   );
 
   if (approval.toolName === TOOL_NAME_APPLY_PATCH) {
+    let parsedApplyPatch: ApplyPatchArgs | null = null;
     try {
-      const args: ApplyPatchArgs = JSON.parse(approval.argumentsText);
-      content = <ApplyPatchPrompt args={args} />;
+      parsedApplyPatch = JSON.parse(approval.argumentsText);
     } catch {
       // Fall back to styled raw text if parsing fails
+    }
+    if (parsedApplyPatch) {
+      content = <ApplyPatchPrompt args={parsedApplyPatch} />;
     }
   } else if (approval.toolName === 'shell') {
+    let parsedShell: ShellArgs | null = null;
     try {
-      const args: ShellArgs = JSON.parse(approval.argumentsText);
-      content = <ShellPrompt args={args} />;
+      parsedShell = JSON.parse(approval.argumentsText);
     } catch {
       // Fall back to ShellPrompt with raw command string if parsing fails
-      content = <ShellPrompt args={{ commands: approval.argumentsText }} />;
     }
+    content = parsedShell ? (
+      <ShellPrompt args={parsedShell} />
+    ) : (
+      <ShellPrompt args={{ commands: approval.argumentsText }} />
+    );
   } else if (approval.toolName === TOOL_NAME_SEARCH_REPLACE) {
+    let parsedSearchReplace: SearchReplaceArgs | null = null;
     try {
-      const args: SearchReplaceArgs = JSON.parse(approval.argumentsText);
-      content = <SearchReplacePrompt args={args} />;
+      parsedSearchReplace = JSON.parse(approval.argumentsText);
     } catch {
       // Fall back to styled raw text if parsing fails
+    }
+    if (parsedSearchReplace) {
+      content = <SearchReplacePrompt args={parsedSearchReplace} />;
     }
   } else if (approval.toolName === 'create_file') {
+    let parsedCreateFile: CreateFileArgs | null = null;
     try {
-      const args: CreateFileArgs = JSON.parse(approval.argumentsText);
-      content = <CreateFilePrompt args={args} />;
+      parsedCreateFile = JSON.parse(approval.argumentsText);
     } catch {
       // Fall back to styled raw text if parsing fails
+    }
+    if (parsedCreateFile) {
+      content = <CreateFilePrompt args={parsedCreateFile} />;
     }
   } else if (isAskUser) {
     const questionText = currentQuestionItem?.question || 'Unknown question';

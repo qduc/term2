@@ -634,7 +634,7 @@ export const formatToolArgs = (
         return `"${filePath}"`;
       }
 
-      default:
+      default: {
         // Generic fallback for unknown tools
         const entries = Object.entries(normalizedArgs);
         if (entries.length === 0) return '';
@@ -650,6 +650,7 @@ export const formatToolArgs = (
             return `${key}=${stringValue}`;
           })
           .join(' ');
+      }
     }
   } catch {
     return '';

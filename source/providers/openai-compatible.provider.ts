@@ -270,7 +270,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
           if (!resolved) {
             throw new Error(
               `Custom provider '${providerId}' is not configured. ` +
-                `Please add it to settings.json under \"providers\".`,
+                `Please add it to settings.json under "providers".`,
             );
           }
 

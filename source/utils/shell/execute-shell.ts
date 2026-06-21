@@ -54,7 +54,6 @@ export async function executeShellCommand(
 
   try {
     const result = await new Promise<{ stdout?: string | Buffer; stderr?: string | Buffer }>((resolve, reject) => {
-      let stopChild: (() => void) | undefined;
       const child = execImpl(
         command,
         {
@@ -64,9 +63,7 @@ export async function executeShellCommand(
           detached: process.platform !== 'win32',
         },
         (error, stdout, stderr) => {
-          if (stopChild) {
-            signal?.removeEventListener('abort', stopChild);
-          }
+          signal?.removeEventListener('abort', stopChild);
           if (error) {
             error.stdout = stdout;
             error.stderr = stderr;
@@ -78,7 +75,7 @@ export async function executeShellCommand(
         },
       );
 
-      stopChild = () => stopChildProcess(child);
+      const stopChild = () => stopChildProcess(child);
       if (signal?.aborted) {
         stopChild();
       } else {

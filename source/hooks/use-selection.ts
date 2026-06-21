@@ -13,6 +13,9 @@ export function useSelection<T>(items: T[], options?: { isInactive?: (item: T) =
       }
       return !!(item as any).inactive;
     },
+    // Only `options.isInactive` matters for the callback identity; the wrapping
+    // options object should not cause a rebuild when it is recreated every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [options?.isInactive],
   );
 

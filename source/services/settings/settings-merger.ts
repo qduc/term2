@@ -11,7 +11,7 @@ export function flattenSettings(obj: any, prefix = ''): Record<string, any> {
   const result: Record<string, any> = {};
 
   for (const key in obj) {
-    if (!obj.hasOwnProperty(key)) continue;
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
 
     const value = obj[key];
     const newKey = prefix ? `${prefix}.${key}` : key;
@@ -31,7 +31,7 @@ export function flattenSettings(obj: any, prefix = ''): Record<string, any> {
  */
 export function deepMerge(target: any, source: any): void {
   for (const key in source) {
-    if (!source.hasOwnProperty(key)) continue;
+    if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
 
     const sourceValue = source[key];
 
@@ -141,11 +141,11 @@ export function trackSettingSources(
 
   // For each possible setting key, determine its source
   for (const key in flatDefaults) {
-    if (flatCli.hasOwnProperty(key)) {
+    if (Object.prototype.hasOwnProperty.call(flatCli, key)) {
       sources.set(key, 'cli');
-    } else if (flatEnv.hasOwnProperty(key)) {
+    } else if (Object.prototype.hasOwnProperty.call(flatEnv, key)) {
       sources.set(key, 'env');
-    } else if (flatFileConfig.hasOwnProperty(key)) {
+    } else if (Object.prototype.hasOwnProperty.call(flatFileConfig, key)) {
       sources.set(key, 'config');
     } else {
       sources.set(key, 'default');

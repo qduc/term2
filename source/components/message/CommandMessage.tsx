@@ -104,7 +104,7 @@ const CommandMessage: FC<Props> = ({
         .join('\n');
     }
     return generateDiff(toolArgs.search_content, toolArgs.replace_content);
-  }, [toolName, toolArgs?.search_content, toolArgs?.replace_content, toolArgs?.replacements]);
+  }, [toolName, toolArgs?.search_content, toolArgs?.replace_content, toolArgs?.replacements, toolArgs]);
 
   const createFileDiffLines = useMemo(
     () =>
@@ -114,7 +114,7 @@ const CommandMessage: FC<Props> = ({
             .map((line: string) => `+${line}`)
             .join('\n')
         : '',
-    [toolName, toolArgs?.content],
+    [toolName, toolArgs?.content, toolArgs],
   );
 
   // Parse the denial reason from the JSON wrapper that the tool rejection interceptor
@@ -179,6 +179,7 @@ const CommandMessage: FC<Props> = ({
   useEffect(() => {
     if (!isRunning) {
       if (!isVisible) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- show-after-delay is an inherent side effect
         setIsVisible(true);
       }
       return;
@@ -189,6 +190,7 @@ const CommandMessage: FC<Props> = ({
     }, 1000);
 
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isVisible drives show-after-delay which is inherently side-effect; adding isVisible would cause a re-render loop
   }, [isRunning]);
 
   if (!isVisible && !isSubagent) {

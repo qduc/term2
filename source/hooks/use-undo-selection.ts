@@ -37,17 +37,19 @@ export const useUndoSelection = (): UndoSelectionResult => {
 
   // Auto-cleanup when mode changes away from undo_selection (e.g., via Escape)
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (mode !== 'undo_selection') {
       setItems([]);
       setScrollOffset(0);
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [mode]);
 
   // Auto-scroll to keep selected item visible
   useEffect(() => {
     if (!isOpen) return;
     if (items.length <= MAX_VISIBLE_ITEMS) {
-      if (scrollOffset !== 0) setScrollOffset(0);
+      if (scrollOffset !== 0) setScrollOffset(0); // eslint-disable-line react-hooks/set-state-in-effect
       return;
     }
     const selectedIndex = selection.selectedIndex;

@@ -162,7 +162,7 @@ const InputBox: FC<Props> = ({
       setCursorOverride(restoredInput.length);
       settings.open(SETTINGS_TRIGGER.length, key);
     },
-    [onChange, settings],
+    [onChange, settings, setCursorOverride],
   );
   const settingsValue = useSettingsValueCompletion(settingsService, {
     onReset: reopenSettingsMenu,
@@ -210,15 +210,18 @@ const InputBox: FC<Props> = ({
 
   const [inputKey, setInputKey] = useState(0);
   const remountInput = useCallback(() => setInputKey((prev) => prev + 1), []);
-  const lockCursor = useCallback((offset: number) => {
-    lockedCursorRef.current = offset;
-    setCursorOverride(offset);
-    setTimeout(() => {
-      if (lockedCursorRef.current === offset) {
-        lockedCursorRef.current = null;
-      }
-    }, 20);
-  }, []);
+  const lockCursor = useCallback(
+    (offset: number) => {
+      lockedCursorRef.current = offset;
+      setCursorOverride(offset);
+      setTimeout(() => {
+        if (lockedCursorRef.current === offset) {
+          lockedCursorRef.current = null;
+        }
+      }, 20);
+    },
+    [setCursorOverride],
+  );
   const handleCursorChange = useCallback(
     (nextOffset: number) => {
       // When a popup menu is open MultilineInput is inactive. The only cursor
@@ -242,17 +245,20 @@ const InputBox: FC<Props> = ({
       cursorOffsetRef.current = nextOffset;
       setCursorOffset(nextOffset);
     },
-    [mode, remountInput, setCursorOffset],
+    [mode, remountInput, setCursorOffset, setCursorOverride],
   );
-  const handleImagesChange = useCallback((nextImages: ImageRef[]) => {
-    setImages((prevImages) => (areImagesEqual(prevImages, nextImages) ? prevImages : nextImages));
-  }, []);
+  const handleImagesChange = useCallback(
+    (nextImages: ImageRef[]) => {
+      setImages((prevImages) => (areImagesEqual(prevImages, nextImages) ? prevImages : nextImages));
+    },
+    [setImages],
+  );
   const submitTextOnly = useCallback(
     (text: string) => {
       setImages([]);
       void onSubmit({ text });
     },
-    [onSubmit],
+    [onSubmit, setImages],
   );
   const applyAutocompleteInsertion = useCallback(
     (result: Insertion) => {
@@ -379,6 +385,7 @@ const InputBox: FC<Props> = ({
         provider: models.provider,
         value,
         appendTrailingSpace: !submitAfterInsert,
+        includeProvider: submitAfterInsert,
       });
       if (!result) return false;
 
@@ -415,7 +422,16 @@ const InputBox: FC<Props> = ({
       models.close();
       return true;
     },
-    [models, value, onChange, submitTextOnly, settingsService, onSettingChange, applyAutocompleteInsertion],
+    [
+      models,
+      value,
+      onChange,
+      submitTextOnly,
+      settingsService,
+      onSettingChange,
+      applyAutocompleteInsertion,
+      reopenSettingsMenu,
+    ],
   );
 
   const insertSelectedSkill = useCallback(
@@ -525,7 +541,7 @@ const InputBox: FC<Props> = ({
     if (cursorOverride !== null && cursorOverride === cursorOffset && mode === 'text') {
       setCursorOverride(null);
     }
-  }, [cursorOverride, cursorOffset, mode]);
+  }, [cursorOverride, cursorOffset, mode, setCursorOverride]);
 
   // After a popup menu closes and the new value has been synced to
   // MultilineInput, apply any pending cursor override. We intentionally defer
@@ -728,7 +744,7 @@ const InputBox: FC<Props> = ({
         remountInput();
       }
     },
-    [mode, modeHandlers, navigateUp, navigateDown, value, images, onChange, remountInput],
+    [mode, modeHandlers, navigateUp, navigateDown, value, images, onChange, remountInput, setImages],
   );
 
   const handleWrapperSubmit = useCallback(
@@ -739,7 +755,7 @@ const InputBox: FC<Props> = ({
       setImages([]);
       void onSubmit({ text: submittedValue, ...(turnImages.length ? { images: turnImages } : {}) });
     },
-    [mode, modeHandlers, onSubmit, images, allowEmptySubmit],
+    [mode, modeHandlers, onSubmit, images, allowEmptySubmit, setImages],
   );
 
   const handlePasteError = useCallback(

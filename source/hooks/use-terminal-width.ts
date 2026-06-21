@@ -21,7 +21,7 @@ export const useTerminalWidth = ({ waitingForRejectionReason, isShellMode, promp
         promptLabel,
       });
 
-    setTerminalWidth(compute());
+    setTerminalWidth(compute()); // eslint-disable-line react-hooks/set-state-in-effect
 
     let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
     const handleResize = () => {
@@ -41,7 +41,7 @@ export const useTerminalWidth = ({ waitingForRejectionReason, isShellMode, promp
         clearTimeout(resizeTimeout);
       }
     };
-  }, [waitingForRejectionReason, isShellMode]);
+  }, [waitingForRejectionReason, isShellMode, promptLabel]);
 
   return terminalWidth;
 };

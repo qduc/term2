@@ -119,7 +119,7 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
   // Sync scrollOffset with selectedIndex
   useEffect(() => {
     if (selectedIndex < scrollOffset) {
-      setScrollOffset(selectedIndex);
+      setScrollOffset(selectedIndex); // eslint-disable-line react-hooks/set-state-in-effect
     } else if (selectedIndex >= scrollOffset + MAX_VISIBLE_ITEMS) {
       setScrollOffset(selectedIndex - MAX_VISIBLE_ITEMS + 1);
     }
@@ -127,7 +127,7 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
 
   // Reset scroll when menu opens or closes
   useEffect(() => {
-    setScrollOffset(0);
+    setScrollOffset(0); // eslint-disable-line react-hooks/set-state-in-effect
   }, [isOpen]);
 
   const open = useCallback(() => {
@@ -136,7 +136,7 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
     if (mode === 'slash_commands') return;
     setMode('slash_commands');
     setSelectedIndex(0);
-  }, [mode, setMode]);
+  }, [mode, setMode, setSelectedIndex]);
 
   const close = useCallback(() => {
     if (mode === 'slash_commands') {

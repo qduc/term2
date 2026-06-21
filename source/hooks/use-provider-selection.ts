@@ -158,13 +158,13 @@ export const useProviderSelection = (settingsService: SettingsService) => {
 
   // Reset scrollOffset when phase changes
   useEffect(() => {
-    setScrollOffset(0);
+    setScrollOffset(0); // eslint-disable-line react-hooks/set-state-in-effect
   }, [phase]);
 
   // Sync scrollOffset with selectedIndex
   useEffect(() => {
     if (selectedIndex < scrollOffset) {
-      setScrollOffset(selectedIndex);
+      setScrollOffset(selectedIndex); // eslint-disable-line react-hooks/set-state-in-effect
     } else if (selectedIndex >= scrollOffset + 10) {
       setScrollOffset(selectedIndex - 10 + 1);
     }
@@ -177,8 +177,9 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     setItems(loadProviderItemsFromService(settingsService));
   }, [settingsService]);
 
-  // Sync list of providers on open
+  // Sync list of providers on open — resets wizard state when the menu opens.
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (isOpen) {
       loadProviderList();
       setPhase('list');
@@ -191,7 +192,8 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       setDiscardFromPhase(null);
       setDraftModified(false);
     }
-  }, [isOpen, loadProviderList]);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [isOpen, loadProviderList, setSelectedIndex]);
 
   const open = useCallback(() => {
     setMode('provider_selection');
@@ -212,10 +214,6 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     selectionMoveDown();
   }, [selectionMoveDown]);
 
-  const getListCount = (): number => {
-    return activeItems.length;
-  };
-
   const saveDraft = useCallback(() => {
     if (!draft) return;
     setErrorMessage(null);
@@ -234,10 +232,10 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     setDraft(null);
     setEditingOriginalName(null);
     setFieldErrors({});
-  }, [draft, editingOriginalName, settingsService, loadProviderList]);
+  }, [draft, editingOriginalName, settingsService, loadProviderList, setSelectedIndex]);
 
   const selectItem = useCallback(() => {
-    const listCount = getListCount();
+    const listCount = activeItems.length;
     if (listCount === 0) return;
     const index = Math.min(selectedIndex, listCount - 1);
 
@@ -491,6 +489,8 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     setInput,
     reorderList,
     saveDraft,
+    activeItems,
+    setSelectedIndex,
   ]);
 
   const goBack = useCallback(() => {
@@ -563,7 +563,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       }
       setDiscardFromPhase(null);
     }
-  }, [phase, editingField, close, draftModified, discardFromPhase, draft, setInput]);
+  }, [phase, editingField, close, draftModified, discardFromPhase, setInput, editingOriginalName, setSelectedIndex]);
 
   // Handler for text input submissions from app.tsx wizard manager
   const handleTextInputSubmit = useCallback(
@@ -655,7 +655,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
 
       return false;
     },
-    [phase, draft, editingField, editingOriginalName, settingsService, setInput],
+    [phase, draft, editingField, editingOriginalName, settingsService, setInput, setSelectedIndex],
   );
 
   const requestDelete = useCallback(() => {
@@ -667,7 +667,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     setEditingOriginalName(provider.id);
     setPhase('confirm_delete');
     setSelectedIndex(DELETE_CONFIRM_DEFAULT_INDEX); // default to 'No' for safety
-  }, [phase, selectedIndex, items]);
+  }, [phase, selectedIndex, items, setSelectedIndex]);
 
   const getActiveItems = useCallback(() => activeItems, [activeItems]);
 
@@ -676,7 +676,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     setPhase('list');
     setSelectedIndex(0);
     setReorderList([]);
-  }, [settingsService, reorderList]);
+  }, [settingsService, reorderList, setSelectedIndex]);
 
   const moveProviderUp = useCallback(() => {
     if (phase !== 'reorder') return;

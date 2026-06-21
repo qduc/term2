@@ -28,6 +28,7 @@ it('returns stale when finalization is stale', async () => {
     } as any,
     streamProcessor: {
       async *process() {
+        yield* [];
         return {
           finalOutput: '',
           reasoningOutput: '',
@@ -116,6 +117,7 @@ it('accumulates command messages from stream', async () => {
     } as any,
     streamProcessor: {
       async *process() {
+        yield* [];
         return {
           finalOutput: 'done',
           reasoningOutput: '',

@@ -53,47 +53,56 @@ const collapseUnchangedLines = (lines: string[]): string[] => {
 };
 
 export const DiffView: FC<DiffViewProps> = ({ diff }) => {
+  const renderLine = (line: string, key: any) => {
+    let color: string | undefined;
+    if (line.startsWith('+')) {
+      color = 'green';
+    } else if (line.startsWith('-')) {
+      color = 'red';
+    } else if (line.startsWith('@@')) {
+      color = 'cyan';
+    }
+
+    return (
+      <Text key={key} color={color || COLOR_TOOL_OUTPUT}>
+        {line}
+      </Text>
+    );
+  };
+
+  let displayLines: string[] = [];
+  let truncated = false;
+  let collapsedLines: string[] = [];
+  let lastLine: string | null = null;
+  const maxLines = 30;
+
   try {
     const trimmedDiff = diff.trimEnd();
     const rawLines = trimmedDiff.split('\n');
-    const collapsedLines = collapseUnchangedLines(rawLines);
+    collapsedLines = collapseUnchangedLines(rawLines);
 
-    const maxLines = 30;
-    const truncated = collapsedLines.length > maxLines + 1;
-    const displayLines = truncated ? collapsedLines.slice(0, maxLines) : collapsedLines;
-    const lastLine = truncated ? collapsedLines[collapsedLines.length - 1] : null;
+    truncated = collapsedLines.length > maxLines + 1;
+    displayLines = truncated ? collapsedLines.slice(0, maxLines) : collapsedLines;
+    lastLine = truncated ? collapsedLines[collapsedLines.length - 1] : null;
+  } catch {
+    // Fall through to error rendering below
+  }
 
-    const renderLine = (line: string, key: any) => {
-      let color: string | undefined;
-      if (line.startsWith('+')) {
-        color = 'green';
-      } else if (line.startsWith('-')) {
-        color = 'red';
-      } else if (line.startsWith('@@')) {
-        color = 'cyan';
-      }
-
-      return (
-        <Text key={key} color={color || COLOR_TOOL_OUTPUT}>
-          {line}
-        </Text>
-      );
-    };
-
-    return (
-      <Box flexDirection="column" marginLeft={2}>
-        {displayLines.map((line, i) => renderLine(line, i))}
-        {truncated && <Text color={COLOR_TOOL_OUTPUT}>... ({collapsedLines.length - maxLines - 1} more lines)</Text>}
-        {truncated && lastLine !== null && renderLine(lastLine, 'last')}
-      </Box>
-    );
-  } catch (_error) {
+  if (collapsedLines.length === 0) {
     return (
       <Box flexDirection="column" marginLeft={2}>
         <Text color="red">[Failed to render diff preview]</Text>
       </Box>
     );
   }
+
+  return (
+    <Box flexDirection="column" marginLeft={2}>
+      {displayLines.map((line, i) => renderLine(line, i))}
+      {truncated && <Text color={COLOR_TOOL_OUTPUT}>... ({collapsedLines.length - maxLines - 1} more lines)</Text>}
+      {truncated && lastLine !== null && renderLine(lastLine, 'last')}
+    </Box>
+  );
 };
 
 export default DiffView;

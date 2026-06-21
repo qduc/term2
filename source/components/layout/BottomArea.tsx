@@ -118,6 +118,7 @@ const BottomArea: FC<BottomAreaProps> = ({
 
   useEffect(() => {
     if (!isProcessing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset dot count when not processing
       setDotCount(1);
       return;
     }
@@ -131,6 +132,7 @@ const BottomArea: FC<BottomAreaProps> = ({
 
   useEffect(() => {
     if (thinkingStartedAt == null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset elapsed seconds when no thinking started
       setThinkingElapsedSeconds(0);
       return;
     }

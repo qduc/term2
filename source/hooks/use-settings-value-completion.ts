@@ -340,7 +340,7 @@ export const useSettingsValueCompletion = (
         setSelectedIndex(0);
       }
     },
-    [mode, setMode, setTriggerIndex, settingKey, settingsService],
+    [mode, setMode, setTriggerIndex, settingKey, settingsService, setSelectedIndex],
   );
 
   const close = useCallback(() => {
@@ -350,7 +350,7 @@ export const useSettingsValueCompletion = (
       setSelectedIndex(0);
       setSettingKey(null);
     }
-  }, [mode, setMode, setTriggerIndex]);
+  }, [mode, setMode, setTriggerIndex, setSelectedIndex]);
 
   const resetCurrentSetting = useCallback(() => {
     if (settingKey) {

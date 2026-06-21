@@ -297,7 +297,11 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     return buildSettingsList(SETTING_KEYS, SETTING_DESCRIPTIONS, true, (key: string) =>
       getCurrentSettingValue(settingsService, key),
     );
-  }, [settingsVersion, settingsService]);
+    // settingsVersion is a signal dep — incrementing it triggers re-computation
+    // when an external setting changes.  Omitted from the dependency lint check
+    // because it does not appear literally in the memo body.
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [settingsService, settingsVersion]);
 
   const categories = useMemo(() => {
     const presentCategoryIds = new Set(allSettings.map((item) => getSettingCategory(item.key).id));
@@ -329,7 +333,7 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
   const [targetKey, setTargetKey] = useState<string | null>(null);
 
   useEffect(() => {
-    setScrollOffset(0);
+    setScrollOffset(0); // eslint-disable-line react-hooks/set-state-in-effect
   }, [query]);
 
   const switchCategory = useCallback(
@@ -354,7 +358,7 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
 
   useEffect(() => {
     if (selectedIndex < scrollOffset) {
-      setScrollOffset(selectedIndex);
+      setScrollOffset(selectedIndex); // eslint-disable-line react-hooks/set-state-in-effect
     } else if (selectedIndex >= scrollOffset + MAX_RESULTS) {
       setScrollOffset(selectedIndex - MAX_RESULTS + 1);
     }
@@ -362,6 +366,7 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
 
   // Effect to select a target key once it appears in filteredEntries
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (targetKey && filteredEntries.length > 0) {
       const index = filteredEntries.findIndex((item) => item.key === targetKey);
       if (index !== -1) {
@@ -369,7 +374,8 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
         setTargetKey(null);
       }
     }
-  }, [filteredEntries, targetKey]);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [filteredEntries, targetKey, setSelectedIndex]);
 
   const open = useCallback(
     (startIndex: number, initialSelectionKey?: string) => {
@@ -385,7 +391,7 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
       }
       setScrollOffset(0);
     },
-    [mode, setMode, setTriggerIndex],
+    [mode, setMode, setTriggerIndex, setSelectedIndex],
   );
 
   const close = useCallback(() => {
@@ -395,7 +401,7 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
       setSelectedIndex(0);
       setScrollOffset(0);
     }
-  }, [mode, setMode, setTriggerIndex]);
+  }, [mode, setMode, setTriggerIndex, setSelectedIndex]);
 
   return {
     isOpen,

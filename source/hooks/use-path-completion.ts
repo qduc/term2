@@ -104,6 +104,7 @@ export const usePathCompletion = (deps?: UsePathCompletionDeps) => {
     }
   }, [loadWorkspaceEntries, loadWorkspaceEntriesMeta, syncWorkspaceWarning]);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     loadEntries().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -117,6 +118,7 @@ export const usePathCompletion = (deps?: UsePathCompletionDeps) => {
       }
     });
   }, [loadEntries]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const filteredEntries = useMemo(() => {
     return filterPathEntries(entries, query, MAX_RESULTS);
@@ -129,14 +131,14 @@ export const usePathCompletion = (deps?: UsePathCompletionDeps) => {
 
   // Reset scroll to top when query changes (filtering)
   useEffect(() => {
-    setScrollOffset(0);
+    setScrollOffset(0); // eslint-disable-line react-hooks/set-state-in-effect
   }, [query]);
 
   // Auto-scroll to keep selected item visible
   useEffect(() => {
     const maxHeight = 10;
     if (selectedIndex < scrollOffset) {
-      setScrollOffset(selectedIndex);
+      setScrollOffset(selectedIndex); // eslint-disable-line react-hooks/set-state-in-effect
     } else if (selectedIndex >= scrollOffset + maxHeight) {
       setScrollOffset(selectedIndex - maxHeight + 1);
     }

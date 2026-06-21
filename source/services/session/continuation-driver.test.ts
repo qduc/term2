@@ -65,6 +65,7 @@ function createDriver(deps: any) {
     } as any,
     streamCycle: {
       async *execute(_state: any) {
+        yield* [];
         return {
           kind: 'completed',
           outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
@@ -76,6 +77,7 @@ function createDriver(deps: any) {
     } as any,
     recoveryHandler: {
       async *handle() {
+        yield* [];
         return { kind: 'terminated' };
       },
     } as any,
@@ -123,11 +125,13 @@ it('drive yields error event when continuation stream throws unrecoverable error
   const driver = createDriver({
     streamCycle: {
       async *execute() {
+        yield* [];
         throw new Error('stream boom');
       },
     } as any,
     recoveryHandler: {
       async *handle() {
+        yield* [];
         return { kind: 'terminated' };
       },
     } as any,
@@ -201,8 +205,11 @@ it('drive preserves already-approved parallel call ids when staging remaining ap
         token: init.generation,
         inputMode: 'delta',
       }),
-      applyInitialSetup: async function* () {},
+      applyInitialSetup: async function* () {
+        yield* [];
+      },
       applyNextPlan: async function* (nextPlan: any, state: any, mergedEmittedIds: Set<string>) {
+        yield* [];
         state.advanceFromPlan(
           nextPlan.pendingApprovalContext.state,
           nextPlan.pendingApprovalContext.interruption,
@@ -217,6 +224,7 @@ it('drive preserves already-approved parallel call ids when staging remaining ap
     streamCycle: {
       async *execute(state: any) {
         seenCallIds.push([...state.currentCallIds]);
+        yield* [];
         return {
           kind: 'completed',
           outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
@@ -255,6 +263,7 @@ it('continuation from rejection records aborted approval in tool tracker', async
     } as any,
     streamCycle: {
       async *execute() {
+        yield* [];
         return {
           kind: 'completed',
           outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
@@ -281,6 +290,7 @@ it('continuation from approval decision returns final response', async () => {
   const driver = createDriver({
     streamCycle: {
       async *execute() {
+        yield* [];
         return {
           kind: 'completed',
           outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
@@ -403,6 +413,7 @@ it('drive returns approval_required when policy says prompt', async () => {
     } as any,
     streamCycle: {
       async *execute() {
+        yield* [];
         return {
           kind: 'completed',
           outcome: {
@@ -486,6 +497,7 @@ it('driver preserves the initial ledger snapshot and records a prompted approval
     streamCycle: {
       async *execute(state: any) {
         initialSnapshot = state.ledgerSnapshot;
+        yield* [];
         return {
           kind: 'completed',
           outcome: {
@@ -561,6 +573,7 @@ it('continuation derives currentCallIds from the current response cycle, not the
     streamCycle: {
       async *execute(state: any) {
         resumedCallIds = [...state.currentCallIds];
+        yield* [];
         return {
           kind: 'completed',
           outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
@@ -610,6 +623,7 @@ it('continuation derives currentCallIds including completed parallel tool calls 
     streamCycle: {
       async *execute(state: any) {
         resumedCallIds = [...state.currentCallIds];
+        yield* [];
         return {
           kind: 'completed',
           outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
@@ -670,6 +684,7 @@ it('continuation derives currentCallIds excluding already consumed tool calls in
     streamCycle: {
       async *execute(state: any) {
         resumedCallIds = [...state.currentCallIds];
+        yield* [];
         return {
           kind: 'completed',
           outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
@@ -726,8 +741,11 @@ it('auto-approved follow-up continuations keep only the next response cycle call
         token: init.generation,
         inputMode: 'delta',
       }),
-      applyInitialSetup: async function* () {},
+      applyInitialSetup: async function* () {
+        yield* [];
+      },
       applyNextPlan: async function* (_nextPlan: any, state: any) {
+        yield* [];
         state.currentState = secondRunState;
         state.currentCallIds = ['call-old', 'call-first', 'call-second'];
       },
@@ -738,6 +756,7 @@ it('auto-approved follow-up continuations keep only the next response cycle call
         cycleCount++;
         if (cycleCount === 1) {
           expect(state.currentCallIds).toEqual(['call-first']);
+          yield* [];
           return {
             kind: 'completed',
             outcome: {
@@ -752,6 +771,7 @@ it('auto-approved follow-up continuations keep only the next response cycle call
           };
         }
         expect(state.currentCallIds).toEqual(['call-second']);
+        yield* [];
         return {
           kind: 'completed',
           outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
@@ -813,8 +833,11 @@ it('auto-approved continuation works without advisory', async () => {
         token: init.generation,
         inputMode: 'delta',
       }),
-      applyInitialSetup: async function* () {},
+      applyInitialSetup: async function* () {
+        yield* [];
+      },
       applyNextPlan: async function* (_nextPlan: any, state: any) {
+        yield* [];
         state.currentState = secondRunState;
         state.currentCallIds = ['call-old', 'call-first', 'call-second'];
       },
@@ -825,6 +848,7 @@ it('auto-approved continuation works without advisory', async () => {
         cycleCount++;
         if (cycleCount === 1) {
           expect(state.currentCallIds).toEqual(['call-first']);
+          yield* [];
           return {
             kind: 'completed',
             outcome: {
@@ -838,6 +862,7 @@ it('auto-approved continuation works without advisory', async () => {
           };
         }
         expect(state.currentCallIds).toEqual(['call-second']);
+        yield* [];
         return {
           kind: 'completed',
           outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
@@ -878,12 +903,13 @@ it('multiple auto-approved interruptions followed by manual approval', async () 
       async *execute() {
         cycleCount++;
         if (cycleCount <= 2) {
+          yield* [];
           return {
             kind: 'completed',
             outcome: {
               kind: 'auto_approve',
               advisory: { model: 'm', reasoning: 'safe', approved: true, source: 'llm' },
-              callId: `call-${cycleCount}`,
+              callId: `call-\${cycleCount}`,
               argumentsText: 'ls',
             },
             nextCumulativeMessages: [],
@@ -891,6 +917,7 @@ it('multiple auto-approved interruptions followed by manual approval', async () 
             mergedEmittedIds: new Set(),
           };
         }
+        yield* [];
         return {
           kind: 'completed',
           outcome: {
@@ -1004,6 +1031,7 @@ it('parallel approval batch is fully decided before the continuation stream resu
       async *execute(state: any) {
         streamExecutions++;
         resumedCallIds = [...state.currentCallIds];
+        yield* [];
         return {
           kind: 'completed',
           outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
@@ -1077,6 +1105,7 @@ it('parallel approval batch prompts for unresolved siblings without resuming the
     } as any,
     streamCycle: {
       async *execute() {
+        yield* [];
         streamExecutions++;
         throw new Error('stream should not resume while a sibling decision is pending');
       },
@@ -1153,6 +1182,7 @@ it('abort resolution derives currentCallIds from the aborted approval record, no
     streamCycle: {
       async *execute(state: any) {
         resumedCallIds = [...state.currentCallIds];
+        yield* [];
         return {
           kind: 'completed',
           outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
@@ -1194,6 +1224,7 @@ it('abort resolution keeps sibling call IDs for a rejected tool in a parallel ba
     streamCycle: {
       async *execute(state: any) {
         resumedCallIds = [...state.currentCallIds];
+        yield* [];
         return {
           kind: 'completed',
           outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
@@ -1234,11 +1265,13 @@ it('recovery returns fresh_start_required', async () => {
   const driver = createDriver({
     streamCycle: {
       async *execute() {
+        yield* [];
         throw new Error('transient');
       },
     } as any,
     recoveryHandler: {
       async *handle() {
+        yield* [];
         return {
           kind: 'fresh_start',
           retryCounts: {
@@ -1278,11 +1311,16 @@ it('rejection preserves event order and ledger state', async () => {
         source: 'continueRunStream',
         token: init.generation,
       }),
-      applyInitialSetup: async function* () {},
-      applyNextPlan: async function* () {},
+      applyInitialSetup: async function* () {
+        yield* [];
+      },
+      applyNextPlan: async function* () {
+        yield* [];
+      },
     } as any,
     streamCycle: {
       async *execute() {
+        yield* [];
         return {
           kind: 'completed',
           outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },

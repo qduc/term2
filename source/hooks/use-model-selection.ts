@@ -118,6 +118,9 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
   }, [models, query]);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    // Synchronize selectedIndex with filteredModels: clamp to bounds and,
+    // when opening or switching provider, preselect the current model.
     if (filteredModels.length === 0) {
       setSelectedIndex(0);
       return;
@@ -140,18 +143,19 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
     }
 
     setSelectedIndex((prev) => Math.min(prev, filteredModels.length - 1));
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [filteredModels, loading, modelSettingConfig, settingsService]);
 
   // Reset scroll to top when query changes (filtering)
   useEffect(() => {
-    setScrollOffset(0);
+    setScrollOffset(0); // eslint-disable-line react-hooks/set-state-in-effect
   }, [query]);
 
   // Auto-scroll to keep selected item visible
   useEffect(() => {
     const maxHeight = 10;
     if (selectedIndex < scrollOffset) {
-      setScrollOffset(selectedIndex);
+      setScrollOffset(selectedIndex); // eslint-disable-line react-hooks/set-state-in-effect
     } else if (selectedIndex >= scrollOffset + maxHeight) {
       setScrollOffset(selectedIndex - maxHeight + 1);
     }

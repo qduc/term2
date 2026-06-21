@@ -18,7 +18,7 @@ export type UseHandoffFlowOptions = {
   clearConversationAndRefreshBanner: () => Promise<void>;
   addSystemMessage: (text: string) => void;
   sendUserMessage: (turn: UserTurn) => Promise<void>;
-  setInput: (value: string) => void;
+  replaceInput: (value: string) => void;
   setInputAndCursor: (value: string, cursorOffset: number, cursorOverride?: number | null) => void;
   setMode: (mode: InputMode) => void;
   setTriggerIndex: (index: number | null) => void;
@@ -47,7 +47,7 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
     clearConversationAndRefreshBanner,
     addSystemMessage,
     sendUserMessage,
-    setInput,
+    replaceInput,
     setInputAndCursor,
     setMode,
     setTriggerIndex,
@@ -71,15 +71,15 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
       const isPlanMode = settingsService.get<boolean>('app.planMode') || false;
       if (isPlanMode) {
         dispatch({ type: 'handoff/standard_mode_requested' });
-        setInput('');
+        replaceInput('');
         return true;
       }
       dispatch({ type: 'handoff/sent' });
-      setInput('');
+      replaceInput('');
       await sendUserMessage({ text: composeHandoffMessage(state) });
       return true;
     },
-    [settingsService, sendUserMessage, setInput],
+    [settingsService, sendUserMessage, replaceInput],
   );
 
   const completeHandoffWithEffort = useCallback(
@@ -130,23 +130,23 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
     if (isPlanMode) {
       await clearConversationAndRefreshBanner();
       dispatch({ type: 'handoff/standard_mode_requested' });
-      setInput('');
+      replaceInput('');
       return;
     }
 
     await clearConversationAndRefreshBanner();
     dispatch({ type: 'handoff/sent' });
-    setInput('');
+    replaceInput('');
     if (state.capturedText) {
       await sendUserMessage({ text: composeHandoffMessage(state) });
     }
-  }, [clearConversationAndRefreshBanner, handoffState, sendUserMessage, setInput, settingsService]);
+  }, [clearConversationAndRefreshBanner, handoffState, sendUserMessage, replaceInput, settingsService]);
 
   const cancelHandoff = useCallback(() => {
     dispatch({ type: 'handoff/cancelled' });
-    setInput('');
+    replaceInput('');
     addSystemMessage('Handoff cancelled');
-  }, [addSystemMessage, setInput]);
+  }, [addSystemMessage, replaceInput]);
 
   const confirmStandardMode = useCallback(async () => {
     const state = handoffState;
@@ -157,22 +157,22 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
     addSystemMessage('Plan mode disabled - switched to Standard mode');
 
     dispatch({ type: 'handoff/sent' });
-    setInput('');
+    replaceInput('');
     if (state.capturedText) {
       await sendUserMessage({ text: composeHandoffMessage(state) });
     }
-  }, [handoffState, settingsService, applyRuntimeSetting, addSystemMessage, sendUserMessage, setInput]);
+  }, [handoffState, settingsService, applyRuntimeSetting, addSystemMessage, sendUserMessage, replaceInput]);
 
   const declineStandardMode = useCallback(async () => {
     const state = handoffState;
     if (!state) return;
 
     dispatch({ type: 'handoff/sent' });
-    setInput('');
+    replaceInput('');
     if (state.capturedText) {
       await sendUserMessage({ text: composeHandoffMessage(state) });
     }
-  }, [handoffState, sendUserMessage, setInput]);
+  }, [handoffState, sendUserMessage, replaceInput]);
 
   const submitHandoffInput = useCallback(
     async (turn: UserTurn): Promise<boolean> => {
@@ -182,7 +182,7 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
       if (state.stage === 'entering_message') {
         const handoffMessage = turn.text.trim() || 'Implement this';
         dispatch({ type: 'handoff/message_captured', handoffMessage });
-        setInput('');
+        replaceInput('');
         return true;
       }
 
@@ -213,7 +213,7 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
     [
       applyRuntimeSetting,
       handoffState,
-      setInput,
+      replaceInput,
       setInputAndCursor,
       setMode,
       setModel,

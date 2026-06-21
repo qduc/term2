@@ -57,7 +57,7 @@ const createOptions = (overrides: Partial<UsePendingTurnGuardsOptions> = {}): Us
   } as any;
   const loggingService = createLoggingService() as any;
   const sendUserMessage = vi.fn(async () => {});
-  const setInput = vi.fn();
+  const replaceInput = vi.fn();
   const setImages = vi.fn();
 
   return {
@@ -68,7 +68,7 @@ const createOptions = (overrides: Partial<UsePendingTurnGuardsOptions> = {}): Us
     historyService,
     loggingService,
     sendUserMessage,
-    setInput,
+    replaceInput,
     setImages,
     ...overrides,
   };
@@ -122,7 +122,7 @@ it.sequential('sendGuardedTurn sends a ready turn after adding it to history and
   expect(options.conversationService.previewInputSurge).toHaveBeenCalledWith(turn);
   expect(options.conversationService.previewLargeUncachedInput).toHaveBeenCalledWith(turn, expect.any(Number));
   expect(options.historyService.addMessage).toHaveBeenCalledWith(turn);
-  expect(options.setInput).toHaveBeenCalledWith('');
+  expect(options.replaceInput).toHaveBeenCalledWith('');
   expect(options.sendUserMessage).toHaveBeenCalledWith(turn);
   expect(options.loggingService.debug).not.toHaveBeenCalledWith('Input surge warning shown', expect.anything());
 
@@ -254,7 +254,7 @@ it.sequential(
 
     expect(getHook().pendingLargeUncachedTurn).toBe(null);
     expect(getHook().pendingLargeUncachedTokens).toBe(0);
-    expect(options.setInput).toHaveBeenLastCalledWith(baseTurn.text);
+    expect(options.replaceInput).toHaveBeenLastCalledWith(baseTurn.text);
 
     act(() => {
       renderer.unmount();
@@ -297,7 +297,7 @@ it.sequential('surge approve clears pending state and sends the turn with the su
   expect(getHook().pendingSurgeReason).toBe('');
   expect(options.setImages).toHaveBeenCalledWith([]);
   expect(options.historyService.addMessage).toHaveBeenLastCalledWith(baseTurn);
-  expect(options.setInput).toHaveBeenLastCalledWith('');
+  expect(options.replaceInput).toHaveBeenLastCalledWith('');
   expect(options.sendUserMessage).toHaveBeenLastCalledWith(baseTurn, { bypassInputSurgeGuard: true });
 
   act(() => {
@@ -331,7 +331,7 @@ it.sequential('large uncached approve clears pending state and sends the origina
   expect(getHook().pendingLargeUncachedTokens).toBe(0);
   expect(options.setImages).toHaveBeenCalledWith([]);
   expect(options.historyService.addMessage).toHaveBeenLastCalledWith(baseTurn);
-  expect(options.setInput).toHaveBeenLastCalledWith('');
+  expect(options.replaceInput).toHaveBeenLastCalledWith('');
   expect(options.sendUserMessage).toHaveBeenLastCalledWith(baseTurn);
 
   act(() => {

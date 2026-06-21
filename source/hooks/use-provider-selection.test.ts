@@ -10,13 +10,15 @@ const TestComponent = ({
   settingsService,
   onHookResult,
   onInputValue,
+  onCursorOffset,
 }: {
   settingsService: any;
   onHookResult: (hook: ReturnType<typeof useProviderSelection>) => void;
   onInputValue?: (value: string) => void;
+  onCursorOffset?: (offset: number) => void;
 }) => {
   const hook = useProviderSelection(settingsService);
-  const { input } = useInputContext();
+  const { input, cursorOffset } = useInputContext();
 
   useEffect(() => {
     onHookResult(hook);
@@ -24,6 +26,10 @@ const TestComponent = ({
 
   useEffect(() => {
     onInputValue?.(input);
+  });
+
+  useEffect(() => {
+    onCursorOffset?.(cursorOffset);
   });
 
   return null;
@@ -1118,3 +1124,117 @@ it.sequential(
     });
   },
 );
+
+it.sequential('useProviderSelection - editing a field populates input and moves cursor to end', async () => {
+  const customProviders = [
+    { name: 'my-provider', type: 'openai-compatible', baseUrl: 'http://example.com/v1', apiKey: 'secret-key' },
+  ];
+  const settingsService = createMockSettingsService(customProviders, 'openai');
+  let hook: ReturnType<typeof useProviderSelection> | undefined;
+  let inputVal = '';
+  let cursorVal = 0;
+  let renderer: any;
+
+  await act(async () => {
+    renderer = render(
+      React.createElement(
+        InputProvider as any,
+        {},
+        React.createElement(TestComponent, {
+          settingsService,
+          onHookResult: (h) => {
+            hook = h;
+          },
+          onInputValue: (v: string) => {
+            inputVal = v;
+          },
+          onCursorOffset: (offset: number) => {
+            cursorVal = offset;
+          },
+        }),
+      ),
+    );
+  });
+
+  await act(async () => {
+    hook!.open();
+  });
+  await flush();
+
+  // Navigate to the custom provider and select it to enter edit_fields
+  await act(async () => {
+    const active = hook!.getActiveItems();
+    const targetIdx = active.findIndex((item) => item.kind === 'provider' && item.id === 'my-provider');
+    let moves = 0;
+    for (let i = 0; i < targetIdx; i++) {
+      if (!(active[i]!.kind === 'provider' && (active[i] as any).id === 'codex')) {
+        moves++;
+      }
+    }
+    for (let i = 0; i < moves; i++) {
+      hook!.moveDown();
+    }
+  });
+  await flush();
+
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+
+  expect(hook!.phase).toBe('edit_fields');
+
+  // Edit Name field (index 0)
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+  expect(hook!.phase).toBe('wizard_name');
+  expect(inputVal).toBe('my-provider');
+  expect(cursorVal, 'cursor should be at end of name').toBe('my-provider'.length);
+
+  // Go back
+  await act(async () => {
+    hook!.goBack();
+  });
+  await flush();
+  expect(hook!.phase).toBe('edit_fields');
+
+  // Edit Base URL field (index 2)
+  await act(async () => {
+    hook!.moveDown();
+    hook!.moveDown();
+  });
+  await flush();
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+  expect(hook!.phase).toBe('wizard_url');
+  expect(inputVal).toBe('http://example.com/v1');
+  expect(cursorVal, 'cursor should be at end of baseUrl').toBe('http://example.com/v1'.length);
+
+  // Go back
+  await act(async () => {
+    hook!.goBack();
+  });
+  await flush();
+  expect(hook!.phase).toBe('edit_fields');
+
+  // Edit API Key field (index 3)
+  await act(async () => {
+    hook!.moveDown();
+  });
+  await flush();
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+  expect(hook!.phase).toBe('wizard_key');
+  expect(inputVal).toBe('secret-key');
+  expect(cursorVal, 'cursor should be at end of apiKey').toBe('secret-key'.length);
+
+  await act(async () => {
+    renderer.unmount();
+  });
+});

@@ -7,14 +7,14 @@ interface CreateEffortSlashCommandDeps {
   settingsService: SettingsService;
   applyRuntimeSetting: (key: string, value: any) => void;
   addSystemMessage: (text: string) => void;
-  setInput: (input: string) => void;
+  replaceInput: (input: string) => void;
 }
 
 export function createEffortSlashCommand({
   settingsService,
   applyRuntimeSetting,
   addSystemMessage,
-  setInput,
+  replaceInput,
 }: CreateEffortSlashCommandDeps): SlashCommand {
   return {
     name: 'effort',
@@ -23,13 +23,13 @@ export function createEffortSlashCommand({
     completion: { type: 'setting-value', trigger: EFFORT_TRIGGER, settingKey: 'agent.reasoningEffort' },
     action: (args?: string) => {
       if (!args) {
-        setInput('/effort ');
+        replaceInput('/effort ');
         return false;
       }
 
       const parts = args.trim().split(/\s+/).filter(Boolean);
       if (parts.length === 0) {
-        setInput('/effort ');
+        replaceInput('/effort ');
         return false;
       }
 

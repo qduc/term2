@@ -6,7 +6,7 @@ interface CreateGuardedSettingsCommandDeps {
   settingsService: SettingsService;
   addSystemMessage: (text: string) => void;
   applyRuntimeSetting?: (key: string, value: any) => void;
-  setInput: (value: string) => void;
+  replaceInput: (value: string) => void;
   messages: { sender: string }[];
 }
 
@@ -14,14 +14,14 @@ export function createGuardedSettingsCommand({
   settingsService,
   addSystemMessage,
   applyRuntimeSetting,
-  setInput,
+  replaceInput,
   messages,
 }: CreateGuardedSettingsCommandDeps): SlashCommand {
   const settingsCommand = createSettingsCommand({
     settingsService,
     addSystemMessage,
     applyRuntimeSetting,
-    setInput,
+    replaceInput,
   });
 
   return {

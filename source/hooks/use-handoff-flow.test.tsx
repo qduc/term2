@@ -77,7 +77,7 @@ const Harness = ({
     clearConversationAndRefreshBanner,
     addSystemMessage,
     sendUserMessage,
-    setInput,
+    replaceInput: setInput,
     setInputAndCursor,
     setMode,
     setTriggerIndex,

@@ -83,7 +83,7 @@ const App: FC<AppProps> = ({
 }) => {
   const { exit } = useApp();
   const { stdout } = useStdout();
-  const { setInput, setMode, setTriggerIndex, setImages, setInputAndCursor } = useInputActions();
+  const { setInput, replaceInput, setMode, setTriggerIndex, setImages, setInputAndCursor } = useInputActions();
   const { input, mode, images } = useInputState();
   const undoMenuRef = useRef<{ open: (items: UndoItem[]) => void } | null>(null);
   const providersMenuRef = useRef<{ open: () => void } | null>(null);
@@ -185,7 +185,7 @@ const App: FC<AppProps> = ({
     settingsService,
     conversationService,
     addShellMessage,
-    setInput,
+    replaceInput,
     liteMode,
     sshInfo,
     sshService,
@@ -205,7 +205,7 @@ const App: FC<AppProps> = ({
     clearConversationAndRefreshBanner,
     addSystemMessage,
     sendUserMessage,
-    setInput,
+    replaceInput,
     setInputAndCursor,
     setMode,
     setTriggerIndex,
@@ -223,7 +223,7 @@ const App: FC<AppProps> = ({
     historyService,
     loggingService,
     sendUserMessage,
-    setInput,
+    replaceInput,
     setImages,
   });
 
@@ -250,7 +250,7 @@ const App: FC<AppProps> = ({
     settingsService,
     addSystemMessage,
     applyRuntimeSetting,
-    setInput,
+    replaceInput,
     clearConversation: clearConversationAndRefreshBanner,
     getSessionUsage,
     exit: exitWithUsage,
@@ -285,7 +285,7 @@ const App: FC<AppProps> = ({
       const text = undoToUserMessage(item.uiIndex);
       if (text !== null) {
         redrawMessageList();
-        setInput(text);
+        replaceInput(text);
       }
     },
     [undoToUserMessage, redrawMessageList, setInput],
@@ -308,14 +308,14 @@ const App: FC<AppProps> = ({
 
     if (key.escape && waitingForAskUserAnswer) {
       setWaitingForAskUserAnswer(false);
-      setInput('');
+      replaceInput('');
       return;
     }
 
     if (key.escape && waitingForRejectionReason) {
       // Cancel rejection reason input and return to approval prompt
       setWaitingForRejectionReason(false);
-      setInput('');
+      replaceInput('');
       return;
     }
 
@@ -376,7 +376,7 @@ const App: FC<AppProps> = ({
     const hasImages = Boolean(turn.images?.length);
     if (waitingForAskUserAnswer) {
       setWaitingForAskUserAnswer(false);
-      setInput('');
+      replaceInput('');
       await handleApprovalDecision('y', undefined, value);
       return;
     }
@@ -385,7 +385,7 @@ const App: FC<AppProps> = ({
     // If waiting for rejection reason, handle it
     if (waitingForRejectionReason) {
       setWaitingForRejectionReason(false);
-      setInput('');
+      replaceInput('');
       await handleApprovalDecision('n', value);
       return;
     }
@@ -433,7 +433,7 @@ const App: FC<AppProps> = ({
 
           // Clear input unless command returned false
           if (shouldClearInput !== false) {
-            setInput('');
+            replaceInput('');
           }
           return;
         }

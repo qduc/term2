@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   goToPreviousQuestion: vi.fn(),
   goToNextQuestion: vi.fn(),
   setInput: vi.fn(),
+  replaceInput: vi.fn(),
   setMode: vi.fn(),
   setTriggerIndex: vi.fn(),
   setImages: vi.fn(),
@@ -54,6 +55,7 @@ vi.mock('./components/ErrorBoundary.js', () => ({
 vi.mock('./context/InputContext.js', () => ({
   useInputActions: () => ({
     setInput: mocks.setInput,
+    replaceInput: mocks.replaceInput,
     setMode: mocks.setMode,
     setTriggerIndex: mocks.setTriggerIndex,
     setImages: mocks.setImages,

@@ -319,6 +319,64 @@ it.sequential('setInputAndCursor updates input, cursorOffset, and cursorOverride
   expect(lastFrame()!.includes('hello world:5:8')).toBe(true);
 });
 
+it.sequential('replaceInput updates input and moves cursor to end', async () => {
+  const TestUpdater = () => {
+    const { input, cursorOffset, replaceInput } = useInputContext();
+
+    useEffect(() => {
+      replaceInput('hello world');
+    }, [replaceInput]);
+
+    return (
+      <Text>
+        {input}:{cursorOffset}
+      </Text>
+    );
+  };
+
+  const { lastFrame } = await renderInAct(
+    <InputProvider>
+      <TestUpdater />
+    </InputProvider>,
+  );
+
+  await flushReactUpdates(5);
+
+  expect(lastFrame()!.includes('hello world:11')).toBe(true);
+});
+
+it.sequential('replaceInput with empty string sets cursor to 0', async () => {
+  const TestUpdater = () => {
+    const { input, cursorOffset, replaceInput, setInput } = useInputContext();
+
+    useEffect(() => {
+      setInput('previous text');
+    }, [setInput]);
+
+    useEffect(() => {
+      if (input === 'previous text') {
+        replaceInput('');
+      }
+    }, [input, replaceInput]);
+
+    return (
+      <Text>
+        {input || 'EMPTY'}:{cursorOffset}
+      </Text>
+    );
+  };
+
+  const { lastFrame } = await renderInAct(
+    <InputProvider>
+      <TestUpdater />
+    </InputProvider>,
+  );
+
+  await flushReactUpdates(5);
+
+  expect(lastFrame()!.includes('EMPTY:0')).toBe(true);
+});
+
 it.sequential('setCursorOverride updates cursorOverride state', async () => {
   const TestUpdater = () => {
     const { cursorOverride, setCursorOverride } = useInputContext();

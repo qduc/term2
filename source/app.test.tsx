@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   bottomAreaProps: null as any,
   useInputHandlers: [] as Array<(input: string, key: Record<string, boolean>) => void>,
   setInput: vi.fn(),
+  replaceInput: vi.fn(),
   setMode: vi.fn(),
   setTriggerIndex: vi.fn(),
   setImages: vi.fn(),
@@ -98,6 +99,7 @@ vi.mock('./components/ErrorBoundary.js', () => ({
 vi.mock('./context/InputContext.js', () => ({
   useInputActions: () => ({
     setInput: mocks.setInput,
+    replaceInput: mocks.replaceInput,
     setMode: mocks.setMode,
     setTriggerIndex: mocks.setTriggerIndex,
     setImages: mocks.setImages,
@@ -247,6 +249,7 @@ beforeEach(() => {
   mocks.bottomAreaProps = null;
   mocks.useInputHandlers = [];
   mocks.setInput.mockReset();
+  mocks.replaceInput.mockReset();
   mocks.setMode.mockReset();
   mocks.setTriggerIndex.mockReset();
   mocks.setImages.mockReset();
@@ -329,7 +332,7 @@ describe('App orchestration', () => {
     });
 
     expect(mocks.setWaitingForRejectionReason).toHaveBeenCalledWith(false);
-    expect(mocks.setInput).toHaveBeenCalledWith('');
+    expect(mocks.replaceInput).toHaveBeenCalledWith('');
     expect(mocks.handleApprovalDecision).toHaveBeenCalledWith('n', 'needs review');
   });
 
@@ -345,7 +348,7 @@ describe('App orchestration', () => {
     });
 
     expect(commandAction).toHaveBeenCalledWith('now');
-    expect(mocks.setInput).toHaveBeenCalledWith('');
+    expect(mocks.replaceInput).toHaveBeenCalledWith('');
     expect(mocks.pendingGuards.sendGuardedTurn).not.toHaveBeenCalled();
   });
 
@@ -361,7 +364,7 @@ describe('App orchestration', () => {
     });
 
     expect(commandAction).toHaveBeenCalledWith('now');
-    expect(mocks.setInput).not.toHaveBeenCalledWith('');
+    expect(mocks.replaceInput).not.toHaveBeenCalledWith('');
     expect(mocks.pendingGuards.sendGuardedTurn).not.toHaveBeenCalled();
   });
 

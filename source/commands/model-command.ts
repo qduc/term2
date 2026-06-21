@@ -8,14 +8,14 @@ interface CreateModelSlashCommandDeps {
   settingsService: SettingsService;
   applyRuntimeSetting: (key: string, value: any) => void;
   addSystemMessage: (text: string) => void;
-  setInput: (input: string) => void;
+  replaceInput: (input: string) => void;
 }
 
 export function createModelSlashCommand({
   settingsService,
   applyRuntimeSetting,
   addSystemMessage,
-  setInput,
+  replaceInput,
 }: CreateModelSlashCommandDeps): SlashCommand {
   return {
     name: 'model',
@@ -24,7 +24,7 @@ export function createModelSlashCommand({
     completion: { type: 'model', trigger: MODEL_CMD_TRIGGER },
     action: (args?: string) => {
       if (!args) {
-        setInput('/model ');
+        replaceInput('/model ');
         return false;
       }
 

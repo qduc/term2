@@ -22,7 +22,7 @@ interface UseAppCommandsProps {
   settingsService: SettingsService;
   addSystemMessage: (text: string) => void;
   applyRuntimeSetting: (key: string, value: any) => void;
-  setInput: (input: string) => void;
+  replaceInput: (input: string) => void;
   clearConversation: () => void | Promise<void>;
   getSessionUsage: () => string;
   exit: () => void;
@@ -50,7 +50,7 @@ export const useAppCommands = ({
   settingsService,
   addSystemMessage,
   applyRuntimeSetting,
-  setInput,
+  replaceInput,
   clearConversation,
   getSessionUsage,
   exit,
@@ -73,12 +73,12 @@ export const useAppCommands = ({
 
   const slashCommands = useMemo<SlashCommand[]>(
     () => [
-      createModelSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, setInput }),
-      createEffortSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, setInput }),
+      createModelSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
+      createEffortSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
       createClearSlashCommand(clearConversation, addSystemMessage),
       createCopySlashCommand({ messages, addSystemMessage }),
       createUsageSlashCommand(addSystemMessage, getSessionUsage),
-      createUndoSlashCommand({ undoLastUserMessage, setInput, addSystemMessage, openUndoMenu, onUndo }),
+      createUndoSlashCommand({ undoLastUserMessage, replaceInput, addSystemMessage, openUndoMenu, onUndo }),
       createRetrySlashCommand({ undoLastUserMessage, sendUserMessage, addSystemMessage, listUserTurns, onUndo }),
       createModeToggleCommand(
         'app.liteMode',
@@ -128,7 +128,7 @@ export const useAppCommands = ({
         },
       },
       createHandoffSlashCommand({ messages, addSystemMessage, onHandoff }),
-      createGuardedSettingsCommand({ settingsService, addSystemMessage, applyRuntimeSetting, setInput, messages }),
+      createGuardedSettingsCommand({ settingsService, addSystemMessage, applyRuntimeSetting, replaceInput, messages }),
       {
         name: 'providers',
         description: 'Manage API providers (list, add, edit, delete)',
@@ -138,7 +138,7 @@ export const useAppCommands = ({
         },
       },
       createQuitSlashCommand(exit),
-      createSkillsSlashCommand({ skillsService, onSkillSelected, addSystemMessage, setInput }),
+      createSkillsSlashCommand({ skillsService, onSkillSelected, addSystemMessage, replaceInput }),
     ],
     [
       addSystemMessage,
@@ -148,7 +148,7 @@ export const useAppCommands = ({
       exit,
       getSessionUsage,
       messages,
-      setInput,
+      replaceInput,
       settingsService,
       undoLastUserMessage,
       openUndoMenu,

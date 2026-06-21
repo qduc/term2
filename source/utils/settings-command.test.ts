@@ -67,7 +67,7 @@ const createDeps = (
     settingsService: settingsService as unknown as SettingsService,
     addSystemMessage: (message: string) => messages.push(message),
     applyRuntimeSetting: (key: string, value: unknown) => applied.push({ key, value }),
-    setInput: (_value: string) => {},
+    replaceInput: (_value: string) => {},
   };
 };
 
@@ -83,7 +83,7 @@ it('formatSettingsSummary renders values with sources', () => {
 it('viewing all settings with no args prompts for autocomplete', () => {
   const deps = createDeps();
   let inputValue = '';
-  deps.setInput = (value) => {
+  deps.replaceInput = (value) => {
     inputValue = value;
   };
   const command = createSettingsCommand(deps);

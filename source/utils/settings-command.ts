@@ -117,14 +117,14 @@ interface CreateSettingsCommandDeps {
   settingsService: SettingsService;
   addSystemMessage: (message: string) => void;
   applyRuntimeSetting?: (key: string, value: any) => void;
-  setInput: (value: string) => void;
+  replaceInput: (value: string) => void;
 }
 
 export function createSettingsCommand({
   settingsService,
   addSystemMessage,
   applyRuntimeSetting,
-  setInput,
+  replaceInput,
 }: CreateSettingsCommandDeps): SlashCommand {
   return {
     name: 'settings',
@@ -136,7 +136,7 @@ export function createSettingsCommand({
 
       // No args: prompt for setting name with autocomplete
       if (!trimmedArgs) {
-        setInput('/settings ');
+        replaceInput('/settings ');
         return false;
       }
 

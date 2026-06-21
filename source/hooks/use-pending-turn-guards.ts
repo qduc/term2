@@ -20,7 +20,7 @@ export type UsePendingTurnGuardsOptions = {
   historyService: HistoryService;
   loggingService: LoggingService;
   sendUserMessage: SendUserMessage;
-  setInput: (value: string) => void;
+  replaceInput: (value: string) => void;
   setImages?: ImageSetter;
 };
 
@@ -51,7 +51,7 @@ export const usePendingTurnGuards = ({
   historyService,
   loggingService,
   sendUserMessage,
-  setInput,
+  replaceInput,
   setImages,
 }: UsePendingTurnGuardsOptions): UsePendingTurnGuardsReturn => {
   const [pendingState, setPendingState] = useState<PendingState>({ kind: 'idle' });
@@ -73,7 +73,7 @@ export const usePendingTurnGuards = ({
   const sendReadyTurn = useCallback(
     async (turn: UserTurn, options?: { bypassInputSurgeGuard?: boolean }) => {
       historyService.addMessage(turn);
-      setInput('');
+      replaceInput('');
       if (options) {
         await sendUserMessage(turn, options);
         return;
@@ -81,7 +81,7 @@ export const usePendingTurnGuards = ({
 
       await sendUserMessage(turn);
     },
-    [historyService, sendUserMessage, setInput],
+    [historyService, sendUserMessage, replaceInput],
   );
 
   const guardTurn = useCallback(
@@ -157,9 +157,9 @@ export const usePendingTurnGuards = ({
 
     setPendingState({ kind: 'idle' });
     queueMicrotask(() => {
-      setInput(turn.text || '');
+      replaceInput(turn.text || '');
     });
-  }, [pendingState, setInput]);
+  }, [pendingState, replaceInput]);
 
   const handleSurgeApprove = useCallback(async () => {
     if (pendingState.kind !== 'pending_surge') {
@@ -180,9 +180,9 @@ export const usePendingTurnGuards = ({
 
     setPendingState({ kind: 'idle' });
     queueMicrotask(() => {
-      setInput(turn.text || '');
+      replaceInput(turn.text || '');
     });
-  }, [pendingState, setInput]);
+  }, [pendingState, replaceInput]);
 
   return {
     largeUncachedWarning,

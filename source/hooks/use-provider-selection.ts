@@ -54,7 +54,7 @@ export type ProviderSelectionMenuItem =
 const DELETE_CONFIRM_DEFAULT_INDEX = 1;
 
 export const useProviderSelection = (settingsService: SettingsService) => {
-  const { mode, setMode, setInput } = useInputContext();
+  const { mode, setMode, setInput, replaceInput } = useInputContext();
 
   const [phase, setPhase] = useState<ProviderSelectionPhase>('list');
   const [items, setItems] = useState<ProviderSelectionItem[]>([]);
@@ -351,7 +351,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setEditingField('apiKey');
           setDraftModified(false);
           setPhase('wizard_key');
-          setInput(draft.apiKey || '');
+          replaceInput(draft.apiKey || '');
         } else if (index === 3) {
           // Save Changes
           saveDraft();
@@ -370,7 +370,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setEditingField('name');
           setDraftModified(false);
           setPhase('wizard_name');
-          setInput(draft.name || '');
+          replaceInput(draft.name || '');
         } else if (index === 1) {
           // Edit Type
           setEditingField('type');
@@ -383,13 +383,13 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setEditingField('baseUrl');
           setDraftModified(false);
           setPhase('wizard_url');
-          setInput(draft.baseUrl || '');
+          replaceInput(draft.baseUrl || '');
         } else if (index === 3) {
           // Edit API Key
           setEditingField('apiKey');
           setDraftModified(false);
           setPhase('wizard_key');
-          setInput(draft.apiKey || '');
+          replaceInput(draft.apiKey || '');
         } else if (index === 4) {
           // Save Changes
           saveDraft();

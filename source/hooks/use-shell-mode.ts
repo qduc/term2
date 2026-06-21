@@ -26,7 +26,7 @@ interface UseShellModeProps {
   settingsService: SettingsService;
   conversationService: ConversationService;
   addShellMessage: (command: string, output: string, exitCode: number | null, timedOut: boolean) => void;
-  setInput: (input: string) => void;
+  replaceInput: (input: string) => void;
   liteMode: boolean;
   sshInfo?: SSHInfo;
   sshService?: ISSHService;
@@ -36,7 +36,7 @@ export const useShellMode = ({
   settingsService,
   conversationService,
   addShellMessage,
-  setInput,
+  replaceInput,
   liteMode,
   sshInfo,
   sshService,
@@ -105,7 +105,7 @@ export const useShellMode = ({
       const maxOutputLength = maxOutputLengthValue != null ? maxOutputLengthValue : undefined;
       const startedAt = Date.now();
 
-      setInput('');
+      replaceInput('');
 
       const result = await executeShellCommand(commandText, {
         timeout,
@@ -136,7 +136,7 @@ export const useShellMode = ({
         },
       ]);
     },
-    [settingsService, setInput, addShellMessage, sshService, sshInfo],
+    [settingsService, replaceInput, addShellMessage, sshService, sshInfo],
   );
 
   return {

@@ -23,7 +23,7 @@ it('createSkillsSlashCommand returns a command with correct metadata', () => {
     skillsService: { getAvailableSkills: () => MOCK_SKILLS } as unknown as SkillsService,
     onSkillSelected: () => {},
     addSystemMessage: () => {},
-    setInput: () => {},
+    replaceInput: () => {},
   });
 
   expect(cmd.name).toBe('skills');
@@ -40,7 +40,7 @@ it('action with valid skill name calls onSkillSelected and addSystemMessage', ()
     skillsService: { getAvailableSkills: () => MOCK_SKILLS } as unknown as SkillsService,
     onSkillSelected: (skill) => selectedSkills.push(skill),
     addSystemMessage: (msg) => messages.push(msg),
-    setInput: () => {},
+    replaceInput: () => {},
   });
 
   const result = cmd.action('codebase-design');
@@ -59,7 +59,7 @@ it('action with unknown skill name shows error message', () => {
     skillsService: { getAvailableSkills: () => MOCK_SKILLS } as unknown as SkillsService,
     onSkillSelected: (skill) => selectedSkills.push(skill),
     addSystemMessage: (msg) => messages.push(msg),
-    setInput: () => {},
+    replaceInput: () => {},
   });
 
   const result = cmd.action('nonexistent');
@@ -78,7 +78,7 @@ it('action with empty args autocompletes to /skills ', () => {
     skillsService: { getAvailableSkills: () => MOCK_SKILLS } as unknown as SkillsService,
     onSkillSelected: (skill) => selectedSkills.push(skill),
     addSystemMessage: (msg) => messages.push(msg),
-    setInput: (val) => inputs.push(val),
+    replaceInput: (val) => inputs.push(val),
   });
 
   const result = cmd.action('');
@@ -96,7 +96,7 @@ it('action matches skill name case-insensitively', () => {
     skillsService: { getAvailableSkills: () => MOCK_SKILLS } as unknown as SkillsService,
     onSkillSelected: (skill) => selectedSkills.push(skill),
     addSystemMessage: (msg) => messages.push(msg),
-    setInput: () => {},
+    replaceInput: () => {},
   });
 
   const result = cmd.action('CODEBASE-DESIGN');
@@ -113,7 +113,7 @@ it('action with skill name that has extra whitespace still matches', () => {
     skillsService: { getAvailableSkills: () => MOCK_SKILLS } as unknown as SkillsService,
     onSkillSelected: (skill) => selectedSkills.push(skill),
     addSystemMessage: (msg) => messages.push(msg),
-    setInput: () => {},
+    replaceInput: () => {},
   });
 
   const result = cmd.action('  codebase-design  ');

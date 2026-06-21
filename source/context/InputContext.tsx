@@ -23,6 +23,8 @@ interface InputState {
 
 interface InputActions {
   setInput: (value: string) => void;
+  /** Replace the entire input buffer and move cursor to end. */
+  replaceInput: (value: string) => void;
   setMode: (mode: InputMode) => void;
   setCursorOffset: (offset: number) => void;
   setTriggerIndex: (index: number | null) => void;
@@ -48,6 +50,13 @@ export const InputProvider = ({ children }: { children: ReactNode }) => {
     setCursorOverride(override);
   }, []);
 
+  const replaceInput = useCallback(
+    (value: string) => {
+      setInputAndCursor(value, value.length);
+    },
+    [setInputAndCursor],
+  );
+
   const state = useMemo<InputState>(
     () => ({ input, mode, cursorOffset, triggerIndex, images, cursorOverride }),
     [input, mode, cursorOffset, triggerIndex, images, cursorOverride],
@@ -56,6 +65,7 @@ export const InputProvider = ({ children }: { children: ReactNode }) => {
   const actions = useMemo<InputActions>(
     () => ({
       setInput,
+      replaceInput,
       setMode,
       setCursorOffset,
       setTriggerIndex,
@@ -63,7 +73,7 @@ export const InputProvider = ({ children }: { children: ReactNode }) => {
       setInputAndCursor,
       setCursorOverride,
     }),
-    [setInputAndCursor],
+    [replaceInput, setInputAndCursor],
   );
 
   return (

@@ -120,7 +120,7 @@ it.sequential('createUndoSlashCommand opens undo menu when no args', () => {
   let menuOpened = false;
   const command = createUndoSlashCommand({
     undoLastUserMessage: () => ({ text: 'Previous message' }),
-    setInput: () => {},
+    replaceInput: () => {},
     addSystemMessage: () => {},
     openUndoMenu: () => {
       menuOpened = true;
@@ -137,7 +137,7 @@ it.sequential('createUndoSlashCommand with "last" arg restores last user message
   let undoRedraws = 0;
   const command = createUndoSlashCommand({
     undoLastUserMessage: () => ({ text: 'Previous message' }),
-    setInput: (value) => {
+    replaceInput: (value) => {
       input = value;
     },
     addSystemMessage: () => {},
@@ -161,7 +161,7 @@ it.sequential(
     let undoRedraws = 0;
     const command = createUndoSlashCommand({
       undoLastUserMessage: () => null,
-      setInput: () => {},
+      replaceInput: () => {},
       addSystemMessage: (text) => systemMessages.push(text),
       openUndoMenu: () => {},
       onUndo: () => {
@@ -279,7 +279,7 @@ const TestHookWrapper = ({
     settingsService,
     addSystemMessage: (text: string) => onSystemMessage?.(text),
     applyRuntimeSetting: (key: string, value: any) => onApply?.(key, value),
-    setInput: () => {},
+    replaceInput: () => {},
     clearConversation: () => {},
     getSessionUsage: () => '',
     exit: () => {},
@@ -574,7 +574,7 @@ it.sequential(
         } as any,
         addSystemMessage: (text: string) => systemMessages.push(text),
         applyRuntimeSetting: () => {},
-        setInput: () => {},
+        replaceInput: () => {},
         clearConversation: () => {
           clearCalled = true;
         },

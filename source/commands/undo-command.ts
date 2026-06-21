@@ -3,7 +3,7 @@ import type { UserTurn } from '../types/user-turn.js';
 
 interface CreateUndoSlashCommandOptions {
   undoLastUserMessage: () => { text: string; images?: UserTurn['images'] } | null;
-  setInput: (input: string) => void;
+  replaceInput: (input: string) => void;
   addSystemMessage: (text: string) => void;
   openUndoMenu: () => void;
   onUndo?: () => void;
@@ -11,7 +11,7 @@ interface CreateUndoSlashCommandOptions {
 
 export function createUndoSlashCommand({
   undoLastUserMessage,
-  setInput,
+  replaceInput,
   addSystemMessage,
   openUndoMenu,
   onUndo,
@@ -34,7 +34,7 @@ export function createUndoSlashCommand({
           return true;
         }
 
-        setInput(removed.text);
+        replaceInput(removed.text);
         onUndo?.();
         return false;
       }

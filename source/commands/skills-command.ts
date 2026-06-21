@@ -6,7 +6,7 @@ export const createSkillsSlashCommand = (deps: {
   skillsService: SkillsService;
   onSkillSelected: (skill: SkillInfo) => void;
   addSystemMessage: (text: string) => void;
-  setInput: (text: string) => void;
+  replaceInput: (text: string) => void;
 }): SlashCommand => ({
   name: 'skills',
   description: 'Activate a skill for the next request',
@@ -15,7 +15,7 @@ export const createSkillsSlashCommand = (deps: {
   action: (args?: string) => {
     const skillName = args?.trim().split(/\s+/)[0];
     if (!skillName) {
-      deps.setInput('/skills ');
+      deps.replaceInput('/skills ');
       return false;
     }
     const skill = deps.skillsService.getAvailableSkills().find((s) => s.name.toLowerCase() === skillName.toLowerCase());

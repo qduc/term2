@@ -681,7 +681,7 @@ Here is a comprehensive example demonstrating the most useful settings keys you 
   "shell": {
     "timeout": 120000,
     "maxOutputLines": 1000,
-    "maxOutputChars": 10000,
+    "maxOutputChars": 40000,
     "autoApproveMode": "off",
     "useRtkCompression": false
   },

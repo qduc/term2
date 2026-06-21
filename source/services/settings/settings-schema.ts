@@ -107,7 +107,7 @@ export const AgentSettingsSchema = z.object({
 export const ShellSettingsSchema = z.object({
   timeout: z.number().int().positive().default(120000),
   maxOutputLines: z.number().int().positive().default(1000),
-  maxOutputChars: z.number().int().positive().default(10000),
+  maxOutputChars: z.number().int().positive().default(40000),
   autoApproveMode: z.enum(['off', 'advisory', 'auto']).default('off').describe('Mode for shell command auto-approval'),
   useRtkCompression: z.boolean().optional().default(false).describe('Use RTK to compress shell command output'),
 });
@@ -576,7 +576,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   shell: {
     timeout: 120000,
     maxOutputLines: 1000,
-    maxOutputChars: 10000,
+    maxOutputChars: 40000,
     autoApproveMode: 'off',
     useRtkCompression: false,
   },

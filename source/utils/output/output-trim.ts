@@ -5,14 +5,14 @@
 export interface OutputTrimConfig {
   /** Maximum number of lines before trimming (default: 1000) */
   maxLines: number;
-  /** Maximum size in characters before trimming (default: 10000) */
+  /** Maximum size in characters before trimming (default: 40000) */
   maxCharacters: number;
 }
 
 /** Default trim configuration */
 export const DEFAULT_TRIM_CONFIG: OutputTrimConfig = {
   maxLines: 1000,
-  maxCharacters: 10000,
+  maxCharacters: 40000,
 };
 
 /** Current trim configuration (can be modified at runtime) */

@@ -22,7 +22,7 @@ const baseSettings = {
   shell: {
     timeout: { value: 120000, source: 'default' },
     maxOutputLines: { value: 1000, source: 'default' },
-    maxOutputChars: { value: 10000, source: 'default' },
+    maxOutputChars: { value: 40000, source: 'default' },
   },
   ui: {
     historySize: { value: 1000, source: 'default' },

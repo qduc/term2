@@ -82,7 +82,7 @@ it('SettingsService initializes with defaults', async () => {
   expect(service.get('agent.maxParallelToolCalls')).toBe(3);
   expect(service.get('shell.timeout')).toBe(120000);
   expect(service.get('shell.maxOutputLines')).toBe(1000);
-  expect(service.get('shell.maxOutputChars')).toBe(10000);
+  expect(service.get('shell.maxOutputChars')).toBe(40000);
   expect(service.get('ui.historySize')).toBe(1000);
   expect(service.get('logging.logLevel')).toBe('info');
 });
@@ -599,7 +599,7 @@ it('gracefully degrades on invalid schema in config file', async () => {
 
   // Should fall back to defaults for invalid settings
   expect(service.get('shell.timeout')).toBe(120000);
-  expect(service.get('shell.maxOutputChars')).toBe(10000);
+  expect(service.get('shell.maxOutputChars')).toBe(40000);
 });
 
 it('loads settings from config file on startup', async () => {
@@ -867,7 +867,7 @@ it.sequential('does not update config file when no new settings are added', asyn
     shell: {
       timeout: 120000,
       maxOutputLines: 1000,
-      maxOutputChars: 10000,
+      maxOutputChars: 40000,
     },
     ui: {
       historySize: 1000,
@@ -943,7 +943,7 @@ it.sequential('does not update config file when format differs but content is sa
     shell: {
       timeout: 120000,
       maxOutputLines: 1000,
-      maxOutputChars: 10000,
+      maxOutputChars: 40000,
     },
     ui: { historySize: 1000 },
     logging: {

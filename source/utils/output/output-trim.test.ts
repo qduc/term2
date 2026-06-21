@@ -30,7 +30,7 @@ it('trims output when exceeding line limit', () => {
 
 it('trims output when exceeding character limit', () => {
   // Create output that exceeds character limit but not line limit
-  const output = 'a'.repeat(15000);
+  const output = 'a'.repeat(50000);
   const result = trimOutput(output);
 
   expect(result.includes('characters trimmed')).toBe(true);
@@ -166,7 +166,7 @@ it('getTrimConfig returns copy of config', () => {
 
 it('DEFAULT_TRIM_CONFIG has expected values', () => {
   expect(DEFAULT_TRIM_CONFIG.maxLines).toBe(1000);
-  expect(DEFAULT_TRIM_CONFIG.maxCharacters).toBe(10000);
+  expect(DEFAULT_TRIM_CONFIG.maxCharacters).toBe(40000);
 });
 
 it('trimOutput uses updated config after setTrimConfig', () => {

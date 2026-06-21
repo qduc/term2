@@ -37,7 +37,7 @@ const shellParametersSchema = z.object({
     .positive()
     .optional()
     .describe(
-      'Optional maximum output length in characters for each command. Outputs exceeding this length will be trimmed. Defaults to 10000 characters if not specified.',
+      'Optional maximum output length in characters for each command. Outputs exceeding this length will be trimmed. Defaults to 40000 characters if not specified.',
     ),
 });
 
@@ -195,11 +195,12 @@ export const formatShellCommandMessage: FormatCommandMessage = (item, index, too
 
 const SHELL_DESCRIPTION =
   'Execute a single shell command. Use this to run tests, check git status, install dependencies, inspect system state, or run one-off scripts. ' +
-  'Long output is saved to a file; search that file instead of rerunning the command just to change filters or add a `| grep` pipeline. ' +
+  'Long output is saved to a file; ' +
   'Do NOT write multi-line inline scripts, it is prone to escaping mistakes. Use create_file to write the script then use this tool to run it. ' +
   'Do NOT use this for complex multi-step edits or broad codebase exploration; use run_subagent instead.';
 const SHELL_DESCRIPTION_ORCHESTRATOR =
-  "Execute a single shell command to verify state (e.g., run tests, check git status, or verify a subagent's work). Long output is saved to a file; search that file instead of rerunning the command just to change filters or add a `| grep` pipeline. For performing complex operations or making changes, prefer delegating to a `worker` subagent via `run_subagent`.";
+  "Execute a single shell command to verify state (e.g., run tests, check git status, or verify a subagent's work). Long output is saved to a file; " +
+  'For performing complex operations or making changes, prefer delegating to a `worker` subagent via `run_subagent`.';
 
 export function createShellToolDefinition(deps: {
   loggingService: ILoggingService;

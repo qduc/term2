@@ -20,7 +20,7 @@ export interface FormatShellExecutionOutputResult {
   artifactPath?: string;
 }
 
-const TRUNCATED_NOTE_PREFIX = 'Full shell output saved to';
+const TRUNCATED_NOTE_PREFIX = 'Full output saved to';
 
 function buildArtifactContents(params: {
   command: string;
@@ -84,9 +84,7 @@ export async function formatShellExecutionOutput({
     );
   }
 
-  const truncationNote = artifactPath
-    ? `${TRUNCATED_NOTE_PREFIX} \`${artifactPath}\`. Search that file for what you need instead of rerunning the command or changing the filter criteria with a \`| grep\` pipeline.`
-    : '';
+  const truncationNote = artifactPath ? `${TRUNCATED_NOTE_PREFIX} \`${artifactPath}\`` : '';
 
   return {
     text: [statusLine, runtimeLine, combinedOutput, emptyOutputNote, truncationNote].filter(Boolean).join('\n'),

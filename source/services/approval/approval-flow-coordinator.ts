@@ -9,6 +9,11 @@ import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { SessionToolTracker } from '../session/session-tool-tracker.js';
 import { GenerationGuard } from '../generation-guard.js';
 import { resolveToolOwner } from './tool-owner.js';
+import {
+  deniedReadStore,
+  executionOverrideStore,
+  getProjectAllowReadStore,
+} from '../../utils/shell/sandbox/denied-read-stores.js';
 
 const noop = () => undefined;
 
@@ -113,13 +118,52 @@ export class ApprovalFlowCoordinator {
 
     let toolStartedEvent: ConversationEvent | undefined;
 
-    if (answer === 'y') {
+    // Denied-read decision values require approval (SDK resumes) plus an execution override.
+    const deniedReadDecision = answer === 'allow-once' || answer === 'allow-remember' || answer === 'unsandboxed-once';
+    // The 'deny' decision is treated as a rejection.
+    const isApproved = answer === 'y' || deniedReadDecision;
+
+    if (isApproved) {
+      // For denied-read decisions, set the execution override before the SDK resumes.
+      if (deniedReadDecision) {
+        const { rawArguments } = getToolInfoFromInterruption(interruption);
+        const parsedArgs = parseToolCallArguments(rawArguments, {
+          callId: decisionCallId ?? String(Date.now()),
+          toolName: 'shell',
+          sessionId: this.deps.sessionId,
+          traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
+        });
+        const shellCommand = (parsedArgs.arguments as { command?: string } | null)?.command;
+        if (typeof shellCommand === 'string') {
+          const stagedInfo = deniedReadStore.consumeStaged(shellCommand);
+          if (stagedInfo) {
+            if (answer === 'allow-once' || answer === 'allow-remember') {
+              executionOverrideStore.set(shellCommand, {
+                extraAllowRead: [stagedInfo.suggestedParent],
+              });
+              if (answer === 'allow-remember') {
+                getProjectAllowReadStore(process.cwd()).append(stagedInfo.suggestedParent);
+                this.deps.logger.security('Sandbox allowed-read path remembered for project', {
+                  path: stagedInfo.suggestedParent,
+                  deniedPath: stagedInfo.path,
+                  sensitive: stagedInfo.sensitive,
+                  sessionId: this.deps.sessionId,
+                });
+              }
+            } else if (answer === 'unsandboxed-once') {
+              executionOverrideStore.set(shellCommand, { forceUnsandboxed: true });
+            }
+          }
+        }
+      }
+
       this.deps.logger.debug('Tool approval granted', {
         eventType: 'approval.granted',
         category: 'approval',
         phase: 'approval',
         sessionId: this.deps.sessionId,
         traceId: this.deps.logger.getCorrelationId(),
+        ...(deniedReadDecision ? { deniedReadDecision: answer } : {}),
       });
 
       const { toolName, rawArguments } = getToolInfoFromInterruption(interruption);

@@ -62,6 +62,15 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
     path.join(home, '.git-credentials'),
     path.join(home, '.bash_history'),
     path.join(home, '.zsh_history'),
+    path.join(home, '.npmrc'),
+    path.join(home, '.pypirc'),
+    path.join(home, '.kube'),
+    path.join(home, '.gnupg'),
+    path.join(home, '.config', 'gh'),
+    path.join(home, '.gem'),
+    path.join(home, '.gemrc'),
+    path.join(home, '.config', 'hub'),
+    path.join(home, '.docker', 'config.json'),
   ];
   const defaultCredentialEnvVars = [
     'AWS_ACCESS_KEY_ID',
@@ -74,6 +83,14 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
     'SSH_AUTH_SOCK',
     'SSH_AGENT_PID',
   ];
+  // Env protection layering (see docs/sandbox-filesystem-read-hardening.md §5):
+  // Layer 1 (authoritative): createSandboxEnvironment() in sandbox-env.ts drops every env
+  //   key not on a tiny allowlist of known-safe values (PATH, SHELL, TMPDIR, locale, …).
+  //   Secrets never reach the child because they are not allowlisted, not because we named them.
+  // Layer 2 (defense-in-depth): credentials.envVars below unsets the same keys at the sandbox
+  //   runtime level (bwrap --unsetenv / Seatbelt -u). It is intentionally small and
+  //   auto-populated from the live env via isSecretKey so it stays exhaustive without hardcoding.
+  //   It earns its keep only if Layer 1 ever regresses; do not treat it as the primary gate.
   const presentSecretEnvVars = Object.keys(options.env ?? process.env).filter(isSecretKey);
   const credentialEnvVars = Array.from(new Set([...defaultCredentialEnvVars, ...presentSecretEnvVars]));
   const allowReadExtra = (options.allowReadExtra ?? []).map((filePath) => expandHomePath(filePath, home));

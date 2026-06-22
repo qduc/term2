@@ -14,6 +14,31 @@ export interface LLMAdvisory {
   isError?: boolean;
 }
 
+/** Answer strings for the denied-read approval variant (see prepareContinuation). */
+export const DENIED_READ_APPROVE_ANSWERS: ReadonlySet<string> = new Set([
+  'allow-once',
+  'allow-remember',
+  'unsandboxed-once',
+]);
+/** The deny answer for the denied-read variant (treated as a rejection). */
+export const DENIED_READ_DENY_ANSWER = 'deny';
+
+/**
+ * Metadata attached to a shell approval when the sandbox denied a read and the agent
+ * retried. Drives the 4-option denied-read prompt (allow once / allow & remember /
+ * run unsandboxed once / deny) instead of the standard Approve/Reject.
+ */
+export interface DeniedReadMetadata {
+  /** Resolved real path of the denied file/dir (for display; ~-compacted in UI). */
+  deniedPath: string;
+  /** What "allow once"/"remember" would add to allowRead. */
+  suggestedParent: string;
+  /** Suppresses the "allow and remember" option for credential-shaped paths. */
+  sensitive: boolean;
+  /** The command that triggered the denied read. */
+  command: string;
+}
+
 export interface ApprovalDescriptor {
   agentName: string;
   toolName: string;
@@ -21,6 +46,7 @@ export interface ApprovalDescriptor {
   rawInterruption: unknown;
   callId?: string;
   llmAdvisory?: LLMAdvisory;
+  deniedRead?: DeniedReadMetadata;
 }
 
 export interface ApprovalRequiredTerminal {

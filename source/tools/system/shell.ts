@@ -33,6 +33,12 @@ import {
   type ShellSandboxRunner,
 } from '../../utils/shell/sandbox/sandbox-policy.js';
 import { getDefaultShellSandboxRunner } from '../../utils/shell/sandbox/shell-sandbox-runner.js';
+import { detectDeniedRead, DETAILED_DENIED_READ_INSTRUCTION } from '../../utils/shell/sandbox/denied-read-detector.js';
+import {
+  deniedReadStore,
+  executionOverrideStore,
+  getProjectAllowReadStore,
+} from '../../utils/shell/sandbox/denied-read-stores.js';
 
 const shellSandboxModeSchema = z.enum(['default', 'unsandboxed']).optional().default('default');
 
@@ -257,6 +263,11 @@ export function createShellToolDefinition(deps: {
         const sshService = executionContext?.getSSHService();
         const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled') !== false;
         if (!sshService && sandboxEnabled) {
+          // If a previous sandboxed run denied a read for this command, require
+          // approval so the user can allow/remember the path or escape unsandboxed.
+          if (deniedReadStore.peek(params.command)) {
+            return true;
+          }
           const availability = await shellSandboxRunner.availability();
           if (availability.type === 'available') {
             return false;
@@ -337,15 +348,31 @@ export function createShellToolDefinition(deps: {
           }
         }
 
+        // Consume any execution override set by a denied-read approval decision.
+        // This is a one-shot override for this single execution only.
+        const override = executionOverrideStore.consume(command);
+        if (override?.forceUnsandboxed) {
+          sandbox = 'unsandboxed';
+          loggingService.debug('Shell executing unsandboxed by approved override', {
+            command: optimizedCommand.substring(0, 100),
+          });
+        }
+        const extraAllowReadFromOverride = override?.extraAllowRead ?? [];
+
         const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled') !== false;
         if (!sshService && sandbox === 'default' && sandboxEnabled) {
           sandboxAvailability = await shellSandboxRunner.availability();
           if (sandboxAvailability.type === 'available') {
             try {
+              const projectAllowRead = getProjectAllowReadStore(cwd).load();
               const sandboxConfig = createSandboxRuntimeConfig({
                 cwd,
                 readPolicy: settingsService.get<SandboxReadPolicy>('sandbox.readPolicy'),
-                allowReadExtra: settingsService.get<string[]>('sandbox.allowReadExtra') ?? [],
+                allowReadExtra: [
+                  ...(settingsService.get<string[]>('sandbox.allowReadExtra') ?? []),
+                  ...projectAllowRead,
+                  ...extraAllowReadFromOverride,
+                ],
               });
               const wrapped = await shellSandboxRunner.wrap(commandToRun, {
                 cwd,
@@ -383,10 +410,29 @@ export function createShellToolDefinition(deps: {
         const stdout = result.stdout ?? '';
         const rawStderr = stripRtkWarning(result.stderr ?? '');
         const annotatedStderr = sandboxed ? shellSandboxRunner.annotateFailure(optimizedCommand, rawStderr) : rawStderr;
-        const stderr =
-          sandboxed && annotatedStderr !== rawStderr
-            ? `${annotatedStderr}\n\n${SANDBOX_ESCAPE_INSTRUCTION}`
-            : annotatedStderr;
+        const sandboxViolation = sandboxed && annotatedStderr !== rawStderr;
+
+        // If the sandbox denied a read under home-denylist, try to extract the denied
+        // path so the agent's retry triggers a 4-option approval prompt.
+        if (sandboxViolation) {
+          const readPolicy = settingsService.get<SandboxReadPolicy>('sandbox.readPolicy');
+          if (readPolicy === 'home-denylist') {
+            const deniedInfo = detectDeniedRead(optimizedCommand, annotatedStderr);
+            if (deniedInfo) {
+              deniedReadStore.record(optimizedCommand, deniedInfo);
+              loggingService.security('Sandbox denied read; agent retry will prompt for approval', {
+                deniedPath: deniedInfo.path,
+                suggestedParent: deniedInfo.suggestedParent,
+                sensitive: deniedInfo.sensitive,
+                command: optimizedCommand.substring(0, 100),
+                correlationId,
+              });
+              return `Error: ${DETAILED_DENIED_READ_INSTRUCTION}`;
+            }
+          }
+        }
+
+        const stderr = sandboxViolation ? `${annotatedStderr}\n\n${SANDBOX_ESCAPE_INSTRUCTION}` : annotatedStderr;
         const exitCode = result.exitCode ?? null;
         const outcome: ShellCommandResult['outcome'] = result.timedOut
           ? { type: 'timeout' }

@@ -1,7 +1,74 @@
-import { it, expect } from 'vitest';
+import { it, expect, beforeEach, afterEach } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 import { ApprovalState } from './approval-state.js';
 import { LoggingService } from '../logging/logging-service.js';
+import {
+  deniedReadStore,
+  executionOverrideStore,
+  resetSandboxDeniedReadStoresForTest,
+  getProjectAllowReadStore,
+} from '../../utils/shell/sandbox/denied-read-stores.js';
+import type { DeniedReadInfo } from '../../utils/shell/sandbox/denied-read-detector.js';
+
+const SENSITIVE_PATH = '/home/testuser/.ssh/id_rsa';
+const SENSITIVE_SUGGESTED = '/home/testuser/.ssh';
+const NON_SENSITIVE_PATH = '/home/testuser/.cargo/registry/cache/index';
+const NON_SENSITIVE_SUGGESTED = '/home/testuser/.cargo';
+
+const makeDeniedReadInfo = (
+  deniedPath = NON_SENSITIVE_PATH,
+  suggestedParent = NON_SENSITIVE_SUGGESTED,
+  sensitive = false,
+): DeniedReadInfo => ({ path: deniedPath, suggestedParent, sensitive });
+
+const SHELL_COMMAND = 'cargo build';
+
+function setupDeniedReadPending(info: DeniedReadInfo = makeDeniedReadInfo()) {
+  deniedReadStore.stageForDescriptor(SHELL_COMMAND, info);
+  let approved = false;
+  let rejected = false;
+  const state: any = {
+    approve: () => (approved = true),
+    reject: () => (rejected = true),
+  };
+  const interruption = { name: 'shell', callId: 'dr1', arguments: JSON.stringify({ command: SHELL_COMMAND }) };
+  const approvalState = new ApprovalState();
+  approvalState.setPending({
+    state,
+    interruption,
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 'dr-test',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+  });
+  return { coord, state, getApproved: () => approved, getRejected: () => rejected };
+}
+
+let originalCwd: string;
+let tmpDir: string;
+
+beforeEach(() => {
+  resetSandboxDeniedReadStoresForTest();
+  originalCwd = process.cwd();
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-dr-test-'));
+  process.chdir(tmpDir);
+});
+
+afterEach(() => {
+  resetSandboxDeniedReadStoresForTest();
+  process.chdir(originalCwd);
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
 
 const logger = new LoggingService({ disableLogging: true });
 const mockToolTracker: any = {
@@ -340,4 +407,57 @@ it('retargetPendingInterruption preserves batch context', () => {
   expect(pending?.state).toBe(state);
   expect(pending?.emittedCommandIds).toEqual(new Set(['message-1']));
   expect(pending?.toolCallArgumentsById).toEqual(new Map([['call-1', { command: 'pwd' }]]));
+});
+
+// --- Denied-read approval decision tests ---
+
+it('prepareContinuation allow-once sets execution override with extraAllowRead and approves', () => {
+  const { coord, getApproved } = setupDeniedReadPending(makeDeniedReadInfo());
+  const plan = coord.prepareContinuation('allow-once', undefined);
+  expect(plan).toBeTruthy();
+  expect(getApproved()).toBe(true);
+  const override = executionOverrideStore.consume(SHELL_COMMAND);
+  expect(override).toEqual({ extraAllowRead: [NON_SENSITIVE_SUGGESTED] });
+});
+
+it('prepareContinuation unsandboxed-once sets forceUnsandboxed override and approves', () => {
+  const { coord, getApproved } = setupDeniedReadPending(makeDeniedReadInfo());
+  const plan = coord.prepareContinuation('unsandboxed-once', undefined);
+  expect(plan).toBeTruthy();
+  expect(getApproved()).toBe(true);
+  const override = executionOverrideStore.consume(SHELL_COMMAND);
+  expect(override).toEqual({ forceUnsandboxed: true });
+});
+
+it('prepareContinuation allow-remember persists path to project store and approves', () => {
+  const { coord, getApproved } = setupDeniedReadPending(makeDeniedReadInfo());
+  const plan = coord.prepareContinuation('allow-remember', undefined);
+  expect(plan).toBeTruthy();
+  expect(getApproved()).toBe(true);
+  const override = executionOverrideStore.consume(SHELL_COMMAND);
+  expect(override).toEqual({ extraAllowRead: [NON_SENSITIVE_SUGGESTED] });
+  // The path is persisted in the project store for future loads.
+  expect(getProjectAllowReadStore(process.cwd()).load()).toEqual([NON_SENSITIVE_SUGGESTED]);
+});
+
+it('prepareContinuation deny calls state.reject and sets no override', () => {
+  const { coord, getApproved, getRejected } = setupDeniedReadPending(makeDeniedReadInfo());
+  const plan = coord.prepareContinuation('deny', undefined);
+  expect(plan).toBeTruthy();
+  expect(getApproved()).toBe(false);
+  expect(getRejected()).toBe(true);
+  // No override is set — the agent gets the rejection.
+  expect(executionOverrideStore.consume(SHELL_COMMAND)).toBeNull();
+  // The staged denied-read info lingers but is harmless (cleared on the next
+  // denied-read detection or on session reset). Deny goes through the generic
+  // rejection branch, which does not clean up denied-read-specific state.
+});
+
+it('prepareContinuation allow-once for sensitive path still sets the override (not suppressed at this layer)', () => {
+  const { coord, getApproved } = setupDeniedReadPending(makeDeniedReadInfo(SENSITIVE_PATH, SENSITIVE_SUGGESTED, true));
+  const plan = coord.prepareContinuation('allow-once', undefined);
+  expect(plan).toBeTruthy();
+  expect(getApproved()).toBe(true);
+  const override = executionOverrideStore.consume(SHELL_COMMAND);
+  expect(override).toEqual({ extraAllowRead: [SENSITIVE_SUGGESTED] });
 });

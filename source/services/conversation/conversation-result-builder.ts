@@ -19,6 +19,8 @@ import { type CommandMessage } from '../../tools/types.js';
 import { resolveToolOwner } from '../approval/tool-owner.js';
 import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { isUnsandboxedShell } from '../approval/shell-sandbox-approval.js';
+import { deniedReadStore } from '../../utils/shell/sandbox/denied-read-stores.js';
+import type { DeniedReadMetadata } from '../../contracts/conversation.js';
 
 export type BuildResultOutcome =
   | { kind: 'response'; result: Extract<ConversationTerminal, { type: 'response' }> }
@@ -59,6 +61,7 @@ export function createApprovalRequiredTerminal(options: {
   rawInterruption?: unknown;
   callId?: string;
   llmAdvisory?: LLMAdvisory;
+  deniedRead?: DeniedReadMetadata;
   usage?: NormalizedUsage;
 }): ApprovalRequiredTerminal {
   return {
@@ -70,6 +73,7 @@ export function createApprovalRequiredTerminal(options: {
       rawInterruption: options.rawInterruption,
       ...(options.callId ? { callId: options.callId } : {}),
       ...(options.llmAdvisory ? { llmAdvisory: options.llmAdvisory } : {}),
+      ...(options.deniedRead ? { deniedRead: options.deniedRead } : {}),
     },
     ...(options.usage ? { usage: options.usage } : {}),
   };
@@ -117,7 +121,24 @@ export async function buildConversationResult(
       throw new ModelBehaviorError(`Error parsing tool arguments for ${toolName}: arguments must be valid JSON.`);
     }
 
-    const forceHumanApproval = isUnsandboxedShell(toolName, parseResult.arguments);
+    // If a sandboxed denied-read retry is pending, force the human prompt (no LLM auto-approval)
+    // and attach the denied-read metadata so the UI renders the 4-option prompt.
+    const shellCommandForDeniedRead =
+      toolName === 'shell' || toolName === 'bash'
+        ? (parseResult.arguments as { command?: string } | null)?.command
+        : undefined;
+    const deniedReadInfo =
+      typeof shellCommandForDeniedRead === 'string' && deniedReadStore.has(shellCommandForDeniedRead)
+        ? deniedReadStore.consume(shellCommandForDeniedRead)
+        : null;
+    const hasDeniedRead = deniedReadInfo !== null;
+    // Re-stage so prepareContinuation can access the info when the user chooses
+    // allow-once / allow-remember / unsandboxed-once for this command.
+    if (deniedReadInfo && typeof shellCommandForDeniedRead === 'string') {
+      deniedReadStore.stageForDescriptor(shellCommandForDeniedRead, deniedReadInfo);
+    }
+
+    const forceHumanApproval = isUnsandboxedShell(toolName, parseResult.arguments) || hasDeniedRead;
 
     approvalFlow.recordPending({
       state: result.state,
@@ -199,6 +220,16 @@ export async function buildConversationResult(
         callId: callId ? String(callId) : undefined,
         llmAdvisory,
         usage: usage ?? extractUsage(result),
+        ...(deniedReadInfo
+          ? {
+              deniedRead: {
+                deniedPath: deniedReadInfo.path,
+                suggestedParent: deniedReadInfo.suggestedParent,
+                sensitive: deniedReadInfo.sensitive,
+                command: shellCommandForDeniedRead ?? '',
+              } satisfies DeniedReadMetadata,
+            }
+          : {}),
       }),
     };
   }
@@ -243,6 +274,7 @@ export const toTerminalEvent = (result: ConversationTerminal): ConversationEvent
         argumentsText: result.approval.argumentsText,
         ...(result.approval.callId ? { callId: result.approval.callId } : {}),
         ...(result.approval.llmAdvisory ? { llmAdvisory: result.approval.llmAdvisory } : {}),
+        ...(result.approval.deniedRead ? { deniedRead: result.approval.deniedRead } : {}),
       },
       ...(result.usage ? { usage: result.usage } : {}),
     };

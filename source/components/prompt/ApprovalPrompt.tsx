@@ -1,4 +1,5 @@
 import React, { FC } from 'react';
+import os from 'node:os';
 import { Box, Text, useInput } from 'ink';
 import type { ApprovalDescriptor } from '../../contracts/conversation.js';
 import { generateDiff } from '../../utils/output/diff.js';
@@ -225,9 +226,25 @@ const ApprovalPrompt: FC<Props> = ({
   }, [approval.argumentsText, approval.toolName]);
   const isUnsandboxedShellApproval = shellApprovalArgs?.sandbox === 'unsandboxed';
 
+  const deniedRead = approval.deniedRead;
+  const isDeniedReadShell = !!deniedRead;
+
+  const deniedReadMenuItems = React.useMemo(() => {
+    if (!deniedRead) return [];
+    const items = ['Deny', 'Allow once'];
+    if (!deniedRead.sensitive) {
+      items.push('Allow and remember this path');
+    }
+    items.push('Run unsandboxed once');
+    return items;
+  }, [deniedRead]);
+
   const askUserMenuItems = React.useMemo(() => {
-    if (!isAskUser) {
+    if (!isAskUser && !isDeniedReadShell) {
       return ['Approve', 'Reject'];
+    }
+    if (isDeniedReadShell) {
+      return deniedReadMenuItems;
     }
 
     const items = isMultiSelect
@@ -280,6 +297,19 @@ const ApprovalPrompt: FC<Props> = ({
     }
 
     if (key.return) {
+      if (isDeniedReadShell) {
+        const selected = deniedReadMenuItems[selectedIndex];
+        if (selected === 'Deny') {
+          onReject();
+        } else if (selected === 'Allow once') {
+          onApprove('allow-once');
+        } else if (selected === 'Allow and remember this path') {
+          onApprove('allow-remember');
+        } else if (selected === 'Run unsandboxed once') {
+          onApprove('unsandboxed-once');
+        }
+        return;
+      }
       if (isAskUser) {
         const selected = askUserMenuItems[selectedIndex];
 
@@ -319,11 +349,20 @@ const ApprovalPrompt: FC<Props> = ({
       }
     }
 
-    if (!isAskUser) {
+    if (!isAskUser && !isDeniedReadShell) {
       if (input === 'y') {
         onApprove();
       }
 
+      if (input === 'n') {
+        onReject();
+      }
+    }
+    if (isDeniedReadShell) {
+      // Quick shortcuts for denied-read: y = allow once, n = deny.
+      if (input === 'y') {
+        onApprove('allow-once');
+      }
       if (input === 'n') {
         onReject();
       }
@@ -533,6 +572,46 @@ const ApprovalPrompt: FC<Props> = ({
     );
   }
 
+  if (isDeniedReadShell && deniedRead) {
+    // Compact the denied path for display (replace $HOME with ~).
+    const displayPath = deniedRead.deniedPath.replace(os.homedir(), '~');
+    const displaySuggestedParent = deniedRead.suggestedParent.replace(os.homedir(), '~');
+    return (
+      <Box flexDirection="column">
+        <Text color="red" bold>
+          Sandbox blocked read access:
+        </Text>
+        <Text color="red"> {displayPath}</Text>
+        {content}
+        <Box flexDirection="column" marginTop={1} marginLeft={1}>
+          {deniedReadMenuItems.map((item, idx) => {
+            const color = idx === 0 ? 'red' : item === 'Run unsandboxed once' ? 'yellow' : 'green';
+            return (
+              <Text key={item} color={selectedIndex === idx ? color : undefined}>
+                {selectedIndex === idx ? '❯ ' : '  '}
+                {item}
+              </Text>
+            );
+          })}
+        </Box>
+        {!deniedRead.sensitive && (
+          <Box marginTop={1}>
+            <Text color="#64748b">
+              "Allow and remember" persists this path for this project: {displaySuggestedParent}
+            </Text>
+          </Box>
+        )}
+        {deniedRead.sensitive && (
+          <Box marginTop={1}>
+            <Text color="#64748b">
+              This is a sensitive path — "allow once" is available but remember is suppressed.
+            </Text>
+          </Box>
+        )}
+      </Box>
+    );
+  }
+
   return (
     <Box flexDirection="column">
       <Text color="yellow">
@@ -542,7 +621,7 @@ const ApprovalPrompt: FC<Props> = ({
       </Text>
       {content}
       {approval.llmAdvisory && <LLMAdvisory advisory={approval.llmAdvisory} />}
-      {!isAskUser && (
+      {!isAskUser && !isDeniedReadShell && (
         <Box flexDirection="column" marginTop={1}>
           <Text>Allow this action?</Text>
           <Box flexDirection="column" marginLeft={1}>

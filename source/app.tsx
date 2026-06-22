@@ -11,6 +11,7 @@ import MessageList, {
 import BottomArea from './components/layout/BottomArea.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import type { ConversationService } from './services/conversation/conversation-service.js';
+import { DENIED_READ_APPROVE_ANSWERS } from './contracts/conversation.js';
 import type { SettingsService } from './services/settings/settings-service.js';
 import type { HistoryService } from './services/history-service.js';
 import type { LoggingService } from './services/logging/logging-service.js';
@@ -334,7 +335,13 @@ const App: FC<AppProps> = ({
 
   const handleApprove = useCallback(
     async (answer?: string) => {
-      await handleApprovalDecision('y', undefined, answer);
+      // Denied-read approval decisions are passed as the answer string itself
+      // so prepareContinuation can distinguish them from standard approve ('y').
+      if (answer && DENIED_READ_APPROVE_ANSWERS.has(answer)) {
+        await handleApprovalDecision(answer);
+      } else {
+        await handleApprovalDecision('y', undefined, answer);
+      }
     },
     [handleApprovalDecision],
   );

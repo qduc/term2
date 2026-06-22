@@ -1,8 +1,13 @@
-import { it, expect } from 'vitest';
+import { it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { createShellToolDefinition } from './shell.js';
+import {
+  deniedReadStore,
+  executionOverrideStore,
+  resetSandboxDeniedReadStoresForTest,
+} from '../../utils/shell/sandbox/denied-read-stores.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import type { ILoggingService, ISSHService } from '../../services/service-interfaces.js';
@@ -571,4 +576,158 @@ it.sequential('shell needsApproval classifications in planMode false', async () 
 
   expect(await tool.needsApproval({ command: 'touch /tmp/somefile_test' })).toBe(true);
   expect(await tool.needsApproval({ command: 'ls' })).toBe(false);
+});
+
+beforeEach(() => {
+  resetSandboxDeniedReadStoresForTest();
+});
+
+afterEach(() => {
+  resetSandboxDeniedReadStoresForTest();
+});
+
+it.sequential('shell needsApproval returns true when a denied-read entry is pending', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    shellSandboxRunner: createFakeSandboxRunner(),
+  });
+
+  // Without a pending denied-read, a default sandboxed command is auto-approved.
+  expect(await tool.needsApproval({ command: 'cargo build', sandbox: 'default' })).toBe(false);
+
+  // Record a denied-read for this command — now the retry must require approval.
+  deniedReadStore.record('cargo build', {
+    path: '/home/testuser/.cargo/registry/cache',
+    suggestedParent: '/home/testuser/.cargo',
+    sensitive: false,
+  });
+  expect(await tool.needsApproval({ command: 'cargo build', sandbox: 'default' })).toBe(true);
+});
+
+it.sequential('shell execute detects denied reads under home-denylist and returns retry instruction', async () => {
+  let executedCommand: string | undefined;
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({
+      'sandbox.enabled': true,
+      'sandbox.readPolicy': 'home-denylist',
+    }),
+    shellSandboxRunner: createFakeSandboxRunner({
+      annotateFailure: (_command: string, stderr: string) =>
+        `${stderr}\n<sandbox_violations>\nSandbox: cat(123) deny file-read* /home/testuser/.cargo/registry/cache\n</sandbox_violations>`,
+    }),
+    executeShellCommandImpl: async (command) => {
+      executedCommand = command;
+      return { stdout: '', stderr: 'cat: error', exitCode: 1, timedOut: false };
+    },
+  });
+
+  const output = await tool.execute({ command: 'cat ~/.cargo/registry/cache', sandbox: 'default' });
+
+  // The denied-read detector records the info and returns the retry instruction.
+  expect(output.toLowerCase()).toContain('retry');
+  expect(output).not.toContain('sandbox="unsandboxed"');
+  expect(deniedReadStore.peek('cat ~/.cargo/registry/cache')).not.toBeNull();
+  // The denied-read entry should have the resolved path and suggested parent.
+  const info = deniedReadStore.peek('cat ~/.cargo/registry/cache');
+  expect(info?.path).toBe('/home/testuser/.cargo/registry/cache');
+  expect(info?.sensitive).toBe(false);
+});
+
+it.sequential('shell execute does not detect denied reads under credential-denylist (V1 compatibility)', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({
+      'sandbox.enabled': true,
+      'sandbox.readPolicy': 'credential-denylist',
+    }),
+    shellSandboxRunner: createFakeSandboxRunner({
+      annotateFailure: (_command: string, stderr: string) =>
+        `${stderr}\n<sandbox_violations>\nSandbox: cat(123) deny file-read* /home/testuser/.cargo/registry/cache\n</sandbox_violations>`,
+    }),
+    executeShellCommandImpl: async () => ({
+      stdout: '',
+      stderr: 'cat: error',
+      exitCode: 1,
+      timedOut: false,
+    }),
+  });
+
+  const output = await tool.execute({ command: 'cat ~/.cargo/registry/cache', sandbox: 'default' });
+
+  // No denied-read detection under credential-denylist — falls through to escape instruction.
+  expect(output).toContain('sandbox="unsandboxed"');
+  expect(deniedReadStore.peek('cat ~/.cargo/registry/cache')).toBeNull();
+});
+
+it.sequential('shell execute consumes forceUnsandboxed override and skips sandbox', async () => {
+  let sandboxWrapped = false;
+  let executedCommand: string | undefined;
+  let receivedEnv: NodeJS.ProcessEnv | undefined;
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    shellSandboxRunner: createFakeSandboxRunner({
+      wrap: async () => {
+        sandboxWrapped = true;
+        return { command: 'sandboxed' };
+      },
+    }),
+    executeShellCommandImpl: async (command, options) => {
+      executedCommand = command;
+      receivedEnv = options?.env;
+      return { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
+    },
+  });
+
+  // Set a force-unsandboxed override (mocks a denied-read approval decision).
+  executionOverrideStore.set('cargo build', { forceUnsandboxed: true });
+
+  await tool.execute({ command: 'cargo build', sandbox: 'default' });
+
+  expect(sandboxWrapped).toBe(false);
+  expect(executedCommand).toBe('cargo build');
+  // Unsanctioned apps run with full env (env: undefined).
+  expect(receivedEnv).toBeUndefined();
+  // Override is consumed (one-shot).
+  expect(executionOverrideStore.consume('cargo build')).toBeNull();
+});
+
+it.sequential('shell execute consumes extraAllowRead override and merges into sandbox config', async () => {
+  let receivedAllowRead: string[] | undefined;
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({
+      'sandbox.enabled': true,
+      'sandbox.readPolicy': 'home-denylist',
+      'sandbox.allowReadExtra': ['/tmp/global-extra'],
+    }),
+    shellSandboxRunner: createFakeSandboxRunner({
+      wrap: async (_command: string, options: any) => {
+        receivedAllowRead = options.config?.filesystem?.allowRead;
+        return { command: 'sandboxed' };
+      },
+    }),
+    executeShellCommandImpl: async () => ({
+      stdout: 'ok',
+      stderr: '',
+      exitCode: 0,
+      timedOut: false,
+    }),
+  });
+
+  // Set an extraAllowRead override (mocks a denied-read "allow once" decision).
+  executionOverrideStore.set('cargo build', {
+    extraAllowRead: ['/home/testuser/.cargo'],
+  });
+
+  await tool.execute({ command: 'cargo build', sandbox: 'default' });
+
+  // The override path is merged into allowRead alongside settings + project paths.
+  expect(receivedAllowRead).toBeDefined();
+  expect(receivedAllowRead).toContain('/home/testuser/.cargo');
+  expect(receivedAllowRead).toContain('/tmp/global-extra');
+  // Override is consumed (one-shot).
+  expect(executionOverrideStore.consume('cargo build')).toBeNull();
 });

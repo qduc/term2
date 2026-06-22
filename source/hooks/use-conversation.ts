@@ -15,6 +15,7 @@ import type { BotMessage, CommandMessage, Message, UserMessage } from '../types/
 import { isBotMessage, isUserMessage } from '../types/message.js';
 import type { NormalizedUsage, UsageAccumulator } from '../utils/ai/token-usage.js';
 import type { ConversationTerminal } from '../contracts/conversation.js';
+import { DENIED_READ_APPROVE_ANSWERS } from '../contracts/conversation.js';
 import { useSetting } from './use-setting.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import {
@@ -445,7 +446,7 @@ export const useConversation = ({
         approvalAnswer = JSON.stringify(nextAnswers);
       }
 
-      if (answer === 'y') {
+      if (answer === 'y' || DENIED_READ_APPROVE_ANSWERS.has(answer as never)) {
         approvedContextRef.current = {
           callId: pendingApproval.callId,
           toolName: pendingApproval.toolName,

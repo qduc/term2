@@ -1527,7 +1527,7 @@ it.sequential('execute gap match works with normalized whitespace within lines',
 it.sequential('execute updates an existing file outside workspace when the call has been approved', async () => {
   // Use a workspace dir outside /tmp so the /tmp exception in resolveWorkspacePath
   // does not mask the workspace boundary check.
-  const workspaceDir = await fs.mkdtemp(path.join(os.homedir(), '.term2-search-replace-'));
+  const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-search-replace-'));
   const originalCwd = process.cwd;
   process.cwd = () => workspaceDir;
   try {

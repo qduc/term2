@@ -18,7 +18,7 @@ async function withTempDir(run: (dir: string) => Promise<void>) {
 // Helper to create a temp dir outside /tmp so tests can exercise parent-directory
 // traversal without the /tmp safety exception silently letting writes through.
 async function withNonTmpTempDir(run: (dir: string) => Promise<void>) {
-  const tempDir = await mkdtemp(path.join(os.homedir(), '.term2-editor-test-'));
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'term2-editor-test-'));
   try {
     await run(tempDir);
   } finally {

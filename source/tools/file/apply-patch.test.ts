@@ -355,7 +355,7 @@ it.sequential('execute: detailed error for context block mismatch', async () => 
 it.sequential('execute: create_file writes outside workspace when the call has been approved', async () => {
   // Use a workspace dir outside /tmp so the /tmp exception in resolveWorkspacePath
   // does not mask the workspace boundary check.
-  const workspaceDir = await fs.mkdtemp(path.join(os.homedir(), '.term2-apply-patch-'));
+  const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-apply-patch-'));
   const originalCwd = process.cwd;
   process.cwd = () => workspaceDir;
   try {

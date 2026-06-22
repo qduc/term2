@@ -464,7 +464,7 @@ it.sequential('needsApproval requires approval and handles error when path is ou
 it.sequential('execute writes outside workspace when the call has been approved', async () => {
   // Use a workspace dir outside /tmp so the /tmp exception in resolveWorkspacePath
   // does not mask the workspace boundary check.
-  const workspaceDir = await fs.mkdtemp(path.join(os.homedir(), '.term2-create-file-'));
+  const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-create-file-'));
   const originalCwd = process.cwd;
   process.cwd = () => workspaceDir;
   try {

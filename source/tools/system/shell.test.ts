@@ -11,6 +11,7 @@ function createFakeSandboxRunner(overrides: Partial<any> = {}): any {
   return {
     availability: async () => ({ type: 'available' }),
     wrap: async (command: string) => ({ command: `sandboxed(${command})` }),
+    cleanupAfterCommand: async () => {},
     annotateFailure: (_command: string, stderr: string) => stderr,
     ...overrides,
   };
@@ -343,10 +344,14 @@ it.sequential('shell execute wraps local default commands with the sandbox when 
   let executedCommand: string | undefined;
   let receivedEnv: NodeJS.ProcessEnv | undefined;
   let wrappedCommand: string | undefined;
+  let cleanupCalls = 0;
   const runner = createFakeSandboxRunner({
     wrap: async (command: string) => {
       wrappedCommand = command;
       return { command: `sandboxed(${command})`, diagnostics: ['sandbox active'] };
+    },
+    cleanupAfterCommand: async () => {
+      cleanupCalls += 1;
     },
   });
 
@@ -366,6 +371,7 @@ it.sequential('shell execute wraps local default commands with the sandbox when 
   expect(wrappedCommand).toBe('pwd');
   expect(executedCommand).toBe('sandboxed(pwd)');
   expect(receivedEnv).toBeTruthy();
+  expect(cleanupCalls).toBe(1);
   expect(output.includes('ok')).toBe(true);
 });
 

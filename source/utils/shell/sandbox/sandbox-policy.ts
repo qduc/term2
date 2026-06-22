@@ -21,6 +21,7 @@ export interface ShellSandboxRunner {
       signal?: AbortSignal;
     },
   ): Promise<{ command: string; diagnostics?: string[] }>;
+  cleanupAfterCommand?(): void | Promise<void>;
   annotateFailure(command: string, stderr: string): string;
 }
 

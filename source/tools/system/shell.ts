@@ -290,6 +290,7 @@ export function createShellToolDefinition(deps: {
       const previousCorrelationId = loggingService.getCorrelationId();
       const correlationId = randomUUID();
       const startedAt = Date.now();
+      let sandboxed = false;
 
       // Set correlation ID for tracking related operations
       loggingService.setCorrelationId(correlationId);
@@ -320,7 +321,6 @@ export function createShellToolDefinition(deps: {
         }
 
         let commandToRun = optimizedCommand;
-        let sandboxed = false;
         let sandboxAvailability: SandboxAvailability | undefined;
         if (
           !sshService &&
@@ -422,6 +422,9 @@ export function createShellToolDefinition(deps: {
 
         return formattedOutput.text;
       } finally {
+        if (sandboxed) {
+          await shellSandboxRunner.cleanupAfterCommand?.();
+        }
         if (previousCorrelationId) {
           loggingService.setCorrelationId(previousCorrelationId);
         } else {

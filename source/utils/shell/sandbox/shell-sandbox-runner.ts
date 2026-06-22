@@ -36,6 +36,10 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
     return { command: wrapped, diagnostics };
   }
 
+  cleanupAfterCommand(): void {
+    SandboxManager.cleanupAfterCommand();
+  }
+
   annotateFailure(command: string, stderr: string): string {
     return SandboxManager.annotateStderrWithSandboxFailures(command, stderr);
   }

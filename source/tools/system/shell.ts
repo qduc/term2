@@ -414,21 +414,19 @@ export function createShellToolDefinition(deps: {
 
         // If the sandbox denied a read under home-denylist, try to extract the denied
         // path so the agent's retry triggers a 4-option approval prompt.
-        if (sandboxViolation) {
-          const readPolicy = settingsService.get<SandboxReadPolicy>('sandbox.readPolicy');
-          if (readPolicy === 'home-denylist') {
-            const deniedInfo = detectDeniedRead(optimizedCommand, annotatedStderr);
-            if (deniedInfo) {
-              deniedReadStore.record(optimizedCommand, deniedInfo);
-              loggingService.security('Sandbox denied read; agent retry will prompt for approval', {
-                deniedPath: deniedInfo.path,
-                suggestedParent: deniedInfo.suggestedParent,
-                sensitive: deniedInfo.sensitive,
-                command: optimizedCommand.substring(0, 100),
-                correlationId,
-              });
-              return `Error: ${DETAILED_DENIED_READ_INSTRUCTION}`;
-            }
+        const readPolicy = settingsService.get<SandboxReadPolicy>('sandbox.readPolicy');
+        if (sandboxed && readPolicy === 'home-denylist') {
+          const deniedInfo = detectDeniedRead(optimizedCommand, annotatedStderr);
+          if (deniedInfo) {
+            deniedReadStore.record(optimizedCommand, deniedInfo);
+            loggingService.security('Sandbox denied read; agent retry will prompt for approval', {
+              deniedPath: deniedInfo.path,
+              suggestedParent: deniedInfo.suggestedParent,
+              sensitive: deniedInfo.sensitive,
+              command: optimizedCommand.substring(0, 100),
+              correlationId,
+            });
+            return `Error: ${DETAILED_DENIED_READ_INSTRUCTION}`;
           }
         }
 

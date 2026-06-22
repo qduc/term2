@@ -201,11 +201,29 @@ const LINUX_PERMISSION_REGEXES: readonly RegExp[] = [
   /^(\/\S+): (?:Permission denied|Operation not permitted)/m,
 ];
 
+const LINUX_HIDDEN_EXISTING_PATH_REGEXES: readonly RegExp[] = [
+  /(?:^|\n)\S*sh: line \d+: (\/[^\n:]+): No such file or directory/,
+];
+
 function extractLinuxPermissionPath(stderr: string): string | null {
   for (const regex of LINUX_PERMISSION_REGEXES) {
     const match = regex.exec(stderr);
     if (match?.[1]) {
       return resolvePathSafely(match[1].replace(/: Permission denied|: Operation not permitted$/, ''));
+    }
+  }
+  return null;
+}
+
+function extractLinuxHiddenExistingPath(stderr: string): string | null {
+  for (const regex of LINUX_HIDDEN_EXISTING_PATH_REGEXES) {
+    const match = regex.exec(stderr);
+    if (!match?.[1]) continue;
+
+    const candidate = match[1].trim().replace(/["']/g, '');
+    const normalized = path.resolve(candidate);
+    if ((normalized === home || normalized.startsWith(home + path.sep)) && fs.existsSync(normalized)) {
+      return resolvePathSafely(normalized);
     }
   }
   return null;
@@ -246,7 +264,7 @@ function hasNetworkOnlyDenial(stderr: string): boolean {
 export function detectDeniedRead(_command: string, stderr: string): DeniedReadInfo | null {
   // macOS structured violations block takes precedence.
   const macosPath = extractMacosViolationPath(stderr);
-  const candidate = macosPath ?? extractLinuxPermissionPath(stderr);
+  const candidate = macosPath ?? extractLinuxPermissionPath(stderr) ?? extractLinuxHiddenExistingPath(stderr);
   if (!candidate) {
     // If the only denials are network, this is not a read denial.
     if (hasNetworkOnlyDenial(stderr)) return null;

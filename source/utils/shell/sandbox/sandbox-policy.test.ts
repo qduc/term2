@@ -81,6 +81,9 @@ it('createSandboxRuntimeConfig denies every present secret-shaped environment va
 it('createSandboxRuntimeConfig denies home and named system reads with workspace carve-outs for home-denylist', () => {
   const home = os.homedir();
   const workspaceRoot = fs.realpathSync(process.cwd());
+  const appCacheDir = path.join(home, '.cache', 'term2-nodejs');
+  const rtkConfigDir = path.join(home, '.config', 'rtk');
+  const rtkDataDir = path.join(home, '.local', 'share', 'rtk');
   const config = createSandboxRuntimeConfig({
     readPolicy: 'home-denylist',
     allowReadExtra: ['~/.local/share/pnpm/store'],
@@ -91,6 +94,9 @@ it('createSandboxRuntimeConfig denies home and named system reads with workspace
     expect.arrayContaining([
       workspaceRoot,
       SANDBOX_TEMP_DIR,
+      appCacheDir,
+      rtkConfigDir,
+      rtkDataDir,
       path.join(home, '.local', 'share', 'pnpm', 'store'),
       '/usr',
       '/bin',

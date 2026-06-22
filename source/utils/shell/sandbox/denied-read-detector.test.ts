@@ -59,6 +59,23 @@ describe('detectDeniedRead', () => {
     expect(info!.path).toBe('/home/user/.cargo/registry');
   });
 
+  it('extracts an existing home path hidden as a bash no-such-file error', () => {
+    const target = path.join(home, '.cache');
+    const stderr = `/usr/bin/bash: line 1: ${target}: No such file or directory`;
+    const info = detectDeniedRead(target, stderr);
+
+    expect(info).not.toBeNull();
+    expect(info!.path).toBe(fs.realpathSync(target));
+  });
+
+  it('does not treat a true missing path as a denied read', () => {
+    const target = path.join(home, '.cache', 'term2-definitely-missing-file');
+    const stderr = `/usr/bin/bash: line 1: ${target}: No such file or directory`;
+    const info = detectDeniedRead(target, stderr);
+
+    expect(info).toBeNull();
+  });
+
   it('returns null when no denied path can be extracted', () => {
     const stderr = 'some unrelated error output';
     const info = detectDeniedRead('echo hi', stderr);

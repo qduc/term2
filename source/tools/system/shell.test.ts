@@ -635,6 +635,32 @@ it.sequential('shell execute detects denied reads under home-denylist and return
   expect(info?.sensitive).toBe(false);
 });
 
+it.sequential(
+  'shell execute detects hidden existing home paths reported as no-such-file under home-denylist',
+  async () => {
+    const target = path.join(os.homedir(), '.cache');
+    const tool = createShellToolDefinition({
+      loggingService: createNoopLogger(),
+      settingsService: createMockSettingsService({
+        'sandbox.enabled': true,
+        'sandbox.readPolicy': 'home-denylist',
+      }),
+      shellSandboxRunner: createFakeSandboxRunner(),
+      executeShellCommandImpl: async () => ({
+        stdout: '',
+        stderr: `/usr/bin/bash: line 1: ${target}: No such file or directory`,
+        exitCode: 127,
+        timedOut: false,
+      }),
+    });
+
+    const output = await tool.execute({ command: target, sandbox: 'default' });
+
+    expect(output.toLowerCase()).toContain('retry');
+    expect(deniedReadStore.peek(target)).not.toBeNull();
+  },
+);
+
 it.sequential('shell execute does not detect denied reads under credential-denylist (V1 compatibility)', async () => {
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),

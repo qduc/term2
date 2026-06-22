@@ -52,6 +52,9 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
   const readPolicy = options.readPolicy ?? 'credential-denylist';
   const workspaceRoot = fs.realpathSync(options.cwd ?? process.cwd());
   const tmpDir = SANDBOX_TEMP_DIR;
+  const appCacheDir = path.join(home, '.cache', 'term2-nodejs');
+  const rtkConfigDir = path.join(home, '.config', 'rtk');
+  const rtkDataDir = path.join(home, '.local', 'share', 'rtk');
   const credentialFiles = [
     path.join(home, '.ssh'),
     path.join(home, '.aws'),
@@ -100,6 +103,9 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
       ? [
           workspaceRoot,
           tmpDir,
+          appCacheDir,
+          rtkConfigDir,
+          rtkDataDir,
           ...allowReadExtra,
           '/usr',
           '/bin',
@@ -126,7 +132,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
       ...(allowRead ? { allowRead } : {}),
       allowWrite: [workspaceRoot, tmpDir],
       denyWrite: [],
-      allowGitConfig: false,
+      allowGitConfig: true,
     },
     credentials: {
       files: credentialFiles.map((filePath) => ({ path: filePath, mode: 'deny' as const })),

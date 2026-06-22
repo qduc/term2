@@ -2,6 +2,7 @@ import { it, expect } from 'vitest';
 import {
   ToolExecutionLedger,
   reconcileHistoryWithToolLedger,
+  dropUnpairedFunctionCalls,
   type SavedToolExecution,
 } from './tool-execution-ledger.js';
 
@@ -421,4 +422,44 @@ it('reconcileHistoryWithToolLedger does NOT count started or approval_required e
   // Only the 'aborted' entry should be counted as dropped, not 'started' or 'approval_required'
   expect(result.droppedIncompleteCalls).toBe(1);
   expect(result.addedCompletedPairs).toBe(0);
+});
+
+it('dropUnpairedFunctionCalls removes function_calls without a matching output', () => {
+  const history = [
+    { role: 'user' as const, type: 'message', content: 'do work' },
+    { type: 'function_call', id: 'fc_1', call_id: 'call-paired', name: 'shell', arguments: '{}' },
+    { type: 'function_call_output', call_id: 'call-paired', output: 'ok' },
+    { type: 'function_call', id: 'fc_2', call_id: 'call-orphan', name: 'read_file', arguments: '{}' },
+    { type: 'function_call', id: 'fc_3', call_id: 'call-orphan-2', name: 'shell', arguments: '{}' },
+  ];
+
+  const result = dropUnpairedFunctionCalls(history);
+  const callIds = result.map((item) => (item as { call_id?: string }).call_id).filter(Boolean);
+  expect(callIds).toEqual(['call-paired', 'call-paired']);
+  expect(result.length).toBe(3);
+});
+
+it('dropUnpairedFunctionCalls leaves non-tool items untouched', () => {
+  const history = [
+    { role: 'user' as const, type: 'message', content: 'hi' },
+    { type: 'reasoning', id: 'rs_1', summary: [] },
+    { type: 'function_call', id: 'fc_1', call_id: 'call-orphan', name: 'shell', arguments: '{}' },
+    { type: 'message', role: 'assistant' as const, content: [{ type: 'output_text', text: 'done' }] },
+  ];
+
+  const result = dropUnpairedFunctionCalls(history);
+  expect(result.length).toBe(3);
+  expect((result[0] as { content: string }).content).toBe('hi');
+  expect((result[1] as { type: string }).type).toBe('reasoning');
+  expect((result[2] as { role: string }).role).toBe('assistant');
+});
+
+it('dropUnpairedFunctionCalls is a no-op when all calls have outputs', () => {
+  const history = [
+    { type: 'function_call', id: 'fc_1', call_id: 'call-a', name: 'shell', arguments: '{}' },
+    { type: 'function_call_output', call_id: 'call-a', output: 'result-a' },
+  ];
+
+  const result = dropUnpairedFunctionCalls(history);
+  expect(result).toBe(history);
 });

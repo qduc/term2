@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import { ConversationStore } from '../conversation/conversation-store.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
+import type { AgentInputItem } from '@openai/agents';
 
 it('dedupeToolStarted scopes subagent starts by agent and call ID', () => {
   const tracker = new SessionToolTracker(new ConversationStore());
@@ -59,4 +60,46 @@ it('activeCallIdsForCurrentTurn only returns entries for the current turn across
   });
 
   expect(tracker.activeCallIdsForCurrentTurn()).toEqual(['call-now']);
+});
+
+it('recoverApprovedResultsFromState recovers all generated tool outputs, not just expected call IDs', () => {
+  const store = new ConversationStore();
+  const tracker = new SessionToolTracker(store);
+  tracker.beginTurn();
+
+  // Simulate function calls observed during streaming (onFunctionCallItem).
+  tracker.recordFunctionCall({
+    rawItem: { type: 'function_call', id: 'fc_1', callId: 'call-a', name: 'shell', arguments: '{}' },
+  });
+  tracker.recordFunctionCall({
+    rawItem: { type: 'function_call', id: 'fc_2', callId: 'call-b', name: 'read_file', arguments: '{}' },
+  });
+
+  // Store only has the user message — in delta/chaining mode the turn's tool
+  // outputs never reach the store (finalize is partial while approvals pend).
+  store.addUserMessage('do the thing');
+
+  // _generatedItems carries outputs for BOTH calls, but expectedCallIds only
+  // names the latest delta's call (the one being submitted when transport failed).
+  const runState = {
+    _generatedItems: [
+      { type: 'function_call_output', callId: 'call-a', output: 'result-a' },
+      { type: 'function_call_output', callId: 'call-b', output: 'result-b' },
+    ],
+  };
+
+  tracker.recoverApprovedResultsFromState(runState, ['call-b']);
+
+  const history = tracker.getReconciledHistory() as AgentInputItem[];
+  const outputs = history.filter((item) => {
+    const type = (item as { type?: string }).type;
+    return type === 'function_call_output' || type === 'function_call_result';
+  });
+  const callIds = outputs.map(
+    (item) => (item as { callId?: string; call_id?: string }).callId ?? (item as { call_id?: string }).call_id,
+  );
+
+  // Both calls' outputs must be recovered, not just call-b.
+  expect(callIds).toContain('call-a');
+  expect(callIds).toContain('call-b');
 });

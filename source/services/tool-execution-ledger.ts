@@ -382,6 +382,40 @@ export class ToolExecutionLedger {
 const createRecoveryMessage = (completedPairs: number, incompleteCalls: number): string =>
   `Recovered ${completedPairs} completed tool call/result pair(s) from a previously interrupted turn. Dropped ${incompleteCalls} incomplete tool call(s); do not assume dropped calls completed.`;
 
+/**
+ * Drop function_call items that have no paired function_call_output in the
+ * history. The Responses API rejects stateless (no previous_response_id)
+ * inputs containing an unpaired function_call with HTTP 400
+ * "No tool output found for function call". This is a safety net for the
+ * stateless full-history fallback path: when recovery cannot find a tool's
+ * output (e.g. the output was an in-flight delta lost to a transport
+ * failure), dropping the orphaned call keeps the API happy rather than
+ * synthesizing a misleading placeholder result.
+ *
+ * Returns the same array reference when no changes are needed.
+ */
+export function dropUnpairedFunctionCalls(history: readonly unknown[]): unknown[] {
+  const callIdsWithResult = new Set<string>();
+  for (const item of history) {
+    if (isResultHistoryItem(item)) {
+      const callId = callIdOf(item);
+      if (callId) {
+        callIdsWithResult.add(callId);
+      }
+    }
+  }
+
+  const filtered = history.filter((item) => {
+    if (typeOf(item) !== 'function_call') {
+      return true;
+    }
+    const callId = callIdOf(item);
+    return !callId || callIdsWithResult.has(callId);
+  });
+
+  return filtered.length === history.length ? (history as unknown[]) : filtered;
+}
+
 export function reconcileHistoryWithToolLedger(
   history: readonly unknown[],
   ledger: readonly SavedToolExecution[] | undefined,

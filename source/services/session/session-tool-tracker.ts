@@ -161,12 +161,25 @@ export class SessionToolTracker {
 
   /**
    * Recover approved tool results from stream state.
+   *
+   * In chaining/delta mode the conversation store never receives
+   * function_call_output items (they are server-managed deltas). They live
+   * transiently in the SDK RunState's _generatedItems. When a transport
+   * failure triggers a stateless full-history retry, this method bridges
+   * those outputs from _generatedItems into the ledger and store.
+   *
+   * All function_call_output items in _generatedItems are recovered, not just
+   * those matching expectedCallIds: a single failure can leave multiple
+   * cycles' outputs un-transferred, and filtering by expectedCallIds (the
+   * latest delta's calls) would drop earlier cycles' outputs — leaving
+   * unpaired function_calls that the Responses API rejects with
+   * "No tool output found for function call".
    */
   recoverApprovedResultsFromState(state: unknown, expectedCallIds: readonly string[]): void {
-    const callIds = new Set(
-      expectedCallIds.filter((callId): callId is string => typeof callId === 'string' && callId.length > 0),
-    );
-    if (callIds.size === 0) {
+    // expectedCallIds is retained as a guard: when empty there are no pending
+    // tool results to recover, so skip the work entirely.
+    const hasExpected = expectedCallIds.some((callId) => typeof callId === 'string' && callId.length > 0);
+    if (!hasExpected) {
       return;
     }
 
@@ -174,7 +187,7 @@ export class SessionToolTracker {
     let recoveredAny = false;
     for (const item of generatedItems) {
       const callId = callIdOf(item);
-      if (!callId || !callIds.has(callId)) {
+      if (!callId) {
         continue;
       }
       this.toolLedger.recordFunctionResult(item);

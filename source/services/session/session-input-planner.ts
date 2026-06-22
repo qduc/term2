@@ -8,6 +8,7 @@ import { LargeUncachedInputGuard, type LargeUncachedInputDecision } from '../lar
 import { getProvider } from '../../providers/index.js';
 import { getMethod } from '../interruption-info.js';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
+import { dropUnpairedFunctionCalls } from '../tool-execution-ledger.js';
 
 const supportsConversationChaining = (providerId: string): boolean => {
   const providerDef = getProvider(providerId);
@@ -141,8 +142,18 @@ export class SessionInputPlanner {
     const latestInput = outgoingHistory[outgoingHistory.length - 1] ?? effectiveTurn.text;
     const chainedInput = effectiveTurn.images?.length ? latestInput : effectiveTurn.text;
 
+    // Stateless (full-history) inputs must be self-contained: the Responses
+    // API rejects a previous_response_id-less input containing a function_call
+    // without a paired output. Recovery may fail to find every in-flight tool
+    // output (lost deltas), so drop orphaned calls as a last-resort safety net.
+    const statelessHistory = useChaining ? null : dropUnpairedFunctionCalls(outgoingHistory);
+
     return {
-      streamInput: useChaining ? (typeof chainedInput === 'string' ? chainedInput : [chainedInput]) : outgoingHistory,
+      streamInput: useChaining
+        ? typeof chainedInput === 'string'
+          ? chainedInput
+          : [chainedInput]
+        : (statelessHistory as AgentInputItem[]),
       inputSurgeKind: useChaining ? 'delta' : 'full_history',
       effectiveTurn,
     };

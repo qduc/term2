@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Agent, RunContext, Runner, RunState, tool as createTool } from '@openai/agents';
@@ -47,10 +48,12 @@ function createRunner(options: {
   model: Model;
   executionContext?: ExecutionContext;
   onEvent?: (event: ConversationEvent) => void;
+  sandboxEnabled?: boolean;
 }): NestedSubagentRunner {
   const settings = createMockSettings({
     'agent.model': 'scripted-model',
     'agent.provider': options.providerId,
+    ...(options.sandboxEnabled !== undefined ? { 'sandbox.enabled': options.sandboxEnabled } : {}),
   });
   const logger = createMockLogger();
   const sessionContextService = createSessionContextService() as any;
@@ -645,7 +648,7 @@ it.sequential('NestedSubagentRunner.runAsTool cancels when request.signal aborts
 
 it.sequential('NestedSubagentRunner resumes a real Agent.asTool run after nested approval', async () => {
   const providerId = `nested-approval-${randomUUID()}`;
-  const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-nested-approval-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-nested-approval-'));
 
   // cleanup handled at end of test via try/finally
   const events: ConversationEvent[] = [];
@@ -653,6 +656,7 @@ it.sequential('NestedSubagentRunner resumes a real Agent.asTool run after nested
   const runner = createRunner({
     providerId,
     model,
+    sandboxEnabled: false,
     executionContext: {
       getCwd: () => tmpDir,
       isRemote: () => false,
@@ -701,13 +705,14 @@ it.sequential('NestedSubagentRunner rejects malformed real Agent.asTool resume s
 
 it.sequential('NestedSubagentRunner does not resume approved nested work after parent cancellation', async () => {
   const providerId = `nested-cancelled-resume-${randomUUID()}`;
-  const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-nested-cancelled-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-nested-cancelled-'));
 
   // cleanup handled at end of test via try/finally
   const model = scriptedApprovalModel();
   const runner = createRunner({
     providerId,
     model,
+    sandboxEnabled: false,
     executionContext: {
       getCwd: () => tmpDir,
       isRemote: () => false,

@@ -663,6 +663,7 @@ describe('worker role agent tool caching', () => {
         settings: createMockSettings({
           'agent.model': 'mock-model',
           'agent.provider': boundaryProviderId,
+          'sandbox.enabled': false,
         }),
         executionContext: createMockExecutionContext(tmpDir),
       });

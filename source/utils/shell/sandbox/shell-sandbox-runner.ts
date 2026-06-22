@@ -50,7 +50,7 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
         await SandboxManager.reset();
       }
       process.env.CLAUDE_CODE_TMPDIR = SANDBOX_TEMP_DIR;
-      await SandboxManager.initialize(createSandboxRuntimeConfig(cwd));
+      await SandboxManager.initialize(createSandboxRuntimeConfig());
       this.#initializedForCwd = cwd;
       this.#initializationFailure = undefined;
     } catch (error) {

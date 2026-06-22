@@ -24,8 +24,7 @@ export interface ShellSandboxRunner {
   annotateFailure(command: string, stderr: string): string;
 }
 
-export function createSandboxRuntimeConfig(cwd: string): SandboxRuntimeConfig {
-  const workspace = path.resolve(cwd);
+export function createSandboxRuntimeConfig(): SandboxRuntimeConfig {
   const home = os.homedir();
   const tmpDir = SANDBOX_TEMP_DIR;
   const credentialFiles = [
@@ -60,7 +59,7 @@ export function createSandboxRuntimeConfig(cwd: string): SandboxRuntimeConfig {
     },
     filesystem: {
       denyRead: credentialFiles,
-      allowWrite: [workspace, tmpDir],
+      allowWrite: ['.', tmpDir],
       denyWrite: [],
       allowGitConfig: false,
     },

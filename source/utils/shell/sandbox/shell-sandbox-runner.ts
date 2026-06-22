@@ -1,4 +1,5 @@
 import { SandboxManager } from '@anthropic-ai/sandbox-runtime';
+import { SANDBOX_TEMP_DIR } from '../temp-dir.js';
 import { createSandboxRuntimeConfig, type SandboxAvailability, type ShellSandboxRunner } from './sandbox-policy.js';
 
 export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
@@ -48,6 +49,7 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
       if (this.#initializedForCwd) {
         await SandboxManager.reset();
       }
+      process.env.CLAUDE_CODE_TMPDIR = SANDBOX_TEMP_DIR;
       await SandboxManager.initialize(createSandboxRuntimeConfig(cwd));
       this.#initializedForCwd = cwd;
       this.#initializationFailure = undefined;

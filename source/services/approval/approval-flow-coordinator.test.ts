@@ -440,6 +440,18 @@ it('prepareContinuation allow-remember persists path to project store and approv
   expect(getProjectAllowReadStore(process.cwd()).load()).toEqual([NON_SENSITIVE_SUGGESTED]);
 });
 
+it('prepareContinuation denied-read approval without staged metadata approves without sandbox override', () => {
+  const { coord, getApproved } = setupDeniedReadPending(makeDeniedReadInfo());
+  deniedReadStore.consumeStaged(SHELL_COMMAND);
+
+  const plan = coord.prepareContinuation('allow-remember', undefined);
+
+  expect(plan).toBeTruthy();
+  expect(getApproved()).toBe(true);
+  expect(executionOverrideStore.consume(SHELL_COMMAND)).toBeNull();
+  expect(getProjectAllowReadStore(process.cwd()).load()).toEqual([]);
+});
+
 it('prepareContinuation deny calls state.reject and sets no override', () => {
   const { coord, getApproved, getRejected } = setupDeniedReadPending(makeDeniedReadInfo());
   const plan = coord.prepareContinuation('deny', undefined);

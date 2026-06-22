@@ -10,18 +10,25 @@ import { clearToolFormatters, registerToolFormatters } from '../../tools/command
 import { formatShellCommandMessage } from '../../tools/system/shell.js';
 import { clearApprovalRejectionMarkers } from '../../utils/streaming/extract-command-messages.js';
 import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
+import {
+  deniedReadStore,
+  executionOverrideStore,
+  resetSandboxDeniedReadStoresForTest,
+} from '../../utils/shell/sandbox/denied-read-stores.js';
 
 beforeEach(() => {
   clearToolFormatters();
   registerToolFormatters([{ name: 'shell', formatCommandMessage: formatShellCommandMessage }]);
   clearApprovalRejectionMarkers();
   toolApprovalPolicyRegistry.clear();
+  resetSandboxDeniedReadStoresForTest();
 });
 
 afterEach(() => {
   clearToolFormatters();
   clearApprovalRejectionMarkers();
   toolApprovalPolicyRegistry.clear();
+  resetSandboxDeniedReadStoresForTest();
 });
 
 const logger = new LoggingService({ disableLogging: true });
@@ -220,6 +227,46 @@ it('unsandboxed shell is not auto-approved by the policy registry', async () => 
   if (outcome.kind === 'approval_required') {
     expect(outcome.result.approval.callId).toBe('shell-unsandboxed');
   }
+});
+
+it('denied-read approval metadata is staged so approval sets the retry override', async () => {
+  const command = 'cargo build';
+  const suggestedParent = '/home/testuser/.cargo';
+  const deps = makeDeps('off');
+  let approved = false;
+  deniedReadStore.record(command, {
+    path: '/home/testuser/.cargo/registry/cache/index',
+    suggestedParent,
+    sensitive: false,
+  });
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'shell',
+        callId: 'shell-denied-read',
+        arguments: { command },
+        agent: { name: 'TestAgent' },
+      },
+    ],
+    state: { id: 'state-1', approve: () => (approved = true) },
+  });
+
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
+
+  expect(outcome.kind).toBe('approval_required');
+  if (outcome.kind === 'approval_required') {
+    expect(outcome.result.approval.deniedRead).toEqual({
+      deniedPath: '/home/testuser/.cargo/registry/cache/index',
+      suggestedParent,
+      sensitive: false,
+      command,
+    });
+  }
+
+  deps.approvalFlow.prepareContinuation('allow-once', undefined);
+
+  expect(approved).toBe(true);
+  expect(executionOverrideStore.consume(command)).toEqual({ extraAllowRead: [suggestedParent] });
 });
 
 it('approval_required records the matching nested subagent owner', async () => {

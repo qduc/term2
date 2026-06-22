@@ -14,12 +14,18 @@ export interface LLMAdvisory {
   isError?: boolean;
 }
 
+export type DeniedReadApproveAnswer = 'allow-once' | 'allow-remember' | 'unsandboxed-once';
+
 /** Answer strings for the denied-read approval variant (see prepareContinuation). */
-export const DENIED_READ_APPROVE_ANSWERS: ReadonlySet<string> = new Set([
+export const DENIED_READ_APPROVE_ANSWERS: ReadonlySet<DeniedReadApproveAnswer> = new Set<DeniedReadApproveAnswer>([
   'allow-once',
   'allow-remember',
   'unsandboxed-once',
 ]);
+
+export function isDeniedReadApproveAnswer(answer: string | undefined): answer is DeniedReadApproveAnswer {
+  return typeof answer === 'string' && DENIED_READ_APPROVE_ANSWERS.has(answer as DeniedReadApproveAnswer);
+}
 /** The deny answer for the denied-read variant (treated as a rejection). */
 export const DENIED_READ_DENY_ANSWER = 'deny';
 

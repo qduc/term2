@@ -14,6 +14,7 @@ import {
   executionOverrideStore,
   getProjectAllowReadStore,
 } from '../../utils/shell/sandbox/denied-read-stores.js';
+import { isDeniedReadApproveAnswer } from '../../contracts/conversation.js';
 
 const noop = () => undefined;
 
@@ -119,7 +120,7 @@ export class ApprovalFlowCoordinator {
     let toolStartedEvent: ConversationEvent | undefined;
 
     // Denied-read decision values require approval (SDK resumes) plus an execution override.
-    const deniedReadDecision = answer === 'allow-once' || answer === 'allow-remember' || answer === 'unsandboxed-once';
+    const deniedReadDecision = isDeniedReadApproveAnswer(answer);
     // The 'deny' decision is treated as a rejection.
     const isApproved = answer === 'y' || deniedReadDecision;
 

@@ -4,7 +4,7 @@ import type { ILoggingService } from '../../../services/service-interfaces.js';
 import type { DeniedReadInfo } from './denied-read-detector.js';
 
 /**
- * Per-callId execution override set at approval time and consumed by `execute` on resume.
+ * Per-command execution override set at approval time and consumed by `execute` on resume.
  * - `extraAllowRead`: merged into allowRead for this one execution only.
  * - `forceUnsandboxed`: run this one call without the sandbox (approved escape).
  */
@@ -18,14 +18,14 @@ export interface ExecutionOverride {
  *
  * Lifecycle of an entry:
  * 1. `execute` detects a denied read → `record(command, info)`.
- * 2. The agent retries the same command; `needsApproval` calls `consume(command)` → returns the info
- *    (so the approval gate fires), then `stageForDescriptor(callId, info)` re-stages it so the
+ * 2. The agent retries the same command; the approval-result builder calls `consume(command)` → returns the info
+ *    (so the approval gate fires), then `stageForDescriptor(command, info)` re-stages it so the
  *    approval-result builder can attach `deniedRead` metadata to the ApprovalDescriptor.
- * 3. `consumeStaged(callId)` is called by the result builder to attach and clear.
+ * 3. `consumeStaged(command)` is called by the approval flow to set the retry override and clear.
  */
 export class DeniedReadStore {
   #byCommand = new Map<string, DeniedReadInfo>();
-  #stagedByCallId = new Map<string, DeniedReadInfo>();
+  #stagedByDescriptorKey = new Map<string, DeniedReadInfo>();
 
   record(command: string, info: DeniedReadInfo): void {
     this.#byCommand.set(command, info);
@@ -48,14 +48,14 @@ export class DeniedReadStore {
     return this.#byCommand.has(command);
   }
 
-  stageForDescriptor(callId: string, info: DeniedReadInfo): void {
-    this.#stagedByCallId.set(callId, info);
+  stageForDescriptor(descriptorKey: string, info: DeniedReadInfo): void {
+    this.#stagedByDescriptorKey.set(descriptorKey, info);
   }
 
-  consumeStaged(callId: string): DeniedReadInfo | null {
-    const info = this.#stagedByCallId.get(callId);
+  consumeStaged(descriptorKey: string): DeniedReadInfo | null {
+    const info = this.#stagedByDescriptorKey.get(descriptorKey);
     if (info) {
-      this.#stagedByCallId.delete(callId);
+      this.#stagedByDescriptorKey.delete(descriptorKey);
       return info;
     }
     return null;
@@ -63,32 +63,32 @@ export class DeniedReadStore {
 
   clear(): void {
     this.#byCommand.clear();
-    this.#stagedByCallId.clear();
+    this.#stagedByDescriptorKey.clear();
   }
 }
 
 /**
- * In-memory, per-callId store of execution overrides. Set at approval-decision time;
+ * In-memory, per-command store of execution overrides. Set at approval-decision time;
  * consumed and cleared by `execute` when the SDK resumes the approved tool call.
  */
 export class ExecutionOverrideStore {
-  #byCallId = new Map<string, ExecutionOverride>();
+  #byCommand = new Map<string, ExecutionOverride>();
 
-  set(callId: string, override: ExecutionOverride): void {
-    this.#byCallId.set(callId, override);
+  set(command: string, override: ExecutionOverride): void {
+    this.#byCommand.set(command, override);
   }
 
-  consume(callId: string): ExecutionOverride | null {
-    const override = this.#byCallId.get(callId);
+  consume(command: string): ExecutionOverride | null {
+    const override = this.#byCommand.get(command);
     if (override) {
-      this.#byCallId.delete(callId);
+      this.#byCommand.delete(command);
       return override;
     }
     return null;
   }
 
   clear(): void {
-    this.#byCallId.clear();
+    this.#byCommand.clear();
   }
 }
 
@@ -181,7 +181,7 @@ let projectAllowReadStoreRoot: string | null = null;
 /**
  * Returns the project-scoped allow-read store for the given workspace root.
  * The store is lazily created and re-created if the workspace root changes
-n * (unlikely in practice — the launch cwd is stable for the process).
+ * (unlikely in practice — the launch cwd is stable for the process).
  */
 export function getProjectAllowReadStore(workspaceRoot: string): ProjectSandboxAllowReadStore {
   if (!projectAllowReadStore || projectAllowReadStoreRoot !== workspaceRoot) {

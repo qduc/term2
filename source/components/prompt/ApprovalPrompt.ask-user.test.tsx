@@ -53,6 +53,23 @@ it.sequential('ApprovalPrompt renders ask_user question and options', async () =
   expect(output.includes('Approve')).toBe(false);
 });
 
+it.sequential('ApprovalPrompt shows unsandboxed shell approvals in the header', async () => {
+  const approval: ApprovalDescriptor = {
+    agentName: 'Agent',
+    toolName: 'shell',
+    argumentsText: JSON.stringify({ command: 'curl https://example.com', sandbox: 'unsandboxed' }),
+    rawInterruption: { type: 'shell' },
+  };
+
+  const { lastFrame } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} />,
+  );
+
+  const output = lastFrame() ?? '';
+  expect(output.includes('Agent wants to run in unsandboxed mode:')).toBe(true);
+  expect(output.includes('curl https://example.com')).toBe(true);
+});
+
 it.sequential('ApprovalPrompt ask_user navigation wraps around menu items', async () => {
   const { lastFrame, stdin } = await renderInAct(
     <ApprovalPrompt approval={baseApproval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,

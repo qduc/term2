@@ -48,6 +48,11 @@ type ShellArgs = {
   max_output_length?: number;
 };
 
+type ShellApprovalArgs = ShellArgs & {
+  command?: string;
+  sandbox?: 'default' | 'unsandboxed';
+};
+
 type SearchReplaceArgs = {
   path: string;
   replacements: {
@@ -206,6 +211,19 @@ const ApprovalPrompt: FC<Props> = ({
   const askUserOptions = currentQuestionItem?.options ?? [];
   const askUserOptionLabels = askUserOptions.map((option) => option.label);
   const hasMultipleQuestions = questionsList.length > 1;
+
+  const shellApprovalArgs = React.useMemo<ShellApprovalArgs | null>(() => {
+    if (approval.toolName !== 'shell') {
+      return null;
+    }
+
+    try {
+      return JSON.parse(approval.argumentsText) as ShellApprovalArgs;
+    } catch {
+      return null;
+    }
+  }, [approval.argumentsText, approval.toolName]);
+  const isUnsandboxedShellApproval = shellApprovalArgs?.sandbox === 'unsandboxed';
 
   const askUserMenuItems = React.useMemo(() => {
     if (!isAskUser) {
@@ -518,7 +536,9 @@ const ApprovalPrompt: FC<Props> = ({
   return (
     <Box flexDirection="column">
       <Text color="yellow">
-        {approval.agentName} wants to run: <Text bold>{approval.toolName}</Text>
+        {approval.agentName}
+        {isUnsandboxedShellApproval ? ' wants to run in unsandboxed mode: ' : ' wants to run: '}
+        <Text bold>{approval.toolName}</Text>
       </Text>
       {content}
       {approval.llmAdvisory && <LLMAdvisory advisory={approval.llmAdvisory} />}

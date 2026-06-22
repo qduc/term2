@@ -237,6 +237,7 @@ describe('explorer role', () => {
     const settings = createMockSettings({
       'agent.model': MODEL_MOCK,
       'agent.provider': explorerProviderId,
+      'sandbox.enabled': false,
     });
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
@@ -257,6 +258,7 @@ describe('explorer role', () => {
     const settings = createMockSettings({
       'agent.model': MODEL_MOCK,
       'agent.provider': explorerProviderId,
+      'sandbox.enabled': false,
     });
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
@@ -323,6 +325,7 @@ describe('explorer role', () => {
     const settings = createMockSettings({
       'agent.model': MODEL_MOCK,
       'agent.provider': explorerProviderId,
+      'sandbox.enabled': false,
     });
     const manager = new TestSubagentManager({
       logger: createMockLogger(),

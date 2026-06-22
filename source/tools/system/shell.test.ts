@@ -50,7 +50,7 @@ it.sequential('shell execute appends spill-file guidance when output is truncate
 
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
-    settingsService: createMockSettingsService(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
     executeShellCommandImpl: async () => ({
       stdout: longStdout,
       stderr: '',
@@ -122,7 +122,7 @@ it.sequential('shell execute restores previous correlation id after command exec
 
   const tool = createShellToolDefinition({
     loggingService,
-    settingsService: createMockSettingsService(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
   });
 
   const output = await tool.execute({
@@ -158,7 +158,7 @@ it.sequential('shell execute clears correlation id when no previous correlation 
 
   const tool = createShellToolDefinition({
     loggingService,
-    settingsService: createMockSettingsService(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
   });
 
   await tool.execute({
@@ -175,7 +175,7 @@ it.sequential('shell execute stops a running command when the tool invocation is
   const abortController = new AbortController();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
-    settingsService: createMockSettingsService(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
   });
 
   const outputPromise = tool.execute(
@@ -200,7 +200,7 @@ it.sequential('shell execute does not install RTK for unsupported commands', asy
 
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
-    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true }),
+    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true, 'sandbox.enabled': false }),
     rtkInstaller: async () => {
       installCalled = true;
       return '/tmp/rtk';
@@ -230,7 +230,7 @@ it.sequential('shell execute wraps eligible RTK commands', async () => {
         }
       },
     }),
-    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true }),
+    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true, 'sandbox.enabled': false }),
     rtkInstaller: async () => {
       installCalled = true;
       return rtkPath;
@@ -344,10 +344,14 @@ it.sequential('shell execute wraps local default commands with the sandbox when 
   let executedCommand: string | undefined;
   let receivedEnv: NodeJS.ProcessEnv | undefined;
   let wrappedCommand: string | undefined;
+  let receivedReadPolicy: string | undefined;
+  let receivedAllowReadExtra: string[] | undefined;
   let cleanupCalls = 0;
   const runner = createFakeSandboxRunner({
-    wrap: async (command: string) => {
+    wrap: async (command: string, options: any) => {
       wrappedCommand = command;
+      receivedReadPolicy = options.config?.filesystem?.allowRead ? 'home-denylist' : 'credential-denylist';
+      receivedAllowReadExtra = options.config?.filesystem?.allowRead;
       return { command: `sandboxed(${command})`, diagnostics: ['sandbox active'] };
     },
     cleanupAfterCommand: async () => {
@@ -357,7 +361,11 @@ it.sequential('shell execute wraps local default commands with the sandbox when 
 
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
-    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    settingsService: createMockSettingsService({
+      'sandbox.enabled': true,
+      'sandbox.readPolicy': 'home-denylist',
+      'sandbox.allowReadExtra': ['/tmp/tool-cache'],
+    }),
     shellSandboxRunner: runner,
     executeShellCommandImpl: async (command, options) => {
       executedCommand = command;
@@ -369,6 +377,8 @@ it.sequential('shell execute wraps local default commands with the sandbox when 
   const output = await tool.execute({ command: 'pwd', sandbox: 'default' });
 
   expect(wrappedCommand).toBe('pwd');
+  expect(receivedReadPolicy).toBe('home-denylist');
+  expect(receivedAllowReadExtra).toContain('/tmp/tool-cache');
   expect(executedCommand).toBe('sandboxed(pwd)');
   expect(receivedEnv).toBeTruthy();
   expect(cleanupCalls).toBe(1);
@@ -434,7 +444,19 @@ it.sequential('shell execute bypasses sandbox when disabled', async () => {
   expect(executedCommand).toBe('pwd');
 });
 
-it.sequential('shell execute falls back when sandbox is unavailable', async () => {
+it('shell needsApproval prompts for default commands when sandbox is unavailable', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    shellSandboxRunner: createFakeSandboxRunner({
+      availability: async () => ({ type: 'unsupported_platform', reason: 'not supported' }),
+    }),
+  });
+
+  expect(await tool.needsApproval({ command: 'pwd', sandbox: 'default' })).toBe(true);
+});
+
+it.sequential('shell execute runs unsandboxed when sandbox is unavailable after approval', async () => {
   let sandboxWrapped = false;
   let executedCommand: string | undefined;
   const tool = createShellToolDefinition({
@@ -459,7 +481,7 @@ it.sequential('shell execute falls back when sandbox is unavailable', async () =
   expect(executedCommand).toBe('pwd');
 });
 
-it.sequential('shell execute falls back when sandbox wrapping fails', async () => {
+it.sequential('shell execute fails closed when sandbox wrapping fails', async () => {
   let executedCommand: string | undefined;
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
@@ -477,8 +499,9 @@ it.sequential('shell execute falls back when sandbox wrapping fails', async () =
 
   const output = await tool.execute({ command: 'pwd', sandbox: 'default' });
 
-  expect(executedCommand).toBe('pwd');
-  expect(output.includes('ok')).toBe(true);
+  expect(executedCommand).toBeUndefined();
+  expect(output).toContain('Sandbox blocked this command');
+  expect(output).toContain('sandbox="unsandboxed"');
 });
 
 it.sequential('shell execute appends retry instruction when sandbox annotates a denial', async () => {
@@ -506,6 +529,7 @@ it.sequential('shell execute appends retry instruction when sandbox annotates a 
 it.sequential('shell execute in plan mode blocks mutating commands but runs green commands', async () => {
   const settingsService = createMockSettingsService({
     'app.planMode': true,
+    'sandbox.enabled': false,
   });
 
   const tool = createShellToolDefinition({

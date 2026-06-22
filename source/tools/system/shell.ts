@@ -27,7 +27,9 @@ import { ensureRtkInstalled, isRtkSupportedCommand, wrapWithRtk } from '../../se
 import { createSandboxEnvironment } from '../../utils/shell/sandbox/sandbox-env.js';
 import {
   SANDBOX_ESCAPE_INSTRUCTION,
+  createSandboxRuntimeConfig,
   type SandboxAvailability,
+  type SandboxReadPolicy,
   type ShellSandboxRunner,
 } from '../../utils/shell/sandbox/sandbox-policy.js';
 import { getDefaultShellSandboxRunner } from '../../utils/shell/sandbox/shell-sandbox-runner.js';
@@ -259,6 +261,7 @@ export function createShellToolDefinition(deps: {
           if (availability.type === 'available') {
             return false;
           }
+          return true;
         }
 
         const isDangerous = isMutatingCommand(params.command, cwd, loggingService);
@@ -339,8 +342,14 @@ export function createShellToolDefinition(deps: {
           sandboxAvailability = await shellSandboxRunner.availability();
           if (sandboxAvailability.type === 'available') {
             try {
+              const sandboxConfig = createSandboxRuntimeConfig({
+                cwd,
+                readPolicy: settingsService.get<SandboxReadPolicy>('sandbox.readPolicy'),
+                allowReadExtra: settingsService.get<string[]>('sandbox.allowReadExtra') ?? [],
+              });
               const wrapped = await shellSandboxRunner.wrap(commandToRun, {
                 cwd,
+                config: sandboxConfig,
                 signal: (details as { signal?: AbortSignal } | undefined)?.signal,
               });
               commandToRun = wrapped.command;
@@ -349,9 +358,10 @@ export function createShellToolDefinition(deps: {
                 loggingService.debug('Shell sandbox diagnostics', { diagnostics: wrapped.diagnostics });
               }
             } catch (error) {
-              loggingService.warn('Shell sandbox initialization failed; running command without sandbox', {
+              loggingService.warn('Shell sandbox initialization failed; refusing unsandboxed fallback', {
                 error: error instanceof Error ? error.message : String(error),
               });
+              return `Error: ${SANDBOX_ESCAPE_INSTRUCTION}`;
             }
           } else if (sandboxAvailability.type !== 'disabled') {
             loggingService.warn('Shell sandbox unavailable; running command without sandbox', {

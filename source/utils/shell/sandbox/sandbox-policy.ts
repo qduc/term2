@@ -1,7 +1,11 @@
 import os from 'node:os';
+import fs from 'node:fs';
 import path from 'node:path';
 import type { SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
 import { SANDBOX_TEMP_DIR } from '../temp-dir.js';
+import { isSecretKey } from './sandbox-env.js';
+
+export type SandboxReadPolicy = 'credential-denylist' | 'home-denylist';
 
 export type ShellSandboxMode = 'default' | 'unsandboxed';
 
@@ -18,6 +22,7 @@ export interface ShellSandboxRunner {
     command: string,
     options: {
       cwd: string;
+      config?: SandboxRuntimeConfig;
       signal?: AbortSignal;
     },
   ): Promise<{ command: string; diagnostics?: string[] }>;
@@ -25,8 +30,27 @@ export interface ShellSandboxRunner {
   annotateFailure(command: string, stderr: string): string;
 }
 
-export function createSandboxRuntimeConfig(): SandboxRuntimeConfig {
+export interface CreateSandboxRuntimeConfigOptions {
+  readPolicy?: SandboxReadPolicy;
+  allowReadExtra?: string[];
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+}
+
+function expandHomePath(filePath: string, home: string): string {
+  if (filePath === '~') {
+    return home;
+  }
+  if (filePath.startsWith('~/')) {
+    return path.join(home, filePath.slice(2));
+  }
+  return filePath;
+}
+
+export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOptions = {}): SandboxRuntimeConfig {
   const home = os.homedir();
+  const readPolicy = options.readPolicy ?? 'credential-denylist';
+  const workspaceRoot = fs.realpathSync(options.cwd ?? process.cwd());
   const tmpDir = SANDBOX_TEMP_DIR;
   const credentialFiles = [
     path.join(home, '.ssh'),
@@ -39,7 +63,7 @@ export function createSandboxRuntimeConfig(): SandboxRuntimeConfig {
     path.join(home, '.bash_history'),
     path.join(home, '.zsh_history'),
   ];
-  const credentialEnvVars = [
+  const defaultCredentialEnvVars = [
     'AWS_ACCESS_KEY_ID',
     'AWS_SECRET_ACCESS_KEY',
     'AWS_SESSION_TOKEN',
@@ -50,6 +74,28 @@ export function createSandboxRuntimeConfig(): SandboxRuntimeConfig {
     'SSH_AUTH_SOCK',
     'SSH_AGENT_PID',
   ];
+  const presentSecretEnvVars = Object.keys(options.env ?? process.env).filter(isSecretKey);
+  const credentialEnvVars = Array.from(new Set([...defaultCredentialEnvVars, ...presentSecretEnvVars]));
+  const allowReadExtra = (options.allowReadExtra ?? []).map((filePath) => expandHomePath(filePath, home));
+  const denyRead = readPolicy === 'home-denylist' ? [home, '/etc', '/var', '/root', '/private/var'] : credentialFiles;
+  const allowRead =
+    readPolicy === 'home-denylist'
+      ? [
+          workspaceRoot,
+          tmpDir,
+          ...allowReadExtra,
+          '/usr',
+          '/bin',
+          '/sbin',
+          '/lib',
+          '/lib64',
+          '/opt',
+          '/Library',
+          '/System/Library',
+          '/usr/local',
+          '/opt/homebrew',
+        ]
+      : undefined;
 
   return {
     network: {
@@ -59,8 +105,9 @@ export function createSandboxRuntimeConfig(): SandboxRuntimeConfig {
       allowLocalBinding: false,
     },
     filesystem: {
-      denyRead: credentialFiles,
-      allowWrite: ['.', tmpDir],
+      denyRead,
+      ...(allowRead ? { allowRead } : {}),
+      allowWrite: [workspaceRoot, tmpDir],
       denyWrite: [],
       allowGitConfig: false,
     },

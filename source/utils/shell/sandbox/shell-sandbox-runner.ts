@@ -1,9 +1,10 @@
 import { SandboxManager } from '@anthropic-ai/sandbox-runtime';
+import type { SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
 import { SANDBOX_TEMP_DIR } from '../temp-dir.js';
 import { createSandboxRuntimeConfig, type SandboxAvailability, type ShellSandboxRunner } from './sandbox-policy.js';
 
 export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
-  #initializedForCwd: string | undefined;
+  #initializedForKey: string | undefined;
   #initializationFailure: SandboxAvailability | undefined;
 
   async availability(): Promise<SandboxAvailability> {
@@ -27,10 +28,11 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
     command: string,
     options: {
       cwd: string;
+      config?: SandboxRuntimeConfig;
       signal?: AbortSignal;
     },
   ): Promise<{ command: string; diagnostics?: string[] }> {
-    await this.#initialize(options.cwd);
+    await this.#initialize(options.cwd, options.config);
     const wrapped = await SandboxManager.wrapWithSandbox(command, undefined, undefined, options.signal);
     const diagnostics = SandboxManager.getLinuxGlobPatternWarnings?.() ?? [];
     return { command: wrapped, diagnostics };
@@ -44,18 +46,19 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
     return SandboxManager.annotateStderrWithSandboxFailures(command, stderr);
   }
 
-  async #initialize(cwd: string): Promise<void> {
-    if (this.#initializedForCwd === cwd) {
+  async #initialize(cwd: string, config: SandboxRuntimeConfig = createSandboxRuntimeConfig({ cwd })): Promise<void> {
+    const initializationKey = JSON.stringify({ cwd, config });
+    if (this.#initializedForKey === initializationKey) {
       return;
     }
 
     try {
-      if (this.#initializedForCwd) {
+      if (this.#initializedForKey) {
         await SandboxManager.reset();
       }
       process.env.CLAUDE_CODE_TMPDIR = SANDBOX_TEMP_DIR;
-      await SandboxManager.initialize(createSandboxRuntimeConfig());
-      this.#initializedForCwd = cwd;
+      await SandboxManager.initialize(config);
+      this.#initializedForKey = initializationKey;
       this.#initializationFailure = undefined;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);

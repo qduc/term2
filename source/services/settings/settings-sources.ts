@@ -29,6 +29,8 @@ const SETTINGS_SOURCE_KEYS = {
   },
   sandbox: {
     enabled: 'sandbox.enabled',
+    readPolicy: 'sandbox.readPolicy',
+    allowReadExtra: 'sandbox.allowReadExtra',
   },
   ui: {
     historySize: 'ui.historySize',

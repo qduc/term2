@@ -114,6 +114,8 @@ export const ShellSettingsSchema = z.object({
 
 export const SandboxSettingsSchema = z.object({
   enabled: z.boolean().optional().default(true),
+  readPolicy: z.enum(['credential-denylist', 'home-denylist']).optional().default('credential-denylist'),
+  allowReadExtra: z.array(z.string()).optional().default([]),
 });
 
 export const UISettingsSchema = z.object({
@@ -342,6 +344,8 @@ export interface SettingsWithSources {
   };
   sandbox: {
     enabled: SettingWithSource<boolean>;
+    readPolicy: SettingWithSource<'credential-denylist' | 'home-denylist'>;
+    allowReadExtra: SettingWithSource<string[]>;
   };
   ui: {
     historySize: SettingWithSource<number>;
@@ -419,6 +423,8 @@ export const SETTING_KEYS = {
   SHELL_AUTO_APPROVE_MODE: 'shell.autoApproveMode',
   SHELL_USE_RTK_COMPRESSION: 'shell.useRtkCompression',
   SANDBOX_ENABLED: 'sandbox.enabled',
+  SANDBOX_READ_POLICY: 'sandbox.readPolicy',
+  SANDBOX_ALLOW_READ_EXTRA: 'sandbox.allowReadExtra',
   AGENT_AUTO_APPROVE_MODEL: 'agent.autoApproveModel',
   AGENT_AUTO_APPROVE_PROVIDER: 'agent.autoApproveProvider',
   AGENT_SUBAGENT_EXPLORER_MODEL: 'agent.subagentExplorerModel',
@@ -494,6 +500,8 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
   SETTING_KEYS.SHELL_USE_RTK_COMPRESSION,
   SETTING_KEYS.SANDBOX_ENABLED,
+  SETTING_KEYS.SANDBOX_READ_POLICY,
+  SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA,
   SETTING_KEYS.UI_PASTE_THRESHOLD,
   SETTING_KEYS.UI_DISPLAY_MODE,
   SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
@@ -593,6 +601,8 @@ export const DEFAULT_SETTINGS: SettingsData = {
   },
   sandbox: {
     enabled: true,
+    readPolicy: 'credential-denylist',
+    allowReadExtra: [],
   },
   ui: {
     historySize: 1000,

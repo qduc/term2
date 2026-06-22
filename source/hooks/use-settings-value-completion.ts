@@ -177,6 +177,10 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'auto', description: 'Full auto-approval (CAUTION)' },
   ],
   'sandbox.enabled': [{ value: 'true' }, { value: 'false' }],
+  'sandbox.readPolicy': [
+    { value: 'credential-denylist', description: 'Compatibility mode: deny known credential paths only' },
+    { value: 'home-denylist', description: 'Deny home and named system paths with workspace carve-outs' },
+  ],
   'webSearch.provider': [
     { value: 'tavily', description: 'Tavily Search API' },
     { value: 'exa', description: 'Exa (formerly Metaphor) Search API' },

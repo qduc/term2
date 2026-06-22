@@ -4,7 +4,7 @@ function isAllowedKey(key: string): boolean {
   return ALLOWED_EXACT_KEYS.has(key) || key === 'LANG' || key.startsWith('LC_');
 }
 
-function isSecretKey(key: string): boolean {
+export function isSecretKey(key: string): boolean {
   return (
     /(^|_)API_KEY$/.test(key) ||
     /(^|_)TOKEN$/.test(key) ||
@@ -25,6 +25,8 @@ export function createSandboxEnvironment(source: NodeJS.ProcessEnv = process.env
   const env: NodeJS.ProcessEnv = {};
 
   for (const [key, value] of Object.entries(source)) {
+    // Layer-1a backstop: redundant while the allowlist stays tiny; do not remove.
+    // It is the last line of defense inside Layer 1 if a secret-shaped key is ever allowlisted.
     if (value === undefined || isSecretKey(key) || !isAllowedKey(key)) {
       continue;
     }

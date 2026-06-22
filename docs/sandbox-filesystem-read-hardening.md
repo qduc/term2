@@ -1,8 +1,10 @@
 # Sandbox Filesystem Read Hardening
 
-Status: proposal (design doc).
+Status: proposal (design doc, revised for compatibility-first rollout).
 
 Follow-up to `docs/plans/sandboxing-proposal.md` (V1), which shipped network-denial, workspace write, env scrubbing, and a denylist of credential read paths. This doc proposes the next security tightening: **hardening home-resident reads and named system paths** (the runtime's read model is allow-by-default outside `denyOnly`, so we deny the home tree + a small system set and re-allow the workspace carve-out) and closing a **fail-open** gap, while keeping friction low for normal coding work.
+
+Rollout principle: the fail-open fix is mandatory because it preserves the sandbox approval contract. The broader read policy should ship behind an explicit compatibility setting first, with a project-scoped approval escape hatch for legitimate development paths. Do not silently turn existing working projects into broken ones without an actionable path to remember narrowly scoped read allowances.
 
 > **Scope caveat.** The runtime's read model is allow-by-default *everywhere not in `denyOnly`*. This proposal denies the home tree plus `/etc`, `/var`, `/root`, `/private/var` and re-allows the workspace + system binaries. It does **not** deny `/` — so `/srv`, `/mnt`, `/media`, `/opt/<app>/config`, application data dirs outside `$HOME`, and (on Linux) `/proc`, `/sys` remain readable. This removes the entire class of *home-resident* credential/source exfiltration and the named system recon paths; it is not a global read-bound. A deny-`/`-then-allow strategy is feasible (the runtime special-cases a deny of `/` to re-allow the root inode for traversal) but riskier for exec and is explicitly **out of scope** here. The acceptance criteria below reflect this narrower contract.
 
@@ -37,9 +39,27 @@ Verified against the published `@anthropic-ai/sandbox-runtime` README, `src/sand
 
 ## Proposal
 
+### 0. Roll out as policy levels, not a surprise default flip
+
+Add a read-policy setting instead of replacing V1 behavior unconditionally:
+
+```ts
+sandbox: {
+  enabled: true,
+  readPolicy: 'credential-denylist' | 'home-denylist',
+  allowReadExtra: string[],
+}
+```
+
+- `credential-denylist` preserves V1 read compatibility: only known credential paths are denied. This should remain the initial default while the stricter mode gets real usage.
+- `home-denylist` enables the hardening in §1: deny `$HOME` plus named system paths, then re-allow the workspace, temp dir, system tooling paths, and `sandbox.allowReadExtra`.
+- `allowReadExtra` is project-scoped config, not a global relaxation. A path that is acceptable for one repository's package manager or build cache should not automatically become readable to every project.
+
+Keep `sandbox.enabled=false` as the existing coarse escape, and keep `sandbox: "unsandboxed"` as the per-command approval-required escape. The new policy level is for users who want stronger reads without paying the full unsandboxed cost for normal tooling.
+
 ### 1. Harden home-resident reads and named system paths with deny-then-allow
 
-Replace the credential-only `denyRead` with a broad deny of the home tree and a small system set, then re-allow the workspace, temp, and a curated read-only tooling set. This is the runtime's documented workspace-only recipe extended with the system paths the README leaves open:
+When `sandbox.readPolicy === 'home-denylist'`, replace the credential-only `denyRead` with a broad deny of the home tree and a small system set, then re-allow the workspace, temp, configured extra read paths, and a curated read-only tooling set. This is the runtime's documented workspace-only recipe extended with the system paths the README leaves open:
 
 ```ts
 filesystem: {
@@ -53,6 +73,7 @@ filesystem: {
   allowRead: [
     workspaceRoot,   // explicit realpath of launch cwd (runtime would resolve "." too; pin for determinism)
     tmpDir,          // realpath (temp-dir.ts); redundant with runtime resolution, kept as local invariant
+    ...allowReadExtraResolvedForProject,
     '/usr', '/bin', '/sbin', '/lib', '/lib64', '/opt',
     '/Library', '/System/Library',                // macOS system frameworks / man pages
     '/usr/local',                                   // Homebrew on Intel macOS
@@ -72,7 +93,36 @@ Why this is the right tradeoff:
 - **`allowRead` precedence caveat:** a credential path that falls *inside* an `allowRead` entry is readable. We keep the existing `credentials.files` deny list, but with the home `denyRead` in place the `credentials.files` entries are **fully redundant on the read side** — `getCredentialRestrictions` unions them into `denyOnly`, which already covers the home tree. Their remaining function is the `files` mode semantics (future `mask`); they earn their keep only if `allowRead` is ever re-broadened over `~`.
 - **What stays readable (out of scope).** Because we do not deny `/`, paths outside the home tree and the named system set remain readable: `/srv`, `/mnt`, `/media`, `/opt/<app>/config`, application data dirs outside `$HOME`, and (on Linux) `/proc`, `/sys`. `/proc`/`/sys` are noted below as cheap-to-add. Network egress is already denied, so the leak surface is local-only reads — a narrower exposure than V1's blanket allow, but not a global read-bound.
 
-Friction escape hatch: add a setting `sandbox.allowReadExtra: string[]` so power users with monorepo layouts or needed `~/.config` tool caches (e.g. `gh` config for `gh`-driven commands) can extend `allowRead` without going fully unsandboxed. Going fully unsandboxed (`sandbox: "unsandboxed"`) remains the high-friction escape and still requires approval.
+Compatibility escape hatch: `sandbox.allowReadExtra: string[]` lets users with monorepo layouts or needed tool caches (for example pnpm stores, Cargo/Rustup installs, Maven caches, Python virtualenvs outside the repo, or `gh` config for `gh`-driven commands) extend `allowRead` without going fully unsandboxed. Going fully unsandboxed (`sandbox: "unsandboxed"`) remains the high-friction escape and still requires approval.
+
+### 1a. Add "allow and remember this path for this project" to denied-read approval
+
+Strict read mode needs an interactive compatibility path. When a sandboxed command fails because the runtime denied a read, surface an approval prompt that can persist the minimum useful path to this project's `sandbox.allowReadExtra`.
+
+Prompt shape:
+
+```text
+Sandbox blocked read access:
+
+  /home/user/.local/share/pnpm/store/v10/files/...
+
+Options:
+  Deny
+  Allow once
+  Allow and remember this path for this project
+  Run command unsandboxed once
+```
+
+Decision rules:
+
+- The prompt must show the resolved real path, because symlinked `node_modules` and language stores often hide the actual outside-workspace target.
+- "Allow and remember" writes only to project-scoped settings, appending a normalized path to `sandbox.allowReadExtra` for the current workspace. It must not mutate global defaults.
+- Suggest the smallest stable useful parent, not an arbitrary broad ancestor. For pnpm, prefer `~/.local/share/pnpm/store`; for Cargo, prefer `~/.cargo` and `~/.rustup`; for Maven, prefer `~/.m2/repository`. Do not auto-collapse to `~`, `~/.local`, or `~/.config`.
+- Sensitive paths (`~/.ssh`, `~/.aws`, `~/.kube`, `~/.gnupg`, `~/.npmrc`, `~/.pypirc`, `~/.docker`, shell history, browser profiles, and broad config roots) should not offer "remember" by default. They may offer deny, allow once, or run unsandboxed once with explicit approval.
+- The agent cannot add remembered read paths by calling a tool directly; persistence is a user approval decision.
+- Log the path, project root, decision, and command correlation id through the existing logging/security path.
+
+Implementation note: the runtime currently reports sandbox failures through stderr annotation, not as a structured denied-path event. The first implementation can parse only the runtime's known denial annotation format and fall back to the normal sandbox-blocked error when no path can be extracted. If the runtime later exposes structured denial metadata, switch to that instead of expanding ad hoc parsing.
 
 ### 2. Pin an explicit workspace root (determinism, not gap correction)
 
@@ -140,17 +190,25 @@ Three concrete actions:
 
 ## Files to change
 
-- `source/utils/shell/sandbox/sandbox-policy.ts` — deny-then-allow `filesystem` (home + named system paths); explicit `workspaceRoot` pin for determinism; extended `credentialFiles` (redundant on read side, kept for mode semantics); layering comment.
-- `source/tools/system/shell.ts` — `needsApproval` requires approval when sandbox unavailable; `execute` fail-closed on `wrap()` failure.
+- `source/services/settings/settings-schema.ts` and `source/services/settings/settings-sources.ts` — add `sandbox.readPolicy` and project-scoped `sandbox.allowReadExtra`; default `readPolicy` to `credential-denylist` for compatibility.
+- `source/hooks/use-settings-value-completion.ts` — add completions for `sandbox.readPolicy` values.
+- `source/utils/shell/sandbox/sandbox-policy.ts` — support both read policies; in `home-denylist`, build deny-then-allow `filesystem` (home + named system paths); include project `allowReadExtra`; explicit `workspaceRoot` pin for determinism; extended `credentialFiles` (redundant on read side, kept for mode semantics); layering comment.
+- `source/tools/system/shell.ts` — `needsApproval` requires approval when sandbox unavailable; `execute` fail-closed on `wrap()` failure; detect denied-read sandbox failures and raise an approval continuation that can allow once, remember for project, or rerun unsandboxed once.
+- `source/components/prompt/ApprovalPrompt.tsx` — render denied-read approval options, including "Allow and remember this path for this project" only for non-sensitive suggested paths.
+- `source/contracts/conversation.ts` / related approval contract types — add a typed approval payload for sandbox denied-read decisions and remembered-path metadata.
 - `source/utils/shell/sandbox/sandbox-env.ts` — export `isSecretKey` (or extract to a shared helper) so it can be reused in §5 action 2; add the Layer-1a defense-in-depth comment (action 3).
-- `source/utils/shell/sandbox/sandbox-policy.test.ts` — assertions for the new `allowRead` set, home denial, workspace carve-out realpath, and that `allowRead` does not include the home root.
-- New test: sandboxed `cat ~/.ssh/id_rsa` (and a symlink variant) is denied; sandboxed `cat <workspace>/README.md` is allowed.
+- `source/utils/shell/sandbox/sandbox-policy.test.ts` — assertions for both read policies; in `home-denylist`, assert the new `allowRead` set, home denial, workspace carve-out realpath, `allowReadExtra`, and that `allowRead` does not include the home root.
+- `source/tools/system/shell.test.ts` and `source/components/prompt/ApprovalPrompt*.test.tsx` — denied-read prompt/decision coverage, sensitive-path suppression for remember, project-scoped persistence, and fail-closed wrap behavior.
+- New runtime/integration-style test where practical: sandboxed `cat ~/.ssh/id_rsa` (and a symlink variant) is denied under `home-denylist`; sandboxed `cat <workspace>/README.md` is allowed; a denied pnpm-store-style path can be remembered and then read on retry.
 
 ## Acceptance criteria
 
-- A sandboxed command cannot read `~/.ssh`, `~/.kube/config`, `~/.npmrc`, a sibling repo under `~/src`, or `/etc/passwd`.
-- A sandboxed command **can** read files in the workspace, `node_modules` that physically resolves under the realpath workspace root, `/usr/bin`, and man pages. (Caveat: pnpm/monorepo symlinked `node_modules` pointing outside the workspace is denied by default and requires an `allowReadExtra` entry — see threat-model notes.)
-- A sandboxed command **can still** read `/srv`, `/mnt`, `/media`, `/proc`, `/sys` — these are out of scope (see §1 scope caveat). Document this as a known limitation, not a regression.
+- With `sandbox.readPolicy=credential-denylist`, existing V1 read behavior is preserved except for the fail-closed sandbox fallback fix.
+- With `sandbox.readPolicy=home-denylist`, a sandboxed command cannot read `~/.ssh`, `~/.kube/config`, `~/.npmrc`, a sibling repo under `~/src`, or `/etc/passwd`.
+- With `sandbox.readPolicy=home-denylist`, a sandboxed command **can** read files in the workspace, `node_modules` that physically resolves under the realpath workspace root, `/usr/bin`, and man pages. (Caveat: pnpm/monorepo symlinked `node_modules` pointing outside the workspace is denied by default and requires an `allowReadExtra` entry — see threat-model notes.)
+- When a legitimate outside-workspace read is denied, the user can approve once or approve-and-remember a non-sensitive suggested parent path for the current project; the next sandboxed retry includes that path in `allowRead`.
+- Sensitive denied paths do not offer "allow and remember" by default.
+- With `sandbox.readPolicy=home-denylist`, a sandboxed command **can still** read `/srv`, `/mnt`, `/media`, `/proc`, `/sys` — these are out of scope (see §1 scope caveat). Document this as a known limitation, not a regression.
 - `wrap()` failure on a default-sandbox command does not execute unsandboxed **and does not leak `process.env`** (the fail-open path currently spawns with `env: undefined`); the agent receives an error pointing to the unsandboxed escape.
 - `sandbox: "unsandboxed"` continues to work as today (requires approval).
 - Existing V1 tests still pass; the read surface change does not regress workspace-local shell work.
@@ -163,6 +221,8 @@ Three concrete actions:
 
 ## Open questions
 
-- Should `sandbox.allowReadExtra` be a flat list or support workspace-relative globs? The runtime already does `~` expansion and resolves relative paths against `process.cwd()` in `normalizePathForSandbox`, so a flat absolute-path list matches runtime semantics cleanly. Globs work natively on macOS (regex-converted) and are expanded to concrete paths on Linux via `expandGlobPattern` (platform asymmetry worth documenting if globs are supported). Lean toward flat absolute paths + `~` expansion.
+- Exact project-settings write path for "allow and remember": use the existing settings source that represents the current project/workspace. If the settings system cannot currently distinguish project-local from global writes, add that boundary before enabling remembered paths.
+- Should `sandbox.allowReadExtra` be a flat list or support workspace-relative globs? The runtime already does `~` expansion and resolves relative paths against `process.cwd()` in `normalizePathForSandbox`, so a flat absolute-path list matches runtime semantics cleanly. Globs work natively on macOS (regex-converted) and are expanded to concrete paths on Linux via `expandGlobPattern` (platform asymmetry worth documenting if globs are supported). Lean toward flat absolute paths + `~` expansion for manually configured paths; remembered paths should persist as normalized, non-glob absolute paths with `~` display compaction only in UI.
 - Do we want a startup-time decision (refuse to run mutating/sandboxed commands at all on unsupported platforms) vs per-command approval? Current proposal is per-command approval via #3, which is lower friction and reuses the existing gate.
 - For the toolchain-env friction note: do we curate a second safe-by-value allowlist, or allowlist a known prefix set (e.g. anything ending in `_HOME`, `*_PATH` minus `PATH`)? Prefix allowlisting risks widening the surface; curated list is safer but needs maintenance.
+- After collecting enough denied-read data, should `home-denylist` become the default? Default change should wait until common package-manager and language-cache paths have documented recipes and the remembered-path UX is proven.

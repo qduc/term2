@@ -47,3 +47,22 @@ it('resolveWorkspacePath: allows paths under /tmp or /private/tmp even when outs
     resolveWorkspacePath('/opt/app.log', workspace);
   }).toThrow(/Operation outside workspace/);
 });
+
+it('resolveWorkspacePath: allows discovered skill directories outside workspace when enabled', () => {
+  const workspace = '/tmp/workspace';
+  const resolved = resolveWorkspacePath(path.join(homedir(), '.agents', 'skills', 'example', 'SKILL.md'), workspace, {
+    allowDiscoveredSkillFolders: true,
+  });
+
+  expect(resolved).toBe(path.join(homedir(), '.agents', 'skills', 'example', 'SKILL.md'));
+});
+
+it('resolveWorkspacePath: still rejects non-skill outside paths when discovered-skill allowance is enabled', () => {
+  const workspace = '/tmp/workspace';
+
+  expect(() => {
+    resolveWorkspacePath(path.join(homedir(), '.ssh', 'config'), workspace, {
+      allowDiscoveredSkillFolders: true,
+    });
+  }).toThrow(/Operation outside workspace/);
+});

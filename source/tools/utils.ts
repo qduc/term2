@@ -1,6 +1,7 @@
 import path from 'path';
 import { homedir } from 'os';
 import { z } from 'zod';
+import { getDiscoveredSkillRoots } from '../utils/skill-discovery-paths.js';
 
 /**
  * Resolves a relative path and ensures it's within the workspace
@@ -14,9 +15,14 @@ export function resolveWorkspacePath(
      * Intended for Lite Mode read-only tools.
      */
     allowOutsideWorkspace?: boolean;
+    /**
+     * If true, paths under skill discovery directories are allowed even when outside baseDir.
+     */
+    allowDiscoveredSkillFolders?: boolean;
   },
 ): string {
   const allowOutsideWorkspace = options?.allowOutsideWorkspace ?? false;
+  const allowDiscoveredSkillFolders = options?.allowDiscoveredSkillFolders ?? false;
 
   // Expand ~ if the path starts with it
   const expandedPath = relativePath.startsWith('~') ? relativePath.replace(/^~/, homedir()) : relativePath;
@@ -43,6 +49,20 @@ export function resolveWorkspacePath(
       normalizedResolved.startsWith('/private/tmp' + path.sep);
 
     if (isTempDir) {
+      isInside = true;
+    }
+  }
+
+  if (!isInside && allowDiscoveredSkillFolders) {
+    const isWithin = (targetPath: string, rootPath: string): boolean => {
+      const normalizedRoot = path.resolve(rootPath);
+      const rootPrefix = normalizedRoot.endsWith(path.sep) ? normalizedRoot : normalizedRoot + path.sep;
+      return targetPath === normalizedRoot || targetPath.startsWith(rootPrefix);
+    };
+
+    const discoveredSkillRoots = getDiscoveredSkillRoots(normalizedBaseDir, homedir());
+
+    if (discoveredSkillRoots.some((rootPath) => isWithin(normalizedResolved, rootPath))) {
       isInside = true;
     }
   }

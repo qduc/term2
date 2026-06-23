@@ -117,6 +117,16 @@ it.sequential('needsApproval: prompts for path outside workspace', async () => {
   });
 });
 
+it.sequential('needsApproval: does not prompt for discovered skill directories outside workspace', async () => {
+  await withTempDir(async () => {
+    const result = await readFileToolDefinition.needsApproval({
+      path: path.join(os.homedir(), '.agents', 'skills', 'example-skill', 'SKILL.md'),
+    });
+
+    expect(result).toBe(false);
+  });
+});
+
 it.sequential('execute: reads path outside workspace after approval path resolution', async () => {
   await withTempDir(async (dir) => {
     const outsidePath = path.join(dir, '..', 'outside.txt');

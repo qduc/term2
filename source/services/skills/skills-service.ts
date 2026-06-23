@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import type { ILoggingService } from '../service-interfaces.js';
+import { getProjectSkillScopes, getUserSkillScopes } from '../../utils/skill-discovery-paths.js';
 
 export interface SkillInfo {
   name: string;
@@ -29,21 +30,13 @@ export class SkillsService {
     const cwd = customCwd || this.projectRoot || process.cwd();
 
     // 1. Resolve discovery directories
-    const projectScopes = [
-      path.join(cwd, '.term2', 'skills'),
-      path.join(cwd, '.agents', 'skills'),
-      path.join(cwd, '.claude', 'skills'),
-    ];
+    const projectScopes = getProjectSkillScopes(cwd);
 
     let userScopes: string[] = [];
     try {
       const homeDir = os.homedir();
       if (homeDir) {
-        userScopes = [
-          path.join(homeDir, '.term2', 'skills'),
-          path.join(homeDir, '.agents', 'skills'),
-          path.join(homeDir, '.claude', 'skills'),
-        ];
+        userScopes = getUserSkillScopes(homeDir);
       }
     } catch (e: any) {
       this.logger.warn(`Could not resolve home directory: ${e.message}`);

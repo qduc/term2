@@ -94,7 +94,9 @@ export const createReadFileToolDefinition = (
 
       try {
         const cwd = executionContext?.getCwd() || process.cwd();
-        resolveWorkspacePath(params.path, cwd);
+        resolveWorkspacePath(params.path, cwd, {
+          allowDiscoveredSkillFolders: true,
+        });
         return false;
       } catch {
         return true;

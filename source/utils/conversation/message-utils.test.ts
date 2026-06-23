@@ -7,6 +7,7 @@ import {
   getLastFinalAssistantText,
   getUserMessageEntries,
   mergeCommandMessages,
+  trimTrailingAssistantMessages,
 } from './message-utils.js';
 
 // ---------------------------------------------------------------------------
@@ -31,6 +32,26 @@ it('getLastFinalAssistantText combines contiguous bot messages', () => {
     { id: '2', sender: 'bot', text: 'world', status: 'finalized' },
   ];
   expect(getLastFinalAssistantText(messages)).toBe('hello world');
+});
+
+// ---------------------------------------------------------------------------
+// trimTrailingAssistantMessages
+// ---------------------------------------------------------------------------
+
+it('trimTrailingAssistantMessages removes trailing assistant messages', () => {
+  const messages: Message[] = [
+    userMsg('u1', 'hello'),
+    { id: 'r1', sender: 'reasoning', text: 'thinking', status: 'finalized' },
+    botMsg('b1', 'answer'),
+  ];
+
+  expect(trimTrailingAssistantMessages(messages)).toEqual([userMsg('u1', 'hello')]);
+});
+
+it('trimTrailingAssistantMessages keeps trailing non-assistant messages intact', () => {
+  const messages: Message[] = [userMsg('u1', 'hello'), { id: 's1', sender: 'system', text: 'notice' }];
+
+  expect(trimTrailingAssistantMessages(messages)).toBe(messages);
 });
 
 // ---------------------------------------------------------------------------

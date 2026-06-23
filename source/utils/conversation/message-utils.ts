@@ -36,6 +36,29 @@ export function getLastFinalAssistantText(messages: Message[]): string | null {
 }
 
 /**
+ * Remove trailing assistant-visible messages so a retry can replace the last
+ * assistant response in place.
+ */
+export function trimTrailingAssistantMessages(messages: Message[]): Message[] {
+  let end = messages.length;
+  while (end > 0) {
+    const message = messages[end - 1];
+    if (
+      message?.sender === 'bot' ||
+      message?.sender === 'reasoning' ||
+      message?.sender === 'system' ||
+      message?.sender === 'subagent'
+    ) {
+      end--;
+      continue;
+    }
+    break;
+  }
+
+  return end === messages.length ? messages : messages.slice(0, end);
+}
+
+/**
  * Deduplicate new command messages against existing UI messages and clean up
  * stale running/pending messages that are about to be replaced by completed ones.
  *

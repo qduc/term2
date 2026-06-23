@@ -12,6 +12,7 @@ import { TurnAttempt } from './turn-attempt.js';
 
 export type InitialTurnRunOptions = {
   skipUserMessage?: boolean;
+  replayFromHistory?: boolean;
   resumeState?: RunState<any, any>;
   resumePreviousResponseId?: string | null;
   abortedContext?: AbortedApprovalContext | null;
@@ -44,7 +45,7 @@ export class TurnAttemptFactory {
       ? { ...normalized, text: `${this.deps.state.pendingModeNotice}\n\n${normalized.text}` }
       : normalized;
 
-    if (!turn.text && options.skipUserMessage) {
+    if (!turn.text && options.skipUserMessage && !options.replayFromHistory) {
       try {
         turn = { ...turn, text: this.deps.conversationStore.getLastUserMessage() };
       } catch {

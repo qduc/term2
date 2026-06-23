@@ -39,7 +39,7 @@ export class SkillsService {
         userScopes = getUserSkillScopes(homeDir);
       }
     } catch (e: any) {
-      this.logger.warn(`Could not resolve home directory: ${e.message}`);
+      this.logger.debug(`Could not resolve home directory: ${e.message}`);
     }
 
     // 2. Scan scopes (User scopes first, then project scopes so project overrides user-level)
@@ -92,16 +92,16 @@ export class SkillsService {
             if (existing.location === skill.location) {
               // no-op: already registered
             } else if (existing.isProjectLevel === isProjectLevel) {
-              this.logger.warn(
+              this.logger.debug(
                 `Skill name collision: '${skill.name}' is defined at both '${existing.location}' and '${skill.location}'. Using the former.`,
               );
             } else if (isProjectLevel) {
-              this.logger.warn(
+              this.logger.debug(
                 `Skill name collision: project-level '${skill.name}' at '${skill.location}' overrides user-level '${existing.location}'.`,
               );
               this.skills.set(skill.name, skill);
             } else {
-              this.logger.warn(
+              this.logger.debug(
                 `Skill name collision: user-level '${skill.name}' at '${skill.location}' is shadowed by project-level '${existing.location}'.`,
               );
             }
@@ -129,13 +129,13 @@ export class SkillsService {
     const normalized = content.replace(/\r\n/g, '\n').trim();
 
     if (!normalized.startsWith('---')) {
-      this.logger.warn(`Skill at ${skillMdPath} is missing YAML frontmatter.`);
+      this.logger.debug(`Skill at ${skillMdPath} is missing YAML frontmatter.`);
       return null;
     }
 
     const secondDividerIndex = normalized.indexOf('\n---', 3);
     if (secondDividerIndex === -1) {
-      this.logger.warn(`Skill at ${skillMdPath} has unclosed YAML frontmatter.`);
+      this.logger.debug(`Skill at ${skillMdPath} has unclosed YAML frontmatter.`);
       return null;
     }
 
@@ -154,20 +154,20 @@ export class SkillsService {
     let finalName = name;
     const parentDirName = path.basename(path.dirname(skillMdPath));
     if (!finalName) {
-      this.logger.warn(
+      this.logger.debug(
         `Skill at ${skillMdPath} is missing a name. Deriving from parent directory: '${parentDirName}'.`,
       );
       finalName = parentDirName;
     }
 
     if (finalName !== parentDirName) {
-      this.logger.warn(
+      this.logger.debug(
         `Skill name '${finalName}' at ${skillMdPath} does not match parent directory name '${parentDirName}'.`,
       );
     }
 
     if (finalName.length > 64) {
-      this.logger.warn(`Skill name '${finalName}' at ${skillMdPath} exceeds 64 characters.`);
+      this.logger.debug(`Skill name '${finalName}' at ${skillMdPath} exceeds 64 characters.`);
     }
 
     const disableModelInvocation =

@@ -173,6 +173,7 @@ export type SessionRuntime = {
       input: string | UserTurn,
       options?: {
         skipUserMessage?: boolean;
+        replayFromHistory?: boolean;
         retries?: any;
         maxModelRetries?: number;
         signal?: AbortSignal;

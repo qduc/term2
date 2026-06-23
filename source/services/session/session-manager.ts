@@ -58,6 +58,29 @@ export class SessionManager {
     return removed;
   }
 
+  peekLastToolOutput(): {
+    index: number;
+    callId?: string;
+    toolName?: string;
+    output?: unknown;
+    itemType: string;
+  } | null {
+    return this.#conversationStore.peekLastToolOutput();
+  }
+
+  retryLastToolOutput(): {
+    index: number;
+    callId?: string;
+    toolName?: string;
+    output?: unknown;
+    itemType: string;
+  } | null {
+    const removed = this.#conversationStore.removeAfterLastToolOutput();
+    if (removed === null) return null;
+    this.#afterToolRetry();
+    return removed;
+  }
+
   undoNUserTurns(n: number): { text: string; images?: UserTurn['images'] } | null {
     const removed = this.#conversationStore.removeNLastUserTurns(n);
     if (removed === null) return null;
@@ -131,5 +154,9 @@ export class SessionManager {
   #afterUndo(count: number): void {
     this.#state.afterUndo();
     this.#conversationLogger.log({ type: 'undo', removedUserTurns: count, snapshot: this.getCurrentSnapshot() });
+  }
+
+  #afterToolRetry(): void {
+    this.#state.afterToolRetry();
   }
 }

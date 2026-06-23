@@ -205,6 +205,49 @@ it('removeLastUserTurn() removes the last user message and everything after it',
   expect((history[1] as any).content[0].text).toBe('Reply 1');
 });
 
+it('removeAfterLastToolOutput() removes trailing assistant text but keeps the last tool output', () => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.appendOutput([
+    { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{"command":"date"}' } as AgentInputItem,
+    {
+      type: 'function_call_result',
+      callId: 'call-1',
+      name: 'shell',
+      output: 'Mon Jan 01 00:00:00 UTC 2024',
+    } as AgentInputItem,
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Done.' }] },
+  ] satisfies AgentInputItem[]);
+
+  const result = store.removeAfterLastToolOutput();
+
+  expect(result).toEqual({
+    index: 2,
+    itemType: 'function_call_result',
+    callId: 'call-1',
+    toolName: 'shell',
+    output: 'Mon Jan 01 00:00:00 UTC 2024',
+  });
+  expect(store.getHistory().map((item: any) => item.type)).toEqual(['user', 'function_call', 'function_call_result']);
+});
+
+it('peekLastToolOutput() returns the last tool output without trimming history', () => {
+  const store = new ConversationStore();
+  store.appendOutput([
+    { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{"command":"date"}' } as AgentInputItem,
+    { type: 'function_call_result', callId: 'call-1', name: 'shell', output: 'done' } as AgentInputItem,
+  ] satisfies AgentInputItem[]);
+
+  expect(store.peekLastToolOutput()).toEqual({
+    index: 1,
+    itemType: 'function_call_result',
+    callId: 'call-1',
+    toolName: 'shell',
+    output: 'done',
+  });
+  expect(store.getHistory().map((item: any) => item.type)).toEqual(['function_call', 'function_call_result']);
+});
+
 it('removeLastUserTurn() returns null when no user message exists', () => {
   const store = new ConversationStore();
   store.appendOutput([

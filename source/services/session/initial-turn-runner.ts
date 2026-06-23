@@ -55,6 +55,7 @@ export class InitialTurnRunner {
 
     const initialCounts = attempt.retryCounts;
     if (
+      options.replayFromHistory ||
       !skipUser ||
       initialCounts.modelRetryCount > 0 ||
       initialCounts.serviceTierFallbackCount > 0 ||

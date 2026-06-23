@@ -19,6 +19,7 @@ export class TurnCoordinator {
     input: string | UserTurn,
     options: {
       skipUserMessage?: boolean;
+      replayFromHistory?: boolean;
       retries?: any;
       maxModelRetries?: number;
       signal?: AbortSignal;
@@ -42,6 +43,7 @@ export class TurnCoordinator {
     try {
       const turnOutcome = yield* this.deps.turnExecutor.executeInitial(input, {
         skipUserMessage: options.skipUserMessage,
+        replayFromHistory: options.replayFromHistory,
         resumeState: options.resumeState,
         resumePreviousResponseId: options.resumePreviousResponseId,
         abortedContext,

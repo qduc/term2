@@ -16,6 +16,7 @@ export type SendMessageOptions = {
   onEvent?: (event: ConversationEvent) => void;
   hallucinationRetryCount?: number;
   bypassInputSurgeGuard?: boolean;
+  replayFromHistory?: boolean;
 };
 
 export type HandleApprovalDecisionOptions = {
@@ -104,6 +105,7 @@ export class ConversationAdapter {
       onEvent,
       hallucinationRetryCount = 0,
       bypassInputSurgeGuard,
+      replayFromHistory,
     }: SendMessageOptions = {},
   ): Promise<ConversationTerminal> {
     const turn = normalizeUserTurn(input);
@@ -118,6 +120,9 @@ export class ConversationAdapter {
         const startOptions: any = { retries: { hallucinationRetryCount } };
         if (bypassInputSurgeGuard !== undefined) {
           startOptions.bypassInputSurgeGuard = bypassInputSurgeGuard;
+        }
+        if (replayFromHistory) {
+          startOptions.replayFromHistory = true;
         }
         result = await collectTerminalResult(this.#turnFlow.start(input, startOptions), {
           onTextChunk,

@@ -402,6 +402,51 @@ it('passes previous response ids into subsequent runs', async () => {
   expect(asFinal(secondResult).finalText).toBe('Second run done.');
 });
 
+it('retryLastToolOutput trims trailing assistant text and replays full history', async () => {
+  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Retried answer' }]);
+  stream.finalOutput = 'Retried answer';
+
+  const startCalls: Array<{ input: unknown; options: unknown }> = [];
+  const mockClient = partialClient({
+    getProvider() {
+      return 'openai';
+    },
+    async startStream(input: any, options: any) {
+      startCalls.push({ input, options });
+      return stream;
+    },
+  });
+
+  const service = new ConversationService({
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  service.importState({
+    history: [
+      { role: 'user', type: 'message', content: 'run the tool' },
+      { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{"command":"date"}' },
+      { type: 'function_call_result', callId: 'call-1', name: 'shell', output: 'Mon Jan 01 00:00:00 UTC 2024' },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Done.' }] },
+    ],
+    previousResponseId: null,
+    toolLedger: [],
+  });
+
+  const result = await service.retryLastToolOutput();
+
+  expect(result?.type).toBe('response');
+  expect(asFinal(result as ConversationTerminal).finalText).toBe('Retried answer');
+  expect(startCalls).toHaveLength(1);
+  expect(Array.isArray(startCalls[0].input)).toBe(true);
+  expect((startCalls[0].input as any[]).map((item) => item.type)).toEqual([
+    'user',
+    'function_call',
+    'function_call_result',
+  ]);
+  expect(startCalls[0].options).toEqual(expect.objectContaining({ previousResponseId: null, sessionId: 'default' }));
+});
+
 it('emits approval interruptions and resumes after approval', async () => {
   const interruption = {
     name: 'bash',

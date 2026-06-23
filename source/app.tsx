@@ -119,6 +119,7 @@ const App: FC<AppProps> = ({
     clearConversation,
     stopProcessing,
     undoLastUserMessage,
+    retryLastToolOutput,
     getUserMessages,
     undoToUserMessage,
     setModel,
@@ -258,6 +259,7 @@ const App: FC<AppProps> = ({
     messages,
     setModel,
     undoLastUserMessage,
+    retryLastToolOutput,
     onUndo: redrawMessageList,
     openUndoMenu: () => {
       const userMessages = getUserMessages().map((m) => ({ uiIndex: m.uiIndex, text: m.text }));

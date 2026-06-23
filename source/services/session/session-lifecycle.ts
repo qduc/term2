@@ -109,6 +109,17 @@ export class SessionLifecycle {
   }
 
   /**
+   * Reset state after rewinding to the last tool output.
+   */
+  afterToolRetry(): void {
+    this.#generationGuard.invalidate();
+    this.#pruneToolLedgerToCurrentHistory();
+    this.#resetProviderContinuity();
+    this.#inputPlanner.markUndoOrRewind();
+    this.#appState.statusMachine.abort();
+  }
+
+  /**
    * Export the current session state for persistence.
    */
   exportPersistedState(): {

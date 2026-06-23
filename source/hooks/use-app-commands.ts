@@ -34,6 +34,7 @@ interface UseAppCommandsProps {
   onUndo?: () => void;
   onHandoff?: (capturedText: string) => void;
   sendUserMessage: (input: string | UserTurn) => Promise<void>;
+  retryLastToolOutput: () => Promise<boolean>;
   listUserTurns: () => { index: number; text: string; imageCount: number }[];
   skillsService: SkillsService;
   onSkillSelected: (skill: SkillInfo) => void;
@@ -61,6 +62,7 @@ export const useAppCommands = ({
   onUndo,
   onHandoff,
   sendUserMessage,
+  retryLastToolOutput,
   listUserTurns,
   skillsService,
   onSkillSelected,
@@ -79,7 +81,14 @@ export const useAppCommands = ({
       createCopySlashCommand({ messages, addSystemMessage }),
       createUsageSlashCommand(addSystemMessage, getSessionUsage),
       createUndoSlashCommand({ undoLastUserMessage, replaceInput, addSystemMessage, openUndoMenu, onUndo }),
-      createRetrySlashCommand({ undoLastUserMessage, sendUserMessage, addSystemMessage, listUserTurns, onUndo }),
+      createRetrySlashCommand({
+        undoLastUserMessage,
+        sendUserMessage,
+        retryLastToolOutput,
+        addSystemMessage,
+        listUserTurns,
+        onUndo,
+      }),
       createModeToggleCommand(
         'app.liteMode',
         'lite',
@@ -156,6 +165,7 @@ export const useAppCommands = ({
       onUndo,
       onHandoff,
       sendUserMessage,
+      retryLastToolOutput,
       listUserTurns,
       togglePlanMode,
       skillsService,

@@ -25,9 +25,9 @@ export class InitialInputPreparer {
   prepare(
     attempt: TurnAttempt,
     skipUserMessage: boolean,
-    options?: { bypassInputSurgeGuard?: boolean },
+    options?: { bypassInputSurgeGuard?: boolean; replayFromHistory?: boolean },
   ): InitialInputPreparationResult {
-    if (!skipUserMessage && !attempt.addedUserMessage) {
+    if (!skipUserMessage && !attempt.addedUserMessage && !options?.replayFromHistory) {
       this.deps.conversationStore.addUserTurn(attempt.turn);
       attempt.markUserMessageAdded();
     }
@@ -35,6 +35,7 @@ export class InitialInputPreparer {
     const plan = this.deps.inputPlanner.build(attempt.turn, {
       includeTurn: false,
       pendingModeNotice: this.deps.state.pendingModeNotice,
+      replayFromHistory: options?.replayFromHistory,
     });
     attempt.attachInput(plan);
 

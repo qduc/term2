@@ -184,6 +184,26 @@ it('afterUndo routes approval cleanup through approvalFlow coordinator', () => {
   expect(calls.agentClient.clearConversations).toBe(1);
 });
 
+it('afterToolRetry rewinds state without touching the conversation logger undo event', () => {
+  const { calls, deps } = makeLifecycleHarness();
+  const lifecycle = new SessionLifecycle(deps as any);
+
+  lifecycle.afterToolRetry();
+
+  expect(calls.approvalFlow.clearPending).toBe(1);
+  expect(calls.approvalFlow.consumeAborted).toBe(1);
+  expect(calls.providerContinuity.clear).toBe(1);
+  expect(calls.toolTracker.pruneToCurrentHistory).toBe(1);
+  expect(calls.toolTracker.clearArguments).toBe(1);
+  expect(calls.toolTracker.clearEmittedToolStarted).toBe(1);
+  expect(calls.inputPlanner.reset).toBe(1);
+  expect(calls.inputPlanner.markUndoOrRewind).toBe(1);
+  expect(calls.turnAccumulator.resetPersistedTurnState).toBe(1);
+  expect(calls.statusMachine.abort).toBe(1);
+  expect(calls.agentClient.clearConversations).toBe(1);
+  expect(calls.logger.warn).toBe(0);
+});
+
 it('importPersistedState clears approval state through approvalFlow coordinator', () => {
   const { calls, deps, providerContinuity } = makeLifecycleHarness();
   const lifecycle = new SessionLifecycle(deps as any);

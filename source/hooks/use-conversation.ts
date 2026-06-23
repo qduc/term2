@@ -4,7 +4,11 @@ import { describeError, isAbortLikeError } from '../utils/error-helpers.js';
 import { ASK_USER_DECLINE_RESULT } from '../tools/agent/ask-user-constants.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 import { createMessageId } from './message-id.js';
-import { countUndoableUserTurnsFrom, findLastUndoableUserMessage } from '../utils/conversation/message-utils.js';
+import {
+  countUndoableUserTurnsFrom,
+  findLastUndoableUserMessage,
+  trimTrailingAssistantMessages,
+} from '../utils/conversation/message-utils.js';
 import { clearStreamingBotMessage, computeNextMessages } from '../utils/conversation/apply-conversation-result.js';
 import { useConversationMessages } from './use-conversation-messages.js';
 import { useConversationSettings } from './use-conversation-settings.js';
@@ -608,6 +612,90 @@ export const useConversation = ({
     return restored;
   }, [messages, conversationService, setMessages]);
 
+  const retryLastToolOutput = useCallback(async (): Promise<boolean> => {
+    conversationService.abort();
+    approvedContextRef.current = null;
+    dispatch({ type: 'reset_transient' });
+    if (!conversationService.peekLastToolOutput()) {
+      return false;
+    }
+
+    setMessages((prev) => trimTrailingAssistantMessages(prev));
+    dispatch({ type: 'turn/started' });
+
+    const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
+      createTurnSession('retryLastToolOutput');
+
+    const wrappedOnEvent = (event: any) => {
+      if (event?.type === 'user_message_consumed_for_abort') {
+        setMessages((prev) => {
+          for (let i = prev.length - 1; i >= 0; i--) {
+            const msg = prev[i];
+            if (isUserMessage(msg)) {
+              if (msg.consumedForAbort) return prev;
+              const next = prev.slice();
+              next[i] = { ...msg, consumedForAbort: true };
+              return next;
+            }
+          }
+          return prev;
+        });
+        return;
+      }
+      applyConversationEvent(event);
+    };
+
+    try {
+      const result = await conversationService.retryLastToolOutput({
+        onEvent: createOnEventWithSubagentTracking(wrappedOnEvent),
+      });
+
+      if (!result) {
+        return false;
+      }
+
+      applyConversationEvent({ type: 'final', finalText: '' } as any);
+      botResponseUpdater.flush();
+      applyServiceResult(result, streamingState, streamingState.latestUsage);
+      return true;
+    } catch (error) {
+      loggingService.error('Error in retryLastToolOutput', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        ...(error instanceof Error && (error as any).eventKind ? { eventKind: (error as any).eventKind } : {}),
+      });
+
+      if (isAbortLikeError(error)) {
+        loggingService.debug('Suppressing abort error in retryLastToolOutput');
+        return true;
+      }
+
+      const errorMessage = enhanceApiKeyError(describeError(error));
+      const botErrorMessage: BotMessage = {
+        id: createMessageId(),
+        sender: 'bot',
+        status: 'finalized',
+        text: `Error: ${errorMessage}`,
+      };
+      appendMessages([botErrorMessage]);
+      dispatch({ type: 'approval/resolved' });
+      return true;
+    } finally {
+      loggingService.debug('retryLastToolOutput finally block - resetting state');
+      reasoningUpdater.flush();
+      botResponseUpdater.cancel();
+      dispatch({ type: 'turn/completed' });
+    }
+  }, [
+    appendMessages,
+    applyServiceResult,
+    conversationService,
+    createOnEventWithSubagentTracking,
+    createTurnSession,
+    loggingService,
+    setMessages,
+  ]);
+
   const undoToUserMessage = useCallback(
     (uiIndex: number): string | null => {
       // Count how many genuine user turns (excluding abort-consumed messages) are
@@ -679,6 +767,7 @@ export const useConversation = ({
     clearConversation,
     stopProcessing,
     undoLastUserMessage,
+    retryLastToolOutput,
     getUserMessages,
     undoToUserMessage,
     setModel,

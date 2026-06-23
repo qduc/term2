@@ -102,6 +102,16 @@ export class ConversationService {
     return this.#runtime.state.undoNUserTurns(n);
   }
 
+  peekLastToolOutput(): {
+    index: number;
+    callId?: string;
+    toolName?: string;
+    output?: unknown;
+    itemType: string;
+  } | null {
+    return this.#runtime.state.peekLastToolOutput();
+  }
+
   setModel(model: string): void {
     this.#runtime.settings.setModel(model);
   }
@@ -140,6 +150,19 @@ export class ConversationService {
 
   sendMessage(input: string | UserTurn, options?: SendMessageOptions): Promise<ConversationTerminal> {
     return this.#adapter.sendMessage(input, options);
+  }
+
+  retryLastToolOutput(options?: SendMessageOptions): Promise<ConversationTerminal | null> {
+    this.abort();
+    const removed = this.#runtime.state.retryLastToolOutput();
+    if (removed === null) {
+      return Promise.resolve(null);
+    }
+
+    return this.#adapter.sendMessage('', {
+      ...options,
+      replayFromHistory: true,
+    });
   }
 
   previewLargeUncachedInput(input: string | UserTurn, now?: number): LargeUncachedInputDecision {

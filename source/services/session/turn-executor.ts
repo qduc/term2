@@ -80,6 +80,7 @@ export class DefaultTurnExecutor implements TurnExecutor {
       currentOptions = {
         ...transition.command.options,
         token: generation,
+        replayFromHistory: currentOptions.replayFromHistory,
       };
     }
   }

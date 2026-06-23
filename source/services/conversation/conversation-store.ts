@@ -2,6 +2,7 @@ import type { AgentInputItem } from '@openai/agents';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
 
 type RemovedUserTurn = { text: string; imageCount: number; images?: UserTurn['images'] };
+type RemovedToolOutput = { index: number; callId?: string; toolName?: string; output?: unknown; itemType: string };
 
 export const SHELL_CONTEXT_PREFIX = '[Previous Shell Session]';
 const LEGACY_MODE_NOTICE_PREFIX = '[Mode Notice] ';
@@ -146,6 +147,25 @@ export class ConversationStore {
     }
   }
 
+  peekLastToolOutput(): RemovedToolOutput | null {
+    const anchor = this.#findLastToolOutputIndex();
+    if (anchor === -1) return null;
+    return ConversationStore.#extractRemovedToolOutput(this.#history[anchor], anchor);
+  }
+
+  /**
+   * Remove everything after the last tool output while keeping that tool
+   * output itself in the transcript so the model can retry from there.
+   */
+  removeAfterLastToolOutput(): RemovedToolOutput | null {
+    const anchor = this.#findLastToolOutputIndex();
+    if (anchor === -1) return null;
+
+    const removed = ConversationStore.#extractRemovedToolOutput(this.#history[anchor], anchor);
+    this.#history.splice(anchor + 1);
+    return removed;
+  }
+
   static #extractText(raw: any): string {
     const content = raw?.content;
     if (typeof content === 'string') return content;
@@ -200,6 +220,42 @@ export class ConversationStore {
 
   static #isSyntheticUserMessage(text: string): boolean {
     return text.startsWith(SHELL_CONTEXT_PREFIX) || text.startsWith(LEGACY_MODE_NOTICE_PREFIX);
+  }
+
+  static #isToolOutputItem(raw: any): boolean {
+    switch (raw?.type) {
+      case 'function_call_result':
+      case 'function_call_output':
+      case 'function_call_output_result':
+      case 'tool_call_output_item':
+      case 'tool_result':
+      case 'shell_call_output':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  static #extractRemovedToolOutput(item: any, index: number): RemovedToolOutput {
+    const raw = item?.rawItem ?? item;
+    return {
+      index,
+      itemType: raw?.type ?? 'unknown',
+      callId: raw?.callId ?? raw?.call_id ?? raw?.tool_call_id ?? raw?.id,
+      toolName: raw?.name ?? raw?.toolName,
+      output: raw?.output,
+    };
+  }
+
+  #findLastToolOutputIndex(): number {
+    for (let i = this.#history.length - 1; i >= 0; i--) {
+      const item: any = this.#history[i];
+      const raw = item?.rawItem ?? item;
+      if (ConversationStore.#isToolOutputItem(raw)) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   /**

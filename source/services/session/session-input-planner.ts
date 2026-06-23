@@ -133,13 +133,24 @@ export class SessionInputPlanner {
    * @param options.pendingModeNotice - An optional mode notice to prepend to the turn text.
    * @returns A plan describing what to send to the provider.
    */
-  build(turn: UserTurn, options: { includeTurn: boolean; pendingModeNotice: string | null }): SessionInputPlan {
+  build(
+    turn: UserTurn,
+    options: { includeTurn: boolean; pendingModeNotice: string | null; replayFromHistory?: boolean },
+  ): SessionInputPlan {
     const provider = this.#getProviderForGuard() ?? 'openai';
     const dynamicSupportsChaining = getMethod<[], boolean>(this.#agentClient, 'supportsConversationChaining');
     const supportsChaining = dynamicSupportsChaining
       ? dynamicSupportsChaining.call(this.#agentClient)
       : supportsConversationChaining(provider);
     const history = this.#toolTracker.getReconciledHistory();
+    if (options.replayFromHistory) {
+      const statelessHistory = sanitizeMalformedToolCallArguments(dropUnpairedFunctionCalls(history));
+      return {
+        streamInput: statelessHistory as AgentInputItem[],
+        inputSurgeKind: 'full_history',
+        effectiveTurn: turn,
+      };
+    }
     const effectiveTurn = options.includeTurn ? this.#turnWithModeNotice(turn, options.pendingModeNotice) : turn;
     const outgoingHistory = options.includeTurn ? [...history, this.#makeUserInputItem(effectiveTurn)] : history;
     // When the history contains a function_call with malformed JSON arguments

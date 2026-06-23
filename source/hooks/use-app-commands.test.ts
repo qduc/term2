@@ -190,6 +190,7 @@ it.sequential('createRetrySlashCommand undoes and re-sends the last user message
     sendUserMessage: async (input) => {
       sentText = typeof input === 'string' ? input : input.text;
     },
+    retryLastToolOutput: async () => true,
     addSystemMessage: (text) => systemMessages.push(text),
     listUserTurns: () => [{ index: 0, text: 'hello', imageCount: 0 }],
     onUndo: () => {
@@ -207,6 +208,67 @@ it.sequential('createRetrySlashCommand undoes and re-sends the last user message
   expect(systemMessages).toEqual([]);
 });
 
+it.sequential('createRetrySlashCommand retries the last user message when explicitly asked', async () => {
+  const systemMessages: string[] = [];
+  let undoCalled = false;
+  let sentText: string | null = null;
+
+  const command = createRetrySlashCommand({
+    undoLastUserMessage: () => {
+      undoCalled = true;
+      return { text: 'hello' };
+    },
+    sendUserMessage: async (input) => {
+      sentText = typeof input === 'string' ? input : input.text;
+    },
+    retryLastToolOutput: async () => true,
+    addSystemMessage: (text) => systemMessages.push(text),
+    listUserTurns: () => [{ index: 0, text: 'hello', imageCount: 0 }],
+  });
+
+  expect(command.action('user')).toBe(true);
+  expect(undoCalled).toBe(true);
+  expect(sentText).toBe('hello');
+  expect(systemMessages).toEqual([]);
+});
+
+it.sequential('createRetrySlashCommand retries the last tool output', async () => {
+  const systemMessages: string[] = [];
+  let retryCalled = false;
+
+  const command = createRetrySlashCommand({
+    undoLastUserMessage: () => null,
+    sendUserMessage: async () => {},
+    retryLastToolOutput: async () => {
+      retryCalled = true;
+      return true;
+    },
+    addSystemMessage: (text) => systemMessages.push(text),
+    listUserTurns: () => [],
+  });
+
+  expect(command.action('tool')).toBe(true);
+  await flushMicrotasks();
+  expect(retryCalled).toBe(true);
+  expect(systemMessages).toEqual([]);
+});
+
+it.sequential('createRetrySlashCommand shows system message when no tool output can be retried', async () => {
+  const systemMessages: string[] = [];
+
+  const command = createRetrySlashCommand({
+    undoLastUserMessage: () => null,
+    sendUserMessage: async () => {},
+    retryLastToolOutput: async () => false,
+    addSystemMessage: (text) => systemMessages.push(text),
+    listUserTurns: () => [],
+  });
+
+  expect(command.action('tool')).toBe(true);
+  await flushMicrotasks();
+  expect(systemMessages).toEqual(['Nothing to retry.']);
+});
+
 it.sequential('createRetrySlashCommand shows system message when nothing to retry', () => {
   const systemMessages: string[] = [];
   let undoCalled = false;
@@ -217,6 +279,7 @@ it.sequential('createRetrySlashCommand shows system message when nothing to retr
       return null;
     },
     sendUserMessage: async () => {},
+    retryLastToolOutput: async () => true,
     addSystemMessage: (text) => systemMessages.push(text),
     listUserTurns: () => [],
   });
@@ -243,6 +306,7 @@ it.sequential('createRetrySlashCommand retries when previous turn included image
     sendUserMessage: async (input) => {
       sentInput = input;
     },
+    retryLastToolOutput: async () => true,
     addSystemMessage: (text) => systemMessages.push(text),
     listUserTurns: () => [{ index: 0, text: 'hello', imageCount: 1 }],
   });
@@ -289,6 +353,7 @@ const TestHookWrapper = ({
     openUndoMenu: () => {},
     openProvidersMenu: () => {},
     sendUserMessage: async () => {},
+    retryLastToolOutput: async () => false,
     listUserTurns: () => [],
     skillsService: { getAvailableSkills: () => [] } as any,
     onSkillSelected: () => {},
@@ -589,6 +654,7 @@ it.sequential(
           handoffText = text;
         },
         sendUserMessage: async () => {},
+        retryLastToolOutput: async () => false,
         listUserTurns: () => [],
         skillsService: { getAvailableSkills: () => [] } as any,
         onSkillSelected: () => {},

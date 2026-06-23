@@ -47,6 +47,18 @@ function expandHomePath(filePath: string, home: string): string {
   return filePath;
 }
 
+function resolveCurrentRuntimeRoot(home: string): string | undefined {
+  try {
+    const realExecPath = fs.realpathSync(process.execPath);
+    if (!realExecPath.startsWith(`${home}${path.sep}`)) {
+      return undefined;
+    }
+    return path.dirname(path.dirname(realExecPath));
+  } catch {
+    return undefined;
+  }
+}
+
 export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOptions = {}): SandboxRuntimeConfig {
   const home = os.homedir();
   const readPolicy = options.readPolicy ?? 'credential-denylist';
@@ -55,6 +67,15 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
   const appCacheDir = path.join(home, '.cache', 'term2-nodejs');
   const rtkConfigDir = path.join(home, '.config', 'rtk');
   const rtkDataDir = path.join(home, '.local', 'share', 'rtk');
+  const safeHomeReadPaths = [
+    path.join(home, '.gitconfig'),
+    path.join(home, '.config', 'git'),
+    path.join(home, '.npm'),
+    path.join(home, 'Library', 'pnpm'),
+    path.join(home, '.local', 'share', 'pnpm'),
+    path.join(home, '.pnpm-store'),
+    resolveCurrentRuntimeRoot(home),
+  ].filter((filePath): filePath is string => Boolean(filePath));
   const credentialFiles = [
     path.join(home, '.ssh'),
     path.join(home, '.aws'),
@@ -106,6 +127,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
           appCacheDir,
           rtkConfigDir,
           rtkDataDir,
+          ...safeHomeReadPaths,
           ...allowReadExtra,
           '/usr',
           '/bin',

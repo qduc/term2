@@ -84,6 +84,13 @@ it('createSandboxRuntimeConfig denies home and named system reads with workspace
   const appCacheDir = path.join(home, '.cache', 'term2-nodejs');
   const rtkConfigDir = path.join(home, '.config', 'rtk');
   const rtkDataDir = path.join(home, '.local', 'share', 'rtk');
+  const gitConfigFile = path.join(home, '.gitconfig');
+  const gitConfigDir = path.join(home, '.config', 'git');
+  const npmCacheDir = path.join(home, '.npm');
+  const pnpmStoreDir = path.join(home, 'Library', 'pnpm');
+  const pnpmStoreDirLinux = path.join(home, '.local', 'share', 'pnpm');
+  const pnpmStoreDirLegacy = path.join(home, '.pnpm-store');
+  const runtimeRoot = path.dirname(path.dirname(fs.realpathSync(process.execPath)));
   const config = createSandboxRuntimeConfig({
     readPolicy: 'home-denylist',
     allowReadExtra: ['~/.local/share/pnpm/store'],
@@ -97,6 +104,13 @@ it('createSandboxRuntimeConfig denies home and named system reads with workspace
       appCacheDir,
       rtkConfigDir,
       rtkDataDir,
+      gitConfigFile,
+      gitConfigDir,
+      npmCacheDir,
+      pnpmStoreDir,
+      pnpmStoreDirLinux,
+      pnpmStoreDirLegacy,
+      runtimeRoot,
       path.join(home, '.local', 'share', 'pnpm', 'store'),
       '/usr',
       '/bin',
@@ -111,5 +125,6 @@ it('createSandboxRuntimeConfig denies home and named system reads with workspace
     ]),
   );
   expect(config.filesystem.allowRead).not.toContain(home);
+  expect(config.filesystem.allowRead).not.toContain(path.join(home, '.npmrc'));
   expect(config.filesystem.allowWrite).toEqual(expect.arrayContaining([workspaceRoot, SANDBOX_TEMP_DIR]));
 });

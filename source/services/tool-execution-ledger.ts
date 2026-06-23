@@ -448,3 +448,89 @@ export function reconcileHistoryWithToolLedger(
 
   return { history: next, addedCompletedPairs, droppedIncompleteCalls };
 }
+
+/**
+ * Check whether a value is a malformed JSON string — i.e. a non-empty string
+ * that looks like JSON (starts with `{` or `[`) but fails to parse.
+ */
+const isMalformedJsonString = (value: unknown): boolean => {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+  try {
+    JSON.parse(trimmed);
+    return false;
+  } catch {
+    return trimmed.startsWith('{') || trimmed.startsWith('[');
+  }
+};
+
+/**
+ * Returns true when the history contains any `function_call` item whose
+ * `arguments` field is a malformed JSON string.
+ *
+ * Used to decide whether provider-side conversation chaining must be
+ * disabled: the previous response stored on the provider side may contain
+ * the malformed tool call, making continuation via `previousResponseId`
+ * unreliable. Falling back to stateless (full-history) mode lets
+ * {@link sanitizeMalformedToolCallArguments} repair the arguments before
+ * they reach the provider API.
+ */
+export function hasMalformedToolCallArguments(history: readonly unknown[]): boolean {
+  return history.some((item) => {
+    if (typeOf(item) !== 'function_call') {
+      return false;
+    }
+    const raw = rawItem(item);
+    return isMalformedJsonString(raw?.arguments ?? raw?.args);
+  });
+}
+
+/**
+ * Replace malformed JSON arguments in `function_call` items with `'{}'`.
+ *
+ * When the model's response stream is interrupted (e.g. the server drops
+ * mid-stream), it may emit a `function_call` item with truncated JSON
+ * arguments. The provider API rejects requests containing invalid JSON in
+ * tool call arguments, which blocks the continuation user message. This
+ * function is a safety net for the stateless (full-history) path: it repairs
+ * malformed argument strings so the conversation history can still be sent.
+ *
+ * Non-string arguments (already-parsed objects), valid JSON strings, and
+ * non-`function_call` items are left untouched.
+ *
+ * Returns the same array reference when no changes are needed.
+ */
+export function sanitizeMalformedToolCallArguments(history: readonly unknown[]): unknown[] {
+  let changed = false;
+  const result = history.map((item): unknown => {
+    if (typeOf(item) !== 'function_call') {
+      return item;
+    }
+    const raw = rawItem(item);
+    if (!raw) {
+      return item;
+    }
+
+    const args = raw.arguments ?? raw.args;
+    if (!isMalformedJsonString(args)) {
+      return item;
+    }
+
+    changed = true;
+    const normalized = clone(raw) as Record<string, unknown>;
+    normalized.arguments = '{}';
+    delete normalized.args;
+    // Preserve the wrapper structure if the original item had a rawItem wrapper
+    const wrapperRecord = asRecord(item);
+    if (wrapperRecord && asRecord(wrapperRecord.rawItem)) {
+      return { ...wrapperRecord, rawItem: normalized };
+    }
+    return normalized;
+  });
+  return changed ? result : (history as unknown[]);
+}

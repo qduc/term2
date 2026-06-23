@@ -3,6 +3,8 @@ import {
   ToolExecutionLedger,
   reconcileHistoryWithToolLedger,
   dropUnpairedFunctionCalls,
+  sanitizeMalformedToolCallArguments,
+  hasMalformedToolCallArguments,
   type SavedToolExecution,
 } from './tool-execution-ledger.js';
 
@@ -462,4 +464,151 @@ it('dropUnpairedFunctionCalls is a no-op when all calls have outputs', () => {
 
   const result = dropUnpairedFunctionCalls(history);
   expect(result).toBe(history);
+});
+
+// ---- sanitizeMalformedToolCallArguments ----
+
+it('sanitizeMalformedToolCallArguments replaces malformed JSON arguments with empty object', () => {
+  const history = [
+    { role: 'user' as const, type: 'message', content: 'do work' },
+    { type: 'function_call', id: 'fc_1', call_id: 'call-a', name: 'shell', arguments: '{"command":"ls",' },
+    { type: 'function_call_output', call_id: 'call-a', output: 'error: malformed arguments' },
+  ];
+
+  const result = sanitizeMalformedToolCallArguments(history);
+  const fc = result.find((item) => (item as { type?: string }).type === 'function_call') as Record<string, unknown>;
+  expect(fc.arguments).toBe('{}');
+  // Non-function_call items are untouched
+  const userMsg = result[0] as Record<string, unknown>;
+  expect(userMsg.content).toBe('do work');
+  const output = result.find((item) => (item as { type?: string }).type === 'function_call_output') as Record<
+    string,
+    unknown
+  >;
+  expect(output.output).toBe('error: malformed arguments');
+});
+
+it('sanitizeMalformedToolCallArguments leaves valid JSON arguments untouched', () => {
+  const history = [
+    { type: 'function_call', id: 'fc_1', call_id: 'call-a', name: 'shell', arguments: '{"command":"echo hi"}' },
+    { type: 'function_call_output', call_id: 'call-a', output: 'hi' },
+  ];
+
+  const result = sanitizeMalformedToolCallArguments(history);
+  expect(result).toBe(history);
+});
+
+it('sanitizeMalformedToolCallArguments leaves non-string arguments untouched', () => {
+  const history = [
+    { type: 'function_call', id: 'fc_1', call_id: 'call-a', name: 'shell', arguments: { command: 'ls' } },
+    { type: 'function_call_output', call_id: 'call-a', output: 'ok' },
+  ];
+
+  const result = sanitizeMalformedToolCallArguments(history);
+  expect(result).toBe(history);
+});
+
+it('sanitizeMalformedToolCallArguments is a no-op when no function_calls exist', () => {
+  const history = [
+    { role: 'user' as const, type: 'message', content: 'hello' },
+    { role: 'assistant' as const, type: 'message', content: [{ type: 'output_text', text: 'hi there' }] },
+  ];
+
+  const result = sanitizeMalformedToolCallArguments(history);
+  expect(result).toBe(history);
+});
+
+it('sanitizeMalformedToolCallArguments handles empty/undefined arguments', () => {
+  const history = [
+    { type: 'function_call', id: 'fc_1', call_id: 'call-a', name: 'shell' },
+    { type: 'function_call', id: 'fc_2', call_id: 'call-b', name: 'shell', arguments: '' },
+  ];
+
+  const result = sanitizeMalformedToolCallArguments(history);
+  expect(result).toBe(history);
+});
+
+it('sanitizeMalformedToolCallArguments handles nested rawItem wrapper', () => {
+  const history = [
+    {
+      rawItem: {
+        type: 'function_call',
+        id: 'fc_1',
+        call_id: 'call-a',
+        name: 'shell',
+        arguments: '{"command":"ls",',
+      },
+    },
+    { type: 'function_call_output', call_id: 'call-a', output: 'ok' },
+  ];
+
+  const result = sanitizeMalformedToolCallArguments(history);
+  const fc = result[0] as Record<string, unknown>;
+  const raw = (fc.rawItem ?? fc) as Record<string, unknown>;
+  expect(raw.arguments).toBe('{}');
+});
+
+it('sanitizeMalformedToolCallArguments handles multiple malformed calls', () => {
+  const history = [
+    { type: 'function_call', id: 'fc_1', call_id: 'call-a', name: 'shell', arguments: '{"cmd' },
+    { type: 'function_call_output', call_id: 'call-a', output: 'r1' },
+    { type: 'function_call', id: 'fc_2', call_id: 'call-b', name: 'read_file', arguments: '{"path":"/tmp' },
+    { type: 'function_call_output', call_id: 'call-b', output: 'r2' },
+  ];
+
+  const result = sanitizeMalformedToolCallArguments(history);
+  const calls = result.filter((item) => (item as { type?: string }).type === 'function_call') as Record<
+    string,
+    unknown
+  >[];
+  expect(calls.every((fc) => fc.arguments === '{}')).toBe(true);
+});
+
+it('sanitizeMalformedToolCallArguments does not mutate the original array', () => {
+  const history = [
+    { type: 'function_call', id: 'fc_1', call_id: 'call-a', name: 'shell', arguments: '{"broken' },
+    { type: 'function_call_output', call_id: 'call-a', output: 'ok' },
+  ];
+
+  const result = sanitizeMalformedToolCallArguments(history);
+  expect(result).not.toBe(history);
+  const originalFc = history[0] as Record<string, unknown>;
+  expect(originalFc.arguments).toBe('{"broken');
+  const sanitizedFc = result[0] as Record<string, unknown>;
+  expect(sanitizedFc.arguments).toBe('{}');
+});
+
+// ---- hasMalformedToolCallArguments ----
+
+it('hasMalformedToolCallArguments returns true when any function_call has malformed JSON', () => {
+  const history = [
+    { type: 'function_call', id: 'fc_1', call_id: 'call-a', name: 'shell', arguments: '{"command":"echo hi"}' },
+    { type: 'function_call_output', call_id: 'call-a', output: 'hi' },
+    { type: 'function_call', id: 'fc_2', call_id: 'call-b', name: 'read_file', arguments: '{"path":"/tmp' },
+  ];
+
+  expect(hasMalformedToolCallArguments(history)).toBe(true);
+});
+
+it('hasMalformedToolCallArguments returns false when all arguments are valid JSON', () => {
+  const history = [
+    { type: 'function_call', id: 'fc_1', call_id: 'call-a', name: 'shell', arguments: '{"command":"ls"}' },
+    { type: 'function_call_output', call_id: 'call-a', output: 'done' },
+  ];
+
+  expect(hasMalformedToolCallArguments(history)).toBe(false);
+});
+
+it('hasMalformedToolCallArguments returns false when arguments are non-string objects', () => {
+  const history = [
+    { type: 'function_call', id: 'fc_1', call_id: 'call-a', name: 'shell', arguments: { command: 'ls' } },
+  ];
+
+  expect(hasMalformedToolCallArguments(history)).toBe(false);
+});
+
+it('hasMalformedToolCallArguments returns false when no function_calls exist', () => {
+  const history = [{ role: 'user' as const, type: 'message', content: 'hello' }];
+
+  expect(hasMalformedToolCallArguments(history)).toBe(false);
 });

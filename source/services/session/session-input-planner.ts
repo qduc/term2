@@ -8,7 +8,11 @@ import { LargeUncachedInputGuard, type LargeUncachedInputDecision } from '../lar
 import { getProvider } from '../../providers/index.js';
 import { getMethod } from '../interruption-info.js';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
-import { dropUnpairedFunctionCalls } from '../tool-execution-ledger.js';
+import {
+  dropUnpairedFunctionCalls,
+  hasMalformedToolCallArguments,
+  sanitizeMalformedToolCallArguments,
+} from '../tool-execution-ledger.js';
 
 const supportsConversationChaining = (providerId: string): boolean => {
   const providerDef = getProvider(providerId);
@@ -138,7 +142,14 @@ export class SessionInputPlanner {
     const history = this.#toolTracker.getReconciledHistory();
     const effectiveTurn = options.includeTurn ? this.#turnWithModeNotice(turn, options.pendingModeNotice) : turn;
     const outgoingHistory = options.includeTurn ? [...history, this.#makeUserInputItem(effectiveTurn)] : history;
-    const useChaining = supportsChaining && this.#providerContinuity.isChainingAvailable(outgoingHistory.length);
+    // When the history contains a function_call with malformed JSON arguments
+    // (e.g. from a stream interrupted mid-response), provider-side chaining is
+    // unreliable — the previous response may carry the malformed tool call.
+    // Fall back to stateless mode where the arguments can be sanitized before
+    // sending.
+    const hasMalformedArgs = hasMalformedToolCallArguments(outgoingHistory);
+    const useChaining =
+      supportsChaining && !hasMalformedArgs && this.#providerContinuity.isChainingAvailable(outgoingHistory.length);
     const latestInput = outgoingHistory[outgoingHistory.length - 1] ?? effectiveTurn.text;
     const chainedInput = effectiveTurn.images?.length ? latestInput : effectiveTurn.text;
 
@@ -146,7 +157,11 @@ export class SessionInputPlanner {
     // API rejects a previous_response_id-less input containing a function_call
     // without a paired output. Recovery may fail to find every in-flight tool
     // output (lost deltas), so drop orphaned calls as a last-resort safety net.
-    const statelessHistory = useChaining ? null : dropUnpairedFunctionCalls(outgoingHistory);
+    // Malformed JSON arguments (from interrupted streams) are also repaired so
+    // the provider API accepts the request.
+    const statelessHistory = useChaining
+      ? null
+      : sanitizeMalformedToolCallArguments(dropUnpairedFunctionCalls(outgoingHistory));
 
     return {
       streamInput: useChaining

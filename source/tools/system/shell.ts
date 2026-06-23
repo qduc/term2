@@ -373,6 +373,12 @@ export function createShellToolDefinition(deps: {
                   ...projectAllowRead,
                   ...extraAllowReadFromOverride,
                 ],
+                onProtectedFiltered: (filtered) => {
+                  loggingService.info('Shell sandbox removed write access to protected paths', {
+                    filtered,
+                    cwd,
+                  });
+                },
               });
               const wrapped = await shellSandboxRunner.wrap(commandToRun, {
                 cwd,

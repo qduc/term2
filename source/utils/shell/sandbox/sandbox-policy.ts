@@ -35,7 +35,55 @@ export interface CreateSandboxRuntimeConfigOptions {
   allowReadExtra?: string[];
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  onProtectedFiltered?: (filtered: readonly string[]) => void;
 }
+
+// Paths the sandbox must never allow writing to, regardless of where term2
+// was launched from. Two classes:
+//   - EXACT: only when cwd (resolved) is exactly the path
+//   - SUBTREE: when cwd (resolved) is the path or any descendant
+// Both Linux and macOS paths are listed; the runtime drops non-existent paths
+// per platform. This list is hardcoded on purpose: it is the floor of what
+// "do not destroy the user's system" means, and giving users a setting to
+// weaken it would defeat the point. See docs/sandbox-filesystem-read-hardening.md.
+const EXACT_PROTECTED_WRITE_PATHS = [
+  '$HOME', // resolved via os.homedir() at use time
+  '/root',
+  '/var',
+  '/private/var',
+  '/mnt',
+  '/media',
+  '/srv',
+  '/opt',
+] as const;
+
+const SUBTREE_PROTECTED_WRITE_PATHS = [
+  '/etc',
+  '/private/etc',
+  '/boot',
+  '/usr',
+  '/bin',
+  '/sbin',
+  '/lib',
+  '/lib64',
+  '/proc',
+  '/sys',
+  '/dev',
+  '/Library',
+  '/System',
+  '/System/Library',
+] as const;
+
+// Common dev locations are intentionally NOT protected:
+//   /usr/local, /opt/homebrew, /tmp, /private/tmp
+// These host Homebrew, local builds, temp worktrees, and cache dirs.
+// Blocking them would break normal development workflows.
+//
+// Writable carve-outs that sit *inside* a SUBTREE-protected path. Without
+// this, the `/usr` subtree guard below would remove `/usr/local` (and
+// descendants like `/usr/local/src`) from allowWrite, contradicting the
+// documented exception above. Checked before subtree protection.
+const WRITABLE_SUBTREE_EXCEPTIONS = ['/usr/local'] as const;
 
 function expandHomePath(filePath: string, home: string): string {
   if (filePath === '~') {
@@ -57,6 +105,47 @@ function resolveCurrentRuntimeRoot(home: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+// Normalize $HOME the same way workspaceRoot is (realpathSync) so the exact
+// home guard still fires when os.homedir() is a symlink path and the launch
+// cwd is $HOME: workspaceRoot becomes the real path while a bare
+// path.resolve(home) would stay the symlink path. Best-effort: fall back to
+// path.resolve when the home directory cannot be resolved.
+function resolveHomePath(home: string): string {
+  try {
+    return fs.realpathSync(home);
+  } catch {
+    return path.resolve(home);
+  }
+}
+
+export function isPathProtected(target: string, home: string): boolean {
+  const resolved = path.resolve(target);
+  const resolvedHome = resolveHomePath(home);
+
+  for (const protectedPath of EXACT_PROTECTED_WRITE_PATHS) {
+    if (resolved === path.resolve(protectedPath === '$HOME' ? resolvedHome : protectedPath)) {
+      return true;
+    }
+  }
+
+  // Writable carve-outs inside a subtree-protected path take precedence over
+  // subtree protection so documented exceptions (e.g. /usr/local) stay writable.
+  for (const exceptionPath of WRITABLE_SUBTREE_EXCEPTIONS) {
+    const resolvedException = path.resolve(exceptionPath);
+    if (resolved === resolvedException || resolved.startsWith(resolvedException + path.sep)) {
+      return false;
+    }
+  }
+
+  for (const protectedPath of SUBTREE_PROTECTED_WRITE_PATHS) {
+    const resolvedProtected = path.resolve(protectedPath);
+    if (resolved === resolvedProtected) return true;
+    if (resolved.startsWith(resolvedProtected + path.sep)) return true;
+  }
+
+  return false;
 }
 
 export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOptions = {}): SandboxRuntimeConfig {
@@ -142,6 +231,13 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
         ]
       : undefined;
 
+  const rawAllowWrite = [workspaceRoot, tmpDir];
+  const protectedFiltered = rawAllowWrite.filter((p) => isPathProtected(p, home));
+  const allowWrite = rawAllowWrite.filter((p) => !isPathProtected(p, home));
+  if (protectedFiltered.length > 0) {
+    options.onProtectedFiltered?.(protectedFiltered);
+  }
+
   return {
     network: {
       allowedDomains: [],
@@ -152,7 +248,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
     filesystem: {
       denyRead,
       ...(allowRead ? { allowRead } : {}),
-      allowWrite: [workspaceRoot, tmpDir],
+      allowWrite,
       denyWrite: [],
       allowGitConfig: true,
     },

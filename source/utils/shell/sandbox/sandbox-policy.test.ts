@@ -2,7 +2,7 @@ import { it, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createSandboxRuntimeConfig } from './sandbox-policy.js';
+import { createSandboxRuntimeConfig, isPathProtected } from './sandbox-policy.js';
 import { SANDBOX_TEMP_DIR } from '../temp-dir.js';
 
 it('createSandboxRuntimeConfig allows writing to the shared sandbox temp dir', () => {
@@ -127,4 +127,87 @@ it('createSandboxRuntimeConfig denies home and named system reads with workspace
   expect(config.filesystem.allowRead).not.toContain(home);
   expect(config.filesystem.allowRead).not.toContain(path.join(home, '.npmrc'));
   expect(config.filesystem.allowWrite).toEqual(expect.arrayContaining([workspaceRoot, SANDBOX_TEMP_DIR]));
+});
+
+it('createSandboxRuntimeConfig filters exact-only protected paths (cwd = $HOME) from allowWrite', () => {
+  const home = os.homedir();
+  const config = createSandboxRuntimeConfig({ cwd: home });
+  expect(config.filesystem.allowWrite).not.toContain(home);
+  // tmpDir is typically under /tmp, which is not protected.
+  expect(config.filesystem.allowWrite).toEqual(expect.arrayContaining([SANDBOX_TEMP_DIR]));
+});
+
+it('createSandboxRuntimeConfig keeps $HOME descendants writable (e.g. ~/projects/foo)', () => {
+  // Use a real existing descendant of home if possible; fall back to a
+  // synthetic non-existent path that realpathSync can still resolve (it
+  // cannot, so we just check the policy does not over-match by shape).
+  const home = os.homedir();
+  const child = path.join(home, '.cache');
+  if (!fs.existsSync(child)) return; // environment without .cache; skip
+  const config = createSandboxRuntimeConfig({ cwd: child });
+  expect(config.filesystem.allowWrite).toEqual(expect.arrayContaining([fs.realpathSync(child), SANDBOX_TEMP_DIR]));
+});
+
+it('createSandboxRuntimeConfig filters subtree /etc from allowWrite', () => {
+  if (!fs.existsSync('/etc')) return; // environment without /etc; skip
+  const configEtcRoot = createSandboxRuntimeConfig({ cwd: '/etc' });
+  expect(configEtcRoot.filesystem.allowWrite).not.toContain('/etc');
+  expect(configEtcRoot.filesystem.allowWrite).toEqual(expect.arrayContaining([SANDBOX_TEMP_DIR]));
+});
+
+it('isPathProtected keeps /usr/local and descendants writable (documented exception)', () => {
+  const home = os.homedir();
+  // /usr/local is a documented writable carve-out inside the /usr subtree.
+  expect(isPathProtected('/usr/local', home)).toBe(false);
+  expect(isPathProtected('/usr/local/src', home)).toBe(false);
+  expect(isPathProtected('/usr/local/foo/bar', home)).toBe(false);
+  // /usr itself and other /usr descendants remain subtree-protected.
+  expect(isPathProtected('/usr', home)).toBe(true);
+  expect(isPathProtected('/usr/bin', home)).toBe(true);
+});
+
+it('isPathProtected guards home even when the home dir is a symlink path', () => {
+  const home = os.homedir();
+  // The protected home entry is normalized the same way workspaceRoot is
+  // (realpath), so it matches the realpath-resolved workspace when launched
+  // from a symlinked $HOME.
+  const realHome = fs.existsSync(home) ? fs.realpathSync(home) : path.resolve(home);
+  expect(isPathProtected(realHome, home)).toBe(true);
+  expect(isPathProtected(path.join(realHome, 'projects'), home)).toBe(false);
+});
+
+it('createSandboxRuntimeConfig invokes onProtectedFiltered callback with filtered paths', () => {
+  const home = os.homedir();
+  const filtered: string[][] = [];
+  createSandboxRuntimeConfig({
+    cwd: home,
+    onProtectedFiltered: (paths) => filtered.push([...paths]),
+  });
+  expect(filtered).toEqual([[home]]);
+});
+
+it('createSandboxRuntimeConfig does not invoke onProtectedFiltered when nothing is filtered', () => {
+  // /tmp is never in the protected list; if it doesn't exist on this machine,
+  // fall back to the system tmpdir (also typically not protected).
+  const safeCwd = fs.existsSync('/tmp') ? '/tmp' : os.tmpdir();
+  let invoked = false;
+  createSandboxRuntimeConfig({
+    cwd: safeCwd,
+    onProtectedFiltered: () => {
+      invoked = true;
+    },
+  });
+  expect(invoked).toBe(false);
+});
+
+it('createSandboxRuntimeConfig does not modify allowRead or denyRead when filtering allowWrite', () => {
+  const home = os.homedir();
+  const config = createSandboxRuntimeConfig({
+    cwd: home,
+    readPolicy: 'home-denylist',
+  });
+  // /etc, /var, /root, /private/var are still in denyRead (unrelated to write filter)
+  expect(config.filesystem.denyRead).toEqual(expect.arrayContaining([home, '/etc', '/var', '/root', '/private/var']));
+  // allowRead still contains the same system tool paths as before the change.
+  expect(config.filesystem.allowRead).toEqual(expect.arrayContaining(['/usr', '/bin', '/opt']));
 });

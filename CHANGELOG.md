@@ -1,3 +1,27 @@
+## [0.9.0] - 2026-06-23
+
+### Features
+- Add sandboxed shell execution with configurable read policy levels (`credential-denylist`, `home-denylist`, `standard`, `strict`)
+- Add sandbox write protection with filtered path logging
+- Add sandbox temp directory management for consistent temporary file handling
+- Add denied read approval UX for sandbox filesystem access
+- Add unsandboxed shell approval support in ApprovalPrompt
+- Rename `find_files` tool to `glob` for clarity
+- Show approval prompt when reading outside workspace instead of denying access
+- Allow using custom model names not in the predefined list
+- Sanitize and detect malformed tool call arguments in conversation history
+- Optimize token input handling for improved performance
+- Increase default max tool output size from 10k to 40k characters
+- Enhance skill discovery paths for better workspace resolution
+
+### Bug Fixes
+- Fix missing tool outputs in stateless full-history fallback causing HTTP 400 errors
+- Fix ghost dotfiles not being cleaned up properly
+- Fix model selection not working in handoff flow
+- Fix duplicate text appearing in non-interactive mode
+
+---
+
 ## [0.8.0] - 2026-06-20
 
 ### Features

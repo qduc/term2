@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # ============================================================================
-# standalone-sandbox.sh — Replicate the project's sandbox in home-denylist mode
+# standalone-sandbox.sh — Replicate the project's sandbox in strict mode
 # ============================================================================
 #
 # USE CASE: Experiment with and debug why commands fail under the sandbox.
 # This script constructs the same bwrap(1) invocation that the project's
 # @anthropic-ai/sandbox-runtime generates when `sandbox.readPolicy` is set
-# to `home-denylist`.
+# to `strict`.
 #
 # REQUIREMENTS:
 #   - Linux with bubblewrap (bwrap) installed
@@ -132,7 +132,7 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       echo "Usage: $(basename "$0") [options] <command>"
       echo
-      echo "Replicate the project's sandbox in home-denylist mode for debugging."
+      echo "Replicate the project's sandbox in strict mode for debugging."
       echo
       echo "Options:"
       echo "  -w, --cwd DIR             Workspace root (default: \$PWD)"
@@ -277,7 +277,7 @@ for p in "$WORKSPACE_ROOT" "$TMP_DIR"; do
 done
 BWROPTS+=("${WRITE_BIND_ARGS[@]}")
 
-# 4. Read restrictions: deny-then-allow (home-denylist mode)
+# 4. Read restrictions: deny-then-allow (strict mode)
 #
 #    Deny-read directories from createSandboxRuntimeConfig():
 #      $HOME, /etc, /var, /root, /private/var
@@ -399,7 +399,7 @@ if $VERBOSE; then
   echo "  Shell:       $SANDBOX_SHELL"
   echo "  TMPDIR:      $TMP_DIR"
   echo "  Network:     blocked"
-  echo "  Read policy: home-denylist"
+  echo "  Read policy: strict"
   echo "  Deny-read:   ${DENY_READ_DIRS[*]}"
   echo "  Allow-write: ${ALLOW_WRITE_PATHS[*]}"
   echo "  Allow-read:  ${ALLOW_READ_PATHS[*]}"

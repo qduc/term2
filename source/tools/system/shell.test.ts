@@ -355,7 +355,7 @@ it.sequential('shell execute wraps local default commands with the sandbox when 
   const runner = createFakeSandboxRunner({
     wrap: async (command: string, options: any) => {
       wrappedCommand = command;
-      receivedReadPolicy = options.config?.filesystem?.allowRead ? 'home-denylist' : 'credential-denylist';
+      receivedReadPolicy = options.config?.filesystem?.allowRead ? 'strict' : 'standard';
       receivedAllowReadExtra = options.config?.filesystem?.allowRead;
       return { command: `sandboxed(${command})`, diagnostics: ['sandbox active'] };
     },
@@ -368,7 +368,7 @@ it.sequential('shell execute wraps local default commands with the sandbox when 
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({
       'sandbox.enabled': true,
-      'sandbox.readPolicy': 'home-denylist',
+      'sandbox.readPolicy': 'strict',
       'sandbox.allowReadExtra': ['/tmp/tool-cache'],
     }),
     shellSandboxRunner: runner,
@@ -382,7 +382,7 @@ it.sequential('shell execute wraps local default commands with the sandbox when 
   const output = await tool.execute({ command: 'pwd', sandbox: 'default' });
 
   expect(wrappedCommand).toBe('pwd');
-  expect(receivedReadPolicy).toBe('home-denylist');
+  expect(receivedReadPolicy).toBe('strict');
   expect(receivedAllowReadExtra).toContain('/tmp/tool-cache');
   expect(executedCommand).toBe('sandboxed(pwd)');
   expect(receivedEnv).toBeTruthy();
@@ -605,13 +605,13 @@ it.sequential('shell needsApproval returns true when a denied-read entry is pend
   expect(await tool.needsApproval({ command: 'cargo build', sandbox: 'default' })).toBe(true);
 });
 
-it.sequential('shell execute detects denied reads under home-denylist and returns retry instruction', async () => {
+it.sequential('shell execute detects denied reads under strict and returns retry instruction', async () => {
   let executedCommand: string | undefined;
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({
       'sandbox.enabled': true,
-      'sandbox.readPolicy': 'home-denylist',
+      'sandbox.readPolicy': 'strict',
     }),
     shellSandboxRunner: createFakeSandboxRunner({
       annotateFailure: (_command: string, stderr: string) =>
@@ -635,38 +635,35 @@ it.sequential('shell execute detects denied reads under home-denylist and return
   expect(info?.sensitive).toBe(false);
 });
 
-it.sequential(
-  'shell execute detects hidden existing home paths reported as no-such-file under home-denylist',
-  async () => {
-    const target = path.join(os.homedir(), '.cache');
-    const tool = createShellToolDefinition({
-      loggingService: createNoopLogger(),
-      settingsService: createMockSettingsService({
-        'sandbox.enabled': true,
-        'sandbox.readPolicy': 'home-denylist',
-      }),
-      shellSandboxRunner: createFakeSandboxRunner(),
-      executeShellCommandImpl: async () => ({
-        stdout: '',
-        stderr: `/usr/bin/bash: line 1: ${target}: No such file or directory`,
-        exitCode: 127,
-        timedOut: false,
-      }),
-    });
-
-    const output = await tool.execute({ command: target, sandbox: 'default' });
-
-    expect(output.toLowerCase()).toContain('retry');
-    expect(deniedReadStore.peek(target)).not.toBeNull();
-  },
-);
-
-it.sequential('shell execute does not detect denied reads under credential-denylist (V1 compatibility)', async () => {
+it.sequential('shell execute detects hidden existing home paths reported as no-such-file under strict', async () => {
+  const target = path.join(os.homedir(), '.cache');
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({
       'sandbox.enabled': true,
-      'sandbox.readPolicy': 'credential-denylist',
+      'sandbox.readPolicy': 'strict',
+    }),
+    shellSandboxRunner: createFakeSandboxRunner(),
+    executeShellCommandImpl: async () => ({
+      stdout: '',
+      stderr: `/usr/bin/bash: line 1: ${target}: No such file or directory`,
+      exitCode: 127,
+      timedOut: false,
+    }),
+  });
+
+  const output = await tool.execute({ command: target, sandbox: 'default' });
+
+  expect(output.toLowerCase()).toContain('retry');
+  expect(deniedReadStore.peek(target)).not.toBeNull();
+});
+
+it.sequential('shell execute does not detect denied reads under standard (V1 compatibility)', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({
+      'sandbox.enabled': true,
+      'sandbox.readPolicy': 'standard',
     }),
     shellSandboxRunner: createFakeSandboxRunner({
       annotateFailure: (_command: string, stderr: string) =>
@@ -682,7 +679,7 @@ it.sequential('shell execute does not detect denied reads under credential-denyl
 
   const output = await tool.execute({ command: 'cat ~/.cargo/registry/cache', sandbox: 'default' });
 
-  // No denied-read detection under credential-denylist — falls through to escape instruction.
+  // No denied-read detection under standard — falls through to escape instruction.
   expect(output).toContain('sandbox="unsandboxed"');
   expect(deniedReadStore.peek('cat ~/.cargo/registry/cache')).toBeNull();
 });
@@ -726,7 +723,7 @@ it.sequential('shell execute consumes extraAllowRead override and merges into sa
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({
       'sandbox.enabled': true,
-      'sandbox.readPolicy': 'home-denylist',
+      'sandbox.readPolicy': 'strict',
       'sandbox.allowReadExtra': ['/tmp/global-extra'],
     }),
     shellSandboxRunner: createFakeSandboxRunner({

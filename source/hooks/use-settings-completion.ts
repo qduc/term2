@@ -61,6 +61,9 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
     'Use shell commands (ripgrep/find) for codebase search instead of built-in tools (true|false)',
   [SETTING_KEYS.SHELL_USE_RTK_COMPRESSION]:
     'Use RTK (third-party) to compress shell command output; term2 downloads it automatically (true|false)',
+  [SETTING_KEYS.SANDBOX_ENABLED]: 'Enable sandbox mode for safer command execution (true|false)',
+  [SETTING_KEYS.SANDBOX_READ_POLICY]: 'File read policy for sandbox (standard|strict)',
+  [SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA]: 'Additional paths allowed for sandbox file reads (comma-separated)',
 };
 
 /**
@@ -134,7 +137,10 @@ export function getSettingCategory(key: string): SettingsCategory {
     key === SETTING_KEYS.SHELL_TIMEOUT ||
     key === SETTING_KEYS.SHELL_MAX_OUTPUT_LINES ||
     key === SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS ||
-    key === SETTING_KEYS.SHELL_USE_RTK_COMPRESSION
+    key === SETTING_KEYS.SHELL_USE_RTK_COMPRESSION ||
+    key === SETTING_KEYS.SANDBOX_ENABLED ||
+    key === SETTING_KEYS.SANDBOX_READ_POLICY ||
+    key === SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA
   ) {
     return findCategoryById('shell');
   }

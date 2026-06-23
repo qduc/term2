@@ -19,7 +19,7 @@ it('createSandboxRuntimeConfig resolves workspace and denies credential files', 
   expect(config.filesystem.denyWrite).toEqual([]);
 });
 
-it('createSandboxRuntimeConfig keeps credential-denylist reads compatible by default', () => {
+it('createSandboxRuntimeConfig keeps standard reads compatible by default', () => {
   const home = os.homedir();
   const config = createSandboxRuntimeConfig();
 
@@ -78,7 +78,7 @@ it('createSandboxRuntimeConfig denies every present secret-shaped environment va
   expect(config.credentials!.envVars).not.toContainEqual({ name: 'JAVA_HOME', mode: 'deny' });
 });
 
-it('createSandboxRuntimeConfig denies home and named system reads with workspace carve-outs for home-denylist', () => {
+it('createSandboxRuntimeConfig denies home and named system reads with workspace carve-outs for strict', () => {
   const home = os.homedir();
   const workspaceRoot = fs.realpathSync(process.cwd());
   const appCacheDir = path.join(home, '.cache', 'term2-nodejs');
@@ -92,7 +92,7 @@ it('createSandboxRuntimeConfig denies home and named system reads with workspace
   const pnpmStoreDirLegacy = path.join(home, '.pnpm-store');
   const runtimeRoot = path.dirname(path.dirname(fs.realpathSync(process.execPath)));
   const config = createSandboxRuntimeConfig({
-    readPolicy: 'home-denylist',
+    readPolicy: 'strict',
     allowReadExtra: ['~/.local/share/pnpm/store'],
   });
 
@@ -204,7 +204,7 @@ it('createSandboxRuntimeConfig does not modify allowRead or denyRead when filter
   const home = os.homedir();
   const config = createSandboxRuntimeConfig({
     cwd: home,
-    readPolicy: 'home-denylist',
+    readPolicy: 'strict',
   });
   // /etc, /var, /root, /private/var are still in denyRead (unrelated to write filter)
   expect(config.filesystem.denyRead).toEqual(expect.arrayContaining([home, '/etc', '/var', '/root', '/private/var']));

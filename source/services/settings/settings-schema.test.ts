@@ -14,22 +14,22 @@ import {
 it('SettingsSchema includes sandbox settings, which default to compatibility-first behavior', () => {
   const parsed = SettingsSchema.parse({ sandbox: {} });
   expect(parsed.sandbox?.enabled).toBe(true);
-  expect(parsed.sandbox?.readPolicy).toBe('credential-denylist');
+  expect(parsed.sandbox?.readPolicy).toBe('standard');
   expect(parsed.sandbox?.allowReadExtra).toEqual([]);
 
   const parsedDisabled = SettingsSchema.parse({ sandbox: { enabled: false } });
   expect(parsedDisabled.sandbox?.enabled).toBe(false);
 
   const parsedHomeDenylist = SettingsSchema.parse({
-    sandbox: { readPolicy: 'home-denylist', allowReadExtra: ['/tmp/cache'] },
+    sandbox: { readPolicy: 'strict', allowReadExtra: ['/tmp/cache'] },
   });
-  expect(parsedHomeDenylist.sandbox?.readPolicy).toBe('home-denylist');
+  expect(parsedHomeDenylist.sandbox?.readPolicy).toBe('strict');
   expect(parsedHomeDenylist.sandbox?.allowReadExtra).toEqual(['/tmp/cache']);
 
   expect(() => SettingsSchema.parse({ sandbox: { readPolicy: 'deny-root' } })).toThrow();
 
   expect(DEFAULT_SETTINGS.sandbox.enabled).toBe(true);
-  expect(DEFAULT_SETTINGS.sandbox.readPolicy).toBe('credential-denylist');
+  expect(DEFAULT_SETTINGS.sandbox.readPolicy).toBe('standard');
   expect(DEFAULT_SETTINGS.sandbox.allowReadExtra).toEqual([]);
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.SANDBOX_ENABLED)).toBe(true);
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.SANDBOX_READ_POLICY)).toBe(true);

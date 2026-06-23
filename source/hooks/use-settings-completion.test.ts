@@ -253,6 +253,8 @@ it('getSettingCategory - groups settings by task-oriented menu tabs', () => {
   expect(getSettingCategory('agent.mentorModel').id).toBe('model');
   expect(getSettingCategory('shell.autoApproveMode').id).toBe('approvals');
   expect(getSettingCategory('shell.timeout').id).toBe('shell');
+  expect(getSettingCategory('sandbox.enabled').id).toBe('shell');
+  expect(getSettingCategory('sandbox.readPolicy').id).toBe('shell');
   expect(getSettingCategory('app.searchViaShell').id).toBe('search');
   expect(getSettingCategory('agent.maxParallelToolCalls').id).toBe('advanced');
   expect(getSettingCategory('agent.subagentWorkerModel').id).toBe('subagents');

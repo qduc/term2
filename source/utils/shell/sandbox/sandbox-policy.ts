@@ -5,7 +5,7 @@ import type { SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
 import { SANDBOX_TEMP_DIR } from '../temp-dir.js';
 import { isSecretKey } from './sandbox-env.js';
 
-export type SandboxReadPolicy = 'credential-denylist' | 'home-denylist';
+export type SandboxReadPolicy = 'standard' | 'strict';
 
 export type ShellSandboxMode = 'default' | 'unsandboxed';
 
@@ -150,7 +150,7 @@ export function isPathProtected(target: string, home: string): boolean {
 
 export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOptions = {}): SandboxRuntimeConfig {
   const home = os.homedir();
-  const readPolicy = options.readPolicy ?? 'credential-denylist';
+  const readPolicy = options.readPolicy ?? 'standard';
   const workspaceRoot = fs.realpathSync(options.cwd ?? process.cwd());
   const tmpDir = SANDBOX_TEMP_DIR;
   const appCacheDir = path.join(home, '.cache', 'term2-nodejs');
@@ -207,9 +207,9 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
   const presentSecretEnvVars = Object.keys(options.env ?? process.env).filter(isSecretKey);
   const credentialEnvVars = Array.from(new Set([...defaultCredentialEnvVars, ...presentSecretEnvVars]));
   const allowReadExtra = (options.allowReadExtra ?? []).map((filePath) => expandHomePath(filePath, home));
-  const denyRead = readPolicy === 'home-denylist' ? [home, '/etc', '/var', '/root', '/private/var'] : credentialFiles;
+  const denyRead = readPolicy === 'strict' ? [home, '/etc', '/var', '/root', '/private/var'] : credentialFiles;
   const allowRead =
-    readPolicy === 'home-denylist'
+    readPolicy === 'strict'
       ? [
           workspaceRoot,
           tmpDir,

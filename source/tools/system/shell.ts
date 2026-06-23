@@ -418,10 +418,10 @@ export function createShellToolDefinition(deps: {
         const annotatedStderr = sandboxed ? shellSandboxRunner.annotateFailure(optimizedCommand, rawStderr) : rawStderr;
         const sandboxViolation = sandboxed && annotatedStderr !== rawStderr;
 
-        // If the sandbox denied a read under home-denylist, try to extract the denied
+        // If the sandbox denied a read under strict, try to extract the denied
         // path so the agent's retry triggers a 4-option approval prompt.
         const readPolicy = settingsService.get<SandboxReadPolicy>('sandbox.readPolicy');
-        if (sandboxed && readPolicy === 'home-denylist') {
+        if (sandboxed && readPolicy === 'strict') {
           const deniedInfo = detectDeniedRead(optimizedCommand, annotatedStderr);
           if (deniedInfo) {
             deniedReadStore.record(optimizedCommand, deniedInfo);

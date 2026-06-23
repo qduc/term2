@@ -26,7 +26,7 @@
  * OPTIONS:
  *   -w, --cwd DIR                Workspace root (default: $PWD)
  *   -e, --allow-read-extra PATH  Extra allow-read path (repeatable, no colon separator)
- *   -p, --read-policy POLICY     'home-denylist' (default) or 'credential-denylist'
+ *   -p, --read-policy POLICY     'strict' (default) or 'standard'
  *   -t, --timeout MS             Command timeout in milliseconds (default: 30000)
  *   -v, --verbose                Print config and wrapped command before running
  *   -d, --dry-run                Only print what would run, don't execute
@@ -74,7 +74,7 @@ directly — the most faithful reproduction available outside the app itself.
 Options:
   -w, --cwd DIR                Workspace root (default: \$PWD)
   -e, --allow-read-extra PATH  Extra allow-read path (repeatable, use multiple -e flags)
-  -p, --read-policy POLICY     'home-denylist' (default) or 'credential-denylist'
+  -p, --read-policy POLICY     'strict' (default) or 'standard'
   -t, --timeout MS             Command timeout in ms (default: 30000)
   -v, --verbose                Print config and wrapped command
   -d, --dry-run                Print only, don't execute
@@ -108,7 +108,7 @@ function parseArgv(argv: string[]): Options {
   const opts: Options = {
     cwd: process.cwd(),
     allowReadExtra: [],
-    readPolicy: 'home-denylist',
+    readPolicy: 'strict',
     timeout: 30_000,
     verbose: false,
     dryRun: false,
@@ -139,8 +139,8 @@ function parseArgv(argv: string[]): Options {
       case '-p':
       case '--read-policy': {
         const val = argv[++i];
-        if (val !== 'home-denylist' && val !== 'credential-denylist') {
-          eprint(`Error: Invalid read policy "${val}". Use 'home-denylist' or 'credential-denylist'.`);
+        if (val !== 'strict' && val !== 'standard') {
+          eprint(`Error: Invalid read policy "${val}". Use 'strict' or 'standard'.`);
           process.exit(1);
         }
         opts.readPolicy = val;

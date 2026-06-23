@@ -75,7 +75,7 @@ export const formatFindFilesCommandMessage: FormatCommandMessage = (item, index,
   const searchPath = args?.path ?? '.';
   const maxResults = args?.max_results;
 
-  const parts = [`find_files "${pattern}"`];
+  const parts = [`glob "${pattern}"`];
   if (searchPath !== '.' && searchPath) {
     parts.push(`"${searchPath}"`);
   }
@@ -92,18 +92,18 @@ export const formatFindFilesCommandMessage: FormatCommandMessage = (item, index,
       command,
       output,
       success,
-      toolName: 'find_files',
+      toolName: 'glob',
       toolArgs: args,
     }),
   ];
 };
 
-const FIND_FILES_DESCRIPTION =
+const GLOB_DESCRIPTION =
   'Search for files by name in the workspace. Useful for finding files by pattern, exploring project structure, or locating specific files. ' +
   'Use this when you know the file name or extension. ' +
   'Do NOT use this to search file contents (use grep) or to find related code from a symbol (use code_context_search). ' +
   'Returns up to max_results matching file paths, one per line, or a note if truncated.';
-const FIND_FILES_DESCRIPTION_OUTSIDE =
+const GLOB_DESCRIPTION_OUTSIDE =
   'Search for files by name on the filesystem. Useful for finding files by pattern, exploring directory structure, or locating specific files. ' +
   'Use this when you know the file name or extension. ' +
   'Do NOT use this to search file contents (use grep). ' +
@@ -118,10 +118,22 @@ export const createFindFilesToolDefinition = (
 ): ToolDefinition<FindFilesToolParams> => {
   const { executionContext, allowOutsideWorkspace = false, forceFindFallback = false } = deps;
   return {
-    name: 'find_files',
-    description: allowOutsideWorkspace ? FIND_FILES_DESCRIPTION_OUTSIDE : FIND_FILES_DESCRIPTION,
+    name: 'glob',
+    description: allowOutsideWorkspace ? GLOB_DESCRIPTION_OUTSIDE : GLOB_DESCRIPTION,
     parameters: findFilesParametersSchema,
-    needsApproval: () => false, // Search is read-only and safe
+    needsApproval: async (params) => {
+      if (allowOutsideWorkspace) {
+        return false;
+      }
+
+      try {
+        const cwd = executionContext?.getCwd() || process.cwd();
+        resolveWorkspacePath(params.path?.trim() || '.', cwd);
+        return false;
+      } catch {
+        return true;
+      }
+    },
     execute: async (params) => {
       const { pattern, path: searchPath, max_results, no_ignore } = params;
 
@@ -137,16 +149,8 @@ export const createFindFilesToolDefinition = (
       const targetPath = searchPath?.trim() || '.';
       const cwd = executionContext?.getCwd() || process.cwd();
 
-      let absolutePath: string;
-      try {
-        // In Lite Mode we may allow searching outside the current workspace.
-        absolutePath = resolveWorkspacePath(targetPath, cwd, { allowOutsideWorkspace });
-      } catch (error: any) {
-        if (error.message?.includes('outside workspace')) {
-          return `Error: ${error.message}`;
-        }
-        throw error;
-      }
+      // The workspace boundary is enforced by needsApproval in the default mode.
+      const absolutePath = resolveWorkspacePath(targetPath, cwd, { allowOutsideWorkspace: true });
 
       const useFd = forceFindFallback ? false : await checkFdAvailability(executionContext);
       const escapedPattern = `'${pattern.replace(/'/g, "'\\''")}'`;

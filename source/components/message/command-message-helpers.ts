@@ -1,11 +1,11 @@
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
 
 const TOOL_NAME_GREP = 'grep' as const;
-const TOOL_NAME_FIND_FILES = 'find_files' as const;
+const TOOL_NAME_GLOB = 'glob' as const;
 
-export type SearchKind = 'grep' | 'find_files' | 'shell';
+export type SearchKind = 'grep' | 'glob' | 'shell';
 
-const SEARCH_TOOL_NAMES = new Set<string>([TOOL_NAME_GREP, TOOL_NAME_FIND_FILES]);
+const SEARCH_TOOL_NAMES = new Set<string>([TOOL_NAME_GREP, TOOL_NAME_GLOB]);
 
 const SEARCH_COMMANDS = ['grep', 'rg', 'find', 'fd', 'ag', 'ack', 'git grep'];
 
@@ -117,7 +117,7 @@ export const parseFindFilesOutput = (output: string | undefined) => {
 
 export const classifySearchKind = (toolName: string | undefined, command: string): SearchKind => {
   if (toolName === TOOL_NAME_GREP) return 'grep';
-  if (toolName === TOOL_NAME_FIND_FILES) return 'find_files';
+  if (toolName === TOOL_NAME_GLOB) return 'glob';
 
   void command;
   return 'shell';
@@ -139,7 +139,7 @@ export const getMatchCount = (toolName: string | undefined, command: string, out
     // Don't fall through to the shell counter; return 0 to avoid miscounting error
     // messages or no-result strings as matches.
     return 0;
-  } else if (searchKind === 'find_files') {
+  } else if (searchKind === 'glob') {
     const parsed = parseFindFilesOutput(sanitizedOutput);
     if (parsed) {
       return parsed.files.length;
@@ -530,7 +530,7 @@ export const formatToolArgs = (
         return `"${path}"`;
       }
 
-      case 'find_files': {
+      case 'glob': {
         const pattern = normalizedArgs.pattern || '';
         const path = normalizedArgs.path || '.';
         if (path !== '.' && path) {

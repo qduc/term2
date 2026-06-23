@@ -625,7 +625,7 @@ it('tool_call_streaming_delta includes tool name from output_item.added when ava
         event: {
           type: 'response.output_item.added',
           output_index: 0,
-          output_item: { type: 'function_call', name: 'find_files', id: 'call-1' },
+          output_item: { type: 'function_call', name: 'glob', id: 'call-1' },
         },
       },
     },
@@ -648,7 +648,7 @@ it('tool_call_streaming_delta includes tool name from output_item.added when ava
 
   const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
   expect(deltas.length).toBe(1);
-  expect(deltas[0].toolName).toBe('find_files');
+  expect(deltas[0].toolName).toBe('glob');
   expect(deltas[0].argumentCharCount).toBe(9); // '{"pattern'.length
 });
 
@@ -697,7 +697,7 @@ it('tool_call_streaming_delta tracks argument char count independently per tool 
         event: {
           type: 'response.output_item.added',
           output_index: 1,
-          output_item: { type: 'function_call', name: 'find_files', id: 'call-2' },
+          output_item: { type: 'function_call', name: 'glob', id: 'call-2' },
         },
       },
     },
@@ -745,7 +745,7 @@ it('tool_call_streaming_delta tracks argument char count independently per tool 
   expect(deltas.length).toBe(3);
   expect(deltas[0].toolName).toBe('shell');
   expect(deltas[0].argumentCharCount).toBe(12); // '{"cmd":"ls"}'.length
-  expect(deltas[1].toolName).toBe('find_files');
+  expect(deltas[1].toolName).toBe('glob');
   expect(deltas[1].argumentCharCount).toBe(18); // '{"pattern":"*.ts"}'.length
   expect(deltas[2].toolName).toBe('shell');
   expect(deltas[2].argumentCharCount).toBe(28); // 12 + ',"detailed":true'.length

@@ -14,7 +14,7 @@ const mockLogger = {
 
 const WORKTREE_HYGIENE_FRAGMENT_MARKER = 'Before making any code changes, inspect the repo worktree.';
 
-it('getAgentDefinition includes grep and find_files when searchViaShell is false', () => {
+it('getAgentDefinition includes grep and glob when searchViaShell is false', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'off',
     'agent.model': 'gpt-4o',
@@ -27,7 +27,7 @@ it('getAgentDefinition includes grep and find_files when searchViaShell is false
 
   const toolNames = definition.tools.map((tool) => tool.name);
   expect(toolNames.includes('grep')).toBe(true);
-  expect(toolNames.includes('find_files')).toBe(true);
+  expect(toolNames.includes('glob')).toBe(true);
   expect(toolNames.includes('read_code_outline')).toBe(true);
   expect(toolNames.includes('code_context_search')).toBe(true);
 });
@@ -200,7 +200,7 @@ it('getAgentDefinition throws if orchestratorMode is true and runSubagent is mis
   ).toThrow(/orchestratorMode.*runSubagent|runSubagent.*orchestratorMode/i);
 });
 
-it('getAgentDefinition excludes grep and find_files when searchViaShell is true', () => {
+it('getAgentDefinition excludes grep and glob when searchViaShell is true', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
     'agent.model': 'gpt-4o',
@@ -213,7 +213,7 @@ it('getAgentDefinition excludes grep and find_files when searchViaShell is true'
 
   const toolNames = definition.tools.map((tool) => tool.name);
   expect(toolNames.includes('grep')).toBe(false);
-  expect(toolNames.includes('find_files')).toBe(false);
+  expect(toolNames.includes('glob')).toBe(false);
   expect(toolNames.includes('read_code_outline')).toBe(true);
   expect(toolNames.includes('code_context_search')).toBe(true);
 });
@@ -238,7 +238,7 @@ it('getAgentDefinition preserves read_file and editing tools when searchViaShell
   expect(toolNames.includes('shell')).toBe(true);
 });
 
-it('getAgentDefinition excludes grep and find_files in lite mode when searchViaShell is true', () => {
+it('getAgentDefinition excludes grep and glob in lite mode when searchViaShell is true', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
     'app.liteMode': true,
@@ -252,14 +252,14 @@ it('getAgentDefinition excludes grep and find_files in lite mode when searchViaS
 
   const toolNames = definition.tools.map((tool) => tool.name);
   expect(toolNames.includes('grep')).toBe(false);
-  expect(toolNames.includes('find_files')).toBe(false);
+  expect(toolNames.includes('glob')).toBe(false);
   expect(toolNames.includes('read_code_outline')).toBe(true);
   expect(toolNames.includes('code_context_search')).toBe(true);
   expect(toolNames.includes('read_file')).toBe(true);
   expect(toolNames.includes('search_replace')).toBe(false);
 });
 
-it('getAgentDefinition for gpt-5 omits grep and find_files regardless of searchViaShell', () => {
+it('getAgentDefinition for gpt-5 omits grep and glob regardless of searchViaShell', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'off',
     'agent.model': 'gpt-5',
@@ -272,7 +272,7 @@ it('getAgentDefinition for gpt-5 omits grep and find_files regardless of searchV
 
   const toolNames = definition.tools.map((tool) => tool.name);
   expect(toolNames.includes('grep')).toBe(false);
-  expect(toolNames.includes('find_files')).toBe(false);
+  expect(toolNames.includes('glob')).toBe(false);
   expect(toolNames.includes('read_code_outline')).toBe(true);
   expect(toolNames.includes('code_context_search')).toBe(true);
   expect(toolNames.includes('apply_patch')).toBe(true);
@@ -316,7 +316,7 @@ it('getAgentDefinition does not default searchViaShell to true for non-gpt-5 mod
   });
 
   expect(definition.instructions.includes('### Searching via the shell')).toBe(false);
-  expect(definition.instructions.includes('`find_files`')).toBe(true);
+  expect(definition.instructions.includes('`glob`')).toBe(true);
   expect(definition.instructions.includes('`grep`')).toBe(true);
 });
 
@@ -332,7 +332,7 @@ it('getAgentDefinition forces searchViaShell on for non-gpt-5 models when explic
   });
 
   expect(definition.instructions.includes('### Searching via the shell')).toBe(true);
-  expect(definition.instructions.includes('`find_files`')).toBe(false);
+  expect(definition.instructions.includes('`glob`')).toBe(false);
   expect(definition.instructions.includes('`grep`')).toBe(false);
 });
 
@@ -398,7 +398,7 @@ it('getAgentDefinition omits dedicated search tool references from prompt when s
     loggingService: mockLogger,
   });
 
-  expect(definition.instructions.includes('`find_files`')).toBe(false);
+  expect(definition.instructions.includes('`glob`')).toBe(false);
   expect(definition.instructions.includes('`grep`')).toBe(false);
 });
 
@@ -413,7 +413,7 @@ it('getAgentDefinition dynamically includes dedicated search tool references whe
     loggingService: mockLogger,
   });
 
-  expect(definition.instructions.includes('`find_files`')).toBe(true);
+  expect(definition.instructions.includes('`glob`')).toBe(true);
   expect(definition.instructions.includes('`grep`')).toBe(true);
   expect(definition.instructions.includes('read_code_outline')).toBe(true);
   expect(definition.instructions.includes('code_context_search')).toBe(true);

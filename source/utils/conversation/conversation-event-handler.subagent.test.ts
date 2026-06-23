@@ -32,7 +32,7 @@ it('subagent events: maintains a live peek with the last three tools', () => {
     type: 'subagent_command_message',
     agentId: 'agent-1',
     role: 'explorer',
-    message: { toolName: 'find_files', command: 'find_files "*.ts"', success: true, output: '' },
+    message: { toolName: 'glob', command: 'glob "*.ts"', success: true, output: '' },
   } as any);
   handler({
     type: 'subagent_command_message',

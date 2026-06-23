@@ -31,13 +31,13 @@ it('getMatchCount returns 0 for grep tool when structured parser returns null (u
   expect(getMatchCount('grep', 'grep', 'some unexpected single line')).toBe(0);
 });
 
-it('getMatchCount returns 0 for find_files tool when structured parser returns null', () => {
+it('getMatchCount returns 0 for glob tool when structured parser returns null', () => {
   // Output that parseFindFilesOutput cannot decode should return 0, not fall through.
-  expect(getMatchCount('find_files', 'find_files', 'Error: no such directory')).toBe(0);
+  expect(getMatchCount('glob', 'glob', 'Error: no such directory')).toBe(0);
 });
 
 it('getMatchCount returns 0 for "No files found matching pattern: ..." output', () => {
-  expect(getMatchCount('find_files', 'find_files', 'No files found matching pattern: *.ts')).toBe(0);
+  expect(getMatchCount('glob', 'glob', 'No files found matching pattern: *.ts')).toBe(0);
 });
 
 it('getMatchCount returns 0 for fallback shell output indicating no results', () => {
@@ -51,10 +51,10 @@ it('getMatchCount returns the sum of matches across files for structured grep ou
   expect(getMatchCount('grep', 'grep', output)).toBe(3);
 });
 
-it('getMatchCount returns the file count for structured find_files output', () => {
+it('getMatchCount returns the file count for structured glob output', () => {
   const output = 'src/a.ts\nsrc/b.ts\nsrc/c.ts';
 
-  expect(getMatchCount('find_files', 'find_files', output)).toBe(3);
+  expect(getMatchCount('glob', 'glob', output)).toBe(3);
 });
 
 it('getMatchCount falls through to the shell fallback when toolName is undefined', () => {
@@ -127,8 +127,8 @@ it("classifySearchKind returns 'grep' for grep tools", () => {
   expect(classifySearchKind('grep', 'rg hello source/')).toBe('grep');
 });
 
-it("classifySearchKind returns 'find_files' for find_files tools", () => {
-  expect(classifySearchKind('find_files', 'find_files')).toBe('find_files');
+it("classifySearchKind returns 'glob' for glob tools", () => {
+  expect(classifySearchKind('glob', 'glob')).toBe('glob');
 });
 
 it("classifySearchKind returns 'shell' for shell-routed search", () => {

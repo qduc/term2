@@ -453,7 +453,7 @@ export function createConversationEventHandler(
               } else if (event.message?.success === false) {
                 suffix = ' (Failed)';
               }
-            } else if (toolName === 'grep' || toolName === 'find_files') {
+            } else if (toolName === 'grep' || toolName === 'glob') {
               const lines = countOutputLines(event.message?.output);
               suffix = ` (${lines} match${lines !== 1 ? 'es' : ''})`;
             } else {

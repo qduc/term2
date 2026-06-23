@@ -39,7 +39,7 @@ it('non-shell tools return undefined advisory', async () => {
   });
 
   const advisory = await resolver.resolveAdvisoryForInterruption({
-    interruption: { name: 'find_files', arguments: { query: 'foo' } },
+    interruption: { name: 'glob', arguments: { query: 'foo' } },
     siblings: [],
   });
 

@@ -81,7 +81,7 @@ const CODE_CONTEXT_SEARCH_DESCRIPTION =
   'Find related files for a given path or declarations for a symbol name. ' +
   'Use this to discover code that depends on or is related to a file, or to locate where a symbol is declared. ' +
   'Note: symbol must be a valid identifier-safe name (letters, numbers, underscores, and dollar signs, and cannot start with a number). ' +
-  'Do NOT use this for plain text search across files (use grep) or for listing files by name (use find_files). ' +
+  'Do NOT use this for plain text search across files (use grep) or for listing files by name (use glob). ' +
   'Returns up to max_results related files or symbol declarations with relation tokens.';
 
 const SKIP_DIRS = ['.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.nuxt', '.cache', 'out', 'vendor'];
@@ -117,12 +117,20 @@ export const createReadCodeOutlineToolDefinition = (
     name: 'read_code_outline',
     description: READ_CODE_OUTLINE_DESCRIPTION,
     parameters: readCodeOutlineParametersSchema,
-    needsApproval: () => false,
+    needsApproval: async ({ path: filePath }) => {
+      try {
+        const cwd = executionContext?.getCwd() || process.cwd();
+        resolveWorkspacePath(filePath, cwd);
+        return false;
+      } catch {
+        return true;
+      }
+    },
     execute: async ({ path: filePath }) => {
       const cwd = executionContext?.getCwd() || process.cwd();
 
       try {
-        const absolutePath = resolveWorkspacePath(filePath, cwd);
+        const absolutePath = resolveWorkspacePath(filePath, cwd, { allowOutsideWorkspace: true });
         const stat = await fs.stat(absolutePath);
         if (stat.size > MAX_TARGET_BYTES) {
           return `WARNING target_too_large\n${formatEmptyOutline(filePath, 'unknown')}`;
@@ -151,7 +159,19 @@ export const createCodeContextSearchToolDefinition = (
     name: 'code_context_search',
     description: CODE_CONTEXT_SEARCH_DESCRIPTION,
     parameters: codeContextSearchParametersSchema,
-    needsApproval: () => false,
+    needsApproval: async (params) => {
+      if (params.query_type !== 'related') {
+        return false;
+      }
+
+      try {
+        const cwd = executionContext?.getCwd() || process.cwd();
+        resolveWorkspacePath(params.path!, cwd);
+        return false;
+      } catch {
+        return true;
+      }
+    },
     execute: async (params) => {
       const cwd = executionContext?.getCwd() || process.cwd();
       const maxResults = params.max_results ?? DEFAULT_MAX_RESULTS;
@@ -165,7 +185,7 @@ export const createCodeContextSearchToolDefinition = (
 
         if (params.query_type === 'related') {
           const targetPath = params.path!;
-          const absolutePath = resolveWorkspacePath(targetPath, cwd);
+          const absolutePath = resolveWorkspacePath(targetPath, cwd, { allowOutsideWorkspace: true });
           await assertReadableTarget(absolutePath);
           const provider = getProvider(targetPath);
           if (!provider?.extractOutline) {

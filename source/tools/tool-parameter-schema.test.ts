@@ -21,7 +21,7 @@ const loggingService: ILoggingService = {
   clearCorrelationId: () => {},
 };
 
-it('find_files schema uses optional params instead of nullable', () => {
+it('glob schema uses optional params instead of nullable', () => {
   const tool = createFindFilesToolDefinition();
 
   expect(tool.parameters.safeParse({ pattern: '*.ts' }).success).toBe(true);

@@ -89,8 +89,8 @@ function getCodeContextSection({ liteMode }: { liteMode: boolean }): string {
 
 function getDedicatedSearchToolsSection({ liteMode }: { liteMode: boolean }): string {
   return liteMode
-    ? '### Search Tools\n\n- `find_files`: locate files by name or glob.\n- `grep`: search file contents.'
-    : '### Search Tools\n\n- Prefer `find_files` for locating files by name or glob.\n- Prefer `grep` for searching code content or symbols.';
+    ? '### Search Tools\n\n- `glob`: locate files by name or glob.\n- `grep`: search file contents.'
+    : '### Search Tools\n\n- Prefer `glob` for locating files by name or glob.\n- Prefer `grep` for searching code content or symbols.';
 }
 
 function getAskUserAddendum(): string {

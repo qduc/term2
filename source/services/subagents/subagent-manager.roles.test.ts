@@ -33,7 +33,7 @@ const TASK_FRESH_QUESTION = 'fresh question';
 const TASK_FIND_TS_FILES = 'find all TypeScript files';
 const TASK_INSPECT_WORKSPACE = 'inspect the workspace';
 const TASK_INSPECT_TEMP_WORKSPACE = 'inspect a temp workspace';
-const TASK_FIND_FILES = 'find files';
+const TASK_GLOB = 'find files';
 
 const UNKNOWN_ROLE_ERROR_FRAGMENT = ROLE_UNKNOWN;
 const MENTOR_MODEL_NOT_CONFIGURED_ERROR = 'Mentor model is not configured';
@@ -414,7 +414,7 @@ describe('explorer role', () => {
       sessionContextService: createSessionContextService() as any,
     });
 
-    await manager.run({ role: ROLE_EXPLORER, task: TASK_FIND_FILES });
+    await manager.run({ role: ROLE_EXPLORER, task: TASK_GLOB });
 
     expect(explorerRunnerCalls.length).toBe(1);
     const agent = explorerRunnerCalls[0].agent;
@@ -423,7 +423,7 @@ describe('explorer role', () => {
     // Explorer should have read tools
     expect(toolNames.includes('read_file')).toBe(true);
     expect(toolNames.includes('grep')).toBe(true);
-    expect(toolNames.includes('find_files')).toBe(true);
+    expect(toolNames.includes('glob')).toBe(true);
 
     // Explorer should NOT have write tools
     expect(toolNames.includes('apply_patch')).toBe(false);

@@ -340,18 +340,37 @@ for (const symbolCase of symbolCases) {
   });
 }
 
-it.sequential('execute: code_context_search rejects paths outside the workspace', async () => {
+it.sequential('needsApproval: prompts for paths outside the workspace', async () => {
   await withTempWorkspace(async () => {
-    const outlineResult = await readCodeOutlineToolDefinition.execute({ path: '/etc/outside.ts' });
-    const relatedResult = await codeContextSearchToolDefinition.execute({
+    const outlineApproval = await readCodeOutlineToolDefinition.needsApproval({ path: '/etc/outside.ts' });
+    const relatedApproval = await codeContextSearchToolDefinition.needsApproval({
       query_type: 'related',
       path: '/etc/outside.ts',
     });
 
-    expect(outlineResult.includes('outside workspace')).toBe(true);
-    expect(relatedResult.includes('outside workspace')).toBe(true);
+    expect(outlineApproval).toBe(true);
+    expect(relatedApproval).toBe(true);
   });
 });
+
+it.sequential(
+  'execute: code_context_search reads paths outside the workspace after approval path resolution',
+  async () => {
+    await withTempWorkspace(async (dir) => {
+      const outsideFile = path.join(dir, '..', 'outside.ts');
+      await fs.writeFile(outsideFile, 'export const outside = true;');
+
+      const outlineResult = await readCodeOutlineToolDefinition.execute({ path: '../outside.ts' });
+      const relatedResult = await codeContextSearchToolDefinition.execute({
+        query_type: 'related',
+        path: '../outside.ts',
+      });
+
+      expect(outlineResult.includes('outside workspace')).toBe(false);
+      expect(relatedResult.includes('outside workspace')).toBe(false);
+    });
+  },
+);
 
 it.sequential('execute: code_context_search rejects unsafe symbol names', async () => {
   await withTempWorkspace(async () => {

@@ -87,15 +87,27 @@ export const createReadFileToolDefinition = (
       ? READ_FILE_DESCRIPTION_OUTSIDE
       : READ_FILE_DESCRIPTION,
     parameters: readFileParametersSchema,
-    needsApproval: () => false, // Read-only operation, safe
+    needsApproval: async (params) => {
+      if (allowOutsideWorkspace) {
+        return false;
+      }
+
+      try {
+        const cwd = executionContext?.getCwd() || process.cwd();
+        resolveWorkspacePath(params.path, cwd);
+        return false;
+      } catch {
+        return true;
+      }
+    },
     execute: async (params) => {
       const { path: filePath, start_line, end_line } = params;
       const cwd = executionContext?.getCwd() || process.cwd();
 
       try {
-        // In Lite Mode we may allow reading outside the current workspace.
+        // The workspace boundary is enforced by needsApproval for the default mode.
         const absolutePath = resolveWorkspacePath(filePath, cwd, {
-          allowOutsideWorkspace,
+          allowOutsideWorkspace: true,
         });
 
         // Read file content

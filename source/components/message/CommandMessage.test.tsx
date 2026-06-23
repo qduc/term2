@@ -593,10 +593,10 @@ it('CommandMessage shows singular match count for grep with 1 result', async () 
   expect(output.includes('matches')).toBe(false);
 });
 
-it('CommandMessage shows match count for find_files tool in concise mode', async () => {
+it('CommandMessage shows match count for glob tool in concise mode', async () => {
   const props = {
-    command: 'find_files',
-    toolName: 'find_files',
+    command: 'glob',
+    toolName: 'glob',
     toolArgs: { pattern: '*.ts', path: 'source' },
     status: 'completed' as const,
     success: true,
@@ -818,10 +818,10 @@ it('CommandMessage renders read_file with line numbers in standard mode', async 
   expect(output.includes('2 │ foo();')).toBe(true);
 });
 
-it('CommandMessage renders find_files lists in standard mode', async () => {
+it('CommandMessage renders glob lists in standard mode', async () => {
   const props = {
-    command: 'find_files',
-    toolName: 'find_files',
+    command: 'glob',
+    toolName: 'glob',
     toolArgs: { pattern: '*.ts' },
     status: 'completed' as const,
     success: true,

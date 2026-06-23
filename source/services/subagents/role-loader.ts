@@ -149,8 +149,8 @@ export function buildAvailableToolGuidance(toolDefinitions: ToolDefinition[], se
 
   if (searchViaShell && hasTool('shell')) {
     lines.push('For workspace search, use `shell` with commands like `rg` for text search and `fd` for file search.');
-  } else if (hasTool('grep') || hasTool('find_files')) {
-    const searchTools = ['grep', 'find_files'].filter(hasTool).map((name) => `\`${name}\``);
+  } else if (hasTool('grep') || hasTool('glob')) {
+    const searchTools = ['grep', 'glob'].filter(hasTool).map((name) => `\`${name}\``);
     lines.push(`For workspace search, use the dedicated search tools: ${searchTools.join(', ')}.`);
   } else {
     lines.push('No dedicated workspace search tool is available. Use `read_file` and provided context where possible.');

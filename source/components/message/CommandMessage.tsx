@@ -220,7 +220,7 @@ const CommandMessage: FC<Props> = ({
       switch (toolName) {
         case 'grep':
           return renderAction('Searched');
-        case 'find_files':
+        case 'glob':
           return renderAction('Searched files');
         case 'read_file':
         case 'view_file':
@@ -570,7 +570,7 @@ const CommandMessage: FC<Props> = ({
       }
     }
 
-    if (toolName === 'find_files') {
+    if (toolName === 'glob') {
       const parsed = parseFindFilesOutput(output) as any;
       if (parsed) {
         const { files, note } = parsed;

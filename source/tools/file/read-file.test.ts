@@ -107,14 +107,28 @@ it.sequential('execute: reads file from start_line to end', async () => {
   });
 });
 
-it.sequential('execute: rejects path outside workspace', async () => {
+it.sequential('needsApproval: prompts for path outside workspace', async () => {
   await withTempDir(async () => {
-    const result = await readFileToolDefinition.execute({
+    const result = await readFileToolDefinition.needsApproval({
       path: '/etc/outside.txt',
     });
 
-    expect(result.includes('Error')).toBe(true);
-    expect(result.includes('outside workspace')).toBe(true);
+    expect(result).toBe(true);
+  });
+});
+
+it.sequential('execute: reads path outside workspace after approval path resolution', async () => {
+  await withTempDir(async (dir) => {
+    const outsidePath = path.join(dir, '..', 'outside.txt');
+    await fs.writeFile(outsidePath, 'outside\ncontent');
+
+    const result = await readFileToolDefinition.execute({
+      path: '../outside.txt',
+    });
+
+    expect(result.includes('outside')).toBe(true);
+    expect(result.includes('content')).toBe(true);
+    expect(result.includes('outside workspace')).toBe(false);
   });
 });
 

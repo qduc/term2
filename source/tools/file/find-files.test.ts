@@ -187,15 +187,32 @@ it.sequential('execute: handles no matches found', async () => {
   });
 });
 
-it.sequential('execute: rejects path outside workspace', async () => {
+it.sequential('needsApproval: prompts for path outside workspace', async () => {
   await withTempDir(async () => {
-    const result = await findFilesToolDefinition.execute({
+    const result = await findFilesToolDefinition.needsApproval({
       pattern: '*.ts',
       path: '/etc/outside',
     });
 
-    expect(result.includes('Error')).toBe(true);
-    expect(result.includes('outside workspace')).toBe(true);
+    expect(result).toBe(true);
+  });
+});
+
+it.sequential('execute: searches path outside workspace after approval path resolution', async () => {
+  await withTempDir(async (dir) => {
+    const outsideDir = path.join(dir, '..', 'outside');
+    await fs.mkdir(outsideDir, { recursive: true });
+    await fs.writeFile(path.join(outsideDir, 'outside.ts'), '');
+    await fs.writeFile(path.join(outsideDir, 'outside.js'), '');
+
+    const result = await findFilesToolDefinition.execute({
+      pattern: '*.ts',
+      path: '../outside',
+    });
+
+    expect(result.includes('outside.ts')).toBe(true);
+    expect(result.includes('outside.js')).toBe(false);
+    expect(result.includes('outside workspace')).toBe(false);
   });
 });
 

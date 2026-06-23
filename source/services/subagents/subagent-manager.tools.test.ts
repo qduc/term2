@@ -52,7 +52,7 @@ it('subagent tool definitions conditional registration for search tools', async 
   });
 
   // 1. Model: gpt-5 (searchViaShell is true by default), canRunShell: true (from worker.md)
-  // Explorer/worker tools should NOT contain dedicated search tools: grep and find_files.
+  // Explorer/worker tools should NOT contain dedicated search tools: grep and glob.
   const managerShellTrue = new TestSubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
@@ -68,19 +68,19 @@ it('subagent tool definitions conditional registration for search tools', async 
   expect(workerAgentShellTrue).toBeTruthy();
   const toolNamesShellTrue: string[] = workerAgentShellTrue.tools.map((tool: any) => tool.name);
   expect(toolNamesShellTrue.includes('grep')).toBe(false);
-  expect(toolNamesShellTrue.includes('find_files')).toBe(false);
+  expect(toolNamesShellTrue.includes('glob')).toBe(false);
   expect(toolNamesShellTrue.includes('shell')).toBe(true);
   expect(workerAgentShellTrue.instructions.includes('Registered tools:')).toBe(true);
   expect(workerAgentShellTrue.instructions.includes('use `shell` with commands like `rg`')).toBe(true);
   expect(workerAgentShellTrue.instructions.includes('`fd` for file search')).toBe(true);
   expect(workerAgentShellTrue.instructions.includes('Use `grep` to search')).toBe(false);
-  expect(workerAgentShellTrue.instructions.includes('Use `find_files` to locate')).toBe(false);
+  expect(workerAgentShellTrue.instructions.includes('Use `glob` to locate')).toBe(false);
   expect(workerAgentShellTrue.instructions.includes('For workspace search, use the dedicated search tools')).toBe(
     false,
   );
 
   // 2. Model: gpt-4o (searchViaShell is false by default), canRunShell: true
-  // Tools should include dedicated grep and find_files.
+  // Tools should include dedicated grep and glob.
   const managerShellFalse = new TestSubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
@@ -96,13 +96,13 @@ it('subagent tool definitions conditional registration for search tools', async 
   expect(workerAgentShellFalse).toBeTruthy();
   const toolNamesShellFalse: string[] = workerAgentShellFalse.tools.map((tool: any) => tool.name);
   expect(toolNamesShellFalse.includes('grep')).toBe(true);
-  expect(toolNamesShellFalse.includes('find_files')).toBe(true);
+  expect(toolNamesShellFalse.includes('glob')).toBe(true);
   expect(toolNamesShellFalse.includes('shell')).toBe(true);
   expect(workerAgentShellFalse.instructions.includes('For workspace search, use the dedicated search tools')).toBe(
     true,
   );
   expect(workerAgentShellFalse.instructions.includes('`grep`')).toBe(true);
-  expect(workerAgentShellFalse.instructions.includes('`find_files`')).toBe(true);
+  expect(workerAgentShellFalse.instructions.includes('`glob`')).toBe(true);
   expect(workerAgentShellFalse.instructions.includes('use `shell` with commands like `rg`')).toBe(false);
 
   // 3. Model: gpt-5 with searchViaShell explicitly disabled still keeps dedicated search tools.
@@ -120,7 +120,7 @@ it('subagent tool definitions conditional registration for search tools', async 
 
   const toolNamesShellOff: string[] = workerAgentShellTrue.tools.map((tool: any) => tool.name);
   expect(toolNamesShellOff.includes('grep')).toBe(true);
-  expect(toolNamesShellOff.includes('find_files')).toBe(true);
+  expect(toolNamesShellOff.includes('glob')).toBe(true);
   expect(toolNamesShellOff.includes('shell')).toBe(true);
   expect(workerAgentShellTrue.instructions.includes('For workspace search, use the dedicated search tools')).toBe(true);
   expect(workerAgentShellTrue.instructions.includes('use `shell` with commands like `rg`')).toBe(false);
@@ -180,7 +180,7 @@ it('explorer uses shell search when available and researcher keeps dedicated sea
   let toolNames: string[] = explorerAgent.tools.map((tool: any) => tool.name);
   expect(toolNames.includes('shell')).toBe(true);
   expect(toolNames.includes('grep')).toBe(false);
-  expect(toolNames.includes('find_files')).toBe(false);
+  expect(toolNames.includes('glob')).toBe(false);
   expect(explorerAgent.instructions.includes('For workspace search, use `shell` with commands like `rg`')).toBe(true);
   expect(explorerAgent.instructions.includes('For workspace search, use the dedicated search tools')).toBe(false);
 
@@ -188,7 +188,7 @@ it('explorer uses shell search when available and researcher keeps dedicated sea
   toolNames = researcherAgent.tools.map((tool: any) => tool.name);
   expect(toolNames.includes('shell')).toBe(false);
   expect(toolNames.includes('grep')).toBe(true);
-  expect(toolNames.includes('find_files')).toBe(true);
+  expect(toolNames.includes('glob')).toBe(true);
   expect(researcherAgent.instructions.includes('For workspace search, use the dedicated search tools')).toBe(true);
   expect(researcherAgent.instructions.includes('use `shell` with commands like `rg`')).toBe(false);
 });

@@ -114,7 +114,11 @@ export const ShellSettingsSchema = z.object({
 
 export const SandboxSettingsSchema = z.object({
   enabled: z.boolean().optional().default(true),
-  readPolicy: z.enum(['credential-denylist', 'home-denylist']).optional().default('credential-denylist'),
+  readPolicy: z
+    .enum(['credential-denylist', 'home-denylist', 'standard', 'strict'])
+    .optional()
+    .default('credential-denylist')
+    .transform((v) => (v === 'standard' ? 'credential-denylist' : v === 'strict' ? 'home-denylist' : v)),
   allowReadExtra: z.array(z.string()).optional().default([]),
 });
 

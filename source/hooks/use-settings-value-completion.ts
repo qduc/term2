@@ -178,8 +178,15 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
   ],
   'sandbox.enabled': [{ value: 'true' }, { value: 'false' }],
   'sandbox.readPolicy': [
-    { value: 'credential-denylist', description: 'Compatibility mode: deny known credential paths only' },
-    { value: 'home-denylist', description: 'Deny home and named system paths with workspace carve-outs' },
+    {
+      value: 'standard',
+      description: 'Sandboxed commands can read anywhere except known credential paths (~/.ssh, ~/.aws, ~/.kube, etc.)',
+    },
+    {
+      value: 'strict',
+      description:
+        'Sandboxed commands can only read the workspace, temp dir, and system tooling paths (cannot read home dir, /etc, /var)',
+    },
   ],
   'webSearch.provider': [
     { value: 'tavily', description: 'Tavily Search API' },

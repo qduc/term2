@@ -213,18 +213,41 @@ const ApprovalPrompt: FC<Props> = ({
   const askUserOptionLabels = askUserOptions.map((option) => option.label);
   const hasMultipleQuestions = questionsList.length > 1;
 
-  const shellApprovalArgs = React.useMemo<ShellApprovalArgs | null>(() => {
+  const isUnsandboxedShellApproval = React.useMemo(() => {
     if (approval.toolName !== 'shell') {
-      return null;
+      return false;
     }
 
     try {
-      return JSON.parse(approval.argumentsText) as ShellApprovalArgs;
+      const parsed = JSON.parse(approval.argumentsText) as ShellApprovalArgs;
+      if (parsed?.sandbox === 'unsandboxed') {
+        return true;
+      }
     } catch {
-      return null;
+      // Fallback if argumentsText is not valid JSON
     }
-  }, [approval.argumentsText, approval.toolName]);
-  const isUnsandboxedShellApproval = shellApprovalArgs?.sandbox === 'unsandboxed';
+
+    try {
+      const rawInterruption = approval.rawInterruption as Record<string, any> | undefined;
+      const rawArguments = rawInterruption?.arguments;
+      if (rawArguments) {
+        if (typeof rawArguments === 'string') {
+          const parsed = JSON.parse(rawArguments);
+          if (parsed?.sandbox === 'unsandboxed') {
+            return true;
+          }
+        } else if (typeof rawArguments === 'object') {
+          if (rawArguments.sandbox === 'unsandboxed') {
+            return true;
+          }
+        }
+      }
+    } catch {
+      // Ignore errors parsing rawInterruption
+    }
+
+    return false;
+  }, [approval.argumentsText, approval.rawInterruption, approval.toolName]);
 
   const deniedRead = approval.deniedRead;
   const isDeniedReadShell = !!deniedRead;

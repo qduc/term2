@@ -48,11 +48,11 @@ it('shell schema uses optional params instead of nullable', () => {
   expect(tool.parameters.safeParse({ command: 'echo hi', max_output_length: null }).success).toBe(false);
 });
 
-it('grep schema uses optional file_pattern instead of nullable', () => {
+it('grep schema uses optional include instead of nullable', () => {
   const tool = createGrepToolDefinition();
 
   expect(tool.parameters.safeParse({ pattern: 'foo', path: '.' }).success).toBe(true);
-  expect(tool.parameters.safeParse({ pattern: 'foo', path: '.', file_pattern: null }).success).toBe(false);
+  expect(tool.parameters.safeParse({ pattern: 'foo', path: '.', include: null }).success).toBe(false);
 });
 
 it('web_fetch schema uses optional continuation_token instead of nullable', () => {

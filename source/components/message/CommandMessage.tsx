@@ -486,7 +486,7 @@ const CommandMessage: FC<Props> = ({
           <Box flexDirection="column" marginY={1}>
             <Box>
               <Text color={COLOR_INFO} bold>
-                📖 [READ FILE]
+                Read File
               </Text>
               <Text>
                 {' '}
@@ -497,19 +497,32 @@ const CommandMessage: FC<Props> = ({
               {displayLines.map((line, idx) => {
                 if (line.lineNum === -1) {
                   return (
-                    <Text key={idx} color={COLOR_MUTED} dimColor>
-                      {line.content}
-                    </Text>
+                    <Box key={idx} flexDirection="row">
+                      <Box width={8} flexShrink={0}>
+                        <Text color={COLOR_MUTED} dimColor>
+                          {'      │ '}
+                        </Text>
+                      </Box>
+                      <Box flexGrow={1}>
+                        <Text color={COLOR_MUTED} dimColor>
+                          {line.content}
+                        </Text>
+                      </Box>
+                    </Box>
                   );
                 }
                 const lineNumStr = String(line.lineNum).padStart(5, ' ');
                 return (
-                  <Text key={idx}>
-                    <Text color={COLOR_MUTED} dimColor>
-                      {lineNumStr} │{' '}
-                    </Text>
-                    <Text color={COLOR_TOOL_OUTPUT}>{line.content}</Text>
-                  </Text>
+                  <Box key={idx} flexDirection="row">
+                    <Box width={8} flexShrink={0}>
+                      <Text color={COLOR_MUTED} dimColor>
+                        {lineNumStr} │{' '}
+                      </Text>
+                    </Box>
+                    <Box flexGrow={1}>
+                      <Text color={COLOR_TOOL_OUTPUT}>{line.content}</Text>
+                    </Box>
+                  </Box>
                 );
               })}
             </Box>
@@ -523,29 +536,68 @@ const CommandMessage: FC<Props> = ({
       if (parsed) {
         const { matchesByFile, note } = parsed;
         const filePaths = Object.keys(matchesByFile);
+
+        const MAX_DISPLAY_MATCHES = 10;
+        let displayedMatchesCount = 0;
+        let truncatedMatchesCount = 0;
+        let truncatedFilesCount = 0;
+
+        const filesToRender: {
+          filePath: string;
+          matches: any[];
+          truncatedCount: number;
+        }[] = [];
+
+        for (const filePath of filePaths) {
+          const matches = matchesByFile[filePath] ?? [];
+          if (displayedMatchesCount >= MAX_DISPLAY_MATCHES) {
+            truncatedMatchesCount += matches.length;
+            truncatedFilesCount++;
+          } else {
+            const remainingSlots = MAX_DISPLAY_MATCHES - displayedMatchesCount;
+            if (matches.length <= remainingSlots) {
+              filesToRender.push({
+                filePath,
+                matches,
+                truncatedCount: 0,
+              });
+              displayedMatchesCount += matches.length;
+            } else {
+              filesToRender.push({
+                filePath,
+                matches: matches.slice(0, remainingSlots),
+                truncatedCount: matches.length - remainingSlots,
+              });
+              displayedMatchesCount += remainingSlots;
+              truncatedMatchesCount += matches.length - remainingSlots;
+            }
+          }
+        }
+
         return (
           <Box flexDirection="column" marginY={1}>
             <Box marginBottom={1}>
               <Text color={COLOR_INFO} bold>
-                🔍 [GREP RESULTS]
+                Grep Results
               </Text>
               <Text> for {toolArgs?.pattern || ''}</Text>
             </Box>
-            {filePaths.map((filePath, fileIdx) => {
-              const matches = matchesByFile[filePath] ?? [];
+            {filesToRender.map((file, fileIdx) => {
+              if (file.matches.length === 0) return null;
               return (
                 <Box key={fileIdx} flexDirection="column" marginBottom={1}>
                   <Box>
                     <Text color={COLOR_INFO} bold>
-                      📄 {filePath}
+                      {file.filePath}
                     </Text>
                     <Text color={COLOR_MUTED}>
                       {' '}
-                      ({matches.length} match{matches.length !== 1 ? 'es' : ''})
+                      ({file.matches.length} match{file.matches.length !== 1 ? 'es' : ''}
+                      {file.truncatedCount > 0 ? `, ${file.truncatedCount} truncated` : ''})
                     </Text>
                   </Box>
                   <Box flexDirection="column" paddingLeft={2}>
-                    {matches.map((match: any, matchIdx: number) => {
+                    {file.matches.map((match: any, matchIdx: number) => {
                       const lineNumStr = String(match.lineNum).padStart(4, ' ');
                       return (
                         <Text key={matchIdx}>
@@ -556,10 +608,27 @@ const CommandMessage: FC<Props> = ({
                         </Text>
                       );
                     })}
+                    {file.truncatedCount > 0 && (
+                      <Text color={COLOR_MUTED} dimColor>
+                        ... ({file.truncatedCount} more match{file.truncatedCount !== 1 ? 'es' : ''} truncated in this
+                        file) ...
+                      </Text>
+                    )}
                   </Box>
                 </Box>
               );
             })}
+            {truncatedMatchesCount > 0 && (
+              <Box marginTop={1}>
+                <Text color={COLOR_WARNING}>
+                  ... ({truncatedMatchesCount} match{truncatedMatchesCount !== 1 ? 'es' : ''}
+                  {truncatedFilesCount > 0
+                    ? ` in ${truncatedFilesCount} more file${truncatedFilesCount !== 1 ? 's' : ''}`
+                    : ''}{' '}
+                  truncated) ...
+                </Text>
+              </Box>
+            )}
             {note && (
               <Box marginTop={1}>
                 <Text color={COLOR_WARNING}>{note}</Text>
@@ -578,7 +647,7 @@ const CommandMessage: FC<Props> = ({
           <Box flexDirection="column" marginY={1}>
             <Box marginBottom={1}>
               <Text color={COLOR_INFO} bold>
-                📂 [FILE SEARCH]
+                File Search
               </Text>
               <Text>
                 {' '}
@@ -588,7 +657,7 @@ const CommandMessage: FC<Props> = ({
             <Box flexDirection="column" paddingLeft={2}>
               {files.map((file: string, idx: number) => (
                 <Text key={idx} color={COLOR_TOOL_OUTPUT}>
-                  📄 {file}
+                  {file}
                 </Text>
               ))}
             </Box>
@@ -611,7 +680,7 @@ const CommandMessage: FC<Props> = ({
           <Box flexDirection="column" marginY={1}>
             <Box>
               <Text color={COLOR_INFO} bold>
-                🤖 [SUBAGENT]
+                Subagent
               </Text>
               <Text> {role} </Text>
               <Text color={statusColor} bold>
@@ -622,12 +691,12 @@ const CommandMessage: FC<Props> = ({
               <Box flexDirection="column" paddingLeft={2} marginY={0.5}>
                 {toolsUsed && (
                   <Text color={COLOR_MUTED}>
-                    🛠️ Tools: <Text color={COLOR_CONTENT}>{toolsUsed}</Text>
+                    Tools: <Text color={COLOR_CONTENT}>{toolsUsed}</Text>
                   </Text>
                 )}
                 {filesChanged && (
                   <Text color={COLOR_MUTED}>
-                    📝 Changed: <Text color={COLOR_CONTENT}>{filesChanged}</Text>
+                    Changed: <Text color={COLOR_CONTENT}>{filesChanged}</Text>
                   </Text>
                 )}
               </Box>
@@ -650,14 +719,14 @@ const CommandMessage: FC<Props> = ({
           <Box flexDirection="column" marginY={1}>
             <Box marginBottom={1}>
               <Text color={COLOR_INFO} bold>
-                🌐 [WEB SEARCH]
+                Web Search
               </Text>
               <Text> "{toolArgs?.query || ''}"</Text>
             </Box>
             {answer && (
               <Box flexDirection="column" borderStyle="round" borderColor={COLOR_WARNING} paddingX={1} marginBottom={1}>
                 <Text color={COLOR_WARNING} bold>
-                  💡 Answer Summary
+                  Answer Summary
                 </Text>
                 <Text color={COLOR_TOOL_OUTPUT}>{answer}</Text>
               </Box>
@@ -665,7 +734,7 @@ const CommandMessage: FC<Props> = ({
             {results && results.length > 0 && (
               <Box flexDirection="column">
                 <Text color={COLOR_INFO} bold>
-                  📋 Search Results:
+                  Search Results:
                 </Text>
                 {results.map((res: any, idx: number) => (
                   <Box key={idx} flexDirection="column" marginTop={1} paddingLeft={2}>
@@ -673,11 +742,11 @@ const CommandMessage: FC<Props> = ({
                       {idx + 1}. {res.title}
                     </Text>
                     <Text color={COLOR_LINK} underline>
-                      🔗 {res.url}
+                      {res.url}
                     </Text>
                     {res.published && (
                       <Text color={COLOR_MUTED} dimColor>
-                        📅 Published: {res.published}
+                        Published: {res.published}
                       </Text>
                     )}
                     <Box marginTop={1}>
@@ -710,13 +779,13 @@ const CommandMessage: FC<Props> = ({
           <Box flexDirection="column" marginY={1}>
             <Box>
               <Text color={COLOR_INFO} bold>
-                📥 [WEB FETCH]
+                Web Fetch
               </Text>
               <Text> {title}</Text>
             </Box>
             <Box paddingLeft={2}>
               <Text color={COLOR_LINK} underline>
-                🔗 {url}
+                {url}
               </Text>
             </Box>
             {toc && (
@@ -729,7 +798,7 @@ const CommandMessage: FC<Props> = ({
                 width={50}
               >
                 <Text color={COLOR_WARNING} bold>
-                  📋 Table of Contents
+                  Table of Contents
                 </Text>
                 <Text color={COLOR_MUTED}>{toc}</Text>
               </Box>
@@ -742,7 +811,7 @@ const CommandMessage: FC<Props> = ({
             {tempFile && (
               <Box marginTop={1}>
                 <Text color={COLOR_WARNING}>
-                  💾 Full content saved to:{' '}
+                  Full content saved to:{' '}
                   <Text bold color={COLOR_CONTENT}>
                     {tempFile}
                   </Text>
@@ -751,7 +820,7 @@ const CommandMessage: FC<Props> = ({
             )}
             {notes && (
               <Box marginTop={0.5}>
-                <Text color={COLOR_WARNING}>⚠️ {notes}</Text>
+                <Text color={COLOR_WARNING}>Warning: {notes}</Text>
               </Box>
             )}
           </Box>
@@ -764,7 +833,7 @@ const CommandMessage: FC<Props> = ({
         <Box flexDirection="column" marginY={1}>
           <Box>
             <Text color={COLOR_INFO} bold>
-              🧠 [MENTOR QUESTION]
+              Mentor Question
             </Text>
             <Text color={COLOR_CONTENT} italic>
               {' '}
@@ -773,7 +842,7 @@ const CommandMessage: FC<Props> = ({
           </Box>
           <Box flexDirection="column" borderStyle="round" borderColor={COLOR_SPECIAL} paddingX={1} marginTop={1}>
             <Text color={COLOR_SPECIAL} bold>
-              💬 Mentor Response
+              Mentor Response
             </Text>
             <Text color={COLOR_TOOL_OUTPUT}>{output}</Text>
           </Box>
@@ -787,7 +856,7 @@ const CommandMessage: FC<Props> = ({
         <Box flexDirection="column" marginY={1}>
           <Box>
             <Text color={COLOR_INFO} bold>
-              ❓ [ASK USER]
+              Ask User
             </Text>
             <Text color={COLOR_CONTENT}> {toolArgs?.question || 'Unknown question'}</Text>
           </Box>
@@ -802,7 +871,7 @@ const CommandMessage: FC<Props> = ({
             </Box>
           )}
           <Box paddingLeft={2} marginTop={0.5}>
-            <Text color={COLOR_MUTED}>🗣️ Response: </Text>
+            <Text color={COLOR_MUTED}>Response: </Text>
             <Text color={COLOR_SUCCESS} bold>
               {output || 'No response yet'}
             </Text>
@@ -819,7 +888,7 @@ const CommandMessage: FC<Props> = ({
           <Box flexDirection="column" marginY={1}>
             <Box marginBottom={1}>
               <Text color={COLOR_INFO} bold>
-                📑 [CODE OUTLINE]
+                Code Outline
               </Text>
               <Text>
                 {' '}
@@ -829,7 +898,7 @@ const CommandMessage: FC<Props> = ({
             {imports && imports.length > 0 && (
               <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
                 <Text color={COLOR_WARNING} bold>
-                  📦 Imports:
+                  Imports:
                 </Text>
                 {imports.map((imp: string, idx: number) => (
                   <Text key={idx} color={COLOR_TOOL_OUTPUT}>
@@ -842,7 +911,7 @@ const CommandMessage: FC<Props> = ({
             {exports && exports.length > 0 && (
               <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
                 <Text color={COLOR_SUCCESS} bold>
-                  📤 Exports:
+                  Exports:
                 </Text>
                 {exports.map((exp: string, idx: number) => (
                   <Text key={idx} color={COLOR_TOOL_OUTPUT}>
@@ -855,7 +924,7 @@ const CommandMessage: FC<Props> = ({
             {decls && decls.length > 0 && (
               <Box flexDirection="column" paddingLeft={2}>
                 <Text color={COLOR_LINK} bold>
-                  🛠️ Declarations:
+                  Declarations:
                 </Text>
                 {decls.map((decl: string, idx: number) => (
                   <Text key={idx} color={COLOR_TOOL_OUTPUT}>
@@ -880,7 +949,7 @@ const CommandMessage: FC<Props> = ({
             <Box flexDirection="column" marginY={1}>
               <Box marginBottom={1}>
                 <Text color={COLOR_INFO} bold>
-                  🔗 [RELATED FILES]
+                  Related Files
                 </Text>
                 <Text> for {target}</Text>
               </Box>
@@ -892,7 +961,7 @@ const CommandMessage: FC<Props> = ({
                 <Box flexDirection="column" paddingLeft={2}>
                   {relatedFiles.map((f: any, idx: number) => (
                     <Box key={idx} flexDirection="column" marginBottom={0.5}>
-                      <Text color={COLOR_CONTENT}>📄 {f.filePath}</Text>
+                      <Text color={COLOR_CONTENT}>{f.filePath}</Text>
                       <Text color={COLOR_MUTED} dimColor>
                         {' '}
                         Relations: {f.relations}
@@ -909,7 +978,7 @@ const CommandMessage: FC<Props> = ({
             <Box flexDirection="column" marginY={1}>
               <Box marginBottom={1}>
                 <Text color={COLOR_INFO} bold>
-                  🔍 [SYMBOL SEARCH]
+                  Symbol Search
                 </Text>
                 <Text> "{symbol}"</Text>
               </Box>
@@ -922,7 +991,7 @@ const CommandMessage: FC<Props> = ({
                   {results.map((res: any, idx: number) => (
                     <Text key={idx}>
                       <Text color={COLOR_CONTENT}>
-                        📄 {res.filePath}:{res.lineNum}
+                        {res.filePath}:{res.lineNum}
                       </Text>
                       <Text color={COLOR_MUTED} dimColor>
                         {' '}

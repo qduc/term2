@@ -22,9 +22,21 @@ const execPromise = util.promisify(exec);
 const searchParametersSchema = z.object({
   pattern: z.string().describe('Search pattern using normal JSON string escaping.'),
   path: z.string().describe('The directory or file to search in. Use "." for current directory.'),
-  mode: z.enum(['regex', 'literal']).optional().describe('Search mode. Defaults to regex.'),
-  case_sensitive: z.boolean().optional().describe('Set false for case-insensitive matching.'),
-  file_pattern: z.string().optional().describe('Glob pattern for files to include (e.g., "*.ts").'),
+  fixed_strings: z
+    .boolean()
+    .optional()
+    .describe(
+      'Interpret pattern as a fixed string instead of a regular expression (equivalent to -F / --fixed-strings).',
+    ),
+  ignore_case: z.boolean().optional().describe('Search case-insensitively (equivalent to -i / --ignore-case).'),
+  include: z
+    .string()
+    .optional()
+    .describe("Search only files matching the glob pattern (equivalent to grep's --include or ripgrep's -g)."),
+  exclude: z
+    .string()
+    .optional()
+    .describe("Skip files matching the glob pattern (equivalent to grep's --exclude or ripgrep's -g '!GLOB')."),
   no_ignore: z
     .boolean()
     .optional()
@@ -74,21 +86,44 @@ function globToRegExp(glob: string): RegExp {
   return new RegExp(`^${source}$`);
 }
 
+function expandBraces(pattern: string): string[] {
+  const braceRegex = /\{([^}]+)\}/;
+  const match = braceRegex.exec(pattern);
+  if (!match) {
+    return [pattern];
+  }
+
+  const [fullMatch, braceContent] = match;
+  const options = braceContent.split(',');
+  const prefix = pattern.slice(0, match.index);
+  const suffix = pattern.slice(match.index + fullMatch.length);
+
+  const results: string[] = [];
+  for (const option of options) {
+    const expanded = prefix + option + suffix;
+    results.push(...expandBraces(expanded));
+  }
+  return results;
+}
+
 function matchesFilePattern(filePath: string, filePattern: string): boolean {
   const normalizedPath = filePath.replace(/\\/g, '/').replace(/^\.\//, '');
   const normalizedPattern = filePattern.replace(/\\/g, '/').replace(/^\.\//, '');
-  const patternMatcher = globToRegExp(normalizedPattern);
 
-  if (patternMatcher.test(normalizedPath)) {
-    return true;
-  }
+  const patterns = expandBraces(normalizedPattern);
+  return patterns.some((pattern) => {
+    const patternMatcher = globToRegExp(pattern);
+    if (patternMatcher.test(normalizedPath)) {
+      return true;
+    }
 
-  if (!normalizedPattern.includes('/')) {
-    const basename = normalizedPath.split('/').pop() ?? normalizedPath;
-    return patternMatcher.test(basename);
-  }
+    if (!pattern.includes('/')) {
+      const basename = normalizedPath.split('/').pop() ?? normalizedPath;
+      return patternMatcher.test(basename);
+    }
 
-  return false;
+    return false;
+  });
 }
 
 function filterGrepOutputByFilePattern(output: string, filePattern?: string): string {
@@ -162,15 +197,21 @@ export const createGrepToolDefinition = (
     argumentParsing: 'strict',
     needsApproval: () => false, // Search is read-only and safe
     execute: async (params) => {
-      const { pattern, path: searchPath, mode = 'regex', case_sensitive = true, file_pattern, no_ignore } = params;
+      const {
+        pattern,
+        path: searchPath,
+        fixed_strings = false,
+        ignore_case = false,
+        include,
+        exclude,
+        no_ignore,
+      } = params;
 
       // Validate pattern is not empty
       if (!pattern || pattern.trim() === '') {
         throw new Error('Search pattern cannot be empty. Please provide a valid search term.');
       }
 
-      // Default values for removed parameters
-      const exclude_pattern = null; // No exclusions (ripgrep respects .gitignore)
       const max_results = 50; // Lowered to reduce output size
 
       const useRg = await checkRgAvailability(executionContext);
@@ -180,11 +221,21 @@ export const createGrepToolDefinition = (
 
       if (useRg) {
         const args = ['rg', '--line-number', '--no-heading', '--color=never'];
-        if (!case_sensitive) args.push('--ignore-case');
-        if (mode === 'literal') args.push('--fixed-strings');
+        if (ignore_case) args.push('--ignore-case');
+        if (fixed_strings) args.push('--fixed-strings');
         if (no_ignore) args.push('--no-ignore');
-        if (file_pattern && no_ignore) args.push('-g', `'${file_pattern}'`);
-        if (exclude_pattern) args.push('-g', `'!${exclude_pattern}'`);
+        if (include && no_ignore) {
+          const patterns = expandBraces(include);
+          for (const pattern of patterns) {
+            args.push('-g', `'${pattern}'`);
+          }
+        }
+        if (exclude) {
+          const patterns = expandBraces(exclude);
+          for (const pattern of patterns) {
+            args.push('-g', `'!${pattern}'`);
+          }
+        }
 
         // Shell-quote the pattern; do not regex-escape it.
         args.push(`'${pattern.replace(/'/g, "'\\''")}'`);
@@ -194,10 +245,20 @@ export const createGrepToolDefinition = (
       } else {
         // Fallback to grep
         const args = ['grep', '-r', '-n', '-I']; // -I to ignore binary
-        if (!case_sensitive) args.push('-i');
-        if (mode === 'literal') args.push('-F');
-        if (file_pattern) args.push(`--include='${file_pattern}'`);
-        if (exclude_pattern) args.push(`--exclude='${exclude_pattern}'`);
+        if (ignore_case) args.push('-i');
+        if (fixed_strings) args.push('-F');
+        if (include) {
+          const patterns = expandBraces(include);
+          for (const pattern of patterns) {
+            args.push(`--include='${pattern}'`);
+          }
+        }
+        if (exclude) {
+          const patterns = expandBraces(exclude);
+          for (const pattern of patterns) {
+            args.push(`--exclude='${pattern}'`);
+          }
+        }
 
         // Shell-quote the pattern; do not regex-escape it.
         args.push(`'${pattern.replace(/'/g, "'\\''")}'`);
@@ -224,13 +285,13 @@ export const createGrepToolDefinition = (
       }
 
       const filteredStdout =
-        useRg && !no_ignore ? filterGrepOutputByFilePattern(result.stdout, file_pattern) : result.stdout;
+        useRg && !no_ignore ? filterGrepOutputByFilePattern(result.stdout, include) : result.stdout;
       const trimmed = filteredStdout.trim();
       const lineCount = trimmed ? trimmed.split('\n').length : 0;
       const outputTrimmed = trimOutput(trimmed, limit);
 
       if (lineCount > limit) {
-        return `${outputTrimmed}\n\nNote: ${lineCount} lines exceed the ${limit}-line limit. Narrow your search (pattern, path, or file_pattern).`;
+        return `${outputTrimmed}\n\nNote: ${lineCount} lines exceed the ${limit}-line limit. Narrow your search (pattern, path, or include).`;
       }
 
       return outputTrimmed || 'No matches found.';
@@ -250,24 +311,22 @@ export const formatGrepCommandMessage: FormatCommandMessage = (item, index, tool
     normalizeToolArguments(normalizedArgs) ?? normalizeToolArguments(fallbackArgs) ?? parsedOutput?.arguments;
   const pattern = args?.pattern ?? '';
   const searchPath = args?.path ?? '.';
-  const mode = args?.mode ?? 'regex';
+  const fixed_strings = args?.fixed_strings ?? false;
 
   const parts = [`grep "${pattern}"`, `"${searchPath}"`];
 
-  if (mode === 'literal') {
-    parts.push('--literal');
+  if (fixed_strings) {
+    parts.push('--fixed-strings');
   }
 
-  if (args?.case_sensitive === true) {
-    parts.push('--case-sensitive');
-  } else if (args?.case_sensitive === false) {
+  if (args?.ignore_case === true) {
     parts.push('--ignore-case');
   }
-  if (args?.file_pattern) {
-    parts.push(`--include "${args.file_pattern}"`);
+  if (args?.include) {
+    parts.push(`--include "${args.include}"`);
   }
-  if (args?.exclude_pattern) {
-    parts.push(`--exclude "${args.exclude_pattern}"`);
+  if (args?.exclude) {
+    parts.push(`--exclude "${args.exclude}"`);
   }
 
   const command = parts.join(' ');

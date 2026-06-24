@@ -99,28 +99,48 @@ it.sequential('execute: finds files in nested directories with glob pattern', as
   });
 });
 
-it.sequential('execute: rejects patterns with path segments', async () => {
+it.sequential('execute: supports patterns with path segments', async () => {
   await withTempDir(async (dir) => {
     await fs.mkdir(path.join(dir, 'src'));
     await fs.writeFile(path.join(dir, 'src/index.ts'), '');
 
     const result = await findFilesToolDefinitionFindFallback.execute({
-      pattern: 'src/**/*',
+      pattern: 'src/**/*.ts',
     });
 
-    expect(result.startsWith('Error')).toBe(true);
-    expect(result.includes('basename-only')).toBe(true);
+    expect(result.includes('src/index.ts')).toBe(true);
   });
 });
 
-it.sequential('execute: on SSH without fd, rejects patterns with path segments', async () => {
+it.sequential('execute: fd supports patterns with path segments', async () => {
+  await withTempDir(async (dir) => {
+    await fs.mkdir(path.join(dir, 'src'));
+    await fs.writeFile(path.join(dir, 'src/index.ts'), '');
+
+    const result = await findFilesToolDefinition.execute({
+      pattern: 'src/**/*.ts',
+    });
+
+    expect(result.includes('src/index.ts')).toBe(true);
+  });
+});
+
+it.sequential('execute: on SSH without fd, supports patterns with path segments', async () => {
   await withTempDir(async () => {
     const sshService = {
       connect: async () => {},
       disconnect: async () => {},
       isConnected: () => true,
-      executeCommand: async () => {
-        throw new Error('fd not found');
+      executeCommand: async (commandString: string) => {
+        if (commandString.startsWith('fd')) {
+          throw new Error('fd not found');
+        }
+        return {
+          stdout: 'src/index.ts\n',
+          stderr: '',
+          exitCode: 0,
+          timedOut: false,
+        };
       },
       readFile: async () => '',
       writeFile: async () => {},
@@ -130,11 +150,10 @@ it.sequential('execute: on SSH without fd, rejects patterns with path segments',
     const tool = createFindFilesToolDefinition({ executionContext });
 
     const result = await tool.execute({
-      pattern: 'src/**/*',
+      pattern: 'src/**/*.ts',
     });
 
-    expect(result.includes('Error')).toBe(true);
-    expect(result.includes('path')).toBe(true);
+    expect(result.includes('src/index.ts')).toBe(true);
   });
 });
 

@@ -511,11 +511,10 @@ export const formatToolArgs = (
         const pattern = normalizedArgs.pattern || '';
         const path = normalizedArgs.path || '.';
         const parts = [`for "${pattern}" in "${path}"`];
-        if (normalizedArgs.mode === 'literal') parts.push('--literal');
-        if (normalizedArgs.case_sensitive) parts.push('--case-sensitive');
-        else if (normalizedArgs.case_sensitive === false) parts.push('--ignore-case');
-        if (normalizedArgs.file_pattern) parts.push(`--include "${normalizedArgs.file_pattern}"`);
-        if (normalizedArgs.exclude_pattern) parts.push(`--exclude "${normalizedArgs.exclude_pattern}"`);
+        if (normalizedArgs.fixed_strings) parts.push('--fixed-strings');
+        if (normalizedArgs.ignore_case) parts.push('--ignore-case');
+        if (normalizedArgs.include) parts.push(`--include "${normalizedArgs.include}"`);
+        if (normalizedArgs.exclude) parts.push(`--exclude "${normalizedArgs.exclude}"`);
         return parts.join(' ');
       }
 

@@ -53,7 +53,7 @@ it.sequential('execute: file_pattern does not include gitignored files', async (
     const result = await createGrepToolDefinition().execute({
       pattern: 'undo',
       path: '.',
-      file_pattern: '*.ts*',
+      include: '*.ts*',
     });
 
     expect(result.includes('source/app.ts')).toBe(true);
@@ -89,14 +89,14 @@ it.sequential('execute: searches are case-sensitive by default', async () => {
   });
 });
 
-it.sequential('execute: case_sensitive false enables case-insensitive search', async () => {
+it.sequential('execute: ignore_case true enables case-insensitive search', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'axc\naXc\n');
 
     const result = await createGrepToolDefinition().execute({
       pattern: 'aXc',
       path: '.',
-      case_sensitive: false,
+      ignore_case: true,
     });
 
     expect(result.includes('axc')).toBe(true);
@@ -148,14 +148,14 @@ it.sequential('invoke: grep uses strict JSON parsing before regex execution', as
   });
 });
 
-it.sequential('execute: literal mode uses fixed-string matching', async () => {
+it.sequential('execute: fixed_strings true uses fixed-string matching', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'hello.world\nhello-world\n');
 
     const result = await createGrepToolDefinition().execute({
       pattern: 'hello.world',
       path: '.',
-      mode: 'literal',
+      fixed_strings: true,
     });
 
     expect(result.includes('hello.world')).toBe(true);
@@ -177,4 +177,40 @@ it('formatGrepCommandMessage sets toolName to "grep" so the match counter uses t
 
   expect(messages.length).toBe(1);
   expect(messages[0].toolName).toBe('grep');
+});
+
+it.sequential('execute: exclude pattern skips matching files', async () => {
+  await withTempDir(async (dir) => {
+    await fs.mkdir(path.join(dir, 'source'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'source', 'app.ts'), 'const value = "undo";\n');
+    await fs.writeFile(path.join(dir, 'source', 'config.json'), '{"value": "undo"}\n');
+
+    const result = await createGrepToolDefinition().execute({
+      pattern: 'undo',
+      path: '.',
+      exclude: '*.json',
+    });
+
+    expect(result.includes('source/app.ts')).toBe(true);
+    expect(result.includes('source/config.json')).toBe(false);
+  });
+});
+
+it.sequential('execute: include with brace expansion filters files correctly', async () => {
+  await withTempDir(async (dir) => {
+    await fs.mkdir(path.join(dir, 'source'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'source', 'app.ts'), 'const value = "undo";\n');
+    await fs.writeFile(path.join(dir, 'source', 'style.css'), 'const value = "undo";\n');
+    await fs.writeFile(path.join(dir, 'source', 'notes.txt'), 'const value = "undo";\n');
+
+    const result = await createGrepToolDefinition().execute({
+      pattern: 'undo',
+      path: '.',
+      include: '*.{ts,css}',
+    });
+
+    expect(result.includes('source/app.ts')).toBe(true);
+    expect(result.includes('source/style.css')).toBe(true);
+    expect(result.includes('source/notes.txt')).toBe(false);
+  });
 });

@@ -545,7 +545,7 @@ it('CommandMessage renders grep case-insensitive flag in concise mode', async ()
   const props = {
     command: 'grep',
     toolName: 'grep',
-    toolArgs: { pattern: 'hello', path: 'source', case_sensitive: false },
+    toolArgs: { pattern: 'hello', path: 'source', ignore_case: true },
     status: 'completed' as const,
     success: true,
     displayMode: 'concise' as const,
@@ -733,7 +733,7 @@ it('CommandMessage renders grep results grouped by file in standard mode', async
 
   expect(output.includes('file1.ts')).toBe(true);
   expect(output.includes('file2.ts')).toBe(true);
-  expect(output.includes('GREP RESULTS')).toBe(true);
+  expect(output.includes('Grep Results')).toBe(true);
 });
 
 it('CommandMessage does not show match count when output is empty', async () => {
@@ -812,10 +812,34 @@ it('CommandMessage renders read_file with line numbers in standard mode', async 
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  expect(output.includes('[READ FILE]')).toBe(true);
+  expect(output.includes('Read File')).toBe(true);
   expect(output.includes('src/main.ts')).toBe(true);
   expect(output.includes('1 │ import { foo } from "bar";')).toBe(true);
   expect(output.includes('2 │ foo();')).toBe(true);
+});
+
+it('CommandMessage renders read_file with line numbers, long wrapping lines, and aligned truncated lines', async () => {
+  const props = {
+    command: 'read_file',
+    toolName: 'read_file',
+    toolArgs: { path: 'src/main.ts', start_line: 1, end_line: 113 },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'standard' as const,
+    output:
+      'File: src/main.ts (113 lines) [lines 1-113]\n===\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nA simple, client-side Markdown editor and previewer built with React and Vite. Create, edit, and manage multiple notes with live rendering and local persistence.\nline 10\nline 11\nline 12',
+  };
+
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+  const output = toVisibleText(lastFrame() ?? '');
+
+  expect(output.includes('Read File')).toBe(true);
+  expect(output.includes('src/main.ts')).toBe(true);
+  expect(output.includes('1 │ line 1')).toBe(true);
+  // Aligned truncation line should have a divider before the text
+  expect(output.includes('│ ... (')).toBe(true);
+  // Wrapped line should align/indent with spaces
+  expect(output.includes('        edit, and manage multiple notes')).toBe(true);
 });
 
 it('CommandMessage renders glob lists in standard mode', async () => {
@@ -832,9 +856,9 @@ it('CommandMessage renders glob lists in standard mode', async () => {
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  expect(output.includes('[FILE SEARCH]')).toBe(true);
-  expect(output.includes('📄 src/a.ts')).toBe(true);
-  expect(output.includes('📄 src/b.ts')).toBe(true);
+  expect(output.includes('File Search')).toBe(true);
+  expect(output.includes('src/a.ts')).toBe(true);
+  expect(output.includes('src/b.ts')).toBe(true);
 });
 
 it('CommandMessage renders subagent card in standard mode', async () => {
@@ -851,7 +875,7 @@ it('CommandMessage renders subagent card in standard mode', async () => {
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  expect(output.includes('[SUBAGENT]')).toBe(true);
+  expect(output.includes('Subagent')).toBe(true);
   expect(output.includes('worker')).toBe(true);
   expect(output.includes('COMPLETED')).toBe(true);
   expect(output.includes('Tools: shell(3)')).toBe(true);
@@ -874,7 +898,7 @@ it('CommandMessage renders web_search dashboard in standard mode', async () => {
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  expect(output.includes('[WEB SEARCH]')).toBe(true);
+  expect(output.includes('Web Search')).toBe(true);
   expect(output.includes('Answer Summary')).toBe(true);
   expect(output.includes('Ink is a React renderer.')).toBe(true);
   expect(output.includes('1. Ink GitHub')).toBe(true);
@@ -897,7 +921,7 @@ it('CommandMessage renders web_fetch result in standard mode', async () => {
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  expect(output.includes('[WEB FETCH]')).toBe(true);
+  expect(output.includes('Web Fetch')).toBe(true);
   expect(output.includes('Example Domain')).toBe(true);
   expect(output.includes('https://example.com')).toBe(true);
   expect(output.includes('Table of Contents')).toBe(true);
@@ -1200,4 +1224,45 @@ it('CommandMessage extracts runtime from shell tool output and displays it in co
   expect(output.includes('(12ms)')).toBe(true);
   expect(output.includes('Hello')).toBe(false);
   expect(output.includes('Runtime: 12ms')).toBe(false);
+});
+
+it('CommandMessage limits the length of grep result in standard mode when there are too many matches', async () => {
+  const props = {
+    command: 'grep',
+    toolName: 'grep',
+    toolArgs: { pattern: 'hello', path: 'source' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'standard' as const,
+    output: [
+      'file1.ts:1:hello 1',
+      'file1.ts:2:hello 2',
+      'file1.ts:3:hello 3',
+      'file1.ts:4:hello 4',
+      'file1.ts:5:hello 5',
+      'file2.ts:1:hello 6',
+      'file2.ts:2:hello 7',
+      'file2.ts:3:hello 8',
+      'file2.ts:4:hello 9',
+      'file2.ts:5:hello 10',
+      'file3.ts:1:hello 11',
+      'file3.ts:2:hello 12',
+    ].join('\n'),
+  };
+
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  expect(output.includes('file1.ts')).toBe(true);
+  expect(output.includes('hello 1')).toBe(true);
+  expect(output.includes('hello 5')).toBe(true);
+
+  expect(output.includes('file2.ts')).toBe(true);
+  expect(output.includes('hello 6')).toBe(true);
+  expect(output.includes('hello 10')).toBe(true);
+
+  expect(output.includes('hello 11')).toBe(false);
+  expect(output.includes('hello 12')).toBe(false);
+
+  expect(output.includes('2 matches in 1 more file truncated')).toBe(true);
 });

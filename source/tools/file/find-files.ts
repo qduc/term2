@@ -9,11 +9,7 @@ import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFrom
 const execPromise = util.promisify(exec);
 
 const findFilesParametersSchema = z.object({
-  pattern: z
-    .string()
-    .describe(
-      'Basename glob or filename to search for (e.g., "*.ts", "README.md"). Path segments are not allowed — use the `path` parameter to scope the directory.',
-    ),
+  pattern: z.string().describe('Glob or filename pattern to search for (e.g., "*.ts", "src/**/*.ts", "README.md").'),
   path: z
     .string()
     .optional()
@@ -141,10 +137,6 @@ export const createFindFilesToolDefinition = (
         return 'Error: Search pattern cannot be empty. Please provide a valid file name or glob pattern.';
       }
 
-      if (patternHasPathSegments(pattern)) {
-        return 'Error: pattern must be basename-only (e.g., "*.ts", "README.md"). Use the `path` parameter to scope the directory. To search outside the workspace, use the shell tool.';
-      }
-
       const limit = max_results ?? 50;
       const targetPath = searchPath?.trim() || '.';
       const cwd = executionContext?.getCwd() || process.cwd();
@@ -158,13 +150,39 @@ export const createFindFilesToolDefinition = (
 
       let command: string;
       if (useFd) {
-        const args = ['fd', '--color=never', '--type', 'f', '--glob'];
+        const args = ['fd', '--color=never', '--type', 'f'];
+        const hasPathSegment = patternHasPathSegments(pattern);
+        if (hasPathSegment) {
+          args.push('--full-path', '--glob');
+          // If the pattern doesn't start with wildcard, dot or slash, prepend **/ to match absolute/relative paths
+          let adjustedPattern = pattern;
+          if (!pattern.startsWith('*') && !pattern.startsWith('.') && !pattern.startsWith('/')) {
+            adjustedPattern = `**/${pattern}`;
+          }
+          const escapedAdjustedPattern = `'${adjustedPattern.replace(/'/g, "'\\''")}'`;
+          args.push(escapedAdjustedPattern);
+        } else {
+          args.push('--glob', escapedPattern);
+        }
         if (no_ignore) args.push('--no-ignore', '--hidden');
-        args.push(escapedPattern, escapedPath);
+        args.push(escapedPath);
         command = args.join(' ');
       } else {
-        // find pushes the glob down via -name so we don't enumerate the whole tree.
-        command = ['find', escapedPath, '-type', 'f', '-name', escapedPattern].join(' ');
+        const hasPathSegment = patternHasPathSegments(pattern);
+        const matchArg = hasPathSegment ? '-path' : '-name';
+        let normalizedPattern = pattern;
+        if (hasPathSegment) {
+          // In find -path, a single * matches directories recursively.
+          // Translate glob **/ to * and /**/ to /
+          normalizedPattern = pattern
+            .replace(/\/\*\*\//g, '/')
+            .replace(/\*\*\//g, '*/')
+            .replace(/\/\*\*/g, '/*')
+            .replace(/\*+/g, '*');
+        }
+        const matchPattern = hasPathSegment ? path.join(absolutePath, normalizedPattern).replace(/\\/g, '/') : pattern;
+        const escapedMatchPattern = `'${matchPattern.replace(/'/g, "'\\''")}'`;
+        command = ['find', escapedPath, '-type', 'f', matchArg, escapedMatchPattern].join(' ');
       }
 
       const sshService = executionContext?.getSSHService();

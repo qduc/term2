@@ -13,6 +13,7 @@ import { isPreviousResponseNotFoundError } from '../services/retry/retry-error-c
 import { computeUpstreamRetryDelayMs } from '../services/retry/upstream-retry-policy.js';
 
 type DiagnosticLogger = {
+  debug?: (message: string, meta?: Record<string, unknown>) => void;
   warn?: (message: string, meta?: Record<string, unknown>) => void;
   error?: (message: string, meta?: Record<string, unknown>) => void;
 };
@@ -655,7 +656,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       return;
     }
 
-    this.diagnosticLogger?.warn?.('Codex provider dropped already-consumed tool outputs before continuation', {
+    this.diagnosticLogger?.debug?.('Codex provider dropped already-consumed tool outputs before continuation', {
       eventType: 'codex.tool_outputs.dropped_consumed',
       category: 'provider',
       phase: 'request_prepare',

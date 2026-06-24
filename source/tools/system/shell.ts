@@ -425,7 +425,12 @@ export function createShellToolDefinition(deps: {
           cwd,
           timeout,
           maxBuffer: 1024 * 1024, // 1MB max buffer
-          env: sandboxed ? createSandboxEnvironment() : undefined,
+          env: sandboxed
+            ? createSandboxEnvironment(undefined, {
+                cwd,
+                readPolicy: settingsService.get<SandboxReadPolicy>('sandbox.readPolicy'),
+              })
+            : undefined,
           signal: (details as { signal?: AbortSignal } | undefined)?.signal,
           sshService,
         });

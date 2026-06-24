@@ -1,3 +1,5 @@
+import { resolveSandboxXdgLayout } from '../temp-dir.js';
+
 const ALLOWED_EXACT_KEYS = new Set(['PATH', 'SHELL', 'TMPDIR', 'TEMP', 'TMP', 'TERM', 'HOME']);
 
 function isAllowedKey(key: string): boolean {
@@ -21,7 +23,15 @@ export function isSecretKey(key: string): boolean {
   );
 }
 
-export function createSandboxEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+export interface SandboxEnvironmentOptions {
+  cwd?: string;
+  readPolicy?: 'standard' | 'strict';
+}
+
+export function createSandboxEnvironment(
+  source: NodeJS.ProcessEnv = process.env,
+  options: SandboxEnvironmentOptions = {},
+): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
 
   for (const [key, value] of Object.entries(source)) {
@@ -31,6 +41,15 @@ export function createSandboxEnvironment(source: NodeJS.ProcessEnv = process.env
       continue;
     }
     env[key] = value;
+  }
+
+  if (options.readPolicy === 'strict') {
+    const cwd = options.cwd ?? process.cwd();
+    const { config, cache, data, state } = resolveSandboxXdgLayout(cwd);
+    env.XDG_CONFIG_HOME = config;
+    env.XDG_CACHE_HOME = cache;
+    env.XDG_DATA_HOME = data;
+    env.XDG_STATE_HOME = state;
   }
 
   return env;

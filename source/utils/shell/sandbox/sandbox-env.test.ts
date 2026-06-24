@@ -1,5 +1,9 @@
 import { it, expect } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createSandboxEnvironment } from './sandbox-env.js';
+import { SANDBOX_TEMP_DIR } from '../temp-dir.js';
 
 it('keeps minimal shell environment and strips secret patterns', () => {
   const env = createSandboxEnvironment({
@@ -45,4 +49,71 @@ it('keeps minimal shell environment and strips secret patterns', () => {
   expect(env.SSH_AUTH_SOCK).toBeUndefined();
   expect(env.SSH_AGENT_PID).toBeUndefined();
   expect(env.CUSTOM_VALUE).toBeUndefined();
+});
+
+it('synthesizes private sandbox XDG paths in strict mode', () => {
+  const cwd = process.cwd();
+  const env = createSandboxEnvironment(
+    {
+      PATH: '/usr/bin:/bin',
+      HOME: os.homedir(),
+      XDG_CONFIG_HOME: '/host/config',
+      XDG_CACHE_HOME: '/host/cache',
+      XDG_DATA_HOME: '/host/data',
+      XDG_STATE_HOME: '/host/state',
+    },
+    { cwd, readPolicy: 'strict' },
+  );
+
+  const expectedRoot = path.join(SANDBOX_TEMP_DIR, 'xdg');
+
+  expect(env.HOME).toBe(os.homedir());
+  expect(env.XDG_CONFIG_HOME).toBeDefined();
+  expect(env.XDG_CACHE_HOME).toBeDefined();
+  expect(env.XDG_DATA_HOME).toBeDefined();
+  expect(env.XDG_STATE_HOME).toBeDefined();
+  expect(env.XDG_CONFIG_HOME).not.toBe('/host/config');
+  expect(env.XDG_CACHE_HOME).not.toBe('/host/cache');
+  expect(env.XDG_DATA_HOME).not.toBe('/host/data');
+  expect(env.XDG_STATE_HOME).not.toBe('/host/state');
+  expect(env.XDG_CONFIG_HOME).toContain(expectedRoot);
+  expect(env.XDG_CACHE_HOME).toContain(expectedRoot);
+  expect(env.XDG_DATA_HOME).toContain(expectedRoot);
+  expect(env.XDG_STATE_HOME).toContain(expectedRoot);
+});
+
+it('creates a private stable XDG layout per workspace', () => {
+  const cwd = process.cwd();
+  const env1 = createSandboxEnvironment({}, { cwd, readPolicy: 'strict' });
+  const env2 = createSandboxEnvironment({}, { cwd, readPolicy: 'strict' });
+
+  expect(env1.XDG_CACHE_HOME).toBe(env2.XDG_CACHE_HOME);
+  expect(env1.XDG_CONFIG_HOME).toBe(env2.XDG_CONFIG_HOME);
+  expect(env1.XDG_DATA_HOME).toBe(env2.XDG_DATA_HOME);
+  expect(env1.XDG_STATE_HOME).toBe(env2.XDG_STATE_HOME);
+
+  const xdgRoot = path.dirname(path.dirname(env1.XDG_CONFIG_HOME!));
+  expect(fs.statSync(xdgRoot).mode & 0o777).toBe(0o700);
+
+  for (const dir of [env1.XDG_CONFIG_HOME, env1.XDG_CACHE_HOME, env1.XDG_DATA_HOME, env1.XDG_STATE_HOME]) {
+    expect(dir).toBeTruthy();
+    expect(dir).toContain(SANDBOX_TEMP_DIR);
+    const mode = fs.statSync(dir!).mode & 0o777;
+    expect(mode).toBe(0o700);
+  }
+});
+
+it('leaves sandbox env unchanged in standard mode', () => {
+  const env = createSandboxEnvironment(
+    {
+      HOME: os.homedir(),
+      XDG_CONFIG_HOME: '/host/config',
+      XDG_CACHE_HOME: '/host/cache',
+    },
+    { cwd: process.cwd(), readPolicy: 'standard' },
+  );
+
+  expect(env.HOME).toBe(os.homedir());
+  expect(env.XDG_CONFIG_HOME).toBeUndefined();
+  expect(env.XDG_CACHE_HOME).toBeUndefined();
 });

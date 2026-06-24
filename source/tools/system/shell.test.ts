@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { createShellToolDefinition } from './shell.js';
+import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import {
   deniedReadStore,
   executionOverrideStore,
@@ -81,7 +82,7 @@ it('shell description mentions saved long output and avoiding reruns', () => {
     settingsService: createMockSettingsService(),
   });
 
-  expect(tool.description.includes('Long output is saved to a file')).toBe(true);
+  expect(tool.description.includes('full output is saved to a file')).toBe(true);
 });
 
 it('shell description is adjusted based on searchViaShell explicit option and settings', () => {
@@ -97,7 +98,9 @@ it('shell description is adjusted based on searchViaShell explicit option and se
     settingsService: createMockSettingsService(),
     searchViaShell: true,
   });
-  expect(toolExplicitTrue.description.includes('Do NOT use this to read or write.')).toBe(true);
+  expect(
+    toolExplicitTrue.description.includes('Do NOT use this to write. Use the specialized tools for those tasks.'),
+  ).toBe(true);
   expect(toolExplicitTrue.description.includes('Do NOT use this to read, write or search.')).toBe(false);
 
   const toolSettingsOn = createShellToolDefinition({
@@ -106,7 +109,9 @@ it('shell description is adjusted based on searchViaShell explicit option and se
       'app.searchViaShell': 'on',
     }),
   });
-  expect(toolSettingsOn.description.includes('Do NOT use this to read or write.')).toBe(true);
+  expect(
+    toolSettingsOn.description.includes('Do NOT use this to write. Use the specialized tools for those tasks.'),
+  ).toBe(true);
 
   const toolSettingsOff = createShellToolDefinition({
     loggingService: createNoopLogger(),
@@ -123,7 +128,9 @@ it('shell description is adjusted based on searchViaShell explicit option and se
       'agent.model': 'gpt-5-turbo',
     }),
   });
-  expect(toolSettingsAutoGpt5.description.includes('Do NOT use this to read or write.')).toBe(true);
+  expect(
+    toolSettingsAutoGpt5.description.includes('Do NOT use this to write. Use the specialized tools for those tasks.'),
+  ).toBe(true);
 
   const toolSettingsAutoNonGpt5 = createShellToolDefinition({
     loggingService: createNoopLogger(),
@@ -437,8 +444,37 @@ it.sequential('shell execute wraps local default commands with the sandbox when 
   expect(receivedAllowReadExtra).toContain('/tmp/tool-cache');
   expect(executedCommand).toBe('sandboxed(pwd)');
   expect(receivedEnv).toBeTruthy();
+  expect(receivedEnv?.HOME).toBe(os.homedir());
+  expect(receivedEnv?.XDG_CONFIG_HOME).toContain(SANDBOX_TEMP_DIR);
+  expect(receivedEnv?.XDG_CACHE_HOME).toContain(SANDBOX_TEMP_DIR);
+  expect(receivedEnv?.XDG_DATA_HOME).toContain(SANDBOX_TEMP_DIR);
+  expect(receivedEnv?.XDG_STATE_HOME).toContain(SANDBOX_TEMP_DIR);
   expect(cleanupCalls).toBe(1);
   expect(output.includes('ok')).toBe(true);
+});
+
+it.sequential('shell execute leaves XDG unset in standard sandbox mode', async () => {
+  let receivedEnv: NodeJS.ProcessEnv | undefined;
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({
+      'sandbox.enabled': true,
+    }),
+    shellSandboxRunner: createFakeSandboxRunner(),
+    executeShellCommandImpl: async (_command, options) => {
+      receivedEnv = options?.env;
+      return { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
+    },
+  });
+
+  await tool.execute({ command: 'pwd', sandbox: 'default' });
+
+  expect(receivedEnv?.HOME).toBe(os.homedir());
+  expect(receivedEnv?.XDG_CONFIG_HOME).toBeUndefined();
+  expect(receivedEnv?.XDG_CACHE_HOME).toBeUndefined();
+  expect(receivedEnv?.XDG_DATA_HOME).toBeUndefined();
+  expect(receivedEnv?.XDG_STATE_HOME).toBeUndefined();
 });
 
 it.sequential('shell execute bypasses sandbox for SSH commands', async () => {

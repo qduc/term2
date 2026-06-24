@@ -1,7 +1,8 @@
-import { mkdirSync, realpathSync } from 'node:fs';
+import { mkdirSync, chmodSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, basename } from 'node:path';
+import { join, basename, resolve as resolvePath } from 'node:path';
 import { homedir } from 'node:os';
+import { createHash } from 'node:crypto';
 
 /**
  * Per-user, deterministic temp directory for sandboxed shell commands.
@@ -42,3 +43,44 @@ const tempPath = resolveTempDir();
 mkdirSync(tempPath, { recursive: true });
 
 export const SANDBOX_TEMP_DIR = realpathSync(tempPath);
+
+export interface SandboxXdgLayout {
+  root: string;
+  config: string;
+  cache: string;
+  data: string;
+  state: string;
+}
+
+function ensurePrivateDir(dir: string): void {
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  chmodSync(dir, 0o700);
+}
+
+function resolveWorkspaceRoot(cwd: string): string {
+  try {
+    return realpathSync(cwd);
+  } catch {
+    return resolvePath(cwd);
+  }
+}
+
+export function resolveSandboxXdgLayout(cwd: string): SandboxXdgLayout {
+  const workspaceRoot = resolveWorkspaceRoot(cwd);
+  const workspaceHash = createHash('sha256').update(workspaceRoot).digest('hex').slice(0, 16);
+  const xdgRoot = join(SANDBOX_TEMP_DIR, 'xdg');
+  const root = join(xdgRoot, workspaceHash);
+  const config = join(root, 'config');
+  const cache = join(root, 'cache');
+  const data = join(root, 'data');
+  const state = join(root, 'state');
+
+  ensurePrivateDir(xdgRoot);
+  ensurePrivateDir(root);
+  ensurePrivateDir(config);
+  ensurePrivateDir(cache);
+  ensurePrivateDir(data);
+  ensurePrivateDir(state);
+
+  return { root, config, cache, data, state };
+}

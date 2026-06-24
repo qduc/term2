@@ -131,6 +131,7 @@ export const getAgentDefinition = (
   // remote (SSH) execution where the workspace lives on another host.
   const codeContextEnabled = !(executionContext?.isRemote() ?? false);
   const isGpt5 = !liteMode && shouldPreferPatchEditingModel(resolvedModel);
+  const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled');
   const promptSpec = buildPromptSpec({
     model: resolvedModel,
     liteMode,
@@ -140,6 +141,7 @@ export const getAgentDefinition = (
     searchViaShell,
     codeContextEnabled,
     runSubagentEnabled: Boolean(runSubagent),
+    sandboxEnabled,
     executionContext,
   });
   let prompt = resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile));
@@ -178,7 +180,13 @@ export const getAgentDefinition = (
     }
     const tools: ToolDefinition[] = [
       createRunSubagentToolDefinition(runSubagent),
-      createShellToolDefinition({ settingsService, loggingService, executionContext, orchestratorMode: true }),
+      createShellToolDefinition({
+        settingsService,
+        loggingService,
+        executionContext,
+        orchestratorMode: true,
+        searchViaShell,
+      }),
       createReadFileToolDefinition({ executionContext, allowOutsideWorkspace: true, orchestratorMode: true }),
       createGrepToolDefinition({ executionContext, orchestratorMode: true }),
     ];
@@ -200,7 +208,7 @@ export const getAgentDefinition = (
   }
 
   const tools: ToolDefinition[] = [
-    createShellToolDefinition({ settingsService, loggingService, executionContext }),
+    createShellToolDefinition({ settingsService, loggingService, executionContext, searchViaShell }),
     createWebSearchToolDefinition({
       settingsService,
       loggingService,

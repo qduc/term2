@@ -24,6 +24,7 @@ import {
 } from '../format-helpers.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import { ensureRtkInstalled, isRtkSupportedCommand, wrapWithRtk } from '../../services/rtk-service.js';
+import { shouldPreferPatchEditingModel } from '../../lib/tool-selection-policy.js';
 import { createSandboxEnvironment } from '../../utils/shell/sandbox/sandbox-env.js';
 import {
   SANDBOX_ESCAPE_INSTRUCTION,
@@ -215,14 +216,16 @@ export const formatShellCommandMessage: FormatCommandMessage = (item, index, too
   ];
 };
 
-const SHELL_DESCRIPTION =
-  'Execute a single shell command. By default, local shell commands run inside the sandbox when available. Use sandbox: "unsandboxed" only when a command needs network or outside-host access; unsandboxed commands require explicit user approval and must be run by the main agent, not delegated. ' +
-  'Use this to run tests, check git status, install dependencies, inspect system state, or run one-off scripts. ' +
-  'Long output is saved to a file; ' +
-  'Do NOT write multi-line inline scripts, it is prone to escaping mistakes. Use create_file to write the script then use this tool to run it. ' +
-  'Do NOT use this for complex multi-step edits or broad codebase exploration; use run_subagent instead.';
+const getShellDescription = (searchViaShell: boolean) =>
+  'Execute a single shell command. ' +
+  'Long output is truncated and the full output is saved to a file; ' +
+  (searchViaShell
+    ? 'Do NOT use this to write. Use the specialized tools for those tasks. '
+    : 'Do NOT use this to read, write or search. Use the specialized tools for those tasks. ') +
+  'Do NOT write multi-line inline scripts, it is prone to escaping mistakes. Create a temporary script then use this tool to run it. ' +
+  'Do NOT use this for complex multi-step edits or broad codebase exploration; use `run_subagent` instead.';
 const SHELL_DESCRIPTION_ORCHESTRATOR =
-  'Execute a single shell command to verify state (e.g., run tests, check git status, or verify a subagent\'s work). By default, local shell commands run inside the sandbox when available. Use sandbox: "unsandboxed" only for network or outside-host access; it requires explicit user approval and must be run by the main agent. Long output is saved to a file; ' +
+  'Execute a single shell command to verify state (e.g., run tests, check git status, or verify a subagent\'s work). By default, local shell commands run inside the sandbox when available. Use sandbox: "unsandboxed" only for network or outside-host access; it requires explicit user approval and must be run by the main agent. Long output is truncated, the full output is saved to a file; ' +
   'For performing complex operations or making changes, prefer delegating to a `worker` subagent via `run_subagent`.';
 
 export function createShellToolDefinition(deps: {
@@ -233,6 +236,7 @@ export function createShellToolDefinition(deps: {
   executeShellCommandImpl?: typeof executeShellCommand;
   shellSandboxRunner?: ShellSandboxRunner;
   orchestratorMode?: boolean;
+  searchViaShell?: boolean;
 }): ToolDefinition<ShellToolParams> {
   const {
     loggingService,
@@ -242,12 +246,25 @@ export function createShellToolDefinition(deps: {
     executeShellCommandImpl = executeShellCommand,
     shellSandboxRunner = getDefaultShellSandboxRunner(),
     orchestratorMode = false,
+    searchViaShell: searchViaShellExplicit,
   } = deps;
 
   // Create command logger function with dependencies
   const logValidationError = (message: string) => logValidationErrorUtil(settingsService, message);
 
-  const shellDescription = orchestratorMode ? SHELL_DESCRIPTION_ORCHESTRATOR : SHELL_DESCRIPTION;
+  const searchViaShellSetting = settingsService.get<'auto' | 'on' | 'off'>('app.searchViaShell') ?? 'auto';
+  const resolvedSearchViaShell =
+    searchViaShellExplicit ??
+    (searchViaShellSetting === 'auto'
+      ? (() => {
+          const model = settingsService.get<string>('agent.model');
+          return model ? shouldPreferPatchEditingModel(model) : false;
+        })()
+      : searchViaShellSetting === 'on');
+
+  const shellDescription = orchestratorMode
+    ? SHELL_DESCRIPTION_ORCHESTRATOR
+    : getShellDescription(resolvedSearchViaShell);
 
   return {
     name: 'shell',

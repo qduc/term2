@@ -84,6 +84,57 @@ it('shell description mentions saved long output and avoiding reruns', () => {
   expect(tool.description.includes('Long output is saved to a file')).toBe(true);
 });
 
+it('shell description is adjusted based on searchViaShell explicit option and settings', () => {
+  const toolExplicitFalse = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService(),
+    searchViaShell: false,
+  });
+  expect(toolExplicitFalse.description.includes('Do NOT use this to read, write or search.')).toBe(true);
+
+  const toolExplicitTrue = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService(),
+    searchViaShell: true,
+  });
+  expect(toolExplicitTrue.description.includes('Do NOT use this to read or write.')).toBe(true);
+  expect(toolExplicitTrue.description.includes('Do NOT use this to read, write or search.')).toBe(false);
+
+  const toolSettingsOn = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({
+      'app.searchViaShell': 'on',
+    }),
+  });
+  expect(toolSettingsOn.description.includes('Do NOT use this to read or write.')).toBe(true);
+
+  const toolSettingsOff = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({
+      'app.searchViaShell': 'off',
+    }),
+  });
+  expect(toolSettingsOff.description.includes('Do NOT use this to read, write or search.')).toBe(true);
+
+  const toolSettingsAutoGpt5 = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({
+      'app.searchViaShell': 'auto',
+      'agent.model': 'gpt-5-turbo',
+    }),
+  });
+  expect(toolSettingsAutoGpt5.description.includes('Do NOT use this to read or write.')).toBe(true);
+
+  const toolSettingsAutoNonGpt5 = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({
+      'app.searchViaShell': 'auto',
+      'agent.model': 'gpt-4o',
+    }),
+  });
+  expect(toolSettingsAutoNonGpt5.description.includes('Do NOT use this to read, write or search.')).toBe(true);
+});
+
 it('shell schema accepts omitted, default, and unsandboxed sandbox modes', () => {
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),

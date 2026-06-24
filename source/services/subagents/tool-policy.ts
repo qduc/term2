@@ -468,6 +468,7 @@ export class SubagentToolFactory {
         settingsService: this.#settings,
         loggingService: this.#logger,
         executionContext: this.#executionContext,
+        searchViaShell,
       });
 
       if (definition.canWrite) {

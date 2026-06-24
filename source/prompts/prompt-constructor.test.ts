@@ -60,7 +60,12 @@ it('buildPromptSpec composes file fragments in stable order', () => {
     searchViaShell: true,
   });
 
-  expect(spec.fragmentFiles).toEqual(['worktree-hygiene.md', 'mentor-addon.md', 'plan-mode-info.md']);
+  expect(spec.fragmentFiles).toEqual([
+    'worktree-hygiene.md',
+    'shell-sandbox.md',
+    'mentor-addon.md',
+    'plan-mode-info.md',
+  ]);
 });
 
 it('buildPromptSpec always includes plan-mode-info in standard mode to keep system prompt cache-stable', () => {
@@ -118,4 +123,14 @@ it('buildPromptSpec uses lite base and skips worktree-hygiene fragment in lite m
   expect(lite.basePromptFile).toBe('lite.md');
   expect(lite.fragmentFiles.includes('worktree-hygiene.md')).toBe(false);
   expect(lite.inlineSections.some((s) => s.includes('Search Tools'))).toBe(true);
+});
+
+it('buildPromptSpec excludes shell-sandbox fragment when sandbox is disabled', () => {
+  const spec = buildPromptSpec({
+    model: 'gpt-4o',
+    liteMode: false,
+    sandboxEnabled: false,
+  });
+  expect(spec.fragmentFiles.includes('shell-sandbox.md')).toBe(false);
+  expect(spec.fragmentFiles.includes('worktree-hygiene.md')).toBe(true);
 });

@@ -143,6 +143,12 @@ const InputBox: FC<Props> = ({
   // value and cursorOverride in the same render is overwritten by ink-prompt's
   // value-sync effect, so we defer the cursor override to a separate commit.
   const pendingCursorOverrideRef = useRef<{ value: string; cursor: number } | null>(null);
+  // Guard that suppresses the stale onImagesChange callback fired by ink-prompt's
+  // MultilineInput after a controlled images prop change (history recall, paste, etc.).
+  // ink-prompt syncs images via two unbuffered effects — one pushes the prop into
+  // internal state, the other reports internal state back — but without the
+  // isSyncingFromProps guard that the value prop already has, causing an oscillation.
+  const suppressImagesCallbackRef = useRef(false);
 
   // Hooks
   const slash = useSlashCommands({
@@ -250,6 +256,10 @@ const InputBox: FC<Props> = ({
   );
   const handleImagesChange = useCallback(
     (nextImages: ImageRef[]) => {
+      if (suppressImagesCallbackRef.current) {
+        suppressImagesCallbackRef.current = false;
+        return;
+      }
       setImages((prevImages) => (areImagesEqual(prevImages, nextImages) ? prevImages : nextImages));
     },
     [setImages],
@@ -741,6 +751,7 @@ const InputBox: FC<Props> = ({
       const next = direction === 'up' ? navigateUp({ text: value, images }) : navigateDown();
       if (next !== null) {
         onChange(next.text);
+        suppressImagesCallbackRef.current = true;
         setImages((prevImages) => (areImagesEqual(prevImages, next.images ?? []) ? prevImages : next.images ?? []));
         remountInput();
       }

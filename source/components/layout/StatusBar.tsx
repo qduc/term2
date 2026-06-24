@@ -39,6 +39,7 @@ const StatusBar: FC<StatusBarProps> = ({
   const autoApproveMode = useSetting<string>(settingsService, 'shell.autoApproveMode') ?? 'off';
   const autoApproveModel = useSetting<string>(settingsService, 'agent.autoApproveModel');
   const sandboxEnabled = useSetting<boolean>(settingsService, 'sandbox.enabled') ?? false;
+  const sandboxReadPolicy = useSetting<string>(settingsService, 'sandbox.readPolicy') ?? 'standard';
 
   const providerDef = getProvider(providerKey);
   const providerLabel = providerDef?.label || providerKey;
@@ -197,6 +198,7 @@ const StatusBar: FC<StatusBarProps> = ({
               <Text color="#10b981" bold>
                 ON
               </Text>
+              <Text color={slate}> ({sandboxReadPolicy})</Text>
             </Box>
           ) : (
             autoApproveMode !== 'off' && (

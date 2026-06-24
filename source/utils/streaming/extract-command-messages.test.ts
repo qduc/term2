@@ -6,8 +6,8 @@ import { formatAskMentorCommandMessage } from '../../tools/agent/ask-mentor.js';
 import {
   formatCodeContextSearchCommandMessage,
   formatReadCodeOutlineCommandMessage,
-} from '../../tools/system/code-context.js';
-import { formatGrepCommandMessage } from '../../tools/system/grep.js';
+} from '../../tools/file/code-context.js';
+import { formatGrepCommandMessage } from '../../tools/file/grep.js';
 import { formatReadFileCommandMessage } from '../../tools/file/read-file.js';
 import { formatShellCommandMessage } from '../../tools/system/shell.js';
 

@@ -117,6 +117,7 @@ export const createFindFilesToolDefinition = (
     name: 'glob',
     description: allowOutsideWorkspace ? GLOB_DESCRIPTION_OUTSIDE : GLOB_DESCRIPTION,
     parameters: findFilesParametersSchema,
+    argumentParsing: 'strict',
     needsApproval: async (params) => {
       if (allowOutsideWorkspace) {
         return false;

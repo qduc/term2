@@ -10,12 +10,12 @@ import { wrapToolInvoke, wrapNeedsApproval } from '../../lib/tool-invoke.js';
 import { toOpenAIStrictToolSchema } from '../../lib/openai-strict-tool-schema.js';
 import { shouldUseStrictToolSchema, shouldPreferPatchEditingModel } from '../../lib/tool-selection-policy.js';
 import { createReadFileToolDefinition } from '../../tools/file/read-file.js';
-import { createGrepToolDefinition } from '../../tools/system/grep.js';
-import { createFindFilesToolDefinition } from '../../tools/file/find-files.js';
+import { createGrepToolDefinition } from '../../tools/file/grep.js';
+import { createFindFilesToolDefinition } from '../../tools/file/glob.js';
 import {
   createReadCodeOutlineToolDefinition,
   createCodeContextSearchToolDefinition,
-} from '../../tools/system/code-context.js';
+} from '../../tools/file/code-context.js';
 import { createWebSearchToolDefinition } from '../../tools/web/web-search.js';
 import { createWebFetchToolDefinition } from '../../tools/web/web-fetch.js';
 import { createApplyPatchToolDefinition } from '../../tools/file/apply-patch.js';

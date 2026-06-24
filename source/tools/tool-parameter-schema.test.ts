@@ -1,12 +1,12 @@
 import { it, expect } from 'vitest';
-import { createFindFilesToolDefinition } from './file/find-files.js';
+import { createFindFilesToolDefinition } from './file/glob.js';
 import { createReadFileToolDefinition } from './file/read-file.js';
 import { createShellToolDefinition } from './system/shell.js';
-import { createGrepToolDefinition } from './system/grep.js';
+import { createGrepToolDefinition } from './file/grep.js';
 import { createWebFetchToolDefinition } from './web/web-fetch.js';
 import { createAskMentorToolDefinition } from './agent/ask-mentor.js';
 import { createSearchReplaceToolDefinition } from './file/search-replace.js';
-import { createCodeContextSearchToolDefinition, createReadCodeOutlineToolDefinition } from './system/code-context.js';
+import { createCodeContextSearchToolDefinition, createReadCodeOutlineToolDefinition } from './file/code-context.js';
 import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 

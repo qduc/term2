@@ -54,36 +54,8 @@ import { executeShellCommand } from '../../utils/shell/execute-shell.js';
 let hasRg: boolean | null = null;
 let hasRgRemote: boolean | null = null;
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
-}
-
-function globToRegExp(glob: string): RegExp {
-  let source = '';
-
-  for (let index = 0; index < glob.length; index += 1) {
-    const char = glob[index];
-    const next = glob[index + 1];
-
-    if (char === '*') {
-      if (next === '*') {
-        source += '.*';
-        index += 1;
-      } else {
-        source += '[^/]*';
-      }
-      continue;
-    }
-
-    if (char === '?') {
-      source += '[^/]';
-      continue;
-    }
-
-    source += escapeRegExp(char);
-  }
-
-  return new RegExp(`^${source}$`);
+function shellQuoteArg(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 function expandBraces(pattern: string): string[] {
@@ -104,49 +76,6 @@ function expandBraces(pattern: string): string[] {
     results.push(...expandBraces(expanded));
   }
   return results;
-}
-
-function matchesFilePattern(filePath: string, filePattern: string): boolean {
-  const normalizedPath = filePath.replace(/\\/g, '/').replace(/^\.\//, '');
-  const normalizedPattern = filePattern.replace(/\\/g, '/').replace(/^\.\//, '');
-
-  const patterns = expandBraces(normalizedPattern);
-  return patterns.some((pattern) => {
-    const patternMatcher = globToRegExp(pattern);
-    if (patternMatcher.test(normalizedPath)) {
-      return true;
-    }
-
-    if (!pattern.includes('/')) {
-      const basename = normalizedPath.split('/').pop() ?? normalizedPath;
-      return patternMatcher.test(basename);
-    }
-
-    return false;
-  });
-}
-
-function filterGrepOutputByFilePattern(output: string, filePattern?: string): string {
-  if (!filePattern) {
-    return output;
-  }
-
-  return output
-    .split('\n')
-    .filter((line) => {
-      const firstColon = line.indexOf(':');
-      if (firstColon === -1) {
-        return true;
-      }
-
-      const secondColon = line.indexOf(':', firstColon + 1);
-      if (secondColon === -1) {
-        return true;
-      }
-
-      return matchesFilePattern(line.slice(0, firstColon), filePattern);
-    })
-    .join('\n');
 }
 
 async function checkRgAvailability(executionContext?: ExecutionContext): Promise<boolean> {
@@ -224,23 +153,23 @@ export const createGrepToolDefinition = (
         if (ignore_case) args.push('--ignore-case');
         if (fixed_strings) args.push('--fixed-strings');
         if (no_ignore) args.push('--no-ignore');
-        if (include && no_ignore) {
+        if (include) {
           const patterns = expandBraces(include);
           for (const pattern of patterns) {
-            args.push('-g', `'${pattern}'`);
+            args.push('-g', shellQuoteArg(pattern));
           }
         }
         if (exclude) {
           const patterns = expandBraces(exclude);
           for (const pattern of patterns) {
-            args.push('-g', `'!${pattern}'`);
+            args.push('-g', shellQuoteArg(`!${pattern}`));
           }
         }
 
         // Shell-quote the pattern; do not regex-escape it.
-        args.push(`'${pattern.replace(/'/g, "'\\''")}'`);
+        args.push('--', shellQuoteArg(pattern));
 
-        args.push(searchPath);
+        args.push(shellQuoteArg(searchPath));
         command = args.join(' ');
       } else {
         // Fallback to grep
@@ -250,20 +179,20 @@ export const createGrepToolDefinition = (
         if (include) {
           const patterns = expandBraces(include);
           for (const pattern of patterns) {
-            args.push(`--include='${pattern}'`);
+            args.push(`--include=${shellQuoteArg(pattern)}`);
           }
         }
         if (exclude) {
           const patterns = expandBraces(exclude);
           for (const pattern of patterns) {
-            args.push(`--exclude='${pattern}'`);
+            args.push(`--exclude=${shellQuoteArg(pattern)}`);
           }
         }
 
         // Shell-quote the pattern; do not regex-escape it.
-        args.push(`'${pattern.replace(/'/g, "'\\''")}'`);
+        args.push('--', shellQuoteArg(pattern));
 
-        args.push(searchPath);
+        args.push(shellQuoteArg(searchPath));
         command = args.join(' ');
       }
 
@@ -284,8 +213,7 @@ export const createGrepToolDefinition = (
         throw new Error(`Search failed: ${result.stderr.trim() || `exit code ${result.exitCode}`}`);
       }
 
-      const filteredStdout =
-        useRg && !no_ignore ? filterGrepOutputByFilePattern(result.stdout, include) : result.stdout;
+      const filteredStdout = result.stdout;
       const trimmed = filteredStdout.trim();
       const lineCount = trimmed ? trimmed.split('\n').length : 0;
       const outputTrimmed = trimOutput(trimmed, limit);

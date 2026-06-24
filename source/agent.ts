@@ -1,6 +1,6 @@
-import { createGrepToolDefinition } from './tools/system/grep.js';
+import { createGrepToolDefinition } from './tools/file/grep.js';
 import { createReadFileToolDefinition } from './tools/file/read-file.js';
-import { createFindFilesToolDefinition } from './tools/file/find-files.js';
+import { createFindFilesToolDefinition } from './tools/file/glob.js';
 import { createSearchReplaceToolDefinition } from './tools/file/search-replace.js';
 import { createApplyPatchToolDefinition } from './tools/file/apply-patch.js';
 import { createShellToolDefinition } from './tools/system/shell.js';
@@ -13,7 +13,7 @@ import { createCreateFileToolDefinition } from './tools/file/create-file.js';
 import {
   createCodeContextSearchToolDefinition,
   createReadCodeOutlineToolDefinition,
-} from './tools/system/code-context.js';
+} from './tools/file/code-context.js';
 import { registerToolFormatters } from './tools/command-message-formatters.js';
 import { TOOL_NAME_ASK_USER } from './tools/tool-names.js';
 import type { ToolDefinition } from './tools/types.js';

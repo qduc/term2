@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { tool as createTool, RunContext } from '@openai/agents';
 import { createGrepToolDefinition, formatGrepCommandMessage } from './grep.js';
 import { toolErrorFunction, wrapToolInvoke } from '../../lib/tool-invoke.js';
+import { ExecutionContext } from '../../services/execution-context.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -42,7 +43,7 @@ async function withTempDir(run: (dir: string) => Promise<void>) {
   }
 }
 
-it.sequential('execute: file_pattern does not include gitignored files', async () => {
+it.sequential('execute: include uses rg-style globs that can re-include gitignored files', async () => {
   await withTempDir(async (dir) => {
     await execFileAsync('git', ['init'], { cwd: dir });
     await fs.mkdir(path.join(dir, 'source'), { recursive: true });
@@ -57,7 +58,7 @@ it.sequential('execute: file_pattern does not include gitignored files', async (
     });
 
     expect(result.includes('source/app.ts')).toBe(true);
-    expect(result.includes('tsconfig.tsbuildinfo')).toBe(false);
+    expect(result.includes('tsconfig.tsbuildinfo')).toBe(true);
   });
 });
 
@@ -161,6 +162,65 @@ it.sequential('execute: fixed_strings true uses fixed-string matching', async ()
     expect(result.includes('hello.world')).toBe(true);
     expect(result.includes('hello-world')).toBe(false);
   });
+});
+
+it.sequential('execute: searches paths containing spaces', async () => {
+  await withTempDir(async (dir) => {
+    const spacedDir = path.join(dir, 'docs plans');
+    await fs.mkdir(spacedDir, { recursive: true });
+    await fs.writeFile(path.join(spacedDir, 'notes.txt'), 'ship it\n');
+
+    const result = await createGrepToolDefinition().execute({
+      pattern: 'ship',
+      path: 'docs plans',
+    });
+
+    expect(result.includes('docs plans/notes.txt')).toBe(true);
+  });
+});
+
+it.sequential('execute: include patterns containing single quotes are treated as one glob argument', async () => {
+  await withTempDir(async (dir) => {
+    await fs.writeFile(path.join(dir, "owner's-notes.txt"), 'target\n');
+    await fs.writeFile(path.join(dir, 'other-notes.txt'), 'target\n');
+
+    const result = await createGrepToolDefinition().execute({
+      pattern: 'target',
+      path: '.',
+      include: "owner's-*.txt",
+    });
+
+    expect(result.includes("owner's-notes.txt")).toBe(true);
+    expect(result.includes('other-notes.txt')).toBe(false);
+  });
+});
+
+it.sequential('execute: passes rg-style include globs through before searching', async () => {
+  const commands: string[] = [];
+  const sshService = {
+    connect: async () => {},
+    disconnect: async () => {},
+    isConnected: () => true,
+    executeCommand: async (commandString: string) => {
+      commands.push(commandString);
+      if (commandString === 'rg --version') {
+        return { stdout: 'ripgrep 14.0.0\n', stderr: '', exitCode: 0, timedOut: false };
+      }
+      return { stdout: 'source/app.ts:1:target\n', stderr: '', exitCode: 0, timedOut: false };
+    },
+    readFile: async () => '',
+    writeFile: async () => {},
+    mkdir: async () => {},
+  };
+  const executionContext = new ExecutionContext(sshService);
+
+  await createGrepToolDefinition({ executionContext }).execute({
+    pattern: 'target',
+    path: '.',
+    include: '*.ts',
+  });
+
+  expect(commands[1]).toContain("-g '*.ts'");
 });
 
 it('formatGrepCommandMessage sets toolName to "grep" so the match counter uses the structured parser', () => {

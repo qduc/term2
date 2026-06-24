@@ -2,8 +2,10 @@ import { it, expect } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { createFindFilesToolDefinition } from './find-files.js';
+import { tool as createTool, RunContext } from '@openai/agents';
+import { createFindFilesToolDefinition } from './glob.js';
 import { ExecutionContext } from '../../services/execution-context.js';
+import { toolErrorFunction, wrapToolInvoke } from '../../lib/tool-invoke.js';
 
 const findFilesToolDefinition = createFindFilesToolDefinition();
 const findFilesToolDefinitionAllowOutside = createFindFilesToolDefinition({
@@ -12,6 +14,22 @@ const findFilesToolDefinitionAllowOutside = createFindFilesToolDefinition({
 const findFilesToolDefinitionFindFallback = createFindFilesToolDefinition({
   forceFindFallback: true,
 });
+
+function createWrappedFindFilesTool() {
+  const definition = createFindFilesToolDefinition();
+  return wrapToolInvoke(
+    createTool({
+      name: definition.name,
+      description: definition.description,
+      parameters: definition.parameters,
+      strict: true,
+      errorFunction: toolErrorFunction,
+      execute: async (params, context, details) => definition.execute(params as any, context, details),
+    }),
+    definition.parameters,
+    { argumentParsing: definition.argumentParsing },
+  );
+}
 
 // Helper to create a temp dir and change cwd to it
 async function withTempDir(run: (dir: string) => Promise<void>) {
@@ -45,6 +63,17 @@ it.sequential('schema: optional params can be omitted and null is rejected', asy
     expect(findFilesToolDefinition.parameters.safeParse({ pattern: '*.ts' }).success).toBe(true);
     expect(findFilesToolDefinition.parameters.safeParse({ pattern: '*.ts', path: null }).success).toBe(false);
     expect(findFilesToolDefinition.parameters.safeParse({ pattern: '*.ts', max_results: null }).success).toBe(false);
+  });
+});
+
+it.sequential('invoke: glob uses strict JSON parsing for glob patterns', async () => {
+  await withTempDir(async () => {
+    const glob = createWrappedFindFilesTool();
+
+    const result = await glob.invoke({} as RunContext, '{"pattern":"*.ts\n"}', {});
+
+    expect(String(result)).toMatch(/Tool input did not match schema for glob|Tool input was invalid for this tool/);
+    expect(String(result)).toMatch(/Retry with/);
   });
 });
 

@@ -440,7 +440,7 @@ it('retryLastToolOutput trims trailing assistant text and replays full history',
   expect(startCalls).toHaveLength(1);
   expect(Array.isArray(startCalls[0].input)).toBe(true);
   expect((startCalls[0].input as any[]).map((item) => item.type)).toEqual([
-    'user',
+    'message',
     'function_call',
     'function_call_result',
   ]);

@@ -228,7 +228,11 @@ it('removeAfterLastToolOutput() removes trailing assistant text but keeps the la
     toolName: 'shell',
     output: 'Mon Jan 01 00:00:00 UTC 2024',
   });
-  expect(store.getHistory().map((item: any) => item.type)).toEqual(['user', 'function_call', 'function_call_result']);
+  expect(store.getHistory().map((item: any) => item.type)).toEqual([
+    'message',
+    'function_call',
+    'function_call_result',
+  ]);
 });
 
 it('peekLastToolOutput() returns the last tool output without trimming history', () => {

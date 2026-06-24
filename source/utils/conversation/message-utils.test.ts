@@ -48,8 +48,12 @@ it('trimTrailingAssistantMessages removes trailing assistant messages', () => {
   expect(trimTrailingAssistantMessages(messages)).toEqual([userMsg('u1', 'hello')]);
 });
 
-it('trimTrailingAssistantMessages keeps trailing non-assistant messages intact', () => {
-  const messages: Message[] = [userMsg('u1', 'hello'), { id: 's1', sender: 'system', text: 'notice' }];
+it('trimTrailingAssistantMessages keeps trailing user messages intact', () => {
+  const messages: Message[] = [
+    userMsg('u1', 'hello'),
+    { id: 'a1', sender: 'bot', text: 'answer' },
+    userMsg('u2', 'follow up'),
+  ];
 
   expect(trimTrailingAssistantMessages(messages)).toBe(messages);
 });

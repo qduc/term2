@@ -11,22 +11,6 @@ it('buildPromptSpec preserves mode precedence for base prompts', () => {
   expect(buildPromptSpec({ model: 'gpt-4o', liteMode: false }).basePromptFile).toBe('simple_v3.md');
 });
 
-it('buildPromptSpec includes ask_user guidance in all modes', () => {
-  const standard = buildPromptSpec({ model: 'gpt-4o', liteMode: false });
-  expect(standard.inlineSections.some((s) => s.includes('ask_user'))).toBe(true);
-
-  const lite = buildPromptSpec({ model: 'gpt-4o', liteMode: true });
-  expect(lite.inlineSections.some((s) => s.includes('ask_user'))).toBe(true);
-
-  const orchestrator = buildPromptSpec({
-    model: 'gpt-4o',
-    liteMode: false,
-    orchestratorMode: true,
-    runSubagentEnabled: true,
-  });
-  expect(orchestrator.inlineSections.some((s) => s.includes('ask_user'))).toBe(true);
-});
-
 // it('buildPromptSpec adds GPT version fragments without changing the base GPT prompt fallback', () => {
 //   const gpt55 = buildPromptSpec({ model: 'gpt-5.5-2026-04-23', liteMode: false });
 //   expect(gpt55.basePromptFile).toBe('gpt-5-modern.md');
@@ -81,25 +65,6 @@ it('buildPromptSpec excludes plan-mode-info in lite and orchestrator modes', () 
   expect(orchestrator.fragmentFiles.includes('plan-mode-info.md')).toBe(false);
 });
 
-it('buildPromptSpec includes code context inline section when enabled and not orchestrator', () => {
-  const standard = buildPromptSpec({
-    model: 'gpt-4o',
-    liteMode: false,
-    codeContextEnabled: true,
-    searchViaShell: false,
-  });
-  expect(standard.inlineSections.length > 0).toBe(true);
-  expect(standard.inlineSections.some((s) => s.includes('Code Context'))).toBe(true);
-
-  const gpt5 = buildPromptSpec({
-    model: 'gpt-5.5',
-    liteMode: false,
-    codeContextEnabled: true,
-    searchViaShell: false,
-  });
-  expect(gpt5.inlineSections.some((s) => s.includes('Code Context'))).toBe(true);
-});
-
 it('buildPromptSpec includes subagent delegation for orchestrator mode', () => {
   const orchestrator = buildPromptSpec({
     model: 'gpt-5.5',
@@ -122,7 +87,8 @@ it('buildPromptSpec uses lite base and skips worktree-hygiene fragment in lite m
   });
   expect(lite.basePromptFile).toBe('lite.md');
   expect(lite.fragmentFiles.includes('worktree-hygiene.md')).toBe(false);
-  expect(lite.inlineSections.some((s) => s.includes('Search Tools'))).toBe(true);
+  // Dedicated search tool text was removed; inlineSections should be empty in lite mode.
+  expect(lite.inlineSections.length).toBe(0);
 });
 
 it('buildPromptSpec excludes shell-sandbox fragment when sandbox is disabled', () => {

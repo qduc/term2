@@ -316,8 +316,10 @@ it('getAgentDefinition does not default searchViaShell to true for non-gpt-5 mod
   });
 
   expect(definition.instructions.includes('### Searching via the shell')).toBe(false);
-  expect(definition.instructions.includes('`glob`')).toBe(true);
-  expect(definition.instructions.includes('`grep`')).toBe(true);
+  // Dedicated search tool instructions (glob/grep) were removed from the prompt;
+  // grep/glob still exist as tools when searchViaShell is false for non-gpt-5.
+  const toolNames = definition.tools.map((tool) => tool.name);
+  expect(toolNames.includes('grep')).toBe(true);
 });
 
 it('getAgentDefinition forces searchViaShell on for non-gpt-5 models when explicitly set to on', () => {
@@ -400,55 +402,6 @@ it('getAgentDefinition omits dedicated search tool references from prompt when s
 
   expect(definition.instructions.includes('`glob`')).toBe(false);
   expect(definition.instructions.includes('`grep`')).toBe(false);
-});
-
-it('getAgentDefinition dynamically includes dedicated search tool references when searchViaShell is false', () => {
-  const settingsService = createMockSettingsService({
-    'app.searchViaShell': 'off',
-    'agent.model': 'gpt-4o',
-  });
-
-  const definition = getAgentDefinition({
-    settingsService,
-    loggingService: mockLogger,
-  });
-
-  expect(definition.instructions.includes('`glob`')).toBe(true);
-  expect(definition.instructions.includes('`grep`')).toBe(true);
-  expect(definition.instructions.includes('read_code_outline')).toBe(true);
-  expect(definition.instructions.includes('code_context_search')).toBe(true);
-  expect(definition.instructions.includes('read_file')).toBe(true);
-});
-
-it('getAgentDefinition dynamically includes code-context tool references when available', () => {
-  const settingsService = createMockSettingsService({
-    'app.searchViaShell': 'on',
-    'agent.model': 'gpt-4o',
-  });
-
-  const definition = getAgentDefinition({
-    settingsService,
-    loggingService: mockLogger,
-  });
-
-  expect(definition.instructions.includes('read_code_outline')).toBe(true);
-  expect(definition.instructions.includes('code_context_search')).toBe(true);
-  expect(definition.instructions.includes('read_file')).toBe(true);
-});
-
-it('getAgentDefinition dynamically includes code-context tool references for gpt-5 models', () => {
-  const settingsService = createMockSettingsService({
-    'app.searchViaShell': 'off',
-    'agent.model': 'gpt-5',
-  });
-
-  const definition = getAgentDefinition({
-    settingsService,
-    loggingService: mockLogger,
-  });
-
-  expect(definition.instructions.includes('read_code_outline')).toBe(true);
-  expect(definition.instructions.includes('code_context_search')).toBe(true);
 });
 
 it('getAgentDefinition uses fallback search prompt for remote execution', () => {

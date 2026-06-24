@@ -8,17 +8,18 @@ import type { ILoggingService } from '../service-interfaces.js';
 function createMockLogger() {
   const warnings: string[] = [];
   const errors: string[] = [];
+  const debugLogs: string[] = [];
   const logger: ILoggingService = {
     info: () => {},
     warn: (msg) => warnings.push(msg),
     error: (msg) => errors.push(msg),
-    debug: () => {},
+    debug: (msg) => debugLogs.push(msg),
     security: () => {},
     setCorrelationId: () => {},
     getCorrelationId: () => undefined,
     clearCorrelationId: () => {},
   };
-  return { logger, warnings, errors };
+  return { logger, warnings, errors, debugLogs };
 }
 
 const TEMP_TEST_DIR = path.join(process.cwd(), 'temp-skills-test');
@@ -86,7 +87,7 @@ This is the markdown body.
 });
 
 it.sequential('SkillsService handles lenient validation - derives missing name from parent directory', () => {
-  const { logger, warnings } = createMockLogger();
+  const { logger, debugLogs } = createMockLogger();
   const skillDir = path.join(mockProject, '.agents', 'skills', 'parent-name-skill');
   fs.mkdirSync(skillDir, { recursive: true });
 
@@ -103,7 +104,7 @@ description: Missing name property in frontmatter
   const skills = service.getAvailableSkills();
   expect(skills.length).toBe(1);
   expect(skills[0]?.name).toBe('parent-name-skill');
-  expect(warnings.some((w) => w.includes('is missing a name. Deriving from parent directory'))).toBe(true);
+  expect(debugLogs.some((w) => w.includes('is missing a name. Deriving from parent directory'))).toBe(true);
 });
 
 it.sequential('SkillsService skips skill with missing description', () => {
@@ -149,7 +150,7 @@ description: Use this skill when: handling colon tests
 });
 
 it.sequential('SkillsService project-level skills override user-level skills', () => {
-  const { logger, warnings } = createMockLogger();
+  const { logger, debugLogs } = createMockLogger();
 
   // User-level skill
   const userSkillDir = path.join(mockHome, '.agents', 'skills', 'overlap-skill');
@@ -182,7 +183,7 @@ Project Body`,
   expect(skills.length).toBe(1);
   expect(skills[0]?.description).toBe('Project level description');
   expect(skills[0]?.body).toBe('Project Body');
-  expect(warnings.some((w) => w.includes('overrides user-level'))).toBe(true);
+  expect(debugLogs.some((w) => w.includes('overrides user-level'))).toBe(true);
 });
 
 it.sequential('SkillsService filter/disable model invocation', () => {

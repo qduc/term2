@@ -10,6 +10,7 @@ import { createStreamAccumulator, processStreamEvents, type StreamAccumulator } 
 import { extractReplaySnapshot, extractFinalizationSnapshot, type StreamReplaySnapshot } from '../stream-snapshot.js';
 import { collectDuplicateToolCallResultPairs } from '../input-surge-guard.js';
 import { callIdOf, toolNameOf, outputOf } from '../tool-execution-ledger.js';
+import { TOOL_RESULT_ITEM_TYPES } from '../../lib/chained-input-filter.js';
 import type { AgentInputItem } from '@openai/agents';
 import { GenerationGuard, type GenerationToken } from '../generation-guard.js';
 
@@ -26,6 +27,14 @@ const hasConversationMessageItems = (items: unknown[]): boolean =>
     const raw = record?.rawItem;
     const candidate = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : record;
     return candidate?.type === 'message' && typeof candidate?.role === 'string';
+  });
+
+const hasToolResultItems = (items: unknown[]): boolean =>
+  items.some((item) => {
+    const record = item && typeof item === 'object' ? (item as Record<string, unknown>) : null;
+    const raw = record?.rawItem;
+    const candidate = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : record;
+    return typeof candidate?.type === 'string' && TOOL_RESULT_ITEM_TYPES.has(candidate.type);
   });
 
 const warnIfStreamHistoryReplayedTools = ({
@@ -238,12 +247,17 @@ export class SessionStreamProcessor {
           // preserve assistant text that SDK history reconstruction may strip.
           // If the incremental payload is only tool outputs, fall back to the
           // authoritative replay history instead of poisoning the canonical store.
+          // When even the replay history has no messages but the incremental
+          // output contains tool results, append those so retry and subsequent
+          // turns can see the new tool output.
           if (hasConversationMessageItems(snapshot.output)) {
             this.deps.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
           } else if (hasConversationMessageItems(snapshot.newItems)) {
             this.deps.conversationStore.appendOutput(snapshot.newItems as AgentInputItem[]);
           } else if (hasConversationMessageItems(snapshot.history)) {
             this.deps.conversationStore.replaceHistory(snapshot.history as AgentInputItem[]);
+          } else if (hasToolResultItems(snapshot.output)) {
+            this.deps.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
           }
         }
         result = { kind: 'committed' };

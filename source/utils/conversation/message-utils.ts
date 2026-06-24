@@ -44,6 +44,7 @@ export function trimTrailingAssistantMessages(messages: Message[]): Message[] {
   while (end > 0) {
     const message = messages[end - 1];
     if (
+      message?.sender === 'command' ||
       message?.sender === 'bot' ||
       message?.sender === 'reasoning' ||
       message?.sender === 'system' ||

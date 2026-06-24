@@ -1,4 +1,5 @@
 import { it, expect } from 'vitest';
+import type { AgentInputItem } from '@openai/agents';
 import { LoggingService } from '../logging/logging-service.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
@@ -465,7 +466,7 @@ it('SessionStreamProcessor.finalize() prefers full replay history when full-hist
   expect(conversationStore.getHistory()).toEqual(fullHistory);
 });
 
-it('SessionStreamProcessor.finalize() keeps canonical history when full-history replay snapshot contains only tool outputs', () => {
+it('SessionStreamProcessor.finalize() appends tool-result-only output when full-history replay snapshot has no messages', () => {
   const conversationStore = new ConversationStore();
   conversationStore.addUserMessage('Initial request');
   conversationStore.appendOutput([
@@ -508,7 +509,58 @@ it('SessionStreamProcessor.finalize() keeps canonical history when full-history 
   const result = processor.finalize(stream, token, 'full_history', 'continueRunStream');
 
   expect(result).toEqual({ kind: 'committed' });
-  expect(conversationStore.getHistory()).toEqual(baselineHistory);
+  expect(conversationStore.getHistory()).toEqual([
+    ...baselineHistory,
+    { type: 'function_call_output', callId: 'call-2', output: 'tool result 2' },
+  ]);
+});
+
+it('SessionStreamProcessor.finalize() appends tool results in full-history mode so retry can locate them', () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.addUserMessage('Run the tool');
+  conversationStore.appendOutput([
+    { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{}' } as AgentInputItem,
+  ]);
+
+  const toolTracker = new SessionToolTracker(conversationStore);
+  const conversationLogger = {} as unknown as ConversationLogger;
+  const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger,
+    providerContinuity,
+    generationGuard,
+  });
+
+  const token = generationGuard.capture();
+  const stream = makeStream([], {
+    interruptions: [],
+    lastResponseId: 'resp-789',
+  });
+  (stream as any).history = [{ type: 'function_call_output', callId: 'call-1', output: 'tool result' }];
+  (stream as any).output = [{ type: 'function_call_output', callId: 'call-1', output: 'tool result' }];
+  (stream as any).newItems = [];
+
+  const result = processor.finalize(stream, token, 'full_history', 'continueRunStream');
+
+  expect(result).toEqual({ kind: 'committed' });
+  expect(conversationStore.getHistory().map((item: any) => item.type)).toEqual([
+    'message',
+    'function_call',
+    'function_call_output',
+  ]);
+  expect(conversationStore.peekLastToolOutput()).toEqual({
+    index: 2,
+    itemType: 'function_call_output',
+    callId: 'call-1',
+    toolName: undefined,
+    output: 'tool result',
+  });
 });
 
 it('SessionStreamProcessor.finalize() - stale finalization mutates neither continuity nor history and returns stale', () => {

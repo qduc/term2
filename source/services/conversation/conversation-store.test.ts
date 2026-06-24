@@ -252,6 +252,32 @@ it('peekLastToolOutput() returns the last tool output without trimming history',
   expect(store.getHistory().map((item: any) => item.type)).toEqual(['function_call', 'function_call_result']);
 });
 
+it('peekLastToolOutput() recognizes all provider and internal tool result types', () => {
+  const toolResultTypes = [
+    'function_call_result',
+    'function_call_output',
+    'function_call_output_result',
+    'tool_call_output_item',
+    'tool_result',
+    'shell_call_output',
+    'tool_call_output',
+    'tool_call_result',
+    'local_shell_call_output',
+    'computer_call_output',
+    'computer_call_result',
+    'apply_patch_call_output',
+  ] as const;
+
+  for (const itemType of toolResultTypes) {
+    const store = new ConversationStore();
+    store.appendOutput([
+      { type: 'function_call', callId: 'call-1', name: 'tool', arguments: '{}' } as AgentInputItem,
+      { type: itemType, callId: 'call-1', output: 'done' } as AgentInputItem,
+    ]);
+    expect(store.peekLastToolOutput()?.itemType).toBe(itemType);
+  }
+});
+
 it('removeLastUserTurn() returns null when no user message exists', () => {
   const store = new ConversationStore();
   store.appendOutput([

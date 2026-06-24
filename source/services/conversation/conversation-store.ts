@@ -230,6 +230,12 @@ export class ConversationStore {
       case 'tool_call_output_item':
       case 'tool_result':
       case 'shell_call_output':
+      case 'tool_call_output':
+      case 'tool_call_result':
+      case 'local_shell_call_output':
+      case 'computer_call_output':
+      case 'computer_call_result':
+      case 'apply_patch_call_output':
         return true;
       default:
         return false;

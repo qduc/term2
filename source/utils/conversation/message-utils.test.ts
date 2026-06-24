@@ -58,6 +58,22 @@ it('trimTrailingAssistantMessages keeps trailing user messages intact', () => {
   expect(trimTrailingAssistantMessages(messages)).toBe(messages);
 });
 
+it('trimTrailingAssistantMessages removes trailing command messages for /retry tool rewind', () => {
+  const messages: Message[] = [
+    userMsg('u1', 'hello'),
+    {
+      id: 'c1',
+      sender: 'command',
+      status: 'completed',
+      command: 'date',
+      output: 'Mon Jan 01 00:00:00 UTC 2024',
+    } as CommandMessage,
+    botMsg('b1', 'answer'),
+  ];
+
+  expect(trimTrailingAssistantMessages(messages)).toEqual([userMsg('u1', 'hello')]);
+});
+
 // ---------------------------------------------------------------------------
 // mergeCommandMessages
 // ---------------------------------------------------------------------------

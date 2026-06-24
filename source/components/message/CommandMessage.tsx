@@ -483,7 +483,7 @@ const CommandMessage: FC<Props> = ({
         }
 
         return (
-          <Box flexDirection="column" marginY={1}>
+          <Box flexDirection="column">
             <Box>
               <Text color={COLOR_INFO} bold>
                 Read File
@@ -575,7 +575,7 @@ const CommandMessage: FC<Props> = ({
         }
 
         return (
-          <Box flexDirection="column" marginY={1}>
+          <Box flexDirection="column">
             <Box marginBottom={1}>
               <Text color={COLOR_INFO} bold>
                 Grep Results
@@ -644,7 +644,7 @@ const CommandMessage: FC<Props> = ({
       if (parsed) {
         const { files, note } = parsed;
         return (
-          <Box flexDirection="column" marginY={1}>
+          <Box flexDirection="column">
             <Box marginBottom={1}>
               <Text color={COLOR_INFO} bold>
                 File Search
@@ -677,7 +677,7 @@ const CommandMessage: FC<Props> = ({
         const { role, status, toolsUsed, filesChanged, mainText } = parsed;
         const statusColor = status === 'completed' ? COLOR_SUCCESS : status === 'failed' ? COLOR_ERROR : COLOR_WARNING;
         return (
-          <Box flexDirection="column" marginY={1}>
+          <Box flexDirection="column">
             <Box>
               <Text color={COLOR_INFO} bold>
                 Subagent
@@ -716,7 +716,7 @@ const CommandMessage: FC<Props> = ({
       if (parsed) {
         const { answer, results } = parsed;
         return (
-          <Box flexDirection="column" marginY={1}>
+          <Box flexDirection="column">
             <Box marginBottom={1}>
               <Text color={COLOR_INFO} bold>
                 Web Search
@@ -776,7 +776,7 @@ const CommandMessage: FC<Props> = ({
           displayContent = `${firstPart}\n\n... (${truncatedCount} lines of content truncated for preview) ...\n\n${lastLine}`;
         }
         return (
-          <Box flexDirection="column" marginY={1}>
+          <Box flexDirection="column">
             <Box>
               <Text color={COLOR_INFO} bold>
                 Web Fetch
@@ -830,7 +830,7 @@ const CommandMessage: FC<Props> = ({
 
     if (toolName === 'ask_mentor') {
       return (
-        <Box flexDirection="column" marginY={1}>
+        <Box flexDirection="column">
           <Box>
             <Text color={COLOR_INFO} bold>
               Mentor Question
@@ -853,7 +853,7 @@ const CommandMessage: FC<Props> = ({
     if (toolName === 'ask_user') {
       const options = toolArgs?.options;
       return (
-        <Box flexDirection="column" marginY={1}>
+        <Box flexDirection="column">
           <Box>
             <Text color={COLOR_INFO} bold>
               Ask User
@@ -885,7 +885,7 @@ const CommandMessage: FC<Props> = ({
       if (parsed) {
         const { filePath, lang, imports, exports, decls } = parsed;
         return (
-          <Box flexDirection="column" marginY={1}>
+          <Box flexDirection="column">
             <Box marginBottom={1}>
               <Text color={COLOR_INFO} bold>
                 Code Outline
@@ -946,7 +946,7 @@ const CommandMessage: FC<Props> = ({
         if (queryType === 'related') {
           const { target, relatedFiles } = parsed;
           return (
-            <Box flexDirection="column" marginY={1}>
+            <Box flexDirection="column">
               <Box marginBottom={1}>
                 <Text color={COLOR_INFO} bold>
                   Related Files
@@ -975,7 +975,7 @@ const CommandMessage: FC<Props> = ({
         } else {
           const { symbol, results } = parsed;
           return (
-            <Box flexDirection="column" marginY={1}>
+            <Box flexDirection="column">
               <Box marginBottom={1}>
                 <Text color={COLOR_INFO} bold>
                   Symbol Search

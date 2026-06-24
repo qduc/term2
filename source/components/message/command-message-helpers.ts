@@ -185,7 +185,8 @@ export const parseReadFileOutput = (output: string | undefined) => {
   if (lines.length >= 3 && lines[0]?.startsWith('File: ') && lines[1] === '===') {
     const header = lines[0] ?? '';
     const match = header.match(/File:\s*(.*?)\s*\((\d+)\s*lines\)\s*\[lines\s*(\d+)-(\d+)\]/);
-    const contentLines = lines.slice(2);
+    // Strip line-number prefixes (e.g. "1: ") added by the read_file tool
+    const contentLines = lines.slice(2).map((line) => line.replace(/^\d+:\s?/, ''));
     if (match) {
       return {
         filePath: match[1],

@@ -145,8 +145,13 @@ export const createReadFileToolDefinition = (
         // Create header with file path, line count, and line range
         const header = `File: ${filePath} (${totalLines} lines) [lines ${fromLine}-${toLine}]\n${'='.repeat(3)}\n`;
 
+        // Add line numbers to each line
+        const numberedLines = filteredLines.map((line, idx) => {
+          return `${fromLine + idx}: ${line}`;
+        });
+
         // Join and trim output
-        const fileContent = filteredLines.join('\n');
+        const fileContent = numberedLines.join('\n');
         const result = header + fileContent;
         return trimOutput(result);
       } catch (error: any) {

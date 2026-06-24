@@ -149,6 +149,18 @@ it('parseReadFileOutput extracts metadata and content lines', () => {
   });
 });
 
+it('parseReadFileOutput strips line-number prefixes from real tool output', () => {
+  expect(
+    parseReadFileOutput('File: src/main.ts (3 lines) [lines 1-3]\n===\n1: import { foo }\n2: foo();\n3: bar();'),
+  ).toEqual({
+    filePath: 'src/main.ts',
+    totalLines: 3,
+    startLine: 1,
+    endLine: 3,
+    contentLines: ['import { foo }', 'foo();', 'bar();'],
+  });
+});
+
 it('parseSubagentOutput extracts status metadata and remaining text', () => {
   expect(
     parseSubagentOutput('Status: completed\nTools used: shell, read_file\nFiles changed: source/a.ts\nSummary', {

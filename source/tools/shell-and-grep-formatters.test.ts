@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest';
 import { formatShellCommandMessage } from './system/shell.js';
-import { formatGrepCommandMessage } from './system/grep.js';
+import { formatGrepCommandMessage } from './file/grep.js';
 
 it('formatShellCommandMessage: sets toolName to "shell"', () => {
   const item = {

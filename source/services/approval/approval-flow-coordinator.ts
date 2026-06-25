@@ -48,12 +48,8 @@ export class ApprovalFlowCoordinator {
     const pending = this.deps.approvalState.getPending();
     const callId = pending ? getCallIdFromObject(pending.interruption) : undefined;
     if (this.deps.approvalState.abortPending()) {
-      this.deps.toolTracker.recordAbortedApproval(
-        'Tool execution was not approved.',
-        'Tool execution was not approved.',
-        callId,
-      );
-      this.deps.logger.debug('Aborted approval - will handle rejection on next message', {
+      this.deps.toolTracker.markOpenCallsAborted('Tool execution was not approved.', callId);
+      this.deps.logger.debug('Aborted approval - abandoning pending tool before next message', {
         eventType: 'approval.aborted',
         category: 'approval',
         phase: 'abort',

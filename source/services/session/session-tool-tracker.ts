@@ -119,8 +119,8 @@ export class SessionToolTracker {
   /**
    * Mark open calls as aborted with the given error message.
    */
-  markOpenCallsAborted(errorMessage: string): void {
-    this.toolLedger.markOpenCallsAborted(errorMessage);
+  markOpenCallsAborted(errorMessage: string, callId?: string): void {
+    this.toolLedger.markOpenCallsAborted(errorMessage, callId);
   }
 
   /**

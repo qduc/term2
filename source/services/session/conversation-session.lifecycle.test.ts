@@ -403,13 +403,16 @@ it('run() omits droppedUserMessage when no user turn was added (skipUserMessage)
   expect(errorEvent.droppedUserMessage).toBe(undefined);
 });
 
-it('run() keeps follow-up input as a user turn when resolving an aborted approval', async () => {
+it('run() keeps follow-up input as a user turn after abandoning an aborted approval', async () => {
   // Plant an aborted approval context directly via approvalState so the
   // session's consumeAborted() picks it up. The downstream fake-execution
   // path will throw (no real interruption), but we only care about event order.
+  const followupStream = new MockStream([{ type: 'response.output_text.delta', delta: 'followed up' }]);
+  followupStream.finalOutput = 'followed up';
+
   const mockClient = createMockAgentClient({
     async startStream() {
-      throw new Error('not used');
+      return followupStream;
     },
     async continueRunStream() {
       throw new Error('continue not implemented in test');
@@ -432,12 +435,8 @@ it('run() keeps follow-up input as a user turn when resolving an aborted approva
   approvalState.abortPending();
 
   const emitted: ConversationEvent[] = [];
-  try {
-    for await (const ev of turnCoordinator.start('follow up text')) {
-      emitted.push(ev);
-    }
-  } catch {
-    // expected — downstream paths will fail in this minimal mock
+  for await (const ev of turnCoordinator.start('follow up text')) {
+    emitted.push(ev);
   }
   const idx = emitted.findIndex((e: ConversationEvent) => e.type === 'user_message_consumed_for_abort');
   expect(idx >= 0).toBe(false);
@@ -810,4 +809,74 @@ it('undoLastUserTurn() preserves earlier tool ledger entries that still belong t
     .map((item) => item.callId || item.call_id);
   expect(retryCallIds.includes(firstToolCallId)).toBe(true);
   expect(retryCallIds.includes(secondToolCallId)).toBe(false);
+});
+
+it('aborting a streaming turn clears provider continuity and forces full history replay on the next turn', async () => {
+  const stream1 = new MockStream([{ type: 'response.output_text.delta', delta: 'First reply' }]);
+  stream1.finalOutput = 'First reply';
+  stream1.lastResponseId = 'resp-1';
+
+  // For the second turn, we yield one delta then get aborted
+  const stream2 = new MockStream([{ type: 'response.output_text.delta', delta: 'Thinking...' }]);
+  stream2.lastResponseId = 'resp-2';
+
+  const stream3 = new MockStream([{ type: 'response.output_text.delta', delta: 'Third reply' }]);
+  stream3.finalOutput = 'Third reply';
+  stream3.lastResponseId = 'resp-3';
+
+  const calls: { input: any; opts: any }[] = [];
+  const mockClient = createMockAgentClient({
+    getProvider() {
+      return 'openai';
+    },
+    clearConversations() {},
+    async startStream(input: unknown, opts?: any) {
+      calls.push({ input, opts });
+      if (calls.length === 1) return stream1;
+      if (calls.length === 2) return stream2;
+      return stream3;
+    },
+  });
+
+  const bundle = createConversationSession({
+    sessionId: 's1',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  const { turnCoordinator, stateFacade } = bundle;
+
+  // 1. First turn: succeeds. previousResponseId is set to 'resp-1'.
+  for await (const _ of turnCoordinator.start('First message')) {
+  }
+  expect(calls[0].opts?.previousResponseId).toBeFalsy();
+
+  // 2. Second turn: aborts mid-stream.
+  // We execute start() but immediately call abort() to simulate user pressing ESC.
+  const turnPromise = (async () => {
+    for await (const _ of turnCoordinator.start('Second message')) {
+      turnCoordinator.abort();
+    }
+  })();
+  await turnPromise.catch(() => {});
+
+  // 3. Third turn: sends a new message.
+  // Since Turn 2 was aborted, provider continuity should have been cleared.
+  // Therefore, Turn 3 should use full_history, not delta.
+  for await (const _ of turnCoordinator.start('Third message')) {
+  }
+
+  expect(calls.length).toBe(3);
+
+  // Verifies Turn 2 was started with delta (chaining active from Turn 1)
+  expect(calls[1].opts?.previousResponseId).toBe('resp-1');
+  expect(calls[1].input).toBe('Second message'); // single string for delta input
+
+  // Verifies Turn 3 was started with full history (chaining cleared on abort)
+  expect(calls[2].opts?.previousResponseId).toBeFalsy();
+  expect(Array.isArray(calls[2].input)).toBe(true); // array of messages representing full history
+  expect(stateFacade.listUserTurns().map((turn) => turn.text)).toEqual([
+    'First message',
+    'Second message',
+    'Third message',
+  ]);
 });

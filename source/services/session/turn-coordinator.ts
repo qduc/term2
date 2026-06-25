@@ -5,11 +5,13 @@ import { TurnStatusMachine } from './turn-status-machine.js';
 import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import { decideTurnTransition, type TurnCommand, type TurnState } from './turn-transition.js';
 import type { TurnExecutor } from './turn-executor.js';
+import type { ProviderContinuity } from '../provider-continuity.js';
 
 export interface TurnCoordinatorDeps {
   statusMachine: TurnStatusMachine;
   turnExecutor: TurnExecutor;
   approvalFlow: ApprovalFlowCoordinator;
+  providerContinuity: ProviderContinuity;
 }
 
 export class TurnCoordinator {
@@ -31,11 +33,10 @@ export class TurnCoordinator {
     if (!this.deps.statusMachine.is('idle')) {
       throw new Error('Another foreground turn is already active.');
     }
-    const abortedStatus = this.deps.approvalFlow.getAbortedStatus();
-    if (abortedStatus.kind === 'stale') {
-      return;
-    }
-    const abortedContext = abortedStatus.kind === 'current' ? abortedStatus.context : null;
+    // Consume any approval aborted by Esc before admitting a new foreground
+    // turn. The follow-up user message must be sent as a normal new turn, not
+    // as a rejection reason used to continue the abandoned SDK run.
+    this.deps.approvalFlow.getAbortedStatus();
 
     this.deps.statusMachine.beginTurn();
     let finalState: TurnState = 'streaming';
@@ -46,7 +47,6 @@ export class TurnCoordinator {
         replayFromHistory: options.replayFromHistory,
         resumeState: options.resumeState,
         resumePreviousResponseId: options.resumePreviousResponseId,
-        abortedContext,
         retries: options.retries,
         maxModelRetries: options.maxModelRetries,
         signal: options.signal,
@@ -123,6 +123,7 @@ export class TurnCoordinator {
   abort(): void {
     this.deps.approvalFlow.abort();
     this.deps.statusMachine.abort();
+    this.deps.providerContinuity.clear();
   }
 
   // ── Private helpers ──────────────────────────────────────────

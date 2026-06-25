@@ -257,7 +257,7 @@ it('queueModeNotice preserves prefix stability by modifying only the next user t
   );
 });
 
-it('aborted approval resolution restores cached tool arguments for command messages', async () => {
+it('abandoned approval follow-up does not replay cached tool arguments as command messages', async () => {
   const callId = 'call-abort-restore';
   const initialStream = new MockStream([
     {
@@ -285,32 +285,25 @@ it('aborted approval resolution restores cached tool arguments for command messa
     reject: () => undefined,
   };
 
-  const resolvedStream = new MockStream([
-    {
-      type: 'run_item_stream_event',
-      item: {
-        rawItem: {
-          type: 'function_call_output',
-          callId,
-          name: 'shell',
-          output: 'exit 0\nrestored',
-        },
-      },
-    },
-  ]);
-  resolvedStream.finalOutput = 'restored';
-  resolvedStream.lastResponseId = 'resp-abort-restore';
+  const followupStream = new MockStream([{ type: 'response.output_text.delta', delta: 'follow-up' }]);
+  followupStream.finalOutput = 'follow-up';
+  followupStream.lastResponseId = 'resp-abort-follow-up';
+
+  const startCalls: unknown[] = [];
+  const continueCalls: unknown[] = [];
 
   const mockClient = {
     abort() {},
     addToolInterceptor() {
       return () => undefined;
     },
-    async startStream() {
-      return initialStream;
+    async startStream(input: unknown) {
+      startCalls.push(input);
+      return startCalls.length === 1 ? initialStream : followupStream;
     },
-    async continueRunStream() {
-      return resolvedStream;
+    async continueRunStream(...args: unknown[]) {
+      continueCalls.push(args);
+      throw new Error('aborted approval should not continue the old run');
     },
   } as any;
 
@@ -332,6 +325,8 @@ it('aborted approval resolution restores cached tool arguments for command messa
   }
 
   const commandMessage = emitted.find((event: any) => event.type === 'command_message');
-  expect(commandMessage).toBeTruthy();
-  expect(commandMessage!.message.command).toBe('shell "echo restored-args"');
+  expect(commandMessage).toBeUndefined();
+  expect(startCalls).toHaveLength(2);
+  expect((startCalls[1] as any[]).map((item) => item.type)).toEqual(['message', 'message']);
+  expect(continueCalls).toEqual([]);
 });

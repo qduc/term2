@@ -193,7 +193,7 @@ it('compacts whitespace-heavy JSON arguments for approvals', async () => {
   expect(emitted[0].approval.argumentsText).toBe('{"path":"a.txt","timeout_ms":null,"max_output_length":null}');
 });
 
-it('emits events when resolving aborted approval on next message', async () => {
+it('starts a fresh request for the next message after aborting approval', async () => {
   const interruption = {
     name: 'bash',
     agent: { name: 'CLI Agent' },
@@ -214,10 +214,12 @@ it('emits events when resolving aborted approval on next message', async () => {
     },
   };
 
-  const continuationStream = new MockStream([{ type: 'response.output_text.delta', delta: 'After abort' }]);
-  continuationStream.finalOutput = 'After abort';
+  const followupStream = new MockStream([{ type: 'response.output_text.delta', delta: 'After abort' }]);
+  followupStream.finalOutput = 'After abort';
 
   let interceptorCount = 0;
+  const startCalls: unknown[] = [];
+  const continueCalls: unknown[] = [];
   const mockClient = partialClient({
     abort() {},
     addToolInterceptor() {
@@ -226,17 +228,13 @@ it('emits events when resolving aborted approval on next message', async () => {
         interceptorCount--;
       };
     },
-    async startStream() {
-      return initialStream;
+    async startStream(input: unknown) {
+      startCalls.push(input);
+      return startCalls.length === 1 ? initialStream : followupStream;
     },
-    async continueRunStream(state: any, options: any) {
-      expect(state).toBe(initialStream.state);
-      expect(options).toEqual({
-        previousResponseId: 'resp_test',
-        sessionId: 'default',
-        toolResultCallIds: ['call-abort'],
-      });
-      return continuationStream;
+    async continueRunStream(...args: unknown[]) {
+      continueCalls.push(args);
+      throw new Error('aborted approval should not continue the old run');
     },
   });
 
@@ -267,12 +265,16 @@ it('emits events when resolving aborted approval on next message', async () => {
   expect(asFinal(resolvedResult).finalText).toBe('After abort');
   expect(resolvedEvents.some((e) => e.type === 'text_delta')).toBe(true);
   expect(resolvedEvents.some((e) => e.type === 'final')).toBe(true);
+  expect(startCalls).toHaveLength(2);
+  expect((startCalls[1] as any[]).map((item) => item.type)).toEqual(['message', 'message']);
+  expect((startCalls[1] as any[])[1].content).toBe('new input');
+  expect(continueCalls).toEqual([]);
   expect(interceptorCount).toBe(0);
   expect(initialStream.state.approveCalls).toEqual([]);
-  expect(initialStream.state.rejectCalls).toEqual([interruption]);
+  expect(initialStream.state.rejectCalls).toEqual([]);
 });
 
-it('reject with reason and abort+new input yield the same history', async () => {
+it('reject with reason preserves tool history while abort starts clean follow-up history', async () => {
   const baseHistory = [
     {
       role: 'user',
@@ -361,14 +363,24 @@ it('reject with reason and abort+new input yield the same history', async () => 
 
     await service.sendMessage('next');
 
-    expect(startCalls.length).toBe(2);
-    return startCalls[1].input;
+    return startCalls.map((call) => call.input);
   };
 
-  const rejectionHistoryAfter = await runFlow('reject');
-  const abortHistoryAfter = await runFlow('abort');
+  const rejectionInputs = await runFlow('reject');
+  const abortInputs = await runFlow('abort');
 
-  expect(abortHistoryAfter).toEqual(rejectionHistoryAfter);
+  expect(rejectionInputs).toHaveLength(2);
+  expect(rejectionInputs[1].map((item: any) => item.type)).toEqual([
+    'message',
+    'function_call',
+    'tool_call_output_item',
+    'message',
+  ]);
+
+  expect(abortInputs).toHaveLength(3);
+  expect(abortInputs[1].map((item: any) => item.type)).toEqual(['message', 'message']);
+  expect(abortInputs[1][1].content).toBe('new input');
+  expect(abortInputs[2].map((item: any) => item.type)).not.toContain('function_call');
 });
 
 it('passes previous response ids into subsequent runs', async () => {
@@ -991,7 +1003,7 @@ it('abort() delegates to agent client and clears pending approval', async () => 
   expect(result).toBe(null);
 });
 
-it('abort() preserves the aborted tool turn in exported state and snapshot', async () => {
+it('abort() omits the abandoned tool turn from exported provider history', async () => {
   const interruption = {
     name: 'shell',
     agent: { name: 'CLI Agent' },
@@ -1025,14 +1037,12 @@ it('abort() preserves the aborted tool turn in exported state and snapshot', asy
   const snapshot = service.getCurrentSnapshot();
 
   for (const state of [exported, snapshot]) {
-    expect(state.history.map((item: any) => item.type)).toEqual(['message', 'function_call', 'tool_call_output_item']);
-    expect((state.history[1] as any).callId).toBe('call-abort');
-    expect((state.history[2] as any).callId).toBe('call-abort');
-    expect((state.history[2] as any).output).toBe('Tool execution was not approved.');
+    expect(state.history.map((item: any) => item.type)).toEqual(['message']);
+    expect(state.toolLedger.find((entry: any) => entry.callId === 'call-abort')?.status).toBe('aborted');
   }
 });
 
-it('switchProvider() after abort reuses the preserved tool turn in the next full-history request', async () => {
+it('switchProvider() after abort does not replay the abandoned tool turn in the next full-history request', async () => {
   const interruption = {
     name: 'shell',
     agent: { name: 'CLI Agent' },
@@ -1079,16 +1089,8 @@ it('switchProvider() after abort reuses the preserved tool turn in the next full
   expect(second.type).toBe('response');
 
   expect(startCalls.length).toBe(2);
-  expect(startCalls[1].map((item: any) => item.type)).toEqual([
-    'message',
-    'function_call',
-    'tool_call_output_item',
-    'message',
-  ]);
-  expect(startCalls[1][1].callId).toBe('call-abort');
-  expect(startCalls[1][2].callId).toBe('call-abort');
-  expect(startCalls[1][2].output).toBe('Tool execution was not approved.');
-  expect(startCalls[1][3].content).toBe('next');
+  expect(startCalls[1].map((item: any) => item.type)).toEqual(['message', 'message']);
+  expect(startCalls[1][1].content).toBe('next');
 });
 
 it('handleApprovalDecision() rejects interruption when answer is n', async () => {

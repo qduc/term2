@@ -73,6 +73,7 @@ afterEach(() => {
 const logger = new LoggingService({ disableLogging: true });
 const mockToolTracker: any = {
   recordAbortedApproval: () => {},
+  markOpenCallsAborted: () => {},
   export: () => [],
 };
 const mockGenerationGuard: any = {

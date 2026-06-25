@@ -65,6 +65,12 @@ export class SessionManager {
     output?: unknown;
     itemType: string;
   } | null {
+    // Reconcile with the tool ledger before reading. When a stream ends
+    // unexpectedly (interrupted/aborted), finalize() returns 'partial' and
+    // does not commit tool outputs to the store. The ledger, however,
+    // captured them during streaming. Reconciling flushes those pending
+    // entries into the store so peekLastToolOutput can find them.
+    this.#toolTracker.reconcileAndUpdateHistory();
     return this.#conversationStore.peekLastToolOutput();
   }
 
@@ -75,6 +81,8 @@ export class SessionManager {
     output?: unknown;
     itemType: string;
   } | null {
+    // Same reconciliation as peekLastToolOutput — see comment above.
+    this.#toolTracker.reconcileAndUpdateHistory();
     const removed = this.#conversationStore.removeAfterLastToolOutput();
     if (removed === null) return null;
     this.#afterToolRetry();

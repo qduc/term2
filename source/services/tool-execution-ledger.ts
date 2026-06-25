@@ -298,8 +298,11 @@ export class ToolExecutionLedger {
       : [...previousHistoryItems, resultItem];
   }
 
-  markOpenCallsAborted(reason: string): void {
+  markOpenCallsAborted(reason: string, callId?: string): void {
     for (const entry of this.#entries) {
+      if (callId && entry.callId !== callId) {
+        continue;
+      }
       if (entry.status !== 'started' && entry.status !== 'approval_required') {
         continue;
       }

@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { TurnCoordinator } from './turn-coordinator.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
 
@@ -53,10 +53,18 @@ const makeHarness = () => {
     },
   } as any;
 
+  let providerContinuityCleared = false;
+  const providerContinuity = {
+    clear: () => {
+      providerContinuityCleared = true;
+    },
+  } as any;
+
   const coordinator = new TurnCoordinator({
     statusMachine,
     turnExecutor,
     approvalFlow,
+    providerContinuity,
   });
 
   return {
@@ -67,6 +75,7 @@ const makeHarness = () => {
     continuationCalls,
     approvalFlow,
     getAbortCalled: () => abortCalled,
+    getProviderContinuityCleared: () => providerContinuityCleared,
   };
 };
 
@@ -274,12 +283,13 @@ it('continuation completion releases the turn for the next user message', async 
 });
 
 it('Abort to idle with pending approval reconciliation', async () => {
-  const { coordinator, statusMachine, getAbortCalled } = makeHarness();
+  const { coordinator, statusMachine, getAbortCalled, getProviderContinuityCleared } = makeHarness();
   statusMachine.beginTurn();
   statusMachine.requestApproval(); // awaiting_approval
 
   coordinator.abort();
 
   expect(getAbortCalled()).toBe(true);
+  expect(getProviderContinuityCleared()).toBe(true);
   expect(statusMachine.current).toBe('idle');
 });

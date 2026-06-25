@@ -396,24 +396,29 @@ it('integration - disposal during active stream work prevents mutation and abort
   expect(composition.appState.statusMachine.current).toBe('idle');
 });
 
-it('integration - aborted-approval input with current token executes resolution continuation', async () => {
+it('integration - aborted-approval input with current token starts a fresh follow-up turn', async () => {
   const interruptedStream = new MockStream([]);
   interruptedStream.interruptions = [createShellInterruption({ callId: 'c1', command: 'echo hello' })];
   interruptedStream.state = createApprovalState();
 
-  const finalStream = new MockStream([{ type: 'response.output_text.delta', delta: 'continuation reply' }]);
-  finalStream.finalOutput = 'continuation reply';
+  const followupStream = new MockStream([{ type: 'response.output_text.delta', delta: 'follow-up reply' }]);
+  followupStream.finalOutput = 'follow-up reply';
+
+  const startCalls: unknown[] = [];
+  const continueCalls: unknown[] = [];
 
   const mockClient = {
     getProvider() {
       return 'openai';
     },
     abort() {},
-    async startStream() {
-      return interruptedStream;
+    async startStream(input: unknown) {
+      startCalls.push(input);
+      return startCalls.length === 1 ? interruptedStream : followupStream;
     },
-    async continueRunStream() {
-      return finalStream;
+    async continueRunStream(...args: unknown[]) {
+      continueCalls.push(args);
+      throw new Error('aborted approval should not continue the old run');
     },
   };
 
@@ -441,12 +446,14 @@ it('integration - aborted-approval input with current token executes resolution 
     events2.push(ev);
   }
 
-  // The resolution continuation should execute without consuming the follow-up user message.
+  // The follow-up should execute as a fresh turn without consuming it as abort-resolution metadata.
   expect(events2.some((e: any) => e.type === 'user_message_consumed_for_abort')).toBe(false);
-  expect(events2.some((e: any) => e.type === 'text_delta' && e.delta === 'continuation reply')).toBe(true);
+  expect(events2.some((e: any) => e.type === 'text_delta' && e.delta === 'follow-up reply')).toBe(true);
+  expect(startCalls).toHaveLength(2);
+  expect(continueCalls).toEqual([]);
 });
 
-it('integration - aborted-approval input with stale token is discarded without mutation', async () => {
+it('integration - aborted-approval input with stale token is processed normally without resolving the stale abort', async () => {
   const interruptedStream = new MockStream([]);
   interruptedStream.interruptions = [createShellInterruption({ callId: 'c1', command: 'echo hello' })];
   interruptedStream.state = createApprovalState();
@@ -480,7 +487,8 @@ it('integration - aborted-approval input with stale token is discarded without m
     events.push(ev);
   }
 
-  // It should be discarded immediately, yielding no events
-  expect(events.length).toBe(0);
-  expect(composition.appState.statusMachine.current).toBe('idle');
+  // It should execute normally since the stale abort is ignored
+  expect(events.length).toBe(1);
+  expect(events[0].type).toBe('approval_required');
+  expect(composition.appState.statusMachine.current).toBe('awaiting_approval');
 });

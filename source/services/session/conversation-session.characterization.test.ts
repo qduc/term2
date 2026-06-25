@@ -1145,22 +1145,27 @@ it('multiple sequential interruptions preserve approval and tool-start ordering'
   ]);
 });
 
-it('aborted approval resolved by new user input emits the abort marker before resumed output', async () => {
+it('aborted approval is abandoned so the next user input starts a fresh turn', async () => {
   const interruption = createShellInterruption({ callId: 'call-aborted', command: 'echo pending' });
   const initialStream = new MockStream([]);
   initialStream.interruptions = [interruption];
   initialStream.state = createApprovalState();
 
-  const resolvedStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Changed course.' }]);
-  resolvedStream.finalOutput = 'Changed course.';
+  const followUpStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Changed course.' }]);
+  followUpStream.finalOutput = 'Changed course.';
+
+  const startCalls: unknown[] = [];
+  const continueCalls: unknown[] = [];
 
   const mockClient = createMockAgentClient({
     abort() {},
-    async startStream() {
-      return initialStream;
+    async startStream(input) {
+      startCalls.push(input);
+      return startCalls.length === 1 ? initialStream : followUpStream;
     },
-    async continueRunStream() {
-      return resolvedStream;
+    async continueRunStream(...args) {
+      continueCalls.push(args);
+      throw new Error('aborted approval should not continue the old run');
     },
   });
 
@@ -1179,14 +1184,16 @@ it('aborted approval resolved by new user input emits the abort marker before re
     events.push(event);
   }
 
-  expect(events.map((event) => event.type)).toEqual([
-    'approval_required',
-    'user_message_consumed_for_abort',
-    'text_delta',
-    'final',
+  expect(events.map((event) => event.type)).toEqual(['approval_required', 'text_delta', 'final']);
+  expect(startCalls).toHaveLength(2);
+  expect(startCalls[1]).toEqual([
+    { role: 'user', type: 'message', content: 'run pending command' },
+    { role: 'user', type: 'message', content: 'do something else' },
   ]);
+  expect(continueCalls).toEqual([]);
   expect(bundle.stateFacade.listUserTurns().map(({ text, imageCount }) => ({ text, imageCount }))).toEqual([
     { text: 'run pending command', imageCount: 0 },
+    { text: 'do something else', imageCount: 0 },
   ]);
 });
 

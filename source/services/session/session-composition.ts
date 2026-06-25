@@ -450,6 +450,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     statusMachine: appState.statusMachine,
     turnExecutor,
     approvalFlow,
+    providerContinuity,
   });
 
   const stateFacade = new SessionManager({

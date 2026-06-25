@@ -568,7 +568,7 @@ const BlockRenderer = ({
     case 'code':
       if (!token.text || !token.text.trim()) return null;
       return (
-        <Box borderStyle="round" borderColor="#64748b" paddingX={1} flexDirection="column">
+        <Box borderStyle="round" borderColor="#64748b" paddingX={1} flexDirection="column" width={maxWidth}>
           <Text color="yellow" dimColor={options.dimColor}>
             {token.text}
           </Text>

@@ -3,7 +3,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { it, expect } from 'vitest';
 import React from 'react';
 import { renderInAct, rerenderInAct } from '../../test-helpers/ink-testing.js';
-import MessageList, { splitStaticHistory, shouldCommitMessageToStatic } from './MessageList.js';
+import MessageList, {
+  detectStaticCommitBlocker,
+  splitStaticHistory,
+  shouldCommitMessageToStatic,
+} from './MessageList.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 
 const countOccurrences = (text: string, pattern: string) => text.split(pattern).length - 1;
@@ -296,6 +300,34 @@ it.sequential('MessageList renders active and static wrapped text with the same 
   expect(staticLines).toEqual(activeLines);
 });
 
+it.sequential('MessageList constrains active and static code blocks to the terminal width', async () => {
+  const maxVisibleWidth = 100;
+  const markdown = `\`\`\`ts
+const value = "${'abcdefghijklmnopqrstuvwxyz'.repeat(5)}";
+\`\`\``;
+
+  const renderer = await renderInAct(
+    <MessageList messages={[{ id: 'code', sender: 'bot', status: 'streaming', text: markdown }]} />,
+  );
+  const activeLines = renderedLines(renderer.lastFrame() ?? '');
+
+  await rerenderInAct(
+    renderer,
+    <MessageList messages={[{ id: 'code', sender: 'bot', status: 'finalized', text: markdown }]} />,
+  );
+  const staticLines = renderedLines(renderer.lastFrame() ?? '');
+
+  expect(
+    activeLines.every((line) => line.length <= maxVisibleWidth),
+    activeLines.join('\n'),
+  ).toBe(true);
+  expect(
+    staticLines.every((line) => line.length <= maxVisibleWidth),
+    staticLines.join('\n'),
+  ).toBe(true);
+  expect(staticLines).toEqual(activeLines);
+});
+
 it.sequential(
   'shouldCommitMessageToStatic commits restored finalized history immediately on first render',
   async () => {
@@ -479,6 +511,46 @@ it.sequential('splitStaticHistory moves finalized bot messages to static history
 
   expect(history.map((message) => message.id)).toEqual(['first', 'second']);
   expect(active).toEqual([]);
+});
+
+it.sequential('detectStaticCommitBlocker reports the first active message when the dynamic suffix is too long', () => {
+  const blocker = detectStaticCommitBlocker(
+    [
+      { id: 'stable', sender: 'bot', text: 'stable', status: 'finalized' },
+      { id: 'cmd', sender: 'command', status: 'running', command: 'npm test', output: '' },
+      { id: 'after', sender: 'bot', text: 'after', status: 'finalized' },
+    ],
+    { messageCountThreshold: 2, textLengthThreshold: 1000 },
+  );
+
+  expect(blocker).toEqual({
+    id: 'cmd',
+    index: 1,
+    sender: 'command',
+    status: 'running',
+    reason: 'command_running',
+    dynamicMessageCount: 2,
+    dynamicTextLength: 5,
+  });
+});
+
+it.sequential('detectStaticCommitBlocker stays silent while the dynamic suffix is below thresholds', () => {
+  const blocker = detectStaticCommitBlocker([{ id: 'bot', sender: 'bot', status: 'streaming', text: 'short tail' }], {
+    messageCountThreshold: 2,
+    textLengthThreshold: 1000,
+  });
+
+  expect(blocker).toBeNull();
+});
+
+it.sequential('detectStaticCommitBlocker can trigger on a large streaming text tail', () => {
+  const blocker = detectStaticCommitBlocker(
+    [{ id: 'bot', sender: 'bot', status: 'streaming', text: 'x'.repeat(1200) }],
+    { messageCountThreshold: 20, textLengthThreshold: 1000 },
+  );
+
+  expect(blocker?.reason).toBe('bot_streaming');
+  expect(blocker?.dynamicTextLength).toBe(1200);
 });
 
 it.sequential('splitStaticHistory preserves chronological order after the first active message', async () => {

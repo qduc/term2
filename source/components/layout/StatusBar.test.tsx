@@ -206,3 +206,31 @@ it.sequential('StatusBar shows Approve: ... when sandbox.enabled is false', asyn
   expect(output.includes('Approve:')).toBe(true);
   expect(output.includes('Sandbox:')).toBe(false);
 });
+
+it.sequential('StatusBar renders a static commit blocker warning', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      staticCommitBlocker={{
+        id: 'cmd-1',
+        index: 4,
+        sender: 'command',
+        status: 'running',
+        reason: 'command_running',
+        dynamicMessageCount: 24,
+        dynamicTextLength: 18_432,
+      }}
+    />,
+  );
+
+  const output = lastFrame() ?? '';
+  expect(output.includes('Static blocked: command/running')).toBe(true);
+  expect(output.includes('24 msgs')).toBe(true);
+  expect(output.includes('18k chars')).toBe(true);
+});

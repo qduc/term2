@@ -19,6 +19,7 @@ import type { PendingApproval } from '../../contracts/conversation.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { UndoItem } from '../../hooks/use-undo-selection.js';
 import type { SkillsService } from '../../services/skills/skills-service.js';
+import type { StaticCommitBlocker } from '../message/MessageList.js';
 
 export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;
@@ -64,6 +65,7 @@ export type BottomAreaProps = {
   onSurgeDecline?: () => void;
   onSlashTabComplete?: (command: SlashCommand) => boolean;
   skillsService?: SkillsService;
+  staticCommitBlocker?: StaticCommitBlocker | null;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -110,6 +112,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   onSurgeDecline,
   onSlashTabComplete,
   skillsService,
+  staticCommitBlocker = null,
 }) => {
   const [dotCount, setDotCount] = useState(1);
   const [thinkingElapsedSeconds, setThinkingElapsedSeconds] = useState(() =>
@@ -263,6 +266,7 @@ const BottomArea: FC<BottomAreaProps> = ({
           (pendingLargeUncachedTurn !== null && pendingLargeUncachedTokens > 0) || pendingSurgeTurn !== null
         }
         pendingLargeUncachedTokens={pendingLargeUncachedTokens}
+        staticCommitBlocker={staticCommitBlocker}
       />
     </Box>
   );

@@ -5,6 +5,7 @@ import { appendStartupBannerId, clearTerminalForRedraw, messagesHaveNonSystemCon
 import { Box, useApp, useInput, useStdout } from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
 import MessageList, {
+  detectStaticCommitBlocker,
   EMPTY_RESTORED_STATIC_MESSAGE_IDS,
   MESSAGE_HORIZONTAL_PADDING,
 } from './components/message/MessageList.js';
@@ -91,6 +92,7 @@ const App: FC<AppProps> = ({
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
+  const displayMode = useSetting<string>(settingsService, 'ui.displayMode') ?? 'standard';
   const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
   const subagentUsage = useMemo(() => subagentUsageAccumulator ?? createUsageAccumulator(), [subagentUsageAccumulator]);
   const [sessionId, setSessionId] = useState(initialSessionId);
@@ -237,6 +239,11 @@ const App: FC<AppProps> = ({
   const getSessionUsage = useCallback(
     () => formatSessionUsageBreakdown(sessionUsage.get(), getSubagentUsage()),
     [sessionUsage, getSubagentUsage],
+  );
+
+  const staticCommitBlocker = useMemo(
+    () => detectStaticCommitBlocker(messages, { displayMode }),
+    [messages, displayMode],
   );
 
   const exitWithUsage = useCallback(() => {
@@ -508,6 +515,7 @@ const App: FC<AppProps> = ({
             onNavigateQuestion={handleNavigateQuestion}
             sshInfo={sshInfo}
             lastCodexRateLimit={lastCodexRateLimit}
+            staticCommitBlocker={staticCommitBlocker}
             undoMenuRef={undoMenuRef}
             onUndoSelect={handleUndoSelect}
             providersMenuRef={providersMenuRef}

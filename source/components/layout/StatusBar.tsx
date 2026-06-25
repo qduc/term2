@@ -6,6 +6,7 @@ import type { SettingsService } from '../../services/settings/settings-service.j
 import type { SSHInfo } from '../../hooks/use-shell-mode.js';
 import { formatFooterUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { CodexRateLimitInfo } from '../../services/conversation/conversation-events.js';
+import type { StaticCommitBlocker } from '../message/MessageList.js';
 
 interface StatusBarProps {
   settingsService: SettingsService;
@@ -16,6 +17,7 @@ interface StatusBarProps {
   largeUncachedWarning?: { estimatedTokens: number } | null;
   hasPendingConfirmation?: boolean;
   pendingLargeUncachedTokens?: number;
+  staticCommitBlocker?: StaticCommitBlocker | null;
 }
 
 const StatusBar: FC<StatusBarProps> = ({
@@ -27,6 +29,7 @@ const StatusBar: FC<StatusBarProps> = ({
   largeUncachedWarning,
   hasPendingConfirmation = false,
   pendingLargeUncachedTokens,
+  staticCommitBlocker = null,
 }) => {
   const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
@@ -104,6 +107,17 @@ const StatusBar: FC<StatusBarProps> = ({
       parts.push(`${days}D: ${secondary.used_percent}% (${timeStr})`);
     }
     return parts.join(' / ');
+  })();
+
+  const staticCommitBlockerText = (() => {
+    if (!staticCommitBlocker) {
+      return '';
+    }
+
+    const sender = staticCommitBlocker.sender ?? 'unknown';
+    const status = staticCommitBlocker.status ?? staticCommitBlocker.reason;
+    const chars = Math.round(staticCommitBlocker.dynamicTextLength / 1000);
+    return `Static blocked: ${sender}/${status} (${staticCommitBlocker.dynamicMessageCount} msgs, ${chars}k chars)`;
   })();
 
   return (
@@ -192,25 +206,34 @@ const StatusBar: FC<StatusBarProps> = ({
       {/* Row 2: Status & Metrics */}
       <Box width="100%">
         <Box flexGrow={1}>
-          {sandboxEnabled ? (
-            <Box marginRight={1}>
-              <Text color={slate}>Sandbox: </Text>
-              <Text color="#10b981" bold>
-                ON
-              </Text>
-              <Text color={slate}> ({sandboxReadPolicy})</Text>
-            </Box>
-          ) : (
-            autoApproveMode !== 'off' && (
+          <Box>
+            {sandboxEnabled ? (
               <Box marginRight={1}>
-                <Text color={slate}>Approve: </Text>
-                <Text color={autoApproveMode === 'auto' ? '#10b981' : '#f97316'} bold>
-                  {autoApproveMode}
+                <Text color={slate}>Sandbox: </Text>
+                <Text color="#10b981" bold>
+                  ON
                 </Text>
-                {autoApproveModel && <Text color={slate}> ({autoApproveModel})</Text>}
+                <Text color={slate}> ({sandboxReadPolicy})</Text>
               </Box>
-            )
-          )}
+            ) : (
+              autoApproveMode !== 'off' && (
+                <Box marginRight={1}>
+                  <Text color={slate}>Approve: </Text>
+                  <Text color={autoApproveMode === 'auto' ? '#10b981' : '#f97316'} bold>
+                    {autoApproveMode}
+                  </Text>
+                  {autoApproveModel && <Text color={slate}> ({autoApproveModel})</Text>}
+                </Box>
+              )
+            )}
+            {staticCommitBlockerText && (
+              <Box marginRight={1}>
+                <Text color={warnRed} bold>
+                  {staticCommitBlockerText}
+                </Text>
+              </Box>
+            )}
+          </Box>
         </Box>
 
         {usageText ? (

@@ -19,6 +19,29 @@ type MessageLike = {
   sender?: string;
   status?: string;
   callId?: string;
+  text?: string;
+};
+
+export type StaticCommitBlocker = {
+  id: string;
+  index: number;
+  sender?: string;
+  status?: string;
+  reason:
+    | 'bot_streaming'
+    | 'reasoning_streaming'
+    | 'command_pending'
+    | 'command_running'
+    | 'subagent_activity'
+    | 'unknown_active';
+  dynamicMessageCount: number;
+  dynamicTextLength: number;
+};
+
+type StaticCommitBlockerOptions = {
+  messageCountThreshold?: number;
+  textLengthThreshold?: number;
+  displayMode?: string;
 };
 
 type StaticBannerItem = {
@@ -36,6 +59,9 @@ type StaticItem = StaticBannerItem | StaticMessageItem;
 
 export const MESSAGE_HORIZONTAL_PADDING = 2;
 export const EMPTY_RESTORED_STATIC_MESSAGE_IDS: readonly string[] = [];
+
+const STATIC_BLOCKER_MESSAGE_COUNT_THRESHOLD = 12;
+const STATIC_BLOCKER_TEXT_LENGTH_THRESHOLD = 12_000;
 
 const canRenderStatically = (message: MessageLike) => {
   if (message.sender === 'reasoning') {
@@ -78,6 +104,63 @@ export const splitStaticHistory = <T extends MessageLike>(messages: T[]) => {
   return {
     history: messages.slice(0, activeStartWithToolLeadIn),
     active: messages.slice(activeStartWithToolLeadIn),
+  };
+};
+
+const getStaticBlockerReason = (message: MessageLike): StaticCommitBlocker['reason'] => {
+  if (message.sender === 'bot' && message.status === 'streaming') {
+    return 'bot_streaming';
+  }
+
+  if (message.sender === 'reasoning' && message.status !== 'finalized') {
+    return 'reasoning_streaming';
+  }
+
+  if (message.sender === 'command' && message.status === 'pending') {
+    return 'command_pending';
+  }
+
+  if (message.sender === 'command' && message.status === 'running') {
+    return 'command_running';
+  }
+
+  if (message.sender === 'subagent') {
+    return 'subagent_activity';
+  }
+
+  return 'unknown_active';
+};
+
+export const detectStaticCommitBlocker = <T extends MessageLike>(
+  messages: T[],
+  options: StaticCommitBlockerOptions = {},
+): StaticCommitBlocker | null => {
+  const filteredMessages =
+    options.displayMode === 'concise' ? messages.filter((message) => message.sender !== 'reasoning') : messages;
+  const activeStart = filteredMessages.findIndex((message) => !canRenderStatically(message));
+
+  if (activeStart === -1) {
+    return null;
+  }
+
+  const active = filteredMessages.slice(activeStart);
+  const dynamicTextLength = active.reduce((sum, message) => sum + (message.text?.length ?? 0), 0);
+  const messageCountThreshold = options.messageCountThreshold ?? STATIC_BLOCKER_MESSAGE_COUNT_THRESHOLD;
+  const textLengthThreshold = options.textLengthThreshold ?? STATIC_BLOCKER_TEXT_LENGTH_THRESHOLD;
+
+  if (active.length < messageCountThreshold && dynamicTextLength < textLengthThreshold) {
+    return null;
+  }
+
+  const blocker = filteredMessages[activeStart];
+  return {
+    id: blocker.id,
+    index: activeStart,
+    sender: blocker.sender,
+    status: blocker.status,
+    reason: getStaticBlockerReason(blocker),
+    dynamicMessageCount: active.length,
+    dynamicTextLength,
   };
 };
 

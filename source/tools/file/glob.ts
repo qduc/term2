@@ -132,15 +132,31 @@ export const createFindFilesToolDefinition = (
       }
     },
     execute: async (params) => {
-      const { pattern, path: searchPath, max_results, no_ignore } = params;
+      const { pattern: rawPattern, path: searchPath, max_results, no_ignore } = params;
 
-      if (!pattern || pattern.trim() === '') {
+      if (!rawPattern || rawPattern.trim() === '') {
         return 'Error: Search pattern cannot be empty. Please provide a valid file name or glob pattern.';
       }
 
       const limit = max_results ?? 50;
-      const targetPath = searchPath?.trim() || '.';
       const cwd = executionContext?.getCwd() || process.cwd();
+
+      // When the pattern itself is an absolute path (e.g. "/data/llamacpp/models/run_*.sh"),
+      // extract the directory as the search root and use only the basename as the glob pattern.
+      let pattern = rawPattern.trim();
+      let targetPath = searchPath?.trim() || '.';
+
+      const normalizedPattern = pattern.replace(/\\/g, '/');
+      if (path.isAbsolute(normalizedPattern)) {
+        // Absolute pattern: split into directory + basename
+        const dir = path.dirname(normalizedPattern);
+        const base = path.basename(normalizedPattern);
+        // Only use the directory as search root if no explicit path was given
+        if (!searchPath?.trim()) {
+          targetPath = dir;
+        }
+        pattern = base;
+      }
 
       // The workspace boundary is enforced by needsApproval in the default mode.
       const absolutePath = resolveWorkspacePath(targetPath, cwd, { allowOutsideWorkspace: true });

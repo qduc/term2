@@ -14,6 +14,10 @@ const findFilesToolDefinitionAllowOutside = createFindFilesToolDefinition({
 const findFilesToolDefinitionFindFallback = createFindFilesToolDefinition({
   forceFindFallback: true,
 });
+const findFilesToolDefinitionAllowOutsideFindFallback = createFindFilesToolDefinition({
+  allowOutsideWorkspace: true,
+  forceFindFallback: true,
+});
 
 function createWrappedFindFilesTool() {
   const definition = createFindFilesToolDefinition();
@@ -292,3 +296,75 @@ it.sequential('execute: handles non-existent directory', async () => {
     ).rejects.toThrow(/File search failed/);
   });
 });
+
+it.sequential('execute: uses pattern directory as search root when pattern is absolute path (fd)', async () => {
+  await withTempDir(async () => {
+    const externalDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-test-glob-ext-'));
+
+    try {
+      await fs.writeFile(path.join(externalDir, 'run_test1.sh'), '');
+      await fs.writeFile(path.join(externalDir, 'run_test2.sh'), '');
+      await fs.writeFile(path.join(externalDir, 'other.txt'), '');
+
+      const result = await findFilesToolDefinitionAllowOutside.execute({
+        pattern: path.join(externalDir, 'run_*.sh'),
+      });
+
+      expect(result).not.toContain('No files found');
+      expect(result).toContain('run_test1.sh');
+      expect(result).toContain('run_test2.sh');
+      expect(result).not.toContain('other.txt');
+    } finally {
+      await fs.rm(externalDir, { recursive: true, force: true });
+    }
+  });
+});
+
+it.sequential('execute: explicit path param takes precedence over absolute pattern directory', async () => {
+  await withTempDir(async () => {
+    const dirA = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-test-glob-a-'));
+    const dirB = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-test-glob-b-'));
+
+    try {
+      await fs.writeFile(path.join(dirA, 'run_alpha.sh'), '');
+      await fs.writeFile(path.join(dirB, 'run_beta.sh'), '');
+
+      const result = await findFilesToolDefinitionAllowOutside.execute({
+        pattern: path.join(dirA, 'run_*.sh'),
+        path: dirB,
+      });
+
+      expect(result).toContain('run_beta.sh');
+      expect(result).not.toContain('run_alpha.sh');
+    } finally {
+      await fs.rm(dirA, { recursive: true, force: true });
+      await fs.rm(dirB, { recursive: true, force: true });
+    }
+  });
+});
+
+it.sequential(
+  'execute: uses pattern directory as search root when pattern is absolute path (find fallback)',
+  async () => {
+    await withTempDir(async () => {
+      const externalDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-test-glob-ext-'));
+
+      try {
+        await fs.writeFile(path.join(externalDir, 'run_test1.sh'), '');
+        await fs.writeFile(path.join(externalDir, 'run_test2.sh'), '');
+        await fs.writeFile(path.join(externalDir, 'other.txt'), '');
+
+        const result = await findFilesToolDefinitionAllowOutsideFindFallback.execute({
+          pattern: path.join(externalDir, 'run_*.sh'),
+        });
+
+        expect(result).not.toContain('No files found');
+        expect(result).toContain('run_test1.sh');
+        expect(result).toContain('run_test2.sh');
+        expect(result).not.toContain('other.txt');
+      } finally {
+        await fs.rm(externalDir, { recursive: true, force: true });
+      }
+    });
+  },
+);

@@ -66,8 +66,12 @@ export async function fetchModels(
   }
 }
 
-export function clearModelCache(): void {
-  cache.clear();
+export function clearModelCache(provider?: string): void {
+  if (provider) {
+    cache.delete(provider);
+  } else {
+    cache.clear();
+  }
 }
 
 export function getModelDefaultReasoningLevel(provider: string, modelId: string): string | undefined {

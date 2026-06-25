@@ -666,6 +666,10 @@ const InputBox: FC<Props> = ({
       currentHandlers[currentMode].onSubmit?.(currentValue);
       return;
     }
+    if (key.ctrl && _input === 'r' && currentHandlers[currentMode].onRefresh) {
+      currentHandlers[currentMode].onRefresh?.();
+      return;
+    }
     if (key.ctrl && _input === 'd' && currentHandlers[currentMode].onReset) {
       currentHandlers[currentMode].onReset?.();
       return;

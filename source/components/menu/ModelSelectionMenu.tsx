@@ -95,7 +95,9 @@ const ModelSelectionMenu: FC<Props> = ({
         loadingText={loading ? `Loading models${provider ? ` from ${provider}` : ''}…` : 'Loading...'}
         error={error ? `Unable to load models: ${error}` : null}
         fallbackText={<Text color="#64748b">No models match "{query || '*'}"</Text>}
-        footer={<Text color="#64748b">Enter → set model · Esc → cancel · ↑↓ → scroll</Text>}
+        footer={
+          <Text color="#64748b">Enter → set model · Esc → cancel · ↑↓ → scroll · Ctrl+R → refresh model list</Text>
+        }
         footerOutsideBorder={true}
         renderItem={(item: ModelInfo, _actualIndex: number, isSelected: boolean) => (
           <Box key={item.id}>

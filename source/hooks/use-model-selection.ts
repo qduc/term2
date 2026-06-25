@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useInputContext } from '../context/InputContext.js';
-import { fetchModels, filterModels, type ModelInfo } from '../services/model-service.js';
+import { fetchModels, filterModels, clearModelCache, type ModelInfo } from '../services/model-service.js';
 import { getProviderIds, sortProvidersByOrder } from '../providers/index.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
@@ -29,6 +29,7 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
   const failedProvidersRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef(true);
   const loadRequestIdRef = useRef(0);
+  const [refreshKey, setRefreshKey] = useState(0);
   const modelsByProviderRef = useRef<Map<string, ModelInfo[]>>(new Map());
   const shouldPreselectRef = useRef(false);
 
@@ -87,8 +88,8 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
 
       try {
         const fetched = await fetchModels({ settingsService, loggingService }, provider);
-        modelsByProviderRef.current.set(provider, fetched);
         if (!isCurrentRequest()) return;
+        modelsByProviderRef.current.set(provider, fetched);
         setModels(fetched);
         isInitialLoadRef.current = false;
       } catch (err) {
@@ -111,7 +112,15 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
       setError(message);
       setLoading(false);
     });
-  }, [isOpen, provider, settingsService, loggingService]);
+  }, [isOpen, provider, settingsService, loggingService, refreshKey]);
+
+  const refresh = useCallback(() => {
+    if (!isOpen || !provider) return;
+    failedProvidersRef.current.delete(provider);
+    modelsByProviderRef.current.delete(provider);
+    clearModelCache(provider);
+    setRefreshKey((k) => k + 1);
+  }, [isOpen, provider]);
 
   const filteredModels = useMemo(() => {
     return filterModels(models, query);
@@ -279,6 +288,7 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
     pageDown,
     getSelectedItem,
     toggleProvider,
+    refresh,
     canSwitchProvider,
     modelSettingConfig,
   };

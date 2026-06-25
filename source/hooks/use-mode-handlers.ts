@@ -16,6 +16,7 @@ export type ModeHandler = {
   moveRight?: () => void;
   onTab?: () => void;
   onSubmit?: (submittedValue: string) => SubmitResult;
+  onRefresh?: () => void;
   onReset?: () => void;
   onDelete?: () => void;
   onMoveItemUp?: () => void;
@@ -40,7 +41,11 @@ type Slash = Movable & {
   completeSelected: () => void;
   getSelectedItem: () => SlashCommand | undefined;
 };
-type Models = Movable & { canSwitchProvider: boolean; toggleProvider: (direction?: 'next' | 'prev') => void };
+type Models = Movable & {
+  canSwitchProvider: boolean;
+  toggleProvider: (direction?: 'next' | 'prev') => void;
+  refresh: () => void;
+};
 type Undo = Movable & {
   confirmSelection: (onSelect: (item: import('../hooks/use-undo-selection.js').UndoItem) => void) => void;
 };
@@ -198,6 +203,7 @@ export const useModeHandlers = ({
           insertSelectedModel(false);
         },
         onSubmit: () => (insertSelectedModel(true) ? 'handled' : 'fallthrough'),
+        onRefresh: models.refresh,
       },
       skill_selection: {
         moveUp: skills.moveUp,

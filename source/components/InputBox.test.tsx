@@ -646,6 +646,52 @@ it.sequential('command-backed model selection still submits after selection', as
   unregisterProvider(mockProviderId);
 });
 
+it.sequential('Ctrl+R refreshes the current provider model list when model selection is open', async () => {
+  clearModelCache();
+  const mockProviderId = `mock-provider-refresh-${Date.now()}-${Math.random()}`;
+  let fetchCount = 0;
+  registerProvider({
+    id: mockProviderId,
+    label: 'Mock Provider Refresh',
+    fetchModels: async () => {
+      fetchCount += 1;
+      return fetchCount === 1 ? [{ id: 'model-a', name: 'Model A' }] : [{ id: 'model-b', name: 'Model B' }];
+    },
+  });
+
+  const settingsService = createMockSettingsService({
+    'agent.provider': mockProviderId,
+  });
+
+  const modelCommand: SlashCommand = {
+    name: '/model',
+    description: 'Select model',
+    action: () => {},
+    completion: { type: 'model', trigger: '/model ' },
+  };
+
+  const { lastFrame, stdin } = await renderAndFlush(
+    <InputProvider>
+      <StateDisplay />
+      <InputBox
+        {...defaultProps}
+        settingsService={settingsService}
+        slashCommands={[...mockSlashCommands, modelCommand]}
+      />
+    </InputProvider>,
+  );
+
+  await writeInput(stdin, '/model ');
+  await waitFor(lastFrame, (f) => f.includes('model-a'), { timeoutMs: 3000 });
+  await writeInput(stdin, '\x12');
+  await waitFor(lastFrame, (f) => f.includes('model-b'), { timeoutMs: 3000 });
+
+  expect(fetchCount).toBeGreaterThanOrEqual(2);
+
+  clearModelCache();
+  unregisterProvider(mockProviderId);
+});
+
 it.sequential('settings-backed model selection saves a typed custom model when no menu item matches', async () => {
   clearModelCache();
   const mockProviderId = `mock-provider-custom-${Date.now()}-${Math.random()}`;

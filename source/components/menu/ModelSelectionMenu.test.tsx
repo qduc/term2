@@ -57,6 +57,24 @@ it.sequential('ModelSelectionMenu renders list of models', async () => {
   expect(output?.includes('claude-3-opus')).toBe(true);
 });
 
+it.sequential('ModelSelectionMenu footer includes refresh hint', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu settingsService={createMockSettingsService()} items={mockModels} selectedIndex={0} query="" />,
+  );
+
+  const output = lastFrame();
+  expect(output?.includes('Ctrl+R → refresh model list')).toBe(true);
+});
+
+it.sequential('ModelSelectionMenu does not duplicate refresh hint', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu settingsService={createMockSettingsService()} items={mockModels} selectedIndex={0} query="" />,
+  );
+
+  const output = lastFrame();
+  expect(output?.match(/Ctrl\+R → refresh model list/g)).toHaveLength(1);
+});
+
 it.sequential('ModelSelectionMenu highlights selected item', async () => {
   // Ink testing library doesn't easily show colors in text output,
   // but we can check if the selected item is present.

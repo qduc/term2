@@ -94,8 +94,15 @@ export class InitialTurnRunner {
 
         // 2. Handle aborted-approval resolution
         if (currentAbortedContext) {
-          if (!skipUser) {
-            yield { type: 'user_message_consumed_for_abort' };
+          // Preserve the follow-up prompt as a normal user turn so the next
+          // turn can steer the conversation naturally after an ESC abort.
+          const preparation = this.deps.inputPreparer.prepare(attempt, skipUser, {
+            bypassInputSurgeGuard: true,
+            replayFromHistory: options.replayFromHistory,
+          });
+          if (preparation.kind === 'blocked') {
+            yield preparation.event;
+            return { kind: 'failed' };
           }
           this.deps.logger.debug('Resolving aborted approval with fake execution', {
             message: attempt.turn.text,

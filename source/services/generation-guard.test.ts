@@ -441,8 +441,8 @@ it('integration - aborted-approval input with current token executes resolution 
     events2.push(ev);
   }
 
-  // The resolution continuation should be executed, yielding user_message_consumed_for_abort
-  expect(events2.some((e: any) => e.type === 'user_message_consumed_for_abort')).toBe(true);
+  // The resolution continuation should execute without consuming the follow-up user message.
+  expect(events2.some((e: any) => e.type === 'user_message_consumed_for_abort')).toBe(false);
   expect(events2.some((e: any) => e.type === 'text_delta' && e.delta === 'continuation reply')).toBe(true);
 });
 

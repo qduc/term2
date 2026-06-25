@@ -403,7 +403,7 @@ it('run() omits droppedUserMessage when no user turn was added (skipUserMessage)
   expect(errorEvent.droppedUserMessage).toBe(undefined);
 });
 
-it('run() emits user_message_consumed_for_abort when an aborted approval is being resolved', async () => {
+it('run() keeps follow-up input as a user turn when resolving an aborted approval', async () => {
   // Plant an aborted approval context directly via approvalState so the
   // session's consumeAborted() picks it up. The downstream fake-execution
   // path will throw (no real interruption), but we only care about event order.
@@ -440,9 +440,8 @@ it('run() emits user_message_consumed_for_abort when an aborted approval is bein
     // expected — downstream paths will fail in this minimal mock
   }
   const idx = emitted.findIndex((e: ConversationEvent) => e.type === 'user_message_consumed_for_abort');
-  expect(idx >= 0).toBe(true);
-  // The store must not have a genuine user turn for this input.
-  expect(stateFacade.listUserTurns().length).toBe(0);
+  expect(idx >= 0).toBe(false);
+  expect(stateFacade.listUserTurns().map((turn) => turn.text)).toEqual(['follow up text']);
 });
 
 it('switchProvider() clears provider continuity but preserves transcript history', async () => {

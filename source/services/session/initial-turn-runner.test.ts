@@ -319,7 +319,7 @@ it('continuation recovery delay checks generation before one-shot client mutatio
   }
 });
 
-it('aborted-approval input reusing the current token', async () => {
+it('aborted-approval input reusing the current token preserves next user turn', async () => {
   const interruption = {
     name: 'shell',
     agent: { name: 'CLI Agent' },
@@ -374,8 +374,7 @@ it('aborted-approval input reusing the current token', async () => {
     expect(outcome.userText).toBe('resolved text');
     expect(outcome.generation).toBe(token);
   }
-  expect(events.length).toBe(1);
-  expect(events[0].type).toBe('user_message_consumed_for_abort');
+  expect(events.length).toBe(0);
 });
 
 it('stale aborted-approval context produces no mutation', async () => {

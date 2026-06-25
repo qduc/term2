@@ -132,8 +132,86 @@ const CommandMessage: FC<Props> = ({
   }, [output]);
 
   const formattedArgs = useMemo(() => {
-    return toolArgs ? formatToolArgs(toolName, toolArgs, displayMode) : '';
-  }, [toolName, toolArgs, displayMode]);
+    return toolArgs ? formatToolArgs(toolName, toolArgs, 'concise') : '';
+  }, [toolName, toolArgs]);
+
+  const displayAction = useMemo(() => {
+    const isShell = !toolName || toolName === 'shell';
+    if (isShell) {
+      return (
+        <>
+          <Text color={COLOR_MUTED}>$</Text> <Text bold>{command}</Text>
+          {runtime && <Text color={COLOR_MUTED}> ({runtime})</Text>}
+        </>
+      );
+    }
+
+    const argsText = formattedArgs ? ` ${formattedArgs}` : '';
+    const renderAction = (verb: string) => (
+      <>
+        <Text dimColor>{verb}</Text>
+        <Text>{argsText}</Text>
+      </>
+    );
+
+    switch (toolName) {
+      case 'grep':
+        return renderAction('Searched');
+      case 'glob':
+        return renderAction('Searched files');
+      case 'read_file':
+      case 'view_file':
+        return renderAction('Read');
+      case TOOL_NAME_APPLY_PATCH:
+        return renderAction('Patched');
+      case TOOL_NAME_SEARCH_REPLACE:
+        return renderAction('Edited');
+      case TOOL_NAME_CREATE_FILE:
+        return renderAction('Created');
+      case 'ask_mentor':
+        return renderAction('Asked mentor');
+      case 'ask_user':
+        return renderAction('Asked user');
+      case 'web_search':
+        return renderAction('Web searched');
+      case 'web_fetch':
+        return renderAction('Web fetched');
+      case 'read_code_outline':
+        return renderAction('Read outline');
+      case 'code_context_search':
+        return renderAction('Searched context');
+      case 'run_subagent':
+        return renderAction('Delegated');
+      default:
+        return (
+          <>
+            <Text dimColor>[{toolName}]</Text>
+            <Text>{argsText}</Text>
+          </>
+        );
+    }
+  }, [toolName, command, runtime, formattedArgs]);
+
+  const renderStandardHeader = () => {
+    const headerColor = success === false ? COLOR_ERROR : isRunning ? COLOR_WARNING : COLOR_INFO;
+    const isShell = !toolName || toolName === 'shell';
+
+    if (isShell) {
+      return (
+        <Box>
+          <Text color={headerColor}>{displayAction}</Text>
+        </Box>
+      );
+    }
+
+    return (
+      <Box>
+        <Text color={headerColor}>
+          <Text color={COLOR_MUTED}>$</Text> {displayAction}
+        </Text>
+      </Box>
+    );
+  };
 
   const changeStats = useMemo(() => {
     const diffText =
@@ -198,63 +276,6 @@ const CommandMessage: FC<Props> = ({
   }
 
   if (displayMode === 'concise') {
-    const displayAction = (() => {
-      const isShell = !toolName || toolName === 'shell';
-      if (isShell) {
-        return (
-          <>
-            <Text color={COLOR_MUTED}>$</Text> <Text>{command}</Text>
-            {runtime && <Text color={COLOR_MUTED}> ({runtime})</Text>}
-          </>
-        );
-      }
-
-      const argsText = formattedArgs ? ` ${formattedArgs}` : '';
-      const renderAction = (verb: string) => (
-        <>
-          <Text dimColor>{verb}</Text>
-          <Text>{argsText}</Text>
-        </>
-      );
-
-      switch (toolName) {
-        case 'grep':
-          return renderAction('Searched');
-        case 'glob':
-          return renderAction('Searched files');
-        case 'read_file':
-        case 'view_file':
-          return renderAction('Read');
-        case TOOL_NAME_APPLY_PATCH:
-          return renderAction('Patched');
-        case TOOL_NAME_SEARCH_REPLACE:
-          return renderAction('Edited');
-        case TOOL_NAME_CREATE_FILE:
-          return renderAction('Created');
-        case 'ask_mentor':
-          return renderAction('Asked mentor');
-        case 'ask_user':
-          return renderAction('Asked user');
-        case 'web_search':
-          return renderAction('Web searched');
-        case 'web_fetch':
-          return renderAction('Web fetched');
-        case 'read_code_outline':
-          return renderAction('Read outline');
-        case 'code_context_search':
-          return renderAction('Searched context');
-        case 'run_subagent':
-          return renderAction('Delegated');
-        default:
-          return (
-            <>
-              <Text dimColor>[{toolName}]</Text>
-              <Text>{argsText}</Text>
-            </>
-          );
-      }
-    })();
-
     if (isSubagent) {
       const isFailed = status === 'failed' || isApprovalRejection || success === false || Boolean(failureReason);
       const statusChar = isFailed ? '✖' : isRunning ? '▶' : '✔';
@@ -395,15 +416,9 @@ const CommandMessage: FC<Props> = ({
       );
     }
 
-    const isCreate = toolArgs.type === 'create_file';
     return (
       <Box flexDirection="column">
-        <Box>
-          <Text color={isCreate ? COLOR_SUCCESS : COLOR_WARNING} bold>
-            {isCreate ? '[CREATE FILE]' : '[PATCH]'}
-          </Text>
-          <Text> {toolArgs.path}</Text>
-        </Box>
+        {renderStandardHeader()}
         {toolArgs.diff && success !== false && <DiffView diff={toolArgs.diff} />}
         {failureReason && <Text color={COLOR_ERROR}>Error: {failureReason}</Text>}
         <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
@@ -425,12 +440,7 @@ const CommandMessage: FC<Props> = ({
     // For auto-approved search_replace (no approval prompt), show diff + output
     return (
       <Box flexDirection="column">
-        <Box>
-          <Text color={COLOR_WARNING} bold>
-            [SEARCH & REPLACE]
-          </Text>
-          <Text> {toolArgs.path}</Text>
-        </Box>
+        {renderStandardHeader()}
         <DiffView diff={diff} />
         {failureReason && <Text color={COLOR_ERROR}>Error: {failureReason}</Text>}
         <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
@@ -442,12 +452,7 @@ const CommandMessage: FC<Props> = ({
   if (toolName === TOOL_NAME_CREATE_FILE && toolArgs) {
     return (
       <Box flexDirection="column">
-        <Box>
-          <Text color={success === false ? COLOR_ERROR : COLOR_SUCCESS} bold>
-            [CREATE]
-          </Text>
-          <Text> {toolArgs.path}</Text>
-        </Box>
+        {renderStandardHeader()}
         {success !== false && <DiffView diff={createFileDiffLines} />}
         {failureReason && <Text color={COLOR_ERROR}>Error: {failureReason}</Text>}
         <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
@@ -484,15 +489,7 @@ const CommandMessage: FC<Props> = ({
 
         return (
           <Box flexDirection="column">
-            <Box>
-              <Text color={COLOR_INFO} bold>
-                Read File
-              </Text>
-              <Text>
-                {' '}
-                {filePath} (Lines {startLine}-{endLine} of {totalLines})
-              </Text>
-            </Box>
+            {renderStandardHeader()}
             <Box flexDirection="column" borderStyle="single" borderColor={COLOR_MUTED} paddingX={1} marginTop={1}>
               {displayLines.map((line, idx) => {
                 if (line.lineNum === -1) {
@@ -576,12 +573,7 @@ const CommandMessage: FC<Props> = ({
 
         return (
           <Box flexDirection="column">
-            <Box marginBottom={1}>
-              <Text color={COLOR_INFO} bold>
-                Grep Results
-              </Text>
-              <Text> for {toolArgs?.pattern || ''}</Text>
-            </Box>
+            <Box marginBottom={1}>{renderStandardHeader()}</Box>
             {filesToRender.map((file, fileIdx) => {
               if (file.matches.length === 0) return null;
               return (
@@ -645,15 +637,7 @@ const CommandMessage: FC<Props> = ({
         const { files, note } = parsed;
         return (
           <Box flexDirection="column">
-            <Box marginBottom={1}>
-              <Text color={COLOR_INFO} bold>
-                File Search
-              </Text>
-              <Text>
-                {' '}
-                found {files.length} file{files.length !== 1 ? 's' : ''}
-              </Text>
-            </Box>
+            <Box marginBottom={1}>{renderStandardHeader()}</Box>
             <Box flexDirection="column" paddingLeft={2}>
               {files.map((file: string, idx: number) => (
                 <Text key={idx} color={COLOR_TOOL_OUTPUT}>
@@ -678,15 +662,7 @@ const CommandMessage: FC<Props> = ({
         const statusColor = status === 'completed' ? COLOR_SUCCESS : status === 'failed' ? COLOR_ERROR : COLOR_WARNING;
         return (
           <Box flexDirection="column">
-            <Box>
-              <Text color={COLOR_INFO} bold>
-                Subagent
-              </Text>
-              <Text> {role} </Text>
-              <Text color={statusColor} bold>
-                ({status.toUpperCase()})
-              </Text>
-            </Box>
+            {renderStandardHeader()}
             {(toolsUsed || filesChanged) && (
               <Box flexDirection="column" paddingLeft={2} marginY={0.5}>
                 {toolsUsed && (
@@ -717,12 +693,7 @@ const CommandMessage: FC<Props> = ({
         const { answer, results } = parsed;
         return (
           <Box flexDirection="column">
-            <Box marginBottom={1}>
-              <Text color={COLOR_INFO} bold>
-                Web Search
-              </Text>
-              <Text> "{toolArgs?.query || ''}"</Text>
-            </Box>
+            <Box marginBottom={1}>{renderStandardHeader()}</Box>
             {answer && (
               <Box flexDirection="column" borderStyle="round" borderColor={COLOR_WARNING} paddingX={1} marginBottom={1}>
                 <Text color={COLOR_WARNING} bold>
@@ -777,12 +748,14 @@ const CommandMessage: FC<Props> = ({
         }
         return (
           <Box flexDirection="column">
-            <Box>
-              <Text color={COLOR_INFO} bold>
-                Web Fetch
-              </Text>
-              <Text> {title}</Text>
-            </Box>
+            {renderStandardHeader()}
+            {title && (
+              <Box paddingLeft={2}>
+                <Text color={COLOR_CONTENT} bold>
+                  {title}
+                </Text>
+              </Box>
+            )}
             <Box paddingLeft={2}>
               <Text color={COLOR_LINK} underline>
                 {url}
@@ -831,15 +804,7 @@ const CommandMessage: FC<Props> = ({
     if (toolName === 'ask_mentor') {
       return (
         <Box flexDirection="column">
-          <Box>
-            <Text color={COLOR_INFO} bold>
-              Mentor Question
-            </Text>
-            <Text color={COLOR_CONTENT} italic>
-              {' '}
-              "{toolArgs?.question || ''}"
-            </Text>
-          </Box>
+          {renderStandardHeader()}
           <Box flexDirection="column" borderStyle="round" borderColor={COLOR_SPECIAL} paddingX={1} marginTop={1}>
             <Text color={COLOR_SPECIAL} bold>
               Mentor Response
@@ -854,12 +819,7 @@ const CommandMessage: FC<Props> = ({
       const options = toolArgs?.options;
       return (
         <Box flexDirection="column">
-          <Box>
-            <Text color={COLOR_INFO} bold>
-              Ask User
-            </Text>
-            <Text color={COLOR_CONTENT}> {toolArgs?.question || 'Unknown question'}</Text>
-          </Box>
+          {renderStandardHeader()}
           {options && Array.isArray(options) && options.length > 0 && (
             <Box paddingLeft={2} marginY={0.5}>
               <Text color={COLOR_MUTED}>Options: </Text>
@@ -886,15 +846,7 @@ const CommandMessage: FC<Props> = ({
         const { filePath, lang, imports, exports, decls } = parsed;
         return (
           <Box flexDirection="column">
-            <Box marginBottom={1}>
-              <Text color={COLOR_INFO} bold>
-                Code Outline
-              </Text>
-              <Text>
-                {' '}
-                {filePath} ({lang})
-              </Text>
-            </Box>
+            <Box marginBottom={1}>{renderStandardHeader()}</Box>
             {imports && imports.length > 0 && (
               <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
                 <Text color={COLOR_WARNING} bold>
@@ -947,12 +899,7 @@ const CommandMessage: FC<Props> = ({
           const { target, relatedFiles } = parsed;
           return (
             <Box flexDirection="column">
-              <Box marginBottom={1}>
-                <Text color={COLOR_INFO} bold>
-                  Related Files
-                </Text>
-                <Text> for {target}</Text>
-              </Box>
+              <Box marginBottom={1}>{renderStandardHeader()}</Box>
               {!relatedFiles || relatedFiles.length === 0 ? (
                 <Box paddingLeft={2}>
                   <Text color={COLOR_MUTED}>No related files found.</Text>
@@ -976,12 +923,7 @@ const CommandMessage: FC<Props> = ({
           const { symbol, results } = parsed;
           return (
             <Box flexDirection="column">
-              <Box marginBottom={1}>
-                <Text color={COLOR_INFO} bold>
-                  Symbol Search
-                </Text>
-                <Text> "{symbol}"</Text>
-              </Box>
+              <Box marginBottom={1}>{renderStandardHeader()}</Box>
               {!results || results.length === 0 ? (
                 <Box paddingLeft={2}>
                   <Text color={COLOR_MUTED}>No symbol declarations found.</Text>
@@ -1020,13 +962,9 @@ const CommandMessage: FC<Props> = ({
   // Special handling for approval-rejected shell commands: show the denial message
   // with a clear [DENIED] label so the user knows what was attempted and why.
   if (isApprovalRejection) {
-    // Extract just the command part for display (e.g. "rm -rf /dangerous").
-    const displayCommand = formattedArgs || command;
     return (
       <Box flexDirection="column">
-        <Text color={COLOR_ERROR} bold>
-          $ <Text bold>{displayCommand}</Text>
-        </Text>
+        {renderStandardHeader()}
         <Text color={COLOR_ERROR}>→ DENIED: {denialReason}</Text>
       </Box>
     );
@@ -1034,11 +972,7 @@ const CommandMessage: FC<Props> = ({
 
   return (
     <Box flexDirection="column">
-      <Text color={success === false ? COLOR_ERROR : isRunning ? COLOR_WARNING : COLOR_INFO}>
-        $ <Text bold>{command}</Text>
-        {isRunning && formattedArgs && command === toolName && <Text color={COLOR_WARNING}> {formattedArgs}</Text>}
-        {runtime && <Text color={COLOR_MUTED}> ({runtime})</Text>}
-      </Text>
+      {renderStandardHeader()}
       {failureReason && <Text color={COLOR_ERROR}>Error: {failureReason}</Text>}
       <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
     </Box>

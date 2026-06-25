@@ -178,7 +178,7 @@ it('CommandMessage renders create_file with [CREATE] header and file path', asyn
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = lastFrame?.() ?? '';
 
-  expect(output.includes('[CREATE]')).toBe(true);
+  expect(output.includes('Created')).toBe(true);
   expect(output.includes('src/new-file.ts')).toBe(true);
 });
 
@@ -212,7 +212,7 @@ it('CommandMessage renders apply_patch update_file with [PATCH] header and diff'
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = lastFrame?.() ?? '';
 
-  expect(output.includes('[PATCH]')).toBe(true);
+  expect(output.includes('Patched')).toBe(true);
   expect(output.includes('src/file.ts')).toBe(true);
   expect(output.includes('-old line')).toBe(true);
   expect(output.includes('+new line')).toBe(true);
@@ -301,7 +301,7 @@ it('CommandMessage renders search_replace in standard mode with single replaceme
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  expect(output.includes('[SEARCH & REPLACE]')).toBe(true);
+  expect(output.includes('Edited')).toBe(true);
   expect(output.includes('src/file.ts')).toBe(true);
   expect(output.includes('+world')).toBe(true);
   expect(output.includes('-hello')).toBe(true);
@@ -327,7 +327,7 @@ it('CommandMessage renders search_replace in standard mode with multiple replace
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  expect(output.includes('[SEARCH & REPLACE]')).toBe(true);
+  expect(output.includes('Edited')).toBe(true);
   expect(output.includes('src/file.ts')).toBe(true);
   // Both replacements show diffs
   expect(output.includes('+world')).toBe(true);
@@ -375,7 +375,7 @@ it('CommandMessage renders search_replace failure in standard mode', async () =>
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  expect(output.includes('[SEARCH & REPLACE]')).toBe(true);
+  expect(output.includes('Edited')).toBe(true);
   expect(output.includes('src/file.ts')).toBe(true);
   expect(output.includes('Error: Search content not found')).toBe(true);
 });
@@ -394,7 +394,7 @@ it('CommandMessage renders apply_patch create_file with [CREATE FILE] header and
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = lastFrame?.() ?? '';
 
-  expect(output.includes('[CREATE FILE]')).toBe(true);
+  expect(output.includes('Patched')).toBe(true);
   expect(output.includes('src/new.ts')).toBe(true);
   expect(output.includes('+line 1')).toBe(true);
 });
@@ -431,7 +431,7 @@ it('CommandMessage renders create_file failure in red', async () => {
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = lastFrame?.() ?? '';
 
-  expect(output.includes('[CREATE]')).toBe(true);
+  expect(output.includes('Created')).toBe(true);
   expect(output.includes('Error')).toBe(true);
 });
 
@@ -828,7 +828,7 @@ it('CommandMessage renders grep results grouped by file in standard mode', async
 
   expect(output.includes('file1.ts')).toBe(true);
   expect(output.includes('file2.ts')).toBe(true);
-  expect(output.includes('Grep Results')).toBe(true);
+  expect(output.includes('Searched')).toBe(true);
 });
 
 it('CommandMessage does not show match count when output is empty', async () => {
@@ -907,7 +907,7 @@ it('CommandMessage renders read_file with line numbers in standard mode', async 
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  expect(output.includes('Read File')).toBe(true);
+  expect(output.includes('Read')).toBe(true);
   expect(output.includes('src/main.ts')).toBe(true);
   expect(output.includes('1 │ import { foo } from "bar";')).toBe(true);
   expect(output.includes('2 │ foo();')).toBe(true);
@@ -928,7 +928,7 @@ it('CommandMessage renders read_file with line numbers, long wrapping lines, and
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  expect(output.includes('Read File')).toBe(true);
+  expect(output.includes('Read')).toBe(true);
   expect(output.includes('src/main.ts')).toBe(true);
   expect(output.includes('1 │ line 1')).toBe(true);
   // Aligned truncation line should have a divider before the text
@@ -951,7 +951,7 @@ it('CommandMessage renders glob lists in standard mode', async () => {
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  expect(output.includes('File Search')).toBe(true);
+  expect(output.includes('Searched files')).toBe(true);
   expect(output.includes('src/a.ts')).toBe(true);
   expect(output.includes('src/b.ts')).toBe(true);
 });
@@ -970,9 +970,8 @@ it('CommandMessage renders subagent card in standard mode', async () => {
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  expect(output.includes('Subagent')).toBe(true);
+  expect(output.includes('Delegated')).toBe(true);
   expect(output.includes('worker')).toBe(true);
-  expect(output.includes('COMPLETED')).toBe(true);
   expect(output.includes('Tools: shell(3)')).toBe(true);
   expect(output.includes('Changed: src/a.ts')).toBe(true);
   expect(output.includes('Subagent finished successfully!')).toBe(true);
@@ -993,7 +992,7 @@ it('CommandMessage renders web_search dashboard in standard mode', async () => {
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  expect(output.includes('Web Search')).toBe(true);
+  expect(output.includes('Web searched')).toBe(true);
   expect(output.includes('Answer Summary')).toBe(true);
   expect(output.includes('Ink is a React renderer.')).toBe(true);
   expect(output.includes('1. Ink GitHub')).toBe(true);
@@ -1016,7 +1015,7 @@ it('CommandMessage renders web_fetch result in standard mode', async () => {
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  expect(output.includes('Web Fetch')).toBe(true);
+  expect(output.includes('Web fetched')).toBe(true);
   expect(output.includes('Example Domain')).toBe(true);
   expect(output.includes('https://example.com')).toBe(true);
   expect(output.includes('Table of Contents')).toBe(true);

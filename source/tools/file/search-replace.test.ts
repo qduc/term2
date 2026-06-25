@@ -2,7 +2,7 @@ import { it, expect } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { createSearchReplaceToolDefinition } from './search-replace.js';
+import { createSearchReplaceToolDefinition, formatSearchReplaceCommandMessage } from './search-replace.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
 
@@ -1555,4 +1555,73 @@ it.sequential('execute updates an existing file outside workspace when the call 
     await fs.rm(workspaceDir, { recursive: true, force: true });
     await fs.rm(path.join(path.dirname(workspaceDir), 'outside-approved.txt'), { force: true });
   }
+});
+
+it('formatSearchReplaceCommandMessage includes all replacements in toolArgs', () => {
+  const item: any = {
+    rawItem: {
+      type: 'function_call_output',
+      callId: 'call-123',
+      name: 'search_replace',
+      arguments: JSON.stringify({
+        path: 'src/file.ts',
+        replacements: [
+          { search_content: 'hello', replace_content: 'world' },
+          { search_content: 'foo', replace_content: 'bar' },
+        ],
+      }),
+      output: { text: 'Updated src/file.ts (2 edits)' },
+    },
+  };
+
+  const messages = formatSearchReplaceCommandMessage(item, 0, new Map());
+  expect(messages).toHaveLength(1);
+
+  const msg = messages[0];
+  expect(msg.toolName).toBe('search_replace');
+  expect(msg.toolArgs).toEqual({
+    path: 'src/file.ts',
+    replacements: [
+      { search_content: 'hello', replace_content: 'world' },
+      { search_content: 'foo', replace_content: 'bar' },
+    ],
+  });
+  expect(msg.command).toContain('2 edits');
+});
+
+it('formatSearchReplaceCommandMessage formats single replacement without count suffix', () => {
+  const item: any = {
+    rawItem: {
+      type: 'function_call_output',
+      callId: 'call-456',
+      name: 'search_replace',
+      arguments: JSON.stringify({
+        path: 'src/file.ts',
+        replacements: [{ search_content: 'hello', replace_content: 'world' }],
+      }),
+      output: { text: 'Updated src/file.ts' },
+    },
+  };
+
+  const messages = formatSearchReplaceCommandMessage(item, 0, new Map());
+  expect(messages[0].command).toBe('search_replace "hello" → "world" "src/file.ts"');
+});
+
+it('formatSearchReplaceCommandMessage handles missing replacements gracefully', () => {
+  const item: any = {
+    rawItem: {
+      type: 'function_call_output',
+      callId: 'call-789',
+      name: 'search_replace',
+      arguments: JSON.stringify({
+        path: 'src/file.ts',
+        search_content: 'hello',
+        replace_content: 'world',
+      }),
+      output: { text: 'Updated src/file.ts' },
+    },
+  };
+
+  const messages = formatSearchReplaceCommandMessage(item, 0, new Map());
+  expect(messages[0].toolArgs.replacements).toEqual([]);
 });

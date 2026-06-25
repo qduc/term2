@@ -301,6 +301,35 @@ it('formatToolArgs summarizes search replacement batches in concise mode', () =>
   ).toBe('"source/a.ts" (+ 1 more)');
 });
 
+it('formatToolArgs formats search_replace with replacements in standard mode', () => {
+  expect(
+    formatToolArgs(
+      TOOL_NAME_SEARCH_REPLACE,
+      {
+        path: 'source/a.ts',
+        replacements: [
+          { search_content: 'old', replace_content: 'new' },
+          { search_content: 'foo', replace_content: 'bar' },
+        ],
+      },
+      'standard',
+    ),
+  ).toBe('"old" → "new" "source/a.ts" (+ 1 more)');
+});
+
+it('formatToolArgs formats search_replace with replacements that are truncated to 30 chars', () => {
+  expect(
+    formatToolArgs(
+      TOOL_NAME_SEARCH_REPLACE,
+      {
+        path: 'source/a.ts',
+        replacements: [{ search_content: 'AAAAAAAAABBBBBBBBBBBCCCCCCCCCCDDDDDDDDDD', replace_content: 'replacement' }],
+      },
+      'standard',
+    ),
+  ).toBe('"AAAAAAAAABBBBBBBBBBBCCCCCCCCCC..." → "replacement" "source/a.ts"');
+});
+
 it('formatToolArgs formats apply patch operation and path', () => {
   expect(formatToolArgs(TOOL_NAME_APPLY_PATCH, { type: 'update_file', path: 'source/a.ts' })).toBe(
     'update_file source/a.ts',

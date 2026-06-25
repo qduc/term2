@@ -245,14 +245,15 @@ export const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, in
 
   return [
     createBaseMessage(item, index, 0, false, {
-      command: `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`,
+      command: `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"${
+        replacements.length > 1 ? ` (${replacements.length} edits)` : ''
+      }`,
       output,
       success,
       toolName: 'search_replace',
       toolArgs: {
         path: filePath,
-        search_content: searchContent,
-        replace_content: replaceContent,
+        replacements,
       },
     }),
   ];

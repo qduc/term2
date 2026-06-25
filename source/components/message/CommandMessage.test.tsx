@@ -285,6 +285,101 @@ it('CommandMessage renders search_replace multiple replacements in concise mode'
   expect(output.includes('(+2 -2)')).toBe(true);
 });
 
+it('CommandMessage renders search_replace in standard mode with single replacement', async () => {
+  const props = {
+    command: 'search_replace "hello" → "world" "src/file.ts"',
+    toolName: TOOL_NAME_SEARCH_REPLACE,
+    toolArgs: {
+      path: 'src/file.ts',
+      replacements: [{ search_content: 'hello', replace_content: 'world' }],
+    },
+    status: 'completed' as const,
+    success: true,
+    output: 'Updated src/file.ts',
+  };
+
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  expect(output.includes('[SEARCH & REPLACE]')).toBe(true);
+  expect(output.includes('src/file.ts')).toBe(true);
+  expect(output.includes('+world')).toBe(true);
+  expect(output.includes('-hello')).toBe(true);
+  expect(output.includes('Updated src/file.ts')).toBe(true);
+});
+
+it('CommandMessage renders search_replace in standard mode with multiple replacements', async () => {
+  const props = {
+    command: 'search_replace "hello" → "world" "src/file.ts" (2 edits)',
+    toolName: TOOL_NAME_SEARCH_REPLACE,
+    toolArgs: {
+      path: 'src/file.ts',
+      replacements: [
+        { search_content: 'hello', replace_content: 'world' },
+        { search_content: 'foo', replace_content: 'bar' },
+      ],
+    },
+    status: 'completed' as const,
+    success: true,
+    output: 'Updated src/file.ts (2 edits)',
+  };
+
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  expect(output.includes('[SEARCH & REPLACE]')).toBe(true);
+  expect(output.includes('src/file.ts')).toBe(true);
+  // Both replacements show diffs
+  expect(output.includes('+world')).toBe(true);
+  expect(output.includes('-hello')).toBe(true);
+  expect(output.includes('+bar')).toBe(true);
+  expect(output.includes('-foo')).toBe(true);
+  expect(output.includes('Updated src/file.ts (2 edits)')).toBe(true);
+});
+
+it('CommandMessage renders search_replace with hadApproval showing only output', async () => {
+  const props = {
+    command: 'search_replace "hello" → "world" "src/file.ts"',
+    toolName: TOOL_NAME_SEARCH_REPLACE,
+    toolArgs: {
+      path: 'src/file.ts',
+      replacements: [{ search_content: 'hello', replace_content: 'world' }],
+    },
+    status: 'completed' as const,
+    success: true,
+    output: 'Updated src/file.ts',
+    hadApproval: true,
+  };
+
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+  const output = lastFrame?.() ?? '';
+
+  expect(output.includes('[SEARCH & REPLACE]')).toBe(false);
+  expect(output.includes('Updated src/file.ts')).toBe(true);
+});
+
+it('CommandMessage renders search_replace failure in standard mode', async () => {
+  const props = {
+    command: 'search_replace "nonexistent" → "new" "src/file.ts"',
+    toolName: TOOL_NAME_SEARCH_REPLACE,
+    toolArgs: {
+      path: 'src/file.ts',
+      replacements: [{ search_content: 'nonexistent', replace_content: 'new' }],
+    },
+    status: 'completed' as const,
+    success: false,
+    failureReason: 'Search content not found',
+    output: 'Error: Search content not found',
+  };
+
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  expect(output.includes('[SEARCH & REPLACE]')).toBe(true);
+  expect(output.includes('src/file.ts')).toBe(true);
+  expect(output.includes('Error: Search content not found')).toBe(true);
+});
+
 it('CommandMessage renders apply_patch create_file with [CREATE FILE] header and diff', async () => {
   const diff = '+line 1\n+line 2';
   const props = {

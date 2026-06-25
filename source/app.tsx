@@ -291,7 +291,7 @@ const App: FC<AppProps> = ({
         replaceInput(text);
       }
     },
-    [undoToUserMessage, redrawMessageList, setInput],
+    [undoToUserMessage, redrawMessageList, replaceInput],
   );
 
   // Handle Ctrl+C to exit immediately

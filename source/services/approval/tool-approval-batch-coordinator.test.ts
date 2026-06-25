@@ -34,6 +34,7 @@ it('prompts for unsandboxed shell even when the registry would auto-approve', as
       recordPendingApproval: () => {},
       applyNextPlan: async function* () {
         appliedPlan = true;
+        yield;
       },
     } as any,
     shellAutoApproval: {

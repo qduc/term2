@@ -281,7 +281,7 @@ const ApprovalPrompt: FC<Props> = ({
     }
 
     return items;
-  }, [isAskUser, isMultiSelect, askUserOptions, askUserOptionLabels, hasMultipleQuestions]);
+  }, [isAskUser, isMultiSelect, askUserOptionLabels, hasMultipleQuestions, deniedReadMenuItems, isDeniedReadShell]);
 
   // reset selection when question/approval changes; cannot derive user-controlled arrow-key state from props
   React.useEffect(() => {

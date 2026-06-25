@@ -27,6 +27,7 @@ export default tseslint.config(
       'eval/**',
       '*.config.ts',
       '*.config.js',
+      'scripts/**',
     ],
   },
   eslint.configs.recommended,

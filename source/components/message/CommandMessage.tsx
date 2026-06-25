@@ -104,7 +104,7 @@ const CommandMessage: FC<Props> = ({
         .join('\n');
     }
     return generateDiff(toolArgs.search_content, toolArgs.replace_content);
-  }, [toolName, toolArgs?.search_content, toolArgs?.replace_content, toolArgs?.replacements, toolArgs]);
+  }, [toolName, toolArgs]);
 
   const createFileDiffLines = useMemo(
     () =>
@@ -114,7 +114,7 @@ const CommandMessage: FC<Props> = ({
             .map((line: string) => `+${line}`)
             .join('\n')
         : '',
-    [toolName, toolArgs?.content, toolArgs],
+    [toolName, toolArgs],
   );
 
   // Parse the denial reason from the JSON wrapper that the tool rejection interceptor

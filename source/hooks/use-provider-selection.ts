@@ -487,6 +487,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     settingsService,
     loadProviderList,
     setInput,
+    replaceInput,
     reorderList,
     saveDraft,
     activeItems,

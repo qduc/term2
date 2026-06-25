@@ -2,6 +2,7 @@ import { it, expect } from 'vitest';
 import * as path from 'path';
 import { homedir } from 'os';
 import { resolveWorkspacePath } from './utils.js';
+import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
 
 it('resolveWorkspacePath: expands ~ to home directory', () => {
   const home = homedir();
@@ -30,19 +31,24 @@ it('resolveWorkspacePath: handles regular relative paths', () => {
   expect(resolved).toBe(path.join(workspace, 'src/main.ts'));
 });
 
-it('resolveWorkspacePath: allows paths under /tmp or /private/tmp even when outside workspace', () => {
+it('resolveWorkspacePath: allows SANDBOX_TEMP_DIR even when outside workspace', () => {
   const workspace = '/Users/test/workspace';
 
-  // Test /tmp path
-  const resolvedTmp = resolveWorkspacePath('/tmp/test-file.txt', workspace);
-  expect(resolvedTmp).toBe(path.normalize('/tmp/test-file.txt'));
+  // Test the sandbox temp dir is allowed
+  const resolvedSandboxTmp = resolveWorkspacePath(SANDBOX_TEMP_DIR + '/test-file.txt', workspace);
+  expect(resolvedSandboxTmp).toBe(path.normalize(SANDBOX_TEMP_DIR + '/test-file.txt'));
 
-  // Test /private/tmp path
-  const resolvedPrivateTmp = resolveWorkspacePath('/private/tmp/sub/file.txt', workspace);
-  expect(resolvedPrivateTmp).toBe(path.normalize('/private/tmp/sub/file.txt'));
+  // Test that /tmp (broad) paths are NOT allowed — only the sandbox-specific temp dir
+  expect(() => {
+    resolveWorkspacePath('/tmp/test-file.txt', workspace);
+  }).toThrow(/Operation outside workspace/);
+
+  // Test that /private/tmp is also rejected
+  expect(() => {
+    resolveWorkspacePath('/private/tmp/sub/file.txt', workspace);
+  }).toThrow(/Operation outside workspace/);
 
   // Test that /opt or other outside paths still throw
-
   expect(() => {
     resolveWorkspacePath('/opt/app.log', workspace);
   }).toThrow(/Operation outside workspace/);

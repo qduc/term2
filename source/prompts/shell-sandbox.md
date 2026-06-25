@@ -12,3 +12,7 @@ The `shell` tool runs commands inside a sandbox. The sandbox imposes these const
 
 - Retry with `sandbox="unsandboxed"` to request a one-time escape (requires user approval).
 - Never delegate tasks that require access outside of workspace or network to subagents.
+
+**Untracked dotfiles:**
+
+The sandbox will automatically create some dotfiles in the workspace to enhance security, such as .bash_profile, .bashrc, .gitconfig, .mcp.json, .profile, .zprofile, .zshrc, .claude/, .codex, .gitmodules, .ripgreprc, etc. These files will be removed when the sandbox is destroyed. Unless the user explicitly asks about them, ignore and do not mention these files in your responses.

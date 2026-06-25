@@ -2,6 +2,7 @@ import type { ExecutionContext } from '../services/execution-context.js';
 import { selectPromptProfile } from './prompt-profiles.js';
 import { getSearchViaShellAddendum } from './search-via-shell.js';
 import { getSubagentDelegationAddendum } from './subagent-delegation.js';
+import { getShellSandboxAddendum } from './shell-sandbox.js';
 
 export type PromptConstructorOptions = {
   model: string;
@@ -46,7 +47,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   }
 
   if (sandboxEnabled) {
-    fragmentFiles.push('shell-sandbox.md');
+    inlineSections.push(getShellSandboxAddendum());
   }
 
   if (mentorMode && isRegularMode) {

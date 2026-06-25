@@ -44,12 +44,9 @@ it('buildPromptSpec composes file fragments in stable order', () => {
     searchViaShell: true,
   });
 
-  expect(spec.fragmentFiles).toEqual([
-    'worktree-hygiene.md',
-    'shell-sandbox.md',
-    'mentor-addon.md',
-    'plan-mode-info.md',
-  ]);
+  expect(spec.fragmentFiles).toEqual(['worktree-hygiene.md', 'mentor-addon.md', 'plan-mode-info.md']);
+
+  expect(spec.inlineSections).toContainEqual(expect.stringContaining('## Shell Sandbox'));
 });
 
 it('buildPromptSpec always includes plan-mode-info in standard mode to keep system prompt cache-stable', () => {
@@ -87,16 +84,17 @@ it('buildPromptSpec uses lite base and skips worktree-hygiene fragment in lite m
   });
   expect(lite.basePromptFile).toBe('lite.md');
   expect(lite.fragmentFiles.includes('worktree-hygiene.md')).toBe(false);
-  // Dedicated search tool text was removed; inlineSections should be empty in lite mode.
-  expect(lite.inlineSections.length).toBe(0);
+  // Shell sandbox is added inline in lite mode (sandbox enabled by default).
+  expect(lite.inlineSections.length).toBe(1);
+  expect(lite.inlineSections[0]).toContain('## Shell Sandbox');
 });
 
-it('buildPromptSpec excludes shell-sandbox fragment when sandbox is disabled', () => {
+it('buildPromptSpec excludes shell-sandbox when sandbox is disabled', () => {
   const spec = buildPromptSpec({
     model: 'gpt-4o',
     liteMode: false,
     sandboxEnabled: false,
   });
-  expect(spec.fragmentFiles.includes('shell-sandbox.md')).toBe(false);
+  expect(spec.inlineSections.some((s) => s.includes('## Shell Sandbox'))).toBe(false);
   expect(spec.fragmentFiles.includes('worktree-hygiene.md')).toBe(true);
 });

@@ -2,6 +2,7 @@ import path from 'path';
 import { homedir } from 'os';
 import { z } from 'zod';
 import { getDiscoveredSkillRoots } from '../utils/skill-discovery-paths.js';
+import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
 
 /**
  * Resolves a relative path and ensures it's within the workspace
@@ -41,12 +42,10 @@ export function resolveWorkspacePath(
   let isInside = normalizedResolved === normalizedBaseDir || normalizedResolved.startsWith(basePrefix);
 
   if (!isInside) {
-    // Check if the path is in a safe temporary directory
+    // Check if the path is in the sandbox-specific temp directory.
+    // Only the app's own temp dir is allowed — not the entire /tmp tree.
     const isTempDir =
-      normalizedResolved === '/tmp' ||
-      normalizedResolved.startsWith('/tmp' + path.sep) ||
-      normalizedResolved === '/private/tmp' ||
-      normalizedResolved.startsWith('/private/tmp' + path.sep);
+      normalizedResolved === SANDBOX_TEMP_DIR || normalizedResolved.startsWith(SANDBOX_TEMP_DIR + path.sep);
 
     if (isTempDir) {
       isInside = true;

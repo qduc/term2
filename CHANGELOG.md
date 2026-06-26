@@ -1,3 +1,28 @@
+## [0.9.1] - 2026-06-26
+
+### Features
+- Add `/retry tool` command that rewinds to the last tool output, trims the trailing assistant/system UI tail, and replays the model from the preserved tool-result history
+- Redesign tool call display in UI
+- Add refresh functionality to model selection and input handling
+- Enhance `search_replace` with detailed command message formatting
+- Enhance `glob` tool to support absolute path patterns and improve error handling
+- Add sandbox read policy display to StatusBar component
+- Add line numbers to `read_file` tool output
+- Adjust `grep` and `glob` tool output to reduce confusion and improve clarity
+- Add sandbox XDG directory redirection
+- Improve sandbox prompts and clarify temp directory location in sandbox messages
+
+### Bug Fixes
+- Fix finished subagent messages retaining in dynamic rendering area causing flickering
+- Fix log files not being cleaned up properly
+- Fix next turn not working correctly after aborting
+- Fix lost user message after aborting
+- Fix stale images callback in InputBox component
+- Fix redundant marginY from CommandMessage tool panels
+- Fix UI not reflecting post-retry tool state
+
+---
+
 ## [0.9.0] - 2026-06-23
 
 ### Features

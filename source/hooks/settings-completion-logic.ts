@@ -23,11 +23,7 @@ export function getSettingCategory(key: string): SettingsCategory {
     }
   }
 
-  if (key.toLowerCase().includes('subagent')) {
-    return findCategoryById('subagents');
-  }
-
-  return findCategoryById('advanced');
+  return findCategoryById('misc');
 }
 
 function categoryRank(key: string): number {

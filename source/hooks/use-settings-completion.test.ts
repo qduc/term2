@@ -249,24 +249,24 @@ it('getSettingCategory - groups settings by task-oriented menu tabs', () => {
   expect(categoryIds.has(getSettingCategory('app.planMode').id)).toBe(true);
 
   // Verify specific expected mappings for key settings
-  expect(getSettingCategory('agent.model').id).toBe('model');
-  expect(getSettingCategory('agent.mentorModel').id).toBe('model');
-  expect(getSettingCategory('shell.autoApproveMode').id).toBe('approvals');
-  expect(getSettingCategory('shell.timeout').id).toBe('shell');
-  expect(getSettingCategory('sandbox.enabled').id).toBe('shell');
-  expect(getSettingCategory('sandbox.readPolicy').id).toBe('shell');
-  expect(getSettingCategory('app.searchViaShell').id).toBe('search');
-  expect(getSettingCategory('agent.maxParallelToolCalls').id).toBe('advanced');
-  expect(getSettingCategory('agent.subagentWorkerModel').id).toBe('subagents');
-  expect(getSettingCategory('ui.pasteThreshold').id).toBe('uiLogging');
+  expect(getSettingCategory('agent.model').id).toBe('models');
+  expect(getSettingCategory('agent.mentorModel').id).toBe('models');
+  expect(getSettingCategory('shell.autoApproveMode').id).toBe('safety');
+  expect(getSettingCategory('shell.timeout').id).toBe('tools');
+  expect(getSettingCategory('sandbox.enabled').id).toBe('safety');
+  expect(getSettingCategory('sandbox.readPolicy').id).toBe('safety');
+  expect(getSettingCategory('app.searchViaShell').id).toBe('tools');
+  expect(getSettingCategory('agent.maxParallelToolCalls').id).toBe('misc');
+  expect(getSettingCategory('agent.subagentWorkerModel').id).toBe('models');
+  expect(getSettingCategory('ui.pasteThreshold').id).toBe('ui');
 });
 
 it('filterSettingsByCategory - limits visible settings to the active task tab', () => {
   const settings = [{ key: 'agent.model' }, { key: 'shell.timeout' }, { key: 'webSearch.provider' }];
 
-  const result = filterSettingsByCategory(settings, 'shell');
+  const result = filterSettingsByCategory(settings, 'tools');
 
-  expect(result.map((item) => item.key)).toEqual(['shell.timeout']);
+  expect(result.map((item) => item.key)).toEqual(['shell.timeout', 'webSearch.provider']);
 });
 
 // filterSettingsByQuery tests

@@ -12,13 +12,11 @@ export type SettingsCategory = {
 };
 
 export const SETTINGS_CATEGORIES: SettingsCategory[] = [
-  { id: 'model', label: 'Model & Reasoning' },
-  { id: 'subagents', label: 'Subagents' },
-  { id: 'approvals', label: 'Safety & Approvals' },
-  { id: 'shell', label: 'Shell Execution' },
-  { id: 'search', label: 'Search & Web' },
-  { id: 'uiLogging', label: 'UI & Logging' },
-  { id: 'advanced', label: 'Advanced' },
+  { id: 'models', label: 'Models' },
+  { id: 'safety', label: 'Safety' },
+  { id: 'tools', label: 'Tools' },
+  { id: 'ui', label: 'UI' },
+  { id: 'misc', label: 'Misc' },
 ];
 
 export const SETTING_DESCRIPTIONS: Record<string, string> = {
@@ -88,6 +86,9 @@ export const HIDDEN_SETTINGS = new Set<string>([
   SETTING_KEYS.SSH_PORT,
   SETTING_KEYS.SSH_USERNAME,
   SETTING_KEYS.SSH_REMOTE_DIR,
+  SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_PROVIDER,
+  SETTING_KEYS.AGENT_SUBAGENT_WORKER_PROVIDER,
+  SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_PROVIDER,
 ]);
 
 export const COMMON_SETTINGS: string[] = [
@@ -97,32 +98,40 @@ export const COMMON_SETTINGS: string[] = [
 ];
 
 export const CATEGORY_KEYS = {
-  model: new Set<string>([
+  models: new Set<string>([
     SETTING_KEYS.AGENT_MODEL,
     SETTING_KEYS.AGENT_REASONING_EFFORT,
     SETTING_KEYS.AGENT_TEMPERATURE,
     SETTING_KEYS.AGENT_MENTOR_MODEL,
     SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
     SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER,
+    SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_MODEL,
+    SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT,
+    SETTING_KEYS.AGENT_SUBAGENT_WORKER_MODEL,
+    SETTING_KEYS.AGENT_SUBAGENT_WORKER_REASONING_EFFORT,
+    SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_MODEL,
+    SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_REASONING_EFFORT,
   ]),
-  modes: new Set<string>([
-    SETTING_KEYS.APP_PLAN_MODE,
-    SETTING_KEYS.APP_ORCHESTRATOR_MODE,
-    SETTING_KEYS.APP_MENTOR_MODE,
-    SETTING_KEYS.APP_LITE_MODE,
-  ]),
-  approvals: new Set<string>([SETTING_KEYS.SHELL_AUTO_APPROVE_MODE, SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL]),
-  shell: new Set<string>([
-    SETTING_KEYS.SHELL_TIMEOUT,
-    SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
-    SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
-    SETTING_KEYS.SHELL_USE_RTK_COMPRESSION,
+  safety: new Set<string>([
+    SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
+    SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
     SETTING_KEYS.SANDBOX_ENABLED,
     SETTING_KEYS.SANDBOX_READ_POLICY,
     SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA,
   ]),
-  search: new Set<string>([SETTING_KEYS.WEB_SEARCH_PROVIDER, SETTING_KEYS.APP_SEARCH_VIA_SHELL]),
-  uiLogging: new Set<string>([
+  tools: new Set<string>([
+    SETTING_KEYS.SHELL_TIMEOUT,
+    SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
+    SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
+    SETTING_KEYS.SHELL_USE_RTK_COMPRESSION,
+    SETTING_KEYS.WEB_SEARCH_PROVIDER,
+    SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY,
+    SETTING_KEYS.WEB_SEARCH_EXA_API_KEY,
+    SETTING_KEYS.APP_SEARCH_VIA_SHELL,
+    SETTING_KEYS.TOOLS_ENABLE_EDIT_HEALING,
+    SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL,
+  ]),
+  ui: new Set<string>([
     SETTING_KEYS.UI_HISTORY_SIZE,
     SETTING_KEYS.UI_PASTE_THRESHOLD,
     SETTING_KEYS.UI_DISPLAY_MODE,
@@ -134,11 +143,4 @@ export const CATEGORY_KEYS = {
   ]),
 } as const;
 
-export const CATEGORY_ORDER: Array<keyof typeof CATEGORY_KEYS> = [
-  'model',
-  'modes',
-  'approvals',
-  'shell',
-  'search',
-  'uiLogging',
-];
+export const CATEGORY_ORDER: Array<keyof typeof CATEGORY_KEYS> = ['models', 'safety', 'tools', 'ui'];

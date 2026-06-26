@@ -3,31 +3,23 @@ import { SETTINGS_CATEGORIES } from './settings-completion-config.js';
 import { clampIndex, filterSettingsByCategory, getSettingCategory } from './settings-completion-logic.js';
 
 it('settings completion config exposes stable category ids', () => {
-  expect(SETTINGS_CATEGORIES.map((item) => item.id)).toEqual([
-    'model',
-    'subagents',
-    'approvals',
-    'shell',
-    'search',
-    'uiLogging',
-    'advanced',
-  ]);
+  expect(SETTINGS_CATEGORIES.map((item) => item.id)).toEqual(['models', 'safety', 'tools', 'ui', 'misc']);
 });
 
 it('getSettingCategory maps known keys to expected categories', () => {
-  expect(getSettingCategory('agent.model').id).toBe('model');
-  expect(getSettingCategory('shell.timeout').id).toBe('shell');
-  expect(getSettingCategory('agent.subagentWorkerModel').id).toBe('subagents');
-  expect(getSettingCategory('totally.unknown').id).toBe('advanced');
+  expect(getSettingCategory('agent.model').id).toBe('models');
+  expect(getSettingCategory('shell.timeout').id).toBe('tools');
+  expect(getSettingCategory('agent.subagentWorkerModel').id).toBe('models');
+  expect(getSettingCategory('totally.unknown').id).toBe('misc');
 });
 
 it('filterSettingsByCategory keeps only entries from the requested category', () => {
   const result = filterSettingsByCategory(
     [{ key: 'agent.model' }, { key: 'shell.timeout' }, { key: 'webSearch.provider' }],
-    'shell',
+    'tools',
   );
 
-  expect(result).toEqual([{ key: 'shell.timeout' }]);
+  expect(result).toEqual([{ key: 'shell.timeout' }, { key: 'webSearch.provider' }]);
 });
 
 it('clampIndex keeps the index in range', () => {

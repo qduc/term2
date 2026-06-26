@@ -344,6 +344,25 @@ it.sequential('gracefully degrades on write errors', async () => {
   expect(true).toBe(true);
 });
 
+it.sequential('uses a stable audit file path for rotated app logs', async () => {
+  const logDir = getTestLogDir();
+  const logger = new LoggingService({
+    logDir,
+    disableLogging: false,
+    logLevel: 'info',
+  });
+
+  logger.info('write to initialize rotate metadata', { eventType: 'test.rotate.audit' });
+
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  const files = fs.readdirSync(logDir);
+  expect(files.includes('term2-audit.json')).toBe(true);
+
+  const hashedAuditFiles = files.filter((name) => /^\.[a-f0-9]+-audit\.json$/i.test(name));
+  expect(hashedAuditFiles.length).toBe(0);
+});
+
 it.sequential('emits canonical contract fields on logs', async () => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({

@@ -95,6 +95,7 @@ export class LoggingService {
 
     // Determine log directory
     const finalLogDir = logDir || path.join(envPaths('term2').log, 'logs');
+    const mainLogAuditFile = path.join(finalLogDir, 'term2-audit.json');
     this.providerTrafficDir = path.join(finalLogDir, 'provider-traffic');
     this.evaluatorTrafficDir = path.join(finalLogDir, 'evaluator-traffic');
     this.providerTrafficStore = new ProviderTrafficArtifactStore({ rootDir: this.providerTrafficDir });
@@ -129,6 +130,7 @@ export class LoggingService {
           datePattern: 'YYYY-MM-DD',
           maxSize: '10m',
           maxFiles: `${LOG_RETENTION_DAYS}d`,
+          auditFile: mainLogAuditFile,
           format: winston.format.json(),
           level: logLevel,
         });

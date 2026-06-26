@@ -1,4 +1,4 @@
-import React, { FC, useState, useEffect, useMemo } from 'react';
+import React, { FC, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { generateDiff } from '../../utils/output/diff.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
@@ -9,18 +9,19 @@ import {
   getFirstParagraph,
   getMatchCount,
   isSearchLikeTool,
-  parseCodeContextSearchOutput,
   parseCodeOutlineOutput,
   parseFindFilesOutput,
-  parseGrepOutput,
-  parseReadFileOutput,
   parseSubagentOutput,
-  parseWebFetchOutput,
-  parseWebSearchOutput,
   stripRgErrorLines,
 } from './command-message-helpers.js';
 import { COLOR_TOOL_OUTPUT, COLOR_MUTED as THEME_COLOR_MUTED } from '../theme.js';
 import DiffView from '../layout/DiffView.js';
+import { useCommandVisibility } from './useCommandVisibility.js';
+import ReadFileRenderer from './ReadFileRenderer.js';
+import GrepRenderer from './GrepRenderer.js';
+import WebSearchRenderer from './WebSearchRenderer.js';
+import WebFetchRenderer from './WebFetchRenderer.js';
+import CodeContextSearchRenderer from './CodeContextSearchRenderer.js';
 
 // --- Command Message Theme Colors ---
 // Customize these values to change the color scheme per theme.
@@ -79,8 +80,7 @@ const CommandMessage: FC<Props> = ({
   textColor,
   isSubagent = false,
 }) => {
-  const isRunning = status === 'pending' || status === 'running';
-  const [isVisible, setIsVisible] = useState(!isRunning);
+  const { isVisible, isRunning } = useCommandVisibility(status);
 
   const { output, runtime } = useMemo(() => {
     const isShell = !toolName || toolName === 'shell';
@@ -254,23 +254,6 @@ const CommandMessage: FC<Props> = ({
         </Text>
       </Box>
     ) : null;
-
-  useEffect(() => {
-    if (!isRunning) {
-      if (!isVisible) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- show-after-delay is an inherent side effect
-        setIsVisible(true);
-      }
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      setIsVisible(true);
-    }, 1000);
-
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- isVisible drives show-after-delay which is inherently side-effect; adding isVisible would cause a re-render loop
-  }, [isRunning]);
 
   if (!isVisible && !isSubagent) {
     return null;
@@ -469,172 +452,13 @@ const CommandMessage: FC<Props> = ({
   // Standard mode custom tool renderers
   if (displayMode === 'standard' && success !== false && !failureReason && !isRunning) {
     if (toolName === 'read_file' || toolName === 'view_file') {
-      const parsed = parseReadFileOutput(output) as any;
-      if (parsed) {
-        const { filePath: _filePath, totalLines: _totalLines, startLine, endLine: _endLine, contentLines } = parsed;
-        const maxContentLines = 10;
-        const displayLines: { lineNum: number; content: string }[] = [];
-        let truncatedCount = 0;
-
-        if (contentLines.length > maxContentLines + 1) {
-          const topCount = maxContentLines - 1;
-          for (let i = 0; i < topCount; i++) {
-            displayLines.push({ lineNum: startLine + i, content: contentLines[i] ?? '' });
-          }
-          truncatedCount = contentLines.length - topCount - 1;
-          displayLines.push({ lineNum: -1, content: `... (${truncatedCount} lines truncated) ...` });
-          displayLines.push({
-            lineNum: startLine + contentLines.length - 1,
-            content: contentLines[contentLines.length - 1] ?? '',
-          });
-        } else {
-          contentLines.forEach((content: string, i: number) => {
-            displayLines.push({ lineNum: startLine + i, content });
-          });
-        }
-
-        return (
-          <Box flexDirection="column">
-            {renderStandardHeader()}
-            <Box flexDirection="column" borderStyle="single" borderColor={COLOR_MUTED} paddingX={1} marginTop={1}>
-              {displayLines.map((line, idx) => {
-                if (line.lineNum === -1) {
-                  return (
-                    <Box key={idx} flexDirection="row">
-                      <Box width={8} flexShrink={0}>
-                        <Text color={COLOR_MUTED} dimColor>
-                          {'      │ '}
-                        </Text>
-                      </Box>
-                      <Box flexGrow={1}>
-                        <Text color={COLOR_MUTED} dimColor>
-                          {line.content}
-                        </Text>
-                      </Box>
-                    </Box>
-                  );
-                }
-                const lineNumStr = String(line.lineNum).padStart(5, ' ');
-                return (
-                  <Box key={idx} flexDirection="row">
-                    <Box width={8} flexShrink={0}>
-                      <Text color={COLOR_MUTED} dimColor>
-                        {lineNumStr} │{' '}
-                      </Text>
-                    </Box>
-                    <Box flexGrow={1}>
-                      <Text color={COLOR_TOOL_OUTPUT}>{line.content}</Text>
-                    </Box>
-                  </Box>
-                );
-              })}
-            </Box>
-          </Box>
-        );
-      }
+      const result = <ReadFileRenderer output={output} renderStandardHeader={renderStandardHeader} />;
+      if (result) return result;
     }
 
     if (toolName === 'grep') {
-      const parsed = parseGrepOutput(output) as any;
-      if (parsed) {
-        const { matchesByFile, note } = parsed;
-        const filePaths = Object.keys(matchesByFile);
-
-        const MAX_DISPLAY_MATCHES = 10;
-        let displayedMatchesCount = 0;
-        let truncatedMatchesCount = 0;
-        let truncatedFilesCount = 0;
-
-        const filesToRender: {
-          filePath: string;
-          matches: any[];
-          truncatedCount: number;
-        }[] = [];
-
-        for (const filePath of filePaths) {
-          const matches = matchesByFile[filePath] ?? [];
-          if (displayedMatchesCount >= MAX_DISPLAY_MATCHES) {
-            truncatedMatchesCount += matches.length;
-            truncatedFilesCount++;
-          } else {
-            const remainingSlots = MAX_DISPLAY_MATCHES - displayedMatchesCount;
-            if (matches.length <= remainingSlots) {
-              filesToRender.push({
-                filePath,
-                matches,
-                truncatedCount: 0,
-              });
-              displayedMatchesCount += matches.length;
-            } else {
-              filesToRender.push({
-                filePath,
-                matches: matches.slice(0, remainingSlots),
-                truncatedCount: matches.length - remainingSlots,
-              });
-              displayedMatchesCount += remainingSlots;
-              truncatedMatchesCount += matches.length - remainingSlots;
-            }
-          }
-        }
-
-        return (
-          <Box flexDirection="column">
-            <Box marginBottom={1}>{renderStandardHeader()}</Box>
-            {filesToRender.map((file, fileIdx) => {
-              if (file.matches.length === 0) return null;
-              return (
-                <Box key={fileIdx} flexDirection="column" marginBottom={1}>
-                  <Box>
-                    <Text color={COLOR_INFO} bold>
-                      {file.filePath}
-                    </Text>
-                    <Text color={COLOR_MUTED}>
-                      {' '}
-                      ({file.matches.length} match{file.matches.length !== 1 ? 'es' : ''}
-                      {file.truncatedCount > 0 ? `, ${file.truncatedCount} truncated` : ''})
-                    </Text>
-                  </Box>
-                  <Box flexDirection="column" paddingLeft={2}>
-                    {file.matches.map((match: any, matchIdx: number) => {
-                      const lineNumStr = String(match.lineNum).padStart(4, ' ');
-                      return (
-                        <Text key={matchIdx}>
-                          <Text color={COLOR_MUTED} dimColor>
-                            {lineNumStr}:{' '}
-                          </Text>
-                          <Text color={COLOR_TOOL_OUTPUT}>{match.content}</Text>
-                        </Text>
-                      );
-                    })}
-                    {file.truncatedCount > 0 && (
-                      <Text color={COLOR_MUTED} dimColor>
-                        ... ({file.truncatedCount} more match{file.truncatedCount !== 1 ? 'es' : ''} truncated in this
-                        file) ...
-                      </Text>
-                    )}
-                  </Box>
-                </Box>
-              );
-            })}
-            {truncatedMatchesCount > 0 && (
-              <Box marginTop={1}>
-                <Text color={COLOR_WARNING}>
-                  ... ({truncatedMatchesCount} match{truncatedMatchesCount !== 1 ? 'es' : ''}
-                  {truncatedFilesCount > 0
-                    ? ` in ${truncatedFilesCount} more file${truncatedFilesCount !== 1 ? 's' : ''}`
-                    : ''}{' '}
-                  truncated) ...
-                </Text>
-              </Box>
-            )}
-            {note && (
-              <Box marginTop={1}>
-                <Text color={COLOR_WARNING}>{note}</Text>
-              </Box>
-            )}
-          </Box>
-        );
-      }
+      const result = <GrepRenderer output={output} renderStandardHeader={renderStandardHeader} />;
+      if (result) return result;
     }
 
     if (toolName === 'glob') {
@@ -694,117 +518,13 @@ const CommandMessage: FC<Props> = ({
     }
 
     if (toolName === 'web_search') {
-      const parsed = parseWebSearchOutput(output) as any;
-      if (parsed) {
-        const { answer, results } = parsed;
-        return (
-          <Box flexDirection="column">
-            <Box marginBottom={1}>{renderStandardHeader()}</Box>
-            {answer && (
-              <Box flexDirection="column" borderStyle="round" borderColor={COLOR_WARNING} paddingX={1} marginBottom={1}>
-                <Text color={COLOR_WARNING} bold>
-                  Answer Summary
-                </Text>
-                <Text color={COLOR_TOOL_OUTPUT}>{answer}</Text>
-              </Box>
-            )}
-            {results && results.length > 0 && (
-              <Box flexDirection="column">
-                <Text color={COLOR_INFO} bold>
-                  Search Results:
-                </Text>
-                {results.map((res: any, idx: number) => (
-                  <Box key={idx} flexDirection="column" marginTop={1} paddingLeft={2}>
-                    <Text bold color={COLOR_CONTENT}>
-                      {idx + 1}. {res.title}
-                    </Text>
-                    <Text color={COLOR_LINK} underline>
-                      {res.url}
-                    </Text>
-                    {res.published && (
-                      <Text color={COLOR_MUTED} dimColor>
-                        Published: {res.published}
-                      </Text>
-                    )}
-                    <Box marginTop={1}>
-                      <Text color={COLOR_TOOL_OUTPUT}>{res.content}</Text>
-                    </Box>
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </Box>
-        );
-      }
+      const result = <WebSearchRenderer output={output} renderStandardHeader={renderStandardHeader} />;
+      if (result) return result;
     }
 
     if (toolName === 'web_fetch') {
-      const parsed = parseWebFetchOutput(output) as any;
-      if (parsed) {
-        const { title, url, toc, tempFile, notes, content } = parsed;
-        const maxLines = 15;
-        const contentLines = content.split('\n');
-        let displayContent = content;
-        let truncatedCount = 0;
-        if (contentLines.length > maxLines + 1) {
-          const firstPart = contentLines.slice(0, maxLines).join('\n');
-          const lastLine = contentLines[contentLines.length - 1];
-          truncatedCount = contentLines.length - maxLines - 1;
-          displayContent = `${firstPart}\n\n... (${truncatedCount} lines of content truncated for preview) ...\n\n${lastLine}`;
-        }
-        return (
-          <Box flexDirection="column">
-            {renderStandardHeader()}
-            {title && (
-              <Box paddingLeft={2}>
-                <Text color={COLOR_CONTENT} bold>
-                  {title}
-                </Text>
-              </Box>
-            )}
-            <Box paddingLeft={2}>
-              <Text color={COLOR_LINK} underline>
-                {url}
-              </Text>
-            </Box>
-            {toc && (
-              <Box
-                flexDirection="column"
-                borderStyle="classic"
-                borderColor={COLOR_MUTED}
-                paddingX={1}
-                marginY={1}
-                width={50}
-              >
-                <Text color={COLOR_WARNING} bold>
-                  Table of Contents
-                </Text>
-                <Text color={COLOR_MUTED}>{toc}</Text>
-              </Box>
-            )}
-            {content && (
-              <Box flexDirection="column" borderStyle="single" borderColor={COLOR_MUTED} paddingX={1} marginTop={1}>
-                <Text color={COLOR_TOOL_OUTPUT}>{displayContent}</Text>
-              </Box>
-            )}
-            {tempFile && (
-              <Box marginTop={1}>
-                <Text color={COLOR_WARNING}>
-                  Full content saved to:{' '}
-                  <Text bold color={COLOR_CONTENT}>
-                    {tempFile}
-                  </Text>
-                </Text>
-              </Box>
-            )}
-            {notes && (
-              <Box marginTop={0.5}>
-                <Text color={COLOR_WARNING}>Warning: {notes}</Text>
-              </Box>
-            )}
-          </Box>
-        );
-      }
+      const result = <WebFetchRenderer output={output} renderStandardHeader={renderStandardHeader} />;
+      if (result) return result;
     }
 
     if (toolName === 'ask_mentor') {
@@ -898,70 +618,8 @@ const CommandMessage: FC<Props> = ({
     }
 
     if (toolName === 'code_context_search') {
-      const parsed = parseCodeContextSearchOutput(output) as any;
-      if (parsed) {
-        const { queryType } = parsed;
-        if (queryType === 'related') {
-          const { target: _target, relatedFiles } = parsed;
-          return (
-            <Box flexDirection="column">
-              <Box marginBottom={1}>{renderStandardHeader()}</Box>
-              {!relatedFiles || relatedFiles.length === 0 ? (
-                <Box paddingLeft={2}>
-                  <Text color={COLOR_MUTED}>No related files found.</Text>
-                </Box>
-              ) : (
-                <Box flexDirection="column" paddingLeft={2}>
-                  {relatedFiles.map((f: any, idx: number) => (
-                    <Box key={idx} flexDirection="column" marginBottom={0.5}>
-                      <Text color={COLOR_CONTENT}>{f.filePath}</Text>
-                      <Text color={COLOR_MUTED} dimColor>
-                        {' '}
-                        Relations: {f.relations}
-                      </Text>
-                    </Box>
-                  ))}
-                </Box>
-              )}
-            </Box>
-          );
-        } else {
-          const { symbol: _symbol, results } = parsed;
-          return (
-            <Box flexDirection="column">
-              <Box marginBottom={1}>{renderStandardHeader()}</Box>
-              {!results || results.length === 0 ? (
-                <Box paddingLeft={2}>
-                  <Text color={COLOR_MUTED}>No symbol declarations found.</Text>
-                </Box>
-              ) : (
-                <Box flexDirection="column" paddingLeft={2}>
-                  {results.map((res: any, idx: number) => (
-                    <Text key={idx}>
-                      <Text color={COLOR_CONTENT}>
-                        {res.filePath}:{res.lineNum}
-                      </Text>
-                      <Text color={COLOR_MUTED} dimColor>
-                        {' '}
-                        │{' '}
-                      </Text>
-                      <Text color={COLOR_WARNING}>
-                        {res.kind} {res.name}
-                      </Text>
-                      {res.exported && (
-                        <Text color={COLOR_SUCCESS} dimColor>
-                          {' '}
-                          (exported)
-                        </Text>
-                      )}
-                    </Text>
-                  ))}
-                </Box>
-              )}
-            </Box>
-          );
-        }
-      }
+      const result = <CodeContextSearchRenderer output={output} renderStandardHeader={renderStandardHeader} />;
+      if (result) return result;
     }
   }
 

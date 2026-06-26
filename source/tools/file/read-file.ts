@@ -28,12 +28,12 @@ const readFileParametersSchema = z.object({
     .int()
     .positive()
     .optional()
-    .describe('Starting line number (1-indexed). If not provided, reads from the beginning.'),
+    .describe('Starting line number (1-indexed). Optional, specify when you know the exact range to read.'),
   end_line: relaxedNumber
     .int()
     .positive()
     .optional()
-    .describe('Ending line number (1-indexed, inclusive). If not provided, reads to the end.'),
+    .describe('Ending line number (1-indexed, inclusive). Optional, specify when you know the exact range to read.'),
 });
 
 export type ReadFileToolParams = z.infer<typeof readFileParametersSchema>;

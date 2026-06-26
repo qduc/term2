@@ -202,6 +202,7 @@ export function createConversationEventHandler(
   return (event: ConversationEvent) => {
     switch (event.type) {
       case 'text_delta': {
+        flushReasoning();
         state.accumulatedText += event.delta;
         const commitOffset = findMarkdownCommitOffset(state.accumulatedText, state.flushedTextLength);
         if (commitOffset > state.flushedTextLength) {

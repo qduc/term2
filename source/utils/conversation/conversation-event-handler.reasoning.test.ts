@@ -92,6 +92,39 @@ it('reasoning_delta: does not finalize until a paragraph boundary exists', () =>
   expect(deps.calls.reasoningPushes).toEqual(['Single paragraph still growing']);
 });
 
+it('text_delta: finalizes a live reasoning tail before streaming assistant text', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  state.currentReasoningMessageId = 'active-reasoning';
+  state.accumulatedReasoningText = 'Final reasoning tail';
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({ type: 'text_delta', delta: 'Answer starts.' } as ConversationEvent);
+
+  expect(deps.calls.reasoningFlushed).toBe(true);
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
+  const next = deps.calls.setMessagesCalls[0]([
+    {
+      id: 'active-reasoning',
+      sender: 'reasoning',
+      text: 'Final reasoning tail',
+    },
+  ]);
+
+  expect(next).toEqual([
+    {
+      id: 'active-reasoning',
+      sender: 'reasoning',
+      status: 'finalized',
+      text: 'Final reasoning tail',
+    },
+  ]);
+  expect(state.currentReasoningMessageId).toBeNull();
+  expect(state.accumulatedReasoningText).toBe('');
+  expect(state.flushedReasoningLength).toBe('Final reasoning tail'.length);
+  expect(deps.calls.botResponsePushes).toEqual(['Answer starts.']);
+});
+
 it('reasoning_delta: finalizes an existing live reasoning message in place before streaming a new tail', () => {
   const deps = createMockDeps();
   const state = createStreamingState();

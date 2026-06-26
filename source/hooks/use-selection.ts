@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
-import { clampIndex } from './use-settings-completion.js';
+import { clampIndex } from './settings-completion-logic.js';
 
 export function useSelection<T>(items: T[], options?: { isInactive?: (item: T) => boolean }) {
   const [, forceUpdate] = useReducer((n: number) => n + 1, 0);

@@ -1,3 +1,15 @@
+## [0.9.2] - 2026-06-26
+
+### Features
+- Allow enabling outbound networking for sandboxed shell commands via settings
+
+### Bug Fixes
+- Fix reasoning message status not supporting 'streaming' state; ensures finalization and teardown run even with empty text buffer
+- Fix reasoning not finalizing when text delta starts
+- Fix memory leak
+
+---
+
 ## [0.9.1] - 2026-06-26
 
 ### Features

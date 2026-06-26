@@ -44,6 +44,7 @@ vi.mock('./components/layout/BottomArea.js', () => ({
 
 vi.mock('./components/message/MessageList.js', () => ({
   default: () => null,
+  detectStaticCommitBlocker: vi.fn(() => null),
   EMPTY_RESTORED_STATIC_MESSAGE_IDS: [],
   MESSAGE_HORIZONTAL_PADDING: 0,
 }));
@@ -91,6 +92,7 @@ vi.mock('./hooks/use-conversation.js', () => ({
     clearConversation: mocks.clearConversation,
     stopProcessing: mocks.stopProcessing,
     undoLastUserMessage: mocks.undoLastUserMessage,
+    retryLastToolOutput: vi.fn(async () => false),
     getUserMessages: mocks.getUserMessages,
     undoToUserMessage: mocks.undoToUserMessage,
     setModel: mocks.setModel,
@@ -153,6 +155,7 @@ vi.mock('./hooks/use-handoff-flow.js', () => ({
     declineHandoff: vi.fn(async () => {}),
     cancelHandoff: vi.fn(),
     submitHandoffInput: vi.fn(async () => false),
+    completeHandoffWithEffort: vi.fn(async () => {}),
     confirmStandardMode: vi.fn(async () => {}),
     declineStandardMode: vi.fn(async () => {}),
   }),

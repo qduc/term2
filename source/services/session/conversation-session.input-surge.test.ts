@@ -245,10 +245,14 @@ it('handleApprovalDecision allows the next turn after a very large appended tool
   expect(followUpResult.finalText).toBe('follow-up-final');
 });
 
-it('abort-resolution keeps normal follow-up input allowed after store growth', async () => {
+it('abandoned approval keeps replacement input and follow-up input as normal turns after store growth', async () => {
   const { bundle } = createSessionHarness({
-    startStreams: [createInterruptedStream(), createTerminalStream(6, 'follow-up')],
-    continuationStreams: [createTerminalStream(800, 'abort-resolved')],
+    startStreams: [
+      createInterruptedStream(),
+      createTerminalStream(800, 'replacement'),
+      createTerminalStream(6, 'follow-up'),
+    ],
+    continuationStreams: [],
   });
 
   seedInputSurgeBaseline(bundle);
@@ -261,16 +265,20 @@ it('abort-resolution keeps normal follow-up input allowed after store growth', a
   const resolvedResult = expectResponse(
     await bundle.terminalAdapter.sendMessage('replace the pending approval with new input'),
   );
-  expect(resolvedResult.finalText).toBe('abort-resolved-final');
+  expect(resolvedResult.finalText).toBe('replacement-final');
 
-  const followUpResult = expectResponse(await bundle.terminalAdapter.sendMessage('next turn after abort resolution'));
+  const followUpResult = expectResponse(await bundle.terminalAdapter.sendMessage('next turn after abandoned approval'));
   expect(followUpResult.finalText).toBe('follow-up-final');
 });
 
-it('abort-resolution allows the next turn after a very large appended tool result', async () => {
+it('abandoned approval allows the next turn after a very large replacement result', async () => {
   const { bundle } = createSessionHarness({
-    startStreams: [createInterruptedStream(), createTerminalStream(3, 'follow-up')],
-    continuationStreams: [createTerminalStreamWithLargeToolResult(120_000, 2, 'start a tool run that will be aborted')],
+    startStreams: [
+      createInterruptedStream(),
+      createTerminalStreamWithLargeToolResult(120_000, 2, 'replacement'),
+      createTerminalStream(3, 'follow-up'),
+    ],
+    continuationStreams: [],
   });
 
   const firstResult = expectApprovalRequired(
@@ -283,10 +291,10 @@ it('abort-resolution allows the next turn after a very large appended tool resul
   const resolvedResult = expectResponse(
     await bundle.terminalAdapter.sendMessage('replace the pending approval with new input'),
   );
-  expect(resolvedResult.finalText).toBe('start a tool run that will be aborted-final');
+  expect(resolvedResult.finalText).toBe('replacement-final');
 
   const followUpResult = expectResponse(
-    await bundle.terminalAdapter.sendMessage('next turn after aborted huge tool result'),
+    await bundle.terminalAdapter.sendMessage('next turn after abandoned approval with huge replacement result'),
   );
   expect(followUpResult.finalText).toBe('follow-up-final');
 });

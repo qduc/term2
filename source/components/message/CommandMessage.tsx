@@ -471,7 +471,7 @@ const CommandMessage: FC<Props> = ({
     if (toolName === 'read_file' || toolName === 'view_file') {
       const parsed = parseReadFileOutput(output) as any;
       if (parsed) {
-        const { filePath, totalLines, startLine, endLine, contentLines } = parsed;
+        const { filePath: _filePath, totalLines: _totalLines, startLine, endLine: _endLine, contentLines } = parsed;
         const maxContentLines = 10;
         const displayLines: { lineNum: number; content: string }[] = [];
         let truncatedCount = 0;
@@ -664,8 +664,8 @@ const CommandMessage: FC<Props> = ({
     if (toolName === 'run_subagent') {
       const parsed = parseSubagentOutput(output, toolArgs) as any;
       if (parsed) {
-        const { role, status, toolsUsed, filesChanged, mainText } = parsed;
-        const statusColor = status === 'completed' ? COLOR_SUCCESS : status === 'failed' ? COLOR_ERROR : COLOR_WARNING;
+        const { role: _role, status, toolsUsed, filesChanged, mainText } = parsed;
+        const _statusColor = status === 'completed' ? COLOR_SUCCESS : status === 'failed' ? COLOR_ERROR : COLOR_WARNING;
         return (
           <Box flexDirection="column">
             {renderStandardHeader()}
@@ -849,7 +849,7 @@ const CommandMessage: FC<Props> = ({
     if (toolName === 'read_code_outline') {
       const parsed = parseCodeOutlineOutput(output) as any;
       if (parsed) {
-        const { filePath, lang, imports, exports, decls } = parsed;
+        const { filePath: _filePath, lang: _lang, imports, exports, decls } = parsed;
         return (
           <Box flexDirection="column">
             <Box marginBottom={1}>{renderStandardHeader()}</Box>
@@ -902,7 +902,7 @@ const CommandMessage: FC<Props> = ({
       if (parsed) {
         const { queryType } = parsed;
         if (queryType === 'related') {
-          const { target, relatedFiles } = parsed;
+          const { target: _target, relatedFiles } = parsed;
           return (
             <Box flexDirection="column">
               <Box marginBottom={1}>{renderStandardHeader()}</Box>
@@ -926,7 +926,7 @@ const CommandMessage: FC<Props> = ({
             </Box>
           );
         } else {
-          const { symbol, results } = parsed;
+          const { symbol: _symbol, results } = parsed;
           return (
             <Box flexDirection="column">
               <Box marginBottom={1}>{renderStandardHeader()}</Box>

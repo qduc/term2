@@ -145,8 +145,9 @@ else
     CHANGELOG_DONE=false
     NPM_DONE=false
 
-    # 2.5 Run tests and build to ensure health
-    echo -e "${BLUE}Running tests and building to ensure health...${NC}"
+    # 2.5 Run lint, tests, and build to ensure health
+    echo -e "${BLUE}Running lint, tests, and build to ensure health...${NC}"
+    pnpm lint
     pnpm run build
     pnpm test
 

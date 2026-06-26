@@ -97,12 +97,11 @@ export function createConversationEventHandler(
   };
 
   const flushReasoning = () => {
-    if (!state.accumulatedReasoningText.trim()) {
-      return;
+    if (state.accumulatedReasoningText.trim()) {
+      reasoningUpdater.flush();
+      state.flushedReasoningLength += state.accumulatedReasoningText.length;
     }
 
-    reasoningUpdater.flush();
-    state.flushedReasoningLength += state.accumulatedReasoningText.length;
     markCurrentReasoningFinalized();
     state.accumulatedReasoningText = '';
     state.currentReasoningMessageId = null;

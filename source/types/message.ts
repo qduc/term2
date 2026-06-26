@@ -38,7 +38,7 @@ export interface ReasoningMessage {
   id: string;
   sender: 'reasoning';
   text: string;
-  status?: 'finalized';
+  status?: 'streaming' | 'finalized';
 }
 
 export interface SubagentActivityMessage {

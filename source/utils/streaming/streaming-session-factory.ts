@@ -92,6 +92,7 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
       const reasoningMessage: ReasoningMessage = {
         id: newId,
         sender: 'reasoning',
+        status: 'streaming',
         text: newReasoningText,
       };
       return deps.trimMessages([...prev, reasoningMessage]);

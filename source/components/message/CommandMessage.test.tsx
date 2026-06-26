@@ -1261,6 +1261,23 @@ it('CommandMessage renders failed status without success/failureReason as ✖ wh
   expect(lines[0]!.includes('✖')).toBe(true);
 });
 
+it('CommandMessage renders aborted status as ✖ when isSubagent is true', async () => {
+  const props = {
+    command: 'shell npm test',
+    toolName: 'shell',
+    status: 'aborted' as const,
+    displayMode: 'concise' as const,
+    isSubagent: true,
+  };
+
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  const lines = output.trim().split('\n');
+  expect(lines.length, `Expected exactly 1 line, got: ${output}`).toBe(1);
+  expect(lines[0]!.includes('✖')).toBe(true);
+});
+
 it('CommandMessage renders approval rejection with ✖ when isSubagent is true', async () => {
   const props = {
     command: 'shell rm -rf /',

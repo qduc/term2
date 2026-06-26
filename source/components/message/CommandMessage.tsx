@@ -2,6 +2,7 @@ import React, { FC, useState, useEffect, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { generateDiff } from '../../utils/output/diff.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
+import type { CommandMessage as CommandMessageData } from '../../tools/types.js';
 import {
   countDiffStats,
   formatToolArgs,
@@ -35,7 +36,7 @@ const COLOR_SPECIAL = 'magenta';
 type Props = {
   command: string;
   output?: string;
-  status?: 'pending' | 'running' | 'completed' | 'failed';
+  status?: CommandMessageData['status'];
   success?: boolean | null;
   failureReason?: string;
   toolName?: string;
@@ -277,7 +278,12 @@ const CommandMessage: FC<Props> = ({
 
   if (displayMode === 'concise') {
     if (isSubagent) {
-      const isFailed = status === 'failed' || isApprovalRejection || success === false || Boolean(failureReason);
+      const isFailed =
+        status === 'failed' ||
+        status === 'aborted' ||
+        isApprovalRejection ||
+        success === false ||
+        Boolean(failureReason);
       const statusChar = isFailed ? '✖' : isRunning ? '▶' : '✔';
       const actionText = isFailed ? command : displayAction;
       return (

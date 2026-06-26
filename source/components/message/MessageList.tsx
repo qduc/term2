@@ -73,7 +73,7 @@ const canRenderStatically = (message: MessageLike) => {
   }
 
   if (message.sender === 'subagent') {
-    return false;
+    return message.status === 'completed' || message.status === 'failed' || message.status === 'cancelled';
   }
 
   if (message.sender === 'bot') {

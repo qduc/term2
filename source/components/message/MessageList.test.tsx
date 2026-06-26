@@ -423,6 +423,28 @@ it.sequential('splitStaticHistory keeps completed commands behind an earlier run
   expect(history.some((message) => message.id === 'completed-command')).toBe(false);
 });
 
+it.sequential('splitStaticHistory moves completed subagent activity to static history', async () => {
+  const messages = [
+    { id: 'older', sender: 'bot', text: 'older', status: 'finalized' },
+    {
+      id: 'completed-subagent',
+      sender: 'subagent',
+      status: 'completed',
+      agentId: 'agent-1',
+      role: 'worker',
+      task: 'inspect the module',
+      finalText: 'done',
+      tools: ['read_file'],
+    },
+    { id: 'after', sender: 'bot', text: 'after', status: 'finalized' },
+  ];
+
+  const { history, active } = splitStaticHistory(messages);
+
+  expect(history.map((message) => message.id)).toEqual(['older', 'completed-subagent', 'after']);
+  expect(active).toEqual([]);
+});
+
 it.sequential('splitStaticHistory keeps bot text before a running command active', async () => {
   const messages = [
     { id: 'older', sender: 'bot', text: 'older', status: 'finalized' },

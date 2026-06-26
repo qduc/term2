@@ -4,7 +4,7 @@ import type { ApprovalPresentationCapability } from './tool-capabilities.js';
 export interface CommandMessage {
   id: string;
   sender: 'command';
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'aborted';
   command: string;
   output: string;
   success?: boolean;

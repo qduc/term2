@@ -1,6 +1,7 @@
 import type { Tool, FunctionTool } from '@openai/agents';
 import { z } from 'zod';
 import { isAbortLike } from '../services/subagents/utils.js';
+import { unwrapSchema } from '../services/settings/setting-schema-utils.js';
 
 /**
  * Maximum payload size (in characters) for which JSON repair is attempted.
@@ -169,30 +170,7 @@ function getObjectShape(schema: any): Record<string, any> | null {
   return null;
 }
 
-function unwrapSchema(schema: any): any {
-  let current = schema;
-  while (current) {
-    const def = current.def || current._def;
-    if (!def) break;
-    const typeName = def.type || def.typeName;
-    const isOptional = typeName === 'optional' || typeName === 'ZodOptional';
-    const isNullable = typeName === 'nullable' || typeName === 'ZodNullable';
-    if (isOptional || isNullable) {
-      if (typeof current.unwrap === 'function') {
-        current = current.unwrap();
-      } else {
-        current = def.innerType;
-      }
-    } else if (typeName === 'default' || typeName === 'ZodDefault') {
-      current = def.innerType;
-    } else if (typeName === 'effects' || typeName === 'ZodEffects') {
-      current = def.schema;
-    } else {
-      break;
-    }
-  }
-  return current;
-}
+// Re-exported from setting-schema-utils for tool parameter normalization.
 
 /**
  * Normalize a plain-object params bag in-place according to the Zod schema.

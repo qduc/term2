@@ -120,6 +120,7 @@ export const SandboxSettingsSchema = z.object({
     .default('standard')
     .transform((v) => (v === 'standard' ? 'standard' : v === 'strict' ? 'strict' : v)),
   allowReadExtra: z.array(z.string()).optional().default([]),
+  allowNetworking: z.boolean().optional().default(false),
 });
 
 export const UISettingsSchema = z.object({
@@ -429,6 +430,7 @@ export const SETTING_KEYS = {
   SANDBOX_ENABLED: 'sandbox.enabled',
   SANDBOX_READ_POLICY: 'sandbox.readPolicy',
   SANDBOX_ALLOW_READ_EXTRA: 'sandbox.allowReadExtra',
+  SANDBOX_ALLOW_NETWORKING: 'sandbox.allowNetworking',
   AGENT_AUTO_APPROVE_MODEL: 'agent.autoApproveModel',
   AGENT_AUTO_APPROVE_PROVIDER: 'agent.autoApproveProvider',
   AGENT_SUBAGENT_EXPLORER_MODEL: 'agent.subagentExplorerModel',
@@ -506,6 +508,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.SANDBOX_ENABLED,
   SETTING_KEYS.SANDBOX_READ_POLICY,
   SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA,
+  SETTING_KEYS.SANDBOX_ALLOW_NETWORKING,
   SETTING_KEYS.UI_PASTE_THRESHOLD,
   SETTING_KEYS.UI_DISPLAY_MODE,
   SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
@@ -607,6 +610,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     enabled: true,
     readPolicy: 'standard',
     allowReadExtra: [],
+    allowNetworking: false,
   },
   ui: {
     historySize: 1000,

@@ -211,3 +211,19 @@ it('createSandboxRuntimeConfig does not modify allowRead or denyRead when filter
   // allowRead still contains the same system tool paths as before the change.
   expect(config.filesystem.allowRead).toEqual(expect.arrayContaining(['/usr', '/bin', '/opt']));
 });
+
+it('createSandboxRuntimeConfig denies all network by default', () => {
+  const config = createSandboxRuntimeConfig();
+  expect(config.network.deniedDomains).toEqual(['*']);
+  expect(config.network.strictAllowlist).toBe(true);
+  expect(config.network.allowLocalBinding).toBe(false);
+  expect(config.network.allowedDomains).toEqual([]);
+});
+
+it('createSandboxRuntimeConfig allows all network when allowNetworking is true', () => {
+  const config = createSandboxRuntimeConfig({ allowNetworking: true });
+  expect(config.network.deniedDomains).toEqual([]);
+  expect(config.network.strictAllowlist).toBe(false);
+  expect(config.network.allowLocalBinding).toBe(true);
+  expect(config.network.allowedDomains).toEqual([]);
+});

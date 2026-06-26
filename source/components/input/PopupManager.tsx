@@ -11,7 +11,7 @@ import SkillSelectionMenu from '../menu/SkillSelectionMenu.js';
 import type { SkillInfo } from '../../services/skills/skills-service.js';
 import type { PathCompletionItem } from '../../hooks/use-path-completion.js';
 import type { SettingCompletionItem, SettingsCategory } from '../../hooks/use-settings-completion.js';
-import type { SettingValueSuggestion } from '../../hooks/use-settings-value-completion.js';
+import type { SettingValueSuggestion } from '../../utils/value-suggestions.js';
 import type { ModelInfo } from '../../services/model-service.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { UndoItem } from '../../hooks/use-undo-selection.js';

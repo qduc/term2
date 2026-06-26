@@ -4,7 +4,7 @@ import { it, expect } from 'vitest';
 import React from 'react';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 import SettingsValueSelectionMenu from './SettingsValueSelectionMenu.js';
-import type { SettingValueSuggestion } from '../../hooks/use-settings-value-completion.js';
+import type { SettingValueSuggestion } from '../../utils/value-suggestions.js';
 
 const suggestions: SettingValueSuggestion[] = [
   { value: 'low', description: 'Lower reasoning cost' },

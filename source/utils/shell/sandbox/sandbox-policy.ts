@@ -33,6 +33,7 @@ export interface ShellSandboxRunner {
 export interface CreateSandboxRuntimeConfigOptions {
   readPolicy?: SandboxReadPolicy;
   allowReadExtra?: string[];
+  allowNetworking?: boolean;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   onProtectedFiltered?: (filtered: readonly string[]) => void;
@@ -238,12 +239,13 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
     options.onProtectedFiltered?.(protectedFiltered);
   }
 
+  const allowNetworking = options.allowNetworking ?? false;
   return {
     network: {
       allowedDomains: [],
-      deniedDomains: ['*'],
-      strictAllowlist: true,
-      allowLocalBinding: false,
+      deniedDomains: allowNetworking ? [] : ['*'],
+      strictAllowlist: allowNetworking ? false : true,
+      allowLocalBinding: allowNetworking,
     },
     filesystem: {
       denyRead,

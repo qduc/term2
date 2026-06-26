@@ -1623,5 +1623,5 @@ it('formatSearchReplaceCommandMessage handles missing replacements gracefully', 
   };
 
   const messages = formatSearchReplaceCommandMessage(item, 0, new Map());
-  expect(messages[0].toolArgs.replacements).toEqual([]);
+  expect((messages[0].toolArgs as any).replacements).toEqual([]);
 });

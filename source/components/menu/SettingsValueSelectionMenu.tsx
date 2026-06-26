@@ -4,7 +4,7 @@ import {
   buildSettingValueSuggestions,
   isStringSetting,
   type SettingValueSuggestion,
-} from '../../hooks/use-settings-value-completion.js';
+} from '../../utils/value-suggestions.js';
 import { MenuContainer } from '../common/MenuContainer.js';
 
 type Props = {

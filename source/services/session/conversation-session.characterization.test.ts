@@ -1159,11 +1159,11 @@ it('aborted approval is abandoned so the next user input starts a fresh turn', a
 
   const mockClient = createMockAgentClient({
     abort() {},
-    async startStream(input) {
+    async startStream(input: unknown) {
       startCalls.push(input);
       return startCalls.length === 1 ? initialStream : followUpStream;
     },
-    async continueRunStream(...args) {
+    async continueRunStream(...args: unknown[]) {
       continueCalls.push(args);
       throw new Error('aborted approval should not continue the old run');
     },

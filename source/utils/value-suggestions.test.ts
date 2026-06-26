@@ -2,10 +2,38 @@ import { it, expect } from 'vitest';
 import {
   buildSettingValueSuggestions,
   filterSettingValueSuggestionsByQuery,
-  isNumberSetting,
-  isStringSetting,
   type SettingValueSuggestion,
-} from './use-settings-value-completion.js';
+} from './value-suggestions.js';
+import { resolveSettingAtPath, unwrapSchema } from '../services/settings/setting-schema-utils.js';
+import { SettingsSchema } from '../services/settings/settings-schema.js';
+import { z } from 'zod';
+
+/**
+ * Walk the SettingsSchema and collect all setting keys whose leaf schema is
+ * an enum or boolean (after unwrapping optional/default/effects wrappers).
+ */
+function collectEnumAndBooleanKeys(): string[] {
+  const keys: string[] = [];
+  const shape = (SettingsSchema as any)._def?.shape;
+  for (const [section, sectionSchema] of Object.entries(shape ?? {})) {
+    const innerShape = unwrapSchema(sectionSchema)?._def?.shape;
+    if (!innerShape) continue;
+    for (const [field, fieldSchema] of Object.entries(innerShape)) {
+      const unwrapped = unwrapSchema(fieldSchema);
+      if (!unwrapped) continue;
+      const def = (unwrapped as any)._def ?? (unwrapped as any).def;
+      if (!def) continue;
+      const typeName = def.type ?? def.typeName;
+      const isEnum =
+        typeName === 'enum' || typeName === 'ZodEnum' || typeName === 'literal' || typeName === 'ZodLiteral';
+      const isBool = typeName === 'boolean' || typeName === 'ZodBoolean';
+      if (isEnum || isBool) {
+        keys.push(`${section}.${field}`);
+      }
+    }
+  }
+  return keys;
+}
 
 it('buildSettingValueSuggestions returns enum suggestions for reasoningEffort', () => {
   const result = buildSettingValueSuggestions('agent.reasoningEffort');
@@ -35,6 +63,15 @@ it('buildSettingValueSuggestions returns enum suggestions for webSearch.provider
 it('buildSettingValueSuggestions returns boolean suggestions for boolean settings', () => {
   const result = buildSettingValueSuggestions('logging.suppressConsoleOutput');
   expect(result.map((r) => r.value).sort()).toEqual(['false', 'true']);
+});
+
+it('every enum/boolean setting has auto-generated suggestions', () => {
+  const keys = collectEnumAndBooleanKeys();
+  expect(keys.length).toBeGreaterThan(0);
+  for (const key of keys) {
+    const suggestions = buildSettingValueSuggestions(key);
+    expect(suggestions.length).toBeGreaterThan(0);
+  }
 });
 
 it('filterSettingValueSuggestionsByQuery filters by partial match', () => {
@@ -79,41 +116,69 @@ it('filterSettingValueSuggestionsByQuery does not include non-number custom valu
 });
 
 it('isNumberSetting returns true for number setting keys', () => {
-  expect(isNumberSetting('agent.maxTurns')).toBe(true);
-  expect(isNumberSetting('agent.temperature')).toBe(true);
-  expect(isNumberSetting('agent.retryAttempts')).toBe(true);
-  expect(isNumberSetting('agent.maxParallelToolCalls')).toBe(true);
-  expect(isNumberSetting('shell.timeout')).toBe(true);
-  expect(isNumberSetting('ui.pasteThreshold')).toBe(true);
-  expect(isNumberSetting('ssh.port')).toBe(true);
+  const numberKeys = [
+    'agent.maxTurns',
+    'agent.temperature',
+    'agent.retryAttempts',
+    'agent.maxParallelToolCalls',
+    'shell.timeout',
+    'ui.pasteThreshold',
+    'ssh.port',
+  ];
+  for (const key of numberKeys) {
+    const schema = resolveSettingAtPath(key);
+    const unwrapped = unwrapSchema(schema);
+    expect(unwrapped).toBeInstanceOf(z.ZodNumber);
+  }
 });
 
 it('isNumberSetting returns false for non-number setting keys', () => {
-  expect(isNumberSetting('agent.model')).toBe(false);
-  expect(isNumberSetting('agent.provider')).toBe(false);
-  expect(isNumberSetting('logging.logLevel')).toBe(false);
-  expect(isNumberSetting('app.mentorMode')).toBe(false);
-  expect(isNumberSetting('tools.enableEditHealing')).toBe(false);
+  const nonNumberKeys = [
+    'agent.model',
+    'agent.provider',
+    'logging.logLevel',
+    'app.mentorMode',
+    'tools.enableEditHealing',
+  ];
+  for (const key of nonNumberKeys) {
+    const schema = resolveSettingAtPath(key);
+    const unwrapped = unwrapSchema(schema);
+    expect(unwrapped).not.toBeInstanceOf(z.ZodNumber);
+  }
 });
 
 it('isStringSetting returns true for string setting keys', () => {
-  expect(isStringSetting('agent.model')).toBe(true);
-  expect(isStringSetting('agent.provider')).toBe(true);
-  expect(isStringSetting('webSearch.exa.apiKey')).toBe(true);
-  expect(isStringSetting('webSearch.tavily.apiKey')).toBe(true);
-  expect(isStringSetting('webSearch.provider')).toBe(true);
-  expect(isStringSetting('ssh.host')).toBe(true);
-  expect(isStringSetting('app.shellPath')).toBe(true);
+  const stringKeys = [
+    'agent.model',
+    'agent.provider',
+    'webSearch.exa.apiKey',
+    'webSearch.tavily.apiKey',
+    'webSearch.provider',
+    'ssh.host',
+    'app.shellPath',
+  ];
+  for (const key of stringKeys) {
+    const schema = resolveSettingAtPath(key);
+    const unwrapped = unwrapSchema(schema);
+    expect(unwrapped).toBeInstanceOf(z.ZodString);
+  }
 });
 
 it('isStringSetting returns false for non-string setting keys', () => {
-  expect(isStringSetting('agent.maxTurns')).toBe(false);
-  expect(isStringSetting('agent.temperature')).toBe(false);
-  expect(isStringSetting('ssh.port')).toBe(false);
-  expect(isStringSetting('logging.logLevel')).toBe(false);
-  expect(isStringSetting('logging.suppressConsoleOutput')).toBe(false);
-  expect(isStringSetting('app.mentorMode')).toBe(false);
-  expect(isStringSetting('tools.enableEditHealing')).toBe(false);
+  const nonStringKeys = [
+    'agent.maxTurns',
+    'agent.temperature',
+    'ssh.port',
+    'logging.logLevel',
+    'logging.suppressConsoleOutput',
+    'app.mentorMode',
+    'tools.enableEditHealing',
+  ];
+  for (const key of nonStringKeys) {
+    const schema = resolveSettingAtPath(key);
+    const unwrapped = unwrapSchema(schema);
+    expect(unwrapped).not.toBeInstanceOf(z.ZodString);
+  }
 });
 
 it('filterSettingValueSuggestionsByQuery includes custom string value for string settings without predefined suggestions', () => {

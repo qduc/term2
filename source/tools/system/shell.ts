@@ -385,6 +385,7 @@ export function createShellToolDefinition(deps: {
               const sandboxConfig = createSandboxRuntimeConfig({
                 cwd,
                 readPolicy: settingsService.get<SandboxReadPolicy>('sandbox.readPolicy'),
+                allowNetworking: settingsService.get<boolean>('sandbox.allowNetworking') === true,
                 allowReadExtra: [
                   ...(settingsService.get<string[]>('sandbox.allowReadExtra') ?? []),
                   ...projectAllowRead,

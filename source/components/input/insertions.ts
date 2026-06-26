@@ -1,6 +1,6 @@
 import type { PathCompletionItem } from '../../hooks/use-path-completion.js';
 import type { SettingCompletionItem } from '../../hooks/use-settings-completion.js';
-import type { SettingValueSuggestion } from '../../hooks/use-settings-value-completion.js';
+import type { SettingValueSuggestion } from '../../utils/value-suggestions.js';
 import type { ModelInfo } from '../../services/model-service.js';
 import type { SkillInfo } from '../../services/skills/skills-service.js';
 import { SETTINGS_TRIGGER, SETTINGS_RESET_TRIGGER, AUTO_APPROVE_TRIGGER, EFFORT_TRIGGER } from './triggers.js';

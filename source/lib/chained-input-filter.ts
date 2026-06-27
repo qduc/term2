@@ -49,6 +49,20 @@ export type ChainedModelInputFilterOptions = {
   toolResultCallIds?: readonly string[];
 };
 
+export class MissingChainedToolOutputError extends Error {
+  readonly callIds: string[];
+
+  constructor(callIds: readonly string[]) {
+    super(`Chained continuation is missing required tool output(s): ${callIds.join(', ')}`);
+    this.name = 'MissingChainedToolOutputError';
+    this.callIds = [...callIds];
+  }
+}
+
+export const isMissingChainedToolOutputError = (error: unknown): error is MissingChainedToolOutputError =>
+  error instanceof MissingChainedToolOutputError ||
+  (asRecord(error)?.name === 'MissingChainedToolOutputError' && Array.isArray(asRecord(error)?.callIds));
+
 /**
  * Finds the starting index of the delta input when conversation chaining is active.
  *
@@ -81,7 +95,7 @@ export const findChainedDeltaStart = (input: unknown[]): number => {
 
 export const filterChainedModelInput = (modelData: any, options: ChainedModelInputFilterOptions = {}): any => {
   const input = modelData?.input;
-  if (!Array.isArray(input) || input.length <= 1) {
+  if (!Array.isArray(input)) {
     return modelData;
   }
 
@@ -98,6 +112,14 @@ export const filterChainedModelInput = (modelData: any, options: ChainedModelInp
         input: expectedToolResults,
       };
     }
+
+    if (input.length === 0) {
+      throw new MissingChainedToolOutputError([...expectedToolResultCallIds]);
+    }
+  }
+
+  if (input.length <= 1) {
+    return modelData;
   }
 
   const deltaStart = findChainedDeltaStart(input);

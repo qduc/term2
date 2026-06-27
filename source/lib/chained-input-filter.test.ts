@@ -3,6 +3,7 @@ import {
   filterChainedModelInput,
   findChainedDeltaStart,
   getToolResultCallId,
+  isMissingChainedToolOutputError,
   isToolResultItem,
   isUserInputMessage,
   TOOL_RESULT_ITEM_TYPES,
@@ -206,6 +207,18 @@ it('filterChainedModelInput handles toolResultCallIds with falsy entries', () =>
   // Falsy entries (empty string) should be filtered out from toolResultCallIds
   const result = filterChainedModelInput(modelData, { toolResultCallIds: ['c1', '', undefined as any] });
   expect(result.input).toEqual([{ type: 'function_call_output', callId: 'c1', output: 'r1' }]);
+});
+
+it('filterChainedModelInput rejects an empty chained delta when tool outputs are required', () => {
+  let thrown: unknown;
+
+  try {
+    filterChainedModelInput({ input: [] }, { toolResultCallIds: ['call-required'] });
+  } catch (error) {
+    thrown = error;
+  }
+
+  expect(isMissingChainedToolOutputError(thrown)).toBe(true);
 });
 
 it('filterChainedModelInput returns full input when deltaStart is 0', () => {

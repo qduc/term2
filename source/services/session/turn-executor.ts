@@ -80,7 +80,7 @@ export class DefaultTurnExecutor implements TurnExecutor {
       currentOptions = {
         ...transition.command.options,
         token: generation,
-        replayFromHistory: currentOptions.replayFromHistory,
+        replayFromHistory: true,
       };
     }
   }
@@ -111,6 +111,7 @@ export class DefaultTurnExecutor implements TurnExecutor {
       {
         ...transition.command.options,
         token: generation,
+        replayFromHistory: true,
       },
     );
   }

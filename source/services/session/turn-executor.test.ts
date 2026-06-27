@@ -127,6 +127,7 @@ it('executeInitial redrives initial execution when continuation requests a fresh
         delayMs: 25,
         useStandardServiceTier: true,
         token: 9,
+        replayFromHistory: true,
       },
     },
   ]);
@@ -153,7 +154,7 @@ it('executeContinuation redrives initial execution when recovery requests a fres
   });
   expect(initialCalls[0]).toEqual({
     input: { text: '' },
-    options: { skipUserMessage: true, retries: defaultRetryCounts, delayMs: 50, token: 11 },
+    options: { skipUserMessage: true, retries: defaultRetryCounts, delayMs: 50, token: 11, replayFromHistory: true },
   });
 });
 

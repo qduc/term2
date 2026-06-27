@@ -1,19 +1,5 @@
-export function createMessageIdFactory(now: () => number = Date.now): () => string {
-  let lastTimestamp = -1;
-  let sequence = 0;
+import { createMessageIdFactory } from '../utils/message-id-factory.js';
 
-  return () => {
-    const timestamp = now();
-
-    if (timestamp === lastTimestamp) {
-      sequence += 1;
-    } else {
-      lastTimestamp = timestamp;
-      sequence = 0;
-    }
-
-    return `${timestamp}-${sequence}`;
-  };
-}
+export { createMessageIdFactory } from '../utils/message-id-factory.js';
 
 export const createMessageId = createMessageIdFactory();

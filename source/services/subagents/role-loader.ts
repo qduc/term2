@@ -6,6 +6,8 @@ import type { ToolDefinition } from '../../tools/types.js';
 import { shouldPreferPatchEditingModel } from '../../lib/tool-selection-policy.js';
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import type { ExecutionContext } from '../execution-context.js';
+import { getShellSandboxAddendum } from '../../prompts/shell-sandbox.js';
+import { getSearchViaShellAddendum } from '../../prompts/search-via-shell.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, '../../prompts');
 export const PROMPTS_DIR = path.join(BASE_PROMPT_PATH, 'subagents');
@@ -195,11 +197,23 @@ export function buildInstructions(
   const worktreeHygiene = resolvePrompt(path.join(PROMPTS_DIR, 'worktree-hygiene.md'));
   const toolGuidance = buildAvailableToolGuidance(toolDefinitions, searchViaShell);
 
+  const sandboxEnabled = settings.get<boolean>('sandbox.enabled') ?? true;
+  const inlineSections: string[] = [];
+
+  if (sandboxEnabled) {
+    inlineSections.push(getShellSandboxAddendum());
+  }
+
+  if (searchViaShell) {
+    inlineSections.push(getSearchViaShellAddendum({ executionContext }));
+  }
+
   return [
     modelPrompt,
     worktreeHygiene,
     definition.instructions,
     toolGuidance,
+    ...inlineSections,
     `Environment: ${envInfo}${agentsInstructions}`,
   ]
     .filter(Boolean)

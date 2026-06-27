@@ -14,7 +14,7 @@ import { createStreamingState, type StreamingState } from '../conversation/conve
 import { createStreamingUpdateCoordinator } from './streaming-updater.js';
 import type { NormalizedUsage } from '../ai/token-usage.js';
 import type { CodexRateLimitInfo } from '../../services/conversation/conversation-events.js';
-import { createMessageIdFactory } from '../../hooks/message-id.js';
+import { createMessageIdFactory } from '../message-id-factory.js';
 
 export interface StreamingSessionFactoryDeps {
   appendMessages: ConversationEventHandlerDeps['appendMessages'];

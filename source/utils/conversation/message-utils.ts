@@ -98,7 +98,7 @@ export function mergeCommandMessages(prev: Message[], newCommands: CommandMessag
  * Find the index of the last user message that was not consumed for abort.
  * Returns -1 if no undoable user message exists.
  */
-export function findLastUndoableUserMessage(messages: Message[]): number {
+export function findLastUndoableUserMessage(messages: readonly Message[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (isUserMessage(m) && !m.consumedForAbort) {
@@ -111,7 +111,7 @@ export function findLastUndoableUserMessage(messages: Message[]): number {
 /**
  * Count how many undoable user turns exist at or after startIndex.
  */
-export function countUndoableUserTurnsFrom(messages: Message[], startIndex: number): number {
+export function countUndoableUserTurnsFrom(messages: readonly Message[], startIndex: number): number {
   let count = 0;
   for (let i = startIndex; i < messages.length; i++) {
     const m = messages[i];

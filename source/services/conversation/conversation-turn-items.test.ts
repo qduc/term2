@@ -75,3 +75,32 @@ it('synthesizeHistoryFromAssistantTurn reconstructs reasoning before a tool_call
   const serializedToolCall = JSON.stringify(toolCall);
   expect(serializedToolCall.includes("I'll run uname -a.")).toBe(false);
 });
+
+it('synthesizeHistoryFromAssistantTurn serializes persisted object tool-call arguments for provider replay', () => {
+  const turn = {
+    items: [
+      {
+        type: 'tool_call' as const,
+        callId: 'call-1',
+        toolName: 'shell',
+        arguments: {
+          command: 'git status --short',
+          timeout_ms: 120000,
+          max_output_length: 12000,
+          sandbox: 'default',
+        },
+      },
+    ],
+  };
+
+  const history = synthesizeHistoryFromAssistantTurn([], turn) as Array<Record<string, any>>;
+
+  expect(history).toEqual([
+    {
+      type: 'function_call',
+      callId: 'call-1',
+      name: 'shell',
+      arguments: '{"command":"git status --short","timeout_ms":120000,"max_output_length":12000,"sandbox":"default"}',
+    },
+  ]);
+});

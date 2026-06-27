@@ -153,7 +153,7 @@ it('replayEvents: timed-out partial assistant turn preserves tool history for th
 
   expect(restored.history).toEqual([
     { role: 'user', type: 'message', content: 'continue the task' },
-    { type: 'function_call', callId: 'call-1', name: 'shell', arguments: { command: 'pwd' } },
+    { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{"command":"pwd"}' },
     { type: 'function_call_result', callId: 'call-1', name: 'shell', output: '/repo' },
   ]);
   expect(restored.previousResponseId).toBe(null);
@@ -972,6 +972,40 @@ it('replayEvents: assistant_turn rebuilds structured assistant history for resum
     id: 'msg_1',
     status: 'completed',
     content: [{ type: 'output_text', text: 'Done.' }],
+  });
+});
+
+it('replayEvents: assistant_turn serializes persisted object tool-call arguments for resume', () => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'status' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          {
+            type: 'tool_call',
+            callId: 'call-1',
+            toolName: 'shell',
+            arguments: {
+              command: 'git status --short',
+              timeout_ms: 120000,
+              max_output_length: 12000,
+              sandbox: 'default',
+            },
+          },
+        ],
+      },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  expect(restored.history[1]).toEqual({
+    type: 'function_call',
+    callId: 'call-1',
+    name: 'shell',
+    arguments: '{"command":"git status --short","timeout_ms":120000,"max_output_length":12000,"sandbox":"default"}',
   });
 });
 

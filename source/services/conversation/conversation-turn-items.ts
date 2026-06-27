@@ -29,6 +29,18 @@ const rawItem = (value: unknown): Record<string, unknown> | null => {
 
 const getString = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined);
 
+const serializeToolCallArgumentsForReplay = (value: unknown): unknown => {
+  if (typeof value === 'string' || value === undefined) {
+    return value;
+  }
+  try {
+    const serialized = JSON.stringify(value);
+    return serialized === undefined ? String(value) : serialized;
+  } catch {
+    return String(value);
+  }
+};
+
 const extractTextParts = (content: unknown): string => {
   if (typeof content === 'string') {
     return content;
@@ -452,7 +464,7 @@ export function synthesizeHistoryFromAssistantTurn(
         ...(getString(raw.id) ? { id: raw.id } : item.providerItem && 'id' in item.providerItem ? {} : {}),
         callId,
         name: toolName,
-        arguments: raw.arguments ?? raw.args ?? item.arguments,
+        arguments: serializeToolCallArgumentsForReplay(raw.arguments ?? raw.args ?? item.arguments),
         ...(providerData ? { providerData } : {}),
       } as AgentInputItem);
       continue;

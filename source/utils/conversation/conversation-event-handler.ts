@@ -406,10 +406,10 @@ export function createConversationEventHandler(
         setMessages((prev) => {
           const index = prev.findIndex((msg) => isSubagentActivityMessage(msg) && msg.agentId === event.agentId);
           if (index !== -1) {
-            // Message already exists; just mark it running — tools are added on tool end
             const next = [...prev];
             const current = next[index];
-            if (!isSubagentActivityMessage(current)) return prev;
+            if (!isSubagentActivityMessage(current) || current.status !== 'running') return prev;
+            // Message already exists; keep it live while tools are added on tool end.
             next[index] = { ...current, status: 'running', role: current.role ?? event.role };
             return trimMessages(next);
           }

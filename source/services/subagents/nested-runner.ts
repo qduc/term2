@@ -23,6 +23,7 @@ import {
   safeEmit,
   createCompositeAbortSignal,
   createAbortError,
+  isAbortLike,
 } from './utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
@@ -337,6 +338,18 @@ export class NestedSubagentRunner {
         agentId,
         role,
         error: error?.message || String(error),
+      });
+      safeEmit(this.#logger, this.#onEvent, {
+        type: 'subagent_completed',
+        result: {
+          agentId,
+          role,
+          status: isAbortLike(error?.message, error) ? 'cancelled' : 'failed',
+          finalText: '',
+          filesChanged: [],
+          toolsUsed: [],
+          error: error?.message || String(error),
+        },
       });
       throw error;
     } finally {

@@ -273,6 +273,7 @@ it.sequential('NestedSubagentRunner.runAsTool surfaces Agent.asTool runtime fail
   });
   const logger = createMockLogger();
   const sessionContextService = createSessionContextService() as any;
+  const events: ConversationEvent[] = [];
   const toolPolicy = new SubagentToolPolicy({
     settings,
     logger,
@@ -289,6 +290,7 @@ it.sequential('NestedSubagentRunner.runAsTool surfaces Agent.asTool runtime fail
     sessionContextService,
     toolFactory,
     roleToolCache: new Map(),
+    onEvent: (event) => events.push(event),
   });
   const tool = runner.getRoleAgentTool('explorer');
   (tool as any).invoke = async () =>
@@ -305,6 +307,12 @@ it.sequential('NestedSubagentRunner.runAsTool surfaces Agent.asTool runtime fail
   }
 
   expect(error?.message).toBe('TypeError: fetch failed');
+  expect(events.some((event) => event.type === 'subagent_started')).toBe(true);
+  expect(
+    events.some(
+      (event) => event.type === 'subagent_completed' && event.result.status === 'failed' && event.result.error,
+    ),
+  ).toBe(true);
 });
 
 it.sequential('NestedSubagentRunner.runAsTool restores context from resumeState', async () => {
@@ -588,6 +596,7 @@ it.sequential('NestedSubagentRunner.runAsTool cancels when request.signal aborts
   });
   const logger = createMockLogger();
   const sessionContextService = createSessionContextService() as any;
+  const events: ConversationEvent[] = [];
 
   const toolPolicy = new SubagentToolPolicy({
     settings,
@@ -609,6 +618,7 @@ it.sequential('NestedSubagentRunner.runAsTool cancels when request.signal aborts
     sessionContextService,
     toolFactory,
     roleToolCache,
+    onEvent: (event) => events.push(event),
   });
 
   const bridgeController = new AbortController();
@@ -644,6 +654,8 @@ it.sequential('NestedSubagentRunner.runAsTool cancels when request.signal aborts
 
   expect(thrown?.name).toBe('AbortError');
   expect(thrown?.message).toMatch(/aborted/i);
+  expect(events.some((event) => event.type === 'subagent_started')).toBe(true);
+  expect(events.some((event) => event.type === 'subagent_completed' && event.result.status === 'cancelled')).toBe(true);
 });
 
 it.sequential('NestedSubagentRunner resumes a real Agent.asTool run after nested approval', async () => {

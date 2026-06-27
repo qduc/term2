@@ -123,6 +123,55 @@ it('subagent_completed updates the status of the live peek', () => {
   ]);
 });
 
+it('subagent_tool_started does not downgrade a finished subagent row back to running', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'subagent_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    task: 'investigate',
+  } as ConversationEvent);
+
+  handler({
+    type: 'subagent_completed',
+    result: {
+      agentId: 'agent-1',
+      role: 'explorer',
+      status: 'completed',
+      finalText: 'done',
+      filesChanged: [],
+      toolsUsed: [],
+    },
+  } as ConversationEvent);
+
+  handler({
+    type: 'subagent_tool_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    toolCallId: 'late-tool',
+    toolName: 'grep',
+    arguments: { pattern: 'TODO', path: 'src/' },
+  } as any);
+
+  const messagesAfterStart = deps.calls.appendedMessages[0];
+  const messagesAfterCompletion = deps.calls.setMessagesCalls[0](messagesAfterStart);
+  const messagesAfterLateTool = deps.calls.setMessagesCalls[1](messagesAfterCompletion);
+
+  expect(messagesAfterLateTool[0]).toEqual({
+    id: 'subagent-agent-1',
+    sender: 'subagent',
+    status: 'completed',
+    agentId: 'agent-1',
+    role: 'explorer',
+    task: 'investigate',
+    tools: [],
+    finalText: 'done',
+  });
+});
+
 it('subagent_started links callId from tool_started and command_message replaces it', () => {
   const deps = createMockDeps();
   const state = createStreamingState();

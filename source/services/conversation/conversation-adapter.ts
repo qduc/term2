@@ -40,7 +40,6 @@ export class ConversationAdapter {
   #logger: ILoggingService;
   #settingsService?: ISettingsService;
   #sessionContextService: ISessionContextService;
-  #userTurns: Pick<SessionManager, 'listUserTurns'>;
   #logs: SessionLogs;
   #approval: SessionApprovalQuery;
   #turnFlow: TurnFlow;
@@ -65,7 +64,6 @@ export class ConversationAdapter {
     this.#logger = deps.logger;
     this.#settingsService = deps.settingsService;
     this.#sessionContextService = deps.sessionContextService;
-    this.#userTurns = deps.userTurns;
     this.#logs = deps.logs;
     this.#approval = deps.approval;
     this.#turnFlow = deps.turnFlow;
@@ -73,11 +71,6 @@ export class ConversationAdapter {
 
   setEventSink(sink: ConversationEventSink | null): void {
     this.#eventSink = sink;
-  }
-
-  #getFirstUserMessagePreview(currentTurn?: string): string {
-    const [firstTurn] = this.#userTurns.listUserTurns();
-    return firstTurn?.text ?? currentTurn ?? '';
   }
 
   #getTrafficMode(): string {
@@ -95,7 +88,6 @@ export class ConversationAdapter {
       {
         sessionId: this.#sessionId,
         sessionStartedAt: this.#startedAt,
-        firstUserMessagePreview: this.#getFirstUserMessagePreview(currentTurn),
         mode,
         traceId: this.#logger.getCorrelationId(),
       },

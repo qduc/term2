@@ -1,7 +1,6 @@
 export type SessionTrafficContext = {
   sessionId: string;
   sessionStartedAt: string;
-  firstUserMessagePreview?: string;
   mode?: string;
   traceId?: string;
   evaluator?: boolean;

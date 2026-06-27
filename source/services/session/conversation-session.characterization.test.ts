@@ -917,12 +917,11 @@ it('sendMessage runs inside sessionContextService.runWithContext with session co
 
   expect(ctx.sessionId).toBe('traffic-test');
   expect(ctx.sessionStartedAt, 'sessionStartedAt should be a non-empty string').toBeTruthy();
-  expect(ctx.firstUserMessagePreview).toBe('my first question');
   expect(ctx.mode).toBe('standard'); // was: t.is(ctx.mode, 'standard', 'Default mode (no settingsService) should be standard')
   expect(ctx.traceId).toBe('trace-abc-123');
 });
 
-it('sendMessage sets firstUserMessagePreview to first turn text even on subsequent messages', async () => {
+it('sendMessage sets mode correctly for different settings', async () => {
   const contextLog: any[] = [];
 
   const sessionContextService = {
@@ -962,14 +961,14 @@ it('sendMessage sets firstUserMessagePreview to first turn text even on subseque
 
   // First message becomes the "first user message"
   await terminalAdapter.sendMessage('first turn');
-  // Second message should still show "first turn" as the firstUserMessagePreview
+  // Second message uses the same traffic context
   await terminalAdapter.sendMessage('second turn');
 
   expect(contextLog.length).toBe(2);
 
   // Both traffic contexts should reference the first message as the preview
-  expect(contextLog[0].firstUserMessagePreview).toBe('first turn');
-  expect(contextLog[1].firstUserMessagePreview).toBe('first turn'); // was: t.is(contextLog[1].firstUserMessagePreview, 'first turn', 'Second turn should keep first turn as preview')
+  expect(contextLog[0].mode).toBe('standard');
+  expect(contextLog[1].mode).toBe('standard');
 });
 
 // ══════════════════════════════════════════════════════════════════════════

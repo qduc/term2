@@ -109,7 +109,6 @@ export class SubagentBridge {
     return this.#sessionContextService.runWithContext(
       {
         ...currentContext,
-        firstUserMessagePreview: preview,
       },
       fn,
     );

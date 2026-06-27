@@ -246,7 +246,6 @@ function makeMockProviderTraffic(loggingService: any, sessionContextService?: an
         traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),
         sessionId: trafficContext?.sessionId,
         sessionStartedAt: trafficContext?.sessionStartedAt,
-        firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
         mode: trafficContext?.mode,
         provider: input.provider,
         model: input.model,
@@ -279,7 +278,6 @@ function makeMockProviderTraffic(loggingService: any, sessionContextService?: an
         traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),
         sessionId: trafficContext?.sessionId,
         sessionStartedAt: trafficContext?.sessionStartedAt,
-        firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
         mode: trafficContext?.mode,
         provider: input.provider,
         model: input.model,
@@ -301,7 +299,6 @@ function makeMockProviderTraffic(loggingService: any, sessionContextService?: an
         traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),
         sessionId: trafficContext?.sessionId,
         sessionStartedAt: trafficContext?.sessionStartedAt,
-        firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
         mode: trafficContext?.mode,
         provider: input.provider,
         model: input.model,
@@ -338,7 +335,6 @@ it('createLoggingMiddleware logs request started and response received', async (
   const sessionContextService = makeSessionContextService({
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
-    firstUserMessagePreview: 'hi',
     mode: 'standard',
   });
   const loggingService = makeLoggingService(
@@ -432,7 +428,6 @@ it('createLoggingMiddleware logs response failed on error', async () => {
   const sessionContextService = makeSessionContextService({
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
-    firstUserMessagePreview: 'hi',
     mode: 'standard',
   });
   const loggingService = makeLoggingService(
@@ -498,7 +493,6 @@ it('createLoggingMiddleware uses evaluator event prefix when traffic context has
   const sessionContextService = makeSessionContextService({
     sessionId: 'session-eval',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
-    firstUserMessagePreview: 'hi',
     mode: 'standard',
     evaluator: true,
   });
@@ -536,7 +530,6 @@ it('createLoggingMiddleware uses request model from body over default model', as
   const sessionContextService = makeSessionContextService({
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
-    firstUserMessagePreview: 'hi',
     mode: 'standard',
   });
   const loggingService = makeLoggingService(
@@ -587,7 +580,6 @@ it('createProviderFetch injects the logging and rate-limit middlewares', async (
   const sessionCtx = makeSessionContextService({
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
-    firstUserMessagePreview: 'hi',
     mode: 'standard',
   });
 
@@ -779,7 +771,6 @@ it('createLoggingMiddleware handles error in fire-and-forget logging gracefully'
   const sessionContextService = makeSessionContextService({
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
-    firstUserMessagePreview: 'hi',
     mode: 'standard',
   });
   const loggingService = makeLoggingService(

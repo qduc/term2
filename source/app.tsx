@@ -1,6 +1,6 @@
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useInputActions, useInputState } from './context/InputContext.js';
-import { appendStartupBannerId, clearTerminalForRedraw, messagesHaveNonSystemContent } from './app-helpers.js';
+import { clearTerminalForRedraw, messagesHaveNonSystemContent } from './app-helpers.js';
 
 import { Box, useApp, useStdout } from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
@@ -192,16 +192,12 @@ const App: FC<AppProps> = ({
     sshService,
   });
 
-  const refreshStartupBanner = useCallback(() => {
-    setStartupBannerIds(appendStartupBannerId);
-  }, []);
-
   const clearConversationAndRefreshBanner = useCallback(async () => {
     onPrintUsage?.();
     await clearConversation();
-    refreshStartupBanner();
+    setStartupBannerIds(['startup-banner-0']);
     setMessageListEpoch((epoch) => epoch + 1);
-  }, [clearConversation, onPrintUsage, refreshStartupBanner]);
+  }, [clearConversation, onPrintUsage]);
 
   const handoff = useHandoffFlow({
     clearConversationAndRefreshBanner,

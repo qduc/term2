@@ -33,7 +33,6 @@ function makeTrafficContext(overrides: Record<string, unknown> = {}) {
   return {
     sessionId: 'session-1',
     sessionStartedAt: '2026-06-21T14:20:00.000Z',
-    firstUserMessagePreview: 'main agent prompt',
     mode: 'standard',
     traceId: 'trace-1',
     ...overrides,
@@ -220,7 +219,6 @@ it('runSubagent scopes traffic context to the subagent task preview', async () =
     expect.objectContaining({
       sessionId: 'session-1',
       sessionStartedAt: '2026-06-21T14:20:00.000Z',
-      firstUserMessagePreview: 'inspect the repository',
       mode: 'standard',
       traceId: 'trace-1',
     }),

@@ -535,7 +535,6 @@ it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed r
     getContext: () => ({
       sessionId: 'sess_ws_1',
       sessionStartedAt: '2025-01-01T00:00:00.000Z',
-      firstUserMessagePreview: 'hello ws',
       mode: 'websocket',
       traceId: 'trace-session-1',
     }),
@@ -629,7 +628,6 @@ it.sequential(
       getContext: () => ({
         sessionId: 'sess_ws_2',
         sessionStartedAt: '2025-01-01T00:00:00.000Z',
-        firstUserMessagePreview: 'hello ws 2',
         mode: 'websocket',
         traceId: 'trace-session-2',
       }),

@@ -19,7 +19,7 @@ export function applyRuntimeSettingChange(key: string, value: unknown, deps: Run
   }
 
   if (key === 'agent.reasoningEffort') {
-    deps.setReasoningEffort(value);
+    deps.setReasoningEffort(value as ReasoningEffortSetting);
     return;
   }
 

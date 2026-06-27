@@ -4,7 +4,7 @@ import { createConversationRuntime } from './services/conversation/conversation-
 import { SessionContextService } from './services/session/session-context-service.js';
 import type { ConversationEvent } from './services/conversation/conversation-events.js';
 import type { UserTurn } from './types/user-turn.js';
-import type { ConversationTerminal } from './contracts/conversation.js';
+import type { ApprovalDescriptor, ConversationTerminal } from './contracts/conversation.js';
 import type {
   SendMessageOptions,
   HandleApprovalDecisionOptions,
@@ -120,7 +120,7 @@ export async function runWithSession(session: ConversationSessionLike, config: N
 
     while (result?.type === 'approval_required') {
       if (config.autoApprove) {
-        const approval = result.approval;
+        const approval: ApprovalDescriptor = result.approval;
         let shouldApprove = true;
         let rejectionReason: string | undefined;
 

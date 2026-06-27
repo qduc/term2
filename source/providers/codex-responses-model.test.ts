@@ -474,6 +474,65 @@ it.sequential('CodexResponsesModel._buildResponsesCreateRequest strips replay it
   }
 });
 
+it.sequential(
+  'CodexResponsesModel._buildResponsesCreateRequest drops unpaired function calls for stateless fallback',
+  () => {
+    const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+      return {
+        requestData: {
+          input: [
+            { role: 'user', type: 'message', content: 'continue' },
+            { id: 'fc_1', type: 'function_call', call_id: 'call-paired', name: 'shell', arguments: '{}' },
+            { type: 'function_call_output', call_id: 'call-paired', output: 'ok' },
+            { id: 'fc_2', type: 'function_call', call_id: 'call-orphan', name: 'shell', arguments: '{}' },
+          ],
+        },
+        sdkRequestHeaders: {},
+        signal: undefined,
+      };
+    };
+
+    try {
+      const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+      const built = (model as any)._buildResponsesCreateRequest({ modelSettings: {} }, true);
+
+      expect(built.requestData.previous_response_id).toBeUndefined();
+      expect(built.requestData.input.map((item: any) => item.call_id).filter(Boolean)).toEqual([
+        'call-paired',
+        'call-paired',
+      ]);
+    } finally {
+      (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+    }
+  },
+);
+
+it.sequential('CodexResponsesModel._buildResponsesCreateRequest keeps function calls for chained requests', () => {
+  const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+    return {
+      requestData: {
+        previous_response_id: 'resp_123',
+        input: [{ id: 'fc_1', type: 'function_call', call_id: 'call-server-held', name: 'shell', arguments: '{}' }],
+      },
+      sdkRequestHeaders: {},
+      signal: undefined,
+    };
+  };
+
+  try {
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const built = (model as any)._buildResponsesCreateRequest({ modelSettings: {} }, true);
+
+    expect(built.requestData.input).toEqual([
+      { type: 'function_call', call_id: 'call-server-held', name: 'shell', arguments: '{}' },
+    ]);
+  } finally {
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+  }
+});
+
 it('CodexResponsesWSModel extends OpenAIResponsesWSModel', () => {
   const mockClient = {
     baseURL: 'https://api.openai.com',

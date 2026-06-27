@@ -3,6 +3,7 @@ import { getCurrentTrace, withTrace } from '@openai/agents-core';
 import { randomUUID } from 'node:crypto';
 import { sanitizeHeaders } from '../utils/header-sanitizer.js';
 import type { ISessionContextService, IProviderTraffic } from '../services/service-interfaces.js';
+import { dropUnpairedFunctionCalls } from '../services/tool-execution-ledger.js';
 
 const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
   recordRequestStart() {},
@@ -73,7 +74,14 @@ function normalizeCodexRequestData(requestData: any, request: any): any {
     delete normalizedRequestData.temperature;
   }
 
-  normalizedRequestData.input = stripCodexReplayIds(normalizedRequestData.input);
+  const hasPreviousResponseId =
+    typeof normalizedRequestData.previous_response_id === 'string' &&
+    normalizedRequestData.previous_response_id.length > 0;
+  const normalizedInput =
+    !hasPreviousResponseId && Array.isArray(normalizedRequestData.input)
+      ? dropUnpairedFunctionCalls(normalizedRequestData.input)
+      : normalizedRequestData.input;
+  normalizedRequestData.input = stripCodexReplayIds(normalizedInput);
 
   const modelInclude = request?.modelSettings?.include;
   if (Array.isArray(modelInclude) && modelInclude.length > 0) {

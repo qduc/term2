@@ -908,3 +908,62 @@ it.sequential('MessageList preserves order when earlier content is static and he
   expect(headingIdx !== -1).toBe(true);
   expect(contentIdx < headingIdx).toBe(true);
 });
+
+it.sequential(
+  'MessageList keeps completed subagent updates dynamic while parallel subagents are still running',
+  async () => {
+    const renderer = await renderInAct(
+      <MessageList
+        messages={[
+          {
+            id: 'subagent-a',
+            sender: 'subagent',
+            status: 'running',
+            agentId: 'agent-a',
+            role: 'explorer',
+            task: 'inspect A',
+            tools: ['read_file'],
+          },
+          {
+            id: 'subagent-b',
+            sender: 'subagent',
+            status: 'running',
+            agentId: 'agent-b',
+            role: 'worker',
+            task: 'inspect B',
+            tools: ['grep'],
+          },
+        ]}
+      />,
+    );
+
+    await rerenderInAct(
+      renderer,
+      <MessageList
+        messages={[
+          {
+            id: 'subagent-a',
+            sender: 'subagent',
+            status: 'completed',
+            agentId: 'agent-a',
+            role: 'explorer',
+            task: 'inspect A',
+            finalText: 'done A',
+            tools: ['read_file'],
+          },
+          {
+            id: 'subagent-b',
+            sender: 'subagent',
+            status: 'running',
+            agentId: 'agent-b',
+            role: 'worker',
+            task: 'inspect B',
+            tools: ['grep'],
+          },
+        ]}
+      />,
+    );
+
+    expect(renderer.frames.length).toBe(2);
+  },
+);

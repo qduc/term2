@@ -200,6 +200,7 @@ const App: FC<AppProps> = ({
     onPrintUsage?.();
     await clearConversation();
     refreshStartupBanner();
+    setMessageListEpoch((epoch) => epoch + 1);
   }, [clearConversation, onPrintUsage, refreshStartupBanner]);
 
   const handoff = useHandoffFlow({

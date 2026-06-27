@@ -64,6 +64,9 @@ const mocks = vi.hoisted(() => ({
   },
   slashCommands: [] as any[],
   slashActionReturnValue: undefined as boolean | void | undefined,
+  clearConversationCallback: null as null | (() => Promise<void>),
+  messageListMounts: 0,
+  stdoutWrite: vi.fn(),
   selectedSkill: null as any,
   conversationState: {
     waitingForApproval: false,
@@ -76,7 +79,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('ink', () => ({
   Box: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useApp: () => ({ exit: mocks.exit }),
-  useStdout: () => ({ stdout: { write: vi.fn() } }),
+  useStdout: () => ({ stdout: { write: mocks.stdoutWrite } }),
   useInput: (handler: (input: string, key: Record<string, boolean>) => void) => {
     mocks.useInputHandler = handler;
   },
@@ -89,8 +92,15 @@ vi.mock('./components/layout/BottomArea.js', () => ({
   },
 }));
 
+const MockMessageList = () => {
+  React.useEffect(() => {
+    mocks.messageListMounts += 1;
+  }, []);
+  return null;
+};
+
 vi.mock('./components/message/MessageList.js', () => ({
-  default: () => null,
+  default: MockMessageList,
   detectStaticCommitBlocker: vi.fn(() => null),
   EMPTY_RESTORED_STATIC_MESSAGE_IDS: [],
   MESSAGE_HORIZONTAL_PADDING: 0,
@@ -172,7 +182,14 @@ vi.mock('./hooks/use-shell-mode.js', () => ({
 }));
 
 vi.mock('./hooks/use-app-commands.js', () => ({
-  useAppCommands: ({ onSkillSelected }: { onSkillSelected: (skill: any) => void }) => {
+  useAppCommands: ({
+    clearConversation,
+    onSkillSelected,
+  }: {
+    clearConversation: () => Promise<void>;
+    onSkillSelected: (skill: any) => void;
+  }) => {
+    mocks.clearConversationCallback = clearConversation;
     if (mocks.selectedSkill) {
       onSkillSelected(mocks.selectedSkill);
     }
@@ -281,6 +298,9 @@ beforeEach(() => {
   mocks.handleShellSubmit.mockReset();
   mocks.cycleAppModes.mockReset();
   mocks.clearConversation.mockReset();
+  mocks.clearConversationCallback = null;
+  mocks.messageListMounts = 0;
+  mocks.stdoutWrite.mockReset();
   mocks.pendingGuards.largeUncachedWarning = null;
   mocks.pendingGuards.pendingLargeUncachedTurn = null;
   mocks.pendingGuards.pendingLargeUncachedTokens = 0;
@@ -313,6 +333,23 @@ beforeEach(() => {
 });
 
 describe('App orchestration', () => {
+  it.sequential('remounts MessageList when clearing conversation without clearing the terminal', async () => {
+    const services = createServices();
+
+    await renderInAct(<App {...services} sessionId="session-1" generateId={() => 'session-2'} />);
+
+    expect(mocks.messageListMounts).toBe(1);
+    expect(mocks.clearConversationCallback).not.toBeNull();
+
+    await act(async () => {
+      await mocks.clearConversationCallback?.();
+    });
+
+    expect(mocks.clearConversation).toHaveBeenCalledTimes(1);
+    expect(mocks.messageListMounts).toBe(2);
+    expect(mocks.stdoutWrite).not.toHaveBeenCalled();
+  });
+
   it.sequential('ignores submit while waiting for approval', async () => {
     mocks.conversationState.waitingForApproval = true;
     mocks.submitConversationTurn.mockResolvedValue(true);

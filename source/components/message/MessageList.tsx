@@ -300,6 +300,22 @@ const MessageList: FC<Props> = ({
           isRestoredMessage: restoredStaticMessageIdSet.has(message.id),
           isCompletedCommand,
         });
+      const isFinishedSubagent =
+        message.sender === 'subagent' &&
+        (message.status === 'completed' || message.status === 'failed' || message.status === 'cancelled');
+
+      // Keep finished subagent summaries dynamic while sibling work is still
+      // running. Committing them to <Static> mid-flight causes an extra Ink
+      // write and visible flicker when parallel subagents finish one by one.
+      if (isFinishedSubagent && hasActiveMessages) {
+        if (candidateMessageSignaturesRef.current.get(message.id) !== signature) {
+          candidateMessageSignaturesRef.current.set(message.id, signature);
+        }
+        deferred.push(message);
+        hasDeferred = true;
+        continue;
+      }
+
       if (!shouldCommitImmediately) {
         if (candidateMessageSignaturesRef.current.get(message.id) !== signature) {
           candidateMessageSignaturesRef.current.set(message.id, signature);

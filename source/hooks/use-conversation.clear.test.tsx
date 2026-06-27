@@ -196,3 +196,58 @@ it.sequential('useConversation exposes transient thinking state only while hidde
     await pendingSend;
   });
 });
+
+it.sequential('useConversation adds a stopped message when processing is stopped', async () => {
+  const mockConversationService = {
+    sessionId: 'session-id',
+    abort: () => {},
+    setRetryCallback: () => {},
+  } as any;
+
+  let stopFn: (() => void) | undefined;
+
+  const Harness = () => {
+    const { stopProcessing, messages } = useConversation({
+      conversationService: mockConversationService,
+      loggingService,
+    });
+    stopFn = stopProcessing;
+    return <Text>{messages.map((message) => ('text' in message ? message.text : message.sender)).join('|')}</Text>;
+  };
+
+  const { lastFrame } = await renderInAct(<Harness />);
+  expect(lastFrame!()).toBe('');
+
+  await act(async () => {
+    stopFn?.();
+  });
+
+  expect(lastFrame!()).toContain('Stopped');
+});
+
+it.sequential('useConversation wires the retry callback to add a system message', async () => {
+  let retryCallback: (() => void) | undefined;
+  const mockConversationService = {
+    sessionId: 'session-id',
+    setRetryCallback(callback: () => void) {
+      retryCallback = callback;
+    },
+  } as any;
+
+  const Harness = () => {
+    const { messages } = useConversation({
+      conversationService: mockConversationService,
+      loggingService,
+    });
+    return <Text>{messages.map((message) => ('text' in message ? message.text : message.sender)).join('|')}</Text>;
+  };
+
+  const { lastFrame } = await renderInAct(<Harness />);
+  expect(retryCallback).toBeTypeOf('function');
+
+  await act(async () => {
+    retryCallback?.();
+  });
+
+  expect(lastFrame!()).toContain('Retrying due to upstream error...');
+});

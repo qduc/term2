@@ -5,7 +5,12 @@ import type { LogEvent, StateSnapshot } from '../logging/conversation-log-events
 import type { UserTurn } from '../../types/user-turn.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { SkillsService } from '../skills/skills-service.js';
-import type { SendMessageOptions, HandleApprovalDecisionOptions, ConversationAdapter } from './conversation-adapter.js';
+import type {
+  SendMessageOptions,
+  HandleApprovalDecisionOptions,
+  ConversationAdapter,
+  ConversationEventSink,
+} from './conversation-adapter.js';
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 import type { InputSurgeDecision } from '../input-surge-guard.js';
 import type { SessionRuntime } from '../session/session-composition.js';
@@ -23,6 +28,7 @@ export class ConversationService {
   #runtime: SessionRuntime;
   #adapter: ConversationAdapter;
   readonly #agentClient: ConversationAgentClient;
+  #eventSink: ConversationEventSink | null = null;
   readonly #deps: {
     logger: ILoggingService;
     settingsService?: ISettingsService;
@@ -58,12 +64,18 @@ export class ConversationService {
     this.#adapter = adapter;
   }
 
+  setEventSink(sink: ConversationEventSink | null): void {
+    this.#eventSink = sink;
+    this.#adapter.setEventSink(sink);
+  }
+
   get sessionId(): string {
     return this.#runtime.sessionId;
   }
 
   resetWithNewId(newId: string): void {
     const previousLogSink = this.#logSink;
+    const previousEventSink = this.#eventSink;
     this.#runtime.state.reset();
     this.#runtime.dispose();
     this.#deps.skillsService?.discoverSkills();
@@ -76,6 +88,9 @@ export class ConversationService {
     this.#adapter = adapter;
     if (previousLogSink) {
       this.#runtime.logs.setLogSink(previousLogSink);
+    }
+    if (previousEventSink) {
+      this.#adapter.setEventSink(previousEventSink);
     }
   }
 

@@ -8,7 +8,7 @@ import { renderInAct } from './test-helpers/ink-testing.js';
 
 const mocks = vi.hoisted(() => ({
   bottomAreaProps: null as any,
-  useInputHandlers: [] as Array<(input: string, key: Record<string, boolean>) => void>,
+  useInputHandler: null as ((input: string, key: Record<string, boolean>) => void) | null,
   setInput: vi.fn(),
   replaceInput: vi.fn(),
   setMode: vi.fn(),
@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   setInputAndCursor: vi.fn(),
   exit: vi.fn(),
   handleApprovalDecision: vi.fn(),
+  submitApprovalDecision: vi.fn(),
+  submitConversationTurn: vi.fn(async () => false),
   setWaitingForRejectionReason: vi.fn(),
   setWaitingForAskUserAnswer: vi.fn(),
   stopProcessing: vi.fn(),
@@ -76,7 +78,7 @@ vi.mock('ink', () => ({
   useApp: () => ({ exit: mocks.exit }),
   useStdout: () => ({ stdout: { write: vi.fn() } }),
   useInput: (handler: (input: string, key: Record<string, boolean>) => void) => {
-    mocks.useInputHandlers.push(handler);
+    mocks.useInputHandler = handler;
   },
 }));
 
@@ -132,6 +134,8 @@ vi.mock('./hooks/use-conversation.js', () => ({
     thinkingStartedAt: null,
     toolCallStreamingInfo: null,
     sendUserMessage: mocks.sendUserMessage,
+    submitConversationTurn: mocks.submitConversationTurn,
+    submitApprovalDecision: mocks.submitApprovalDecision,
     handleApprovalDecision: mocks.handleApprovalDecision,
     onTypeAnswer: vi.fn(),
     clearConversation: mocks.clearConversation,
@@ -196,6 +200,10 @@ vi.mock('./hooks/use-terminal-focus-notifier.js', () => ({
   }),
 }));
 
+vi.mock('./hooks/use-app-keyboard-shortcuts.js', () => ({
+  useAppKeyboardShortcuts: vi.fn(),
+}));
+
 vi.mock('./hooks/use-pending-turn-guards.js', () => ({
   usePendingTurnGuards: () => mocks.pendingGuards,
 }));
@@ -239,18 +247,9 @@ const createServices = () => ({
   } as any,
 });
 
-const fireInput = async (input: string, key: Record<string, boolean>) => {
-  await act(async () => {
-    for (const handler of mocks.useInputHandlers) {
-      handler(input, key);
-    }
-    await Promise.resolve();
-  });
-};
-
 beforeEach(() => {
   mocks.bottomAreaProps = null;
-  mocks.useInputHandlers = [];
+  mocks.useInputHandler = null;
   mocks.setInput.mockReset();
   mocks.replaceInput.mockReset();
   mocks.setMode.mockReset();
@@ -258,6 +257,9 @@ beforeEach(() => {
   mocks.setImages.mockReset();
   mocks.exit.mockReset();
   mocks.handleApprovalDecision.mockReset();
+  mocks.submitApprovalDecision.mockReset();
+  mocks.submitConversationTurn.mockReset();
+  mocks.submitConversationTurn.mockResolvedValue(false);
   mocks.setWaitingForRejectionReason.mockReset();
   mocks.setWaitingForAskUserAnswer.mockReset();
   mocks.stopProcessing.mockReset();
@@ -313,6 +315,7 @@ beforeEach(() => {
 describe('App orchestration', () => {
   it.sequential('ignores submit while waiting for approval', async () => {
     mocks.conversationState.waitingForApproval = true;
+    mocks.submitConversationTurn.mockResolvedValue(true);
     const services = createServices();
 
     await renderInAct(<App {...services} sessionId="session-1" generateId={() => 'session-2'} />);
@@ -321,12 +324,14 @@ describe('App orchestration', () => {
       await mocks.bottomAreaProps.onSubmit({ text: 'hello', images: [] });
     });
 
+    expect(mocks.submitConversationTurn).toHaveBeenCalledWith({ text: 'hello', images: [] });
     expect(mocks.pendingGuards.sendGuardedTurn).not.toHaveBeenCalled();
     expect(mocks.handleApprovalDecision).not.toHaveBeenCalled();
   });
 
-  it.sequential('routes rejection-reason submit through handleApprovalDecision', async () => {
+  it.sequential('routes rejection-reason submit through useConversation', async () => {
     mocks.conversationState.waitingForRejectionReason = true;
+    mocks.submitConversationTurn.mockResolvedValue(true);
     const services = createServices();
 
     await renderInAct(<App {...services} sessionId="session-1" generateId={() => 'session-2'} />);
@@ -335,9 +340,10 @@ describe('App orchestration', () => {
       await mocks.bottomAreaProps.onSubmit({ text: 'needs review', images: [] });
     });
 
-    expect(mocks.setWaitingForRejectionReason).toHaveBeenCalledWith(false);
-    expect(mocks.replaceInput).toHaveBeenCalledWith('');
-    expect(mocks.handleApprovalDecision).toHaveBeenCalledWith('n', 'needs review');
+    expect(mocks.submitConversationTurn).toHaveBeenCalledWith({ text: 'needs review', images: [] });
+    expect(mocks.setWaitingForRejectionReason).not.toHaveBeenCalled();
+    expect(mocks.replaceInput).not.toHaveBeenCalled();
+    expect(mocks.handleApprovalDecision).not.toHaveBeenCalled();
   });
 
   it.sequential('clears input after slash command actions unless they return false', async () => {
@@ -410,31 +416,5 @@ describe('App orchestration', () => {
       text: '/unknown command',
       images: [],
     });
-  });
-
-  it.sequential('ignores Shift+Tab when a large uncached turn is pending', async () => {
-    mocks.pendingGuards.pendingLargeUncachedTurn = { text: 'large', images: [] };
-    const services = createServices();
-
-    await renderInAct(<App {...services} sessionId="session-1" generateId={() => 'session-2'} />);
-
-    await fireInput('\u001b[Z', { shift: true, tab: true });
-
-    expect(mocks.cycleAppModes).not.toHaveBeenCalled();
-    expect(mocks.toggleShellMode).not.toHaveBeenCalled();
-  });
-
-  it.sequential('cancels handoff on Escape when entering the handoff message', async () => {
-    mocks.handoff.handoffState = {
-      capturedText: 'code',
-      stage: 'entering_message',
-    };
-    const services = createServices();
-
-    await renderInAct(<App {...services} sessionId="session-1" generateId={() => 'session-2'} />);
-
-    await fireInput('', { escape: true });
-
-    expect(mocks.handoff.cancelHandoff).toHaveBeenCalledTimes(1);
   });
 });

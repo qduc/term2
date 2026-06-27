@@ -514,6 +514,56 @@ it('emits approval interruptions and resumes after approval', async () => {
   expect(initialStream.state.rejectCalls).toEqual([]);
 });
 
+it('forwards streamed events to a persistent event sink across approval continuation', async () => {
+  const interruption = {
+    name: 'bash',
+    agent: { name: 'CLI Agent' },
+    arguments: JSON.stringify({ command: 'echo hi' }),
+    callId: 'call-123',
+  };
+
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [interruption];
+  initialStream.state = {
+    approveCalls: [],
+    rejectCalls: [],
+    approve(arg: unknown) {
+      (this as any).approveCalls.push(arg);
+    },
+    reject(arg: unknown) {
+      (this as any).rejectCalls.push(arg);
+    },
+  };
+
+  const continuationStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Approved run' }]);
+  continuationStream.finalOutput = 'Approved run';
+
+  const mockClient = partialClient({
+    async startStream() {
+      return initialStream;
+    },
+    async continueRunStream() {
+      return continuationStream;
+    },
+  });
+
+  const events: any[] = [];
+  const service = new ConversationService({
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  service.setEventSink((event) => events.push(event));
+
+  const approvalResult = await service.sendMessage('run command');
+  expect(approvalResult.type).toBe('approval_required');
+
+  const finalResult = await service.handleApprovalDecision('y');
+
+  expect(finalResult).toBeTruthy();
+  expect(finalResult!.type).toBe('response');
+  expect(events.map((event) => event.type)).toEqual(['approval_required', 'tool_started', 'text_delta', 'final']);
+});
+
 it('dedupes command messages emitted live from run events', async () => {
   const commandPayload = 'exit 0\nfile.txt';
   const rawItem = {

@@ -7,6 +7,10 @@ import type { NormalizedUsage, UsageAccumulator } from '../utils/ai/token-usage.
 import { useSetting } from './use-setting.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { ConversationOrchestrator } from '../services/conversation/conversation-orchestrator.js';
+import {
+  normalizeApprovalDecision,
+  routeConversationTurnSubmission,
+} from '../services/conversation/conversation-input-routing.js';
 import type { Message } from '../types/message.js';
 import { isBotMessage } from '../types/message.js';
 import type { UserTurn } from '../types/user-turn.js';
@@ -57,6 +61,7 @@ export const useConversation = ({
   sessionId,
   onClear,
   settingsService,
+  replaceInput,
   onRestoreInput,
   logWriter,
   notifier,
@@ -69,6 +74,7 @@ export const useConversation = ({
   sessionId?: string;
   onClear?: () => void | Promise<void>;
   settingsService?: SettingsService;
+  replaceInput?: (text: string) => void;
   /**
    * Called when a user message could not be sent (e.g. upstream error before any
    * stream tokens, or input-surge guard) and the session dropped it from the
@@ -112,6 +118,14 @@ export const useConversation = ({
   useEffect(() => {
     dispatch({ type: 'rate_limit/cleared' });
   }, [provider]);
+
+  useEffect(() => {
+    if (typeof conversationService.setRetryCallback !== 'function') {
+      return;
+    }
+
+    conversationService.setRetryCallback(() => addSystemMessage('Retrying due to upstream error...'));
+  }, [conversationService, addSystemMessage]);
 
   // ── Orchestrator instantiation (lazy, once) ─────────────────────────────
   const messagesRef = useRef(messages);
@@ -179,6 +193,11 @@ export const useConversation = ({
 
   const stopProcessing = useCallback(() => orchestrator.stopProcessing(), [orchestrator]);
 
+  const stopProcessingWithNotice = useCallback(() => {
+    stopProcessing();
+    addSystemMessage('Stopped');
+  }, [stopProcessing, addSystemMessage]);
+
   const undoLastUserMessage = useCallback<() => { text: string; images?: UserTurn['images'] } | null>(
     () => orchestrator.undoLastUserMessage(),
     [orchestrator],
@@ -196,6 +215,50 @@ export const useConversation = ({
   const goToPreviousQuestion = useCallback(() => orchestrator.goToPreviousQuestion(), [orchestrator]);
 
   const goToNextQuestion = useCallback(() => orchestrator.goToNextQuestion(), [orchestrator]);
+
+  const submitApprovalDecision = useCallback(
+    async (answer?: string) => {
+      const normalized = normalizeApprovalDecision(answer);
+      if (normalized.approvalAnswer !== undefined) {
+        replaceInput?.('');
+        await handleApprovalDecision(normalized.answer, undefined, normalized.approvalAnswer);
+        return;
+      }
+
+      await handleApprovalDecision(normalized.answer);
+    },
+    [handleApprovalDecision, replaceInput],
+  );
+
+  const submitConversationTurn = useCallback(
+    async (turn: UserTurn) => {
+      const route = routeConversationTurnSubmission({
+        text: turn.text,
+        waitingForAskUserAnswer,
+        waitingForRejectionReason,
+        waitingForApproval,
+      });
+
+      if (route.kind === 'blocked') {
+        return true;
+      }
+
+      if (route.kind === 'approval_answer') {
+        replaceInput?.('');
+        await handleApprovalDecision(route.answer, undefined, route.approvalAnswer);
+        return true;
+      }
+
+      if (route.kind === 'rejection_reason') {
+        replaceInput?.('');
+        await handleApprovalDecision('n', route.reason);
+        return true;
+      }
+
+      return false;
+    },
+    [handleApprovalDecision, replaceInput, waitingForApproval, waitingForAskUserAnswer, waitingForRejectionReason],
+  );
 
   // ── Compatibility wrappers (pure UI state, no orchestration) ────────────
   const onTypeAnswer = useCallback(() => {
@@ -227,10 +290,12 @@ export const useConversation = ({
     thinkingStartedAt,
     toolCallStreamingInfo,
     sendUserMessage,
+    submitConversationTurn,
+    submitApprovalDecision,
     handleApprovalDecision,
     onTypeAnswer,
     clearConversation,
-    stopProcessing,
+    stopProcessing: stopProcessingWithNotice,
     undoLastUserMessage,
     retryLastToolOutput,
     getUserMessages,

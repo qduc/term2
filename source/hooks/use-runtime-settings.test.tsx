@@ -4,6 +4,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import React, { useEffect } from 'react';
 import { Text } from 'ink';
+import type { ConversationService } from '../services/conversation/conversation-service.js';
 import { useRuntimeSettings } from './use-runtime-settings.js';
 import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 import { renderInAct } from '../test-helpers/ink-testing.js';
@@ -18,14 +19,11 @@ it.sequential('useRuntimeSettings routes agent.provider changes through switchPr
   const settingsService = createMockSettingsService({
     'agent.provider': 'openai',
   });
-  const conversationService = {
+  const conversationService: Pick<ConversationService, 'switchProvider'> = {
     switchProvider(provider: string) {
       calls.push(`switch:${provider}`);
     },
-    setProvider(provider: string) {
-      calls.push(`set:${provider}`);
-    },
-  } as any;
+  };
 
   const Harness = () => {
     const applyRuntimeSetting = useRuntimeSettings({

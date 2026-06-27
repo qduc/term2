@@ -46,6 +46,44 @@ it('streams text_delta events to stdout and appends newline', async () => {
   expect(stderr.getOutput()).toBe('');
 });
 
+it('uses a persistent event sink when the session supports one', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+
+  const setEventSinkCalls: Array<((event: any) => void) | null> = [];
+  let sink: ((event: any) => void) | null = null;
+
+  const session: any = {
+    setEventSink(next: ((event: any) => void) | null) {
+      setEventSinkCalls.push(next);
+      sink = next;
+    },
+    async sendMessage(_prompt: string) {
+      sink?.({ type: 'text_delta', delta: 'Hello' });
+      sink?.({ type: 'final', finalText: 'Hello' });
+      return { type: 'response', finalText: 'Hello', commandMessages: [] };
+    },
+    async handleApprovalDecision() {
+      expect(true).toBe(false);
+      return null;
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'hi',
+    autoApprove: false,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+  });
+
+  expect(exitCode).toBe(0);
+  expect(stdout.getOutput()).toBe('Hello\n');
+  expect(stderr.getOutput()).toBe('');
+  expect(setEventSinkCalls.length).toBeGreaterThanOrEqual(2);
+  expect(typeof setEventSinkCalls[0]).toBe('function');
+  expect(setEventSinkCalls[setEventSinkCalls.length - 1]).toBeNull();
+});
+
 it('streams reasoning_delta events to stderr only', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();

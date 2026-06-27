@@ -2,7 +2,7 @@ import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 're
 import { useInputActions, useInputState } from './context/InputContext.js';
 import { appendStartupBannerId, clearTerminalForRedraw, messagesHaveNonSystemContent } from './app-helpers.js';
 
-import { Box, useApp, useInput, useStdout } from 'ink';
+import { Box, useApp, useStdout } from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
 import MessageList, {
   detectStaticCommitBlocker,
@@ -12,7 +12,6 @@ import MessageList, {
 import BottomArea from './components/layout/BottomArea.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import type { ConversationService } from './services/conversation/conversation-service.js';
-import { isDeniedReadApproveAnswer } from './contracts/conversation.js';
 import type { SettingsService } from './services/settings/settings-service.js';
 import type { HistoryService } from './services/history-service.js';
 import type { LoggingService } from './services/logging/logging-service.js';
@@ -25,6 +24,7 @@ import { useAppCommands } from './hooks/use-app-commands.js';
 import { useHandoffFlow } from './hooks/use-handoff-flow.js';
 import { usePendingTurnGuards } from './hooks/use-pending-turn-guards.js';
 import { useTerminalFocusNotifier } from './hooks/use-terminal-focus-notifier.js';
+import { useAppKeyboardShortcuts } from './hooks/use-app-keyboard-shortcuts.js';
 import { hasUserTurnContent, type UserTurn } from './types/user-turn.js';
 import type { Message } from './types/message.js';
 import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumulator } from './utils/ai/token-usage.js';
@@ -116,7 +116,8 @@ const App: FC<AppProps> = ({
     thinkingStartedAt,
     toolCallStreamingInfo,
     sendUserMessage,
-    handleApprovalDecision,
+    submitConversationTurn,
+    submitApprovalDecision,
     onTypeAnswer,
     clearConversation,
     stopProcessing,
@@ -172,10 +173,6 @@ const App: FC<AppProps> = ({
   useEffect(() => {
     handleClearConversationRef.current = handleClearConversation;
   }, [handleClearConversation]);
-
-  useEffect(() => {
-    conversationService.setRetryCallback(() => addSystemMessage('Retrying due to upstream error...'));
-  }, [conversationService, addSystemMessage]);
 
   const applyRuntimeSetting = useRuntimeSettings({
     setModel,
@@ -301,58 +298,11 @@ const App: FC<AppProps> = ({
     [undoToUserMessage, redrawMessageList, replaceInput],
   );
 
-  // Handle Ctrl+C to exit immediately
-  useInput((_input: string, key) => {
-    if (key.ctrl && _input === 'c') {
-      exitWithUsage();
-    }
-  });
-
-  // Handle Esc to stop processing or cancel rejection reason or handoff
-  useInput((_input: string, key) => {
-    if (key.escape && pendingSkillRef.current) {
-      pendingSkillRef.current = null;
-      addSystemMessage('Skill activation cancelled.');
-      return;
-    }
-
-    if (key.escape && waitingForAskUserAnswer) {
-      setWaitingForAskUserAnswer(false);
-      replaceInput('');
-      return;
-    }
-
-    if (key.escape && waitingForRejectionReason) {
-      // Cancel rejection reason input and return to approval prompt
-      setWaitingForRejectionReason(false);
-      replaceInput('');
-      return;
-    }
-
-    if (key.escape && (isProcessing || waitingForApproval)) {
-      stopProcessing();
-      addSystemMessage('Stopped');
-      setWaitingForRejectionReason(false);
-      return;
-    }
-
-    if (key.escape && handoff.handoffState && handoff.handoffState.stage === 'entering_message') {
-      handoff.cancelHandoff();
-      return;
-    }
-  });
-
   const handleApprove = useCallback(
     async (answer?: string) => {
-      // Denied-read approval decisions are passed as the answer string itself
-      // so prepareContinuation can distinguish them from standard approve ('y').
-      if (isDeniedReadApproveAnswer(answer)) {
-        await handleApprovalDecision(answer);
-      } else {
-        await handleApprovalDecision('y', undefined, answer);
-      }
+      await submitApprovalDecision(answer);
     },
-    [handleApprovalDecision],
+    [submitApprovalDecision],
   );
 
   const handleReject = useCallback(() => {
@@ -370,44 +320,34 @@ const App: FC<AppProps> = ({
     [goToPreviousQuestion, goToNextQuestion],
   );
 
-  // Switch between Standard and Plan modes with Shift+Tab
-  useInput((input: string, key) => {
-    const isShiftTab = (key.shift && key.tab) || input === '\u001b[Z';
-    if (!isShiftTab) return;
-
-    if (pendingGuards.pendingLargeUncachedTurn) {
-      return;
-    }
-
-    if (liteMode) {
-      toggleShellMode();
-      return;
-    }
-
-    cycleAppModes();
+  useAppKeyboardShortcuts({
+    exitWithUsage,
+    pendingSkillRef,
+    waitingForAskUserAnswer,
+    setWaitingForAskUserAnswer,
+    waitingForRejectionReason,
+    setWaitingForRejectionReason,
+    isProcessing,
+    waitingForApproval,
+    stopProcessing,
+    handoffState: handoff.handoffState,
+    cancelHandoff: handoff.cancelHandoff,
+    pendingLargeUncachedTurn: pendingGuards.pendingLargeUncachedTurn,
+    liteMode,
+    toggleShellMode,
+    cycleAppModes,
+    replaceInput,
+    onSkillActivationCancelled: () => addSystemMessage('Skill activation cancelled.'),
   });
 
   const handleSubmit = async (turn: UserTurn): Promise<void> => {
+    if (await submitConversationTurn(turn)) {
+      return;
+    }
+
     const value = turn.text;
     const hasImages = Boolean(turn.images?.length);
-    if (waitingForAskUserAnswer) {
-      setWaitingForAskUserAnswer(false);
-      replaceInput('');
-      await handleApprovalDecision('y', undefined, value);
-      return;
-    }
     if (!hasUserTurnContent(turn) && handoff.handoffState?.stage !== 'entering_message') return;
-
-    // If waiting for rejection reason, handle it
-    if (waitingForRejectionReason) {
-      setWaitingForRejectionReason(false);
-      replaceInput('');
-      await handleApprovalDecision('n', value);
-      return;
-    }
-
-    // If waiting for approval, ignore text input (handled by useInput)
-    if (waitingForApproval) return;
 
     if (liteMode && isShellMode && !hasImages) {
       await handleShellSubmit(value);

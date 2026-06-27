@@ -29,9 +29,12 @@ export type HandleApprovalDecisionOptions = {
 
 export type TurnFlow = Pick<SessionRuntime['turns'], 'start' | 'continueAfterApproval'>;
 
+export type ConversationEventSink = (event: ConversationEvent) => void;
+
 export class ConversationAdapter {
   #sessionId: string;
   #startedAt: string;
+  #eventSink: ConversationEventSink | null = null;
   #askUserAnswerSink: AskUserAnswerSink | null;
   #subagentEventSinkHost: SubagentEventSinkHost | null;
   #logger: ILoggingService;
@@ -66,6 +69,10 @@ export class ConversationAdapter {
     this.#logs = deps.logs;
     this.#approval = deps.approval;
     this.#turnFlow = deps.turnFlow;
+  }
+
+  setEventSink(sink: ConversationEventSink | null): void {
+    this.#eventSink = sink;
   }
 
   #getFirstUserMessagePreview(currentTurn?: string): string {
@@ -112,6 +119,7 @@ export class ConversationAdapter {
     return this.#withTrafficContext(turn.text, async () => {
       const wrappedOnEvent = (event: ConversationEvent) => {
         this.#logs.dispatchEventToLog(event);
+        this.#eventSink?.(event);
         onEvent?.(event);
       };
       this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
@@ -179,6 +187,7 @@ export class ConversationAdapter {
     return this.#withTrafficContext(undefined, async () => {
       const wrappedOnEvent = (event: ConversationEvent) => {
         this.#logs.dispatchEventToLog(event);
+        this.#eventSink?.(event);
         onEvent?.(event);
       };
       this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);

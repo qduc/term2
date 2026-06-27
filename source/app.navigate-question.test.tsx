@@ -87,6 +87,8 @@ vi.mock('./hooks/use-conversation.js', () => ({
     thinkingStartedAt: null,
     toolCallStreamingInfo: null,
     sendUserMessage: mocks.sendUserMessage,
+    submitConversationTurn: vi.fn(async () => false),
+    submitApprovalDecision: vi.fn(async () => {}),
     handleApprovalDecision: mocks.handleApprovalDecision,
     onTypeAnswer: mocks.onTypeAnswer,
     clearConversation: mocks.clearConversation,

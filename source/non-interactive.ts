@@ -37,6 +37,7 @@ export interface ConversationSessionLike {
     rejectionReason?: string,
     options?: HandleApprovalDecisionOptions,
   ): Promise<ConversationTerminal | null>;
+  setEventSink?: (sink: ((event: ConversationEvent) => void) | null) => void;
   exportState?(): { history: unknown[]; previousResponseId: string | null; toolLedger: SavedToolExecution[] };
 }
 
@@ -107,7 +108,15 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     type SendResult = Awaited<ReturnType<ConversationSessionLike['sendMessage']>>;
     type ApprovalResult = Awaited<ReturnType<ConversationSessionLike['handleApprovalDecision']>>;
 
-    let result: SendResult | ApprovalResult = await session.sendMessage(config.prompt, { onEvent } as any);
+    const supportsPersistentEventSink = typeof session.setEventSink === 'function';
+    if (supportsPersistentEventSink) {
+      session.setEventSink!(onEvent);
+    }
+
+    let result: SendResult | ApprovalResult;
+    result = supportsPersistentEventSink
+      ? await session.sendMessage(config.prompt)
+      : await session.sendMessage(config.prompt, { onEvent } as any);
 
     while (result?.type === 'approval_required') {
       if (config.autoApprove) {
@@ -166,17 +175,19 @@ export async function runWithSession(session: ConversationSessionLike, config: N
         }
 
         if (shouldApprove) {
-          result = await session.handleApprovalDecision('y', undefined, {
-            onEvent,
-          } as any);
+          result = supportsPersistentEventSink
+            ? await session.handleApprovalDecision('y', undefined)
+            : await session.handleApprovalDecision('y', undefined, { onEvent } as any);
         } else {
           stderr.write(`Approval Rejected: ${rejectionReason}\n`);
-          result = await session.handleApprovalDecision('n', rejectionReason, {
-            onEvent,
-          } as any);
+          result = supportsPersistentEventSink
+            ? await session.handleApprovalDecision('n', rejectionReason)
+            : await session.handleApprovalDecision('n', rejectionReason, { onEvent } as any);
         }
       } else {
-        result = await session.handleApprovalDecision('n', NON_INTERACTIVE_REJECTION_REASON, { onEvent } as any);
+        result = supportsPersistentEventSink
+          ? await session.handleApprovalDecision('n', NON_INTERACTIVE_REJECTION_REASON)
+          : await session.handleApprovalDecision('n', NON_INTERACTIVE_REJECTION_REASON, { onEvent } as any);
       }
 
       if (result === null) {
@@ -196,6 +207,10 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     const message = error instanceof Error ? error.message : String(error);
     stderr.write(`error ${message}\n`);
     return 1;
+  } finally {
+    if (typeof session.setEventSink === 'function') {
+      session.setEventSink(null);
+    }
   }
 }
 

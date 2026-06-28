@@ -1,11 +1,15 @@
-import type { ConversationService } from './conversation/conversation-service.js';
 import type { SettingsService } from './settings/settings-service.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import { setTrimConfig } from '../utils/output/output-trim.js';
 import { planModeNotice } from './mode-notices.js';
 
+export interface RuntimeSettingRouterConversationService {
+  switchProvider(provider: string): void;
+  queueModeNotice(text: string): void;
+}
+
 export interface RuntimeSettingRouterDeps {
-  conversationService: ConversationService;
+  conversationService: RuntimeSettingRouterConversationService;
   settingsService: SettingsService;
   setModel: (model: string) => void;
   setReasoningEffort: (effort: ReasoningEffortSetting) => void;

@@ -19,9 +19,12 @@ it.sequential('useRuntimeSettings routes agent.provider changes through switchPr
   const settingsService = createMockSettingsService({
     'agent.provider': 'openai',
   });
-  const conversationService: Pick<ConversationService, 'switchProvider'> = {
+  const conversationService: Pick<ConversationService, 'switchProvider' | 'queueModeNotice'> = {
     switchProvider(provider: string) {
       calls.push(`switch:${provider}`);
+    },
+    queueModeNotice() {
+      // no-op for this test
     },
   };
 

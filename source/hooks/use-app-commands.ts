@@ -11,6 +11,7 @@ import { createRetrySlashCommand } from '../commands/retry-command.js';
 import { createQuitSlashCommand } from '../commands/quit-command.js';
 import { createModelSlashCommand } from '../commands/model-command.js';
 import { createAutoApproveSlashCommand } from '../commands/auto-approve-command.js';
+import { createSandboxSlashCommand } from '../commands/sandbox-command.js';
 import { createEffortSlashCommand } from '../commands/effort-command.js';
 import { createHandoffSlashCommand } from '../commands/handoff-command.js';
 import { createGuardedSettingsCommand } from '../commands/guarded-settings-command.js';
@@ -128,6 +129,7 @@ export const useAppCommands = ({
         },
       ),
       createAutoApproveSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage }),
+      createSandboxSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage }),
       {
         name: 'plan',
         description: 'Toggle plan mode (read-only research/planning mode)',

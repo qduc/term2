@@ -42,6 +42,7 @@
     "dev": "tsc --project tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --reporter=minimal",
+    "test:e2e": "vitest run --reporter=minimal .e2e.test.ts",
     "test:verbose": "vitest run",
     "test:vitest:watch": "vitest",
     "test:vitest:coverage": "vitest run --coverage",

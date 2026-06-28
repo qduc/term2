@@ -117,3 +117,52 @@ it('ConversationAdapter forwards streamed events to a persistent event sink', as
   expect(result.type).toBe('response');
   expect(emitted.map((event) => event.type)).toEqual(['text_delta', 'final']);
 });
+
+it('ConversationAdapter populates firstUserMessagePreview in session context', async () => {
+  let capturedContext: any = null;
+  const sessionContextService = {
+    runWithContext: (context: any, fn: () => any) => {
+      capturedContext = context;
+      return fn();
+    },
+    getContext: () => null,
+  };
+  const turnFlow = {
+    async *start() {
+      yield { type: 'final' as const, finalText: 'done' };
+    },
+    async *continueAfterApproval() {
+      yield { type: 'final' as const, finalText: 'done' };
+    },
+  };
+  const userTurns = {
+    listUserTurns: () => [{ index: 0, text: 'First message\nwith newline', imageCount: 0 }],
+  } as unknown as Pick<SessionManager, 'listUserTurns'>;
+  const logs = {
+    dispatchEventToLog: noop,
+    log: noop,
+    setLogSink: noop,
+  } as unknown as SessionLogs;
+  const approval = {
+    getPending: () => null,
+    getPendingInterruption: () => ({}),
+  } as unknown as SessionApprovalQuery;
+
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: '2026-06-12T00:00:00.000Z',
+    logger,
+    sessionContextService,
+    userTurns,
+    logs,
+    approval,
+    turnFlow,
+  });
+
+  await adapter.sendMessage('ignore me');
+
+  expect(capturedContext).toMatchObject({
+    sessionId: 'session-1',
+    firstUserMessagePreview: 'First message with newline',
+  });
+});

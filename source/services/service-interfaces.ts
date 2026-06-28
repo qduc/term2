@@ -4,6 +4,7 @@ export type SessionTrafficContext = {
   mode?: string;
   traceId?: string;
   evaluator?: boolean;
+  firstUserMessagePreview?: string;
 };
 
 export interface ILoggingService {

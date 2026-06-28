@@ -255,22 +255,6 @@ const providerFlag =
 const reasoningEffort =
   typeof rawReasoningFlag === 'string' && rawReasoningFlag.trim().length > 0 ? rawReasoningFlag.trim() : undefined;
 
-// Validate provider flag against available providers
-const validProviderIds = getProviderIds();
-const validatedProviderFlag: string | undefined =
-  providerFlag && validProviderIds.includes(providerFlag) ? providerFlag : undefined;
-
-if (providerFlag && !validatedProviderFlag) {
-  console.error(`Error: Unknown provider "${providerFlag}".`);
-  console.error('Available providers:');
-  const providers = getAllProviders();
-  for (const p of providers) {
-    console.error(`  - ${p.id}  (${p.label})`);
-  }
-  console.error('\nYou can configure custom providers in your settings.json file.');
-  process.exit(1);
-}
-
 const validReasoningEfforts = ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', null] as const;
 type ModelSettingsReasoningEffort = (typeof validReasoningEfforts)[number];
 
@@ -365,8 +349,8 @@ if (modelFlag) {
   cliOverrides.agent = { ...cliOverrides.agent, model: modelFlag };
 }
 
-if (validatedProviderFlag) {
-  cliOverrides.agent = { ...cliOverrides.agent, provider: validatedProviderFlag };
+if (providerFlag) {
+  cliOverrides.agent = { ...cliOverrides.agent, provider: providerFlag };
 }
 
 if (validatedReasoningEffort) {
@@ -394,6 +378,19 @@ const settings = new SettingsService({
       : undefined,
   loggingService: logger,
 });
+
+// Validate provider flag after settings load so runtime-defined providers from
+// settings.json are registered before we check.
+if (providerFlag && !getProviderIds().includes(providerFlag)) {
+  console.error(`Error: Unknown provider "${providerFlag}".`);
+  console.error('Available providers:');
+  const providers = getAllProviders();
+  for (const p of providers) {
+    console.error(`  - ${p.id}  (${p.label})`);
+  }
+  console.error('\nYou can configure custom providers in your settings.json file.');
+  process.exit(1);
+}
 
 // Fresh sessions honor --lite/non-interactive defaults. Resumed sessions keep
 // the saved mode profile so prompt/tool behavior matches the conversation.

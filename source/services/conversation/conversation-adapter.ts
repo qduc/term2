@@ -40,6 +40,7 @@ export class ConversationAdapter {
   #logger: ILoggingService;
   #settingsService?: ISettingsService;
   #sessionContextService: ISessionContextService;
+  #userTurns: Pick<SessionManager, 'listUserTurns'>;
   #logs: SessionLogs;
   #approval: SessionApprovalQuery;
   #turnFlow: TurnFlow;
@@ -64,6 +65,7 @@ export class ConversationAdapter {
     this.#logger = deps.logger;
     this.#settingsService = deps.settingsService;
     this.#sessionContextService = deps.sessionContextService;
+    this.#userTurns = deps.userTurns;
     this.#logs = deps.logs;
     this.#approval = deps.approval;
     this.#turnFlow = deps.turnFlow;
@@ -84,12 +86,17 @@ export class ConversationAdapter {
 
   #withTrafficContext<T>(currentTurn: string | undefined, fn: () => T): T {
     const mode = this.#getTrafficMode();
+    const turns = this.#userTurns.listUserTurns();
+    const firstTurn = turns[0]?.text ?? currentTurn;
+    const firstUserMessagePreview = firstTurn ? firstTurn.slice(0, 160).replace(/\n/g, ' ') : undefined;
+
     return this.#sessionContextService.runWithContext(
       {
         sessionId: this.#sessionId,
         sessionStartedAt: this.#startedAt,
         mode,
         traceId: this.#logger.getCorrelationId(),
+        firstUserMessagePreview,
       },
       fn,
     );

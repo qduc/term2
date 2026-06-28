@@ -217,3 +217,56 @@ it('CLI prompts before starting in non-lite mode from root directory', () => {
   expect(stderr.includes('Warning: you are starting term2 in non-lite mode from your home directory.')).toBe(true);
   expect(stderr.includes('Cancelled.')).toBe(true);
 });
+
+it('CLI accepts a custom provider from settings.json in non-interactive mode', () => {
+  const cliPath = path.resolve('dist/cli.js');
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  const settingsDir = path.join(tempHome, '.local', 'state', 'term2-nodejs');
+  fs.mkdirSync(settingsDir, { recursive: true });
+  const providerName = 'my-custom-provider';
+
+  const settingsFile = path.join(settingsDir, 'settings.json');
+  fs.writeFileSync(
+    settingsFile,
+    JSON.stringify(
+      {
+        providers: [
+          {
+            name: providerName,
+            type: 'openai-compatible',
+            baseUrl: 'http://127.0.0.1:65535/v1',
+            apiKey: 'test-key',
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+    'utf-8',
+  );
+
+  let error: any;
+  let stderr = '';
+
+  try {
+    execFileSync('node', [cliPath, '--provider', providerName, 'hello'], {
+      env: {
+        ...process.env,
+        HOME: tempHome,
+        TERM2_CONVERSATIONS_DIR: testDir,
+        DISABLE_LOGGING: '1',
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (err: any) {
+    error = err;
+    stderr = err.stderr?.toString?.() ?? '';
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+
+  // The command may still fail due to missing upstream provider endpoint, but
+  // it should not fail the early provider validation path.
+  expect(stderr.includes(`Error: Unknown provider "${providerName}".`)).toBe(false);
+  expect(error).toBeTruthy();
+});

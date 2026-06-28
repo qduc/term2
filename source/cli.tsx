@@ -20,6 +20,7 @@ import { ExecutionContext } from './services/execution-context.js';
 import { ISSHService } from './services/service-interfaces.js';
 import { resolveSSHHost } from './utils/ssh-config-parser.js';
 import { createUsageAccumulator, formatSessionUsageBreakdown } from './utils/ai/token-usage.js';
+import { buildProjectFolderTitle, setTerminalTitle } from './utils/output/terminal-title.js';
 import {
   generateId,
   getResumeCommand,
@@ -536,6 +537,7 @@ const history = new HistoryService({
 
 const skillsService = new SkillsService(logger, executionContext.getCwd());
 skillsService.discoverSkills();
+const terminalTitleBase = buildProjectFolderTitle(executionContext.getCwd());
 
 const usedModel = settings.get('agent.model');
 const usedReasoningEffort = settings.get('agent.reasoningEffort');
@@ -568,6 +570,8 @@ if (hasPositionalPrompt) {
   });
   process.exit(exitCode);
 }
+
+setTerminalTitle(terminalTitleBase);
 
 // Generate session UUID and handle resume
 effectiveSessionId = generateId();
@@ -732,6 +736,7 @@ const { waitUntilExit } = render(
         onHasConversationContent={(hasContent) => {
           effectiveHasConversationContent = hasContent;
         }}
+        terminalTitleBase={terminalTitleBase}
       />
     </InputProvider>
   ) as ReactNode,

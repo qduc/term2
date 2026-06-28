@@ -31,6 +31,7 @@ import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumula
 import type { UndoItem } from './hooks/use-undo-selection.js';
 import { resolveSlashCommand } from './slash-commands.js';
 import type { SkillsService, SkillInfo } from './services/skills/skills-service.js';
+import { buildTerminalTitleLabel, setTerminalTitle } from './utils/output/terminal-title.js';
 import {
   registerSandboxNetworkApprovalHandler,
   type SandboxNetworkAccessRequest,
@@ -64,6 +65,7 @@ interface AppProps {
   onSessionIdChange?: (newId: string, createdAt: string) => void;
   onHasConversationContent?: (hasContent: boolean) => void;
   skillsService?: SkillsService;
+  terminalTitleBase: string;
 }
 
 const App: FC<AppProps> = ({
@@ -86,6 +88,7 @@ const App: FC<AppProps> = ({
   onSessionIdChange,
   onHasConversationContent,
   skillsService,
+  terminalTitleBase,
 }) => {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -391,6 +394,10 @@ const App: FC<AppProps> = ({
   const effectiveWaitingForRejectionReason = sandboxPromptRequest ? false : waitingForRejectionReason;
   const effectiveWaitingForAskUserAnswer = sandboxPromptRequest ? false : waitingForAskUserAnswer;
   const effectiveIsProcessing = sandboxPromptRequest ? false : isProcessing;
+
+  useEffect(() => {
+    setTerminalTitle(buildTerminalTitleLabel(terminalTitleBase, effectiveIsProcessing));
+  }, [effectiveIsProcessing, terminalTitleBase]);
 
   const handleNavigateQuestion = useCallback(
     (direction: 'prev' | 'next') => {

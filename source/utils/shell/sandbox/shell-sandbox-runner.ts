@@ -2,6 +2,7 @@ import { SandboxManager } from '@anthropic-ai/sandbox-runtime';
 import type { SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
 import { SANDBOX_TEMP_DIR } from '../temp-dir.js';
 import { createSandboxRuntimeConfig, type SandboxAvailability, type ShellSandboxRunner } from './sandbox-policy.js';
+import { requestSandboxNetworkApproval } from './sandbox-network-approval.js';
 
 export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
   #initializedForKey: string | undefined;
@@ -57,7 +58,10 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
         await SandboxManager.reset();
       }
       process.env.CLAUDE_CODE_TMPDIR = SANDBOX_TEMP_DIR;
-      await SandboxManager.initialize(config);
+      const sandboxAskCallback = async ({ host, port }: { host: string; port?: number }): Promise<boolean> => {
+        return requestSandboxNetworkApproval({ host, port });
+      };
+      await SandboxManager.initialize(config, sandboxAskCallback);
       this.#initializedForKey = initializationKey;
       this.#initializationFailure = undefined;
     } catch (error) {

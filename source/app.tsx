@@ -31,6 +31,10 @@ import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumula
 import type { UndoItem } from './hooks/use-undo-selection.js';
 import { resolveSlashCommand } from './slash-commands.js';
 import type { SkillsService, SkillInfo } from './services/skills/skills-service.js';
+import {
+  registerSandboxNetworkApprovalHandler,
+  type SandboxNetworkAccessRequest,
+} from './utils/shell/sandbox/sandbox-network-approval.js';
 
 export {
   appendStartupBannerId,
@@ -98,8 +102,66 @@ const App: FC<AppProps> = ({
   const [sessionId, setSessionId] = useState(initialSessionId);
   const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);
   const pendingSkillRef = useRef<SkillInfo | null>(null);
+  const [sandboxPromptRequest, setSandboxPromptRequest] = useState<SandboxNetworkAccessRequest | null>(null);
+  const sandboxPromptQueueRef = useRef<
+    Array<{ request: SandboxNetworkAccessRequest; resolve: (allow: boolean) => void }>
+  >([]);
+  const activeSandboxPromptRef = useRef<{
+    request: SandboxNetworkAccessRequest;
+    resolve: (allow: boolean) => void;
+  } | null>(null);
 
   const notifier = useTerminalFocusNotifier({ stdout, settingsService, loggingService });
+
+  const showNextSandboxPrompt = useCallback(() => {
+    if (activeSandboxPromptRef.current) {
+      return;
+    }
+    const next = sandboxPromptQueueRef.current.shift();
+    if (!next) {
+      return;
+    }
+    activeSandboxPromptRef.current = next;
+    setSandboxPromptRequest(next.request);
+  }, []);
+
+  const resolveSandboxPrompt = useCallback(
+    (allow: boolean) => {
+      const active = activeSandboxPromptRef.current;
+      if (!active) {
+        return;
+      }
+      active.resolve(allow);
+      activeSandboxPromptRef.current = null;
+      setSandboxPromptRequest(null);
+      showNextSandboxPrompt();
+    },
+    [showNextSandboxPrompt],
+  );
+
+  useEffect(() => {
+    const unregister = registerSandboxNetworkApprovalHandler(async (request) => {
+      return await new Promise<boolean>((resolve) => {
+        sandboxPromptQueueRef.current.push({ request, resolve });
+        showNextSandboxPrompt();
+      });
+    });
+
+    return () => {
+      unregister();
+      const active = activeSandboxPromptRef.current;
+      if (active) {
+        active.resolve(false);
+      }
+      activeSandboxPromptRef.current = null;
+      setSandboxPromptRequest(null);
+
+      for (const queued of sandboxPromptQueueRef.current) {
+        queued.resolve(false);
+      }
+      sandboxPromptQueueRef.current = [];
+    };
+  }, [showNextSandboxPrompt]);
 
   const {
     messages,
@@ -297,14 +359,38 @@ const App: FC<AppProps> = ({
 
   const handleApprove = useCallback(
     async (answer?: string) => {
+      if (sandboxPromptRequest) {
+        resolveSandboxPrompt(true);
+        return;
+      }
       await submitApprovalDecision(answer);
     },
-    [submitApprovalDecision],
+    [sandboxPromptRequest, resolveSandboxPrompt, submitApprovalDecision],
   );
 
   const handleReject = useCallback(() => {
+    if (sandboxPromptRequest) {
+      resolveSandboxPrompt(false);
+      return;
+    }
     setWaitingForRejectionReason(true);
-  }, [setWaitingForRejectionReason]);
+  }, [sandboxPromptRequest, resolveSandboxPrompt, setWaitingForRejectionReason]);
+
+  const effectivePendingApproval =
+    sandboxPromptRequest === null
+      ? pendingApproval
+      : {
+          agentName: 'Sandbox',
+          toolName: 'sandbox_network_access',
+          argumentsText: `Allow network access to ${sandboxPromptRequest.host}${
+            sandboxPromptRequest.port == null ? '' : `:${sandboxPromptRequest.port}`
+          }?`,
+          rawInterruption: sandboxPromptRequest,
+        };
+  const effectiveWaitingForApproval = sandboxPromptRequest ? true : waitingForApproval;
+  const effectiveWaitingForRejectionReason = sandboxPromptRequest ? false : waitingForRejectionReason;
+  const effectiveWaitingForAskUserAnswer = sandboxPromptRequest ? false : waitingForAskUserAnswer;
+  const effectiveIsProcessing = sandboxPromptRequest ? false : isProcessing;
 
   const handleNavigateQuestion = useCallback(
     (direction: 'prev' | 'next') => {
@@ -320,12 +406,12 @@ const App: FC<AppProps> = ({
   useAppKeyboardShortcuts({
     exitWithUsage,
     pendingSkillRef,
-    waitingForAskUserAnswer,
+    waitingForAskUserAnswer: effectiveWaitingForAskUserAnswer,
     setWaitingForAskUserAnswer,
-    waitingForRejectionReason,
+    waitingForRejectionReason: effectiveWaitingForRejectionReason,
     setWaitingForRejectionReason,
-    isProcessing,
-    waitingForApproval,
+    isProcessing: effectiveIsProcessing,
+    waitingForApproval: effectiveWaitingForApproval,
     stopProcessing,
     handoffState: handoff.handoffState,
     cancelHandoff: handoff.cancelHandoff,
@@ -430,12 +516,12 @@ const App: FC<AppProps> = ({
         {/* Fixed bottom area for input / status */}
         <Box paddingX={MESSAGE_HORIZONTAL_PADDING}>
           <BottomArea
-            pendingApproval={pendingApproval}
-            waitingForApproval={waitingForApproval}
-            waitingForRejectionReason={waitingForRejectionReason}
-            waitingForAskUserAnswer={waitingForAskUserAnswer}
+            pendingApproval={effectivePendingApproval}
+            waitingForApproval={effectiveWaitingForApproval}
+            waitingForRejectionReason={effectiveWaitingForRejectionReason}
+            waitingForAskUserAnswer={effectiveWaitingForAskUserAnswer}
             currentAskUserQuestionIndex={currentAskUserQuestionIndex}
-            isProcessing={isProcessing}
+            isProcessing={effectiveIsProcessing}
             thinkingStartedAt={thinkingStartedAt}
             toolCallStreamingInfo={toolCallStreamingInfo}
             isShellMode={isShellMode}

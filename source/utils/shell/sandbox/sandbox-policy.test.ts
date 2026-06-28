@@ -217,13 +217,17 @@ it('createSandboxRuntimeConfig denies all network by default', () => {
   expect(config.network.deniedDomains).toEqual(['*']);
   expect(config.network.strictAllowlist).toBe(true);
   expect(config.network.allowLocalBinding).toBe(false);
-  expect(config.network.allowedDomains).toEqual([]);
+  expect(config.network.allowedDomains).toEqual(
+    expect.arrayContaining(['registry.npmjs.org', 'pypi.org', 'raw.githubusercontent.com']),
+  );
 });
 
-it('createSandboxRuntimeConfig allows all network when allowNetworking is true', () => {
+it('createSandboxRuntimeConfig uses allowlist auto-allow and asks for non-allowlisted hosts when allowNetworking is true', () => {
   const config = createSandboxRuntimeConfig({ allowNetworking: true });
   expect(config.network.deniedDomains).toEqual([]);
   expect(config.network.strictAllowlist).toBe(false);
   expect(config.network.allowLocalBinding).toBe(true);
-  expect(config.network.allowedDomains).toEqual([]);
+  expect(config.network.allowedDomains).toEqual(
+    expect.arrayContaining(['registry.npmjs.org', 'pypi.org', 'raw.githubusercontent.com']),
+  );
 });

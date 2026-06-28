@@ -39,6 +39,280 @@ export interface CreateSandboxRuntimeConfigOptions {
   onProtectedFiltered?: (filtered: readonly string[]) => void;
 }
 
+const copilotAllowlist = [
+  // GitHub public URLs
+  'https://github.com/login/*',
+  'https://github.com/copilot/*',
+  'https://api.github.com/user',
+  'https://api.github.com/copilot_internal/*',
+  'https://collector.github.com/*',
+  'https://copilot-telemetry.githubusercontent.com/telemetry',
+  'https://default.exp-tas.com',
+  'https://copilot-proxy.githubusercontent.com',
+  'https://origin-tracker.githubusercontent.com',
+  'https://*.githubcopilot.com/*',
+  'https://*.individual.githubcopilot.com',
+  'https://*.business.githubcopilot.com',
+  'https://*.enterprise.githubcopilot.com',
+  'https://copilot-reports.github.com',
+  'https://copilot-reports-*.b01.azurefd.net',
+  'https://usagereports*.blob.core.windows.net',
+
+  // Copilot voice features
+  'https://ai.azure.com',
+  'https://api.catalog.azureml.ms',
+  'https://*.api.azureml.ms',
+  'https://amlwlrt4*.blob.core.windows.net',
+
+  // Container Registries: Docker
+  '172.18.0.1',
+  'ghcr.io',
+  'registry.hub.docker.com',
+  '*.docker.io',
+  '*.docker.com',
+  'production.cloudflare.docker.com',
+  'auth.docker.io',
+  'quay.io',
+  'mcr.microsoft.com',
+  'gcr.io',
+  'public.ecr.aws',
+
+  // GitHub: Content & API
+  '*.githubusercontent.com',
+  'raw.githubusercontent.com',
+  'objects.githubusercontent.com',
+  'lfs.github.com',
+  'github-cloud.githubusercontent.com',
+  'github-cloud.s3.amazonaws.com',
+  'codeload.github.com',
+  'scanning-api.github.com',
+  'api.mcp.github.com',
+  'uploads.github.com/copilot/chat/attachments/',
+
+  // GitHub: Actions Artifact Storage
+  'productionresultssa0.blob.core.windows.net',
+  'productionresultssa1.blob.core.windows.net',
+  'productionresultssa2.blob.core.windows.net',
+  'productionresultssa3.blob.core.windows.net',
+  'productionresultssa4.blob.core.windows.net',
+  'productionresultssa5.blob.core.windows.net',
+  'productionresultssa6.blob.core.windows.net',
+  'productionresultssa7.blob.core.windows.net',
+  'productionresultssa8.blob.core.windows.net',
+  'productionresultssa9.blob.core.windows.net',
+  'productionresultssa10.blob.core.windows.net',
+  'productionresultssa11.blob.core.windows.net',
+  'productionresultssa12.blob.core.windows.net',
+  'productionresultssa13.blob.core.windows.net',
+  'productionresultssa14.blob.core.windows.net',
+  'productionresultssa15.blob.core.windows.net',
+  'productionresultssa16.blob.core.windows.net',
+  'productionresultssa17.blob.core.windows.net',
+  'productionresultssa18.blob.core.windows.net',
+  'productionresultssa19.blob.core.windows.net',
+
+  // C# / .NET
+  'nuget.org',
+  'dist.nuget.org',
+  'api.nuget.org',
+  'nuget.pkg.github.com',
+  'dotnet.microsoft.com',
+  'pkgs.dev.azure.com',
+  'builds.dotnet.microsoft.com',
+  'dotnetcli.blob.core.windows.net',
+  'nugetregistryv2prod.blob.core.windows.net',
+  'azuresearch-usnc.nuget.org',
+  'azuresearch-ussc.nuget.org',
+  'dc.services.visualstudio.com',
+  'dot.net',
+  'download.visualstudio.microsoft.com',
+  'dotnetcli.azureedge.net',
+  'ci.dot.net',
+  'www.microsoft.com',
+  'oneocsp.microsoft.com',
+  'www.microsoft.com/pkiops/crl/',
+
+  // Dart
+  'pub.dev',
+  'pub.dartlang.org',
+  'storage.googleapis.com/pub-packages/',
+  'storage.googleapis.com/dart-archive/',
+
+  // Go
+  'go.dev',
+  'golang.org',
+  'proxy.golang.org',
+  'sum.golang.org',
+  'pkg.go.dev',
+  'goproxy.io',
+  'storage.googleapis.com/proxy-golang-org-prod/',
+
+  // Haskell
+  'haskell.org',
+  '*.hackage.haskell.org',
+  'get-ghcup.haskell.org',
+  'downloads.haskell.org',
+
+  // Java
+  'www.java.com',
+  'jdk.java.net',
+  'api.adoptium.net',
+  'adoptium.net',
+  'search.maven.org',
+  'maven.apache.org',
+  'repo.maven.apache.org',
+  'repo1.maven.org',
+  'maven.pkg.github.com',
+  'maven-central.storage-download.googleapis.com',
+  'maven.google.com',
+  'maven.oracle.com',
+  'jcenter.bintray.com',
+  'oss.sonatype.org',
+  'repo.spring.io',
+  'gradle.org',
+  'services.gradle.org',
+  'plugins.gradle.org',
+  'plugins-artifacts.gradle.org',
+  'repo.grails.org',
+  'download.eclipse.org',
+  'download.oracle.com',
+
+  // Node.js / JavaScript
+  'npmjs.org',
+  'npmjs.com',
+  'registry.npmjs.com',
+  'registry.npmjs.org',
+  'skimdb.npmjs.com',
+  'npm.pkg.github.com',
+  'api.npms.io',
+  'nodejs.org',
+  'yarnpkg.com',
+  'registry.yarnpkg.com',
+  'repo.yarnpkg.com',
+  'deb.nodesource.com',
+  'get.pnpm.io',
+  'bun.sh',
+  'deno.land',
+  'registry.bower.io',
+  'binaries.prisma.sh',
+
+  // Perl
+  'cpan.org',
+  'www.cpan.org',
+  'metacpan.org',
+  'cpan.metacpan.org',
+
+  // PHP
+  'repo.packagist.org',
+  'packagist.org',
+  'getcomposer.org',
+
+  // Python
+  'pypi.python.org',
+  'pypi.org',
+  'pip.pypa.io',
+  '*.pythonhosted.org',
+  'files.pythonhosted.org',
+  'bootstrap.pypa.io',
+  'conda.binstar.org',
+  'conda.anaconda.org',
+  'binstar.org',
+  'anaconda.org',
+  'download.pytorch.org',
+  'repo.continuum.io',
+  'repo.anaconda.com',
+
+  // Ruby
+  'rubygems.org',
+  'api.rubygems.org',
+  'rubygems.pkg.github.com',
+  'bundler.rubygems.org',
+  'gems.rubyforge.org',
+  'gems.rubyonrails.org',
+  'index.rubygems.org',
+  'cache.ruby-lang.org',
+  '*.rvm.io',
+
+  // Rust
+  'crates.io',
+  'index.crates.io',
+  'static.crates.io',
+  'sh.rustup.rs',
+  'static.rust-lang.org',
+
+  // Swift
+  'download.swift.org',
+  'swift.org',
+  'cocoapods.org',
+  'cdn.cocoapods.org',
+
+  // HashiCorp
+  'releases.hashicorp.com',
+  'apt.releases.hashicorp.com',
+  'yum.releases.hashicorp.com',
+  'registry.terraform.io',
+
+  // JSON Schema
+  'json-schema.org',
+  'json.schemastore.org',
+
+  // Playwright
+  'playwright.download.prss.microsoft.com',
+  'cdn.playwright.dev',
+  'playwright.azureedge.net',
+  'playwright-akamai.azureedge.net',
+  'playwright-verizon.azureedge.net',
+  'storage.googleapis.com/chrome-for-testing-public',
+
+  // Ubuntu
+  'archive.ubuntu.com',
+  'security.ubuntu.com',
+  'ppa.launchpad.net',
+  'keyserver.ubuntu.com',
+  'azure.archive.ubuntu.com',
+  'api.snapcraft.io',
+
+  // Debian
+  'deb.debian.org',
+  'security.debian.org',
+  'keyring.debian.org',
+  'packages.debian.org',
+  'debian.map.fastlydns.net',
+  'apt.llvm.org',
+
+  // Fedora
+  'dl.fedoraproject.org',
+  'mirrors.fedoraproject.org',
+  'download.fedoraproject.org',
+
+  // CentOS
+  'mirror.centos.org',
+  'vault.centos.org',
+
+  // Alpine
+  'dl-cdn.alpinelinux.org',
+  'pkg.alpinelinux.org',
+
+  // Arch
+  'mirror.archlinux.org',
+  'archlinux.org',
+
+  // SUSE
+  'download.opensuse.org',
+
+  // Red Hat
+  'cdn.redhat.com',
+
+  // Common Package Sources
+  'packagecloud.io',
+  'packages.cloud.google.com',
+  'packages.microsoft.com',
+
+  // Other
+  'dl.k8s.io',
+  'pkgs.k8s.io',
+];
+
 // Paths the sandbox must never allow writing to, regardless of where term2
 // was launched from. Two classes:
 //   - EXACT: only when cwd (resolved) is exactly the path
@@ -242,7 +516,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
   const allowNetworking = options.allowNetworking ?? false;
   return {
     network: {
-      allowedDomains: [],
+      allowedDomains: copilotAllowlist,
       deniedDomains: allowNetworking ? [] : ['*'],
       strictAllowlist: allowNetworking ? false : true,
       allowLocalBinding: allowNetworking,

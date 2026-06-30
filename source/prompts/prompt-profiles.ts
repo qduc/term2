@@ -59,7 +59,7 @@ export const PROMPT_PROFILES: PromptProfile[] = [
   },
   {
     id: 'default',
-    basePromptFile: 'simple_v3.md',
+    basePromptFile: 'simple_v4.md',
     matches: () => true,
   },
 ];

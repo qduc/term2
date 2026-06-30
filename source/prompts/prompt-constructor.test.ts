@@ -8,7 +8,7 @@ it('buildPromptSpec preserves mode precedence for base prompts', () => {
   );
   expect(buildPromptSpec({ model: 'claude-3-sonnet', liteMode: false }).basePromptFile).toBe('anthropic.md');
   expect(buildPromptSpec({ model: 'gpt-5.3-codex', liteMode: false }).basePromptFile).toBe('codex.md');
-  expect(buildPromptSpec({ model: 'gpt-4o', liteMode: false }).basePromptFile).toBe('simple_v3.md');
+  expect(buildPromptSpec({ model: 'gpt-4o', liteMode: false }).basePromptFile).toBe('simple_v4.md');
 });
 
 // it('buildPromptSpec adds GPT version fragments without changing the base GPT prompt fallback', () => {

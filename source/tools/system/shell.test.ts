@@ -618,6 +618,29 @@ it.sequential('shell execute appends retry instruction when sandbox annotates a 
   expect(output.includes('sandbox="unsandboxed"')).toBe(true);
 });
 
+it.sequential(
+  'shell execute appends retry instruction for proxy allowlist blocks without sandbox annotation',
+  async () => {
+    const tool = createShellToolDefinition({
+      loggingService: createNoopLogger(),
+      settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+      shellSandboxRunner: createFakeSandboxRunner(),
+      executeShellCommandImpl: async () => ({
+        stdout: '',
+        stderr: 'HTTP/1.1 403 Forbidden\nblocked-by-allowlist',
+        exitCode: 1,
+        timedOut: false,
+      }),
+    });
+
+    const output = await tool.execute({ command: 'curl https://not-allowed.example', sandbox: 'default' });
+
+    expect(output.includes('blocked-by-allowlist')).toBe(true);
+    expect(output.includes('Sandbox blocked this command')).toBe(true);
+    expect(output.includes('sandbox="unsandboxed"')).toBe(true);
+  },
+);
+
 it.sequential('shell execute in plan mode blocks mutating commands but runs green commands', async () => {
   const settingsService = createMockSettingsService({
     'app.planMode': true,

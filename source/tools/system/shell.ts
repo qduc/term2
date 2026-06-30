@@ -34,12 +34,13 @@ import {
   type ShellSandboxRunner,
 } from '../../utils/shell/sandbox/sandbox-policy.js';
 import { getDefaultShellSandboxRunner } from '../../utils/shell/sandbox/shell-sandbox-runner.js';
-import { detectDeniedRead, DETAILED_DENIED_READ_INSTRUCTION } from '../../utils/shell/sandbox/denied-read-detector.js';
+import { DETAILED_DENIED_READ_INSTRUCTION } from '../../utils/shell/sandbox/denied-read-detector.js';
 import {
   deniedReadStore,
   executionOverrideStore,
   getProjectAllowReadStore,
 } from '../../utils/shell/sandbox/denied-read-stores.js';
+import { classifySandboxFailure } from '../../utils/shell/sandbox/sandbox-failure-classifier.js';
 
 const shellSandboxModeSchema = z.enum(['default', 'unsandboxed']).optional().default('default');
 
@@ -439,27 +440,30 @@ export function createShellToolDefinition(deps: {
         const stdout = result.stdout ?? '';
         const rawStderr = stripRtkWarning(result.stderr ?? '');
         const annotatedStderr = sandboxed ? shellSandboxRunner.annotateFailure(optimizedCommand, rawStderr) : rawStderr;
-        const sandboxViolation = sandboxed && annotatedStderr !== rawStderr;
 
-        // If the sandbox denied a read under strict, try to extract the denied
-        // path so the agent's retry triggers a 4-option approval prompt.
         const readPolicy = settingsService.get<SandboxReadPolicy>('sandbox.readPolicy');
-        if (sandboxed && readPolicy === 'strict') {
-          const deniedInfo = detectDeniedRead(optimizedCommand, annotatedStderr);
-          if (deniedInfo) {
-            deniedReadStore.record(optimizedCommand, deniedInfo);
-            loggingService.security('Sandbox denied read; agent retry will prompt for approval', {
-              deniedPath: deniedInfo.path,
-              suggestedParent: deniedInfo.suggestedParent,
-              sensitive: deniedInfo.sensitive,
-              command: optimizedCommand.substring(0, 100),
-              correlationId,
-            });
-            return `Error: ${DETAILED_DENIED_READ_INSTRUCTION}`;
-          }
+        const sandboxFailure = classifySandboxFailure({
+          command: optimizedCommand,
+          rawStderr,
+          annotatedStderr,
+          sandboxed,
+          readPolicy,
+        });
+
+        if (sandboxFailure?.type === 'denied_read') {
+          deniedReadStore.record(optimizedCommand, sandboxFailure.deniedRead);
+          loggingService.security('Sandbox denied read; agent retry will prompt for approval', {
+            deniedPath: sandboxFailure.deniedRead.path,
+            suggestedParent: sandboxFailure.deniedRead.suggestedParent,
+            sensitive: sandboxFailure.deniedRead.sensitive,
+            confidence: sandboxFailure.confidence,
+            command: optimizedCommand.substring(0, 100),
+            correlationId,
+          });
+          return `Error: ${DETAILED_DENIED_READ_INSTRUCTION}`;
         }
 
-        const stderr = sandboxViolation ? `${annotatedStderr}\n\n${SANDBOX_ESCAPE_INSTRUCTION}` : annotatedStderr;
+        const stderr = sandboxFailure ? `${sandboxFailure.stderr}\n\n${SANDBOX_ESCAPE_INSTRUCTION}` : annotatedStderr;
         const exitCode = result.exitCode ?? null;
         const outcome: ShellCommandResult['outcome'] = result.timedOut
           ? { type: 'timeout' }

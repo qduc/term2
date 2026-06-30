@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  normalizeProviderIdentifier,
+  resolveProviderId,
+  resolveProviderName,
+} from './custom-provider-normalization.js';
 
 // Define schemas for validation
 export const AgentSettingsSchema = z.object({
@@ -238,12 +243,23 @@ export const CustomProviderTypeSchema = z.enum(KNOWN_CUSTOM_PROVIDER_TYPES).defa
 
 export const CustomProviderSchema = z
   .object({
-    name: z.string().min(1),
+    id: z.string().min(1).optional(),
+    name: z.string().min(1).optional(),
     type: CustomProviderTypeSchema,
     baseUrl: z.string().url().optional(),
     apiKey: z.string().optional(),
   })
+  .passthrough()
   .superRefine((data, ctx) => {
+    const id = resolveProviderId(data);
+    if (!id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'id is required',
+        path: ['id'],
+      });
+    }
+
     if (data.type !== 'anthropic' && data.type !== 'google' && data.type !== 'opencode' && !data.baseUrl) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -251,6 +267,18 @@ export const CustomProviderSchema = z
         path: ['baseUrl'],
       });
     }
+  })
+  .transform((data) => {
+    const id = resolveProviderId(data) ?? normalizeProviderIdentifier(data.name ?? '');
+    const name = resolveProviderName(data, id);
+
+    return {
+      id,
+      name,
+      type: data.type,
+      baseUrl: data.baseUrl,
+      apiKey: data.apiKey,
+    };
   });
 
 /**

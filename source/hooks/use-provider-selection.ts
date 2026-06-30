@@ -15,6 +15,7 @@ import {
   isProviderBuiltIn,
   getProviderLabel,
 } from '../providers/provider-service.js';
+import { resolveProviderId, resolveProviderName } from '../services/settings/custom-provider-normalization.js';
 
 export type { ProviderSelectionPhase, CustomProviderDraft, ProviderSelectionItem };
 
@@ -285,10 +286,11 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setDraftModified(false);
           // Edit custom provider directly
           const list = settingsService.get<any[]>('providers') || [];
-          const found = list.find((p: any) => p && p.name === provider.id);
+          const found = list.find((p: any) => resolveProviderId(p) === provider.id);
           if (found) {
+            const id = resolveProviderId(found) ?? provider.id;
             setDraft({
-              name: found.name,
+              name: resolveProviderName(found, id),
               type: found.type || 'openai-compatible',
               baseUrl: found.baseUrl || '',
               apiKey: found.apiKey || '',
@@ -301,7 +303,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
               apiKey: '',
             });
           }
-          setEditingOriginalName(found ? found.name : null);
+          setEditingOriginalName(found ? resolveProviderId(found) ?? provider.id : null);
           setFieldErrors({});
           setPhase('edit_fields');
           setSelectedIndex(0);

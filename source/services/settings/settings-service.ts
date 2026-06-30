@@ -4,6 +4,7 @@ import envPaths from 'env-paths';
 import { LoggingService } from '../logging/logging-service.js';
 import { getProvider, upsertProvider } from '../../providers/registry.js';
 import { createOpenAICompatibleProviderDefinition } from '../../providers/openai-compatible-lazy.js';
+import { resolveProviderId, resolveProviderName } from './custom-provider-normalization.js';
 import {
   DEFAULT_SETTINGS,
   OPTIONAL_DEFAULT_KEYS,
@@ -128,6 +129,10 @@ export class SettingsService {
     // in the model selection menu and can be selected as agent.provider.
     this.registerRuntimeProviders();
 
+    // Migrate legacy selected provider values (for example values with spaces)
+    // to the normalized provider id form before validation fallback runs.
+    this.migrateSelectedProviderId();
+
     // Validate selected provider and fall back if invalid (without rejecting the
     // entire settings file).
     this.validateSelectedProvider();
@@ -156,6 +161,7 @@ export class SettingsService {
     // Check if file config is missing any keys that exist in defaults
     // Use raw file config (pre-Zod) to detect missing keys since Zod adds defaults
     const shouldUpdateFile = configFileExisted && this.hasMissingKeys(rawFileConfig, DEFAULT_SETTINGS);
+    const shouldMigrateLegacyProviderFormat = configFileExisted && this.hasLegacyProviderFormat(rawFileConfig);
 
     // If there was no config file on disk, persist the current merged settings so
     // users get a settings.json created at startup (rather than waiting for a
@@ -170,16 +176,36 @@ export class SettingsService {
           });
         }
       }
-    } else if (shouldUpdateFile && !fileHadErrors) {
+    } else if ((shouldUpdateFile || shouldMigrateLegacyProviderFormat) && !fileHadErrors) {
       if (!this.disableFilePersistence) {
         this.saveToFile();
         if (!this.disableLogging) {
-          this.loggingService.debug('Updated settings file with new default values', {
+          this.loggingService.debug('Updated settings file with defaults and/or provider migrations', {
             settingsFile: settingsFilePath,
+            updatedMissingDefaults: shouldUpdateFile,
+            migratedLegacyProviders: shouldMigrateLegacyProviderFormat,
           });
         }
       }
     }
+  }
+
+  private hasLegacyProviderFormat(rawFileConfig: any): boolean {
+    const providers = rawFileConfig?.providers;
+    if (!Array.isArray(providers)) return false;
+
+    for (const provider of providers) {
+      if (!provider || typeof provider !== 'object') {
+        continue;
+      }
+
+      const hasId = typeof (provider as any).id === 'string' && (provider as any).id.trim().length > 0;
+      if (!hasId) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private registerRuntimeProviders(): void {
@@ -187,9 +213,11 @@ export class SettingsService {
     if (!Array.isArray(configured) || configured.length === 0) return;
 
     for (const p of configured) {
-      const providerId = (p as any)?.name;
+      const providerId = resolveProviderId(p);
+      if (!providerId) continue;
       const baseUrl = (p as any)?.baseUrl;
       const providerType = String((p as any)?.type || '');
+      const providerName = resolveProviderName(p, providerId);
       const baseUrlOptional = providerType === 'anthropic' || providerType === 'google' || providerType === 'opencode';
       if (!providerId || (!baseUrl && !baseUrlOptional)) continue;
 
@@ -207,6 +235,7 @@ export class SettingsService {
         upsertProvider(
           createOpenAICompatibleProviderDefinition({
             name: String(providerId),
+            label: providerName,
             type: (p as any)?.type ? String((p as any).type) : 'openai-compatible',
             baseUrl: baseUrl ? String(baseUrl) : undefined,
             apiKey: (p as any)?.apiKey ? String((p as any).apiKey) : undefined,
@@ -221,6 +250,29 @@ export class SettingsService {
         }
       }
     }
+  }
+
+  private migrateSelectedProviderId(): void {
+    const current = this.settings?.agent?.provider;
+    if (!current || typeof current !== 'string') {
+      return;
+    }
+
+    if (getProvider(current)) {
+      return;
+    }
+
+    const normalized = resolveProviderId({ name: current });
+    if (!normalized || normalized === current) {
+      return;
+    }
+
+    if (!getProvider(normalized)) {
+      return;
+    }
+
+    this.settings.agent.provider = normalized;
+    this.sources.set('agent.provider', 'config');
   }
 
   private validateSelectedProvider(): void {

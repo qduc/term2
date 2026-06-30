@@ -67,8 +67,8 @@ it('validateWizardName rejects whitespace-only name', () => {
 it('validateWizardName rejects invalid format', () => {
   const settingsService = createMockSettingsService();
   const result = validateWizardName('my provider', settingsService, false);
-  expect(result.valid).toBe(false);
-  expect(result.errorMessage!.includes('start with a letter or number')).toBe(true);
+  expect(result.valid).toBe(true);
+  expect(result.errorMessage).toBe(undefined);
 });
 
 it('validateWizardName rejects name conflict', () => {
@@ -80,7 +80,7 @@ it('validateWizardName rejects name conflict', () => {
 
 it('validateWizardName allows current name when editing', () => {
   const settingsService = createMockSettingsService(
-    [{ name: 'existing', type: 'openai-compatible', baseUrl: 'http://localhost:8080/v1' }],
+    [{ id: 'existing', name: 'existing', type: 'openai-compatible', baseUrl: 'http://localhost:8080/v1' }],
     'openai',
   );
   const result = validateWizardName('existing', settingsService, true, 'existing');
@@ -150,7 +150,14 @@ it('hasProviderNameConflict does not flag current name', () => {
 
 it('hasProviderNameConflict detects custom provider conflict', () => {
   const settingsService = createMockSettingsService(
-    [{ name: 'custom-ollama', type: 'openai-compatible', baseUrl: 'http://localhost:11434/v1' }],
+    [
+      {
+        id: 'custom-ollama',
+        name: 'Custom Ollama',
+        type: 'openai-compatible',
+        baseUrl: 'http://localhost:11434/v1',
+      },
+    ],
     'openai',
   );
   expect(hasProviderNameConflict(settingsService, 'custom-ollama')).toBe(true);
@@ -163,7 +170,14 @@ it('hasProviderNameConflict returns false for empty candidate', () => {
 
 it('getConfiguredProviderNames includes built-in and custom names', () => {
   const settingsService = createMockSettingsService(
-    [{ name: 'custom-ollama', type: 'openai-compatible', baseUrl: 'http://localhost:11434/v1' }],
+    [
+      {
+        id: 'custom-ollama',
+        name: 'Custom Ollama',
+        type: 'openai-compatible',
+        baseUrl: 'http://localhost:11434/v1',
+      },
+    ],
     'openai',
   );
   const names = getConfiguredProviderNames(settingsService);
@@ -182,19 +196,34 @@ it('loadProviderItems includes built-in providers without custom flag', () => {
 
 it('loadProviderItems includes custom providers with custom flag', () => {
   const settingsService = createMockSettingsService(
-    [{ name: 'custom-ollama', type: 'openai-compatible', baseUrl: 'http://localhost:11434/v1' }],
+    [
+      {
+        id: 'custom-ollama',
+        name: 'Custom Ollama',
+        type: 'openai-compatible',
+        baseUrl: 'http://localhost:11434/v1',
+      },
+    ],
     'openai',
   );
   const items = loadProviderItems(settingsService);
   const custom = items.find((i) => i.id === 'custom-ollama');
   expect(custom).toBeTruthy();
+  expect(custom!.label).toBe('Custom Ollama');
   expect(custom!.isCustom).toBe(true);
   expect(custom!.isActive).toBe(false);
 });
 
 it('loadProviderItems marks active provider correctly', () => {
   const settingsService = createMockSettingsService(
-    [{ name: 'custom-ollama', type: 'openai-compatible', baseUrl: 'http://localhost:11434/v1' }],
+    [
+      {
+        id: 'custom-ollama',
+        name: 'Custom Ollama',
+        type: 'openai-compatible',
+        baseUrl: 'http://localhost:11434/v1',
+      },
+    ],
     'custom-ollama',
   );
   const items = loadProviderItems(settingsService);
@@ -226,8 +255,7 @@ it('saveProvider validates invalid name format', () => {
     { name: 'bad name', type: 'openai-compatible', baseUrl: 'http://localhost:8080/v1' },
     null,
   );
-  expect(result.success).toBe(false);
-  expect(result.fieldErrors?.name).toBeTruthy();
+  expect(result.success).toBe(true);
 });
 
 it('saveProvider validates name conflict', () => {
@@ -260,7 +288,23 @@ it('saveProvider succeeds with valid provider', () => {
   const providers = settingsService.get('providers');
   expect(Array.isArray(providers)).toBe(true);
   expect(providers.length).toBe(1);
+  expect(providers[0].id).toBe('my-provider');
   expect(providers[0].name).toBe('my-provider');
+  expect(Object.prototype.hasOwnProperty.call(providers[0], 'identifier')).toBe(false);
+});
+
+it('saveProvider normalizes spaces to underscores for identifier', () => {
+  const settingsService = createMockSettingsService([], 'openai');
+  const result = saveProvider(
+    settingsService,
+    { name: 'My Provider Name', type: 'openai-compatible', baseUrl: 'http://localhost:8080/v1' },
+    null,
+  );
+
+  expect(result.success).toBe(true);
+  const providers = settingsService.get('providers');
+  expect(providers[0].id).toBe('My_Provider_Name');
+  expect(providers[0].name).toBe('My Provider Name');
 });
 
 it('saveProvider succeeds without baseUrl for types that do not require it', () => {
@@ -271,7 +315,14 @@ it('saveProvider succeeds without baseUrl for types that do not require it', () 
 
 it('saveProvider edits an existing provider', () => {
   const settingsService = createMockSettingsService(
-    [{ name: 'old-name', type: 'openai-compatible', baseUrl: 'http://localhost:8080/v1' }],
+    [
+      {
+        id: 'old-name',
+        name: 'Old Name',
+        type: 'openai-compatible',
+        baseUrl: 'http://localhost:8080/v1',
+      },
+    ],
     'openai',
   );
   const result = saveProvider(
@@ -282,13 +333,20 @@ it('saveProvider edits an existing provider', () => {
   expect(result.success).toBe(true);
   const providers = settingsService.get('providers');
   expect(providers.length).toBe(1);
-  expect(providers[0].name).toBe('old-name');
+  expect(providers[0].id).toBe('old-name');
   expect(providers[0].baseUrl).toBe('http://localhost:9090/v1');
 });
 
 it('saveProvider renames an existing provider', () => {
   const settingsService = createMockSettingsService(
-    [{ name: 'old-name', type: 'openai-compatible', baseUrl: 'http://localhost:8080/v1' }],
+    [
+      {
+        id: 'old-name',
+        name: 'Old Name',
+        type: 'openai-compatible',
+        baseUrl: 'http://localhost:8080/v1',
+      },
+    ],
     'openai',
   );
   const result = saveProvider(
@@ -299,6 +357,7 @@ it('saveProvider renames an existing provider', () => {
   expect(result.success).toBe(true);
   const providers = settingsService.get('providers');
   expect(providers.length).toBe(1);
+  expect(providers[0].id).toBe('new-name');
   expect(providers[0].name).toBe('new-name');
 });
 
@@ -311,7 +370,14 @@ it('saveProvider saves API key for built-in provider', () => {
 
 it('deleteCustomProvider removes provider from settings and registry', () => {
   const settingsService = createMockSettingsService(
-    [{ name: 'custom-ollama', type: 'openai-compatible', baseUrl: 'http://localhost:11434/v1' }],
+    [
+      {
+        id: 'custom-ollama',
+        name: 'Custom Ollama',
+        type: 'openai-compatible',
+        baseUrl: 'http://localhost:11434/v1',
+      },
+    ],
     'custom-ollama',
   );
   deleteCustomProvider(settingsService, 'custom-ollama');
@@ -322,7 +388,14 @@ it('deleteCustomProvider removes provider from settings and registry', () => {
 
 it('deleteCustomProvider does not change active provider when deleting inactive one', () => {
   const settingsService = createMockSettingsService(
-    [{ name: 'custom-ollama', type: 'openai-compatible', baseUrl: 'http://localhost:11434/v1' }],
+    [
+      {
+        id: 'custom-ollama',
+        name: 'Custom Ollama',
+        type: 'openai-compatible',
+        baseUrl: 'http://localhost:11434/v1',
+      },
+    ],
     'openai',
   );
   deleteCustomProvider(settingsService, 'custom-ollama');

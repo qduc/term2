@@ -872,6 +872,16 @@ it('lazy opencode provider reuses the same model provider instance across getMod
   ).toBe(model2);
 });
 
+it('lazy provider definition preserves configured label', () => {
+  const definition = createLazyProviderDefinition({
+    name: 'lazy-provider-id',
+    label: 'Lazy Provider Label',
+    type: 'openai-compatible',
+  });
+
+  expect(definition.label).toBe('Lazy Provider Label');
+});
+
 it('opencode provider type caches model instances across getModel calls', async () => {
   const provider = createCustomProviderModelProvider(
     {

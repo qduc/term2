@@ -266,7 +266,8 @@ it('registers custom OpenAI-compatible providers from settings.json', async () =
     JSON.stringify({
       providers: [
         {
-          name: providerName,
+          id: providerName,
+          name: 'LM Studio Test',
           baseUrl: 'http://localhost:1234',
           apiKey: 'my-secret-api-key',
         },
@@ -324,6 +325,124 @@ it('custom providers default missing type for old settings.json files', async ()
   });
 
   expect(service.get('providers')[0].type).toBe('openai-compatible');
+  expect(service.get('providers')[0].id).toBe(providerName);
+  expect(service.get('providers')[0].name).toBe(providerName);
+});
+
+it('migrates name-only custom provider to id with underscores', async () => {
+  const settingsDir = getTestSettingsDir();
+
+  const configFile = path.join(settingsDir, 'settings.json');
+  if (!fs.existsSync(settingsDir)) {
+    fs.mkdirSync(settingsDir, { recursive: true });
+  }
+
+  fs.writeFileSync(
+    configFile,
+    JSON.stringify({
+      providers: [
+        {
+          displayName: 'My Local Provider',
+          type: 'openai-compatible',
+          baseUrl: 'http://localhost:1234',
+        },
+      ],
+      agent: {
+        provider: 'My_Local_Provider',
+      },
+    }),
+    'utf-8',
+  );
+
+  const service = new SettingsService({
+    settingsDir,
+    disableLogging: true,
+    disableFilePersistence: true,
+  });
+
+  const providers = service.get<any[]>('providers');
+  expect(providers[0].id).toBe('My_Local_Provider');
+  expect(providers[0].name).toBe('My Local Provider');
+  expect(service.get('agent.provider')).toBe('My_Local_Provider');
+  expect(getProvider('My_Local_Provider')).toBeTruthy();
+});
+
+it('migrates legacy agent.provider names with spaces to normalized provider id', async () => {
+  const settingsDir = getTestSettingsDir();
+
+  const configFile = path.join(settingsDir, 'settings.json');
+  if (!fs.existsSync(settingsDir)) {
+    fs.mkdirSync(settingsDir, { recursive: true });
+  }
+
+  fs.writeFileSync(
+    configFile,
+    JSON.stringify({
+      providers: [
+        {
+          name: 'My Local Provider',
+          type: 'openai-compatible',
+          baseUrl: 'http://localhost:1234',
+        },
+      ],
+      agent: {
+        provider: 'My Local Provider',
+      },
+    }),
+    'utf-8',
+  );
+
+  const service = new SettingsService({
+    settingsDir,
+    disableLogging: true,
+    disableFilePersistence: true,
+  });
+
+  expect(service.get('agent.provider')).toBe('My_Local_Provider');
+  expect(getProvider('My_Local_Provider')).toBeTruthy();
+});
+
+it.sequential('startup rewrites legacy provider format to new format in settings.json', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const configFile = path.join(settingsDir, 'settings.json');
+
+    if (!fs.existsSync(settingsDir)) {
+      fs.mkdirSync(settingsDir, { recursive: true });
+    }
+
+    fs.writeFileSync(
+      configFile,
+      JSON.stringify(
+        {
+          providers: [
+            {
+              name: 'Legacy Local Provider',
+              type: 'openai-compatible',
+              baseUrl: 'http://localhost:1234',
+            },
+          ],
+          agent: {
+            provider: 'Legacy_Local_Provider',
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const service = new SettingsService({
+      settingsDir,
+      disableLogging: true,
+    });
+
+    expect(service.get('agent.provider')).toBe('Legacy_Local_Provider');
+
+    const rewritten = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
+    expect(rewritten.providers[0].id).toBe('Legacy_Local_Provider');
+    expect(rewritten.providers[0].name).toBe('Legacy Local Provider');
+  });
 });
 
 it('set() modifies runtime-modifiable settings', async () => {

@@ -1,6 +1,11 @@
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { getAllProviders, upsertProvider, unregisterProvider } from './index.js';
 import { createOpenAICompatibleProviderDefinition } from './openai-compatible-lazy.js';
+import {
+  normalizeProviderIdentifier,
+  resolveProviderId,
+  resolveProviderName,
+} from '../services/settings/custom-provider-normalization.js';
 
 export type ProviderSelectionPhase =
   | 'list'
@@ -47,8 +52,9 @@ export const getConfiguredProviderNames = (settingsService: SettingsService): Se
 
   const configured = settingsService.get<any[]>('providers') || [];
   for (const provider of configured) {
-    if (provider && provider.name) {
-      names.add(String(provider.name));
+    const id = resolveProviderId(provider);
+    if (id) {
+      names.add(id);
     }
   }
 
@@ -89,13 +95,15 @@ export const loadProviderItems = (settingsService: SettingsService): ProviderSel
     }));
 
   for (const c of customList) {
-    if (c && c.name) {
-      if (!providerItems.some((p) => p.id === c.name)) {
+    const id = resolveProviderId(c);
+    if (id) {
+      if (!providerItems.some((p) => p.id === id)) {
+        const label = resolveProviderName(c, id);
         providerItems.push({
-          id: c.name,
-          label: c.name,
+          id,
+          label,
           isCustom: true,
-          isActive: c.name === activeProvider,
+          isActive: id === activeProvider,
         });
       }
     }
@@ -105,7 +113,7 @@ export const loadProviderItems = (settingsService: SettingsService): ProviderSel
     providerItems.push({
       id: activeProvider,
       label: activeProvider,
-      isCustom: customList.some((c: any) => c && c.name === activeProvider),
+      isCustom: customList.some((c: any) => resolveProviderId(c) === activeProvider),
       isActive: true,
     });
   }
@@ -142,7 +150,8 @@ export const saveProvider = (
     return { success: false, fieldErrors: { name: 'Name cannot be empty.' } };
   }
 
-  if (!PROVIDER_NAME_REGEX.test(draft.name.trim())) {
+  const providerIdentifier = normalizeProviderIdentifier(draft.name);
+  if (!PROVIDER_NAME_REGEX.test(providerIdentifier)) {
     return {
       success: false,
       fieldErrors: {
@@ -152,8 +161,8 @@ export const saveProvider = (
   }
 
   const originalName = editingOriginalName;
-  if (hasProviderNameConflict(settingsService, draft.name, originalName ?? undefined)) {
-    return { success: false, fieldErrors: { name: `Provider with name '${draft.name}' already exists.` } };
+  if (hasProviderNameConflict(settingsService, providerIdentifier, originalName ?? undefined)) {
+    return { success: false, fieldErrors: { name: `Provider with name '${providerIdentifier}' already exists.` } };
   }
 
   const type = draft.type;
@@ -168,15 +177,19 @@ export const saveProvider = (
     let updatedList;
 
     if (isEdit && originalName) {
-      updatedList = list.filter((p: any) => p && p.name !== originalName);
-      if (originalName !== draft.name) {
+      updatedList = list.filter((p: any) => resolveProviderId(p) !== originalName);
+      if (originalName !== providerIdentifier) {
         unregisterProvider(originalName);
       }
     } else {
       updatedList = [...list];
     }
 
-    const newEntry: any = { name: draft.name, type: draft.type };
+    const newEntry: any = {
+      id: providerIdentifier,
+      name: draft.name.trim(),
+      type: draft.type,
+    };
     if (draft.baseUrl) newEntry.baseUrl = draft.baseUrl;
     if (draft.apiKey) newEntry.apiKey = draft.apiKey;
 
@@ -184,7 +197,8 @@ export const saveProvider = (
     settingsService.setPersistent('providers', updatedList);
 
     const def = createOpenAICompatibleProviderDefinition({
-      name: draft.name,
+      name: providerIdentifier,
+      label: newEntry.name,
       type: draft.type,
       baseUrl: draft.baseUrl,
       apiKey: draft.apiKey,
@@ -192,7 +206,7 @@ export const saveProvider = (
     upsertProvider(def);
 
     if (isEdit && originalName && originalName === settingsService.get('agent.provider')) {
-      settingsService.set('agent.provider', draft.name);
+      settingsService.set('agent.provider', providerIdentifier);
     }
 
     return { success: true };
@@ -203,7 +217,7 @@ export const saveProvider = (
 
 export const deleteCustomProvider = (settingsService: SettingsService, name: string): void => {
   const list = settingsService.get<any[]>('providers') || [];
-  const updated = list.filter((p: any) => p && p.name !== name);
+  const updated = list.filter((p: any) => resolveProviderId(p) !== name);
   settingsService.setPersistent('providers', updated);
   unregisterProvider(name);
 
@@ -223,7 +237,8 @@ export const validateWizardName = (
   if (!val) {
     return { valid: false, errorMessage: 'Name cannot be empty.' };
   }
-  if (!PROVIDER_NAME_REGEX.test(val)) {
+  const candidateIdentifier = normalizeProviderIdentifier(val);
+  if (!PROVIDER_NAME_REGEX.test(candidateIdentifier)) {
     return {
       valid: false,
       errorMessage:
@@ -231,8 +246,8 @@ export const validateWizardName = (
     };
   }
   const originalName = isEditingField ? editingOriginalName : undefined;
-  if (hasProviderNameConflict(settingsService, val, originalName)) {
-    return { valid: false, errorMessage: `Provider with name '${val}' already exists.` };
+  if (hasProviderNameConflict(settingsService, candidateIdentifier, originalName)) {
+    return { valid: false, errorMessage: `Provider with name '${candidateIdentifier}' already exists.` };
   }
   return { valid: true };
 };

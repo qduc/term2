@@ -55,7 +55,14 @@ function createMockSettingsService(initialProviders: any[] = [], initialActive =
 }
 
 it.sequential('useProviderSelection - lists registered and custom providers on open', async () => {
-  const customProviders = [{ name: 'custom-ollama', type: 'openai-compatible', baseUrl: 'http://localhost:11434/v1' }];
+  const customProviders = [
+    {
+      id: 'custom-ollama',
+      name: 'Custom Ollama',
+      type: 'openai-compatible',
+      baseUrl: 'http://localhost:11434/v1',
+    },
+  ];
   const settingsService = createMockSettingsService(customProviders, 'openai');
   let hook: ReturnType<typeof useProviderSelection> | undefined;
   let renderer: any;
@@ -93,7 +100,14 @@ it.sequential('useProviderSelection - lists registered and custom providers on o
 });
 
 it.sequential('useProviderSelection - selecting a custom provider opens edit_fields directly', async () => {
-  const customProviders = [{ name: 'custom-ollama', type: 'openai-compatible', baseUrl: 'http://localhost:11434/v1' }];
+  const customProviders = [
+    {
+      id: 'custom-ollama',
+      name: 'Custom Ollama',
+      type: 'openai-compatible',
+      baseUrl: 'http://localhost:11434/v1',
+    },
+  ];
   const settingsService = createMockSettingsService(customProviders, 'openai');
   let hook: ReturnType<typeof useProviderSelection> | undefined;
   let renderer: any;
@@ -141,7 +155,7 @@ it.sequential('useProviderSelection - selecting a custom provider opens edit_fie
 
   expect(hook!.phase).toBe('edit_fields');
   expect(hook!.selectedIndex).toBe(0);
-  expect(hook!.draft?.name).toBe('custom-ollama');
+  expect(hook!.draft?.name).toBe('Custom Ollama');
   expect(hook!.draft?.baseUrl).toBe('http://localhost:11434/v1');
 
   await act(async () => {
@@ -250,7 +264,14 @@ it.sequential(
 );
 
 it.sequential('useProviderSelection - requestDelete on a custom provider opens confirm_delete', async () => {
-  const customProviders = [{ name: 'custom-ollama', type: 'openai-compatible', baseUrl: 'http://localhost:11434/v1' }];
+  const customProviders = [
+    {
+      id: 'custom-ollama',
+      name: 'Custom Ollama',
+      type: 'openai-compatible',
+      baseUrl: 'http://localhost:11434/v1',
+    },
+  ];
   const settingsService = createMockSettingsService(customProviders, 'openai');
   let hook: ReturnType<typeof useProviderSelection> | undefined;
   let renderer: any;
@@ -491,6 +512,7 @@ it.sequential('useProviderSelection - add provider wizard flow and validation', 
   const persisted = settingsService.get('providers');
   expect(Array.isArray(persisted)).toBe(true);
   expect(persisted.length).toBe(1);
+  expect(persisted[0].id).toBe('my-custom-provider');
   expect(persisted[0].name).toBe('my-custom-provider');
   expect(persisted[0].type).toBe('openai-compatible');
   expect(persisted[0].baseUrl).toBe('http://localhost:8000/v1');
@@ -904,7 +926,7 @@ it.sequential('useProviderSelection - unchanged provider names are allowed when 
   expect(hook!.phase).toBe('list');
   expect(hook!.errorMessage).toBe(null);
   expect(settingsService.get('providers').length).toBe(1);
-  expect(settingsService.get('providers')[0].name).toBe('existing-provider');
+  expect(settingsService.get('providers')[0].id).toBe('existing-provider');
 
   await act(async () => {
     renderer.unmount();

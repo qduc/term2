@@ -24,6 +24,7 @@ import { getModelListItems, mapModelListItem } from './openai-compatible-models.
 
 export type CustomProviderConfig = {
   name: string;
+  label?: string;
   type?: string;
   baseUrl?: string;
   apiKey?: string;
@@ -52,11 +53,15 @@ export type CustomProviderRuntimeDeps = {
 function findConfigFromSettings(settingsService: ISettingsService, providerId: string): CustomProviderConfig | null {
   const list = settingsService?.get?.('providers');
   if (!Array.isArray(list)) return null;
-  const entry = list.find((p: any) => p && p.name === providerId);
+  const entry = list.find((p: any) => p && (p.id === providerId || p.name === providerId));
   if (!entry) return null;
 
+  const id = entry.id ? String(entry.id) : String(entry.name);
+  const label = entry.name ? String(entry.name) : id;
+
   return {
-    name: String(entry.name),
+    name: id,
+    label,
     type: entry.type ? String(entry.type) : 'openai-compatible',
     baseUrl: entry.baseUrl ? String(entry.baseUrl) : undefined,
     apiKey: entry.apiKey ? String(entry.apiKey) : undefined,
@@ -254,7 +259,7 @@ export function createCustomProviderModelProvider(
 
 export function createOpenAICompatibleProviderDefinition(config: CustomProviderConfig): ProviderDefinition {
   const providerId = config.name;
-  const label = toLabel(config.name);
+  const label = toLabel(config.label ?? config.name);
 
   return {
     id: providerId,

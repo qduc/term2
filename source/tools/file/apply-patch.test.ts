@@ -352,6 +352,33 @@ it.sequential('execute: detailed error for context block mismatch', async () => 
   });
 });
 
+it.sequential('execute: context mismatch suggests nearby candidate blocks when individual lines exist', async () => {
+  await withTempDir(async (dir) => {
+    const tool = createTool();
+    const filePath = 'existing.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(
+      absPath,
+      'function alpha() {\n  const shared = true;\n  return 1;\n}\n\nfunction beta() {\n  const shared = true;\n  return 2;\n}\n',
+    );
+
+    const result = await tool.execute({
+      type: 'update_file',
+      path: filePath,
+      diff: '@@\n function alpha() {\n   const shared = true;\n   return 2;\n }',
+    });
+
+    const parsed = parsePlainResult(result);
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error).toContain('Closest matching blocks:');
+    expect(parsed.output[0].error).toContain('lines 1-4: 3/4 context lines matched');
+    expect(parsed.output[0].error).toContain('lines 6-9: 3/4 context lines matched');
+    expect(parsed.output[0].error).toContain(
+      'The patch is ambiguous. Add a stronger @@ anchor or use a smaller context block.',
+    );
+  });
+});
+
 it.sequential('execute: create_file writes outside workspace when the call has been approved', async () => {
   // Use a workspace dir outside /tmp so the /tmp exception in resolveWorkspacePath
   // does not mask the workspace boundary check.

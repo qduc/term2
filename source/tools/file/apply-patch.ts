@@ -505,6 +505,43 @@ export function createApplyPatchToolDefinition(deps: {
 /**
  * Helper to analyze why a context block failed to match the original file content.
  */
+function findClosestContextBlocks(contextLines: string[], originalLines: string[]): string[] {
+  const nonBlankContextLines = contextLines.filter((line) => line.trim() !== '');
+  if (nonBlankContextLines.length < 2 || originalLines.length === 0) {
+    return [];
+  }
+
+  const windowSize = Math.min(Math.max(contextLines.length, nonBlankContextLines.length), originalLines.length);
+  const minimumScore = Math.max(2, Math.ceil(nonBlankContextLines.length / 2));
+  const candidates: Array<{ start: number; end: number; score: number }> = [];
+
+  for (let start = 0; start <= originalLines.length - windowSize; start++) {
+    const windowLines = originalLines.slice(start, start + windowSize);
+    const score = nonBlankContextLines.reduce(
+      (matches, contextLine) => matches + (windowLines.includes(contextLine) ? 1 : 0),
+      0,
+    );
+
+    if (score >= minimumScore && score < nonBlankContextLines.length) {
+      candidates.push({
+        start,
+        end: start + windowSize - 1,
+        score,
+      });
+    }
+  }
+
+  return candidates
+    .sort((a, b) => b.score - a.score || a.start - b.start)
+    .slice(0, 3)
+    .map(
+      (candidate) =>
+        `- lines ${candidate.start + 1}-${candidate.end + 1}: ${candidate.score}/${
+          nonBlankContextLines.length
+        } context lines matched`,
+    );
+}
+
 export function diagnoseContextMismatch(contextText: string, original: string): string {
   const contextLines = contextText.split(/\r?\n/);
   const originalLines = original.split(/\r?\n/);
@@ -577,6 +614,14 @@ export function diagnoseContextMismatch(contextText: string, original: string): 
   } else {
     diagnosis +=
       'The lines exist individually, but not in the same order or location. Make the block contiguous and match the file.';
+
+    const closestBlocks = findClosestContextBlocks(contextLines, originalLines);
+    if (closestBlocks.length > 0) {
+      diagnosis +=
+        '\nClosest matching blocks:\n' +
+        closestBlocks.join('\n') +
+        '\nThe patch is ambiguous. Add a stronger @@ anchor or use a smaller context block.';
+    }
   }
 
   return diagnosis;

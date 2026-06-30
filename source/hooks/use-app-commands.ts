@@ -129,7 +129,6 @@ export const useAppCommands = ({
         },
       ),
       createAutoApproveSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage }),
-      createSandboxSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage }),
       {
         name: 'plan',
         description: 'Toggle plan mode (read-only research/planning mode)',
@@ -140,6 +139,7 @@ export const useAppCommands = ({
       },
       createHandoffSlashCommand({ messages, addSystemMessage, onHandoff }),
       createGuardedSettingsCommand({ settingsService, addSystemMessage, applyRuntimeSetting, replaceInput, messages }),
+      createSandboxSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage }),
       {
         name: 'providers',
         description: 'Manage API providers (list, add, edit, delete)',
@@ -148,8 +148,8 @@ export const useAppCommands = ({
           return true;
         },
       },
-      createQuitSlashCommand(exit),
       createSkillsSlashCommand({ skillsService, onSkillSelected, addSystemMessage, replaceInput }),
+      createQuitSlashCommand(exit),
     ],
     [
       addSystemMessage,

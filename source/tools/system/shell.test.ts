@@ -406,6 +406,7 @@ it.sequential('shell execute bypasses RTK for SSH commands', async () => {
 it.sequential('shell execute wraps local default commands with the sandbox when enabled and available', async () => {
   let executedCommand: string | undefined;
   let receivedEnv: NodeJS.ProcessEnv | undefined;
+  let receivedPauseOnNetworkApproval: boolean | undefined;
   let wrappedCommand: string | undefined;
   let receivedReadPolicy: string | undefined;
   let receivedAllowReadExtra: string[] | undefined;
@@ -433,6 +434,7 @@ it.sequential('shell execute wraps local default commands with the sandbox when 
     executeShellCommandImpl: async (command, options) => {
       executedCommand = command;
       receivedEnv = options?.env;
+      receivedPauseOnNetworkApproval = options?.pauseOnSandboxNetworkApproval;
       return { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
     },
   });
@@ -443,6 +445,7 @@ it.sequential('shell execute wraps local default commands with the sandbox when 
   expect(receivedReadPolicy).toBe('strict');
   expect(receivedAllowReadExtra).toContain('/tmp/tool-cache');
   expect(executedCommand).toBe('sandboxed(pwd)');
+  expect(receivedPauseOnNetworkApproval).toBe(true);
   expect(receivedEnv).toBeTruthy();
   expect(receivedEnv?.HOME).toBe(os.homedir());
   expect(receivedEnv?.XDG_CONFIG_HOME).toContain(SANDBOX_TEMP_DIR);

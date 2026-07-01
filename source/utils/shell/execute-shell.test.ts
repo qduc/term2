@@ -3,6 +3,10 @@ import { PassThrough, Writable } from 'stream';
 import type { ChildProcess } from 'child_process';
 import { executeShellCommand } from './execute-shell.js';
 import { SANDBOX_TEMP_DIR } from './temp-dir.js';
+import {
+  registerSandboxNetworkApprovalHandler,
+  requestSandboxNetworkApproval,
+} from './sandbox/sandbox-network-approval.js';
 
 it('executeShellCommand returns stdout and exit code for successful command', async () => {
   const result = await executeShellCommand("printf 'hello'", {
@@ -129,6 +133,45 @@ it('executeShellCommand stops the child process when execution is aborted', asyn
 
   expect(killCalls).toBe(1);
   expect(result.timedOut).toBe(true);
+});
+
+it('executeShellCommand pauses sandboxed child processes while network approval is pending', async () => {
+  let completeCommand: ((stdout: string) => void) | undefined;
+  let resolveApproval: ((allow: boolean) => void) | undefined;
+  const signals: string[] = [];
+  const unregisterHandler = registerSandboxNetworkApprovalHandler(async () => {
+    return await new Promise<boolean>((resolve) => {
+      resolveApproval = resolve;
+    });
+  });
+
+  const resultPromise = executeShellCommand('networking', {
+    pauseOnSandboxNetworkApproval: true,
+    execImpl: (_command, _options, callback) => {
+      const child = createFakeChildProcess();
+      child.kill = (signal?: NodeJS.Signals | number) => {
+        signals.push(String(signal));
+        return true;
+      };
+      completeCommand = (stdout) => callback(null, stdout, '');
+      return child;
+    },
+  });
+
+  const approvalPromise = requestSandboxNetworkApproval({ host: 'example.com', port: 443 });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(signals).toEqual(['SIGSTOP']);
+
+  resolveApproval?.(true);
+  await expect(approvalPromise).resolves.toBe(true);
+  expect(signals).toEqual(['SIGSTOP', 'SIGCONT']);
+
+  completeCommand?.('ok');
+  await expect(resultPromise).resolves.toMatchObject({ stdout: 'ok', exitCode: 0 });
+
+  unregisterHandler();
 });
 
 function createFakeChildProcess(): ChildProcess {

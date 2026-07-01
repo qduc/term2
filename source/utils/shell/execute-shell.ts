@@ -1,6 +1,7 @@
 import { exec, type ChildProcess } from 'child_process';
 import process from 'process';
 import { SANDBOX_TEMP_DIR } from './temp-dir.js';
+import { registerSandboxNetworkApprovalPauseController } from './sandbox/sandbox-network-approval.js';
 
 type ExecCallback = (error: any, stdout: string | Buffer, stderr: string | Buffer) => void;
 
@@ -29,6 +30,24 @@ export interface ExecuteShellOptions {
   signal?: AbortSignal;
   sshService?: ISSHService;
   execImpl?: ExecImpl;
+  pauseOnSandboxNetworkApproval?: boolean;
+}
+
+function signalChildProcess(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (process.platform === 'win32') {
+    return;
+  }
+
+  if (child.pid) {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // Fall back to the direct child when it has no usable process group.
+    }
+  }
+
+  child.kill(signal);
 }
 
 function stopChildProcess(child: ChildProcess): void {
@@ -48,7 +67,16 @@ export async function executeShellCommand(
   command: string,
   options: ExecuteShellOptions = {},
 ): Promise<ShellExecutionResult> {
-  const { cwd = process.cwd(), timeout, maxBuffer, env, signal, sshService, execImpl = defaultExecImpl } = options;
+  const {
+    cwd = process.cwd(),
+    timeout,
+    maxBuffer,
+    env,
+    signal,
+    sshService,
+    execImpl = defaultExecImpl,
+    pauseOnSandboxNetworkApproval = false,
+  } = options;
 
   if (sshService) {
     return sshService.executeCommand(command, { cwd });
@@ -61,6 +89,7 @@ export async function executeShellCommand(
 
   try {
     const result = await new Promise<{ stdout?: string | Buffer; stderr?: string | Buffer }>((resolve, reject) => {
+      let unregisterPauseController: (() => void) | undefined;
       const child = execImpl(
         command,
         {
@@ -72,6 +101,7 @@ export async function executeShellCommand(
         },
         (error, stdout, stderr) => {
           signal?.removeEventListener('abort', stopChild);
+          unregisterPauseController?.();
           if (error) {
             error.stdout = stdout;
             error.stderr = stderr;
@@ -84,6 +114,12 @@ export async function executeShellCommand(
       );
 
       const stopChild = () => stopChildProcess(child);
+      if (pauseOnSandboxNetworkApproval) {
+        unregisterPauseController = registerSandboxNetworkApprovalPauseController({
+          pause: () => signalChildProcess(child, 'SIGSTOP'),
+          resume: () => signalChildProcess(child, 'SIGCONT'),
+        });
+      }
       if (signal?.aborted) {
         stopChild();
       } else {

@@ -433,6 +433,7 @@ export function createShellToolDefinition(deps: {
                 readPolicy: settingsService.get<SandboxReadPolicy>('sandbox.readPolicy'),
               })
             : undefined,
+          pauseOnSandboxNetworkApproval: sandboxed,
           signal: (details as { signal?: AbortSignal } | undefined)?.signal,
           sshService,
         });

@@ -1,4 +1,4 @@
-import { exec, type ChildProcess } from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
 import process from 'process';
 import { SANDBOX_TEMP_DIR } from './temp-dir.js';
 import { registerSandboxNetworkApprovalPauseController } from './sandbox/sandbox-network-approval.js';
@@ -11,7 +11,72 @@ type ExecImpl = (
   callback: ExecCallback,
 ) => ChildProcess;
 
-const defaultExecImpl: ExecImpl = exec;
+const defaultExecImpl: ExecImpl = (command, options, callback) => {
+  const child = spawn(command, {
+    shell: true,
+    cwd: options.cwd,
+    env: options.env,
+    detached: options.detached,
+  });
+
+  let stdout = '';
+  let stderr = '';
+  let killed = false;
+  let ex: Error | null = null;
+  const maxBuffer = options.maxBuffer ?? 1024 * 1024;
+  let timeoutId: NodeJS.Timeout | undefined;
+
+  if (options.timeout && options.timeout > 0) {
+    timeoutId = setTimeout(() => {
+      killed = true;
+      child.kill('SIGTERM');
+    }, options.timeout);
+  }
+
+  child.stdout?.setEncoding('utf8');
+  child.stdout?.on('data', (chunk) => {
+    stdout += chunk;
+    if (stdout.length > maxBuffer) {
+      ex = new Error('stdout maxBuffer length exceeded');
+      child.kill('SIGTERM');
+    }
+  });
+
+  child.stderr?.setEncoding('utf8');
+  child.stderr?.on('data', (chunk) => {
+    stderr += chunk;
+    if (stderr.length > maxBuffer) {
+      ex = new Error('stderr maxBuffer length exceeded');
+      child.kill('SIGTERM');
+    }
+  });
+
+  child.on('close', (code, signal) => {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (ex) {
+      callback(ex, stdout, stderr);
+      return;
+    }
+    if (code !== 0 || signal) {
+      const err = new Error(`Command failed: ${command}`) as any;
+      err.code = code;
+      err.signal = signal;
+      err.killed = killed;
+      callback(err, stdout, stderr);
+      return;
+    }
+    callback(null, stdout, stderr);
+  });
+
+  child.on('error', (err) => {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (!ex) {
+      ex = err;
+    }
+  });
+
+  return child;
+};
 
 export interface ShellExecutionResult {
   stdout: string;

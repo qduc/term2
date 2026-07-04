@@ -28,6 +28,16 @@ function setup(options: { pendingModeNotice?: string | null; lastUserMessage?: s
       pendingModeNotice: options.pendingModeNotice ?? null,
     } as any,
     resolveRetryLimit: () => 3,
+    journal: {
+      getEvents: () => [
+        {
+          type: 'assistant_journal_item',
+          turnId: 'turn-1',
+          seq: 1,
+          item: { type: 'tool_call', callId: 'call-1', toolName: 'tool', arguments: '{}' },
+        },
+      ],
+    } as any,
   });
 
   return { factory, wasAborted: () => aborted };
@@ -57,7 +67,14 @@ it('creates an attempt with normalized legacy retry counts and pending mode noti
   });
   expect(result.attempt.maxTransientRetries).toBe(3);
   expect(result.attempt.maxModelRetries).toBe(5);
-  expect(result.attempt.initialLedgerSnapshot).toEqual([{ callId: 'call-1' }]);
+  expect(result.attempt.initialJournalSnapshot).toEqual([
+    {
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 1,
+      item: { type: 'tool_call', callId: 'call-1', toolName: 'tool', arguments: '{}' },
+    },
+  ]);
 });
 
 it('recovers the last user message for a skipped empty turn', () => {

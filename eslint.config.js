@@ -93,6 +93,29 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': ['error', noUnusedVarsOptions],
     },
   },
+  {
+    files: ['source/services/**/*.{ts,tsx}'],
+    ignores: ['**/*.test.{ts,tsx}', 'source/services/conversation/conversation-state-projector.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '../tool-execution-ledger.js',
+              importNames: ['reconcileHistoryWithToolLedger'],
+              message: 'Use conversation-state-projector instead of reconciling conversation history manually.',
+            },
+            {
+              name: './tool-execution-ledger.js',
+              importNames: ['reconcileHistoryWithToolLedger'],
+              message: 'Use conversation-state-projector instead of reconciling conversation history manually.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Tests often need mocks, stubs, and partially implemented interfaces, so
   // unused vars stay as a warning here (overriding the production error).
   {

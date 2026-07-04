@@ -1,7 +1,7 @@
 import type { RunState } from '@openai/agents';
 import type { AgentStream } from '../agent-stream.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import type { SavedToolExecution } from '../tool-execution-ledger.js';
+import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-events.js';
 
 // ── Classification ─────────────────────────────────────────────
 
@@ -57,7 +57,8 @@ export type RecoveryContext = {
 // ── Recovery State ─────────────────────────────────────────────
 
 export type RecoveryState = {
-  ledgerSnapshot: SavedToolExecution[];
+  /** Durable assistant-output journal events; replaces the legacy ledger snapshot. */
+  journalSnapshot: AssistantJournalItemLogEvent[];
   addedUserMessage: boolean;
   stream: AgentStream | null;
   currentState?: RunState<any, any>;

@@ -7,7 +7,8 @@ import type { StreamHistorySource } from './session-stream-processor.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
 import type { GenerationToken } from '../generation-guard.js';
 import type { PersistedAssistantTurnItem } from '../conversation/conversation-persistence-types.js';
-import type { SavedToolExecution } from '../tool-execution-ledger.js';
+import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-events.js';
+import type { AbortedApprovalContext } from '../approval/approval-state.js';
 
 export interface PreparedContinuation {
   state: RunState<any, any>;
@@ -24,13 +25,27 @@ export interface PreparedContinuation {
   cumulativeTurnItems?: PersistedAssistantTurnItem[];
 }
 
+export type ContinuationInit =
+  | {
+      kind: 'approval_decision';
+      answer: string;
+      rejectionReason?: string;
+      generation: number;
+    }
+  | {
+      kind: 'abort_resolution';
+      abortedContext: AbortedApprovalContext;
+      userText: string;
+      generation: number;
+    };
+
 export class ContinuationState {
   token: number;
   currentState: RunState<any, any>;
   currentCallIds: string[];
   source: StreamHistorySource;
   previouslyEmittedIds: Set<string>;
-  ledgerSnapshot: SavedToolExecution[];
+  journalSnapshot: AssistantJournalItemLogEvent[];
   inputMode: 'delta' | 'full_history';
   cumulativeUsage?: NormalizedUsage;
   cumulativeCommandMessages: CommandMessage[];
@@ -45,7 +60,7 @@ export class ContinuationState {
     this.currentCallIds = [];
     this.source = 'continueRunStream';
     this.previouslyEmittedIds = new Set();
-    this.ledgerSnapshot = [];
+    this.journalSnapshot = [];
     this.inputMode = 'delta';
     this.cumulativeCommandMessages = [];
     this.retryCounts = {
@@ -75,14 +90,14 @@ export class ContinuationState {
     _nextInterruption: unknown,
     nextInputMode: 'delta' | 'full_history' | undefined,
     mergedEmittedIds: Set<string>,
-    ledgerSnapshot: SavedToolExecution[],
+    journalSnapshot: AssistantJournalItemLogEvent[],
     currentCallIds: string[],
   ): void {
     this.currentState = nextState;
     this.currentCallIds = currentCallIds;
     this.source = 'continueRunStream';
     this.previouslyEmittedIds = mergedEmittedIds;
-    this.ledgerSnapshot = ledgerSnapshot;
+    this.journalSnapshot = journalSnapshot;
     this.inputMode = nextInputMode ?? this.inputMode;
   }
 
@@ -110,7 +125,7 @@ export class ContinuationState {
     this.currentResumePreviousResponseId = id;
   }
 
-  setLedgerSnapshot(snapshot: SavedToolExecution[]): void {
-    this.ledgerSnapshot = snapshot;
+  setJournalSnapshot(snapshot: AssistantJournalItemLogEvent[]): void {
+    this.journalSnapshot = snapshot;
   }
 }

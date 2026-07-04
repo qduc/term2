@@ -40,8 +40,24 @@ export interface ContinuationPlan {
   removeInterceptor: () => void;
 }
 
+export type ApprovalDecisionInput = {
+  kind: 'approval_decision';
+  answer: string;
+  rejectionReason?: string;
+  generation: number;
+};
+
 export class ApprovalFlowCoordinator {
   constructor(private readonly deps: ApprovalFlowCoordinatorDeps) {}
+
+  buildApprovalDecision(answer: string, rejectionReason?: string): ApprovalDecisionInput {
+    return {
+      kind: 'approval_decision',
+      answer,
+      rejectionReason,
+      generation: this.deps.approvalState.getPending()?.token ?? 0,
+    };
+  }
 
   abort(): { aborted: boolean; callId?: string } {
     this.deps.agentClient.abort();

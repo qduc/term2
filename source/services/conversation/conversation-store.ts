@@ -8,12 +8,16 @@ export const SHELL_CONTEXT_PREFIX = '[Previous Shell Session]';
 const LEGACY_MODE_NOTICE_PREFIX = '[Mode Notice] ';
 
 /**
- * ConversationStore maintains the canonical conversation history for the app.
+ * ConversationStore maintains the live provider-facing transcript projection.
  *
  * The Agents SDK can accept either a string (single new user input) or an
  * AgentInputItem[] (full conversation history). For providers without
  * server-managed conversation chaining (e.g. OpenRouter), we must provide the
  * full history on each turn.
+ *
+ * This store does not own the complete durable conversation state. Tool
+ * lifecycle recovery, assistant journal replay, and cross-stream precedence
+ * rules belong to conversation-state-projector.
  */
 export class ConversationStore {
   #history: AgentInputItem[] = [];

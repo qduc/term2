@@ -9,8 +9,8 @@ import { buildPersistedAssistantItemsFromRaw } from '../conversation/conversatio
 export interface AssistantTurnJournalOptions {
   /** Resolves the active turn id; usually backed by the tool ledger. */
   getCurrentTurnId: () => string;
-  /** Sink that accepts the resulting log events. */
-  sink: (event: LogEvent) => void;
+  /** Sink that accepts the resulting log events. May be set later via setSink. */
+  sink?: (event: LogEvent) => void;
 }
 
 /**
@@ -26,16 +26,37 @@ export interface AssistantTurnJournalOptions {
  * Sequence numbers are monotonic per turn and reset when `resetForNewTurn`
  * is called. The current turn id is read on each call so approval
  * continuations stay on the same logical turn.
+ *
+ * Item events are buffered in memory so they can serve as the source of truth
+ * for live turn recovery as well as crash recovery.
  */
 export class AssistantTurnJournal {
   #getCurrentTurnId: () => string;
-  #sink: (event: LogEvent) => void;
+  #sink: ((event: LogEvent) => void) | null;
   #seq = 0;
   #emittedRawItemKeys: Set<string> = new Set();
+  #itemEvents: AssistantJournalItemLogEvent[] = [];
 
   constructor(opts: AssistantTurnJournalOptions) {
     this.#getCurrentTurnId = opts.getCurrentTurnId;
-    this.#sink = opts.sink;
+    this.#sink = opts.sink ?? null;
+  }
+
+  /**
+   * Replaces the downstream sink and flushes any buffered item events.
+   * Passing null stops emission; buffered events are retained until a sink
+   * is set again. Idempotent: calling with the same sink is a no-op.
+   */
+  setSink(sink: ((event: LogEvent) => void) | null): void {
+    if (this.#sink === sink) {
+      return;
+    }
+    this.#sink = sink;
+    if (sink) {
+      for (const event of this.#itemEvents) {
+        this.#emit(event);
+      }
+    }
   }
 
   /**
@@ -45,6 +66,35 @@ export class AssistantTurnJournal {
   resetForNewTurn(): void {
     this.#seq = 0;
     this.#emittedRawItemKeys.clear();
+  }
+
+  /**
+   * Returns all durable item events emitted so far, across all turns.
+   */
+  getEvents(): AssistantJournalItemLogEvent[] {
+    return [...this.#itemEvents];
+  }
+
+  /**
+   * Returns all durable persisted items emitted so far, across all turns.
+   */
+  getItems(): PersistedAssistantTurnItem[] {
+    return this.#itemEvents.map((event) => event.item);
+  }
+
+  /**
+   * Returns durable item events for the current turn only.
+   */
+  getCurrentTurnEvents(): AssistantJournalItemLogEvent[] {
+    const turnId = this.#getCurrentTurnId();
+    return this.#itemEvents.filter((event) => event.turnId === turnId);
+  }
+
+  /**
+   * Returns durable persisted items for the current turn only.
+   */
+  getCurrentTurnItems(): PersistedAssistantTurnItem[] {
+    return this.getCurrentTurnEvents().map((event) => event.item);
   }
 
   /**
@@ -102,7 +152,8 @@ export class AssistantTurnJournal {
         seq: ++this.#seq,
         item: persisted,
       };
-      this.#sink(event);
+      this.#itemEvents.push(event);
+      this.#emit(event);
     }
     return items;
   }
@@ -115,6 +166,10 @@ export class AssistantTurnJournal {
     return this.#seq + 1;
   }
 
+  #emit(event: LogEvent): void {
+    this.#sink?.(event);
+  }
+
   #emitDelta(kind: 'text' | 'reasoning', delta: string): void {
     const event: AssistantJournalDeltaLogEvent = {
       type: 'assistant_journal_delta',
@@ -123,7 +178,7 @@ export class AssistantTurnJournal {
       kind,
       delta,
     };
-    this.#sink(event);
+    this.#emit(event);
   }
 }
 

@@ -1,0 +1,3 @@
+{"v":3,"seq":1,"ts":"2026-01-01T00:00:00.000Z","event":{"type":"session_init","id":"current-v3","createdAt":"2026-01-01T00:00:00.000Z","model":"gpt-5","provider":"openai"}}
+{"v":3,"seq":2,"ts":"2026-01-01T00:00:01.000Z","event":{"type":"user_message","message":{"id":"u1","sender":"user","text":"run pwd"}}}
+{"v":3,"seq":3,"ts":"2026-01-01T00:00:02.000Z","event":{"type":"assistant_turn","turn":{"items":[{"type":"tool_call","callId":"call-1","toolName":"shell","arguments":"{\"command\":\"pwd\"}"},{"type":"tool_result","callId":"call-1","toolName":"shell","status":"completed","output":"/repo"},{"type":"assistant_text","text":"The current directory is /repo."}]},"state":{"previousResponseId":"resp-v3","model":"gpt-5","provider":"openai"}}}

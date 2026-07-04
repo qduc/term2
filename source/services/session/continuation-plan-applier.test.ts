@@ -23,6 +23,9 @@ function createMockDeps(): any {
     toolTracker: tracker,
     logger: { debug: () => {}, getCorrelationId: () => undefined },
     sessionId: 'test-session',
+    journal: {
+      getEvents: () => [] as any[],
+    },
   };
 }
 
@@ -139,7 +142,7 @@ it('applyInitialSetup yields deduped tool_started event', async () => {
     toolStartedEvent: { type: 'tool_started', toolCallId: 'c1' },
     toolCallArgumentsById: new Map(),
   } as any;
-  const state = { setLedgerSnapshot: () => {} } as any;
+  const state = { setJournalSnapshot: () => {} } as any;
 
   for await (const event of applier.applyInitialSetup(prepared, state)) {
     events.push(event);
@@ -156,7 +159,7 @@ it('applyInitialSetup populates toolTracker argumentsById', async () => {
     toolStartedEvent: undefined,
     toolCallArgumentsById: new Map([['k1', 'v1']]),
   } as any;
-  const state = { setLedgerSnapshot: () => {} } as any;
+  const state = { setJournalSnapshot: () => {} } as any;
 
   for await (const _ of applier.applyInitialSetup(prepared, state)) {
     // no events
@@ -165,14 +168,21 @@ it('applyInitialSetup populates toolTracker argumentsById', async () => {
   expect(deps.toolTracker.argumentsById.get('k1')).toBe('v1');
 });
 
-it('applyInitialSetup captures the current tool ledger for recovery', async () => {
+it('applyInitialSetup captures the current journal snapshot for recovery', async () => {
   const deps = createMockDeps();
-  const snapshot = [{ callId: 'existing-call', status: 'completed' }];
-  deps.toolTracker.export = () => snapshot;
+  const snapshot = [
+    {
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 1,
+      item: { type: 'tool_result', callId: 'existing-call', toolName: 'tool', status: 'completed', output: 'done' },
+    },
+  ];
+  deps.journal.getEvents = () => snapshot;
 
   let capturedSnapshot: unknown;
   const state = {
-    setLedgerSnapshot: (value: unknown) => {
+    setJournalSnapshot: (value: unknown) => {
       capturedSnapshot = value;
     },
   } as any;
@@ -221,14 +231,14 @@ it('applyNextPlan updates state for approved plan', async () => {
       nextInterruption: any,
       nextInputMode: any,
       mergedIds: any,
-      ledger: any,
+      journalSnapshot: any,
       currentCallIds: any,
     ) => {
       expect(nextState.id).toBe('s2');
       expect(nextInterruption.callId).toBe('c2');
       expect(nextInputMode).toBe('full_history');
       expect(mergedIds).toEqual(new Set(['id1']));
-      expect(ledger).toEqual([]);
+      expect(journalSnapshot).toEqual([]);
       expect(currentCallIds).toEqual([]);
     },
   } as any;
@@ -279,9 +289,18 @@ it('applyNextPlan records aborted approval for rejected plan', async () => {
 it('applyNextPlan passes ledger-derived currentCallIds to advanceFromPlan', async () => {
   const deps = createMockDeps();
   deps.toolTracker.activeCallIdsForCurrentTurn = () => ['call-a', 'call-rejected'];
-  deps.toolTracker.export = () => [{ callId: 'call-a', status: 'completed' }] as any;
+  const journalSnapshot = [
+    {
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 1,
+      item: { type: 'tool_result', callId: 'call-a', toolName: 'tool', status: 'completed', output: 'done' },
+    },
+  ];
+  deps.journal.getEvents = () => journalSnapshot;
 
   let receivedCallIds: string[] | undefined;
+  let receivedSnapshot: unknown;
   const applier = new ContinuationPlanApplier(deps);
   const state = {
     advanceFromPlan: (
@@ -289,9 +308,10 @@ it('applyNextPlan passes ledger-derived currentCallIds to advanceFromPlan', asyn
       _nextInterruption: any,
       _nextInputMode: any,
       _mergedIds: any,
-      _ledger: any,
+      snapshot: any,
       currentCallIds: string[],
     ) => {
+      receivedSnapshot = snapshot;
       receivedCallIds = currentCallIds;
     },
   } as any;
@@ -312,4 +332,5 @@ it('applyNextPlan passes ledger-derived currentCallIds to advanceFromPlan', asyn
   // Includes the aborted sibling (call-rejected) because the ledger has no
   // status filter — provider APIs require an output for every tool call.
   expect(receivedCallIds).toEqual(['call-a', 'call-rejected']);
+  expect(receivedSnapshot).toBe(journalSnapshot);
 });

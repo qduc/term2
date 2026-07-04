@@ -12,7 +12,7 @@ function createAttempt() {
       modelRetryCount: 0,
       transportDowngradeCount: 0,
     },
-    initialLedgerSnapshot: [],
+    initialJournalSnapshot: [],
     maxTransientRetries: 3,
   });
 }

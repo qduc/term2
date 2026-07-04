@@ -1,6 +1,21 @@
 import { it, expect } from 'vitest';
 import { ConversationLogger } from './conversation-logger.js';
 import { TurnItemAccumulator } from '../session/turn-item-accumulator.js';
+import type { AssistantTurnJournal } from './assistant-turn-journal.js';
+
+const makeJournal = (overrides: Partial<AssistantTurnJournal> = {}): AssistantTurnJournal =>
+  ({
+    recordTextDelta: () => {},
+    recordReasoningDelta: () => {},
+    recordRunItem: () => [],
+    resetForNewTurn: () => {},
+    getEvents: () => [],
+    getItems: () => [],
+    getCurrentTurnEvents: () => [],
+    getCurrentTurnItems: () => [],
+    setSink: () => {},
+    ...overrides,
+  } as unknown as AssistantTurnJournal);
 
 const makeLoggingService = () => {
   const warnings: Array<{ message: string; meta: unknown }> = [];
@@ -27,6 +42,7 @@ it('setLogSink updates the sink used by log', () => {
     turnAccumulator: new TurnItemAccumulator(),
     logger,
     getAssistantTurnState: () => ({ previousResponseId: null }),
+    journal: makeJournal(),
   });
 
   conversationLogger.setLogSink((event) => sinkA.push(event));
@@ -50,6 +66,7 @@ it('log is a no-op when the sink is null', () => {
     turnAccumulator: new TurnItemAccumulator(),
     logger,
     getAssistantTurnState: () => ({ previousResponseId: null }),
+    journal: makeJournal(),
   });
 
   conversationLogger.log({ type: 'session_cleared' });
@@ -63,6 +80,7 @@ it('log warns when the sink throws', () => {
     turnAccumulator: new TurnItemAccumulator(),
     logger,
     getAssistantTurnState: () => ({ previousResponseId: null }),
+    journal: makeJournal(),
   });
 
   conversationLogger.setLogSink(() => {
@@ -87,6 +105,7 @@ it('log stamps the current turn id on operational events', () => {
     logger,
     getAssistantTurnState: () => ({ previousResponseId: null }),
     getCurrentTurnId: () => 'turn-9',
+    journal: makeJournal(),
   });
 
   conversationLogger.setLogSink((event) => sinkEvents.push(event));
@@ -132,6 +151,7 @@ it('dispatchEventToLog accumulates turn items and logs the final assistant turn'
       model: 'gpt-4.1',
       provider: 'openai',
     }),
+    journal: makeJournal(),
   });
 
   conversationLogger.setLogSink((event) => sinkEvents.push(event));
@@ -177,6 +197,7 @@ it('dispatchEventToLog checkpoints accumulated turn items before logging an erro
       model: 'gpt-5',
       provider: 'openai',
     }),
+    journal: makeJournal(),
   });
 
   conversationLogger.setLogSink((event) => sinkEvents.push(event));
@@ -246,6 +267,7 @@ it('dispatchEventToLog logs event-specific records', () => {
     turnAccumulator,
     logger,
     getAssistantTurnState: () => ({ previousResponseId: null }),
+    journal: makeJournal(),
   });
 
   conversationLogger.setLogSink((event) => sinkEvents.push(event));
@@ -382,11 +404,10 @@ it('dispatchEventToLog forwards text and reasoning deltas to the journal', () =>
     turnAccumulator,
     logger,
     getAssistantTurnState: () => ({ previousResponseId: null }),
-    getJournal: () =>
-      ({
-        recordTextDelta: (delta: string) => journalDeltas.push({ kind: 'text', delta }),
-        recordReasoningDelta: (delta: string) => journalDeltas.push({ kind: 'reasoning', delta }),
-      } as any),
+    journal: makeJournal({
+      recordTextDelta: (delta: string) => journalDeltas.push({ kind: 'text', delta }),
+      recordReasoningDelta: (delta: string) => journalDeltas.push({ kind: 'reasoning', delta }),
+    } as any),
   });
   conversationLogger.setLogSink((event) => sinkEvents.push(event));
 
@@ -399,14 +420,19 @@ it('dispatchEventToLog forwards text and reasoning deltas to the journal', () =>
   ]);
 });
 
-it('dispatchEventToLog is a no-op for the journal when no journal is registered', () => {
+it('dispatchEventToLog forwards text and reasoning deltas to the required journal', () => {
   const { logger } = makeLoggingService();
   const sinkEvents: any[] = [];
   const turnAccumulator = new TurnItemAccumulator();
+  const journalDeltas: Array<{ kind: 'text' | 'reasoning'; delta: string }> = [];
   const conversationLogger = new ConversationLogger({
     turnAccumulator,
     logger,
     getAssistantTurnState: () => ({ previousResponseId: null }),
+    journal: makeJournal({
+      recordTextDelta: (delta: string) => journalDeltas.push({ kind: 'text', delta }),
+      recordReasoningDelta: (delta: string) => journalDeltas.push({ kind: 'reasoning', delta }),
+    } as any),
   });
   conversationLogger.setLogSink((event) => sinkEvents.push(event));
 
@@ -414,4 +440,8 @@ it('dispatchEventToLog is a no-op for the journal when no journal is registered'
   conversationLogger.dispatchEventToLog({ type: 'reasoning_delta', delta: 'x' });
   conversationLogger.dispatchEventToLog({ type: 'text_delta', delta: 'y' });
   expect(sinkEvents).toEqual([]);
+  expect(journalDeltas).toEqual([
+    { kind: 'reasoning', delta: 'x' },
+    { kind: 'text', delta: 'y' },
+  ]);
 });

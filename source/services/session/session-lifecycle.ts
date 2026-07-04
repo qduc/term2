@@ -1,18 +1,15 @@
 import type { AgentInputItem } from '@openai/agents';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
-import { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
-import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
-import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ILoggingService } from '../service-interfaces.js';
-import { getMethod } from '../interruption-info.js';
-import { reconcileHistoryWithToolLedger } from '../tool-execution-ledger.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
-import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
 import { GenerationGuard } from '../generation-guard.js';
+import { SessionContinuityReset } from './session-continuity-reset.js';
+import { projectImportedState, ProjectionWarningCode } from '../conversation/conversation-state-projector.js';
+import { ImportedConversationStateSchema } from '../conversation/conversation-state-schema.js';
 
 /**
  * Owns and manages session-level state transitions:
@@ -31,43 +28,34 @@ export class SessionLifecycle {
 
   #inputPlanner: SessionInputPlanner;
   #toolTracker: SessionToolTracker;
-  #shellAutoApproval: ShellAutoApprovalResolver;
-  #turnAccumulator: TurnItemAccumulator;
   #conversationStore: ConversationStore;
-  #agentClient: ConversationAgentClient;
   #logger: ILoggingService;
   #sessionId: string;
   #appState: { statusMachine: TurnStatusMachine };
-  #approvalFlow: ApprovalFlowCoordinator;
   #providerContinuity: ProviderContinuity;
   #generationGuard: GenerationGuard;
+  #continuityReset: SessionContinuityReset;
 
   constructor(deps: {
     inputPlanner: SessionInputPlanner;
-    approvalFlow: ApprovalFlowCoordinator;
     toolTracker: SessionToolTracker;
-    shellAutoApproval: ShellAutoApprovalResolver;
-    turnAccumulator: TurnItemAccumulator;
     conversationStore: ConversationStore;
-    agentClient: ConversationAgentClient;
     logger: ILoggingService;
     sessionId: string;
     appState: { statusMachine: TurnStatusMachine };
     providerContinuity: ProviderContinuity;
     generationGuard: GenerationGuard;
+    continuityReset: SessionContinuityReset;
   }) {
     this.#inputPlanner = deps.inputPlanner;
     this.#toolTracker = deps.toolTracker;
-    this.#shellAutoApproval = deps.shellAutoApproval;
-    this.#turnAccumulator = deps.turnAccumulator;
     this.#conversationStore = deps.conversationStore;
-    this.#agentClient = deps.agentClient;
     this.#logger = deps.logger;
     this.#sessionId = deps.sessionId;
     this.#appState = deps.appState;
-    this.#approvalFlow = deps.approvalFlow;
     this.#providerContinuity = deps.providerContinuity;
     this.#generationGuard = deps.generationGuard;
+    this.#continuityReset = deps.continuityReset;
   }
 
   // ── Public lifecycle methods ─────────────────────────────────────
@@ -78,7 +66,7 @@ export class SessionLifecycle {
    */
   resetSession(options?: { clearConversations?: boolean }): void {
     this.#generationGuard.invalidate();
-    this.#resetProviderContinuity(options);
+    this.#continuityReset.reset(options);
     this.#conversationStore.clear();
     this.#toolTracker.reset();
     this.#inputPlanner.reset();
@@ -91,7 +79,7 @@ export class SessionLifecycle {
    */
   afterProviderChanged(): void {
     this.#generationGuard.invalidate();
-    this.#resetProviderContinuity();
+    this.#continuityReset.reset();
     this.#appState.statusMachine.abort();
   }
 
@@ -103,7 +91,7 @@ export class SessionLifecycle {
   afterUndo(): void {
     this.#generationGuard.invalidate();
     this.#pruneToolLedgerToCurrentHistory();
-    this.#resetProviderContinuity();
+    this.#continuityReset.reset();
     this.#inputPlanner.markUndoOrRewind();
     this.#appState.statusMachine.abort();
   }
@@ -114,7 +102,7 @@ export class SessionLifecycle {
   afterToolRetry(): void {
     this.#generationGuard.invalidate();
     this.#pruneToolLedgerToCurrentHistory();
-    this.#resetProviderContinuity();
+    this.#continuityReset.reset();
     this.#inputPlanner.markUndoOrRewind();
     this.#appState.statusMachine.abort();
   }
@@ -147,56 +135,46 @@ export class SessionLifecycle {
     toolLedger?: SavedToolExecution[];
     updatedAt?: string;
   }): void {
+    const validatedState = ImportedConversationStateSchema.parse(state);
     this.#conversationStore.clear();
-    this.#toolTracker.import(state.toolLedger);
-    const reconciled = reconcileHistoryWithToolLedger(state.history, state.toolLedger);
-    if (reconciled.addedCompletedPairs > 0 || reconciled.droppedIncompleteCalls > 0) {
+    this.#toolTracker.import(validatedState.toolLedger);
+    const projected = projectImportedState({
+      history: validatedState.history,
+      previousResponseId: validatedState.previousResponseId,
+      toolLedger: validatedState.toolLedger,
+    });
+    if (projected.warnings.length > 0) {
+      const addedCompletedPairs =
+        (
+          projected.warnings.find((warning) => warning.code === ProjectionWarningCode.CompletedToolHistoryInserted)
+            ?.detail as { addedCompletedPairs?: number } | undefined
+        )?.addedCompletedPairs ?? 0;
+      const droppedIncompleteCalls =
+        (
+          projected.warnings.find((warning) => warning.code === ProjectionWarningCode.IncompleteToolHistoryDropped)
+            ?.detail as { droppedIncompleteCalls?: number } | undefined
+        )?.droppedIncompleteCalls ?? 0;
       this.#logger.warn('Reconciled saved conversation history with tool execution ledger', {
         eventType: 'conversation.tool_ledger.reconciled',
         category: 'conversation',
         phase: 'resume',
         sessionId: this.#sessionId,
-        addedCompletedPairs: reconciled.addedCompletedPairs,
-        droppedIncompleteCalls: reconciled.droppedIncompleteCalls,
+        addedCompletedPairs,
+        droppedIncompleteCalls,
       });
     }
-    for (const item of reconciled.history as AgentInputItem[]) {
+    for (const item of projected.history as AgentInputItem[]) {
       this.#conversationStore.addImportedItem(item);
     }
     // Provider-side response chains can expire while the local transcript remains valid.
     // Force the first resumed turn to resync from full history; successful completion
     // will populate a fresh previousResponseId for subsequent chained turns.
-    this.#providerContinuity.clear();
-    this.#toolTracker.clearEmittedToolStarted();
-    this.#inputPlanner.reset();
-    this.#shellAutoApproval.clearCache();
-    this.#approvalFlow.clearPending();
-    this.#approvalFlow.consumeAborted();
-    this.#toolTracker.clearArguments();
-    this.#turnAccumulator.resetPersistedTurnState();
+    this.#continuityReset.reset({ clearConversations: false });
     this.#inputPlanner.markResumedSession({
-      updatedAtMs: state.updatedAt ? Date.parse(state.updatedAt) : null,
+      updatedAtMs: validatedState.updatedAt ? Date.parse(validatedState.updatedAt) : null,
     });
     this.#generationGuard.invalidate();
     this.#appState.statusMachine.abort();
-  }
-
-  // ── Internal helpers ──────────────────────────────────────────────
-
-  #resetProviderContinuity({ clearConversations = true }: { clearConversations?: boolean } = {}): void {
-    this.#providerContinuity.clear();
-    this.#approvalFlow.clearPending();
-    this.#approvalFlow.consumeAborted();
-    this.#toolTracker.clearArguments();
-    this.#toolTracker.clearEmittedToolStarted();
-    this.#shellAutoApproval.clearCache();
-    this.#inputPlanner.reset();
-    this.#turnAccumulator.resetPersistedTurnState();
-
-    if (clearConversations) {
-      const clearConversationsFn = getMethod<[], void>(this.#agentClient, 'clearConversations');
-      clearConversationsFn?.call(this.#agentClient);
-    }
   }
 
   #pruneToolLedgerToCurrentHistory(): void {

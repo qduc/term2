@@ -8,6 +8,7 @@ import type { UserTurn } from '../../types/user-turn.js';
 import { normalizeUserTurn } from '../../types/user-turn.js';
 import type { SessionLifecycle } from './session-lifecycle.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
+import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
 import { TurnAttempt } from './turn-attempt.js';
 
 export type InitialTurnRunOptions = {
@@ -32,6 +33,7 @@ export type TurnAttemptFactoryDeps = {
   toolTracker: SessionToolTracker;
   state: SessionLifecycle;
   resolveRetryLimit: () => number;
+  journal: AssistantTurnJournal;
 };
 
 export type TurnAttemptCreationResult = { kind: 'created'; attempt: TurnAttempt } | { kind: 'stale' };
@@ -64,7 +66,7 @@ export class TurnAttemptFactory {
         turn,
         token,
         initialRetryCounts: this.#normalizeRetryCounts(options.retries),
-        initialLedgerSnapshot: this.deps.toolTracker.export(),
+        initialJournalSnapshot: this.deps.journal.getEvents(),
         maxTransientRetries: this.deps.resolveRetryLimit(),
         maxModelRetries: options.maxModelRetries,
         signal: options.signal,

@@ -1,12 +1,7 @@
 import type { AgentInputItem } from '@openai/agents';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import { createUsageAccumulator } from '../../utils/ai/token-usage.js';
-import {
-  ToolExecutionLedger,
-  callIdOf,
-  reconcileHistoryWithToolLedger,
-  type SavedToolExecution,
-} from '../tool-execution-ledger.js';
+import { callIdOf, type SavedToolExecution } from '../tool-execution-ledger.js';
 import { repairConversationHistory } from './conversation-history-repair.js';
 import type { AssistantTurnState, LogEnvelope, LogEvent, StateSnapshot } from '../logging/conversation-log-events.js';
 import type {
@@ -17,6 +12,7 @@ import type {
 } from './conversation-persistence-types.js';
 import { synthesizeHistoryFromAssistantTurn } from './conversation-turn-items.js';
 import { formatPatchOutputItems, coerceToText } from '../../tools/format-helpers.js';
+import { projectProviderHistory } from './conversation-state-projector.js';
 
 export interface RestoredState {
   id: string;
@@ -943,6 +939,44 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
   }
 }
 
+const journalBackedToolCallIds = (state: ReplayState): Set<string> => {
+  const callIds = new Set<string>();
+  for (const journal of state.pendingJournals.values()) {
+    if (journal.sawFinalTurn) {
+      continue;
+    }
+    for (const item of journal.items) {
+      if (item.type === 'tool_call' || item.type === 'tool_result') {
+        callIds.add(item.callId);
+      }
+    }
+  }
+  return callIds;
+};
+
+const markLegacyInFlightCallsAborted = (state: ReplayState, legacyInFlightCalls: InFlightToolCall[]): void => {
+  const abortedAt = new Date(0).toISOString();
+  for (const tc of legacyInFlightCalls) {
+    let entry = state.toolLedger.find((e) => e.callId === tc.callId);
+    if (!entry) {
+      entry = {
+        turnId: 'turn-interrupted',
+        callId: tc.callId,
+        toolName: tc.toolName,
+        status: 'started',
+        startedAt: abortedAt,
+      };
+      state.toolLedger.push(entry);
+    }
+    if (entry.status === 'started') {
+      entry.status = 'aborted';
+      entry.failureReason = 'Session ended unexpectedly';
+      entry.completedAt = abortedAt;
+      delete entry.historyItems;
+    }
+  }
+};
+
 /**
  * Builds the SavedMessage list for a single journal turn. Mirrors the
  * rendering used by `replayAssistantTurn` so the UI sees the same shapes.
@@ -1089,26 +1123,17 @@ export function replayEvents(envelopes: LogEnvelope[]): RestoredState {
   applyInterruptedTurnJournals(state);
 
   // Mid-turn crash handling
-  if (state.trailingUserMessage || state.inFlightToolCalls.size > 0) {
-    // Synthesize ledger entries for in-flight tool calls that started after the last snapshot.
-    const ledgerWithInFlight = [...state.toolLedger];
-    const existingCallIds = new Set(ledgerWithInFlight.map((e) => e.callId));
-    for (const tc of state.inFlightToolCalls.values()) {
-      if (existingCallIds.has(tc.callId)) continue;
-      ledgerWithInFlight.push({
-        turnId: 'turn-interrupted',
-        callId: tc.callId,
-        toolName: tc.toolName,
-        status: 'started',
-        startedAt: new Date(0).toISOString(),
-      });
+  const journalBackedCallIds = journalBackedToolCallIds(state);
+  const legacyInFlightCalls = [...state.inFlightToolCalls.values()].filter(
+    (tc) => !journalBackedCallIds.has(tc.callId),
+  );
+  if (state.trailingUserMessage || legacyInFlightCalls.length > 0) {
+    if (legacyInFlightCalls.length > 0) {
+      markLegacyInFlightCallsAborted(state, legacyInFlightCalls);
     }
-    const ledger = new ToolExecutionLedger();
-    ledger.import(ledgerWithInFlight);
-    ledger.markOpenCallsAborted('Session ended unexpectedly');
-    state.toolLedger = ledger.export();
-    const reconciled = reconcileHistoryWithToolLedger(state.history, state.toolLedger);
-    state.history = reconciled.history as AgentInputItem[];
+    if (state.toolLedger.some((entry) => entry.status !== 'started' && entry.status !== 'approval_required')) {
+      state.history = projectProviderHistory({ history: state.history, toolLedger: state.toolLedger }).history;
+    }
     if (state.trailingUserMessage) {
       state.warnings.push('Previous turn was interrupted.');
       state.messages.push({

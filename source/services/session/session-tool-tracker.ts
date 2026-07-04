@@ -1,12 +1,8 @@
 import type { AgentInputItem } from '@openai/agents';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import {
-  reconcileHistoryWithToolLedger,
-  ToolExecutionLedger,
-  type SavedToolExecution,
-  callIdOf,
-} from '../tool-execution-ledger.js';
+import { ToolExecutionLedger, type SavedToolExecution, callIdOf } from '../tool-execution-ledger.js';
 import type { ConversationStore } from '../conversation/conversation-store.js';
+import { projectProviderHistory, ProjectionWarningCode } from '../conversation/conversation-state-projector.js';
 
 /**
  * Owns all tool-tracking state for a conversation session.
@@ -198,9 +194,12 @@ export class SessionToolTracker {
       return;
     }
 
-    const reconciled = reconcileHistoryWithToolLedger(this.conversationStore.getHistory(), this.toolLedger.export());
-    if (reconciled.addedCompletedPairs > 0) {
-      this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
+    const projected = projectProviderHistory({
+      history: this.conversationStore.getHistory(),
+      toolLedger: this.toolLedger.export(),
+    });
+    if (projected.warnings.some((warning) => warning.code === ProjectionWarningCode.CompletedToolHistoryInserted)) {
+      this.conversationStore.replaceHistory(projected.history);
     }
   }
 
@@ -253,8 +252,10 @@ export class SessionToolTracker {
    * Reconcile history with the tool ledger and return the reconciled history.
    */
   getReconciledHistory(): AgentInputItem[] {
-    return reconcileHistoryWithToolLedger(this.conversationStore.getHistory(), this.toolLedger.export())
-      .history as AgentInputItem[];
+    return projectProviderHistory({
+      history: this.conversationStore.getHistory(),
+      toolLedger: this.toolLedger.export(),
+    }).history;
   }
 
   /**
@@ -262,9 +263,12 @@ export class SessionToolTracker {
    * Returns true if any changes were made.
    */
   reconcileAndUpdateHistory(): boolean {
-    const reconciled = reconcileHistoryWithToolLedger(this.conversationStore.getHistory(), this.toolLedger.export());
-    if (reconciled.addedCompletedPairs > 0 || reconciled.droppedIncompleteCalls > 0) {
-      this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
+    const projected = projectProviderHistory({
+      history: this.conversationStore.getHistory(),
+      toolLedger: this.toolLedger.export(),
+    });
+    if (projected.warnings.length > 0) {
+      this.conversationStore.replaceHistory(projected.history);
       return true;
     }
     return false;

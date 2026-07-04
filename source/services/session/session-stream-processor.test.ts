@@ -12,6 +12,19 @@ import { GenerationGuard } from '../generation-guard.js';
 
 const logger = new LoggingService({ disableLogging: true });
 
+const makeJournal = () =>
+  ({
+    recordTextDelta: () => {},
+    recordReasoningDelta: () => {},
+    recordRunItem: () => [],
+    resetForNewTurn: () => {},
+    getEvents: () => [],
+    getItems: () => [],
+    getCurrentTurnEvents: () => [],
+    getCurrentTurnItems: () => [],
+    setSink: () => {},
+  } as any);
+
 const makeStream = (events: unknown[], extras: Partial<AgentStream> = {}): AgentStream => {
   return {
     [Symbol.asyncIterator]: async function* () {
@@ -52,6 +65,7 @@ it('SessionStreamProcessor.process() streams events and updates toolTracker', as
     conversationLogger,
     providerContinuity,
     generationGuard,
+    journal: makeJournal(),
   });
 
   const stream = makeStream([
@@ -128,6 +142,7 @@ it('SessionStreamProcessor.process() preserves reasoning before recovered tool c
     conversationLogger,
     providerContinuity,
     generationGuard,
+    journal: makeJournal(),
   });
 
   const stream = makeStream([
@@ -201,6 +216,7 @@ it('SessionStreamProcessor.process() does not log tool results for startStream s
     conversationLogger,
     providerContinuity,
     generationGuard,
+    journal: makeJournal(),
   });
 
   const stream = makeStream([
@@ -252,6 +268,7 @@ it('SessionStreamProcessor.process() stops pulling stale stream work after gener
     conversationLogger,
     providerContinuity,
     generationGuard,
+    journal: makeJournal(),
   });
 
   const token = generationGuard.capture();
@@ -320,6 +337,7 @@ it('SessionStreamProcessor.process() ignores a stale tool result that arrives wh
     conversationLogger,
     providerContinuity,
     generationGuard,
+    journal: makeJournal(),
   });
 
   const token = generationGuard.capture();
@@ -408,6 +426,7 @@ it('SessionStreamProcessor.finalize() updates providerContinuity previousRespons
     conversationLogger,
     providerContinuity,
     generationGuard,
+    journal: makeJournal(),
   });
 
   const token = generationGuard.capture();
@@ -437,6 +456,7 @@ it('SessionStreamProcessor.finalize() prefers full replay history when full-hist
     conversationLogger,
     providerContinuity,
     generationGuard,
+    journal: makeJournal(),
   });
 
   const fullHistory = [
@@ -492,6 +512,7 @@ it('SessionStreamProcessor.finalize() appends tool-result-only output when full-
     conversationLogger,
     providerContinuity,
     generationGuard,
+    journal: makeJournal(),
   });
 
   const token = generationGuard.capture();
@@ -535,6 +556,7 @@ it('SessionStreamProcessor.finalize() appends tool results in full-history mode 
     conversationLogger,
     providerContinuity,
     generationGuard,
+    journal: makeJournal(),
   });
 
   const token = generationGuard.capture();
@@ -578,6 +600,7 @@ it('SessionStreamProcessor.finalize() - stale finalization mutates neither conti
     conversationLogger,
     providerContinuity,
     generationGuard,
+    journal: makeJournal(),
   });
 
   const staleToken = generationGuard.capture();
@@ -611,6 +634,7 @@ it('SessionStreamProcessor.finalize() - interrupted stream returns partial, upda
     conversationLogger,
     providerContinuity,
     generationGuard,
+    journal: makeJournal(),
   });
 
   const token = generationGuard.capture();
@@ -651,7 +675,7 @@ it('SessionStreamProcessor.process() feeds every raw run item into the journal',
     conversationLogger,
     providerContinuity,
     generationGuard,
-    getJournal: () => journal,
+    journal,
   });
 
   const stream = makeStream([
@@ -705,7 +729,7 @@ it('SessionStreamProcessor.process() drops journal writes after generation inval
     conversationLogger,
     providerContinuity,
     generationGuard,
-    getJournal: () => journal,
+    journal,
   });
 
   const token = generationGuard.capture();

@@ -1,10 +1,18 @@
-import type { AgentInputItem } from '@openai/agents';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import { reconcileHistoryWithToolLedger } from '../tool-execution-ledger.js';
+import type { SavedToolExecution } from '../tool-execution-ledger.js';
+import { buildToolLedgerFromJournalEvents } from '../conversation/journal-to-ledger.js';
 import type { NextRunInstruction, RecoveryResult, RecoveryExecutor, RecoveryExecutorInput } from './retry-contracts.js';
 import type { ConversationStore } from '../conversation/conversation-store.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { SessionToolTracker } from '../session/session-tool-tracker.js';
+import { projectProviderHistory, ProjectionWarningCode } from '../conversation/conversation-state-projector.js';
+
+const journalSnapshotToLedger = (
+  snapshot: import('../logging/conversation-log-events.js').AssistantJournalItemLogEvent[] | undefined,
+): SavedToolExecution[] => {
+  if (!snapshot || snapshot.length === 0) return [];
+  return buildToolLedgerFromJournalEvents(snapshot, new Date().toISOString());
+};
 
 export type RecoveryExecutorDeps = {
   toolTracker: SessionToolTracker;
@@ -31,7 +39,7 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
 
       case 'replay_turn': {
         this.deps.providerContinuity.clear();
-        this.deps.toolTracker.import(state.ledgerSnapshot);
+        this.deps.toolTracker.import(journalSnapshotToLedger(state.journalSnapshot));
 
         if (plan.rollbackUserMessage) {
           this.deps.conversationStore.removeLastUserMessage();
@@ -58,17 +66,19 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
         }
         if (state.stream) {
           this.deps.providerContinuity.clear();
-          this.deps.toolTracker.restoreCompletedEntries(state.ledgerSnapshot);
-          const reconciled = reconcileHistoryWithToolLedger(
-            this.deps.conversationStore.getHistory(),
-            this.deps.toolTracker.export(),
-          );
-          if (reconciled.addedCompletedPairs > 0) {
-            this.deps.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
+          this.deps.toolTracker.restoreCompletedEntries(journalSnapshotToLedger(state.journalSnapshot));
+          const projected = projectProviderHistory({
+            history: this.deps.conversationStore.getHistory(),
+            toolLedger: this.deps.toolTracker.export(),
+          });
+          if (
+            projected.warnings.some((warning) => warning.code === ProjectionWarningCode.CompletedToolHistoryInserted)
+          ) {
+            this.deps.conversationStore.replaceHistory(projected.history);
           }
         } else {
           this.deps.providerContinuity.clear();
-          this.deps.toolTracker.restoreCompletedEntries(state.ledgerSnapshot);
+          this.deps.toolTracker.restoreCompletedEntries(journalSnapshotToLedger(state.journalSnapshot));
         }
 
         const instruction: NextRunInstruction = {
@@ -93,12 +103,12 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
 
         if (state.stream) {
           this.deps.toolTracker.markOpenCallsAborted('Stream failed');
-          const reconciled = reconcileHistoryWithToolLedger(
-            this.deps.conversationStore.getHistory(),
-            this.deps.toolTracker.export(),
-          );
-          if (reconciled.addedCompletedPairs > 0 || reconciled.droppedIncompleteCalls > 0) {
-            this.deps.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
+          const projected = projectProviderHistory({
+            history: this.deps.conversationStore.getHistory(),
+            toolLedger: this.deps.toolTracker.export(),
+          });
+          if (projected.warnings.length > 0) {
+            this.deps.conversationStore.replaceHistory(projected.history);
           }
         }
 

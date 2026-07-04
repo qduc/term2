@@ -60,14 +60,14 @@ function mockConversationService(): ConversationService {
 function makeMessagePort(): MessagePort {
   let messages: Message[] = [];
   return {
-    getMessages: () => messages,
-    setMessages: (updater) => {
+    getMessages: vi.fn(() => messages),
+    setMessages: vi.fn((updater) => {
       messages = updater(messages);
-    },
-    appendMessages: (additions) => {
+    }),
+    appendMessages: vi.fn((additions) => {
       messages = [...messages, ...additions];
-    },
-    trimMessages: (next) => next,
+    }),
+    trimMessages: vi.fn((next) => next),
   };
 }
 

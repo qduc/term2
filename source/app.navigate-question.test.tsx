@@ -221,6 +221,7 @@ it.sequential('App wires ask_user navigation into BottomArea', async () => {
       historyService={historyService}
       loggingService={loggingService}
       sessionId="session-1"
+      terminalTitleBase="term2"
       generateId={() => 'session-2'}
     />,
   );

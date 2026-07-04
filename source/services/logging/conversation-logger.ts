@@ -16,7 +16,7 @@ export class ConversationLogger {
   private getAssistantTurnState: () => AssistantTurnState;
   private getCurrentTurnId?: () => string;
   private getToolLedger?: () => SavedToolExecution[];
-  private getJournal?: () => AssistantTurnJournal | undefined;
+  private journal: AssistantTurnJournal;
 
   constructor(opts: {
     turnAccumulator: TurnItemAccumulator;
@@ -24,14 +24,14 @@ export class ConversationLogger {
     getAssistantTurnState: () => AssistantTurnState;
     getCurrentTurnId?: () => string;
     getToolLedger?: () => SavedToolExecution[];
-    getJournal?: () => AssistantTurnJournal | undefined;
+    journal: AssistantTurnJournal;
   }) {
     this.turnAccumulator = opts.turnAccumulator;
     this.logger = opts.logger;
     this.getAssistantTurnState = opts.getAssistantTurnState;
     this.getCurrentTurnId = opts.getCurrentTurnId;
     this.getToolLedger = opts.getToolLedger;
-    this.getJournal = opts.getJournal;
+    this.journal = opts.journal;
   }
 
   setLogSink(sink: ((event: LogEvent) => void) | null): void {
@@ -57,7 +57,6 @@ export class ConversationLogger {
 
   dispatchEventToLog(event: ConversationEvent): void {
     if (!this.logSink) return;
-    const journal = this.getJournal?.();
     switch (event.type) {
       case 'usage_update':
         this.turnAccumulator.setDisplayUsage(event.usage);
@@ -67,14 +66,14 @@ export class ConversationLogger {
           this.turnAccumulator.flushReasoningItem();
         }
         this.turnAccumulator.appendTextDelta(event.delta);
-        journal?.recordTextDelta(event.delta);
+        this.journal.recordTextDelta(event.delta);
         return;
       case 'reasoning_delta':
         if (this.turnAccumulator.hasTextBuffer()) {
           this.turnAccumulator.flushAssistantTextItem();
         }
         this.turnAccumulator.appendReasoningDelta(event.delta);
-        journal?.recordReasoningDelta(event.delta);
+        this.journal.recordReasoningDelta(event.delta);
         return;
       case 'tool_started':
         this.turnAccumulator.recordToolCallItem(event.toolCallId, event.toolName, event.arguments);

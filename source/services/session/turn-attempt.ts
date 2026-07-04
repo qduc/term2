@@ -2,7 +2,7 @@ import type { AgentInputItem } from '@openai/agents';
 import type { AgentStream } from '../agent-stream.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
-import type { SavedToolExecution } from '../tool-execution-ledger.js';
+import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-events.js';
 import type { SessionInputPlan } from './session-input-planner.js';
 import type { GenerationToken } from '../generation-guard.js';
 
@@ -10,7 +10,7 @@ export class TurnAttempt {
   readonly #turn: UserTurn;
   readonly #token: GenerationToken;
   readonly #initialRetryCounts: RetryCounts;
-  readonly #initialLedgerSnapshot: SavedToolExecution[];
+  readonly #initialJournalSnapshot: AssistantJournalItemLogEvent[];
   readonly #maxTransientRetries: number;
   readonly #maxModelRetries?: number;
 
@@ -28,7 +28,7 @@ export class TurnAttempt {
     turn: UserTurn;
     token: GenerationToken;
     initialRetryCounts: RetryCounts;
-    initialLedgerSnapshot: SavedToolExecution[];
+    initialJournalSnapshot: AssistantJournalItemLogEvent[];
     maxTransientRetries: number;
     maxModelRetries?: number;
     signal?: AbortSignal;
@@ -37,7 +37,7 @@ export class TurnAttempt {
     this.#turn = options.turn;
     this.#token = options.token;
     this.#initialRetryCounts = options.initialRetryCounts;
-    this.#initialLedgerSnapshot = options.initialLedgerSnapshot;
+    this.#initialJournalSnapshot = options.initialJournalSnapshot;
     this.#maxTransientRetries = options.maxTransientRetries;
     this.#maxModelRetries = options.maxModelRetries;
     this.#retryCounts = { ...options.initialRetryCounts };
@@ -71,8 +71,8 @@ export class TurnAttempt {
     return this.#initialRetryCounts;
   }
 
-  get initialLedgerSnapshot(): SavedToolExecution[] {
-    return this.#initialLedgerSnapshot;
+  get initialJournalSnapshot(): AssistantJournalItemLogEvent[] {
+    return this.#initialJournalSnapshot;
   }
 
   get maxTransientRetries(): number {

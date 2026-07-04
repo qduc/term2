@@ -1,5 +1,22 @@
 import { it, expect } from 'vitest';
 import { TurnStatusMachine } from './turn-status-machine.js';
+import type { ConversationTerminal } from '../../contracts/conversation.js';
+
+const terminalResponse: ConversationTerminal = {
+  type: 'response',
+  commandMessages: [],
+  finalText: 'hello',
+};
+
+const terminalApproval: ConversationTerminal = {
+  type: 'approval_required',
+  approval: {
+    agentName: 'test',
+    toolName: 'shell',
+    argumentsText: 'ls',
+    rawInterruption: {},
+  },
+};
 
 it('begins turn from idle', () => {
   const machine = new TurnStatusMachine();
@@ -111,4 +128,81 @@ it('is helper matches current status', () => {
   machine.beginTurn();
   expect(machine.is('streaming')).toBe(true);
   expect(machine.is('idle')).toBe(false);
+});
+
+it('completeOutcome emits response terminals and returns to idle', () => {
+  const machine = new TurnStatusMachine();
+  machine.beginTurn();
+
+  const command = machine.completeOutcome({ kind: 'response', terminal: terminalResponse });
+
+  expect(machine.current).toBe('idle');
+  expect(command).toEqual({ kind: 'emit_terminal', terminal: terminalResponse });
+});
+
+it('completeOutcome emits approval terminals and enters awaiting approval', () => {
+  const machine = new TurnStatusMachine();
+  machine.beginTurn();
+
+  const command = machine.completeOutcome({ kind: 'approval_required', terminal: terminalApproval });
+
+  expect(machine.current).toBe('awaiting_approval');
+  expect(command).toEqual({ kind: 'emit_terminal', terminal: terminalApproval });
+});
+
+it('completeOutcome leaves stale active status untouched', () => {
+  const machine = new TurnStatusMachine();
+  machine.beginTurn();
+
+  const command = machine.completeOutcome({ kind: 'stale' });
+
+  expect(machine.current).toBe('streaming');
+  expect(command).toEqual({ kind: 'none' });
+});
+
+it('completeOutcome returns failed active turns to idle without emitting', () => {
+  const machine = new TurnStatusMachine();
+  machine.beginTurn();
+
+  const command = machine.completeOutcome({ kind: 'failed' });
+
+  expect(machine.current).toBe('idle');
+  expect(command).toEqual({ kind: 'none' });
+});
+
+it('completeOutcome ignores stale outcomes after an external status change', () => {
+  const machine = new TurnStatusMachine();
+  machine.beginTurn();
+  machine.abort();
+
+  const command = machine.completeOutcome({ kind: 'stale' });
+
+  expect(machine.current).toBe('idle');
+  expect(command).toEqual({ kind: 'none' });
+});
+
+it('completeContinuationOutcome emits a response terminal even after an external status change', () => {
+  const machine = new TurnStatusMachine();
+  machine.beginTurn();
+  machine.requestApproval();
+  machine.beginContinuation();
+  machine.abort();
+
+  const command = machine.completeContinuationOutcome({ kind: 'response', terminal: terminalResponse });
+
+  expect(machine.current).toBe('idle');
+  expect(command).toEqual({ kind: 'emit_terminal', terminal: terminalResponse });
+});
+
+it('completeContinuationOutcome emits an approval terminal even after an external status change', () => {
+  const machine = new TurnStatusMachine();
+  machine.beginTurn();
+  machine.requestApproval();
+  machine.beginContinuation();
+  machine.abort();
+
+  const command = machine.completeContinuationOutcome({ kind: 'approval_required', terminal: terminalApproval });
+
+  expect(machine.current).toBe('idle');
+  expect(command).toEqual({ kind: 'emit_terminal', terminal: terminalApproval });
 });

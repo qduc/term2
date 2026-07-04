@@ -1,4 +1,5 @@
 import { it, expect } from 'vitest';
+import { SessionContinuityReset } from './session-continuity-reset.js';
 import { SessionLifecycle } from './session-lifecycle.js';
 
 const makeLifecycleHarness = () => {
@@ -143,7 +144,17 @@ const makeLifecycleHarness = () => {
     },
   };
 
-  return { calls, deps, providerContinuity };
+  const continuityReset = new SessionContinuityReset({
+    providerContinuity: deps.providerContinuity as any,
+    approvalFlow: deps.approvalFlow as any,
+    toolTracker: deps.toolTracker as any,
+    shellAutoApproval: deps.shellAutoApproval as any,
+    inputPlanner: deps.inputPlanner as any,
+    turnAccumulator: deps.turnAccumulator as any,
+    agentClient: deps.agentClient as any,
+  });
+
+  return { calls, deps: { ...deps, continuityReset }, providerContinuity };
 };
 
 it('resetSession clears approval state through approvalFlow and keeps persistence on providerContinuity', () => {

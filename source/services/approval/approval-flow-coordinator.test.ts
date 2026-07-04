@@ -149,6 +149,53 @@ it('prepareContinuation returns null when no pending approval', () => {
   expect(coord.prepareContinuation('y', undefined)).toBe(null);
 });
 
+it('buildApprovalDecision uses the pending generation token', () => {
+  const approvalState = new ApprovalState();
+  approvalState.setPending({
+    state: {} as any,
+    interruption: {},
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+    token: 7,
+  });
+
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+  });
+
+  expect(coord.buildApprovalDecision('n', 'too risky')).toEqual({
+    kind: 'approval_decision',
+    answer: 'n',
+    rejectionReason: 'too risky',
+    generation: 7,
+  });
+});
+
+it('buildApprovalDecision falls back to generation 0 when nothing is pending', () => {
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState: new ApprovalState(),
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+  });
+
+  expect(coord.buildApprovalDecision('y', undefined)).toEqual({
+    kind: 'approval_decision',
+    answer: 'y',
+    rejectionReason: undefined,
+    generation: 0,
+  });
+});
+
 it('prepareContinuation answer=y emits tool_started and approves', () => {
   let approved = false;
   const state: any = { approve: () => (approved = true) };

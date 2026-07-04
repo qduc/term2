@@ -8,8 +8,8 @@ import type { SessionLifecycle } from './session-lifecycle.js';
  * model, reasoning effort, temperature, provider, and retry callback.
  *
  * Each setting mutation calls `afterProviderChanged()` on the state controller
- * before delegating to the agent client, ensuring session state is properly
- * reset (e.g., response chaining is severed).
+ * before delegating to the agent client when the client supports the mutation,
+ * ensuring session state is properly reset (e.g., response chaining is severed).
  */
 export class SessionRuntimeController {
   readonly #agentClient: ConversationAgentClient;
@@ -26,21 +26,30 @@ export class SessionRuntimeController {
   }
 
   setReasoningEffort(effort: ReasoningEffortSetting): void {
-    this.#state.afterProviderChanged();
     const setReasoningEffort = getMethod<[ReasoningEffortSetting], void>(this.#agentClient, 'setReasoningEffort');
-    setReasoningEffort?.call(this.#agentClient, effort);
+    if (!setReasoningEffort) {
+      return;
+    }
+    this.#state.afterProviderChanged();
+    setReasoningEffort.call(this.#agentClient, effort);
   }
 
   setTemperature(temperature?: number): void {
-    this.#state.afterProviderChanged();
     const setTemperature = getMethod<[number | undefined], void>(this.#agentClient, 'setTemperature');
-    setTemperature?.call(this.#agentClient, temperature);
+    if (!setTemperature) {
+      return;
+    }
+    this.#state.afterProviderChanged();
+    setTemperature.call(this.#agentClient, temperature);
   }
 
   setProvider(provider: string): void {
-    this.#state.afterProviderChanged();
     const setProvider = getMethod<[string], void>(this.#agentClient, 'setProvider');
-    setProvider?.call(this.#agentClient, provider);
+    if (!setProvider) {
+      return;
+    }
+    this.#state.afterProviderChanged();
+    setProvider.call(this.#agentClient, provider);
   }
 
   /** Alias for setProvider, kept for public API surface. */

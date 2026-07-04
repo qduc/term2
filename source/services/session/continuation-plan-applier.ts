@@ -3,16 +3,17 @@ import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordina
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import { getCallIdFromObject } from '../interruption-info.js';
-import type { ContinuationInit } from './continuation-driver.js';
-import type { ContinuationState, PreparedContinuation } from './continuation-state.js';
+import type { ContinuationInit, ContinuationState, PreparedContinuation } from './continuation-state.js';
 import type { ContinuationPlan } from '../approval/approval-flow-coordinator.js';
 import type { ApprovalContext } from '../approval/approval-decision-policy.js';
+import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
 
 export type ContinuationPlanApplierDeps = {
   approvalFlow: ApprovalFlowCoordinator;
   toolTracker: SessionToolTracker;
   logger: ILoggingService;
   sessionId: string;
+  journal: AssistantTurnJournal;
 };
 
 export class ContinuationPlanApplier {
@@ -84,7 +85,7 @@ export class ContinuationPlanApplier {
       }
     }
 
-    state.setLedgerSnapshot(this.deps.toolTracker.export());
+    state.setJournalSnapshot(this.deps.journal.getEvents());
   }
 
   recordPendingApproval(context: ApprovalContext): void {
@@ -132,7 +133,7 @@ export class ContinuationPlanApplier {
       nextPlan.pendingApprovalContext.interruption,
       nextPlan.pendingApprovalContext.inputMode,
       mergedEmittedIds,
-      this.deps.toolTracker.export(),
+      this.deps.journal.getEvents(),
       this.deps.toolTracker.activeCallIdsForCurrentTurn(),
     );
   }

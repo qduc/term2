@@ -92,19 +92,20 @@ vi.mock('./components/layout/BottomArea.js', () => ({
   },
 }));
 
-const MockMessageList = () => {
-  React.useEffect(() => {
-    mocks.messageListMounts += 1;
-  }, []);
-  return null;
-};
-
-vi.mock('./components/message/MessageList.js', () => ({
-  default: MockMessageList,
-  detectStaticCommitBlocker: vi.fn(() => null),
-  EMPTY_RESTORED_STATIC_MESSAGE_IDS: [],
-  MESSAGE_HORIZONTAL_PADDING: 0,
-}));
+vi.mock('./components/message/MessageList.js', () => {
+  const MockMessageList = () => {
+    React.useEffect(() => {
+      mocks.messageListMounts += 1;
+    }, []);
+    return null;
+  };
+  return {
+    default: MockMessageList,
+    detectStaticCommitBlocker: vi.fn(() => null),
+    EMPTY_RESTORED_STATIC_MESSAGE_IDS: [],
+    MESSAGE_HORIZONTAL_PADDING: 0,
+  };
+});
 
 vi.mock('./components/ErrorBoundary.js', () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -336,7 +337,9 @@ describe('App orchestration', () => {
   it.sequential('remounts MessageList when clearing conversation without clearing the terminal', async () => {
     const services = createServices();
 
-    await renderInAct(<App {...services} sessionId="session-1" generateId={() => 'session-2'} />);
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
 
     expect(mocks.messageListMounts).toBe(1);
     expect(mocks.clearConversationCallback).not.toBeNull();
@@ -355,7 +358,9 @@ describe('App orchestration', () => {
     mocks.submitConversationTurn.mockResolvedValue(true);
     const services = createServices();
 
-    await renderInAct(<App {...services} sessionId="session-1" generateId={() => 'session-2'} />);
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
 
     await act(async () => {
       await mocks.bottomAreaProps.onSubmit({ text: 'hello', images: [] });
@@ -371,7 +376,9 @@ describe('App orchestration', () => {
     mocks.submitConversationTurn.mockResolvedValue(true);
     const services = createServices();
 
-    await renderInAct(<App {...services} sessionId="session-1" generateId={() => 'session-2'} />);
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
 
     await act(async () => {
       await mocks.bottomAreaProps.onSubmit({ text: 'needs review', images: [] });
@@ -388,7 +395,9 @@ describe('App orchestration', () => {
     mocks.slashCommands = [{ name: 'clear', description: 'Clear', action: commandAction }];
     const services = createServices();
 
-    await renderInAct(<App {...services} sessionId="session-1" generateId={() => 'session-2'} />);
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
 
     await act(async () => {
       await mocks.bottomAreaProps.onSubmit({ text: '/clear now', images: [] });
@@ -404,7 +413,9 @@ describe('App orchestration', () => {
     mocks.slashCommands = [{ name: 'clear', description: 'Clear', action: commandAction }];
     const services = createServices();
 
-    await renderInAct(<App {...services} sessionId="session-1" generateId={() => 'session-2'} />);
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
 
     await act(async () => {
       await mocks.bottomAreaProps.onSubmit({ text: '/clear now', images: [] });
@@ -423,7 +434,9 @@ describe('App orchestration', () => {
     };
     const services = createServices();
 
-    await renderInAct(<App {...services} sessionId="session-1" generateId={() => 'session-2'} />);
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
 
     await act(async () => {
       await mocks.bottomAreaProps.onSubmit({ text: 'Ship it', images: [] });
@@ -443,7 +456,9 @@ describe('App orchestration', () => {
   it.sequential('falls through unknown slash commands to guarded send', async () => {
     const services = createServices();
 
-    await renderInAct(<App {...services} sessionId="session-1" generateId={() => 'session-2'} />);
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
 
     await act(async () => {
       await mocks.bottomAreaProps.onSubmit({ text: '/unknown command', images: [] });

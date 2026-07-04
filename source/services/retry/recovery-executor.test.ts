@@ -1,6 +1,5 @@
 import { it, expect } from 'vitest';
 import { ConversationStore } from '../conversation/conversation-store.js';
-import { type SavedToolExecution } from '../tool-execution-ledger.js';
 import type { RetryCounts, RecoveryState } from './retry-contracts.js';
 import { DefaultRecoveryExecutor, type RecoveryExecutorDeps } from './recovery-executor.js';
 import { ProviderContinuity } from '../provider-continuity.js';
@@ -23,7 +22,7 @@ const makeExecutor = (): { executor: DefaultRecoveryExecutor; deps: RecoveryExec
 };
 
 const baseRecoveryState = (overrides: Partial<RecoveryState> = {}): RecoveryState => ({
-  ledgerSnapshot: [],
+  journalSnapshot: [],
   addedUserMessage: false,
   stream: null,
   ...overrides,
@@ -112,21 +111,35 @@ it('retry_fresh with stream reconciles history and restores ledger', () => {
   deps.conversationStore.addUserMessage('hello');
   deps.providerContinuity.update('resp-old');
 
-  const completedEntry: SavedToolExecution = {
-    turnId: 'turn-1',
-    callId: 'call-read',
-    toolName: 'read_file',
-    status: 'completed',
-    startedAt: '2026-01-01T00:00:00.000Z',
-    completedAt: '2026-01-01T00:00:01.000Z',
-    historyItems: [],
-  };
-
   const result = executor.apply({
     plan: { kind: 'retry_fresh', inputMode: 'full_history' },
     state: baseRecoveryState({
       stream: { completed: Promise.resolve(undefined) } as any,
-      ledgerSnapshot: [completedEntry],
+      journalSnapshot: [
+        {
+          type: 'assistant_journal_item',
+          turnId: 'turn-1',
+          seq: 1,
+          item: {
+            type: 'tool_call',
+            callId: 'call-read',
+            toolName: 'read_file',
+            arguments: '{}',
+          },
+        },
+        {
+          type: 'assistant_journal_item',
+          turnId: 'turn-1',
+          seq: 2,
+          item: {
+            type: 'tool_result',
+            callId: 'call-read',
+            toolName: 'read_file',
+            status: 'completed',
+            output: 'contents',
+          },
+        },
+      ],
     }),
     retryCounts: baseCounts(),
   });

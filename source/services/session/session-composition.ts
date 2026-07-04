@@ -3,7 +3,10 @@ import { ConversationStore } from '../conversation/conversation-store.js';
 import { ApprovalState, type PendingApprovalContext } from '../approval/approval-state.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import { getMethod } from '../interruption-info.js';
-import { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
+import {
+  ShellAutoApprovalResolver,
+  DelegatingShellAutoApprovalResolver,
+} from '../approval/shell-auto-approval-resolver.js';
 import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { ConversationLogger } from '../logging/conversation-logger.js';
@@ -18,27 +21,24 @@ import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { SessionLifecycle } from './session-lifecycle.js';
 import { ProviderContinuity } from '../provider-continuity.js';
-import { TurnCoordinator } from './turn-coordinator.js';
+import { TurnCoordinator, type TurnStartOptions } from './turn-coordinator.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
 import { SessionManager } from './session-manager.js';
 import { SessionRuntimeController } from './session-runtime-controller.js';
-import { ContinuationDriver } from './continuation-driver.js';
 import { ContinuationPlanApplier } from './continuation-plan-applier.js';
-import { ContinuationStreamCycle } from './continuation-stream-cycle.js';
 import { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
 import { DefaultConversationRecoveryPolicy } from '../retry/recovery-policy.js';
 import { DefaultRecoveryExecutor } from '../retry/recovery-executor.js';
 import { GenerationGuard } from '../generation-guard.js';
 import { DefaultRetryClassifier } from '../retry/retry-classifier.js';
 import { RetryEventPresenter } from '../retry/retry-event-presenter.js';
-import { InitialTurnRunner } from './initial-turn-runner.js';
-import { DefaultTurnExecutor, type TurnExecutor } from './turn-executor.js';
+import { TurnWorkflow } from './turn-workflow.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
 import { TurnAttemptFactory } from './turn-attempt-factory.js';
 import { InitialInputPreparer } from './initial-input-preparer.js';
-import { InitialStreamCycle } from './initial-stream-cycle.js';
 import { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
 import { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
+import { SessionContinuityReset } from './session-continuity-reset.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
   value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
@@ -62,6 +62,7 @@ export type ConversationSessionRetryOptions = {
 export type SessionRuntimeInternals = {
   sessionId: string;
   sessionStartedAt: string;
+  logger: ILoggingService;
   conversationStore: ConversationStore;
   approvalState: ApprovalState;
   toolTracker: SessionToolTracker;
@@ -74,7 +75,6 @@ export type SessionRuntimeInternals = {
   streamProcessor: SessionStreamProcessor;
   appState: { statusMachine: TurnStatusMachine };
   turnCoordinator: TurnCoordinator;
-  turnExecutor: TurnExecutor;
   /** Facade for state/persistence/undo/snapshot operations. */
   stateFacade: SessionManager;
   /** Controller for runtime model/provider/retry settings. */
@@ -87,19 +87,15 @@ export type SessionRuntimeInternals = {
   generationGuard: GenerationGuard;
   providerContinuity: ProviderContinuity;
   breakChaining: () => void;
-  continuationDriver: ContinuationDriver;
   recoveryPolicy: DefaultConversationRecoveryPolicy;
   recoveryExecutor: DefaultRecoveryExecutor;
   retryClassifier: DefaultRetryClassifier;
   retryEventPresenter: RetryEventPresenter;
   turnAccumulator: TurnItemAccumulator;
-  initialTurnRunner: InitialTurnRunner;
+  turnWorkflow: TurnWorkflow;
   freshStartRetriesAllowed: boolean;
-  /**
-   * Lazily constructs the assistant turn journal once a log sink is
-   * available. Idempotent: subsequent calls return the same journal.
-   */
-  ensureJournal: (sink: (event: LogEvent) => void) => AssistantTurnJournal;
+  /** Stable assistant-output journal created during composition. */
+  journal: AssistantTurnJournal;
   /** @internal Resolved ask-user-answer sink (derived from option or agent client). */
   resolvedAskUserAnswerSink: AskUserAnswerSink | null;
   /** @internal Resolved subagent event sink host (derived from option or agent client). */
@@ -139,7 +135,7 @@ export type ConversationSessionBundle = Pick<
   | 'toolTracker'
   | 'inputPlanner'
   | 'dispose'
-  | 'ensureJournal'
+  | 'journal'
 >;
 
 export type SessionApprovalQuery = {
@@ -169,19 +165,7 @@ export type SessionRuntime = {
   sessionId: string;
   sessionStartedAt: string;
   turns: {
-    start: (
-      input: string | UserTurn,
-      options?: {
-        skipUserMessage?: boolean;
-        replayFromHistory?: boolean;
-        retries?: any;
-        maxModelRetries?: number;
-        signal?: AbortSignal;
-        resumeState?: any;
-        resumePreviousResponseId?: string | null;
-        bypassInputSurgeGuard?: boolean;
-      },
-    ) => AsyncIterable<ConversationEvent>;
+    start: (input: string | UserTurn, options?: TurnStartOptions) => AsyncIterable<ConversationEvent>;
     continueAfterApproval: (options: { answer: string; rejectionReason?: string }) => AsyncIterable<ConversationEvent>;
     abort: () => void;
   };
@@ -224,27 +208,13 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const approvalState = new ApprovalState();
   const toolTracker = new SessionToolTracker(conversationStore);
 
-  let currentShellAutoApproval = new ShellAutoApprovalResolver({
+  const shellAutoApproval = new DelegatingShellAutoApprovalResolver({
     conversationStore,
     agentClient,
     logger,
     settingsService,
     sessionContextService,
   });
-
-  const shellAutoApproval = new Proxy(
-    {},
-    {
-      get(_target, prop, receiver) {
-        if (prop === 'setDelegate') {
-          return (newDelegate: ShellAutoApprovalResolver) => {
-            currentShellAutoApproval = newDelegate;
-          };
-        }
-        return Reflect.get(currentShellAutoApproval, prop, receiver);
-      },
-    },
-  ) as unknown as ShellAutoApprovalResolver;
 
   const appState = { statusMachine: new TurnStatusMachine() };
   const providerContinuity = new ProviderContinuity();
@@ -256,7 +226,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     providerContinuity,
   });
 
-  let journal: AssistantTurnJournal | null = null;
+  const journal = new AssistantTurnJournal({
+    getCurrentTurnId: () => toolTracker.getCurrentTurnId(),
+  });
 
   const conversationLogger = new ConversationLogger({
     turnAccumulator: resolvedTurnAccumulator,
@@ -273,7 +245,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     },
     getCurrentTurnId: () => toolTracker.getCurrentTurnId(),
     getToolLedger: () => toolTracker.export(),
-    getJournal: () => journal ?? undefined,
+    journal,
   });
 
   const approvalFlow = new ApprovalFlowCoordinator({
@@ -285,19 +257,26 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     generationGuard,
   });
 
-  const state = new SessionLifecycle({
-    inputPlanner,
+  const continuityReset = new SessionContinuityReset({
+    providerContinuity,
     approvalFlow,
     toolTracker,
     shellAutoApproval,
+    inputPlanner,
     turnAccumulator: resolvedTurnAccumulator,
-    conversationStore,
     agentClient,
+  });
+
+  const state = new SessionLifecycle({
+    inputPlanner,
+    toolTracker,
+    conversationStore,
     logger,
     sessionId: id,
     appState,
     providerContinuity,
     generationGuard,
+    continuityReset,
   });
 
   const streamProcessor = new SessionStreamProcessor({
@@ -308,7 +287,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     conversationLogger,
     providerContinuity,
     generationGuard,
-    getJournal: () => journal ?? undefined,
+    journal,
   });
 
   const breakChaining = (): void => {
@@ -344,6 +323,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     toolTracker,
     state,
     resolveRetryLimit,
+    journal,
   });
   const inputPreparer = new InitialInputPreparer({
     conversationStore,
@@ -352,19 +332,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     logger,
     sessionId: id,
     state,
-  });
-  const streamCycle = new InitialStreamCycle({
-    agentClient,
-    approvalFlow,
-    conversationStore,
-    inputPlanner,
-    logger,
-    providerContinuity,
-    sessionId: id,
-    shellAutoApproval,
-    streamProcessor,
-    toolTracker,
-    turnAccumulator: resolvedTurnAccumulator,
   });
   const recoveryHandler = new InitialTurnRecoveryHandler({
     conversationStore,
@@ -384,19 +351,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     toolTracker,
     logger,
     sessionId: id,
-  });
-
-  const continuationStreamCycle = new ContinuationStreamCycle({
-    agentClient,
-    streamProcessor,
-    conversationStore,
-    turnAccumulator: resolvedTurnAccumulator,
-    toolTracker,
-    approvalFlow,
-    shellAutoApproval,
-    logger,
-    sessionId: id,
-    providerContinuity,
+    journal,
   });
 
   const continuationRecoveryHandler = new ContinuationRecoveryHandler({
@@ -411,21 +366,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     toolTracker,
   });
 
-  const continuationDriver = new ContinuationDriver({
-    generationGuard,
-    logger,
-    sessionId: id,
-    shellAutoApproval,
-    inputPlanner,
-    conversationStore,
-    approvalFlow,
-    planApplier,
-    streamCycle: continuationStreamCycle,
-    recoveryHandler: continuationRecoveryHandler,
-    toolTracker,
-  });
-
-  const initialTurnRunner = new InitialTurnRunner({
+  const turnWorkflow = new TurnWorkflow({
     agentClient,
     logger,
     sessionId: id,
@@ -435,20 +376,20 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     generationGuard,
     attemptFactory,
     inputPreparer,
-    streamCycle,
+    streamProcessor,
     recoveryHandler,
-    getJournal: () => journal ?? undefined,
-  });
-
-  const turnExecutor = new DefaultTurnExecutor({
-    initialTurnRunner,
-    continuationDriver,
-    shellAutoApproval,
+    journal,
+    inputPlanner,
+    conversationStore,
+    approvalFlow,
+    planApplier,
+    continuationRecoveryHandler,
+    providerContinuity,
   });
 
   const turnCoordinator = new TurnCoordinator({
     statusMachine: appState.statusMachine,
-    turnExecutor,
+    turnWorkflow,
     approvalFlow,
     providerContinuity,
   });
@@ -462,26 +403,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     settingsService,
     inputPlanner,
   });
-
-  const ensureJournal = (sink: (event: LogEvent) => void): AssistantTurnJournal => {
-    if (!journal) {
-      journal = new AssistantTurnJournal({
-        getCurrentTurnId: () => toolTracker.getCurrentTurnId(),
-        sink: (event) => {
-          try {
-            sink(event);
-          } catch (err) {
-            logger.warn('Journal sink threw', {
-              eventType: 'conversation_log.sink_failed',
-              category: 'persistence',
-              errorMessage: err instanceof Error ? err.message : String(err),
-            });
-          }
-        },
-      });
-    }
-    return journal;
-  };
 
   const runtimeController = new SessionRuntimeController({
     agentClient,
@@ -504,6 +425,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   return {
     sessionId: id,
     sessionStartedAt: startedAt,
+    logger,
     conversationStore,
     approvalState,
     toolTracker,
@@ -515,22 +437,20 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     streamProcessor,
     appState,
     turnCoordinator,
-    turnExecutor,
     stateFacade,
     runtimeController,
     dispose,
     generationGuard,
     providerContinuity,
     breakChaining,
-    continuationDriver,
     recoveryPolicy,
     recoveryExecutor,
     retryClassifier,
     retryEventPresenter,
     turnAccumulator: resolvedTurnAccumulator,
-    initialTurnRunner,
+    turnWorkflow,
     freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
-    ensureJournal,
+    journal,
     resolvedAskUserAnswerSink,
     resolvedSubagentEventSinkHost,
   };
@@ -549,7 +469,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     stateFacade,
     runtimeController,
     conversationLogger,
-    ensureJournal,
+    journal,
     dispose,
     approvalFlow,
     resolvedAskUserAnswerSink,
@@ -569,9 +489,21 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     logs: {
       setLogSink: (sink) => {
         conversationLogger.setLogSink(sink);
-        if (sink) {
-          ensureJournal(sink);
-        }
+        journal.setSink(
+          sink
+            ? (event) => {
+                try {
+                  sink(event);
+                } catch (err) {
+                  internals.logger.warn('Journal sink threw', {
+                    eventType: 'conversation_log.sink_failed',
+                    category: 'persistence',
+                    errorMessage: err instanceof Error ? err.message : String(err),
+                  });
+                }
+              }
+            : null,
+        );
       },
       dispatchEventToLog: conversationLogger.dispatchEventToLog.bind(conversationLogger),
       log: conversationLogger.log.bind(conversationLogger),

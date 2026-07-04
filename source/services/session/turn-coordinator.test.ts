@@ -1,4 +1,4 @@
-import { it, expect, vi } from 'vitest';
+import { it, expect } from 'vitest';
 import { TurnCoordinator } from './turn-coordinator.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
 
@@ -9,7 +9,7 @@ const makeHarness = () => {
   const continuationCalls: any[] = [];
   const initialResults: any[] = [];
   const continuationResults: any[] = [];
-  const turnExecutor = {
+  const turnWorkflow = {
     executeInitial: async function* (input: any, options: any) {
       initialCalls.push({ input, options });
       const result = initialResults.shift();
@@ -20,8 +20,8 @@ const makeHarness = () => {
       }
       return result?.outcome ?? { kind: 'response', terminal: { type: 'response', finalText: 'done' } };
     },
-    executeContinuation: async function* (input: any) {
-      continuationCalls.push(input);
+    executeContinuation: async function* (init: any) {
+      continuationCalls.push(init);
       const result = continuationResults.shift();
       if (result?.events) {
         for (const ev of result.events) {
@@ -47,6 +47,12 @@ const makeHarness = () => {
       abortCalled = true;
       return { aborted: true, callId: 'call-1' };
     },
+    buildApprovalDecision: (answer: string, rejectionReason?: string) => ({
+      kind: 'approval_decision',
+      answer,
+      rejectionReason,
+      generation: getPendingResult?.token ?? 0,
+    }),
     getPending: () => getPendingResult,
     setPending: (p: any) => {
       getPendingResult = p;
@@ -62,7 +68,7 @@ const makeHarness = () => {
 
   const coordinator = new TurnCoordinator({
     statusMachine,
-    turnExecutor,
+    turnWorkflow,
     approvalFlow,
     providerContinuity,
   });
@@ -70,7 +76,7 @@ const makeHarness = () => {
   return {
     coordinator,
     statusMachine,
-    turnExecutor,
+    turnWorkflow,
     initialCalls,
     continuationCalls,
     approvalFlow,
@@ -89,9 +95,28 @@ it('Foreground-turn admission: throws when already active', async () => {
   }).rejects.toThrow('Another foreground turn is already active.');
 });
 
+it('start forwards turn start options to the workflow', async () => {
+  const { coordinator, initialCalls } = makeHarness();
+  const options = {
+    skipUserMessage: true,
+    replayFromHistory: true,
+    retries: { transientRetryCount: 2 },
+    maxModelRetries: 3,
+    signal: new AbortController().signal,
+    resumeState: { state: 'resume' } as any,
+    resumePreviousResponseId: 'resp-1',
+    bypassInputSurgeGuard: true,
+  };
+
+  for await (const _ of coordinator.start('hello', options)) {
+  }
+
+  expect(initialCalls).toEqual([{ input: 'hello', options }]);
+});
+
 it('streaming -> awaiting_approval', async () => {
-  const { coordinator, statusMachine, turnExecutor } = makeHarness();
-  turnExecutor.setNextInitialResult({
+  const { coordinator, statusMachine, turnWorkflow } = makeHarness();
+  turnWorkflow.setNextInitialResult({
     kind: 'approval_required',
     terminal: { type: 'approval_required', approval: { toolName: 'shell', argumentsText: 'ls' } },
   });
@@ -108,11 +133,11 @@ it('streaming -> awaiting_approval', async () => {
 });
 
 it('awaiting_approval -> continuing -> awaiting_approval', async () => {
-  const { coordinator, statusMachine, turnExecutor } = makeHarness();
+  const { coordinator, statusMachine, turnWorkflow } = makeHarness();
   statusMachine.beginTurn();
   statusMachine.requestApproval(); // status becomes 'awaiting_approval'
 
-  turnExecutor.setNextContinuationResult({
+  turnWorkflow.setNextContinuationResult({
     kind: 'approval_required',
     terminal: { type: 'approval_required', approval: { toolName: 'shell', argumentsText: 'ls' } },
   });
@@ -129,11 +154,11 @@ it('awaiting_approval -> continuing -> awaiting_approval', async () => {
 });
 
 it('Auto-approved initial continuations leave status streaming', async () => {
-  const { coordinator, statusMachine, turnExecutor } = makeHarness();
+  const { coordinator, statusMachine, turnWorkflow } = makeHarness();
 
   let checkedStatusInLoop: any = null;
 
-  turnExecutor.executeInitial = async function* () {
+  turnWorkflow.executeInitial = async function* () {
     checkedStatusInLoop = statusMachine.current;
     yield { type: 'text_delta', delta: 'Running...' };
     return { kind: 'response', terminal: { type: 'response', finalText: 'done' } };
@@ -147,13 +172,13 @@ it('Auto-approved initial continuations leave status streaming', async () => {
 });
 
 it('Auto-approved manual continuations leave status continuing', async () => {
-  const { coordinator, statusMachine, turnExecutor } = makeHarness();
+  const { coordinator, statusMachine, turnWorkflow } = makeHarness();
   statusMachine.beginTurn();
   statusMachine.requestApproval(); // status becomes 'awaiting_approval'
 
   let checkedStatusInLoop: any = null;
 
-  turnExecutor.executeContinuation = async function* () {
+  turnWorkflow.executeContinuation = async function* () {
     checkedStatusInLoop = statusMachine.current;
     yield { type: 'text_delta', delta: 'Running...' };
     return { kind: 'response', terminal: { type: 'response', finalText: 'done' } };
@@ -167,8 +192,8 @@ it('Auto-approved manual continuations leave status continuing', async () => {
 });
 
 it('Terminal completion to idle', async () => {
-  const { coordinator, statusMachine, turnExecutor } = makeHarness();
-  turnExecutor.setNextInitialResult({
+  const { coordinator, statusMachine, turnWorkflow } = makeHarness();
+  turnWorkflow.setNextInitialResult({
     kind: 'response',
     terminal: { type: 'response', finalText: 'complete' },
   });
@@ -180,8 +205,8 @@ it('Terminal completion to idle', async () => {
 });
 
 it('failed completes the status because the runner already emitted terminal events', async () => {
-  const { coordinator, statusMachine, turnExecutor } = makeHarness();
-  turnExecutor.setNextInitialResult({
+  const { coordinator, statusMachine, turnWorkflow } = makeHarness();
+  turnWorkflow.setNextInitialResult({
     kind: 'failed',
   });
 
@@ -192,9 +217,9 @@ it('failed completes the status because the runner already emitted terminal even
 });
 
 it('stale leaves status untouched because lifecycle operation resolved it', async () => {
-  const { coordinator, statusMachine, turnExecutor } = makeHarness();
+  const { coordinator, statusMachine, turnWorkflow } = makeHarness();
 
-  turnExecutor.executeInitial = async function* () {
+  turnWorkflow.executeInitial = async function* () {
     // during the run, concurrent operation invalidates and starts new turn
     statusMachine.complete(); // back to idle
     statusMachine.beginTurn(); // new turn streaming
@@ -209,8 +234,8 @@ it('stale leaves status untouched because lifecycle operation resolved it', asyn
 });
 
 it('stale initial outcome does not emit a terminal event', async () => {
-  const { coordinator, turnExecutor } = makeHarness();
-  turnExecutor.setNextInitialResult({
+  const { coordinator, turnWorkflow } = makeHarness();
+  turnWorkflow.setNextInitialResult({
     kind: 'stale',
     terminal: { type: 'response', finalText: 'stale response' },
   });
@@ -224,11 +249,11 @@ it('stale initial outcome does not emit a terminal event', async () => {
 });
 
 it('stale continuation leaves a newer turn status untouched', async () => {
-  const { coordinator, statusMachine, turnExecutor } = makeHarness();
+  const { coordinator, statusMachine, turnWorkflow } = makeHarness();
   statusMachine.beginTurn();
   statusMachine.requestApproval();
 
-  turnExecutor.executeContinuation = async function* () {
+  turnWorkflow.executeContinuation = async function* () {
     statusMachine.abort();
     statusMachine.beginTurn();
     yield* [];
@@ -242,11 +267,11 @@ it('stale continuation leaves a newer turn status untouched', async () => {
 });
 
 it('continueAfterApproval passes the pending generation to the executor', async () => {
-  const { coordinator, statusMachine, turnExecutor, continuationCalls, approvalFlow } = makeHarness();
+  const { coordinator, statusMachine, turnWorkflow, continuationCalls, approvalFlow } = makeHarness();
   statusMachine.beginTurn();
   statusMachine.requestApproval();
   approvalFlow.setPending({ token: 7 });
-  turnExecutor.setNextContinuationResult({
+  turnWorkflow.setNextContinuationResult({
     kind: 'response',
     terminal: { type: 'response', finalText: 'done' },
   });
@@ -254,16 +279,23 @@ it('continueAfterApproval passes the pending generation to the executor', async 
   for await (const _ of coordinator.continueAfterApproval({ answer: 'n', rejectionReason: 'too risky' })) {
   }
 
-  expect(continuationCalls).toEqual([{ answer: 'n', rejectionReason: 'too risky', generation: 7 }]);
+  expect(continuationCalls).toEqual([
+    {
+      kind: 'approval_decision',
+      answer: 'n',
+      rejectionReason: 'too risky',
+      generation: 7,
+    },
+  ]);
   expect(statusMachine.current).toBe('idle');
 });
 
 it('continuation completion releases the turn for the next user message', async () => {
-  const { coordinator, statusMachine, turnExecutor, approvalFlow } = makeHarness();
+  const { coordinator, statusMachine, turnWorkflow, approvalFlow } = makeHarness();
   statusMachine.beginTurn();
   statusMachine.requestApproval();
   approvalFlow.setPending({ token: 7 });
-  turnExecutor.setNextContinuationResult({
+  turnWorkflow.setNextContinuationResult({
     kind: 'response',
     terminal: { type: 'response', finalText: 'recovered' },
   });
@@ -273,7 +305,7 @@ it('continuation completion releases the turn for the next user message', async 
 
   expect(statusMachine.current).toBe('idle');
 
-  turnExecutor.setNextInitialResult({
+  turnWorkflow.setNextInitialResult({
     kind: 'response',
     terminal: { type: 'response', finalText: 'next turn' },
   });

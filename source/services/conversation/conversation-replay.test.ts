@@ -1,4 +1,6 @@
 import { it, expect, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { LOG_ENVELOPE_VERSION, type LogEnvelope, type LogEvent } from '../logging/conversation-log-events.js';
 import { replayEvents } from './conversation-replay.js';
 
@@ -10,6 +12,14 @@ function env(event: LogEvent): LogEnvelope {
 beforeEach(() => {
   seq = 0;
 });
+
+const loadFixture = (name: string): LogEnvelope[] => {
+  const filePath = path.join(process.cwd(), 'source/services/conversation/__fixtures__', name);
+  return readFileSync(filePath, 'utf-8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line) as LogEnvelope);
+};
 
 it('replayEvents: empty log produces empty state with no warnings', () => {
   const restored = replayEvents([]);
@@ -132,6 +142,26 @@ it('replayEvents: v3 assistant_turn restores state without cumulative snapshot',
   expect(restored.messages[1].status).toBe('completed');
   expect(restored.messages[2].text).toBe('The current directory is /repo.');
   expect(restored.messages[2].usage).toBe(undefined);
+});
+
+it('replayEvents: golden legacy v2 conversation restores from snapshot format', () => {
+  const restored = replayEvents(loadFixture('legacy-v2-conversation.jsonl'));
+
+  expect(restored.id).toBe('legacy-v2');
+  expect(restored.previousResponseId).toBe('resp-v2');
+  expect(restored.history.map((item: any) => item.callId).filter(Boolean)).toEqual(['call-1', 'call-1']);
+  expect(restored.toolLedger).toHaveLength(1);
+  expect(restored.messages.map((message) => message.sender)).toEqual(['user', 'command', 'bot']);
+});
+
+it('replayEvents: golden current v3 conversation restores from compact assistant state', () => {
+  const restored = replayEvents(loadFixture('current-v3-conversation.jsonl'));
+
+  expect(restored.id).toBe('current-v3');
+  expect(restored.previousResponseId).toBe('resp-v3');
+  expect(restored.history.map((item: any) => item.callId).filter(Boolean)).toEqual(['call-1', 'call-1']);
+  expect(restored.toolLedger).toHaveLength(1);
+  expect(restored.messages.map((message) => message.sender)).toEqual(['user', 'command', 'bot']);
 });
 
 it('replayEvents: timed-out partial assistant turn preserves tool history for the next message', () => {
@@ -1118,6 +1148,49 @@ it('replayEvents: assistant_journal_item restores history and ledger on interrup
   expect(commandMsg).toBeTruthy();
   expect(commandMsg?.status).toBe('completed');
   expect(commandMsg?.output).toBe('/repo');
+});
+
+it('replayEvents: journal-backed pending tool call remains started after crash recovery', () => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run pwd' } }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 1,
+      item: {
+        type: 'tool_call',
+        callId: 'call-1',
+        toolName: 'shell',
+        arguments: '{"command":"pwd"}',
+        providerItem: {
+          type: 'function_call',
+          callId: 'call-1',
+          name: 'shell',
+          arguments: '{"command":"pwd"}',
+        },
+      },
+    }),
+    env({
+      type: 'tool_started',
+      turnId: 'turn-1',
+      toolCallId: 'call-1',
+      toolName: 'shell',
+      arguments: { command: 'pwd' },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  expect(restored.toolLedger).toHaveLength(1);
+  expect(restored.toolLedger[0]).toMatchObject({
+    turnId: 'turn-1',
+    callId: 'call-1',
+    toolName: 'shell',
+    status: 'started',
+  });
+  expect(restored.history.some((h: any) => h.type === 'function_call' && h.callId === 'call-1')).toBe(true);
+  expect(restored.replayWarnings).toContain('Previous turn was interrupted.');
 });
 
 it('replayEvents: journal reasoning is preserved when tool_result already populated ledger history', () => {

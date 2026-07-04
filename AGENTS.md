@@ -21,19 +21,32 @@ Most application code lives under `source/`. Navigate by responsibility rather t
 
 When changing behavior, enter through the public boundary for that feature and follow dependencies inward. Avoid starting from low-level helpers unless the bug is already isolated there. Tests are colocated with production files and are usually the fastest way to discover the intended contract.
 
+## Architecture Balance
+
+Prefer deep, cohesive modules over both god objects and over-extracted "ravioli" code. A good module should hide meaningful workflow, policy, or state invariants behind a small interface; a bad extraction only renames a step and forces callers to keep knowing the sequence.
+
+When changing session or conversation flow:
+
+- Keep orchestration where the domain lifecycle is owned. `TurnWorkflow` may be internally complex if it keeps the turn lifecycle local and testable through its public methods.
+- Keep policy in the policy modules. Approval decisions belong in `services/approval/`; retry classification and recovery decisions belong in `services/retry/`; provider transport details belong in `providers/` or `lib/`.
+- Do not add a new `Runner`, `Driver`, `Coordinator`, `Manager`, or `Handler` just to shorten a file. Add a module only when it owns a stable concept, hides real decisions, or has more than one meaningful caller.
+- Do not collapse unrelated policy, transport, persistence, and UI behavior into one class. If a module needs "and" to describe unrelated responsibilities, split by ownership, not by line count.
+- Before extracting, apply the deletion test: if deleting the new module would only inline one or two pass-through calls, keep the code local; if deleting it would spread policy or invariants across callers, the module is probably earning its keep.
+- Tests should target the owning interface. Avoid tests that require knowing every internal helper unless the helper is itself the owner of a policy or invariant.
+
 ## How It Works
 
 1. User types a message → `app.tsx` captures it
 2. `use-conversation.ts` calls `ConversationService.sendMessage()`
 3. `ConversationService` delegates terminal execution to the `ConversationAdapter` created by `session-composition.ts`
 4. `ConversationAdapter` establishes logging/traffic context, collects terminal events, and calls `TurnCoordinator.start()` directly
-5. `TurnCoordinator.start()` guards turn admission with `TurnStatusMachine`, checks stale/aborted approval state through `ApprovalFlowCoordinator`, and delegates execution to `InitialTurnRunner`
-6. `InitialTurnRunner` prepares input through `SessionInputPlanner`, drives the agent client, feeds events to `SessionStreamProcessor`, and returns an `InitialTurnOutcome`
+5. `TurnCoordinator.start()` guards turn admission with `TurnStatusMachine`, checks stale/aborted approval state through `ApprovalFlowCoordinator`, and delegates execution to `TurnWorkflow.executeInitial()`
+6. `TurnWorkflow` prepares input through `InitialInputPreparer` and `SessionInputPlanner`, drives the agent client, feeds events to `SessionStreamProcessor`, and returns a turn outcome
 7. The agent client selects a provider through the Provider Registry and streams the response
 8. Tool requests are validated by `ApprovalFlowCoordinator` and paused for user approval; `TurnStatusMachine` transitions to `awaiting_approval`
 9. Approval/rejection follows the same facade and adapter path, then `ConversationAdapter` calls `TurnCoordinator.continueAfterApproval()` directly
-10. `TurnCoordinator` delegates approved continuation execution to `ContinuationDriver`, which applies the decision, streams tool/model work, and returns `response`, `approval_required`, `fresh_start_required`, or `stale`
-11. Retry logic in `services/retry/` classifies errors and handles recovery; `fresh_start_required` lets `TurnCoordinator` re-drive through `InitialTurnRunner`
+10. `TurnCoordinator` delegates approved continuation execution to `TurnWorkflow.executeContinuation()`, which applies the decision, streams tool/model work, and returns `response`, `approval_required`, `fresh_start_required`, or `stale`
+11. Retry logic in `services/retry/` classifies errors and handles recovery; `fresh_start_required` lets `TurnWorkflow` re-drive initial execution from history
 12. The terminal result is collected by `ConversationAdapter` and rendered in the message list
 
 ## Testing & Quality

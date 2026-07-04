@@ -11,7 +11,7 @@ function createMockState(overrides: any = {}) {
       transportDowngradeCount: 0,
     },
     lastStream: null,
-    ledgerSnapshot: [],
+    journalSnapshot: [],
     currentState: { id: 'run-1' },
     currentCallIds: ['call-1'],
     setRetryCounts: (_counts: any) => {

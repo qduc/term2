@@ -1,4 +1,3 @@
-import type { AgentInputItem } from '@openai/agents';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ISettingsService } from '../service-interfaces.js';
@@ -8,8 +7,9 @@ import type { StateSnapshot } from '../logging/conversation-log-events.js';
 import { SessionLifecycle } from './session-lifecycle.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { SessionInputPlanner } from './session-input-planner.js';
-import { reconcileHistoryWithToolLedger, type SavedToolExecution } from '../tool-execution-ledger.js';
+import type { SavedToolExecution } from '../tool-execution-ledger.js';
 import { getMethod } from '../interruption-info.js';
+import { projectSnapshot } from '../conversation/conversation-state-projector.js';
 
 /**
  * Facade that owns state/persistence/undo/shell-context/mode-notice operations
@@ -108,14 +108,13 @@ export class SessionManager {
       ? providerFn.call(this.#agentClient)
       : this.#settingsService?.get<string>('agent.provider');
     const model = this.#settingsService?.get<string>('agent.model');
-    return {
-      history: reconcileHistoryWithToolLedger(this.#conversationStore.getHistory(), this.#toolTracker.export())
-        .history as AgentInputItem[],
+    return projectSnapshot({
+      history: this.#conversationStore.getHistory(),
       previousResponseId: this.#state.exportPersistedState().previousResponseId,
       toolLedger: this.#toolTracker.export(),
       ...(model ? { model } : {}),
       ...(provider ? { provider } : {}),
-    };
+    });
   }
 
   exportState(): {

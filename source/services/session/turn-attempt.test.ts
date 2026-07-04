@@ -1,20 +1,23 @@
 import { it, expect } from 'vitest';
 import { TurnAttempt } from './turn-attempt.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
-import type { SavedToolExecution } from '../tool-execution-ledger.js';
+import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-events.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { AgentStream } from '../agent-stream.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
 
 const mockTurn: UserTurn = { text: 'test turn' };
-const mockLedger: SavedToolExecution[] = [
+const mockJournalSnapshot: AssistantJournalItemLogEvent[] = [
   {
+    type: 'assistant_journal_item',
     turnId: 'turn-1',
-    callId: 'call_1',
-    toolName: 'tool_1',
-    arguments: '{}',
-    status: 'started',
-    startedAt: new Date().toISOString(),
+    seq: 1,
+    item: {
+      type: 'tool_call',
+      callId: 'call_1',
+      toolName: 'tool_1',
+      arguments: '{}',
+    },
   },
 ];
 const mockRetryCounts: RetryCounts = {
@@ -29,7 +32,7 @@ it('TurnAttempt construction and getters', () => {
     turn: mockTurn,
     token: 42,
     initialRetryCounts: mockRetryCounts,
-    initialLedgerSnapshot: mockLedger,
+    initialJournalSnapshot: mockJournalSnapshot,
     maxTransientRetries: 3,
     maxModelRetries: 5,
   });
@@ -37,7 +40,7 @@ it('TurnAttempt construction and getters', () => {
   expect(attempt.turn).toBe(mockTurn);
   expect(attempt.token).toBe(42);
   expect(attempt.initialRetryCounts).toEqual(mockRetryCounts);
-  expect(attempt.initialLedgerSnapshot).toEqual(mockLedger);
+  expect(attempt.initialJournalSnapshot).toEqual(mockJournalSnapshot);
   expect(attempt.maxTransientRetries).toBe(3);
   expect(attempt.maxModelRetries).toBe(5);
   expect(attempt.retryCounts).toEqual(mockRetryCounts);
@@ -53,7 +56,7 @@ it('markUserMessageAdded sets addedUserMessage to true', () => {
     turn: mockTurn,
     token: 1,
     initialRetryCounts: mockRetryCounts,
-    initialLedgerSnapshot: [],
+    initialJournalSnapshot: [],
     maxTransientRetries: 3,
   });
 
@@ -67,7 +70,7 @@ it('attachInput sets streamInput and inputMode', () => {
     turn: mockTurn,
     token: 1,
     initialRetryCounts: mockRetryCounts,
-    initialLedgerSnapshot: [],
+    initialJournalSnapshot: [],
     maxTransientRetries: 3,
   });
 
@@ -86,7 +89,7 @@ it('attachStream updates the current stream reference', () => {
     turn: mockTurn,
     token: 1,
     initialRetryCounts: mockRetryCounts,
-    initialLedgerSnapshot: [],
+    initialJournalSnapshot: [],
     maxTransientRetries: 3,
   });
 
@@ -103,7 +106,7 @@ it('advanceRetry updates retryCounts without replacing initial snapshot', () => 
     turn: mockTurn,
     token: 1,
     initialRetryCounts: mockRetryCounts,
-    initialLedgerSnapshot: mockLedger,
+    initialJournalSnapshot: mockJournalSnapshot,
     maxTransientRetries: 3,
   });
 
@@ -118,7 +121,7 @@ it('advanceRetry updates retryCounts without replacing initial snapshot', () => 
 
   expect(attempt.retryCounts).toEqual(nextCounts);
   expect(attempt.initialRetryCounts).toEqual(mockRetryCounts);
-  expect(attempt.initialLedgerSnapshot).toEqual(mockLedger);
+  expect(attempt.initialJournalSnapshot).toEqual(mockJournalSnapshot);
 });
 
 it('close is idempotent and removes abort listener', () => {
@@ -128,7 +131,7 @@ it('close is idempotent and removes abort listener', () => {
     turn: mockTurn,
     token: 1,
     initialRetryCounts: mockRetryCounts,
-    initialLedgerSnapshot: [],
+    initialJournalSnapshot: [],
     maxTransientRetries: 3,
     signal: controller.signal,
     onAbort: () => {
@@ -162,7 +165,7 @@ it('constructor throws AbortError for already-aborted signal', () => {
       turn: mockTurn,
       token: 1,
       initialRetryCounts: mockRetryCounts,
-      initialLedgerSnapshot: [],
+      initialJournalSnapshot: [],
       maxTransientRetries: 3,
       signal: controller.signal,
       onAbort: () => {
@@ -182,7 +185,7 @@ it('onAbort is called when signal is aborted later', () => {
     turn: mockTurn,
     token: 1,
     initialRetryCounts: mockRetryCounts,
-    initialLedgerSnapshot: [],
+    initialJournalSnapshot: [],
     maxTransientRetries: 3,
     signal: controller.signal,
     onAbort: () => {

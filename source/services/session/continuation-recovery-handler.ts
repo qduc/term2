@@ -80,7 +80,7 @@ export class ContinuationRecoveryHandler {
     });
 
     const recoveryState: RecoveryState = {
-      ledgerSnapshot: state.ledgerSnapshot,
+      journalSnapshot: state.journalSnapshot,
       addedUserMessage: false,
       stream: retryStream,
       currentState: state.currentState,

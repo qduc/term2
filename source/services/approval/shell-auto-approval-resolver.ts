@@ -86,3 +86,40 @@ export class ShellAutoApprovalResolver {
     this.advisoriesByCallId.clear();
   }
 }
+
+export class DelegatingShellAutoApprovalResolver extends ShellAutoApprovalResolver {
+  private delegate?: ShellAutoApprovalResolver;
+
+  constructor(deps: ShellAutoApprovalResolverDeps) {
+    super(deps);
+  }
+
+  setDelegate(delegate: ShellAutoApprovalResolver): void {
+    this.delegate = delegate;
+  }
+
+  override getAutoApproveMode(): AutoApproveMode | undefined {
+    return this.delegate ? this.delegate.getAutoApproveMode() : super.getAutoApproveMode();
+  }
+
+  override shouldAutoApprove(advisory: LLMAdvisory | undefined): boolean {
+    return this.delegate ? this.delegate.shouldAutoApprove(advisory) : super.shouldAutoApprove(advisory);
+  }
+
+  override async resolveAdvisoryForInterruption(input: {
+    interruption: unknown;
+    siblings: unknown[];
+  }): Promise<LLMAdvisory | undefined> {
+    return this.delegate
+      ? this.delegate.resolveAdvisoryForInterruption(input)
+      : super.resolveAdvisoryForInterruption(input);
+  }
+
+  override clearCache(): void {
+    if (this.delegate) {
+      this.delegate.clearCache();
+    } else {
+      super.clearCache();
+    }
+  }
+}

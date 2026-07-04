@@ -114,7 +114,14 @@ it('advanceFromPlan updates state for next iteration', () => {
   const nextState = { id: 'run-2' } as any;
   const nextInterruption = { callId: 'call-2' };
   const mergedIds = new Set(['id-1', 'id-2']);
-  const snapshot = [{ callId: 'call-1', status: 'completed' } as any];
+  const snapshot = [
+    {
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 1,
+      item: { type: 'tool_result', callId: 'call-1', toolName: 'tool', status: 'completed', output: 'done' },
+    },
+  ] as any;
 
   state.advanceFromPlan(nextState, nextInterruption, 'delta', mergedIds, snapshot, ['call-2']);
 
@@ -123,7 +130,7 @@ it('advanceFromPlan updates state for next iteration', () => {
   expect(state.source).toBe('continueRunStream');
   expect(state.previouslyEmittedIds).toEqual(mergedIds);
   expect(state.inputMode).toBe('delta');
-  expect(state.ledgerSnapshot).toEqual(snapshot);
+  expect(state.journalSnapshot).toEqual(snapshot);
 });
 
 it('advanceFromPlan uses the passed-in currentCallIds (superset from ledger)', () => {

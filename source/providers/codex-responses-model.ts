@@ -10,7 +10,10 @@ const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
   async recordResponseReceived() {},
   recordRequestFailed() {},
 };
-import { isPreviousResponseNotFoundError } from '../services/retry/retry-error-classification.js';
+import {
+  isPreviousResponseNotFoundError,
+  isRetryableTransportError,
+} from '../services/retry/retry-error-classification.js';
 import { computeUpstreamRetryDelayMs } from '../services/retry/upstream-retry-policy.js';
 
 type DiagnosticLogger = {
@@ -308,6 +311,16 @@ const getResponseIdFromStreamEvent = (event: unknown): string | undefined => {
   }
 
   return getResponseIdFromResponse(record.response) ?? getResponseIdFromResponse(record);
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message ?? '');
+  }
+  return '';
 };
 
 const hasGenerateFalse = (request: any): boolean =>
@@ -695,6 +708,15 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     this.codexConsumedToolResultCallIdsByResponseId.clear();
   }
 
+  #shouldForgetCodexServerHistory(error: unknown): boolean {
+    const message = getErrorMessage(error);
+    return (
+      isPreviousResponseNotFoundError(error) ||
+      message.includes('previous_response_not_found') ||
+      isRetryableTransportError(error).transportFallback
+    );
+  }
+
   #getCodexServerHistoryKey(): string | null {
     const trafficContext = this.sessionContextService?.getContext() ?? null;
     return trafficContext?.sessionId ?? trafficContext?.traceId ?? null;
@@ -731,13 +753,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         );
         return response;
       } catch (error) {
-        const message =
-          typeof error === 'string'
-            ? error
-            : error && typeof error === 'object' && 'message' in error
-            ? String((error as { message?: unknown }).message ?? '')
-            : '';
-        if (isPreviousResponseNotFoundError(error) || message.includes('previous_response_not_found')) {
+        if (this.#shouldForgetCodexServerHistory(error)) {
           this.#forgetCodexResponseId();
         }
         throw error;
@@ -765,13 +781,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       }
       this.#rememberConsumedToolResultCallIds(responseId, effectiveRequest.previousResponseId, effectiveRequest.input);
     } catch (error) {
-      const message =
-        typeof error === 'string'
-          ? error
-          : error && typeof error === 'object' && 'message' in error
-          ? String((error as { message?: unknown }).message ?? '')
-          : '';
-      if (isPreviousResponseNotFoundError(error) || message.includes('previous_response_not_found')) {
+      if (this.#shouldForgetCodexServerHistory(error)) {
         this.#forgetCodexResponseId();
       }
       throw error;

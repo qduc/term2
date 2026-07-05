@@ -871,18 +871,6 @@ it('wrapCodexStream throws a detailed provider error when receiving a failed res
   }).rejects.toThrow('Codex provider error: Model context length exceeded');
 });
 
-function createSleepRecorder() {
-  const delays: number[] = [];
-  return {
-    delays,
-    sleep: async (delayMs: number) => {
-      delays.push(delayMs);
-    },
-  };
-}
-
-const DEFAULT_STREAM_MAX_RETRIES = 5;
-
 it.sequential(
   'CodexResponsesWSModel injects Codex previous response id and trims replayed tool-continuation input',
   async () => {
@@ -1377,172 +1365,7 @@ it.sequential(
   },
 );
 
-it.sequential(
-  'CodexResponsesWSModel retries safe Codex warm-up failures before chaining the delta request',
-  async () => {
-    const seenRequests: any[] = [];
-    const sleep = createSleepRecorder();
-    const safeWarmupError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
-      code: 'connection_closed_before_opening',
-    });
-
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
-      seenRequests.push(request);
-      if (seenRequests.length === 1) {
-        throw safeWarmupError;
-      }
-      return makeStream([
-        {
-          type: 'response.completed',
-          response: {
-            id: seenRequests.length === 2 ? 'resp-warmup' : 'resp-main',
-            output: [],
-            usage: {},
-          },
-        } as any,
-      ]);
-    };
-
-    const mockClient = {
-      baseURL: 'https://api.openai.com',
-      apiKey: 'test-key',
-      _options: {},
-    };
-    const tokenManager = {
-      getOrRefreshAccessToken: async () => 'token',
-      getAccountId: () => 'acc_123',
-    };
-
-    try {
-      const model = new CodexResponsesWSModel(
-        mockClient as any,
-        'gpt-5-codex',
-        tokenManager as any,
-        undefined,
-        undefined,
-        {
-          getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
-          runWithContext: <T>(_context: any, fn: () => T) => fn(),
-        },
-        { sleep: sleep.sleep },
-      );
-
-      (model as any).getRetryAdvice = async ({ error }: any) =>
-        error === safeWarmupError ? { suggested: true, replaySafety: 'safe' } : { suggested: false };
-
-      const latestUser = { role: 'user', type: 'message', content: 'next' };
-      await model.getResponse({
-        input: [
-          { role: 'user', type: 'message', content: 'first' },
-          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first response' }] },
-          latestUser,
-        ],
-        modelSettings: {},
-        tools: [],
-        handoffs: [],
-      } as any);
-
-      expect(seenRequests.length).toBe(3);
-      expect(sleep.delays.length).toBe(1);
-      expect(sleep.delays[0] > 0).toBe(true);
-      expect(seenRequests[0].modelSettings.providerData?.generate).toBe(false);
-      expect(seenRequests[1].modelSettings.providerData?.generate).toBe(false);
-      expect(seenRequests[0].input).toEqual(seenRequests[1].input);
-      expect(seenRequests[2].previousResponseId).toBe('resp-warmup');
-      expect(seenRequests[2].input).toEqual([latestUser]);
-    } finally {
-      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
-    }
-  },
-);
-
-it.sequential(
-  'CodexResponsesWSModel falls back to full history without previous response id when safe Codex warm-up retries are exhausted',
-  async () => {
-    const seenRequests: any[] = [];
-    const sleep = createSleepRecorder();
-    const safeWarmupError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
-      code: 'connection_closed_before_opening',
-    });
-
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
-      seenRequests.push(request);
-      if (seenRequests.length <= DEFAULT_STREAM_MAX_RETRIES + 1) {
-        throw safeWarmupError;
-      }
-      return makeStream([
-        {
-          type: 'response.completed',
-          response: {
-            id: 'resp-main',
-            output: [],
-            usage: {},
-          },
-        } as any,
-      ]);
-    };
-
-    const mockClient = {
-      baseURL: 'https://api.openai.com',
-      apiKey: 'test-key',
-      _options: {},
-    };
-    const tokenManager = {
-      getOrRefreshAccessToken: async () => 'token',
-      getAccountId: () => 'acc_123',
-    };
-
-    try {
-      const model = new CodexResponsesWSModel(
-        mockClient as any,
-        'gpt-5-codex',
-        tokenManager as any,
-        undefined,
-        undefined,
-        {
-          getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
-          runWithContext: <T>(_context: any, fn: () => T) => fn(),
-        },
-        { sleep: sleep.sleep },
-      );
-
-      (model as any).getRetryAdvice = async ({ error }: any) =>
-        error === safeWarmupError ? { suggested: true, replaySafety: 'safe' } : { suggested: false };
-
-      const fullInput = [
-        { role: 'user', type: 'message', content: 'first' },
-        { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first response' }] },
-        { role: 'user', type: 'message', content: 'next' },
-      ];
-      for await (const _event of model.getStreamedResponse({
-        input: fullInput,
-        modelSettings: {},
-        tools: [],
-        handoffs: [],
-      } as any)) {
-      }
-
-      const expectedTotalAttempts = DEFAULT_STREAM_MAX_RETRIES + 2;
-      expect(seenRequests.length).toBe(expectedTotalAttempts);
-      expect(sleep.delays.length).toBe(DEFAULT_STREAM_MAX_RETRIES);
-      expect(sleep.delays.every((delayMs) => delayMs > 0)).toBe(true);
-      expect(
-        seenRequests
-          .slice(0, expectedTotalAttempts - 1)
-          .every((request) => request.modelSettings.providerData?.generate === false),
-      ).toBe(true);
-      expect(seenRequests[expectedTotalAttempts - 1].input).toEqual(fullInput);
-      expect(seenRequests[expectedTotalAttempts - 1].previousResponseId).toBe(undefined);
-      expect(seenRequests[expectedTotalAttempts - 1].modelSettings.providerData?.generate).toBe(undefined);
-    } finally {
-      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
-    }
-  },
-);
-
-it.sequential('CodexResponsesWSModel drops remembered chained history after websocket network failure', async () => {
+it.sequential('CodexResponsesWSModel falls back to full history immediately after warmup network failure', async () => {
   const seenRequests: any[] = [];
   const networkError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
     code: 'connection_closed_before_opening',
@@ -1552,19 +1375,6 @@ it.sequential('CodexResponsesWSModel drops remembered chained history after webs
   (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
     seenRequests.push(request);
     if (seenRequests.length === 1) {
-      return makeStream([
-        {
-          type: 'response.completed',
-          response: {
-            id: 'resp-stale-chain',
-            output: [],
-            usage: {},
-          },
-        } as any,
-      ]);
-    }
-
-    if (seenRequests.length === 2) {
       throw networkError;
     }
 
@@ -1572,7 +1382,7 @@ it.sequential('CodexResponsesWSModel drops remembered chained history after webs
       {
         type: 'response.completed',
         response: {
-          id: 'resp-recovered',
+          id: 'resp-full-history',
           output: [],
           usage: {},
         },
@@ -1589,14 +1399,10 @@ it.sequential('CodexResponsesWSModel drops remembered chained history after webs
     getOrRefreshAccessToken: async () => 'token',
     getAccountId: () => 'acc_123',
   };
-
-  const continuationInput = [
-    { role: 'user', type: 'message', content: 'continue' },
-    {
-      type: 'function_call_result',
-      callId: 'call_kQ5FnDgiK4ZWWNTvzPglQtEU',
-      output: 'tool output',
-    },
+  const fullInput = [
+    { role: 'user', type: 'message', content: 'first' },
+    { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first response' }] },
+    { role: 'user', type: 'message', content: 'next' },
   ];
 
   try {
@@ -1607,21 +1413,110 @@ it.sequential('CodexResponsesWSModel drops remembered chained history after webs
       undefined,
       undefined,
       {
-        getContext: () => ({ sessionId: 'session-network-repro', traceId: 'trace-network-repro' } as any),
+        getContext: () => ({ sessionId: 'session-warmup-repro', traceId: 'trace-warmup-repro' } as any),
         runWithContext: <T>(_context: any, fn: () => T) => fn(),
       },
     );
 
     for await (const _event of model.getStreamedResponse({
-      previousResponseId: 'resp-root',
-      input: [{ role: 'user', type: 'message', content: 'first turn' }],
+      input: fullInput,
       modelSettings: {},
       tools: [],
       handoffs: [],
     } as any)) {
     }
 
-    await expect(async () => {
+    expect(seenRequests.length).toBe(2);
+    expect(seenRequests[0].modelSettings.providerData?.generate).toBe(false);
+    expect(seenRequests[1].previousResponseId).toBe(undefined);
+    expect(seenRequests[1].modelSettings.providerData?.generate).toBe(undefined);
+    expect(seenRequests[1].input).toEqual(fullInput);
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+  }
+});
+
+it.sequential(
+  'CodexResponsesWSModel falls back to full history immediately after websocket network failure',
+  async () => {
+    const seenRequests: any[] = [];
+    const networkError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
+      code: 'connection_closed_before_opening',
+    });
+
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+      seenRequests.push(request);
+      if (seenRequests.length === 1) {
+        return makeStream([
+          {
+            type: 'response.completed',
+            response: {
+              id: 'resp-stale-chain',
+              output: [],
+              usage: {},
+            },
+          } as any,
+        ]);
+      }
+
+      if (seenRequests.length === 2) {
+        throw networkError;
+      }
+
+      return makeStream([
+        {
+          type: 'response.completed',
+          response: {
+            id: 'resp-recovered',
+            output: [],
+            usage: {},
+          },
+        } as any,
+      ]);
+    };
+
+    const mockClient = {
+      baseURL: 'https://api.openai.com',
+      apiKey: 'test-key',
+      _options: {},
+    };
+    const tokenManager = {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'acc_123',
+    };
+
+    const continuationInput = [
+      { role: 'user', type: 'message', content: 'continue' },
+      {
+        type: 'function_call_result',
+        callId: 'call_kQ5FnDgiK4ZWWNTvzPglQtEU',
+        output: 'tool output',
+      },
+    ];
+
+    try {
+      const model = new CodexResponsesWSModel(
+        mockClient as any,
+        'gpt-5-codex',
+        tokenManager as any,
+        undefined,
+        undefined,
+        {
+          getContext: () => ({ sessionId: 'session-network-repro', traceId: 'trace-network-repro' } as any),
+          runWithContext: <T>(_context: any, fn: () => T) => fn(),
+        },
+      );
+
+      for await (const _event of model.getStreamedResponse({
+        previousResponseId: 'resp-root',
+        input: [{ role: 'user', type: 'message', content: 'first turn' }],
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any)) {
+      }
+
       for await (const _event of model.getStreamedResponse({
         input: continuationInput,
         modelSettings: {},
@@ -1629,29 +1524,18 @@ it.sequential('CodexResponsesWSModel drops remembered chained history after webs
         handoffs: [],
       } as any)) {
       }
-    }).rejects.toThrow('connection closed before opening');
 
-    for await (const _event of model.getStreamedResponse({
-      input: continuationInput,
-      modelSettings: {},
-      tools: [],
-      handoffs: [],
-    } as any)) {
+      expect(seenRequests.length).toBe(3);
+      expect(seenRequests[1].previousResponseId).toBe('resp-stale-chain');
+      expect(seenRequests[1].input).toEqual([continuationInput[1]]);
+
+      // After transport failure, stale chained history is cleared and the same
+      // turn is replayed from full history without trying stateful history again.
+      expect(seenRequests[2].previousResponseId).toBe(undefined);
+      expect(seenRequests[2].modelSettings.providerData?.generate).toBe(undefined);
+      expect(seenRequests[2].input).toEqual(continuationInput);
+    } finally {
+      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
     }
-
-    expect(seenRequests.length).toBe(4);
-    expect(seenRequests[1].previousResponseId).toBe('resp-stale-chain');
-    expect(seenRequests[1].input).toEqual([continuationInput[1]]);
-
-    // After transport failure, stale chained history is cleared. The next
-    // turn performs a warmup (generate: false) before replaying the delta.
-    expect(seenRequests[2].previousResponseId).toBe(undefined);
-    expect(seenRequests[2].modelSettings.providerData?.generate).toBe(false);
-    expect(seenRequests[2].input).toEqual([continuationInput[0]]);
-    expect(seenRequests[3].previousResponseId).toBe('resp-recovered');
-    expect(seenRequests[3].modelSettings.providerData?.generate).toBe(undefined);
-    expect(seenRequests[3].input).toEqual([continuationInput[1]]);
-  } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
-  }
-});
+  },
+);

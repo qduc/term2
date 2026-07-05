@@ -14,7 +14,6 @@ import {
   isPreviousResponseNotFoundError,
   isRetryableTransportError,
 } from '../services/retry/retry-error-classification.js';
-import { computeUpstreamRetryDelayMs } from '../services/retry/upstream-retry-policy.js';
 
 type DiagnosticLogger = {
   debug?: (message: string, meta?: Record<string, unknown>) => void;
@@ -342,15 +341,9 @@ type PreparedCodexRequest = {
   warmupRequest?: any;
 };
 
-type WarmupKind = 'unary' | 'stream';
-
-const DEFAULT_STREAM_MAX_RETRIES = 5;
-
 export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   private readonly codexPreviousResponseIds = new Map<string, string>();
   private readonly codexConsumedToolResultCallIdsByResponseId = new Map<string, Set<string>>();
-  private readonly warmupSleep: (delayMs: number) => Promise<void>;
-  private readonly warmupRandom: () => number;
   #serverHistoryReuseDisabled = false;
 
   private readonly providerTraffic: IProviderTraffic;
@@ -362,20 +355,8 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     private readonly diagnosticLogger?: DiagnosticLogger,
     providerTraffic?: IProviderTraffic,
     private readonly sessionContextService?: ISessionContextService,
-    warmupRetryDependencies?: {
-      sleep?: (delayMs: number) => Promise<void>;
-      random?: () => number;
-    },
   ) {
     super(client, model);
-    this.warmupSleep =
-      warmupRetryDependencies?.sleep ??
-      ((delayMs: number) =>
-        new Promise<void>((resolve) => {
-          setTimeout(resolve, delayMs);
-        }));
-    this.warmupRandom = warmupRetryDependencies?.random ?? Math.random;
-
     this.providerTraffic = providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
   }
 
@@ -460,78 +441,26 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     return wrapped();
   }
 
-  async #shouldRetryCodexWarmup(request: any, error: unknown, kind: WarmupKind, attempt: number): Promise<boolean> {
-    const retryAdvice =
-      typeof (this as any).getRetryAdvice === 'function'
-        ? await (this as any).getRetryAdvice({ request, error, stream: kind === 'stream', attempt })
-        : undefined;
-
-    return retryAdvice?.suggested === true && retryAdvice?.replaySafety === 'safe';
-  }
-
-  async #sleepBeforeCodexWarmupRetry(attempt: number): Promise<void> {
-    const delayMs = computeUpstreamRetryDelayMs({ attemptNumber: attempt, random: this.warmupRandom });
-    await this.warmupSleep(delayMs);
-  }
-
   async #warmupCodexUnary(request: any | undefined): Promise<string | undefined> {
     if (!request) {
       return undefined;
     }
-
-    const maxAttempts = DEFAULT_STREAM_MAX_RETRIES + 1;
-    let attempt = 1;
-    while (attempt <= maxAttempts) {
-      try {
-        const response = await super.getResponse(request);
-        const responseId = getResponseIdFromResponse(response);
-        this.#rememberCodexResponseId(responseId);
-        return responseId;
-      } catch (error) {
-        const canSafelyRetry = await this.#shouldRetryCodexWarmup(request, error, 'unary', attempt);
-        if (!canSafelyRetry) {
-          throw error;
-        }
-        if (attempt >= maxAttempts) {
-          return undefined;
-        }
-        await this.#sleepBeforeCodexWarmupRetry(attempt);
-        attempt++;
-      }
-    }
-
-    return undefined;
+    const response = await super.getResponse(request);
+    const responseId = getResponseIdFromResponse(response);
+    this.#rememberCodexResponseId(responseId);
+    return responseId;
   }
 
   async #warmupCodexStream(request: any | undefined): Promise<string | undefined> {
     if (!request) {
       return undefined;
     }
-
-    const maxAttempts = DEFAULT_STREAM_MAX_RETRIES + 1;
-    let attempt = 1;
-    while (attempt <= maxAttempts) {
-      try {
-        let responseId: string | undefined;
-        for await (const event of super.getStreamedResponse(request)) {
-          responseId = getResponseIdFromStreamEvent(event) ?? responseId;
-        }
-        this.#rememberCodexResponseId(responseId);
-        return responseId;
-      } catch (error) {
-        const canSafelyRetry = await this.#shouldRetryCodexWarmup(request, error, 'stream', attempt);
-        if (!canSafelyRetry) {
-          throw error;
-        }
-        if (attempt >= maxAttempts) {
-          return undefined;
-        }
-        await this.#sleepBeforeCodexWarmupRetry(attempt);
-        attempt++;
-      }
+    let responseId: string | undefined;
+    for await (const event of super.getStreamedResponse(request)) {
+      responseId = getResponseIdFromStreamEvent(event) ?? responseId;
     }
-
-    return undefined;
+    this.#rememberCodexResponseId(responseId);
+    return responseId;
   }
 
   #prepareCodexServerHistoryRequest(request: any): any {
@@ -736,6 +665,15 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       : originalRequest;
   }
 
+  #withoutCodexServerHistory(request: any): any {
+    if (!request || typeof request !== 'object') {
+      return request;
+    }
+
+    const { previousResponseId: _previousResponseId, ...rest } = request;
+    return rest;
+  }
+
   override async getResponse(request: any): Promise<any> {
     const run = async () => {
       try {
@@ -755,6 +693,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       } catch (error) {
         if (this.#shouldForgetCodexServerHistory(error)) {
           this.#forgetCodexResponseId();
+          const fallbackRequest = this.#withoutCodexServerHistory(request);
+          const response = await super.getResponse(fallbackRequest);
+          const responseId = getResponseIdFromResponse(response);
+          this.#rememberCodexResponseId(responseId);
+          this.#rememberConsumedToolResultCallIds(responseId, undefined, fallbackRequest.input);
+          return response;
         }
         throw error;
       }
@@ -768,6 +712,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   }
 
   override async *getStreamedResponse(request: any): AsyncIterable<any> {
+    let yieldedAnyEvent = false;
     try {
       const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
       const warmupResponseId = await this.#warmupCodexStream(preparedRequest.warmupRequest);
@@ -777,10 +722,23 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       for await (const event of super.getStreamedResponse(effectiveRequest)) {
         responseId = getResponseIdFromStreamEvent(event) ?? responseId;
         this.#rememberCodexResponseId(responseId);
+        yieldedAnyEvent = true;
         yield event;
       }
       this.#rememberConsumedToolResultCallIds(responseId, effectiveRequest.previousResponseId, effectiveRequest.input);
     } catch (error) {
+      if (this.#shouldForgetCodexServerHistory(error) && !yieldedAnyEvent) {
+        this.#forgetCodexResponseId();
+        const fallbackRequest = this.#withoutCodexServerHistory(request);
+        let responseId: string | undefined;
+        for await (const event of super.getStreamedResponse(fallbackRequest)) {
+          responseId = getResponseIdFromStreamEvent(event) ?? responseId;
+          this.#rememberCodexResponseId(responseId);
+          yield event;
+        }
+        this.#rememberConsumedToolResultCallIds(responseId, undefined, fallbackRequest.input);
+        return;
+      }
       if (this.#shouldForgetCodexServerHistory(error)) {
         this.#forgetCodexResponseId();
       }

@@ -1,3 +1,10 @@
+## [0.9.4] - 2026-07-08
+
+### Improvements
+- Rebalance executor and mentor prompts to remove adversarial/gate framing: mentor is now a calibrated strategic advisor, executor retains final decision responsibility
+
+---
+
 ## [0.9.3] - 2026-07-05
 
 ### Features

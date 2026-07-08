@@ -221,7 +221,14 @@ it('CLI prompts before starting in non-lite mode from root directory', () => {
 it('CLI accepts a custom provider from settings.json in non-interactive mode', () => {
   const cliPath = path.resolve('dist/cli.js');
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
-  const settingsDir = path.join(tempHome, '.local', 'state', 'term2-nodejs');
+  // Compute platform-correct path matching envPaths('term2').log
+  const platformRelPath =
+    process.platform === 'darwin'
+      ? 'Library/Logs/term2-nodejs'
+      : process.platform === 'win32'
+      ? 'AppData/Local/term2-nodejs/Log'
+      : '.local/state/term2-nodejs';
+  const settingsDir = path.join(tempHome, platformRelPath);
   fs.mkdirSync(settingsDir, { recursive: true });
   const providerName = 'my-custom-provider';
 

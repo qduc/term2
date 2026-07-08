@@ -253,5 +253,5 @@ it('mentor subagent is NOT affected by prompt profiles', async () => {
   expect(mentorAgent.instructions.includes('nested Codex-family subagent')).toBe(false);
   expect(mentorAgent.instructions.includes('## Available Tool Guidance')).toBe(false);
   expect(mentorAgent.instructions.includes('## Worktree Hygiene')).toBe(false);
-  expect(mentorAgent.instructions.includes('You are a senior architect')).toBe(true);
+  expect(mentorAgent.instructions.includes('You are a strategic engineering mentor')).toBe(true);
 });

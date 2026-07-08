@@ -1,3 +1,35 @@
+## [0.9.3] - 2026-07-05
+
+### Features
+- Implement sandbox network approval system with toggle command and tests
+- Add sandbox failure classification for enhanced error handling
+- Enhance context mismatch diagnosis with closest candidate blocks suggestion
+- Add terminal title management with project folder and running state indicators
+- Enhance Codex WebSocket handling for network failures with automatic history clearing
+- Add `id` field to provider settings for unique identification
+- Add E2E test infrastructure with terminal integration helpers
+
+### Bug Fixes
+- Fix shell commands not waiting for network approval before execution
+- Fix custom providers not available in non-interactive mode
+- Fix nested subagent terminal events causing incorrect UI state
+- Fix lost tool output after retrying network errors in Codex WebSocket
+- Fix double banner output on conversation start
+- Fix flickering after handoff or parallel subagent completion
+- Fix resume tool call argument replay producing incorrect history
+- Fix chained continuation recovery after interrupted turns
+- Fix type errors in non-interactive mode and runtime setting router
+
+### Improvements
+- Simplify CodexResponsesWSModel warmup logic by removing unnecessary retry mechanisms
+- Replace `exec` with `spawn` for improved process handling in shell execution
+- Extract `ConversationOrchestrator` from `use-conversation.ts` for cleaner separation of UI and business logic
+- Extract conversation state projection and schema from replay logic
+- Rearrange settings menu for improved usability
+- Update system prompts for better agent behavior
+
+---
+
 ## [0.9.2] - 2026-06-26
 
 ### Features

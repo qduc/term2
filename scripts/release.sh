@@ -48,6 +48,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+CHANGELOG_PREWRITTEN=false
+CHANGELOG_PREWRITTEN_VERSION=""
+
 echo -e "${BLUE}=== Release Script ===${NC}"
 
 # Helper function to check if a tag exists
@@ -76,15 +79,48 @@ is_published_on_npm() {
     pnpm view "${pkg_name}@$1" version >/dev/null 2>&1
 }
 
+# Helper function to extract the top version from CHANGELOG.md
+get_changelog_top_version() {
+    if [ ! -f CHANGELOG.md ]; then
+        return 1
+    fi
+    grep -m1 '^## \[' CHANGELOG.md | sed -E 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/'
+}
+
 # 1. Check for uncommitted changes (skip in resume mode with appropriate conditions)
 if [[ "$RESUME_MODE" == "true" ]]; then
     echo -e "${YELLOW}Resume mode: Skipping clean working directory check${NC}"
 else
-    # Allow untracked files so release can run in a worktree with local scratch files.
-    if [[ -n $(git status -s --untracked-files=no) ]]; then
-        echo -e "${RED}Error: Working directory is not clean. Please commit or stash changes.${NC}"
-        git status -s
-        exit 1
+    DIRTY_FILES=$(git status -s --untracked-files=no)
+    if [[ -n "$DIRTY_FILES" ]]; then
+        DIRTY_COUNT=$(echo "$DIRTY_FILES" | wc -l | tr -d ' ')
+        # Allow CHANGELOG.md-only changes if it contains a valid next version entry
+        if [[ "$DIRTY_COUNT" -eq 1 ]] && echo "$DIRTY_FILES" | grep -q 'CHANGELOG.md'; then
+            CHANGELOG_VERSION=$(get_changelog_top_version)
+            if [[ -z "$CHANGELOG_VERSION" ]]; then
+                echo -e "${RED}Error: CHANGELOG.md is modified but no valid version header (## [X.Y.Z]) found.${NC}"
+                exit 1
+            fi
+            if tag_exists "$CHANGELOG_VERSION"; then
+                echo -e "${RED}Error: CHANGELOG.md version v$CHANGELOG_VERSION is already tagged.${NC}"
+                exit 1
+            fi
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "")
+            if [[ -n "$LATEST_TAG" ]]; then
+                HIGHER=$(printf "%s\n%s" "$LATEST_TAG" "$CHANGELOG_VERSION" | sort -V | tail -1)
+                if [[ "$HIGHER" != "$CHANGELOG_VERSION" ]]; then
+                    echo -e "${RED}Error: CHANGELOG.md version ($CHANGELOG_VERSION) is not greater than latest tag ($LATEST_TAG).${NC}"
+                    exit 1
+                fi
+            fi
+            CHANGELOG_PREWRITTEN=true
+            CHANGELOG_PREWRITTEN_VERSION="$CHANGELOG_VERSION"
+            echo -e "${GREEN}CHANGELOG.md modified with next version $CHANGELOG_VERSION. Using pre-written changelog.${NC}"
+        else
+            echo -e "${RED}Error: Working directory is not clean. Please commit or stash changes.${NC}"
+            git status -s
+            exit 1
+        fi
     fi
 fi
 
@@ -151,39 +187,50 @@ else
     pnpm run build
     pnpm test
 
-    # 3. Select bump type
-    echo "Select release type:"
-    options=("Patch" "Minor" "Major" "Custom")
-    select opt in "${options[@]}"
-    do
-        case $opt in
-            "Patch")
-                pnpm version patch --no-git-tag-version --no-commit-hooks > /dev/null
-                NEW_VERSION=$(node -p "require('./package.json').version")
-                break
-                ;;
-            "Minor")
-                pnpm version minor --no-git-tag-version --no-commit-hooks > /dev/null
-                NEW_VERSION=$(node -p "require('./package.json').version")
-                break
-                ;;
-            "Major")
-                pnpm version major --no-git-tag-version --no-commit-hooks > /dev/null
-                NEW_VERSION=$(node -p "require('./package.json').version")
-                break
-                ;;
-            "Custom")
-                read -p "Enter version: " NEW_VERSION
-                # validate version format if possible, or trust pnpm version to fail later if invalid
-                pnpm version $NEW_VERSION --no-git-tag-version --no-commit-hooks > /dev/null
-                break
-                ;;
-            *) echo "Invalid option";;
-        esac
-    done
+    if [[ "$CHANGELOG_PREWRITTEN" == "true" ]]; then
+        NEW_VERSION="$CHANGELOG_PREWRITTEN_VERSION"
+        CHANGELOG_DONE=true
+        echo -e "Preparing release for pre-written version: ${GREEN}$NEW_VERSION${NC}"
 
-    # Revert the pnpm version change for now, we will apply it properly later with changelog
-    git checkout package.json
+        # Commit pre-written changelog to keep working tree clean for subsequent pnpm commands
+        echo -e "${BLUE}Committing pre-written changelog...${NC}"
+        git add CHANGELOG.md
+        git commit -m "chore: update CHANGELOG.md for v$NEW_VERSION"
+    else
+        # 3. Select bump type
+        echo "Select release type:"
+        options=("Patch" "Minor" "Major" "Custom")
+        select opt in "${options[@]}"
+        do
+            case $opt in
+                "Patch")
+                    pnpm version patch --no-git-tag-version --no-commit-hooks > /dev/null
+                    NEW_VERSION=$(node -p "require('./package.json').version")
+                    break
+                    ;;
+                "Minor")
+                    pnpm version minor --no-git-tag-version --no-commit-hooks > /dev/null
+                    NEW_VERSION=$(node -p "require('./package.json').version")
+                    break
+                    ;;
+                "Major")
+                    pnpm version major --no-git-tag-version --no-commit-hooks > /dev/null
+                    NEW_VERSION=$(node -p "require('./package.json').version")
+                    break
+                    ;;
+                "Custom")
+                    read -p "Enter version: " NEW_VERSION
+                    # validate version format if possible, or trust pnpm version to fail later if invalid
+                    pnpm version $NEW_VERSION --no-git-tag-version --no-commit-hooks > /dev/null
+                    break
+                    ;;
+                *) echo "Invalid option";;
+            esac
+        done
+
+        # Revert the pnpm version change for now, we will apply it properly later with changelog
+        git checkout package.json
+    fi
 fi
 
 echo -e "Preparing release for version: ${GREEN}$NEW_VERSION${NC}"

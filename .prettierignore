@@ -5,3 +5,4 @@ log_viewer
 *.md
 eval/*
 .junie
+pnpm-lock.yaml

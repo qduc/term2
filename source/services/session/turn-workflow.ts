@@ -7,7 +7,7 @@ import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { TurnItemAccumulator } from './turn-item-accumulator.js';
 import type { GenerationGuard } from '../generation-guard.js';
 import { TurnAttempt } from './turn-attempt.js';
-import { getMethod, getCallIdFromObject, asRecord, getToolInfoFromInterruption } from '../interruption-info.js';
+import { getMethod, getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { InitialTurnRunOptions, TurnAttemptFactory } from './turn-attempt-factory.js';
 import type { InitialInputPreparer } from './initial-input-preparer.js';
@@ -45,7 +45,6 @@ import { describeError } from '../../utils/error-helpers.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { ContinuationPlanApplier } from './continuation-plan-applier.js';
 import type { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
-import { callIdOf } from '../tool-execution-ledger.js';
 import { ContinuationState, type ContinuationInit, type PreparedContinuation } from './continuation-state.js';
 import { ToolApprovalBatchCoordinator } from '../approval/tool-approval-batch-coordinator.js';
 import {
@@ -56,6 +55,7 @@ import type { ProviderContinuity } from '../provider-continuity.js';
 import type { SessionStreamProcessor } from './session-stream-processor.js';
 import type { AgentStream } from '../agent-stream.js';
 import { extractCommandMessages } from '../../utils/streaming/extract-command-messages.js';
+import { resolveAbortedApprovalCallIds, resolveResponseCycleCallIds } from './continuation-call-id-resolver.js';
 
 export interface TurnWorkflowDeps {
   agentClient: ConversationAgentClient;
@@ -491,11 +491,12 @@ export class TurnWorkflow {
               mergedEmittedIds,
               approvalResult.isApproved,
             );
-            state.currentCallIds = this.#activeCallIdsForResponseCycle(
-              approvalResult.nextPlan.pendingApprovalContext.state,
-              approvalResult.nextPlan.pendingApprovalContext.interruption,
-              state.currentCallIds,
-            );
+            state.currentCallIds = resolveResponseCycleCallIds({
+              runState: approvalResult.nextPlan.pendingApprovalContext.state,
+              primaryInterruption: approvalResult.nextPlan.pendingApprovalContext.interruption,
+              fallbackCallIds: state.currentCallIds,
+              conversationHistory: this.deps.conversationStore.getHistory(),
+            });
           }
           continue;
         } catch (error) {
@@ -556,12 +557,13 @@ export class TurnWorkflow {
     }
     if (result.kind === 'ready') {
       const pending = this.deps.approvalFlow.getPending?.();
-      state.currentCallIds = this.#activeCallIdsForResponseCycle(
-        state.currentState,
-        pending?.interruption,
-        state.currentCallIds,
-        true,
-      );
+      state.currentCallIds = resolveResponseCycleCallIds({
+        runState: state.currentState,
+        primaryInterruption: pending?.interruption,
+        fallbackCallIds: state.currentCallIds,
+        conversationHistory: this.deps.conversationStore.getHistory(),
+        preserveFallback: true,
+      });
     }
     return result;
   }
@@ -755,116 +757,17 @@ export class TurnWorkflow {
 
   #activeCallIdsForInit(init: ContinuationInit, prepared: PreparedContinuation): string[] {
     if (init.kind === 'abort_resolution') {
-      return this.#activeCallIdsForAbortedContext(init.abortedContext);
+      return resolveAbortedApprovalCallIds({
+        runState: init.abortedContext.state,
+        primaryInterruption: init.abortedContext.interruption,
+      });
     }
-    return this.#activeCallIdsForResponseCycle(
-      prepared.state,
-      prepared.interruption,
-      this.deps.toolTracker.activeCallIdsForCurrentTurn(),
-    );
-  }
-
-  #activeCallIdsForResponseCycle(
-    runState: unknown,
-    primaryInterruption: unknown,
-    fallbackCallIds: readonly string[],
-    preserveFallback = false,
-  ): string[] {
-    const callIds = new Set<string>();
-    const addCallId = (callId: unknown): void => {
-      if (typeof callId === 'string' && callId.length > 0) {
-        callIds.add(callId);
-      }
-    };
-
-    if (preserveFallback) {
-      for (const callId of fallbackCallIds) {
-        addCallId(callId);
-      }
-    }
-
-    const interruptions = getMethod<[], unknown>(runState, 'getInterruptions')?.();
-    if (Array.isArray(interruptions)) {
-      for (const interruption of interruptions) {
-        addCallId(getCallIdFromObject(interruption));
-      }
-    }
-
-    const consumedCallIds = new Set<string>();
-    for (const item of this.deps.conversationStore.getHistory()) {
-      const record = asRecord(item);
-      const type = record?.type;
-      if (type !== 'function_call' && type !== 'tool_call') {
-        const callId = getCallIdFromObject(item);
-        if (callId) {
-          consumedCallIds.add(callId);
-        }
-      }
-    }
-
-    const generatedItems = asRecord(runState)?._generatedItems;
-    if (Array.isArray(generatedItems)) {
-      for (const item of generatedItems) {
-        const raw = asRecord(item)?.rawItem;
-        const typeSource = asRecord(raw) ?? asRecord(item);
-        const type = typeof typeSource?.type === 'string' ? typeSource.type : '';
-        if (
-          type === 'function_call_result' ||
-          type === 'function_call_output' ||
-          type === 'function_call_output_result' ||
-          type === 'tool_call_output_item'
-        ) {
-          const callId = callIdOf(item);
-          if (callId && !consumedCallIds.has(callId)) {
-            addCallId(callId);
-          }
-        }
-      }
-    }
-
-    addCallId(getCallIdFromObject(primaryInterruption));
-
-    if (callIds.size > 0) {
-      return [...callIds];
-    }
-
-    return [...fallbackCallIds];
-  }
-
-  #activeCallIdsForAbortedContext(abortedContext: AbortedApprovalContext): string[] {
-    const callIds = new Set<string>();
-    const addCallId = (callId: unknown): void => {
-      if (typeof callId === 'string' && callId.length > 0) {
-        callIds.add(callId);
-      }
-    };
-
-    const interruptions = getMethod<[], unknown>(abortedContext.state, 'getInterruptions')?.();
-    if (Array.isArray(interruptions)) {
-      for (const interruption of interruptions) {
-        addCallId(getCallIdFromObject(interruption));
-      }
-    }
-
-    const generatedItems = asRecord(abortedContext.state)?._generatedItems;
-    if (Array.isArray(generatedItems)) {
-      for (const item of generatedItems) {
-        const raw = asRecord(item)?.rawItem;
-        const typeSource = asRecord(raw) ?? asRecord(item);
-        const type = typeof typeSource?.type === 'string' ? typeSource.type : '';
-        if (
-          type === 'function_call_result' ||
-          type === 'function_call_output' ||
-          type === 'function_call_output_result' ||
-          type === 'tool_call_output_item'
-        ) {
-          addCallId(callIdOf(item));
-        }
-      }
-    }
-
-    addCallId(getCallIdFromObject(abortedContext.interruption));
-    return [...callIds];
+    return resolveResponseCycleCallIds({
+      runState: prepared.state,
+      primaryInterruption: prepared.interruption,
+      fallbackCallIds: this.deps.toolTracker.activeCallIdsForCurrentTurn(),
+      conversationHistory: this.deps.conversationStore.getHistory(),
+    });
   }
 
   #recordSuccess(state: ContinuationState, previousInputForSurge?: unknown): void {

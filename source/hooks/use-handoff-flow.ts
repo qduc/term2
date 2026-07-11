@@ -58,11 +58,6 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
   } = deps;
 
   const [handoffState, dispatch] = useReducer(handoffFlowReducer, null, createInitialHandoffState);
-
-  // Previous render's mode/handoffState, used by the auto-send effect to
-  // distinguish a genuine user abandonment of model/effort selection (only
-  // `mode` returns to 'text') from a programmatic transition driven by
-  // `submitHandoffInput` (which changes `handoffState` in the same batch).
   const prevRef = useRef<{ mode: string; handoffState: HandoffState | null }>({ mode, handoffState });
 
   const sendCapturedHandoff = useCallback(
@@ -96,15 +91,8 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
   useEffect(() => {
     const prev = prevRef.current;
     prevRef.current = { mode, handoffState };
-    if (mode !== 'text') return;
-    if (handoffState === null) return;
-    if (handoffState.stage !== 'selecting_model' && handoffState.stage !== 'selecting_effort') return;
-    // Only act on a real return-to-text from a non-text mode. This guards
-    // against callback-identity re-runs and post-send re-runs.
-    if (prev.mode === 'text') return;
-    // A programmatic transition (submitHandoffInput) changes handoffState in
-    // the same render batch; a true abandonment leaves it unchanged.
-    if (prev.handoffState !== handoffState) return;
+    if (mode !== 'text' || handoffState?.stage !== 'selecting_model') return;
+    if (prev.mode === 'text' || prev.handoffState !== handoffState) return;
     void sendCapturedHandoff(handoffState);
   }, [handoffState, mode, sendCapturedHandoff]);
 

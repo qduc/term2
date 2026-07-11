@@ -277,7 +277,7 @@ it.sequential(
   },
 );
 
-it.sequential('submitHandoffInput in selecting_model sends once even after mode returns to text', async () => {
+it.sequential('does not send the handoff when the effort picker returns to text before a choice', async () => {
   const { deps, getSnapshot, renderer } = await renderHarness();
 
   await act(async () => {
@@ -314,21 +314,15 @@ it.sequential('submitHandoffInput in selecting_model sends once even after mode 
   });
   await flush();
 
-  expect(deps.sendUserMessage).toHaveBeenCalledTimes(1);
-
-  await act(async () => {
-    getSnapshot().setMode('text');
-  });
-  await flush();
-
-  expect(deps.sendUserMessage).toHaveBeenCalledTimes(1);
+  expect(deps.sendUserMessage).not.toHaveBeenCalled();
+  expect(getSnapshot().handoffState?.stage).toBe('selecting_effort');
 
   await act(async () => {
     renderer.unmount();
   });
 });
 
-it.sequential('submitHandoffInput in selecting_model sends the handoff even without a model argument', async () => {
+it.sequential('submitHandoffInput without a model argument still waits for an effort choice', async () => {
   const { deps, getSnapshot, renderer } = await renderHarness();
 
   await act(async () => {
@@ -366,8 +360,8 @@ it.sequential('submitHandoffInput in selecting_model sends the handoff even with
   });
   await flush();
 
-  expect(deps.sendUserMessage).toHaveBeenCalledWith({ text: 'Implement this:\n\nCaptured text' });
-  expect(deps.sendUserMessage).toHaveBeenCalledTimes(1);
+  expect(deps.sendUserMessage).not.toHaveBeenCalled();
+  expect(getSnapshot().handoffState?.stage).toBe('selecting_effort');
 
   await act(async () => {
     renderer.unmount();
@@ -490,14 +484,8 @@ it.sequential(
 
     expect(getSnapshot().handoffState?.stage).toBe('selecting_effort');
 
-    // Simulate useTriggerDetection opening settings value completion
     await act(async () => {
-      getSnapshot().setMode('settings_value_completion');
-    });
-    await flush();
-
-    await act(async () => {
-      getSnapshot().setMode('text');
+      await getSnapshot().hook.completeHandoffWithEffort('medium');
     });
     await flush();
 

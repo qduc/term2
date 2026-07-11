@@ -226,6 +226,9 @@ const isUserInputMessage = (item: unknown): boolean => asRecord(item)?.role === 
 
 const isToolResultItem = (item: unknown): boolean => normalizeCodexServerHistoryItem(item).isToolResult;
 
+const hasToolResultInput = (request: any): boolean =>
+  Array.isArray(request?.input) && request.input.some((item: unknown) => isToolResultItem(item));
+
 const getToolResultCallId = (item: unknown): string | undefined => {
   const normalized = normalizeCodexServerHistoryItem(item);
   return normalized.isToolResult ? normalized.callId : undefined;
@@ -362,6 +365,11 @@ const getErrorMessage = (error: unknown): string => {
     return String((error as { message?: unknown }).message ?? '');
   }
   return '';
+};
+
+const isPreviousResponseUnavailableError = (error: unknown): boolean => {
+  const message = getErrorMessage(error);
+  return isPreviousResponseNotFoundError(error) || message.includes('previous_response_not_found');
 };
 
 const hasGenerateFalse = (request: any): boolean =>
@@ -810,6 +818,9 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       } catch (error) {
         if (this.#shouldForgetCodexServerHistory(error)) {
           this.#forgetCodexResponseId();
+          if (isPreviousResponseUnavailableError(error) && hasToolResultInput(request)) {
+            throw error;
+          }
           const fallbackRequest = this.#withoutCodexServerHistory(request);
           const response = await super.getResponse(fallbackRequest);
           const responseId = getResponseIdFromResponse(response);
@@ -846,6 +857,9 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     } catch (error) {
       if (this.#shouldForgetCodexServerHistory(error) && !yieldedAnyEvent) {
         this.#forgetCodexResponseId();
+        if (isPreviousResponseUnavailableError(error) && hasToolResultInput(request)) {
+          throw error;
+        }
         const fallbackRequest = this.#withoutCodexServerHistory(request);
         let responseId: string | undefined;
         for await (const event of super.getStreamedResponse(fallbackRequest)) {

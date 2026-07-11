@@ -117,6 +117,57 @@ it('returns fresh_start when recovery executor signals fresh start', async () =>
   expect(value.delayMs).toBe(500);
 });
 
+it('returns fresh_start for a stale chained response transport downgrade', async () => {
+  const handler = new ContinuationRecoveryHandler({
+    logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
+    sessionId: 'test',
+    generationGuard: { isCurrent: () => true } as any,
+    retryClassifier: {
+      classify: () => ({ kind: 'transport_downgrade' }),
+    } as any,
+    recoveryPolicy: {
+      nextRetryCounts: (counts: any) => ({
+        ...counts,
+        transientRetryCount: 0,
+        transportDowngradeCount: counts.transportDowngradeCount + 1,
+      }),
+      plan: () => ({ kind: 'retry_fresh', inputMode: 'full_history' }),
+    } as any,
+    recoveryExecutor: {
+      apply: () => ({ kind: 'run', instruction: { skipUserMessage: true } }),
+    } as any,
+    retryEventPresenter: {
+      present: () => ({ event: { type: 'retry_scheduled' }, logMessage: 'retry', logFields: {} }),
+    } as any,
+    resolveRetryLimit: () => 2,
+    toolTracker: { activeCallIdsForCurrentTurn: () => [] } as any,
+  });
+
+  const events: any[] = [];
+  const state = createMockState();
+  state.setRetryCounts = (counts: any) => {
+    state.retryCounts = counts;
+  };
+  const iterator = handler.handle({
+    error: Object.assign(new Error('previous response not found'), { code: 'previous_response_not_found' }),
+    state,
+  });
+  let next = await iterator.next();
+  while (!next.done) {
+    events.push(next.value);
+    next = await iterator.next();
+  }
+
+  expect(events).toHaveLength(1);
+  expect(next.value).toMatchObject({
+    kind: 'fresh_start',
+    retryCounts: {
+      transientRetryCount: 0,
+      transportDowngradeCount: 1,
+    },
+  });
+});
+
 it('returns resume without widening currentCallIds back to the whole turn ledger', async () => {
   const handler = new ContinuationRecoveryHandler({
     logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,

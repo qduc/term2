@@ -2027,6 +2027,129 @@ it.sequential('CodexResponsesWSModel invalidates Luna wire state on previous_res
   }
 });
 
+it.sequential(
+  'CodexResponsesWSModel propagates stale tool continuations instead of replaying orphaned outputs',
+  async () => {
+    const seenRequests: any[] = [];
+    const previousResponseNotFound = Object.assign(new Error('Previous response not found for id resp-stale'), {
+      code: 'previous_response_not_found',
+    });
+
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+      seenRequests.push(request);
+      throw previousResponseNotFound;
+    };
+
+    const mockClient = {
+      baseURL: 'https://api.openai.com',
+      apiKey: 'test-key',
+      _options: {},
+    };
+    const tokenManager = {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'acc_123',
+    };
+
+    try {
+      const model = new CodexResponsesWSModel(
+        mockClient as any,
+        'gpt-5-codex',
+        tokenManager as any,
+        undefined,
+        undefined,
+        {
+          getContext: () => ({ sessionId: 'session-stale-tool', traceId: 'trace-stale-tool' } as any),
+          runWithContext: <T>(_context: any, fn: () => T) => fn(),
+        },
+      );
+
+      await expect(
+        collect(
+          model.getStreamedResponse({
+            previousResponseId: 'resp-stale',
+            input: [
+              { role: 'user', type: 'message', content: 'inspect the repo' },
+              {
+                type: 'function_call_result',
+                callId: 'call-orphaned-output',
+                output: 'tool output from the missing response',
+              },
+            ],
+            modelSettings: {},
+            tools: [],
+            handoffs: [],
+          } as any),
+        ),
+      ).rejects.toMatchObject({ code: 'previous_response_not_found' });
+
+      expect(seenRequests).toHaveLength(1);
+      expect(seenRequests[0].previousResponseId).toBe('resp-stale');
+    } finally {
+      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    }
+  },
+);
+
+it.sequential('CodexResponsesWSModel unary path propagates stale tool continuations without fallback', async () => {
+  const seenRequests: any[] = [];
+  const previousResponseNotFound = Object.assign(new Error('Previous response not found for id resp-stale-unary'), {
+    code: 'previous_response_not_found',
+  });
+
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    throw previousResponseNotFound;
+  };
+
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5-codex',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({ sessionId: 'session-stale-tool-unary', traceId: 'trace-stale-tool-unary' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+    );
+
+    await expect(
+      model.getResponse({
+        previousResponseId: 'resp-stale-unary',
+        input: [
+          { role: 'user', type: 'message', content: 'inspect the repo' },
+          {
+            type: 'function_call_result',
+            callId: 'call-orphaned-output-unary',
+            output: 'tool output from the missing response',
+          },
+        ],
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any),
+    ).rejects.toMatchObject({ code: 'previous_response_not_found' });
+
+    expect(seenRequests).toHaveLength(1);
+    expect(seenRequests[0].previousResponseId).toBe('resp-stale-unary');
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+  }
+});
+
 it.sequential('CodexResponsesWSModel unary path records Luna wire state response with correct token', async () => {
   const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
   const trafficBodies: any[] = [];

@@ -120,6 +120,7 @@ export class CodexTokenManager {
   private tokenPathResolver: () => string | null;
   private fetchImpl: typeof fetch;
   private accountId: string | null = null;
+  private installationId: string | null | undefined;
 
   constructor(options?: { tokenPathResolver?: () => string | null; fetchImpl?: typeof fetch }) {
     this.tokenPathResolver = options?.tokenPathResolver || resolveTokenPath;
@@ -128,6 +129,28 @@ export class CodexTokenManager {
 
   getAccountId(): string | null {
     return this.accountId;
+  }
+
+  getInstallationId(): string | null {
+    if (this.installationId !== undefined) {
+      return this.installationId;
+    }
+
+    const tokenPath = this.tokenPathResolver();
+    if (!tokenPath) {
+      this.installationId = null;
+      return this.installationId;
+    }
+
+    try {
+      const installationPath = path.join(path.dirname(tokenPath), 'installation_id');
+      const installationId = fs.readFileSync(installationPath, 'utf8').trim();
+      this.installationId = installationId || null;
+    } catch {
+      this.installationId = null;
+    }
+
+    return this.installationId;
   }
 
   async getOrRefreshAccessToken(): Promise<string> {
@@ -276,7 +299,7 @@ export async function resolveCodexClientVersion(options?: {
   const execImpl = options?.execImpl || (execAsync as any);
   const dir = options?.cacheDir || process.env.TERM2_CACHE_DIR || envPaths('term2').cache;
   const cachePath = path.join(dir, 'codex-client-version.json');
-  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
   // 1. Try reading from cache
   try {
@@ -284,7 +307,7 @@ export async function resolveCodexClientVersion(options?: {
       const cacheContent = fs.readFileSync(cachePath, 'utf8');
       const cached: VersionCache = JSON.parse(cacheContent);
       if (typeof cached.version === 'string' && typeof cached.timestamp === 'number') {
-        if (Date.now() - cached.timestamp < ONE_WEEK_MS) {
+        if (Date.now() - cached.timestamp < ONE_DAY_MS) {
           return cached.version;
         }
       }
@@ -358,6 +381,27 @@ export function sanitizeCodexRequestInit(url: unknown, init?: RequestInit): Requ
   } catch {
     return init;
   }
+}
+
+export function addCodexResponsesLiteHeader(url: unknown, init?: RequestInit): RequestInit | undefined {
+  const target = typeof url === 'string' ? url : url instanceof URL ? url.toString() : '';
+  if (!target.includes('/responses') || typeof init?.body !== 'string') {
+    return init;
+  }
+
+  try {
+    const parsed = JSON.parse(init.body);
+    if (parsed?.model !== 'gpt-5.6-luna') {
+      return init;
+    }
+  } catch {
+    return init;
+  }
+
+  return {
+    ...init,
+    headers: injectHeaders(init.headers, { 'x-openai-internal-codex-responses-lite': 'true' }),
+  };
 }
 
 async function fetchCodexModels(
@@ -501,7 +545,7 @@ function codexAuthMiddleware(
 }
 
 const codexSanitizeRequestMiddleware: FetchMiddleware = (ctx, next) => {
-  const sanitizedInit = sanitizeCodexRequestInit(ctx.url, ctx.init);
+  const sanitizedInit = addCodexResponsesLiteHeader(ctx.url, sanitizeCodexRequestInit(ctx.url, ctx.init));
   if (sanitizedInit !== ctx.init) {
     return next({ url: ctx.url, init: sanitizedInit });
   }

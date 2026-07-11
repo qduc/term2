@@ -31,6 +31,7 @@ const TERMINAL_RESPONSE_EVENT_TYPES = new Set([
 
 const WS_RESPONSE_MODEL_CLASS = 'OpenAIResponsesWSModel';
 const WS_RESPONSE_WRAPPER_CLASS = 'CodexResponsesWSModel';
+const RESPONSES_LITE_MODELS = new Set(['gpt-5.6-luna']);
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -68,7 +69,7 @@ function stripCodexReplayIds(input: unknown): unknown {
   return changed ? normalized : input;
 }
 
-function normalizeCodexRequestData(requestData: any, request: any): any {
+function normalizeCodexRequestData(requestData: any, request: any, model: string): any {
   const normalizedRequestData = { ...requestData };
 
   // Codex responses endpoint rejects temperature; always omit it.
@@ -96,6 +97,35 @@ function normalizeCodexRequestData(requestData: any, request: any): any {
   const promptCacheKey = request?.modelSettings?.prompt_cache_key;
   if (typeof promptCacheKey === 'string' && promptCacheKey.length > 0) {
     normalizedRequestData.prompt_cache_key = promptCacheKey;
+  }
+
+  if (RESPONSES_LITE_MODELS.has(normalizedRequestData.model ?? model)) {
+    const prefix: any[] = [
+      {
+        type: 'additional_tools',
+        role: 'developer',
+        tools: normalizedRequestData.tools ?? [],
+      },
+    ];
+    if (typeof normalizedRequestData.instructions === 'string' && normalizedRequestData.instructions.length > 0) {
+      prefix.push({
+        type: 'message',
+        role: 'developer',
+        content: [{ type: 'input_text', text: normalizedRequestData.instructions }],
+      });
+    }
+    normalizedRequestData.input = [...prefix, ...(normalizedRequestData.input ?? [])];
+    normalizedRequestData.instructions = '';
+    delete normalizedRequestData.tools;
+    normalizedRequestData.parallel_tool_calls = false;
+    normalizedRequestData.reasoning = {
+      ...(asRecord(normalizedRequestData.reasoning) ?? {}),
+      context: 'all_turns',
+    };
+    normalizedRequestData.client_metadata = {
+      ...normalizedRequestData.client_metadata,
+      'x-openai-internal-codex-responses-lite': 'true',
+    };
   }
 
   return normalizedRequestData;
@@ -341,27 +371,38 @@ type PreparedCodexRequest = {
   warmupRequest?: any;
 };
 
+type CodexWebSocketIdentity = {
+  sessionId: string;
+  threadId: string;
+  turnId: string;
+  windowId: string;
+  turnMetadata: string;
+  clientMetadata: Record<string, string>;
+  headers: Record<string, string>;
+};
+
 export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   private readonly codexPreviousResponseIds = new Map<string, string>();
   private readonly codexConsumedToolResultCallIdsByResponseId = new Map<string, Set<string>>();
+  private readonly codexTurnIdsBySession = new Map<string, string>();
   #serverHistoryReuseDisabled = false;
 
   private readonly providerTraffic: IProviderTraffic;
 
   constructor(
     client: any,
-    model: string,
+    private readonly modelId: string,
     private readonly tokenManager: any,
     private readonly diagnosticLogger?: DiagnosticLogger,
     providerTraffic?: IProviderTraffic,
     private readonly sessionContextService?: ISessionContextService,
   ) {
-    super(client, model);
+    super(client, modelId);
     this.providerTraffic = providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
   }
 
   #modelNameFallback(): string {
-    return (this as any).model ?? 'unknown';
+    return this.modelId;
   }
 
   #logTrafficStarted(requestId: string, requestData: Record<string, unknown>, headers?: HeadersInit): void {
@@ -635,6 +676,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     this.#serverHistoryReuseDisabled = true;
     this.codexPreviousResponseIds.clear();
     this.codexConsumedToolResultCallIdsByResponseId.clear();
+    this.codexTurnIdsBySession.clear();
   }
 
   #shouldForgetCodexServerHistory(error: unknown): boolean {
@@ -649,6 +691,53 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   #getCodexServerHistoryKey(): string | null {
     const trafficContext = this.sessionContextService?.getContext() ?? null;
     return trafficContext?.sessionId ?? trafficContext?.traceId ?? null;
+  }
+
+  #buildCodexWebSocketIdentity(requestId: string, request: any): CodexWebSocketIdentity | undefined {
+    const installationId = this.tokenManager.getInstallationId?.();
+    if (typeof installationId !== 'string' || installationId.length === 0) {
+      return undefined;
+    }
+
+    const sessionContext = this.sessionContextService?.getContext();
+    const sessionId = sessionContext?.sessionId ?? requestId;
+    const threadId = sessionId;
+    const hasPreviousResponseId =
+      typeof request?.previousResponseId === 'string' && request.previousResponseId.length > 0;
+    const turnId = hasPreviousResponseId ? this.codexTurnIdsBySession.get(sessionId) ?? randomUUID() : randomUUID();
+    this.codexTurnIdsBySession.set(sessionId, turnId);
+    const windowId = `${threadId}:1`;
+    const turnMetadata = JSON.stringify({
+      installation_id: installationId,
+      session_id: sessionId,
+      thread_id: threadId,
+      turn_id: turnId,
+      window_id: windowId,
+      request_kind: 'turn',
+    });
+
+    return {
+      sessionId,
+      threadId,
+      turnId,
+      windowId,
+      turnMetadata,
+      clientMetadata: {
+        'x-codex-installation-id': installationId,
+        session_id: sessionId,
+        thread_id: threadId,
+        'x-codex-window-id': windowId,
+        turn_id: turnId,
+        'x-codex-turn-metadata': turnMetadata,
+      },
+      headers: {
+        'x-client-request-id': threadId,
+        'session-id': sessionId,
+        'thread-id': threadId,
+        'x-codex-window-id': windowId,
+        'x-codex-turn-metadata': turnMetadata,
+      },
+    };
   }
 
   #getEffectiveCodexRequestAfterWarmup(
@@ -751,27 +840,32 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 
     return {
       ...built,
-      requestData: normalizeCodexRequestData(built.requestData, request),
+      requestData: normalizeCodexRequestData(built.requestData, request, this.modelId),
     };
   }
 
   protected override async _fetchResponse(request: any, stream: boolean): Promise<any> {
     const requestId = randomUUID();
-    const builtRequest = (this as any)._buildResponsesCreateRequest(request, true);
-    const requestData = (asRecord(builtRequest?.requestData) ?? {}) as Record<string, unknown>;
 
     const accessToken = await this.tokenManager.getOrRefreshAccessToken();
     const accountId = this.tokenManager.getAccountId();
 
+    const codexIdentity = this.#buildCodexWebSocketIdentity(requestId, request);
     const extraHeaders: Record<string, string> = {
       authorization: `Bearer ${accessToken}`,
       'OpenAI-Beta': 'responses_websockets=2026-02-06',
+      originator: 'codex_exec',
     };
+    if (codexIdentity) {
+      Object.assign(extraHeaders, codexIdentity.headers);
+    }
+    const isResponsesLite = RESPONSES_LITE_MODELS.has(this.modelId);
+    if (isResponsesLite) {
+      extraHeaders['x-openai-internal-codex-responses-lite'] = 'true';
+    }
     if (accountId) {
       extraHeaders['chatgpt-account-id'] = accountId;
     }
-
-    this.#logTrafficStarted(requestId, requestData, extraHeaders);
 
     const updatedRequest = {
       ...request,
@@ -779,6 +873,23 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         ...request.modelSettings,
         providerData: {
           ...request.modelSettings?.providerData,
+          ...(codexIdentity
+            ? {
+                client_metadata: {
+                  ...request.modelSettings?.providerData?.client_metadata,
+                  ...codexIdentity.clientMetadata,
+                },
+              }
+            : {}),
+          ...(isResponsesLite
+            ? {
+                client_metadata: {
+                  ...request.modelSettings?.providerData?.client_metadata,
+                  ...(codexIdentity?.clientMetadata ?? {}),
+                  ws_request_header_x_openai_internal_codex_responses_lite: 'true',
+                },
+              }
+            : {}),
           extraHeaders: {
             ...request.modelSettings?.providerData?.extraHeaders,
             ...extraHeaders,
@@ -786,6 +897,10 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         },
       },
     };
+
+    const builtRequest = (this as any)._buildResponsesCreateRequest(updatedRequest, true);
+    const requestData = (asRecord(builtRequest?.requestData) ?? {}) as Record<string, unknown>;
+    this.#logTrafficStarted(requestId, requestData, extraHeaders);
 
     if (!stream) {
       try {
@@ -813,8 +928,8 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 }
 
 export class CodexResponsesModel extends OpenAIResponsesModel {
-  constructor(client: any, model: string, private readonly diagnosticLogger?: DiagnosticLogger) {
-    super(client, model);
+  constructor(client: any, private readonly modelId: string, private readonly diagnosticLogger?: DiagnosticLogger) {
+    super(client, modelId);
   }
 
   override _buildResponsesCreateRequest(request: any, stream: boolean): any {
@@ -822,7 +937,7 @@ export class CodexResponsesModel extends OpenAIResponsesModel {
 
     return {
       ...built,
-      requestData: normalizeCodexRequestData(built.requestData, request),
+      requestData: normalizeCodexRequestData(built.requestData, request, this.modelId),
     };
   }
 

@@ -45,6 +45,59 @@ it('sanitizeSentTrafficBody truncates instruction-like fields and preserves user
   expect(sanitized.tools).toEqual(['read_file', 'web_search']);
 });
 
+it('sanitizeSentTrafficBody summarizes Responses Lite additional_tools input items', () => {
+  const body = {
+    input: [
+      {
+        type: 'additional_tools',
+        role: 'developer',
+        tools: [
+          {
+            type: 'function',
+            name: 'shell',
+            parameters: { type: 'object', properties: { command: { type: 'string' } } },
+          },
+          {
+            type: 'function',
+            name: 'apply_patch',
+            parameters: { type: 'object', properties: { patch: { type: 'string' } } },
+          },
+        ],
+      },
+    ],
+  };
+
+  const sanitized = sanitizeSentTrafficBody(body);
+
+  expect(sanitized.input).toEqual([
+    {
+      type: 'additional_tools',
+      role: 'developer',
+      tools: ['shell', 'apply_patch'],
+    },
+  ]);
+});
+
+it('sanitizeSentTrafficBody truncates Responses Lite developer input_text instructions', () => {
+  const longText = 'd'.repeat(1200);
+  const body = {
+    input: [
+      {
+        type: 'message',
+        role: 'developer',
+        content: [{ type: 'input_text', text: longText }],
+      },
+    ],
+  };
+
+  const sanitized = sanitizeSentTrafficBody(body);
+  const input = sanitized.input as Array<Record<string, unknown>>;
+  const content = input[0].content as Array<Record<string, unknown>>;
+
+  expect(String(content[0].text).startsWith('d'.repeat(TRAFFIC_TEXT_LIMIT))).toBe(true);
+  expect(String(content[0].text).includes(expectedTruncation(longText.length))).toBe(true);
+});
+
 it('sanitizeSentTrafficBody truncates system and developer messages in messages-style bodies only', () => {
   const longText = 'y'.repeat(1105);
   const body = {

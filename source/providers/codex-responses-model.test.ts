@@ -441,6 +441,48 @@ it.sequential('CodexResponsesModel._buildResponsesCreateRequest forwards prompt_
   }
 });
 
+it.sequential('CodexResponsesModel sends gpt-5.6-luna through the Responses Lite protocol', () => {
+  const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+    return {
+      requestData: {
+        instructions: 'Follow the repository instructions.',
+        input: [{ role: 'user', type: 'message', content: 'Review this change.' }],
+        tools: [{ type: 'function', name: 'shell', parameters: { type: 'object' } }],
+        parallel_tool_calls: true,
+      },
+      sdkRequestHeaders: {},
+      signal: undefined,
+    };
+  };
+
+  try {
+    const model = new CodexResponsesModel({} as any, 'gpt-5.6-luna');
+    const built = (model as any)._buildResponsesCreateRequest({ modelSettings: {} }, true);
+
+    expect(built.requestData.instructions).toBe('');
+    expect(built.requestData.tools).toBeUndefined();
+    expect(built.requestData.parallel_tool_calls).toBe(false);
+    expect(built.requestData.reasoning).toMatchObject({ context: 'all_turns' });
+    expect(built.requestData.client_metadata).toEqual({ 'x-openai-internal-codex-responses-lite': 'true' });
+    expect(built.requestData.input).toEqual([
+      {
+        type: 'additional_tools',
+        role: 'developer',
+        tools: [{ type: 'function', name: 'shell', parameters: { type: 'object' } }],
+      },
+      {
+        type: 'message',
+        role: 'developer',
+        content: [{ type: 'input_text', text: 'Follow the repository instructions.' }],
+      },
+      { role: 'user', type: 'message', content: 'Review this change.' },
+    ]);
+  } finally {
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+  }
+});
+
 it.sequential('CodexResponsesModel._buildResponsesCreateRequest strips replay item ids from input', () => {
   const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
   (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
@@ -625,6 +667,149 @@ it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed r
     expect(trafficCalls[0].args.sessionId).toBeUndefined(); // Codex model doesn't pass sessionId directly
     expect(trafficCalls[0].args.headers.authorization).toBe('[REDACTED]');
     expect(trafficCalls[1].args.transport).toBe('websocket');
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
+  }
+});
+
+it.sequential('CodexResponsesWSModel marks Luna websocket requests as Responses Lite', async () => {
+  const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  let seenRequest: any;
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    seenRequest = request;
+    return makeStream([{ type: 'response.completed', response: { id: 'resp_luna', output: [], usage: {} } }]);
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5.6-luna',
+      { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    );
+
+    await collect(model.getStreamedResponse({ input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] }));
+
+    expect(seenRequest.modelSettings.providerData.extraHeaders['x-openai-internal-codex-responses-lite']).toBe('true');
+    expect(seenRequest.modelSettings.providerData.client_metadata).toEqual({
+      ws_request_header_x_openai_internal_codex_responses_lite: 'true',
+    });
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
+  }
+});
+
+it.sequential('CodexResponsesWSModel sends Codex turn identity metadata for Luna', async () => {
+  const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  let seenRequest: any;
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    seenRequest = request;
+    return makeStream([{ type: 'response.completed', response: { id: 'resp_luna_identity', output: [], usage: {} } }]);
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5.6-luna',
+      {
+        getOrRefreshAccessToken: async () => 'token',
+        getAccountId: () => 'acc_123',
+        getInstallationId: () => 'installation-123',
+      } as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({
+          sessionId: 'session-123',
+          sessionStartedAt: '2025-01-01T00:00:00.000Z',
+        }),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      } as any,
+    );
+
+    await collect(model.getStreamedResponse({ input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] }));
+
+    const providerData = seenRequest.modelSettings.providerData;
+    expect(providerData.extraHeaders).toMatchObject({
+      originator: 'codex_exec',
+      'x-client-request-id': 'session-123',
+      'session-id': 'session-123',
+      'thread-id': 'session-123',
+      'x-codex-window-id': 'session-123:1',
+    });
+    expect(providerData.client_metadata).toMatchObject({
+      'x-codex-installation-id': 'installation-123',
+      session_id: 'session-123',
+      thread_id: 'session-123',
+      'x-codex-window-id': 'session-123:1',
+      ws_request_header_x_openai_internal_codex_responses_lite: 'true',
+    });
+
+    const turnMetadata = JSON.parse(providerData.client_metadata['x-codex-turn-metadata']);
+    expect(turnMetadata).toMatchObject({
+      installation_id: 'installation-123',
+      session_id: 'session-123',
+      thread_id: 'session-123',
+      window_id: 'session-123:1',
+      request_kind: 'turn',
+    });
+    expect(typeof turnMetadata.turn_id).toBe('string');
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
+  }
+});
+
+it.sequential('CodexResponsesWSModel keeps turn identity stable across response continuations', async () => {
+  const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  const seenRequests: any[] = [];
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    return makeStream([
+      { type: 'response.completed', response: { id: 'resp_stable_identity', output: [], usage: {} } },
+    ]);
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5.6-luna',
+      {
+        getOrRefreshAccessToken: async () => 'token',
+        getAccountId: () => 'acc_123',
+        getInstallationId: () => 'installation-123',
+      } as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({
+          sessionId: 'session-123',
+          sessionStartedAt: '2025-01-01T00:00:00.000Z',
+          traceId: 'turn-123',
+        }),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      } as any,
+    );
+
+    await collect(model.getStreamedResponse({ input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] }));
+    await collect(
+      model.getStreamedResponse({
+        input: [],
+        previousResponseId: 'resp_stable_identity',
+        tracing: false,
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      }),
+    );
+
+    expect(seenRequests).toHaveLength(2);
+    const firstMetadata = seenRequests[0].modelSettings.providerData.client_metadata;
+    const secondMetadata = seenRequests[1].modelSettings.providerData.client_metadata;
+    expect(JSON.parse(firstMetadata['x-codex-turn-metadata']).turn_id).toBe(
+      JSON.parse(secondMetadata['x-codex-turn-metadata']).turn_id,
+    );
+    expect(seenRequests[0].modelSettings.providerData.extraHeaders['x-codex-turn-metadata']).toBe(
+      seenRequests[1].modelSettings.providerData.extraHeaders['x-codex-turn-metadata'],
+    );
   } finally {
     (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
   }

@@ -93,7 +93,7 @@ const sanitizeContentArray = (content: unknown[]): unknown[] =>
   content.map((item) => {
     const record = asRecord(item);
     if (!record) return item;
-    if (record.type === 'text' && typeof record.text === 'string') {
+    if ((record.type === 'text' || record.type === 'input_text') && typeof record.text === 'string') {
       return { ...record, text: truncateTrafficText(record.text) };
     }
     return item;
@@ -211,6 +211,9 @@ export const sanitizeSentTrafficBody = (body: Record<string, unknown>): Record<s
       if (!record) return item;
       const role = typeof record.role === 'string' ? record.role : undefined;
       const type = typeof record.type === 'string' ? record.type : undefined;
+      if (type === 'additional_tools') {
+        return { ...record, tools: sanitizeToolDefinitions(record.tools) };
+      }
       if (role === 'system' || role === 'developer' || type === 'message') {
         return sanitizeMessageContent(record);
       }

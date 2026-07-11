@@ -11,6 +11,7 @@ import {
   extractAccountId,
   resolveCodexClientVersion,
   sanitizeCodexRequestInit,
+  addCodexResponsesLiteHeader,
 } from './codex.provider.js';
 
 // Helper to create a fake JWT with a specific expiry time in seconds from now
@@ -106,6 +107,19 @@ it('CodexTokenManager throws if no token file found', async () => {
   await expect(async () => {
     await manager.getOrRefreshAccessToken();
   }).rejects.toThrow(/Codex token file not found/);
+});
+
+it('CodexTokenManager reads the Codex installation ID beside auth.json', () => {
+  const tokenPath = path.join(TEST_DIR, 'installation-auth.json');
+  fs.writeFileSync(tokenPath, '{}');
+  fs.writeFileSync(path.join(TEST_DIR, 'installation_id'), 'installation-123\n');
+
+  const manager = new CodexTokenManager({
+    tokenPathResolver: () => tokenPath,
+  });
+
+  expect(manager.getInstallationId()).toBe('installation-123');
+  expect(manager.getInstallationId()).toBe('installation-123');
 });
 
 it('CodexTokenManager does not refresh if access token is valid and refresh is recent', async () => {
@@ -359,6 +373,20 @@ it('sanitizeCodexRequestInit normalizes include JSON string to array', () => {
   expect(body.include).toEqual(['reasoning.encrypted_content']);
 });
 
+it('addCodexResponsesLiteHeader marks Luna Responses requests', () => {
+  const init: RequestInit = {
+    headers: { authorization: 'Bearer token' },
+    body: JSON.stringify({ model: 'gpt-5.6-luna', input: [] }),
+  };
+
+  const updated = addCodexResponsesLiteHeader('https://chatgpt.com/backend-api/codex/responses', init);
+
+  if (!updated) {
+    throw new Error('Expected Luna Responses headers to be added');
+  }
+  expect(new Headers(updated.headers).get('x-openai-internal-codex-responses-lite')).toBe('true');
+});
+
 it('resolveCodexClientVersion falls back to npm registry if local version fails', async () => {
   const cacheDir = path.join(TEST_DIR, 'cache-npm');
   fs.mkdirSync(cacheDir, { recursive: true });
@@ -416,7 +444,7 @@ it('resolveCodexClientVersion falls back to fallback version if all fails', asyn
   expect(cached.version).toBe('0.133.0');
 });
 
-it('resolveCodexClientVersion uses cache if valid and less than one week old', async () => {
+it('resolveCodexClientVersion uses cache if valid and less than one day old', async () => {
   const cacheDir = path.join(TEST_DIR, 'cache-valid');
   fs.mkdirSync(cacheDir, { recursive: true });
 
@@ -425,7 +453,7 @@ it('resolveCodexClientVersion uses cache if valid and less than one week old', a
     cachePath,
     JSON.stringify({
       version: '9.9.9',
-      timestamp: Date.now() - 24 * 60 * 60 * 1000, // 1 day ago
+      timestamp: Date.now() - 12 * 60 * 60 * 1000, // 12 hours ago
     }),
   );
 
@@ -448,7 +476,7 @@ it('resolveCodexClientVersion uses cache if valid and less than one week old', a
   expect(version).toBe('9.9.9');
 });
 
-it('resolveCodexClientVersion ignores cache if older than one week', async () => {
+it('resolveCodexClientVersion ignores cache if older than one day', async () => {
   const cacheDir = path.join(TEST_DIR, 'cache-expired');
   fs.mkdirSync(cacheDir, { recursive: true });
 
@@ -457,7 +485,7 @@ it('resolveCodexClientVersion ignores cache if older than one week', async () =>
     cachePath,
     JSON.stringify({
       version: '9.9.9',
-      timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000, // 8 days ago (expired)
+      timestamp: Date.now() - 2 * 24 * 60 * 60 * 1000, // 2 days ago (expired)
     }),
   );
 

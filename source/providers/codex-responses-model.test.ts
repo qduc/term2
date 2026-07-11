@@ -483,6 +483,35 @@ it.sequential('CodexResponsesModel sends gpt-5.6-luna through the Responses Lite
   }
 });
 
+it.sequential('CodexResponsesModel does not resend Luna developer instructions on chained requests', () => {
+  const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+    return {
+      requestData: {
+        previous_response_id: 'resp_previous',
+        instructions: 'Follow the repository instructions.',
+        input: [{ role: 'user', type: 'message', content: 'Continue the review.' }],
+        tools: [],
+      },
+      sdkRequestHeaders: {},
+      signal: undefined,
+    };
+  };
+
+  try {
+    const model = new CodexResponsesModel({} as any, 'gpt-5.6-luna');
+    const built = (model as any)._buildResponsesCreateRequest({ modelSettings: {} }, true);
+
+    expect(built.requestData.input).toEqual([
+      { type: 'additional_tools', role: 'developer', tools: [] },
+      { role: 'user', type: 'message', content: 'Continue the review.' },
+    ]);
+    expect(built.requestData.instructions).toBe('');
+  } finally {
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+  }
+});
+
 it.sequential('CodexResponsesModel._buildResponsesCreateRequest strips replay item ids from input', () => {
   const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
   (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
@@ -669,6 +698,77 @@ it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed r
     expect(trafficCalls[1].args.transport).toBe('websocket');
   } finally {
     (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
+  }
+});
+
+it.sequential('CodexResponsesWSModel sends only new input after a Responses-Lite prefix is established', async () => {
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  const trafficBodies: any[] = [];
+  let responseCount = 0;
+
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficBodies.push(input.sentBody);
+    },
+    async recordResponseReceived() {},
+    recordRequestFailed() {},
+  };
+
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function () {
+    responseCount += 1;
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: { id: `resp_lite_${responseCount}`, output: [], usage: {} },
+      },
+    ]);
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5.6-luna',
+      { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+      undefined,
+      mockProviderTraffic,
+      {
+        getContext: () => ({ sessionId: 'session-lite-prefix', traceId: 'trace-lite-prefix' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      } as any,
+    );
+
+    const tool = { type: 'function', name: 'shell', parameters: { type: 'object' } };
+    const firstUserMessage = { role: 'user', type: 'message', content: 'hello' };
+    const secondUserMessage = { role: 'user', type: 'message', content: 'how are you?' };
+
+    await collect(
+      model.getStreamedResponse({
+        input: [firstUserMessage],
+        systemInstructions: 'Follow the repository instructions.',
+        modelSettings: {},
+        tools: [tool],
+        handoffs: [],
+      } as any),
+    );
+    await collect(
+      model.getStreamedResponse({
+        previousResponseId: 'resp_lite_2',
+        input: [secondUserMessage],
+        systemInstructions: 'Follow the repository instructions.',
+        modelSettings: {},
+        tools: [tool],
+        handoffs: [],
+      } as any),
+    );
+
+    expect(trafficBodies).toHaveLength(3);
+    expect(trafficBodies[0].input[0]).toMatchObject({ type: 'additional_tools', role: 'developer' });
+    expect(trafficBodies[1].previous_response_id).toBe('resp_lite_1');
+    expect(trafficBodies[1].input).toEqual([expect.objectContaining({ role: 'user', content: 'hello' })]);
+    expect(trafficBodies[2].previous_response_id).toBe('resp_lite_2');
+    expect(trafficBodies[2].input).toEqual([expect.objectContaining({ role: 'user', content: 'how are you?' })]);
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
   }
 });
 

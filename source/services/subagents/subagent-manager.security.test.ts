@@ -645,3 +645,75 @@ describe('worker shell tool safety gating', () => {
     });
   });
 });
+
+// ── Redirect safety for scoped web_fetch ──────────────────────────
+
+describe('network tool redirect safety', () => {
+  const fetchDefinition: ToolDefinition = {
+    name: 'web_fetch',
+    description: 'fetch a page',
+    parameters: {} as any,
+    needsApproval: async () => false,
+    execute: async () => 'ok',
+    formatCommandMessage: () => [],
+  };
+
+  const searchDefinition: ToolDefinition = {
+    name: 'web_search',
+    description: 'search the web',
+    parameters: {} as any,
+    needsApproval: async () => false,
+    execute: async () => 'ok',
+    formatCommandMessage: () => [],
+  };
+
+  it('web_fetch with undefined host scope passes through unchanged', async () => {
+    const tp = createToolPolicy();
+    const wrapped = tp.wrapNetworkToolWithScope(fetchDefinition, undefined, (p: any) => p?.url);
+    expect(wrapped).toBe(fetchDefinition);
+  });
+
+  it('web_fetch with wildcard host scope is allowed', async () => {
+    const tp = createToolPolicy();
+    const wrapped = tp.wrapNetworkToolWithScope(fetchDefinition, ['*'], (p: any) => p?.url);
+    expect(wrapped).not.toBe(fetchDefinition);
+    const result = await wrapped.execute({ url: 'https://example.com' });
+    expect(result).toBe('ok');
+  });
+
+  it('web_fetch with finite host scope is rejected with typed permission error', async () => {
+    const tp = createToolPolicy();
+    const wrapped = tp.wrapNetworkToolWithScope(fetchDefinition, ['api.example.com'], (p: any) => p?.url);
+    const result = await wrapped.execute({ url: 'https://api.example.com' });
+    expect(result).toContain('Error: Permission denied');
+    expect(result).toContain('web_fetch cannot be used with finite host scopes');
+    expect(result).toContain("hosts: ['*']");
+  });
+
+  it('web_search with finite host scope is NOT blocked (no redirects)', async () => {
+    const tp = createToolPolicy();
+    const wrapped = tp.wrapNetworkToolWithScope(searchDefinition, ['api.example.com'], (p: any) => p?.url);
+    expect(wrapped).not.toBe(searchDefinition);
+    // web_search has no extractable URL for query-only calls; requires wildcard
+    const result = await wrapped.execute({ query: 'test' });
+    expect(result).toContain("requires the '*' wildcard");
+  });
+
+  it('web_search with finite host scope and URL param validates host', async () => {
+    const tp = createToolPolicy();
+    const wrapped = tp.wrapNetworkToolWithScope(searchDefinition, ['api.example.com'], (p: any) => p?.url);
+    const result = await wrapped.execute({ url: 'https://other.example.com' });
+    expect(result).toContain('not in the allowed network hosts');
+  });
+
+  it('empty host patterns deny all network access for both tools', async () => {
+    const tp = createToolPolicy();
+    const wrappedFetch = tp.wrapNetworkToolWithScope(fetchDefinition, [], (p: any) => p?.url);
+    const result = await wrappedFetch.execute({ url: 'https://example.com' });
+    expect(result).toContain('no allowed hosts configured');
+
+    const wrappedSearch = tp.wrapNetworkToolWithScope(searchDefinition, [], (p: any) => p?.url);
+    const result2 = await wrappedSearch.execute({ query: 'test' });
+    expect(result2).toContain('no allowed hosts configured');
+  });
+});

@@ -2,14 +2,16 @@ import { randomUUID } from 'node:crypto';
 import type { Tool, Agent } from '@openai/agents';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
-import type { SubagentRequest, SubagentResult, SupportedSubagentRole } from './types.js';
+import type { SubagentRequest, SubagentResult, SupportedSubagentRole, SubagentDefinition } from './types.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ISubagentClient, ISubagentClientFactory } from './subagent-client-types.js';
 import { createSubagentRuntime, type SubagentRuntime } from './runtime.js';
-import { loadRoleDefinition } from './role-loader.js';
 import { isAbortLike, safeEmit } from './utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
 import type { SubagentRunContext } from './tool-policy.js';
+import { adaptLegacyRole, adaptLegacyDefinition } from '../agent-runtime/legacy-adapter.js';
+import { createAgentRuntimeFromSubagentRuntime } from '../agent-runtime/compose-agent-runtime.js';
+import type { AgentRuntime } from '../agent-runtime/agent-runtime.js';
 
 export class SubagentManager {
   #logger: ILoggingService;
@@ -52,6 +54,33 @@ export class SubagentManager {
     return this.#runtime.nestedRunner.runAsTool(request, context, details);
   }
 
+  /**
+   * Obtain an AgentRuntime backed by this manager's existing subagent
+   * infrastructure (shared tool policy, execution runner, mentor runner).
+   * Avoids creating duplicate independent tool policies. The returned
+   * runtime's handles execute through the same ExecutionSubagentRunner
+   * and MentorRunner used by this manager.
+   */
+  getAgentRuntime(): AgentRuntime {
+    return createAgentRuntimeFromSubagentRuntime({
+      settings: this.#settings,
+      logger: this.#logger,
+      executionRunner: this.#runtime.executionRunner,
+      mentorRunner: this.#runtime.mentorRunner,
+    });
+  }
+
+  /**
+   * Resolve a role to a legacy SubagentDefinition through the shared
+   * ResolvedAgentDefinition adaptation path. This ensures all role
+   * definitions (explorer/worker/researcher/mentor) pass through the
+   * same resolution before execution.
+   */
+  #resolveRoleDefinition(role: string): SubagentDefinition {
+    const resolved = adaptLegacyRole(role, this.#settings);
+    return adaptLegacyDefinition(resolved);
+  }
+
   async run(request: SubagentRequest): Promise<SubagentResult> {
     const agentId = randomUUID();
 
@@ -68,7 +97,7 @@ export class SubagentManager {
       const result =
         request.role === 'mentor'
           ? await this.#runtime.mentorRunner.run(agentId, request.task, request.signal)
-          : await this.#runtime.executionRunner.run(agentId, request, loadRoleDefinition(request.role, this.#settings));
+          : await this.#runtime.executionRunner.run(agentId, request, this.#resolveRoleDefinition(request.role));
       safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result });
       return result;
     } catch (error: any) {

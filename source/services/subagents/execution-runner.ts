@@ -10,6 +10,7 @@ import { buildInstructions, resolveSubagentSearchViaShell } from './role-loader.
 import type { ISubagentClientFactory } from './subagent-client-types.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { createSessionRuntime } from '../session/session-composition.js';
+import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 
 export class ExecutionSubagentRunner {
   #logger: ILoggingService;
@@ -43,6 +44,26 @@ export class ExecutionSubagentRunner {
       throw new Error('SubagentManager: createClient factory not provided');
     }
 
+    // ── Budget enforcement ──
+    // Root executions do NOT consume a child slot; only actual nested
+    // agent runs do. The root budget tracks children, not itself.
+    let childSlot: AcquiredChildSlot | undefined;
+    if (definition.executionBudget && !definition.isRootExecution) {
+      const slot = definition.executionBudget.tryAcquireChild();
+      if (!(slot instanceof AcquiredChildSlot)) {
+        return {
+          agentId,
+          role: request.role,
+          status: 'failed',
+          finalText: '',
+          filesChanged: [],
+          toolsUsed: [],
+          error: `Budget exhausted: ${slot.reason}${slot.max !== undefined ? ` (${slot.current}/${slot.max})` : ''}`,
+        };
+      }
+      childSlot = slot;
+    }
+
     const toolCounts = new Map<string, number>();
     const filesChanged: string[] = [];
 
@@ -67,6 +88,10 @@ export class ExecutionSubagentRunner {
     };
     if (definition.reasoningEffort && definition.reasoningEffort !== 'default') {
       modelSettings.reasoning = { effort: definition.reasoningEffort, summary: 'auto' };
+    }
+    // Pass maxTokens from definition to provider model settings
+    if (definition.maxTokens !== undefined) {
+      modelSettings.maxTokens = definition.maxTokens;
     }
 
     const fullInstructions = buildInstructions(
@@ -175,6 +200,12 @@ export class ExecutionSubagentRunner {
         usage = normalizeAgentRunUsage(err?.state?.usage) ?? extractUsage(err);
       }
     } finally {
+      // Record usage to the budget on every terminal path
+      if (childSlot && usage) {
+        definition.executionBudget!.recordUsage(usage);
+      }
+      // Release the child slot
+      childSlot?.release();
       runtime.dispose();
     }
 

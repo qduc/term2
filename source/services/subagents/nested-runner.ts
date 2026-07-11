@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { Agent, RunContext, Runner, type Tool } from '@openai/agents';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
-import type { SubagentRequest, SubagentResult, SupportedSubagentRole } from './types.js';
+import type { SubagentRequest, SubagentResult, SupportedSubagentRole, SubagentDefinition } from './types.js';
 import { SUBAGENT_ROLES } from './types.js';
 import { SubagentToolFactory, getSubagentRunContext, type SubagentRunContext } from './tool-policy.js';
 import {
@@ -27,6 +27,7 @@ import {
 } from './utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
+import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 
 export type CachedRoleTool = {
   agent: Agent<SubagentRunContext>;
@@ -71,6 +72,14 @@ export class NestedSubagentRunner {
   #toolFactory: SubagentToolFactory;
   #onEvent?: (event: ConversationEvent) => void;
   #roleToolCache: Map<SupportedSubagentRole, CachedRoleTool>;
+  /**
+   * Optional resolver that overrides the default `loadRoleDefinition`.
+   * When set, all role loads in `#getOrCreateRoleTool` go through this
+   * callback. This allows the agent-runtime / `SubagentManager` to
+   * inject the shared `ResolvedAgentDefinition` adaptation so that every
+   * role passes through the same resolution before reaching the SDK.
+   */
+  readonly #resolveRole?: (role: SupportedSubagentRole) => SubagentDefinition;
 
   constructor(deps: {
     logger: ILoggingService;
@@ -80,6 +89,8 @@ export class NestedSubagentRunner {
     toolFactory: SubagentToolFactory;
     onEvent?: (event: ConversationEvent) => void;
     roleToolCache: Map<SupportedSubagentRole, CachedRoleTool>;
+    /** Optional role resolver for shared resolution path. */
+    resolveRole?: (role: SupportedSubagentRole) => SubagentDefinition;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
@@ -88,6 +99,7 @@ export class NestedSubagentRunner {
     this.#toolFactory = deps.toolFactory;
     this.#onEvent = deps.onEvent;
     this.#roleToolCache = deps.roleToolCache;
+    this.#resolveRole = deps.resolveRole;
   }
 
   clearCache(): void {
@@ -130,7 +142,9 @@ export class NestedSubagentRunner {
     const cached = this.#roleToolCache.get(role);
     if (cached) return cached;
 
-    const definition = loadRoleDefinition(role, this.#settings);
+    // Use the injected resolver when available (shared ResolvedAgentDefinition
+    // adaptation path); otherwise fall back to direct loadRoleDefinition.
+    const definition = this.#resolveRole ? this.#resolveRole(role) : loadRoleDefinition(role, this.#settings);
     const searchViaShell = resolveSubagentSearchViaShell(this.#settings, definition.model, definition.canRunShell);
     const toolDefinitions = this.#toolFactory.buildToolDefinitions(definition, [], '', searchViaShell, true);
     const providerId = definition.provider;
@@ -186,6 +200,10 @@ export class NestedSubagentRunner {
     const modelSettings: any = { retry: { maxRetries: this.#settings.get<number>('agent.retryAttempts') ?? 2 } };
     if (definition.reasoningEffort && definition.reasoningEffort !== 'default') {
       modelSettings.reasoning = { effort: definition.reasoningEffort, summary: 'auto' };
+    }
+    // Pass maxTokens from definition to provider model settings
+    if (definition.maxTokens !== undefined) {
+      modelSettings.maxTokens = definition.maxTokens;
     }
 
     const envInfo = getEnvInfo(this.#settings, this.#executionContext);
@@ -274,9 +292,28 @@ export class NestedSubagentRunner {
     const detailsRecord = details as
       | { resumeState?: string; signal?: AbortSignal; toolCall?: { callId?: string } }
       | undefined;
+
+    // ── Budget enforcement ──
+    // Only acquire a slot for fresh runs, not resumed ones (resumed runs
+    // already hold their slot from the initial invocation).
+    let childSlot: AcquiredChildSlot | undefined;
+    if (request.executionBudget && !detailsRecord?.resumeState) {
+      const slot = request.executionBudget.tryAcquireChild();
+      if (!(slot instanceof AcquiredChildSlot)) {
+        const rejection = slot;
+        throw new Error(
+          `Budget exhausted: ${rejection.reason}${
+            rejection.max !== undefined ? ` (${rejection.current}/${rejection.max})` : ''
+          }`,
+        );
+      }
+      childSlot = slot;
+    }
+
     const composite = createCompositeAbortSignal(detailsRecord?.signal, request.signal);
     const signal = composite?.signal;
     if (signal?.aborted) {
+      childSlot?.release();
       throw createAbortError('The nested subagent run was aborted.');
     }
     const restoredContext = this.#restoreRunContext(detailsRecord?.resumeState);
@@ -289,7 +326,7 @@ export class NestedSubagentRunner {
       toolCounts: {},
       activeCommandMessages: {},
       turnCount: 0,
-      maxTurns: loadRoleDefinition(role, this.#settings).maxTurns,
+      maxTurns: (this.#resolveRole ? this.#resolveRole(role) : loadRoleDefinition(role, this.#settings)).maxTurns,
     };
     runContext.task = request.task;
 
@@ -329,6 +366,10 @@ export class NestedSubagentRunner {
       }
       const raw = await Promise.race(promises);
       const parsed = parseNestedSubagentResult(raw);
+      // Record usage from nested run
+      if (childSlot && parsed.usage) {
+        request.executionBudget!.recordUsage(parsed.usage);
+      }
       if (!parsed.interrupted) {
         safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result: parsed });
       }
@@ -353,6 +394,7 @@ export class NestedSubagentRunner {
       });
       throw error;
     } finally {
+      childSlot?.release();
       if (abortListener && signal) {
         signal.removeEventListener('abort', abortListener);
       }

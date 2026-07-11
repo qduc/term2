@@ -5,6 +5,7 @@ import type { ILoggingService, ISettingsService, ISessionContextService } from '
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentDefinition, SupportedSubagentRole } from './types.js';
 import type { CommandMessage, ToolDefinition } from '../../tools/types.js';
+import { isPathInScopeSafe, isHostInScope } from '../agent-runtime/scope-resolver.js';
 import { getProvider } from '../../providers/index.js';
 import { wrapToolInvoke, wrapNeedsApproval } from '../../lib/tool-invoke.js';
 import { toOpenAIStrictToolSchema } from '../../lib/openai-strict-tool-schema.js';
@@ -405,6 +406,163 @@ export class SubagentToolPolicy {
       },
     };
   }
+
+  /**
+   * Wrap a read tool with filesystem scope enforcement.
+   * When `scopePatterns` is defined (non-undefined), every path read must
+   * match at least one pattern. Undefined scope = no restriction.
+   * Uses symlink-safe realpath resolution.
+   */
+  wrapReadToolWithScope(
+    definition: ToolDefinition,
+    scopePatterns: string[] | undefined,
+    extractPath: (params: any) => string | undefined,
+  ): ToolDefinition {
+    // No scope defined — no fine-grained restriction
+    if (scopePatterns === undefined) return definition;
+
+    const originalExecute = definition.execute.bind(definition);
+    return {
+      ...definition,
+      execute: async (params: any, context?: unknown, details?: unknown) => {
+        const filePath = extractPath(params);
+        if (filePath) {
+          const safe = await isPathInScopeSafe(filePath, scopePatterns);
+          if (!safe) {
+            return `Error: Path "${filePath}" is outside the allowed filesystem read scope.`;
+          }
+        }
+        return originalExecute(params, context, details);
+      },
+    };
+  }
+
+  /**
+   * Wrap a write tool with filesystem scope enforcement.
+   * When `scopePatterns` is defined (non-undefined), every path written must
+   * match at least one pattern. Undefined scope = no restriction.
+   * Uses symlink-safe realpath resolution: resolves existing paths with
+   * realpath, and for nonexistent targets resolves the nearest existing
+   * ancestor to detect symlink escapes.
+   */
+  wrapWriteToolWithScope(
+    definition: ToolDefinition,
+    scopePatterns: string[] | undefined,
+    extractPaths: (params: any) => string[],
+  ): ToolDefinition {
+    if (scopePatterns === undefined) return definition;
+
+    const originalExecute = definition.execute.bind(definition);
+    return {
+      ...definition,
+      execute: async (params: any, context?: unknown, details?: unknown) => {
+        const paths = extractPaths(params);
+        for (const filePath of paths) {
+          const safe = await isPathInScopeSafe(filePath, scopePatterns);
+          if (!safe) {
+            return `Error: Path "${filePath}" is outside the allowed filesystem write scope.`;
+          }
+        }
+        return originalExecute(params, context, details);
+      },
+    };
+  }
+
+  /**
+   * Wrap a shell tool with filesystem scope enforcement.
+   *
+   * Shell commands cannot be safely scoped to a subset of the filesystem
+   * because any command can access the entire workspace through symlinks,
+   * absolute paths, environment variables, and other means. When any
+   * finite filesystem scope is defined, the shell tool is rejected with
+   * a typed permission error.
+   */
+  wrapShellToolWithScope(definition: ToolDefinition, scopePatterns: string[] | undefined): ToolDefinition {
+    if (scopePatterns !== undefined) {
+      return {
+        ...definition,
+        execute: async () =>
+          'Error: Shell access is not permitted when filesystem scopes are configured. ' +
+          'Filesystem scopes cannot safely restrict shell commands because the shell ' +
+          'can bypass path-based restrictions through symlinks, absolute paths, ' +
+          'environment variables, and arbitrary command execution. ' +
+          'Remove filesystem scopes to use shell, or use scoped read/write tools instead.',
+      };
+    }
+    return definition;
+  }
+
+  /**
+   * Wrap a network tool (web_search, web_fetch) with host scope enforcement.
+   * When `hostPatterns` is defined (non-undefined), the target URL must
+   * match at least one allowed host. Empty array = no network authority.
+   * Undefined = no restriction (legacy coarse behavior).
+   *
+   * web_search has no target host — it searches broadly. To allow
+   * web_search under host scopes, the scope must contain the literal
+   * wildcard `'*'` (meaning "all hosts").
+   *
+   * web_fetch validates the initial URL host including case and port,
+   * but the underlying HTTP library may follow redirects transparently to
+   * a different host. Because redirect targets are not observable or
+   * enforceable by the current fetch tool, web_fetch is REJECTED at
+   * definition time when host scopes are set to anything other than
+   * `['*']` (all hosts). The caller receives a typed permission error.
+   */
+  wrapNetworkToolWithScope(
+    definition: ToolDefinition,
+    hostPatterns: string[] | undefined,
+    extractUrl: (params: any) => string | undefined,
+  ): ToolDefinition {
+    if (hostPatterns === undefined) return definition;
+
+    // Empty host patterns = explicitly no network authority
+    if (hostPatterns.length === 0) {
+      return {
+        ...definition,
+        execute: async () => `Error: Network access denied: no allowed hosts configured.`,
+      };
+    }
+
+    // ── Redirect safety guard for fetch-style tools ──
+    // If the tool follows redirects and we can't observe them, reject
+    // any finite host scope that isn't the wildcard '*'.
+    if (definition.name === 'web_fetch' && hostPatterns.length > 0 && !hostPatterns.includes('*')) {
+      return {
+        ...definition,
+        execute: async () =>
+          `Error: Permission denied: web_fetch cannot be used with finite host scopes ` +
+          `because the underlying HTTP library may follow redirects transparently ` +
+          `to hosts outside the allowed scope. To allow web_fetch under network ` +
+          `restrictions, use hosts: ['*'] (all hosts). Otherwise, remove ` +
+          `web_fetch from the tool set or omit network host scopes entirely.`,
+      };
+    }
+
+    const originalExecute = definition.execute.bind(definition);
+    return {
+      ...definition,
+      execute: async (params: any, context?: unknown, details?: unknown) => {
+        const url = extractUrl(params);
+        if (url) {
+          // Host-specific validation: check the exact URL host
+          if (!isHostInScope(url, hostPatterns)) {
+            return `Error: Host "${url}" is not in the allowed network hosts.`;
+          }
+        } else {
+          // No extractable URL (e.g., web_search with only a query).
+          // This tool has no target host; it requires the wildcard scope.
+          if (!hostPatterns.includes('*')) {
+            return (
+              `Error: Network access denied: the "${definition.name}" tool has no target host ` +
+              `and requires the '*' wildcard host scope to operate under network restrictions.`
+            );
+          }
+        }
+        return originalExecute(params, context, details);
+      },
+    };
+  }
 }
 
 export class SubagentToolFactory {
@@ -436,40 +594,80 @@ export class SubagentToolFactory {
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
     const isRemote = this.#executionContext?.isRemote() ?? false;
 
+    // Extract resolved scopes from definition
+    const fsReadScope = definition.filesystemScope?.read;
+    const fsWriteScope = definition.filesystemScope?.write;
+    const netScope = definition.networkScope;
+
     if (definition.canRead) {
       tools.push(
-        createReadFileToolDefinition({ executionContext: this.#executionContext, allowOutsideWorkspace: false }),
+        this.#toolPolicy.wrapReadToolWithScope(
+          createReadFileToolDefinition({ executionContext: this.#executionContext, allowOutsideWorkspace: false }),
+          fsReadScope,
+          (params: any) => params?.path ?? params?.filePath,
+        ),
       );
 
       if (!searchViaShell) {
         tools.push(
-          createGrepToolDefinition({ executionContext: this.#executionContext }),
-          createFindFilesToolDefinition({ executionContext: this.#executionContext }),
+          this.#toolPolicy.wrapReadToolWithScope(
+            createGrepToolDefinition({ executionContext: this.#executionContext }),
+            fsReadScope,
+            (params: any) => params?.path,
+          ),
+          this.#toolPolicy.wrapReadToolWithScope(
+            createFindFilesToolDefinition({ executionContext: this.#executionContext }),
+            fsReadScope,
+            (params: any) =>
+              // When path is omitted, the tool defaults to searching from the
+              // workspace root (CWD). Use the workspace root as the base path
+              // for scope validation. Never treat the glob pattern as a path.
+              params?.path ?? '.',
+          ),
         );
       }
 
       if (!isRemote) {
         tools.push(
-          createReadCodeOutlineToolDefinition({ executionContext: this.#executionContext }),
-          createCodeContextSearchToolDefinition({ executionContext: this.#executionContext }),
+          this.#toolPolicy.wrapReadToolWithScope(
+            createReadCodeOutlineToolDefinition({ executionContext: this.#executionContext }),
+            fsReadScope,
+            (params: any) => params?.path,
+          ),
+          this.#toolPolicy.wrapReadToolWithScope(
+            createCodeContextSearchToolDefinition({ executionContext: this.#executionContext }),
+            fsReadScope,
+            (params: any) => params?.path,
+          ),
         );
       }
     }
 
     if (definition.canSearchWeb) {
       tools.push(
-        createWebSearchToolDefinition({ settingsService: this.#settings, loggingService: this.#logger }),
-        createWebFetchToolDefinition({ settingsService: this.#settings, loggingService: this.#logger }),
+        this.#toolPolicy.wrapNetworkToolWithScope(
+          createWebSearchToolDefinition({ settingsService: this.#settings, loggingService: this.#logger }),
+          netScope,
+          (params: any) => (params?.query ? undefined : params?.url),
+        ),
+        this.#toolPolicy.wrapNetworkToolWithScope(
+          createWebFetchToolDefinition({ settingsService: this.#settings, loggingService: this.#logger }),
+          netScope,
+          (params: any) => params?.url,
+        ),
       );
     }
 
     if (definition.canRunShell) {
-      const shellDef = createShellToolDefinition({
-        settingsService: this.#settings,
-        loggingService: this.#logger,
-        executionContext: this.#executionContext,
-        searchViaShell,
-      });
+      const shellDef = this.#toolPolicy.wrapShellToolWithScope(
+        createShellToolDefinition({
+          settingsService: this.#settings,
+          loggingService: this.#logger,
+          executionContext: this.#executionContext,
+          searchViaShell,
+        }),
+        fsReadScope,
+      );
 
       if (definition.canWrite) {
         tools.push(
@@ -486,52 +684,79 @@ export class SubagentToolFactory {
       const isGpt5 = shouldPreferPatchEditingModel(definition.model);
       if (isGpt5) {
         tools.push(
-          this.#toolPolicy.wrapWriteTool(
-            createApplyPatchToolDefinition({
-              settingsService: this.#settings,
-              loggingService: this.#logger,
-              executionContext: this.#executionContext,
-            }),
-            cwd,
-            filesChanged,
+          this.#toolPolicy.wrapWriteToolWithScope(
+            this.#toolPolicy.wrapWriteTool(
+              createApplyPatchToolDefinition({
+                settingsService: this.#settings,
+                loggingService: this.#logger,
+                executionContext: this.#executionContext,
+              }),
+              cwd,
+              filesChanged,
+              (params: any) => {
+                if (Array.isArray(params?.operations)) {
+                  return params.operations.map((op: any) => op?.path).filter(Boolean);
+                }
+                return params?.path ? [params.path] : [];
+              },
+              nestedApprovals,
+            ),
+            fsWriteScope,
             (params: any) => {
               if (Array.isArray(params?.operations)) {
                 return params.operations.map((op: any) => op?.path).filter(Boolean);
               }
               return params?.path ? [params.path] : [];
             },
-            nestedApprovals,
           ),
         );
       } else {
         tools.push(
-          this.#toolPolicy.wrapWriteTool(
-            createSearchReplaceToolDefinition({
-              settingsService: this.#settings,
-              loggingService: this.#logger,
-              executionContext: this.#executionContext,
-            }),
-            cwd,
-            filesChanged,
+          this.#toolPolicy.wrapWriteToolWithScope(
+            this.#toolPolicy.wrapWriteTool(
+              createSearchReplaceToolDefinition({
+                settingsService: this.#settings,
+                loggingService: this.#logger,
+                executionContext: this.#executionContext,
+              }),
+              cwd,
+              filesChanged,
+              (params: any) => (params?.path ? [params.path] : []),
+              nestedApprovals,
+            ),
+            fsWriteScope,
             (params: any) => (params?.path ? [params.path] : []),
-            nestedApprovals,
           ),
-          this.#toolPolicy.wrapWriteTool(
-            createCreateFileToolDefinition({
-              settingsService: this.#settings,
-              loggingService: this.#logger,
-              executionContext: this.#executionContext,
-            }),
-            cwd,
-            filesChanged,
+          this.#toolPolicy.wrapWriteToolWithScope(
+            this.#toolPolicy.wrapWriteTool(
+              createCreateFileToolDefinition({
+                settingsService: this.#settings,
+                loggingService: this.#logger,
+                executionContext: this.#executionContext,
+              }),
+              cwd,
+              filesChanged,
+              (params: any) => (params?.path ? [params.path] : []),
+              nestedApprovals,
+            ),
+            fsWriteScope,
             (params: any) => (params?.path ? [params.path] : []),
-            nestedApprovals,
           ),
         );
       }
     }
 
     registerToolFormatters(tools);
+
+    // Honor explicit tool allowlist from the definition.
+    // When a non-empty allowlist is present, only provision tools
+    // whose names appear in it. This lets AgentRuntime pass resolved
+    // tool lists through to ExecutionSubagentRunner.
+    if (definition.tools && definition.tools.length > 0) {
+      const allowed = new Set(definition.tools);
+      return tools.filter((t) => allowed.has(t.name));
+    }
+
     return tools;
   }
 

@@ -3,6 +3,7 @@ import type { ConversationEvent } from '../services/conversation/conversation-ev
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import type { ExecutionContext } from '../services/execution-context.js';
 import type { SubagentResult } from '../services/subagents/types.js';
+import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
 import { createAbortError } from '../services/subagents/utils.js';
 
 export interface SubagentBridgeDeps {
@@ -56,6 +57,17 @@ export class SubagentBridge {
       this.#subagentEventSink = sink;
       this.#pendingClearSink = false;
     }
+  }
+
+  /**
+   * Obtain an AgentRuntime backed by this bridge's SubagentManager.
+   * This is the stable production boundary for creating and running
+   * one-shot agents through the same infrastructure that powers
+   * subagent tool calls. Budget creation, scope enforcement, and
+   * permission attenuation are all enforced.
+   */
+  getAgentRuntime(): AgentRuntime | null {
+    return this.#subagentManager?.getAgentRuntime() ?? null;
   }
 
   clearSubagentCache(): void {

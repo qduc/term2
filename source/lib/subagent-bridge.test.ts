@@ -354,6 +354,25 @@ it('resetAbortController replaces the shared abort controller', () => {
   expect(secondSignal.aborted).toBe(false);
 });
 
+it('getAgentRuntime returns null when SubagentManager is null', () => {
+  const bridge = makeBridge(null);
+  expect(bridge.getAgentRuntime()).toBeNull();
+});
+
+it('getAgentRuntime returns the AgentRuntime from SubagentManager', () => {
+  const mockRuntime = { agent: () => ({ run: async () => ({}) }) };
+  const manager = {
+    ...createMockManager().manager,
+    getAgentRuntime: () => mockRuntime,
+  };
+  const bridge = makeBridge(manager);
+
+  const runtime = bridge.getAgentRuntime();
+  expect(runtime).toBeDefined();
+  expect(runtime).toBe(mockRuntime);
+  expect(typeof (runtime as any).agent).toBe('function');
+});
+
 it('deferred sink clear is applied after active subagents complete', async () => {
   const { manager } = createMockManager();
   const bridge = makeBridge(manager);

@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { sanitizeHeaders } from '../utils/header-sanitizer.js';
 import type { ISessionContextService, IProviderTraffic } from '../services/service-interfaces.js';
 import { dropUnpairedFunctionCalls } from '../services/tool-execution-ledger.js';
-import { ResponsesLiteWireState, type ResponsesLiteWireStateKey } from './responses-lite-wire-state.js';
+import { ChainedWireState, type ChainedWireStateKey, type ChainedRequestToken } from './chained-wire-state.js';
+import { LunaResponsesLiteWireProtocol } from './luna-responses-lite-wire-protocol.js';
 
 const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
   recordRequestStart() {},
@@ -399,7 +400,8 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   #serverHistoryReuseDisabled = false;
 
   private readonly providerTraffic: IProviderTraffic;
-  private readonly responsesLiteWireState = new ResponsesLiteWireState();
+  private readonly chainedWireState = new ChainedWireState(new LunaResponsesLiteWireProtocol());
+  private readonly requestTokens = new WeakMap<object, ChainedRequestToken>();
 
   constructor(
     client: any,
@@ -467,11 +469,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     responseStream: AsyncIterable<any>,
     requestId: string,
     requestData: Record<string, unknown>,
-    wireStateKey?: ResponsesLiteWireStateKey,
+    wireStateKey?: ChainedWireStateKey,
+    wireStateToken?: ChainedRequestToken,
   ): Promise<AsyncIterable<any>> {
     const logReceived = this.#logTrafficReceived.bind(this);
     const logFailed = this.#logTrafficFailed.bind(this);
-    const wireState = this.responsesLiteWireState;
+    const wireState = this.chainedWireState;
 
     async function* wrapped(): AsyncIterable<any> {
       try {
@@ -483,8 +486,8 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
             (event as any).response
           ) {
             const response = (event as any).response;
-            if (wireStateKey && typeof response.id === 'string' && response.id.length > 0) {
-              wireState.recordResponse(wireStateKey, response.id, response.output);
+            if (wireStateKey && wireStateToken && typeof response.id === 'string' && response.id.length > 0) {
+              wireState.recordResponse(wireStateKey, wireStateToken, response.id, response.output);
             }
             logReceived(requestId, requestData, response);
           }
@@ -496,6 +499,10 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         }
         logFailed(requestId, requestData, error);
         throw error;
+      } finally {
+        if (wireStateKey && wireStateToken) {
+          wireState.abandon(wireStateKey, wireStateToken);
+        }
       }
     }
 
@@ -697,7 +704,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     this.codexPreviousResponseIds.clear();
     this.codexConsumedToolResultCallIdsByResponseId.clear();
     this.codexTurnIdsBySession.clear();
-    this.responsesLiteWireState.clear();
+    this.chainedWireState.clear();
   }
 
   #shouldForgetCodexServerHistory(error: unknown): boolean {
@@ -863,11 +870,17 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     });
     const wireStateKey = RESPONSES_LITE_MODELS.has(this.modelId) ? this.#getCodexServerHistoryKey() : null;
 
+    if (!wireStateKey) {
+      return { ...built, requestData };
+    }
+
+    const token = this.requestTokens.get(request) ?? randomUUID();
+    this.requestTokens.set(request, token);
+    const prepared = this.chainedWireState.prepare(wireStateKey, token, requestData);
+
     return {
       ...built,
-      requestData: wireStateKey
-        ? this.responsesLiteWireState.prepare(wireStateKey, requestData).requestData
-        : requestData,
+      requestData: prepared.requestData,
     };
   }
 
@@ -930,6 +943,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 
     const builtRequest = (this as any)._buildResponsesCreateRequest(updatedRequest, true);
     const requestData = (asRecord(builtRequest?.requestData) ?? {}) as Record<string, unknown>;
+    const wireStateToken = this.requestTokens.get(updatedRequest);
     this.#logTrafficStarted(requestId, requestData, extraHeaders);
 
     if (!stream) {
@@ -938,14 +952,14 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
           () => super._fetchResponse(updatedRequest, true as false) as unknown as Promise<AsyncIterable<any>>,
           this.diagnosticLogger,
         );
-        if (wireStateKey && typeof response?.id === 'string' && response.id.length > 0) {
-          this.responsesLiteWireState.recordResponse(wireStateKey, response.id, response.output);
+        if (wireStateKey && wireStateToken && typeof response?.id === 'string' && response.id.length > 0) {
+          this.chainedWireState.recordResponse(wireStateKey, wireStateToken, response.id, response.output);
         }
         this.#logTrafficReceived(requestId, requestData, response);
         return response;
       } catch (error) {
         if (wireStateKey) {
-          this.responsesLiteWireState.invalidate(wireStateKey);
+          this.chainedWireState.invalidate(wireStateKey);
         }
         this.#logTrafficFailed(requestId, requestData, error);
         throw error;
@@ -955,10 +969,10 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     try {
       const response = (await super._fetchResponse(updatedRequest, stream as false)) as unknown as AsyncIterable<any>;
       const patched = wrapCodexStream(response, this.diagnosticLogger);
-      return this.#withTrafficLogging(patched, requestId, requestData, wireStateKey);
+      return this.#withTrafficLogging(patched, requestId, requestData, wireStateKey, wireStateToken);
     } catch (error) {
       if (wireStateKey) {
-        this.responsesLiteWireState.invalidate(wireStateKey);
+        this.chainedWireState.invalidate(wireStateKey);
       }
       this.#logTrafficFailed(requestId, requestData, error);
       throw error;

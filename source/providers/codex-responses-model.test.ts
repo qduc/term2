@@ -772,6 +772,113 @@ it.sequential('CodexResponsesWSModel sends only new input after a Responses-Lite
   }
 });
 
+it.sequential('CodexResponsesWSModel correlates Responses-Lite state across sequential streamed requests', async () => {
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  const trafficBodies: any[] = [];
+  let responseCount = 0;
+
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficBodies.push(input.sentBody);
+    },
+    async recordResponseReceived() {},
+    recordRequestFailed() {},
+  };
+
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function () {
+    responseCount += 1;
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: { id: `resp_token_${responseCount}`, output: [], usage: {} },
+      },
+    ]);
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5.6-luna',
+      { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+      undefined,
+      mockProviderTraffic,
+      {
+        getContext: () => ({ sessionId: 'session-token', traceId: 'trace-token' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      } as any,
+    );
+
+    const tool = { type: 'function', name: 'shell', parameters: { type: 'object' } };
+    const msg1 = { role: 'user', type: 'message', content: 'first' };
+    const msg2 = { role: 'user', type: 'message', content: 'second' };
+
+    // First turn establishes the stored baseline.
+    await collect(
+      model.getStreamedResponse({
+        input: [msg1],
+        systemInstructions: 'Do it.',
+        modelSettings: {},
+        tools: [tool],
+        handoffs: [],
+      } as any),
+    );
+
+    // Second turn chains off the first.
+    await collect(
+      model.getStreamedResponse({
+        previousResponseId: 'resp_token_2',
+        input: [msg2],
+        systemInstructions: 'Do it.',
+        modelSettings: {},
+        tools: [tool],
+        handoffs: [],
+      } as any),
+    );
+
+    // Traffic captures tell us the delta is correctly computed across turns.
+    expect(trafficBodies).toHaveLength(3);
+    // The third body (second turn's final request) should carry just the
+    // new user message as a delta.
+    expect(trafficBodies[2].previous_response_id).toBe('resp_token_2');
+    expect(trafficBodies[2].input).toEqual([expect.objectContaining({ role: 'user', content: 'second' })]);
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+  }
+});
+
+it.sequential('CodexResponsesWSModel does not use wire state for non-Luna models', async () => {
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function () {
+    return makeStream([{ type: 'response.completed', response: { id: 'resp_nonluna', output: [], usage: {} } }]);
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5-codex',
+      { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({ sessionId: 'session-nonluna', traceId: 'trace-nonluna' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      } as any,
+    );
+
+    // Verify no tokens are stored for non-Luna requests.
+    const built = (model as any)._buildResponsesCreateRequest(
+      { input: [{ role: 'user', content: 'hello' }], modelSettings: {}, tools: [], handoffs: [] },
+      true,
+    );
+
+    // requestTokens WeakMap should not have an entry for the request.
+    // The built requestData should not have been modified by wire state prep.
+    expect(built.requestData.input).toEqual([{ role: 'user', content: 'hello' }]);
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+  }
+});
+
 it.sequential('CodexResponsesWSModel marks Luna websocket requests as Responses Lite', async () => {
   const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
   let seenRequest: any;
@@ -1824,3 +1931,166 @@ it.sequential(
     }
   },
 );
+
+it.sequential('CodexResponsesWSModel invalidates Luna wire state on previous_response_not_found error', async () => {
+  const seenRequests: any[] = [];
+  let rejectedChainedContinuation = false;
+  const prevNotFoundError = Object.assign(new Error('Previous response not found for id resp_stale'), {
+    code: 'previous_response_not_found',
+  });
+
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+
+    const isChainedContinuation =
+      request.previousResponseId === 'resp_luna_ok' && request.input?.some((item: any) => item?.content === 'continue');
+    if (isChainedContinuation && !rejectedChainedContinuation) {
+      rejectedChainedContinuation = true;
+      throw prevNotFoundError;
+    }
+
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: { id: 'resp_luna_ok', output: [], usage: {} },
+      } as any,
+    ]);
+  };
+
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5.6-luna',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({ sessionId: 'session-luna-err', traceId: 'trace-luna-err' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+    );
+
+    const userMsg = { role: 'user', type: 'message', content: 'hello' };
+    const userMsg2 = { role: 'user', type: 'message', content: 'continue' };
+
+    // First request: succeeds, establishes stored state.
+    await collect(
+      model.getStreamedResponse({
+        input: [userMsg],
+        systemInstructions: 'Do it.',
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any),
+    );
+
+    // Second request: chains off the first, but fails with prev-not-found.
+    // The error triggers invalidation, then the fallback sends full input.
+    await collect(
+      model.getStreamedResponse({
+        previousResponseId: 'resp_luna_ok',
+        input: [userMsg, userMsg2],
+        systemInstructions: 'Do it.',
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any),
+    );
+
+    // After invalidation, the exact fallback request replays full history
+    // without trying to continue the stale response chain.
+    expect(rejectedChainedContinuation).toBe(true);
+    const failedRequestIndex = seenRequests.findIndex(
+      (candidate) =>
+        candidate.previousResponseId === 'resp_luna_ok' &&
+        candidate.input?.some((item: any) => item?.content === 'continue'),
+    );
+    const fallbackRequests = seenRequests.slice(failedRequestIndex + 1);
+    expect(fallbackRequests).not.toHaveLength(0);
+    expect(fallbackRequests[0].previousResponseId).toBeUndefined();
+    expect(fallbackRequests.flatMap((candidate) => candidate.input)).toEqual(
+      expect.arrayContaining([userMsg, userMsg2]),
+    );
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+  }
+});
+
+it.sequential('CodexResponsesWSModel unary path records Luna wire state response with correct token', async () => {
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  const trafficBodies: any[] = [];
+  let responseCount = 0;
+
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficBodies.push(input.sentBody);
+    },
+    async recordResponseReceived() {},
+    recordRequestFailed() {},
+  };
+
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function () {
+    responseCount += 1;
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: { id: `resp_unary_luna_${responseCount}`, output: [], usage: {} },
+      },
+    ]);
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5.6-luna',
+      { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+      undefined,
+      mockProviderTraffic,
+      {
+        getContext: () => ({ sessionId: 'session-unary-token', traceId: 'trace-unary-token' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      } as any,
+    );
+
+    const msg1 = { role: 'user', type: 'message', content: 'unary first' };
+    const msg2 = { role: 'user', type: 'message', content: 'unary second' };
+
+    // First unary call establishes stored state.
+    await model.getResponse({
+      input: [msg1],
+      systemInstructions: 'Do it.',
+      modelSettings: {},
+      tools: [],
+      handoffs: [],
+    } as any);
+
+    // Second unary call chains off first and should produce a delta.
+    await model.getResponse({
+      previousResponseId: 'resp_unary_luna_2',
+      input: [msg2],
+      systemInstructions: 'Do it.',
+      modelSettings: {},
+      tools: [],
+      handoffs: [],
+    } as any);
+
+    // The second call's final request body (third traffic entry) should
+    // carry only the new user message as a delta.
+    expect(trafficBodies).toHaveLength(3);
+    expect(trafficBodies[2].previous_response_id).toBe('resp_unary_luna_2');
+    expect(trafficBodies[2].input).toEqual([expect.objectContaining({ role: 'user', content: 'unary second' })]);
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+  }
+});

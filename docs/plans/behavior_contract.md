@@ -1,150 +1,169 @@
-# Term2 Behavior Contract & Execution Specification
+# Term2 Queue and Turn Behavior Contract
 
-This document defines the formal behavior contract and execution rules for the Term2 state and queue management.
+This is the behavioral contract for foreground-message queuing. It specifies observable behavior and durable state, not a required class layout.
 
----
+## Ownership and public boundary
 
-## 1. Core States & Relation to TurnStatusMachine
+The **Queue Controller** owns the queue state machine, queue-item admission, dispatch, persistence, and transcript/control-event projection. It is the sole writer of the queue state and is the public boundary for the UI, slash-command layer, and turn lifecycle:
 
-Term2 operates a dual-layer state model: a **Conversation/Queue Layer** state machine, and the low-level **TurnStatusMachine** (which owns individual turn execution phases: `idle`, `streaming`, `awaiting_approval`, `continuing`).
+```ts
+type QueueCommand =
+  | { kind: 'submit'; text: string }
+  | { kind: 'cancel' }
+  | { kind: 'answer_preflight'; itemId: ItemId; actionId: ActionId; accepted: boolean }
+  | { kind: 'resolve_tool_approval'; executionId: ExecutionId; actionId: ActionId; approved: boolean }
+  | { kind: 'answer_ask_user'; executionId: ExecutionId; actionId: ActionId; value: string }
+  | { kind: 'resume_queue' }
+  | { kind: 'discard_queue' }
+  | { kind: 'edit_queued'; itemId: ItemId; text: string }
+  | { kind: 'remove_queued'; itemId: ItemId }
+  | { kind: 'change_execution_settings'; settings: ExecutionSettings }
+  | { kind: 'change_cosmetic_settings'; settings: CosmeticSettings };
 
-The high-level Conversation states map to and coexist with the low-level status machine as follows:
-
-| Core State | Description | Coexisting `TurnStatusMachine` state |
-| :--- | :--- | :--- |
-| `idle` | No task is active, and the queue is empty. Ready to accept a new message. | `idle` |
-| `running` | A top-level run is currently executing. Incoming messages are queued. | `streaming` or `continuing` |
-| `cancelling` | The active run is aborting. Cleanup/shutdown hooks are resolving. | `idle` (aborted) |
-| `completing` | The active run finished. Transitioning to next queued item or `idle`. | `idle` |
-| `queue_paused` | Queue is paused (e.g., after run failure/manual pause). Items accumulate but do not start. | `idle` |
-| `awaiting_user_action` | Run is suspended waiting for user interaction (approval, ask_user question, or surge/uncached warnings). | `awaiting_approval` |
-| `failed` | Active run failed. The queue is paused, waiting for resume/discard. | `idle` |
-
----
-
-## 2. Input Categories
-
-Term2 classifies incoming user and system actions into distinct input categories:
-
-1. **Normal Message**: A natural-language prompt or request intended to be run by the agent (e.g., `"explain this code"`).
-2. **Slash Command `/cancel`**: Explicit command to abort the currently active top-level run.
-3. **Queue Controls**: Actions like `resume queue` or `discard queue`.
-4. **Configuration Change (Model)**: Changing the model selected for execution.
-5. **Configuration Change (Theme)**: Changing cosmetic elements of the terminal/UI.
-6. **Task Completion Event**: Successful completion event returned from the run lifecycle.
-7. **Task Failure Event**: Failure or error event returned from the run lifecycle.
-8. **User Action Required Event**: A tool request, confirmation, input-surge warning, or large-uncached warning requiring user approval.
-
----
-
-## 3. State Transition Matrix
-
-The table below defines allowed state transitions. Any transition not listed here must be rejected or raise an error.
-
-```mermaid
-stateDiagram-v2
-    [*] --> idle
-    idle --> running : normal message (passes guards)
-    idle --> awaiting_user_action : normal message (triggers guards)
-    running --> cancelling : /cancel
-    running --> awaiting_user_action : user action required / tool approval / max turns
-    running --> failed : failure event
-    running --> completing : successful completion
-
-    awaiting_user_action --> running : user approval
-    awaiting_user_action --> cancelling : /cancel or escape
-
-    cancelling --> queue_paused : cleanup complete (queue not empty)
-    cancelling --> idle : cleanup complete (queue empty)
-
-    failed --> queue_paused : user retains queue / pause
-    failed --> idle : user discards queue
-
-    completing --> running : dispatch queued item (queue not empty, passes guards)
-    completing --> awaiting_user_action : dispatch queued item (triggers guards)
-    completing --> idle : transitions finished (queue empty)
-
-    queue_paused --> running : resume queue (passes guards)
-    queue_paused --> awaiting_user_action : resume queue (triggers guards)
-    queue_paused --> idle : discard queue
+type TurnEvent =
+  | { kind: 'tool_approval_requested'; executionId: ExecutionId; actionId: ActionId; request: ToolRequest }
+  | { kind: 'ask_user_requested'; executionId: ExecutionId; actionId: ActionId; question: AskUserQuestion }
+  | { kind: 'completed'; executionId: ExecutionId; terminal: ConversationTerminal }
+  | { kind: 'failed'; executionId: ExecutionId; failure: FailureSummary }
+  | { kind: 'cancelled'; executionId: ExecutionId };
 ```
 
----
+The concrete payload types are owned by their existing contracts; the discriminants and IDs above are normative. The controller MUST return a defined result (`accepted`, `rejected` with a reason, or `no_op`) for every `QueueCommand` in every state. It MUST NOT throw merely because a command is inapplicable.
 
-## 4. Decision Table
+`TurnStatusMachine` is deliberately separate and remains the low-level, single-turn transition validator (`idle`, `streaming`, `awaiting_approval`, `continuing`). The Queue Controller starts, continues, or aborts a turn through the turn/session boundary and consumes its `TurnEvent`s. It MUST NOT treat a `TurnStatusMachine` status as its own queue state, nor use it to infer queue ownership.
 
-| Current State | Input Action | Immediate Action | Deferred/Later Action | Next State |
-| :--- | :--- | :--- | :--- | :--- |
-| **`idle`** | Sends normal message | Evaluate input guards. If clear, start run; if blocked, prompt user. | Stream agent output | **`running`** or **`awaiting_user_action`** |
-| **`running`** | Sends normal message | Add message to pending queue | None | **`running`** |
-| **`running`** | Sends `/cancel` | Stop active execution signal via `TurnCoordinator.abort()` | Clean up resources, cancel subagents | **`cancelling`** |
-| **`cancelling`** | Sends `/cancel` | Show cancellation in progress message | None | **`cancelling`** |
-| **`running`** | Changes model | Record new model selection in settings | Apply configuration snapshot when next queued item starts | **`running`** |
-| **`running`** | Changes theme | Apply UI theme changes immediately | None | **`running`** |
-| **`running`** | Task completes successfully | Start cleanup | If queue is non-empty, start next run; else idle | **`completing`** |
-| **`running`** | Task fails | Stop run, log error | Pause queue execution | **`failed`** |
-| **`running`** | User action required | Suspend active execution stream | Prompt user for input (tool approval / ask_user) | **`awaiting_user_action`** |
-| **`awaiting_user_action`** | User provides approval | Resume execution or proceed with queued item | Stream next step | **`running`** |
-| **`failed`** | Selects resume queue | Unpause queue | Dispatch next queued item (running guards) | **`running`** or **`awaiting_user_action`** |
-| **`failed`** | Selects discard queue | Clear queue | Reset system status | **`idle`** |
+## Glossary and data model
 
----
+| Term | Meaning |
+| --- | --- |
+| **Item** | One accepted normal user message awaiting execution or preflight confirmation. It is not a turn until dispatched. |
+| **Execution** | One attempt to run an item, identified by a fresh `ExecutionId`. Retries of the same item create a new execution ID. |
+| **Active execution** | The sole execution owned by the controller while in `running`, `awaiting_active_action`, `cancelling`, or `completing`. |
+| **Preflight guard** | A cost/input warning evaluated before a turn starts (for example input-surge or large-uncached-input warning). It is not a tool approval. |
+| **Active action** | An interaction emitted by an executing turn: `tool_approval` or `ask_user`. |
+| **Admission barrier** | The synchronous controller transition that claims or retires an execution ID before work may start or a terminal result may dispatch another item. |
+| **Paused** | A stable state in which queued work is retained but dispatch is disabled. `pauseReason` records why. |
 
-## 5. Timing, Ordering, & Semantics
+An item has the following logical model. Storage may add harmless metadata, but MUST preserve these fields and meanings:
 
-### Queue Ordering & Guard Evaluation
-* The queue operates strictly as **First-In, First-Out (FIFO)**.
-* Queued items can be edited or removed safely *only* while they are not executing.
-* **Guard Execution Time**: Input guards (input surge guard, large uncached input warning) are evaluated **at execution time** rather than submission time. If a queued item triggers a warning when starting, the queue pauses and the system transitions to `awaiting_user_action`.
-* If the queue reaches its maximum capacity, any new normal message is rejected with a clear UI warning without clearing the user's input buffer.
+```ts
+type QueueItem = {
+  id: ItemId;                 // stable, unique within the session
+  text: string;               // immutable after dispatch
+  sequence: number;           // monotonically increasing FIFO order
+  submittedAt: string;        // informational ISO-8601 timestamp
+  preflight?: { actionId: ActionId; kind: 'input_surge' | 'large_uncached_input' };
+};
+```
 
-### Settings Timing & Snapshotting
-* **Cosmetic Settings (Theme, Font, etc.)**: Applied immediately to the active view.
-* **Execution Settings (Model, Temperature, System Instructions)**: Snapshot is taken and frozen when a queue item transitions from queued to execution (`running`). Settings changes made during a run do not mutate the active run, but are saved as the pending configuration for future queued tasks.
+An item is `queued` until the dispatch barrier claims it; it is then removed from the queue and represented by `active`. A queued item MAY be edited or removed by ID. An active or completed item MUST reject those operations. The configured capacity counts queued items, not the active item; a rejected submission MUST leave the input buffer and existing queue unchanged.
 
-### Cancellation Semantics
-* A cancel request triggers an abort signal sent to the active provider call and stops all tool execution.
-* Subagent runs are recursively cancelled during cleanup.
-* Late events arriving from child processes or subagents after cancellation is in progress are ignored and discarded.
+## Queue states and invariants
 
-### Persistence Semantics
-* If Term2 exits or crashes, the queue contents and their snapshots are persisted to local storage under the current session's path.
-* Upon restarting Term2, the queue is loaded in a **paused** state. Paid work does not auto-resume without explicit user confirmation.
+| State | Active execution | Dispatch permitted | Meaning |
+| --- | --- | --- | --- |
+| `idle` | none | yes | No active work and no paused condition. |
+| `awaiting_preflight` | none | no | Head item has a pending preflight guard. |
+| `running` | one | no | The active turn is streaming or continuing. |
+| `awaiting_active_action` | one | no | The active turn awaits a typed tool approval or `ask_user` answer. |
+| `cancelling` | one | no | Abort and owned-resource cleanup are in progress. |
+| `completing` | one | no | A matched terminal event has been admitted; its final projection is being committed. |
+| `paused` | none | no | Queue retention is intentional; `pauseReason` is `failure`, `manual`, or `recovered_interrupted`. |
 
+There is no `failed` state: failure is a terminal event that yields `paused { pauseReason: 'failure' }`. Thus `failed` and `queue_paused` cannot overlap.
 
----
+The controller MUST maintain these invariants:
 
-## 6. Explicit Non-Goals (Negative Rules)
+1. At most one active execution exists, and its ID is unique for the lifetime of the session.
+2. Only the queue head may be considered for preflight or dispatch; accepted items execute in increasing `sequence` order.
+3. An event or action whose `executionId`, `itemId`, or `actionId` does not match the current owner is stale and has no state, transcript, or dispatch effect.
+4. No dispatch occurs while `cancelling`, `completing`, an action is pending, or the queue is paused.
+5. An item is either queued, active, or terminal—never more than one of these.
 
-* **No Concurrent Runs**: Only one top-level run can execute at any time.
-* **No Runtime Mutation**: A normal message cannot alter the parameters (e.g. model) of an already-running model call.
-* **No Direct Child Input**: User input cannot be routed directly to subagents.
-* **No Silent Settings Mutation**: Settings changes cannot modify the execution parameters of an active run.
-* **No Auto-Resume on Failure**: Queued messages will never resume automatically after a failure; they require manual user action.
-* **No Natural-Language Cancellation**: Words like "stop" or "cancel" sent as messages are treated as normal conversational inputs, not system commands. Only `/cancel` triggers cancellation.
-* **No Message Double-Dipping**: A queued message cannot be simultaneously injected into the active run and executed as a separate future turn.
-* **No CLI Logs in Transcript**: Commands typed in the terminal are not inserted as user conversational messages.
+## Transitions, barriers, and actions
 
----
+The controller serializes commands and events. The following are the only state-changing transitions; all other inputs have the total-command outcome defined below.
 
-## 7. Acceptance Tests for Race Conditions
+| From | Accepted input | Required transition/effect | To |
+| --- | --- | --- | --- |
+| `idle` | submit or post-terminal dispatch | Enqueue if needed; evaluate head preflight | `awaiting_preflight`, `running`, or `idle` |
+| `awaiting_preflight` | matching accepted preflight | Capture snapshot and claim head at the dispatch barrier; start turn | `running` |
+| `awaiting_preflight` | matching declined preflight | Remove head without starting a turn; consider next head | `idle`, `awaiting_preflight`, or `running` |
+| `running` | matching tool/ask-user request | Record the typed active action and suspend/await continuation | `awaiting_active_action` |
+| `awaiting_active_action` | matching action resolution of the same kind | Continue the active turn with that resolution | `running` |
+| `running` or `awaiting_active_action` | matching completed | Enter completion barrier, commit terminal projection, retire active ownership, then consider head | `completing`, then `idle`/`awaiting_preflight`/`running` |
+| `running` or `awaiting_active_action` | matching failed | Retire active ownership and retain queue | `paused` (`failure`) |
+| active state | cancel | Enter cancellation barrier, request abort once, clean up recursively | `cancelling` |
+| `cancelling` | matching cancelled or cleanup finished | Retire active ownership; retain queue | `paused` (`manual`) |
+| `paused` | resume_queue | Clear pause reason and consider head | `idle`/`awaiting_preflight`/`running` |
 
-### Test 1: Simultaneous Submission at Completion
-* **Given** a run is in the `completing` state,
-* **When** the user submits a message at the exact same moment,
-* **Then** the message is added to the queue or starts the next run, but never both.
+### Preflight versus active actions
 
-### Test 2: Model Configuration Snapshotted
-* **Given** a run is active with Model A,
-* **When** the user changes the model setting to Model B,
-* **Then** the active run continues using Model A, and newly queued items use Model B.
+Preflight guards are evaluated at execution time, before the dispatch barrier and before `TurnStatusMachine.beginTurn()`. Their action IDs are item-scoped and only accept `answer_preflight`. A `tool_approval_requested` and an `ask_user_requested` are execution-scoped active actions; only `resolve_tool_approval` and `answer_ask_user`, respectively, may resolve them. Implementations MUST NOT represent these three interactions as one untyped “approval,” and MUST NOT send a preflight answer to a tool or subagent.
 
-### Test 3: Failure Isolation
-* **Given** there are two queued messages,
-* **When** the active run fails,
-* **Then** the state transitions to `failed` and neither queued message starts automatically.
+### Admission barriers
 
-### Test 4: Late Child Event during Cancellation
-* **Given** cancellation is in progress,
-* **When** a late child completion or tool output event arrives,
-* **Then** the event is ignored, and no queued task starts until cleanup completes.
+At the **dispatch barrier**, the controller MUST, as one serialized transition: verify that it is dispatchable and the item is the head; capture the execution snapshot; allocate `executionId`; remove the item from the queue; install `active`; and only then request turn start. A failure before turn start returns the item to the head or pauses with a recorded failure; it MUST NOT silently lose it.
+
+At the **completion barrier**, the controller MUST first verify the matching active `executionId` and move to `completing`. Until the terminal projection is committed and ownership retired, submissions only enqueue and no dispatcher may start work. Exactly one matched terminal event can retire an execution. Late duplicate terminal, output, child, or tool events are stale and MUST be ignored after retirement or cancellation begins.
+
+Cancellation similarly installs the `cancelling` barrier before signalling abort. It MUST signal the active execution at most once, cancel owned subagents during cleanup, and wait for cleanup completion before any future dispatch. A cancel with no active execution is a `no_op`, not an error.
+
+## Total command behavior
+
+| Command | Behavior in every state |
+| --- | --- |
+| `submit` | Validate and append FIFO item, or reject on capacity/validation. In `idle` it MAY immediately drive the dispatcher; in every other state it remains queued. Natural-language “stop” is a normal submission, never cancellation. |
+| `cancel` | In an active state, start cancellation as above; in `cancelling`, return `no_op`; otherwise return `no_op`. |
+| `answer_preflight` | Accept only in `awaiting_preflight` for the matching head item/action; otherwise reject as stale or inapplicable. |
+| `resolve_tool_approval` / `answer_ask_user` | Accept only in `awaiting_active_action` for the matching execution/action and action kind; otherwise reject as stale or inapplicable. |
+| `resume_queue` | Only `paused` resumes. In all other states it is `no_op`. |
+| `discard_queue` | Remove all queued items in every state. It never aborts or mutates active work; an active execution may still complete into an empty queue. |
+| `edit_queued` / `remove_queued` | Act only on an identified queued item. Missing, active, or terminal IDs are rejected without mutation. Removing the pending preflight head re-runs head selection. |
+| execution-setting change | Persist the new default in every state; it affects only a later dispatch. |
+| cosmetic-setting change | Apply/persist it immediately in every state; it has no execution effect. |
+
+## Execution snapshots and retry lifetime
+
+An execution snapshot is captured exactly once at the dispatch barrier and remains immutable through streaming, active actions, continuation, cancellation, and terminal projection. It MUST contain the item ID and text, model/provider selection, temperature and other generation parameters, system instructions, tool-policy/approval policy, and the session/conversation context reference or immutable version used to construct the turn. It SHOULD contain any other execution-affecting setting needed for reproducibility; cosmetic settings MUST NOT be included as execution inputs.
+
+Changing execution settings never changes an active snapshot. A queued item has no final execution snapshot, so it uses the defaults current when it reaches its dispatch barrier. A retry is a new execution with a new `ExecutionId` and a newly captured snapshot; it MUST NOT mutate the historical snapshot or reuse a prior active action ID.
+
+## Persistence and recovery
+
+The persisted queue record is a versioned, atomically replaced JSON document:
+
+```ts
+type PersistedQueueV1 = {
+  version: 1;
+  nextSequence: number;
+  queue: QueueItem[]; // sorted by sequence, including a pending preflight head
+  pause?: { reason: 'failure' | 'manual' | 'recovered_interrupted'; detail?: FailureSummary };
+  active?: {
+    executionId: ExecutionId;
+    item: QueueItem;
+    snapshot: ExecutionSnapshot;
+    phase: 'running' | 'awaiting_active_action' | 'cancelling' | 'completing';
+    pendingAction?: { actionId: ActionId; kind: 'tool_approval' | 'ask_user' };
+  };
+};
+```
+
+The controller MUST persist after every queue, pause, preflight, active-ownership, and terminal-ownership mutation, using an atomic-replace or equivalent all-or-nothing protocol. It MUST validate `version`, required IDs, and strictly increasing queue sequence on load; an invalid record MUST be quarantined/ignored with a visible recovery error rather than partially executed.
+
+On restart, no provider call, tool, subagent, approval, or active turn is resumed automatically. If `active` was persisted, it represents interrupted work: its item MUST NOT be re-enqueued automatically and its snapshot is retained only as recovery/audit information. The remaining queue is recovered in `paused { reason: 'recovered_interrupted' }` and requires `resume_queue`; a saved preflight remains pending and MUST receive a freshly issued preflight action ID before it can be confirmed. If no active work was persisted, a saved manual/failure pause is retained; otherwise recovered queued work is still paused before any paid work starts.
+
+## Transcript and control events
+
+An accepted `submit` creates one user transcript message for that item, in submission order. It MUST NOT be injected into an active turn and later run again. A matched terminal completion creates its normal terminal transcript entry exactly once. Tool requests, `ask_user` prompts and answers, preflight warnings/answers, queue status, failures, cancellation notices, retries, settings changes, and slash commands are control events: they MAY be rendered in the UI or audit log, but MUST NOT become ordinary user conversational messages or model-history turns. In particular, `/cancel` is not transcript content and no CLI log is transcript content. Only the active execution’s accepted output may be projected into the conversation transcript.
+
+## Acceptance criteria
+
+Tests MUST use controllable barriers and explicit IDs; they MUST NOT rely on wall-clock “simultaneous” actions.
+
+1. **Completion/submission race:** hold execution `E1` at its completion barrier; submit item `I2`; release the barrier. Assert `I2` has one queue/dispatch lifecycle, `E1` produces one terminal entry, and exactly one execution for `I2` starts.
+2. **Cancellation late event:** hold cleanup for `E1` after `cancel`; inject `completed`, tool output, and child completion events tagged `E1`; release cleanup. Assert none is projected, no item dispatches before release, and the resulting state is `paused` with retained queue.
+3. **Typed interaction isolation:** hold `I1` at preflight action `P1`; deliver a tool approval resolution and an answer for a different preflight ID, then decline `P1`. Assert neither mismatched action starts a turn and no tool continuation occurs. Separately, hold `E1` at `ask_user` action `A1`; assert tool-approval resolution for `A1` is rejected.
+4. **Snapshot/retry:** start `E1` after capturing Model A; change defaults to Model B while it is held at an active action; continue `E1` and assert it uses A. Fail it, resume its queued successor, and assert the successor captures B. If `I1` is retried, assert its new execution ID and snapshot are distinct from `E1`.
+5. **Recovery:** persist a record containing active `E1`, queued `I2`, and a pending action; construct a new controller from it. Assert no turn starts until `resume_queue`, `I1` is not auto-replayed, state is `paused(recovered_interrupted)`, and stale `E1`/old-action events have no effect.
+6. **Failure isolation:** inject matched failure for `E1` with `I2` and `I3` queued. Assert state is only `paused(failure)`, neither item starts before explicit resume, and FIFO dispatch after resume begins with `I2`.

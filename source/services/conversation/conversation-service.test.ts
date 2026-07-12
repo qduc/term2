@@ -61,6 +61,128 @@ beforeEach(() => {
   clearApprovalRejectionMarkers();
 });
 
+const flushQueue = async (): Promise<void> => {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+};
+
+class GatedStream {
+  interruptions: unknown[] = [];
+  state = {};
+  newItems: unknown[] = [];
+  history: unknown[] = [];
+  finalOutput: string;
+  readonly #gate: Promise<void>;
+
+  constructor(finalOutput: string, gate: Promise<void>) {
+    this.finalOutput = finalOutput;
+    this.#gate = gate;
+  }
+
+  async *[Symbol.asyncIterator](): AsyncGenerator<unknown> {
+    await this.#gate;
+    yield;
+  }
+}
+
+it('queues foreground messages FIFO, returns each item terminal, and executes each input once', async () => {
+  let releaseFirst!: () => void;
+  const firstGate = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  const inputs: unknown[] = [];
+  const mockClient = partialClient({
+    async startStream(input: unknown) {
+      inputs.push(input);
+      if (inputs.length === 1) return new GatedStream('first terminal', firstGate) as unknown as AgentStream;
+      const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'second terminal' }]);
+      stream.finalOutput = 'second terminal';
+      return stream;
+    },
+  });
+  const service = new ConversationService({
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  const first = service.sendMessage('first');
+  const second = service.sendMessage('second');
+  await flushQueue();
+  expect(inputs).toHaveLength(1);
+
+  releaseFirst();
+  const [firstTerminal, secondTerminal] = await Promise.all([first, second]);
+
+  expect(asFinal(firstTerminal).finalText).toBe('first terminal');
+  expect(asFinal(secondTerminal).finalText).toBe('second terminal');
+  expect(inputs).toHaveLength(2);
+  expect(service.listUserTurns().map((turn) => turn.text)).toEqual(['first', 'second']);
+});
+
+it('pauses queued foreground messages after a failed execution until resumeQueue is requested', async () => {
+  const inputs: unknown[] = [];
+  const mockClient = partialClient({
+    async startStream(input: unknown) {
+      inputs.push(input);
+      if (inputs.length === 1) throw new Error('first failed');
+      const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'second terminal' }]);
+      stream.finalOutput = 'second terminal';
+      return stream;
+    },
+  });
+  const service = new ConversationService({
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  const first = service.sendMessage('first');
+  const second = service.sendMessage('second');
+  await expect(first).rejects.toThrow('first failed');
+  await flushQueue();
+  expect(inputs).toHaveLength(1);
+
+  await service.resumeQueue();
+  expect(asFinal(await second).finalText).toBe('second terminal');
+  expect(inputs).toHaveLength(2);
+});
+
+it('retains queued foreground messages across abort and blocks them until resumeQueue', async () => {
+  let releaseFirst!: () => void;
+  const firstGate = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  const inputs: unknown[] = [];
+  const mockClient = partialClient({
+    abort() {
+      releaseFirst();
+    },
+    async startStream(input: unknown) {
+      inputs.push(input);
+      if (inputs.length === 1) return new GatedStream('aborted terminal', firstGate) as unknown as AgentStream;
+      const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'second terminal' }]);
+      stream.finalOutput = 'second terminal';
+      return stream;
+    },
+  });
+  const service = new ConversationService({
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  const first = service.sendMessage('first');
+  const second = service.sendMessage('second');
+  await flushQueue();
+  service.abort();
+  await first;
+  await flushQueue();
+  expect(inputs).toHaveLength(1);
+
+  await service.resumeQueue();
+  expect(asFinal(await second).finalText).toBe('second terminal');
+  expect(inputs).toHaveLength(2);
+});
+
 it('emits live text chunks for response.output_text.delta events', async () => {
   expect.assertions(3);
 
@@ -255,11 +377,13 @@ it('starts a fresh request for the next message after aborting approval', async 
   service.abort();
 
   const resolvedEvents: any[] = [];
-  const resolvedResult = await service.sendMessage('new input', {
+  const resolvedResultPromise = service.sendMessage('new input', {
     onEvent(event) {
       resolvedEvents.push(event);
     },
   });
+  await service.resumeQueue();
+  const resolvedResult = await resolvedResultPromise;
 
   expect(resolvedResult.type).toBe('response');
   expect(asFinal(resolvedResult).finalText).toBe('After abort');
@@ -358,7 +482,9 @@ it('reject with reason preserves tool history while abort starts clean follow-up
       await service.handleApprovalDecision('n', 'no thanks');
     } else {
       service.abort();
-      await service.sendMessage('new input');
+      const next = service.sendMessage('new input');
+      await service.resumeQueue();
+      await next;
     }
 
     await service.sendMessage('next');
@@ -1135,7 +1261,9 @@ it('switchProvider() after abort does not replay the abandoned tool turn in the 
   service.abort();
   service.switchProvider('openrouter');
 
-  const second = await service.sendMessage('next');
+  const secondPromise = service.sendMessage('next');
+  await service.resumeQueue();
+  const second = await secondPromise;
   expect(second.type).toBe('response');
 
   expect(startCalls.length).toBe(2);
@@ -1381,7 +1509,9 @@ it('failed user turn is dropped from history after non-retryable provider error'
 
   await expect(service.sendMessage('first failed message')).rejects.toThrow('400 Error from provider: bad request');
 
-  const result = await service.sendMessage('second message');
+  const resultPromise = service.sendMessage('second message');
+  await service.resumeQueue();
+  const result = await resultPromise;
 
   expect(result.type).toBe('response');
   expect(startCalls.length).toBe(2);

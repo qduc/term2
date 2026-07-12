@@ -15,6 +15,8 @@ export type ConversationRuntimeBundle = {
 };
 
 export type CreateConversationRuntimeOptions = {
+  /** Enables serialized foreground submissions for the ConversationService facade. */
+  queueForeground?: boolean;
   sessionId: string;
   /** ISO timestamp; defaults to now. */
   sessionStartedAt?: string;
@@ -39,7 +41,10 @@ export type CreateConversationRuntimeOptions = {
  */
 export function createConversationRuntime(options: CreateConversationRuntimeOptions): ConversationRuntimeBundle {
   const runtime = createSessionRuntime(options);
-  const adapter = createConversationAdapterForRuntime(runtime, { deps: options.deps });
+  const adapter = createConversationAdapterForRuntime(runtime, {
+    deps: options.deps,
+    queueForeground: options.queueForeground,
+  });
 
   return { runtime, adapter };
 }

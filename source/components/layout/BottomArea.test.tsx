@@ -35,6 +35,11 @@ const baseProps: BottomAreaProps = {
   } as any,
   onApprove: () => {},
   onReject: () => {},
+  queuePaused: false,
+  queueLength: 0,
+  queuePauseReason: undefined,
+  onResumeQueue: () => {},
+  onDiscardQueue: () => {},
 };
 
 const renderBottomArea = async (props: typeof baseProps) => {
@@ -93,7 +98,54 @@ it.sequential('BottomArea shows processing indicator when busy', async () => {
   const output = lastFrame() ?? '';
   expect(output.includes('processing.')).toBe(true);
   expect(output.includes('Allow this action?')).toBe(false);
+  // With queue mode, input stays visible while processing so the user can queue messages
+  expect(output.includes('❯')).toBe(true);
+  act(() => {
+    unmount();
+  });
+});
+
+it.sequential('BottomArea shows InputBox while processing when queue mode is active', async () => {
+  const { lastFrame, unmount } = await renderBottomArea({
+    ...baseProps,
+    isProcessing: true,
+  });
+  const output = lastFrame() ?? '';
+  // With queue mode, InputBox shows while processing for queuing additional messages
+  expect(output.includes('❯')).toBe(true);
+  expect(output.includes('processing.')).toBe(true);
+  act(() => {
+    unmount();
+  });
+});
+
+it.sequential('BottomArea shows QueuePausedPrompt when queuePaused is true', async () => {
+  const { lastFrame, unmount } = await renderBottomArea({
+    ...baseProps,
+    queuePaused: true,
+    queueLength: 3,
+    queuePauseReason: 'manual',
+  });
+  const output = lastFrame() ?? '';
+  expect(output.includes('Queue paused: 3 item(s) pending.')).toBe(true);
+  expect(output.includes('esume')).toBe(true);
+  expect(output.includes('iscard')).toBe(true);
   expect(output.includes('❯')).toBe(false);
+  act(() => {
+    unmount();
+  });
+});
+
+it.sequential('BottomArea shows QueuePausedPrompt with failure reason', async () => {
+  const { lastFrame, unmount } = await renderBottomArea({
+    ...baseProps,
+    queuePaused: true,
+    queueLength: 1,
+    queuePauseReason: 'failure',
+  });
+  const output = lastFrame() ?? '';
+  expect(output.includes('Queue paused: 1 item(s) pending.')).toBe(true);
+  expect(output.includes('Last turn failed.')).toBe(true);
   act(() => {
     unmount();
   });

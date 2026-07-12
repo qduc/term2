@@ -8,6 +8,14 @@ import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
 import type { SessionRuntime, SessionLogs, SessionApprovalQuery } from '../session/session-composition.js';
 import type { SessionManager } from '../session/session-manager.js';
 import type { AskUserAnswerSink, SubagentEventSinkHost } from '../conversation-agent-client.js';
+import {
+  QueueController,
+  type ActionId,
+  type ActiveExecution,
+  type ExecutionId,
+  type QueuePersistence,
+  type QueueTurnDriver,
+} from '../queue/queue-controller.js';
 
 export type SendMessageOptions = {
   onTextChunk?: (fullText: string, chunk: string) => void;
@@ -27,7 +35,35 @@ export type HandleApprovalDecisionOptions = {
   approvalAnswer?: string;
 };
 
-export type TurnFlow = Pick<SessionRuntime['turns'], 'start' | 'continueAfterApproval'>;
+export type TurnFlow = Pick<SessionRuntime['turns'], 'start' | 'continueAfterApproval'> & {
+  abort?: () => void;
+};
+
+type QueuedMessage = {
+  readonly input: string | UserTurn;
+  readonly options: SendMessageOptions;
+  readonly resolve: (terminal: ConversationTerminal) => void;
+  readonly reject: (error: unknown) => void;
+};
+
+type QueuedMessageSnapshot = { readonly requestId: string; readonly recovered?: boolean };
+
+export type QueueStateKind =
+  | 'idle'
+  | 'running'
+  | 'awaiting_active_action'
+  | 'cancelling'
+  | 'completing'
+  | 'paused'
+  | 'awaiting_preflight';
+
+export interface QueueStateSnapshot {
+  readonly queueLength: number;
+  readonly stateKind: QueueStateKind;
+  readonly pauseReason?: 'failure' | 'manual' | 'recovered_interrupted';
+}
+
+export type QueueStateObserver = (snapshot: QueueStateSnapshot) => void;
 
 export type ConversationEventSink = (event: ConversationEvent) => void;
 
@@ -44,6 +80,19 @@ export class ConversationAdapter {
   #logs: SessionLogs;
   #approval: SessionApprovalQuery;
   #turnFlow: TurnFlow;
+  readonly #pendingMessages: Array<{
+    readonly requestId: string;
+    readonly message: QueuedMessage;
+  }> = [];
+  readonly #messagesById = new Map<string, QueuedMessage>();
+  readonly #queue: QueueController<QueuedMessageSnapshot, ConversationTerminal> | null;
+  #nextQueuedMessageId = 1;
+  #nextActionId = 1;
+  #activeTurn: Promise<void> = Promise.resolve();
+  #cancellation: Promise<void> = Promise.resolve();
+  #approvalExecutionId: ExecutionId | null = null;
+  #approvalActionId: ActionId | null = null;
+  #queueStateObserver: QueueStateObserver | null = null;
 
   constructor(deps: {
     sessionId: string;
@@ -57,6 +106,8 @@ export class ConversationAdapter {
     logs: SessionLogs;
     approval: SessionApprovalQuery;
     turnFlow: TurnFlow;
+    queueForeground?: boolean;
+    queuePersistence?: QueuePersistence<QueuedMessageSnapshot>;
   }) {
     this.#sessionId = deps.sessionId;
     this.#startedAt = deps.startedAt;
@@ -69,10 +120,47 @@ export class ConversationAdapter {
     this.#logs = deps.logs;
     this.#approval = deps.approval;
     this.#turnFlow = deps.turnFlow;
+    if (deps.queueForeground) {
+      const driver: QueueTurnDriver<QueuedMessageSnapshot> = {
+        start: (execution) => this.#startQueuedTurn(execution),
+        cancel: async () => {
+          await this.#activeTurn;
+        },
+      };
+      this.#queue = new QueueController({
+        driver,
+        snapshotFactory: (item) => {
+          if (Date.parse(item.submittedAt) < Date.parse(this.#startedAt)) {
+            return { requestId: `recovered:${item.id}`, recovered: true };
+          }
+          const pending = this.#pendingMessages.shift();
+          return pending ? { requestId: pending.requestId } : { requestId: `recovered:${item.id}`, recovered: true };
+        },
+        persistence: deps.queuePersistence,
+      });
+    } else {
+      this.#queue = null;
+    }
   }
 
   setEventSink(sink: ConversationEventSink | null): void {
     this.#eventSink = sink;
+  }
+
+  setQueueStateObserver(observer: QueueStateObserver | null): void {
+    this.#queueStateObserver = observer;
+    // Immediately notify with current state
+    this.#notifyQueueState();
+  }
+
+  #notifyQueueState(): void {
+    if (!this.#queue || !this.#queueStateObserver) return;
+    const state = this.#queue.state();
+    this.#queueStateObserver({
+      queueLength: state.queue.length,
+      stateKind: state.kind,
+      pauseReason: 'reason' in state ? (state as any).reason : undefined,
+    });
   }
 
   #getTrafficMode(): string {
@@ -103,6 +191,110 @@ export class ConversationAdapter {
   }
 
   async sendMessage(
+    input: string | UserTurn,
+    {
+      onTextChunk,
+      onReasoningChunk,
+      onCommandMessage,
+      onEvent,
+      hallucinationRetryCount = 0,
+      bypassInputSurgeGuard,
+      replayFromHistory,
+    }: SendMessageOptions = {},
+  ): Promise<ConversationTerminal> {
+    const queue = this.#queue;
+    if (!queue) {
+      return this.#executeMessage(input, {
+        onTextChunk,
+        onReasoningChunk,
+        onCommandMessage,
+        onEvent,
+        hallucinationRetryCount,
+        bypassInputSurgeGuard,
+        replayFromHistory,
+      });
+    }
+    return new Promise<ConversationTerminal>((resolve, reject) => {
+      const requestId = String(this.#nextQueuedMessageId++);
+      const message = {
+        input,
+        options: {
+          onTextChunk,
+          onReasoningChunk,
+          onCommandMessage,
+          onEvent,
+          hallucinationRetryCount,
+          bypassInputSurgeGuard,
+          replayFromHistory,
+        },
+        resolve,
+        reject,
+      };
+      this.#messagesById.set(requestId, message);
+      this.#pendingMessages.push({ requestId, message });
+      void queue
+        .command({ kind: 'submit', text: normalizeUserTurn(input).text || '\u0000queued-message' })
+        .then(() => this.#notifyQueueState());
+    });
+  }
+
+  async resumeQueue(): Promise<void> {
+    if (!this.#queue) return;
+    await this.#cancellation;
+    await this.#queue.command({ kind: 'resume_queue' });
+    this.#notifyQueueState();
+  }
+
+  async discardQueue(): Promise<void> {
+    if (!this.#queue) return;
+    await this.#queue.command({ kind: 'discard_queue' });
+    this.#notifyQueueState();
+  }
+
+  abort(): void {
+    if (!this.#queue) {
+      this.#turnFlow.abort?.();
+      return;
+    }
+    this.#turnFlow.abort?.();
+    this.#cancellation = this.#queue.command({ kind: 'cancel' }).then(() => {
+      this.#notifyQueueState();
+    });
+  }
+
+  #startQueuedTurn(execution: ActiveExecution<QueuedMessageSnapshot>): void {
+    this.#activeTurn = this.#runQueuedTurn(execution);
+  }
+
+  async #runQueuedTurn(execution: ActiveExecution<QueuedMessageSnapshot>): Promise<void> {
+    const message = this.#messagesById.get(execution.snapshot.requestId);
+    if (message) this.#messagesById.delete(execution.snapshot.requestId);
+    try {
+      const result = await this.#executeMessage(message?.input ?? execution.item.text, message?.options ?? {});
+      if (result.type === 'approval_required') {
+        this.#approvalExecutionId = execution.executionId;
+        this.#approvalActionId = `adapter-action-${this.#nextActionId++}` as ActionId;
+        await this.#queue!.event({
+          kind: 'tool_approval_requested',
+          executionId: execution.executionId,
+          actionId: this.#approvalActionId,
+          request: {}, // existing runtime doesn't expose typed tool request details
+        });
+        this.#notifyQueueState();
+        message?.resolve(result);
+        return;
+      }
+      await this.#queue!.event({ kind: 'completed', executionId: execution.executionId, terminal: result });
+      this.#notifyQueueState();
+      message?.resolve(result);
+    } catch (error) {
+      await this.#queue!.event({ kind: 'failed', executionId: execution.executionId, failure: error });
+      this.#notifyQueueState();
+      message?.reject(error);
+    }
+  }
+
+  async #executeMessage(
     input: string | UserTurn,
     {
       onTextChunk,
@@ -183,42 +375,78 @@ export class ConversationAdapter {
       answer: answer === 'y' ? 'y' : 'n',
       ...(rejectionReason ? { rejectionReason } : {}),
     });
-    return this.#withTrafficContext(undefined, async () => {
-      const wrappedOnEvent = (event: ConversationEvent) => {
-        this.#logs.dispatchEventToLog(event);
-        this.#eventSink?.(event);
-        onEvent?.(event);
-      };
-      this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
-      let result: ConversationTerminal | null;
-      try {
-        result = await collectTerminalResult(this.#turnFlow.continueAfterApproval({ answer, rejectionReason }), {
-          onTextChunk,
-          onReasoningChunk,
-          onCommandMessage,
-          onEvent: wrappedOnEvent,
-          getRawInterruption: () => this.#approval.getPendingInterruption(),
-          onFinalEvent: (event) => {
-            this.#logger.debug('handleApprovalDecision received final event', {
-              sessionId: this.#sessionId,
-              hasUsage: Boolean(event.usage),
-              usage: event.usage,
-            });
-          },
+    try {
+      // If queue tracks this approval, resolve the typed action before continuing.
+      if (this.#queue && this.#approvalExecutionId && this.#approvalActionId) {
+        const actionCmd = await this.#queue.command({
+          kind: 'resolve_tool_approval',
+          executionId: this.#approvalExecutionId,
+          actionId: this.#approvalActionId,
+          approved: answer === 'y',
         });
-      } finally {
-        this.#subagentEventSinkHost?.setSubagentEventSink(null);
+        this.#notifyQueueState();
+        // If the queue rejected (e.g. stale from concurrent cancel), proceed
+        // with the direct continuation but do not attempt further queue events.
+        if (actionCmd.kind !== 'accepted') {
+          this.#approvalExecutionId = null;
+          this.#approvalActionId = null;
+        }
       }
 
-      if (result && result.type === 'response') {
-        this.#logger.debug('handleApprovalDecision returning response', {
-          sessionId: this.#sessionId,
-          hasUsage: Boolean(result.usage),
-          usage: result.usage,
-        });
-      }
+      const result = await this.#withTrafficContext(undefined, async () => {
+        const wrappedOnEvent = (event: ConversationEvent) => {
+          this.#logs.dispatchEventToLog(event);
+          this.#eventSink?.(event);
+          onEvent?.(event);
+        };
+        this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
+        let result: ConversationTerminal | null;
+        try {
+          result = await collectTerminalResult(this.#turnFlow.continueAfterApproval({ answer, rejectionReason }), {
+            onTextChunk,
+            onReasoningChunk,
+            onCommandMessage,
+            onEvent: wrappedOnEvent,
+            getRawInterruption: () => this.#approval.getPendingInterruption(),
+            onFinalEvent: (event) => {
+              this.#logger.debug('handleApprovalDecision received final event', {
+                sessionId: this.#sessionId,
+                hasUsage: Boolean(event.usage),
+                usage: event.usage,
+              });
+            },
+          });
+        } finally {
+          this.#subagentEventSinkHost?.setSubagentEventSink(null);
+        }
 
+        if (result && result.type === 'response') {
+          this.#logger.debug('handleApprovalDecision returning response', {
+            sessionId: this.#sessionId,
+            hasUsage: Boolean(result.usage),
+            usage: result.usage,
+          });
+        }
+
+        return result;
+      });
+      if (result && this.#queue && this.#approvalExecutionId) {
+        const executionId = this.#approvalExecutionId;
+        this.#approvalExecutionId = null;
+        this.#approvalActionId = null;
+        await this.#queue.event({ kind: 'completed', executionId, terminal: result });
+        this.#notifyQueueState();
+      }
       return result;
-    });
+    } catch (error) {
+      if (this.#queue && this.#approvalExecutionId) {
+        const executionId = this.#approvalExecutionId;
+        this.#approvalExecutionId = null;
+        this.#approvalActionId = null;
+        await this.#queue.event({ kind: 'failed', executionId, failure: error });
+        this.#notifyQueueState();
+      }
+      throw error;
+    }
   }
 }

@@ -15,6 +15,7 @@
 import type { NormalizedUsage } from '../utils/ai/token-usage.js';
 import type { CodexRateLimitInfo } from '../services/conversation/conversation-events.js';
 import type { PendingApproval } from '../contracts/conversation.js';
+import type { QueuePauseReason } from '../services/queue/queue-controller.js';
 
 // ---------------------------------------------------------------------------
 // State shape
@@ -33,6 +34,21 @@ export type TurnPhase =
   | { kind: 'processing_awaiting_approval'; approval: PendingApproval; interaction: ApprovalInteraction }
   | { kind: 'awaiting_approval'; approval: PendingApproval; interaction: ApprovalInteraction };
 
+export type QueueStateKind =
+  | 'idle'
+  | 'running'
+  | 'awaiting_active_action'
+  | 'cancelling'
+  | 'completing'
+  | 'paused'
+  | 'awaiting_preflight';
+
+export interface QueueSnapshot {
+  readonly queueLength: number;
+  readonly stateKind: QueueStateKind;
+  readonly pauseReason?: QueuePauseReason;
+}
+
 export interface ConversationUIFlags {
   isProcessing: boolean;
   waitingForApproval: boolean;
@@ -41,6 +57,12 @@ export interface ConversationUIFlags {
   askUserAnswers: AskUserAnswer[];
   currentAskUserQuestionIndex: number;
   pendingApproval: PendingApproval | null;
+
+  // Queue state
+  queueActive: boolean;
+  queuePaused: boolean;
+  queueLength: number;
+  queuePauseReason?: QueuePauseReason;
 }
 
 export interface ConversationUIState {
@@ -53,6 +75,9 @@ export interface ConversationUIState {
   // Usage (included here so reset_all can clear them atomically)
   lastUsage: NormalizedUsage | null;
   lastCodexRateLimit: CodexRateLimitInfo | null;
+
+  // Queue state snapshot
+  queueSnapshot: QueueSnapshot | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +128,9 @@ export type ConversationUIAction =
   | { type: 'rate_limit/updated'; rateLimit: CodexRateLimitInfo }
   | { type: 'rate_limit/cleared' }
 
+  // --- Queue state ---
+  | { type: 'queue/updated'; snapshot: QueueSnapshot }
+
   // --- Compound resets ---
   /** Reset transient approval/processing/indicator state (used by stop, undo, etc.). */
   | { type: 'reset_transient' }
@@ -120,6 +148,7 @@ export function createInitialUIState(initialUsage: NormalizedUsage | null): Conv
     toolCallStreamingInfo: null,
     lastUsage: initialUsage,
     lastCodexRateLimit: null,
+    queueSnapshot: null,
   };
 }
 
@@ -178,29 +207,50 @@ function createApprovalPhase(current: TurnPhase, approval: PendingApproval): Tur
     : { kind: 'awaiting_approval', approval, interaction };
 }
 
+const QUEUE_ACTIVE_KINDS: ReadonlySet<QueueStateKind> = new Set([
+  'running',
+  'awaiting_active_action',
+  'cancelling',
+  'completing',
+]);
+
 export function getConversationUIFlags(state: ConversationUIState): ConversationUIFlags {
   const phase = state.turnPhase;
+  const queueSnapshot = state.queueSnapshot;
+  const queueActive = queueSnapshot !== null && QUEUE_ACTIVE_KINDS.has(queueSnapshot.stateKind);
+  const queuePaused = queueSnapshot?.stateKind === 'paused';
+  const queueLength = queueSnapshot?.queueLength ?? 0;
+  const isProcessing = isProcessingPhase(phase) || queueActive;
+
   if (!isApprovalPhase(phase)) {
     return {
-      isProcessing: phase.kind === 'processing',
+      isProcessing,
       waitingForApproval: false,
       waitingForRejectionReason: false,
       waitingForAskUserAnswer: false,
       askUserAnswers: [],
       currentAskUserQuestionIndex: 0,
       pendingApproval: null,
+      queueActive,
+      queuePaused,
+      queueLength,
+      queuePauseReason: queueSnapshot?.pauseReason,
     };
   }
 
   const askUserState = getAskUserState(phase.interaction);
   return {
-    isProcessing: phase.kind === 'processing_awaiting_approval',
+    isProcessing,
     waitingForApproval: true,
     waitingForRejectionReason: phase.interaction.kind === 'rejection_reason',
     waitingForAskUserAnswer: phase.interaction.kind === 'ask_user_answer',
     askUserAnswers: askUserState.askUserAnswers,
     currentAskUserQuestionIndex: askUserState.currentAskUserQuestionIndex,
     pendingApproval: phase.approval,
+    queueActive,
+    queuePaused,
+    queueLength,
+    queuePauseReason: queueSnapshot?.pauseReason,
   };
 }
 
@@ -392,6 +442,10 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
     case 'rate_limit/cleared':
       return { ...state, lastCodexRateLimit: null };
 
+    // --- Queue state ---
+    case 'queue/updated':
+      return { ...state, queueSnapshot: action.snapshot };
+
     // --- Compound resets ---
     case 'reset_transient':
       return {
@@ -399,6 +453,7 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
         turnPhase: { kind: 'idle' },
         thinkingStartedAt: null,
         toolCallStreamingInfo: null,
+        queueSnapshot: null,
       };
 
     case 'reset_all':

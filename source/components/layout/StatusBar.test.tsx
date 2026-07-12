@@ -234,3 +234,42 @@ it.sequential('StatusBar renders a static commit blocker warning', async () => {
   expect(output.includes('24 msgs')).toBe(true);
   expect(output.includes('18k chars')).toBe(true);
 });
+
+it.sequential('StatusBar shows queue badge when queueLength > 0', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+
+  const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} queueLength={3} />);
+
+  const output = lastFrame() ?? '';
+  expect(output.includes('[Q:3]')).toBe(true);
+});
+
+it.sequential('StatusBar hides queue badge when queueLength is 0', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+
+  const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} queueLength={0} />);
+
+  const output = lastFrame() ?? '';
+  expect(output.includes('[Q:')).toBe(false);
+});
+
+it.sequential('StatusBar hides queue badge when queueLength is undefined', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+
+  const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
+
+  const output = lastFrame() ?? '';
+  expect(output.includes('[Q:')).toBe(false);
+});

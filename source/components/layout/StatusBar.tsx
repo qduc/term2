@@ -18,6 +18,7 @@ interface StatusBarProps {
   hasPendingConfirmation?: boolean;
   pendingLargeUncachedTokens?: number;
   staticCommitBlocker?: StaticCommitBlocker | null;
+  queueLength?: number;
 }
 
 const StatusBar: FC<StatusBarProps> = ({
@@ -30,6 +31,7 @@ const StatusBar: FC<StatusBarProps> = ({
   hasPendingConfirmation = false,
   pendingLargeUncachedTokens,
   staticCommitBlocker = null,
+  queueLength,
 }) => {
   const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
@@ -166,6 +168,15 @@ const StatusBar: FC<StatusBarProps> = ({
               </Text>
             )}
             {!mentorMode && !liteMode && !planMode && !orchestratorMode && <Text color={slate}>Standard</Text>}
+
+            {queueLength != null && queueLength > 0 && (
+              <>
+                <Text color={slate}>│</Text>
+                <Box marginX={1}>
+                  <Text color={accent}>[Q:{queueLength}]</Text>
+                </Box>
+              </>
+            )}
           </Box>
 
           {model && (

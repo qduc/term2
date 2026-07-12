@@ -7,6 +7,7 @@ import HandoffConfirmationPrompt from '../prompt/HandoffConfirmationPrompt.js';
 import StandardModeConfirmationPrompt from '../prompt/StandardModeConfirmationPrompt.js';
 import LargeUncachedConfirmationPrompt from '../prompt/LargeUncachedConfirmationPrompt.js';
 import InputSurgeConfirmationPrompt from '../prompt/InputSurgeConfirmationPrompt.js';
+import QueuePausedPrompt from '../prompt/QueuePausedPrompt.js';
 import type { HandoffState } from '../../hooks/use-handoff-flow.js';
 import type { SlashCommand } from '../../slash-commands.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
@@ -20,6 +21,7 @@ import type { UserTurn } from '../../types/user-turn.js';
 import type { UndoItem } from '../../hooks/use-undo-selection.js';
 import type { SkillsService } from '../../services/skills/skills-service.js';
 import type { StaticCommitBlocker } from '../message/MessageList.js';
+import type { QueuePauseReason } from '../../services/queue/queue-controller.js';
 
 export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;
@@ -66,6 +68,12 @@ export type BottomAreaProps = {
   onSlashTabComplete?: (command: SlashCommand) => boolean;
   skillsService?: SkillsService;
   staticCommitBlocker?: StaticCommitBlocker | null;
+  // Queue state
+  queuePaused?: boolean;
+  queueLength?: number;
+  queuePauseReason?: QueuePauseReason;
+  onResumeQueue?: () => void;
+  onDiscardQueue?: () => void;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -113,6 +121,11 @@ const BottomArea: FC<BottomAreaProps> = ({
   onSlashTabComplete,
   skillsService,
   staticCommitBlocker = null,
+  queuePaused = false,
+  queueLength = 0,
+  queuePauseReason,
+  onResumeQueue,
+  onDiscardQueue,
 }) => {
   const [dotCount, setDotCount] = useState(1);
   const [thinkingElapsedSeconds, setThinkingElapsedSeconds] = useState(() =>
@@ -162,12 +175,14 @@ const BottomArea: FC<BottomAreaProps> = ({
     !isProcessing &&
     !waitingForRejectionReason &&
     pendingApproval;
+  const showQueuePausedPrompt = queuePaused && !showHandoffConfirm && !showStandardModeConfirm;
   const showInput =
     !showHandoffConfirm &&
     !showStandardModeConfirm &&
     !showLargeUncachedPrompt &&
     !showSurgePrompt &&
-    ((!isProcessing && !waitingForApproval) || waitingForRejectionReason || waitingForAskUserAnswer);
+    !queuePaused &&
+    (!waitingForApproval || waitingForRejectionReason || waitingForAskUserAnswer);
 
   return (
     <Box flexDirection="column" width="100%">
@@ -221,7 +236,15 @@ const BottomArea: FC<BottomAreaProps> = ({
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt == null && (
               <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>
             )}
-            {showInput && (
+            {showQueuePausedPrompt && (
+              <QueuePausedPrompt
+                queueLength={queueLength}
+                pauseReason={queuePauseReason}
+                onResume={onResumeQueue || (() => {})}
+                onDiscard={onDiscardQueue || (() => {})}
+              />
+            )}
+            {!showQueuePausedPrompt && showInput && (
               <InputBox
                 onSubmit={onSubmit}
                 slashCommands={slashCommands}
@@ -267,6 +290,7 @@ const BottomArea: FC<BottomAreaProps> = ({
         }
         pendingLargeUncachedTokens={pendingLargeUncachedTokens}
         staticCommitBlocker={staticCommitBlocker}
+        queueLength={queueLength}
       />
     </Box>
   );

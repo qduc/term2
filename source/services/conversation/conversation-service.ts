@@ -14,6 +14,7 @@ import type {
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 import type { InputSurgeDecision } from '../input-surge-guard.js';
 import type { SessionRuntime } from '../session/session-composition.js';
+import type { QueueStateObserver } from './conversation-adapter.js';
 import { createConversationRuntime } from './conversation-runtime-factory.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../../contracts/conversation.js';
@@ -57,6 +58,7 @@ export class ConversationService {
     const { runtime, adapter } = createConversationRuntime({
       agentClient,
       deps,
+      queueForeground: true,
       sessionId: sessionId ?? 'default',
       sessionStartedAt,
     });
@@ -82,6 +84,7 @@ export class ConversationService {
     const { runtime, adapter } = createConversationRuntime({
       agentClient: this.#agentClient,
       deps: this.#deps,
+      queueForeground: true,
       sessionId: newId,
     });
     this.#runtime = runtime;
@@ -160,11 +163,26 @@ export class ConversationService {
   }
 
   abort(): void {
-    this.#runtime.turns.abort();
+    this.#adapter.abort();
   }
 
   sendMessage(input: string | UserTurn, options?: SendMessageOptions): Promise<ConversationTerminal> {
     return this.#adapter.sendMessage(input, options);
+  }
+
+  /** Resume foreground messages retained after an execution failure or abort. */
+  resumeQueue(): Promise<void> {
+    return this.#adapter.resumeQueue();
+  }
+
+  /** Discard all queued foreground messages without executing them. */
+  discardQueue(): Promise<void> {
+    return this.#adapter.discardQueue();
+  }
+
+  /** Set an observer for queue state changes. The observer fires immediately with current state. */
+  setQueueStateObserver(observer: QueueStateObserver | null): void {
+    this.#adapter.setQueueStateObserver(observer);
   }
 
   retryLastToolOutput(options?: SendMessageOptions): Promise<ConversationTerminal | null> {

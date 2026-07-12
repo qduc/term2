@@ -198,6 +198,12 @@ const App: FC<AppProps> = ({
     getSubagentUsage,
     goToPreviousQuestion,
     goToNextQuestion,
+    queueActive: _queueActive,
+    queuePaused,
+    queueLength,
+    queuePauseReason,
+    resumeQueue,
+    discardQueue,
   } = useConversation({
     conversationService,
     loggingService,
@@ -533,6 +539,11 @@ const App: FC<AppProps> = ({
             toolCallStreamingInfo={toolCallStreamingInfo}
             isShellMode={isShellMode}
             lastUsage={lastUsage}
+            queuePaused={queuePaused}
+            queueLength={queueLength}
+            queuePauseReason={queuePauseReason}
+            onResumeQueue={resumeQueue}
+            onDiscardQueue={discardQueue}
             onSubmit={handleSubmit}
             slashCommands={slashCommands}
             skillsService={skillsService}

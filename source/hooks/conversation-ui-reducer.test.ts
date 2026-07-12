@@ -354,6 +354,140 @@ it('reset_all clears everything including usage', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Queue state
+// ---------------------------------------------------------------------------
+
+it('queue/updated sets queue state and flags derive queueActive', () => {
+  const state = createInitialUIState(null);
+  const next = conversationUIReducer(state, {
+    type: 'queue/updated',
+    snapshot: { queueLength: 2, stateKind: 'running' },
+  });
+  const flags = getConversationUIFlags(next);
+  expect(flags.queueActive).toBe(true);
+  expect(flags.queuePaused).toBe(false);
+  expect(flags.isProcessing).toBe(true);
+  expect(flags.queueLength).toBe(2);
+});
+
+it('queue/updated with paused state sets queuePaused', () => {
+  const state = createInitialUIState(null);
+  const next = conversationUIReducer(state, {
+    type: 'queue/updated',
+    snapshot: { queueLength: 3, stateKind: 'paused', pauseReason: 'failure' },
+  });
+  const flags = getConversationUIFlags(next);
+  expect(flags.queueActive).toBe(false);
+  expect(flags.queuePaused).toBe(true);
+  expect(flags.isProcessing).toBe(false);
+  expect(flags.queueLength).toBe(3);
+  expect(flags.queuePauseReason).toBe('failure');
+});
+
+it('queue/updated with idle state clears queue flags', () => {
+  let state = conversationUIReducer(createInitialUIState(null), {
+    type: 'queue/updated',
+    snapshot: { queueLength: 2, stateKind: 'running' },
+  });
+  state = conversationUIReducer(state, {
+    type: 'queue/updated',
+    snapshot: { queueLength: 0, stateKind: 'idle' },
+  });
+  const flags = getConversationUIFlags(state);
+  expect(flags.queueActive).toBe(false);
+  expect(flags.queuePaused).toBe(false);
+  expect(flags.isProcessing).toBe(false);
+  expect(flags.queueLength).toBe(0);
+});
+
+it('isProcessing stays true when queue is active even after turn/completed', () => {
+  let state = createInitialUIState(null);
+  // Simulate: turn starts, queue becomes active, turn completes (queued successor)
+  state = conversationUIReducer(state, { type: 'turn/started' });
+  state = conversationUIReducer(state, {
+    type: 'queue/updated',
+    snapshot: { queueLength: 1, stateKind: 'running' },
+  });
+  state = conversationUIReducer(state, { type: 'turn/completed' });
+  // Queue is still active, so isProcessing should remain true
+  const flags = getConversationUIFlags(state);
+  expect(flags.isProcessing).toBe(true);
+  expect(flags.queueActive).toBe(true);
+});
+
+it('queue/updated with completing also counts as queueActive', () => {
+  const state = conversationUIReducer(createInitialUIState(null), {
+    type: 'queue/updated',
+    snapshot: { queueLength: 1, stateKind: 'completing' },
+  });
+  const flags = getConversationUIFlags(state);
+  expect(flags.queueActive).toBe(true);
+  expect(flags.isProcessing).toBe(true);
+});
+
+it('queue/updated with cancelling also counts as queueActive', () => {
+  const state = conversationUIReducer(createInitialUIState(null), {
+    type: 'queue/updated',
+    snapshot: { queueLength: 0, stateKind: 'cancelling' },
+  });
+  const flags = getConversationUIFlags(state);
+  expect(flags.queueActive).toBe(true);
+  expect(flags.isProcessing).toBe(true);
+});
+
+it('queue/updated with awaiting_active_action also counts as queueActive', () => {
+  const state = conversationUIReducer(createInitialUIState(null), {
+    type: 'queue/updated',
+    snapshot: { queueLength: 1, stateKind: 'awaiting_active_action' },
+  });
+  const flags = getConversationUIFlags(state);
+  expect(flags.queueActive).toBe(true);
+  expect(flags.isProcessing).toBe(true);
+});
+
+it('queue/updated with awaiting_preflight does NOT count as queueActive', () => {
+  const state = conversationUIReducer(createInitialUIState(null), {
+    type: 'queue/updated',
+    snapshot: { queueLength: 1, stateKind: 'awaiting_preflight' },
+  });
+  const flags = getConversationUIFlags(state);
+  expect(flags.queueActive).toBe(false);
+  expect(flags.isProcessing).toBe(false);
+});
+
+it('reset_transient clears queue state', () => {
+  let state = conversationUIReducer(createInitialUIState(null), {
+    type: 'queue/updated',
+    snapshot: { queueLength: 2, stateKind: 'running' },
+  });
+  state = conversationUIReducer(state, { type: 'reset_transient' });
+  const flags = getConversationUIFlags(state);
+  expect(flags.queueActive).toBe(false);
+  expect(flags.queuePaused).toBe(false);
+  expect(flags.queueLength).toBe(0);
+  expect(flags.queuePauseReason).toBeUndefined();
+  expect(flags.isProcessing).toBe(false);
+});
+
+it('reset_all clears queue state including usage', () => {
+  let state = conversationUIReducer(createInitialUIState(null), {
+    type: 'queue/updated',
+    snapshot: { queueLength: 3, stateKind: 'paused', pauseReason: 'manual' },
+  });
+  state = conversationUIReducer(state, {
+    type: 'usage/updated',
+    usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+  });
+  state = conversationUIReducer(state, { type: 'reset_all' });
+  const flags = getConversationUIFlags(state);
+  expect(flags.queueActive).toBe(false);
+  expect(flags.queuePaused).toBe(false);
+  expect(flags.queueLength).toBe(0);
+  expect(flags.isProcessing).toBe(false);
+  expect(state.lastUsage).toBe(null);
+});
+
+// ---------------------------------------------------------------------------
 // Immutability
 // ---------------------------------------------------------------------------
 

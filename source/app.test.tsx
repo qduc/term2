@@ -163,6 +163,12 @@ vi.mock('./hooks/use-conversation.js', () => ({
     getSubagentUsage: mocks.getSubagentUsage,
     goToPreviousQuestion: mocks.goToPreviousQuestion,
     goToNextQuestion: mocks.goToNextQuestion,
+    queueActive: false,
+    queuePaused: false,
+    queueLength: 0,
+    queuePauseReason: undefined,
+    resumeQueue: vi.fn(),
+    discardQueue: vi.fn(),
   }),
 }));
 

@@ -107,6 +107,10 @@ export const useConversation = ({
     waitingForAskUserAnswer,
     currentAskUserQuestionIndex,
     pendingApproval,
+    queueActive,
+    queuePaused,
+    queueLength,
+    queuePauseReason,
   } = getConversationUIFlags(uiState);
 
   const approvedContextRef = useRef<
@@ -158,6 +162,7 @@ export const useConversation = ({
         onAskUserAnswerSubmitted: (answer) => dispatch({ type: 'ask_user/answer_submitted', answer }),
         onAskUserAdvanceToNext: (nextIndex) => dispatch({ type: 'ask_user/advance_to_next', nextIndex }),
         onAskUserGoBack: (_currentIndex, _answers) => dispatch({ type: 'ask_user/go_back' }),
+        onQueueStateChange: (snapshot) => dispatch({ type: 'queue/updated', snapshot }),
       },
       approvedContext: approvedContextRef,
       usageAccumulator,
@@ -308,5 +313,12 @@ export const useConversation = ({
     getSubagentUsage,
     goToPreviousQuestion,
     goToNextQuestion,
+    // Queue state
+    queueActive,
+    queuePaused,
+    queueLength,
+    queuePauseReason,
+    resumeQueue: () => conversationService.resumeQueue(),
+    discardQueue: () => conversationService.discardQueue(),
   };
 };

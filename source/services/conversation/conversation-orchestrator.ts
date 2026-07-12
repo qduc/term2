@@ -38,6 +38,12 @@ export class ConversationOrchestrator {
 
   constructor(private config: ConversationOrchestratorConfig) {
     this.createMessageId = config.createMessageId ?? createMessageIdFactory(config.now);
+    // Wire queue state observer from the adapter through to the UI.
+    if (typeof config.conversationService.setQueueStateObserver === 'function') {
+      config.conversationService.setQueueStateObserver((snapshot) => {
+        config.ui.onQueueStateChange(snapshot);
+      });
+    }
   }
 
   updateCallbacks({

@@ -5,6 +5,7 @@ import type { PendingApproval } from '../../contracts/conversation.js';
 import type { Message } from '../../types/message.js';
 import type { NormalizedUsage, UsageAccumulator } from '../../utils/ai/token-usage.js';
 import type { CodexRateLimitInfo } from './conversation-events.js';
+import type { QueueStateSnapshot } from './conversation-adapter.js';
 
 export type AskUserAnswer = string | string[];
 
@@ -36,6 +37,7 @@ export interface UIPort {
   onAskUserAnswerSubmitted(answer: AskUserAnswer): void;
   onAskUserAdvanceToNext(nextIndex: number): void;
   onAskUserGoBack(currentIndex: number, answers: readonly AskUserAnswer[]): void;
+  onQueueStateChange(snapshot: QueueStateSnapshot): void;
 }
 
 export interface ConversationOrchestratorConfig {

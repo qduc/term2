@@ -88,6 +88,7 @@ function makeUIPort(): UIPort {
     onAskUserAnswerSubmitted: vi.fn(),
     onAskUserAdvanceToNext: vi.fn(),
     onAskUserGoBack: vi.fn(),
+    onQueueStateChange: vi.fn(),
   };
 }
 

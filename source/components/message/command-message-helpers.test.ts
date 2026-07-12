@@ -9,6 +9,7 @@ import {
   parseCodeContextSearchOutput,
   parseCodeOutlineOutput,
   parseGrepOutput,
+  parseMemoryOutput,
   parseReadFileOutput,
   parseSubagentOutput,
   parseWebFetchOutput,
@@ -334,6 +335,51 @@ it('formatToolArgs formats apply patch operation and path', () => {
   expect(formatToolArgs(TOOL_NAME_APPLY_PATCH, { type: 'update_file', path: 'source/a.ts' })).toBe(
     'update_file source/a.ts',
   );
+});
+
+it('parseMemoryOutput returns list shape for {memories: []}', () => {
+  const result = parseMemoryOutput(JSON.stringify({ memories: [{ id: 'a', title: 'A' }] }));
+  expect(result).toEqual({
+    type: 'list',
+    memories: [{ id: 'a', title: 'A', summary: undefined, tags: undefined }],
+  });
+});
+
+it('parseMemoryOutput returns search shape for {results: []} without a memory field', () => {
+  const result = parseMemoryOutput(
+    JSON.stringify({ query: 'rules', results: [{ memory: { id: 'a' }, matchedFields: ['title'] }] }),
+  );
+  expect(result).toEqual({
+    type: 'search',
+    query: 'rules',
+    results: [{ memory: { id: 'a' }, matchedFields: ['title'] }],
+  });
+});
+
+it('parseMemoryOutput returns get shape for {memory: {}}', () => {
+  const memory = { id: 'a', title: 'A' };
+  const result = parseMemoryOutput(JSON.stringify({ memory }));
+  expect(result).toEqual({ type: 'get', memory });
+});
+
+it('parseMemoryOutput returns delete shape for {deleted: boolean}', () => {
+  expect(parseMemoryOutput(JSON.stringify({ deleted: true }))).toEqual({ type: 'delete', deleted: true });
+  expect(parseMemoryOutput(JSON.stringify({ deleted: false }))).toEqual({ type: 'delete', deleted: false });
+});
+
+it('parseMemoryOutput returns error shape for {error: {}}', () => {
+  expect(parseMemoryOutput(JSON.stringify({ error: { code: 'not_found', message: 'Missing' } }))).toEqual({
+    type: 'error',
+    code: 'not_found',
+    message: 'Missing',
+  });
+});
+
+it('parseMemoryOutput returns null for non-JSON or non-object input', () => {
+  expect(parseMemoryOutput(undefined)).toBe(null);
+  expect(parseMemoryOutput('')).toBe(null);
+  expect(parseMemoryOutput('not json')).toBe(null);
+  expect(parseMemoryOutput(JSON.stringify({}))).toBe(null);
 });
 
 it('countDiffStats ignores diff headers and hunk markers', () => {

@@ -410,6 +410,43 @@ export const parseCodeOutlineOutput = (output: string | undefined) => {
   return null;
 };
 
+export const parseMemoryOutput = (output: string | undefined) => {
+  if (!output) return null;
+  let parsed: any;
+  try {
+    parsed = JSON.parse(output);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return null;
+  }
+  if (parsed.error && typeof parsed.error === 'object') {
+    return { type: 'error' as const, code: parsed.error.code, message: parsed.error.message ?? 'Memory error' };
+  }
+  if (Array.isArray(parsed.memories)) {
+    return {
+      type: 'list' as const,
+      memories: parsed.memories.map((m: any) => ({
+        id: String(m?.id ?? ''),
+        title: m?.title,
+        summary: m?.summary,
+        tags: Array.isArray(m?.tags) ? m.tags : undefined,
+      })),
+    };
+  }
+  if (Array.isArray(parsed.results)) {
+    return { type: 'search' as const, query: String(parsed.query ?? ''), results: parsed.results };
+  }
+  if (parsed.memory && typeof parsed.memory === 'object') {
+    return { type: 'get' as const, memory: parsed.memory };
+  }
+  if (parsed.deleted !== undefined) {
+    return { type: 'delete' as const, deleted: Boolean(parsed.deleted) };
+  }
+  return null;
+};
+
 export const parseCodeContextSearchOutput = (output: string | undefined) => {
   if (!output) return null;
   const lines = output.split('\n');
@@ -633,6 +670,24 @@ export const formatToolArgs = (
         const filePath = normalizedArgs.path || 'unknown';
         return `"${filePath}"`;
       }
+
+      case 'memory_list': {
+        if (normalizedArgs.limit) return `(limit: ${normalizedArgs.limit})`;
+        return '';
+      }
+      case 'memory_get':
+        return `"${normalizedArgs.id ?? ''}"`;
+      case 'memory_search':
+        return `for "${normalizedArgs.query ?? ''}"`;
+      case 'memory_create': {
+        const id = normalizedArgs.id ?? '';
+        const title = normalizedArgs.title ?? '';
+        return `"${id}" - "${title}"`;
+      }
+      case 'memory_update':
+        return `"${normalizedArgs.id ?? ''}"`;
+      case 'memory_delete':
+        return `"${normalizedArgs.id ?? ''}"`;
 
       default: {
         // Generic fallback for unknown tools

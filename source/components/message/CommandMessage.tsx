@@ -22,6 +22,7 @@ import GrepRenderer from './GrepRenderer.js';
 import WebSearchRenderer from './WebSearchRenderer.js';
 import WebFetchRenderer from './WebFetchRenderer.js';
 import CodeContextSearchRenderer from './CodeContextSearchRenderer.js';
+import MemoryRenderer from './MemoryRenderer.js';
 
 // --- Command Message Theme Colors ---
 // Customize these values to change the color scheme per theme.
@@ -183,6 +184,18 @@ const CommandMessage: FC<Props> = ({
         return renderAction('Searched context');
       case 'run_subagent':
         return renderAction('Delegated');
+      case 'memory_list':
+        return renderAction('Listed memories');
+      case 'memory_get':
+        return renderAction('Retrieved memory');
+      case 'memory_search':
+        return renderAction('Searched memories');
+      case 'memory_create':
+        return renderAction('Saved memory');
+      case 'memory_update':
+        return renderAction('Updated memory');
+      case 'memory_delete':
+        return renderAction('Deleted memory');
       default:
         return (
           <>
@@ -619,6 +632,11 @@ const CommandMessage: FC<Props> = ({
 
     if (toolName === 'code_context_search') {
       const result = <CodeContextSearchRenderer output={output} renderStandardHeader={renderStandardHeader} />;
+      if (result) return result;
+    }
+
+    if (toolName && toolName.startsWith('memory_')) {
+      const result = <MemoryRenderer output={output} toolName={toolName} renderStandardHeader={renderStandardHeader} />;
       if (result) return result;
     }
   }

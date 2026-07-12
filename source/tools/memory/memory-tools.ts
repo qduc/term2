@@ -9,22 +9,26 @@ import {
   type MemoryStore,
 } from '../../services/memory/memory-store.js';
 
-const format: FormatCommandMessage = (item, index, calls) => {
-  const callId = getCallIdFromItem(item);
-  const args =
-    normalizeToolArguments(item?.rawItem?.arguments ?? item?.arguments) ??
-    (callId ? normalizeToolArguments(calls.get(callId)) : {}) ??
-    {};
-  return [
-    createBaseMessage(item, index, 0, false, {
-      command: `memory: ${String(args.id ?? args.query ?? 'list')}`,
-      output: getOutputText(item),
-      success: !getOutputText(item).startsWith('Error:'),
-      toolName: 'memory',
-      toolArgs: args,
-    }),
-  ];
-};
+const makeFormat =
+  (toolName: string): FormatCommandMessage =>
+  (item, index, calls) => {
+    const callId = getCallIdFromItem(item);
+    const args =
+      normalizeToolArguments(item?.rawItem?.arguments ?? item?.arguments) ??
+      (callId ? normalizeToolArguments(calls.get(callId)) : {}) ??
+      {};
+    const outputText = getOutputText(item);
+    const commandLabel = toolName.replace(/^memory_/, '');
+    return [
+      createBaseMessage(item, index, 0, false, {
+        command: `memory_${commandLabel}: ${String(args.id ?? args.query ?? '')}`,
+        output: outputText,
+        success: !outputText.startsWith('Error:'),
+        toolName,
+        toolArgs: args,
+      }),
+    ];
+  };
 const id = z
   .string()
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
@@ -65,7 +69,7 @@ function definition<P>(
     parameters,
     needsApproval: () => false,
     execute: (params) => safe(() => execute(params)),
-    formatCommandMessage: format,
+    formatCommandMessage: makeFormat(name),
   };
 }
 

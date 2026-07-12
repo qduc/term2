@@ -11,6 +11,7 @@ import type { ISubagentClientFactory } from './subagent-client-types.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { createSessionRuntime } from '../session/session-composition.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
+import type { SkillsService } from '../skills/skills-service.js';
 
 export class ExecutionSubagentRunner {
   #logger: ILoggingService;
@@ -20,6 +21,7 @@ export class ExecutionSubagentRunner {
   #createClient?: ISubagentClientFactory['createClient'];
   #toolFactory: SubagentToolFactory;
   #onEvent?: (event: ConversationEvent) => void;
+  #skillsService?: SkillsService;
 
   constructor(deps: {
     logger: ILoggingService;
@@ -29,6 +31,7 @@ export class ExecutionSubagentRunner {
     createClient?: ISubagentClientFactory['createClient'];
     toolFactory: SubagentToolFactory;
     onEvent?: (event: ConversationEvent) => void;
+    skillsService?: SkillsService;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
@@ -37,6 +40,7 @@ export class ExecutionSubagentRunner {
     this.#createClient = deps.createClient;
     this.#toolFactory = deps.toolFactory;
     this.#onEvent = deps.onEvent;
+    this.#skillsService = deps.skillsService;
   }
 
   async run(agentId: string, request: SubagentRequest, definition: SubagentDefinition): Promise<SubagentResult> {
@@ -100,6 +104,7 @@ export class ExecutionSubagentRunner {
       searchViaShell,
       this.#settings,
       this.#executionContext,
+      this.#skillsService,
     );
 
     const agent = new Agent({

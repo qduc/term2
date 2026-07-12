@@ -23,6 +23,8 @@ import { createApplyPatchToolDefinition } from '../../tools/file/apply-patch.js'
 import { createSearchReplaceToolDefinition } from '../../tools/file/search-replace.js';
 import { createCreateFileToolDefinition } from '../../tools/file/create-file.js';
 import { createShellToolDefinition } from '../../tools/system/shell.js';
+import { createActivateSkillToolDefinition } from '../../tools/agent/activate-skill.js';
+import type { SkillsService } from '../skills/skills-service.js';
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { trimToolOutput } from '../../utils/output/trim-tool-output.js';
 import { injectTurnLimitWarning } from '../../utils/inject-warning-into-tool-output.js';
@@ -30,6 +32,8 @@ import { tryAcquireFileLock } from '../../tools/file/file-locks.js';
 import { classifyCommand, SafetyStatus } from '../../utils/shell/command-safety/index.js';
 import { evaluateShellAutoApprovalAdvisories } from '../approval/shell-auto-approval-evaluator.js';
 import type { ISubagentClient } from './subagent-client-types.js';
+
+const MODEL_FACING_EDITOR_TOOLS = new Set(['apply_patch', 'search_replace', 'create_file']);
 
 export type SubagentRunContext = {
   agentId: string;
@@ -570,17 +574,20 @@ export class SubagentToolFactory {
   #logger: ILoggingService;
   #executionContext?: ExecutionContext;
   #toolPolicy: SubagentToolPolicy;
+  #skillsService?: SkillsService;
 
   constructor(deps: {
     settings: ISettingsService;
     logger: ILoggingService;
     executionContext?: ExecutionContext;
     toolPolicy: SubagentToolPolicy;
+    skillsService?: SkillsService;
   }) {
     this.#settings = deps.settings;
     this.#logger = deps.logger;
     this.#executionContext = deps.executionContext;
     this.#toolPolicy = deps.toolPolicy;
+    this.#skillsService = deps.skillsService;
   }
 
   buildToolDefinitions(
@@ -593,6 +600,10 @@ export class SubagentToolFactory {
     const tools: ToolDefinition[] = [];
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
     const isRemote = this.#executionContext?.isRemote() ?? false;
+
+    if (this.#skillsService && this.#skillsService.getAvailableSkillsForModel().length > 0) {
+      tools.push(createActivateSkillToolDefinition(this.#skillsService));
+    }
 
     // Extract resolved scopes from definition
     const fsReadScope = definition.filesystemScope?.read;
@@ -754,7 +765,18 @@ export class SubagentToolFactory {
     // tool lists through to ExecutionSubagentRunner.
     if (definition.tools && definition.tools.length > 0) {
       const allowed = new Set(definition.tools);
-      return tools.filter((t) => allowed.has(t.name));
+      // The three editor names represent one capability, while models expose
+      // different concrete editing interfaces. An explicit request for any
+      // editor therefore admits the compatible editor set selected above,
+      // rather than requiring the requested spelling to match it exactly.
+      // `canWrite` remains the sole authority grant for editor tools.
+      const editorRequested = definition.canWrite && [...allowed].some((name) => MODEL_FACING_EDITOR_TOOLS.has(name));
+      return tools.filter((tool) => {
+        if (tool.name === 'activate_skill') {
+          return true;
+        }
+        return MODEL_FACING_EDITOR_TOOLS.has(tool.name) ? editorRequested : allowed.has(tool.name);
+      });
     }
 
     return tools;

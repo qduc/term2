@@ -5,6 +5,7 @@ import type { ExecutionContext } from '../services/execution-context.js';
 import type { SubagentResult } from '../services/subagents/types.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
 import { createAbortError } from '../services/subagents/utils.js';
+import type { SkillsService } from '../services/skills/skills-service.js';
 
 export interface SubagentBridgeDeps {
   logger: ILoggingService;
@@ -20,6 +21,7 @@ export interface SubagentBridgeDeps {
    * When provided, the bridge uses it instead of creating one internally.
    */
   subagentManager?: SubagentManager;
+  skillsService?: SkillsService;
 }
 
 export class SubagentBridge {
@@ -46,6 +48,7 @@ export class SubagentBridge {
         onEvent: (event) => this.#subagentEventSink?.(event),
         agentClient: { chat: (message, options) => deps.chat(message, options) },
         createClient: deps.createClient,
+        skillsService: deps.skillsService,
       });
     }
   }

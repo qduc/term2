@@ -12,6 +12,7 @@ import type { SubagentRunContext } from './tool-policy.js';
 import { adaptLegacyRole, adaptLegacyDefinition } from '../agent-runtime/legacy-adapter.js';
 import { createAgentRuntimeFromSubagentRuntime } from '../agent-runtime/compose-agent-runtime.js';
 import type { AgentRuntime } from '../agent-runtime/agent-runtime.js';
+import type { SkillsService } from '../skills/skills-service.js';
 
 export class SubagentManager {
   #logger: ILoggingService;
@@ -27,6 +28,7 @@ export class SubagentManager {
     onEvent?: (event: ConversationEvent) => void;
     agentClient?: ISubagentClient;
     createClient?: ISubagentClientFactory['createClient'];
+    skillsService?: SkillsService;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;

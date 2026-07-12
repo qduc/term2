@@ -232,3 +232,42 @@ it('remote execution disables code-context tools and guidance', async () => {
   expect(remoteAgent.instructions.includes('Code-context tools are not available in this run.')).toBe(true);
   expect(remoteAgent.instructions.includes('For code structure and symbol context, use:')).toBe(false);
 });
+
+it('subagent runtime registers activate_skill tool and appends skills catalog to instructions when skills exist', async () => {
+  let subAgent: any = null;
+
+  const providerId = registerTestProvider({
+    label: 'Mock Skills Test Provider',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          subAgent = agent;
+          const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+          return wrapResultAsAgentStream(result);
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'gpt-4o' }],
+  });
+
+  const mockSkillsService = {
+    getAvailableSkillsForModel: () => [{ name: 'test-skill', description: 'Test skill desc', location: '/path' }],
+    getSkillCatalog: () => '<available_skills>Test Skill Catalog</available_skills>',
+  };
+
+  const manager = new TestSubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'gpt-4o',
+      'agent.provider': providerId,
+    }),
+    sessionContextService: createSessionContextService() as any,
+    skillsService: mockSkillsService as any,
+  });
+
+  await manager.run({ role: 'worker', task: 'perform task with skill' });
+
+  expect(subAgent).toBeTruthy();
+  const toolNames: string[] = subAgent.tools.map((tool: any) => tool.name);
+  expect(toolNames.includes('activate_skill')).toBe(true);
+  expect(subAgent.instructions.includes('<available_skills>Test Skill Catalog</available_skills>')).toBe(true);
+});

@@ -5,6 +5,7 @@ import { Agent, RunContext, Runner, type Tool } from '@openai/agents';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentRequest, SubagentResult, SupportedSubagentRole, SubagentDefinition } from './types.js';
+import type { SkillsService } from '../skills/skills-service.js';
 import { SUBAGENT_ROLES } from './types.js';
 import { SubagentToolFactory, getSubagentRunContext, type SubagentRunContext } from './tool-policy.js';
 import {
@@ -72,6 +73,7 @@ export class NestedSubagentRunner {
   #toolFactory: SubagentToolFactory;
   #onEvent?: (event: ConversationEvent) => void;
   #roleToolCache: Map<SupportedSubagentRole, CachedRoleTool>;
+  #skillsService?: SkillsService;
   /**
    * Optional resolver that overrides the default `loadRoleDefinition`.
    * When set, all role loads in `#getOrCreateRoleTool` go through this
@@ -91,6 +93,7 @@ export class NestedSubagentRunner {
     roleToolCache: Map<SupportedSubagentRole, CachedRoleTool>;
     /** Optional role resolver for shared resolution path. */
     resolveRole?: (role: SupportedSubagentRole) => SubagentDefinition;
+    skillsService?: SkillsService;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
@@ -100,6 +103,7 @@ export class NestedSubagentRunner {
     this.#onEvent = deps.onEvent;
     this.#roleToolCache = deps.roleToolCache;
     this.#resolveRole = deps.resolveRole;
+    this.#skillsService = deps.skillsService;
   }
 
   clearCache(): void {
@@ -209,12 +213,21 @@ export class NestedSubagentRunner {
     const envInfo = getEnvInfo(this.#settings, this.#executionContext);
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
     const agentsInstructions = this.#executionContext?.isRemote() ? '' : getAgentsInstructions(cwd);
+
+    let skillsInstructions = '';
+    if (this.#skillsService) {
+      const catalog = this.#skillsService.getSkillCatalog();
+      if (catalog) {
+        skillsInstructions = `\n\n${catalog}`;
+      }
+    }
+
     const instructions = [
       resolvePrompt(path.join(PROMPTS_DIR, selectSubagentBasePromptFile(definition.model))),
       resolvePrompt(path.join(PROMPTS_DIR, 'worktree-hygiene.md')),
       definition.instructions,
       buildAvailableToolGuidance(toolDefinitions, searchViaShell),
-      `Environment: ${envInfo}${agentsInstructions}`,
+      `Environment: ${envInfo}${agentsInstructions}${skillsInstructions}`,
     ]
       .filter(Boolean)
       .join('\n\n');

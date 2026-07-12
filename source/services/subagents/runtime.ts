@@ -7,6 +7,7 @@ import { NestedSubagentRunner, type CachedRoleTool } from './nested-runner.js';
 import { ExecutionSubagentRunner } from './execution-runner.js';
 import { MentorRunner } from './mentor-runner.js';
 import type { SupportedSubagentRole } from './types.js';
+import type { SkillsService } from '../skills/skills-service.js';
 
 export interface SubagentRuntimeDeps {
   logger: ILoggingService;
@@ -16,6 +17,7 @@ export interface SubagentRuntimeDeps {
   onEvent?: (event: ConversationEvent) => void;
   agentClient?: ISubagentClient;
   createClient?: ISubagentClientFactory['createClient'];
+  skillsService?: SkillsService;
 }
 
 export interface SubagentRuntime {
@@ -40,6 +42,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     logger: deps.logger,
     executionContext: deps.executionContext,
     toolPolicy,
+    skillsService: deps.skillsService,
   });
 
   const roleToolCache = new Map<SupportedSubagentRole, CachedRoleTool>();
@@ -52,6 +55,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     toolFactory,
     onEvent: deps.onEvent,
     roleToolCache,
+    skillsService: deps.skillsService,
   });
 
   const executionRunner = new ExecutionSubagentRunner({
@@ -62,6 +66,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     createClient: deps.createClient,
     toolFactory,
     onEvent: deps.onEvent,
+    skillsService: deps.skillsService,
   });
 
   const mentorRunner = new MentorRunner({

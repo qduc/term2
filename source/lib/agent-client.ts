@@ -169,10 +169,12 @@ export class AgentClient {
               settings: deps.settings,
               executionContext: deps.executionContext,
               sessionContextService: this.#sessionContextService,
+              skillsService: deps.skillsService,
             },
             agentOverride: agent,
             providerOverride: provider,
           }),
+        skillsService: deps.skillsService,
       });
     }
 

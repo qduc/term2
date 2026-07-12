@@ -8,6 +8,7 @@ import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import type { ExecutionContext } from '../execution-context.js';
 import { getShellSandboxAddendum } from '../../prompts/shell-sandbox.js';
 import { getSearchViaShellAddendum } from '../../prompts/search-via-shell.js';
+import type { SkillsService } from '../skills/skills-service.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, '../../prompts');
 export const PROMPTS_DIR = path.join(BASE_PROMPT_PATH, 'subagents');
@@ -188,6 +189,7 @@ export function buildInstructions(
   searchViaShell: boolean,
   settings: ISettingsService,
   executionContext?: ExecutionContext,
+  skillsService?: SkillsService,
 ): string {
   const envInfo = getEnvInfo(settings, executionContext);
   const cwd = executionContext?.getCwd() ?? process.cwd();
@@ -208,13 +210,21 @@ export function buildInstructions(
     inlineSections.push(getSearchViaShellAddendum({ executionContext }));
   }
 
+  let skillsInstructions = '';
+  if (skillsService) {
+    const catalog = skillsService.getSkillCatalog();
+    if (catalog) {
+      skillsInstructions = `\n\n${catalog}`;
+    }
+  }
+
   return [
     modelPrompt,
     worktreeHygiene,
     definition.instructions,
     toolGuidance,
     ...inlineSections,
-    `Environment: ${envInfo}${agentsInstructions}`,
+    `Environment: ${envInfo}${agentsInstructions}${skillsInstructions}`,
   ]
     .filter(Boolean)
     .join('\n\n');

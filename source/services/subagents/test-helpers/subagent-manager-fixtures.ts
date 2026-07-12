@@ -175,6 +175,7 @@ export class TestSubagentManager extends RealSubagentManager {
     onEvent?: (event: any) => void;
     agentClient?: ISubagentClient;
     createClient?: ISubagentClientFactory['createClient'];
+    skillsService?: any;
   }) {
     const logger = deps.logger ?? createMockLogger();
     const sessionContextService = deps.sessionContextService ?? createSessionContextService();
@@ -185,6 +186,7 @@ export class TestSubagentManager extends RealSubagentManager {
       sessionContextService,
       onEvent: deps.onEvent,
       agentClient: deps.agentClient,
+      skillsService: deps.skillsService,
       createClient:
         deps.createClient ??
         (({ agent, provider, maxTurns, retryAttempts }: any) =>
@@ -197,6 +199,7 @@ export class TestSubagentManager extends RealSubagentManager {
               settings: deps.settings,
               executionContext: deps.executionContext,
               sessionContextService,
+              skillsService: deps.skillsService,
             },
             agentOverride: agent,
             providerOverride: provider,

@@ -66,6 +66,78 @@ describe('resolveModelPolicy', () => {
     });
   });
 
+  it('prefers efficientModel over subagentExplorerModel and agent.model', () => {
+    const s = settings({
+      'agent.efficientModel': 'efficient-model',
+      'agent.subagentExplorerModel': 'explorer-model',
+      'agent.model': 'main-model',
+    });
+    expect(resolveModelPolicy('efficient', s).model).toBe('efficient-model');
+  });
+
+  it('falls back from efficientModel to subagentExplorerModel before agent.model', () => {
+    const s = settings({
+      'agent.efficientModel': undefined,
+      'agent.subagentExplorerModel': 'explorer-model',
+      'agent.model': 'main-model',
+    });
+    expect(resolveModelPolicy('efficient', s).model).toBe('explorer-model');
+  });
+
+  it('falls back from efficientModel and subagentExplorerModel to agent.model', () => {
+    const s = settings({
+      'agent.efficientModel': undefined,
+      'agent.subagentExplorerModel': undefined,
+      'agent.model': 'main-model',
+    });
+    expect(resolveModelPolicy('efficient', s).model).toBe('main-model');
+  });
+
+  it('falls back from efficient tier settings to the terminal model fallback', () => {
+    const s = settings({
+      'agent.efficientModel': undefined,
+      'agent.subagentExplorerModel': undefined,
+      'agent.model': undefined,
+    });
+    expect(resolveModelPolicy('efficient', s).model).toBe('gpt-4o');
+  });
+
+  it('prefers capableModel over mentorModel and agent.model', () => {
+    const s = settings({
+      'agent.capableModel': 'capable-model',
+      'agent.mentorModel': 'mentor-model',
+      'agent.model': 'main-model',
+    });
+    expect(resolveModelPolicy('capable', s).model).toBe('capable-model');
+  });
+
+  it('falls back from capableModel to mentorModel before agent.model', () => {
+    const s = settings({
+      'agent.capableModel': undefined,
+      'agent.mentorModel': 'mentor-model',
+      'agent.model': 'main-model',
+    });
+    expect(resolveModelPolicy('capable', s).model).toBe('mentor-model');
+  });
+
+  it('falls back from capableModel and mentorModel to agent.model', () => {
+    const s = settings({
+      'agent.capableModel': undefined,
+      'agent.mentorModel': undefined,
+      'agent.model': 'main-model',
+    });
+    expect(resolveModelPolicy('capable', s).model).toBe('main-model');
+  });
+
+  it('falls back from capable tier settings to the terminal model fallback', () => {
+    const s = settings({
+      'agent.capableModel': undefined,
+      'agent.mentorModel': undefined,
+      'agent.model': undefined,
+    });
+    expect(resolveModelPolicy('capable', s).model).toBe('gpt-4o');
+  });
+
   // ── Relative tier (no parent) ─────────────────────────
   it('rejects relative tier when no parent policy is provided', () => {
     const s = settings();
@@ -83,6 +155,46 @@ describe('resolveModelPolicy', () => {
       provider: 'openai',
       model: 'gpt-4o-mini',
     });
+  });
+
+  it('prefers efficientModel for relative lower tier over subagentExplorerModel and agent.model', () => {
+    const s = settings({
+      'agent.efficientModel': 'efficient-model',
+      'agent.subagentExplorerModel': 'explorer-model',
+      'agent.model': 'main-model',
+    });
+    const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
+    expect(resolveModelPolicy({ tier: 'lower' }, s, parent).model).toBe('efficient-model');
+  });
+
+  it('falls back from efficientModel to subagentExplorerModel for relative lower tier', () => {
+    const s = settings({
+      'agent.efficientModel': undefined,
+      'agent.subagentExplorerModel': 'explorer-model',
+      'agent.model': 'main-model',
+    });
+    const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
+    expect(resolveModelPolicy({ tier: 'lower' }, s, parent).model).toBe('explorer-model');
+  });
+
+  it('falls back to agent.model for relative lower tier after efficient tier settings', () => {
+    const s = settings({
+      'agent.efficientModel': undefined,
+      'agent.subagentExplorerModel': undefined,
+      'agent.model': 'main-model',
+    });
+    const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
+    expect(resolveModelPolicy({ tier: 'lower' }, s, parent).model).toBe('main-model');
+  });
+
+  it('falls back to the parent model for relative lower tier when all settings are unset', () => {
+    const s = settings({
+      'agent.efficientModel': undefined,
+      'agent.subagentExplorerModel': undefined,
+      'agent.model': undefined,
+    });
+    const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
+    expect(resolveModelPolicy({ tier: 'lower' }, s, parent).model).toBe('parent-model');
   });
 
   it('resolves relative "same" tier against parent exact model', () => {
@@ -104,6 +216,46 @@ describe('resolveModelPolicy', () => {
       provider: 'openai',
       model: 'gpt-4.1',
     });
+  });
+
+  it('prefers capableModel for relative higher tier over mentorModel and agent.model', () => {
+    const s = settings({
+      'agent.capableModel': 'capable-model',
+      'agent.mentorModel': 'mentor-model',
+      'agent.model': 'main-model',
+    });
+    const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
+    expect(resolveModelPolicy({ tier: 'higher' }, s, parent).model).toBe('capable-model');
+  });
+
+  it('falls back from capableModel to mentorModel for relative higher tier', () => {
+    const s = settings({
+      'agent.capableModel': undefined,
+      'agent.mentorModel': 'mentor-model',
+      'agent.model': 'main-model',
+    });
+    const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
+    expect(resolveModelPolicy({ tier: 'higher' }, s, parent).model).toBe('mentor-model');
+  });
+
+  it('falls back to agent.model for relative higher tier after capable tier settings', () => {
+    const s = settings({
+      'agent.capableModel': undefined,
+      'agent.mentorModel': undefined,
+      'agent.model': 'main-model',
+    });
+    const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
+    expect(resolveModelPolicy({ tier: 'higher' }, s, parent).model).toBe('main-model');
+  });
+
+  it('falls back to the parent model for relative higher tier when all settings are unset', () => {
+    const s = settings({
+      'agent.capableModel': undefined,
+      'agent.mentorModel': undefined,
+      'agent.model': undefined,
+    });
+    const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
+    expect(resolveModelPolicy({ tier: 'higher' }, s, parent).model).toBe('parent-model');
   });
 
   it('resolves relative "lower" with reasoning flag from settings', () => {

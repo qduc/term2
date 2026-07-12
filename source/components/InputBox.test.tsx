@@ -607,6 +607,60 @@ it.sequential('settings-backed model selection restores settings menu after subm
   unregisterProvider(mockProviderId);
 });
 
+const assertSettingsModelTriggerOpensModelMenu = async (settingKey: 'agent.efficientModel' | 'agent.capableModel') => {
+  clearModelCache();
+  const mockProviderId = `mock-provider-${settingKey.split('.')[1]}-${Date.now()}-${Math.random()}`;
+  registerProvider({
+    id: mockProviderId,
+    label: 'Mock Provider',
+    fetchModels: async () => [{ id: 'gpt-test', name: 'GPT Test' }],
+  });
+
+  const settingsService = createMockSettingsService({
+    'agent.provider': mockProviderId,
+  });
+  const settingsSlashCommand: SlashCommand = {
+    name: '/settings',
+    description: 'Settings',
+    action: () => {},
+    completion: {
+      type: 'settings',
+      trigger: SETTINGS_TRIGGER,
+      resetTrigger: '/settings reset ',
+    },
+  };
+
+  try {
+    const { lastFrame, stdin } = await renderAndFlush(
+      <InputProvider>
+        <StateDisplay />
+        <InputBox
+          {...defaultProps}
+          settingsService={settingsService}
+          slashCommands={[...mockSlashCommands, settingsSlashCommand]}
+        />
+      </InputProvider>,
+    );
+
+    await writeInput(stdin, `${SETTINGS_TRIGGER}${settingKey} `);
+    const frame = await waitFor(lastFrame, (f) => f.includes('gpt-test'), { timeoutMs: 3000 });
+
+    expect(frame).toContain('Mode:model_selection');
+    expect(frame).toContain('gpt-test');
+  } finally {
+    clearModelCache();
+    unregisterProvider(mockProviderId);
+  }
+};
+
+it.sequential('efficientModel setting opens the model selection menu', async () => {
+  await assertSettingsModelTriggerOpensModelMenu('agent.efficientModel');
+});
+
+it.sequential('capableModel setting opens the model selection menu', async () => {
+  await assertSettingsModelTriggerOpensModelMenu('agent.capableModel');
+});
+
 it.sequential('command-backed model selection still submits after selection', async () => {
   clearModelCache();
   const mockProviderId = `mock-provider-2-${Date.now()}-${Math.random()}`;

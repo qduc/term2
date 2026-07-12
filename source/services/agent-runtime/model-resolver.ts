@@ -32,8 +32,7 @@ export function resolveModelPolicy(
 
 function resolveTierPolicy(tier: string, settings: ISettingsService): ExactModelPolicy {
   const provider = settings.get<string>('agent.provider') ?? 'openai';
-  const settingKey = tierModelSettingKey(tier);
-  const model = settings.get<string>(settingKey) ?? settings.get<string>('agent.model') ?? 'gpt-4o';
+  const model = resolveConfiguredTierModel(tier, settings) ?? settings.get<string>('agent.model') ?? 'gpt-4o';
   return { provider, model };
 }
 
@@ -60,19 +59,27 @@ function resolveRelativePolicy(
   }
 
   const tier = policy.tier === 'lower' ? 'efficient' : 'capable';
-  const tierModel = settings.get<string>(tierModelSettingKey(tier));
+  const tierModel = resolveConfiguredTierModel(tier, settings);
   const model = tierModel ?? settings.get<string>('agent.model') ?? parentExact.model;
   return { provider: parentExact.provider, model };
 }
 
-function tierModelSettingKey(tier: string): string {
+function resolveConfiguredTierModel(tier: string, settings: ISettingsService): string | undefined {
+  for (const settingKey of tierModelSettingKeys(tier)) {
+    const model = settings.get<string>(settingKey);
+    if (model !== undefined && model !== null) return model;
+  }
+  return undefined;
+}
+
+function tierModelSettingKeys(tier: string): string[] {
   switch (tier) {
     case 'efficient':
-      return 'agent.efficientModel';
+      return ['agent.efficientModel', 'agent.subagentExplorerModel'];
     case 'capable':
-      return 'agent.capableModel';
+      return ['agent.capableModel', 'agent.mentorModel'];
     case 'balanced':
     default:
-      return 'agent.model';
+      return ['agent.model'];
   }
 }

@@ -51,6 +51,16 @@ export const MODEL_SETTING_CONFIGS: ModelSettingConfig[] = [
     providerKey: SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_PROVIDER,
     fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
   },
+  {
+    modelKey: SETTING_KEYS.AGENT_EFFICIENT_MODEL,
+    trigger: '/settings agent.efficientModel ',
+    providerKey: SETTING_KEYS.AGENT_PROVIDER,
+  },
+  {
+    modelKey: SETTING_KEYS.AGENT_CAPABLE_MODEL,
+    trigger: '/settings agent.capableModel ',
+    providerKey: SETTING_KEYS.AGENT_PROVIDER,
+  },
 ];
 
 export const MODEL_SETTING_TRIGGERS = MODEL_SETTING_CONFIGS.map((config) => config.trigger);

@@ -467,36 +467,15 @@ export function createConversationEventHandler(
             return `${displayCommand}${suffix}`;
           })();
 
-          const appendOrReplaceTool = (message: SubagentActivityMessage): SubagentActivityMessage => {
+          const appendTool = (message: SubagentActivityMessage): SubagentActivityMessage => {
             const currentTools = Array.isArray(message.tools) ? [...message.tools] : [];
-            let toolIndex = -1;
-            if (toolName) {
-              for (let i = currentTools.length - 1; i >= 0; i--) {
-                const t = currentTools[i];
-                if (typeof t === 'string') {
-                  if (t === toolName || t.startsWith(`${toolName} `)) {
-                    toolIndex = i;
-                    break;
-                  }
-                } else if (t && typeof t === 'object' && t.toolName === toolName) {
-                  toolIndex = i;
-                  break;
-                }
-              }
-            }
-
             const isWriteTool =
               toolName === TOOL_NAME_CREATE_FILE ||
               toolName === TOOL_NAME_SEARCH_REPLACE ||
               toolName === TOOL_NAME_APPLY_PATCH;
 
             const itemToAppend = isWriteTool ? event.message : finishedCommand;
-
-            if (toolIndex !== -1) {
-              currentTools[toolIndex] = itemToAppend;
-            } else {
-              currentTools.push(itemToAppend);
-            }
+            currentTools.push(itemToAppend);
 
             return {
               ...message,
@@ -525,7 +504,7 @@ export function createConversationEventHandler(
           if (!isSubagentActivityMessage(current)) {
             return prev;
           }
-          next[index] = appendOrReplaceTool(current);
+          next[index] = appendTool(current);
           return trimMessages(next);
         });
         return;

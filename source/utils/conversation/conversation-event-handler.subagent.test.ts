@@ -621,3 +621,54 @@ it('tool_started: links subagent delegation tools to subagent activity', () => {
   expect(deps.calls.appendedMessages[0][0].id).toBe('subagent-agent-sa-nested');
   expect(deps.calls.appendedMessages[0][0].callId).toBe('call-sa-nested');
 });
+
+it('subagent_command_message: appends multiple tool calls of the same type instead of overwriting', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  // Start subagent
+  handler({
+    type: 'subagent_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    task: 'find files',
+  } as ConversationEvent);
+
+  // Run first read_file
+  handler({
+    type: 'subagent_command_message',
+    agentId: 'agent-1',
+    role: 'explorer',
+    message: {
+      id: 'cmd-1',
+      sender: 'command',
+      status: 'completed',
+      command: 'read_file "file1.txt"',
+      toolName: 'read_file',
+      success: true,
+    },
+  } as any);
+
+  // Run second read_file (same tool type)
+  handler({
+    type: 'subagent_command_message',
+    agentId: 'agent-1',
+    role: 'explorer',
+    message: {
+      id: 'cmd-2',
+      sender: 'command',
+      status: 'completed',
+      command: 'read_file "file2.txt"',
+      toolName: 'read_file',
+      success: true,
+    },
+  } as any);
+
+  let messages = deps.calls.appendedMessages[0];
+  for (const update of deps.calls.setMessagesCalls) {
+    messages = update(messages);
+  }
+
+  expect(messages[0].tools).toEqual(['read_file "file1.txt" (Success)', 'read_file "file2.txt" (Success)']);
+});

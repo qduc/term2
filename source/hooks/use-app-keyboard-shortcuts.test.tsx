@@ -48,6 +48,7 @@ const renderHarness = async (overrides: Partial<Parameters<typeof useAppKeyboard
     setWaitingForAskUserAnswer: mocks.setWaitingForAskUserAnswer,
     waitingForRejectionReason: false,
     setWaitingForRejectionReason: mocks.setWaitingForRejectionReason,
+    inputMode: 'text',
     isProcessing: false,
     waitingForApproval: false,
     stopProcessing: mocks.stopProcessing,
@@ -113,6 +114,14 @@ it.sequential('stops processing on Escape when waiting for approval', async () =
   await fireInput('', { escape: true });
 
   expect(mocks.stopProcessing).toHaveBeenCalledTimes(1);
+});
+
+it.sequential('does not stop processing on Escape while a slash-command menu is active', async () => {
+  await renderHarness({ isProcessing: true, inputMode: 'slash_commands' });
+
+  await fireInput('', { escape: true });
+
+  expect(mocks.stopProcessing).not.toHaveBeenCalled();
 });
 
 it.sequential('cancels handoff entry on Escape', async () => {

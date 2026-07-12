@@ -425,6 +425,7 @@ const App: FC<AppProps> = ({
     setWaitingForAskUserAnswer,
     waitingForRejectionReason: effectiveWaitingForRejectionReason,
     setWaitingForRejectionReason,
+    inputMode: mode,
     isProcessing: effectiveIsProcessing,
     waitingForApproval: effectiveWaitingForApproval,
     stopProcessing,

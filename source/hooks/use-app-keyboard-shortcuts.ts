@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { useInput } from 'ink';
 import type { MutableRefObject } from 'react';
+import type { InputMode } from '../context/InputContext.js';
 import type { SkillInfo } from '../services/skills/skills-service.js';
 import type { UserTurn } from '../types/user-turn.js';
 
@@ -15,6 +16,7 @@ export type UseAppKeyboardShortcutsOptions = {
   setWaitingForAskUserAnswer: (value: boolean) => void;
   waitingForRejectionReason: boolean;
   setWaitingForRejectionReason: (value: boolean) => void;
+  inputMode: InputMode;
   isProcessing: boolean;
   waitingForApproval: boolean;
   stopProcessing: () => void;
@@ -35,6 +37,7 @@ export const useAppKeyboardShortcuts = ({
   setWaitingForAskUserAnswer,
   waitingForRejectionReason,
   setWaitingForRejectionReason,
+  inputMode,
   isProcessing,
   waitingForApproval,
   stopProcessing,
@@ -53,6 +56,7 @@ export const useAppKeyboardShortcuts = ({
     setWaitingForAskUserAnswer,
     waitingForRejectionReason,
     setWaitingForRejectionReason,
+    inputMode,
     isProcessing,
     waitingForApproval,
     stopProcessing,
@@ -73,6 +77,7 @@ export const useAppKeyboardShortcuts = ({
     setWaitingForAskUserAnswer,
     waitingForRejectionReason,
     setWaitingForRejectionReason,
+    inputMode,
     isProcessing,
     waitingForApproval,
     stopProcessing,
@@ -114,7 +119,7 @@ export const useAppKeyboardShortcuts = ({
         return;
       }
 
-      if (current.isProcessing || current.waitingForApproval) {
+      if (current.inputMode === 'text' && (current.isProcessing || current.waitingForApproval)) {
         current.stopProcessing();
         return;
       }

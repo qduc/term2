@@ -45,20 +45,19 @@ it('adds memory tools and summary-only context when memory is enabled, and neith
     settingsService: createMockSettingsService({ 'memory.enabled': false, 'memory.directory': root }),
     loggingService: mockLogger,
   });
-  expect(enabled.tools.map((tool) => tool.name)).toEqual(
-    expect.arrayContaining([
-      'memory_list',
-      'memory_get',
-      'memory_search',
-      'memory_create',
-      'memory_update',
-      'memory_delete',
-    ]),
-  );
+  expect(enabled.tools.map((tool) => tool.name).filter((name) => name.startsWith('memory_'))).toEqual([
+    'memory_list',
+    'memory_get',
+    'memory_search',
+    'memory_create',
+    'memory_update',
+    'memory_delete',
+  ]);
   expect(enabled.instructions).toContain('Durable rules.');
   expect(enabled.instructions).not.toContain('full memory content');
-  expect(disabled.tools.map((tool) => tool.name)).not.toContain('memory_list');
+  expect(disabled.tools.map((tool) => tool.name).filter((name) => name.startsWith('memory_'))).toEqual([]);
   expect(disabled.instructions).not.toContain('## Persistent memory');
+  expect(disabled.instructions).not.toContain('Durable rules.');
 });
 
 it('fails agent construction with a typed visible error for a corrupted memory index', async () => {
@@ -248,7 +247,7 @@ it('getAgentDefinition omits delegation guidance in lite mode', () => {
   expect(definition.instructions.includes('### Delegating to subagents')).toBe(false);
 });
 
-it('getAgentDefinition in orchestrator mode exposes run_subagent, shell, read_file, and grep', () => {
+it('getAgentDefinition in orchestrator mode retains full memory authority', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
     'agent.model': 'gpt-5',
@@ -260,7 +259,27 @@ it('getAgentDefinition in orchestrator mode exposes run_subagent, shell, read_fi
     runSubagent: async () => ({} as any),
   });
 
-  expect(definition.tools.map((tool) => tool.name)).toEqual(['run_subagent', 'shell', 'read_file', 'grep']);
+  expect(definition.tools.map((tool) => tool.name)).toEqual([
+    'run_subagent',
+    'shell',
+    'read_file',
+    'grep',
+    'memory_list',
+    'memory_get',
+    'memory_search',
+    'memory_create',
+    'memory_update',
+    'memory_delete',
+  ]);
+  expect(definition.instructions).toContain('Validate any memory proposals from subagents');
+  expect(definition.tools.map((tool) => tool.name).filter((name) => name.startsWith('memory_'))).toEqual([
+    'memory_list',
+    'memory_get',
+    'memory_search',
+    'memory_create',
+    'memory_update',
+    'memory_delete',
+  ]);
 });
 
 it('getAgentDefinition in orchestrator mode requires delegated tool work', () => {
@@ -282,7 +301,7 @@ it('getAgentDefinition in orchestrator mode requires delegated tool work', () =>
   expect(definition.instructions.includes('Prefer `read_file` for reading file contents.')).toBe(false);
 });
 
-it('getAgentDefinition in orchestrator mode exposes run_subagent, shell, read_file, and grep for non-gpt-5 model', () => {
+it('getAgentDefinition in orchestrator mode retains full memory authority for non-gpt-5 models', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
     'agent.model': 'gpt-4o',
@@ -294,7 +313,20 @@ it('getAgentDefinition in orchestrator mode exposes run_subagent, shell, read_fi
     runSubagent: async () => ({} as any),
   });
 
-  expect(definition.tools.map((tool) => tool.name)).toEqual(['run_subagent', 'shell', 'read_file', 'grep']);
+  expect(definition.tools.map((tool) => tool.name)).toEqual(
+    expect.arrayContaining([
+      'run_subagent',
+      'shell',
+      'read_file',
+      'grep',
+      'memory_list',
+      'memory_get',
+      'memory_search',
+      'memory_create',
+      'memory_update',
+      'memory_delete',
+    ]),
+  );
 });
 
 it('getAgentDefinition throws if orchestratorMode is true and runSubagent is missing', () => {

@@ -32,6 +32,7 @@ import { tryAcquireFileLock } from '../../tools/file/file-locks.js';
 import { classifyCommand, SafetyStatus } from '../../utils/shell/command-safety/index.js';
 import { evaluateShellAutoApprovalAdvisories } from '../approval/shell-auto-approval-evaluator.js';
 import type { ISubagentClient } from './subagent-client-types.js';
+import { MemoryCapabilityBuilder } from '../memory/memory-capabilities.js';
 
 const MODEL_FACING_EDITOR_TOOLS = new Set(['apply_patch', 'search_replace', 'create_file']);
 
@@ -575,6 +576,7 @@ export class SubagentToolFactory {
   #executionContext?: ExecutionContext;
   #toolPolicy: SubagentToolPolicy;
   #skillsService?: SkillsService;
+  #memoryCapabilities: MemoryCapabilityBuilder;
 
   constructor(deps: {
     settings: ISettingsService;
@@ -588,6 +590,7 @@ export class SubagentToolFactory {
     this.#executionContext = deps.executionContext;
     this.#toolPolicy = deps.toolPolicy;
     this.#skillsService = deps.skillsService;
+    this.#memoryCapabilities = new MemoryCapabilityBuilder(deps.settings);
   }
 
   buildToolDefinitions(
@@ -601,9 +604,14 @@ export class SubagentToolFactory {
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
     const isRemote = this.#executionContext?.isRemote() ?? false;
 
+    // Mentor is advisory-only; it must never inherit incidental capabilities.
+    if (definition.role === 'mentor') return tools;
+
     if (this.#skillsService && this.#skillsService.getAvailableSkillsForModel().length > 0) {
       tools.push(createActivateSkillToolDefinition(this.#skillsService));
     }
+
+    tools.push(...this.#memoryCapabilities.build({ kind: 'subagent', role: definition.role }).tools);
 
     // Extract resolved scopes from definition
     const fsReadScope = definition.filesystemScope?.read;

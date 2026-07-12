@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SubagentToolFactory, SubagentToolPolicy } from './tool-policy.js';
+import { buildInstructions } from './role-loader.js';
 import type { SubagentDefinition } from './types.js';
 import {
   createMockLogger,
@@ -24,8 +25,20 @@ function createDefinition(overrides: Partial<SubagentDefinition>): SubagentDefin
   };
 }
 
-function buildToolNames(definition: SubagentDefinition): string[] {
-  const settings = createMockSettings();
+function createMemorySettings(enabled = true) {
+  return createMockSettings({
+    memory: {
+      enabled,
+      directory: '/tmp/subagent-memory',
+      contextBudgetChars: 1000,
+      searchDefaultLimit: 10,
+      searchMaxLimit: 20,
+    },
+  });
+}
+
+function buildToolNames(definition: SubagentDefinition, memoryEnabled = true): string[] {
+  const settings = createMemorySettings(memoryEnabled);
   const policy = new SubagentToolPolicy({
     settings,
     logger: createMockLogger(),
@@ -58,5 +71,53 @@ describe('SubagentToolFactory editor capability selection', () => {
         }),
       ),
     ).toEqual(['read_file', 'shell']);
+  });
+});
+
+describe('SubagentToolFactory memory authority', () => {
+  it.each(['explorer', 'worker', 'researcher'] as const)('gives %s read-only memory tools', (role) => {
+    const tools = buildToolNames(createDefinition({ role }));
+
+    expect(tools.filter((name) => name.startsWith('memory_'))).toEqual(['memory_list', 'memory_get', 'memory_search']);
+  });
+
+  it('keeps mentor tool-free even when memory is enabled', () => {
+    expect(
+      buildToolNames(
+        createDefinition({
+          role: 'mentor',
+          canRead: false,
+          canWrite: false,
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it('omits memory tools for disabled subagent memory', () => {
+    expect(
+      buildToolNames(createDefinition({ role: 'worker' }), false).filter((name) => name.startsWith('memory_')),
+    ).toEqual([]);
+  });
+
+  it('keeps read-only memory guidance and proposal protocol without automatic context injection', () => {
+    const definition = createDefinition({ role: 'explorer', canRead: true, canWrite: false });
+    const settings = createMemorySettings();
+    const instructions = buildInstructions(definition, [], false, settings);
+
+    expect(instructions).toContain('Search memory only when it is materially useful to the task');
+    expect(instructions).toContain('propose it in your final report');
+    expect(instructions).not.toContain('The following memories are summaries from previous sessions');
+  });
+
+  it.each([
+    ['mentor', createDefinition({ role: 'mentor', canRead: false, canWrite: false }), true],
+    ['disabled worker', createDefinition({ role: 'worker', canRead: true, canWrite: false }), false],
+  ])('omits memory tools, guidance, and context for %s', (_name, definition, memoryEnabled) => {
+    const settings = createMemorySettings(memoryEnabled);
+    const instructions = buildInstructions(definition, [], false, settings);
+
+    expect(buildToolNames(definition, memoryEnabled).filter((name) => name.startsWith('memory_'))).toEqual([]);
+    expect(instructions).not.toContain('Persistent memory');
+    expect(instructions).not.toContain('The following memories are summaries from previous sessions');
   });
 });

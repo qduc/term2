@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { Agent, RunContext, Runner, type Tool } from '@openai/agents';
@@ -8,15 +7,7 @@ import type { SubagentRequest, SubagentResult, SupportedSubagentRole, SubagentDe
 import type { SkillsService } from '../skills/skills-service.js';
 import { SUBAGENT_ROLES } from './types.js';
 import { SubagentToolFactory, getSubagentRunContext, type SubagentRunContext } from './tool-policy.js';
-import {
-  loadRoleDefinition,
-  resolvePrompt,
-  resolveSubagentSearchViaShell,
-  buildAvailableToolGuidance,
-  selectSubagentBasePromptFile,
-  PROMPTS_DIR,
-} from './role-loader.js';
-import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
+import { loadRoleDefinition, resolveSubagentSearchViaShell, buildInstructions } from './role-loader.js';
 import { getProvider } from '../../providers/index.js';
 import {
   extractFinalText,
@@ -210,27 +201,14 @@ export class NestedSubagentRunner {
       modelSettings.maxTokens = definition.maxTokens;
     }
 
-    const envInfo = getEnvInfo(this.#settings, this.#executionContext);
-    const cwd = this.#executionContext?.getCwd() ?? process.cwd();
-    const agentsInstructions = this.#executionContext?.isRemote() ? '' : getAgentsInstructions(cwd);
-
-    let skillsInstructions = '';
-    if (this.#skillsService) {
-      const catalog = this.#skillsService.getSkillCatalog();
-      if (catalog) {
-        skillsInstructions = `\n\n${catalog}`;
-      }
-    }
-
-    const instructions = [
-      resolvePrompt(path.join(PROMPTS_DIR, selectSubagentBasePromptFile(definition.model))),
-      resolvePrompt(path.join(PROMPTS_DIR, 'worktree-hygiene.md')),
-      definition.instructions,
-      buildAvailableToolGuidance(toolDefinitions, searchViaShell),
-      `Environment: ${envInfo}${agentsInstructions}${skillsInstructions}`,
-    ]
-      .filter(Boolean)
-      .join('\n\n');
+    const instructions = buildInstructions(
+      definition,
+      toolDefinitions,
+      searchViaShell,
+      this.#settings,
+      this.#executionContext,
+      this.#skillsService,
+    );
 
     const agent = new Agent<SubagentRunContext>({
       name: definition.name,

@@ -15,6 +15,7 @@ export type PromptConstructorOptions = {
   runSubagentEnabled?: boolean;
   sandboxEnabled?: boolean;
   memoryEnabled?: boolean;
+  memoryGuidance?: string;
   executionContext?: ExecutionContext;
 };
 
@@ -34,6 +35,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     runSubagentEnabled = false,
     sandboxEnabled = true,
     memoryEnabled = false,
+    memoryGuidance = '',
     executionContext,
   } = options;
 
@@ -70,6 +72,10 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
 
   if (memoryEnabled && isAgentMode) {
     fragmentFiles.push('memory.md');
+  }
+
+  if (memoryGuidance) {
+    inlineSections.push(memoryGuidance);
   }
 
   return {

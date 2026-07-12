@@ -9,6 +9,7 @@ import type { ExecutionContext } from '../execution-context.js';
 import { getShellSandboxAddendum } from '../../prompts/shell-sandbox.js';
 import { getSearchViaShellAddendum } from '../../prompts/search-via-shell.js';
 import type { SkillsService } from '../skills/skills-service.js';
+import { MemoryCapabilityBuilder } from '../memory/memory-capabilities.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, '../../prompts');
 export const PROMPTS_DIR = path.join(BASE_PROMPT_PATH, 'subagents');
@@ -198,6 +199,7 @@ export function buildInstructions(
   const modelPrompt = resolvePrompt(path.join(PROMPTS_DIR, selectSubagentBasePromptFile(definition.model)));
   const worktreeHygiene = resolvePrompt(path.join(PROMPTS_DIR, 'worktree-hygiene.md'));
   const toolGuidance = buildAvailableToolGuidance(toolDefinitions, searchViaShell);
+  const memoryCapability = new MemoryCapabilityBuilder(settings).build({ kind: 'subagent', role: definition.role });
 
   const sandboxEnabled = settings.get<boolean>('sandbox.enabled') ?? true;
   const inlineSections: string[] = [];
@@ -222,6 +224,8 @@ export function buildInstructions(
     modelPrompt,
     worktreeHygiene,
     definition.instructions,
+    memoryCapability.guidance,
+    memoryCapability.context,
     toolGuidance,
     ...inlineSections,
     `Environment: ${envInfo}${agentsInstructions}${skillsInstructions}`,

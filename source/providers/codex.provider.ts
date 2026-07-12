@@ -466,6 +466,7 @@ class CodexProvider implements ModelProvider {
     private readonly sessionContextService: ISessionContextService | undefined,
     private readonly transport: 'websocket' | 'http',
     private readonly retryAttempts: number,
+    private readonly websocketReceiveTimeouts: { firstFrameMs: number; interFrameMs: number },
     private readonly onRetry?: () => void,
   ) {}
 
@@ -486,6 +487,7 @@ class CodexProvider implements ModelProvider {
             this.loggingService,
             this.loggingService?.providerTraffic,
             this.sessionContextService,
+            this.websocketReceiveTimeouts,
           );
     const retryingModel = new RetryingModel(selectedModel, {
       retryAttempts: this.retryAttempts,
@@ -606,6 +608,10 @@ registerProvider({
         sessionContextService,
         settingsService.get('agent.transport') ?? 'websocket',
         settingsService.get('agent.retryAttempts') ?? 2,
+        {
+          firstFrameMs: settingsService.get('agent.codex.websocketFirstFrameTimeoutMs') ?? 90_000,
+          interFrameMs: settingsService.get('agent.codex.websocketInterFrameTimeoutMs') ?? 600_000,
+        },
         onRetry,
       ),
     });

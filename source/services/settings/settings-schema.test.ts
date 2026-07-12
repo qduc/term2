@@ -11,6 +11,32 @@ import {
   normalizeAppModes,
 } from './settings-schema.js';
 
+it('Codex websocket receive timeouts default to transport-safe values and reject invalid values', () => {
+  expect(AgentSettingsSchema.parse({}).codex).toEqual({
+    websocketFirstFrameTimeoutMs: 90_000,
+    websocketInterFrameTimeoutMs: 600_000,
+  });
+
+  expect(
+    SettingsSchema.parse({
+      agent: {
+        codex: {
+          websocketFirstFrameTimeoutMs: 45_000,
+          websocketInterFrameTimeoutMs: 300_000,
+        },
+      },
+    }).agent?.codex,
+  ).toEqual({
+    websocketFirstFrameTimeoutMs: 45_000,
+    websocketInterFrameTimeoutMs: 300_000,
+  });
+
+  for (const value of [0, -1, 1.5, Infinity, Number.NaN]) {
+    expect(() => SettingsSchema.parse({ agent: { codex: { websocketFirstFrameTimeoutMs: value } } })).toThrow();
+    expect(() => SettingsSchema.parse({ agent: { codex: { websocketInterFrameTimeoutMs: value } } })).toThrow();
+  }
+});
+
 it('memory settings default to enabled local storage with bounded retrieval and context budgets', () => {
   const parsed = SettingsSchema.parse({});
   expect(parsed.memory).toMatchObject({

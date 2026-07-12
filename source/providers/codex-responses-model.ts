@@ -6,6 +6,11 @@ import type { ISessionContextService, IProviderTraffic } from '../services/servi
 import { dropUnpairedFunctionCalls } from '../services/tool-execution-ledger.js';
 import { ChainedWireState, type ChainedWireStateKey, type ChainedRequestToken } from './chained-wire-state.js';
 import { LunaResponsesLiteWireProtocol } from './luna-responses-lite-wire-protocol.js';
+import {
+  createWebSocketReceiveWatchdog,
+  DEFAULT_WEBSOCKET_RECEIVE_TIMEOUTS,
+  type WebSocketReceiveTimeouts,
+} from './websocket-receive-watchdog.js';
 
 const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
   recordRequestStart() {},
@@ -418,6 +423,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     private readonly diagnosticLogger?: DiagnosticLogger,
     providerTraffic?: IProviderTraffic,
     private readonly sessionContextService?: ISessionContextService,
+    private readonly websocketReceiveTimeouts: WebSocketReceiveTimeouts = DEFAULT_WEBSOCKET_RECEIVE_TIMEOUTS,
   ) {
     super(client, modelId);
     this.providerTraffic = providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
@@ -926,6 +932,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 
     const updatedRequest = {
       ...request,
+      signal: undefined as AbortSignal | undefined,
       modelSettings: {
         ...request.modelSettings,
         providerData: {
@@ -954,6 +961,8 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         },
       },
     };
+    const watchdog = createWebSocketReceiveWatchdog(request.signal, this.websocketReceiveTimeouts);
+    updatedRequest.signal = watchdog.signal;
 
     const builtRequest = (this as any)._buildResponsesCreateRequest(updatedRequest, true);
     const requestData = (asRecord(builtRequest?.requestData) ?? {}) as Record<string, unknown>;
@@ -963,7 +972,10 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     if (!stream) {
       try {
         const response = await fetchAndReconstructUnaryResponse(
-          () => super._fetchResponse(updatedRequest, true as false) as unknown as Promise<AsyncIterable<any>>,
+          async () =>
+            watchdog.wrap(
+              await (super._fetchResponse(updatedRequest, true as false) as unknown as Promise<AsyncIterable<any>>),
+            ),
           this.diagnosticLogger,
         );
         if (wireStateKey && wireStateToken && typeof response?.id === 'string' && response.id.length > 0) {
@@ -972,24 +984,28 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         this.#logTrafficReceived(requestId, requestData, response);
         return response;
       } catch (error) {
+        const timeoutError = watchdog.timeoutError();
+        watchdog.close();
         if (wireStateKey) {
           this.chainedWireState.invalidate(wireStateKey);
         }
-        this.#logTrafficFailed(requestId, requestData, error);
-        throw error;
+        this.#logTrafficFailed(requestId, requestData, timeoutError ?? error);
+        throw timeoutError ?? error;
       }
     }
 
     try {
       const response = (await super._fetchResponse(updatedRequest, stream as false)) as unknown as AsyncIterable<any>;
-      const patched = wrapCodexStream(response, this.diagnosticLogger);
+      const patched = wrapCodexStream(watchdog.wrap(response), this.diagnosticLogger);
       return this.#withTrafficLogging(patched, requestId, requestData, wireStateKey, wireStateToken);
     } catch (error) {
+      const timeoutError = watchdog.timeoutError();
+      watchdog.close();
       if (wireStateKey) {
         this.chainedWireState.invalidate(wireStateKey);
       }
-      this.#logTrafficFailed(requestId, requestData, error);
-      throw error;
+      this.#logTrafficFailed(requestId, requestData, timeoutError ?? error);
+      throw timeoutError ?? error;
     }
   }
 }

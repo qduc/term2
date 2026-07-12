@@ -13,6 +13,10 @@ const SETTINGS_SOURCE_KEYS = {
     maxParallelToolCalls: 'agent.maxParallelToolCalls',
     provider: 'agent.provider',
     openrouter: 'agent.openrouter',
+    codex: {
+      websocketFirstFrameTimeoutMs: 'agent.codex.websocketFirstFrameTimeoutMs',
+      websocketInterFrameTimeoutMs: 'agent.codex.websocketInterFrameTimeoutMs',
+    },
     mentorModel: 'agent.mentorModel',
     mentorProvider: 'agent.mentorProvider',
     mentorReasoningEffort: 'agent.mentorReasoningEffort',

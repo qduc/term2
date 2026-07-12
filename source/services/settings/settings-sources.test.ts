@@ -8,6 +8,10 @@ it('buildSettingsWithSources maps nested values and sources including optional u
     agent: {
       ...DEFAULT_SETTINGS.agent,
       temperature: undefined,
+      codex: {
+        websocketFirstFrameTimeoutMs: 12_345,
+        websocketInterFrameTimeoutMs: 67_890,
+      },
     },
     webSearch: {
       ...DEFAULT_SETTINGS.webSearch,
@@ -22,6 +26,10 @@ it('buildSettingsWithSources maps nested values and sources including optional u
 
     if (key === 'webSearch.tavily') {
       return 'env';
+    }
+
+    if (key === 'agent.codex.websocketFirstFrameTimeoutMs') {
+      return 'config';
     }
 
     return 'default';
@@ -42,4 +50,12 @@ it('buildSettingsWithSources maps nested values and sources including optional u
   expect(result.app.orchestratorMode.source).toBe('default');
   expect(result.agent.maxParallelToolCalls.value).toBe(settings.agent.maxParallelToolCalls);
   expect(result.agent.maxParallelToolCalls.source).toBe('default');
+  const codex = result.agent.codex as unknown as {
+    websocketFirstFrameTimeoutMs: { value: number; source: SettingSource };
+    websocketInterFrameTimeoutMs: { value: number; source: SettingSource };
+  };
+  expect(codex.websocketFirstFrameTimeoutMs.value).toBe(12_345);
+  expect(codex.websocketFirstFrameTimeoutMs.source).toBe('config');
+  expect(codex.websocketInterFrameTimeoutMs.value).toBe(67_890);
+  expect(codex.websocketInterFrameTimeoutMs.source).toBe('default');
 });

@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { withTrace } from '@openai/agents-core';
 import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
 import type { IProviderTraffic } from '../services/service-interfaces.js';
@@ -2215,5 +2215,89 @@ it.sequential('CodexResponsesWSModel unary path records Luna wire state response
     expect(trafficBodies[2].input).toEqual([expect.objectContaining({ role: 'user', content: 'unary second' })]);
   } finally {
     (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+  }
+});
+
+it.sequential(
+  'CodexResponsesWSModel gives the SDK a composed request signal before receiving websocket events',
+  async () => {
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+    const external = new AbortController();
+    let sdkSignal: AbortSignal | undefined;
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+      sdkSignal = request.signal;
+      return makeStream([{ type: 'response.completed', response: { id: 'resp_1', output: [], usage: {} } }]);
+    };
+
+    try {
+      const model = new CodexResponsesWSModel(
+        { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+        'gpt-5-codex',
+        { getOrRefreshAccessToken: async () => 'token', getAccountId: () => undefined } as any,
+      );
+
+      await collect(
+        model.getStreamedResponse({
+          input: [{ role: 'user', content: 'hello' }],
+          modelSettings: {},
+          tools: [],
+          handoffs: [],
+          signal: external.signal,
+        } as any),
+      );
+
+      expect(sdkSignal).toBeDefined();
+      expect(sdkSignal).not.toBe(external.signal);
+      expect(sdkSignal?.aborted).toBe(false);
+    } finally {
+      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    }
+  },
+);
+
+it.sequential('CodexResponsesWSModel applies configured websocket receive timeouts', async () => {
+  vi.useFakeTimers();
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  const external = new AbortController();
+  let sdkSignal: AbortSignal | undefined;
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    sdkSignal = request.signal;
+    return {
+      [Symbol.asyncIterator]: () => ({
+        next: () => new Promise(() => {}),
+        return: async () => ({ done: true, value: undefined }),
+      }),
+    };
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5-codex',
+      { getOrRefreshAccessToken: async () => 'token', getAccountId: () => undefined } as any,
+      undefined,
+      undefined,
+      undefined,
+      { firstFrameMs: 25, interFrameMs: 50 },
+    );
+    const pending = collect(
+      model.getStreamedResponse({
+        input: [{ role: 'user', content: 'hello' }],
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+        signal: external.signal,
+      } as any),
+    );
+    void pending.catch(() => {});
+
+    await vi.advanceTimersByTimeAsync(25);
+    expect(sdkSignal?.aborted).toBe(true);
+    expect(sdkSignal?.reason).toBeInstanceOf(Error);
+    expect((sdkSignal?.reason as Error).message).toBe('WebSocket first frame timeout');
+  } finally {
+    external.abort();
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    vi.useRealTimers();
   }
 });

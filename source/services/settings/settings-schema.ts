@@ -52,6 +52,12 @@ export const AgentSettingsSchema = z.object({
       apiKey: z.string().optional(),
     })
     .optional(),
+  codex: z
+    .object({
+      websocketFirstFrameTimeoutMs: z.number().int().positive().finite().default(90_000),
+      websocketInterFrameTimeoutMs: z.number().int().positive().finite().default(600_000),
+    })
+    .default({ websocketFirstFrameTimeoutMs: 90_000, websocketInterFrameTimeoutMs: 600_000 }),
   mentorModel: z.string().optional().describe('Model to use as a mentor'),
   mentorProvider: z
     .string()
@@ -397,6 +403,7 @@ export interface SettingsWithSources {
     provider: SettingWithSource<string>;
     openrouter: SettingWithSource<any>;
     openai: SettingWithSource<any>;
+    codex: SettingWithSource<{ websocketFirstFrameTimeoutMs: number; websocketInterFrameTimeoutMs: number }>;
     mentorModel: SettingWithSource<string | undefined>;
     mentorProvider: SettingWithSource<string | undefined>;
     mentorReasoningEffort: SettingWithSource<string>;
@@ -501,6 +508,8 @@ export const SETTING_KEYS = {
   AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl', // Sensitive - env only
   AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer', // Sensitive - env only
   AGENT_OPENROUTER_TITLE: 'agent.openrouter.title', // Sensitive - env only
+  AGENT_CODEX_WEBSOCKET_FIRST_FRAME_TIMEOUT_MS: 'agent.codex.websocketFirstFrameTimeoutMs',
+  AGENT_CODEX_WEBSOCKET_INTER_FRAME_TIMEOUT_MS: 'agent.codex.websocketInterFrameTimeoutMs',
   AGENT_MENTOR_MODEL: 'agent.mentorModel',
   AGENT_MENTOR_PROVIDER: 'agent.mentorProvider',
   AGENT_MENTOR_REASONING_EFFORT: 'agent.mentorReasoningEffort',
@@ -678,6 +687,10 @@ export const DEFAULT_SETTINGS: SettingsData = {
     openai: {
       // defaults empty; can be provided via env or config
     } as any,
+    codex: {
+      websocketFirstFrameTimeoutMs: 90_000,
+      websocketInterFrameTimeoutMs: 600_000,
+    },
     mentorModel: undefined,
     mentorProvider: undefined,
     mentorReasoningEffort: 'default',

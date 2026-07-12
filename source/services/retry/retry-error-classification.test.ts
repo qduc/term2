@@ -41,6 +41,7 @@ it('isNetworkProtocolError correctly flags network protocol errors', () => {
   ).toBe(true);
   expect(isNetworkProtocolError(new Error('Responses websocket connection timed out'))).toBe(true);
   expect(isNetworkProtocolError(new Error('WebSocket first frame timeout after 5000ms'))).toBe(true);
+  expect(isNetworkProtocolError(new Error('WebSocket idle timeout'))).toBe(true);
   expect(isNetworkProtocolError({ name: 'InvalidStateError', message: 'Socket is closing' })).toBe(true);
 
   expect(isNetworkProtocolError(new Error('unexpected server response: 401'))).toBe(false);
@@ -57,6 +58,10 @@ it('isNetworkProtocolError correctly flags network protocol errors', () => {
 
 it('isRetryableTransportError separates retryable errors from HTTP fallback candidates', () => {
   expect(isRetryableTransportError(new Error('WebSocket first frame timeout after 5000ms'))).toEqual({
+    retryable: true,
+    transportFallback: true,
+  });
+  expect(isRetryableTransportError(new Error('WebSocket idle timeout'))).toEqual({
     retryable: true,
     transportFallback: true,
   });
@@ -120,6 +125,11 @@ it('isTransientRetryableError: OpenAI SDK errors are retryable', () => {
   expect(
     isTransientRetryableError(asInstanceOf(RateLimitError.prototype, { message: 'rate limit', status: 429 })),
   ).toBe(true);
+});
+
+it('isTransientRetryableError: websocket receive watchdog timeouts are retryable', () => {
+  expect(isTransientRetryableError(new Error('WebSocket first frame timeout'))).toBe(true);
+  expect(isTransientRetryableError(new Error('WebSocket idle timeout'))).toBe(true);
 });
 
 it('isTransientRetryableError: OpenRouter 429/5xx are retryable', () => {

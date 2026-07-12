@@ -1,4 +1,5 @@
-import { it, expect, beforeAll, afterAll } from 'vitest';
+import { it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { OpenAIResponsesWSModel } from '@openai/agents-openai';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -784,5 +785,66 @@ it.sequential('Codex provider createRunner custom fetch injects chatgpt-account-
     try {
       fs.unlinkSync(path.join(TEST_DIR, 'auth.json'));
     } catch {}
+  }
+});
+
+it.sequential('Codex provider passes configured receive timeouts to websocket models', async () => {
+  const provider = getProvider('codex');
+  expect(provider?.createRunner).toBeTruthy();
+  if (!provider?.createRunner) return;
+
+  vi.useFakeTimers();
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  let sdkSignal: AbortSignal | undefined;
+  let reads = 0;
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    sdkSignal = request.signal;
+    return {
+      [Symbol.asyncIterator]: () => ({
+        next: () => {
+          reads += 1;
+          return reads === 1
+            ? Promise.resolve({ done: false, value: { type: 'response.created', response: { id: 'resp_1' } } })
+            : new Promise(() => {});
+        },
+        return: async () => ({ done: true, value: undefined }),
+      }),
+    };
+  };
+
+  try {
+    const settings = new Map<string, unknown>([
+      ['agent.model', 'gpt-5.3-codex'],
+      ['agent.transport', 'websocket'],
+      ['agent.retryAttempts', 0],
+      ['agent.codex.websocketFirstFrameTimeoutMs', 50],
+      ['agent.codex.websocketInterFrameTimeoutMs', 25],
+    ]);
+    const runner = provider.createRunner({
+      settingsService: { get: (key: string) => settings.get(key) },
+      loggingService: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+    } as any);
+    expect(runner).toBeTruthy();
+    if (!runner) return;
+    const model = await runner.config.modelProvider.getModel('gpt-5.3-codex');
+    const pending = (async () => {
+      for await (const _event of model.getStreamedResponse({
+        input: [{ role: 'user', content: 'hello' }],
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any)) {
+        // The test stream intentionally never yields.
+      }
+    })();
+    void pending.catch(() => {});
+
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(25);
+    expect(sdkSignal?.aborted).toBe(true);
+    expect((sdkSignal?.reason as Error).message).toBe('WebSocket idle timeout');
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    vi.useRealTimers();
   }
 });

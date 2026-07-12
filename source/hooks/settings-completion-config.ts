@@ -37,6 +37,10 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.AGENT_MAX_TURNS]: 'Maximum conversation turns',
   [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]: 'Number of retry attempts for failed requests',
   [SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS]: 'Maximum number of tool calls allowed to run at the same time',
+  [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_FIRST_FRAME_TIMEOUT_MS]:
+    'Codex WebSocket timeout before the first response frame, in milliseconds',
+  [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_INTER_FRAME_TIMEOUT_MS]:
+    'Codex WebSocket timeout between response frames, in milliseconds',
   [SETTING_KEYS.SHELL_TIMEOUT]: 'Shell command timeout in milliseconds',
   [SETTING_KEYS.SHELL_MAX_OUTPUT_LINES]: 'Maximum lines of shell output to capture',
   [SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS]: 'Maximum characters of shell output to capture',

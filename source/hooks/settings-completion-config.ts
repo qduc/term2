@@ -73,6 +73,12 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.MEMORY_CONTEXT_BUDGET_CHARS]: 'Character budget for memory summaries in initial context (number)',
   [SETTING_KEYS.MEMORY_SEARCH_DEFAULT_LIMIT]: 'Default number of search results to return (number)',
   [SETTING_KEYS.MEMORY_SEARCH_MAX_LIMIT]: 'Maximum number of search results to return (number)',
+  [SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_MODEL]:
+    'Model override for the librarian subagent (falls back to agent.model)',
+  [SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_PROVIDER]:
+    'Provider override for the librarian subagent (falls back to agent.provider)',
+  [SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT]:
+    'Reasoning effort for the librarian subagent (none|minimal|low|medium|high|xhigh|default)',
 };
 
 /**
@@ -104,6 +110,7 @@ export const HIDDEN_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_WORKER_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_PROVIDER,
+  SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_PROVIDER,
   SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA,
 ]);
 
@@ -129,6 +136,8 @@ export const CATEGORY_KEYS = {
     SETTING_KEYS.AGENT_SUBAGENT_WORKER_REASONING_EFFORT,
     SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_MODEL,
     SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_REASONING_EFFORT,
+    SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_MODEL,
+    SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT,
   ]),
   safety: new Set<string>([
     SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,

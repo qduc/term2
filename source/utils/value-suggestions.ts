@@ -45,6 +45,14 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'google', description: 'Google Gemini' },
     { value: 'codex', description: 'ChatGPT Codex (OAuth)' },
   ],
+  'agent.subagentLibrarianProvider': [
+    { value: 'openai', description: 'OpenAI official API' },
+    { value: 'openrouter', description: 'OpenRouter.ai' },
+    { value: 'openai-compatible', description: 'Local models/Ollama' },
+    { value: 'anthropic', description: 'Anthropic Claude' },
+    { value: 'google', description: 'Google Gemini' },
+    { value: 'codex', description: 'ChatGPT Codex (OAuth)' },
+  ],
   'agent.autoApproveProvider': [
     { value: 'openai', description: 'OpenAI official API' },
     { value: 'openrouter', description: 'OpenRouter.ai' },

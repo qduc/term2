@@ -3,15 +3,7 @@ import { findPathTrigger } from './input/triggers.js';
 import { determineActiveMenu, type ActiveMenu } from './input/determine-active-menu.js';
 import type { SlashCommand } from '../slash-commands.js';
 import { SKILLS_TRIGGER } from './input/triggers.js';
-import {
-  MODEL_TRIGGER,
-  MENTOR_TRIGGER,
-  AUTO_APPROVE_MODEL_TRIGGER,
-  EDIT_HEALING_MODEL_TRIGGER,
-  SUBAGENT_EXPLORER_MODEL_TRIGGER,
-  SUBAGENT_WORKER_MODEL_TRIGGER,
-  SUBAGENT_RESEARCHER_MODEL_TRIGGER,
-} from '../hooks/use-model-selection.js';
+import { MODEL_SETTING_CONFIGS } from '../utils/ai/model-settings.js';
 
 const commandMetadata: SlashCommand[] = [
   {
@@ -49,45 +41,15 @@ const determine = (input: string, cursor = input.length) => determineActiveMenu(
 it('determineActiveMenu - model triggers (priority 0)', () => {
   const cases: Array<{ input: string; cursor: number; expected: ActiveMenu }> = [
     {
-      input: '/settings agent.model gpt-4',
-      cursor: '/settings agent.model gpt-4'.length,
-      expected: { type: 'model', startIndex: MODEL_TRIGGER.length },
-    },
-    {
       input: '/model gpt',
       cursor: '/model gpt'.length,
       expected: { type: 'model', startIndex: '/model '.length },
     },
-    {
-      input: '/settings agent.mentorModel claude',
-      cursor: '/settings agent.mentorModel claude'.length,
-      expected: { type: 'model', startIndex: MENTOR_TRIGGER.length },
-    },
-    {
-      input: '/settings agent.autoApproveModel haiku',
-      cursor: '/settings agent.autoApproveModel haiku'.length,
-      expected: { type: 'model', startIndex: AUTO_APPROVE_MODEL_TRIGGER.length },
-    },
-    {
-      input: '/settings tools.editHealingModel gpt-4o-mini',
-      cursor: '/settings tools.editHealingModel gpt-4o-mini'.length,
-      expected: { type: 'model', startIndex: EDIT_HEALING_MODEL_TRIGGER.length },
-    },
-    {
-      input: '/settings agent.subagentExplorerModel gpt-4o',
-      cursor: '/settings agent.subagentExplorerModel gpt-4o'.length,
-      expected: { type: 'model', startIndex: SUBAGENT_EXPLORER_MODEL_TRIGGER.length },
-    },
-    {
-      input: '/settings agent.subagentWorkerModel gpt-4o',
-      cursor: '/settings agent.subagentWorkerModel gpt-4o'.length,
-      expected: { type: 'model', startIndex: SUBAGENT_WORKER_MODEL_TRIGGER.length },
-    },
-    {
-      input: '/settings agent.subagentResearcherModel gpt-4o',
-      cursor: '/settings agent.subagentResearcherModel gpt-4o'.length,
-      expected: { type: 'model', startIndex: SUBAGENT_RESEARCHER_MODEL_TRIGGER.length },
-    },
+    ...MODEL_SETTING_CONFIGS.map(({ trigger }) => ({
+      input: `${trigger}model`,
+      cursor: `${trigger}model`.length,
+      expected: { type: 'model' as const, startIndex: trigger.length },
+    })),
   ];
 
   for (const { input, cursor, expected } of cases) {
@@ -184,9 +146,11 @@ it('determineActiveMenu - priority enforcement', () => {
   expect(determine('/settings ', 10)).toEqual({ type: 'settings', startIndex: 10 });
 
   // Model beats settings when model trigger fully present.
-  expect(determine('/settings agent.model ', MODEL_TRIGGER.length)).toEqual({
+  const modelTrigger = MODEL_SETTING_CONFIGS[0]?.trigger;
+  expect(modelTrigger).toBeDefined();
+  expect(determine(modelTrigger!, modelTrigger!.length)).toEqual({
     type: 'model',
-    startIndex: MODEL_TRIGGER.length,
+    startIndex: modelTrigger!.length,
   });
 
   // Slash beats path: "/@test" stays slash.

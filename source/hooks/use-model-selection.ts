@@ -4,16 +4,7 @@ import { fetchModels, filterModels, clearModelCache, type ModelInfo } from '../s
 import { getProviderIds, sortProvidersByOrder } from '../providers/index.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
-import { MODEL_CMD_TRIGGER, getModelSettingConfigForInput, MODEL_SETTING_CONFIGS } from '../utils/ai/model-settings.js';
-
-export const MODEL_TRIGGER = MODEL_SETTING_CONFIGS[0].trigger;
-export { MODEL_CMD_TRIGGER };
-export const MENTOR_TRIGGER = MODEL_SETTING_CONFIGS[1].trigger;
-export const AUTO_APPROVE_MODEL_TRIGGER = MODEL_SETTING_CONFIGS[2].trigger;
-export const EDIT_HEALING_MODEL_TRIGGER = MODEL_SETTING_CONFIGS[3].trigger;
-export const SUBAGENT_EXPLORER_MODEL_TRIGGER = MODEL_SETTING_CONFIGS[4].trigger;
-export const SUBAGENT_WORKER_MODEL_TRIGGER = MODEL_SETTING_CONFIGS[5].trigger;
-export const SUBAGENT_RESEARCHER_MODEL_TRIGGER = MODEL_SETTING_CONFIGS[6].trigger;
+import { getModelSettingConfigForInput } from '../utils/ai/model-settings.js';
 
 export const useModelSelection = (deps: { loggingService: ILoggingService; settingsService: ISettingsService }) => {
   const { loggingService, settingsService } = deps;

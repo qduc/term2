@@ -65,6 +65,8 @@ export interface AgentRuntimeFromSubagentRuntimeDeps {
   skillsService?: SkillsService;
   executionRunner: ExecutionSubagentRunner;
   mentorRunner: MentorRunner;
+  /** Event sink for public AgentRuntime child lifecycle events. */
+  onEvent?: (event: ConversationEvent) => void;
   parent?: {
     permissions?: AgentPermissions;
     limits?: AgentLimits;
@@ -83,6 +85,7 @@ export function createAgentRuntimeFromSubagentRuntime(deps: AgentRuntimeFromSuba
     (agentId, request, definition) => deps.executionRunner.run(agentId, request, definition),
     deps.logger,
     (agentId, task, signal) => deps.mentorRunner.run(agentId, task, signal),
+    deps.onEvent,
   );
 
   return new AgentRuntime({
@@ -151,6 +154,7 @@ export function createAgentRuntime(deps: CreateAgentRuntimeDeps): AgentRuntimeCo
     (agentId, request, definition) => executionRunner.run(agentId, request, definition),
     deps.logger,
     (agentId, task, signal) => mentorRunner.run(agentId, task, signal),
+    deps.onEvent,
   );
 
   const runtime = new AgentRuntime({

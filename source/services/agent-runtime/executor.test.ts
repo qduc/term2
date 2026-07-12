@@ -179,6 +179,27 @@ describe('createExecutor', () => {
     expect((capturedRequest as any).task).toBe('do work');
   });
 
+  it('emits matching lifecycle events for an AgentRuntime child run', async () => {
+    const events: unknown[] = [];
+    const runWithDef: SubagentRunWithDefFn = async (agentId, request) => ({
+      agentId,
+      role: request.role,
+      status: 'completed',
+      finalText: 'done',
+      filesChanged: [],
+      toolsUsed: [],
+    });
+
+    const executor = createExecutor(runWithDef, logger(), undefined, (event) => events.push(event));
+
+    await executor(makeExecutorInput());
+
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({ type: 'subagent_started', task: 'do work' });
+    expect(events[1]).toMatchObject({ type: 'subagent_completed', result: { status: 'completed' } });
+    expect((events[1] as any).result.agentId).toBe((events[0] as any).agentId);
+  });
+
   it('propagates cancellation signal to the run request', async () => {
     let capturedSignal: AbortSignal | undefined;
 

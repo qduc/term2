@@ -69,6 +69,7 @@ export class SubagentManager {
       logger: this.#logger,
       executionRunner: this.#runtime.executionRunner,
       mentorRunner: this.#runtime.mentorRunner,
+      onEvent: this.#onEvent,
     });
   }
 

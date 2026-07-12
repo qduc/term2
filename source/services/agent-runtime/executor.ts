@@ -4,6 +4,8 @@ import type { RunResult, RunErrorCode, ArtifactReference } from './types.js';
 import type { SubagentDefinition, SubagentResult, SubagentRequest } from '../subagents/types.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import { adaptLegacyDefinition } from './legacy-adapter.js';
+import type { ConversationEvent } from '../conversation/conversation-events.js';
+import { isAbortLike, safeEmit } from '../subagents/utils.js';
 
 /**
  * Signature for executing a subagent with a pre-built definition.
@@ -97,6 +99,7 @@ export function createExecutor(
   runWithDef: SubagentRunWithDefFn,
   logger: ILoggingService,
   mentorRun?: MentorRunFn,
+  onEvent?: (event: ConversationEvent) => void,
 ): ExecutorFn {
   return async <T = string>(input: ExecutorInput): Promise<RunResult<T>> => {
     const { definition, instructions, input: runInput } = input;
@@ -122,6 +125,13 @@ export function createExecutor(
       signal: effectiveSignal,
     };
 
+    safeEmit(logger, onEvent, {
+      type: 'subagent_started',
+      agentId,
+      role: request.role,
+      task: request.task,
+    });
+
     logger.debug('AgentRuntime executor starting', {
       agentName: definition.name,
       agentId,
@@ -138,10 +148,26 @@ export function createExecutor(
       legacyDef.name.toLowerCase() === 'mentor';
 
     let subagentResult: SubagentResult;
-    if (isMentor && mentorRun) {
-      subagentResult = await mentorRun(agentId, runInput.task, effectiveSignal);
-    } else {
-      subagentResult = await runWithDef(agentId, request, legacyDef);
+    try {
+      if (isMentor && mentorRun) {
+        subagentResult = await mentorRun(agentId, runInput.task, effectiveSignal);
+      } else {
+        subagentResult = await runWithDef(agentId, request, legacyDef);
+      }
+    } catch (error) {
+      safeEmit(logger, onEvent, {
+        type: 'subagent_completed',
+        result: {
+          agentId,
+          role: request.role,
+          status: isAbortLike(error instanceof Error ? error.message : String(error), error) ? 'cancelled' : 'failed',
+          finalText: '',
+          filesChanged: [],
+          toolsUsed: [],
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      throw error;
     }
 
     logger.debug('AgentRuntime executor completed', {
@@ -149,6 +175,8 @@ export function createExecutor(
       agentId,
       status: subagentResult.status,
     });
+
+    safeEmit(logger, onEvent, { type: 'subagent_completed', result: subagentResult });
 
     return mapSubagentResultToRunResult<T>(subagentResult);
   };

@@ -10,6 +10,7 @@ import type {
   HandleApprovalDecisionOptions,
   ConversationAdapter,
   ConversationEventSink,
+  QueuedTurnStartObserver,
 } from './conversation-adapter.js';
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 import type { InputSurgeDecision } from '../input-surge-guard.js';
@@ -180,9 +181,42 @@ export class ConversationService {
     return this.#adapter.discardQueue();
   }
 
+  /**
+   * Remove the most recently queued message from the queue and return its
+   * text so the caller can move it back to the input box. Returns null when
+   * the queue is empty, the adapter has no queue, or the controller rejects
+   * the removal.
+   */
+  removeLastQueuedItem(): Promise<{ text: string } | null> {
+    if (typeof this.#adapter.removeLastQueuedItem !== 'function') {
+      return Promise.resolve(null);
+    }
+    return this.#adapter.removeLastQueuedItem();
+  }
+
+  /**
+   * Returns true if a foreground turn is currently active (running,
+   * completing, awaiting an approval, etc.). The orchestrator uses this to
+   * decide whether to immediately append a user message to the message list
+   * (when no turn is active) or display it as queued until the queue pops it.
+   */
+  isQueueActive(): boolean {
+    return this.#adapter.isQueueActive();
+  }
+
   /** Set an observer for queue state changes. The observer fires immediately with current state. */
   setQueueStateObserver(observer: QueueStateObserver | null): void {
     this.#adapter.setQueueStateObserver(observer);
+  }
+
+  /**
+   * Set an observer that fires each time the queue has actually started
+   * executing a queued message (after the in-flight turn finished). The
+   * observer receives the internal request id and the original turn so the
+   * caller can render the message in the UI at the correct timeline.
+   */
+  setQueuedTurnStartObserver(observer: QueuedTurnStartObserver | null): void {
+    this.#adapter.setQueuedTurnStartObserver(observer);
   }
 
   retryLastToolOutput(options?: SendMessageOptions): Promise<ConversationTerminal | null> {

@@ -14,10 +14,37 @@ Most application code lives under `source/`. Navigate by responsibility rather t
 - **UI and user interaction**: `source/components/` contains presentational Ink components. `source/hooks/` owns interactive state and behavior such as conversation handling, input modes, menus, settings, and keyboard actions. `source/commands/` implements slash commands.
 - **Conversation and turn execution**: `source/services/conversation/` owns the public conversation facade, event contracts, history, and persistence. `source/services/session/` owns the lifecycle of a foreground turn, including initial execution, approval continuation, streaming, retries, and session state. `session-composition.ts` is the single composition root; begin with `conversation-service.ts`, then `session-composition.ts` and `turn-coordinator.ts`.
 - **Approval and recovery policy**: `source/services/approval/` decides when and how tools require approval. `source/services/retry/` classifies failures and decides whether execution should resume, retry, or restart. Keep policy decisions in these directories rather than in UI or provider code.
-- **Providers and model transport**: `source/providers/` contains provider registration, provider-specific adapters, response normalization, and transport middleware. Shared agent-client infrastructure and tool interception live in `source/lib/`. New providers must be registered through the provider registry.
+- **Providers and model transport**: `source/providers/` contains provider registration, provider-specific adapters, response normalization, and transport middleware:
+  - `common/` — shared provider utilities
+  - `fetch/` — HTTP fetch middleware (logging, rate-limiting, composition)
+  - `web-search/` — Exa and Tavily search provider implementations
+  - `ai-sdk-*` — AI SDK adapters for Anthropic, Google, OpenRouter
+  - `opencode-*` — OpenCode provider with routing and session management
+  - `openai-compatible-*` — OpenAI-compatible provider with lazy model loading
+  Shared agent-client infrastructure and tool interception live in `source/lib/`. New providers must be registered through the provider registry.
 - **Subagent execution**: `source/services/subagents/subagent-manager.ts` is a compatibility facade that emits top-level lifecycle events and delegates through the composition root in `runtime.ts`. Strategy-specific execution belongs in `mentor-runner.ts` for persistent mentor history and provider continuity, `execution-runner.ts` for one-shot explorer/worker/researcher sessions, and `nested-runner.ts` for cached `Agent.asTool()` instances, approval interruption/resume, and nested bookkeeping. Role frontmatter, prompt selection, environment context, and tool guidance belong in `role-loader.ts`; capability construction and write/shell safety policy belong in `tool-policy.ts`. Keep wiring and the nested role-tool cache in `runtime.ts`, and do not add execution, prompt, cache, or tool-policy logic back to `SubagentManager`.
-- **Tools and prompts**: `source/tools/` contains the capabilities exposed to the agent, grouped by domain such as file, system, web, and agent interaction. Register new tools in `agent.ts`. Agent and subagent instructions live in `source/prompts/`.
-- **Cross-cutting services**: settings, logging, subagents, notifications, execution context, and provider continuity live under `source/services/` in their named areas. Reusable domain helpers belong in `source/utils/`; shared data shapes belong in `source/types/` or `source/contracts/`.
+- **Tools and prompts**: `source/tools/` contains the capabilities exposed to the agent, grouped by domain:
+  - `agent/` — skill activation, mentor interaction, user prompting, subagent execution
+  - `file/` — file operations (read, write, edit, search, patches)
+  - `languages/` — language-specific helpers (TypeScript, Python, Go, Rust, Java, C++, etc.)
+  - `memory/` — persistent memory tools
+  - `system/` — shell execution
+  - `web/` — web search and fetch
+  Register new tools in `agent.ts`. Agent and subagent instructions live in `source/prompts/`.
+- **Cross-cutting services**: `source/services/` contains domain services organized by responsibility:
+  - `agent-runtime/` — agent composition, resolution, execution budget, and structured output
+  - `approval/` — tool approval policy
+  - `conversation/` — conversation facade, events, history, and persistence
+  - `logging/` — logging infrastructure, provider traffic, and conversation logging
+  - `memory/` — persistent memory store and capabilities
+  - `queue/` — turn execution queue with pause/recovery
+  - `retry/` — failure classification and recovery decisions
+  - `session/` — turn lifecycle (workflow, coordinator, stream)
+  - `settings/` — settings schema, persistence, and merging
+  - `skills/` — skills discovery and loading
+  - `subagents/` — subagent execution (manager, runners, runtime, tool-policy)
+  - `test-helpers/` — shared test utilities
+  Reusable domain helpers belong in `source/utils/`; shared data shapes belong in `source/types/` or `source/contracts/`.
 
 When changing behavior, enter through the public boundary for that feature and follow dependencies inward. Avoid starting from low-level helpers unless the bug is already isolated there. Tests are colocated with production files and are usually the fastest way to discover the intended contract.
 
@@ -39,7 +66,7 @@ When changing session or conversation flow:
 1. User types a message → `app.tsx` captures it
 2. `use-conversation.ts` calls `ConversationService.sendMessage()`
 3. `ConversationService` delegates terminal execution to the `ConversationAdapter` created by `session-composition.ts`
-4. `ConversationAdapter` establishes logging/traffic context, collects terminal events, and calls `TurnCoordinator.start()` directly
+4. `ConversationAdapter` establishes logging/traffic context, collects terminal events, and routes through `QueueController` to manage turn admission
 5. `TurnCoordinator.start()` guards turn admission with `TurnStatusMachine`, checks stale/aborted approval state through `ApprovalFlowCoordinator`, and delegates execution to `TurnWorkflow.executeInitial()`
 6. `TurnWorkflow` prepares input through `InitialInputPreparer` and `SessionInputPlanner`, drives the agent client, feeds events to `SessionStreamProcessor`, and returns a turn outcome
 7. The agent client selects a provider through the Provider Registry and streams the response
@@ -48,6 +75,7 @@ When changing session or conversation flow:
 10. `TurnCoordinator` delegates approved continuation execution to `TurnWorkflow.executeContinuation()`, which applies the decision, streams tool/model work, and returns `response`, `approval_required`, `fresh_start_required`, or `stale`
 11. Retry logic in `services/retry/` classifies errors and handles recovery; `fresh_start_required` lets `TurnWorkflow` re-drive initial execution from history
 12. The terminal result is collected by `ConversationAdapter` and rendered in the message list
+13. `source/services/agent-runtime/` provides a parallel runtime path for agent workflows with resolution, budgeting, and structured output
 
 ## Testing & Quality
 

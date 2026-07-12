@@ -44,6 +44,15 @@ export class ConversationOrchestrator {
         config.ui.onQueueStateChange(snapshot);
       });
     }
+    // When the queue has actually popped the next head and is about to start
+    // its turn, the orchestrator appends the user message to the message list
+    // (with the timeline the turn actually started at) and clears the pending
+    // indicator above the input box.
+    if (typeof config.conversationService.setQueuedTurnStartObserver === 'function') {
+      config.conversationService.setQueuedTurnStartObserver((execution) => {
+        this.moveQueuedMessageIntoList(execution.requestId, execution.input);
+      });
+    }
   }
 
   updateCallbacks({
@@ -116,6 +125,29 @@ export class ConversationOrchestrator {
     this.config.ui.onResetTransient();
 
     return restored;
+  }
+
+  /**
+   * Cancel the most recently queued message and return its text so the UI
+   * can move it back into the input box. Returns null when there are no
+   * pending queued messages, the service cannot cancel the tail item, or the
+   * service does not implement cancellation.
+   */
+  async removeLastQueuedPendingMessage(): Promise<string | null> {
+    const service = this.config.conversationService;
+    if (typeof service.removeLastQueuedItem !== 'function') {
+      return null;
+    }
+
+    const result = await service.removeLastQueuedItem();
+    if (!result) return null;
+
+    // The pending indicator above the input box is managed by the UI. The
+    // adapter already removed the matching internal entry, but the UI state
+    // is still showing it until we tell it to drop the last entry.
+    this.config.ui.onRemoveLastPendingMessage?.();
+
+    return result.text;
   }
 
   async retryLastToolOutput(): Promise<boolean> {
@@ -204,7 +236,15 @@ export class ConversationOrchestrator {
       ...(turn.skill ? { skill: turn.skill } : {}),
     };
 
-    this.config.messages.appendMessages([userMessage]);
+    const hasInflightTurn = this.config.conversationService.isQueueActive?.() ?? false;
+    if (hasInflightTurn) {
+      // A turn is already in flight. Show the message above the input box
+      // until the queue actually starts processing it; the message list will
+      // be updated when the queue pops this turn.
+      this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text);
+    } else {
+      this.config.messages.appendMessages([userMessage]);
+    }
     this.config.logWriter?.append({ type: 'user_message', message: userMessage });
     this.config.ui.onTurnStart();
 
@@ -491,6 +531,37 @@ export class ConversationOrchestrator {
       this.config.usageAccumulator?.add(result.usage);
       this.config.ui.onUsageUpdate(latestStreamedUsage ?? result.usage);
     }
+  }
+
+  /**
+   * Append a previously-queued user message into the message list. Called by
+   * the queue when it actually starts processing the next turn. After the
+   * append, the pending indicator above the input box is cleared.
+   */
+  private moveQueuedMessageIntoList(messageId: string, fallbackInput?: string | UserTurn): void {
+    // The message id we created up-front matches the one we will append now.
+    // We do not look it up by id because by the time the queue fires the
+    // observer the original UserMessage may not be reachable, so we re-build
+    // a minimal one with the same id and the formatted text.
+    let resolved: UserMessage | null = null;
+
+    if (fallbackInput !== undefined) {
+      const turn = normalizeUserTurn(fallbackInput);
+      if (hasUserTurnContent(turn)) {
+        resolved = {
+          id: messageId,
+          sender: 'user',
+          text: formatUserTurnForDisplay(turn),
+          ...(turn.skill ? { skill: turn.skill } : {}),
+        };
+      }
+    }
+
+    if (resolved) {
+      this.config.messages.appendMessages([resolved]);
+    }
+
+    this.config.ui.onQueuedMessageStarted?.(messageId);
   }
 
   private annotateCommandMessage(cmdMsg: CommandMessage): CommandMessage {

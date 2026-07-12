@@ -118,6 +118,133 @@ it('ConversationAdapter forwards streamed events to a persistent event sink', as
   expect(emitted.map((event) => event.type)).toEqual(['text_delta', 'final']);
 });
 
+it('ConversationAdapter fires queuedTurnStartObserver when the queue starts a turn', async () => {
+  const turnFlow = {
+    async *start() {
+      yield { type: 'final' as const, finalText: 'done' };
+    },
+    async *continueAfterApproval() {
+      yield { type: 'final' as const, finalText: 'done' };
+    },
+  };
+  const approval = {
+    getPending: () => null,
+    getPendingInterruption: () => ({}),
+  } as unknown as SessionApprovalQuery;
+  const logs = {
+    dispatchEventToLog: noop,
+    log: noop,
+    setLogSink: noop,
+  } as unknown as SessionLogs;
+  const userTurns = {
+    listUserTurns: () => [],
+  } as unknown as Pick<SessionManager, 'listUserTurns'>;
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns,
+    logs,
+    approval,
+    turnFlow,
+    queueForeground: true,
+  });
+
+  const startCalls: Array<{ requestId: string; input: string | UserTurn }> = [];
+  adapter.setQueuedTurnStartObserver((execution) => {
+    startCalls.push(execution);
+  });
+
+  await adapter.sendMessage('queued-1');
+  await adapter.sendMessage('queued-2');
+  await new Promise((r) => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
+
+  expect(startCalls.length).toBeGreaterThanOrEqual(1);
+  expect(startCalls[0]?.input).toBe('queued-1');
+});
+
+it('removeLastQueuedItem returns null when there is no queue', async () => {
+  const turnFlow = {
+    async *start() {
+      yield { type: 'final' as const, finalText: 'done' };
+    },
+    async *continueAfterApproval() {
+      yield { type: 'final' as const, finalText: 'done' };
+    },
+  };
+  const approval = {
+    getPending: () => null,
+    getPendingInterruption: () => ({}),
+  } as unknown as SessionApprovalQuery;
+  const logs = {
+    dispatchEventToLog: noop,
+    log: noop,
+    setLogSink: noop,
+  } as unknown as SessionLogs;
+  const userTurns = {
+    listUserTurns: () => [],
+  } as unknown as Pick<SessionManager, 'listUserTurns'>;
+  // No queueForeground here so the adapter has no queue.
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: '2026-06-12T00:00:00.000Z',
+    logger,
+    sessionContextService,
+    userTurns,
+    logs,
+    approval,
+    turnFlow,
+  });
+
+  expect(await adapter.removeLastQueuedItem()).toBeNull();
+});
+
+it('removeLastQueuedItem returns the text of the most recently queued item', async () => {
+  const turnFlow = {
+    async *start() {
+      // Never resolves so the queued items stay in the queue and don't fire.
+      await new Promise(() => {});
+    },
+    async *continueAfterApproval() {
+      yield { type: 'final' as const, finalText: 'done' };
+    },
+  };
+  const approval = {
+    getPending: () => null,
+    getPendingInterruption: () => ({}),
+  } as unknown as SessionApprovalQuery;
+  const logs = {
+    dispatchEventToLog: noop,
+    log: noop,
+    setLogSink: noop,
+  } as unknown as SessionLogs;
+  const userTurns = {
+    listUserTurns: () => [],
+  } as unknown as Pick<SessionManager, 'listUserTurns'>;
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: '2026-06-12T00:00:00.000Z',
+    logger,
+    sessionContextService,
+    userTurns,
+    logs,
+    approval,
+    turnFlow,
+    queueForeground: true,
+  });
+
+  void adapter.sendMessage('first');
+  void adapter.sendMessage('second');
+  // Yield so the submissions land in the queue before we cancel.
+  await new Promise((r) => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
+
+  const restored = await adapter.removeLastQueuedItem();
+  expect(restored).toEqual({ text: 'second' });
+});
+
 it('ConversationAdapter populates firstUserMessagePreview in session context', async () => {
   let capturedContext: any = null;
   const sessionContextService = {

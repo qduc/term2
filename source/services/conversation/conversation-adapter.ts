@@ -67,6 +67,21 @@ export type QueueStateObserver = (snapshot: QueueStateSnapshot) => void;
 
 export type ConversationEventSink = (event: ConversationEvent) => void;
 
+/**
+ * Fired by the adapter when the queue has actually started executing a queued
+ * message (i.e. after the in-flight turn finished and the next head is popped).
+ * The receiver can use this to surface the message in the UI (e.g. append it
+ * to the message list at the correct timeline position).
+ *
+ * `requestId` is the internal id assigned by the adapter in sendMessage().
+ * `input` is the original turn so callers can render the full content,
+ * including images and skill attachments.
+ */
+export type QueuedTurnStartObserver = (execution: {
+  readonly requestId: string;
+  readonly input: string | UserTurn;
+}) => void;
+
 export class ConversationAdapter {
   #sessionId: string;
   #startedAt: string;
@@ -93,6 +108,7 @@ export class ConversationAdapter {
   #approvalExecutionId: ExecutionId | null = null;
   #approvalActionId: ActionId | null = null;
   #queueStateObserver: QueueStateObserver | null = null;
+  #queuedTurnStartObserver: QueuedTurnStartObserver | null = null;
 
   constructor(deps: {
     sessionId: string;
@@ -151,6 +167,25 @@ export class ConversationAdapter {
     this.#queueStateObserver = observer;
     // Immediately notify with current state
     this.#notifyQueueState();
+  }
+
+  setQueuedTurnStartObserver(observer: QueuedTurnStartObserver | null): void {
+    this.#queuedTurnStartObserver = observer;
+  }
+
+  isQueueActive(): boolean {
+    if (!this.#queue) {
+      // Without a queue, the adapter is a pass-through. Treat the adapter as
+      // active only while the run-as-foreground path is in flight.
+      return false;
+    }
+    const state = this.#queue.state();
+    return (
+      state.kind === 'running' ||
+      state.kind === 'awaiting_active_action' ||
+      state.kind === 'cancelling' ||
+      state.kind === 'completing'
+    );
   }
 
   #notifyQueueState(): void {
@@ -251,6 +286,41 @@ export class ConversationAdapter {
     this.#notifyQueueState();
   }
 
+  /**
+   * Remove the last (most recently queued) item from the queue and return its
+   * text so the caller can move it back to the input box. Returns null when
+   * the queue is empty, the adapter has no queue (pass-through mode), or the
+   * underlying controller rejects the removal.
+   *
+   * Also pops the matching pending message from the internal pending list so
+   * the queue/pending state observers fire consistently.
+   */
+  async removeLastQueuedItem(): Promise<{ text: string } | null> {
+    const queue = this.#queue;
+    if (!queue) return null;
+
+    const state = queue.state();
+    if (state.queue.length === 0) return null;
+
+    // The queue is FIFO. The "last" queued item is the one at the tail.
+    const lastItem = state.queue[state.queue.length - 1]!;
+
+    const result = await queue.command({ kind: 'remove_queued', itemId: lastItem.id });
+    if (result.kind !== 'accepted') return null;
+
+    // The pending message list is in submission order. The corresponding
+    // pending entry for this item is the last one we added. Removing it keeps
+    // the adapter's internal bookkeeping consistent with the queue controller.
+    this.#pendingMessages.pop();
+    // Note: we don't need to touch #messagesById here because the queue head
+    // has not yet started executing this item (it was still queued), so there
+    // is no pending execution for it to resolve. The pending message entry
+    // was only there to support the snapshot factory if the head was popped.
+
+    this.#notifyQueueState();
+    return { text: lastItem.text };
+  }
+
   abort(): void {
     if (!this.#queue) {
       this.#turnFlow.abort?.();
@@ -263,6 +333,21 @@ export class ConversationAdapter {
   }
 
   #startQueuedTurn(execution: ActiveExecution<QueuedMessageSnapshot>): void {
+    // Notify the orchestrator/UI before kicking off the run so that the user
+    // message can be appended to the message list with the correct timeline.
+    const message = this.#messagesById.get(execution.snapshot.requestId);
+    if (message && this.#queuedTurnStartObserver) {
+      try {
+        this.#queuedTurnStartObserver({
+          requestId: execution.snapshot.requestId,
+          input: message.input,
+        });
+      } catch (error) {
+        this.#logger.error('queuedTurnStartObserver threw', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     this.#activeTurn = this.#runQueuedTurn(execution);
   }
 

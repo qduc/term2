@@ -99,7 +99,7 @@ export const useConversation = ({
   const [uiState, dispatch] = useReducer(conversationUIReducer, initialMessages, (init) =>
     createInitialUIState(getInitialLastUsage(init)),
   );
-  const { thinkingStartedAt, toolCallStreamingInfo, lastUsage, lastCodexRateLimit } = uiState;
+  const { thinkingStartedAt, toolCallStreamingInfo, lastUsage, lastCodexRateLimit, pendingQueuedMessages } = uiState;
   const {
     isProcessing,
     waitingForApproval,
@@ -163,6 +163,10 @@ export const useConversation = ({
         onAskUserAdvanceToNext: (nextIndex) => dispatch({ type: 'ask_user/advance_to_next', nextIndex }),
         onAskUserGoBack: (_currentIndex, _answers) => dispatch({ type: 'ask_user/go_back' }),
         onQueueStateChange: (snapshot) => dispatch({ type: 'queue/updated', snapshot }),
+        onQueuedMessagePending: (id, text) =>
+          dispatch({ type: 'queue/message_pending', id, text, queuedAt: Date.now() }),
+        onQueuedMessageStarted: (id) => dispatch({ type: 'queue/message_started', id }),
+        onRemoveLastPendingMessage: () => dispatch({ type: 'queue/remove_last_pending' }),
       },
       approvedContext: approvedContextRef,
       usageAccumulator,
@@ -214,6 +218,11 @@ export const useConversation = ({
   );
 
   const undoToUserMessage = useCallback((uiIndex: number) => orchestrator.undoToUserMessage(uiIndex), [orchestrator]);
+
+  const removeLastQueuedPendingMessage = useCallback(
+    () => orchestrator.removeLastQueuedPendingMessage(),
+    [orchestrator],
+  );
 
   const getSubagentUsage = useCallback(() => orchestrator.getSubagentUsage(), [orchestrator]);
 
@@ -318,7 +327,9 @@ export const useConversation = ({
     queuePaused,
     queueLength,
     queuePauseReason,
+    pendingQueuedMessages,
     resumeQueue: () => conversationService.resumeQueue(),
     discardQueue: () => conversationService.discardQueue(),
+    removeLastQueuedPendingMessage,
   };
 };

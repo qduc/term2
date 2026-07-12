@@ -38,6 +38,25 @@ export interface UIPort {
   onAskUserAdvanceToNext(nextIndex: number): void;
   onAskUserGoBack(currentIndex: number, answers: readonly AskUserAnswer[]): void;
   onQueueStateChange(snapshot: QueueStateSnapshot): void;
+  /**
+   * A user message was queued behind an in-flight turn. The orchestrator has
+   * NOT yet appended it to the message list. The UI should display it above
+   * the input box until the queue actually starts processing the turn.
+   */
+  onQueuedMessagePending?(id: string, text: string): void;
+  /**
+   * The queue has started executing a previously-pending message. The
+   * orchestrator has now appended it to the message list. The UI should
+   * remove it from the pending indicator above the input box.
+   */
+  onQueuedMessageStarted?(id: string): void;
+  /**
+   * A user-cancelled pending message was just removed from the queue (e.g.
+   * by pressing up-arrow on an empty input box). The UI should drop the
+   * last entry from its pending-queued indicator so it stops being shown
+   * above the input box.
+   */
+  onRemoveLastPendingMessage?(): void;
 }
 
 export interface ConversationOrchestratorConfig {

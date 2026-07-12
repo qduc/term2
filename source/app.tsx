@@ -202,8 +202,10 @@ const App: FC<AppProps> = ({
     queuePaused,
     queueLength,
     queuePauseReason,
+    pendingQueuedMessages,
     resumeQueue,
     discardQueue,
+    removeLastQueuedPendingMessage,
   } = useConversation({
     conversationService,
     loggingService,
@@ -511,6 +513,14 @@ const App: FC<AppProps> = ({
     [applyRuntimeSetting, handoff],
   );
 
+  const cancelQueuedMessage = useCallback(async (): Promise<string | null> => {
+    const restored = await removeLastQueuedPendingMessage();
+    if (restored !== null) {
+      replaceInput(restored);
+    }
+    return restored;
+  }, [removeLastQueuedPendingMessage, replaceInput]);
+
   return (
     <ErrorBoundary loggingService={loggingService}>
       <Box flexDirection="column" flexGrow={1}>
@@ -544,6 +554,8 @@ const App: FC<AppProps> = ({
             queuePauseReason={queuePauseReason}
             onResumeQueue={resumeQueue}
             onDiscardQueue={discardQueue}
+            pendingQueuedMessages={pendingQueuedMessages}
+            onCancelQueuedMessage={cancelQueuedMessage}
             onSubmit={handleSubmit}
             slashCommands={slashCommands}
             skillsService={skillsService}

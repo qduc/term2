@@ -167,6 +167,7 @@ vi.mock('./hooks/use-conversation.js', () => ({
     queuePaused: false,
     queueLength: 0,
     queuePauseReason: undefined,
+    pendingQueuedMessages: [],
     resumeQueue: vi.fn(),
     discardQueue: vi.fn(),
   }),

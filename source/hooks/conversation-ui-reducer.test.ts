@@ -496,3 +496,83 @@ it('reducer returns new object references', () => {
   const next = conversationUIReducer(state, { type: 'turn/started' });
   expect(state).not.toBe(next);
 });
+
+// ---------------------------------------------------------------------------
+// Queued messages
+// ---------------------------------------------------------------------------
+
+it('queue/message_pending appends to pendingQueuedMessages', () => {
+  const state = createInitialUIState(null);
+  const next = conversationUIReducer(state, {
+    type: 'queue/message_pending',
+    id: 'm-1',
+    text: 'hello',
+    queuedAt: 1000,
+  });
+  expect(next.pendingQueuedMessages).toEqual([{ id: 'm-1', text: 'hello', queuedAt: 1000 }]);
+});
+
+it('queue/message_pending accumulates multiple pending messages in order', () => {
+  let state = createInitialUIState(null);
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-1', text: 'first', queuedAt: 1 });
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-2', text: 'second', queuedAt: 2 });
+  expect(state.pendingQueuedMessages.map((m) => m.id)).toEqual(['m-1', 'm-2']);
+  expect(state.pendingQueuedMessages.map((m) => m.text)).toEqual(['first', 'second']);
+  expect(state.pendingQueuedMessages.map((m) => m.queuedAt)).toEqual([1, 2]);
+});
+
+it('queue/message_started removes the matching id from pendingQueuedMessages', () => {
+  let state = createInitialUIState(null);
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-1', text: 'first', queuedAt: 1 });
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-2', text: 'second', queuedAt: 2 });
+  const next = conversationUIReducer(state, { type: 'queue/message_started', id: 'm-1' });
+  expect(next.pendingQueuedMessages.map((m) => m.id)).toEqual(['m-2']);
+});
+
+it('queue/message_started preserves other pending messages', () => {
+  let state = createInitialUIState(null);
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-1', text: 'first', queuedAt: 1 });
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-2', text: 'second', queuedAt: 2 });
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-3', text: 'third', queuedAt: 3 });
+  const next = conversationUIReducer(state, { type: 'queue/message_started', id: 'm-2' });
+  expect(next.pendingQueuedMessages.map((m) => m.id)).toEqual(['m-1', 'm-3']);
+});
+
+it('queue/message_started is a no-op when the id is not pending', () => {
+  let state = createInitialUIState(null);
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-1', text: 'first', queuedAt: 1 });
+  const next = conversationUIReducer(state, { type: 'queue/message_started', id: 'unknown' });
+  expect(next.pendingQueuedMessages.map((m) => m.id)).toEqual(['m-1']);
+});
+
+it('queue/remove_last_pending removes the last entry from pendingQueuedMessages', () => {
+  let state = createInitialUIState(null);
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-1', text: 'first', queuedAt: 1 });
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-2', text: 'second', queuedAt: 2 });
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-3', text: 'third', queuedAt: 3 });
+  const next = conversationUIReducer(state, { type: 'queue/remove_last_pending' });
+  expect(next.pendingQueuedMessages.map((m) => m.id)).toEqual(['m-1', 'm-2']);
+  expect(next.pendingQueuedMessages.map((m) => m.text)).toEqual(['first', 'second']);
+});
+
+it('queue/remove_last_pending is a no-op when pendingQueuedMessages is empty', () => {
+  const state = createInitialUIState(null);
+  const next = conversationUIReducer(state, { type: 'queue/remove_last_pending' });
+  expect(next.pendingQueuedMessages).toEqual([]);
+  // Reference equality is required because there is nothing to change.
+  expect(next).toBe(state);
+});
+
+it('queue/remove_last_pending removes the single entry when only one is pending', () => {
+  let state = createInitialUIState(null);
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-1', text: 'only', queuedAt: 1 });
+  const next = conversationUIReducer(state, { type: 'queue/remove_last_pending' });
+  expect(next.pendingQueuedMessages).toEqual([]);
+});
+
+it('reset_all clears pendingQueuedMessages', () => {
+  let state = createInitialUIState(null);
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-1', text: 'first', queuedAt: 1 });
+  const next = conversationUIReducer(state, { type: 'reset_all' });
+  expect(next.pendingQueuedMessages).toEqual([]);
+});

@@ -75,6 +75,18 @@ type Props = {
   promptLabel?: string;
   allowEmptySubmit?: boolean;
   skillsService?: SkillsService;
+  /**
+   * Pending queued messages shown above the input box. The InputBox uses this
+   * to intercept the up-arrow on an empty input and cancel the most recent
+   * queued message (returning its text to the input box).
+   */
+  pendingQueuedMessages?: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
+  /**
+   * Cancel the most recently queued message and resolve with its text so it
+   * can be restored to the input box. Resolves to null when there is nothing
+   * to cancel.
+   */
+  onCancelQueuedMessage?: () => Promise<string | null>;
 };
 
 const isFocusReportingSequence = (input: string): boolean => {
@@ -119,6 +131,8 @@ const InputBox: FC<Props> = ({
   promptLabel,
   allowEmptySubmit = false,
   skillsService,
+  pendingQueuedMessages,
+  onCancelQueuedMessage,
 }) => {
   const {
     input: value,
@@ -751,6 +765,25 @@ const InputBox: FC<Props> = ({
         return;
       }
 
+      // In text mode, up-arrow first tries to cancel the most recently queued
+      // message and return its text to the input box. This is only useful when
+      // the input is empty and there is at least one queued message waiting
+      // behind the in-flight turn. Otherwise fall through to input history.
+      if (
+        direction === 'up' &&
+        value === '' &&
+        pendingQueuedMessages &&
+        pendingQueuedMessages.length > 0 &&
+        onCancelQueuedMessage
+      ) {
+        void onCancelQueuedMessage().then((restored) => {
+          if (restored !== null) {
+            onChange(restored);
+          }
+        });
+        return;
+      }
+
       // In text mode, arrows traverse input history.
       const next = direction === 'up' ? navigateUp({ text: value, images }) : navigateDown();
       if (next !== null) {
@@ -760,7 +793,19 @@ const InputBox: FC<Props> = ({
         remountInput();
       }
     },
-    [mode, modeHandlers, navigateUp, navigateDown, value, images, onChange, remountInput, setImages],
+    [
+      mode,
+      modeHandlers,
+      navigateUp,
+      navigateDown,
+      value,
+      images,
+      onChange,
+      remountInput,
+      setImages,
+      pendingQueuedMessages,
+      onCancelQueuedMessage,
+    ],
   );
 
   const handleWrapperSubmit = useCallback(

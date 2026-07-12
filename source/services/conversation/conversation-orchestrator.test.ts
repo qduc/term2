@@ -54,6 +54,10 @@ function mockConversationService(): ConversationService {
     previewInputSurge: vi.fn(),
     exportState: vi.fn(),
     importState: vi.fn(),
+    isQueueActive: vi.fn(() => false),
+    setQueueStateObserver: vi.fn(),
+    setQueuedTurnStartObserver: vi.fn(),
+    removeLastQueuedItem: vi.fn(async () => null),
   } as unknown as ConversationService;
 }
 
@@ -89,6 +93,9 @@ function makeUIPort(): UIPort {
     onAskUserAdvanceToNext: vi.fn(),
     onAskUserGoBack: vi.fn(),
     onQueueStateChange: vi.fn(),
+    onQueuedMessagePending: vi.fn(),
+    onQueuedMessageStarted: vi.fn(),
+    onRemoveLastPendingMessage: vi.fn(),
   };
 }
 
@@ -267,5 +274,100 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.ui.onAskUserAnswerSubmitted).toHaveBeenCalledWith('first');
     expect(cfg.ui.onAskUserAdvanceToNext).toHaveBeenCalledWith(1);
     expect(cfg.conversationService.handleApprovalDecision).not.toHaveBeenCalled();
+  });
+
+  it('routes a queued message to onQueuedMessagePending instead of appending when a turn is in flight', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueActive).mockReturnValue(true);
+    // Return a never-resolving promise that we can settle from the test
+    // so the orchestrator's sendUserMessage promise resolves.
+    let release!: () => void;
+    const settled = new Promise<ConversationTerminal>((resolve) => {
+      release = () => resolve({ type: 'response', finalText: 'ok', commandMessages: [] });
+    });
+    vi.mocked(cfg.conversationService.sendMessage).mockReturnValue(settled as any);
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    const inFlight = orchestrator.sendUserMessage('follow-up');
+
+    // Yield to the event loop so the microtask chain inside sendUserMessage
+    // can run before we resolve the network response.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledTimes(1);
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'follow-up');
+    expect(cfg.messages.appendMessages).not.toHaveBeenCalled();
+
+    release();
+    await inFlight;
+  });
+
+  it('appends immediately when no turn is in flight', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueActive).mockReturnValue(false);
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    await orchestrator.sendUserMessage('first');
+
+    expect(cfg.ui.onQueuedMessagePending).not.toHaveBeenCalled();
+    expect(cfg.messages.appendMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('appends a queued message into the list when the queue fires its start observer', async () => {
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    // Capture the observer that the orchestrator registered so we can fire it.
+    const setObserver = vi.mocked(cfg.conversationService.setQueuedTurnStartObserver);
+    const observer = setObserver.mock.calls[0]?.[0] as (execution: { requestId: string; input: string }) => void;
+    expect(observer).toBeDefined();
+
+    observer({ requestId: 'req-7', input: 'queued-then-started' });
+
+    expect(cfg.messages.appendMessages).toHaveBeenCalledTimes(1);
+    const appended = vi.mocked(cfg.messages.appendMessages).mock.calls[0]?.[0]?.[0] as any;
+    expect(appended.sender).toBe('user');
+    expect(appended.id).toBe('req-7');
+    expect(appended.text).toBe('queued-then-started');
+    expect(cfg.ui.onQueuedMessageStarted).toHaveBeenCalledWith('req-7');
+  });
+
+  it('cancels the last queued message and returns its text', async () => {
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    vi.mocked(cfg.conversationService.removeLastQueuedItem).mockResolvedValue({ text: 'restored message' });
+
+    const restored = await orchestrator.removeLastQueuedPendingMessage();
+
+    expect(restored).toBe('restored message');
+    expect(cfg.conversationService.removeLastQueuedItem).toHaveBeenCalledTimes(1);
+    expect(cfg.ui.onRemoveLastPendingMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null and skips the UI hook when no queued message can be cancelled', async () => {
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    vi.mocked(cfg.conversationService.removeLastQueuedItem).mockResolvedValue(null);
+
+    const restored = await orchestrator.removeLastQueuedPendingMessage();
+
+    expect(restored).toBeNull();
+    expect(cfg.ui.onRemoveLastPendingMessage).not.toHaveBeenCalled();
+  });
+
+  it('returns null and skips the adapter when the service cannot cancel queued items', async () => {
+    const cfg = makeConfig();
+    (cfg.conversationService as any).removeLastQueuedItem = undefined;
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    const restored = await orchestrator.removeLastQueuedPendingMessage();
+
+    expect(restored).toBeNull();
+    expect(cfg.ui.onRemoveLastPendingMessage).not.toHaveBeenCalled();
   });
 });

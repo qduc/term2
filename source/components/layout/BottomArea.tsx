@@ -74,6 +74,13 @@ export type BottomAreaProps = {
   queuePauseReason?: QueuePauseReason;
   onResumeQueue?: () => void;
   onDiscardQueue?: () => void;
+  pendingQueuedMessages?: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
+  /**
+   * Cancel the most recently queued message and resolve with its text so it
+   * can be restored to the input box. The InputBox invokes this when the user
+   * presses up-arrow on an empty input.
+   */
+  onCancelQueuedMessage?: () => Promise<string | null>;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -126,6 +133,8 @@ const BottomArea: FC<BottomAreaProps> = ({
   queuePauseReason,
   onResumeQueue,
   onDiscardQueue,
+  pendingQueuedMessages = [],
+  onCancelQueuedMessage,
 }) => {
   const [dotCount, setDotCount] = useState(1);
   const [thinkingElapsedSeconds, setThinkingElapsedSeconds] = useState(() =>
@@ -186,6 +195,21 @@ const BottomArea: FC<BottomAreaProps> = ({
 
   return (
     <Box flexDirection="column" width="100%">
+      {pendingQueuedMessages.length > 0 && (
+        <Box flexDirection="column" marginTop={1} marginBottom={1}>
+          {pendingQueuedMessages.map((msg) => {
+            const preview = msg.text.length > 80 ? `${msg.text.slice(0, 80)}…` : msg.text;
+            return (
+              <Box key={msg.id} flexDirection="row">
+                <Text color="#94a3b8">⏳ Queued: </Text>
+                <Text color="#cbd5e1" dimColor>
+                  {preview}
+                </Text>
+              </Box>
+            );
+          })}
+        </Box>
+      )}
       <Box flexDirection="column" marginTop={1}>
         {showHandoffConfirm ? (
           <HandoffConfirmationPrompt
@@ -260,6 +284,8 @@ const BottomArea: FC<BottomAreaProps> = ({
                 onSystemMessage={onSystemMessage}
                 onSlashTabComplete={onSlashTabComplete}
                 skillsService={skillsService}
+                pendingQueuedMessages={pendingQueuedMessages}
+                onCancelQueuedMessage={onCancelQueuedMessage}
                 promptLabel={
                   waitingForAskUserAnswer
                     ? 'Answer: '

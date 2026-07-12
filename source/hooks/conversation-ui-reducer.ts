@@ -78,6 +78,11 @@ export interface ConversationUIState {
 
   // Queue state snapshot
   queueSnapshot: QueueSnapshot | null;
+
+  // Messages queued behind an in-flight turn. Shown above the input box until
+  // the queue actually starts processing each one, at which point it is moved
+  // to the message list with the correct timeline.
+  pendingQueuedMessages: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -130,6 +135,12 @@ export type ConversationUIAction =
 
   // --- Queue state ---
   | { type: 'queue/updated'; snapshot: QueueSnapshot }
+  /** A user message is queued behind an in-flight turn; show it above the input box. */
+  | { type: 'queue/message_pending'; id: string; text: string; queuedAt: number }
+  /** The queue has started executing the queued message; remove it from the pending list. */
+  | { type: 'queue/message_started'; id: string }
+  /** The user cancelled a pending queued message; drop the last entry from the pending list. */
+  | { type: 'queue/remove_last_pending' }
 
   // --- Compound resets ---
   /** Reset transient approval/processing/indicator state (used by stop, undo, etc.). */
@@ -149,6 +160,7 @@ export function createInitialUIState(initialUsage: NormalizedUsage | null): Conv
     lastUsage: initialUsage,
     lastCodexRateLimit: null,
     queueSnapshot: null,
+    pendingQueuedMessages: [],
   };
 }
 
@@ -445,6 +457,33 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
     // --- Queue state ---
     case 'queue/updated':
       return { ...state, queueSnapshot: action.snapshot };
+
+    case 'queue/message_pending':
+      // Append in submission order; do not dedupe by id because the same id
+      // could (in principle) be re-queued after a previous rejection.
+      return {
+        ...state,
+        pendingQueuedMessages: [
+          ...state.pendingQueuedMessages,
+          { id: action.id, text: action.text, queuedAt: action.queuedAt },
+        ],
+      };
+
+    case 'queue/message_started':
+      if (!state.pendingQueuedMessages.some((m) => m.id === action.id)) {
+        return state;
+      }
+      return {
+        ...state,
+        pendingQueuedMessages: state.pendingQueuedMessages.filter((m) => m.id !== action.id),
+      };
+
+    case 'queue/remove_last_pending':
+      if (state.pendingQueuedMessages.length === 0) return state;
+      return {
+        ...state,
+        pendingQueuedMessages: state.pendingQueuedMessages.slice(0, -1),
+      };
 
     // --- Compound resets ---
     case 'reset_transient':

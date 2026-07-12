@@ -20,7 +20,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
 ];
 
 export const SETTING_DESCRIPTIONS: Record<string, string> = {
+  [SETTING_KEYS.ENABLE_AGENT_WORKFLOW]:
+    'Enable bounded JavaScript workflows that coordinate concurrent read-only agents (true|false)',
   [SETTING_KEYS.AGENT_MODEL]: 'The AI model to use (e.g. gpt-4, claude-3-opus)',
+  [SETTING_KEYS.AGENT_EFFICIENT_MODEL]: 'Model for lower-tier workflow agents (falls back to agent.model)',
+  [SETTING_KEYS.AGENT_CAPABLE_MODEL]: 'Model for higher-tier workflow agents (falls back to agent.model)',
   [SETTING_KEYS.AGENT_REASONING_EFFORT]: 'Reasoning effort (none|minimal|low|medium|high|xhigh|default)',
   [SETTING_KEYS.AGENT_TEMPERATURE]: 'Model temperature (0-2, controls randomness)',
   [SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER]: 'Use OpenAI Flex Service Tier to reduce costs (true|false, OpenAI only)',
@@ -102,6 +106,8 @@ export const COMMON_SETTINGS: string[] = [
 export const CATEGORY_KEYS = {
   models: new Set<string>([
     SETTING_KEYS.AGENT_MODEL,
+    SETTING_KEYS.AGENT_EFFICIENT_MODEL,
+    SETTING_KEYS.AGENT_CAPABLE_MODEL,
     SETTING_KEYS.AGENT_REASONING_EFFORT,
     SETTING_KEYS.AGENT_TEMPERATURE,
     SETTING_KEYS.AGENT_MENTOR_MODEL,
@@ -123,6 +129,7 @@ export const CATEGORY_KEYS = {
     SETTING_KEYS.SANDBOX_ALLOW_NETWORKING,
   ]),
   tools: new Set<string>([
+    SETTING_KEYS.ENABLE_AGENT_WORKFLOW,
     SETTING_KEYS.SHELL_TIMEOUT,
     SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
     SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,

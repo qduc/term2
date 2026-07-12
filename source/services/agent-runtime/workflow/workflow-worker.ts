@@ -28,7 +28,15 @@ function agent(config) {
 }
 const sandbox = Object.create(null);
 sandbox.agent = agent;
-sandbox.console = Object.freeze({ log: (...values) => send('console.log', { values: values.filter(value => json(value)) }) });
+// A transport guard only: the host independently validates console data and
+// applies the cumulative budget before forwarding it to observers.
+sandbox.console = Object.freeze({ log: (...values) => {
+  if (!values.every(value => json(value))) return;
+  try {
+    if (workerData.maxConsoleBytes !== undefined && Buffer.byteLength(JSON.stringify(values), 'utf8') > workerData.maxConsoleBytes) return;
+    send('console.log', { values });
+  } catch (_) {}
+} });
 const context = vm.createContext(sandbox, { codeGeneration: { strings: false, wasm: false } });
 parentPort.on('message', (message) => {
   if (message.type === 'agent.result') { const resolve = pending.get(message.requestId); pending.delete(message.requestId); if (resolve) resolve(message.result); }

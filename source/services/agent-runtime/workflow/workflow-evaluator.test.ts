@@ -127,19 +127,55 @@ describe('WorkflowEvaluator', () => {
     });
   });
 
-  it('rejects approval-requiring tools without running an agent', async () => {
+  it('allows shell as an equivalent read interface when the parent has dedicated read tools', async () => {
+    const agent = vi.fn(() => ({ run: async () => ({ status: 'completed', output: 'ok' }) }));
     const evaluator = new WorkflowEvaluatorImpl({
-      runtime: {
-        agent: () => {
-          throw new Error('must not run');
-        },
-      } as any,
-      parentTools: ['shell'],
+      runtime: { agent } as any,
+      parentTools: ['read_file', 'grep'],
     });
     const result = await evaluator.evaluate({
       code: `return await agent({ instructions: 'x', tools: ['shell'] }).run({ task: 'x' });`,
     });
-    expect(result).toMatchObject({ ok: false, error: { code: 'approval_required' }, runs: [] });
+
+    expect(result).toMatchObject({ ok: true, output: { ok: true, output: 'ok' } });
+    expect(agent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: ['shell'],
+        permissions: { tools: ['shell'] },
+      }),
+    );
+  });
+
+  it('allows dedicated read tools as equivalent interfaces when the parent has shell', async () => {
+    const agent = vi.fn(() => ({ run: async () => ({ status: 'completed', output: 'ok' }) }));
+    const evaluator = new WorkflowEvaluatorImpl({
+      runtime: { agent } as any,
+      parentTools: ['shell'],
+    });
+    const result = await evaluator.evaluate({
+      code: `return await agent({ instructions: 'x', tools: ['read_file', 'grep', 'glob'] }).run({ task: 'x' });`,
+    });
+
+    expect(result).toMatchObject({ ok: true, output: { ok: true, output: 'ok' } });
+    expect(agent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: ['read_file', 'grep', 'glob'],
+        permissions: { tools: ['read_file', 'grep', 'glob'] },
+      }),
+    );
+  });
+
+  it('does not treat non-read tools as equivalent interfaces', async () => {
+    const evaluator = new WorkflowEvaluatorImpl({ runtime: {} as any, parentTools: ['read_file'] });
+    const result = await evaluator.evaluate({
+      code: `return await agent({ instructions: 'x', tools: ['web_search'] }).run({ task: 'x' });`,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      output: { ok: false, error: { code: 'permission_denied' } },
+      runs: [],
+    });
   });
 
   it('rejects an unsupported model tier before creating an agent', async () => {
@@ -237,5 +273,156 @@ describe('WorkflowEvaluator', () => {
     const result = await evaluator.evaluate({ code: "return this.constructor.constructor('return process')();" });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'runtime_error' } });
+  });
+
+  it('admits all editor interfaces only when the parent has an editor, never shell alone', async () => {
+    const agent = vi.fn(() => ({ run: async () => ({ status: 'completed', output: 'ok' }) }));
+    const permitted = new WorkflowEvaluatorImpl({ runtime: { agent } as any, parentTools: ['apply_patch'] });
+    await permitted.evaluate({
+      code: "return agent({ instructions: 'x', tools: ['search_replace', 'create_file'] }).run({ task: 'x' });",
+    });
+    expect(agent).toHaveBeenCalledWith(expect.objectContaining({ tools: ['search_replace', 'create_file'] }));
+
+    const denied = new WorkflowEvaluatorImpl({ runtime: {} as any, parentTools: ['shell'] });
+    await expect(
+      denied.evaluate({ code: "return agent({ instructions: 'x', tools: ['apply_patch'] }).run({ task: 'x' });" }),
+    ).resolves.toMatchObject({ output: { ok: false, error: { code: 'permission_denied' } } });
+  });
+
+  it('admits web capabilities by exact parent tool name', async () => {
+    const agent = vi.fn(() => ({ run: async () => ({ status: 'completed', output: 'ok' }) }));
+    const evaluator = new WorkflowEvaluatorImpl({ runtime: { agent } as any, parentTools: ['web_search'] });
+    await evaluator.evaluate({
+      code: "return agent({ instructions: 'x', tools: ['web_search'] }).run({ task: 'x' });",
+    });
+    expect(agent).toHaveBeenCalled();
+    await expect(
+      evaluator.evaluate({ code: "return agent({ instructions: 'x', tools: ['web_fetch'] }).run({ task: 'x' });" }),
+    ).resolves.toMatchObject({ output: { ok: false, error: { code: 'permission_denied' } } });
+  });
+
+  it('passes structured output unchanged and rejects malformed output or non-object context before creation', async () => {
+    const run = vi.fn(async () => ({ status: 'failed', error: { code: 'invalid_schema', message: 'bad schema' } }));
+    const evaluator = new WorkflowEvaluatorImpl({ runtime: { agent: () => ({ run }) } as any, parentTools: [] });
+    const output = { schema: { type: 'object', unknownKeyword: true }, name: 'finding' };
+    await evaluator.evaluate({
+      code: `return agent({ instructions: 'x' }).run({ task: 'x', context: { path: 'a' }, output: ${JSON.stringify(
+        output,
+      )} });`,
+    });
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ output, context: { path: 'a' } }));
+    await expect(
+      evaluator.evaluate({ code: "return agent({ instructions: 'x' }).run({ task: 'x', context: [] });" }),
+    ).resolves.toMatchObject({ output: { ok: false, error: { code: 'agent_error' } } });
+    await expect(
+      evaluator.evaluate({ code: "return agent({ instructions: 'x' }).run({ task: 'x', output: { schema: [] } });" }),
+    ).resolves.toMatchObject({ output: { ok: false, error: { code: 'agent_error' } } });
+  });
+
+  it('keeps summaries in admission order and reports resolved handle metadata', async () => {
+    const evaluator = new WorkflowEvaluatorImpl({
+      runtime: {
+        agent: (config: any) => ({
+          name: `resolved-${config.name}`,
+          model: { provider: 'test-provider', model: 'test-model' },
+          run: async () => {
+            if (config.name === 'first') await new Promise((resolve) => setTimeout(resolve, 10));
+            return { status: 'completed', output: config.name };
+          },
+        }),
+      } as any,
+      parentTools: [],
+      limits: { maxConcurrency: 2 },
+    });
+    const result = await evaluator.evaluate({
+      code: "return Promise.all(['first', 'second'].map(name => agent({ name, instructions: 'x' }).run({ task: 'x' })));",
+    });
+    expect(result.runs).toMatchObject([
+      { runId: 1, requestedName: 'first', name: 'resolved-first', provider: 'test-provider', model: 'test-model' },
+      { runId: 2, requestedName: 'second', name: 'resolved-second' },
+    ]);
+  });
+
+  it('forwards only whole valid console messages within the cumulative budget', async () => {
+    const logs: unknown[][] = [];
+    const evaluator = new WorkflowEvaluatorImpl({
+      runtime: {} as any,
+      parentTools: [],
+      limits: { maxConsoleBytes: 10 },
+      onConsole: (values) => logs.push(values),
+    });
+    await evaluator.evaluate({ code: "console.log('ok'); console.log('too-long'); return 1;" });
+    expect(logs).toEqual([['ok']]);
+  });
+
+  it('does not start queued admissions after parent cancellation', async () => {
+    const controller = new AbortController();
+    let created = 0;
+    let started!: () => void;
+    const firstStarted = new Promise<void>((resolve) => (started = resolve));
+    const evaluator = new WorkflowEvaluatorImpl({
+      runtime: {
+        agent: () => ({
+          run: ({ signal }: any) => {
+            created++;
+            started();
+            return new Promise((_, reject) => signal.addEventListener('abort', () => reject(new Error('cancelled'))));
+          },
+        }),
+      } as any,
+      parentTools: [],
+      limits: { maxConcurrency: 1, timeoutMs: 1_000 },
+    });
+    const pending = evaluator.evaluate({
+      code: "return Promise.all([agent({ instructions: 'x' }).run({ task: 'one' }), agent({ instructions: 'x' }).run({ task: 'two' })]);",
+      signal: controller.signal,
+    });
+    await firstStarted;
+    controller.abort();
+    await expect(pending).resolves.toMatchObject({ ok: false, error: { code: 'timeout' } });
+    expect(created).toBe(1);
+  });
+
+  it('releases a transferred queued permit when the workflow settles before its continuation', async () => {
+    let finishFirst!: () => void;
+    const firstFinished = new Promise<void>((resolve) => (finishFirst = resolve));
+    let firstStarted!: () => void;
+    const started = new Promise<void>((resolve) => (firstStarted = resolve));
+    const agent = vi.fn(() => ({
+      run: async () => {
+        firstStarted();
+        await firstFinished;
+        return { status: 'completed', output: 'first' };
+      },
+    }));
+    const worker: any = {
+      on: vi.fn(),
+      once: vi.fn(),
+      postMessage: vi.fn((message) => {
+        if (message.requestId === 'first') messageListener({ type: 'workflow.complete', output: 'done' });
+      }),
+      terminate: vi.fn(async () => 0),
+    };
+    let messageListener!: (message: unknown) => void;
+    worker.on.mockImplementation((event: string, listener: (message: unknown) => void) => {
+      if (event === 'message') messageListener = listener;
+      return worker;
+    });
+    const evaluator = new WorkflowEvaluatorImpl({
+      runtime: { agent } as any,
+      parentTools: [],
+      limits: { maxConcurrency: 1 },
+      workerFactory: () => worker,
+    });
+
+    const pending = evaluator.evaluate({ code: 'return null;' });
+    await vi.waitFor(() => expect(messageListener).toBeTypeOf('function'));
+    messageListener({ type: 'agent.run', requestId: 'first', config: { instructions: 'x' }, input: { task: 'one' } });
+    messageListener({ type: 'agent.run', requestId: 'second', config: { instructions: 'x' }, input: { task: 'two' } });
+    await started;
+    finishFirst();
+
+    await expect(pending).resolves.toMatchObject({ ok: true, output: 'done' });
+    expect(agent).toHaveBeenCalledTimes(1);
   });
 });

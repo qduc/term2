@@ -7,6 +7,8 @@ import type { SettingsService } from '../services/settings/settings-service.js';
 const baseSettings = {
   agent: {
     model: { value: 'gpt-5.1', source: 'default' },
+    efficientModel: { value: 'gpt-5-mini', source: 'config' },
+    capableModel: { value: undefined, source: 'default' },
     reasoningEffort: { value: 'default', source: 'default' },
     temperature: { value: undefined, source: 'default' },
     mentorModel: { value: undefined, source: 'default' },
@@ -75,6 +77,8 @@ it('formatSettingsSummary renders values with sources', () => {
   const summary = formatSettingsSummary(baseSettings);
 
   expect(summary.includes('agent.model: gpt-5.1 (default)')).toBe(true);
+  expect(summary.includes('agent.efficientModel: gpt-5-mini (config)')).toBe(true);
+  expect(summary.includes('agent.capableModel: undefined (default)')).toBe(true);
   expect(summary.includes('shell.timeout: 120000 (default)')).toBe(true);
   expect(summary.includes('logging.logLevel: info (default)')).toBe(true);
   expect(summary.includes('agent.maxParallelToolCalls: 3 (default)')).toBe(true);

@@ -29,6 +29,16 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.agent.model.source,
     },
     {
+      key: SETTING_KEYS.AGENT_EFFICIENT_MODEL,
+      value: settings.agent.efficientModel.value,
+      source: settings.agent.efficientModel.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_CAPABLE_MODEL,
+      value: settings.agent.capableModel.value,
+      source: settings.agent.capableModel.source,
+    },
+    {
       key: SETTING_KEYS.AGENT_REASONING_EFFORT,
       value: settings.agent.reasoningEffort.value,
       source: settings.agent.reasoningEffort.source,

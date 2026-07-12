@@ -123,7 +123,8 @@ export interface WorkflowAgentConfig {
 
 export interface WorkflowRunInput {
   task: string;
-  context?: JsonValue;
+  context?: { [key: string]: JsonValue };
+  output?: RunOutputFormat;
 }
 
 export type WorkflowRunResult =
@@ -171,7 +172,11 @@ export type WorkflowResult =
     };
 
 export interface WorkflowRunSummary {
+  runId: number;
+  requestedName?: string;
   name?: string;
+  provider?: string;
+  model?: string;
   ok: boolean;
   durationMs: number;
   usage?: NormalizedUsage;
@@ -207,6 +212,7 @@ export interface WorkflowLimits {
   maxConcurrency: number;
   maxCodeBytes: number;
   maxOutputBytes: number;
+  maxConsoleBytes: number;
 }
 ```
 
@@ -219,6 +225,7 @@ Recommended initial defaults:
   maxConcurrency: 3,
   maxCodeBytes: 16_384,
   maxOutputBytes: 65_536,
+  maxConsoleBytes: 16_384,
 }
 ```
 
@@ -230,28 +237,36 @@ Rules:
 - active runs may not exceed `maxConcurrency`;
 - the entire workflow shares one timeout and parent cancellation signal;
 - output exceeding `maxOutputBytes` fails with `invalid_output`.
+- console data is JSON-safe, forwarded only as whole messages, and bounded cumulatively by `maxConsoleBytes`.
+- queued runs are cancelled before starting when the workflow times out or its parent cancels.
 
 Aggregate token budgeting and public budget binding are deferred. Existing per-agent limits remain active.
 
 ## Tool Authority
 
-The workflow may request only tools already available to the parent agent and explicitly allowed for workflows.
+The workflow may request only capabilities available to the parent agent and explicitly allowed for workflows. Tool names that expose the same capability may differ between the parent and child model.
 
 ```text
-resolved tools =
-  requested tools
-  ∩ parent tools
-  ∩ workflow allowlist
+resolved capabilities =
+  capabilities(requested tools)
+  ∩ capabilities(parent tools)
+  ∩ workflow capability allowlist
 ```
 
 The workflow cannot broaden permissions.
+
+Workspace-reading interfaces form one equivalence class: `shell`, `read_file`, `grep`, `glob`, `read_code_outline`, and `code_context_search`. A child may select any of these when the parent has workspace-read access. This supports mixed workflows where GPT-family models inspect through shell while other models use dedicated tools. Shell commands remain subject to the child runtime's command-level safety policy, so read authority does not grant mutation authority.
+
+Editor interfaces form a separate write capability: when the parent has any of `apply_patch`, `search_replace`, or `create_file`, a workflow child may request any of those model-compatible editor interfaces. Shell alone never grants write authority. `web_search` and `web_fetch` are admitted only when the parent has that exact tool; one does not imply the other. Filesystem and network scopes remain enforced by the child runtime.
+
+Workflow model tiers are user-configurable: `lower` resolves through `agent.efficientModel`, `default` through `agent.model`, and `higher` through `agent.capableModel`. Unset tier-specific models fall back to `agent.model`; all tiers use `agent.provider`.
 
 For the MVP:
 
 - prefer read-only tools;
 - reject tools requiring interactive approval;
 - do not suspend and resume workflows around approvals;
-- return `approval_required` when a child attempts such an operation.
+- reject interactive tools such as `ask_user` and nested-agent tools; unsafe, unsandboxed, locked, and out-of-scope operations are rejected by the non-interactive child policy rather than prompting.
 
 No separate workflow permissions language is introduced.
 

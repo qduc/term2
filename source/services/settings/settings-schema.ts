@@ -8,6 +8,16 @@ import {
 // Define schemas for validation
 export const AgentSettingsSchema = z.object({
   model: z.string().min(1).default('gpt-5.1'),
+  efficientModel: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Model for lower-tier workflow agents. Falls back to agent.model when unset.'),
+  capableModel: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Model for higher-tier workflow agents. Falls back to agent.model when unset.'),
   // 'default' signals we should *not* explicitly pass a reasoningEffort
   // to the API, allowing it to decide what to use.
   reasoningEffort: z.enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']).default('default'),
@@ -134,6 +144,7 @@ export const AgentWorkflowSettingsSchema = z.object({
   maxConcurrency: z.number().int().positive().default(3),
   maxCodeBytes: z.number().int().positive().default(16_384),
   maxOutputBytes: z.number().int().positive().default(65_536),
+  maxConsoleBytes: z.number().int().positive().default(16_384),
 });
 
 export const UISettingsSchema = z.object({
@@ -355,6 +366,8 @@ export interface SettingWithSource<T = any> {
 export interface SettingsWithSources {
   agent: {
     model: SettingWithSource<string>;
+    efficientModel: SettingWithSource<string | undefined>;
+    capableModel: SettingWithSource<string | undefined>;
     reasoningEffort: SettingWithSource<string>;
     temperature: SettingWithSource<number | undefined>;
     maxTurns: SettingWithSource<number>;
@@ -445,7 +458,10 @@ export interface SettingsWithSources {
  * Used by settings command UI and other components to avoid duplication.
  */
 export const SETTING_KEYS = {
+  ENABLE_AGENT_WORKFLOW: 'enable_agent_workflow',
   AGENT_MODEL: 'agent.model',
+  AGENT_EFFICIENT_MODEL: 'agent.efficientModel',
+  AGENT_CAPABLE_MODEL: 'agent.capableModel',
   AGENT_REASONING_EFFORT: 'agent.reasoningEffort',
   AGENT_TEMPERATURE: 'agent.temperature',
   AGENT_PROVIDER: 'agent.provider',
@@ -520,6 +536,8 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_OPENROUTER_API_KEY,
   SETTING_KEYS.AGENT_OPENAI_API_KEY,
   SETTING_KEYS.AGENT_MODEL,
+  SETTING_KEYS.AGENT_EFFICIENT_MODEL,
+  SETTING_KEYS.AGENT_CAPABLE_MODEL,
   SETTING_KEYS.AGENT_REASONING_EFFORT,
   SETTING_KEYS.AGENT_TEMPERATURE,
   SETTING_KEYS.AGENT_PROVIDER,
@@ -659,6 +677,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     maxConcurrency: 3,
     maxCodeBytes: 16_384,
     maxOutputBytes: 65_536,
+    maxConsoleBytes: 16_384,
   },
   ui: {
     historySize: 1000,

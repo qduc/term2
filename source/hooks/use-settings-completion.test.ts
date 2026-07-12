@@ -7,6 +7,8 @@ import {
   filterSettingsByCategory,
   SETTINGS_CATEGORIES,
 } from './use-settings-completion.js';
+import { SETTING_KEYS } from '../services/settings/settings-service.js';
+import { SETTING_DESCRIPTIONS } from './settings-completion-config.js';
 
 // Mock setting keys for testing (matching actual SETTING_KEYS structure)
 const MOCK_SETTING_KEYS = {
@@ -68,6 +70,31 @@ const MOCK_DESCRIPTIONS: Record<string, string> = {
 };
 
 // buildSettingsList tests
+it('buildSettingsList - exposes the agent workflow feature flag', () => {
+  const result = buildSettingsList(SETTING_KEYS, SETTING_DESCRIPTIONS);
+
+  expect(result).toContainEqual(
+    expect.objectContaining({
+      key: 'enable_agent_workflow',
+      description: expect.any(String),
+    }),
+  );
+  expect(getSettingCategory('enable_agent_workflow').id).toBe('tools');
+});
+
+it('buildSettingsList - exposes workflow model tiers in the models category', () => {
+  const result = buildSettingsList(SETTING_KEYS, SETTING_DESCRIPTIONS);
+
+  expect(result).toContainEqual(
+    expect.objectContaining({ key: 'agent.efficientModel', description: expect.any(String) }),
+  );
+  expect(result).toContainEqual(
+    expect.objectContaining({ key: 'agent.capableModel', description: expect.any(String) }),
+  );
+  expect(getSettingCategory('agent.efficientModel').id).toBe('models');
+  expect(getSettingCategory('agent.capableModel').id).toBe('models');
+});
+
 it('buildSettingsList - creates list from keys and descriptions', () => {
   const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 

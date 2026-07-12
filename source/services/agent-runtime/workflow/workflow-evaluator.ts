@@ -16,7 +16,21 @@ import {
   type WorkflowRunSummary,
 } from './workflow-types.js';
 
-const WORKFLOW_READ_ONLY_TOOLS = new Set(['read_file', 'grep', 'glob', 'read_code_outline', 'code_context_search']);
+// Models differ in how they inspect a workspace: GPT-family models generally
+// use shell, while others use dedicated file/search tools. These interfaces
+// represent the same delegated read capability; shell mutation is still
+// blocked by the child runtime's command-level tool policy.
+const WORKFLOW_READ_INTERFACES = new Set([
+  'shell',
+  'read_file',
+  'grep',
+  'glob',
+  'read_code_outline',
+  'code_context_search',
+]);
+const WORKFLOW_EDITOR_TOOLS = new Set(['apply_patch', 'search_replace', 'create_file']);
+const WORKFLOW_WEB_TOOLS = new Set(['web_search', 'web_fetch']);
+const WORKFLOW_PROHIBITED_TOOLS = new Set(['ask_user', 'run_subagent', 'run_agent_workflow']);
 
 export interface WorkflowEvaluatorDeps {
   runtime: Pick<AgentRuntime, 'agent'>;
@@ -29,6 +43,15 @@ export interface WorkflowEvaluatorDeps {
 
 function bytes(value: unknown): number {
   return Buffer.byteLength(JSON.stringify(value), 'utf8');
+}
+
+function isJsonObject(value: unknown): value is Record<string, JsonValue> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) && isJsonValue(value);
+}
+
+function isOutputTransport(value: unknown): boolean {
+  if (!isJsonObject(value) || !isJsonObject(value.schema)) return false;
+  return value.name === undefined || typeof value.name === 'string';
 }
 
 function safeMessage(error: unknown): string {
@@ -55,7 +78,7 @@ export class WorkflowEvaluatorImpl implements WorkflowEvaluator {
     try {
       worker =
         this.#deps.workerFactory?.(input.code, this.#limits.timeoutMs) ??
-        createWorkflowSandbox(input.code, this.#limits.timeoutMs);
+        createWorkflowSandbox(input.code, this.#limits.timeoutMs, this.#limits.maxConsoleBytes);
     } catch (error) {
       return this.#failure('sandbox_unavailable', `Workflow sandbox is unavailable: ${safeMessage(error)}`, runs);
     }
@@ -68,30 +91,36 @@ export class WorkflowEvaluatorImpl implements WorkflowEvaluator {
     let failFromParentAbort: (() => void) | undefined;
     let admissions = 0;
     let active = 0;
-    const waiting: Array<() => void> = [];
+    const waiting: Array<(release: (() => void) | undefined) => void> = [];
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const release = () => {
-      active--;
-      waiting.shift()?.();
+    const cancelWaiting = () => {
+      for (const waiter of waiting.splice(0)) waiter(undefined);
     };
-    const acquire = async (): Promise<void> => {
+    const grantPermit = (): (() => void) => {
+      active++;
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        active--;
+        const waiter = waiting.shift();
+        if (waiter) waiter(grantPermit());
+      };
+    };
+    const acquire = async (): Promise<(() => void) | undefined> => {
+      if (settled || controller.signal.aborted) return undefined;
       if (active < this.#limits.maxConcurrency) {
-        active++;
-        return;
+        return grantPermit();
       }
-      await new Promise<void>((resolve) =>
-        waiting.push(() => {
-          active++;
-          resolve();
-        }),
-      );
+      return new Promise<(() => void) | undefined>((resolve) => waiting.push(resolve));
     };
 
     const result = await new Promise<WorkflowResult>((resolve) => {
       const finish = (value: WorkflowResult) => {
         if (settled) return;
         settled = true;
+        cancelWaiting();
         resolve(value);
       };
       const fail = (code: WorkflowError['code'], message: string) => finish(this.#failure(code, message, runs));
@@ -106,10 +135,17 @@ export class WorkflowEvaluatorImpl implements WorkflowEvaluator {
       }
       input.signal?.addEventListener('abort', onAbort, { once: true });
 
+      let consoleBytes = 0;
       worker.on('message', async (message: any) => {
         if (settled) return;
         if (message?.type === 'console.log') {
-          this.#deps.onConsole?.(message.values ?? []);
+          if (Array.isArray(message.values) && message.values.every((value: unknown) => isJsonValue(value))) {
+            const size = bytes(message.values);
+            if (size <= this.#limits.maxConsoleBytes && consoleBytes + size <= this.#limits.maxConsoleBytes) {
+              consoleBytes += size;
+              this.#deps.onConsole?.(message.values);
+            }
+          }
           return;
         }
         if (message?.type === 'workflow.complete') {
@@ -139,47 +175,59 @@ export class WorkflowEvaluatorImpl implements WorkflowEvaluator {
             return;
           }
           admissions++;
-          if (admissions > this.#limits.maxRuns) {
+          const runId = admissions;
+          if (runId > this.#limits.maxRuns) {
             fail('limit_exceeded', 'Workflow exceeded its maximum number of agent runs');
             return;
           }
-          await acquire();
-          if (settled) {
-            release();
+          runs[runId - 1] = {
+            runId,
+            requestedName: request.config.name,
+            name: request.config.name,
+            ok: false,
+            durationMs: 0,
+            errorCode: 'cancelled',
+          };
+          const releasePermit = await acquire();
+          if (!releasePermit) return;
+          if (settled || controller.signal.aborted) {
+            releasePermit();
             return;
           }
           const started = Date.now();
           try {
             const handle = this.#deps.runtime.agent(request.config);
-            const child = await handle.run({
-              ...request.input,
-              context: request.input.context as Record<string, unknown> | undefined,
-              signal: controller.signal,
-            });
+            const child = await handle.run({ ...request.input, signal: controller.signal });
             const normalized = this.#normalizeRun(child);
-            runs.push({
-              name: request.config.name,
+            const resolved = handle as Partial<typeof handle>;
+            runs[runId - 1] = {
+              runId,
+              requestedName: request.config.name,
+              name: resolved.name ?? request.config.name,
+              ...(resolved.model ? { provider: resolved.model.provider, model: resolved.model.model } : {}),
               ok: normalized.ok,
               durationMs: Date.now() - started,
               usage: normalized.usage,
               errorCode: normalized.errorCode,
-            });
+            };
             worker.postMessage({ type: 'agent.result', requestId: message.requestId, result: normalized.result });
           } catch (error) {
             const messageText = safeMessage(error);
-            runs.push({
+            runs[runId - 1] = {
+              runId,
+              requestedName: request.config.name,
               name: request.config.name,
               ok: false,
               durationMs: Date.now() - started,
               errorCode: 'agent_error',
-            });
+            };
             worker.postMessage({
               type: 'agent.result',
               requestId: message.requestId,
               result: { ok: false, error: { code: 'agent_error', message: messageText } },
             });
           } finally {
-            release();
+            releasePermit();
           }
         }
       });
@@ -216,19 +264,44 @@ export class WorkflowEvaluatorImpl implements WorkflowEvaluator {
     const requested = raw.tools ?? [];
     if (!Array.isArray(requested) || requested.some((tool) => typeof tool !== 'string'))
       return { error: { code: 'agent_error', message: 'Workflow tools must be strings' } };
+    const parentCanReadWorkspace = this.#deps.parentTools.some((tool) => WORKFLOW_READ_INTERFACES.has(tool));
+    const parentCanWriteWorkspace = this.#deps.parentTools.some((tool) => WORKFLOW_EDITOR_TOOLS.has(tool));
     for (const tool of requested) {
-      if (!this.#deps.parentTools.includes(tool))
-        return { error: { code: 'permission_denied', message: `Tool '${tool}' is not available to the parent agent` } };
-      if (!WORKFLOW_READ_ONLY_TOOLS.has(tool))
-        return {
-          error: {
-            code: 'approval_required',
-            message: `Tool '${tool}' requires approval or is not permitted in workflows`,
-          },
-        };
+      if (WORKFLOW_READ_INTERFACES.has(tool)) {
+        if (!parentCanReadWorkspace)
+          return {
+            error: { code: 'permission_denied', message: `Tool '${tool}' requires parent workspace read access` },
+          };
+        continue;
+      }
+      if (WORKFLOW_EDITOR_TOOLS.has(tool)) {
+        if (!parentCanWriteWorkspace)
+          return {
+            error: { code: 'permission_denied', message: `Tool '${tool}' requires parent workspace write access` },
+          };
+        continue;
+      }
+      if (WORKFLOW_WEB_TOOLS.has(tool)) {
+        if (!this.#deps.parentTools.includes(tool))
+          return {
+            error: { code: 'permission_denied', message: `Tool '${tool}' is not available to the parent agent` },
+          };
+        continue;
+      }
+      if (WORKFLOW_PROHIBITED_TOOLS.has(tool))
+        return { error: { code: 'approval_required', message: `Tool '${tool}' is not permitted in workflows` } };
+      return {
+        error: {
+          code: 'approval_required',
+          message: `Tool '${tool}' requires approval or is not permitted in workflows`,
+        },
+      };
     }
-    if ((input as WorkflowRunInput).context !== undefined && !isJsonValue((input as WorkflowRunInput).context))
-      return { error: { code: 'agent_error', message: 'Workflow run context must be JSON-safe' } };
+    const runInput = input as Record<string, unknown>;
+    if (runInput.context !== undefined && !isJsonObject(runInput.context))
+      return { error: { code: 'agent_error', message: 'Workflow run context must be a JSON-safe object' } };
+    if (runInput.output !== undefined && !isOutputTransport(runInput.output))
+      return { error: { code: 'agent_error', message: 'Workflow output format must be JSON-safe transport data' } };
     return {
       config: {
         name: raw.name,
@@ -240,7 +313,11 @@ export class WorkflowEvaluatorImpl implements WorkflowEvaluator {
         tools: requested,
         permissions: { tools: requested },
       },
-      input: input as WorkflowRunInput,
+      input: {
+        task: runInput.task as string,
+        ...(runInput.context === undefined ? {} : { context: runInput.context as Record<string, JsonValue> }),
+        ...(runInput.output === undefined ? {} : { output: runInput.output as WorkflowRunInput['output'] }),
+      },
     };
   }
 

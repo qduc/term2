@@ -33,3 +33,13 @@ it('runs two concurrent child agents and returns both results in one tool respon
     ],
   });
 });
+
+it('documents the complete workflow contract while retaining code-only parameters', () => {
+  const tool = createRunAgentWorkflowToolDefinition({ runtime: {} as any, parentTools: [] });
+  expect(Object.keys((tool.parameters as any).shape)).toEqual(['code']);
+  expect(tool.description).toContain("model? ('lower', 'default', or 'higher')");
+  expect(tool.description).toContain('Promise.all()');
+  expect(tool.description).toContain('web_search and web_fetch require the exact matching parent capability');
+  expect(tool.description).toContain('Interactive approvals');
+  expect(tool.description).toContain('runId');
+});

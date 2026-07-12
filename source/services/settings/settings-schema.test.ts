@@ -58,12 +58,17 @@ it('workflow limits have bounded defaults and accept workspace configuration', (
     maxConcurrency: 3,
     maxCodeBytes: 16_384,
     maxOutputBytes: 65_536,
+    maxConsoleBytes: 16_384,
   });
-  expect(SettingsSchema.parse({ agentWorkflow: { maxRuns: 2, maxOutputBytes: 1024 } }).agentWorkflow).toMatchObject({
+  expect(
+    SettingsSchema.parse({ agentWorkflow: { maxRuns: 2, maxOutputBytes: 1024, maxConsoleBytes: 512 } }).agentWorkflow,
+  ).toMatchObject({
     maxRuns: 2,
     maxOutputBytes: 1024,
+    maxConsoleBytes: 512,
   });
   expect(() => SettingsSchema.parse({ agentWorkflow: { maxConcurrency: 0 } })).toThrow();
+  expect(() => SettingsSchema.parse({ agentWorkflow: { maxConsoleBytes: 0 } })).toThrow();
 });
 
 it('CustomProviderSchema defaults provider type for legacy configs', () => {
@@ -190,6 +195,19 @@ it('SettingsSchema includes agent.maxParallelToolCalls, which defaults to 3 and 
 
 it('SettingsSchema rejects non-positive agent.maxParallelToolCalls values', () => {
   expect(() => SettingsSchema.parse({ agent: { maxParallelToolCalls: 0 } })).toThrow();
+});
+
+it('SettingsSchema preserves user-configured workflow model tiers', () => {
+  const parsed = SettingsSchema.parse({
+    agent: { efficientModel: 'gpt-5-mini', capableModel: 'gpt-5.3-codex' },
+  });
+
+  expect(parsed.agent?.efficientModel).toBe('gpt-5-mini');
+  expect(parsed.agent?.capableModel).toBe('gpt-5.3-codex');
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_EFFICIENT_MODEL)).toBe(true);
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_CAPABLE_MODEL)).toBe(true);
+  expect(() => SettingsSchema.parse({ agent: { efficientModel: '' } })).toThrow();
+  expect(() => SettingsSchema.parse({ agent: { capableModel: '' } })).toThrow();
 });
 
 it('startup normalization: persisted orchestratorMode=true with implicit lite (positional prompt) does not produce liteMode=true', () => {

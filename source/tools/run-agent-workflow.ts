@@ -5,8 +5,16 @@ import type { WorkflowLimits } from '../services/agent-runtime/workflow/workflow
 import type { ToolDefinition } from './types.js';
 import { createBaseMessage, getCallIdFromItem, normalizeToolArguments } from './format-helpers.js';
 
-const schema = z.object({ code: z.string().describe('JavaScript workflow source. Use return and top-level await.') });
-const description = `Run a bounded JavaScript workflow in an isolated disposable sandbox. The workflow receives agent(config), whose handle has run({ task, context? }). Use await sequentially or Promise.all() concurrently. Return only JSON-safe data. Workflow agents may request only read-only tools already available to you.`;
+const schema = z.object({
+  code: z
+    .string()
+    .describe(
+      'Self-contained modern JavaScript workflow body (not TypeScript): use agent(...), top-level await, and return a JSON-safe value.',
+    ),
+});
+const description = `Run bounded, disposable JavaScript orchestration in an isolated sandbox. The only application API is agent(config): config accepts name?, required instructions, model? ('lower', 'default', or 'higher'), and tools?; it returns a handle with run({ task, context?, output? }). context must be a JSON-safe object. output is the native structured-output request { schema, name? } and is passed to AgentHandle unchanged, so native invalid_schema and invalid_output errors are returned as child results. Child results are { ok: true, output, usage? } or { ok: false, error: { code, message }, usage? }; use await sequentially or Promise.all() for concurrent runs. Return only JSON-safe data.
+
+Children inherit only parent capabilities: workspace read interfaces are interchangeable; any parent editor capability admits apply_patch, search_replace, and create_file; web_search and web_fetch require the exact matching parent capability. Existing filesystem/network scope policy remains enforced. Interactive approvals (including ask_user), nested agents, unsandboxed operations, unsafe shell commands, out-of-scope writes, and locked writes are not available: operations are rejected rather than suspending/resuming a workflow. Limits cover total timeout/cancellation, run count, concurrency, source bytes, returned-output bytes, and cumulative console bytes. The result includes admission-ordered run summaries with stable runId, requested name, and resolved name/provider/model when available, plus duration, usage, and error metadata.`;
 
 export function createRunAgentWorkflowToolDefinition(deps: {
   runtime: Pick<AgentRuntime, 'agent'>;

@@ -1,4 +1,5 @@
 import type { NormalizedUsage } from '../../../utils/ai/token-usage.js';
+import type { RunOutputFormat } from '../types.js';
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -11,7 +12,10 @@ export interface WorkflowAgentConfig {
 
 export interface WorkflowRunInput {
   task: string;
-  context?: JsonValue;
+  /** JSON-safe object transport; AgentHandle validates/injects its semantic form. */
+  context?: { [key: string]: JsonValue };
+  /** JSON-safe transport for AgentHandle's structured-output contract. */
+  output?: RunOutputFormat;
 }
 export type WorkflowRunResult =
   | { ok: true; output: JsonValue; usage?: NormalizedUsage }
@@ -22,7 +26,13 @@ export interface WorkflowInput {
   signal?: AbortSignal;
 }
 export interface WorkflowRunSummary {
+  /** Stable, one-based order in which this run was admitted. */
+  runId: number;
+  /** Name supplied to agent(config), before runtime resolution. */
+  requestedName?: string;
   name?: string;
+  provider?: string;
+  model?: string;
   ok: boolean;
   durationMs: number;
   usage?: NormalizedUsage;
@@ -50,6 +60,7 @@ export interface WorkflowLimits {
   maxConcurrency: number;
   maxCodeBytes: number;
   maxOutputBytes: number;
+  maxConsoleBytes: number;
 }
 export const DEFAULT_WORKFLOW_LIMITS: WorkflowLimits = {
   timeoutMs: 120_000,
@@ -57,6 +68,7 @@ export const DEFAULT_WORKFLOW_LIMITS: WorkflowLimits = {
   maxConcurrency: 3,
   maxCodeBytes: 16_384,
   maxOutputBytes: 65_536,
+  maxConsoleBytes: 16_384,
 };
 
 export interface WorkflowEvaluator {

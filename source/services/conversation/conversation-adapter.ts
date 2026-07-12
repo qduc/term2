@@ -25,6 +25,7 @@ export type SendMessageOptions = {
   hallucinationRetryCount?: number;
   bypassInputSurgeGuard?: boolean;
   replayFromHistory?: boolean;
+  preferredMessageId?: string;
 };
 
 export type HandleApprovalDecisionOptions = {
@@ -235,6 +236,7 @@ export class ConversationAdapter {
       hallucinationRetryCount = 0,
       bypassInputSurgeGuard,
       replayFromHistory,
+      preferredMessageId,
     }: SendMessageOptions = {},
   ): Promise<ConversationTerminal> {
     const queue = this.#queue;
@@ -250,7 +252,7 @@ export class ConversationAdapter {
       });
     }
     return new Promise<ConversationTerminal>((resolve, reject) => {
-      const requestId = String(this.#nextQueuedMessageId++);
+      const requestId = preferredMessageId ?? String(this.#nextQueuedMessageId++);
       const message = {
         input,
         options: {

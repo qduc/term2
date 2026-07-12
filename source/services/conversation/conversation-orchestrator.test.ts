@@ -327,7 +327,7 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.messages.appendMessages).toHaveBeenCalledTimes(1);
   });
 
-  it('routes to onQueuedMessagePending when the queue is wired up but not yet active', async () => {
+  it('appends directly when queue is wired up but no turn is in flight', async () => {
     const cfg = makeConfig();
     // Queue infrastructure is available, but no turn is in flight yet.
     vi.mocked(cfg.conversationService.isQueueActive).mockReturnValue(false);
@@ -340,11 +340,17 @@ describe('ConversationOrchestrator', () => {
 
     await orchestrator.sendUserMessage('first');
 
-    // With queue support present we must never append directly: the queue
-    // observer is the single owner of the message list append.
-    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledTimes(1);
-    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'first');
-    expect(cfg.messages.appendMessages).not.toHaveBeenCalled();
+    // When no turn is in flight, append directly — no pending indicator needed.
+    expect(cfg.ui.onQueuedMessagePending).not.toHaveBeenCalled();
+    expect(cfg.messages.appendMessages).toHaveBeenCalledTimes(1);
+    const appended = vi.mocked(cfg.messages.appendMessages).mock.calls[0]?.[0]?.[0] as any;
+    expect(appended.sender).toBe('user');
+    expect(appended.text).toBe('first');
+
+    // The orchestrator must pass its message id as preferredMessageId so the
+    // adapter's queued-turn-start observer fires with the same id later.
+    const sendMsg = vi.mocked(cfg.conversationService.sendMessage).mock.calls[0]?.[1] as any;
+    expect(sendMsg.preferredMessageId).toBe(appended.id);
   });
 
   it('appends a queued message into the list when the queue fires its start observer', async () => {
@@ -365,6 +371,36 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.ui.onQueuedMessageStarted).toHaveBeenCalledWith('req-7');
   });
 
+  it('does not double-append when the observer fires for an already-directly-appended message', async () => {
+    const cfg = makeConfig();
+    // Simulate: queue is idle, so the message was appended directly.
+    vi.mocked(cfg.conversationService.isQueueActive).mockReturnValue(false);
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+    await orchestrator.sendUserMessage('first');
+
+    // Capture the observer that the orchestrator registered.
+    const setObserver = vi.mocked(cfg.conversationService.setQueuedTurnStartObserver);
+    const observer = setObserver.mock.calls[0]?.[0] as (execution: { requestId: string; input: string }) => void;
+    expect(observer).toBeDefined();
+
+    // Get the id from the direct append.
+    const firstAppendCall = vi.mocked(cfg.messages.appendMessages).mock.calls[0]!;
+    const directlyAppendedId = (firstAppendCall[0][0] as any).id as string;
+    expect(directlyAppendedId).toBeTruthy();
+
+    // Now the queue observer fires with the same id (this happens during sendMessage).
+    // The dedup guard should prevent a second append.
+    const appendCountBefore = vi.mocked(cfg.messages.appendMessages).mock.calls.length;
+    observer({ requestId: directlyAppendedId, input: 'first' });
+    expect(vi.mocked(cfg.messages.appendMessages).mock.calls.length).toBe(appendCountBefore);
+    expect(cfg.ui.onQueuedMessageStarted).not.toHaveBeenCalled();
+  });
+
   it('cancels the last queued message and returns its text', async () => {
     const cfg = makeConfig();
     const orchestrator = new ConversationOrchestrator(cfg);
@@ -375,6 +411,82 @@ describe('ConversationOrchestrator', () => {
     expect(restored).toBe('restored message');
     expect(cfg.conversationService.removeLastQueuedItem).toHaveBeenCalledTimes(1);
     expect(cfg.ui.onRemoveLastPendingMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retain directly-appended id across clearConversation', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueActive).mockReturnValue(false);
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+    await orchestrator.sendUserMessage('first');
+
+    const firstAppendCall = vi.mocked(cfg.messages.appendMessages).mock.calls[0]!;
+    const directlyAppendedId = (firstAppendCall[0][0] as any).id as string;
+
+    // After clearConversation, the orchestrator must not retain the directly-
+    // appended id. A later observer firing with that same id should treat it
+    // as a fresh, not-already-appended message and append it normally.
+    await orchestrator.clearConversation();
+
+    const setObserver = vi.mocked(cfg.conversationService.setQueuedTurnStartObserver);
+    const observer = setObserver.mock.calls[0]?.[0] as (execution: { requestId: string; input: string }) => void;
+    expect(observer).toBeDefined();
+    const beforeCalls = vi.mocked(cfg.messages.appendMessages).mock.calls.length;
+    observer({ requestId: directlyAppendedId, input: 'first' });
+    expect(vi.mocked(cfg.messages.appendMessages).mock.calls.length).toBe(beforeCalls + 1);
+  });
+
+  it('does not retain directly-appended id across stopProcessing', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueActive).mockReturnValue(false);
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+    await orchestrator.sendUserMessage('first');
+
+    const firstAppendCall = vi.mocked(cfg.messages.appendMessages).mock.calls[0]!;
+    const directlyAppendedId = (firstAppendCall[0][0] as any).id as string;
+
+    orchestrator.stopProcessing();
+
+    const setObserver = vi.mocked(cfg.conversationService.setQueuedTurnStartObserver);
+    const observer = setObserver.mock.calls[0]?.[0] as (execution: { requestId: string; input: string }) => void;
+    expect(observer).toBeDefined();
+    const beforeCalls = vi.mocked(cfg.messages.appendMessages).mock.calls.length;
+    observer({ requestId: directlyAppendedId, input: 'first' });
+    expect(vi.mocked(cfg.messages.appendMessages).mock.calls.length).toBe(beforeCalls + 1);
+  });
+
+  it('does not retain directly-appended id across undoLastUserMessage', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueActive).mockReturnValue(false);
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+    await orchestrator.sendUserMessage('first');
+
+    const firstAppendCall = vi.mocked(cfg.messages.appendMessages).mock.calls[0]!;
+    const directlyAppendedId = (firstAppendCall[0][0] as any).id as string;
+
+    vi.mocked(cfg.conversationService.undoLastUserTurn).mockReturnValue({ text: 'first' });
+    orchestrator.undoLastUserMessage();
+
+    const setObserver = vi.mocked(cfg.conversationService.setQueuedTurnStartObserver);
+    const observer = setObserver.mock.calls[0]?.[0] as (execution: { requestId: string; input: string }) => void;
+    expect(observer).toBeDefined();
+    const beforeCalls = vi.mocked(cfg.messages.appendMessages).mock.calls.length;
+    observer({ requestId: directlyAppendedId, input: 'first' });
+    expect(vi.mocked(cfg.messages.appendMessages).mock.calls.length).toBe(beforeCalls + 1);
   });
 
   it('returns null and skips the UI hook when no queued message can be cancelled', async () => {

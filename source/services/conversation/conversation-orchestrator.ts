@@ -35,6 +35,7 @@ export class ConversationOrchestrator {
   private askUserAnswers: AskUserAnswer[] = [];
   private currentAskUserQuestionIndex = 0;
   private readonly createMessageId: () => string;
+  readonly #directlyAppendedMessageIds = new Set<string>();
 
   constructor(private config: ConversationOrchestratorConfig) {
     this.createMessageId = config.createMessageId ?? createMessageIdFactory(config.now);
@@ -96,6 +97,7 @@ export class ConversationOrchestrator {
     this.config.ui.onResetAll();
     this.config.usageAccumulator?.reset();
     this.config.subagentUsageAccumulator?.reset();
+    this.#directlyAppendedMessageIds.clear();
   }
 
   stopProcessing(): void {
@@ -104,6 +106,7 @@ export class ConversationOrchestrator {
     this.pendingApproval = null;
     this.resetAskUserState();
     this.config.ui.onResetTransient();
+    this.#directlyAppendedMessageIds.clear();
   }
 
   undoLastUserMessage(): { text: string; images?: UserTurn['images'] } | null {
@@ -123,6 +126,7 @@ export class ConversationOrchestrator {
     this.pendingApproval = null;
     this.resetAskUserState();
     this.config.ui.onResetTransient();
+    this.#directlyAppendedMessageIds.clear();
 
     return restored;
   }
@@ -219,6 +223,7 @@ export class ConversationOrchestrator {
     this.pendingApproval = null;
     this.resetAskUserState();
     this.config.ui.onResetTransient();
+    this.#directlyAppendedMessageIds.clear();
 
     return restored;
   }
@@ -236,21 +241,24 @@ export class ConversationOrchestrator {
       ...(turn.skill ? { skill: turn.skill } : {}),
     };
 
-    // If queue infrastructure is wired up, always route through
-    // onQueuedMessagePending so the queue observer is the single source of
-    // truth for appending queued messages. Checking only isQueueActive() races
-    // with the queue pop, which can cause the message to be appended twice
-    // (once here and once when the observer fires).
-    const hasQueue = typeof this.config.conversationService.setQueuedTurnStartObserver === 'function';
+    // When no turn is in flight, append the user message directly to the
+    // message list. The queue observer will still fire when the turn starts,
+    // but the dedup guard in moveQueuedMessageIntoList will swallow the
+    // second append. When a turn is already in flight, show the message
+    // above the input box until the queue actually starts processing it; the
+    // message list will be updated when the queue pops this turn.
     const hasInflightTurn = this.config.conversationService.isQueueActive?.() ?? false;
-    if (hasQueue || hasInflightTurn) {
-      // A turn is already in flight (or the queue may start one at any time).
-      // Show the message above the input box until the queue actually starts
-      // processing it; the message list will be updated when the queue pops
-      // this turn.
+    if (hasInflightTurn) {
+      // A turn is already in flight. Show the message above the input box
+      // until the queue actually starts processing it; the message list will
+      // be updated when the queue pops this turn.
       this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text);
     } else {
+      // No turn is in flight — append directly. The queue observer will also
+      // fire when the turn starts, but the dedup guard in
+      // moveQueuedMessageIntoList prevents a double-append.
       this.config.messages.appendMessages([userMessage]);
+      this.#directlyAppendedMessageIds.add(userMessage.id);
     }
     this.config.logWriter?.append({ type: 'user_message', message: userMessage });
     this.config.ui.onTurnStart();
@@ -263,6 +271,7 @@ export class ConversationOrchestrator {
       const result = await this.config.conversationService.sendMessage(turnToSend, {
         onEvent: this.createOnEventHandler(applyConversationEvent),
         bypassInputSurgeGuard: options?.bypassInputSurgeGuard,
+        preferredMessageId: userMessage.id,
       });
 
       applyConversationEvent({ type: 'final', finalText: '' } as any);
@@ -546,6 +555,13 @@ export class ConversationOrchestrator {
    * append, the pending indicator above the input box is cleared.
    */
   private moveQueuedMessageIntoList(messageId: string, fallbackInput?: string | UserTurn): void {
+    // If the message was already appended directly (when no turn was in flight),
+    // the queue observer fired after the fact — skip the duplicate append.
+    if (this.#directlyAppendedMessageIds.has(messageId)) {
+      this.#directlyAppendedMessageIds.delete(messageId);
+      return;
+    }
+
     // The message id we created up-front matches the one we will append now.
     // We do not look it up by id because by the time the queue fires the
     // observer the original UserMessage may not be reachable, so we re-build

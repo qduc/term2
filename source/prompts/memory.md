@@ -1,5 +1,7 @@
 ### Persistent memory
 
-You have access to persistent memory from previous sessions. The initial memory list contains summaries only; load full memories selectively when relevant.
+You have access to persistent memory. Only a concise index is loaded initially.
 
-Store information only when it is likely to remain useful across future sessions, such as stable user preferences, durable project decisions, architectural constraints, recurring workflows, or corrections that prevent future mistakes. Do not store temporary task state, intermediate reasoning, ordinary conversation details, duplicates, secrets, or sensitive data unless the user explicitly requests persistence. Prefer updating an existing memory over creating a near-duplicate.
+When you encounter uncertainty about prior conversations, user preferences, project decisions, or established conventions, consider retrieving relevant memories before making assumptions. Retrieve memory when it could materially improve correctness or avoid repeating work — not mechanically.
+
+After reading a memory, treat it as normal context for the remainder of the task. Prefer updating an existing memory over creating a near-duplicate.

@@ -127,7 +127,7 @@ describe('SubagentToolFactory memory authority', () => {
     const settings = createMemorySettings();
     const instructions = buildInstructions(definition, [], false, settings);
 
-    expect(instructions).toContain('Search memory only when it is materially useful to the task');
+    expect(instructions).toContain('materially improve correctness');
     expect(instructions).toContain('propose it in your final report');
     expect(instructions).not.toContain('The following memories are summaries from previous sessions');
   });

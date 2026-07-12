@@ -60,6 +60,8 @@ describe('MemoryCapabilityBuilder', () => {
 
       expect(capability.tools.map((tool) => tool.name)).toEqual(readTools);
       expect(capability.guidance).toContain('propose it in your final report');
+      expect(capability.guidance).toContain('Only a concise index is loaded initially.');
+      expect(capability.guidance).toContain('materially improve correctness');
       expect(capability.context).toBe('');
     },
   );

@@ -26,13 +26,23 @@ const READ_TOOL_COUNT = 3;
 
 const MAIN_GUIDANCE = `### Persistent memory
 
-You have access to persistent memory from previous sessions. The initial memory list contains summaries only; load full memories selectively when relevant.
+You have access to persistent memory. Only a concise index is loaded initially.
+
+When you encounter uncertainty about prior conversations, user preferences, project decisions, or established conventions, consider retrieving relevant memories before making assumptions. Retrieve memory when it could materially improve correctness or avoid repeating work — not mechanically.
+
+After reading a memory, treat it as normal context for the remainder of the task.
+
+The memory librarian specializes in retrieval and organization. Prefer consulting the librarian over manual memory search when a task would benefit from broad search or synthesis across multiple memories.
 
 Validate any memory proposals from subagents before acting on them. Persist only durable, useful information, and merge or update an existing memory rather than creating a duplicate when appropriate. Do not store temporary task state, intermediate reasoning, ordinary conversation details, duplicates, secrets, or sensitive data unless the user explicitly requests persistence.`;
 
 const SUBAGENT_GUIDANCE = `### Persistent memory
 
-You can read persistent memory from previous sessions, but cannot change it. Search memory only when it is materially useful to the task; treat results as potentially stale and avoid unnecessary repetition.
+You can read persistent memory from previous sessions, but cannot change it. Only a concise index is loaded initially.
+
+When you encounter uncertainty about prior context, user preferences, or project decisions, consider searching memory before making assumptions. Retrieve memory when it could materially improve correctness or avoid repeating work.
+
+Treat results as potentially stale and avoid unnecessary repetition.
 
 If you discover durable, reusable knowledge worth retaining, propose it in your final report for the main agent to review and persist. Never claim a proposal was persisted. Use this concise structure: action, target, reason, content, evidence.`;
 

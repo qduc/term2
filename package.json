@@ -115,7 +115,7 @@
     "prettier": "^2.8.7",
     "tsx": "^4.20.6",
     "typescript": "npm:@typescript/typescript6@^6.0.1",
-    "typescript-7": "npm:typescript@7.0.1-rc",
+    "typescript-7": "npm:typescript@7.0.2",
     "typescript-eslint": "^8.62.0",
     "vitest": "^4.1.9"
   },

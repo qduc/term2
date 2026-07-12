@@ -4,6 +4,13 @@ import * as path from 'path';
 import * as os from 'os';
 import { createReadFileToolDefinition } from './read-file.js';
 
+it('orchestrator read_file description permits direct inspection', () => {
+  const tool = createReadFileToolDefinition({ orchestratorMode: true });
+
+  expect(tool.description).toContain('Inspect a known file directly');
+  expect(tool.description).not.toContain('to verify a specific claim');
+});
+
 const readFileToolDefinition = createReadFileToolDefinition();
 const readFileToolDefinitionAllowOutside = createReadFileToolDefinition({
   allowOutsideWorkspace: true,

@@ -110,8 +110,8 @@ const GREP_DESCRIPTION =
   'Do NOT use this to list files by name (use glob) or to explore relationships between files (use code_context_search). ' +
   'Returns up to 50 matches as path:line:matched_text, or a note if results are truncated.';
 const GREP_DESCRIPTION_ORCHESTRATOR =
-  "Search for a known symbol or string when you already have a target in mind (e.g., confirm a subagent's reference, locate a specific identifier). Uses normal JSON escaping. Regex mode is the default; use literal mode for exact fixed-string matching. " +
-  'For broad codebase exploration or "where is X used" investigations, prefer delegating to an `explorer` subagent via `run_subagent`. ' +
+  'Search directly for a symbol, string, or pattern in the codebase. Uses normal JSON escaping. Regex mode is the default; use literal mode for exact fixed-string matching. ' +
+  'Delegate broad or separable investigation when it provides meaningful context compression or specialization. ' +
   'Do NOT use this to list files by name (use glob) or to explore relationships between files (use code_context_search). ' +
   'Returns up to 50 matches as path:line:matched_text, or a note if results are truncated.';
 

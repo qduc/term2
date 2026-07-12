@@ -264,6 +264,9 @@ it('getAgentDefinition in orchestrator mode retains full memory authority', () =
     'shell',
     'read_file',
     'grep',
+    'read_code_outline',
+    'code_context_search',
+    'apply_patch',
     'memory_list',
     'memory_get',
     'memory_search',
@@ -282,7 +285,7 @@ it('getAgentDefinition in orchestrator mode retains full memory authority', () =
   ]);
 });
 
-it('getAgentDefinition in orchestrator mode requires delegated tool work', () => {
+it('getAgentDefinition in orchestrator mode enables direct work while retaining delegation', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
     'agent.model': 'gpt-5',
@@ -295,10 +298,12 @@ it('getAgentDefinition in orchestrator mode requires delegated tool work', () =>
   });
 
   expect(definition.instructions.includes('Orchestrator mode')).toBe(true);
-  expect(definition.instructions.includes('Delegate workspace inspection')).toBe(true);
-  expect(definition.instructions.includes('Use `read_code_outline`')).toBe(false);
-  // Verify non-orchestrator direct-tool guidance is absent from orchestrator instructions
-  expect(definition.instructions.includes('Prefer `read_file` for reading file contents.')).toBe(false);
+  expect(definition.instructions).toContain('You own the user-requested outcome end to end');
+  expect(definition.instructions).toContain('Directly inspect, edit, run commands, and test small or clear work');
+  expect(definition.instructions).not.toContain('Delegate workspace inspection');
+  expect(definition.tools.map((tool) => tool.name)).toEqual(
+    expect.arrayContaining(['read_code_outline', 'code_context_search', 'apply_patch']),
+  );
 });
 
 it('getAgentDefinition in orchestrator mode retains full memory authority for non-gpt-5 models', () => {
@@ -688,7 +693,17 @@ it('getAgentDefinition includes worktree hygiene fragment in standard, mentor, p
     loggingService: mockLogger,
     runSubagent: async () => ({} as any),
   });
-  expect(orchestrator.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER)).toBe(true);
+  expect(orchestrator.instructions).toContain(WORKTREE_HYGIENE_FRAGMENT_MARKER);
+  expect(orchestrator.instructions).toContain('Run `git status --short` or an equivalent read-only git status command');
+  expect(orchestrator.instructions).toContain('If pre-existing dirty files overlap with your current task');
+  expect(orchestrator.instructions).toContain(
+    'Before editing code, run the smallest relevant available test, lint, typecheck, or validation command as a baseline.',
+  );
+  expect(orchestrator.instructions).toContain('After your changes, rerun the same command and compare results');
+  expect(orchestrator.instructions).toContain(
+    'Choose investigation, planning, delegation, implementation, review, and validation adaptively.',
+  );
+  expect(orchestrator.instructions).toContain('Delegation transfers execution, never outcome ownership.');
 });
 
 it('getAgentDefinition omits worktree hygiene fragment in lite mode', () => {

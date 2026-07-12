@@ -10,11 +10,13 @@ it('getSubagentDelegationAddendum returns non-empty delegation guidance', () => 
   expect(result.includes('run_subagent')).toBe(true);
 });
 
-it('getSubagentDelegationAddendum includes orchestrator-specific text when orchestratorMode is true', () => {
+it('getSubagentDelegationAddendum gives orchestrators adaptive delegation and direct-work guidance', () => {
   const result = getSubagentDelegationAddendum({ orchestratorMode: true });
 
   expect(result.includes('Orchestrator mode')).toBe(true);
-  expect(result.includes('Delegate workspace inspection')).toBe(true);
+  expect(result).toContain('Delegate when it provides meaningful leverage');
+  expect(result).toContain('directly inspect, edit, run commands, and test small or clear work');
+  expect(result).not.toContain('Delegate workspace inspection');
 });
 
 it('getSubagentDelegationAddendum includes self-service fallback when orchestratorMode is false', () => {
@@ -23,30 +25,12 @@ it('getSubagentDelegationAddendum includes self-service fallback when orchestrat
   expect(result.includes('just do it yourself')).toBe(true);
 });
 
-it('orchestrator mode includes safe coordination guidance', () => {
+it('orchestrator mode protects outcome ownership and safe coordination', () => {
   const result = getSubagentDelegationAddendum({ orchestratorMode: true });
-  expect(result.includes('safe coordination over maximum parallelism')).toBe(true);
-});
-
-it('orchestrator mode includes coupled or multi-worker language', () => {
-  const result = getSubagentDelegationAddendum({ orchestratorMode: true });
-  expect(result.includes('coupled or multi-worker')).toBe(true);
-});
-
-it('orchestrator mode includes ownership language', () => {
-  const result = getSubagentDelegationAddendum({ orchestratorMode: true });
-  expect(result.includes('Which worker owns')).toBe(true);
-});
-
-it('orchestrator mode says not to over-process simple single-worker tasks', () => {
-  const result = getSubagentDelegationAddendum({ orchestratorMode: true });
-  expect(result.includes('Do not over-process')).toBe(true);
-});
-
-it('non-orchestrator mode does not include coordination checklist', () => {
-  const result = getSubagentDelegationAddendum({ orchestratorMode: false });
-  expect(result.includes('coupled or multi-worker')).toBe(false);
-  expect(result.includes('Coordination checklist')).toBe(false);
+  expect(result).toContain('Delegation transfers execution, never outcome ownership');
+  expect(result).toContain('Avoid concurrent overlapping edits');
+  expect(result).not.toContain('Coordination checklist');
+  expect(result).not.toContain('First delegate investigation');
 });
 
 it('includes task framing guidance about autonomous workers', () => {
@@ -70,12 +54,11 @@ it('requires task-specific context without repeating automatically supplied cont
   expect(result).toContain('The subagent does not see your conversation or reasoning');
 });
 
-it('orchestrator mode includes splitting rule and worker-sized definition', () => {
+it('retains worker autonomy without mandatory pre-delegation ceremony', () => {
   const result = getSubagentDelegationAddendum({ orchestratorMode: true });
-  expect(result.includes('Split work at learning and verification boundaries')).toBe(true);
-  expect(result.includes('First delegate investigation or the next implementable checkpoint')).toBe(true);
   expect(result.includes('one cohesive unit that can be understood, implemented, and verified')).toBe(true);
   expect(result.includes('The orchestrator decides where execution units begin and end')).toBe(true);
+  expect(result).not.toContain('Before any `run_subagent` call, plan silently');
 });
 
 it('includes librarian delegation trigger', () => {

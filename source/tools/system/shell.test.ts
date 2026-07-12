@@ -85,6 +85,17 @@ it('shell description mentions saved long output and avoiding reruns', () => {
   expect(tool.description.includes('full output is saved to a file')).toBe(true);
 });
 
+it('orchestrator shell description permits proportionate direct command use', () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService(),
+    orchestratorMode: true,
+  });
+
+  expect(tool.description).toContain('Directly inspect, test, or perform a small clear operation');
+  expect(tool.description).not.toContain('to verify state');
+});
+
 it('shell description is adjusted based on searchViaShell explicit option and settings', () => {
   const toolExplicitFalse = createShellToolDefinition({
     loggingService: createNoopLogger(),

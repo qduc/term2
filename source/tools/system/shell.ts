@@ -226,8 +226,8 @@ const getShellDescription = (searchViaShell: boolean) =>
   'Do NOT write multi-line inline scripts, it is prone to escaping mistakes. Create a temporary script then use this tool to run it. ' +
   'Do NOT use this for complex multi-step edits or broad codebase exploration; use `run_subagent` instead.';
 const SHELL_DESCRIPTION_ORCHESTRATOR =
-  'Execute a single shell command to verify state (e.g., run tests, check git status, or verify a subagent\'s work). By default, local shell commands run inside the sandbox when available. Use sandbox: "unsandboxed" only for network or outside-host access; it requires explicit user approval and must be run by the main agent. Long output is truncated, the full output is saved to a file; ' +
-  'For performing complex operations or making changes, prefer delegating to a `worker` subagent via `run_subagent`.';
+  'Execute a single shell command. Directly inspect, test, or perform a small clear operation when that is the most efficient path. By default, local shell commands run inside the sandbox when available. Use sandbox: "unsandboxed" only for network or outside-host access; it requires explicit user approval and must be run by the main agent. Long output is truncated, the full output is saved to a file; ' +
+  'delegate complex, risky, or separable work when specialization, context compression, or safe parallelism provides meaningful leverage.';
 
 export function createShellToolDefinition(deps: {
   loggingService: ILoggingService;

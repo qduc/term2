@@ -45,8 +45,11 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
 
   const isRegularMode = !liteMode;
   const isAgentMode = !orchestratorMode;
+  // Orchestrators can directly modify the worktree, so every non-lite prompt
+  // receives the shared dirty-state and validation safeguards.
+  const shouldIncludeWorktreeHygiene = !liteMode;
 
-  if (isRegularMode) {
+  if (shouldIncludeWorktreeHygiene) {
     fragmentFiles.push('worktree-hygiene.md');
   }
 

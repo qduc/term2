@@ -209,6 +209,20 @@ export const getAgentDefinition = (
       createReadFileToolDefinition({ executionContext, allowOutsideWorkspace: true, orchestratorMode: true }),
       createGrepToolDefinition({ executionContext, orchestratorMode: true }),
     ];
+    if (codeContextEnabled) {
+      tools.push(
+        createReadCodeOutlineToolDefinition({ executionContext }),
+        createCodeContextSearchToolDefinition({ executionContext }),
+      );
+    }
+    if (isGpt5) {
+      tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext }));
+    } else {
+      tools.push(
+        createCreateFileToolDefinition({ settingsService, loggingService, executionContext }),
+        createSearchReplaceToolDefinition({ settingsService, loggingService, executionContext }),
+      );
+    }
     tools.push(...memoryCapability.tools);
     if (getAskUserAnswer) {
       const askUserTool = createAskUserToolDefinition(getAskUserAnswer);

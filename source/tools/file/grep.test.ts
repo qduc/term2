@@ -9,6 +9,13 @@ import { createGrepToolDefinition, formatGrepCommandMessage } from './grep.js';
 import { toolErrorFunction, wrapToolInvoke } from '../../lib/tool-invoke.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 
+it('orchestrator grep description permits direct targeted investigation', () => {
+  const tool = createGrepToolDefinition({ orchestratorMode: true });
+
+  expect(tool.description).toContain('Search directly for a symbol, string, or pattern');
+  expect(tool.description).not.toContain('when you already have a target in mind');
+});
+
 const execFileAsync = promisify(execFile);
 
 function createWrappedGrepTool() {

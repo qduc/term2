@@ -72,6 +72,10 @@ it('buildPromptSpec includes subagent delegation for orchestrator mode', () => {
     searchViaShell: false,
   });
   expect(orchestrator.inlineSections.some((s) => s.includes('Delegating to subagents'))).toBe(true);
+  expect(orchestrator.inlineSections.some((s) => s.includes('Delegate when it provides meaningful leverage'))).toBe(
+    true,
+  );
+  expect(orchestrator.inlineSections.some((s) => s.includes('Delegate workspace inspection'))).toBe(false);
   expect(orchestrator.inlineSections.some((s) => s.includes('Code Context'))).toBe(false);
 });
 

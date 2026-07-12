@@ -17,8 +17,8 @@ const READ_FILE_DESCRIPTION_OUTSIDE =
   'Avoid reading tiny repeated chunks (e.g. 50 lines at a time); read the full file if it is under 1000 lines or use a larger window. ' +
   'Returns the file path, total line count, and the requested lines.';
 const READ_FILE_DESCRIPTION_ORCHESTRATOR =
-  "Read file content to verify a specific claim about a known location (e.g., confirm a subagent's edit landed, check a referenced symbol). " +
-  'For exploring unfamiliar code or understanding files you have not seen, prefer delegating to an `explorer` subagent via `run_subagent`. ' +
+  'Inspect a known file directly, including to understand a small or clear area of the workspace. ' +
+  'Delegate broad or separable exploration when it provides meaningful context compression or specialization. ' +
   'Supports line ranges — read the smallest relevant range. ' +
   'Returns the file path, total line count, and the requested lines.';
 

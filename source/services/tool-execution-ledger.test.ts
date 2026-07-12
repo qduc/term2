@@ -441,6 +441,20 @@ it('dropUnpairedFunctionCalls removes function_calls without a matching output',
   expect(result.length).toBe(3);
 });
 
+it('dropUnpairedFunctionCalls removes function_call_outputs without a matching call', () => {
+  const history = [
+    { role: 'user' as const, type: 'message', content: 'do work' },
+    { type: 'function_call_output', call_id: 'call-already-consumed', output: 'old result' },
+    { type: 'function_call', id: 'fc_1', call_id: 'call-current', name: 'shell', arguments: '{}' },
+    { type: 'function_call_output', call_id: 'call-current', output: 'current result' },
+  ];
+
+  const result = dropUnpairedFunctionCalls(history);
+  const callIds = result.map((item) => (item as { call_id?: string }).call_id).filter(Boolean);
+  expect(callIds).toEqual(['call-current', 'call-current']);
+  expect(result.length).toBe(3);
+});
+
 it('dropUnpairedFunctionCalls leaves non-tool items untouched', () => {
   const history = [
     { role: 'user' as const, type: 'message', content: 'hi' },

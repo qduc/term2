@@ -20,12 +20,15 @@ describe('MemoryCapabilityBuilder', () => {
     ['worker', { kind: 'subagent' as const, role: 'worker' }, 'read', readTools],
     ['researcher', { kind: 'subagent' as const, role: 'researcher' }, 'read', readTools],
     ['mentor', { kind: 'subagent' as const, role: 'mentor' }, 'none', []],
+    ['librarian', { kind: 'subagent' as const, role: 'librarian' }, 'write', writeTools],
   ])('grants %s the expected enabled-memory access', (_mode, subject, access, tools) => {
     const capability = new MemoryCapabilityBuilder(createMockSettingsService()).build(subject);
 
     expect(capability.access).toBe(access);
     expect(capability.tools.map((tool) => tool.name)).toEqual(tools);
-    expect(capability.guidance).toEqual(access === 'none' ? '' : expect.stringContaining('Persistent memory'));
+    expect(capability.guidance).toEqual(
+      access === 'none' ? '' : expect.stringMatching(/Persistent memory|Memory librarian/),
+    );
     if (access === 'none') expect(capability.context).toBe('');
   });
 
@@ -89,14 +92,27 @@ describe('MemoryCapabilityBuilder', () => {
     expect(capability.context).toContain('Inject this for the main agent.');
   });
 
-  it.each([{ kind: 'main' } as const, { kind: 'subagent' as const, role: 'worker' }])(
-    'removes tools, guidance, and context when memory is disabled',
-    (subject) => {
-      const capability = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.enabled': false })).build(
-        subject,
-      );
+  it.each([
+    { kind: 'main' } as const,
+    { kind: 'subagent' as const, role: 'worker' } as const,
+    { kind: 'subagent' as const, role: 'librarian' } as const,
+  ])('removes tools, guidance, and context when memory is disabled', (subject) => {
+    const capability = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.enabled': false })).build(
+      subject,
+    );
 
-      expect(capability).toMatchObject({ access: 'none', tools: [], guidance: '', context: '' });
-    },
-  );
+    expect(capability).toMatchObject({ access: 'none', tools: [], guidance: '', context: '' });
+  });
+
+  it('gives librarian write access without injecting memory context', () => {
+    const capability = new MemoryCapabilityBuilder(createMockSettingsService()).build({
+      kind: 'subagent',
+      role: 'librarian',
+    });
+
+    expect(capability.access).toBe('write');
+    expect(capability.tools.map((tool) => tool.name)).toEqual(writeTools);
+    expect(capability.context).toBe('');
+    expect(capability.guidance).toContain('memory librarian');
+  });
 });

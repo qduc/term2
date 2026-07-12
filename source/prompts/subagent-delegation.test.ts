@@ -77,3 +77,8 @@ it('orchestrator mode includes splitting rule and worker-sized definition', () =
   expect(result.includes('one cohesive unit that can be understood, implemented, and verified')).toBe(true);
   expect(result.includes('The orchestrator decides where execution units begin and end')).toBe(true);
 });
+
+it('includes librarian delegation trigger', () => {
+  const result = getSubagentDelegationAddendum();
+  expect(result.includes('librarian')).toBe(true);
+});

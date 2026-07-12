@@ -59,6 +59,17 @@ describe('adaptLegacyRole', () => {
     expect(def.permissions.canUseNestedAgents).toBe(false);
   });
 
+  it('adapts librarian role to ResolvedAgentDefinition', () => {
+    const def = adaptLegacyRole('librarian', settings());
+    expect(def.name).toBe('Memory Librarian');
+    expect(def.permissions.canRead).toBe(false);
+    expect(def.permissions.canWrite).toBe(false);
+    expect(def.permissions.canRunShell).toBe(false);
+    expect(def.permissions.canSearchWeb).toBe(false);
+    expect(def.permissions.canUseNestedAgents).toBe(false);
+    expect(def.instructions).toContain('memory librarian');
+  });
+
   it('throws for unknown role', () => {
     expect(() => adaptLegacyRole('unknown_role', settings())).toThrow(/unknown subagent role/i);
   });

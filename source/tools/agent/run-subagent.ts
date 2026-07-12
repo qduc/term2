@@ -24,8 +24,8 @@ const RUN_SUBAGENT_DESCRIPTION =
 
 const runSubagentSchema = z.object({
   role: z
-    .enum(['explorer', 'worker', 'researcher', 'mentor'])
-    .describe('The subagent role to use: "explorer", "worker", "researcher", or "mentor".'),
+    .enum(['explorer', 'worker', 'researcher', 'mentor', 'librarian'])
+    .describe('The subagent role to use: "explorer", "worker", "researcher", "mentor", or "librarian".'),
   task: z.string().describe('The full task description.'),
 });
 
@@ -150,6 +150,7 @@ export function getSubagentsRolesSection(): string {
       '- `explorer`: read-only workspace access. Use for locating files and answering codebase questions.\n' +
       '- `researcher`: web search + read-only workspace. Use for looking up external docs or current information.\n' +
       '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' +
+      '- `librarian`: memory reasoning. Use for retrieving context from persistent memory and recommending memory maintenance.\n' +
       '- `worker`: read + write + shell access. Use for implementing bounded file changes or general purpose works that does not fit any role above.\n\n'
     );
   }
@@ -203,6 +204,7 @@ export function getSubagentsRolesSection(): string {
     '- `explorer`: read-only workspace access. Use for locating files and answering codebase questions.\n' +
     '- `researcher`: web search + read-only workspace. Use for looking up external docs or current information.\n' +
     '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' +
+    '- `librarian`: memory reasoning. Use for retrieving context from persistent memory and recommending memory maintenance.\n' +
     '- `worker`: read + write access. Use for implementing bounded file changes.\n\n'
   );
 }

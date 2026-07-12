@@ -36,6 +36,16 @@ You can read persistent memory from previous sessions, but cannot change it. Sea
 
 If you discover durable, reusable knowledge worth retaining, propose it in your final report for the main agent to review and persist. Never claim a proposal was persisted. Use this concise structure: action, target, reason, content, evidence.`;
 
+const LIBRARIAN_GUIDANCE = `### Memory librarian
+
+You are the memory librarian. You have read and write access to persistent memory through the same public memory API available to all agents. Interpret the task, search memory broadly, read the most promising items, judge their usefulness, and return a concise synthesis.
+
+For **context retrieval** tasks, search memory from multiple angles, read full content of promising items, discard irrelevant material, identify contradictions or stale information, and return a compact context brief with references to the source memory IDs. Do not mutate memory during a retrieval task.
+
+For **memory maintenance** tasks, review the memory store and existing memories, identify duplication and conflict, and recommend whether to create, update, merge, retain, or delete memory items. Present your recommendations as a reviewable proposal with clear rationale before executing any mutation. Only perform mutations through memory_create, memory_update, or memory_delete when the task explicitly asks you to apply the recommendations.
+
+Always cite source memory IDs so the caller can trace claims to their sources. Treat all memory as potentially stale. Never fabricate memory content. Do not store temporary task state, intermediate reasoning, or sensitive data.`;
+
 /**
  * Resolves the complete memory authority for a caller. This is the sole place
  * that maps roles to authority and couples memory settings, store creation,
@@ -60,16 +70,23 @@ export class MemoryCapabilityBuilder {
     return {
       access,
       tools: access === 'read' ? tools.slice(0, READ_TOOL_COUNT) : tools,
-      guidance: subject.kind === 'main' ? MAIN_GUIDANCE : SUBAGENT_GUIDANCE,
-      // Read-only subagents search selectively on demand; only main agents
-      // receive the automatic summary context.
-      context: access === 'write' ? store.contextSync(settings.contextBudgetChars) : '',
+      guidance: this.#guidanceFor(subject),
+      // Only the main agent receives the automatic memory summary context.
+      // Subagents (including the librarian) search on demand.
+      context: subject.kind === 'main' && access === 'write' ? store.contextSync(settings.contextBudgetChars) : '',
     };
   }
 
   #accessFor(subject: MemoryCapabilitySubject): MemoryAccess {
     if (subject.kind === 'main') return 'write';
+    if (subject.role === 'librarian') return 'write';
     return ['explorer', 'worker', 'researcher'].includes(subject.role) ? 'read' : 'none';
+  }
+
+  #guidanceFor(subject: MemoryCapabilitySubject): string {
+    if (subject.kind === 'main') return MAIN_GUIDANCE;
+    if (subject.role === 'librarian') return LIBRARIAN_GUIDANCE;
+    return SUBAGENT_GUIDANCE;
   }
 
   #createStore(settings: MemorySettings): FileMemoryStore {

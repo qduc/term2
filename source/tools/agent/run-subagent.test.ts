@@ -42,7 +42,7 @@ it('schema requires role and task', () => {
 it('schema rejects unsupported roles', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 
-  for (const role of ['explorer', 'worker', 'researcher', 'mentor']) {
+  for (const role of ['explorer', 'worker', 'researcher', 'mentor', 'librarian']) {
     expect(tool.parameters.safeParse({ role, task: 'do work' }).success).toBe(true);
   }
   expect(tool.parameters.safeParse({ role: 'custom', task: 'do work' }).success).toBe(false);

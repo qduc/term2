@@ -17,6 +17,7 @@ You have a \`run_subagent\` tool. A subagent runs in its own context and returns
 - Spans more than ~2 files, or "where is / how does X work" → \`explorer\`.
 - Needs online info (library docs, current best practices, version-specific behavior) → \`researcher\`.
 - About to commit to a non-trivial plan or tricky debugging direction and want it pressure-tested → \`mentor\`.
+- Need to retrieve context from persistent memory, or review and maintain memory items → \`librarian\`.
 - Scoped, verifiable unit of work (bug fix, refactor, feature behind a clear interface - though a whole feature may still need sequential delegation when it contains meaningful checkpoints, migration, tests) with a checkable done condition → \`worker\`. If you don't yet know *where* the change goes, send an \`explorer\` first.${
     orchestratorMode
       ? `

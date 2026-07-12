@@ -12,7 +12,7 @@ export const installPlanModeInterceptor = (
 ): (() => void) => {
   // Subagent roles that cannot mutate the workspace (canWrite: false). The
   // `worker` role (and any future write-capable/custom role) is blocked.
-  const READ_ONLY_SUBAGENT_ROLES = new Set(['explorer', 'researcher', 'mentor']);
+  const READ_ONLY_SUBAGENT_ROLES = new Set(['explorer', 'researcher', 'mentor', 'librarian']);
 
   const extractRole = (params: unknown): string | undefined => {
     let obj = params;

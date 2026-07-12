@@ -99,6 +99,29 @@ describe('SubagentToolFactory memory authority', () => {
     ).toEqual([]);
   });
 
+  it('gives librarian all memory tools (write access)', () => {
+    const tools = buildToolNames(createDefinition({ role: 'librarian' }));
+
+    expect(tools.filter((name) => name.startsWith('memory_'))).toEqual([
+      'memory_list',
+      'memory_get',
+      'memory_search',
+      'memory_create',
+      'memory_update',
+      'memory_delete',
+    ]);
+  });
+
+  it('gives librarian memory-specific guidance without automatic context injection', () => {
+    const definition = createDefinition({ role: 'librarian', canRead: false, canWrite: false });
+    const settings = createMemorySettings();
+    const instructions = buildInstructions(definition, [], false, settings);
+
+    expect(instructions).toContain('memory librarian');
+    expect(instructions).toContain('reviewable proposal');
+    expect(instructions).not.toContain('The following memories are summaries from previous sessions');
+  });
+
   it('keeps read-only memory guidance and proposal protocol without automatic context injection', () => {
     const definition = createDefinition({ role: 'explorer', canRead: true, canWrite: false });
     const settings = createMemorySettings();

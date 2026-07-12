@@ -125,6 +125,20 @@ export const AgentSettingsSchema = z.object({
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
     .describe('Reasoning effort override for the researcher subagent. Falls back to agent.reasoningEffort when unset.'),
+  subagentLibrarianModel: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Model override for the librarian subagent. Falls back to agent.model when unset.'),
+  subagentLibrarianProvider: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Provider override for the librarian subagent. Falls back to agent.provider when unset.'),
+  subagentLibrarianReasoningEffort: z
+    .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+    .optional()
+    .describe('Reasoning effort override for the librarian subagent. Falls back to agent.reasoningEffort when unset.'),
 });
 
 export const ShellSettingsSchema = z.object({
@@ -419,6 +433,9 @@ export interface SettingsWithSources {
     subagentResearcherModel: SettingWithSource<string | undefined>;
     subagentResearcherProvider: SettingWithSource<string | undefined>;
     subagentResearcherReasoningEffort: SettingWithSource<string | undefined>;
+    subagentLibrarianModel: SettingWithSource<string | undefined>;
+    subagentLibrarianProvider: SettingWithSource<string | undefined>;
+    subagentLibrarianReasoningEffort: SettingWithSource<string | undefined>;
   };
   shell: {
     timeout: SettingWithSource<number>;
@@ -534,6 +551,9 @@ export const SETTING_KEYS = {
   AGENT_SUBAGENT_RESEARCHER_MODEL: 'agent.subagentResearcherModel',
   AGENT_SUBAGENT_RESEARCHER_PROVIDER: 'agent.subagentResearcherProvider',
   AGENT_SUBAGENT_RESEARCHER_REASONING_EFFORT: 'agent.subagentResearcherReasoningEffort',
+  AGENT_SUBAGENT_LIBRARIAN_MODEL: 'agent.subagentLibrarianModel',
+  AGENT_SUBAGENT_LIBRARIAN_PROVIDER: 'agent.subagentLibrarianProvider',
+  AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT: 'agent.subagentLibrarianReasoningEffort',
   UI_HISTORY_SIZE: 'ui.historySize',
   UI_PASTE_THRESHOLD: 'ui.pasteThreshold',
   UI_DISPLAY_MODE: 'ui.displayMode',
@@ -621,6 +641,9 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_MODEL,
   SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_REASONING_EFFORT,
+  SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_MODEL,
+  SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_PROVIDER,
+  SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT,
   SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL,
   SETTING_KEYS.TOOLS_EDIT_HEALING_PROVIDER,
   SETTING_KEYS.WEB_SEARCH_PROVIDER,
@@ -706,6 +729,9 @@ export const DEFAULT_SETTINGS: SettingsData = {
     subagentResearcherModel: undefined,
     subagentResearcherProvider: undefined,
     subagentResearcherReasoningEffort: undefined,
+    subagentLibrarianModel: undefined,
+    subagentLibrarianProvider: undefined,
+    subagentLibrarianReasoningEffort: undefined,
   },
   shell: {
     timeout: 120000,

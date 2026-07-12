@@ -369,6 +369,7 @@ describe('ConversationOrchestrator', () => {
     expect(appended.id).toBe('req-7');
     expect(appended.text).toBe('queued-then-started');
     expect(cfg.ui.onQueuedMessageStarted).toHaveBeenCalledWith('req-7');
+    expect(cfg.ui.onTurnStart).toHaveBeenCalledOnce();
   });
 
   it('does not double-append when the observer fires for an already-directly-appended message', async () => {
@@ -398,7 +399,10 @@ describe('ConversationOrchestrator', () => {
     const appendCountBefore = vi.mocked(cfg.messages.appendMessages).mock.calls.length;
     observer({ requestId: directlyAppendedId, input: 'first' });
     expect(vi.mocked(cfg.messages.appendMessages).mock.calls.length).toBe(appendCountBefore);
-    expect(cfg.ui.onQueuedMessageStarted).not.toHaveBeenCalled();
+    expect(cfg.ui.onQueuedMessageStarted).toHaveBeenCalledWith(directlyAppendedId);
+    // The direct submission already started the UI lifecycle; its queue-start
+    // notification must not begin it a second time.
+    expect(cfg.ui.onTurnStart).toHaveBeenCalledOnce();
   });
 
   it('cancels the last queued message and returns its text', async () => {

@@ -51,7 +51,13 @@ export class ConversationOrchestrator {
     // indicator above the input box.
     if (typeof config.conversationService.setQueuedTurnStartObserver === 'function') {
       config.conversationService.setQueuedTurnStartObserver((execution) => {
-        this.moveQueuedMessageIntoList(execution.requestId, execution.input);
+        const wasAlreadyStarted = this.moveQueuedMessageIntoList(execution.requestId, execution.input);
+        if (!wasAlreadyStarted) {
+          // A queued submission's original turn-start may have been balanced
+          // by the preceding turn completing. Reassert processing when this
+          // turn actually becomes the queue head.
+          config.ui.onTurnStart();
+        }
       });
     }
   }
@@ -554,12 +560,14 @@ export class ConversationOrchestrator {
    * the queue when it actually starts processing the next turn. After the
    * append, the pending indicator above the input box is cleared.
    */
-  private moveQueuedMessageIntoList(messageId: string, fallbackInput?: string | UserTurn): void {
+  private moveQueuedMessageIntoList(messageId: string, fallbackInput?: string | UserTurn): boolean {
     // If the message was already appended directly (when no turn was in flight),
-    // the queue observer fired after the fact — skip the duplicate append.
-    if (this.#directlyAppendedMessageIds.has(messageId)) {
+    // the queue observer fired after the fact — skip the duplicate append and
+    // avoid restarting its UI lifecycle. Still emit message-started so stale
+    // pending UI state cannot survive a queue-state race.
+    const wasAlreadyStarted = this.#directlyAppendedMessageIds.has(messageId);
+    if (wasAlreadyStarted) {
       this.#directlyAppendedMessageIds.delete(messageId);
-      return;
     }
 
     // The message id we created up-front matches the one we will append now.
@@ -580,11 +588,12 @@ export class ConversationOrchestrator {
       }
     }
 
-    if (resolved) {
+    if (resolved && !wasAlreadyStarted) {
       this.config.messages.appendMessages([resolved]);
     }
 
     this.config.ui.onQueuedMessageStarted?.(messageId);
+    return wasAlreadyStarted;
   }
 
   private annotateCommandMessage(cmdMsg: CommandMessage): CommandMessage {

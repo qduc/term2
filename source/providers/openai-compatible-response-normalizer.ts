@@ -7,6 +7,14 @@ function normalizeMessageField(target: any): void {
   }
 }
 
+function isCostOnlyTrailer(chunk: any): boolean {
+  if (!chunk || typeof chunk !== 'object') return false;
+  const hasEmptyChoices = !chunk.choices || (Array.isArray(chunk.choices) && chunk.choices.length === 0);
+  if (!hasEmptyChoices) return false;
+  if (chunk.usage != null) return false;
+  return typeof chunk.cost === 'string' || typeof chunk['x-opencode-type'] === 'string';
+}
+
 function createNormalizedReasoningStream(
   stream: AsyncIterable<any>,
   loggingService?: ILoggingService,
@@ -16,7 +24,15 @@ function createNormalizedReasoningStream(
     [Symbol.asyncIterator]() {
       return {
         async next() {
-          const result = await iterator.next();
+          let result = await iterator.next();
+          while (!result.done && isCostOnlyTrailer(result.value)) {
+            if (loggingService) {
+              loggingService.warn(
+                '[SKIPPED_COST_TRAILER] Stripped provider cost-only trailer chunk to preserve SDK usage accumulator',
+              );
+            }
+            result = await iterator.next();
+          }
           if (!result.done && result.value?.choices) {
             const choices = result.value.choices;
             const hasMultipleChoices = choices.length > 1;

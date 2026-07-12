@@ -354,3 +354,40 @@ it('normalizeAgentRunUsage extracts usage from SDK Usage shape with inputTokens/
     total_tokens: 150,
   });
 });
+
+it('normalizeUsage recognizes camelCase reasoningTokens', () => {
+  expect(normalizeUsage({ inputTokens: 90, outputTokens: 54, reasoningTokens: 52 })).toEqual({
+    prompt_tokens: 90,
+    completion_tokens: 54,
+    total_tokens: 144,
+    reasoning_tokens: 52,
+  });
+});
+
+it('normalizeUsage recognizes camelCase cacheReadTokens', () => {
+  expect(normalizeUsage({ inputTokens: 10, outputTokens: 5, cacheReadTokens: 3 })).toEqual({
+    prompt_tokens: 10,
+    completion_tokens: 5,
+    total_tokens: 15,
+    cache_read_tokens: 3,
+  });
+});
+
+it('normalizeUsage recognizes cacheWrite5mTokens / cacheWrite1hTokens as cache_creation_tokens', () => {
+  expect(normalizeUsage({ inputTokens: 10, outputTokens: 5, cacheWrite5mTokens: 2, cacheWrite1hTokens: 1 })).toEqual({
+    prompt_tokens: 10,
+    completion_tokens: 5,
+    total_tokens: 17,
+    cache_creation_tokens: 2,
+  });
+});
+
+it('extractUsage finds normalizedUsage', () => {
+  const result = extractUsage({
+    normalizedUsage: { inputTokens: 90, outputTokens: 54, reasoningTokens: 52, cacheReadTokens: 0 },
+  });
+  expect(result).toBeDefined();
+  expect(result!.prompt_tokens).toBe(90);
+  expect(result!.completion_tokens).toBe(54);
+  expect(result!.reasoning_tokens).toBe(52);
+});

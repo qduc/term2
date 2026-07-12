@@ -83,6 +83,8 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
     usage.cacheCreationInputTokens,
     usage.cache_creation_tokens,
     usage.cacheCreationTokens,
+    usage.cacheWrite5mTokens,
+    usage.cacheWrite1hTokens,
   );
 
   const cacheReadTokens = coalesceNumber(
@@ -96,6 +98,7 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
     usage.promptTokensDetails?.cachedTokens,
     usage.cachedContentTokenCount,
     usage.cached_content_token_count,
+    usage.cacheReadTokens,
   );
 
   const totalTokens =
@@ -113,6 +116,7 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
     usage?.output_tokens_details?.reasoning_tokens,
     usage.thoughtsTokenCount,
     usage.thoughts_token_count,
+    usage.reasoningTokens,
   );
 
   const promptMs = coalesceNumber(usage.prompt_ms, usage.promptMs);
@@ -155,6 +159,9 @@ export function extractUsage(payload: unknown): NormalizedUsage | undefined {
 
     const metadata = normalizeUsage(record.usageMetadata || record.usage_metadata);
     if (metadata) results.push(metadata);
+
+    const normalized = normalizeUsage(record.normalizedUsage);
+    if (normalized) results.push(normalized);
 
     const responseUsage = normalizeUsage(asUsageContainer(record.response)?.usage);
     if (responseUsage) results.push(responseUsage);

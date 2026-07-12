@@ -57,6 +57,19 @@ it('includes task framing guidance about autonomous workers', () => {
   expect(result.includes('not implementation steps')).toBe(true);
 });
 
+it('requires task-specific context without repeating automatically supplied context', () => {
+  const result = getSubagentDelegationAddendum();
+
+  expect(result).toContain(
+    'Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog.',
+  );
+  expect(result).toContain(
+    'objective, task-specific scope, non-discoverable parent findings or decisions, constraints',
+  );
+  expect(result).toContain('deliverable or acceptance criteria, and validation when applicable');
+  expect(result).toContain('The subagent does not see your conversation or reasoning');
+});
+
 it('orchestrator mode includes splitting rule and worker-sized definition', () => {
   const result = getSubagentDelegationAddendum({ orchestratorMode: true });
   expect(result.includes('Split work at learning and verification boundaries')).toBe(true);

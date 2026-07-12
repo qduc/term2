@@ -17,8 +17,9 @@ const RUN_SUBAGENT_DESCRIPTION =
   'The subagent runs in its own context and returns only a summary, preserving your context. ' +
   '(When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\n' +
   '## Task Requirements\n' +
-  'The task must be fully self-contained. Include all context, constraints, and the expected output format. ' +
-  'The subagent has no access to your conversation history or reasoning.\n\n' +
+  'Include the objective, task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable. ' +
+  'Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. ' +
+  'The subagent does not see your conversation or reasoning.\n\n' +
   'Returns a summary with status (completed, failed, or cancelled), any final text, a list of tools used, and files changed.';
 
 const runSubagentSchema = z.object({

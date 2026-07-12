@@ -48,13 +48,15 @@ Otherwise, just do it yourself — especially when the task needs mid-flight cou
   const planningStep = `**Before any \`run_subagent\` call, plan silently:**
 1. Restate the user's objective in one sentence.
 2. Decompose into sub-objectives (one item is valid only when it is genuinely cohesive, or zero, are both valid). A worker task should be one cohesive unit that can be understood, implemented, and verified without owning an entire multi-stage plan.
-3. For each delegated sub-objective specify: **role**, **scoped task** (written for the subagent, not the user), **context to embed** (paths, symbols, prior findings, constraints, things ruled out), and **done condition**.
+3. For each delegated sub-objective specify: **role**, **task-specific scope** (written for the subagent, not the user), non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable.
 
 "No delegation needed" is a legitimate conclusion. Don't delegate to justify having planned.
 
 **Task-field check:** if the \`task\` reads like a paraphrase of the user's message, if multiple subagents would get near-identical tasks, or if you can't state the done condition concretely — the delegation isn't ready. Rewrite, re-decompose, or investigate first.
 
-**Task framing:** The orchestrator decides where execution units begin and end. Workers retain autonomy over how to complete their assigned unit. Workers are autonomous agents with read, write, and shell access. Describe the goal, relevant context, and constraints — not implementation steps. The worker will explore the code and choose its own approach. Over-specifying 'how' wastes context; specify 'what' and 'why'.`;
+**Task framing:** The orchestrator decides where execution units begin and end. Workers retain autonomy over how to complete their assigned unit. Workers are autonomous agents with read, write, and shell access. Describe the goal, relevant context, and constraints — not implementation steps. The worker will explore the code and choose its own approach. Over-specifying 'how' wastes context; specify 'what' and 'why'.
+
+Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root \`AGENTS.md\`, or skills catalog. The subagent does not see your conversation or reasoning, so include only objective, task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable.`;
 
   return `${header}\n\n${triggers}\n\n${planningStep}\n\n${getSubagentsRolesSection()}`;
 }

@@ -22,6 +22,15 @@ it('createRunSubagentToolDefinition defines the tool correctly', () => {
   expect(tool.needsApproval({ role: 'explorer', task: 'test' }, undefined)).toBe(false);
 });
 
+it('describes task-specific context without requesting automatically supplied context', () => {
+  const tool = createRunSubagentToolDefinition(async () => makeResult());
+
+  expect(tool.description).toContain(
+    'Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog.',
+  );
+  expect(tool.description).toContain('The subagent does not see your conversation or reasoning');
+});
+
 it('schema requires role and task', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 

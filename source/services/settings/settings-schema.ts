@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import envPaths from 'env-paths';
+import path from 'node:path';
 import {
   normalizeProviderIdentifier,
   resolveProviderId,
@@ -243,6 +245,22 @@ export const WebSearchSettingsSchema = z.object({
     .optional(),
 });
 
+export const MemorySettingsSchema = z
+  .object({
+    enabled: z.boolean().optional().default(true),
+    directory: z
+      .string()
+      .min(1)
+      .default(path.join(envPaths('term2').data, 'memory')),
+    contextBudgetChars: z.number().int().positive().default(3000),
+    searchDefaultLimit: z.number().int().positive().default(10),
+    searchMaxLimit: z.number().int().positive().default(50),
+  })
+  .refine((config) => config.searchDefaultLimit <= config.searchMaxLimit, {
+    message: 'searchDefaultLimit must not exceed searchMaxLimit.',
+    path: ['searchDefaultLimit'],
+  });
+
 export const KNOWN_CUSTOM_PROVIDER_TYPES = [
   'openai',
   'openai-compatible',
@@ -335,6 +353,7 @@ export const SettingsSchema = z.object({
   debug: DebugSettingsSchema.optional(),
   ssh: SSHSettingsSchema.optional(),
   webSearch: WebSearchSettingsSchema.optional(),
+  memory: MemorySettingsSchema.optional().default(MemorySettingsSchema.parse({})),
 });
 
 // Type definitions
@@ -354,6 +373,7 @@ export interface SettingsData {
   debug: z.infer<typeof DebugSettingsSchema>;
   ssh: z.infer<typeof SSHSettingsSchema>;
   webSearch: z.infer<typeof WebSearchSettingsSchema>;
+  memory: z.infer<typeof MemorySettingsSchema>;
 }
 
 export type SettingSource = 'cli' | 'env' | 'config' | 'default';
@@ -451,6 +471,13 @@ export interface SettingsWithSources {
     tavily: SettingWithSource<{ apiKey?: string } | undefined>;
     exa: SettingWithSource<{ apiKey?: string } | undefined>;
   };
+  memory: {
+    enabled: SettingWithSource<boolean>;
+    directory: SettingWithSource<string>;
+    contextBudgetChars: SettingWithSource<number>;
+    searchDefaultLimit: SettingWithSource<number>;
+    searchMaxLimit: SettingWithSource<number>;
+  };
 }
 
 /**
@@ -528,6 +555,11 @@ export const SETTING_KEYS = {
   WEB_SEARCH_PROVIDER: 'webSearch.provider',
   WEB_SEARCH_TAVILY_API_KEY: 'webSearch.tavily.apiKey',
   WEB_SEARCH_EXA_API_KEY: 'webSearch.exa.apiKey',
+  MEMORY_ENABLED: 'memory.enabled',
+  MEMORY_DIRECTORY: 'memory.directory',
+  MEMORY_CONTEXT_BUDGET_CHARS: 'memory.contextBudgetChars',
+  MEMORY_SEARCH_DEFAULT_LIMIT: 'memory.searchDefaultLimit',
+  MEMORY_SEARCH_MAX_LIMIT: 'memory.searchMaxLimit',
   PROVIDER_ORDER: 'providerOrder',
 } as const;
 
@@ -586,6 +618,10 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY,
   SETTING_KEYS.WEB_SEARCH_EXA_API_KEY,
   SETTING_KEYS.PROVIDER_ORDER,
+  SETTING_KEYS.MEMORY_ENABLED,
+  SETTING_KEYS.MEMORY_CONTEXT_BUDGET_CHARS,
+  SETTING_KEYS.MEMORY_SEARCH_DEFAULT_LIMIT,
+  SETTING_KEYS.MEMORY_SEARCH_MAX_LIMIT,
 ]);
 
 export interface AppModes {
@@ -721,6 +757,13 @@ export const DEFAULT_SETTINGS: SettingsData = {
     provider: 'tavily',
     tavily: {},
     exa: {},
+  },
+  memory: {
+    enabled: true,
+    directory: path.join(envPaths('term2').data, 'memory'),
+    contextBudgetChars: 3000,
+    searchDefaultLimit: 10,
+    searchMaxLimit: 50,
   },
 };
 

@@ -114,6 +114,11 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       value: settings.logging.logLevel.value,
       source: settings.logging.logLevel.source,
     },
+    {
+      key: SETTING_KEYS.MEMORY_ENABLED,
+      value: settings.memory.enabled.value,
+      source: settings.memory.enabled.source,
+    },
   ];
 
   for (const entry of entries) {

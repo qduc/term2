@@ -11,6 +11,18 @@ import {
   normalizeAppModes,
 } from './settings-schema.js';
 
+it('memory settings default to enabled local storage with bounded retrieval and context budgets', () => {
+  const parsed = SettingsSchema.parse({});
+  expect(parsed.memory).toMatchObject({
+    enabled: true,
+    contextBudgetChars: 3000,
+    searchDefaultLimit: 10,
+    searchMaxLimit: 50,
+  });
+  expect(() => SettingsSchema.parse({ memory: { contextBudgetChars: 0 } })).toThrow();
+  expect(() => SettingsSchema.parse({ memory: { searchDefaultLimit: 51, searchMaxLimit: 50 } })).toThrow();
+});
+
 it('SettingsSchema includes sandbox settings, which default to compatibility-first behavior', () => {
   const parsed = SettingsSchema.parse({ sandbox: {} });
   expect(parsed.sandbox?.enabled).toBe(true);

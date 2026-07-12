@@ -36,6 +36,9 @@ const baseSettings = {
     mentorMode: { value: false, source: 'default' },
     editMode: { value: false, source: 'default' },
   },
+  memory: {
+    enabled: { value: true, source: 'default' },
+  },
 } as unknown as SettingsWithSources;
 
 const createDeps = (
@@ -82,6 +85,7 @@ it('formatSettingsSummary renders values with sources', () => {
   expect(summary.includes('shell.timeout: 120000 (default)')).toBe(true);
   expect(summary.includes('logging.logLevel: info (default)')).toBe(true);
   expect(summary.includes('agent.maxParallelToolCalls: 3 (default)')).toBe(true);
+  expect(summary.includes('memory.enabled: true (default)')).toBe(true);
 });
 
 it('viewing all settings with no args prompts for autocomplete', () => {

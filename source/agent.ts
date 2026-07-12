@@ -30,6 +30,8 @@ import { createRunAgentWorkflowToolDefinition } from './tools/run-agent-workflow
 import type { AgentRuntime } from './services/agent-runtime/agent-runtime.js';
 import type { WorkflowLimits } from './services/agent-runtime/workflow/workflow-types.js';
 import { getProjectTreeForPrompt } from './utils/project-tree.js';
+import { FileMemoryStore } from './services/memory/memory-store.js';
+import { createMemoryToolDefinitions } from './tools/memory/memory-tools.js';
 
 export { getProjectTreeForPrompt } from './utils/project-tree.js';
 
@@ -144,6 +146,20 @@ export const getAgentDefinition = (
   const codeContextEnabled = !(executionContext?.isRemote() ?? false);
   const isGpt5 = !liteMode && shouldPreferPatchEditingModel(resolvedModel);
   const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled');
+  const memoryConfig = settingsService.get<{
+    enabled: boolean;
+    directory: string;
+    contextBudgetChars: number;
+    searchDefaultLimit: number;
+    searchMaxLimit: number;
+  }>('memory');
+  const memoryStore = memoryConfig?.enabled
+    ? new FileMemoryStore({
+        root: memoryConfig.directory,
+        searchDefaultLimit: memoryConfig.searchDefaultLimit,
+        searchMaxLimit: memoryConfig.searchMaxLimit,
+      })
+    : null;
   const promptSpec = buildPromptSpec({
     model: resolvedModel,
     liteMode,
@@ -154,6 +170,7 @@ export const getAgentDefinition = (
     codeContextEnabled,
     runSubagentEnabled: Boolean(runSubagent),
     sandboxEnabled,
+    memoryEnabled: Boolean(memoryStore) && !orchestratorMode,
     executionContext,
   });
   let prompt = resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile));
@@ -168,6 +185,10 @@ export const getAgentDefinition = (
 
   for (const inlineSection of promptSpec.inlineSections) {
     prompt = `${prompt}\n\n${inlineSection}`;
+  }
+
+  if (memoryStore && !orchestratorMode) {
+    prompt = `${prompt}\n\n${memoryStore.contextSync(memoryConfig.contextBudgetChars)}`;
   }
 
   const cwd = executionContext?.getCwd() || process.cwd();
@@ -230,6 +251,10 @@ export const getAgentDefinition = (
       loggingService,
     }),
   ];
+
+  if (memoryStore) {
+    tools.push(...createMemoryToolDefinitions(memoryStore));
+  }
 
   if (skillsService && skillsService.getAvailableSkillsForModel().length > 0) {
     tools.push(createActivateSkillToolDefinition(skillsService));

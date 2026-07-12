@@ -56,3 +56,11 @@ it('includes task framing guidance about autonomous workers', () => {
   expect(result.includes('goal, relevant context, and constraints')).toBe(true);
   expect(result.includes('not implementation steps')).toBe(true);
 });
+
+it('orchestrator mode includes splitting rule and worker-sized definition', () => {
+  const result = getSubagentDelegationAddendum({ orchestratorMode: true });
+  expect(result.includes('Split work at learning and verification boundaries')).toBe(true);
+  expect(result.includes('First delegate investigation or the next implementable checkpoint')).toBe(true);
+  expect(result.includes('one cohesive unit that can be understood, implemented, and verified')).toBe(true);
+  expect(result.includes('The orchestrator decides where execution units begin and end')).toBe(true);
+});

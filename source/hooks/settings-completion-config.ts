@@ -16,6 +16,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
   { id: 'safety', label: 'Safety' },
   { id: 'tools', label: 'Tools' },
   { id: 'ui', label: 'UI' },
+  { id: 'memory', label: 'Memory' },
   { id: 'misc', label: 'Misc' },
 ];
 
@@ -63,6 +64,11 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.SANDBOX_READ_POLICY]: 'File read policy for sandbox (standard|strict)',
   [SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA]: 'Additional paths allowed for sandbox file reads (comma-separated)',
   [SETTING_KEYS.SANDBOX_ALLOW_NETWORKING]: 'Allow sandboxed commands to access the network (true|false)',
+  [SETTING_KEYS.MEMORY_ENABLED]: 'Enable persistent memory across sessions (true|false)',
+  [SETTING_KEYS.MEMORY_DIRECTORY]: 'Directory where memory files are stored (path)',
+  [SETTING_KEYS.MEMORY_CONTEXT_BUDGET_CHARS]: 'Character budget for memory summaries in initial context (number)',
+  [SETTING_KEYS.MEMORY_SEARCH_DEFAULT_LIMIT]: 'Default number of search results to return (number)',
+  [SETTING_KEYS.MEMORY_SEARCH_MAX_LIMIT]: 'Maximum number of search results to return (number)',
 };
 
 /**
@@ -151,6 +157,13 @@ export const CATEGORY_KEYS = {
     SETTING_KEYS.APP_NOTIFICATIONS_ON_APPROVAL,
     SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE,
   ]),
+  memory: new Set<string>([
+    SETTING_KEYS.MEMORY_ENABLED,
+    SETTING_KEYS.MEMORY_DIRECTORY,
+    SETTING_KEYS.MEMORY_CONTEXT_BUDGET_CHARS,
+    SETTING_KEYS.MEMORY_SEARCH_DEFAULT_LIMIT,
+    SETTING_KEYS.MEMORY_SEARCH_MAX_LIMIT,
+  ]),
 } as const;
 
-export const CATEGORY_ORDER: Array<keyof typeof CATEGORY_KEYS> = ['models', 'safety', 'tools', 'ui'];
+export const CATEGORY_ORDER: Array<keyof typeof CATEGORY_KEYS> = ['models', 'safety', 'tools', 'ui', 'memory'];

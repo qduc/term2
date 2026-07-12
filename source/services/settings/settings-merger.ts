@@ -90,6 +90,7 @@ export function mergeSettings(
     debug: result.debug || JSON.parse(JSON.stringify(defaults.debug)),
     ssh: result.ssh || JSON.parse(JSON.stringify(defaults.ssh)),
     webSearch: result.webSearch || JSON.parse(JSON.stringify(defaults.webSearch)),
+    memory: result.memory || JSON.parse(JSON.stringify(defaults.memory)),
   };
 
   // Validate final result
@@ -113,6 +114,7 @@ export function mergeSettings(
       debug: merged.debug,
       ssh: merged.ssh,
       webSearch: merged.webSearch,
+      memory: merged.memory,
     };
   }
 

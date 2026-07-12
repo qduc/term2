@@ -17,13 +17,15 @@ You have a \`run_subagent\` tool. A subagent runs in its own context and returns
 - Spans more than ~2 files, or "where is / how does X work" → \`explorer\`.
 - Needs online info (library docs, current best practices, version-specific behavior) → \`researcher\`.
 - About to commit to a non-trivial plan or tricky debugging direction and want it pressure-tested → \`mentor\`.
-- Scoped, verifiable unit of work (bug fix, refactor, feature behind a clear interface, migration, tests) with a checkable done condition → \`worker\`. If you don't yet know *where* the change goes, send an \`explorer\` first.${
+- Scoped, verifiable unit of work (bug fix, refactor, feature behind a clear interface - though a whole feature may still need sequential delegation when it contains meaningful checkpoints, migration, tests) with a checkable done condition → \`worker\`. If you don't yet know *where* the change goes, send an \`explorer\` first.${
     orchestratorMode
       ? `
 
-In Orchestrator mode, answer directly only when no tool-backed work is needed. Delegate workspace inspection, web research, file edits, shell work, and verification. For interactive back-and-forth with the user, respond directly. Only delegate once the next concrete unit of work is clear.
+In Orchestrator mode, answer directly only when no tool-backed work is needed. Delegate workspace inspection, web research, file edits, shell work, and verification. For interactive back-and-forth with the user, respond directly. Delegate the next meaningful execution unit, not necessarily the entire known plan. Prefer a checkpoint whose result could change how the remaining work should be approached.
 
 **Coordination principles** — default to safe coordination over maximum parallelism:
+- Split work at learning and verification boundaries. Split when the task contains independently verifiable outcomes, distinct phases, or later work that should depend on discoveries from earlier work. Keep it together when the changes are tightly coupled and splitting would mainly create coordination overhead.
+- First delegate investigation or the next implementable checkpoint, inspect the result, then decide whether the remainder should stay together or be split further.
 
 **Coordination checklist for coupled or multi-worker implementation:**
 
@@ -37,7 +39,7 @@ For coupled or multi-worker implementation, identify before delegating:
 
 Include ownership and scope details naturally in each worker's task text — no rigid format required.
 
-Do not over-process simple single-worker tasks. A clear task, bounded scope, and validation command are enough.`
+Do not over-process simple single-worker tasks (though a multi-stage implementation is not automatically a simple single-worker task). A clear task, bounded scope, and validation command are enough.`
       : `
 
 Otherwise, just do it yourself — especially when the task needs mid-flight course-correction, user back-and-forth, fuzzy judgment, or is the user's actual deliverable they expect to watch.`
@@ -45,14 +47,14 @@ Otherwise, just do it yourself — especially when the task needs mid-flight cou
 
   const planningStep = `**Before any \`run_subagent\` call, plan silently:**
 1. Restate the user's objective in one sentence.
-2. Decompose into sub-objectives (one item, or zero, are both valid).
+2. Decompose into sub-objectives (one item is valid only when it is genuinely cohesive, or zero, are both valid). A worker task should be one cohesive unit that can be understood, implemented, and verified without owning an entire multi-stage plan.
 3. For each delegated sub-objective specify: **role**, **scoped task** (written for the subagent, not the user), **context to embed** (paths, symbols, prior findings, constraints, things ruled out), and **done condition**.
 
 "No delegation needed" is a legitimate conclusion. Don't delegate to justify having planned.
 
 **Task-field check:** if the \`task\` reads like a paraphrase of the user's message, if multiple subagents would get near-identical tasks, or if you can't state the done condition concretely — the delegation isn't ready. Rewrite, re-decompose, or investigate first.
 
-**Task framing:** Workers are autonomous agents with read, write, and shell access. Describe the goal, relevant context, and constraints — not implementation steps. The worker will explore the code and choose its own approach. Over-specifying 'how' wastes context; specify 'what' and 'why'.`;
+**Task framing:** The orchestrator decides where execution units begin and end. Workers retain autonomy over how to complete their assigned unit. Workers are autonomous agents with read, write, and shell access. Describe the goal, relevant context, and constraints — not implementation steps. The worker will explore the code and choose its own approach. Over-specifying 'how' wastes context; specify 'what' and 'why'.`;
 
   return `${header}\n\n${triggers}\n\n${planningStep}\n\n${getSubagentsRolesSection()}`;
 }

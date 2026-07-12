@@ -14,6 +14,7 @@ export type PromptConstructorOptions = {
   codeContextEnabled?: boolean;
   runSubagentEnabled?: boolean;
   sandboxEnabled?: boolean;
+  memoryEnabled?: boolean;
   executionContext?: ExecutionContext;
 };
 
@@ -32,6 +33,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     searchViaShell = false,
     runSubagentEnabled = false,
     sandboxEnabled = true,
+    memoryEnabled = false,
     executionContext,
   } = options;
 
@@ -64,6 +66,10 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
 
   if (isRegularMode && isAgentMode) {
     fragmentFiles.push('plan-mode-info.md');
+  }
+
+  if (memoryEnabled && isAgentMode) {
+    fragmentFiles.push('memory.md');
   }
 
   return {

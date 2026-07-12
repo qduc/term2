@@ -98,3 +98,12 @@ it('buildPromptSpec excludes shell-sandbox when sandbox is disabled', () => {
   expect(spec.inlineSections.some((s) => s.includes('## Shell Sandbox'))).toBe(false);
   expect(spec.fragmentFiles.includes('worktree-hygiene.md')).toBe(true);
 });
+
+it('adds persistent-memory guidance only when memory tools are enabled', () => {
+  expect(buildPromptSpec({ model: 'gpt-4o', liteMode: false, memoryEnabled: true }).fragmentFiles).toContain(
+    'memory.md',
+  );
+  expect(buildPromptSpec({ model: 'gpt-4o', liteMode: false, memoryEnabled: false }).fragmentFiles).not.toContain(
+    'memory.md',
+  );
+});

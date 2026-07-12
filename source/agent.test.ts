@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import { getAgentDefinition } from './agent.js';
 import { createMockSettingsService } from './services/settings/settings-service.mock.js';
+import { MemoryStorageError } from './services/memory/memory-store.js';
 
 const mockLogger = {
   debug: () => {},
@@ -13,6 +14,68 @@ const mockLogger = {
 } as any;
 
 const WORKTREE_HYGIENE_FRAGMENT_MARKER = 'Before making any code changes, inspect the repo worktree.';
+
+it('adds memory tools and summary-only context when memory is enabled, and neither when disabled', async () => {
+  const { mkdtemp, writeFile, mkdir } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const root = await mkdtemp(join(tmpdir(), 'term2-agent-memory-'));
+  await mkdir(join(root, 'items'));
+  await writeFile(
+    join(root, 'index.json'),
+    JSON.stringify({
+      version: 1,
+      memories: [
+        {
+          id: 'project-rules',
+          title: 'Rules',
+          summary: 'Durable rules.',
+          tags: [],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    }),
+  );
+  const enabled = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'memory.directory': root }),
+    loggingService: mockLogger,
+  });
+  const disabled = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'memory.enabled': false, 'memory.directory': root }),
+    loggingService: mockLogger,
+  });
+  expect(enabled.tools.map((tool) => tool.name)).toEqual(
+    expect.arrayContaining([
+      'memory_list',
+      'memory_get',
+      'memory_search',
+      'memory_create',
+      'memory_update',
+      'memory_delete',
+    ]),
+  );
+  expect(enabled.instructions).toContain('Durable rules.');
+  expect(enabled.instructions).not.toContain('full memory content');
+  expect(disabled.tools.map((tool) => tool.name)).not.toContain('memory_list');
+  expect(disabled.instructions).not.toContain('## Persistent memory');
+});
+
+it('fails agent construction with a typed visible error for a corrupted memory index', async () => {
+  const { mkdtemp, writeFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const root = await mkdtemp(join(tmpdir(), 'term2-agent-memory-corrupt-'));
+  await writeFile(join(root, 'index.json'), '{ malformed');
+
+  const construct = () =>
+    getAgentDefinition({
+      settingsService: createMockSettingsService({ 'memory.directory': root }),
+      loggingService: mockLogger,
+    });
+  expect(construct).toThrow(MemoryStorageError);
+  expect(construct).toThrow(/Memory index\.json is corrupted or unreadable/);
+});
 
 it('registers run_agent_workflow only when enable_agent_workflow is enabled', () => {
   const disabled = getAgentDefinition({

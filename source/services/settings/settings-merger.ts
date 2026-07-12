@@ -76,10 +76,12 @@ export function mergeSettings(
   // Ensure all required fields are present
   const merged: SettingsData = {
     providers: result.providers || JSON.parse(JSON.stringify(defaults.providers)),
+    enable_agent_workflow: result.enable_agent_workflow ?? defaults.enable_agent_workflow,
     providerOrder: result.providerOrder ?? JSON.parse(JSON.stringify(defaults.providerOrder)),
     agent: result.agent || JSON.parse(JSON.stringify(defaults.agent)),
     shell: result.shell || JSON.parse(JSON.stringify(defaults.shell)),
     sandbox: result.sandbox || JSON.parse(JSON.stringify(defaults.sandbox)),
+    agentWorkflow: result.agentWorkflow || JSON.parse(JSON.stringify(defaults.agentWorkflow)),
     ui: result.ui || JSON.parse(JSON.stringify(defaults.ui)),
     logging: result.logging || JSON.parse(JSON.stringify(defaults.logging)),
     environment: result.environment || JSON.parse(JSON.stringify(defaults.environment)),
@@ -97,10 +99,12 @@ export function mergeSettings(
     // Ensure we return a complete SettingsData object
     return {
       providers: merged.providers,
+      enable_agent_workflow: merged.enable_agent_workflow,
       providerOrder: merged.providerOrder,
       agent: merged.agent,
       shell: merged.shell,
       sandbox: merged.sandbox,
+      agentWorkflow: merged.agentWorkflow,
       ui: merged.ui,
       logging: merged.logging,
       environment: merged.environment,

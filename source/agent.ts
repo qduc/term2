@@ -26,6 +26,9 @@ import { buildPromptSpec } from './prompts/prompt-constructor.js';
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { SkillsService } from './services/skills/skills-service.js';
 import { createActivateSkillToolDefinition } from './tools/agent/activate-skill.js';
+import { createRunAgentWorkflowToolDefinition } from './tools/run-agent-workflow.js';
+import type { AgentRuntime } from './services/agent-runtime/agent-runtime.js';
+import type { WorkflowLimits } from './services/agent-runtime/workflow/workflow-types.js';
 import { getProjectTreeForPrompt } from './utils/project-tree.js';
 
 export { getProjectTreeForPrompt } from './utils/project-tree.js';
@@ -110,11 +113,20 @@ export const getAgentDefinition = (
     runSubagent?: (params: { role: string; task: string }, context?: unknown, details?: unknown) => Promise<any>;
     getAskUserAnswer?: (callId?: string) => string | undefined;
     skillsService?: SkillsService;
+    agentRuntime?: Pick<AgentRuntime, 'agent'> | null;
   },
   model?: string,
 ): AgentDefinition => {
-  const { settingsService, loggingService, executionContext, askMentor, runSubagent, getAskUserAnswer, skillsService } =
-    deps;
+  const {
+    settingsService,
+    loggingService,
+    executionContext,
+    askMentor,
+    runSubagent,
+    getAskUserAnswer,
+    skillsService,
+    agentRuntime,
+  } = deps;
   const defaultModel = settingsService.get<string>('agent.model');
   const resolvedModel = model?.trim() || defaultModel;
 
@@ -288,6 +300,16 @@ export const getAgentDefinition = (
     if (runSubagent) {
       tools.push(createRunSubagentToolDefinition(runSubagent));
     }
+  }
+
+  if (settingsService.get<boolean>('enable_agent_workflow') && agentRuntime) {
+    tools.push(
+      createRunAgentWorkflowToolDefinition({
+        runtime: agentRuntime,
+        parentTools: tools.map((tool) => tool.name),
+        limits: settingsService.get<WorkflowLimits>('agentWorkflow'),
+      }),
+    );
   }
 
   registerToolFormatters(tools);

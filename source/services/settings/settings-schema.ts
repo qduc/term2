@@ -128,6 +128,14 @@ export const SandboxSettingsSchema = z.object({
   allowNetworking: z.boolean().optional().default(false),
 });
 
+export const AgentWorkflowSettingsSchema = z.object({
+  timeoutMs: z.number().int().positive().default(120_000),
+  maxRuns: z.number().int().positive().default(8),
+  maxConcurrency: z.number().int().positive().default(3),
+  maxCodeBytes: z.number().int().positive().default(16_384),
+  maxOutputBytes: z.number().int().positive().default(65_536),
+});
+
 export const UISettingsSchema = z.object({
   historySize: z.number().int().positive().default(1000),
   pasteThreshold: z
@@ -298,6 +306,7 @@ export const SENSITIVE_SETTING_KEYS = getSensitiveSettingKeys();
 
 export const SettingsSchema = z.object({
   providers: z.array(CustomProviderSchema).optional().default([]),
+  enable_agent_workflow: z.boolean().optional().default(false),
   providerOrder: z
     .array(z.string())
     .optional()
@@ -306,6 +315,7 @@ export const SettingsSchema = z.object({
   agent: AgentSettingsSchema.optional(),
   shell: ShellSettingsSchema.optional(),
   sandbox: SandboxSettingsSchema.optional(),
+  agentWorkflow: AgentWorkflowSettingsSchema.optional().default(AgentWorkflowSettingsSchema.parse({})),
   ui: UISettingsSchema.optional(),
   logging: LoggingSettingsSchema.optional(),
   environment: EnvironmentSettingsSchema.optional(),
@@ -319,10 +329,12 @@ export const SettingsSchema = z.object({
 // Type definitions
 export interface SettingsData {
   providers: Array<z.infer<typeof CustomProviderSchema>>;
+  enable_agent_workflow: boolean;
   providerOrder: string[];
   agent: z.infer<typeof AgentSettingsSchema>;
   shell: z.infer<typeof ShellSettingsSchema>;
   sandbox: z.infer<typeof SandboxSettingsSchema>;
+  agentWorkflow: z.infer<typeof AgentWorkflowSettingsSchema>;
   ui: z.infer<typeof UISettingsSchema>;
   logging: z.infer<typeof LoggingSettingsSchema>;
   environment: z.infer<typeof EnvironmentSettingsSchema>;
@@ -595,6 +607,7 @@ export const OPTIONAL_DEFAULT_KEYS = new Set<string>([]);
 // Default settings
 export const DEFAULT_SETTINGS: SettingsData = {
   providers: [],
+  enable_agent_workflow: false,
   providerOrder: [],
   agent: {
     model: 'gpt-5.1',
@@ -639,6 +652,13 @@ export const DEFAULT_SETTINGS: SettingsData = {
     readPolicy: 'standard',
     allowReadExtra: [],
     allowNetworking: false,
+  },
+  agentWorkflow: {
+    timeoutMs: 120_000,
+    maxRuns: 8,
+    maxConcurrency: 3,
+    maxCodeBytes: 16_384,
+    maxOutputBytes: 65_536,
   },
   ui: {
     historySize: 1000,

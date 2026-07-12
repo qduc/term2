@@ -144,6 +144,13 @@ export class AgentConfiguration implements AgentSource {
       checkToolInterceptors: (name, params, toolCallId) =>
         this.#toolInterceptorRegistry.check(name, params, toolCallId),
       skillsService: this.#skillsService,
+      getAgentRuntime: () => ({
+        agent: (config) => {
+          const runtime = this.#getSubagentBridge()?.getAgentRuntime();
+          if (!runtime) throw new Error('Agent runtime is unavailable');
+          return runtime.agent(config);
+        },
+      }),
     };
   }
 
@@ -176,6 +183,7 @@ export class AgentConfiguration implements AgentSource {
       'app.orchestratorMode',
       'app.planMode',
       'app.mentorMode',
+      'enable_agent_workflow',
       'app.searchViaShell',
       'agent.model',
       'agent.provider',

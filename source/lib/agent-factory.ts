@@ -17,6 +17,7 @@ import {
 } from './tool-selection-policy.js';
 import { getModelDefaultReasoningLevel } from '../services/model-service.js';
 import { toolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
+import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
@@ -30,6 +31,8 @@ export interface AgentFactoryDeps {
   getAskUserAnswer: (callId?: string) => string | undefined;
   checkToolInterceptors: (name: string, params: unknown, toolCallId?: string) => Promise<string | null>;
   skillsService?: SkillsService;
+  /** Optional lazy bridge to the production one-shot agent runtime. */
+  getAgentRuntime?: () => Pick<AgentRuntime, 'agent'> | null;
 }
 
 export interface AgentBuildResult {
@@ -278,6 +281,7 @@ export function buildAgent(
       runSubagent: deps.runSubagent,
       getAskUserAnswer: deps.getAskUserAnswer,
       skillsService: deps.skillsService,
+      agentRuntime: deps.getAgentRuntime?.() ?? null,
     },
     resolvedModel,
   );

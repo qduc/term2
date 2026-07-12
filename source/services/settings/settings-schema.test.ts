@@ -50,6 +50,22 @@ it('agent transport defaults to websocket and is runtime modifiable', () => {
   expect(() => AgentSettingsSchema.parse({ transport: 'fallback' })).toThrow();
 });
 
+it('workflow limits have bounded defaults and accept workspace configuration', () => {
+  const defaults = SettingsSchema.parse({});
+  expect(defaults.agentWorkflow).toEqual({
+    timeoutMs: 120_000,
+    maxRuns: 8,
+    maxConcurrency: 3,
+    maxCodeBytes: 16_384,
+    maxOutputBytes: 65_536,
+  });
+  expect(SettingsSchema.parse({ agentWorkflow: { maxRuns: 2, maxOutputBytes: 1024 } }).agentWorkflow).toMatchObject({
+    maxRuns: 2,
+    maxOutputBytes: 1024,
+  });
+  expect(() => SettingsSchema.parse({ agentWorkflow: { maxConcurrency: 0 } })).toThrow();
+});
+
 it('CustomProviderSchema defaults provider type for legacy configs', () => {
   const parsed = CustomProviderSchema.parse({
     name: 'local',

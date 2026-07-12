@@ -14,6 +14,54 @@ const mockLogger = {
 
 const WORKTREE_HYGIENE_FRAGMENT_MARKER = 'Before making any code changes, inspect the repo worktree.';
 
+it('registers run_agent_workflow only when enable_agent_workflow is enabled', () => {
+  const disabled = getAgentDefinition({
+    settingsService: createMockSettingsService({ enable_agent_workflow: false }),
+    loggingService: mockLogger,
+    agentRuntime: { agent: () => ({}) } as any,
+  });
+  const enabled = getAgentDefinition({
+    settingsService: createMockSettingsService({ enable_agent_workflow: true }),
+    loggingService: mockLogger,
+    agentRuntime: { agent: () => ({}) } as any,
+  });
+  expect(disabled.tools.map((tool) => tool.name)).not.toContain('run_agent_workflow');
+  expect(enabled.tools.map((tool) => tool.name)).toContain('run_agent_workflow');
+});
+
+it('leaves run_subagent and ask_mentor available when workflow feature is disabled', () => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({
+      enable_agent_workflow: false,
+      'agent.mentorModel': 'gpt-4o-mini',
+    }),
+    loggingService: mockLogger,
+    askMentor: async () => 'mentor',
+    runSubagent: async () => ({ finalText: 'subagent' }),
+    agentRuntime: { agent: () => ({}) } as any,
+  });
+  const names = definition.tools.map((tool) => tool.name);
+  expect(names).toContain('ask_mentor');
+  expect(names).toContain('run_subagent');
+  expect(names).not.toContain('run_agent_workflow');
+});
+
+it('uses configured workflow limits without exposing them in tool arguments', async () => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ enable_agent_workflow: true, 'agentWorkflow.maxRuns': 1 }),
+    loggingService: mockLogger,
+    agentRuntime: { agent: () => ({ run: async () => ({ status: 'completed', output: 'ok' }) }) } as any,
+  });
+  const workflow = definition.tools.find((tool) => tool.name === 'run_agent_workflow')!;
+  expect(Object.keys((workflow.parameters as any).shape)).toEqual(['code']);
+  const result = JSON.parse(
+    await workflow.execute({
+      code: "const agentHandle = agent({ instructions: 'x' }); await agentHandle.run({ task: 'one' }); return agentHandle.run({ task: 'two' });",
+    }),
+  );
+  expect(result).toMatchObject({ ok: false, error: { code: 'limit_exceeded' } });
+});
+
 it('getAgentDefinition includes grep and glob when searchViaShell is false', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'off',

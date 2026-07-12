@@ -40,6 +40,21 @@ export {
 // Execution budget for tree-level resource enforcement
 export { ExecutionBudget, createRootBudget, type ChildAcquireRejection } from './execution-budget.js';
 
+// Bounded programmable workflow evaluator.
+export { WorkflowEvaluatorImpl } from './workflow/workflow-evaluator.js';
+export {
+  DEFAULT_WORKFLOW_LIMITS,
+  type JsonValue,
+  type WorkflowAgentConfig,
+  type WorkflowEvaluator,
+  type WorkflowInput,
+  type WorkflowLimits,
+  type WorkflowResult,
+  type WorkflowRunInput,
+  type WorkflowRunResult,
+  type WorkflowRunSummary,
+} from './workflow/workflow-types.js';
+
 // ── Internal types re-exported for subagent integration ───────────────
 // These are used by SubagentManager / NestedSubagentRunner to bridge
 // legacy roles through the shared resolver. They are NOT part of the

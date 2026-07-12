@@ -489,6 +489,25 @@ it('normalizeObjectParams coerces boolean strings', () => {
   expect(result.flag).toBe(true);
 });
 
+it('normalizeObjectParams coerces numeric strings', () => {
+  const schema = z.object({
+    limit: z.number(),
+  });
+
+  const result = normalizeObjectParams({ limit: '5' }, schema) as Record<string, unknown>;
+  expect(result.limit).toBe(5);
+  expect(typeof result.limit).toBe('number');
+});
+
+it('normalizeObjectParams does not coerce non-numeric strings to numbers', () => {
+  const schema = z.object({
+    limit: z.number(),
+  });
+
+  const result = normalizeObjectParams({ limit: 'abc' }, schema) as Record<string, unknown>;
+  expect(result.limit).toBe('abc'); // unchanged
+});
+
 it('normalizeObjectParams coerces stringified arrays', () => {
   const schema = z.object({
     tags: z.array(z.string()),

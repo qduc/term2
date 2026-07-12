@@ -224,7 +224,20 @@ export const normalizeObjectParams = (params: unknown, schema?: z.ZodTypeAny): u
       }
     }
 
-    // 3. Array or Object coercion from stringified representation
+    // 3. Number coercion: "5" -> 5
+    const isNumber = fieldSchema.safeParse(0).success && !fieldSchema.safeParse('not a number').success;
+    if (isNumber && typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed !== '') {
+        const parsed = Number(trimmed);
+        if (Number.isFinite(parsed)) {
+          result[key] = parsed;
+          modified = true;
+        }
+      }
+    }
+
+    // 4. Array or Object coercion from stringified representation
     const unwrapped = unwrapSchema(fieldSchema);
     if (typeof value === 'string' && unwrapped) {
       const def = unwrapped.def || unwrapped._def;

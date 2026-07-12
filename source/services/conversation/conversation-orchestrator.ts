@@ -236,11 +236,18 @@ export class ConversationOrchestrator {
       ...(turn.skill ? { skill: turn.skill } : {}),
     };
 
+    // If queue infrastructure is wired up, always route through
+    // onQueuedMessagePending so the queue observer is the single source of
+    // truth for appending queued messages. Checking only isQueueActive() races
+    // with the queue pop, which can cause the message to be appended twice
+    // (once here and once when the observer fires).
+    const hasQueue = typeof this.config.conversationService.setQueuedTurnStartObserver === 'function';
     const hasInflightTurn = this.config.conversationService.isQueueActive?.() ?? false;
-    if (hasInflightTurn) {
-      // A turn is already in flight. Show the message above the input box
-      // until the queue actually starts processing it; the message list will
-      // be updated when the queue pops this turn.
+    if (hasQueue || hasInflightTurn) {
+      // A turn is already in flight (or the queue may start one at any time).
+      // Show the message above the input box until the queue actually starts
+      // processing it; the message list will be updated when the queue pops
+      // this turn.
       this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text);
     } else {
       this.config.messages.appendMessages([userMessage]);

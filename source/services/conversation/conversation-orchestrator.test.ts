@@ -129,6 +129,9 @@ function makeConfig(overrides: Partial<ConversationOrchestratorConfig> = {}): Co
 describe('ConversationOrchestrator', () => {
   it('sends a user message and applies a response', async () => {
     const cfg = makeConfig();
+    // No queue support in this test: the immediate-append path must run.
+    cfg.conversationService.isQueueActive = undefined;
+    cfg.conversationService.setQueuedTurnStartObserver = undefined;
     const orchestrator = new ConversationOrchestrator(cfg);
     const terminal: ConversationTerminal = { type: 'response', finalText: 'ok', commandMessages: [] };
 
@@ -168,6 +171,8 @@ describe('ConversationOrchestrator', () => {
 
   it('suppresses abort-like send errors', async () => {
     const cfg = makeConfig();
+    cfg.conversationService.isQueueActive = undefined;
+    cfg.conversationService.setQueuedTurnStartObserver = undefined;
     const orchestrator = new ConversationOrchestrator(cfg);
     const abortError = new Error('aborted');
     abortError.name = 'AbortError';
@@ -303,9 +308,12 @@ describe('ConversationOrchestrator', () => {
     await inFlight;
   });
 
-  it('appends immediately when no turn is in flight', async () => {
+  it('appends immediately when no queue infrastructure is available', async () => {
     const cfg = makeConfig();
-    vi.mocked(cfg.conversationService.isQueueActive).mockReturnValue(false);
+    // Simulate a service without queue support: both isQueueActive and the
+    // observer registration must be unavailable for the immediate-append path.
+    cfg.conversationService.isQueueActive = undefined;
+    cfg.conversationService.setQueuedTurnStartObserver = undefined;
     vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
       type: 'response',
       finalText: 'ok',
@@ -317,6 +325,26 @@ describe('ConversationOrchestrator', () => {
 
     expect(cfg.ui.onQueuedMessagePending).not.toHaveBeenCalled();
     expect(cfg.messages.appendMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes to onQueuedMessagePending when the queue is wired up but not yet active', async () => {
+    const cfg = makeConfig();
+    // Queue infrastructure is available, but no turn is in flight yet.
+    vi.mocked(cfg.conversationService.isQueueActive).mockReturnValue(false);
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    await orchestrator.sendUserMessage('first');
+
+    // With queue support present we must never append directly: the queue
+    // observer is the single owner of the message list append.
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledTimes(1);
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'first');
+    expect(cfg.messages.appendMessages).not.toHaveBeenCalled();
   });
 
   it('appends a queued message into the list when the queue fires its start observer', async () => {

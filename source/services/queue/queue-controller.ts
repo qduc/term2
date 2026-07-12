@@ -416,6 +416,10 @@ export class QueueController<Snapshot, Terminal = unknown> {
         return { kind: 'accepted' };
       case 'discard_queue':
         this.#queue = [];
+        if (this.#phase === 'paused' && this.#queue.length === 0) {
+          this.#phase = 'idle';
+          this.#pauseReason = undefined;
+        }
         await this.#persist();
         return { kind: 'accepted' };
       case 'edit_queued': {
@@ -465,8 +469,16 @@ export class QueueController<Snapshot, Terminal = unknown> {
     if (event.kind === 'failed') {
       this.#active = undefined;
       this.#pendingAction = undefined;
-      this.#phase = 'paused';
-      this.#pauseReason = 'failure';
+      // Invariant: a paused queue must contain retained work. If the failure
+      // leaves no queued items behind, there is nothing to retain and the
+      // controller returns to idle instead of pausing with an empty queue.
+      if (this.#queue.length === 0) {
+        this.#phase = 'idle';
+        this.#pauseReason = undefined;
+      } else {
+        this.#phase = 'paused';
+        this.#pauseReason = 'failure';
+      }
       await this.#persist();
       return;
     }

@@ -209,8 +209,9 @@ it('returns total results for capacity and queued item commands without mutating
   await controller.command({ kind: 'submit', text: 'discard me' });
   expect(await controller.command({ kind: 'cancel' })).toEqual({ kind: 'accepted' });
   expect(await controller.command({ kind: 'discard_queue' })).toEqual({ kind: 'accepted' });
-  expect(controller.state()).toMatchObject({ kind: 'paused', queue: [] });
-  expect(await controller.command({ kind: 'resume_queue' })).toEqual({ kind: 'accepted' });
+  // Invariant: a paused queue must contain retained work. With no queued
+  // items left, discard collapses the pause and the state becomes idle.
+  expect(controller.state()).toMatchObject({ kind: 'idle', queue: [] });
   expect(await controller.command({ kind: 'resume_queue' })).toEqual({ kind: 'no_op' });
 });
 
@@ -1394,4 +1395,101 @@ it('discards queue in awaiting_preflight state', async () => {
   await controller.command({ kind: 'submit', text: 'second' });
   expect(await controller.command({ kind: 'discard_queue' })).toEqual({ kind: 'accepted' });
   expect(controller.state().queue).toHaveLength(0);
+});
+
+// ── Queue invariant: a paused queue must contain retained work ─────
+
+it('paused queue must contain retained work: failure with no remaining items transitions to idle', async () => {
+  const controller = new QueueController({
+    driver: { start: () => undefined, cancel: async () => undefined },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let n = 0;
+        return () => `item-${++n}`;
+      })(),
+      execution: () => 'execution-1',
+    },
+  });
+
+  await controller.command({ kind: 'submit', text: 'only' });
+  expect(controller.state().kind).toBe('running');
+
+  await controller.event({ kind: 'failed', executionId: 'execution-1' as ExecutionId, failure: {} });
+
+  const state = controller.state();
+  expect(state.kind).toBe('idle');
+  expect(state.queue).toHaveLength(0);
+  // 'paused' state requires a reason; an idle state must not have one.
+  expect((state as { reason?: unknown }).reason).toBeUndefined();
+});
+
+it('paused queue must contain retained work: failure with remaining items stays paused with reason failure', async () => {
+  const controller = new QueueController({
+    driver: { start: () => undefined, cancel: async () => undefined },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let n = 0;
+        return () => `item-${++n}`;
+      })(),
+      execution: (() => {
+        let n = 0;
+        return () => `execution-${++n}`;
+      })(),
+    },
+  });
+
+  await controller.command({ kind: 'submit', text: 'first' });
+  await controller.command({ kind: 'submit', text: 'second' });
+  await controller.command({ kind: 'submit', text: 'third' });
+
+  await controller.event({ kind: 'failed', executionId: 'execution-1' as ExecutionId, failure: {} });
+
+  expect(controller.state()).toMatchObject({
+    kind: 'paused',
+    reason: 'failure',
+    queue: [{ text: 'second' }, { text: 'third' }],
+  });
+});
+
+it('paused queue must contain retained work: discarding a paused queue clears items, reason, and transitions to idle', async () => {
+  const starts: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ executionId }) => {
+        starts.push(String(executionId));
+      },
+      cancel: async () => undefined,
+    },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let n = 0;
+        return () => `item-${++n}`;
+      })(),
+      execution: (() => {
+        let n = 0;
+        return () => `execution-${++n}`;
+      })(),
+    },
+  });
+
+  await controller.command({ kind: 'submit', text: 'first' });
+  await controller.command({ kind: 'submit', text: 'second' });
+  await controller.event({ kind: 'failed', executionId: 'execution-1' as ExecutionId, failure: {} });
+  expect(controller.state()).toMatchObject({ kind: 'paused', reason: 'failure' });
+
+  expect(await controller.command({ kind: 'discard_queue' })).toEqual({ kind: 'accepted' });
+
+  // After discard, the queue must be empty, pause reason must be cleared, and
+  // the state must be idle (not paused with no items).
+  const discarded = controller.state();
+  expect(discarded.kind).toBe('idle');
+  expect(discarded.queue).toHaveLength(0);
+  expect((discarded as { reason?: unknown }).reason).toBeUndefined();
+
+  // resume_queue on an idle (non-paused) queue is a no-op and must not start work.
+  expect(await controller.command({ kind: 'resume_queue' })).toEqual({ kind: 'no_op' });
+  expect(starts).toEqual(['execution-1']);
 });

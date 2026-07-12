@@ -79,6 +79,7 @@ The controller MUST maintain these invariants:
 3. An event or action whose `executionId`, `itemId`, or `actionId` does not match the current owner is stale and has no state, transcript, or dispatch effect.
 4. No dispatch occurs while `cancelling`, `completing`, an action is pending, or the queue is paused.
 5. An item is either queued, active, or terminal—never more than one of these.
+6. A `paused` queue MUST contain retained work. `pauseReason` is meaningless against an empty queue, so a failure with no remaining queued items yields `idle` (not `paused`), and `discard_queue` that empties a paused queue collapses the pause and returns to `idle`. `resume_queue` is `no_op` whenever the queue is not `paused`, including the just-discarded idle case.
 
 ## Transitions, barriers, and actions
 
@@ -118,7 +119,7 @@ Cancellation similarly installs the `cancelling` barrier before signalling abort
 | `answer_preflight` | Accept only in `awaiting_preflight` for the matching head item/action; otherwise reject as stale or inapplicable. |
 | `resolve_tool_approval` / `answer_ask_user` | Accept only in `awaiting_active_action` for the matching execution/action and action kind; otherwise reject as stale or inapplicable. |
 | `resume_queue` | Only `paused` resumes. In all other states it is `no_op`. |
-| `discard_queue` | Remove all queued items in every state. It never aborts or mutates active work; an active execution may still complete into an empty queue. |
+| `discard_queue` | Remove all queued items in every state. It never aborts or mutates active work; an active execution may still complete into an empty queue. If `discard_queue` empties a paused queue, the controller collapses the pause and transitions to `idle`; `resume_queue` then becomes `no_op`. |
 | `edit_queued` / `remove_queued` | Act only on an identified queued item. Missing, active, or terminal IDs are rejected without mutation. Removing the pending preflight head re-runs head selection. |
 | execution-setting change | Persist the new default in every state; it affects only a later dispatch. |
 | cosmetic-setting change | Apply/persist it immediately in every state; it has no execution effect. |

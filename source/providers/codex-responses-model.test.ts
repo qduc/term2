@@ -2,6 +2,7 @@ import { it, expect, vi } from 'vitest';
 import { withTrace } from '@openai/agents-core';
 import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
 import type { IProviderTraffic } from '../services/service-interfaces.js';
+import { SessionContextService } from '../services/session/session-context-service.js';
 import { CodexResponsesModel, CodexResponsesWSModel, wrapCodexStream } from './codex-responses-model.js';
 
 // Fixture mirrors the SSE shape that codex's responses endpoint emits: deltas
@@ -1359,6 +1360,90 @@ it.sequential(
       expect(seenRequests.length).toBe(4);
       expect(seenRequests[3].previousResponseId).toBe('resp-explicit');
       expect(seenRequests[3].input).toEqual([latestUser]);
+    } finally {
+      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    }
+  },
+);
+
+it.sequential(
+  'CodexResponsesWSModel isolates implicit response history for logical runs sharing a foreground session',
+  async () => {
+    const seenRequests: any[] = [];
+    const sessionContextService = new SessionContextService();
+
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+      seenRequests.push(request);
+      const userMessage = request.input?.find((item: any) => item?.role === 'user');
+      const responseId =
+        userMessage?.content === 'chain-a'
+          ? 'resp-chain-a'
+          : userMessage?.content === 'chain-b'
+          ? 'resp-chain-b'
+          : `resp-${seenRequests.length}`;
+      return makeStream([
+        {
+          type: 'response.completed',
+          response: { id: responseId, output: [], usage: {} },
+        } as any,
+      ]);
+    };
+
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5-codex',
+      {
+        getOrRefreshAccessToken: async () => 'token',
+        getAccountId: () => 'acc_123',
+      } as any,
+      undefined,
+      undefined,
+      sessionContextService,
+    );
+    const contextFor = (providerHistoryKey: string) => ({
+      sessionId: 'shared-parent-session',
+      sessionStartedAt: '2026-07-13T00:00:00.000Z',
+      providerHistoryKey,
+    });
+    const openChain = async (chain: string) => {
+      await collect(
+        model.getStreamedResponse({
+          input: [{ role: 'user', type: 'message', content: chain }],
+          modelSettings: {},
+          tools: [],
+          handoffs: [],
+        } as any),
+      );
+    };
+
+    try {
+      await sessionContextService.runWithContext(contextFor('nested-run-a'), () => openChain('chain-a'));
+      await sessionContextService.runWithContext(contextFor('nested-run-b'), () => openChain('chain-b'));
+
+      const toolOutput = {
+        type: 'function_call_result',
+        callId: 'call-a',
+        output: 'result-a',
+      };
+      await sessionContextService.runWithContext(contextFor('nested-run-a'), () =>
+        collect(
+          model.getStreamedResponse({
+            input: [
+              { role: 'user', type: 'message', content: 'chain-a' },
+              { type: 'function_call', call_id: 'call-a', name: 'read_file', arguments: '{}' },
+              toolOutput,
+            ],
+            modelSettings: {},
+            tools: [],
+            handoffs: [],
+          } as any),
+        ),
+      );
+
+      const continuation = seenRequests.at(-1);
+      expect(continuation.previousResponseId).toBe('resp-chain-a');
+      expect(continuation.input).toEqual([toolOutput]);
     } finally {
       (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
     }

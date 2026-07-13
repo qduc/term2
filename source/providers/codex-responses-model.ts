@@ -732,7 +732,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 
   #getCodexServerHistoryKey(): string | null {
     const trafficContext = this.sessionContextService?.getContext() ?? null;
-    return trafficContext?.sessionId ?? trafficContext?.traceId ?? null;
+    return trafficContext?.providerHistoryKey ?? trafficContext?.sessionId ?? trafficContext?.traceId ?? null;
   }
 
   #buildCodexWebSocketIdentity(requestId: string, request: any): CodexWebSocketIdentity | undefined {

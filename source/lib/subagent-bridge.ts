@@ -115,7 +115,7 @@ export class SubagentBridge {
     };
   }
 
-  #withSubagentTrafficContext<T>(preview: string, fn: () => T): T {
+  #withSubagentTrafficContext<T>(toolCallId: string | undefined, fn: () => T): T {
     const currentContext = this.#sessionContextService.getContext();
     if (!currentContext) {
       return fn();
@@ -124,6 +124,7 @@ export class SubagentBridge {
     return this.#sessionContextService.runWithContext(
       {
         ...currentContext,
+        ...(toolCallId ? { providerHistoryKey: `${currentContext.sessionId}:subagent:${toolCallId}` } : {}),
       },
       fn,
     );
@@ -135,7 +136,7 @@ export class SubagentBridge {
     }
     const endRun = this.#beginSubagentRun();
     try {
-      const result = await this.#withSubagentTrafficContext(question, () =>
+      const result = await this.#withSubagentTrafficContext(undefined, () =>
         this.#subagentManager!.run({
           role: 'mentor',
           task: question,
@@ -169,7 +170,9 @@ export class SubagentBridge {
     if (!this.#subagentManager) {
       throw new Error('Transient agent clients cannot spawn subagents.');
     }
-    const detailsRecord = details as { resumeState?: string; signal?: AbortSignal; toolCall?: unknown } | undefined;
+    const detailsRecord = details as
+      | { resumeState?: string; signal?: AbortSignal; toolCall?: { callId?: string } }
+      | undefined;
     const request = {
       ...params,
       parentTool: 'run_subagent',
@@ -179,7 +182,7 @@ export class SubagentBridge {
 
     const endRun = this.#beginSubagentRun();
     try {
-      return await this.#withSubagentTrafficContext(params.task, () =>
+      return await this.#withSubagentTrafficContext(detailsRecord?.toolCall?.callId, () =>
         this.#subagentManager!.runAsTool(request, _context, details),
       );
     } finally {

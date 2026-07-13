@@ -187,7 +187,7 @@ it('runSubagent still forwards resumeState from details', async () => {
   expect(trackRunAsTool.lastArgs.args.signal).toBe(bridge.signal);
 });
 
-it('runSubagent scopes traffic context to the subagent task preview', async () => {
+it('runSubagent scopes provider history to the subagent tool call', async () => {
   const sessionContextService = new SessionContextService();
   const seenContexts: Array<Record<string, unknown> | null> = [];
 
@@ -212,7 +212,9 @@ it('runSubagent scopes traffic context to the subagent task preview', async () =
 
   const parentContext = makeTrafficContext();
   await sessionContextService.runWithContext(parentContext as any, async () => {
-    await bridge.runSubagent({ role: 'worker', task: 'inspect the repository' });
+    await bridge.runSubagent({ role: 'worker', task: 'inspect the repository' }, undefined, {
+      toolCall: { callId: 'call-explorer-1' },
+    });
   });
 
   expect(seenContexts).toEqual([
@@ -221,6 +223,7 @@ it('runSubagent scopes traffic context to the subagent task preview', async () =
       sessionStartedAt: '2026-06-21T14:20:00.000Z',
       mode: 'standard',
       traceId: 'trace-1',
+      providerHistoryKey: 'session-1:subagent:call-explorer-1',
     }),
   ]);
 });

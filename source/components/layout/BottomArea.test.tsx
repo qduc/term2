@@ -7,6 +7,11 @@ import { InputProvider } from '../../context/InputContext.js';
 import BottomArea, { type BottomAreaProps } from './BottomArea.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import type { SlashCommand } from '../../slash-commands.js';
+import {
+  conversationUIReducer,
+  createInitialUIState,
+  getConversationUIFlags,
+} from '../../hooks/conversation-ui-reducer.js';
 
 const mockSlashCommands: SlashCommand[] = [{ name: '/clear', description: 'Clear screen', action: () => {} }];
 
@@ -85,6 +90,39 @@ it.sequential('BottomArea shows approval prompt when waiting for approval', asyn
   expect(output.includes('Allow this action?')).toBe(true);
   expect(output.includes('Approve')).toBe(true);
   expect(output.includes('Reject')).toBe(true);
+  expect(output.includes('processing')).toBe(false);
+  act(() => {
+    unmount();
+  });
+});
+
+it.sequential('BottomArea shows approval prompt while the queue awaits the active approval action', async () => {
+  const approval = {
+    agentName: 'Agent',
+    toolName: 'shell',
+    argumentsText: '{"commands":"ls"}',
+    rawInterruption: null,
+  };
+  let state = conversationUIReducer(createInitialUIState(null), { type: 'turn/started' });
+  state = conversationUIReducer(state, { type: 'approval/requested', approval });
+  state = conversationUIReducer(state, {
+    type: 'queue/updated',
+    snapshot: { queueLength: 0, stateKind: 'awaiting_active_action' },
+  });
+  state = conversationUIReducer(state, { type: 'turn/completed' });
+  const flags = getConversationUIFlags(state);
+
+  const { lastFrame, unmount } = await renderBottomArea({
+    ...baseProps,
+    pendingApproval: flags.pendingApproval,
+    waitingForApproval: flags.waitingForApproval,
+    waitingForRejectionReason: flags.waitingForRejectionReason,
+    waitingForAskUserAnswer: flags.waitingForAskUserAnswer,
+    isProcessing: flags.isProcessing,
+  });
+
+  const output = lastFrame() ?? '';
+  expect(output.includes('Allow this action?')).toBe(true);
   expect(output.includes('processing')).toBe(false);
   act(() => {
     unmount();

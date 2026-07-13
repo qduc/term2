@@ -232,7 +232,7 @@ export function getConversationUIFlags(state: ConversationUIState): Conversation
   const queueActive = queueSnapshot !== null && QUEUE_ACTIVE_KINDS.has(queueSnapshot.stateKind);
   const queuePaused = queueSnapshot?.stateKind === 'paused';
   const queueLength = queueSnapshot?.queueLength ?? 0;
-  const isProcessing = isProcessingPhase(phase) || queueActive;
+  const isProcessing = isProcessingPhase(phase) || (queueActive && phase.kind !== 'awaiting_approval');
 
   if (!isApprovalPhase(phase)) {
     return {

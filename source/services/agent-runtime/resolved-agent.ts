@@ -13,6 +13,8 @@ import type { ResolvedFilesystemScope, ResolvedNetworkScope } from './scope-reso
  */
 export interface ResolvedAgentDefinition {
   readonly name: string;
+  /** Stable trusted-preset identity; distinct from the user-facing display name. */
+  readonly legacyRole?: string;
   readonly instructions: string;
   readonly model: ExactModelPolicy;
   /** Internal coarse permission flags resolved from the public shape. */

@@ -40,7 +40,7 @@ describe('AgentRuntime integration: legacy roles resolve through boundary', () =
     const legacyDef = adaptLegacyDefinition(legacyResolved);
 
     // 3. Verify the definition can drive execution
-    expect(legacyDef.role).toBe('Explorer');
+    expect(legacyDef.role).toBe('explorer');
     expect(legacyDef.canRead).toBe(true);
     expect(legacyDef.canWrite).toBe(false);
     expect(legacyDef.canSearchWeb).toBe(false);
@@ -52,7 +52,7 @@ describe('AgentRuntime integration: legacy roles resolve through boundary', () =
     const resolved = adaptLegacyRole('worker', settings());
     const legacyDef = adaptLegacyDefinition(resolved);
 
-    expect(legacyDef.role).toBe('Worker');
+    expect(legacyDef.role).toBe('worker');
     expect(legacyDef.canRead).toBe(true);
     expect(legacyDef.canWrite).toBe(true);
     expect(legacyDef.canRunShell).toBe(true);

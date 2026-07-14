@@ -59,15 +59,24 @@ describe('adaptLegacyRole', () => {
     expect(def.permissions.canUseNestedAgents).toBe(false);
   });
 
-  it('adapts librarian role to ResolvedAgentDefinition', () => {
-    const def = adaptLegacyRole('librarian', settings());
-    expect(def.name).toBe('Memory Librarian');
-    expect(def.permissions.canRead).toBe(false);
-    expect(def.permissions.canWrite).toBe(false);
-    expect(def.permissions.canRunShell).toBe(false);
-    expect(def.permissions.canSearchWeb).toBe(false);
-    expect(def.permissions.canUseNestedAgents).toBe(false);
-    expect(def.instructions).toContain('memory librarian');
+  it('preserves the librarian role identity through the legacy adapter round trip', () => {
+    const resolved = adaptLegacyRole('librarian', settings());
+    const def = adaptLegacyDefinition(resolved);
+
+    expect(resolved.name).toBe('Memory Librarian');
+    expect(def.role).toBe('librarian');
+    expect(def.canRead).toBe(false);
+    expect(resolved.permissions.canWrite).toBe(false);
+    expect(resolved.permissions.canRunShell).toBe(false);
+    expect(resolved.permissions.canSearchWeb).toBe(false);
+    expect(resolved.permissions.canUseNestedAgents).toBe(false);
+    expect(resolved.instructions).toContain('memory librarian');
+  });
+
+  it('rejects the librarian when persistent memory is disabled', () => {
+    expect(() => adaptLegacyRole('librarian', settings({ 'memory.enabled': false }))).toThrow(
+      /librarian.*memory is disabled/i,
+    );
   });
 
   it('throws for unknown role', () => {

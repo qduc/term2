@@ -8,7 +8,8 @@ import { getSubagentsRolesSection } from '../tools/agent/run-subagent.js';
  */
 export function getSubagentDelegationAddendum({
   orchestratorMode = false,
-}: { orchestratorMode?: boolean } = {}): string {
+  memoryEnabled = true,
+}: { orchestratorMode?: boolean; memoryEnabled?: boolean } = {}): string {
   const header = `### Delegating to subagents
 
 You have a \`run_subagent\` tool. A subagent runs in its own context and returns only a summary — use it to keep your own context focused on high-level reasoning.`;
@@ -17,8 +18,9 @@ You have a \`run_subagent\` tool. A subagent runs in its own context and returns
 - Need focused codebase investigation or context compression → \`explorer\`.
 - Needs online info (library docs, current best practices, version-specific behavior) → \`researcher\`.
 - About to commit to a non-trivial plan or tricky debugging direction and want it pressure-tested → \`mentor\`.
-- Need relevant persistent-memory context or memory maintenance → \`librarian\`.
-- Have a cohesive, separable implementation or review unit with a checkable done condition → \`worker\`.${
+${
+  memoryEnabled ? '- Need relevant persistent-memory context or memory maintenance → `librarian`.\n' : ''
+}- Have a cohesive, separable implementation or review unit with a checkable done condition → \`worker\`.${
     orchestratorMode
       ? `
 
@@ -32,5 +34,7 @@ Otherwise, just do it yourself — especially when the task needs mid-flight cou
 
 Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root \`AGENTS.md\`, or skills catalog. The subagent does not see your conversation or reasoning, so include only objective, task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable.`;
 
-  return `${header}\n\n${triggers}\n\n${planningStep}\n\n${getSubagentsRolesSection()}`;
+  return `${header}\n\n${triggers}\n\n${planningStep}\n\n${getSubagentsRolesSection({
+    includeLibrarian: memoryEnabled,
+  })}`;
 }

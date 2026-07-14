@@ -71,6 +71,10 @@ export function parseFrontmatter(content: string): { frontmatter: Record<string,
 }
 
 export function loadRoleDefinition(role: SubagentRole, settings: ISettingsService): SubagentDefinition {
+  if (role === 'librarian' && settings.get<boolean>('memory.enabled') === false) {
+    throw new Error('The librarian subagent is unavailable because persistent memory is disabled.');
+  }
+
   const filePath = path.join(PROMPTS_DIR, `${role}.md`);
 
   let content: string;

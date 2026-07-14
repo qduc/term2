@@ -135,7 +135,7 @@ export const formatRunSubagentCommandMessage: FormatCommandMessage = (item, inde
   ];
 };
 
-export function getSubagentsRolesSection(): string {
+export function getSubagentsRolesSection({ includeLibrarian = true }: { includeLibrarian?: boolean } = {}): string {
   let promptsDir = path.join(import.meta.dirname, '../prompts/subagents');
   if (!fs.existsSync(promptsDir)) {
     const altDir = path.join(import.meta.dirname, '../../source/prompts/subagents');
@@ -150,7 +150,9 @@ export function getSubagentsRolesSection(): string {
       '- `explorer`: read-only workspace access. Use for locating files and answering codebase questions.\n' +
       '- `researcher`: web search + read-only workspace. Use for looking up external docs or current information.\n' +
       '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' +
-      '- `librarian`: memory reasoning. Use for retrieving context from persistent memory and recommending memory maintenance.\n' +
+      (includeLibrarian
+        ? '- `librarian`: memory reasoning. Use for retrieving context from persistent memory and recommending memory maintenance.\n'
+        : '') +
       '- `worker`: read + write + shell access. Use for implementing bounded file changes or general purpose works that does not fit any role above.\n\n'
     );
   }
@@ -164,6 +166,7 @@ export function getSubagentsRolesSection(): string {
 
     for (const file of files) {
       const roleName = path.basename(file, '.md');
+      if (roleName === 'librarian' && !includeLibrarian) continue;
       const content = fs.readFileSync(path.join(promptsDir, file), 'utf-8');
       const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
       let description = '';
@@ -204,7 +207,9 @@ export function getSubagentsRolesSection(): string {
     '- `explorer`: read-only workspace access. Use for locating files and answering codebase questions.\n' +
     '- `researcher`: web search + read-only workspace. Use for looking up external docs or current information.\n' +
     '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' +
-    '- `librarian`: memory reasoning. Use for retrieving context from persistent memory and recommending memory maintenance.\n' +
+    (includeLibrarian
+      ? '- `librarian`: memory reasoning. Use for retrieving context from persistent memory and recommending memory maintenance.\n'
+      : '') +
     '- `worker`: read + write access. Use for implementing bounded file changes.\n\n'
   );
 }

@@ -141,7 +141,7 @@ describe('createAgentRuntime composition', () => {
     });
 
     const def = comp.resolveRoleDefinition('explorer');
-    expect(def.role).toBe('Explorer');
+    expect(def.role).toBe('explorer');
     expect(def.name).toBe('Explorer');
     expect(def.canRead).toBe(true);
     expect(def.canWrite).toBe(false);

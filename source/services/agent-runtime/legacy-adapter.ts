@@ -17,6 +17,7 @@ export function adaptLegacyRole(
 
   return {
     name: def.name,
+    legacyRole: def.role,
     instructions: def.instructions,
     model: { provider: def.provider, model: def.model },
     permissions: {
@@ -46,7 +47,7 @@ export function adaptLegacyRole(
  */
 export function adaptLegacyDefinition(resolved: ResolvedAgentDefinition, budget?: ExecutionBudget): SubagentDefinition {
   return {
-    role: resolved.name,
+    role: resolved.legacyRole ?? resolved.name,
     name: resolved.name,
     instructions: resolved.instructions,
     canRead: resolved.permissions.canRead ?? false,

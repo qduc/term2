@@ -66,7 +66,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   }
 
   if (orchestratorMode && runSubagentEnabled) {
-    inlineSections.push(getSubagentDelegationAddendum({ orchestratorMode }));
+    inlineSections.push(getSubagentDelegationAddendum({ orchestratorMode, memoryEnabled }));
   }
 
   if (isRegularMode && isAgentMode) {

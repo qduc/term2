@@ -38,6 +38,10 @@ it('normalizes denied-read approval answers without rewriting them', () => {
   expect(normalizeApprovalDecision('allow-once')).toEqual({ answer: 'allow-once' });
 });
 
+it('preserves the session folder approval answer', () => {
+  expect(normalizeApprovalDecision('allow-folder-session')).toEqual({ answer: 'allow-folder-session' });
+});
+
 it('normalizes standard approval answers to y plus approval text', () => {
   expect(normalizeApprovalDecision('approval text')).toEqual({ answer: 'y', approvalAnswer: 'approval text' });
 });

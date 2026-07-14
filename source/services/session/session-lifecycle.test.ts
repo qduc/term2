@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import { SessionContinuityReset } from './session-continuity-reset.js';
 import { SessionLifecycle } from './session-lifecycle.js';
+import { sessionReadAccess } from '../approval/session-read-access.js';
 
 const makeLifecycleHarness = () => {
   const calls = {
@@ -177,6 +178,16 @@ it('resetSession clears approval state through approvalFlow and keeps persistenc
   expect(calls.agentClient.clearConversations).toBe(1);
   expect(lifecycle.exportPersistedState().previousResponseId).toBe(null);
   expect(providerContinuity.previousResponseId).toBe(null);
+});
+
+it('resetSession clears session-only read folder access', () => {
+  const { deps } = makeLifecycleHarness();
+  const lifecycle = new SessionLifecycle(deps as any);
+  sessionReadAccess.allowFolder('session-1', '/outside/docs');
+
+  lifecycle.resetSession();
+
+  expect(sessionReadAccess.allows('session-1', '/outside/docs/guide.md')).toBe(false);
 });
 
 it('afterUndo routes approval cleanup through approvalFlow coordinator', () => {

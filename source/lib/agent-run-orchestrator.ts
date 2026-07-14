@@ -183,6 +183,7 @@ export class AgentRunOrchestrator {
       const userContext: any = {
         turnCount: 0,
         maxTurns: this.#runnerManager.maxTurns,
+        ...(sessionId ? { sessionId } : {}),
       };
       const supportsConversationChaining = this.supportsConversationChaining();
       const options: any = {
@@ -248,6 +249,9 @@ export class AgentRunOrchestrator {
       };
     }
     userContext.maxTurns = this.#runnerManager.maxTurns;
+    if (sessionId) {
+      userContext.sessionId = sessionId;
+    }
     if (typeof userContext.turnCount !== 'number') {
       userContext.turnCount = 0;
     }

@@ -826,6 +826,7 @@ it.sequential('codex startStream puts prompt_cache_key on agent modelSettings, n
 
   expect(codexRunnerCalls.length).toBe(1);
   expect(codexRunnerCalls[0].agent.modelSettings.prompt_cache_key).toBe('session-123');
+  expect(codexRunnerCalls[0].options.context.sessionId).toBe('session-123');
   expect('modelSettings' in codexRunnerCalls[0].options).toBe(false);
 });
 

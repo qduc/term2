@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
 import { trimOutput } from '../../utils/output/output-trim.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import { getSessionIdFromToolContext, sessionReadAccess } from '../../services/approval/session-read-access.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
 
 const READ_FILE_DESCRIPTION =
@@ -87,13 +88,19 @@ export const createReadFileToolDefinition = (
       ? READ_FILE_DESCRIPTION_OUTSIDE
       : READ_FILE_DESCRIPTION,
     parameters: readFileParametersSchema,
-    needsApproval: async (params) => {
+    needsApproval: async (params, context) => {
       if (allowOutsideWorkspace) {
         return false;
       }
 
       try {
         const cwd = executionContext?.getCwd() || process.cwd();
+        const resolvedPath = resolveWorkspacePath(params.path, cwd, { allowOutsideWorkspace: true });
+        const sessionId = getSessionIdFromToolContext(context);
+        if (sessionId && sessionReadAccess.allows(sessionId, resolvedPath, cwd)) {
+          return false;
+        }
+
         resolveWorkspacePath(params.path, cwd, {
           allowDiscoveredSkillFolders: true,
         });

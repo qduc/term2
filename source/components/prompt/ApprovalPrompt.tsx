@@ -1,7 +1,7 @@
 import React, { FC } from 'react';
 import os from 'node:os';
 import { Box, Text, useInput } from 'ink';
-import type { ApprovalDescriptor } from '../../contracts/conversation.js';
+import { READ_FILE_SESSION_APPROVE_ANSWER, type ApprovalDescriptor } from '../../contracts/conversation.js';
 import { generateDiff } from '../../utils/output/diff.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_ASK_USER, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
 import {
@@ -251,6 +251,7 @@ const ApprovalPrompt: FC<Props> = ({
 
   const deniedRead = approval.deniedRead;
   const isDeniedReadShell = !!deniedRead;
+  const isReadFileApproval = approval.toolName === 'read_file';
 
   const deniedReadMenuItems = React.useMemo(() => {
     if (!deniedRead) return [];
@@ -264,7 +265,7 @@ const ApprovalPrompt: FC<Props> = ({
 
   const askUserMenuItems = React.useMemo(() => {
     if (!isAskUser && !isDeniedReadShell) {
-      return ['Approve', 'Reject'];
+      return isReadFileApproval ? ['Approve', 'Allow this folder for this session', 'Reject'] : ['Approve', 'Reject'];
     }
     if (isDeniedReadShell) {
       return deniedReadMenuItems;
@@ -281,7 +282,15 @@ const ApprovalPrompt: FC<Props> = ({
     }
 
     return items;
-  }, [isAskUser, isMultiSelect, askUserOptionLabels, hasMultipleQuestions, deniedReadMenuItems, isDeniedReadShell]);
+  }, [
+    isAskUser,
+    isMultiSelect,
+    askUserOptionLabels,
+    hasMultipleQuestions,
+    deniedReadMenuItems,
+    isDeniedReadShell,
+    isReadFileApproval,
+  ]);
 
   // reset selection when question/approval changes; cannot derive user-controlled arrow-key state from props
   React.useEffect(() => {
@@ -367,6 +376,8 @@ const ApprovalPrompt: FC<Props> = ({
         }
       } else if (selectedIndex === 0) {
         onApprove();
+      } else if (isReadFileApproval && selectedIndex === 1) {
+        onApprove(READ_FILE_SESSION_APPROVE_ANSWER);
       } else {
         onReject();
       }
@@ -648,8 +659,12 @@ const ApprovalPrompt: FC<Props> = ({
         <Box flexDirection="column" marginTop={1}>
           <Text>Allow this action?</Text>
           <Box flexDirection="column" marginLeft={1}>
-            <Text color={selectedIndex === 0 ? 'green' : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Approve</Text>
-            <Text color={selectedIndex === 1 ? 'red' : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}Reject</Text>
+            {askUserMenuItems.map((item, index) => (
+              <Text key={item} color={selectedIndex === index ? (item === 'Reject' ? 'red' : 'green') : undefined}>
+                {selectedIndex === index ? '❯ ' : '  '}
+                {item}
+              </Text>
+            ))}
           </Box>
         </Box>
       )}

@@ -15,6 +15,13 @@ export interface LLMAdvisory {
 }
 
 export type DeniedReadApproveAnswer = 'allow-once' | 'allow-remember' | 'unsandboxed-once';
+export const READ_FILE_SESSION_APPROVE_ANSWER = 'allow-folder-session';
+
+export function isReadFileSessionApproveAnswer(
+  answer: string | undefined,
+): answer is typeof READ_FILE_SESSION_APPROVE_ANSWER {
+  return answer === READ_FILE_SESSION_APPROVE_ANSWER;
+}
 
 /** Answer strings for the denied-read approval variant (see prepareContinuation). */
 export const DENIED_READ_APPROVE_ANSWERS: ReadonlySet<DeniedReadApproveAnswer> = new Set<DeniedReadApproveAnswer>([

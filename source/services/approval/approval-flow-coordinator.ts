@@ -14,7 +14,9 @@ import {
   executionOverrideStore,
   getProjectAllowReadStore,
 } from '../../utils/shell/sandbox/denied-read-stores.js';
-import { isDeniedReadApproveAnswer } from '../../contracts/conversation.js';
+import { isDeniedReadApproveAnswer, isReadFileSessionApproveAnswer } from '../../contracts/conversation.js';
+import path from 'node:path';
+import { sessionReadAccess } from './session-read-access.js';
 
 const noop = () => undefined;
 
@@ -133,8 +135,24 @@ export class ApprovalFlowCoordinator {
 
     // Denied-read decision values require approval (SDK resumes) plus an execution override.
     const deniedReadDecision = isDeniedReadApproveAnswer(answer);
+    const { toolName: decisionToolName, rawArguments: decisionRawArguments } =
+      getToolInfoFromInterruption(interruption);
+    let allowReadFolderForSession = false;
+    if (isReadFileSessionApproveAnswer(answer) && decisionToolName === 'read_file') {
+      const parsedReadArgs = parseToolCallArguments(decisionRawArguments, {
+        callId: decisionCallId ?? String(Date.now()),
+        toolName: decisionToolName,
+        sessionId: this.deps.sessionId,
+        traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
+      });
+      const requestedPath = (parsedReadArgs.arguments as { path?: unknown } | null)?.path;
+      if (typeof requestedPath === 'string' && requestedPath.length > 0) {
+        sessionReadAccess.allowFolder(this.deps.sessionId, path.dirname(requestedPath));
+        allowReadFolderForSession = true;
+      }
+    }
     // The 'deny' decision is treated as a rejection.
-    const isApproved = answer === 'y' || deniedReadDecision;
+    const isApproved = answer === 'y' || deniedReadDecision || allowReadFolderForSession;
 
     if (isApproved) {
       // For denied-read decisions, set the execution override before the SDK resumes.

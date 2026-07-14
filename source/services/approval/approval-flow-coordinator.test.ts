@@ -12,6 +12,7 @@ import {
   getProjectAllowReadStore,
 } from '../../utils/shell/sandbox/denied-read-stores.js';
 import type { DeniedReadInfo } from '../../utils/shell/sandbox/denied-read-detector.js';
+import { sessionReadAccess } from './session-read-access.js';
 
 const SENSITIVE_PATH = '/home/testuser/.ssh/id_rsa';
 const SENSITIVE_SUGGESTED = '/home/testuser/.ssh';
@@ -66,6 +67,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetSandboxDeniedReadStoresForTest();
+  sessionReadAccess.clear('s1');
   process.chdir(originalCwd);
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
@@ -226,6 +228,35 @@ it('prepareContinuation answer=y emits tool_started and approves', () => {
     expect(plan.toolStartedEvent.toolName).toBe('shell');
     expect(plan.toolStartedEvent.toolCallId).toBe('c1');
   }
+});
+
+it('prepareContinuation allow-folder-session allows the read file parent recursively for this session', () => {
+  let approved = false;
+  const state: any = { approve: () => (approved = true) };
+  const approvalState = new ApprovalState();
+  const filePath = path.join(tmpDir, 'docs', 'guide.md');
+  approvalState.setPending({
+    state,
+    interruption: { name: 'read_file', callId: 'read-1', arguments: JSON.stringify({ path: filePath }) },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+  });
+
+  coord.prepareContinuation('allow-folder-session', undefined);
+
+  expect(approved).toBe(true);
+  expect(sessionReadAccess.allows('s1', path.join(tmpDir, 'docs', 'nested', 'other.md'))).toBe(true);
+  expect(sessionReadAccess.allows('s1', path.join(tmpDir, 'sibling', 'other.md'))).toBe(false);
 });
 
 it('prepareContinuation answer=y normalizes JSON string tool_started arguments', () => {

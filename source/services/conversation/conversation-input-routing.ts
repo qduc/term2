@@ -1,4 +1,4 @@
-import { isDeniedReadApproveAnswer } from '../../contracts/conversation.js';
+import { isDeniedReadApproveAnswer, isReadFileSessionApproveAnswer } from '../../contracts/conversation.js';
 
 export type ConversationTurnSubmissionRoute =
   | { kind: 'approval_answer'; answer: string; approvalAnswer?: string }
@@ -28,7 +28,7 @@ export function routeConversationTurnSubmission(input: {
 }
 
 export function normalizeApprovalDecision(answer?: string): { answer: string; approvalAnswer?: string } {
-  if (isDeniedReadApproveAnswer(answer)) {
+  if (isDeniedReadApproveAnswer(answer) || isReadFileSessionApproveAnswer(answer)) {
     return { answer };
   }
 

@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { createReadFileToolDefinition } from './read-file.js';
+import { sessionReadAccess } from '../../services/approval/session-read-access.js';
 
 it('orchestrator read_file description permits direct inspection', () => {
   const tool = createReadFileToolDefinition({ orchestratorMode: true });
@@ -121,6 +122,25 @@ it.sequential('needsApproval: prompts for path outside workspace', async () => {
     });
 
     expect(result).toBe(true);
+  });
+});
+
+it.sequential('needsApproval: does not prompt for descendants of a folder allowed for the session', async () => {
+  await withTempDir(async (workspaceDir) => {
+    const sessionId = 'read-folder-session';
+    const allowedFolder = path.join(workspaceDir, '..', 'docs');
+    sessionReadAccess.allowFolder(sessionId, allowedFolder);
+
+    try {
+      const result = await readFileToolDefinition.needsApproval(
+        { path: path.join(allowedFolder, 'nested', 'guide.md') },
+        { context: { sessionId } },
+      );
+
+      expect(result).toBe(false);
+    } finally {
+      sessionReadAccess.clear(sessionId);
+    }
   });
 });
 

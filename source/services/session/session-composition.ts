@@ -8,6 +8,7 @@ import {
   DelegatingShellAutoApprovalResolver,
 } from '../approval/shell-auto-approval-resolver.js';
 import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
+import { sessionReadAccess } from '../approval/session-read-access.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { ConversationLogger } from '../logging/conversation-logger.js';
 import type { AssistantTurnState, LogEvent } from '../logging/conversation-log-events.js';
@@ -421,6 +422,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       appState.statusMachine.abort();
     }
     providerContinuity.clear();
+    sessionReadAccess.clear(id);
   };
 
   return {

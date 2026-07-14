@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { createMemoryToolDefinitions } from './memory-tools.js';
 import { MemoryNotFoundError, MemoryStorageError, type MemoryStore } from '../../services/memory/memory-store.js';
+import type { MemoryScope } from './memory-tools.js';
 
 const memory = {
   id: 'project-rules',
@@ -20,6 +21,23 @@ const store: MemoryStore = {
   remove: async () => true,
 };
 
+const stores: Record<MemoryScope, MemoryStore> = {
+  global: store,
+  project: { ...store, list: async () => [{ ...memory, id: 'project-only' }] },
+};
+
+it('selects project memory explicitly and defaults omitted scope to global', async () => {
+  const tools = createMemoryToolDefinitions(stores);
+
+  expect(JSON.parse(await tools[0].execute({}))).toEqual({ scope: 'global', memories: [memory] });
+  expect(JSON.parse(await tools[0].execute({ scope: 'project' }))).toEqual({
+    scope: 'project',
+    memories: [{ ...memory, id: 'project-only' }],
+  });
+  expect(tools[0].parameters.safeParse({ scope: 'project' }).success).toBe(true);
+  expect(tools[0].parameters.safeParse({ scope: 'invalid' }).success).toBe(false);
+});
+
 it('exposes memory operations with structured responses', async () => {
   const tools = createMemoryToolDefinitions(store);
   expect(tools.map((tool) => tool.name)).toEqual([
@@ -31,13 +49,23 @@ it('exposes memory operations with structured responses', async () => {
     'memory_update',
     'memory_delete',
   ]);
-  expect(JSON.parse(await tools[0].execute({}))).toEqual({ memories: [memory] });
-  expect(JSON.parse(await tools[1].execute({ id: memory.id }))).toEqual({ memory });
-  expect(JSON.parse(await tools[2].execute({ query: 'rules' }))).toMatchObject({ results: [{ memory }] });
-  expect(JSON.parse(await tools[3].execute({ query: 'rules' }))).toEqual({ memories: [memory], unavailableIds: [] });
-  expect(JSON.parse(await tools[4].execute(memory))).toEqual({ memory });
-  expect(JSON.parse(await tools[5].execute({ id: memory.id, title: 'New rules' }))).toEqual({ memory });
-  expect(JSON.parse(await tools[6].execute({ id: memory.id }))).toEqual({ deleted: true });
+  expect(JSON.parse(await tools[0].execute({}))).toEqual({ scope: 'global', memories: [memory] });
+  expect(JSON.parse(await tools[1].execute({ id: memory.id }))).toEqual({ scope: 'global', memory });
+  expect(JSON.parse(await tools[2].execute({ query: 'rules' }))).toMatchObject({
+    scope: 'global',
+    results: [{ memory }],
+  });
+  expect(JSON.parse(await tools[3].execute({ query: 'rules' }))).toEqual({
+    scope: 'global',
+    memories: [memory],
+    unavailableIds: [],
+  });
+  expect(JSON.parse(await tools[4].execute(memory))).toEqual({ scope: 'global', memory });
+  expect(JSON.parse(await tools[5].execute({ id: memory.id, title: 'New rules' }))).toEqual({
+    scope: 'global',
+    memory,
+  });
+  expect(JSON.parse(await tools[6].execute({ id: memory.id }))).toEqual({ scope: 'global', deleted: true });
   expect(
     tools[4].parameters.safeParse({ id: '../escape', title: 'Title', summary: 'Summary', content: 'Content' }).success,
   ).toBe(false);
@@ -62,6 +90,7 @@ it('retrieves other memories when one result becomes unavailable', async () => {
   });
 
   expect(JSON.parse(await tools[3].execute({ query: 'rules' }))).toEqual({
+    scope: 'global',
     memories: [memory],
     unavailableIds: [unavailable.id],
   });

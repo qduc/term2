@@ -111,6 +111,39 @@ describe('MemoryCapabilityBuilder', () => {
     expect(capability.context).toContain('Inject this for the main agent.');
   });
 
+  it('isolates project memories by project path and injects both scopes', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'term2-memory-capability-'));
+    const first = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory })).build(
+      { kind: 'main' },
+      { projectPath: '/workspace/first' },
+    );
+    const second = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory })).build(
+      { kind: 'main' },
+      { projectPath: '/workspace/second' },
+    );
+    const firstCreate = first.tools.find((tool) => tool.name === 'memory_create')!;
+    const firstList = first.tools.find((tool) => tool.name === 'memory_list')!;
+    const secondList = second.tools.find((tool) => tool.name === 'memory_list')!;
+
+    await firstCreate.execute({
+      scope: 'project',
+      id: 'local-rule',
+      title: 'Local rule',
+      summary: 'Only for the first project.',
+      content: 'Project-specific content.',
+    });
+
+    expect(JSON.parse(await firstList.execute({ scope: 'project' })).memories).toHaveLength(1);
+    expect(JSON.parse(await secondList.execute({ scope: 'project' })).memories).toHaveLength(0);
+
+    const rebuilt = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory })).build(
+      { kind: 'main' },
+      { projectPath: '/workspace/first' },
+    );
+    expect(rebuilt.context).toContain('Project scope');
+    expect(rebuilt.context).toContain('Only for the first project.');
+  });
+
   it.each([
     { kind: 'main' } as const,
     { kind: 'subagent' as const, role: 'worker' } as const,

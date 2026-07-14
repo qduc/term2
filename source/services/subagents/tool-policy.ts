@@ -611,7 +611,9 @@ export class SubagentToolFactory {
       tools.push(createActivateSkillToolDefinition(this.#skillsService));
     }
 
-    tools.push(...this.#memoryCapabilities.build({ kind: 'subagent', role: definition.role }).tools);
+    tools.push(
+      ...this.#memoryCapabilities.build({ kind: 'subagent', role: definition.role }, { projectPath: cwd }).tools,
+    );
 
     // Extract resolved scopes from definition
     const fsReadScope = definition.filesystemScope?.read;

@@ -147,7 +147,7 @@ export const getAgentDefinition = (
   const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled');
   const memoryCapability = new MemoryCapabilityBuilder(settingsService, {
     onWarning: (message) => loggingService.warn(message),
-  }).build({ kind: 'main' });
+  }).build({ kind: 'main' }, { projectPath: executionContext?.getCwd() ?? process.cwd() });
   const promptSpec = buildPromptSpec({
     model: resolvedModel,
     liteMode,

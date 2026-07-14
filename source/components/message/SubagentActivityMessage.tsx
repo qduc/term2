@@ -51,7 +51,8 @@ const formatSubagentStringTool = (tool: string, activityStatus?: string): string
     statusChar = '✔';
     cleaned = tool.replace(/\s+\(\d+\s+matches?\)$/, '');
   } else {
-    statusChar = activityStatus === 'running' ? '▶' : '✔';
+    statusChar =
+      activityStatus === 'running' ? '▶' : activityStatus === 'failed' || activityStatus === 'cancelled' ? '✖' : '✔';
   }
 
   return `${statusChar} ${cleaned}`;

@@ -191,6 +191,38 @@ it.sequential('SubagentActivityMessage renders unknown-suffix tool as success wh
   expect(output.includes('\u2714 read_file "source/app.tsx"')).toBe(true);
 });
 
+it.sequential('SubagentActivityMessage renders unknown-suffix tool as failed when activity failed', async () => {
+  const props = {
+    msg: {
+      role: 'explorer',
+      task: 'find x',
+      status: 'failed',
+      tools: ['read_file "source/app.tsx"'],
+    },
+  };
+
+  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
+  const output = toVisibleText(lastFrame() ?? '');
+
+  expect(output.includes('\u2716 read_file "source/app.tsx"')).toBe(true);
+});
+
+it.sequential('SubagentActivityMessage renders unknown-suffix tool as failed when activity was cancelled', async () => {
+  const props = {
+    msg: {
+      role: 'explorer',
+      task: 'find x',
+      status: 'cancelled',
+      tools: ['read_file "source/app.tsx"'],
+    },
+  };
+
+  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
+  const output = toVisibleText(lastFrame() ?? '');
+
+  expect(output.includes('\u2716 read_file "source/app.tsx"')).toBe(true);
+});
+
 it.sequential('SubagentActivityMessage does not misparse embedded (Failed: in arguments', async () => {
   const props = {
     msg: {

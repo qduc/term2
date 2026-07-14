@@ -600,9 +600,10 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       return { request: preparedRequest };
     }
 
-    const input = request.input;
+    const input = Array.isArray(request.input) ? dropUnpairedFunctionCalls(request.input) : request.input;
+    const replayRequest = input === request.input ? request : { ...request, input };
     if (!Array.isArray(input) || input.length === 0) {
-      return { request };
+      return { request: replayRequest };
     }
 
     const deltaStart = findServerManagedDeltaStart(input);
@@ -628,13 +629,13 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     return {
       warmupRequest: withProviderData(
         {
-          ...request,
+          ...replayRequest,
           input: warmupItems,
         },
         { generate: false },
       ),
       request: {
-        ...request,
+        ...replayRequest,
         input: deltaInput,
       },
     };

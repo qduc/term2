@@ -2176,6 +2176,82 @@ it.sequential(
   },
 );
 
+it.sequential('CodexResponsesWSModel drops orphaned tool outputs before creating a warmup chain', async () => {
+  const seenRequests: any[] = [];
+  const serverCallIds = new Set<string>();
+
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    for (const item of request.input ?? []) {
+      if (item?.type === 'function_call' && typeof item.callId === 'string') {
+        serverCallIds.add(item.callId);
+      }
+      if (item?.type === 'function_call_result' && typeof item.callId === 'string' && !serverCallIds.has(item.callId)) {
+        throw new Error(`No tool call found for function call output with call_id ${item.callId}.`);
+      }
+    }
+
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: request.modelSettings?.providerData?.generate === false ? 'resp-warmup' : 'resp-completed',
+          output: [],
+          usage: {},
+        },
+      },
+    ]);
+  };
+
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5-codex',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({ sessionId: 'session-orphan-warmup', traceId: 'trace-orphan-warmup' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+    );
+
+    await collect(
+      model.getStreamedResponse({
+        input: [
+          { role: 'user', type: 'message', content: 'inspect the repo' },
+          { type: 'reasoning', content: [] },
+          {
+            type: 'function_call_result',
+            callId: 'call-orphaned-output',
+            output: 'tool output from a discarded response chain',
+          },
+        ],
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any),
+    );
+
+    expect(seenRequests.flatMap((request) => request.input ?? [])).not.toContainEqual(
+      expect.objectContaining({ callId: 'call-orphaned-output' }),
+    );
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+  }
+});
+
 it.sequential('CodexResponsesWSModel unary path propagates stale tool continuations without fallback', async () => {
   const seenRequests: any[] = [];
   const previousResponseNotFound = Object.assign(new Error('Previous response not found for id resp-stale-unary'), {

@@ -30,6 +30,29 @@ describe('adaptLegacyRole', () => {
     expect(def.tools).toEqual([]);
   });
 
+  it('maps role defaults to their ancillary tiers while preserving legacy role overrides', () => {
+    const configured = settings({
+      'agent.smartModel': 'smart-model',
+      'agent.balancedModel': 'balanced-model',
+      'agent.cheapModel': 'cheap-model',
+      'agent.mentorModel': 'legacy-mentor-model',
+      'agent.subagentExplorerModel': 'legacy-explorer-model',
+    });
+
+    expect(adaptLegacyRole('mentor', configured).model.model).toBe('smart-model');
+    expect(adaptLegacyRole('worker', configured).model.model).toBe('balanced-model');
+    expect(adaptLegacyRole('researcher', configured).model.model).toBe('balanced-model');
+    expect(adaptLegacyRole('explorer', configured).model.model).toBe('cheap-model');
+    expect(adaptLegacyRole('librarian', configured).model.model).toBe('cheap-model');
+
+    const legacyOnly = settings({
+      'agent.mentorModel': 'legacy-mentor-model',
+      'agent.subagentExplorerModel': 'legacy-explorer-model',
+    });
+    expect(adaptLegacyRole('mentor', legacyOnly).model.model).toBe('legacy-mentor-model');
+    expect(adaptLegacyRole('explorer', legacyOnly).model.model).toBe('legacy-explorer-model');
+  });
+
   it('adapts worker role to ResolvedAgentDefinition', () => {
     const def = adaptLegacyRole('worker', settings());
     expect(def.name).toBe('Worker');

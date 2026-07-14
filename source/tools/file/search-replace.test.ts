@@ -461,6 +461,33 @@ it.sequential('execute heals search content when no match is found', async () =>
   });
 });
 
+it.sequential('execute uses the chore tier for edit healing', async () => {
+  await withTempDir(async (dir) => {
+    const filePath = 'content.txt';
+    await fs.writeFile(path.join(dir, filePath), 'const foo = 1;\n');
+    let invocation: { model: string; providerId: string | undefined } | undefined;
+    const tool = createTool(
+      createMockSettingsService({
+        'tools.enableEditHealing': true,
+        'agent.choreModel': 'chore-model',
+        'agent.choreProvider': 'chore-provider',
+        'tools.editHealingModel': 'legacy-healing-model',
+      }),
+      async (params, _content, model, _apiKey, deps) => {
+        invocation = { model, providerId: deps?.providerId };
+        return { params, wasModified: false, confidence: 0 };
+      },
+    );
+
+    await tool.execute({
+      path: filePath,
+      replacements: [{ search_content: 'const foo = 2;\n', replace_content: 'const foo = 3;\n' }],
+    });
+
+    expect(invocation).toEqual({ model: 'chore-model', providerId: 'chore-provider' });
+  });
+});
+
 it.sequential('execute includes auto-healing failure reason when healing does not find a match', async () => {
   await withTempDir(async (dir) => {
     const filePath = 'content.txt';

@@ -248,6 +248,57 @@ it('SettingsSchema preserves user-configured workflow model tiers', () => {
   expect(() => SettingsSchema.parse({ agent: { capableModel: '' } })).toThrow();
 });
 
+it('SettingsSchema preserves optional flat ancillary model tiers and their providers', () => {
+  const parsed = SettingsSchema.parse({
+    agent: {
+      smartModel: 'smart-model',
+      smartProvider: 'smart-provider',
+      balancedModel: 'balanced-model',
+      balancedProvider: 'balanced-provider',
+      cheapModel: 'cheap-model',
+      cheapProvider: 'cheap-provider',
+      choreModel: 'chore-model',
+      choreProvider: 'chore-provider',
+    },
+  });
+
+  expect(parsed.agent).toMatchObject({
+    smartModel: 'smart-model',
+    smartProvider: 'smart-provider',
+    balancedModel: 'balanced-model',
+    balancedProvider: 'balanced-provider',
+    cheapModel: 'cheap-model',
+    cheapProvider: 'cheap-provider',
+    choreModel: 'chore-model',
+    choreProvider: 'chore-provider',
+  });
+  const defaults = AgentSettingsSchema.parse({});
+  for (const key of [
+    'smartModel',
+    'smartProvider',
+    'balancedModel',
+    'balancedProvider',
+    'cheapModel',
+    'cheapProvider',
+    'choreModel',
+    'choreProvider',
+  ]) {
+    expect(defaults[key as keyof typeof defaults]).toBeUndefined();
+  }
+  for (const key of [
+    SETTING_KEYS.AGENT_SMART_MODEL,
+    SETTING_KEYS.AGENT_SMART_PROVIDER,
+    SETTING_KEYS.AGENT_BALANCED_MODEL,
+    SETTING_KEYS.AGENT_BALANCED_PROVIDER,
+    SETTING_KEYS.AGENT_CHEAP_MODEL,
+    SETTING_KEYS.AGENT_CHEAP_PROVIDER,
+    SETTING_KEYS.AGENT_CHORE_MODEL,
+    SETTING_KEYS.AGENT_CHORE_PROVIDER,
+  ]) {
+    expect(RUNTIME_MODIFIABLE_SETTINGS.has(key)).toBe(true);
+  }
+});
+
 it('startup normalization: persisted orchestratorMode=true with implicit lite (positional prompt) does not produce liteMode=true', () => {
   // Simulate the cli.tsx startup logic:
   // - persisted/resumed settings have orchestratorMode: true

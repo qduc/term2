@@ -607,7 +607,9 @@ it.sequential('settings-backed model selection restores settings menu after subm
   unregisterProvider(mockProviderId);
 });
 
-const assertSettingsModelTriggerOpensModelMenu = async (settingKey: 'agent.efficientModel' | 'agent.capableModel') => {
+const assertSettingsModelTriggerOpensModelMenu = async (
+  settingKey: 'agent.smartModel' | 'agent.balancedModel' | 'agent.cheapModel' | 'agent.choreModel',
+) => {
   clearModelCache();
   const mockProviderId = `mock-provider-${settingKey.split('.')[1]}-${Date.now()}-${Math.random()}`;
   registerProvider({
@@ -653,12 +655,20 @@ const assertSettingsModelTriggerOpensModelMenu = async (settingKey: 'agent.effic
   }
 };
 
-it.sequential('efficientModel setting opens the model selection menu', async () => {
-  await assertSettingsModelTriggerOpensModelMenu('agent.efficientModel');
+it.sequential('smartModel setting opens the model selection menu', async () => {
+  await assertSettingsModelTriggerOpensModelMenu('agent.smartModel');
 });
 
-it.sequential('capableModel setting opens the model selection menu', async () => {
-  await assertSettingsModelTriggerOpensModelMenu('agent.capableModel');
+it.sequential('balancedModel setting opens the model selection menu', async () => {
+  await assertSettingsModelTriggerOpensModelMenu('agent.balancedModel');
+});
+
+it.sequential('cheapModel setting opens the model selection menu', async () => {
+  await assertSettingsModelTriggerOpensModelMenu('agent.cheapModel');
+});
+
+it.sequential('choreModel setting opens the model selection menu', async () => {
+  await assertSettingsModelTriggerOpensModelMenu('agent.choreModel');
 });
 
 it.sequential('command-backed model selection still submits after selection', async () => {

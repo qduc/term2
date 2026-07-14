@@ -112,6 +112,36 @@ it('evaluates non-RED commands via chat and parses valid JSON results', async ()
   expect(chatCalls[0].options.reasoningEffort).toBe('none');
 });
 
+it('uses the chore tier model and provider ahead of legacy auto-approval settings', async () => {
+  const calls: Array<Record<string, unknown>> = [];
+  const settingsService = {
+    get: (key: string) =>
+      ({
+        'shell.autoApproveMode': 'advisory',
+        'agent.choreModel': 'chore-model',
+        'agent.choreProvider': 'chore-provider',
+        'agent.autoApproveModel': 'legacy-auto-model',
+        'agent.autoApproveProvider': 'legacy-auto-provider',
+      }[key]),
+  };
+
+  await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-chore', command: 'ls source' }],
+    history: [],
+    settingsService: settingsService as any,
+    agentClient: {
+      chat: async (_prompt: string, options: Record<string, unknown>) => {
+        calls.push(options);
+        return JSON.stringify({ results: [{ approved: true, reasoning: 'Safe.' }] });
+      },
+    } as any,
+    logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  expect(calls).toEqual([expect.objectContaining({ model: 'chore-model', provider: 'chore-provider' })]);
+});
+
 it('uses structured chatJson when structured support is unknown', async () => {
   const chatJsonCalls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
   let chatCalls = 0;

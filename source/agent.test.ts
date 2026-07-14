@@ -113,7 +113,7 @@ it('leaves run_subagent and ask_mentor available when workflow feature is disabl
   const definition = getAgentDefinition({
     settingsService: createMockSettingsService({
       enable_agent_workflow: false,
-      'agent.mentorModel': 'gpt-4o-mini',
+      'agent.smartModel': 'gpt-4o-mini',
     }),
     loggingService: mockLogger,
     askMentor: async () => 'mentor',

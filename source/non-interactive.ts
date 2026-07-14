@@ -132,7 +132,11 @@ export async function runWithSession(session: ConversationSessionLike, config: N
             shouldApprove = false;
             rejectionReason = `Heuristic validation failed: command is RED (dangerous) and cannot be executed automatically: ${command}`;
           } else if (classification.status === SafetyStatus.YELLOW) {
-            const autoApproveModel = config.settingsService?.get<string>('agent.autoApproveModel');
+            const autoApproveModel =
+              config.settingsService && config.agentClient
+                ? config.settingsService.get<string>('agent.choreModel') ??
+                  config.settingsService.get<string>('agent.autoApproveModel')
+                : undefined;
             if (!autoApproveModel) {
               shouldApprove = false;
               rejectionReason = `Heuristic validation failed: command is YELLOW (suspicious) and no auto-approve model is configured: ${command}`;

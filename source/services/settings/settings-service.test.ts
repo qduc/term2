@@ -445,6 +445,76 @@ it.sequential('startup rewrites legacy provider format to new format in settings
   });
 });
 
+it('migrates legacy ancillary settings into tier settings without overwriting new values', () => {
+  const settingsDir = getTestSettingsDir();
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    getSettingsFilePath(settingsDir),
+    JSON.stringify({
+      agent: {
+        capableModel: 'legacy-capable',
+        mentorProvider: 'legacy-smart-provider',
+        mentorReasoningEffort: 'high',
+        subagentWorkerModel: 'legacy-worker',
+        subagentWorkerProvider: 'legacy-balanced-provider',
+        subagentWorkerReasoningEffort: 'medium',
+        efficientModel: 'legacy-efficient',
+        subagentExplorerProvider: 'legacy-cheap-provider',
+        subagentExplorerReasoningEffort: 'low',
+        autoApproveModel: 'legacy-chore',
+        autoApproveProvider: 'legacy-chore-provider',
+        smartModel: 'new-smart',
+      },
+    }),
+    'utf-8',
+  );
+
+  const service = new SettingsService({ settingsDir, disableLogging: true, disableFilePersistence: true });
+
+  expect({
+    smart: [
+      service.get('agent.smartModel'),
+      service.get('agent.smartProvider'),
+      service.get('agent.smartReasoningEffort'),
+    ],
+    balanced: [
+      service.get('agent.balancedModel'),
+      service.get('agent.balancedProvider'),
+      service.get('agent.balancedReasoningEffort'),
+    ],
+    cheap: [
+      service.get('agent.cheapModel'),
+      service.get('agent.cheapProvider'),
+      service.get('agent.cheapReasoningEffort'),
+    ],
+    chore: [service.get('agent.choreModel'), service.get('agent.choreProvider')],
+  }).toEqual({
+    smart: ['new-smart', 'legacy-smart-provider', 'high'],
+    balanced: ['legacy-worker', 'legacy-balanced-provider', 'medium'],
+    cheap: ['legacy-efficient', 'legacy-cheap-provider', 'low'],
+    chore: ['legacy-chore', 'legacy-chore-provider'],
+  });
+});
+
+it.sequential('startup persists migrated ancillary tier settings', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    fs.mkdirSync(settingsDir, { recursive: true });
+    const settingsFile = getSettingsFilePath(settingsDir);
+    fs.writeFileSync(
+      settingsFile,
+      JSON.stringify({ agent: { subagentWorkerModel: 'legacy-worker', subagentWorkerReasoningEffort: 'high' } }),
+      'utf-8',
+    );
+
+    new SettingsService({ settingsDir, disableLogging: true });
+
+    const persisted = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
+    expect(persisted.agent.balancedModel).toBe('legacy-worker');
+    expect(persisted.agent.balancedReasoningEffort).toBe('high');
+  });
+});
+
 it('set() modifies runtime-modifiable settings', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({

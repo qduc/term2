@@ -36,7 +36,6 @@ const TASK_INSPECT_TEMP_WORKSPACE = 'inspect a temp workspace';
 const TASK_GLOB = 'find files';
 
 const UNKNOWN_ROLE_ERROR_FRAGMENT = ROLE_UNKNOWN;
-const MENTOR_MODEL_NOT_CONFIGURED_ERROR = 'Mentor model is not configured';
 const EXPLORER_BLOCKED_PREFIX =
   'Error: command blocked - explorer can only run read-only (GREEN) shell commands. Command: ';
 
@@ -143,7 +142,7 @@ describe('mentor role', () => {
     expect(mentorManagerRunnerCalls[0].agent.model).toBe(MODEL_MENTOR);
   });
 
-  it('run() with mentor role fails when mentorModel is not set', async () => {
+  it('run() with mentor role falls back to the smart tier when mentorModel is not set', async () => {
     const settings = createMockSettings({
       'agent.model': MODEL_MAIN,
       'agent.provider': mentorProviderId,
@@ -156,8 +155,8 @@ describe('mentor role', () => {
 
     const result = await manager.run({ role: ROLE_MENTOR, task: TASK_ADVISE_ME });
 
-    expect(result.status).toBe('failed');
-    expect(result.error!.includes(MENTOR_MODEL_NOT_CONFIGURED_ERROR)).toBe(true);
+    expect(result.status).toBe('completed');
+    expect(mentorManagerRunnerCalls[0].agent.model).toBe(MODEL_MAIN);
   });
 
   it('run() mentor maintains conversation history across calls', async () => {

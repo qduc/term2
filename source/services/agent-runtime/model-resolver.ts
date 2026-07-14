@@ -1,6 +1,8 @@
 import type { ISettingsService } from '../service-interfaces.js';
 import type { ModelPolicy, ExactModelPolicy } from './types.js';
 
+export type AncillaryModelTier = 'smart' | 'balanced' | 'cheap' | 'chore';
+
 /**
  * Resolve a model policy to a concrete {provider, model} pair.
  *
@@ -31,9 +33,13 @@ export function resolveModelPolicy(
 }
 
 function resolveTierPolicy(tier: string, settings: ISettingsService): ExactModelPolicy {
-  const provider = settings.get<string>('agent.provider') ?? 'openai';
-  const model = resolveConfiguredTierModel(tier, settings) ?? settings.get<string>('agent.model') ?? 'gpt-4o';
-  return { provider, model };
+  return resolveAncillaryModelTier(policyTierToAncillaryTier(tier), settings);
+}
+
+export function resolveAncillaryModelTier(tier: AncillaryModelTier, settings: ISettingsService): ExactModelPolicy {
+  const model = settings.get<string>(`agent.${tier}Model`) ?? resolveLegacyTierModel(tier, settings);
+  const provider = settings.get<string>(`agent.${tier}Provider`) ?? settings.get<string>('agent.provider') ?? 'openai';
+  return { provider, model: model ?? settings.get<string>('agent.model') ?? 'gpt-4o' };
 }
 
 function resolveRelativePolicy(
@@ -58,26 +64,44 @@ function resolveRelativePolicy(
     }
   }
 
-  const tier = policy.tier === 'lower' ? 'efficient' : 'capable';
-  const tierModel = resolveConfiguredTierModel(tier, settings);
-  const model = tierModel ?? settings.get<string>('agent.model') ?? parentExact.model;
-  return { provider: parentExact.provider, model };
+  const tier = policy.tier === 'lower' ? 'cheap' : 'smart';
+  const model =
+    settings.get<string>(`agent.${tier}Model`) ??
+    resolveLegacyTierModel(tier, settings) ??
+    settings.get<string>('agent.model') ??
+    parentExact.model;
+  const provider = settings.get<string>(`agent.${tier}Provider`) ?? parentExact.provider;
+  return { provider, model };
 }
 
-function resolveConfiguredTierModel(tier: string, settings: ISettingsService): string | undefined {
-  for (const settingKey of tierModelSettingKeys(tier)) {
+function resolveLegacyTierModel(tier: AncillaryModelTier, settings: ISettingsService): string | undefined {
+  for (const settingKey of legacyTierModelSettingKeys(tier)) {
     const model = settings.get<string>(settingKey);
     if (model !== undefined && model !== null) return model;
   }
   return undefined;
 }
 
-function tierModelSettingKeys(tier: string): string[] {
+function policyTierToAncillaryTier(tier: string): AncillaryModelTier {
   switch (tier) {
-    case 'efficient':
-      return ['agent.efficientModel', 'agent.subagentExplorerModel'];
     case 'capable':
+      return 'smart';
+    case 'efficient':
+      return 'cheap';
+    case 'balanced':
+    default:
+      return 'balanced';
+  }
+}
+
+function legacyTierModelSettingKeys(tier: AncillaryModelTier): string[] {
+  switch (tier) {
+    case 'cheap':
+      return ['agent.efficientModel', 'agent.subagentExplorerModel'];
+    case 'smart':
       return ['agent.capableModel', 'agent.mentorModel'];
+    case 'chore':
+      return [];
     case 'balanced':
     default:
       return ['agent.model'];

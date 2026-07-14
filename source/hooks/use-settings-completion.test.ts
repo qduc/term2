@@ -82,17 +82,32 @@ it('buildSettingsList - exposes the agent workflow feature flag', () => {
   expect(getSettingCategory('enable_agent_workflow').id).toBe('tools');
 });
 
-it('buildSettingsList - exposes workflow model tiers in the models category', () => {
+it('buildSettingsList - exposes flat ancillary model tiers and hides legacy model settings', () => {
   const result = buildSettingsList(SETTING_KEYS, SETTING_DESCRIPTIONS);
 
-  expect(result).toContainEqual(
-    expect.objectContaining({ key: 'agent.efficientModel', description: expect.any(String) }),
-  );
-  expect(result).toContainEqual(
-    expect.objectContaining({ key: 'agent.capableModel', description: expect.any(String) }),
-  );
-  expect(getSettingCategory('agent.efficientModel').id).toBe('models');
-  expect(getSettingCategory('agent.capableModel').id).toBe('models');
+  for (const key of [
+    'agent.smartModel',
+    'agent.smartReasoningEffort',
+    'agent.balancedModel',
+    'agent.balancedReasoningEffort',
+    'agent.cheapModel',
+    'agent.cheapReasoningEffort',
+    'agent.choreModel',
+  ]) {
+    expect(result).toContainEqual(expect.objectContaining({ key, description: expect.any(String) }));
+    expect(getSettingCategory(key).id).toBe('models');
+  }
+
+  for (const key of [
+    'agent.efficientModel',
+    'agent.capableModel',
+    'agent.mentorModel',
+    'agent.mentorReasoningEffort',
+    'agent.subagentWorkerModel',
+    'agent.subagentWorkerReasoningEffort',
+  ]) {
+    expect(result.some((item) => item.key === key)).toBe(false);
+  }
 });
 
 it('buildSettingsList - creates list from keys and descriptions', () => {
@@ -100,7 +115,9 @@ it('buildSettingsList - creates list from keys and descriptions', () => {
 
   const excludedKeys = new Set([
     'agent.provider',
+    'agent.mentorModel',
     'agent.mentorProvider',
+    'agent.mentorReasoningEffort',
     'agent.openrouter.apiKey',
     'agent.openrouter.baseUrl',
     'agent.openrouter.referrer',
@@ -140,7 +157,9 @@ it('buildSettingsList - can include sensitive settings when requested', () => {
 
   const hiddenKeys = new Set([
     'agent.provider',
+    'agent.mentorModel',
     'agent.mentorProvider',
+    'agent.mentorReasoningEffort',
     'logging.debugLogging',
     'logging.suppressConsoleOutput',
     'environment.nodeEnv',
@@ -242,7 +261,9 @@ it('buildSettingsList - handles empty descriptions object', () => {
 
   const excludedKeys = new Set([
     'agent.provider',
+    'agent.mentorModel',
     'agent.mentorProvider',
+    'agent.mentorReasoningEffort',
     'agent.openrouter.apiKey',
     'agent.openrouter.baseUrl',
     'agent.openrouter.referrer',

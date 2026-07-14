@@ -48,7 +48,19 @@ export function applyRuntimeSettingChange(key: string, value: unknown, deps: Run
     return;
   }
 
-  if (key === 'agent.mentorModel' || key === 'agent.mentorProvider' || key === 'agent.mentorReasoningEffort') {
+  if (
+    key === 'agent.smartModel' ||
+    key === 'agent.smartProvider' ||
+    key === 'agent.balancedModel' ||
+    key === 'agent.balancedProvider' ||
+    key === 'agent.cheapModel' ||
+    key === 'agent.cheapProvider' ||
+    key === 'agent.choreModel' ||
+    key === 'agent.choreProvider' ||
+    key === 'agent.mentorModel' ||
+    key === 'agent.mentorProvider' ||
+    key === 'agent.mentorReasoningEffort'
+  ) {
     deps.setModel(deps.settingsService.get<string>('agent.model'));
     return;
   }

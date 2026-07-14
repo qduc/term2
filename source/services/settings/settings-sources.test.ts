@@ -8,6 +8,8 @@ it('buildSettingsWithSources maps nested values and sources including optional u
     agent: {
       ...DEFAULT_SETTINGS.agent,
       temperature: undefined,
+      smartModel: 'smart-model',
+      smartProvider: 'smart-provider',
       codex: {
         websocketFirstFrameTimeoutMs: 12_345,
         websocketInterFrameTimeoutMs: 67_890,
@@ -32,6 +34,10 @@ it('buildSettingsWithSources maps nested values and sources including optional u
       return 'config';
     }
 
+    if (key === 'agent.smartModel') {
+      return 'config';
+    }
+
     return 'default';
   };
 
@@ -41,6 +47,10 @@ it('buildSettingsWithSources maps nested values and sources including optional u
   expect(result.agent.model.source).toBe('cli');
   expect(result.agent.temperature.value).toBe(undefined);
   expect(result.agent.temperature.source).toBe('default');
+  expect(result.agent.smartModel.value).toBe('smart-model');
+  expect(result.agent.smartModel.source).toBe('config');
+  expect(result.agent.smartProvider.value).toBe('smart-provider');
+  expect(result.agent.smartProvider.source).toBe('default');
   expect(result.webSearch.tavily.value).toBe(undefined);
   expect(result.webSearch.tavily.source).toBe('env');
   expect(result.webSearch.provider.value).toEqual(settings.webSearch.provider);

@@ -173,7 +173,7 @@ While in the chat, you can use these commands:
 
 **Lite Mode** is a fast, lightweight assistant for general terminal work (system admin, file management, SSH sessions). No codebase context or file editing tools. Use `term2 --lite` or `/lite` to toggle.
 
-**Mentor Mode** pairs your primary AI with a separate (often more powerful) mentor model for strategic guidance on complex problems. Configure `agent.mentorModel` in settings, toggle with `/mentor`.
+**Mentor Mode** pairs your primary AI with the `agent.smartModel` tier for strategic guidance on complex problems. Toggle it with `/mentor`.
 
 **Orchestrator Mode** delegates all tool-backed work to subagents, preserving the main context window for high-level orchestration. Toggle with `/orchestrator`.
 
@@ -221,11 +221,11 @@ Toggle modes with `/auto-approve`:
 ```json
 {
   "shell": { "autoApproveMode": "auto" },
-  "agent": { "autoApproveModel": "gpt-5.4-mini" }
+  "agent": { "choreModel": "gpt-5.4-mini" }
 }
 ```
 
-> [!TIP] Use a fast, lightweight model (e.g. `gpt-5.4-mini`) as your `autoApproveModel` to keep safety checks fast.
+> [!TIP] The chore tier also handles edit self-healing. Use a fast, lightweight model to keep these narrow background tasks responsive.
 
 ## Configuration
 
@@ -296,8 +296,10 @@ Supported provider types: `openai` (default), `openai-compatible`, `anthropic`, 
     "provider": "openai",
     "reasoningEffort": "default",
     "temperature": 1,
-    "mentorModel": "gpt-5.5",
-    "subagentWorkerModel": "gpt-5.3-codex"
+    "smartModel": "gpt-5.5",
+    "balancedModel": "gpt-5.3-codex",
+    "cheapModel": "gpt-5.4-mini",
+    "choreModel": "gpt-5.4-mini"
   },
   "shell": {
     "timeout": 120000,
@@ -322,7 +324,9 @@ You can reorder provider priority with the `PROVIDER_ORDER` setting in `settings
 
 ## Subagents
 
-Delegate tasks to specialized subagents to prevent context bloat. Available roles: **Explorer** (codebase scanning), **Worker** (modifications & tests), **Researcher** (web search & docs), **Mentor** (strategic guidance). Configure per-role model overrides in settings (e.g. `agent.subagentWorkerModel`).
+Delegate tasks to specialized subagents to prevent context bloat. Available roles: **Explorer** (codebase scanning), **Worker** (modifications & tests), **Researcher** (web search & docs), **Mentor** (strategic guidance). Ancillary workloads use four configurable tiers: mentor uses `smart`, worker and researcher use `balanced`, explorer and librarian use `cheap`, and approval/edit-healing tasks use `chore`. Each tier can set a matching provider, such as `agent.smartProvider`; subagent tiers can also set reasoning effort with `agent.smartReasoningEffort`, `agent.balancedReasoningEffort`, or `agent.cheapReasoningEffort`. Unset values inherit the main agent settings.
+
+Legacy per-role, mentor, auto-approval, and edit-healing model settings remain readable for compatibility but are hidden from the interactive settings menu. New configuration should use the tier settings.
 
 Subagents can also use the `ask_user` tool to ask you structured multi-choice questions during execution. Low-risk (YELLOW) shell commands issued by subagents are auto-approved to reduce interruptions.
 

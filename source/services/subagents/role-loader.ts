@@ -10,11 +10,23 @@ import { getShellSandboxAddendum } from '../../prompts/shell-sandbox.js';
 import { getSearchViaShellAddendum } from '../../prompts/search-via-shell.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import { MemoryCapabilityBuilder } from '../memory/memory-capabilities.js';
+import { resolveAncillaryModelTier, type AncillaryModelTier } from '../agent-runtime/model-resolver.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, '../../prompts');
 export const PROMPTS_DIR = path.join(BASE_PROMPT_PATH, 'subagents');
 
 const ROLE_MAX_TURNS_DEFAULT = 20;
+
+const roleModelTiers: Record<string, AncillaryModelTier> = {
+  mentor: 'smart',
+  worker: 'balanced',
+  researcher: 'balanced',
+  explorer: 'cheap',
+  librarian: 'cheap',
+};
+
+const isInherited = (value: unknown): boolean =>
+  value === 'inherit' || value === undefined || value === null || value === '';
 
 export function resolvePrompt(promptPath: string): string {
   try {
@@ -89,19 +101,19 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
   const subagentPrefix =
     role === 'mentor' ? 'agent.mentor' : `agent.subagent${role.charAt(0).toUpperCase() + role.slice(1)}`;
 
-  const resolve = (value: any, subagentKey: string, fallbackKey: string | undefined, defaultValue: any): any => {
-    if (value === 'inherit' || value === undefined || value === null || value === '') {
-      const subagentVal = settings.get(subagentKey);
-      if (subagentVal !== undefined && subagentVal !== null) {
-        return subagentVal;
-      }
-      if (fallbackKey) {
-        return settings.get(fallbackKey) ?? defaultValue;
-      }
-      return defaultValue;
-    }
-    return value;
-  };
+  const tier = roleModelTiers[role] ?? 'balanced';
+  const tierModel = resolveAncillaryModelTier(tier, settings);
+  const legacyModel = settings.get<string>(`${subagentPrefix}Model`);
+  const legacyProvider = settings.get<string>(`${subagentPrefix}Provider`);
+  const configuredLegacyReasoningEffort = settings.get<string>(`${subagentPrefix}ReasoningEffort`);
+  const legacyReasoningEffort =
+    role === 'mentor' && configuredLegacyReasoningEffort === 'default' ? undefined : configuredLegacyReasoningEffort;
+  const model = isInherited(frontmatter.model)
+    ? settings.get<string>(`agent.${tier}Model`) ?? legacyModel ?? tierModel.model
+    : frontmatter.model;
+  const provider = isInherited(frontmatter.provider)
+    ? settings.get<string>(`agent.${tier}Provider`) ?? legacyProvider ?? tierModel.provider
+    : frontmatter.provider;
 
   return {
     role,
@@ -112,9 +124,14 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
     canSearchWeb: frontmatter.canSearchWeb ?? false,
     canRunShell: frontmatter.canRunShell ?? false,
     maxTurns: frontmatter.maxTurns ?? ROLE_MAX_TURNS_DEFAULT,
-    model: resolve(frontmatter.model, `${subagentPrefix}Model`, 'agent.model', 'gpt-4o'),
-    provider: resolve(frontmatter.provider, `${subagentPrefix}Provider`, 'agent.provider', 'openai'),
-    reasoningEffort: resolve(frontmatter.reasoningEffort, `${subagentPrefix}ReasoningEffort`, undefined, 'default'),
+    model,
+    provider,
+    reasoningEffort: isInherited(frontmatter.reasoningEffort)
+      ? settings.get<string>(`agent.${tier}ReasoningEffort`) ??
+        legacyReasoningEffort ??
+        settings.get<string>('agent.reasoningEffort') ??
+        'default'
+      : frontmatter.reasoningEffort,
     description: frontmatter.description ?? '',
   };
 }

@@ -16,6 +16,31 @@ export const MODEL_SETTING_CONFIGS: ModelSettingConfig[] = [
     providerKey: SETTING_KEYS.AGENT_PROVIDER,
   },
   {
+    modelKey: SETTING_KEYS.AGENT_SMART_MODEL,
+    trigger: '/settings agent.smartModel ',
+    providerKey: SETTING_KEYS.AGENT_SMART_PROVIDER,
+    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
+  },
+  {
+    modelKey: SETTING_KEYS.AGENT_BALANCED_MODEL,
+    trigger: '/settings agent.balancedModel ',
+    providerKey: SETTING_KEYS.AGENT_BALANCED_PROVIDER,
+    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
+  },
+  {
+    modelKey: SETTING_KEYS.AGENT_CHEAP_MODEL,
+    trigger: '/settings agent.cheapModel ',
+    providerKey: SETTING_KEYS.AGENT_CHEAP_PROVIDER,
+    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
+  },
+  {
+    modelKey: SETTING_KEYS.AGENT_CHORE_MODEL,
+    trigger: '/settings agent.choreModel ',
+    providerKey: SETTING_KEYS.AGENT_CHORE_PROVIDER,
+    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
+  },
+  // Legacy triggers remain recognized for settings files and commands created before tier consolidation.
+  {
     modelKey: SETTING_KEYS.AGENT_MENTOR_MODEL,
     trigger: '/settings agent.mentorModel ',
     providerKey: SETTING_KEYS.AGENT_MENTOR_PROVIDER,

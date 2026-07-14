@@ -23,6 +23,25 @@ describe('resolveModelPolicy', () => {
     expect(result).toEqual({ provider: 'anthropic', model: 'claude-sonnet' });
   });
 
+  it('resolves ancillary tiers independently from the main agent model', () => {
+    const s = settings({
+      'agent.model': 'main-model',
+      'agent.provider': 'main-provider',
+      'agent.smartModel': 'smart-model',
+      'agent.smartProvider': 'smart-provider',
+      'agent.balancedModel': 'balanced-model',
+      'agent.balancedProvider': 'balanced-provider',
+      'agent.cheapModel': 'cheap-model',
+      'agent.cheapProvider': 'cheap-provider',
+      'agent.choreModel': 'chore-model',
+      'agent.choreProvider': 'chore-provider',
+    });
+
+    expect(resolveModelPolicy('capable', s)).toEqual({ provider: 'smart-provider', model: 'smart-model' });
+    expect(resolveModelPolicy('balanced', s)).toEqual({ provider: 'balanced-provider', model: 'balanced-model' });
+    expect(resolveModelPolicy('efficient', s)).toEqual({ provider: 'cheap-provider', model: 'cheap-model' });
+  });
+
   // ── Named tiers ────────────────────────────────────────
   it('resolves "balanced" from agent.model setting', () => {
     const s = settings({ 'agent.model': 'gpt-4o' });

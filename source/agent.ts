@@ -325,8 +325,9 @@ export const getAgentDefinition = (
       );
     }
 
-    // Add mentor tool if configured (not in lite mode)
-    const mentorModel = settingsService.get<string>('agent.mentorModel');
+    // Add mentor tool if the smart tier or its legacy mentor override is configured.
+    const mentorModel =
+      settingsService.get<string>('agent.smartModel') ?? settingsService.get<string>('agent.mentorModel');
     if (mentorModel && askMentor) {
       tools.push(createAskMentorToolDefinition(askMentor));
     }

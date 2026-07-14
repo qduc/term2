@@ -15,7 +15,9 @@ const Banner: FC<BannerProps> = ({ settingsService, isShellMode = false }) => {
   const planMode = useSetting<boolean>(settingsService, 'app.planMode') ?? false;
   const orchestratorMode = useSetting<boolean>(settingsService, 'app.orchestratorMode') ?? false;
   const model = useSetting<string>(settingsService, 'agent.model');
-  const mentorModel = useSetting<string>(settingsService, 'agent.mentorModel');
+  const smartModel = useSetting<string>(settingsService, 'agent.smartModel');
+  const legacyMentorModel = useSetting<string>(settingsService, 'agent.mentorModel');
+  const mentorModel = smartModel ?? legacyMentorModel;
   const providerKey = useSetting<string>(settingsService, 'agent.provider') ?? 'openai';
   const reasoningEffort = useSetting<string>(settingsService, 'agent.reasoningEffort') ?? 'default';
   const mentorReasoningEffort = useSetting<string>(settingsService, 'agent.mentorReasoningEffort') ?? 'default';

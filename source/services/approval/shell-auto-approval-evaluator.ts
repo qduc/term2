@@ -7,6 +7,7 @@ import {
   SHELL_AUTO_APPROVAL_PROMPT_VERSION,
 } from '../../prompts/shell-auto-approval.js';
 import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
+import { resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
 
 export type ShellAutoApprovalCommand = {
   id: string;
@@ -306,8 +307,15 @@ export async function evaluateShellAutoApprovalAdvisories({
   const mode = settingsService.get<'off' | 'advisory' | 'auto'>('shell.autoApproveMode');
   if (mode === 'off') return out;
 
-  const autoApproveModel = settingsService.get<string>('agent.autoApproveModel');
-  const autoApproveProvider = settingsService.get<string>('agent.autoApproveProvider');
+  const choreModel = resolveAncillaryModelTier('chore', settingsService);
+  const autoApproveModel =
+    settingsService.get<string>('agent.choreModel') ??
+    settingsService.get<string>('agent.autoApproveModel') ??
+    choreModel.model;
+  const autoApproveProvider =
+    settingsService.get<string>('agent.choreProvider') ??
+    settingsService.get<string>('agent.autoApproveProvider') ??
+    choreModel.provider;
 
   const toEvaluateByLLM: ShellAutoApprovalCommand[] = [];
   const redSafetyDetails = new Map<string, string>();

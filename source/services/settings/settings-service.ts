@@ -19,6 +19,7 @@ import {
 import { isTestEnvironment, parseBooleanEnv } from './settings-env.js';
 import { flattenSettings, mergeSettings, trackSettingSources } from './settings-merger.js';
 import { buildSettingsWithSources } from './settings-sources.js';
+import { migrateLegacyAncillarySettings } from './ancillary-settings-migration.js';
 import {
   hasMissingKeys,
   loadSettingsFromFile,
@@ -105,7 +106,11 @@ export class SettingsService {
     // Load settings with precedence: CLI > Env > Config > Default
     const settingsFilePath = path.join(this.settingsDir, 'settings.json');
     const configFileExisted = fs.existsSync(settingsFilePath);
-    const { validated: fileConfig, raw: rawFileConfig, hadErrors: fileHadErrors } = this.loadFromFile();
+    const { validated, raw: rawFileConfig, hadErrors: fileHadErrors } = this.loadFromFile();
+    const { config: fileConfig, migrated: migratedLegacyAncillarySettings } = migrateLegacyAncillarySettings(
+      validated,
+      rawFileConfig,
+    );
     this.settings = mergeSettings(DEFAULT_SETTINGS, fileConfig, env, cli, {
       disableLogging: this.disableLogging,
       loggingService: this.loggingService,
@@ -176,14 +181,18 @@ export class SettingsService {
           });
         }
       }
-    } else if ((shouldUpdateFile || shouldMigrateLegacyProviderFormat) && !fileHadErrors) {
+    } else if (
+      (shouldUpdateFile || shouldMigrateLegacyProviderFormat || migratedLegacyAncillarySettings) &&
+      !fileHadErrors
+    ) {
       if (!this.disableFilePersistence) {
         this.saveToFile();
         if (!this.disableLogging) {
-          this.loggingService.debug('Updated settings file with defaults and/or provider migrations', {
+          this.loggingService.debug('Updated settings file with defaults and/or migrations', {
             settingsFile: settingsFilePath,
             updatedMissingDefaults: shouldUpdateFile,
             migratedLegacyProviders: shouldMigrateLegacyProviderFormat,
+            migratedLegacyAncillarySettings,
           });
         }
       }

@@ -20,6 +20,58 @@ export const AgentSettingsSchema = z.object({
     .min(1)
     .optional()
     .describe('Model for higher-tier workflow agents. Falls back to agent.model when unset.'),
+  smartModel: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Model for smart ancillary tasks. Falls back to agent.model when unset.'),
+  smartProvider: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Provider for smart ancillary tasks. Falls back to agent.provider when unset.'),
+  smartReasoningEffort: z
+    .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+    .optional()
+    .describe('Reasoning effort for smart ancillary tasks. Falls back to agent.reasoningEffort when unset.'),
+  balancedModel: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Model for balanced ancillary tasks. Falls back to agent.model when unset.'),
+  balancedProvider: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Provider for balanced ancillary tasks. Falls back to agent.provider when unset.'),
+  balancedReasoningEffort: z
+    .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+    .optional()
+    .describe('Reasoning effort for balanced ancillary tasks. Falls back to agent.reasoningEffort when unset.'),
+  cheapModel: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Model for cheap ancillary tasks. Falls back to agent.model when unset.'),
+  cheapProvider: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Provider for cheap ancillary tasks. Falls back to agent.provider when unset.'),
+  cheapReasoningEffort: z
+    .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+    .optional()
+    .describe('Reasoning effort for cheap ancillary tasks. Falls back to agent.reasoningEffort when unset.'),
+  choreModel: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Model for chore ancillary tasks. Falls back to agent.model when unset.'),
+  choreProvider: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Provider for chore ancillary tasks. Falls back to agent.provider when unset.'),
   // 'default' signals we should *not* explicitly pass a reasoningEffort
   // to the API, allowing it to decide what to use.
   reasoningEffort: z.enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']).default('default'),
@@ -408,6 +460,17 @@ export interface SettingsWithSources {
     model: SettingWithSource<string>;
     efficientModel: SettingWithSource<string | undefined>;
     capableModel: SettingWithSource<string | undefined>;
+    smartModel: SettingWithSource<string | undefined>;
+    smartProvider: SettingWithSource<string | undefined>;
+    smartReasoningEffort: SettingWithSource<string | undefined>;
+    balancedModel: SettingWithSource<string | undefined>;
+    balancedProvider: SettingWithSource<string | undefined>;
+    balancedReasoningEffort: SettingWithSource<string | undefined>;
+    cheapModel: SettingWithSource<string | undefined>;
+    cheapProvider: SettingWithSource<string | undefined>;
+    cheapReasoningEffort: SettingWithSource<string | undefined>;
+    choreModel: SettingWithSource<string | undefined>;
+    choreProvider: SettingWithSource<string | undefined>;
     reasoningEffort: SettingWithSource<string>;
     temperature: SettingWithSource<number | undefined>;
     maxTurns: SettingWithSource<number>;
@@ -513,6 +576,17 @@ export const SETTING_KEYS = {
   AGENT_MODEL: 'agent.model',
   AGENT_EFFICIENT_MODEL: 'agent.efficientModel',
   AGENT_CAPABLE_MODEL: 'agent.capableModel',
+  AGENT_SMART_MODEL: 'agent.smartModel',
+  AGENT_SMART_PROVIDER: 'agent.smartProvider',
+  AGENT_SMART_REASONING_EFFORT: 'agent.smartReasoningEffort',
+  AGENT_BALANCED_MODEL: 'agent.balancedModel',
+  AGENT_BALANCED_PROVIDER: 'agent.balancedProvider',
+  AGENT_BALANCED_REASONING_EFFORT: 'agent.balancedReasoningEffort',
+  AGENT_CHEAP_MODEL: 'agent.cheapModel',
+  AGENT_CHEAP_PROVIDER: 'agent.cheapProvider',
+  AGENT_CHEAP_REASONING_EFFORT: 'agent.cheapReasoningEffort',
+  AGENT_CHORE_MODEL: 'agent.choreModel',
+  AGENT_CHORE_PROVIDER: 'agent.choreProvider',
   AGENT_REASONING_EFFORT: 'agent.reasoningEffort',
   AGENT_TEMPERATURE: 'agent.temperature',
   AGENT_PROVIDER: 'agent.provider',
@@ -599,6 +673,17 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_MODEL,
   SETTING_KEYS.AGENT_EFFICIENT_MODEL,
   SETTING_KEYS.AGENT_CAPABLE_MODEL,
+  SETTING_KEYS.AGENT_SMART_MODEL,
+  SETTING_KEYS.AGENT_SMART_PROVIDER,
+  SETTING_KEYS.AGENT_SMART_REASONING_EFFORT,
+  SETTING_KEYS.AGENT_BALANCED_MODEL,
+  SETTING_KEYS.AGENT_BALANCED_PROVIDER,
+  SETTING_KEYS.AGENT_BALANCED_REASONING_EFFORT,
+  SETTING_KEYS.AGENT_CHEAP_MODEL,
+  SETTING_KEYS.AGENT_CHEAP_PROVIDER,
+  SETTING_KEYS.AGENT_CHEAP_REASONING_EFFORT,
+  SETTING_KEYS.AGENT_CHORE_MODEL,
+  SETTING_KEYS.AGENT_CHORE_PROVIDER,
   SETTING_KEYS.AGENT_REASONING_EFFORT,
   SETTING_KEYS.AGENT_TEMPERATURE,
   SETTING_KEYS.AGENT_PROVIDER,
@@ -697,6 +782,19 @@ export const DEFAULT_SETTINGS: SettingsData = {
   providerOrder: [],
   agent: {
     model: 'gpt-5.1',
+    efficientModel: undefined,
+    capableModel: undefined,
+    smartModel: undefined,
+    smartProvider: undefined,
+    smartReasoningEffort: undefined,
+    balancedModel: undefined,
+    balancedProvider: undefined,
+    balancedReasoningEffort: undefined,
+    cheapModel: undefined,
+    cheapProvider: undefined,
+    cheapReasoningEffort: undefined,
+    choreModel: undefined,
+    choreProvider: undefined,
     reasoningEffort: 'default',
     maxTurns: 100,
     retryAttempts: 2,

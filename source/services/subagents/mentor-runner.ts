@@ -38,16 +38,10 @@ export class MentorRunner {
   }
 
   async run(agentId: string, task: string, signal?: AbortSignal): Promise<SubagentResult> {
-    const mentorModel = this.#settings.get<string>('agent.mentorModel');
-    if (!mentorModel) {
-      throw new Error('Mentor model is not configured');
-    }
-
-    const mentorProvider =
-      this.#settings.get<string>('agent.mentorProvider') ?? this.#settings.get<string>('agent.provider') ?? 'openai';
-    const mentorMode = this.#settings.get<boolean>('app.mentorMode');
-
     const definition = loadRoleDefinition('mentor', this.#settings);
+    const mentorModel = definition.model;
+    const mentorProvider = definition.provider;
+    const mentorMode = this.#settings.get<boolean>('app.mentorMode');
 
     const baseInstructions = mentorMode
       ? resolvePrompt(path.join(PROMPTS_DIR, 'mentor-mode.md'))

@@ -1,7 +1,6 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { getAgentDefinition } from './agent.js';
 import { createMockSettingsService } from './services/settings/settings-service.mock.js';
-import { MemoryStorageError } from './services/memory/memory-store.js';
 
 const mockLogger = {
   debug: () => {},
@@ -49,6 +48,7 @@ it('adds memory tools and summary-only context when memory is enabled, and neith
     'memory_list',
     'memory_get',
     'memory_search',
+    'memory_retrieve',
     'memory_create',
     'memory_update',
     'memory_delete',
@@ -60,20 +60,38 @@ it('adds memory tools and summary-only context when memory is enabled, and neith
   expect(disabled.instructions).not.toContain('Durable rules.');
 });
 
-it('fails agent construction with a typed visible error for a corrupted memory index', async () => {
+it('advertises librarian delegation when memory and subagent delegation are enabled', () => {
+  const enabled = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'app.orchestratorMode': true }),
+    loggingService: mockLogger,
+    runSubagent: async () => ({ finalText: 'done' }),
+  });
+  const disabled = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'app.orchestratorMode': true, 'memory.enabled': false }),
+    loggingService: mockLogger,
+    runSubagent: async () => ({ finalText: 'done' }),
+  });
+
+  expect(enabled.instructions).toContain('`librarian`');
+  expect(disabled.instructions).not.toContain('`librarian`');
+});
+
+it('starts without injected memory context and warns when the memory index is corrupted', async () => {
   const { mkdtemp, writeFile } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const root = await mkdtemp(join(tmpdir(), 'term2-agent-memory-corrupt-'));
   await writeFile(join(root, 'index.json'), '{ malformed');
 
-  const construct = () =>
-    getAgentDefinition({
-      settingsService: createMockSettingsService({ 'memory.directory': root }),
-      loggingService: mockLogger,
-    });
-  expect(construct).toThrow(MemoryStorageError);
-  expect(construct).toThrow(/Memory index\.json is corrupted or unreadable/);
+  const warn = vi.fn();
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'memory.directory': root }),
+    loggingService: { ...mockLogger, warn },
+  });
+
+  expect(definition.tools.map((tool) => tool.name)).toContain('memory_search');
+  expect(definition.instructions).not.toContain('The following memories are summaries');
+  expect(warn).toHaveBeenCalledWith(expect.stringMatching(/memory context.*corrupted/i));
 });
 
 it('registers run_agent_workflow only when enable_agent_workflow is enabled', () => {
@@ -295,6 +313,7 @@ it('getAgentDefinition in orchestrator mode retains full memory authority', () =
     'memory_list',
     'memory_get',
     'memory_search',
+    'memory_retrieve',
     'memory_create',
     'memory_update',
     'memory_delete',
@@ -304,6 +323,7 @@ it('getAgentDefinition in orchestrator mode retains full memory authority', () =
     'memory_list',
     'memory_get',
     'memory_search',
+    'memory_retrieve',
     'memory_create',
     'memory_update',
     'memory_delete',
@@ -352,6 +372,7 @@ it('getAgentDefinition in orchestrator mode retains full memory authority for no
       'memory_list',
       'memory_get',
       'memory_search',
+      'memory_retrieve',
       'memory_create',
       'memory_update',
       'memory_delete',

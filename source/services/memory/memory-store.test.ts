@@ -53,6 +53,13 @@ it('updates partial fields, changes timestamp, and removes broken entries', asyn
   expect(await memory.remove(input.id)).toBe(false);
 });
 
+it('rejects updates that do not change any memory fields', async () => {
+  const memory = await store();
+  await memory.create(input);
+
+  await expect(memory.update(input.id, {})).rejects.toThrow(/at least one field/i);
+});
+
 it('returns null for an absent memory without creating content', async () => {
   const memory = await store();
   expect(await memory.get('unknown-memory')).toBeNull();
@@ -74,12 +81,21 @@ it('searches deterministically with fixed field scoring and tie breaking', async
   expect(results[1].matchedFields).toEqual(expect.arrayContaining(['id', 'title', 'content']));
 });
 
-it('reports malformed indexes rather than replacing them and replaces indexes atomically', async () => {
+it('recovers a missing index from the last durable backup', async () => {
+  const memory = await store();
+  await memory.create(input);
+  await rm(join(roots[0], 'index.json'));
+
+  expect(await new FileMemoryStore({ root: roots[0] }).list()).toMatchObject([{ id: input.id }]);
+});
+
+it('recovers a corrupted index from the last durable backup', async () => {
   const memory = await store();
   await memory.create(input);
   expect(await readFile(join(roots[0], 'index.json.tmp'), 'utf8').catch(() => '')).toBe('');
   await writeFile(join(roots[0], 'index.json'), '{ bad');
-  await expect(new FileMemoryStore({ root: roots[0] }).list()).rejects.toBeInstanceOf(MemoryStorageError);
+
+  expect(await new FileMemoryStore({ root: roots[0] }).list()).toMatchObject([{ id: input.id }]);
 });
 
 it('rejects corrupted index metadata with invalid field types', async () => {
@@ -104,6 +120,14 @@ it('rejects corrupted index metadata with invalid field types', async () => {
   await expect(memory.list()).rejects.toThrow(/Memory index\.json/);
 });
 
+it('marks search results whose full content is unavailable', async () => {
+  const memory = await store();
+  await memory.create(input);
+  await rm(join(roots[0], 'items', `${input.id}.md`));
+
+  expect(await memory.search('project-rules')).toMatchObject([{ available: false }]);
+});
+
 it('searches every indexed memory before applying its result limit', async () => {
   const memory = await store();
   const memories = Array.from({ length: 51 }, (_, index) => ({
@@ -123,6 +147,18 @@ it('serializes concurrent in-process mutations', async () => {
   const memory = await store();
   await Promise.all(Array.from({ length: 8 }, (_, index) => memory.create({ ...input, id: `rule-${index}` })));
   expect((await memory.list({ limit: 20 })).map((entry) => entry.id)).toHaveLength(8);
+});
+
+it('serializes mutations across store instances sharing a directory', async () => {
+  const first = await store();
+  const second = new FileMemoryStore({ root: roots[0] });
+
+  await Promise.all([
+    ...Array.from({ length: 4 }, (_, index) => first.create({ ...input, id: `first-${index}` })),
+    ...Array.from({ length: 4 }, (_, index) => second.create({ ...input, id: `second-${index}` })),
+  ]);
+
+  expect(await first.list({ limit: 20 })).toHaveLength(8);
 });
 
 it('renders summary-only context within a budget', async () => {

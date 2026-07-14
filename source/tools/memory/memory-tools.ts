@@ -62,12 +62,13 @@ function definition<P>(
   description: string,
   parameters: z.ZodObject<any>,
   execute: (params: P) => Promise<unknown>,
+  needsApproval = false,
 ): ToolDefinition<P> {
   return {
     name,
     description,
     parameters,
-    needsApproval: () => false,
+    needsApproval: () => needsApproval,
     execute: (params) => safe(() => execute(params)),
     formatCommandMessage: makeFormat(name),
   };
@@ -93,6 +94,31 @@ export function createMemoryToolDefinitions(store: MemoryStore): ToolDefinition[
       async (params) => ({ results: await store.search(params.query, params) }),
     ),
     definition(
+      'memory_retrieve',
+      'Search and load the full content of relevant persistent memories in one operation.',
+      z.object({ query: z.string(), limit: z.number().int().positive().optional() }),
+      async (params) => {
+        const results = await store.search(params.query, params);
+        const memories = [];
+        const unavailableIds: string[] = [];
+        for (const result of results) {
+          if (!result.available) {
+            unavailableIds.push(result.memory.id);
+            continue;
+          }
+          try {
+            const memory = await store.get(result.memory.id);
+            if (memory) memories.push(memory);
+            else unavailableIds.push(result.memory.id);
+          } catch (error) {
+            if (!(error instanceof MemoryStorageError) && !(error instanceof MemoryNotFoundError)) throw error;
+            unavailableIds.push(result.memory.id);
+          }
+        }
+        return { memories, unavailableIds };
+      },
+    ),
+    definition(
       'memory_create',
       'Explicitly save durable information as persistent memory.',
       z.object({
@@ -107,11 +133,20 @@ export function createMemoryToolDefinitions(store: MemoryStore): ToolDefinition[
     definition(
       'memory_update',
       'Update an existing persistent memory; its ID cannot change.',
-      z.object({ id, ...fields }),
+      z
+        .object({ id, ...fields })
+        .refine(({ id: _, ...input }) => Object.values(input).some((value) => value !== undefined), {
+          message: 'At least one field must be provided for a memory update.',
+        }),
       async ({ id, ...input }) => ({ memory: await store.update(id, input) }),
+      true,
     ),
-    definition('memory_delete', 'Delete an explicit persistent memory item.', z.object({ id }), async ({ id }) => ({
-      deleted: await store.remove(id),
-    })),
+    definition(
+      'memory_delete',
+      'Delete an explicit persistent memory item.',
+      z.object({ id }),
+      async ({ id }) => ({ deleted: await store.remove(id) }),
+      true,
+    ),
   ];
 }

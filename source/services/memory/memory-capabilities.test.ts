@@ -6,8 +6,16 @@ import { describe, expect, it } from 'vitest';
 import { MemoryCapabilityBuilder } from './memory-capabilities.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 
-const writeTools = ['memory_list', 'memory_get', 'memory_search', 'memory_create', 'memory_update', 'memory_delete'];
-const readTools = writeTools.slice(0, 3);
+const writeTools = [
+  'memory_list',
+  'memory_get',
+  'memory_search',
+  'memory_retrieve',
+  'memory_create',
+  'memory_update',
+  'memory_delete',
+];
+const readTools = writeTools.slice(0, 4);
 
 describe('MemoryCapabilityBuilder', () => {
   it.each([
@@ -65,6 +73,15 @@ describe('MemoryCapabilityBuilder', () => {
       expect(capability.context).toBe('');
     },
   );
+
+  it('guides the main agent to review durable turn outcomes without storing routine conversation', () => {
+    const capability = new MemoryCapabilityBuilder(createMockSettingsService()).build({ kind: 'main' });
+
+    expect(capability.guidance).toContain('memory_retrieve');
+    expect(capability.guidance).toContain('Before finishing a task');
+    expect(capability.guidance).toContain('explicit durable');
+    expect(capability.guidance).toContain('ordinary conversation');
+  });
 
   it('injects summary context for a main agent with write access', () => {
     const directory = mkdtempSync(join(tmpdir(), 'term2-memory-capability-'));

@@ -78,7 +78,12 @@ describe('SubagentToolFactory memory authority', () => {
   it.each(['explorer', 'worker', 'researcher'] as const)('gives %s read-only memory tools', (role) => {
     const tools = buildToolNames(createDefinition({ role }));
 
-    expect(tools.filter((name) => name.startsWith('memory_'))).toEqual(['memory_list', 'memory_get', 'memory_search']);
+    expect(tools.filter((name) => name.startsWith('memory_'))).toEqual([
+      'memory_list',
+      'memory_get',
+      'memory_search',
+      'memory_retrieve',
+    ]);
   });
 
   it('keeps mentor tool-free even when memory is enabled', () => {
@@ -106,6 +111,7 @@ describe('SubagentToolFactory memory authority', () => {
       'memory_list',
       'memory_get',
       'memory_search',
+      'memory_retrieve',
       'memory_create',
       'memory_update',
       'memory_delete',

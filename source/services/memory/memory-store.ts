@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { join, resolve } from 'node:path';
 
 export type MemoryId = string;
 export interface MemoryMetadata {
@@ -30,6 +31,7 @@ export interface UpdateMemoryInput {
 export interface MemorySearchResult {
   memory: MemoryMetadata;
   matchedFields: Array<'id' | 'title' | 'summary' | 'tags' | 'content'>;
+  available: boolean;
 }
 export interface MemoryStore {
   list(options?: { limit?: number }): Promise<MemoryMetadata[]>;
@@ -68,11 +70,15 @@ export class MemoryStorageError extends Error {
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SUMMARY_LIMIT = 300;
 const DEFAULT_SEARCH_LIMIT = 10;
+const SEARCH_READ_CONCURRENCY = 8;
 type Index = { version: 1; memories: MemoryMetadata[] };
+const mutationQueues = new Map<string, Promise<void>>();
+const initializationPromises = new Map<string, Promise<void>>();
 
 export class FileMemoryStore implements MemoryStore {
-  private queue = Promise.resolve();
+  private readonly root: string;
   private readonly indexPath: string;
+  private readonly indexBackupPath: string;
   private readonly itemsPath: string;
   private readonly now: () => Date;
   private readonly searchDefaultLimit: number;
@@ -89,8 +95,10 @@ export class FileMemoryStore implements MemoryStore {
     searchDefaultLimit?: number;
     searchMaxLimit?: number;
   }) {
-    this.indexPath = join(root, 'index.json');
-    this.itemsPath = join(root, 'items');
+    this.root = resolve(root);
+    this.indexPath = join(this.root, 'index.json');
+    this.indexBackupPath = join(this.root, 'index.backup.json');
+    this.itemsPath = join(this.root, 'items');
     this.now = now;
     this.searchDefaultLimit = searchDefaultLimit;
     this.searchMaxLimit = searchMaxLimit;
@@ -114,52 +122,51 @@ export class FileMemoryStore implements MemoryStore {
     const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
     if (!terms.length) throw new InvalidMemoryError('Search query must not be empty.');
     const memories = [...(await this.load()).memories].sort(byRecent);
-    const scored = await Promise.all(
-      memories.map(async (memory) => {
-        let score = 0;
-        const fields = new Set<MemorySearchResult['matchedFields'][number]>();
-        let content = '';
-        try {
-          content = await readFile(this.itemPath(memory.id), 'utf8');
-        } catch {
-          /* Missing content remains searchable by metadata. */
+    const scored = await mapConcurrent(memories, SEARCH_READ_CONCURRENCY, async (memory) => {
+      let score = 0;
+      const fields = new Set<MemorySearchResult['matchedFields'][number]>();
+      let content = '';
+      let available = true;
+      try {
+        content = await readFile(this.itemPath(memory.id), 'utf8');
+      } catch {
+        available = false;
+      }
+      for (const term of terms) {
+        if (memory.id === term) {
+          score += 100;
+          fields.add('id');
+        } else if (memory.id.includes(term)) {
+          score += 20;
+          fields.add('id');
         }
-        for (const term of terms) {
-          if (memory.id === term) {
-            score += 100;
-            fields.add('id');
-          } else if (memory.id.includes(term)) {
-            score += 20;
-            fields.add('id');
-          }
-          if (memory.title.toLowerCase().includes(term)) {
-            score += 15;
-            fields.add('title');
-          }
-          if (memory.tags.some((tag) => tag === term)) {
-            score += 12;
-            fields.add('tags');
-          } else if (memory.tags.some((tag) => tag.includes(term))) {
-            score += 12;
-            fields.add('tags');
-          }
-          if (memory.summary.toLowerCase().includes(term)) {
-            score += 8;
-            fields.add('summary');
-          }
-          if (content.toLowerCase().includes(term)) {
-            score += 2;
-            fields.add('content');
-          }
+        if (memory.title.toLowerCase().includes(term)) {
+          score += 15;
+          fields.add('title');
         }
-        return { memory, matchedFields: [...fields], score };
-      }),
-    );
+        if (memory.tags.some((tag) => tag === term)) {
+          score += 12;
+          fields.add('tags');
+        } else if (memory.tags.some((tag) => tag.includes(term))) {
+          score += 12;
+          fields.add('tags');
+        }
+        if (memory.summary.toLowerCase().includes(term)) {
+          score += 8;
+          fields.add('summary');
+        }
+        if (content.toLowerCase().includes(term)) {
+          score += 2;
+          fields.add('content');
+        }
+      }
+      return { memory, matchedFields: [...fields], score, available };
+    });
     return scored
       .filter((result) => result.score > 0)
       .sort((a, b) => b.score - a.score || byRecent(a.memory, b.memory))
       .slice(0, limit(options.limit, this.searchMaxLimit, this.searchDefaultLimit))
-      .map(({ memory, matchedFields }) => ({ memory, matchedFields }));
+      .map(({ memory, matchedFields, available }) => ({ memory, matchedFields, available }));
   }
   async create(input: CreateMemoryInput): Promise<Memory> {
     return this.mutate(async () => {
@@ -175,6 +182,8 @@ export class FileMemoryStore implements MemoryStore {
     });
   }
   async update(id: MemoryId, input: UpdateMemoryInput): Promise<Memory> {
+    if (!Object.values(input).some((value) => value !== undefined))
+      throw new InvalidMemoryError('At least one field must be provided for a memory update.');
     return this.mutate(async () => {
       validateId(id);
       const index = await this.load();
@@ -250,36 +259,82 @@ export class FileMemoryStore implements MemoryStore {
   }
   private async load(): Promise<Index> {
     await this.initialize();
+    let contents: string;
     try {
-      return validateIndex(JSON.parse(await readFile(this.indexPath, 'utf8')));
+      contents = await readFile(this.indexPath, 'utf8');
+    } catch {
+      return this.recoverBackup();
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(contents);
+    } catch {
+      return this.recoverBackup();
+    }
+    try {
+      return validateIndex(parsed);
     } catch {
       throw new MemoryStorageError('Memory index.json is corrupted or unreadable.');
     }
   }
   private async initialize() {
+    const existing = initializationPromises.get(this.root);
+    if (existing) return existing;
+    const initialization = this.initializeOnce();
+    initializationPromises.set(this.root, initialization);
+    try {
+      await initialization;
+    } finally {
+      if (initializationPromises.get(this.root) === initialization) initializationPromises.delete(this.root);
+    }
+  }
+  private async initializeOnce() {
     try {
       await mkdir(this.itemsPath, { recursive: true });
       await readFile(this.indexPath, 'utf8');
     } catch (error: any) {
-      if (error?.code === 'ENOENT') await this.writeIndex({ version: 1, memories: [] });
-      else throw new MemoryStorageError('Unable to initialize memory storage.');
+      if (error?.code !== 'ENOENT') throw new MemoryStorageError('Unable to initialize memory storage.');
+      try {
+        await this.recoverBackup();
+      } catch {
+        await this.writeIndex({ version: 1, memories: [] });
+      }
+    }
+  }
+  private async recoverBackup(): Promise<Index> {
+    try {
+      const backup = validateIndex(JSON.parse(await readFile(this.indexBackupPath, 'utf8')));
+      await this.writeFileAtomically(this.indexPath, serializeIndex(backup));
+      return backup;
+    } catch {
+      throw new MemoryStorageError('Memory index.json is corrupted or unreadable.');
     }
   }
   private async writeIndex(index: Index) {
     try {
-      const temporary = `${this.indexPath}.tmp`;
-      await writeFile(temporary, `${JSON.stringify(index, null, 2)}\n`, 'utf8');
-      await rename(temporary, this.indexPath);
+      const contents = serializeIndex(index);
+      await this.writeFileAtomically(this.indexPath, contents);
+      await this.writeFileAtomically(this.indexBackupPath, contents);
     } catch {
       throw new MemoryStorageError('Unable to save memory index.');
     }
   }
+  private async writeFileAtomically(path: string, contents: string) {
+    const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
+    await writeFile(temporary, contents, 'utf8');
+    await rename(temporary, path);
+  }
   private async mutate<T>(operation: () => Promise<T>) {
-    const result = this.queue.then(operation, operation);
-    this.queue = result.then(
+    const queue = mutationQueues.get(this.root) ?? Promise.resolve();
+    const result = queue.then(operation, operation);
+    const settled = result.then(
       () => undefined,
       () => undefined,
     );
+    mutationQueues.set(this.root, settled);
+    settled.finally(() => {
+      if (mutationQueues.get(this.root) === settled) mutationQueues.delete(this.root);
+    });
     return result;
   }
 }
@@ -331,6 +386,24 @@ function byRecent(a: MemoryMetadata, b: MemoryMetadata) {
 function limit(value: number | undefined, max: number, fallback = max) {
   return Math.min(Math.max(1, value ?? fallback), max);
 }
+async function mapConcurrent<T, R>(items: T[], concurrency: number, operation: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+      while (next < items.length) {
+        const index = next++;
+        results[index] = await operation(items[index]);
+      }
+    }),
+  );
+  return results;
+}
+
+function serializeIndex(index: Index): string {
+  return `${JSON.stringify(index, null, 2)}\n`;
+}
+
 function validateIndex(value: unknown): Index {
   const index = value as Index;
   if (!index || index.version !== 1 || !Array.isArray(index.memories))

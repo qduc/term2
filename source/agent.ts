@@ -145,7 +145,9 @@ export const getAgentDefinition = (
   const codeContextEnabled = !(executionContext?.isRemote() ?? false);
   const isGpt5 = shouldPreferPatchEditingModel(resolvedModel);
   const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled');
-  const memoryCapability = new MemoryCapabilityBuilder(settingsService).build({ kind: 'main' });
+  const memoryCapability = new MemoryCapabilityBuilder(settingsService, {
+    onWarning: (message) => loggingService.warn(message),
+  }).build({ kind: 'main' });
   const promptSpec = buildPromptSpec({
     model: resolvedModel,
     liteMode,
@@ -156,6 +158,7 @@ export const getAgentDefinition = (
     codeContextEnabled,
     runSubagentEnabled: Boolean(runSubagent),
     sandboxEnabled,
+    memoryEnabled: memoryCapability.access !== 'none',
     memoryGuidance: memoryCapability.guidance,
     executionContext,
   });

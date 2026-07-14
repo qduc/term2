@@ -24,8 +24,8 @@ const RUN_SUBAGENT_DESCRIPTION =
 
 const runSubagentSchema = z.object({
   role: z
-    .enum(['explorer', 'worker', 'researcher', 'mentor', 'librarian'])
-    .describe('The subagent role to use: "explorer", "worker", "researcher", "mentor", or "librarian".'),
+    .enum(['explorer', 'worker', 'researcher', 'librarian'])
+    .describe('The subagent role to use: "explorer", "worker", "researcher", or "librarian".'),
   task: z.string().describe('The full task description.'),
 });
 

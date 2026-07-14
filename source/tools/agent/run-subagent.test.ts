@@ -39,12 +39,13 @@ it('schema requires role and task', () => {
   expect(tool.parameters.safeParse({ task: 'find files' }).success).toBe(false);
 });
 
-it('schema rejects unsupported roles', () => {
+it('schema accepts delegatable roles but hides mentor behind ask_mentor', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 
-  for (const role of ['explorer', 'worker', 'researcher', 'mentor', 'librarian']) {
+  for (const role of ['explorer', 'worker', 'researcher', 'librarian']) {
     expect(tool.parameters.safeParse({ role, task: 'do work' }).success).toBe(true);
   }
+  expect(tool.parameters.safeParse({ role: 'mentor', task: 'do work' }).success).toBe(false);
   expect(tool.parameters.safeParse({ role: 'custom', task: 'do work' }).success).toBe(false);
 });
 

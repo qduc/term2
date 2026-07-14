@@ -120,6 +120,43 @@ it('SessionStreamProcessor.process() streams events and updates toolTracker', as
   expect(loggedEvents[0].output).toBe('file1.txt');
 });
 
+it('SessionStreamProcessor.process() aborts a stream that enters a repeating text pattern', async () => {
+  const conversationStore = new ConversationStore();
+  const toolTracker = new SessionToolTracker(conversationStore);
+  const generationGuard = new GenerationGuard();
+  let abortCount = 0;
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger: { hasSink: () => false } as ConversationLogger,
+    providerContinuity: new ProviderContinuity(),
+    generationGuard,
+    journal: makeJournal(),
+    abortStream: () => abortCount++,
+  });
+  const stream = makeStream([
+    {
+      type: 'raw_model_stream_event',
+      data: { type: 'output_text_delta', delta: 'abc '.repeat(60) },
+    },
+  ]);
+
+  const consume = async () => {
+    for await (const _ of processor.process(stream, {
+      gen: generationGuard.capture(),
+      source: 'startStream',
+      preserveExistingToolArgs: false,
+    })) {
+      // Consume the stream.
+    }
+  };
+
+  await expect(consume()).rejects.toMatchObject({ code: 'repetitive_model_output' });
+  expect(abortCount).toBe(1);
+});
+
 it('SessionStreamProcessor.process() preserves reasoning before recovered tool call history', async () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);

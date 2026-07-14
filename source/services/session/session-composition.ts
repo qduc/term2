@@ -288,6 +288,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     providerContinuity,
     generationGuard,
     journal,
+    abortStream: () => agentClient.abort(),
   });
 
   const breakChaining = (): void => {

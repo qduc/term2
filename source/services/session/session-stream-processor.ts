@@ -13,6 +13,7 @@ import { callIdOf, toolNameOf, outputOf } from '../tool-execution-ledger.js';
 import { TOOL_RESULT_ITEM_TYPES } from '../../lib/chained-input-filter.js';
 import type { AgentInputItem } from '@openai/agents';
 import { GenerationGuard, type GenerationToken } from '../generation-guard.js';
+import { RepetitionDetector, RepetitiveModelOutputError } from './repetition-detector.js';
 
 export type StreamHistorySource = 'startStream' | 'continueRunStream' | 'abortResolution';
 
@@ -87,6 +88,8 @@ export interface SessionStreamProcessorDeps {
   generationGuard: GenerationGuard;
   /** Assistant-output journal; every raw run item is fed into it. */
   journal: AssistantTurnJournal;
+  /** Cancels provider work when the output safety guard terminates a stream. */
+  abortStream?: () => void;
 }
 
 export interface StreamProcessOptions {
@@ -131,6 +134,7 @@ export class SessionStreamProcessor {
     };
     let pendingLedgerReasoningText = '';
     let consumedLedgerReasoningLength = 0;
+    const repetitionDetector = new RepetitionDetector();
 
     const generator = processStreamEvents(
       stream,
@@ -204,6 +208,18 @@ export class SessionStreamProcessor {
         this.deps.generationGuard.runIfCurrent(options.gen, commitWorkingCaches);
         if (next.value.type === 'reasoning_delta') {
           pendingLedgerReasoningText = acc.reasoningOutput.slice(consumedLedgerReasoningLength);
+        }
+        if (next.value.type === 'text_delta' && repetitionDetector.append(next.value.delta)) {
+          this.deps.logger.warn('Repeating model output detected; aborting stream', {
+            eventType: 'conversation.repetitive_output_detected',
+            category: 'provider',
+            phase: 'stream',
+            sessionId: this.deps.sessionId,
+            traceId: this.deps.logger.getCorrelationId(),
+            outputLength: acc.finalOutput.length,
+          });
+          this.deps.abortStream?.();
+          throw new RepetitiveModelOutputError();
         }
         const filtered = this.deps.toolTracker.dedupeToolStarted(next.value);
         if (filtered) {

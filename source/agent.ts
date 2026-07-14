@@ -143,7 +143,7 @@ export const getAgentDefinition = (
   // Code-context tools operate on the local filesystem only; disable them for
   // remote (SSH) execution where the workspace lives on another host.
   const codeContextEnabled = !(executionContext?.isRemote() ?? false);
-  const isGpt5 = !liteMode && shouldPreferPatchEditingModel(resolvedModel);
+  const isGpt5 = shouldPreferPatchEditingModel(resolvedModel);
   const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled');
   const memoryCapability = new MemoryCapabilityBuilder(settingsService).build({ kind: 'main' });
   const promptSpec = buildPromptSpec({
@@ -275,7 +275,7 @@ export const getAgentDefinition = (
   }
 
   if (liteMode) {
-    // Lite mode: shell + read-only tools only (no editing tools)
+    // Lite mode keeps lightweight context and delegation policy, but still allows file edits.
     if (!searchViaShell) {
       tools.push(
         createGrepToolDefinition({ executionContext }),
@@ -291,6 +291,14 @@ export const getAgentDefinition = (
         allowOutsideWorkspace: true,
       }),
     );
+    if (isGpt5) {
+      tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext }));
+    } else {
+      tools.push(
+        createCreateFileToolDefinition({ settingsService, loggingService, executionContext }),
+        createSearchReplaceToolDefinition({ settingsService, loggingService, executionContext }),
+      );
+    }
   } else {
     // Full mode: all tools based on model
     if (isGpt5) {

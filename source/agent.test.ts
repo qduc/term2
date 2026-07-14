@@ -164,6 +164,31 @@ it('getAgentDefinition includes ask_user in lite mode when getAskUserAnswer is p
   expect(toolNames.includes('ask_user')).toBe(true);
 });
 
+it('getAgentDefinition allows file modification in lite mode for patch-capable models', () => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-5', 'app.liteMode': true }),
+    loggingService: mockLogger,
+  });
+
+  const toolNames = definition.tools.map((tool) => tool.name);
+  expect(toolNames).toContain('apply_patch');
+  expect(toolNames).not.toContain('create_file');
+  expect(toolNames).not.toContain('search_replace');
+  expect(definition.instructions).toContain('edit files');
+});
+
+it('getAgentDefinition allows file modification in lite mode for non-patch models', () => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o', 'app.liteMode': true }),
+    loggingService: mockLogger,
+  });
+
+  const toolNames = definition.tools.map((tool) => tool.name);
+  expect(toolNames).toContain('create_file');
+  expect(toolNames).toContain('search_replace');
+  expect(definition.instructions).toContain('edit files');
+});
+
 it('getAgentDefinition includes ask_user in orchestrator mode when getAskUserAnswer is provided', () => {
   const definition = getAgentDefinition({
     settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o', 'app.orchestratorMode': true }),
@@ -404,7 +429,7 @@ it('getAgentDefinition excludes grep and glob in lite mode when searchViaShell i
   expect(toolNames.includes('read_code_outline')).toBe(true);
   expect(toolNames.includes('code_context_search')).toBe(true);
   expect(toolNames.includes('read_file')).toBe(true);
-  expect(toolNames.includes('search_replace')).toBe(false);
+  expect(toolNames.includes('search_replace')).toBe(true);
 });
 
 it('getAgentDefinition for gpt-5 omits grep and glob regardless of searchViaShell', () => {

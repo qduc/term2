@@ -2,6 +2,7 @@ import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, Rat
 import { OpenAICompatibleError, OpenRouterError, LongRetryDelayError } from '../../providers/common/provider-errors.js';
 import { getRetryAfterMs } from './upstream-retry-policy.js';
 import type { ILoggingService } from '../service-interfaces.js';
+import { AmbiguousModelOutcomeError } from './retry-errors.js';
 
 export type RetryableTransportDecision = {
   retryable: boolean;
@@ -152,7 +153,7 @@ export function isUndiciSocketCloseError(error: unknown): boolean {
 }
 
 export function isNetworkProtocolError(error: unknown, seen = new Set<unknown>()): boolean {
-  if (!error) return false;
+  if (!error || error instanceof AmbiguousModelOutcomeError) return false;
 
   if (seen.has(error)) {
     return false;
@@ -264,6 +265,10 @@ export const isRetryableTransportError = (
   error: unknown,
   logger?: Pick<ILoggingService, 'info'>,
 ): RetryableTransportDecision => {
+  if (error instanceof AmbiguousModelOutcomeError) {
+    return { retryable: false, transportFallback: false };
+  }
+
   const retryable =
     isPreviousResponseNotFoundError(error) ||
     isFirstFrameTimeoutError(error) ||

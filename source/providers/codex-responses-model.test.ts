@@ -1842,7 +1842,7 @@ it.sequential(
   },
 );
 
-it.sequential('CodexResponsesWSModel falls back to full history immediately after warmup network failure', async () => {
+it.sequential('CodexResponsesWSModel leaves warmup connection failures to the outer retry policy', async () => {
   const seenRequests: any[] = [];
   const networkError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
     code: 'connection_closed_before_opening',
@@ -1895,105 +1895,103 @@ it.sequential('CodexResponsesWSModel falls back to full history immediately afte
       },
     );
 
+    await expect(async () => {
+      for await (const _event of model.getStreamedResponse({
+        input: fullInput,
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any)) {
+      }
+    }).rejects.toBe(networkError);
+
+    expect(seenRequests.length).toBe(1);
+    expect(seenRequests[0].modelSettings.providerData?.generate).toBe(false);
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+  }
+});
+
+it.sequential('CodexResponsesWSModel leaves chained connection failures to the outer retry policy', async () => {
+  const seenRequests: any[] = [];
+  const networkError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
+    code: 'connection_closed_before_opening',
+  });
+
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    if (seenRequests.length === 1) {
+      return makeStream([
+        {
+          type: 'response.completed',
+          response: {
+            id: 'resp-stale-chain',
+            output: [],
+            usage: {},
+          },
+        } as any,
+      ]);
+    }
+
+    if (seenRequests.length === 2) {
+      throw networkError;
+    }
+
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: 'resp-recovered',
+          output: [],
+          usage: {},
+        },
+      } as any,
+    ]);
+  };
+
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+
+  const continuationInput = [
+    { role: 'user', type: 'message', content: 'continue' },
+    {
+      type: 'function_call_result',
+      callId: 'call_kQ5FnDgiK4ZWWNTvzPglQtEU',
+      output: 'tool output',
+    },
+  ];
+
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5-codex',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({ sessionId: 'session-network-repro', traceId: 'trace-network-repro' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+    );
+
     for await (const _event of model.getStreamedResponse({
-      input: fullInput,
+      previousResponseId: 'resp-root',
+      input: [{ role: 'user', type: 'message', content: 'first turn' }],
       modelSettings: {},
       tools: [],
       handoffs: [],
     } as any)) {
     }
 
-    expect(seenRequests.length).toBe(2);
-    expect(seenRequests[0].modelSettings.providerData?.generate).toBe(false);
-    expect(seenRequests[1].previousResponseId).toBe(undefined);
-    expect(seenRequests[1].modelSettings.providerData?.generate).toBe(undefined);
-    expect(seenRequests[1].input).toEqual(fullInput);
-  } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
-  }
-});
-
-it.sequential(
-  'CodexResponsesWSModel falls back to full history immediately after websocket network failure',
-  async () => {
-    const seenRequests: any[] = [];
-    const networkError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
-      code: 'connection_closed_before_opening',
-    });
-
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
-      seenRequests.push(request);
-      if (seenRequests.length === 1) {
-        return makeStream([
-          {
-            type: 'response.completed',
-            response: {
-              id: 'resp-stale-chain',
-              output: [],
-              usage: {},
-            },
-          } as any,
-        ]);
-      }
-
-      if (seenRequests.length === 2) {
-        throw networkError;
-      }
-
-      return makeStream([
-        {
-          type: 'response.completed',
-          response: {
-            id: 'resp-recovered',
-            output: [],
-            usage: {},
-          },
-        } as any,
-      ]);
-    };
-
-    const mockClient = {
-      baseURL: 'https://api.openai.com',
-      apiKey: 'test-key',
-      _options: {},
-    };
-    const tokenManager = {
-      getOrRefreshAccessToken: async () => 'token',
-      getAccountId: () => 'acc_123',
-    };
-
-    const continuationInput = [
-      { role: 'user', type: 'message', content: 'continue' },
-      {
-        type: 'function_call_result',
-        callId: 'call_kQ5FnDgiK4ZWWNTvzPglQtEU',
-        output: 'tool output',
-      },
-    ];
-
-    try {
-      const model = new CodexResponsesWSModel(
-        mockClient as any,
-        'gpt-5-codex',
-        tokenManager as any,
-        undefined,
-        undefined,
-        {
-          getContext: () => ({ sessionId: 'session-network-repro', traceId: 'trace-network-repro' } as any),
-          runWithContext: <T>(_context: any, fn: () => T) => fn(),
-        },
-      );
-
-      for await (const _event of model.getStreamedResponse({
-        previousResponseId: 'resp-root',
-        input: [{ role: 'user', type: 'message', content: 'first turn' }],
-        modelSettings: {},
-        tools: [],
-        handoffs: [],
-      } as any)) {
-      }
-
+    await expect(async () => {
       for await (const _event of model.getStreamedResponse({
         input: continuationInput,
         modelSettings: {},
@@ -2001,21 +1999,15 @@ it.sequential(
         handoffs: [],
       } as any)) {
       }
+    }).rejects.toBe(networkError);
 
-      expect(seenRequests.length).toBe(3);
-      expect(seenRequests[1].previousResponseId).toBe('resp-stale-chain');
-      expect(seenRequests[1].input).toEqual([continuationInput[1]]);
-
-      // After transport failure, stale chained history is cleared and the same
-      // turn is replayed from full history without trying stateful history again.
-      expect(seenRequests[2].previousResponseId).toBe(undefined);
-      expect(seenRequests[2].modelSettings.providerData?.generate).toBe(undefined);
-      expect(seenRequests[2].input).toEqual(continuationInput);
-    } finally {
-      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
-    }
-  },
-);
+    expect(seenRequests.length).toBe(2);
+    expect(seenRequests[1].previousResponseId).toBe('resp-stale-chain');
+    expect(seenRequests[1].input).toEqual([continuationInput[1]]);
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+  }
+});
 
 it.sequential('CodexResponsesWSModel invalidates Luna wire state on previous_response_not_found error', async () => {
   const seenRequests: any[] = [];

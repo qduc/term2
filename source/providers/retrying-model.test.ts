@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest';
 import type { Model, ModelRequest, StreamEvent } from '@openai/agents-core';
+import { AmbiguousModelOutcomeError } from '../services/retry/retry-errors.js';
 import { RetryingModel } from './retrying-model.js';
 
 const request = { input: 'hello' } as unknown as ModelRequest;
@@ -22,6 +23,21 @@ it('getResponse retries the same request on the same model until exhausted', asy
   await expect(model.getResponse(request)).rejects.toThrow('upstream unavailable');
   expect(seen.length).toBe(3);
   expect(seen.every((item) => item === request)).toBe(true);
+});
+
+it('getResponse does not replay a request with an ambiguous provider outcome', async () => {
+  let calls = 0;
+  const underlying = {
+    async getResponse() {
+      calls++;
+      throw new AmbiguousModelOutcomeError('request accepted but response was not acknowledged');
+    },
+    async *getStreamedResponse() {},
+  } as unknown as Model;
+  const model = new RetryingModel(underlying, { retryAttempts: 3, sleep: async () => {} });
+
+  await expect(model.getResponse(request)).rejects.toThrow('request accepted but response was not acknowledged');
+  expect(calls).toBe(1);
 });
 
 it('getResponse fails immediately for non-retryable errors', async () => {

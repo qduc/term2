@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { sanitizeHeaders } from '../utils/header-sanitizer.js';
 import type { ISessionContextService, IProviderTraffic } from '../services/service-interfaces.js';
 import { dropUnpairedFunctionCalls } from '../services/tool-execution-ledger.js';
+import { AmbiguousModelOutcomeError } from '../services/retry/retry-errors.js';
 import { ChainedWireState, type ChainedWireStateKey, type ChainedRequestToken } from './chained-wire-state.js';
 import { LunaResponsesLiteWireProtocol } from './luna-responses-lite-wire-protocol.js';
 import {
@@ -375,6 +376,41 @@ const getErrorMessage = (error: unknown): string => {
 const isPreviousResponseUnavailableError = (error: unknown): boolean => {
   const message = getErrorMessage(error);
   return isPreviousResponseNotFoundError(error) || message.includes('previous_response_not_found');
+};
+
+const isDefinitelyUnsentWebSocketError = (error: unknown, seen = new Set<unknown>()): boolean => {
+  if (!error || seen.has(error)) return false;
+  seen.add(error);
+
+  if (typeof error === 'string') {
+    const message = error.toLowerCase();
+    return (
+      message.includes('before opening') ||
+      message.includes('timed out before opening') ||
+      message.includes('econnrefused') ||
+      message.includes('enotfound')
+    );
+  }
+  if (typeof error !== 'object') return false;
+
+  const record = error as Record<string, unknown>;
+  if (
+    record.code === 'connection_closed_before_opening' ||
+    record.code === 'ECONNREFUSED' ||
+    record.code === 'ENOTFOUND'
+  ) {
+    return true;
+  }
+  return isDefinitelyUnsentWebSocketError(record.message, seen) || isDefinitelyUnsentWebSocketError(record.cause, seen);
+};
+
+const asAmbiguousModelOutcome = (error: unknown): AmbiguousModelOutcomeError | undefined => {
+  if (!isRetryableTransportError(error).transportFallback || isDefinitelyUnsentWebSocketError(error)) {
+    return undefined;
+  }
+  return new AmbiguousModelOutcomeError(getErrorMessage(error) || 'Codex request outcome is unknown.', {
+    cause: error,
+  });
 };
 
 const hasGenerateFalse = (request: any): boolean =>
@@ -808,8 +844,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 
   override async getResponse(request: any): Promise<any> {
     const run = async () => {
+      let attemptedWithServerHistory = false;
       try {
         const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
+        attemptedWithServerHistory = Boolean(
+          preparedRequest.warmupRequest || preparedRequest.request?.previousResponseId,
+        );
         const warmupResponseId = await this.#warmupCodexUnary(preparedRequest.warmupRequest);
         const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
 
@@ -823,7 +863,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         );
         return response;
       } catch (error) {
-        if (this.#shouldForgetCodexServerHistory(error)) {
+        if (isPreviousResponseUnavailableError(error) && attemptedWithServerHistory) {
           this.#forgetCodexResponseId();
           if (isPreviousResponseUnavailableError(error) && hasToolResultInput(request)) {
             throw error;
@@ -835,7 +875,10 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
           this.#rememberConsumedToolResultCallIds(responseId, undefined, fallbackRequest.input);
           return response;
         }
-        throw error;
+        if (this.#shouldForgetCodexServerHistory(error)) {
+          this.#forgetCodexResponseId();
+        }
+        throw asAmbiguousModelOutcome(error) ?? error;
       }
     };
 
@@ -848,8 +891,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 
   override async *getStreamedResponse(request: any): AsyncIterable<any> {
     let yieldedAnyEvent = false;
+    let attemptedWithServerHistory = false;
     try {
       const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
+      attemptedWithServerHistory = Boolean(
+        preparedRequest.warmupRequest || preparedRequest.request?.previousResponseId,
+      );
       const warmupResponseId = await this.#warmupCodexStream(preparedRequest.warmupRequest);
       const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
 
@@ -862,7 +909,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       }
       this.#rememberConsumedToolResultCallIds(responseId, effectiveRequest.previousResponseId, effectiveRequest.input);
     } catch (error) {
-      if (this.#shouldForgetCodexServerHistory(error) && !yieldedAnyEvent) {
+      if (isPreviousResponseUnavailableError(error) && attemptedWithServerHistory && !yieldedAnyEvent) {
         this.#forgetCodexResponseId();
         if (isPreviousResponseUnavailableError(error) && hasToolResultInput(request)) {
           throw error;
@@ -880,7 +927,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       if (this.#shouldForgetCodexServerHistory(error)) {
         this.#forgetCodexResponseId();
       }
-      throw error;
+      throw (!yieldedAnyEvent ? asAmbiguousModelOutcome(error) : undefined) ?? error;
     }
   }
 

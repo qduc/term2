@@ -3,6 +3,7 @@ import { ModelBehaviorError } from '@openai/agents';
 import { OpenAICompatibleError } from '../../providers/common/provider-errors.js';
 import { MissingChainedToolOutputError } from '../../lib/chained-input-filter.js';
 import type { ClassificationContext } from './retry-contracts.js';
+import { AmbiguousModelOutcomeError } from './retry-errors.js';
 import { DefaultRetryClassifier } from './retry-classifier.js';
 
 const makeClassifier = (agentClient: Record<string, any> = {}, random: () => number = Math.random) =>
@@ -21,6 +22,16 @@ const baseContext = (overrides: Partial<ClassificationContext> = {}): Classifica
   stream: null,
   maxTransientRetries: 5,
   ...overrides,
+});
+
+it('classify terminates an ambiguous provider outcome instead of replaying the turn', () => {
+  const classifier = makeClassifier();
+
+  const result = classifier.classify(
+    baseContext({ error: new AmbiguousModelOutcomeError('request accepted but response was not acknowledged') }),
+  );
+
+  expect(result.kind).toBe('unrecoverable');
 });
 
 it('classify does not return service_tier_fallback when already attempted', () => {

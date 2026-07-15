@@ -43,6 +43,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --reporter=minimal",
     "test:e2e": "vitest run --reporter=minimal .e2e.test.ts",
+    "test:codex-network": "vitest run --reporter=minimal scripts/fake-codex-server.e2e.test.ts",
+    "fake:codex": "tsx scripts/fake-codex-server.ts",
     "test:verbose": "vitest run",
     "test:vitest:watch": "vitest",
     "test:vitest:coverage": "vitest run --coverage",
@@ -101,6 +103,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.0.0",
     "@types/turndown": "^5.0.6",
+    "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.1.9",
     "chalk": "^5.2.0",
     "eslint": "^9.39.4",
@@ -117,7 +120,8 @@
     "typescript": "npm:@typescript/typescript6@^6.0.1",
     "typescript-7": "npm:typescript@7.0.2",
     "typescript-eslint": "^8.62.0",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "ws": "^8.21.0"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [

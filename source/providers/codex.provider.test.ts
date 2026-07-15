@@ -788,6 +788,33 @@ it.sequential('Codex provider createRunner custom fetch injects chatgpt-account-
   }
 });
 
+it.sequential('Codex provider uses CODEX_BASE_URL for local server simulation', async () => {
+  const provider = getProvider('codex');
+  expect(provider?.createRunner).toBeTruthy();
+  if (!provider?.createRunner) return;
+
+  const originalBaseUrl = process.env.CODEX_BASE_URL;
+  process.env.CODEX_BASE_URL = 'http://127.0.0.1:8787/backend-api/codex';
+
+  try {
+    const runner = provider.createRunner({
+      settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
+      loggingService: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+    } as any);
+    expect(runner).toBeTruthy();
+    if (!runner) return;
+
+    const model = await runner.config.modelProvider.getModel('gpt-5.3-codex');
+    expect((model as any).wrappedModel._client.baseURL).toBe('http://127.0.0.1:8787/backend-api/codex');
+  } finally {
+    if (originalBaseUrl === undefined) {
+      delete process.env.CODEX_BASE_URL;
+    } else {
+      process.env.CODEX_BASE_URL = originalBaseUrl;
+    }
+  }
+});
+
 it.sequential('Codex provider passes configured receive timeouts to websocket models', async () => {
   const provider = getProvider('codex');
   expect(provider?.createRunner).toBeTruthy();

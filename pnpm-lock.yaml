@@ -240,16 +240,16 @@ importers:
         version: 0.6.0
       '@openai/agents':
         specifier: ^0.11.4
-        version: 0.11.4(ws@8.20.0)(zod@4.1.13)
+        version: 0.11.4(ws@8.21.0)(zod@4.1.13)
       '@openai/agents-core':
         specifier: ^0.11.4
-        version: 0.11.4(ws@8.20.0)(zod@4.1.13)
+        version: 0.11.4(ws@8.21.0)(zod@4.1.13)
       '@openai/agents-extensions':
         specifier: ^0.11.4
-        version: 0.11.4(@ai-sdk/provider@3.0.10)(@openai/agents@0.11.4(ws@8.20.0)(zod@4.1.13))(ai@6.0.177(zod@4.1.13))(ws@8.20.0)(zod@4.1.13)
+        version: 0.11.4(@ai-sdk/provider@3.0.10)(@openai/agents@0.11.4(ws@8.21.0)(zod@4.1.13))(ai@6.0.177(zod@4.1.13))(ws@8.21.0)(zod@4.1.13)
       '@openai/agents-openai':
         specifier: ^0.11.4
-        version: 0.11.4(ws@8.20.0)(zod@4.1.13)
+        version: 0.11.4(ws@8.21.0)(zod@4.1.13)
       '@openrouter/ai-sdk-provider':
         specifier: ^2.9.0
         version: 2.9.0(ai@6.0.177(zod@4.1.13))(zod@4.1.13)
@@ -291,7 +291,7 @@ importers:
         version: 11.0.0
       openai:
         specifier: ^6.9.1
-        version: 6.37.0(ws@8.20.0)(zod@4.1.13)
+        version: 6.37.0(ws@8.21.0)(zod@4.1.13)
       react:
         specifier: ^19.0.0
         version: 19.2.0
@@ -347,6 +347,9 @@ importers:
       '@types/turndown':
         specifier: ^5.0.6
         version: 5.0.6
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       '@vitest/coverage-v8':
         specifier: ^4.1.9
         version: 4.1.9(vitest@4.1.9)
@@ -398,6 +401,9 @@ importers:
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@24.10.1)(@vitest/coverage-v8@4.1.9)(jsdom@27.4.0)(vite@8.0.16(@types/node@24.10.1)(tsx@4.20.6)(yaml@2.9.0))
+      ws:
+        specifier: ^8.21.0
+        version: 8.21.0
 
 packages:
 
@@ -3634,6 +3640,18 @@ packages:
       utf-8-validate:
         optional: true
 
+  ws@8.21.0:
+    resolution: {integrity: sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   xml-name-validator@5.0.0:
     resolution: {integrity: sha512-EvGK8EJ3DhaHfbRlETOWAS5pO9MZITeauHKJyb8wyajUfQUenkIg2MvLDTZ4T/TgIcm3HU0TFBgWWboAZ30UHg==}
     engines: {node: '>=18'}
@@ -4247,13 +4265,25 @@ snapshots:
       - supports-color
       - ws
 
-  '@openai/agents-extensions@0.11.4(@ai-sdk/provider@3.0.10)(@openai/agents@0.11.4(ws@8.20.0)(zod@4.1.13))(ai@6.0.177(zod@4.1.13))(ws@8.20.0)(zod@4.1.13)':
+  '@openai/agents-core@0.11.4(ws@8.21.0)(zod@4.1.13)':
     dependencies:
-      '@openai/agents': 0.11.4(ws@8.20.0)(zod@4.1.13)
-      '@openai/agents-core': 0.11.4(ws@8.20.0)(zod@4.1.13)
+      debug: 4.4.3
+      openai: 6.37.0(ws@8.21.0)(zod@4.1.13)
+    optionalDependencies:
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.1.13)
+      zod: 4.1.13
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - supports-color
+      - ws
+
+  '@openai/agents-extensions@0.11.4(@ai-sdk/provider@3.0.10)(@openai/agents@0.11.4(ws@8.21.0)(zod@4.1.13))(ai@6.0.177(zod@4.1.13))(ws@8.21.0)(zod@4.1.13)':
+    dependencies:
+      '@openai/agents': 0.11.4(ws@8.21.0)(zod@4.1.13)
+      '@openai/agents-core': 0.11.4(ws@8.21.0)(zod@4.1.13)
       '@types/ws': 8.18.1
       debug: 4.4.3
-      ws: 8.20.0
+      ws: 8.21.0
       zod: 4.1.13
     optionalDependencies:
       '@ai-sdk/provider': 3.0.10
@@ -4262,11 +4292,11 @@ snapshots:
       - '@cfworker/json-schema'
       - supports-color
 
-  '@openai/agents-openai@0.11.4(ws@8.20.0)(zod@4.1.13)':
+  '@openai/agents-openai@0.11.4(ws@8.21.0)(zod@4.1.13)':
     dependencies:
-      '@openai/agents-core': 0.11.4(ws@8.20.0)(zod@4.1.13)
+      '@openai/agents-core': 0.11.4(ws@8.21.0)(zod@4.1.13)
       debug: 4.4.3
-      openai: 6.37.0(ws@8.20.0)(zod@4.1.13)
+      openai: 6.37.0(ws@8.21.0)(zod@4.1.13)
       zod: 4.1.13
     transitivePeerDependencies:
       - '@cfworker/json-schema'
@@ -4286,13 +4316,13 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@openai/agents@0.11.4(ws@8.20.0)(zod@4.1.13)':
+  '@openai/agents@0.11.4(ws@8.21.0)(zod@4.1.13)':
     dependencies:
-      '@openai/agents-core': 0.11.4(ws@8.20.0)(zod@4.1.13)
-      '@openai/agents-openai': 0.11.4(ws@8.20.0)(zod@4.1.13)
+      '@openai/agents-core': 0.11.4(ws@8.21.0)(zod@4.1.13)
+      '@openai/agents-openai': 0.11.4(ws@8.21.0)(zod@4.1.13)
       '@openai/agents-realtime': 0.11.4(zod@4.1.13)
       debug: 4.4.3
-      openai: 6.37.0(ws@8.20.0)(zod@4.1.13)
+      openai: 6.37.0(ws@8.21.0)(zod@4.1.13)
       zod: 4.1.13
     transitivePeerDependencies:
       - '@cfworker/json-schema'
@@ -6281,6 +6311,11 @@ snapshots:
       ws: 8.20.0
       zod: 4.1.13
 
+  openai@6.37.0(ws@8.21.0)(zod@4.1.13):
+    optionalDependencies:
+      ws: 8.21.0
+      zod: 4.1.13
+
   optionator@0.9.4:
     dependencies:
       deep-is: 0.1.4
@@ -7143,6 +7178,8 @@ snapshots:
   wrappy@1.0.2: {}
 
   ws@8.20.0: {}
+
+  ws@8.21.0: {}
 
   xml-name-validator@5.0.0: {}
 

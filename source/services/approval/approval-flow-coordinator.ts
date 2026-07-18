@@ -14,9 +14,14 @@ import {
   executionOverrideStore,
   getProjectAllowReadStore,
 } from '../../utils/shell/sandbox/denied-read-stores.js';
-import { isDeniedReadApproveAnswer, isReadFileSessionApproveAnswer } from '../../contracts/conversation.js';
+import {
+  isDeniedReadApproveAnswer,
+  isDockerHostControlApproveAnswer,
+  isReadFileSessionApproveAnswer,
+} from '../../contracts/conversation.js';
 import path from 'node:path';
 import { sessionReadAccess } from './session-read-access.js';
+import { grantDockerHostControl } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 
 const noop = () => undefined;
 
@@ -137,6 +142,14 @@ export class ApprovalFlowCoordinator {
     const deniedReadDecision = isDeniedReadApproveAnswer(answer);
     const { toolName: decisionToolName, rawArguments: decisionRawArguments } =
       getToolInfoFromInterruption(interruption);
+    const parsedDecisionArgs = parseToolCallArguments(decisionRawArguments, {
+      callId: decisionCallId ?? String(Date.now()),
+      toolName: decisionToolName,
+      sessionId: this.deps.sessionId,
+      traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
+    }).arguments as { command?: unknown; cwd?: unknown; docker_host_control?: unknown } | null;
+    const dockerDecision = isDockerHostControlApproveAnswer(answer);
+    const isDockerRequest = decisionToolName === 'shell' && parsedDecisionArgs?.docker_host_control === true;
     let allowReadFolderForSession = false;
     if (isReadFileSessionApproveAnswer(answer) && decisionToolName === 'read_file') {
       const parsedReadArgs = parseToolCallArguments(decisionRawArguments, {
@@ -152,7 +165,8 @@ export class ApprovalFlowCoordinator {
       }
     }
     // The 'deny' decision is treated as a rejection.
-    const isApproved = answer === 'y' || deniedReadDecision || allowReadFolderForSession;
+    const isApproved =
+      answer === 'y' || deniedReadDecision || allowReadFolderForSession || (dockerDecision && isDockerRequest);
 
     if (isApproved) {
       // For denied-read decisions, set the execution override before the SDK resumes.
@@ -186,6 +200,12 @@ export class ApprovalFlowCoordinator {
             }
           }
         }
+      }
+      if (dockerDecision && isDockerRequest && typeof parsedDecisionArgs?.command === 'string') {
+        const cwd = typeof parsedDecisionArgs.cwd === 'string' ? parsedDecisionArgs.cwd : process.cwd();
+        const scope =
+          answer === 'docker-allow-once' ? 'once' : answer === 'docker-allow-session' ? 'session' : 'project';
+        grantDockerHostControl({ command: parsedDecisionArgs.command, cwd, scope });
       }
 
       this.deps.logger.debug('Tool approval granted', {

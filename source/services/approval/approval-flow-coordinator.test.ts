@@ -13,6 +13,11 @@ import {
 } from '../../utils/shell/sandbox/denied-read-stores.js';
 import type { DeniedReadInfo } from '../../utils/shell/sandbox/denied-read-detector.js';
 import { sessionReadAccess } from './session-read-access.js';
+import {
+  consumeDockerHostControlOnce,
+  hasDockerHostControlSession,
+  resetDockerHostControlGrantsForTests,
+} from '../../utils/shell/sandbox/docker-host-control-grants.js';
 
 const SENSITIVE_PATH = '/home/testuser/.ssh/id_rsa';
 const SENSITIVE_SUGGESTED = '/home/testuser/.ssh';
@@ -67,6 +72,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetSandboxDeniedReadStoresForTest();
+  resetDockerHostControlGrantsForTests();
   sessionReadAccess.clear('s1');
   process.chdir(originalCwd);
   fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -228,6 +234,56 @@ it('prepareContinuation answer=y emits tool_started and approves', () => {
     expect(plan.toolStartedEvent.toolName).toBe('shell');
     expect(plan.toolStartedEvent.toolCallId).toBe('c1');
   }
+});
+
+it('prepareContinuation stages but does not consume an explicit Docker one-shot grant', () => {
+  let approved = false;
+  const approvalState = new ApprovalState();
+  approvalState.setPending({
+    state: { approve: () => (approved = true) } as any,
+    interruption: { name: 'shell', callId: 'docker-1', arguments: { command: 'docker ps', docker_host_control: true } },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+  });
+
+  coord.prepareContinuation('docker-allow-once', undefined);
+
+  expect(approved).toBe(true);
+  expect(consumeDockerHostControlOnce('docker ps')).toBe(true);
+});
+
+it('prepareContinuation rejects Docker-specific answers for requests without Docker host control', () => {
+  let rejected = false;
+  const approvalState = new ApprovalState();
+  approvalState.setPending({
+    state: { reject: () => (rejected = true) } as any,
+    interruption: { name: 'shell', callId: 'not-docker', arguments: { command: 'docker ps' } },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+  });
+
+  coord.prepareContinuation('docker-allow-session', undefined);
+
+  expect(rejected).toBe(true);
+  expect(hasDockerHostControlSession(process.cwd())).toBe(false);
 });
 
 it('prepareContinuation allow-folder-session allows the read file parent recursively for this session', () => {

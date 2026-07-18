@@ -67,6 +67,53 @@ it('prompts for unsandboxed shell even when the registry would auto-approve', as
   toolApprovalPolicyRegistry.clear();
 });
 
+it('does not auto-approve an explicit Docker host-control request', async () => {
+  toolApprovalPolicyRegistry.clear();
+  toolApprovalPolicyRegistry.register({ toolName: 'shell', needsApproval: async () => false });
+  const interruption = {
+    name: 'shell',
+    callId: 'docker-shell',
+    arguments: { command: 'docker ps', docker_host_control: true },
+    agent: { name: 'TestAgent' },
+  };
+  const pending = {
+    interruption,
+    interruptions: [interruption],
+    decisionsByCallId: new Map(),
+    promptedCallId: 'docker-shell',
+  };
+  let appliedPlan = false;
+  const coordinator = new ToolApprovalBatchCoordinator({
+    approvalFlow: {
+      getPending: () => pending,
+      retargetPendingInterruption: () => {},
+      prepareContinuation: () => ({ pendingApprovalContext: pending }),
+    } as any,
+    planApplier: {
+      recordPendingApproval: () => {},
+      applyNextPlan: async function* () {
+        appliedPlan = true;
+      },
+    } as any,
+    shellAutoApproval: { resolveAdvisoryForInterruption: async () => ({ approved: true }) } as any,
+    logger: { getCorrelationId: () => undefined } as any,
+    sessionId: 's1',
+  });
+
+  const result = await drain(
+    coordinator.stageBatch({
+      state: { currentState: { _context: {} }, cumulativeUsage: undefined, previouslyEmittedIds: new Set() } as any,
+      interruptions: [interruption],
+      policy: { decide: async () => 'approve' } as any,
+      token: 1,
+    }),
+  );
+
+  expect(result.kind).toBe('approval_required');
+  expect(appliedPlan).toBe(false);
+  toolApprovalPolicyRegistry.clear();
+});
+
 async function drain<T>(generator: AsyncGenerator<unknown, T, void>): Promise<T> {
   let next = await generator.next();
   while (!next.done) {

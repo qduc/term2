@@ -15,6 +15,17 @@ export interface LLMAdvisory {
 }
 
 export type DeniedReadApproveAnswer = 'allow-once' | 'allow-remember' | 'unsandboxed-once';
+export type DockerHostControlApproveAnswer = 'docker-allow-once' | 'docker-allow-session' | 'docker-allow-project';
+export const DOCKER_HOST_CONTROL_APPROVE_ANSWERS: ReadonlySet<DockerHostControlApproveAnswer> = new Set([
+  'docker-allow-once',
+  'docker-allow-session',
+  'docker-allow-project',
+]);
+export function isDockerHostControlApproveAnswer(answer: string | undefined): answer is DockerHostControlApproveAnswer {
+  return (
+    typeof answer === 'string' && DOCKER_HOST_CONTROL_APPROVE_ANSWERS.has(answer as DockerHostControlApproveAnswer)
+  );
+}
 export const READ_FILE_SESSION_APPROVE_ANSWER = 'allow-folder-session';
 
 export function isReadFileSessionApproveAnswer(

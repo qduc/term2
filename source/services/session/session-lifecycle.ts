@@ -11,6 +11,7 @@ import { SessionContinuityReset } from './session-continuity-reset.js';
 import { projectImportedState, ProjectionWarningCode } from '../conversation/conversation-state-projector.js';
 import { ImportedConversationStateSchema } from '../conversation/conversation-state-schema.js';
 import { sessionReadAccess } from '../approval/session-read-access.js';
+import { clearDockerHostControlSession } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 
 /**
  * Owns and manages session-level state transitions:
@@ -68,6 +69,7 @@ export class SessionLifecycle {
   resetSession(options?: { clearConversations?: boolean }): void {
     this.#generationGuard.invalidate();
     sessionReadAccess.clear(this.#sessionId);
+    clearDockerHostControlSession();
     this.#continuityReset.reset(options);
     this.#conversationStore.clear();
     this.#toolTracker.reset();
@@ -139,6 +141,7 @@ export class SessionLifecycle {
   }): void {
     const validatedState = ImportedConversationStateSchema.parse(state);
     sessionReadAccess.clear(this.#sessionId);
+    clearDockerHostControlSession();
     this.#conversationStore.clear();
     this.#toolTracker.import(validatedState.toolLedger);
     const projected = projectImportedState({

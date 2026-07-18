@@ -867,6 +867,17 @@ it.sequential('persists changes to config file', async () => {
   });
 });
 
+it.sequential('persists Docker host-control project grants only in the user settings file', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+    service.set('sandbox.dockerHostControlProjects', ['/workspace/project']);
+
+    const persisted = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
+    expect(persisted.sandbox.dockerHostControlProjects).toEqual(['/workspace/project']);
+  });
+});
+
 it('tracks setting sources correctly', async () => {
   const settingsDir = getTestSettingsDir();
 

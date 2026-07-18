@@ -60,6 +60,8 @@ it('buildSettingsWithSources maps nested values and sources including optional u
   expect(result.app.orchestratorMode.source).toBe('default');
   expect(result.agent.maxParallelToolCalls.value).toBe(settings.agent.maxParallelToolCalls);
   expect(result.agent.maxParallelToolCalls.source).toBe('default');
+  expect(result.sandbox.dockerHostControlProjects.value).toEqual([]);
+  expect(result.sandbox.dockerHostControlProjects.source).toBe('default');
   const codex = result.agent.codex as unknown as {
     websocketFirstFrameTimeoutMs: { value: number; source: SettingSource };
     websocketInterFrameTimeoutMs: { value: number; source: SettingSource };

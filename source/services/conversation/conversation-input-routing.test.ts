@@ -40,6 +40,7 @@ it('normalizes denied-read approval answers without rewriting them', () => {
 
 it('preserves the session folder approval answer', () => {
   expect(normalizeApprovalDecision('allow-folder-session')).toEqual({ answer: 'allow-folder-session' });
+  expect(normalizeApprovalDecision('docker-allow-project')).toEqual({ answer: 'docker-allow-project' });
 });
 
 it('normalizes standard approval answers to y plus approval text', () => {

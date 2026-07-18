@@ -45,6 +45,7 @@ type ApplyPatchArgs = {
 
 type ShellArgs = {
   commands: string;
+  cwd?: string;
   timeout_ms?: number;
   max_output_length?: number;
 };
@@ -52,6 +53,7 @@ type ShellArgs = {
 type ShellApprovalArgs = ShellArgs & {
   command?: string;
   sandbox?: 'default' | 'unsandboxed';
+  docker_host_control?: boolean;
 };
 
 type SearchReplaceArgs = {
@@ -98,6 +100,11 @@ const ShellPrompt: FC<{ args: ShellArgs }> = ({ args }) => {
           {cmd}
         </Text>
       </Box>
+      {args.cwd && (
+        <Box>
+          <Text color="#64748b">Cwd: {args.cwd}</Text>
+        </Box>
+      )}
       {args.timeout_ms && (
         <Box>
           <Text color="#64748b">Timeout: {args.timeout_ms}ms</Text>
@@ -249,6 +256,20 @@ const ApprovalPrompt: FC<Props> = ({
     return false;
   }, [approval.argumentsText, approval.rawInterruption, approval.toolName]);
 
+  const isDockerHostControlApproval = React.useMemo(() => {
+    if (approval.toolName !== 'shell') return false;
+    try {
+      if ((JSON.parse(approval.argumentsText) as ShellApprovalArgs)?.docker_host_control === true) return true;
+    } catch {}
+    try {
+      const args = (approval.rawInterruption as Record<string, any> | undefined)?.arguments;
+      const parsed = typeof args === 'string' ? JSON.parse(args) : args;
+      return parsed?.docker_host_control === true;
+    } catch {
+      return false;
+    }
+  }, [approval.argumentsText, approval.rawInterruption, approval.toolName]);
+
   const deniedRead = approval.deniedRead;
   const isDeniedReadShell = !!deniedRead;
   const isReadFileApproval = approval.toolName === 'read_file';
@@ -264,6 +285,9 @@ const ApprovalPrompt: FC<Props> = ({
   }, [deniedRead]);
 
   const askUserMenuItems = React.useMemo(() => {
+    if (isDockerHostControlApproval) {
+      return ['Deny', 'Allow this command', 'Allow for this session', 'Always allow for this project'];
+    }
     if (!isAskUser && !isDeniedReadShell) {
       return isReadFileApproval ? ['Approve', 'Allow this folder for this session', 'Reject'] : ['Approve', 'Reject'];
     }
@@ -290,6 +314,7 @@ const ApprovalPrompt: FC<Props> = ({
     deniedReadMenuItems,
     isDeniedReadShell,
     isReadFileApproval,
+    isDockerHostControlApproval,
   ]);
 
   // reset selection when question/approval changes; cannot derive user-controlled arrow-key state from props
@@ -329,6 +354,14 @@ const ApprovalPrompt: FC<Props> = ({
     }
 
     if (key.return) {
+      if (isDockerHostControlApproval) {
+        const selected = askUserMenuItems[selectedIndex];
+        if (selected === 'Deny') onReject();
+        else if (selected === 'Allow this command') onApprove('docker-allow-once');
+        else if (selected === 'Allow for this session') onApprove('docker-allow-session');
+        else if (selected === 'Always allow for this project') onApprove('docker-allow-project');
+        return;
+      }
       if (isDeniedReadShell) {
         const selected = deniedReadMenuItems[selectedIndex];
         if (selected === 'Deny') {
@@ -383,7 +416,7 @@ const ApprovalPrompt: FC<Props> = ({
       }
     }
 
-    if (!isAskUser && !isDeniedReadShell) {
+    if (!isAskUser && !isDeniedReadShell && !isDockerHostControlApproval) {
       if (input === 'y') {
         onApprove();
       }
@@ -649,18 +682,35 @@ const ApprovalPrompt: FC<Props> = ({
   return (
     <Box flexDirection="column">
       <Text color="yellow">
-        {approval.agentName}
-        {isUnsandboxedShellApproval ? ' wants to run in unsandboxed mode: ' : ' wants to run: '}
-        <Text bold>{approval.toolName}</Text>
+        {isDockerHostControlApproval ? (
+          <Text bold color="red">
+            Docker Host Control
+          </Text>
+        ) : (
+          <>
+            {approval.agentName}
+            {isUnsandboxedShellApproval ? ' wants to run in unsandboxed mode: ' : ' wants to run: '}
+            <Text bold>{approval.toolName}</Text>
+          </>
+        )}
       </Text>
       {content}
+      {isDockerHostControlApproval && (
+        <Text color="red">
+          This command can control your Docker daemon. It can bypass filesystem and network sandbox restrictions, mount
+          host files, run privileged or persistent workloads, and is effectively equivalent to host access.
+        </Text>
+      )}
       {approval.llmAdvisory && <LLMAdvisory advisory={approval.llmAdvisory} />}
       {!isAskUser && !isDeniedReadShell && (
         <Box flexDirection="column" marginTop={1}>
-          <Text>Allow this action?</Text>
+          <Text>{isDockerHostControlApproval ? 'Allow Docker host access?' : 'Allow this action?'}</Text>
           <Box flexDirection="column" marginLeft={1}>
             {askUserMenuItems.map((item, index) => (
-              <Text key={item} color={selectedIndex === index ? (item === 'Reject' ? 'red' : 'green') : undefined}>
+              <Text
+                key={item}
+                color={selectedIndex === index ? (item === 'Reject' || item === 'Deny' ? 'red' : 'green') : undefined}
+              >
                 {selectedIndex === index ? '❯ ' : '  '}
                 {item}
               </Text>

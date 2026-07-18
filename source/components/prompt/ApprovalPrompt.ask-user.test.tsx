@@ -70,6 +70,109 @@ it.sequential('ApprovalPrompt shows unsandboxed shell approvals in the header', 
   expect(output.includes('curl https://example.com')).toBe(true);
 });
 
+it.sequential('ApprovalPrompt renders the Docker host-control menu without ordinary approval choices', async () => {
+  const approval: ApprovalDescriptor = {
+    agentName: 'Agent',
+    toolName: 'shell',
+    argumentsText: JSON.stringify({ command: 'docker ps', docker_host_control: true }),
+    rawInterruption: { type: 'shell' },
+  };
+  const { lastFrame } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output).toContain('Docker Host Control');
+  expect(output).toContain('Deny');
+  expect(output).toContain('Allow this command');
+  expect(output).toContain('Allow for this session');
+  expect(output).toContain('Always allow for this project');
+  expect(output).not.toContain('Run unsandboxed once');
+  expect(output).not.toContain('Approve');
+  expect(output.replace(/\s+/g, ' ')).toContain(
+    'This command can control your Docker daemon. It can bypass filesystem and network sandbox restrictions, mount host files, run privileged or persistent workloads, and is effectively equivalent to host access.',
+  );
+});
+
+it.sequential('ApprovalPrompt sends the Docker one-shot grant answer', async () => {
+  let answer: string | undefined;
+  const approval: ApprovalDescriptor = {
+    agentName: 'Agent',
+    toolName: 'shell',
+    argumentsText: JSON.stringify({ command: 'docker ps', docker_host_control: true }),
+    rawInterruption: {},
+  };
+  const { stdin } = await renderInAct(
+    <ApprovalPrompt
+      approval={approval}
+      onApprove={(value) => {
+        answer = value;
+      }}
+      onReject={() => {}}
+    />,
+  );
+  await writeInput(stdin, '\u001B[B');
+  await writeInput(stdin, '\r');
+  expect(answer).toBe('docker-allow-once');
+});
+
+it.sequential('ApprovalPrompt sends the Docker session grant answer', async () => {
+  let answer: string | undefined;
+  const approval = {
+    ...baseApproval,
+    toolName: 'shell',
+    argumentsText: JSON.stringify({ command: 'docker ps', docker_host_control: true }),
+  };
+  const { stdin } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
+  );
+  await writeInput(stdin, '\u001B[B');
+  await writeInput(stdin, '\u001B[B');
+  await writeInput(stdin, '\r');
+  expect(answer).toBe('docker-allow-session');
+});
+
+it.sequential('ApprovalPrompt sends the Docker project grant answer', async () => {
+  let answer: string | undefined;
+  const approval = {
+    ...baseApproval,
+    toolName: 'shell',
+    argumentsText: JSON.stringify({ command: 'docker ps', docker_host_control: true }),
+  };
+  const { stdin } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
+  );
+  for (let index = 0; index < 3; index++) await writeInput(stdin, '\u001B[B');
+  await writeInput(stdin, '\r');
+  expect(answer).toBe('docker-allow-project');
+});
+
+it.sequential('ApprovalPrompt denies a Docker host-control request', async () => {
+  let rejected = false;
+  const approval = {
+    ...baseApproval,
+    toolName: 'shell',
+    argumentsText: JSON.stringify({ command: 'docker ps', docker_host_control: true }),
+  };
+  const { stdin } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => (rejected = true)} />,
+  );
+  await writeInput(stdin, '\r');
+  expect(rejected).toBe(true);
+});
+
+it.sequential('ApprovalPrompt identifies Docker host control from raw interruption arguments', async () => {
+  const approval = {
+    ...baseApproval,
+    toolName: 'shell',
+    argumentsText: 'docker ps',
+    rawInterruption: { arguments: JSON.stringify({ command: 'docker ps', docker_host_control: true }) },
+  };
+  const { lastFrame } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} />,
+  );
+  expect(lastFrame()).toContain('Docker Host Control');
+});
+
 it.sequential(
   'ApprovalPrompt shows unsandboxed shell approvals in the header with raw command argumentsText',
   async () => {

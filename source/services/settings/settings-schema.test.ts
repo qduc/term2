@@ -54,6 +54,7 @@ it('SettingsSchema includes sandbox settings, which default to compatibility-fir
   expect(parsed.sandbox?.enabled).toBe(true);
   expect(parsed.sandbox?.readPolicy).toBe('standard');
   expect(parsed.sandbox?.allowReadExtra).toEqual([]);
+  expect(parsed.sandbox?.dockerHostControlProjects).toEqual([]);
   expect(parsed.sandbox?.allowNetworking).toBe(false);
 
   const parsedDisabled = SettingsSchema.parse({ sandbox: { enabled: false } });
@@ -73,10 +74,12 @@ it('SettingsSchema includes sandbox settings, which default to compatibility-fir
   expect(DEFAULT_SETTINGS.sandbox.enabled).toBe(true);
   expect(DEFAULT_SETTINGS.sandbox.readPolicy).toBe('standard');
   expect(DEFAULT_SETTINGS.sandbox.allowReadExtra).toEqual([]);
+  expect(DEFAULT_SETTINGS.sandbox.dockerHostControlProjects).toEqual([]);
   expect(DEFAULT_SETTINGS.sandbox.allowNetworking).toBe(false);
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.SANDBOX_ENABLED)).toBe(true);
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.SANDBOX_READ_POLICY)).toBe(true);
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA)).toBe(true);
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS)).toBe(true);
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.SANDBOX_ALLOW_NETWORKING)).toBe(true);
 });
 

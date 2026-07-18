@@ -42,6 +42,12 @@ import {
 } from '../../utils/shell/sandbox/denied-read-stores.js';
 import { classifySandboxFailure } from '../../utils/shell/sandbox/sandbox-failure-classifier.js';
 import { createDockerHostControl, type DockerHostControl } from '../../utils/shell/sandbox/docker-host-control.js';
+import {
+  configureDockerHostControlGrants,
+  consumeDockerHostControlOnce,
+  hasDockerHostControlProject,
+  hasDockerHostControlSession,
+} from '../../utils/shell/sandbox/docker-host-control-grants.js';
 
 const shellSandboxModeSchema = z.enum(['default', 'unsandboxed']).optional().default('default');
 
@@ -71,8 +77,9 @@ const shellParametersSchema = z.object({
     ),
 });
 
-export type ShellToolParams = Omit<z.infer<typeof shellParametersSchema>, 'sandbox'> & {
+export type ShellToolParams = Omit<z.infer<typeof shellParametersSchema>, 'sandbox' | 'docker_host_control'> & {
   sandbox?: 'default' | 'unsandboxed';
+  docker_host_control?: boolean;
 };
 
 // Re-export trim utilities for backwards compatibility
@@ -245,6 +252,7 @@ export function createShellToolDefinition(deps: {
   executeShellCommandImpl?: typeof executeShellCommand;
   shellSandboxRunner?: ShellSandboxRunner;
   dockerHostControlFactory?: () => DockerHostControl;
+  sessionId?: string;
   orchestratorMode?: boolean;
   searchViaShell?: boolean;
 }): ToolDefinition<ShellToolParams> {
@@ -259,6 +267,7 @@ export function createShellToolDefinition(deps: {
     orchestratorMode = false,
     searchViaShell: searchViaShellExplicit,
   } = deps;
+  configureDockerHostControlGrants(settingsService);
 
   // Create command logger function with dependencies
   const logValidationError = (message: string) => logValidationErrorUtil(settingsService, message);
@@ -283,11 +292,14 @@ export function createShellToolDefinition(deps: {
     parameters: shellParametersSchema,
     needsApproval: async (params) => {
       try {
-        if (params.sandbox === 'unsandboxed' || params.docker_host_control) {
+        if (params.sandbox === 'unsandboxed') {
           return true;
         }
 
         const cwd = executionContext?.getCwd() || process.cwd();
+        if (params.docker_host_control && !hasDockerHostControlSession(cwd) && !hasDockerHostControlProject(cwd)) {
+          return true;
+        }
         const sshService = executionContext?.getSSHService();
         const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled') !== false;
         if (!sshService && sandboxEnabled) {
@@ -329,6 +341,14 @@ export function createShellToolDefinition(deps: {
       details,
     ) => {
       const cwd = executionContext?.getCwd() || process.cwd();
+      if (
+        docker_host_control &&
+        !hasDockerHostControlSession(cwd) &&
+        !hasDockerHostControlProject(cwd) &&
+        !consumeDockerHostControlOnce(command)
+      ) {
+        return 'Error: Docker host control requires explicit approval.';
+      }
       if (settingsService.get<boolean>('app.planMode') && isMutatingCommand(command, cwd, loggingService)) {
         return `Error: plan mode is read-only. Command not executed: ${command}`;
       }

@@ -5,6 +5,17 @@ import React from 'react';
 import StatusBar from './StatusBar.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
+import {
+  grantDockerHostControl,
+  resetDockerHostControlGrantsForTests,
+} from '../../utils/shell/sandbox/docker-host-control-grants.js';
+
+it.sequential('StatusBar displays an active Docker host-control session grant', async () => {
+  grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'session' });
+  const { lastFrame } = await renderInAct(<StatusBar settingsService={createMockSettingsService()} />);
+  expect(lastFrame()).toContain('Docker host access: session');
+  resetDockerHostControlGrantsForTests();
+});
 
 it.sequential('StatusBar renders reasoning effort on the first row with the model', async () => {
   const settingsService = createMockSettingsService({

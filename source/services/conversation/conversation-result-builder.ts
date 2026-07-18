@@ -18,7 +18,7 @@ import { type GenerationToken } from '../generation-guard.js';
 import { type CommandMessage } from '../../tools/types.js';
 import { resolveToolOwner } from '../approval/tool-owner.js';
 import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
-import { isUnsandboxedShell } from '../approval/shell-sandbox-approval.js';
+import { requiresHumanShellApproval } from '../approval/shell-sandbox-approval.js';
 import { deniedReadStore } from '../../utils/shell/sandbox/denied-read-stores.js';
 import type { DeniedReadMetadata } from '../../contracts/conversation.js';
 
@@ -138,7 +138,7 @@ export async function buildConversationResult(
       deniedReadStore.stageForDescriptor(shellCommandForDeniedRead, deniedReadInfo);
     }
 
-    const forceHumanApproval = isUnsandboxedShell(toolName, parseResult.arguments) || hasDeniedRead;
+    const forceHumanApproval = requiresHumanShellApproval(toolName, parseResult.arguments) || hasDeniedRead;
 
     approvalFlow.recordPending({
       state: result.state,

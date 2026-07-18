@@ -485,6 +485,56 @@ it('unsandboxed shell is not auto-approved by LLM advisory mode', async () => {
   }
 });
 
+it('explicit Docker host control is not auto-approved by LLM advisory mode', async () => {
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'shell',
+        callId: 'c-docker-host-control',
+        arguments: { command: 'docker version', sandbox: 'default', docker_host_control: true },
+      },
+    ],
+    state: {},
+  });
+  let advisoryCalls = 0;
+  const agentClient: any = {
+    chat: async () => {
+      advisoryCalls++;
+      return '{"results":[{"id":"c-docker-host-control","reasoning":"safe","approved":true}]}';
+    },
+  };
+  const shellAutoApproval = new ShellAutoApprovalResolver({
+    conversationStore: new ConversationStore(),
+    agentClient,
+    logger,
+    settingsService: { get: () => 'auto' },
+    sessionContextService: {
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      getContext: () => null,
+    },
+  });
+  const approvalFlow = new ApprovalFlowCoordinator({
+    agentClient,
+    approvalState: new ApprovalState(),
+    logger,
+    sessionId: 's1',
+    toolTracker: { recordAbortedApproval: () => {}, export: () => [] } as any,
+    generationGuard: { isCurrent: () => true } as any,
+  });
+
+  const outcome = await buildConversationResult(
+    { result: stream, toolCallArgumentsById: new Map() },
+    { approvalFlow, shellAutoApproval, logger, sessionId: 's1' },
+  );
+
+  expect(outcome.kind).toBe('approval_required');
+  expect(advisoryCalls).toBe(0);
+  if (outcome.kind === 'approval_required') {
+    expect(outcome.result.approval.callId).toBe('c-docker-host-control');
+    expect(outcome.result.approval.llmAdvisory).toBeUndefined();
+  }
+});
+
 it('command messages dedup against emittedCommandIds', async () => {
   const stream = makeStream({
     history: [

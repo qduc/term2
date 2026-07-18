@@ -51,6 +51,15 @@ it('keeps minimal shell environment and strips secret patterns', () => {
   expect(env.CUSTOM_VALUE).toBeUndefined();
 });
 
+it('preserves TMUX so commands target the caller session server', () => {
+  const env = createSandboxEnvironment({
+    PATH: '/usr/bin:/bin',
+    TMUX: '/private/tmp/tmux-501/default,12345,0',
+  });
+
+  expect(env.TMUX).toBe('/private/tmp/tmux-501/default,12345,0');
+});
+
 it('synthesizes private sandbox XDG paths in strict mode', () => {
   const cwd = process.cwd();
   const env = createSandboxEnvironment(

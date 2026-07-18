@@ -1,6 +1,6 @@
 import { resolveSandboxXdgLayout } from '../temp-dir.js';
 
-const ALLOWED_EXACT_KEYS = new Set(['PATH', 'SHELL', 'TMPDIR', 'TEMP', 'TMP', 'TERM', 'HOME']);
+const ALLOWED_EXACT_KEYS = new Set(['PATH', 'SHELL', 'TMPDIR', 'TEMP', 'TMP', 'TERM', 'HOME', 'TMUX']);
 
 function isAllowedKey(key: string): boolean {
   return ALLOWED_EXACT_KEYS.has(key) || key === 'LANG' || key.startsWith('LC_');

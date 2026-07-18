@@ -213,7 +213,7 @@ it('createSandboxRuntimeConfig does not modify allowRead or denyRead when filter
 });
 
 it('createSandboxRuntimeConfig denies all network by default', () => {
-  const config = createSandboxRuntimeConfig();
+  const config = createSandboxRuntimeConfig({ env: {} });
   expect(config.network.deniedDomains).toEqual(['*']);
   expect(config.network.strictAllowlist).toBe(true);
   expect(config.network.allowLocalBinding).toBe(false);
@@ -223,8 +223,19 @@ it('createSandboxRuntimeConfig denies all network by default', () => {
   );
 });
 
+it('createSandboxRuntimeConfig allows the caller tmux socket', () => {
+  const config = createSandboxRuntimeConfig({
+    env: { TMUX: '/private/tmp/tmux-501/default,16696,0' },
+  });
+
+  expect(config.network.allowUnixSockets).toEqual(['/private/tmp/tmux-501/default']);
+});
+
 it('createSandboxRuntimeConfig allows only the explicit Docker socket when host control is granted', () => {
-  const config = createSandboxRuntimeConfig({ dockerSocketPath: '/private/var/folders/docker.sock' });
+  const config = createSandboxRuntimeConfig({
+    dockerSocketPath: '/private/var/folders/docker.sock',
+    env: {},
+  });
 
   expect(config.network.allowUnixSockets).toEqual(['/private/var/folders/docker.sock']);
 });

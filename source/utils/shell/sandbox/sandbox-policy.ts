@@ -482,6 +482,10 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
   //   It earns its keep only if Layer 1 ever regresses; do not treat it as the primary gate.
   const presentSecretEnvVars = Object.keys(options.env ?? process.env).filter(isSecretKey);
   const credentialEnvVars = Array.from(new Set([...defaultCredentialEnvVars, ...presentSecretEnvVars]));
+  const tmuxSocketPath = (options.env ?? process.env).TMUX?.split(',', 1)[0];
+  const allowUnixSockets = [options.dockerSocketPath, tmuxSocketPath].filter((socketPath): socketPath is string =>
+    Boolean(socketPath),
+  );
   const allowReadExtra = (options.allowReadExtra ?? []).map((filePath) => expandHomePath(filePath, home));
   const denyRead = readPolicy === 'strict' ? [home, '/etc', '/var', '/root', '/private/var'] : credentialFiles;
   const allowRead =
@@ -521,7 +525,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
       deniedDomains: allowNetworking ? [] : ['*'],
       strictAllowlist: allowNetworking ? false : true,
       allowLocalBinding: allowNetworking,
-      ...(options.dockerSocketPath ? { allowUnixSockets: [options.dockerSocketPath] } : {}),
+      ...(allowUnixSockets.length > 0 ? { allowUnixSockets } : {}),
     },
     filesystem: {
       denyRead,

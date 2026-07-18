@@ -165,6 +165,15 @@ it('shell schema accepts omitted, default, and unsandboxed sandbox modes', () =>
   expect(() => tool.parameters.parse({ command: 'pwd', sandbox: 'off' })).toThrow();
 });
 
+it('shell schema accepts an explicit Docker host-control capability request', () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService(),
+  });
+
+  expect(tool.parameters.parse({ command: 'docker ps', docker_host_control: true }).docker_host_control).toBe(true);
+});
+
 it('shell needsApproval always prompts for unsandboxed execution', async () => {
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
@@ -172,6 +181,40 @@ it('shell needsApproval always prompts for unsandboxed execution', async () => {
   });
 
   expect(await tool.needsApproval({ command: 'ls', sandbox: 'unsandboxed' })).toBe(true);
+});
+
+it('shell needsApproval always prompts for Docker host control', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService(),
+  });
+
+  expect(await tool.needsApproval({ command: 'docker ps', docker_host_control: true })).toBe(true);
+});
+
+it('shell execute refuses Docker host control when the local sandbox is unavailable', async () => {
+  let executed = false;
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    shellSandboxRunner: createFakeSandboxRunner({
+      availability: async () => ({ type: 'missing_dependency', reason: 'sandbox runtime unavailable' }),
+    }),
+    dockerHostControlFactory: () => ({
+      socketPath: '/private/var/run/docker.sock',
+      configDir: createTmpDir(),
+      cleanup: () => {},
+    }),
+    executeShellCommandImpl: async () => {
+      executed = true;
+      return { stdout: '', stderr: '', exitCode: 0, timedOut: false };
+    },
+  });
+
+  const output = await tool.execute({ command: 'docker ps', docker_host_control: true });
+
+  expect(executed).toBe(false);
+  expect(output).toContain('requires an available local sandbox');
 });
 
 it.sequential('shell execute restores previous correlation id after command execution', async () => {
@@ -465,6 +508,43 @@ it.sequential('shell execute wraps local default commands with the sandbox when 
   expect(receivedEnv?.XDG_STATE_HOME).toContain(SANDBOX_TEMP_DIR);
   expect(cleanupCalls).toBe(1);
   expect(output.includes('ok')).toBe(true);
+});
+
+it.sequential('shell execute grants Docker host control only to the approved sandboxed command', async () => {
+  let receivedSocketPaths: string[] | undefined;
+  let receivedEnv: NodeJS.ProcessEnv | undefined;
+  let cleanupCalls = 0;
+  const configDir = createTmpDir();
+  const socketPath = '/private/var/run/docker.sock';
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    shellSandboxRunner: createFakeSandboxRunner({
+      wrap: async (command: string, options: any) => {
+        receivedSocketPaths = options.config.network.allowUnixSockets;
+        return { command: `sandboxed(${command})` };
+      },
+    }),
+    dockerHostControlFactory: () => ({
+      socketPath,
+      configDir,
+      cleanup: () => {
+        cleanupCalls += 1;
+      },
+    }),
+    executeShellCommandImpl: async (_command, options) => {
+      receivedEnv = options?.env;
+      return { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
+    },
+  });
+
+  const output = await tool.execute({ command: 'docker ps', docker_host_control: true });
+
+  expect(receivedSocketPaths).toEqual([socketPath]);
+  expect(receivedEnv?.DOCKER_HOST).toBe(`unix://${socketPath}`);
+  expect(receivedEnv?.DOCKER_CONFIG).toBe(configDir);
+  expect(cleanupCalls).toBe(1);
+  expect(output).toContain('ok');
 });
 
 it.sequential('shell execute leaves XDG unset in standard sandbox mode', async () => {

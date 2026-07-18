@@ -217,9 +217,16 @@ it('createSandboxRuntimeConfig denies all network by default', () => {
   expect(config.network.deniedDomains).toEqual(['*']);
   expect(config.network.strictAllowlist).toBe(true);
   expect(config.network.allowLocalBinding).toBe(false);
+  expect(config.network.allowUnixSockets).toBeUndefined();
   expect(config.network.allowedDomains).toEqual(
     expect.arrayContaining(['registry.npmjs.org', 'pypi.org', 'raw.githubusercontent.com']),
   );
+});
+
+it('createSandboxRuntimeConfig allows only the explicit Docker socket when host control is granted', () => {
+  const config = createSandboxRuntimeConfig({ dockerSocketPath: '/private/var/folders/docker.sock' });
+
+  expect(config.network.allowUnixSockets).toEqual(['/private/var/folders/docker.sock']);
 });
 
 it('createSandboxRuntimeConfig uses allowlist auto-allow and asks for non-allowlisted hosts when allowNetworking is true', () => {

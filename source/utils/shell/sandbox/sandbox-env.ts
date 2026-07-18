@@ -26,6 +26,7 @@ export function isSecretKey(key: string): boolean {
 export interface SandboxEnvironmentOptions {
   cwd?: string;
   readPolicy?: 'standard' | 'strict';
+  dockerHostControl?: { socketPath: string; configDir: string };
 }
 
 export function createSandboxEnvironment(
@@ -50,6 +51,11 @@ export function createSandboxEnvironment(
     env.XDG_CACHE_HOME = cache;
     env.XDG_DATA_HOME = data;
     env.XDG_STATE_HOME = state;
+  }
+
+  if (options.dockerHostControl) {
+    env.DOCKER_HOST = `unix://${options.dockerHostControl.socketPath}`;
+    env.DOCKER_CONFIG = options.dockerHostControl.configDir;
   }
 
   return env;

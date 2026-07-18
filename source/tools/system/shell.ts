@@ -41,6 +41,7 @@ import {
   getProjectAllowReadStore,
 } from '../../utils/shell/sandbox/denied-read-stores.js';
 import { classifySandboxFailure } from '../../utils/shell/sandbox/sandbox-failure-classifier.js';
+import { createDockerHostControl, type DockerHostControl } from '../../utils/shell/sandbox/docker-host-control.js';
 
 const shellSandboxModeSchema = z.enum(['default', 'unsandboxed']).optional().default('default');
 
@@ -61,6 +62,13 @@ const shellParametersSchema = z.object({
   sandbox: shellSandboxModeSchema.describe(
     'Run mode. default runs inside the sandbox when available. unsandboxed requires explicit user approval.',
   ),
+  docker_host_control: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      'Grant this command control of the local Docker daemon. Requires explicit approval and can bypass sandbox filesystem and network restrictions.',
+    ),
 });
 
 export type ShellToolParams = Omit<z.infer<typeof shellParametersSchema>, 'sandbox'> & {
@@ -236,6 +244,7 @@ export function createShellToolDefinition(deps: {
   rtkInstaller?: typeof ensureRtkInstalled;
   executeShellCommandImpl?: typeof executeShellCommand;
   shellSandboxRunner?: ShellSandboxRunner;
+  dockerHostControlFactory?: () => DockerHostControl;
   orchestratorMode?: boolean;
   searchViaShell?: boolean;
 }): ToolDefinition<ShellToolParams> {
@@ -246,6 +255,7 @@ export function createShellToolDefinition(deps: {
     rtkInstaller = ensureRtkInstalled,
     executeShellCommandImpl = executeShellCommand,
     shellSandboxRunner = getDefaultShellSandboxRunner(),
+    dockerHostControlFactory = createDockerHostControl,
     orchestratorMode = false,
     searchViaShell: searchViaShellExplicit,
   } = deps;
@@ -273,7 +283,7 @@ export function createShellToolDefinition(deps: {
     parameters: shellParametersSchema,
     needsApproval: async (params) => {
       try {
-        if (params.sandbox === 'unsandboxed') {
+        if (params.sandbox === 'unsandboxed' || params.docker_host_control) {
           return true;
         }
 
@@ -313,7 +323,11 @@ export function createShellToolDefinition(deps: {
         return true; // fail-safe: require approval on validation errors
       }
     },
-    execute: async ({ command, timeout_ms, max_output_length, sandbox = 'default' }, _context, details) => {
+    execute: async (
+      { command, timeout_ms, max_output_length, sandbox = 'default', docker_host_control = false },
+      _context,
+      details,
+    ) => {
       const cwd = executionContext?.getCwd() || process.cwd();
       if (settingsService.get<boolean>('app.planMode') && isMutatingCommand(command, cwd, loggingService)) {
         return `Error: plan mode is read-only. Command not executed: ${command}`;
@@ -323,6 +337,7 @@ export function createShellToolDefinition(deps: {
       const correlationId = randomUUID();
       const startedAt = Date.now();
       let sandboxed = false;
+      let dockerHostControl: DockerHostControl | undefined;
 
       // Set correlation ID for tracking related operations
       loggingService.setCorrelationId(correlationId);
@@ -378,8 +393,27 @@ export function createShellToolDefinition(deps: {
         const extraAllowReadFromOverride = override?.extraAllowRead ?? [];
 
         const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled') !== false;
+        if (docker_host_control) {
+          if (sandbox !== 'default' || sshService || !sandboxEnabled) {
+            return 'Error: Docker host control requires the default local sandbox.';
+          }
+          try {
+            dockerHostControl = dockerHostControlFactory();
+            loggingService.security('Docker host-control capability granted for shell command', {
+              command: optimizedCommand.substring(0, 100),
+              cwd,
+              socketPath: dockerHostControl.socketPath,
+              correlationId,
+            });
+          } catch (error) {
+            return `Error: ${error instanceof Error ? error.message : String(error)}`;
+          }
+        }
         if (!sshService && sandbox === 'default' && sandboxEnabled) {
           sandboxAvailability = await shellSandboxRunner.availability();
+          if (docker_host_control && sandboxAvailability.type !== 'available') {
+            return 'Error: Docker host control requires an available local sandbox.';
+          }
           if (sandboxAvailability.type === 'available') {
             try {
               const projectAllowRead = getProjectAllowReadStore(cwd).load();
@@ -387,6 +421,7 @@ export function createShellToolDefinition(deps: {
                 cwd,
                 readPolicy: settingsService.get<SandboxReadPolicy>('sandbox.readPolicy'),
                 allowNetworking: settingsService.get<boolean>('sandbox.allowNetworking') === true,
+                dockerSocketPath: dockerHostControl?.socketPath,
                 allowReadExtra: [
                   ...(settingsService.get<string[]>('sandbox.allowReadExtra') ?? []),
                   ...projectAllowRead,
@@ -431,6 +466,7 @@ export function createShellToolDefinition(deps: {
             ? createSandboxEnvironment(undefined, {
                 cwd,
                 readPolicy: settingsService.get<SandboxReadPolicy>('sandbox.readPolicy'),
+                dockerHostControl,
               })
             : undefined,
           pauseOnSandboxNetworkApproval: sandboxed,
@@ -513,6 +549,7 @@ export function createShellToolDefinition(deps: {
         if (sandboxed) {
           await shellSandboxRunner.cleanupAfterCommand?.();
         }
+        dockerHostControl?.cleanup();
         if (previousCorrelationId) {
           loggingService.setCorrelationId(previousCorrelationId);
         } else {

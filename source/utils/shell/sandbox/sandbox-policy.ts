@@ -34,6 +34,7 @@ export interface CreateSandboxRuntimeConfigOptions {
   readPolicy?: SandboxReadPolicy;
   allowReadExtra?: string[];
   allowNetworking?: boolean;
+  dockerSocketPath?: string;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   onProtectedFiltered?: (filtered: readonly string[]) => void;
@@ -520,6 +521,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
       deniedDomains: allowNetworking ? [] : ['*'],
       strictAllowlist: allowNetworking ? false : true,
       allowLocalBinding: allowNetworking,
+      ...(options.dockerSocketPath ? { allowUnixSockets: [options.dockerSocketPath] } : {}),
     },
     filesystem: {
       denyRead,

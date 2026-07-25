@@ -21,7 +21,11 @@ import {
 } from '../../contracts/conversation.js';
 import path from 'node:path';
 import { sessionReadAccess } from './session-read-access.js';
-import { grantDockerHostControl } from '../../utils/shell/sandbox/docker-host-control-grants.js';
+import {
+  consumeDockerHostControlDenial,
+  grantDockerHostControl,
+  requiresDockerHostControlApproval,
+} from '../../utils/shell/sandbox/docker-host-control-grants.js';
 
 const noop = () => undefined;
 
@@ -147,9 +151,12 @@ export class ApprovalFlowCoordinator {
       toolName: decisionToolName,
       sessionId: this.deps.sessionId,
       traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
-    }).arguments as { command?: unknown; cwd?: unknown; docker_host_control?: unknown } | null;
+    }).arguments as { command?: unknown; cwd?: unknown } | null;
     const dockerDecision = isDockerHostControlApproveAnswer(answer);
-    const isDockerRequest = decisionToolName === 'shell' && parsedDecisionArgs?.docker_host_control === true;
+    const isDockerRequest =
+      decisionToolName === 'shell' &&
+      typeof parsedDecisionArgs?.command === 'string' &&
+      requiresDockerHostControlApproval(parsedDecisionArgs.command);
     let allowReadFolderForSession = false;
     if (isReadFileSessionApproveAnswer(answer) && decisionToolName === 'read_file') {
       const parsedReadArgs = parseToolCallArguments(decisionRawArguments, {
@@ -209,6 +216,9 @@ export class ApprovalFlowCoordinator {
         const scope =
           answer === 'docker-allow-once' ? 'once' : answer === 'docker-allow-session' ? 'session' : 'project';
         grantDockerHostControl({ command: parsedDecisionArgs.command, cwd, scope, sessionId: this.deps.sessionId });
+        // The pending block is left in place deliberately: for an indirect
+        // invocation it is the only thing that tells `execute` this command
+        // needs host control. `execute` consumes it when it creates the control.
       }
 
       this.deps.logger.debug('Tool approval granted', {
@@ -266,6 +276,12 @@ export class ApprovalFlowCoordinator {
       const rejectionMessage = rejectionReason
         ? `Tool execution was not approved. User's reason: ${rejectionReason}`
         : 'Tool execution was not approved.';
+
+      // A refused Docker request is settled: drop the pending block so the same
+      // command runs sandboxed again instead of stalling on approval forever.
+      if (isDockerRequest && typeof parsedDecisionArgs?.command === 'string') {
+        consumeDockerHostControlDenial(parsedDecisionArgs.command);
+      }
 
       markToolCallAsApprovalRejection(expectedCallId);
 

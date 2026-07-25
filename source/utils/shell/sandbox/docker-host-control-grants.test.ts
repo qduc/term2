@@ -3,10 +3,13 @@ import { createMockSettingsService } from '../../../services/settings/settings-s
 import {
   clearDockerHostControlSession,
   configureDockerHostControlGrants,
+  consumeDockerHostControlDenial,
   consumeDockerHostControlOnce,
   grantDockerHostControl,
   hasDockerHostControlProject,
   hasDockerHostControlSession,
+  recordDockerHostControlDenial,
+  requiresDockerHostControlApproval,
   resetDockerHostControlGrantsForTests,
 } from './docker-host-control-grants.js';
 
@@ -19,6 +22,25 @@ it('consumes one-shot Docker grants only for the exact command in the granting s
   expect(consumeDockerHostControlOnce('session-a', 'docker images')).toBe(false);
   expect(consumeDockerHostControlOnce('session-a', 'docker ps')).toBe(true);
   expect(consumeDockerHostControlOnce('session-a', 'docker ps')).toBe(false);
+});
+
+it('treats a command the sandbox blocked from Docker as needing host-control approval', () => {
+  // Docker reached from a script never mentions docker in the command string,
+  // so the blocked run is what makes the approval prompt reachable.
+  expect(requiresDockerHostControlApproval('pnpm test')).toBe(false);
+
+  recordDockerHostControlDenial('pnpm test');
+
+  expect(requiresDockerHostControlApproval('pnpm test')).toBe(true);
+  expect(requiresDockerHostControlApproval('pnpm build')).toBe(false);
+});
+
+it('forgets a blocked command once its approval decision has been acted on', () => {
+  recordDockerHostControlDenial('pnpm test');
+
+  expect(consumeDockerHostControlDenial('pnpm test')).toBe(true);
+  expect(requiresDockerHostControlApproval('pnpm test')).toBe(false);
+  expect(consumeDockerHostControlDenial('pnpm test')).toBe(false);
 });
 
 it('keeps session grants isolated by session identity even when sessions share a workspace', () => {

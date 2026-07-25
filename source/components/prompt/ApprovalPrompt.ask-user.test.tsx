@@ -74,7 +74,7 @@ it.sequential('ApprovalPrompt renders the Docker host-control menu without ordin
   const approval: ApprovalDescriptor = {
     agentName: 'Agent',
     toolName: 'shell',
-    argumentsText: JSON.stringify({ command: 'docker ps', docker_host_control: true }),
+    argumentsText: JSON.stringify({ command: 'docker ps' }),
     rawInterruption: { type: 'shell' },
   };
   const { lastFrame } = await renderInAct(
@@ -98,7 +98,7 @@ it.sequential('ApprovalPrompt sends the Docker one-shot grant answer', async () 
   const approval: ApprovalDescriptor = {
     agentName: 'Agent',
     toolName: 'shell',
-    argumentsText: JSON.stringify({ command: 'docker ps', docker_host_control: true }),
+    argumentsText: JSON.stringify({ command: 'docker ps' }),
     rawInterruption: {},
   };
   const { stdin } = await renderInAct(
@@ -120,7 +120,7 @@ it.sequential('ApprovalPrompt sends the Docker session grant answer', async () =
   const approval = {
     ...baseApproval,
     toolName: 'shell',
-    argumentsText: JSON.stringify({ command: 'docker ps', docker_host_control: true }),
+    argumentsText: JSON.stringify({ command: 'docker ps' }),
   };
   const { stdin } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
@@ -136,7 +136,7 @@ it.sequential('ApprovalPrompt sends the Docker project grant answer', async () =
   const approval = {
     ...baseApproval,
     toolName: 'shell',
-    argumentsText: JSON.stringify({ command: 'docker ps', docker_host_control: true }),
+    argumentsText: JSON.stringify({ command: 'docker ps' }),
   };
   const { stdin } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
@@ -151,7 +151,7 @@ it.sequential('ApprovalPrompt denies a Docker host-control request', async () =>
   const approval = {
     ...baseApproval,
     toolName: 'shell',
-    argumentsText: JSON.stringify({ command: 'docker ps', docker_host_control: true }),
+    argumentsText: JSON.stringify({ command: 'docker ps' }),
   };
   const { stdin } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => (rejected = true)} />,
@@ -165,7 +165,7 @@ it.sequential('ApprovalPrompt identifies Docker host control from raw interrupti
     ...baseApproval,
     toolName: 'shell',
     argumentsText: 'docker ps',
-    rawInterruption: { arguments: JSON.stringify({ command: 'docker ps', docker_host_control: true }) },
+    rawInterruption: { arguments: JSON.stringify({ command: 'docker ps' }) },
   };
   const { lastFrame } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} />,

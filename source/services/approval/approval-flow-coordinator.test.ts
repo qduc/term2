@@ -16,6 +16,8 @@ import { sessionReadAccess } from './session-read-access.js';
 import {
   consumeDockerHostControlOnce,
   hasDockerHostControlSession,
+  recordDockerHostControlDenial,
+  requiresDockerHostControlApproval,
   resetDockerHostControlGrantsForTests,
 } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 
@@ -242,7 +244,7 @@ it('prepareContinuation rejects a generic approval for Docker host control witho
   const approvalState = new ApprovalState();
   approvalState.setPending({
     state: { approve: () => (approved = true), reject: () => (rejected = true) } as any,
-    interruption: { name: 'shell', callId: 'docker-y', arguments: { command: 'docker ps', docker_host_control: true } },
+    interruption: { name: 'shell', callId: 'docker-y', arguments: { command: 'docker ps' } },
     emittedCommandIds: new Set(),
     toolCallArgumentsById: new Map(),
   });
@@ -268,7 +270,7 @@ it('prepareContinuation stages but does not consume an explicit Docker one-shot 
   const approvalState = new ApprovalState();
   approvalState.setPending({
     state: { approve: () => (approved = true) } as any,
-    interruption: { name: 'shell', callId: 'docker-1', arguments: { command: 'docker ps', docker_host_control: true } },
+    interruption: { name: 'shell', callId: 'docker-1', arguments: { command: 'docker ps' } },
     emittedCommandIds: new Set(),
     toolCallArgumentsById: new Map(),
   });
@@ -288,12 +290,67 @@ it('prepareContinuation stages but does not consume an explicit Docker one-shot 
   expect(consumeDockerHostControlOnce('s1', 'docker ps')).toBe(true);
 });
 
-it('prepareContinuation rejects Docker-specific answers for requests without Docker host control', () => {
+it('prepareContinuation grants Docker host control to a command the sandbox blocked from the daemon', () => {
+  let approved = false;
+  const approvalState = new ApprovalState();
+  approvalState.setPending({
+    state: { approve: () => (approved = true) } as any,
+    interruption: { name: 'shell', callId: 'blocked-1', arguments: { command: 'pnpm test' } },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+  });
+  recordDockerHostControlDenial('pnpm test');
+
+  coord.prepareContinuation('docker-allow-once', undefined);
+
+  expect(approved).toBe(true);
+  expect(consumeDockerHostControlOnce('s1', 'pnpm test')).toBe(true);
+  // The pending block must survive approval: for a command that does not read as
+  // Docker, it is what tells the resumed execution to take host control.
+  expect(requiresDockerHostControlApproval('pnpm test')).toBe(true);
+});
+
+it('prepareContinuation clears the pending Docker request when the user denies it', () => {
   let rejected = false;
   const approvalState = new ApprovalState();
   approvalState.setPending({
     state: { reject: () => (rejected = true) } as any,
-    interruption: { name: 'shell', callId: 'not-docker', arguments: { command: 'docker ps' } },
+    interruption: { name: 'shell', callId: 'blocked-2', arguments: { command: 'pnpm test' } },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+  });
+  recordDockerHostControlDenial('pnpm test');
+
+  coord.prepareContinuation('n', 'no docker');
+
+  expect(rejected).toBe(true);
+  expect(requiresDockerHostControlApproval('pnpm test')).toBe(false);
+});
+
+it('prepareContinuation rejects Docker-specific answers for non-Docker commands', () => {
+  let rejected = false;
+  const approvalState = new ApprovalState();
+  approvalState.setPending({
+    state: { reject: () => (rejected = true) } as any,
+    interruption: { name: 'shell', callId: 'not-docker', arguments: { command: 'git status' } },
     emittedCommandIds: new Set(),
     toolCallArgumentsById: new Map(),
   });

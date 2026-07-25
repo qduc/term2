@@ -73,7 +73,7 @@ it('does not auto-approve an explicit Docker host-control request', async () => 
   const interruption = {
     name: 'shell',
     callId: 'docker-shell',
-    arguments: { command: 'docker ps', docker_host_control: true },
+    arguments: { command: 'docker ps' },
     agent: { name: 'TestAgent' },
   };
   const pending = {

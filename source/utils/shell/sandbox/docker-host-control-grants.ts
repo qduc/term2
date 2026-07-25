@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ISettingsService } from '../../../services/service-interfaces.js';
+import { requestsDockerHostControl } from './docker-host-control.js';
 
 export type DockerHostControlGrant = 'once' | 'session' | 'project';
 
@@ -25,6 +26,20 @@ class DockerHostControlGrants {
   #settings: ISettingsService | undefined;
   #onceBySession = new Map<string, Set<string>>();
   #sessionRootsBySession = new Map<string, Set<string>>();
+  #deniedCommands = new Set<string>();
+
+  /** A sandboxed run of this command was blocked from the Docker daemon. */
+  recordDenial(command: string): void {
+    this.#deniedCommands.add(command);
+  }
+
+  consumeDenial(command: string): boolean {
+    return this.#deniedCommands.delete(command);
+  }
+
+  hasDenial(command: string): boolean {
+    return this.#deniedCommands.has(command);
+  }
 
   configure(settings: ISettingsService): void {
     this.#settings = settings;
@@ -74,6 +89,7 @@ class DockerHostControlGrants {
   resetForTests(): void {
     this.#onceBySession.clear();
     this.#sessionRootsBySession.clear();
+    this.#deniedCommands.clear();
     this.#settings = undefined;
   }
 }
@@ -88,5 +104,15 @@ export const hasDockerHostControlSession = (sessionId: string, cwd: string) =>
   dockerHostControlGrants.hasSession(sessionId, cwd);
 export const hasDockerHostControlProject = (cwd: string) => dockerHostControlGrants.hasProject(cwd);
 export const clearDockerHostControlSession = (sessionId: string) => dockerHostControlGrants.clearSession(sessionId);
+export const recordDockerHostControlDenial = (command: string) => dockerHostControlGrants.recordDenial(command);
+export const consumeDockerHostControlDenial = (command: string) => dockerHostControlGrants.consumeDenial(command);
+
+/**
+ * Whether this command must go through the Docker host-control approval prompt:
+ * either it reads as a Docker invocation, or a sandboxed run of it was already
+ * blocked from the daemon (the only signal for indirect invocations).
+ */
+export const requiresDockerHostControlApproval = (command: string) =>
+  requestsDockerHostControl(command) || dockerHostControlGrants.hasDenial(command);
 export const resetDockerHostControlGrantsForTests = () => dockerHostControlGrants.resetForTests();
 export const normalizeDockerHostControlWorkspaceRoot = realRoot;

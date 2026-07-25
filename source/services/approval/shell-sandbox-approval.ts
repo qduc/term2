@@ -1,3 +1,5 @@
+import { requiresDockerHostControlApproval } from '../../utils/shell/sandbox/docker-host-control-grants.js';
+
 export function isUnsandboxedShell(toolName: string | undefined, args: unknown): boolean {
   if (toolName !== 'shell' && toolName !== 'bash') {
     return false;
@@ -8,10 +10,9 @@ export function isUnsandboxedShell(toolName: string | undefined, args: unknown):
 
 export function requiresHumanShellApproval(toolName: string | undefined, args: unknown): boolean {
   if (isUnsandboxedShell(toolName, args)) return true;
-  return Boolean(
-    (toolName === 'shell' || toolName === 'bash') &&
-      args &&
-      typeof args === 'object' &&
-      (args as Record<string, unknown>).docker_host_control === true,
-  );
+  const command =
+    (toolName === 'shell' || toolName === 'bash') && args && typeof args === 'object'
+      ? (args as Record<string, unknown>).command
+      : undefined;
+  return typeof command === 'string' && requiresDockerHostControlApproval(command);
 }

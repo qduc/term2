@@ -6,7 +6,10 @@ import {
   grantDockerHostControl,
   resetDockerHostControlGrantsForTests,
 } from '../../utils/shell/sandbox/docker-host-control-grants.js';
-import { createDockerHostControl } from '../../utils/shell/sandbox/docker-host-control.js';
+import {
+  createDockerHostControl,
+  DOCKER_HOST_CONTROL_RETRY_INSTRUCTION,
+} from '../../utils/shell/sandbox/docker-host-control.js';
 import { getDefaultShellSandboxRunner } from '../../utils/shell/sandbox/shell-sandbox-runner.js';
 import { createShellToolDefinition } from './shell.js';
 
@@ -73,15 +76,58 @@ if (prerequisite) {
     const context = { context: { sessionId } };
 
     try {
-      const blocked = await tool.execute({ command: 'docker version', docker_host_control: true }, context);
+      const blocked = await tool.execute({ command: 'docker version' }, context);
       expect(blocked).toContain('requires explicit approval');
 
       grantDockerHostControl({ command: 'docker version', cwd: process.cwd(), scope: 'once', sessionId });
-      const granted = await tool.execute(
-        { command: 'docker version', docker_host_control: true, timeout_ms: 20_000 },
-        context,
-      );
+      const granted = await tool.execute({ command: 'docker version', timeout_ms: 20_000 }, context);
       expect(granted).toContain('exit 0');
+
+      // Regression: a subshell prefix used to hide the invocation from detection,
+      // so the command ran sandboxed and Docker fell back to the denied
+      // /var/run/docker.sock default context.
+      const wrapped = "(docker version 2>&1 || true) && printf 'done\\n'";
+      expect(await tool.execute({ command: wrapped }, context)).toContain('requires explicit approval');
+      grantDockerHostControl({ command: wrapped, cwd: process.cwd(), scope: 'once', sessionId });
+      const grantedWrapped = await tool.execute({ command: wrapped, timeout_ms: 20_000 }, context);
+      expect(grantedWrapped).not.toContain('permission denied');
+    } finally {
+      resetDockerHostControlGrantsForTests();
+    }
+  });
+
+  it.sequential('a Docker call the command string hides is blocked, then approvable', async ({ skip }) => {
+    const runner = getDefaultShellSandboxRunner();
+    const availability = await runner.availability();
+    if (availability.type !== 'available') {
+      skip(`Docker Desktop host-control integration unavailable: ${availability.type}`);
+    }
+
+    // `sh -c` stands in for a script, make target, or package command that
+    // reaches Docker internally: no command-string check can see it.
+    const indirect = `sh -c 'docker version --format "{{.Server.Version}}"'`;
+    const sessionId = 'docker-desktop-indirect';
+    const tool = createShellToolDefinition({
+      loggingService: createNoopLogger(),
+      settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+      shellSandboxRunner: runner,
+    });
+    const context = { context: { sessionId } };
+
+    try {
+      expect(await tool.needsApproval({ command: indirect }, context)).toBe(false);
+      expect(await tool.execute({ command: indirect, timeout_ms: 20_000 }, context)).toContain(
+        DOCKER_HOST_CONTROL_RETRY_INSTRUCTION,
+      );
+
+      // The blocked run is what makes the retry approvable.
+      expect(await tool.needsApproval({ command: indirect }, context)).toBe(true);
+
+      // Approval leaves the pending block in place; only the run that uses it
+      // clears it. Granting here mirrors prepareContinuation exactly.
+      grantDockerHostControl({ command: indirect, cwd: process.cwd(), scope: 'once', sessionId });
+      expect(await tool.execute({ command: indirect, timeout_ms: 20_000 }, context)).toContain('exit 0');
+      expect(await tool.needsApproval({ command: indirect }, context)).toBe(false);
     } finally {
       resetDockerHostControlGrantsForTests();
     }

@@ -491,7 +491,7 @@ it('explicit Docker host control is not auto-approved by LLM advisory mode', asy
       {
         name: 'shell',
         callId: 'c-docker-host-control',
-        arguments: { command: 'docker version', sandbox: 'default', docker_host_control: true },
+        arguments: { command: 'docker version', sandbox: 'default' },
       },
     ],
     state: {},

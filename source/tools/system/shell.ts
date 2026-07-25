@@ -41,10 +41,17 @@ import {
   getProjectAllowReadStore,
 } from '../../utils/shell/sandbox/denied-read-stores.js';
 import { classifySandboxFailure } from '../../utils/shell/sandbox/sandbox-failure-classifier.js';
-import { createDockerHostControl, type DockerHostControl } from '../../utils/shell/sandbox/docker-host-control.js';
+import {
+  createDockerHostControl,
+  DOCKER_HOST_CONTROL_RETRY_INSTRUCTION,
+  type DockerHostControl,
+} from '../../utils/shell/sandbox/docker-host-control.js';
 import {
   configureDockerHostControlGrants,
+  consumeDockerHostControlDenial,
   consumeDockerHostControlOnce,
+  recordDockerHostControlDenial,
+  requiresDockerHostControlApproval,
   hasDockerHostControlProject,
   hasDockerHostControlSession,
 } from '../../utils/shell/sandbox/docker-host-control-grants.js';
@@ -68,18 +75,10 @@ const shellParametersSchema = z.object({
   sandbox: shellSandboxModeSchema.describe(
     'Run mode. default runs inside the sandbox when available. unsandboxed requires explicit user approval.',
   ),
-  docker_host_control: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe(
-      'Grant this command control of the local Docker daemon. Requires explicit approval and can bypass sandbox filesystem and network restrictions.',
-    ),
 });
 
-export type ShellToolParams = Omit<z.infer<typeof shellParametersSchema>, 'sandbox' | 'docker_host_control'> & {
+export type ShellToolParams = Omit<z.infer<typeof shellParametersSchema>, 'sandbox'> & {
   sandbox?: 'default' | 'unsandboxed';
-  docker_host_control?: boolean;
 };
 
 // Re-export trim utilities for backwards compatibility
@@ -293,6 +292,9 @@ export function createShellToolDefinition(deps: {
   const shellDescription = orchestratorMode
     ? SHELL_DESCRIPTION_ORCHESTRATOR
     : getShellDescription(resolvedSearchViaShell);
+  // Read per call: the sandbox can be toggled while a session is running, and a
+  // stale value would let needsApproval and execute disagree about Docker.
+  const isSandboxEnabled = () => settingsService.get<boolean>('sandbox.enabled') !== false;
 
   return {
     name: 'shell',
@@ -306,15 +308,16 @@ export function createShellToolDefinition(deps: {
 
         const cwd = executionContext?.getCwd() || process.cwd();
         const sessionId = getConversationSessionId(context);
+        const sandboxEnabled = isSandboxEnabled();
+        const dockerHostControlRequested = sandboxEnabled && requiresDockerHostControlApproval(params.command);
         if (
-          params.docker_host_control &&
+          dockerHostControlRequested &&
           !hasDockerHostControlProject(cwd) &&
           (!sessionId || !hasDockerHostControlSession(sessionId, cwd))
         ) {
           return true;
         }
         const sshService = executionContext?.getSSHService();
-        const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled') !== false;
         if (!sshService && sandboxEnabled) {
           // If a previous sandboxed run denied a read for this command, require
           // approval so the user can allow/remember the path or escape unsandboxed.
@@ -348,19 +351,17 @@ export function createShellToolDefinition(deps: {
         return true; // fail-safe: require approval on validation errors
       }
     },
-    execute: async (
-      { command, timeout_ms, max_output_length, sandbox = 'default', docker_host_control = false },
-      _context,
-      details,
-    ) => {
+    execute: async ({ command, timeout_ms, max_output_length, sandbox = 'default' }, _context, details) => {
       const cwd = executionContext?.getCwd() || process.cwd();
       const sessionId = getConversationSessionId(_context);
+      const sandboxEnabled = isSandboxEnabled();
+      const dockerHostControlRequested = sandboxEnabled && requiresDockerHostControlApproval(command);
       const hasDockerGrant =
-        docker_host_control &&
+        dockerHostControlRequested &&
         (hasDockerHostControlProject(cwd) ||
           (sessionId &&
             (hasDockerHostControlSession(sessionId, cwd) || consumeDockerHostControlOnce(sessionId, command))));
-      if (docker_host_control && !hasDockerGrant) {
+      if (dockerHostControlRequested && !hasDockerGrant) {
         return 'Error: Docker host control requires explicit approval.';
       }
       if (settingsService.get<boolean>('app.planMode') && isMutatingCommand(command, cwd, loggingService)) {
@@ -426,13 +427,15 @@ export function createShellToolDefinition(deps: {
         }
         const extraAllowReadFromOverride = override?.extraAllowRead ?? [];
 
-        const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled') !== false;
-        if (docker_host_control) {
+        if (dockerHostControlRequested) {
           if (sandbox !== 'default' || sshService || !sandboxEnabled) {
             return 'Error: Docker host control requires the default local sandbox.';
           }
           try {
             dockerHostControl = dockerHostControlFactory();
+            // The run that uses the approval settles the pending block, so a
+            // later run of the same command is judged on its own.
+            consumeDockerHostControlDenial(command);
             loggingService.security('Docker host-control capability granted for shell command', {
               command: optimizedCommand.substring(0, 100),
               cwd,
@@ -445,7 +448,7 @@ export function createShellToolDefinition(deps: {
         }
         if (!sshService && sandbox === 'default' && sandboxEnabled) {
           sandboxAvailability = await shellSandboxRunner.availability();
-          if (docker_host_control && sandboxAvailability.type !== 'available') {
+          if (dockerHostControlRequested && sandboxAvailability.type !== 'available') {
             return 'Error: Docker host control requires an available local sandbox.';
           }
           if (sandboxAvailability.type === 'available') {
@@ -519,7 +522,22 @@ export function createShellToolDefinition(deps: {
           annotatedStderr,
           sandboxed,
           readPolicy,
+          dockerHostControlActive: Boolean(dockerHostControl),
+          exitCode: result.exitCode,
         });
+
+        if (sandboxFailure?.type === 'docker_blocked') {
+          // Keyed by the command the model passed, because that is what the
+          // approval flow and the retry will present.
+          recordDockerHostControlDenial(command);
+          loggingService.security('Sandbox blocked Docker daemon access; agent retry will prompt for approval', {
+            confidence: sandboxFailure.confidence,
+            command: command.substring(0, 100),
+            cwd,
+            correlationId,
+          });
+          return `Error: ${DOCKER_HOST_CONTROL_RETRY_INSTRUCTION}`;
+        }
 
         if (sandboxFailure?.type === 'denied_read') {
           deniedReadStore.record(optimizedCommand, sandboxFailure.deniedRead);

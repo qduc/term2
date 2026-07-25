@@ -13,9 +13,13 @@ import { createMockSettingsService } from '../../services/settings/settings-serv
 import { ExecutionContext } from '../../services/execution-context.js';
 import type { ILoggingService, ISSHService } from '../../services/service-interfaces.js';
 import {
+  consumeDockerHostControlDenial,
   grantDockerHostControl,
+  recordDockerHostControlDenial,
+  requiresDockerHostControlApproval,
   resetDockerHostControlGrantsForTests,
 } from '../../utils/shell/sandbox/docker-host-control-grants.js';
+import { DOCKER_HOST_CONTROL_RETRY_INSTRUCTION } from '../../utils/shell/sandbox/docker-host-control.js';
 
 beforeEach(() => resetDockerHostControlGrantsForTests());
 
@@ -172,13 +176,22 @@ it('shell schema accepts omitted, default, and unsandboxed sandbox modes', () =>
   expect(() => tool.parameters.parse({ command: 'pwd', sandbox: 'off' })).toThrow();
 });
 
-it('shell schema accepts an explicit Docker host-control capability request', () => {
+it('shell schema does not expose Docker host control', () => {
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService(),
   });
 
-  expect(tool.parameters.parse({ command: 'docker ps', docker_host_control: true }).docker_host_control).toBe(true);
+  expect(tool.parameters.shape).not.toHaveProperty('docker_host_control');
+});
+
+it('shell schema does not expose Docker host control when the sandbox is disabled', () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+  });
+
+  expect(tool.parameters.shape).not.toHaveProperty('docker_host_control');
 });
 
 it('shell needsApproval always prompts for unsandboxed execution', async () => {
@@ -190,13 +203,13 @@ it('shell needsApproval always prompts for unsandboxed execution', async () => {
   expect(await tool.needsApproval({ command: 'ls', sandbox: 'unsandboxed' })).toBe(true);
 });
 
-it('shell needsApproval always prompts for Docker host control', async () => {
+it('shell needsApproval prompts for Docker commands in the sandbox', async () => {
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService(),
   });
 
-  expect(await tool.needsApproval({ command: 'docker ps', docker_host_control: true })).toBe(true);
+  expect(await tool.needsApproval({ command: 'docker ps' })).toBe(true);
 });
 
 it('Docker session grants do not suppress approval in another session sharing the same cwd', async () => {
@@ -210,8 +223,8 @@ it('Docker session grants do not suppress approval in another session sharing th
   const sessionB = { context: { sessionId: 'session-b' } };
 
   grantDockerHostControl({ command: 'docker ps', cwd: path.join(cwd, '.'), scope: 'session', sessionId: 'session-a' });
-  expect(await tool.needsApproval({ command: 'docker ps', docker_host_control: true }, sessionA)).toBe(false);
-  expect(await tool.needsApproval({ command: 'docker ps', docker_host_control: true }, sessionB)).toBe(true);
+  expect(await tool.needsApproval({ command: 'docker ps' }, sessionA)).toBe(false);
+  expect(await tool.needsApproval({ command: 'docker ps' }, sessionB)).toBe(true);
 
   resetDockerHostControlGrantsForTests();
   const projectTool = createShellToolDefinition({
@@ -220,10 +233,10 @@ it('Docker session grants do not suppress approval in another session sharing th
     shellSandboxRunner: createFakeSandboxRunner(),
   });
   grantDockerHostControl({ command: 'docker ps', cwd, scope: 'project', sessionId: 'session-a' });
-  expect(await projectTool.needsApproval({ command: 'docker ps', docker_host_control: true }, sessionB)).toBe(false);
+  expect(await projectTool.needsApproval({ command: 'docker ps' }, sessionB)).toBe(false);
 });
 
-it('does not apply Docker authorization unless docker_host_control is explicitly requested', async () => {
+it('does not apply Docker authorization when the sandbox is disabled', async () => {
   let dockerFactoryCalled = false;
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
@@ -240,6 +253,102 @@ it('does not apply Docker authorization unless docker_host_control is explicitly
   expect(dockerFactoryCalled).toBe(false);
 });
 
+it('shell needsApproval follows sandbox.enabled changes made after the tool was created', async () => {
+  const settingsService = createMockSettingsService({ 'sandbox.enabled': false });
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService,
+    shellSandboxRunner: createFakeSandboxRunner({
+      availability: async () => ({ type: 'missing_dependency', reason: 'sandbox runtime unavailable' }),
+    }),
+  });
+
+  settingsService.set('sandbox.enabled', true);
+
+  // Sandbox is on but unavailable, so an otherwise harmless command must prompt.
+  expect(await tool.needsApproval({ command: 'pwd' })).toBe(true);
+});
+
+it('turns a sandboxed Docker daemon block into an approvable retry for an indirect command', async () => {
+  const dockerStderr =
+    'WARNING: Error loading config file: open /Users/me/.docker/config.json: operation not permitted\n' +
+    'permission denied while trying to connect to the docker API at unix:///var/run/docker.sock';
+  let dockerFactoryCalled = false;
+  const executed: string[] = [];
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    shellSandboxRunner: createFakeSandboxRunner(),
+    dockerHostControlFactory: () => {
+      dockerFactoryCalled = true;
+      return { socketPath: '/tmp/docker.sock', configDir: createTmpDir(), cleanup: () => {} };
+    },
+    executeShellCommandImpl: async (command: string) => {
+      executed.push(command);
+      return { stdout: '', stderr: dockerFactoryCalled ? '' : dockerStderr, exitCode: 1, timedOut: false };
+    },
+  });
+  const sessionA = { context: { sessionId: 'session-a' } };
+
+  // 1. The command never mentions Docker, so it runs sandboxed and is blocked.
+  expect(await tool.needsApproval({ command: 'pnpm test' }, sessionA)).toBe(false);
+  const blocked = await tool.execute({ command: 'pnpm test' }, sessionA);
+  expect(blocked).toContain(DOCKER_HOST_CONTROL_RETRY_INSTRUCTION);
+  expect(dockerFactoryCalled).toBe(false);
+
+  // 2. The retry is now approvable, and refused until a grant exists.
+  expect(await tool.needsApproval({ command: 'pnpm test' }, sessionA)).toBe(true);
+  expect(await tool.execute({ command: 'pnpm test' }, sessionA)).toContain('requires explicit approval');
+
+  // 3. Once granted, the same command runs with Docker host control.
+  grantDockerHostControl({ command: 'pnpm test', cwd: process.cwd(), scope: 'once', sessionId: 'session-a' });
+  const granted = await tool.execute({ command: 'pnpm test' }, sessionA);
+  expect(dockerFactoryCalled).toBe(true);
+  expect(granted).not.toContain('requires explicit approval');
+  expect(executed).toHaveLength(2);
+});
+
+it('grants Docker host control on the retry the approval flow actually produces', async () => {
+  let dockerFactoryCalled = false;
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    shellSandboxRunner: createFakeSandboxRunner(),
+    dockerHostControlFactory: () => {
+      dockerFactoryCalled = true;
+      return { socketPath: '/tmp/docker.sock', configDir: createTmpDir(), cleanup: () => {} };
+    },
+    executeShellCommandImpl: async () => ({ stdout: '', stderr: '', exitCode: 0, timedOut: false }),
+  });
+  const sessionA = { context: { sessionId: 'session-a' } };
+
+  // Exactly what prepareContinuation does when the user approves a blocked command.
+  recordDockerHostControlDenial('pnpm test');
+  grantDockerHostControl({ command: 'pnpm test', cwd: process.cwd(), scope: 'once', sessionId: 'session-a' });
+
+  expect(await tool.execute({ command: 'pnpm test' }, sessionA)).not.toContain('requires explicit approval');
+  expect(dockerFactoryCalled).toBe(true);
+  // The request is settled by the run that used it, not before.
+  expect(requiresDockerHostControlApproval('pnpm test')).toBe(false);
+});
+
+it('a denied Docker request lets the command run sandboxed again instead of looping on approval', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    shellSandboxRunner: createFakeSandboxRunner(),
+    executeShellCommandImpl: async () => ({ stdout: '', stderr: '', exitCode: 0, timedOut: false }),
+  });
+  const sessionA = { context: { sessionId: 'session-a' } };
+  recordDockerHostControlDenial('pnpm test');
+
+  // The approval flow clears the pending request when the user decides.
+  consumeDockerHostControlDenial('pnpm test');
+
+  expect(await tool.needsApproval({ command: 'pnpm test' }, sessionA)).toBe(false);
+  expect(await tool.execute({ command: 'pnpm test' }, sessionA)).not.toContain('requires explicit approval');
+});
+
 it('consumes a one-shot Docker grant only for its exact command', async () => {
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
@@ -251,15 +360,9 @@ it('consumes a one-shot Docker grant only for its exact command', async () => {
   grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'once', sessionId: 'session-a' });
   const sessionA = { context: { sessionId: 'session-a' } };
 
-  expect(await tool.execute({ command: 'docker images', docker_host_control: true }, sessionA)).toContain(
-    'requires explicit approval',
-  );
-  expect(await tool.execute({ command: 'docker ps', docker_host_control: true }, sessionA)).not.toContain(
-    'requires explicit approval',
-  );
-  expect(await tool.execute({ command: 'docker ps', docker_host_control: true }, sessionA)).toContain(
-    'requires explicit approval',
-  );
+  expect(await tool.execute({ command: 'docker images' }, sessionA)).toContain('requires explicit approval');
+  expect(await tool.execute({ command: 'docker ps' }, sessionA)).not.toContain('requires explicit approval');
+  expect(await tool.execute({ command: 'docker ps' }, sessionA)).toContain('requires explicit approval');
 });
 
 it('shell execute refuses Docker host control when the local sandbox is unavailable', async () => {
@@ -282,10 +385,7 @@ it('shell execute refuses Docker host control when the local sandbox is unavaila
   });
 
   grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'once', sessionId: 'session-a' });
-  const output = await tool.execute(
-    { command: 'docker ps', docker_host_control: true },
-    { context: { sessionId: 'session-a' } },
-  );
+  const output = await tool.execute({ command: 'docker ps' }, { context: { sessionId: 'session-a' } });
 
   expect(executed).toBe(false);
   expect(output).toContain('requires an available local sandbox');
@@ -302,10 +402,7 @@ it('shell execute retains the Docker socket error after an approved grant', asyn
   });
   grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'once', sessionId: 'session-a' });
 
-  const output = await tool.execute(
-    { command: 'docker ps', docker_host_control: true },
-    { context: { sessionId: 'session-a' } },
-  );
+  const output = await tool.execute({ command: 'docker ps' }, { context: { sessionId: 'session-a' } });
 
   expect(output).toContain('Docker socket is unavailable');
 });
@@ -632,10 +729,7 @@ it.sequential('shell execute grants Docker host control only to the approved san
   });
 
   grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'once', sessionId: 'session-a' });
-  const output = await tool.execute(
-    { command: 'docker ps', docker_host_control: true },
-    { context: { sessionId: 'session-a' } },
-  );
+  const output = await tool.execute({ command: 'docker ps' }, { context: { sessionId: 'session-a' } });
 
   expect(receivedSocketPaths).toEqual([socketPath]);
   expect(receivedEnv?.DOCKER_HOST).toBe(`unix://${socketPath}`);

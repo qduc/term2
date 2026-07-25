@@ -60,6 +60,66 @@ describe('classifySandboxFailure', () => {
     });
   });
 
+  it('classifies a blocked Docker daemon connection so the approval flow can offer host control', () => {
+    const stderr =
+      'WARNING: Error loading config file: open /Users/me/.docker/config.json: operation not permitted\n' +
+      'permission denied while trying to connect to the docker API at unix:///var/run/docker.sock';
+
+    expect(
+      classifySandboxFailure({
+        command: 'pnpm test',
+        rawStderr: stderr,
+        annotatedStderr: stderr,
+        sandboxed: true,
+        readPolicy: 'standard',
+      }),
+    ).toEqual({ type: 'docker_blocked', confidence: 'stderr_pattern', stderr });
+  });
+
+  it('classifies the daemon-unreachable form Docker reports when it loses its context', () => {
+    const stderr = 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?';
+
+    expect(
+      classifySandboxFailure({
+        command: 'make up',
+        rawStderr: stderr,
+        annotatedStderr: stderr,
+        sandboxed: true,
+        readPolicy: 'standard',
+      })?.type,
+    ).toBe('docker_blocked');
+  });
+
+  it('does not swallow the output of a command that succeeded while mentioning the daemon', () => {
+    const stderr = 'note: cannot connect to the Docker daemon (ignored)';
+
+    expect(
+      classifySandboxFailure({
+        command: 'pnpm test',
+        rawStderr: stderr,
+        annotatedStderr: stderr,
+        sandboxed: true,
+        readPolicy: 'standard',
+        exitCode: 0,
+      }),
+    ).toBeNull();
+  });
+
+  it('does not blame the sandbox when the command already held Docker host control', () => {
+    const stderr = 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?';
+
+    expect(
+      classifySandboxFailure({
+        command: 'docker ps',
+        rawStderr: stderr,
+        annotatedStderr: stderr,
+        sandboxed: true,
+        readPolicy: 'standard',
+        dockerHostControlActive: true,
+      }),
+    ).toBeNull();
+  });
+
   it('does not classify ordinary stderr when no sandbox signal is present', () => {
     const result = classifySandboxFailure({
       command: 'cat ./private-file',

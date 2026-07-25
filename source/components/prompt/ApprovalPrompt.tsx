@@ -13,6 +13,7 @@ import {
   ASK_USER_NEXT_QUESTION_LABEL,
 } from '../../tools/agent/ask-user-constants.js';
 import DiffView from '../layout/DiffView.js';
+import { requiresDockerHostControlApproval } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 
 type Props = {
   approval: ApprovalDescriptor;
@@ -53,7 +54,6 @@ type ShellArgs = {
 type ShellApprovalArgs = ShellArgs & {
   command?: string;
   sandbox?: 'default' | 'unsandboxed';
-  docker_host_control?: boolean;
 };
 
 type SearchReplaceArgs = {
@@ -259,14 +259,15 @@ const ApprovalPrompt: FC<Props> = ({
   const isDockerHostControlApproval = React.useMemo(() => {
     if (approval.toolName !== 'shell') return false;
     try {
-      if ((JSON.parse(approval.argumentsText) as ShellApprovalArgs)?.docker_host_control === true) return true;
+      const parsed = JSON.parse(approval.argumentsText) as ShellApprovalArgs;
+      if (typeof parsed?.command === 'string') return requiresDockerHostControlApproval(parsed.command);
     } catch {
-      // Ignore JSON parsing errors
+      // Try the raw interruption below.
     }
     try {
       const args = (approval.rawInterruption as Record<string, any> | undefined)?.arguments;
-      const parsed = typeof args === 'string' ? JSON.parse(args) : args;
-      return parsed?.docker_host_control === true;
+      const parsed = (typeof args === 'string' ? JSON.parse(args) : args) as ShellApprovalArgs | undefined;
+      return typeof parsed?.command === 'string' && requiresDockerHostControlApproval(parsed.command);
     } catch {
       return false;
     }

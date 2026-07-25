@@ -7,7 +7,7 @@ type ExecCallback = (error: any, stdout: string | Buffer, stderr: string | Buffe
 
 type ExecImpl = (
   command: string,
-  options: { cwd?: string; timeout?: number; maxBuffer?: number; detached?: boolean; env?: NodeJS.ProcessEnv },
+  options: { cwd?: string; maxBuffer?: number; detached?: boolean; env?: NodeJS.ProcessEnv },
   callback: ExecCallback,
 ) => ChildProcess;
 
@@ -21,18 +21,8 @@ const defaultExecImpl: ExecImpl = (command, options, callback) => {
 
   let stdout = '';
   let stderr = '';
-  let killed = false;
   let ex: Error | null = null;
   const maxBuffer = options.maxBuffer ?? 1024 * 1024;
-  let timeoutId: NodeJS.Timeout | undefined;
-
-  if (options.timeout && options.timeout > 0) {
-    timeoutId = setTimeout(() => {
-      killed = true;
-      child.kill('SIGTERM');
-    }, options.timeout);
-  }
-
   child.stdout?.setEncoding('utf8');
   child.stdout?.on('data', (chunk) => {
     stdout += chunk;
@@ -52,7 +42,6 @@ const defaultExecImpl: ExecImpl = (command, options, callback) => {
   });
 
   child.on('close', (code, signal) => {
-    if (timeoutId) clearTimeout(timeoutId);
     if (ex) {
       callback(ex, stdout, stderr);
       return;
@@ -61,7 +50,6 @@ const defaultExecImpl: ExecImpl = (command, options, callback) => {
       const err = new Error(`Command failed: ${command}`) as any;
       err.code = code;
       err.signal = signal;
-      err.killed = killed;
       callback(err, stdout, stderr);
       return;
     }
@@ -69,7 +57,6 @@ const defaultExecImpl: ExecImpl = (command, options, callback) => {
   });
 
   child.on('error', (err) => {
-    if (timeoutId) clearTimeout(timeoutId);
     if (!ex) {
       ex = err;
     }
@@ -155,16 +142,54 @@ export async function executeShellCommand(
   try {
     const result = await new Promise<{ stdout?: string | Buffer; stderr?: string | Buffer }>((resolve, reject) => {
       let unregisterPauseController: (() => void) | undefined;
-      const child = execImpl(
+      let timeoutId: NodeJS.Timeout | undefined;
+      let timeoutStartedAt: number | undefined;
+      let remainingTimeoutMs = timeout ?? 0;
+      let child: ChildProcess;
+      let paused = false;
+      let settled = false;
+
+      const clearCommandTimeout = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = undefined;
+        }
+        timeoutStartedAt = undefined;
+      };
+      const stopChild = () => {
+        if (paused) {
+          paused = false;
+          signalChildProcess(child, 'SIGCONT');
+        }
+        stopChildProcess(child);
+      };
+      const startCommandTimeout = () => {
+        if (remainingTimeoutMs <= 0 || timeoutId) return;
+        timeoutStartedAt = Date.now();
+        timeoutId = setTimeout(() => {
+          timeoutId = undefined;
+          remainingTimeoutMs = 0;
+          stopChild();
+        }, remainingTimeoutMs);
+      };
+      const pauseCommandTimeout = () => {
+        if (!timeoutId || timeoutStartedAt === undefined) return;
+        remainingTimeoutMs = Math.max(0, remainingTimeoutMs - (Date.now() - timeoutStartedAt));
+        clearCommandTimeout();
+      };
+
+      child = execImpl(
         command,
         {
           cwd,
-          timeout,
           maxBuffer,
           env: childEnv,
           detached: process.platform !== 'win32',
         },
         (error, stdout, stderr) => {
+          if (settled) return;
+          settled = true;
+          clearCommandTimeout();
           signal?.removeEventListener('abort', stopChild);
           unregisterPauseController?.();
           if (error) {
@@ -178,20 +203,32 @@ export async function executeShellCommand(
         },
       );
 
-      const stopChild = () => stopChildProcess(child);
-      if (pauseOnSandboxNetworkApproval) {
-        unregisterPauseController = registerSandboxNetworkApprovalPauseController({
-          pause: () => signalChildProcess(child, 'SIGSTOP'),
-          resume: () => signalChildProcess(child, 'SIGCONT'),
-        });
-      }
-      if (signal?.aborted) {
-        stopChild();
-      } else {
-        signal?.addEventListener('abort', stopChild, { once: true });
-      }
+      if (!settled) {
+        startCommandTimeout();
+        if (pauseOnSandboxNetworkApproval) {
+          unregisterPauseController = registerSandboxNetworkApprovalPauseController({
+            pause: () => {
+              if (settled || paused) return;
+              pauseCommandTimeout();
+              paused = true;
+              signalChildProcess(child, 'SIGSTOP');
+            },
+            resume: () => {
+              if (settled || !paused) return;
+              paused = false;
+              startCommandTimeout();
+              signalChildProcess(child, 'SIGCONT');
+            },
+          });
+        }
+        if (signal?.aborted) {
+          stopChild();
+        } else {
+          signal?.addEventListener('abort', stopChild, { once: true });
+        }
 
-      child.stdin?.end();
+        child.stdin?.end();
+      }
     });
 
     return {

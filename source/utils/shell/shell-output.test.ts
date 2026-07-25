@@ -56,6 +56,20 @@ it('formatShellExecutionOutput leaves short output unchanged', async () => {
   expect(result.text).toBe('exit 0\nRuntime: 42ms\nhello');
 });
 
+it('formats a child-owned curl timeout as exit 28 rather than a shell timeout', async () => {
+  const result = await formatShellExecutionOutput({
+    command: 'curl --max-time 10 https://example.com',
+    cwd: '/workspace',
+    stdout: '',
+    stderr: 'curl: (28) Operation timed out',
+    exitCode: 28,
+    timedOut: false,
+  });
+
+  expect(result.text).toContain('exit 28');
+  expect(result.text).not.toMatch(/^timeout(?:\n|$)/);
+});
+
 it('formatShellExecutionOutput reuses one temp directory and randomizes artifact filenames', async () => {
   const longOutput = 'x'.repeat(8000);
 

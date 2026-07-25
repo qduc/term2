@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SubagentAsyncRegistry, SubagentRegistryError } from './subagent-async-registry.js';
 import type { SubagentRequest, SubagentResult } from './types.js';
+import type { SubagentSession } from './subagent-session.js';
 import { createMockLogger } from './test-helpers/subagent-manager-fixtures.js';
 
 const result = (role: string, status: SubagentResult['status'] = 'completed'): SubagentResult => ({
@@ -12,7 +13,8 @@ const result = (role: string, status: SubagentResult['status'] = 'completed'): S
   toolsUsed: [],
   ...(status !== 'completed' ? { error: status } : {}),
 });
-const make = (run = async ({ request }: { request: SubagentRequest }) => result(request.role)) =>
+type RunParams = { request: SubagentRequest; session: SubagentSession; signal: AbortSignal };
+const make = (run: (params: RunParams) => Promise<SubagentResult> = async ({ request }) => result(request.role)) =>
   new SubagentAsyncRegistry({ logger: createMockLogger(), run });
 
 it('returns the exact running launch handle and executes with its owned session', async () => {

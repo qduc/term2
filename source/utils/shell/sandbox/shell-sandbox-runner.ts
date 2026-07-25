@@ -5,8 +5,12 @@ import { createSandboxRuntimeConfig, type SandboxAvailability, type ShellSandbox
 import { requestSandboxNetworkApproval } from './sandbox-network-approval.js';
 
 export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
-  #initializedForKey: string | undefined;
-  #initializationFailure: SandboxAvailability | undefined;
+  // SandboxManager is a process-wide singleton. Keep configuration and wrapping
+  // together so every generated sandbox command gets the policy it requested.
+  // The lock does not cover process execution: wrapped commands still run concurrently.
+  static #initializedForKey: string | undefined;
+  static #initializationFailure: SandboxAvailability | undefined;
+  static #managerOperation: Promise<void> = Promise.resolve();
 
   async availability(): Promise<SandboxAvailability> {
     if (!SandboxManager.isSupportedPlatform()) {
@@ -18,8 +22,8 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
       return { type: 'missing_dependency', reason: dependencyCheck.errors.join('; ') };
     }
 
-    if (this.#initializationFailure) {
-      return this.#initializationFailure;
+    if (AnthropicShellSandboxRunner.#initializationFailure) {
+      return AnthropicShellSandboxRunner.#initializationFailure;
     }
 
     return { type: 'available' };
@@ -33,10 +37,12 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
       signal?: AbortSignal;
     },
   ): Promise<{ command: string; diagnostics?: string[] }> {
-    await this.#initialize(options.cwd, options.config);
-    const wrapped = await SandboxManager.wrapWithSandbox(command, undefined, undefined, options.signal);
-    const diagnostics = SandboxManager.getLinuxGlobPatternWarnings?.() ?? [];
-    return { command: wrapped, diagnostics };
+    return this.#withManagerLock(async () => {
+      await this.#initialize(options.cwd, options.config);
+      const wrapped = await SandboxManager.wrapWithSandbox(command, undefined, undefined, options.signal);
+      const diagnostics = SandboxManager.getLinuxGlobPatternWarnings?.() ?? [];
+      return { command: wrapped, diagnostics };
+    });
   }
 
   cleanupAfterCommand(): void {
@@ -49,12 +55,12 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
 
   async #initialize(cwd: string, config: SandboxRuntimeConfig = createSandboxRuntimeConfig({ cwd })): Promise<void> {
     const initializationKey = JSON.stringify({ cwd, config });
-    if (this.#initializedForKey === initializationKey) {
+    if (AnthropicShellSandboxRunner.#initializedForKey === initializationKey) {
       return;
     }
 
     try {
-      if (this.#initializedForKey) {
+      if (AnthropicShellSandboxRunner.#initializedForKey) {
         await SandboxManager.reset();
       }
       process.env.CLAUDE_CODE_TMPDIR = SANDBOX_TEMP_DIR;
@@ -62,12 +68,26 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
         return requestSandboxNetworkApproval({ host, port });
       };
       await SandboxManager.initialize(config, sandboxAskCallback);
-      this.#initializedForKey = initializationKey;
-      this.#initializationFailure = undefined;
+      AnthropicShellSandboxRunner.#initializedForKey = initializationKey;
+      AnthropicShellSandboxRunner.#initializationFailure = undefined;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      this.#initializationFailure = { type: 'initialization_failed', reason };
+      AnthropicShellSandboxRunner.#initializationFailure = { type: 'initialization_failed', reason };
       throw error;
+    }
+  }
+
+  async #withManagerLock<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = AnthropicShellSandboxRunner.#managerOperation;
+    let release: () => void;
+    AnthropicShellSandboxRunner.#managerOperation = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release!();
     }
   }
 }

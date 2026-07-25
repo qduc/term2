@@ -164,9 +164,12 @@ export class ApprovalFlowCoordinator {
         allowReadFolderForSession = true;
       }
     }
-    // The 'deny' decision is treated as a rejection.
-    const isApproved =
-      answer === 'y' || deniedReadDecision || allowReadFolderForSession || (dockerDecision && isDockerRequest);
+    // Docker host control is a distinct capability: ordinary approval answers
+    // must not resume it, because resumption without a matching grant would
+    // make generic/programmatic continuation a host-access bypass.
+    const isApproved = isDockerRequest
+      ? dockerDecision
+      : answer === 'y' || deniedReadDecision || allowReadFolderForSession;
 
     if (isApproved) {
       // For denied-read decisions, set the execution override before the SDK resumes.
@@ -205,7 +208,7 @@ export class ApprovalFlowCoordinator {
         const cwd = typeof parsedDecisionArgs.cwd === 'string' ? parsedDecisionArgs.cwd : process.cwd();
         const scope =
           answer === 'docker-allow-once' ? 'once' : answer === 'docker-allow-session' ? 'session' : 'project';
-        grantDockerHostControl({ command: parsedDecisionArgs.command, cwd, scope });
+        grantDockerHostControl({ command: parsedDecisionArgs.command, cwd, scope, sessionId: this.deps.sessionId });
       }
 
       this.deps.logger.debug('Tool approval granted', {

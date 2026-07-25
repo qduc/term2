@@ -236,6 +236,33 @@ it('prepareContinuation answer=y emits tool_started and approves', () => {
   }
 });
 
+it('prepareContinuation rejects a generic approval for Docker host control without granting access', () => {
+  let approved = false;
+  let rejected = false;
+  const approvalState = new ApprovalState();
+  approvalState.setPending({
+    state: { approve: () => (approved = true), reject: () => (rejected = true) } as any,
+    interruption: { name: 'shell', callId: 'docker-y', arguments: { command: 'docker ps', docker_host_control: true } },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+  });
+
+  coord.prepareContinuation('y', undefined);
+
+  expect(approved).toBe(false);
+  expect(rejected).toBe(true);
+  expect(consumeDockerHostControlOnce('s1', 'docker ps')).toBe(false);
+});
+
 it('prepareContinuation stages but does not consume an explicit Docker one-shot grant', () => {
   let approved = false;
   const approvalState = new ApprovalState();
@@ -258,7 +285,7 @@ it('prepareContinuation stages but does not consume an explicit Docker one-shot 
   coord.prepareContinuation('docker-allow-once', undefined);
 
   expect(approved).toBe(true);
-  expect(consumeDockerHostControlOnce('docker ps')).toBe(true);
+  expect(consumeDockerHostControlOnce('s1', 'docker ps')).toBe(true);
 });
 
 it('prepareContinuation rejects Docker-specific answers for requests without Docker host control', () => {
@@ -283,7 +310,7 @@ it('prepareContinuation rejects Docker-specific answers for requests without Doc
   coord.prepareContinuation('docker-allow-session', undefined);
 
   expect(rejected).toBe(true);
-  expect(hasDockerHostControlSession(process.cwd())).toBe(false);
+  expect(hasDockerHostControlSession('s1', process.cwd())).toBe(false);
 });
 
 it('prepareContinuation allow-folder-session allows the read file parent recursively for this session', () => {

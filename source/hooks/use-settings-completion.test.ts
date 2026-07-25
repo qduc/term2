@@ -82,6 +82,18 @@ it('buildSettingsList - exposes the agent workflow feature flag', () => {
   expect(getSettingCategory('enable_agent_workflow').id).toBe('tools');
 });
 
+it('buildSettingsList - exposes persistent Docker host-control grants for revocation', () => {
+  const result = buildSettingsList(SETTING_KEYS, SETTING_DESCRIPTIONS);
+
+  expect(result).toContainEqual(
+    expect.objectContaining({
+      key: SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS,
+      description: expect.stringContaining('revoke'),
+    }),
+  );
+  expect(getSettingCategory(SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS).id).toBe('safety');
+});
+
 it('buildSettingsList - exposes flat ancillary model tiers and hides legacy model settings', () => {
   const result = buildSettingsList(SETTING_KEYS, SETTING_DESCRIPTIONS);
 
@@ -303,6 +315,8 @@ it('getSettingCategory - groups settings by task-oriented menu tabs', () => {
   expect(getSettingCategory('shell.timeout').id).toBe('tools');
   expect(getSettingCategory('sandbox.enabled').id).toBe('safety');
   expect(getSettingCategory('sandbox.readPolicy').id).toBe('safety');
+  expect(getSettingCategory(SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS).id).toBe('safety');
+  expect(SETTING_DESCRIPTIONS[SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS]).toContain('revoke');
   expect(getSettingCategory('app.searchViaShell').id).toBe('tools');
   expect(getSettingCategory('agent.maxParallelToolCalls').id).toBe('misc');
   expect(getSettingCategory('agent.subagentWorkerModel').id).toBe('models');

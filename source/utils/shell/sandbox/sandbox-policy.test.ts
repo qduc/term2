@@ -240,6 +240,21 @@ it('createSandboxRuntimeConfig allows only the explicit Docker socket when host 
   expect(config.network.allowUnixSockets).toEqual(['/private/var/folders/docker.sock']);
 });
 
+it('keeps the Docker credential directory denied while carving out only an explicitly granted socket', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-docker-home-'));
+  const socketPath = path.join(home, '.docker', 'run', 'docker.sock');
+  fs.mkdirSync(path.dirname(socketPath), { recursive: true });
+  try {
+    const config = createSandboxRuntimeConfig({ home, dockerSocketPath: socketPath, env: {} });
+
+    expect(config.filesystem.denyRead).toContain(path.join(home, '.docker'));
+    expect(config.filesystem.allowRead).toEqual([socketPath]);
+    expect(config.credentials?.files).toContainEqual({ path: path.join(home, '.docker'), mode: 'deny' });
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 it('createSandboxRuntimeConfig uses allowlist auto-allow and asks for non-allowlisted hosts when allowNetworking is true', () => {
   const config = createSandboxRuntimeConfig({ allowNetworking: true });
   expect(config.network.deniedDomains).toEqual([]);

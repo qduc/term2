@@ -2,6 +2,11 @@ import { it, expect } from 'vitest';
 import { SessionContinuityReset } from './session-continuity-reset.js';
 import { SessionLifecycle } from './session-lifecycle.js';
 import { sessionReadAccess } from '../approval/session-read-access.js';
+import {
+  grantDockerHostControl,
+  hasDockerHostControlSession,
+  resetDockerHostControlGrantsForTests,
+} from '../../utils/shell/sandbox/docker-host-control-grants.js';
 
 const makeLifecycleHarness = () => {
   const calls = {
@@ -188,6 +193,19 @@ it('resetSession clears session-only read folder access', () => {
   lifecycle.resetSession();
 
   expect(sessionReadAccess.allows('session-1', '/outside/docs/guide.md')).toBe(false);
+});
+
+it('resetSession clears only its own Docker session grant', () => {
+  const { deps } = makeLifecycleHarness();
+  const lifecycle = new SessionLifecycle(deps as any);
+  grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'session', sessionId: 'session-1' });
+  grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'session', sessionId: 'session-2' });
+
+  lifecycle.resetSession();
+
+  expect(hasDockerHostControlSession('session-1', process.cwd())).toBe(false);
+  expect(hasDockerHostControlSession('session-2', process.cwd())).toBe(true);
+  resetDockerHostControlGrantsForTests();
 });
 
 it('afterUndo routes approval cleanup through approvalFlow coordinator', () => {

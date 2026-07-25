@@ -129,6 +129,14 @@ function isMutatingCommand(command: string, cwd: string, log: ILoggingService): 
   return validateCommandSafety(stripRedundantCd(command, cwd), log); // true = YELLOW/RED
 }
 
+function getConversationSessionId(context: unknown): string | undefined {
+  if (!context || typeof context !== 'object') return undefined;
+  const runContext = (context as { context?: unknown }).context;
+  if (!runContext || typeof runContext !== 'object') return undefined;
+  const sessionId = (runContext as { sessionId?: unknown }).sessionId;
+  return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined;
+}
+
 const coerceCommandText = (value: unknown): string => {
   if (typeof value === 'string') {
     return value;
@@ -290,14 +298,19 @@ export function createShellToolDefinition(deps: {
     name: 'shell',
     description: shellDescription,
     parameters: shellParametersSchema,
-    needsApproval: async (params) => {
+    needsApproval: async (params, context) => {
       try {
         if (params.sandbox === 'unsandboxed') {
           return true;
         }
 
         const cwd = executionContext?.getCwd() || process.cwd();
-        if (params.docker_host_control && !hasDockerHostControlSession(cwd) && !hasDockerHostControlProject(cwd)) {
+        const sessionId = getConversationSessionId(context);
+        if (
+          params.docker_host_control &&
+          !hasDockerHostControlProject(cwd) &&
+          (!sessionId || !hasDockerHostControlSession(sessionId, cwd))
+        ) {
           return true;
         }
         const sshService = executionContext?.getSSHService();
@@ -341,12 +354,13 @@ export function createShellToolDefinition(deps: {
       details,
     ) => {
       const cwd = executionContext?.getCwd() || process.cwd();
-      if (
+      const sessionId = getConversationSessionId(_context);
+      const hasDockerGrant =
         docker_host_control &&
-        !hasDockerHostControlSession(cwd) &&
-        !hasDockerHostControlProject(cwd) &&
-        !consumeDockerHostControlOnce(command)
-      ) {
+        (hasDockerHostControlProject(cwd) ||
+          (sessionId &&
+            (hasDockerHostControlSession(sessionId, cwd) || consumeDockerHostControlOnce(sessionId, command))));
+      if (docker_host_control && !hasDockerGrant) {
         return 'Error: Docker host control requires explicit approval.';
       }
       if (settingsService.get<boolean>('app.planMode') && isMutatingCommand(command, cwd, loggingService)) {

@@ -69,7 +69,7 @@ export class SessionLifecycle {
   resetSession(options?: { clearConversations?: boolean }): void {
     this.#generationGuard.invalidate();
     sessionReadAccess.clear(this.#sessionId);
-    clearDockerHostControlSession();
+    clearDockerHostControlSession(this.#sessionId);
     this.#continuityReset.reset(options);
     this.#conversationStore.clear();
     this.#toolTracker.reset();
@@ -141,7 +141,7 @@ export class SessionLifecycle {
   }): void {
     const validatedState = ImportedConversationStateSchema.parse(state);
     sessionReadAccess.clear(this.#sessionId);
-    clearDockerHostControlSession();
+    clearDockerHostControlSession(this.#sessionId);
     this.#conversationStore.clear();
     this.#toolTracker.import(validatedState.toolLedger);
     const projected = projectImportedState({

@@ -186,6 +186,10 @@ const CommandMessage: FC<Props> = ({
         return renderAction('Searched context');
       case 'run_subagent':
         return renderAction('Delegated');
+      case 'run_subagent_async':
+        return renderAction('Delegated async');
+      case 'get_subagent_result':
+        return renderAction('Got subagent result');
       case 'memory_list':
         return renderAction('Listed memories');
       case 'memory_get':
@@ -503,7 +507,7 @@ const CommandMessage: FC<Props> = ({
       }
     }
 
-    if (toolName === 'run_subagent') {
+    if (toolName === 'run_subagent' || toolName === 'get_subagent_result') {
       const parsed = parseSubagentOutput(output, toolArgs) as any;
       if (parsed) {
         const { role: _role, status, toolsUsed, filesChanged, mainText } = parsed;
@@ -533,6 +537,26 @@ const CommandMessage: FC<Props> = ({
           </Box>
         );
       }
+    }
+
+    if (toolName === 'run_subagent_async') {
+      let runId: string | undefined;
+      try {
+        const parsed = JSON.parse(output);
+        runId = parsed?.runId;
+      } catch {
+        // Fall back to treating the whole output as the runId.
+        runId = output;
+      }
+      return (
+        <Box flexDirection="column">
+          {renderStandardHeader()}
+          <Box paddingLeft={2} marginTop={0.5}>
+            <Text color={COLOR_MUTED}>RunId: </Text>
+            <Text color={COLOR_SUCCESS}>{runId || output}</Text>
+          </Box>
+        </Box>
+      );
     }
 
     if (toolName === 'web_search') {

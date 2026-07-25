@@ -294,3 +294,54 @@ it('ConversationAdapter populates firstUserMessagePreview in session context', a
     firstUserMessagePreview: 'First message with newline',
   });
 });
+
+it('ConversationAdapter cancels live async subagent runs when the turn ends', async () => {
+  const turnFlow = {
+    async *start() {
+      yield { type: 'final' as const, finalText: 'done' };
+    },
+    async *continueAfterApproval() {
+      yield { type: 'final' as const, finalText: 'done' };
+    },
+  };
+  const approval = {
+    getPending: () => null,
+    getPendingInterruption: () => ({}),
+  } as unknown as SessionApprovalQuery;
+  const logs = {
+    dispatchEventToLog: noop,
+    log: noop,
+    setLogSink: noop,
+  } as unknown as SessionLogs;
+  const userTurns = {
+    listUserTurns: () => [],
+  } as unknown as Pick<SessionManager, 'listUserTurns'>;
+
+  const sinkCalls: Array<string | null> = [];
+  const cancelCalls: number[] = [];
+  const subagentEventSinkHost = {
+    setSubagentEventSink(sink: ((event: ConversationEvent) => void) | null) {
+      sinkCalls.push(typeof sink);
+    },
+    cancelSubagentRuns() {
+      cancelCalls.push(1);
+    },
+  };
+
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: '2026-06-12T00:00:00.000Z',
+    logger,
+    sessionContextService,
+    userTurns,
+    logs,
+    approval,
+    turnFlow,
+    subagentEventSinkHost,
+  });
+
+  await adapter.sendMessage('hello');
+
+  expect(sinkCalls).toEqual(['function', 'object']);
+  expect(cancelCalls.length).toBe(1);
+});

@@ -50,6 +50,16 @@ export class AgentClient {
     this.#subagentBridge?.setEventSink(sink);
   }
 
+  /**
+   * Cancel any asynchronous subagent runs that are still live.
+   *
+   * Phase 1 async runs are scoped to a single parent turn; this is called
+   * by the conversation adapter when the turn ends.
+   */
+  cancelSubagentRuns(): void {
+    this.#subagentBridge?.cancelAsyncRuns();
+  }
+
   #resetMentorState(): void {
     this.#subagentBridge?.clearSubagentCache();
   }

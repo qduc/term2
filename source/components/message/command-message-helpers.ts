@@ -583,6 +583,18 @@ export const formatToolArgs = (
         return `[${role}] "${taskPreview.replace(/\r?\n/g, ' ')}"`;
       }
 
+      case 'run_subagent_async': {
+        const role = normalizedArgs.role || 'subagent';
+        const task = normalizedArgs.task || '';
+        const taskPreview = task.length > 40 ? `${task.slice(0, 40)}...` : task;
+        return `[${role}] "${taskPreview.replace(/\r?\n/g, ' ')}"`;
+      }
+
+      case 'get_subagent_result': {
+        const runId = normalizedArgs.runId || 'unknown';
+        return `[${runId}]`;
+      }
+
       case 'web_search': {
         const query = normalizedArgs.query || '';
         return `for "${query}"`;

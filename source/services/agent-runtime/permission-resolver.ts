@@ -82,7 +82,7 @@ function deriveCanSearchWeb(perms: AgentPermissions): boolean {
 function deriveCanUseNestedAgents(perms: AgentPermissions): boolean {
   // Explicit denial via agents.create: false overrides everything.
   if (perms.agents?.create === false) return false;
-  const nestedTools = new Set(['run_subagent', 'ask_mentor']);
+  const nestedTools = new Set(['run_subagent', 'run_subagent_async', 'get_subagent_result', 'ask_mentor']);
   if (perms.tools?.some((t) => nestedTools.has(t))) return true;
   if (perms.agents?.create === true) return true;
   return false;

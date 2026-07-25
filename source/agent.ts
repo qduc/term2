@@ -7,6 +7,10 @@ import { createShellToolDefinition } from './tools/system/shell.js';
 import { createAskMentorToolDefinition } from './tools/agent/ask-mentor.js';
 import { createAskUserToolDefinition } from './tools/agent/ask-user.js';
 import { createRunSubagentToolDefinition } from './tools/agent/run-subagent.js';
+import {
+  createRunSubagentAsyncToolDefinition,
+  createGetSubagentResultToolDefinition,
+} from './tools/agent/run-subagent-async.js';
 import { createWebSearchToolDefinition } from './tools/web/web-search.js';
 import { createWebFetchToolDefinition } from './tools/web/web-fetch.js';
 import { createCreateFileToolDefinition } from './tools/file/create-file.js';
@@ -112,6 +116,8 @@ export const getAgentDefinition = (
     executionContext?: ExecutionContext;
     askMentor?: (question: string) => Promise<string>;
     runSubagent?: (params: { role: string; task: string }, context?: unknown, details?: unknown) => Promise<any>;
+    runSubagentAsync?: (params: { role: string; task: string }, context?: unknown, details?: unknown) => Promise<any>;
+    getSubagentResult?: (params: { runId: string }, context?: unknown, details?: unknown) => Promise<any>;
     getAskUserAnswer?: (callId?: string) => string | undefined;
     skillsService?: SkillsService;
     agentRuntime?: Pick<AgentRuntime, 'agent'> | null;
@@ -124,6 +130,8 @@ export const getAgentDefinition = (
     executionContext,
     askMentor,
     runSubagent,
+    runSubagentAsync,
+    getSubagentResult,
     getAskUserAnswer,
     skillsService,
     agentRuntime,
@@ -157,6 +165,7 @@ export const getAgentDefinition = (
     searchViaShell,
     codeContextEnabled,
     runSubagentEnabled: Boolean(runSubagent),
+    runSubagentAsyncEnabled: Boolean(runSubagentAsync) && Boolean(getSubagentResult),
     sandboxEnabled,
     memoryEnabled: memoryCapability.access !== 'none',
     memoryGuidance: memoryCapability.guidance,
@@ -200,8 +209,14 @@ export const getAgentDefinition = (
         'orchestratorMode requires runSubagent: cannot build orchestrator agent without a runSubagent implementation.',
       );
     }
-    const tools: ToolDefinition[] = [
-      createRunSubagentToolDefinition(runSubagent),
+    const tools: ToolDefinition[] = [createRunSubagentToolDefinition(runSubagent)];
+    if (runSubagentAsync && getSubagentResult) {
+      tools.push(
+        createRunSubagentAsyncToolDefinition(runSubagentAsync),
+        createGetSubagentResultToolDefinition(getSubagentResult),
+      );
+    }
+    tools.push(
       createShellToolDefinition({
         settingsService,
         loggingService,
@@ -211,7 +226,7 @@ export const getAgentDefinition = (
       }),
       createReadFileToolDefinition({ executionContext, allowOutsideWorkspace: true, orchestratorMode: true }),
       createGrepToolDefinition({ executionContext, orchestratorMode: true }),
-    ];
+    );
     if (codeContextEnabled) {
       tools.push(
         createReadCodeOutlineToolDefinition({ executionContext }),
@@ -335,6 +350,14 @@ export const getAgentDefinition = (
     // Add run_subagent tool (not in lite mode)
     if (runSubagent) {
       tools.push(createRunSubagentToolDefinition(runSubagent));
+    }
+
+    // Add async subagent tools (not in lite mode)
+    if (runSubagentAsync && getSubagentResult) {
+      tools.push(
+        createRunSubagentAsyncToolDefinition(runSubagentAsync),
+        createGetSubagentResultToolDefinition(getSubagentResult),
+      );
     }
   }
 

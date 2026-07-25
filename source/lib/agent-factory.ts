@@ -28,6 +28,8 @@ export interface AgentFactoryDeps {
   serviceTierOverrideForNextRequest: 'standard' | null;
   createMentor: (task: string) => Promise<string>;
   runSubagent: (params: { role: string; task: string }) => Promise<{ finalText: string }>;
+  runSubagentAsync: (params: { role: string; task: string }, context?: unknown, details?: unknown) => Promise<any>;
+  getSubagentResult: (params: { runId: string }, context?: unknown, details?: unknown) => Promise<any>;
   getAskUserAnswer: (callId?: string) => string | undefined;
   checkToolInterceptors: (name: string, params: unknown, toolCallId?: string) => Promise<string | null>;
   skillsService?: SkillsService;
@@ -279,6 +281,8 @@ export function buildAgent(
       executionContext: deps.executionContext,
       askMentor: deps.createMentor,
       runSubagent: deps.runSubagent,
+      runSubagentAsync: deps.runSubagentAsync,
+      getSubagentResult: deps.getSubagentResult,
       getAskUserAnswer: deps.getAskUserAnswer,
       skillsService: deps.skillsService,
       agentRuntime: deps.getAgentRuntime?.() ?? null,

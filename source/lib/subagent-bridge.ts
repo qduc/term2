@@ -6,6 +6,7 @@ import type { SubagentResult } from '../services/subagents/types.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
 import { createAbortError } from '../services/subagents/utils.js';
 import type { SkillsService } from '../services/skills/skills-service.js';
+import type { SubagentRunHandle } from '../services/subagents/types.js';
 
 export interface SubagentBridgeDeps {
   logger: ILoggingService;
@@ -188,5 +189,53 @@ export class SubagentBridge {
     } finally {
       endRun();
     }
+  };
+
+  runSubagentAsync = async (
+    params: { role: string; task: string },
+    _context?: unknown,
+    details?: unknown,
+  ): Promise<SubagentRunHandle> => {
+    if (!this.#subagentManager) {
+      throw new Error('Transient agent clients cannot spawn subagents.');
+    }
+    const detailsRecord = details as { signal?: AbortSignal; toolCall?: { callId?: string } } | undefined;
+    const parentSignal = detailsRecord?.signal ?? this.signal;
+    const request = {
+      ...params,
+      parentTool: 'run_subagent_async',
+      signal: parentSignal,
+    };
+
+    return this.#withSubagentTrafficContext(detailsRecord?.toolCall?.callId, () => {
+      const handle = this.#subagentManager!.startRunAsync(request);
+
+      // Keep the subagent event sink alive for the duration of the async run,
+      // even after run_subagent_async returns its handle.
+      const endRun = this.#beginSubagentRun();
+      handle.completed.then(() => endRun()).catch(() => endRun());
+
+      return handle;
+    });
+  };
+
+  getSubagentResult = async (
+    params: { runId: string },
+    _context?: unknown,
+    details?: unknown,
+  ): Promise<SubagentResult> => {
+    if (!this.#subagentManager) {
+      throw new Error('Transient agent clients cannot spawn subagents.');
+    }
+    const detailsRecord = details as { signal?: AbortSignal } | undefined;
+    return this.#subagentManager.getRunResult(params.runId, detailsRecord?.signal);
+  };
+
+  /**
+   * Cancel all running asynchronous subagent runs. Phase 1 async runs are
+   * tied to a single parent turn; this is called when the turn ends.
+   */
+  cancelAsyncRuns = (): void => {
+    this.#subagentManager?.cancelAllAsyncRuns();
   };
 }

@@ -13,6 +13,7 @@ import { adaptLegacyRole, adaptLegacyDefinition } from '../agent-runtime/legacy-
 import { createAgentRuntimeFromSubagentRuntime } from '../agent-runtime/compose-agent-runtime.js';
 import type { AgentRuntime } from '../agent-runtime/agent-runtime.js';
 import type { SkillsService } from '../skills/skills-service.js';
+import type { SubagentRunHandle } from './types.js';
 
 export class SubagentManager {
   #logger: ILoggingService;
@@ -127,5 +128,33 @@ export class SubagentManager {
       safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result });
       return result;
     }
+  }
+
+  /**
+   * Start an asynchronous subagent run.
+   *
+   * Delegates to the SubagentAsyncRegistry, which owns the live session and
+   * run lifecycle. The returned handle is a Phase 1 boundary object: only
+   * explorer, researcher, and mentor are supported.
+   */
+  startRunAsync(request: SubagentRequest): SubagentRunHandle {
+    return this.#runtime.asyncRegistry.startRun(request, request.signal);
+  }
+
+  /**
+   * Retrieve the result of a previously started asynchronous subagent run.
+   */
+  getRunResult(runId: string, signal?: AbortSignal): Promise<SubagentResult> {
+    return this.#runtime.asyncRegistry.getResult(runId, signal);
+  }
+
+  /**
+   * Cancel all running asynchronous subagent runs.
+   *
+   * Phase 1 async runs are scoped to a single parent turn; this is called
+   * when the parent turn ends.
+   */
+  cancelAllAsyncRuns(): void {
+    this.#runtime.asyncRegistry.cancelAllRuns();
   }
 }

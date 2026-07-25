@@ -69,6 +69,8 @@ const createDeps = (
       executionContext: overrides.executionContext,
       createMentor: overrides.createMentor ?? (async () => 'mentor-response'),
       runSubagent: overrides.runSubagent ?? (async () => ({ finalText: 'subagent-response' })),
+      runSubagentAsync: overrides.runSubagentAsync ?? (async () => ({ runId: 'run-1', status: 'running' } as any)),
+      getSubagentResult: overrides.getSubagentResult ?? (async () => ({ status: 'completed', finalText: '' } as any)),
       getAskUserAnswer: overrides.getAskUserAnswer ?? (() => undefined),
       checkToolInterceptors: overrides.checkToolInterceptors ?? (async () => null),
     },

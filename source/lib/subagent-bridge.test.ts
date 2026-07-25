@@ -51,8 +51,13 @@ function createMockManager():
   | any {
   const trackRun = { callCount: 0, lastArgs: null as any };
   const trackRunAsTool = { callCount: 0, lastArgs: null as any };
+  const trackStartRunAsync = { callCount: 0, lastArgs: null as any };
+  const trackGetRunResult = { callCount: 0, lastArgs: null as any };
+  const trackCancelAllAsyncRuns = { callCount: 0 };
   const trackReset = { callCount: 0 };
   const trackClearCache = { callCount: 0 };
+
+  const completedControllers = new Set<AbortController>();
 
   const manager = {
     run: async (args: any) => {
@@ -65,6 +70,45 @@ function createMockManager():
       trackRunAsTool.lastArgs = { args, context: _context, details: _details };
       return { finalText: 'mock-tool-result', status: 'completed', toolsUsed: [], filesChanged: [] };
     },
+    startRunAsync: (args: any) => {
+      trackStartRunAsync.callCount++;
+      trackStartRunAsync.lastArgs = args;
+      const abortController = new AbortController();
+      completedControllers.add(abortController);
+      const runId = args.runId ?? 'run-1';
+      return {
+        runId,
+        role: args.role,
+        task: args.task,
+        status: 'running',
+        abortController,
+        completed: new Promise((resolve) => {
+          abortController.signal.addEventListener('abort', () => {
+            resolve({
+              agentId: runId,
+              role: args.role,
+              status: 'cancelled',
+              finalText: '',
+              filesChanged: [],
+              toolsUsed: [],
+              error: 'aborted',
+            });
+          });
+        }),
+      };
+    },
+    getRunResult: async (args: any) => {
+      trackGetRunResult.callCount++;
+      trackGetRunResult.lastArgs = args;
+      return { finalText: 'async-result', status: 'completed', toolsUsed: [], filesChanged: [] };
+    },
+    cancelAllAsyncRuns: () => {
+      trackCancelAllAsyncRuns.callCount++;
+      for (const controller of completedControllers) {
+        controller.abort();
+      }
+      completedControllers.clear();
+    },
     resetMentorSession: () => {
       trackReset.callCount++;
     },
@@ -73,7 +117,16 @@ function createMockManager():
     },
   };
 
-  return { manager, trackRun, trackRunAsTool, trackReset, trackClearCache };
+  return {
+    manager,
+    trackRun,
+    trackRunAsTool,
+    trackStartRunAsync,
+    trackGetRunResult,
+    trackCancelAllAsyncRuns,
+    trackReset,
+    trackClearCache,
+  };
 }
 
 function makeBridge(subagentManager: Record<string, any> | null) {
@@ -396,4 +449,78 @@ it('deferred sink clear is applied after active subagents complete', async () =>
   // Setting a new sink should work without crashing
   bridge.setEventSink((_event: ConversationEvent) => {});
   bridge.setEventSink(null);
+});
+
+it('runSubagentAsync delegates to SubagentManager.startRunAsync', async () => {
+  const { manager, trackStartRunAsync } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  const handle = await bridge.runSubagentAsync({ role: 'explorer', task: 'find files' });
+
+  expect(trackStartRunAsync.callCount).toBe(1);
+  expect(trackStartRunAsync.lastArgs.role).toBe('explorer');
+  expect(trackStartRunAsync.lastArgs.task).toBe('find files');
+  expect(trackStartRunAsync.lastArgs.parentTool).toBe('run_subagent_async');
+  expect(handle.role).toBe('explorer');
+  expect(handle.task).toBe('find files');
+});
+
+it('runSubagentAsync passes the bridge abort signal to startRunAsync', async () => {
+  const { manager, trackStartRunAsync } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  await bridge.runSubagentAsync({ role: 'researcher', task: 'look up docs' });
+
+  expect(trackStartRunAsync.lastArgs.signal).toBe(bridge.signal);
+});
+
+it('runSubagentAsync keeps event sink alive until the async run completes', async () => {
+  const { manager } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  bridge.setEventSink((_event: ConversationEvent) => {});
+  const handle = await bridge.runSubagentAsync({ role: 'explorer', task: 'find files' });
+
+  expect(bridge.activeSubagentsCount).toBe(1);
+
+  handle.abortController.abort();
+  await handle.completed;
+
+  expect(bridge.activeSubagentsCount).toBe(0);
+});
+
+it('getSubagentResult delegates to SubagentManager.getRunResult', async () => {
+  const { manager, trackGetRunResult } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  const result = await bridge.getSubagentResult({ runId: 'run-123' });
+
+  expect(trackGetRunResult.callCount).toBe(1);
+  expect(trackGetRunResult.lastArgs).toBe('run-123');
+  expect(result.status).toBe('completed');
+});
+
+it('cancelAsyncRuns delegates to SubagentManager.cancelAllAsyncRuns', () => {
+  const { manager, trackCancelAllAsyncRuns } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  bridge.cancelAsyncRuns();
+
+  expect(trackCancelAllAsyncRuns.callCount).toBe(1);
+});
+
+it('runSubagentAsync throws when SubagentManager is null', async () => {
+  const bridge = makeBridge(null);
+
+  await expect(bridge.runSubagentAsync({ role: 'explorer', task: 'test' })).rejects.toThrow(
+    /Transient agent clients cannot spawn subagents/,
+  );
+});
+
+it('getSubagentResult throws when SubagentManager is null', async () => {
+  const bridge = makeBridge(null);
+
+  await expect(bridge.getSubagentResult({ runId: 'run-1' })).rejects.toThrow(
+    /Transient agent clients cannot spawn subagents/,
+  );
 });

@@ -37,12 +37,12 @@ export const installPlanModeInterceptor = (
       return `Plan mode is active (read-only). The "${name}" tool is disabled. Do not attempt file or state changes — investigate with read-only tools and present an ordered implementation plan. Tell the user to exit plan mode to execute it.`;
     }
 
-    if (name === 'run_subagent') {
+    if (name === 'run_subagent' || name === 'run_subagent_async') {
       const role = extractRole(params);
       // Allow only read-only subagent roles; block worker and unknown roles
       // (an unknown role could be a write-capable custom subagent).
       if (!role || !READ_ONLY_SUBAGENT_ROLES.has(role)) {
-        return `Plan mode is active (read-only). The "run_subagent" tool is restricted to read-only roles (explorer, researcher, mentor) — the "${
+        return `Plan mode is active (read-only). The "${name}" tool is restricted to read-only roles (explorer, researcher, mentor) — the "${
           role ?? 'unknown'
         }" role is disabled. Use a read-only subagent to investigate, then present an ordered implementation plan. Tell the user to exit plan mode to execute it.`;
       }

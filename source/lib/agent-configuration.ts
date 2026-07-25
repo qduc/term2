@@ -137,6 +137,8 @@ export class AgentConfiguration implements AgentSource {
       serviceTierOverrideForNextRequest: this.#serviceTierOverrideForNextRequest,
       createMentor: (...args) => this.#getSubagentBridge()!.createMentor(...args),
       runSubagent: (...args) => this.#getSubagentBridge()!.runSubagent(...args),
+      runSubagentAsync: (...args) => this.#getSubagentBridge()!.runSubagentAsync(...args),
+      getSubagentResult: (...args) => this.#getSubagentBridge()!.getSubagentResult(...args),
       getAskUserAnswer: (callId?: string) => {
         if (!callId) return undefined;
         return this.#askUserAnswerStore.consume(callId);

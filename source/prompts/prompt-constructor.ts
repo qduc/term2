@@ -2,6 +2,7 @@ import type { ExecutionContext } from '../services/execution-context.js';
 import { selectPromptProfile } from './prompt-profiles.js';
 import { getSearchViaShellAddendum } from './search-via-shell.js';
 import { getSubagentDelegationAddendum } from './subagent-delegation.js';
+import { getAsyncSubagentDelegationAddendum } from './async-subagent-delegation.js';
 import { getShellSandboxAddendum } from './shell-sandbox.js';
 
 export type PromptConstructorOptions = {
@@ -13,6 +14,7 @@ export type PromptConstructorOptions = {
   searchViaShell?: boolean;
   codeContextEnabled?: boolean;
   runSubagentEnabled?: boolean;
+  runSubagentAsyncEnabled?: boolean;
   sandboxEnabled?: boolean;
   memoryEnabled?: boolean;
   memoryGuidance?: string;
@@ -33,6 +35,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     mentorMode = false,
     searchViaShell = false,
     runSubagentEnabled = false,
+    runSubagentAsyncEnabled = false,
     sandboxEnabled = true,
     memoryEnabled = false,
     memoryGuidance = '',
@@ -67,6 +70,10 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
 
   if (orchestratorMode && runSubagentEnabled) {
     inlineSections.push(getSubagentDelegationAddendum({ orchestratorMode, memoryEnabled }));
+  }
+
+  if (runSubagentAsyncEnabled && !liteMode) {
+    inlineSections.push(getAsyncSubagentDelegationAddendum({ memoryEnabled }));
   }
 
   if (isRegularMode && isAgentMode) {

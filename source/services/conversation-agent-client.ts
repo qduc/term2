@@ -35,6 +35,8 @@ export interface AskUserAnswerSink {
 
 export interface SubagentEventSinkHost {
   setSubagentEventSink(sink: ((event: ConversationEvent) => void) | null): void;
+  /** Optional hook to cancel live async subagent runs when the parent turn ends. */
+  cancelSubagentRuns?(): void;
 }
 
 export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {

@@ -111,3 +111,35 @@ it('adds persistent-memory guidance only when memory tools are enabled', () => {
     'memory.md',
   );
 });
+
+it('buildPromptSpec includes async subagent guidance when async tools are enabled', () => {
+  const spec = buildPromptSpec({
+    model: 'gpt-4o',
+    liteMode: false,
+    runSubagentAsyncEnabled: true,
+  });
+  expect(spec.inlineSections.some((s) => s.includes('Asynchronous subagents'))).toBe(true);
+  expect(spec.inlineSections.some((s) => s.includes('run_subagent_async'))).toBe(true);
+  expect(spec.inlineSections.some((s) => s.includes('get_subagent_result'))).toBe(true);
+  expect(spec.inlineSections.some((s) => s.includes('explorer'))).toBe(true);
+  expect(spec.inlineSections.some((s) => s.includes('researcher'))).toBe(true);
+  expect(spec.inlineSections.some((s) => s.includes('mentor'))).toBe(true);
+});
+
+it('buildPromptSpec excludes async subagent guidance in lite mode', () => {
+  const spec = buildPromptSpec({
+    model: 'gpt-4o',
+    liteMode: true,
+    runSubagentAsyncEnabled: true,
+  });
+  expect(spec.inlineSections.some((s) => s.includes('Asynchronous subagents'))).toBe(false);
+});
+
+it('buildPromptSpec excludes async subagent guidance when disabled', () => {
+  const spec = buildPromptSpec({
+    model: 'gpt-4o',
+    liteMode: false,
+    runSubagentAsyncEnabled: false,
+  });
+  expect(spec.inlineSections.some((s) => s.includes('Asynchronous subagents'))).toBe(false);
+});

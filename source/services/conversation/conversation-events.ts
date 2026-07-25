@@ -20,6 +20,7 @@ export type ConversationEvent =
   | SubagentToolStartedEvent
   | SubagentCommandMessageEvent
   | SubagentCompletedEvent
+  | SubagentAsyncProgressEvent
   | CodexRateLimitEvent
   | UserMessageConsumedForAbortEvent;
 
@@ -145,6 +146,8 @@ export interface SubagentStartedEvent {
   role: string;
   task: string;
   parentTool?: string;
+  /** True when this run was started via `run_subagent_async` and is still live. */
+  async?: boolean;
 }
 
 export interface SubagentToolStartedEvent {
@@ -167,6 +170,16 @@ export interface SubagentCommandMessageEvent {
 export interface SubagentCompletedEvent {
   type: 'subagent_completed';
   result: SubagentResult;
+  /** True when this completion finishes an async run started by `run_subagent_async`. */
+  async?: boolean;
+}
+
+export interface SubagentAsyncProgressEvent {
+  type: 'subagent_async_progress';
+  runId: string;
+  role: string;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  message?: string;
 }
 
 /**

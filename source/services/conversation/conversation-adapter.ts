@@ -425,6 +425,7 @@ export class ConversationAdapter {
           },
         });
       } finally {
+        this.#subagentEventSinkHost?.cancelSubagentRuns?.();
         this.#subagentEventSinkHost?.setSubagentEventSink(null);
       }
 
@@ -504,6 +505,7 @@ export class ConversationAdapter {
             },
           });
         } finally {
+          this.#subagentEventSinkHost?.cancelSubagentRuns?.();
           this.#subagentEventSinkHost?.setSubagentEventSink(null);
         }
 

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { realpathSync } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
 
 // ─── Public scope types ──────────────────────────────────────────
@@ -47,7 +48,15 @@ export type ResolvedNetworkScope = NetworkHostPattern[];
 let workspaceRoot: string | undefined;
 
 export function setWorkspaceRoot(root: string): void {
-  workspaceRoot = path.resolve(root);
+  const resolved = path.resolve(root);
+  // Resolve symlinks in the root itself (e.g. macOS /var -> /private/var)
+  // so it stays consistent with the realpath'd descendants that
+  // resolveRealToolPath compares against.
+  try {
+    workspaceRoot = realpathSync(resolved);
+  } catch {
+    workspaceRoot = resolved;
+  }
 }
 
 export function getWorkspaceRoot(): string {

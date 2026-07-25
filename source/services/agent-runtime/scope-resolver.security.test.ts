@@ -228,6 +228,10 @@ describe('symlink escape defense', () => {
     outsideDir = path.join(testDir, 'outside');
     fs.mkdirSync(workspaceDir, { recursive: true });
     fs.mkdirSync(outsideDir, { recursive: true });
+    // Resolve symlinks (e.g. macOS /var -> /private/var) so expectations
+    // in this file match the realpath'd values resolveRealToolPath returns.
+    workspaceDir = fs.realpathSync(workspaceDir);
+    outsideDir = fs.realpathSync(outsideDir);
     // Create a real file inside workspace
     fs.writeFileSync(path.join(workspaceDir, 'safe.txt'), 'safe');
     // Create a sensitive file outside workspace

@@ -304,7 +304,9 @@ fi
 
 # Bump version (uses --allow-same-version for idempotency)
 echo -e "${BLUE}Setting version to $NEW_VERSION...${NC}"
-pnpm version $NEW_VERSION --no-git-tag-version --allow-same-version
+# CHANGELOG.md is intentionally uncommitted at this point. Disable pnpm's
+# clean-working-tree check; the release commit below records both files.
+pnpm version $NEW_VERSION --no-git-tag-version --allow-same-version --no-git-checks
 
 # Skip verification if commit already exists (tests passed before)
 if [[ "$COMMIT_DONE" == "true" ]]; then

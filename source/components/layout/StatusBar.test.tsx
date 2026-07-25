@@ -6,14 +6,17 @@ import StatusBar from './StatusBar.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 import {
+  configureDockerHostControlGrants,
   grantDockerHostControl,
   resetDockerHostControlGrantsForTests,
 } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 
-it.sequential('StatusBar displays an active Docker host-control session grant', async () => {
-  grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'session' });
-  const { lastFrame } = await renderInAct(<StatusBar settingsService={createMockSettingsService()} />);
-  expect(lastFrame()).toContain('Docker host access: session');
+it.sequential('StatusBar displays an active persistent Docker host-control project grant', async () => {
+  const settingsService = createMockSettingsService();
+  configureDockerHostControlGrants(settingsService);
+  grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'project', sessionId: 'session-a' });
+  const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
+  expect(lastFrame()).toContain('Docker host access: project');
   resetDockerHostControlGrantsForTests();
 });
 

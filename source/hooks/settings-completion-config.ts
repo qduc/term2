@@ -77,6 +77,8 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.SANDBOX_ENABLED]: 'Enable sandbox mode for safer command execution (true|false)',
   [SETTING_KEYS.SANDBOX_READ_POLICY]: 'File read policy for sandbox (standard|strict)',
   [SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA]: 'Additional paths allowed for sandbox file reads (comma-separated)',
+  [SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS]:
+    'Projects with persistent Docker host-control grants; remove a path here to revoke it (JSON array)',
   [SETTING_KEYS.SANDBOX_ALLOW_NETWORKING]: 'Allow sandboxed commands to access the network (true|false)',
   [SETTING_KEYS.MEMORY_ENABLED]: 'Enable persistent memory across sessions (true|false)',
   [SETTING_KEYS.MEMORY_DIRECTORY]: 'Directory where memory files are stored (path)',
@@ -178,6 +180,7 @@ export const CATEGORY_KEYS = {
     SETTING_KEYS.SANDBOX_ENABLED,
     SETTING_KEYS.SANDBOX_READ_POLICY,
     SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA,
+    SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS,
     SETTING_KEYS.SANDBOX_ALLOW_NETWORKING,
   ]),
   tools: new Set<string>([

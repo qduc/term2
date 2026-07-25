@@ -35,6 +35,8 @@ export interface CreateSandboxRuntimeConfigOptions {
   allowReadExtra?: string[];
   allowNetworking?: boolean;
   dockerSocketPath?: string;
+  /** Test seam for exercising home-resident credential policy without touching the real home directory. */
+  home?: string;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   onProtectedFiltered?: (filtered: readonly string[]) => void;
@@ -425,7 +427,7 @@ export function isPathProtected(target: string, home: string): boolean {
 }
 
 export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOptions = {}): SandboxRuntimeConfig {
-  const home = os.homedir();
+  const home = options.home ?? os.homedir();
   const readPolicy = options.readPolicy ?? 'standard';
   const workspaceRoot = fs.realpathSync(options.cwd ?? process.cwd());
   const tmpDir = SANDBOX_TEMP_DIR;
@@ -488,6 +490,11 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
   );
   const allowReadExtra = (options.allowReadExtra ?? []).map((filePath) => expandHomePath(filePath, home));
   const denyRead = readPolicy === 'strict' ? [home, '/etc', '/var', '/root', '/private/var'] : credentialFiles;
+  // Docker Desktop's socket is nested under the credential-denied ~/.docker
+  // tree. The sandbox runtime gives allowRead precedence over denyRead, so this
+  // exact-path exception permits connecting only to the user-approved daemon
+  // socket; ~/.docker config/auth files remain denied.
+  const dockerSocketReadException = options.dockerSocketPath ? [options.dockerSocketPath] : [];
   const allowRead =
     readPolicy === 'strict'
       ? [
@@ -498,6 +505,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
           rtkDataDir,
           ...safeHomeReadPaths,
           ...allowReadExtra,
+          ...dockerSocketReadException,
           '/usr',
           '/bin',
           '/sbin',
@@ -509,6 +517,8 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
           '/usr/local',
           '/opt/homebrew',
         ]
+      : dockerSocketReadException.length > 0
+      ? dockerSocketReadException
       : undefined;
 
   const rawAllowWrite = [workspaceRoot, tmpDir];

@@ -1,10 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { useSetting } from '../../hooks/use-setting.js';
-import {
-  hasDockerHostControlProject,
-  hasDockerHostControlSession,
-} from '../../utils/shell/sandbox/docker-host-control-grants.js';
+import { hasDockerHostControlProject } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 import { getProvider } from '../../providers/index.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { SSHInfo } from '../../hooks/use-shell-mode.js';
@@ -53,11 +50,9 @@ const StatusBar: FC<StatusBarProps> = ({
   const autoApproveModel = choreModel ?? legacyAutoApproveModel;
   const sandboxEnabled = useSetting<boolean>(settingsService, 'sandbox.enabled') ?? false;
   const sandboxReadPolicy = useSetting<string>(settingsService, 'sandbox.readPolicy') ?? 'standard';
-  const dockerHostAccess = hasDockerHostControlSession(process.cwd())
-    ? 'session'
-    : hasDockerHostControlProject(process.cwd())
-    ? 'project'
-    : undefined;
+  // Session-scoped grants are intentionally not process-global, so only the
+  // persistent project grant is discoverable from this app-wide status bar.
+  const dockerHostAccess = hasDockerHostControlProject(process.cwd()) ? 'project' : undefined;
 
   const providerDef = getProvider(providerKey);
   const providerLabel = providerDef?.label || providerKey;

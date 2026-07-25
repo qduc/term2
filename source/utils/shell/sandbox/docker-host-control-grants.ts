@@ -4,6 +4,13 @@ import type { ISettingsService } from '../../../services/service-interfaces.js';
 
 export type DockerHostControlGrant = 'once' | 'session' | 'project';
 
+type DockerHostControlGrantRequest = {
+  command: string;
+  cwd: string;
+  scope: DockerHostControlGrant;
+  sessionId: string;
+};
+
 const realRoot = (cwd: string) => {
   const resolved = path.resolve(cwd);
   try {
@@ -16,39 +23,57 @@ const realRoot = (cwd: string) => {
 /** Narrow capability grant store. Persistence is intentionally limited to user settings. */
 class DockerHostControlGrants {
   #settings: ISettingsService | undefined;
-  #once = new Set<string>();
-  #sessionRoots = new Set<string>();
+  #onceBySession = new Map<string, Set<string>>();
+  #sessionRootsBySession = new Map<string, Set<string>>();
 
   configure(settings: ISettingsService): void {
     this.#settings = settings;
   }
 
-  grant({ command, cwd, scope }: { command: string; cwd: string; scope: DockerHostControlGrant }): void {
-    if (scope === 'once') this.#once.add(command);
-    if (scope === 'session') this.#sessionRoots.add(realRoot(cwd));
+  grant({ command, cwd, scope, sessionId }: DockerHostControlGrantRequest): void {
+    if (scope === 'once') {
+      const commands = this.#onceBySession.get(sessionId) ?? new Set<string>();
+      commands.add(command);
+      this.#onceBySession.set(sessionId, commands);
+    }
+    if (scope === 'session') {
+      const roots = this.#sessionRootsBySession.get(sessionId) ?? new Set<string>();
+      roots.add(realRoot(cwd));
+      this.#sessionRootsBySession.set(sessionId, roots);
+    }
     if (scope === 'project') this.grantProject(cwd);
   }
-  consumeOnce(command: string): boolean {
-    return this.#once.delete(command);
+
+  consumeOnce(sessionId: string, command: string): boolean {
+    const commands = this.#onceBySession.get(sessionId);
+    if (!commands?.delete(command)) return false;
+    if (commands.size === 0) this.#onceBySession.delete(sessionId);
+    return true;
   }
-  hasSession(cwd: string): boolean {
-    return this.#sessionRoots.has(realRoot(cwd));
+
+  hasSession(sessionId: string, cwd: string): boolean {
+    return this.#sessionRootsBySession.get(sessionId)?.has(realRoot(cwd)) ?? false;
   }
+
   hasProject(cwd: string): boolean {
     return (this.#settings?.get<string[]>('sandbox.dockerHostControlProjects') ?? []).includes(realRoot(cwd));
   }
+
   grantProject(cwd: string): void {
     if (!this.#settings) throw new Error('Docker host-control grants are not configured.');
     const root = realRoot(cwd);
     const projects = this.#settings.get<string[]>('sandbox.dockerHostControlProjects') ?? [];
     if (!projects.includes(root)) this.#settings.set('sandbox.dockerHostControlProjects', [...projects, root]);
   }
-  clearSession(): void {
-    this.#sessionRoots.clear();
+
+  clearSession(sessionId: string): void {
+    this.#onceBySession.delete(sessionId);
+    this.#sessionRootsBySession.delete(sessionId);
   }
+
   resetForTests(): void {
-    this.#once.clear();
-    this.#sessionRoots.clear();
+    this.#onceBySession.clear();
+    this.#sessionRootsBySession.clear();
     this.#settings = undefined;
   }
 }
@@ -56,11 +81,12 @@ class DockerHostControlGrants {
 const dockerHostControlGrants = new DockerHostControlGrants();
 export const configureDockerHostControlGrants = (settings: ISettingsService) =>
   dockerHostControlGrants.configure(settings);
-export const grantDockerHostControl = (grant: { command: string; cwd: string; scope: DockerHostControlGrant }) =>
-  dockerHostControlGrants.grant(grant);
-export const consumeDockerHostControlOnce = (command: string) => dockerHostControlGrants.consumeOnce(command);
-export const hasDockerHostControlSession = (cwd: string) => dockerHostControlGrants.hasSession(cwd);
+export const grantDockerHostControl = (grant: DockerHostControlGrantRequest) => dockerHostControlGrants.grant(grant);
+export const consumeDockerHostControlOnce = (sessionId: string, command: string) =>
+  dockerHostControlGrants.consumeOnce(sessionId, command);
+export const hasDockerHostControlSession = (sessionId: string, cwd: string) =>
+  dockerHostControlGrants.hasSession(sessionId, cwd);
 export const hasDockerHostControlProject = (cwd: string) => dockerHostControlGrants.hasProject(cwd);
-export const clearDockerHostControlSession = () => dockerHostControlGrants.clearSession();
+export const clearDockerHostControlSession = (sessionId: string) => dockerHostControlGrants.clearSession(sessionId);
 export const resetDockerHostControlGrantsForTests = () => dockerHostControlGrants.resetForTests();
 export const normalizeDockerHostControlWorkspaceRoot = realRoot;

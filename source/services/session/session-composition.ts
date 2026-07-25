@@ -40,6 +40,7 @@ import { InitialInputPreparer } from './initial-input-preparer.js';
 import { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
 import { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
 import { SessionContinuityReset } from './session-continuity-reset.js';
+import { clearDockerHostControlSession } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
   value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
@@ -423,6 +424,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     }
     providerContinuity.clear();
     sessionReadAccess.clear(id);
+    clearDockerHostControlSession(id);
   };
 
   return {

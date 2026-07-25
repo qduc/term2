@@ -108,6 +108,13 @@ export class ConversationOrchestrator {
 
   stopProcessing(): void {
     this.config.conversationService.abort();
+    this.config.messages.setMessages((messages) =>
+      messages.map((message) =>
+        message.sender === 'command' && message.status === 'running'
+          ? { ...message, status: 'cancelled' as const }
+          : message,
+      ),
+    );
     this.config.approvedContext.current = null;
     this.pendingApproval = null;
     this.resetAskUserState();

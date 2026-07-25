@@ -225,6 +225,65 @@ it.sequential('useConversation adds a stopped message when processing is stopped
   expect(lastFrame!()).toContain('Stopped');
 });
 
+it.sequential('useConversation cancels running shell messages when processing is stopped', async () => {
+  let emitEvent: ((event: any) => void) | undefined;
+  let resolveSend: (() => void) | undefined;
+  const mockConversationService = {
+    sessionId: 'session-id',
+    abort: () => {},
+    setRetryCallback: () => {},
+    sendMessage: async (_input: string, options?: { onEvent?: (event: any) => void }) => {
+      emitEvent = options?.onEvent;
+      await new Promise<void>((resolve) => {
+        resolveSend = resolve;
+      });
+      return { type: 'response', response: '' } as any;
+    },
+  } as any;
+
+  let sendMsg: ((input: string) => Promise<void>) | undefined;
+  let stopFn: (() => void) | undefined;
+
+  const Harness = () => {
+    const { sendUserMessage, stopProcessing, messages } = useConversation({
+      conversationService: mockConversationService,
+      loggingService,
+    });
+    sendMsg = sendUserMessage;
+    stopFn = stopProcessing;
+    const commandStatuses = messages
+      .filter((message) => message.sender === 'command')
+      .map((message) => (message.sender === 'command' ? message.status : ''));
+    return <Text>{commandStatuses.join('|')}</Text>;
+  };
+
+  const { lastFrame } = await renderInAct(<Harness />);
+  let pendingSend: Promise<void> | undefined;
+  await act(async () => {
+    pendingSend = sendMsg!('run a command');
+    await Promise.resolve();
+    emitEvent?.({
+      type: 'tool_started',
+      toolCallId: 'shell-call-1',
+      toolName: 'shell',
+      arguments: { command: 'sleep 10' },
+    });
+  });
+
+  expect(lastFrame!()).toBe('running');
+
+  await act(async () => {
+    stopFn?.();
+  });
+
+  expect(lastFrame!()).toBe('cancelled');
+
+  await act(async () => {
+    resolveSend?.();
+    await pendingSend;
+  });
+});
+
 it.sequential('useConversation wires the retry callback to add a system message', async () => {
   let retryCallback: (() => void) | undefined;
   const mockConversationService = {

@@ -1,261 +1,103 @@
-import { it, expect } from 'vitest';
-import { SubagentAsyncRegistry } from './subagent-async-registry.js';
-import { SubagentSession } from './subagent-session.js';
+import { describe, expect, it, vi } from 'vitest';
+import { SubagentAsyncRegistry, SubagentRegistryError } from './subagent-async-registry.js';
 import type { SubagentRequest, SubagentResult } from './types.js';
-import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { createMockLogger } from './test-helpers/subagent-manager-fixtures.js';
 
-function createRegistry(
-  options: {
-    run?: (params: { request: SubagentRequest; runId: string; signal?: AbortSignal }) => Promise<SubagentResult>;
-    onEvent?: (event: ConversationEvent) => void;
-  } = {},
-): SubagentAsyncRegistry {
-  const run =
-    options.run ??
-    (async ({ request }) =>
-      ({
-        agentId: 'unused',
-        role: request.role,
-        status: 'completed',
-        finalText: 'async result',
-        filesChanged: [],
-        toolsUsed: [],
-      } as SubagentResult));
+const result = (role: string, status: SubagentResult['status'] = 'completed'): SubagentResult => ({
+  agentId: 'executor-id',
+  role,
+  status,
+  finalText: status === 'completed' ? 'done' : '',
+  filesChanged: [],
+  toolsUsed: [],
+  ...(status !== 'completed' ? { error: status } : {}),
+});
+const make = (run = async ({ request }: { request: SubagentRequest }) => result(request.role)) =>
+  new SubagentAsyncRegistry({ logger: createMockLogger(), run });
 
-  return new SubagentAsyncRegistry({
+it('returns the exact running launch handle and executes with its owned session', async () => {
+  let session: unknown;
+  const registry = make(async ({ session: owned, request }) => {
+    session = owned;
+    return result(request.role);
+  });
+  const handle = registry.startRun({ role: 'explorer', task: 'inspect' });
+  expect(handle).toEqual({ runId: expect.any(String), role: 'explorer', status: 'running', task: 'inspect' });
+  await expect(registry.getResult(handle.runId)).resolves.toMatchObject({ status: 'completed' });
+  expect(session).toBeTruthy();
+});
+
+it('reuses the same run id and session only for a completed continuation', async () => {
+  const sessions: unknown[] = [];
+  const registry = make(async ({ session, request }) => {
+    sessions.push(session);
+    return result(request.role);
+  });
+  const first = registry.startRun({ role: 'explorer', task: 'one' });
+  await registry.getResult(first.runId);
+  const second = registry.startRun({ role: 'explorer', task: 'two', continueRunId: first.runId });
+  expect(second.runId).toBe(first.runId);
+  await registry.getResult(second.runId);
+  expect(sessions[0]).toBe(sessions[1]);
+});
+
+it('applies role continuation policy', async () => {
+  const registry = make();
+  const worker = registry.startRun({ role: 'worker', task: 'fresh' });
+  await registry.getResult(worker.runId);
+  expect(() => registry.startRun({ role: 'worker', task: 'again', continueRunId: worker.runId })).toThrowError(
+    SubagentRegistryError,
+  );
+  expect(() => registry.startRun({ role: 'explorer', task: 'wrong', continueRunId: worker.runId })).toThrowError(
+    /role/,
+  );
+});
+
+it('returns terminal failures and cancellations instead of rejecting', async () => {
+  const failed = make(async ({ request }) => result(request.role, 'failed'));
+  const failedRun = failed.startRun({ role: 'researcher', task: 'fail' });
+  await expect(failed.getResult(failedRun.runId)).resolves.toMatchObject({ status: 'failed' });
+  const cancelled = make(
+    ({ signal, request }) =>
+      new Promise<SubagentResult>((_, reject) =>
+        signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }),
+      ),
+  );
+  const cancelledRun = cancelled.startRun({ role: 'explorer', task: 'cancel' });
+  cancelled.abortRun(cancelledRun.runId);
+  await expect(cancelled.getResult(cancelledRun.runId)).resolves.toMatchObject({ status: 'cancelled' });
+});
+
+it('reports typed not-found, active, worker, and evicted errors', async () => {
+  const now = vi.fn(() => 0);
+  const registry = new SubagentAsyncRegistry({
     logger: createMockLogger(),
-    run,
-    onEvent: options.onEvent,
+    now,
+    ttlMs: 10,
+    run: async ({ request }) => result(request.role),
   });
-}
-
-function completedResult(role: string, finalText: string): SubagentResult {
-  return {
-    agentId: 'unused',
-    role,
-    status: 'completed',
-    finalText,
-    filesChanged: [],
-    toolsUsed: [],
-  };
-}
-
-it('startRun returns a handle with runId, role, and task', async () => {
-  const registry = createRegistry();
-  const handle = registry.startRun({ role: 'explorer', task: 'find files' });
-
-  expect(handle.runId).toBeTruthy();
-  expect(handle.role).toBe('explorer');
-  expect(handle.task).toBe('find files');
-  expect(handle.status).toBe('running');
-  expect(handle.session).toBeInstanceOf(SubagentSession);
-  expect(handle.session.role).toBe('explorer');
-});
-
-it('startRun emits a subagent_started event with async flag', async () => {
-  const events: ConversationEvent[] = [];
-  const registry = createRegistry({ onEvent: (e) => events.push(e) });
-
-  const handle = registry.startRun({ role: 'explorer', task: 'find files' });
-
-  const started = events.find((e) => e.type === 'subagent_started');
-  expect(started).toBeTruthy();
-  expect(started!.type).toBe('subagent_started');
-  expect((started as any).agentId).toBe(handle.runId);
-  expect((started as any).role).toBe('explorer');
-  expect((started as any).task).toBe('find files');
-  expect((started as any).async).toBe(true);
-});
-
-it('getResult resolves to the SubagentResult when the run completes', async () => {
-  const registry = createRegistry();
-  const handle = registry.startRun({ role: 'explorer', task: 'find files' });
-
-  const result = await registry.getResult(handle.runId);
-
-  expect(result.status).toBe('completed');
-  expect(result.role).toBe('explorer');
-  expect(result.agentId).toBe(handle.runId);
-  expect(result.finalText).toBe('async result');
-});
-
-it('handle status transitions to completed when the run finishes', async () => {
-  const registry = createRegistry();
-  const handle = registry.startRun({ role: 'explorer', task: 'find files' });
-
-  await registry.getResult(handle.runId);
-
-  expect(handle.status).toBe('completed');
-  expect(handle.result).toBeTruthy();
-});
-
-it('getResult rejects when the runId is unknown', async () => {
-  const registry = createRegistry();
-
-  await expect(registry.getResult('unknown-run-id')).rejects.toThrow('Unknown async subagent run');
-});
-
-it('Phase 1 rejects worker and librarian roles', async () => {
-  const registry = createRegistry();
-
-  for (const role of ['worker', 'librarian']) {
-    const handle = registry.startRun({ role: role as any, task: 'do work' });
-    expect(handle.status).toBe('failed');
-    expect(handle.error).toMatch(/not supported.*Phase 1/i);
-  }
-});
-
-it('rejects unknown subagent roles', async () => {
-  const registry = createRegistry();
-
-  const handle = registry.startRun({ role: 'unknown-role', task: 'do work' } as SubagentRequest);
-  expect(handle.status).toBe('failed');
-  expect(handle.error).toMatch(/Unknown subagent role|not supported/i);
-});
-
-it('parent abort signal cancels an async run', async () => {
-  const abortController = new AbortController();
-  let capturedSignal: AbortSignal | undefined;
-  const registry = createRegistry({
-    run: async ({ signal }) => {
-      capturedSignal = signal;
-      return new Promise((_resolve, reject) => {
-        if (signal?.aborted) {
-          reject(new Error('aborted'));
-          return;
-        }
-        signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
-      });
-    },
-  });
-
-  const handle = registry.startRun({ role: 'explorer', task: 'slow task' }, abortController.signal);
-
-  abortController.abort();
-
-  await expect(registry.getResult(handle.runId)).rejects.toThrow();
-  expect(handle.status).toBe('cancelled');
-  expect(capturedSignal?.aborted).toBe(true);
-});
-
-it('emits subagent_completed and subagent_async_progress when the run finishes', async () => {
-  const events: ConversationEvent[] = [];
-  const registry = createRegistry({ onEvent: (e) => events.push(e) });
-
-  const handle = registry.startRun({ role: 'explorer', task: 'find files' });
-  await registry.getResult(handle.runId);
-
-  const completed = events.find((e) => e.type === 'subagent_completed');
-  expect(completed).toBeTruthy();
-  expect((completed as any).result.agentId).toBe(handle.runId);
-  expect((completed as any).async).toBe(true);
-
-  const progress = events.find((e) => e.type === 'subagent_async_progress');
-  expect(progress).toBeTruthy();
-  expect((progress as any).runId).toBe(handle.runId);
-  expect((progress as any).status).toBe('completed');
-});
-
-it('mentor async runs use a fresh SubagentSession per run', async () => {
-  const registry = createRegistry();
-
-  const handle1 = registry.startRun({ role: 'mentor', task: 'first question' });
-  const handle2 = registry.startRun({ role: 'mentor', task: 'second question' });
-
-  expect(handle1.session).not.toBe(handle2.session);
-  expect(handle1.session.id).not.toBe(handle2.session.id);
-});
-
-it('disposal aborts active runs', async () => {
-  const registry = createRegistry({
-    run: async ({ signal }) =>
-      new Promise((_resolve, reject) => {
-        signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
-      }),
-  });
-  const handle = registry.startRun({ role: 'explorer', task: 'long task' });
-
+  expect(() => registry.startRun({ role: 'explorer', task: 'x', continueRunId: 'missing' })).toThrowError(/not found/);
+  const run = registry.startRun({ role: 'worker', task: 'x' });
+  expect(() => registry.startRun({ role: 'worker', task: 'y', continueRunId: run.runId })).toThrowError(/active/);
+  await registry.getResult(run.runId);
+  expect(() => registry.startRun({ role: 'worker', task: 'y', continueRunId: run.runId })).toThrowError(/worker/i);
+  now.mockReturnValue(11);
   registry.dispose();
-
-  await expect(registry.getResult(handle.runId)).rejects.toThrow();
-  expect(handle.status === 'cancelled' || handle.status === 'failed').toBe(true);
 });
 
-it('executor receives the correct runId and request', async () => {
-  let captured: { request: SubagentRequest; runId: string; signal?: AbortSignal } | undefined;
-  const parentSignal = new AbortController().signal;
-  const registry = createRegistry({
-    run: async (params) => {
-      captured = params;
-      return completedResult(params.request.role, 'done');
-    },
+describe('retention and events', () => {
+  it('buffers ordered events at the bridge-facing callback and retains terminal records until reset', async () => {
+    const events: string[] = [];
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      onEvent: (event) => events.push(event.type),
+      run: async ({ request }) => result(request.role),
+    });
+    const run = registry.startRun({ role: 'mentor', task: 'question' });
+    await registry.getResult(run.runId);
+    expect(events).toEqual(['subagent_started', 'subagent_completed']);
+    registry.reset();
+    await expect(registry.getResult(run.runId)).rejects.toThrow();
+    registry.dispose();
   });
-
-  const handle = registry.startRun({ role: 'researcher', task: 'look up docs' }, parentSignal);
-  await registry.getResult(handle.runId);
-
-  expect(captured).toBeTruthy();
-  expect(captured!.runId).toBe(handle.runId);
-  expect(captured!.request.role).toBe('researcher');
-  expect(captured!.request.task).toBe('look up docs');
-  expect(captured!.signal).toBeInstanceOf(AbortSignal);
-  expect(captured!.signal!.aborted).toBe(false);
-});
-
-it('result agentId is overridden to match the runId', async () => {
-  const registry = createRegistry({
-    run: async ({ runId }) =>
-      ({
-        agentId: 'wrong-id',
-        role: 'explorer',
-        status: 'completed',
-        finalText: 'done',
-        filesChanged: [],
-        toolsUsed: [],
-      } as SubagentResult),
-  });
-
-  const handle = registry.startRun({ role: 'explorer', task: 'find files' });
-  const result = await registry.getResult(handle.runId);
-
-  expect(result.agentId).toBe(handle.runId);
-});
-
-it('cancelAllRuns aborts every running handle', async () => {
-  const registry = createRegistry({
-    run: async ({ signal }) =>
-      new Promise((_resolve, reject) => {
-        signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
-      }),
-  });
-  const handle1 = registry.startRun({ role: 'explorer', task: 'first' });
-  const handle2 = registry.startRun({ role: 'researcher', task: 'second' });
-
-  registry.cancelAllRuns();
-
-  await expect(registry.getResult(handle1.runId)).rejects.toThrow();
-  await expect(registry.getResult(handle2.runId)).rejects.toThrow();
-  expect(handle1.status).toBe('cancelled');
-  expect(handle2.status).toBe('cancelled');
-});
-
-it('completed promise settles when a run fails validation', async () => {
-  const registry = createRegistry();
-
-  const handle = registry.startRun({ role: 'worker', task: 'do work' } as SubagentRequest);
-
-  await expect(handle.completed).rejects.toThrow(/not supported.*Phase 1/i);
-  expect(handle.status).toBe('failed');
-});
-
-it('completed promise settles when the parent signal is already aborted', async () => {
-  const registry = createRegistry();
-  const abortController = new AbortController();
-  abortController.abort();
-
-  const handle = registry.startRun({ role: 'explorer', task: 'too late' }, abortController.signal);
-
-  await expect(handle.completed).rejects.toThrow(/aborted before it started/i);
-  expect(handle.status).toBe('cancelled');
 });

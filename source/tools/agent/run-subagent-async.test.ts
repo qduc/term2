@@ -39,14 +39,14 @@ it('run_subagent_async tool is registered with the correct name', () => {
   expect(tool.name).toBe('run_subagent_async');
 });
 
-it('run_subagent_async schema accepts only Phase 1 roles', () => {
+it('run_subagent_async schema accepts supported roles', () => {
   const tool = createRunSubagentAsyncToolDefinition(async () => makeHandle());
 
   for (const role of ['explorer', 'researcher', 'mentor']) {
     expect(tool.parameters.safeParse({ role, task: 'do work' }).success).toBe(true);
   }
-  expect(tool.parameters.safeParse({ role: 'worker', task: 'do work' }).success).toBe(false);
-  expect(tool.parameters.safeParse({ role: 'librarian', task: 'do work' }).success).toBe(false);
+  expect(tool.parameters.safeParse({ role: 'worker', task: 'do work' }).success).toBe(true);
+  expect(tool.parameters.safeParse({ role: 'librarian', task: 'do work' }).success).toBe(true);
   expect(tool.parameters.safeParse({ role: 'unknown', task: 'do work' }).success).toBe(false);
 });
 

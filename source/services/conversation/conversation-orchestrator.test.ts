@@ -130,8 +130,8 @@ describe('ConversationOrchestrator', () => {
   it('sends a user message and applies a response', async () => {
     const cfg = makeConfig();
     // No queue support in this test: the immediate-append path must run.
-    cfg.conversationService.isQueueActive = undefined;
-    cfg.conversationService.setQueuedTurnStartObserver = undefined;
+    (cfg.conversationService as any).isQueueActive = undefined;
+    (cfg.conversationService as any).setQueuedTurnStartObserver = undefined;
     const orchestrator = new ConversationOrchestrator(cfg);
     const terminal: ConversationTerminal = { type: 'response', finalText: 'ok', commandMessages: [] };
 
@@ -171,8 +171,8 @@ describe('ConversationOrchestrator', () => {
 
   it('suppresses abort-like send errors', async () => {
     const cfg = makeConfig();
-    cfg.conversationService.isQueueActive = undefined;
-    cfg.conversationService.setQueuedTurnStartObserver = undefined;
+    (cfg.conversationService as any).isQueueActive = undefined;
+    (cfg.conversationService as any).setQueuedTurnStartObserver = undefined;
     const orchestrator = new ConversationOrchestrator(cfg);
     const abortError = new Error('aborted');
     abortError.name = 'AbortError';
@@ -312,8 +312,8 @@ describe('ConversationOrchestrator', () => {
     const cfg = makeConfig();
     // Simulate a service without queue support: both isQueueActive and the
     // observer registration must be unavailable for the immediate-append path.
-    cfg.conversationService.isQueueActive = undefined;
-    cfg.conversationService.setQueuedTurnStartObserver = undefined;
+    (cfg.conversationService as any).isQueueActive = undefined;
+    (cfg.conversationService as any).setQueuedTurnStartObserver = undefined;
     vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
       type: 'response',
       finalText: 'ok',

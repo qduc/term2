@@ -110,7 +110,7 @@ it.sequential('ApprovalPrompt sends the Docker one-shot grant answer', async () 
       onReject={() => {}}
     />,
   );
-  await writeInput(stdin, '\u001B[B');
+  // Default selection is index 0 ('Allow this command')
   await writeInput(stdin, '\r');
   expect(answer).toBe('docker-allow-once');
 });
@@ -156,6 +156,8 @@ it.sequential('ApprovalPrompt denies a Docker host-control request', async () =>
   const { stdin } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => (rejected = true)} />,
   );
+  // Navigate down from index 0 ('Allow this command') to index 1 ('Deny')
+  await writeInput(stdin, '\u001B[B');
   await writeInput(stdin, '\r');
   expect(rejected).toBe(true);
 });
@@ -619,6 +621,7 @@ it.sequential('ApprovalPrompt renders network access approval menu options', asy
     agentName: 'Sandbox',
     toolName: 'sandbox_network_access',
     argumentsText: 'Allow network access to api.example.com:443?',
+    rawInterruption: { type: 'sandbox_network_access' },
   };
   const { lastFrame } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} />,
@@ -634,6 +637,7 @@ it.sequential('ApprovalPrompt sends allow-session for network access approval', 
     agentName: 'Sandbox',
     toolName: 'sandbox_network_access',
     argumentsText: 'Allow network access to api.example.com:443?',
+    rawInterruption: { type: 'sandbox_network_access' },
   };
   const { stdin } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
@@ -651,6 +655,7 @@ it.sequential('ApprovalPrompt sends allow-project for network access approval', 
     agentName: 'Sandbox',
     toolName: 'sandbox_network_access',
     argumentsText: 'Allow network access to api.example.com:443?',
+    rawInterruption: { type: 'sandbox_network_access' },
   };
   const { stdin } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
@@ -668,6 +673,7 @@ it.sequential('ApprovalPrompt handles y and n shortcut keys for network access a
     agentName: 'Sandbox',
     toolName: 'sandbox_network_access',
     argumentsText: 'Allow network access to api.example.com:443?',
+    rawInterruption: { type: 'sandbox_network_access' },
   };
 
   const { stdin: stdinY } = await renderInAct(

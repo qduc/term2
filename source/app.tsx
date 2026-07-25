@@ -34,6 +34,7 @@ import type { SkillsService, SkillInfo } from './services/skills/skills-service.
 import { buildTerminalTitleLabel, setTerminalTitle } from './utils/output/terminal-title.js';
 import {
   registerSandboxNetworkApprovalHandler,
+  type NetworkApprovalAnswer,
   type SandboxNetworkAccessRequest,
 } from './utils/shell/sandbox/sandbox-network-approval.js';
 

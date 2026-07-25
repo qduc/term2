@@ -72,8 +72,7 @@ it.sequential('ApprovalPrompt denied-read Enter on "Allow once" calls onApprove 
       onReject={() => {}}
     />,
   );
-  // Default selection is index 0 (Deny). Navigate down to "Allow once" (index 1).
-  await writeInput(result.stdin, '\u001B[B'); // down arrow
+  // Default selection is index 0 ("Allow once").
   await writeInput(result.stdin, '\r'); // Enter
   expect(approveArg).toBe('allow-once');
 });
@@ -89,7 +88,8 @@ it.sequential('ApprovalPrompt denied-read Enter on "Deny" calls onReject', async
       }}
     />,
   );
-  // Default selection is index 0 (Deny).
+  // Default selection is index 0 ("Allow once"). Navigate down to "Deny" (index 1).
+  await writeInput(result.stdin, '\u001B[B'); // down arrow
   await writeInput(result.stdin, '\r'); // Enter
   expect(rejected).toBe(true);
 });

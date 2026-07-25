@@ -280,7 +280,7 @@ const ApprovalPrompt: FC<Props> = ({
 
   const deniedReadMenuItems = React.useMemo(() => {
     if (!deniedRead) return [];
-    const items = ['Deny', 'Allow once'];
+    const items = ['Allow once', 'Deny'];
     if (!deniedRead.sensitive) {
       items.push('Allow and remember this path');
     }
@@ -290,10 +290,10 @@ const ApprovalPrompt: FC<Props> = ({
 
   const askUserMenuItems = React.useMemo(() => {
     if (isDockerHostControlApproval) {
-      return ['Deny', 'Allow this command', 'Allow for this session', 'Always allow for this project'];
+      return ['Allow this command', 'Deny', 'Allow for this session', 'Always allow for this project'];
     }
     if (isSandboxNetworkApproval) {
-      return ['Deny', 'Allow once', 'Allow host for this session', 'Always allow host for this project'];
+      return ['Allow once', 'Deny', 'Allow host for this session', 'Always allow host for this project'];
     }
     if (!isAskUser && !isDeniedReadShell) {
       return isReadFileApproval ? ['Approve', 'Allow this folder for this session', 'Reject'] : ['Approve', 'Reject'];

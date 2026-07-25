@@ -660,6 +660,7 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
         agentId: event.agentId,
         role: event.role,
         task: event.task,
+        async: event.async,
         tools: [],
       } as unknown as SavedMessage);
       return;

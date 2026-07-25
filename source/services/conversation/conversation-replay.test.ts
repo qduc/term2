@@ -318,7 +318,7 @@ it('replayEvents: subagent_started + subagent_completed cleans up activity messa
 it('replayEvents: subagent_tool_started restores scoped activity without a parent in-flight tool', () => {
   const envelopes: LogEnvelope[] = [
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
-    env({ type: 'subagent_started', agentId: 'a1', role: 'worker', task: 'inspect' }),
+    env({ type: 'subagent_started', agentId: 'a1', role: 'worker', task: 'inspect', async: true }),
     env({
       type: 'subagent_tool_started',
       agentId: 'a1',
@@ -332,6 +332,9 @@ it('replayEvents: subagent_tool_started restores scoped activity without a paren
   const restored = replayEvents(envelopes);
 
   expect(restored.toolLedger.length).toBe(0);
+  expect(
+    restored.messages.find((message: any) => message.sender === 'subagent' && message.agentId === 'a1'),
+  ).toMatchObject({ async: true });
   expect(restored.messages.some((message: any) => message.sender === 'subagent' && message.agentId === 'a1')).toBe(
     true,
   );

@@ -23,6 +23,24 @@ it.sequential('SubagentActivityMessage renders plain string tools', async () => 
   expect(output.includes('✔ read_file "source/app.tsx"')).toBe(true);
 });
 
+it.sequential('SubagentActivityMessage labels asynchronous starts as run_subagent_async', async () => {
+  const { lastFrame } = await renderInAct(
+    <SubagentActivityMessage
+      msg={{
+        role: 'explorer',
+        task: 'find x',
+        status: 'running',
+        tools: [],
+        async: true,
+      }}
+    />,
+  );
+  const output = toVisibleText(lastFrame() ?? '');
+
+  expect(output).toContain('run_subagent_async [explorer] find x');
+  expect(output).not.toContain('$ run_subagent [explorer] find x');
+});
+
 it.sequential('SubagentActivityMessage renders write tool CommandMessage concisely', async () => {
   const writeMsg = {
     id: 'cmd-w1',

@@ -392,6 +392,7 @@ export function createConversationEventHandler(
           agentId: event.agentId,
           role: event.role,
           task: event.task,
+          async: event.async,
           tools: [],
         };
         if (matchingCallId !== undefined) {

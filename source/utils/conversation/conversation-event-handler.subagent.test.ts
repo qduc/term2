@@ -14,6 +14,7 @@ it('subagent events: maintains a live peek with the last three tools', () => {
     agentId: 'agent-1',
     role: 'explorer',
     task: 'inspect the command message rendering flow and report findings',
+    async: true,
   } as ConversationEvent);
 
   expect(deps.calls.appendedMessages[0]).toEqual([
@@ -25,6 +26,7 @@ it('subagent events: maintains a live peek with the last three tools', () => {
       role: 'explorer',
       task: 'inspect the command message rendering flow and report findings',
       tools: [],
+      async: true,
     },
   ]);
 
@@ -71,6 +73,7 @@ it('subagent events: maintains a live peek with the last three tools', () => {
       agentId: 'agent-1',
       role: 'explorer',
       task: 'inspect the command message rendering flow and report findings',
+      async: true,
       tools: [
         'grep "needle" "source" (2 matches)',
         'read_file "source/app.tsx" (Success)',

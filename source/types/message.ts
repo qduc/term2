@@ -49,6 +49,7 @@ export interface SubagentActivityMessage {
   agentId: string;
   role: string;
   task: string;
+  async?: boolean;
   tools: (string | CommandMessage)[];
   finalText?: string;
 }

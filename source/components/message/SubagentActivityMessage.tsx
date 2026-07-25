@@ -9,6 +9,7 @@ type Props = {
     role?: string;
     task?: string;
     status?: string;
+    async?: boolean;
     tools?: (string | any)[];
     finalText?: string;
   };
@@ -25,10 +26,10 @@ const truncate = (value: string, maxLength: number) => {
   return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
 };
 
-const buildTitle = (role: string | undefined, task: string | undefined): string => {
+const buildTitle = (role: string | undefined, task: string | undefined, async: boolean | undefined): string => {
   const roleLabel = role ? `[${role}]` : '';
   const taskPreview = truncate(getFirstParagraph(task, 200).replace(/\s+/g, ' '), MAX_TASK_LENGTH);
-  return ['run_subagent', roleLabel, taskPreview].filter(Boolean).join(' ');
+  return [async ? 'run_subagent_async' : 'run_subagent', roleLabel, taskPreview].filter(Boolean).join(' ');
 };
 
 const formatSubagentStringTool = (tool: string, activityStatus?: string): string => {
@@ -60,7 +61,7 @@ const formatSubagentStringTool = (tool: string, activityStatus?: string): string
 
 const SubagentActivityMessage: FC<Props> = ({ msg }) => {
   const tools = Array.isArray(msg.tools) ? msg.tools.slice(-3) : [];
-  const title = buildTitle(msg.role, msg.task);
+  const title = buildTitle(msg.role, msg.task, msg.async);
   const statusSuffix = msg.status && msg.status !== 'running' ? ` — ${msg.status}` : '';
   const color =
     msg.status === 'completed'

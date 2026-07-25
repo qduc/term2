@@ -130,6 +130,104 @@ it.sequential('StatusBar renders Codex rate limits when valid, but hides them wh
   expect(outputInvalid.includes('Invalid Date')).toBe(false);
 });
 
+it.sequential('StatusBar labels a Codex window by its length, not by which slot carries it', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+
+  const resetAt = Math.floor(Date.now() / 1000) + 3 * 24 * 60 * 60;
+
+  // Codex may send a single weekly window in the `primary` slot.
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      lastCodexRateLimit={{
+        allowed: true,
+        limit_reached: false,
+        primary: { used_percent: 58, window_minutes: 10080, reset_after_seconds: 259200, reset_at: resetAt },
+      }}
+    />,
+  );
+
+  const output = lastFrame() ?? '';
+  expect(output.includes('7D: 58%')).toBe(true);
+  expect(output.includes('168H')).toBe(false);
+});
+
+it.sequential('StatusBar shows a date for a Codex reset more than a day away', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+
+  const resetAt = Math.floor(Date.now() / 1000) + 3 * 24 * 60 * 60;
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      lastCodexRateLimit={{
+        allowed: true,
+        limit_reached: false,
+        primary: { used_percent: 58, window_minutes: 10080, reset_after_seconds: 259200, reset_at: resetAt },
+      }}
+    />,
+  );
+
+  expect(lastFrame() ?? '').toMatch(/7D: 58% \(\d{1,2}[./-]\d{1,2}\)/);
+});
+
+it.sequential('StatusBar shows a clock time for a Codex reset within 24 hours', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+
+  const resetAt = Math.floor(Date.now() / 1000) + 60 * 60;
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      lastCodexRateLimit={{
+        allowed: true,
+        limit_reached: false,
+        primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 3600, reset_at: resetAt },
+      }}
+    />,
+  );
+
+  const output = lastFrame() ?? '';
+  expect(output).toMatch(/5H: 11% \(\d{1,2}:\d{2}/);
+  // A sub-day window resetting today needs no date to disambiguate.
+  expect(output).not.toMatch(/5H: 11% \(\d{1,2}[./-]\d{1,2}/);
+});
+
+it.sequential('StatusBar dates a day-scale Codex window that resets within 24 hours', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+
+  const resetAt = Math.floor(Date.now() / 1000) + 60 * 60;
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      lastCodexRateLimit={{
+        allowed: true,
+        limit_reached: false,
+        secondary: { used_percent: 58, window_minutes: 10080, reset_after_seconds: 3600, reset_at: resetAt },
+      }}
+    />,
+  );
+
+  expect(lastFrame() ?? '').toMatch(/7D: 58% \(\d{1,2}[./-]\d{1,2}\D{1,2}\d{1,2}:\d{2}/);
+});
+
 it.sequential('StatusBar renders large uncached prompt warning and confirmation warning', async () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',

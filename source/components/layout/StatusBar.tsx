@@ -6,7 +6,7 @@ import { getProvider } from '../../providers/index.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { SSHInfo } from '../../hooks/use-shell-mode.js';
 import { formatFooterUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
-import type { CodexRateLimitInfo } from '../../services/conversation/conversation-events.js';
+import type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../services/conversation/conversation-events.js';
 import type { StaticCommitBlocker } from '../message/MessageList.js';
 
 interface StatusBarProps {
@@ -80,43 +80,44 @@ const StatusBar: FC<StatusBarProps> = ({
 
   const codexRateLimitText = (() => {
     if (!lastCodexRateLimit) return '';
-    const { primary, secondary } = lastCodexRateLimit;
-    const parts: string[] = [];
 
-    if (
-      primary &&
-      typeof primary.window_minutes === 'number' &&
-      !isNaN(primary.window_minutes) &&
-      typeof primary.used_percent === 'number' &&
-      !isNaN(primary.used_percent) &&
-      typeof primary.reset_at === 'number' &&
-      !isNaN(primary.reset_at)
-    ) {
-      const hours = Math.round(primary.window_minutes / 60);
-      const resetDate = new Date(primary.reset_at * 1000);
-      const timeStr = resetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      parts.push(`${hours}H: ${primary.used_percent}% (${timeStr})`);
-    }
-    if (
-      secondary &&
-      typeof secondary.window_minutes === 'number' &&
-      !isNaN(secondary.window_minutes) &&
-      typeof secondary.used_percent === 'number' &&
-      !isNaN(secondary.used_percent) &&
-      typeof secondary.reset_at === 'number' &&
-      !isNaN(secondary.reset_at)
-    ) {
-      const days = Math.round(secondary.window_minutes / (60 * 24));
-      const resetDate = new Date(secondary.reset_at * 1000);
-      const nowMs = Date.now();
-      const diffMs = resetDate.getTime() - nowMs;
+    const isNumber = (value: unknown): value is number => typeof value === 'number' && !isNaN(value);
+
+    // Codex decides which slot carries which window, so derive the unit from the
+    // window length instead of assuming primary is short and secondary is weekly.
+    const formatWindow = (minutes: number): string => {
+      if (minutes >= 24 * 60) return `${Math.round(minutes / (24 * 60))}D`;
+      if (minutes >= 60) return `${Math.round(minutes / 60)}H`;
+      return `${Math.round(minutes)}M`;
+    };
+
+    // A reset further out than a day only needs a date. A reset landing within
+    // 24h needs the clock time, plus the date when the window itself spans days
+    // so it stays clear the reset can be tomorrow rather than later today.
+    const formatReset = (resetAt: number, windowMinutes: number): string => {
+      const resetDate = new Date(resetAt * 1000);
+      const diffMs = resetDate.getTime() - Date.now();
       const within24Hours = diffMs >= 0 && diffMs < 24 * 60 * 60 * 1000;
-      const timeStr = within24Hours
+      if (!within24Hours) {
+        return resetDate.toLocaleDateString([], { month: '2-digit', day: '2-digit' });
+      }
+      return windowMinutes >= 24 * 60
         ? resetDate.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-        : resetDate.toLocaleDateString([], { month: '2-digit', day: '2-digit' });
-      parts.push(`${days}D: ${secondary.used_percent}% (${timeStr})`);
-    }
-    return parts.join(' / ');
+        : resetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+
+    const formatWindowUsage = (window: CodexRateLimitWindow | undefined): string | undefined => {
+      if (!window || !isNumber(window.window_minutes) || !isNumber(window.used_percent) || !isNumber(window.reset_at)) {
+        return undefined;
+      }
+      const reset = formatReset(window.reset_at, window.window_minutes);
+      return `${formatWindow(window.window_minutes)}: ${window.used_percent}% (${reset})`;
+    };
+
+    return [lastCodexRateLimit.primary, lastCodexRateLimit.secondary]
+      .map(formatWindowUsage)
+      .filter((part): part is string => part !== undefined)
+      .join(' / ');
   })();
 
   const staticCommitBlockerText = (() => {

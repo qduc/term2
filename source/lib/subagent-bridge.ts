@@ -107,6 +107,7 @@ export class SubagentBridge {
   /** Abort all active subagent runs and prepare a fresh controller. */
   abort(): void {
     this.#abortController.abort();
+    this.#subagentManager?.cancelAllAsyncRuns();
     this.#abortController = new AbortController();
   }
 
@@ -211,6 +212,7 @@ export class SubagentBridge {
       task: params.task,
       ...(params.continue_run_id ? { continueRunId: params.continue_run_id } : {}),
       parentTool: 'run_subagent_async',
+      signal: this.signal,
     };
 
     return this.#withSubagentTrafficContext(detailsRecord?.toolCall?.callId, () => {

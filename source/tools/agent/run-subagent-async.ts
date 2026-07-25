@@ -8,6 +8,7 @@ import {
   safeJsonParse,
 } from '../format-helpers.js';
 import type { SubagentResult, SubagentRunHandle } from '../../services/subagents/types.js';
+import { SubagentRegistryError } from '../../services/subagents/subagent-async-registry.js';
 import { isAbortLike } from '../../services/subagents/utils.js';
 
 const ASYNC_ROLES = ['explorer', 'worker', 'researcher', 'mentor', 'librarian'] as const;
@@ -182,7 +183,13 @@ export function createRunSubagentAsyncToolDefinition(
         if (isAbortLike(error?.message, error)) {
           throw error;
         }
-        return JSON.stringify({ runId: null, status: 'failed', error: error?.message || String(error) });
+        if (error instanceof SubagentRegistryError) {
+          return JSON.stringify({ status: 'failed', error: { code: error.code, message: error.message } });
+        }
+        return JSON.stringify({
+          status: 'failed',
+          error: { code: 'execution_failed', message: error?.message || String(error) },
+        });
       }
     },
     formatCommandMessage: formatRunSubagentAsyncCommandMessage,
@@ -206,6 +213,13 @@ export function createGetSubagentResultToolDefinition(
       } catch (error: any) {
         if (isAbortLike(error?.message, error)) {
           throw error;
+        }
+        if (error instanceof SubagentRegistryError) {
+          return JSON.stringify({
+            status: 'failed',
+            error: { code: error.code, message: error.message },
+            runId: params.runId,
+          });
         }
         const errorResult: SubagentResult = {
           agentId: params.runId,

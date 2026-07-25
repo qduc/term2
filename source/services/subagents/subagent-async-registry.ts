@@ -33,6 +33,8 @@ type StoredRun = {
   lastUsedAt: number;
   resolve: (result: SubagentResult) => void;
   promise: Promise<SubagentResult>;
+  settled: boolean;
+  removeParentAbortListener?: () => void;
 };
 
 export interface SubagentAsyncRegistryDeps {
@@ -61,6 +63,7 @@ export class SubagentAsyncRegistry {
   #now: () => number;
   #ttlMs: number;
   #messageCap: number;
+  #sessionCap = 50;
   #sessionForRole?: (role: string) => SubagentSession | undefined;
   #timer: ReturnType<typeof setInterval>;
   #disposed = false;
@@ -113,6 +116,13 @@ export class SubagentAsyncRegistry {
       this.#sessions.set(key, session);
     }
 
+    for (const active of this.#runs.values()) {
+      if (active.status === 'running' && active.session === session) {
+        throw new SubagentRegistryError('already_active', `Session for role ${role} is already active`);
+      }
+    }
+    this.#evictToSessionCap();
+
     const runId = continuation ?? randomUUID();
     const controller = new AbortController();
     let resolve!: (result: SubagentResult) => void;
@@ -127,7 +137,15 @@ export class SubagentAsyncRegistry {
       lastUsedAt: this.#now(),
       resolve,
       promise,
+      settled: false,
     };
+    const parentSignal = request.signal ?? _legacyParentSignal;
+    if (parentSignal) {
+      const onAbort = () => this.#cancelRun(stored);
+      parentSignal.addEventListener('abort', onAbort, { once: true });
+      stored.removeParentAbortListener = () => parentSignal.removeEventListener('abort', onAbort);
+      if (parentSignal.aborted) onAbort();
+    }
     this.#runs.set(runId, stored);
     safeEmit(this.#logger, this.#onEvent, {
       type: 'subagent_started',
@@ -138,7 +156,11 @@ export class SubagentAsyncRegistry {
       async: true,
     });
     void this.#execute(stored, request);
-    return { runId, role, status: 'running', task: request.task } as SubagentRunHandle;
+    return { runId, role, status: 'running', task: request.task };
+  }
+
+  hasActiveRunForRole(role: string): boolean {
+    return [...this.#runs.values()].some((run) => run.role === role && run.status === 'running');
   }
 
   getResult(runId: string, signal?: AbortSignal): Promise<SubagentResult> {
@@ -158,15 +180,37 @@ export class SubagentAsyncRegistry {
 
   abortRun(runId: string): void {
     const run = this.#runs.get(runId);
-    if (run?.status === 'running') run.abortController.abort();
+    if (run?.status === 'running') this.#cancelRun(run);
   }
 
   cancelAllRuns(): void {
-    for (const run of this.#runs.values()) if (run.status === 'running') run.abortController.abort();
+    for (const run of this.#runs.values()) if (run.status === 'running') this.#cancelRun(run);
+  }
+
+  #cancelRun(run: StoredRun): void {
+    if (run.status !== 'running') return;
+    run.abortController.abort();
+    const result: SubagentResult = {
+      agentId: run.runId,
+      role: run.role,
+      status: 'cancelled',
+      finalText: '',
+      filesChanged: [],
+      toolsUsed: [],
+      error: 'The subagent run was aborted.',
+    };
+    run.status = 'cancelled';
+    run.result = result;
+    run.lastUsedAt = this.#now();
+    run.settled = true;
+    run.removeParentAbortListener?.();
+    run.resolve(result);
+    safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result, async: true });
   }
 
   reset(): void {
     for (const run of this.#runs.values()) if (run.status === 'running') run.abortController.abort();
+    this.cancelAllRuns();
     this.#runs.clear();
     this.#sessions.clear();
     this.#evicted.clear();
@@ -177,6 +221,20 @@ export class SubagentAsyncRegistry {
     this.#disposed = true;
     clearInterval(this.#timer);
     this.reset();
+  }
+
+  #evictToSessionCap(): void {
+    while (this.#sessions.size > this.#sessionCap) {
+      const candidate = [...this.#runs.values()]
+        .filter((run) => run.status !== 'running')
+        .sort((a, b) => a.lastUsedAt - b.lastUsedAt)[0];
+      if (!candidate) return;
+      this.#runs.delete(candidate.runId);
+      this.#evicted.add(candidate.runId);
+      if (![...this.#runs.values()].some((run) => run.session === candidate.session)) {
+        for (const [key, session] of this.#sessions) if (session === candidate.session) this.#sessions.delete(key);
+      }
+    }
   }
 
   #evictExpired(): void {
@@ -207,9 +265,13 @@ export class SubagentAsyncRegistry {
         error: error?.message ?? String(error),
       };
     }
+    // Explicit cancellation is terminal and wins over a late executor result.
+    if (run.settled) return;
     run.status = result.status;
     run.result = result;
     run.lastUsedAt = this.#now();
+    run.settled = true;
+    run.removeParentAbortListener?.();
     run.resolve(result);
     safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result, async: true });
   }

@@ -15,10 +15,11 @@ You have two tools for running subagents in the background:
 Use these when you want to start a background investigation and continue with other work, then collect the result later.`;
 
   const rules = `**Rules for async subagents:**
-- Only \`explorer\`, \`researcher\`, and \`mentor\` are available in Phase 1.
-- Each async run is tied to the current parent turn. If the parent turn ends, the run is cancelled.
+- Fresh async runs support explorer, worker, researcher, mentor, and librarian.
+- Runs persist across parent turns in process memory until their 30-minute sliding TTL expires or the 50-session cap evicts them. Ordinary turn completion does not cancel them.
 - You must call \`get_subagent_result\` with the exact \`runId\` returned by \`run_subagent_async\`.
-- Do not invent runIds. If you lost the runId, start a new run.
+- Mentor and librarian fresh calls reuse their default session. Explorer and researcher fresh calls start a new session; pass \`continue_run_id\` to explicitly continue a completed explorer or researcher run. Worker runs are always fresh and cannot be continued.
+- Only completed runs can be continued. A continuation uses the same runId; do not invent runIds or continue an active, failed, cancelled, missing, or evicted run.
 - The result format is the same structured \`SubagentResult\` returned by \`run_subagent\`: status, final text, tools used, and files changed.`;
 
   const triggers = `**When to use async subagents:**

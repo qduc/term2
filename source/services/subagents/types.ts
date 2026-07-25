@@ -87,15 +87,10 @@ export interface SubagentResult {
   nestedRunResult?: unknown;
 }
 
+/** The only state exposed while an asynchronous run is live. */
 export interface SubagentRunHandle {
   runId: string;
   role: string;
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'running';
   task: string;
-  /** @deprecated Internal state is intentionally not present at runtime. */
-  readonly session?: any;
-  readonly result?: SubagentResult;
-  readonly error?: string;
-  readonly abortController: AbortController;
-  readonly completed?: Promise<SubagentResult>;
 }

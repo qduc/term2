@@ -14,12 +14,14 @@ import { createAgentRuntimeFromSubagentRuntime } from '../agent-runtime/compose-
 import type { AgentRuntime } from '../agent-runtime/agent-runtime.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import type { SubagentRunHandle } from './types.js';
+import { SubagentRegistryError } from './subagent-async-registry.js';
 
 export class SubagentManager {
   #logger: ILoggingService;
   #settings: ISettingsService;
   #onEvent?: (event: ConversationEvent) => void;
   #runtime: SubagentRuntime;
+  #mentorActive = false;
 
   constructor(deps: {
     logger: ILoggingService;
@@ -99,9 +101,21 @@ export class SubagentManager {
     });
 
     try {
+      if (request.role === 'mentor') {
+        if (this.#mentorActive || this.#runtime.asyncRegistry.hasActiveRunForRole('mentor')) {
+          throw new SubagentRegistryError('already_active', 'Mentor session is already active');
+        }
+        this.#mentorActive = true;
+      }
       const result =
         request.role === 'mentor'
-          ? await this.#runtime.mentorRunner.run(agentId, request.task, request.signal)
+          ? await this.#runtime.mentorRunner.run(
+              agentId,
+              request.task,
+              request.signal,
+              undefined,
+              request.executionBudget,
+            )
           : await this.#runtime.executionRunner.run(agentId, request, this.#resolveRoleDefinition(request.role));
       safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result });
       return result;
@@ -128,6 +142,8 @@ export class SubagentManager {
       };
       safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result });
       return result;
+    } finally {
+      if (request.role === 'mentor') this.#mentorActive = false;
     }
   }
 
@@ -135,10 +151,12 @@ export class SubagentManager {
    * Start an asynchronous subagent run.
    *
    * Delegates to the SubagentAsyncRegistry, which owns the live session and
-   * run lifecycle. The returned handle is a Phase 1 boundary object: only
-   * explorer, researcher, and mentor are supported.
+   * run lifecycle. The returned handle exposes only the live-run contract.
    */
   startRunAsync(request: SubagentRequest): SubagentRunHandle {
+    if (request.role === 'mentor' && this.#mentorActive) {
+      throw new SubagentRegistryError('already_active', 'Mentor session is already active');
+    }
     return this.#runtime.asyncRegistry.startRun(request);
   }
 
@@ -157,9 +175,9 @@ export class SubagentManager {
     this.#runtime.asyncRegistry.reset();
   }
 
-  /** @deprecated Ordinary turn completion must not cancel async runs. */
+  /** Cancel all live asynchronous runs for an explicit parent abort. */
   cancelAllAsyncRuns(): void {
-    // Explicit abort/reset APIs own cancellation.
+    this.#runtime.asyncRegistry.cancelAllRuns();
   }
 
   dispose(): void {

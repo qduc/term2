@@ -57,8 +57,6 @@ function createMockManager():
   const trackReset = { callCount: 0 };
   const trackClearCache = { callCount: 0 };
 
-  const completedControllers = new Set<AbortController>();
-
   const manager = {
     run: async (args: any) => {
       trackRun.callCount++;
@@ -73,29 +71,7 @@ function createMockManager():
     startRunAsync: (args: any) => {
       trackStartRunAsync.callCount++;
       trackStartRunAsync.lastArgs = args;
-      const abortController = new AbortController();
-      completedControllers.add(abortController);
-      const runId = args.runId ?? 'run-1';
-      return {
-        runId,
-        role: args.role,
-        task: args.task,
-        status: 'running',
-        abortController,
-        completed: new Promise((resolve) => {
-          abortController.signal.addEventListener('abort', () => {
-            resolve({
-              agentId: runId,
-              role: args.role,
-              status: 'cancelled',
-              finalText: '',
-              filesChanged: [],
-              toolsUsed: [],
-              error: 'aborted',
-            });
-          });
-        }),
-      };
+      return { runId: args.runId ?? 'run-1', role: args.role, task: args.task, status: 'running' };
     },
     getRunResult: async (args: any) => {
       trackGetRunResult.callCount++;
@@ -104,10 +80,6 @@ function createMockManager():
     },
     cancelAllAsyncRuns: () => {
       trackCancelAllAsyncRuns.callCount++;
-      for (const controller of completedControllers) {
-        controller.abort();
-      }
-      completedControllers.clear();
     },
     resetMentorSession: () => {
       trackReset.callCount++;
@@ -471,7 +443,7 @@ it('runSubagentAsync passes the bridge abort signal to startRunAsync', async () 
 
   await bridge.runSubagentAsync({ role: 'researcher', task: 'look up docs' });
 
-  expect(trackStartRunAsync.lastArgs.signal).toBeUndefined();
+  expect(trackStartRunAsync.lastArgs.signal).toBeInstanceOf(AbortSignal);
 });
 
 it('runSubagentAsync keeps event sink alive until the async run completes', async () => {

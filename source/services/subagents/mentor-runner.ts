@@ -11,6 +11,8 @@ import { getProvider } from '../../providers/index.js';
 import { runWithProvider, extractFinalText } from './utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
+import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
+import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
 
 export class MentorRunner {
   #logger: ILoggingService;
@@ -38,12 +40,39 @@ export class MentorRunner {
     this.#mentorSession.reset();
   }
 
-  async run(agentId: string, task: string, signal?: AbortSignal, session?: SubagentSession): Promise<SubagentResult> {
+  async run(
+    agentId: string,
+    task: string,
+    signal?: AbortSignal,
+    session?: SubagentSession,
+    executionBudget?: ExecutionBudget,
+  ): Promise<SubagentResult> {
+    let slot: AcquiredChildSlot | undefined;
+    if (executionBudget) {
+      const acquired = executionBudget.tryAcquireChild();
+      if (!(acquired instanceof AcquiredChildSlot)) {
+        return {
+          agentId,
+          role: 'mentor',
+          status: 'failed',
+          finalText: '',
+          filesChanged: [],
+          toolsUsed: [],
+          error: `Budget exhausted: ${acquired.reason}${
+            acquired.max !== undefined ? ` (${acquired.current}/${acquired.max})` : ''
+          }`,
+        };
+      }
+      slot = acquired;
+    }
     const previousSession = this.#mentorSession;
     if (session) this.#mentorSession = session;
     try {
-      return await this.#runWithSession(agentId, task, signal);
+      const result = await this.#runWithSession(agentId, task, signal);
+      if (slot && result.usage) executionBudget!.recordUsage(result.usage);
+      return result;
     } finally {
+      slot?.release();
       if (session) this.#mentorSession = previousSession;
     }
   }
@@ -54,7 +83,7 @@ export class MentorRunner {
     signal: AbortSignal | undefined,
     session: SubagentSession,
   ): Promise<SubagentResult> {
-    return this.run(agentId, task, signal, session);
+    return this.run(agentId, task, signal, session, undefined);
   }
 
   async #runWithSession(agentId: string, task: string, signal?: AbortSignal): Promise<SubagentResult> {

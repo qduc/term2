@@ -55,6 +55,36 @@ it('applies role continuation policy', async () => {
   );
 });
 
+it('explicit cancellation remains terminal when the executor resolves later', async () => {
+  let resolve!: (value: SubagentResult) => void;
+  const registry = make(() => new Promise<SubagentResult>((r) => (resolve = r)));
+  const run = registry.startRun({ role: 'explorer', task: 'cancel me' });
+  registry.cancelAllRuns();
+  await expect(registry.getResult(run.runId)).resolves.toMatchObject({ status: 'cancelled' });
+  resolve(result('explorer'));
+  await new Promise((r) => setTimeout(r, 0));
+  await expect(registry.getResult(run.runId)).resolves.toMatchObject({ status: 'cancelled' });
+});
+
+it('cancels a run when its parent signal aborts', async () => {
+  const controller = new AbortController();
+  const registry = make(
+    ({ signal, request }) =>
+      new Promise<SubagentResult>((_, reject) =>
+        signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }),
+      ),
+  );
+  const run = registry.startRun({ role: 'researcher', task: 'parent', signal: controller.signal });
+  controller.abort();
+  await expect(registry.getResult(run.runId)).resolves.toMatchObject({ status: 'cancelled' });
+});
+
+it('rejects a fresh run targeting an active shared session', () => {
+  const registry = make(() => new Promise<SubagentResult>(() => undefined));
+  registry.startRun({ role: 'mentor', task: 'one' });
+  expect(() => registry.startRun({ role: 'mentor', task: 'two' })).toThrowError(/already active/);
+});
+
 it('returns terminal failures and cancellations instead of rejecting', async () => {
   const failed = make(async ({ request }) => result(request.role, 'failed'));
   const failedRun = failed.startRun({ role: 'researcher', task: 'fail' });

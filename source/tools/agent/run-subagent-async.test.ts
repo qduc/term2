@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import { createRunSubagentAsyncToolDefinition, createGetSubagentResultToolDefinition } from './run-subagent-async.js';
 import type { SubagentRunHandle, SubagentResult } from '../../services/subagents/types.js';
+import { SubagentRegistryError } from '../../services/subagents/subagent-async-registry.js';
 
 function makeHandle(overrides: Partial<SubagentRunHandle> = {}): SubagentRunHandle {
   return {
@@ -8,18 +9,8 @@ function makeHandle(overrides: Partial<SubagentRunHandle> = {}): SubagentRunHand
     role: 'explorer',
     task: 'find files',
     status: 'running',
-    abortController: new AbortController(),
-    session: undefined as any,
-    completed: Promise.resolve({
-      agentId: 'run-123',
-      role: 'explorer',
-      status: 'completed',
-      finalText: 'Found them.',
-      filesChanged: [],
-      toolsUsed: [],
-    } as SubagentResult),
     ...overrides,
-  } as SubagentRunHandle;
+  };
 }
 
 function makeResult(overrides: Partial<SubagentResult> = {}): SubagentResult {
@@ -85,6 +76,19 @@ it('get_subagent_result returns a formatted SubagentResult', async () => {
   expect(raw).toContain('Status: completed');
   expect(raw).toContain('Answer here.');
   expect(raw.startsWith('{')).toBe(false);
+});
+
+it('preserves registry error codes through the async tool boundary', async () => {
+  const tool = createRunSubagentAsyncToolDefinition(async () => {
+    throw new SubagentRegistryError('worker_blocked', 'Worker runs cannot be continued asynchronously');
+  });
+
+  await expect(tool.execute({ role: 'worker', task: 'continue', continue_run_id: 'run-abc' })).resolves.toBe(
+    JSON.stringify({
+      status: 'failed',
+      error: { code: 'worker_blocked', message: 'Worker runs cannot be continued asynchronously' },
+    }),
+  );
 });
 
 it('get_subagent_result returns failed result text on error', async () => {

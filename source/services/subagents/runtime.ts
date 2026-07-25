@@ -87,10 +87,15 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     logger: deps.logger,
     run: async ({ request, runId, session, signal }) => {
       if (request.role === 'mentor') {
-        return mentorRunner.runInSession(runId, request.task, signal, session);
+        return mentorRunner.run(runId, request.task, signal, session, request.executionBudget);
       }
       const definition = loadRoleDefinition(request.role, deps.settings);
-      return executionRunner.runInSession(runId, { ...request, signal }, definition, session);
+      return executionRunner.runInSession(
+        runId,
+        { ...request, signal },
+        { ...definition, ...(request.executionBudget ? { executionBudget: request.executionBudget } : {}) },
+        session,
+      );
     },
     onEvent: deps.onEvent,
     ttlMs: deps.settings.get<number>('subagent.asyncSessionTtlMs') ?? 30 * 60 * 1000,

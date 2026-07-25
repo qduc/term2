@@ -39,6 +39,7 @@ export class SubagentManager {
 
   resetMentorSession(): void {
     this.#runtime.mentorRunner.reset();
+    this.#runtime.asyncRegistry.reset();
   }
 
   clearCache(): void {
@@ -138,7 +139,7 @@ export class SubagentManager {
    * explorer, researcher, and mentor are supported.
    */
   startRunAsync(request: SubagentRequest): SubagentRunHandle {
-    return this.#runtime.asyncRegistry.startRun(request, request.signal);
+    return this.#runtime.asyncRegistry.startRun(request);
   }
 
   /**
@@ -148,13 +149,20 @@ export class SubagentManager {
     return this.#runtime.asyncRegistry.getResult(runId, signal);
   }
 
-  /**
-   * Cancel all running asynchronous subagent runs.
-   *
-   * Phase 1 async runs are scoped to a single parent turn; this is called
-   * when the parent turn ends.
-   */
+  abortAsyncRun(runId: string): void {
+    this.#runtime.asyncRegistry.abortRun(runId);
+  }
+
+  resetAsyncRuns(): void {
+    this.#runtime.asyncRegistry.reset();
+  }
+
+  /** @deprecated Ordinary turn completion must not cancel async runs. */
   cancelAllAsyncRuns(): void {
-    this.#runtime.asyncRegistry.cancelAllRuns();
+    // Explicit abort/reset APIs own cancellation.
+  }
+
+  dispose(): void {
+    this.#runtime.asyncRegistry.dispose();
   }
 }

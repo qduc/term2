@@ -91,6 +91,10 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
     'Provider override for the librarian subagent (falls back to agent.provider)',
   [SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT]:
     'Reasoning effort for the librarian subagent (none|minimal|low|medium|high|xhigh|default)',
+  [SETTING_KEYS.SUBAGENT_ASYNC_SESSION_TTL_MS]:
+    'How long completed async subagent sessions are retained in memory before eviction, in milliseconds',
+  [SETTING_KEYS.SUBAGENT_ASYNC_MESSAGE_CAP]:
+    'Maximum number of user turns to retain in a persisted async subagent session',
 };
 
 /**
@@ -195,6 +199,8 @@ export const CATEGORY_KEYS = {
     SETTING_KEYS.APP_SEARCH_VIA_SHELL,
     SETTING_KEYS.TOOLS_ENABLE_EDIT_HEALING,
     SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL,
+    SETTING_KEYS.SUBAGENT_ASYNC_SESSION_TTL_MS,
+    SETTING_KEYS.SUBAGENT_ASYNC_MESSAGE_CAP,
   ]),
   ui: new Set<string>([
     SETTING_KEYS.UI_HISTORY_SIZE,

@@ -4,6 +4,7 @@ import type { SessionLogs, SessionApprovalQuery } from '../session/session-compo
 import type { UserTurn } from '../../types/user-turn.js';
 import type { SessionManager } from '../session/session-manager.js';
 import type { FinalTerminal } from '../../contracts/conversation.js';
+import type { ConversationEvent } from './conversation-events.js';
 
 const noop = () => {};
 

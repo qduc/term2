@@ -3,6 +3,7 @@ import type { ILoggingService, ISettingsService, ISessionContextService } from '
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentRequest, SubagentDefinition, SubagentResult } from './types.js';
 import type { SubagentToolFactory } from './tool-policy.js';
+import { SubagentSession } from './subagent-session.js';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
 import { isAbortLike, aggregateToolUsage, safeEmit } from './utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
@@ -44,6 +45,38 @@ export class ExecutionSubagentRunner {
   }
 
   async run(agentId: string, request: SubagentRequest, definition: SubagentDefinition): Promise<SubagentResult> {
+    return this.#execute(
+      agentId,
+      request,
+      definition,
+      new SubagentSession(agentId, request.role),
+      undefined,
+      request.signal,
+      undefined,
+    );
+  }
+
+  async runInSession(
+    agentId: string,
+    request: SubagentRequest,
+    definition: SubagentDefinition,
+    session: SubagentSession,
+    providedChildSlot?: AcquiredChildSlot,
+    signal?: AbortSignal,
+    onEventOverride?: (event: ConversationEvent) => void,
+  ): Promise<SubagentResult> {
+    return this.#execute(agentId, request, definition, session, providedChildSlot, signal, onEventOverride);
+  }
+
+  async #execute(
+    agentId: string,
+    request: SubagentRequest,
+    definition: SubagentDefinition,
+    session: SubagentSession,
+    providedChildSlot: AcquiredChildSlot | undefined,
+    signal: AbortSignal | undefined,
+    onEventOverride: ((event: ConversationEvent) => void) | undefined,
+  ): Promise<SubagentResult> {
     if (!this.#createClient) {
       throw new Error('SubagentManager: createClient factory not provided');
     }
@@ -51,8 +84,8 @@ export class ExecutionSubagentRunner {
     // ── Budget enforcement ──
     // Root executions do NOT consume a child slot; only actual nested
     // agent runs do. The root budget tracks children, not itself.
-    let childSlot: AcquiredChildSlot | undefined;
-    if (definition.executionBudget && !definition.isRootExecution) {
+    let childSlot = providedChildSlot;
+    if (definition.executionBudget && !definition.isRootExecution && !childSlot) {
       const slot = definition.executionBudget.tryAcquireChild();
       if (!(slot instanceof AcquiredChildSlot)) {
         return {
@@ -135,6 +168,12 @@ export class ExecutionSubagentRunner {
       },
     });
 
+    const initialState = session.exportState();
+    if (initialState.history.length > 0) {
+      runtime.state.importState(initialState);
+    }
+
+    const onEvent = onEventOverride ?? this.#onEvent;
     const userTurn = { text: request.task, images: [] as any[] };
     let finalText = '';
     let usage: any = undefined;
@@ -144,13 +183,13 @@ export class ExecutionSubagentRunner {
 
     try {
       for await (const event of runtime.turns.start(userTurn, {
-        signal: request.signal,
+        signal,
         maxModelRetries: MAX_SUBAGENT_MODEL_RETRIES,
       })) {
         switch (event.type) {
           case 'tool_started':
             if (event.toolName) {
-              safeEmit(this.#logger, this.#onEvent, {
+              safeEmit(this.#logger, onEvent, {
                 type: 'subagent_tool_started',
                 agentId,
                 role: request.role,
@@ -161,7 +200,7 @@ export class ExecutionSubagentRunner {
             }
             break;
           case 'command_message':
-            safeEmit(this.#logger, this.#onEvent, {
+            safeEmit(this.#logger, onEvent, {
               type: 'subagent_command_message',
               agentId,
               role: request.role,
@@ -181,7 +220,7 @@ export class ExecutionSubagentRunner {
             subagentStatus = isAbortLike(event.message, event) ? 'cancelled' : 'failed';
             break;
           case 'retry':
-            safeEmit(this.#logger, this.#onEvent, {
+            safeEmit(this.#logger, onEvent, {
               type: 'retry',
               toolName: event.toolName,
               attempt: event.attempt,
@@ -205,6 +244,17 @@ export class ExecutionSubagentRunner {
         usage = normalizeAgentRunUsage(err?.state?.usage) ?? extractUsage(err);
       }
     } finally {
+      try {
+        const exported = runtime.state.exportState();
+        session.importState(exported as any);
+        const messageCap = this.#settings.get<number>('subagent.asyncMessageCap') ?? 50;
+        session.trimHistory(messageCap);
+      } catch (exportErr: any) {
+        this.#logger.debug('Failed to export async subagent session state', {
+          agentId,
+          error: exportErr?.message || String(exportErr),
+        });
+      }
       // Record usage to the budget on every terminal path
       if (childSlot && usage) {
         definition.executionBudget!.recordUsage(usage);

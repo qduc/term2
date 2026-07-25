@@ -115,6 +115,16 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.logging.logLevel.source,
     },
     {
+      key: SETTING_KEYS.SUBAGENT_ASYNC_SESSION_TTL_MS,
+      value: settings.subagent.asyncSessionTtlMs.value,
+      source: settings.subagent.asyncSessionTtlMs.source,
+    },
+    {
+      key: SETTING_KEYS.SUBAGENT_ASYNC_MESSAGE_CAP,
+      value: settings.subagent.asyncMessageCap.value,
+      source: settings.subagent.asyncMessageCap.source,
+    },
+    {
       key: SETTING_KEYS.MEMORY_ENABLED,
       value: settings.memory.enabled.value,
       source: settings.memory.enabled.source,

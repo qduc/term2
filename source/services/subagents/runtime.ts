@@ -6,9 +6,10 @@ import { SubagentToolPolicy, SubagentToolFactory } from './tool-policy.js';
 import { NestedSubagentRunner, type CachedRoleTool } from './nested-runner.js';
 import { ExecutionSubagentRunner } from './execution-runner.js';
 import { MentorRunner } from './mentor-runner.js';
-import type { SupportedSubagentRole, SubagentRequest, SubagentResult } from './types.js';
+import type { SupportedSubagentRole } from './types.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import { SubagentAsyncRegistry } from './subagent-async-registry.js';
+import { SubagentSession } from './subagent-session.js';
 import { loadRoleDefinition } from './role-loader.js';
 
 export interface SubagentRuntimeDeps {
@@ -72,41 +73,29 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     skillsService: deps.skillsService,
   });
 
+  const mentorSession = new SubagentSession('mentor', 'mentor');
   const mentorRunner = new MentorRunner({
     logger: deps.logger,
     settings: deps.settings,
     sessionContextService: deps.sessionContextService,
     executionContext: deps.executionContext,
     onEvent: deps.onEvent,
+    session: mentorSession,
   });
 
   const asyncRegistry = new SubagentAsyncRegistry({
     logger: deps.logger,
-    run: async ({
-      request,
-      runId,
-      signal,
-    }: {
-      request: SubagentRequest;
-      runId: string;
-      signal?: AbortSignal;
-    }): Promise<SubagentResult> => {
+    run: async ({ request, runId, session, signal }) => {
       if (request.role === 'mentor') {
-        // Async mentor runs are isolated: a fresh MentorRunner per run so the
-        // persistent sync mentor session is not shared.
-        const perRunMentor = new MentorRunner({
-          logger: deps.logger,
-          settings: deps.settings,
-          sessionContextService: deps.sessionContextService,
-          executionContext: deps.executionContext,
-          onEvent: deps.onEvent,
-        });
-        return perRunMentor.run(runId, request.task, signal);
+        return mentorRunner.runInSession(runId, request.task, signal, session);
       }
       const definition = loadRoleDefinition(request.role, deps.settings);
-      return executionRunner.run(runId, { ...request, signal }, definition);
+      return executionRunner.runInSession(runId, { ...request, signal }, definition, session);
     },
     onEvent: deps.onEvent,
+    ttlMs: deps.settings.get<number>('subagent.asyncSessionTtlMs') ?? 30 * 60 * 1000,
+    messageCap: deps.settings.get<number>('subagent.asyncMessageCap') ?? 50,
+    sessionForRole: (role) => (role === 'mentor' ? mentorSession : undefined),
   });
 
   return {

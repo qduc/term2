@@ -39,6 +39,10 @@ const baseSettings = {
   memory: {
     enabled: { value: true, source: 'default' },
   },
+  subagent: {
+    asyncSessionTtlMs: { value: 30 * 60 * 1000, source: 'default' },
+    asyncMessageCap: { value: 50, source: 'default' },
+  },
 } as unknown as SettingsWithSources;
 
 const createDeps = (

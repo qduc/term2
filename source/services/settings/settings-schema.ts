@@ -222,6 +222,21 @@ export const AgentWorkflowSettingsSchema = z.object({
   maxConsoleBytes: z.number().int().positive().default(16_384),
 });
 
+export const SubagentSettingsSchema = z.object({
+  asyncSessionTtlMs: z
+    .number()
+    .int()
+    .positive()
+    .default(30 * 60 * 1000)
+    .describe('How long completed async subagent sessions are retained in memory before eviction, in milliseconds'),
+  asyncMessageCap: z
+    .number()
+    .int()
+    .positive()
+    .default(50)
+    .describe('Maximum number of user turns to retain in a persisted async subagent session'),
+});
+
 export const UISettingsSchema = z.object({
   historySize: z.number().int().positive().default(1000),
   pasteThreshold: z
@@ -418,6 +433,7 @@ export const SettingsSchema = z.object({
   shell: ShellSettingsSchema.optional(),
   sandbox: SandboxSettingsSchema.optional(),
   agentWorkflow: AgentWorkflowSettingsSchema.optional().default(AgentWorkflowSettingsSchema.parse({})),
+  subagent: SubagentSettingsSchema.optional().default(SubagentSettingsSchema.parse({})),
   ui: UISettingsSchema.optional(),
   logging: LoggingSettingsSchema.optional(),
   environment: EnvironmentSettingsSchema.optional(),
@@ -438,6 +454,7 @@ export interface SettingsData {
   shell: z.infer<typeof ShellSettingsSchema>;
   sandbox: z.infer<typeof SandboxSettingsSchema>;
   agentWorkflow: z.infer<typeof AgentWorkflowSettingsSchema>;
+  subagent: z.infer<typeof SubagentSettingsSchema>;
   ui: z.infer<typeof UISettingsSchema>;
   logging: z.infer<typeof LoggingSettingsSchema>;
   environment: z.infer<typeof EnvironmentSettingsSchema>;
@@ -513,6 +530,10 @@ export interface SettingsWithSources {
     readPolicy: SettingWithSource<'standard' | 'strict'>;
     allowReadExtra: SettingWithSource<string[]>;
     dockerHostControlProjects: SettingWithSource<string[]>;
+  };
+  subagent: {
+    asyncSessionTtlMs: SettingWithSource<number>;
+    asyncMessageCap: SettingWithSource<number>;
   };
   ui: {
     historySize: SettingWithSource<number>;
@@ -631,6 +652,8 @@ export const SETTING_KEYS = {
   AGENT_SUBAGENT_LIBRARIAN_MODEL: 'agent.subagentLibrarianModel',
   AGENT_SUBAGENT_LIBRARIAN_PROVIDER: 'agent.subagentLibrarianProvider',
   AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT: 'agent.subagentLibrarianReasoningEffort',
+  SUBAGENT_ASYNC_SESSION_TTL_MS: 'subagent.asyncSessionTtlMs',
+  SUBAGENT_ASYNC_MESSAGE_CAP: 'subagent.asyncMessageCap',
   UI_HISTORY_SIZE: 'ui.historySize',
   UI_PASTE_THRESHOLD: 'ui.pasteThreshold',
   UI_DISPLAY_MODE: 'ui.displayMode',
@@ -733,6 +756,8 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_MODEL,
   SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT,
+  SETTING_KEYS.SUBAGENT_ASYNC_SESSION_TTL_MS,
+  SETTING_KEYS.SUBAGENT_ASYNC_MESSAGE_CAP,
   SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL,
   SETTING_KEYS.TOOLS_EDIT_HEALING_PROVIDER,
   SETTING_KEYS.WEB_SEARCH_PROVIDER,
@@ -856,6 +881,10 @@ export const DEFAULT_SETTINGS: SettingsData = {
     maxCodeBytes: 16_384,
     maxOutputBytes: 65_536,
     maxConsoleBytes: 16_384,
+  },
+  subagent: {
+    asyncSessionTtlMs: 30 * 60 * 1000,
+    asyncMessageCap: 50,
   },
   ui: {
     historySize: 1000,

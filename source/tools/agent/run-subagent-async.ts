@@ -10,13 +10,15 @@ import {
 import type { SubagentResult, SubagentRunHandle } from '../../services/subagents/types.js';
 import { isAbortLike } from '../../services/subagents/utils.js';
 
-const ASYNC_ROLES = ['explorer', 'researcher', 'mentor'] as const;
+const ASYNC_ROLES = ['explorer', 'worker', 'researcher', 'mentor', 'librarian'] as const;
 
 const runSubagentAsyncSchema = z.object({
-  role: z
-    .enum(ASYNC_ROLES)
-    .describe('The subagent role to use: "explorer", "researcher", or "mentor" (Phase 1 async roles).'),
+  role: z.enum(ASYNC_ROLES).describe('The subagent role to use: explorer, worker, researcher, mentor, or librarian.'),
   task: z.string().describe('The full task description.'),
+  continue_run_id: z
+    .string()
+    .optional()
+    .describe('Continue a completed run using its runId. Required for explicit session reuse.'),
 });
 
 const getSubagentResultSchema = z.object({
@@ -167,8 +169,8 @@ export function createRunSubagentAsyncToolDefinition(
     description:
       'Start a subagent that runs asynchronously in the background and returns a runId immediately. ' +
       'Use this when you want to launch a subagent and continue with other work before retrieving the result. ' +
-      'Phase 1 supports only explorer, researcher, and mentor. ' +
-      'The run is tied to the current parent turn and will be cancelled if the parent turn ends. ' +
+      'Fresh runs support explorer, worker, researcher, mentor, and librarian. ' +
+      'Only completed non-worker runs can be continued across turns; worker continuation is blocked. ' +
       'Call get_subagent_result with the returned runId to retrieve the final SubagentResult.',
     parameters: runSubagentAsyncSchema,
     needsApproval: () => false,

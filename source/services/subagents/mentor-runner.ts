@@ -25,19 +25,39 @@ export class MentorRunner {
     sessionContextService: ISessionContextService;
     executionContext?: ExecutionContext;
     onEvent?: (event: ConversationEvent) => void;
+    session?: SubagentSession;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
     this.#sessionContextService = deps.sessionContextService;
     this.#executionContext = deps.executionContext;
-    this.#mentorSession = new SubagentSession(randomUUID(), 'mentor');
+    this.#mentorSession = deps.session ?? new SubagentSession(randomUUID(), 'mentor');
   }
 
   reset(): void {
     this.#mentorSession.reset();
   }
 
-  async run(agentId: string, task: string, signal?: AbortSignal): Promise<SubagentResult> {
+  async run(agentId: string, task: string, signal?: AbortSignal, session?: SubagentSession): Promise<SubagentResult> {
+    const previousSession = this.#mentorSession;
+    if (session) this.#mentorSession = session;
+    try {
+      return await this.#runWithSession(agentId, task, signal);
+    } finally {
+      if (session) this.#mentorSession = previousSession;
+    }
+  }
+
+  async runInSession(
+    agentId: string,
+    task: string,
+    signal: AbortSignal | undefined,
+    session: SubagentSession,
+  ): Promise<SubagentResult> {
+    return this.run(agentId, task, signal, session);
+  }
+
+  async #runWithSession(agentId: string, task: string, signal?: AbortSignal): Promise<SubagentResult> {
     const definition = loadRoleDefinition('mentor', this.#settings);
     const mentorModel = definition.model;
     const mentorProvider = definition.provider;

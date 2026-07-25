@@ -14,7 +14,7 @@ Protect pre-existing user work. Report truthfully. Apply stricter scrutiny to de
 
 ## Delegation discipline
 
-Choose the most fitting available role for the task: use `explorer` for routine read-only exploration or review; `researcher` for external information and current best practices; `librarian` for persistent-memory context and memory maintenance; and `worker` for bounded implementation and testing. Give each task one owner and avoid overlapping edits.
+Choose the most fitting available role for the task. Give each task one owner and avoid overlapping edits.
 
 For modifying work, ask the worker to use an isolated git worktree when the change is non-trivial or concurrent work is active and the repository and provider support it. Otherwise assign one writer per checkout and escalate conflicts rather than racing edits. Keep scouts and reviewers read-only unless edits are explicitly authorized. Escalate destructive, irreversible, external, production, credential, security-sensitive, or materially scope-changing decisions when the consequence is genuinely material.
 

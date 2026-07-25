@@ -31,6 +31,7 @@ export class SubagentBridge {
   #subagentEventSink: ((event: ConversationEvent) => void) | null = null;
   #activeSubagentsCount = 0;
   #pendingClearSink = false;
+  #bufferedEvents: ConversationEvent[] = [];
   #logger: ILoggingService;
   #abortController = new AbortController();
 
@@ -46,7 +47,7 @@ export class SubagentBridge {
         settings: deps.settings,
         executionContext: deps.executionContext,
         sessionContextService: deps.sessionContextService,
-        onEvent: (event) => this.#subagentEventSink?.(event),
+        onEvent: (event) => this.#emitEvent(event),
         agentClient: { chat: (message, options) => deps.chat(message, options) },
         createClient: deps.createClient,
         skillsService: deps.skillsService,
@@ -55,12 +56,17 @@ export class SubagentBridge {
   }
 
   setEventSink(sink: ((event: ConversationEvent) => void) | null): void {
-    if (sink === null && this.#activeSubagentsCount > 0) {
-      this.#pendingClearSink = true;
-    } else {
-      this.#subagentEventSink = sink;
-      this.#pendingClearSink = false;
+    this.#subagentEventSink = sink;
+    this.#pendingClearSink = false;
+    if (sink) {
+      const buffered = this.#bufferedEvents.splice(0);
+      for (const event of buffered) sink(event);
     }
+  }
+
+  #emitEvent(event: ConversationEvent): void {
+    if (this.#subagentEventSink) this.#subagentEventSink(event);
+    else this.#bufferedEvents.push(event);
   }
 
   /**
@@ -192,28 +198,23 @@ export class SubagentBridge {
   };
 
   runSubagentAsync = async (
-    params: { role: string; task: string },
+    params: { role: string; task: string; continue_run_id?: string },
     _context?: unknown,
     details?: unknown,
   ): Promise<SubagentRunHandle> => {
     if (!this.#subagentManager) {
       throw new Error('Transient agent clients cannot spawn subagents.');
     }
-    const detailsRecord = details as { signal?: AbortSignal; toolCall?: { callId?: string } } | undefined;
-    const parentSignal = detailsRecord?.signal ?? this.signal;
+    const detailsRecord = details as { toolCall?: { callId?: string } } | undefined;
     const request = {
-      ...params,
+      role: params.role,
+      task: params.task,
+      ...(params.continue_run_id ? { continueRunId: params.continue_run_id } : {}),
       parentTool: 'run_subagent_async',
-      signal: parentSignal,
     };
 
     return this.#withSubagentTrafficContext(detailsRecord?.toolCall?.callId, () => {
       const handle = this.#subagentManager!.startRunAsync(request);
-
-      // Keep the subagent event sink alive for the duration of the async run,
-      // even after run_subagent_async returns its handle.
-      const endRun = this.#beginSubagentRun();
-      handle.completed.then(() => endRun()).catch(() => endRun());
 
       return handle;
     });
@@ -231,11 +232,16 @@ export class SubagentBridge {
     return this.#subagentManager.getRunResult(params.runId, detailsRecord?.signal);
   };
 
-  /**
-   * Cancel all running asynchronous subagent runs. Phase 1 async runs are
-   * tied to a single parent turn; this is called when the turn ends.
-   */
+  abortAsyncRun = (runId: string): void => {
+    this.#subagentManager?.abortAsyncRun(runId);
+  };
+
+  resetAsyncRuns = (): void => {
+    this.#subagentManager?.resetAsyncRuns();
+  };
+
+  /** @deprecated Ordinary turns do not cancel async runs. */
   cancelAsyncRuns = (): void => {
-    this.#subagentManager?.cancelAllAsyncRuns();
+    // Kept for callers compiled against the Phase 1 bridge.
   };
 }

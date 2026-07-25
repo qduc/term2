@@ -287,6 +287,24 @@ export class ConversationStore {
   }
 
   /**
+   * Remove the oldest genuine user turns so that at most `maxUserTurns` remain,
+   * keeping all items from the first retained turn onward. This preserves a
+   * valid provider-facing transcript that starts at a user turn.
+   */
+  trimUserTurns(maxUserTurns: number): void {
+    if (maxUserTurns <= 0) {
+      this.#history = [];
+      return;
+    }
+    const turns = this.listUserTurns();
+    if (turns.length <= maxUserTurns) {
+      return;
+    }
+    const keepIndex = turns[turns.length - maxUserTurns]!.index;
+    this.#history = this.#history.slice(keepIndex);
+  }
+
+  /**
    * Remove the last genuine user turn and everything after it.
    * Skips shell-context items (identified by SHELL_CONTEXT_PREFIX).
    * Used by /undo to rewind to before the last user turn.

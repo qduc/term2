@@ -1,6 +1,5 @@
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
-import type { SubagentSession } from './subagent-session.js';
 
 export const SUBAGENT_ROLES = ['explorer', 'worker', 'researcher', 'mentor', 'librarian'] as const;
 export const PHASE_1_ASYNC_SUBAGENT_ROLES = ['explorer', 'researcher', 'mentor'] as const;
@@ -19,6 +18,8 @@ export interface SubagentRequest {
   parentTool?: string;
   /** Execution-tree budget for tracking aggregate resource usage. */
   executionBudget?: ExecutionBudget;
+  /** Continue a completed async session. */
+  continueRunId?: string;
 }
 
 export interface SubagentDefinition {
@@ -89,11 +90,12 @@ export interface SubagentResult {
 export interface SubagentRunHandle {
   runId: string;
   role: string;
-  task: string;
   status: 'running' | 'completed' | 'failed' | 'cancelled';
-  session: SubagentSession;
-  result?: SubagentResult;
-  error?: string;
-  abortController: AbortController;
-  completed: Promise<SubagentResult>;
+  task: string;
+  /** @deprecated Internal state is intentionally not present at runtime. */
+  readonly session?: any;
+  readonly result?: SubagentResult;
+  readonly error?: string;
+  readonly abortController: AbortController;
+  readonly completed?: Promise<SubagentResult>;
 }

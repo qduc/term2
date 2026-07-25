@@ -1,5 +1,6 @@
-import type { Agent, Runner } from '@openai/agents';
+import type { Agent, Runner, AgentInputItem } from '@openai/agents';
 import { ConversationStore } from '../conversation/conversation-store.js';
+import type { SavedToolExecution } from '../tool-execution-ledger.js';
 
 /**
  * General-purpose subagent session. Replaces the private MentorSession shape.
@@ -7,6 +8,12 @@ import { ConversationStore } from '../conversation/conversation-store.js';
  * For persistent sessions (e.g. mentor): reuse across calls, track store and previousResponseId.
  * For one-shot runs (e.g. run_subagent): create a new session per call, discard after.
  */
+export type SubagentSessionState = {
+  history: AgentInputItem[];
+  previousResponseId: string | null;
+  toolLedger: SavedToolExecution[];
+};
+
 export class SubagentSession {
   readonly id: string;
   readonly role: string;
@@ -15,6 +22,7 @@ export class SubagentSession {
   #agent: Agent | null = null;
   #store: ConversationStore | null = null;
   #previousResponseId: string | null = null;
+  #toolLedger: SavedToolExecution[] = [];
 
   constructor(id: string, role: string) {
     this.id = id;
@@ -42,10 +50,39 @@ export class SubagentSession {
       this.#store.clear();
     }
     this.#previousResponseId = null;
+    this.#toolLedger = [];
     this.#store = null;
     this.#runner = null;
     this.#provider = null;
     this.#agent = null;
+  }
+
+  exportState(): SubagentSessionState {
+    return {
+      history: this.#store?.getHistory() ?? [],
+      previousResponseId: this.#previousResponseId,
+      toolLedger: [...this.#toolLedger],
+    };
+  }
+
+  importState(state: SubagentSessionState): void {
+    this.#store?.clear();
+    if (!this.#store) {
+      this.#store = new ConversationStore();
+    }
+    for (const item of state.history ?? []) {
+      this.#store.addImportedItem(item);
+    }
+    this.#previousResponseId = state.previousResponseId ?? null;
+    this.#toolLedger = state.toolLedger ? [...state.toolLedger] : [];
+  }
+
+  getUserTurnCount(): number {
+    return this.#store?.listUserTurns().length ?? 0;
+  }
+
+  trimHistory(maxUserTurns: number): void {
+    this.#store?.trimUserTurns(maxUserTurns);
   }
 
   switchProvider(provider: string): void {
@@ -96,5 +133,9 @@ export class SubagentSession {
     if (result.responseId) {
       this.#previousResponseId = result.responseId;
     }
+  }
+
+  setToolLedger(toolLedger: SavedToolExecution[]): void {
+    this.#toolLedger = [...toolLedger];
   }
 }

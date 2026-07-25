@@ -270,6 +270,8 @@ const CommandMessage: FC<Props> = ({
       </Box>
     ) : null;
 
+  const autoApprovalLabel = autoApprovedByLlm ? <Text color={COLOR_MUTED}>(Auto approved by LLM)</Text> : null;
+
   if (!isVisible && !isSubagent) {
     return null;
   }
@@ -391,6 +393,7 @@ const CommandMessage: FC<Props> = ({
           {changeStatsElement}
         </Text>
         {matchCountElement}
+        {autoApprovalLabel}
       </Box>
     );
   }
@@ -659,7 +662,7 @@ const CommandMessage: FC<Props> = ({
       {renderStandardHeader()}
       {failureReason && <Text color={COLOR_ERROR}>Error: {failureReason}</Text>}
       <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
-      {autoApprovedByLlm && <Text color={COLOR_MUTED}>(Auto approved by LLM)</Text>}
+      {autoApprovalLabel}
     </Box>
   );
 };

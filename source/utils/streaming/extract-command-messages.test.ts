@@ -84,7 +84,7 @@ it('extracts failure reason from shell command outcome', () => {
 it('marks a shell command auto-approved by the LLM', () => {
   markToolCallAsLlmAutoApproved('call-auto-approved');
 
-  const messages = extractCommandMessages([
+  const items = [
     {
       type: 'function_call',
       id: 'call-auto-approved',
@@ -100,10 +100,13 @@ it('marks a shell command auto-approved by the LLM', () => {
         callId: 'call-auto-approved',
       },
     },
-  ]);
+  ];
+
+  const messages = extractCommandMessages(items);
 
   expect(messages).toHaveLength(1);
   expect(messages[0]?.autoApprovedByLlm).toBe(true);
+  expect(extractCommandMessages(items)[0]?.autoApprovedByLlm).toBeUndefined();
 });
 
 it('extracts shell command from matching function_call item', () => {

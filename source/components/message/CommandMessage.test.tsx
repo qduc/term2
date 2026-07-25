@@ -475,6 +475,22 @@ it('CommandMessage notes LLM auto-approval below shell output', async () => {
   expect(output.indexOf('(Auto approved by LLM)')).toBeGreaterThan(output.lastIndexOf('hi'));
 });
 
+it('CommandMessage notes LLM auto-approval in concise mode', async () => {
+  const { lastFrame } = await renderInAct(
+    <CommandMessage
+      command="echo hi"
+      toolName="shell"
+      displayMode="concise"
+      status="completed"
+      success={true}
+      output="hi"
+      autoApprovedByLlm={true}
+    />,
+  );
+
+  expect(toVisibleText(lastFrame() ?? '')).toContain('(Auto approved by LLM)');
+});
+
 it('CommandMessage does not truncate output and shows all lines when output is exactly 4 lines', async () => {
   const props = {
     command: 'shell: echo',

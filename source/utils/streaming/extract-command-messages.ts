@@ -39,9 +39,13 @@ const isApprovalRejectionForItem = (item: ToolResultItem | null | undefined): bo
   return approvalRejectionCallIds.has(callId);
 };
 
-const isLlmAutoApprovalForItem = (item: ToolResultItem | null | undefined): boolean => {
+const consumeLlmAutoApprovalForItem = (item: ToolResultItem | null | undefined): boolean => {
   const callId = getCallIdFromItem(item);
-  return Boolean(callId && llmAutoApprovalCallIds.has(callId));
+  if (!callId || !llmAutoApprovalCallIds.has(callId)) {
+    return false;
+  }
+  llmAutoApprovalCallIds.delete(callId);
+  return true;
 };
 
 const normalizeToolItem = (
@@ -121,7 +125,7 @@ export const extractCommandMessages = (items: readonly unknown[] = []): CommandM
     }
 
     const isApprovalRejection = isApprovalRejectionForItem(item);
-    const autoApprovedByLlm = isLlmAutoApprovalForItem(item);
+    const autoApprovedByLlm = consumeLlmAutoApprovalForItem(item);
 
     const formatter = getToolFormatter(normalizedItem.toolName);
     if (formatter) {

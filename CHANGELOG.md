@@ -1,3 +1,30 @@
+## [0.10.0] - 2026-07-25
+
+### Features
+- Add a persistent memory system with a dedicated librarian subagent for storing, retrieving, and consulting memories across global and project scopes
+- Add message queueing: send follow-up messages while the agent is working, with up-arrow cancellation for queued messages
+- Add Docker host control capability for sandboxed commands, with explicit approval grants and sandboxed tmux socket access
+- Automatically detect and stop runaway/repetitive model responses
+- Allow file modifications while in lite mode
+- Add "Allow this folder for this session" option to outside-workspace file read approval prompts
+- Add model tier settings with fallback chains for ancillary models
+- Add skill activation support for subagents
+
+### Bug Fixes
+- Fix Codex WebSocket reliability: recover from stalled responses, fix warmup path, and prevent session history from growing unbounded
+- Fix stale tool call continuation recovery after interrupted turns
+- Fix approval outputs not recovering correctly after continuation
+- Fix duplicate user messages appearing in the UI
+- Fix Escape key closing menus from unintentionally stopping the agent
+- Fix shell command timeout not pausing during network approval prompts
+- Fix built CLI not marked as executable
+
+### Improvements
+- Improve usage and cost tracking accuracy
+- Improve subagent task delegation guidance
+
+---
+
 ## [0.9.4] - 2026-07-08
 
 ### Improvements

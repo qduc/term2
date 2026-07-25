@@ -4,7 +4,10 @@ import { getSubagentsRolesSection } from '../tools/agent/run-subagent.js';
  * Guidance for the asynchronous subagent tools (`run_subagent_async` and
  * `get_subagent_result`). Injected when both tools are available.
  */
-export function getAsyncSubagentDelegationAddendum({ memoryEnabled = true }: { memoryEnabled?: boolean } = {}): string {
+export function getAsyncSubagentDelegationAddendum({
+  memoryEnabled = true,
+  orchestratorMode = false,
+}: { memoryEnabled?: boolean; orchestratorMode?: boolean } = {}): string {
   const header = `### Asynchronous subagents
 
 You have two tools for running subagents in the background:
@@ -25,7 +28,13 @@ Use these when you want to start a background investigation and continue with ot
   const triggers = `**When to use async subagents:**
 - A codebase exploration or web research task can run in parallel with other reasoning.
 - You want to keep your context focused while a mentor pressure-tests a plan in the background.
-- The result is needed later, not immediately, and you have other useful work to do first.`;
+- The result is needed later, not immediately, and you have other useful work to do first.${
+    orchestratorMode
+      ? `
+
+In Orchestrator mode, use \`run_subagent_async\` by default for delegable work and return control after receiving the run handle. Use \`run_subagent\` only when the result is truly needed immediately; explicitly justify why the foreground wait is necessary.`
+      : ''
+  }`;
 
   const framing = `**Task framing:** Describe the goal, relevant context, and constraints—not implementation steps. Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root \`AGENTS.md\`, or skills catalog.`;
 

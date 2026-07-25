@@ -73,7 +73,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   }
 
   if (runSubagentAsyncEnabled && !liteMode) {
-    inlineSections.push(getAsyncSubagentDelegationAddendum({ memoryEnabled }));
+    inlineSections.push(getAsyncSubagentDelegationAddendum({ memoryEnabled, orchestratorMode }));
   }
 
   if (isRegularMode && isAgentMode) {

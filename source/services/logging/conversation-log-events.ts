@@ -127,6 +127,7 @@ export interface SubagentStartedLogEvent {
   agentId: string;
   role: string;
   task: string;
+  async?: boolean;
 }
 
 export interface SubagentToolStartedLogEvent {

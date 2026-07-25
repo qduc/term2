@@ -116,6 +116,7 @@ export class ConversationLogger {
           agentId: event.agentId,
           role: event.role,
           task: event.task,
+          async: event.async,
         });
         return;
       case 'subagent_tool_started':

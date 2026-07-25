@@ -203,6 +203,7 @@ it('removeLastQueuedItem returns null when there is no queue', async () => {
 
 it('removeLastQueuedItem returns the text of the most recently queued item', async () => {
   const turnFlow = {
+    // eslint-disable-next-line require-yield
     async *start() {
       // Never resolves so the queued items stay in the queue and don't fire.
       await new Promise(() => {});

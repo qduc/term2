@@ -145,7 +145,6 @@ export async function executeShellCommand(
       let timeoutId: NodeJS.Timeout | undefined;
       let timeoutStartedAt: number | undefined;
       let remainingTimeoutMs = timeout ?? 0;
-      let child: ChildProcess;
       let paused = false;
       let settled = false;
 
@@ -178,7 +177,7 @@ export async function executeShellCommand(
         clearCommandTimeout();
       };
 
-      child = execImpl(
+      const child = execImpl(
         command,
         {
           cwd,

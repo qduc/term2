@@ -93,6 +93,7 @@ it('does not auto-approve an explicit Docker host-control request', async () => 
       recordPendingApproval: () => {},
       applyNextPlan: async function* () {
         appliedPlan = true;
+        yield;
       },
     } as any,
     shellAutoApproval: { resolveAdvisoryForInterruption: async () => ({ approved: true }) } as any,

@@ -260,7 +260,9 @@ const ApprovalPrompt: FC<Props> = ({
     if (approval.toolName !== 'shell') return false;
     try {
       if ((JSON.parse(approval.argumentsText) as ShellApprovalArgs)?.docker_host_control === true) return true;
-    } catch {}
+    } catch {
+      // Ignore JSON parsing errors
+    }
     try {
       const args = (approval.rawInterruption as Record<string, any> | undefined)?.arguments;
       const parsed = typeof args === 'string' ? JSON.parse(args) : args;

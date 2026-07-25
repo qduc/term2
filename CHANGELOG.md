@@ -1,3 +1,15 @@
+## [0.10.1] - 2026-07-25
+
+### Features
+- Added labels for LLM auto-approved commands.
+
+### Bug Fixes
+- Fixed Codex rate limit window formatting.
+- Fixed Docker host-control approval detection in sandboxed runs.
+
+### Improvements
+- No additional improvements.
+
 ## [0.10.0] - 2026-07-25
 
 ### Features

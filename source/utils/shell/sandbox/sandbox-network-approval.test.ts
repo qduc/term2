@@ -1,11 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
 import {
   registerSandboxNetworkApprovalHandler,
   registerSandboxNetworkApprovalPauseController,
   requestSandboxNetworkApproval,
 } from './sandbox-network-approval.js';
+import { resetSandboxNetworkStoreForTest, isHostAllowed } from './sandbox-network-store.js';
 
 describe('sandbox-network-approval', () => {
+  beforeEach(() => {
+    resetSandboxNetworkStoreForTest();
+    registerSandboxNetworkApprovalHandler(null);
+  });
+
   it('returns false when no handler is registered', async () => {
     registerSandboxNetworkApprovalHandler(null);
 
@@ -21,6 +27,32 @@ describe('sandbox-network-approval', () => {
 
     await expect(requestSandboxNetworkApproval({ host: 'example.com', port: 443 })).resolves.toBe(true);
     await expect(requestSandboxNetworkApproval({ host: 'example.com', port: 80 })).resolves.toBe(false);
+
+    unregister();
+  });
+
+  it('supports allow-session decision and remembers host for subsequent requests', async () => {
+    let callCount = 0;
+    const unregister = registerSandboxNetworkApprovalHandler(async () => {
+      callCount++;
+      return 'allow-session';
+    });
+
+    await expect(requestSandboxNetworkApproval({ host: 'session.com', port: 443 })).resolves.toBe(true);
+    expect(callCount).toBe(1);
+
+    // Second request to same host auto-approves without invoking handler
+    await expect(requestSandboxNetworkApproval({ host: 'session.com', port: 443 })).resolves.toBe(true);
+    expect(callCount).toBe(1);
+
+    unregister();
+  });
+
+  it('supports allow-project decision and saves host to store', async () => {
+    const unregister = registerSandboxNetworkApprovalHandler(async () => 'allow-project');
+
+    await expect(requestSandboxNetworkApproval({ host: 'project.com', port: 8080 })).resolves.toBe(true);
+    expect(isHostAllowed('project.com', 8080)).toBe(true);
 
     unregister();
   });

@@ -613,3 +613,72 @@ it.sequential('ApprovalPrompt dynamically updates description on navigation', as
   expect((lastFrame() ?? '').includes('Optimizes for speed')).toBe(false);
   expect((lastFrame() ?? '').includes('Type a custom write-in response.')).toBe(true);
 });
+
+it.sequential('ApprovalPrompt renders network access approval menu options', async () => {
+  const approval: ApprovalDescriptor = {
+    agentName: 'Sandbox',
+    toolName: 'sandbox_network_access',
+    argumentsText: 'Allow network access to api.example.com:443?',
+  };
+  const { lastFrame } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} />,
+  );
+  const frame = lastFrame() ?? '';
+  expect(frame).toContain('Allow host for this session');
+  expect(frame).toContain('Always allow host for this project');
+});
+
+it.sequential('ApprovalPrompt sends allow-session for network access approval', async () => {
+  let answer: string | undefined;
+  const approval: ApprovalDescriptor = {
+    agentName: 'Sandbox',
+    toolName: 'sandbox_network_access',
+    argumentsText: 'Allow network access to api.example.com:443?',
+  };
+  const { stdin } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
+  );
+  // Navigate to 'Allow host for this session' (index 2: Deny [0], Allow once [1], Allow host for this session [2])
+  await writeInput(stdin, '\u001B[B');
+  await writeInput(stdin, '\u001B[B');
+  await writeInput(stdin, '\r');
+  expect(answer).toBe('allow-session');
+});
+
+it.sequential('ApprovalPrompt sends allow-project for network access approval', async () => {
+  let answer: string | undefined;
+  const approval: ApprovalDescriptor = {
+    agentName: 'Sandbox',
+    toolName: 'sandbox_network_access',
+    argumentsText: 'Allow network access to api.example.com:443?',
+  };
+  const { stdin } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
+  );
+  // Navigate to 'Always allow host for this project' (index 3)
+  for (let idx = 0; idx < 3; idx++) await writeInput(stdin, '\u001B[B');
+  await writeInput(stdin, '\r');
+  expect(answer).toBe('allow-project');
+});
+
+it.sequential('ApprovalPrompt handles y and n shortcut keys for network access approval', async () => {
+  let answer: string | undefined;
+  let rejected = false;
+  const approval: ApprovalDescriptor = {
+    agentName: 'Sandbox',
+    toolName: 'sandbox_network_access',
+    argumentsText: 'Allow network access to api.example.com:443?',
+  };
+
+  const { stdin: stdinY } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
+  );
+  await writeInput(stdinY, 'y');
+  expect(answer).toBe('allow-once');
+
+  const { stdin: stdinN } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => (rejected = true)} />,
+  );
+  await writeInput(stdinN, 'n');
+  expect(rejected).toBe(true);
+});

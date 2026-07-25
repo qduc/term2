@@ -1,9 +1,13 @@
+import { addAllowedHost, isHostAllowed } from './sandbox-network-store.js';
+
 export type SandboxNetworkAccessRequest = {
   host: string;
   port?: number;
 };
 
-type SandboxNetworkApprovalHandler = (request: SandboxNetworkAccessRequest) => Promise<boolean>;
+export type NetworkApprovalAnswer = 'deny' | 'allow-once' | 'allow-session' | 'allow-project' | boolean;
+
+type SandboxNetworkApprovalHandler = (request: SandboxNetworkAccessRequest) => Promise<NetworkApprovalAnswer>;
 
 type SandboxNetworkApprovalPauseController = {
   pause: () => void | Promise<void>;
@@ -50,13 +54,29 @@ async function resumeActiveSandboxedCommand(): Promise<void> {
 }
 
 export async function requestSandboxNetworkApproval(request: SandboxNetworkAccessRequest): Promise<boolean> {
+  if (isHostAllowed(request.host, request.port)) {
+    return true;
+  }
+
   if (!activeHandler) {
     return false;
   }
 
   await pauseActiveSandboxedCommand();
   try {
-    return await activeHandler(request);
+    const answer = await activeHandler(request);
+    if (answer === true || answer === 'allow-once') {
+      return true;
+    }
+    if (answer === 'allow-session') {
+      addAllowedHost(request.host, request.port, 'session');
+      return true;
+    }
+    if (answer === 'allow-project') {
+      addAllowedHost(request.host, request.port, 'project');
+      return true;
+    }
+    return false;
   } catch {
     return false;
   } finally {

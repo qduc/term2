@@ -273,6 +273,7 @@ const ApprovalPrompt: FC<Props> = ({
     }
   }, [approval.argumentsText, approval.rawInterruption, approval.toolName]);
 
+  const isSandboxNetworkApproval = approval.toolName === 'sandbox_network_access';
   const deniedRead = approval.deniedRead;
   const isDeniedReadShell = !!deniedRead;
   const isReadFileApproval = approval.toolName === 'read_file';
@@ -290,6 +291,9 @@ const ApprovalPrompt: FC<Props> = ({
   const askUserMenuItems = React.useMemo(() => {
     if (isDockerHostControlApproval) {
       return ['Deny', 'Allow this command', 'Allow for this session', 'Always allow for this project'];
+    }
+    if (isSandboxNetworkApproval) {
+      return ['Deny', 'Allow once', 'Allow host for this session', 'Always allow host for this project'];
     }
     if (!isAskUser && !isDeniedReadShell) {
       return isReadFileApproval ? ['Approve', 'Allow this folder for this session', 'Reject'] : ['Approve', 'Reject'];
@@ -318,6 +322,7 @@ const ApprovalPrompt: FC<Props> = ({
     isDeniedReadShell,
     isReadFileApproval,
     isDockerHostControlApproval,
+    isSandboxNetworkApproval,
   ]);
 
   // reset selection when question/approval changes; cannot derive user-controlled arrow-key state from props
@@ -363,6 +368,14 @@ const ApprovalPrompt: FC<Props> = ({
         else if (selected === 'Allow this command') onApprove('docker-allow-once');
         else if (selected === 'Allow for this session') onApprove('docker-allow-session');
         else if (selected === 'Always allow for this project') onApprove('docker-allow-project');
+        return;
+      }
+      if (isSandboxNetworkApproval) {
+        const selected = askUserMenuItems[selectedIndex];
+        if (selected === 'Deny') onReject();
+        else if (selected === 'Allow once') onApprove('allow-once');
+        else if (selected === 'Allow host for this session') onApprove('allow-session');
+        else if (selected === 'Always allow host for this project') onApprove('allow-project');
         return;
       }
       if (isDeniedReadShell) {
@@ -419,7 +432,14 @@ const ApprovalPrompt: FC<Props> = ({
       }
     }
 
-    if (!isAskUser && !isDeniedReadShell && !isDockerHostControlApproval) {
+    if (isSandboxNetworkApproval) {
+      if (input === 'y') {
+        onApprove('allow-once');
+      }
+      if (input === 'n') {
+        onReject();
+      }
+    } else if (!isAskUser && !isDeniedReadShell && !isDockerHostControlApproval) {
       if (input === 'y') {
         onApprove();
       }

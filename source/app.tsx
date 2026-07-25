@@ -107,11 +107,11 @@ const App: FC<AppProps> = ({
   const pendingSkillRef = useRef<SkillInfo | null>(null);
   const [sandboxPromptRequest, setSandboxPromptRequest] = useState<SandboxNetworkAccessRequest | null>(null);
   const sandboxPromptQueueRef = useRef<
-    Array<{ request: SandboxNetworkAccessRequest; resolve: (allow: boolean) => void }>
+    Array<{ request: SandboxNetworkAccessRequest; resolve: (answer: NetworkApprovalAnswer) => void }>
   >([]);
   const activeSandboxPromptRef = useRef<{
     request: SandboxNetworkAccessRequest;
-    resolve: (allow: boolean) => void;
+    resolve: (answer: NetworkApprovalAnswer) => void;
   } | null>(null);
 
   const notifier = useTerminalFocusNotifier({ stdout, settingsService, loggingService });
@@ -129,12 +129,12 @@ const App: FC<AppProps> = ({
   }, []);
 
   const resolveSandboxPrompt = useCallback(
-    (allow: boolean) => {
+    (answer: NetworkApprovalAnswer) => {
       const active = activeSandboxPromptRef.current;
       if (!active) {
         return;
       }
-      active.resolve(allow);
+      active.resolve(answer);
       activeSandboxPromptRef.current = null;
       setSandboxPromptRequest(null);
       showNextSandboxPrompt();
@@ -144,7 +144,7 @@ const App: FC<AppProps> = ({
 
   useEffect(() => {
     const unregister = registerSandboxNetworkApprovalHandler(async (request) => {
-      return await new Promise<boolean>((resolve) => {
+      return await new Promise<NetworkApprovalAnswer>((resolve) => {
         sandboxPromptQueueRef.current.push({ request, resolve });
         showNextSandboxPrompt();
       });
@@ -154,13 +154,11 @@ const App: FC<AppProps> = ({
       unregister();
       const active = activeSandboxPromptRef.current;
       if (active) {
-        active.resolve(false);
+        active.resolve('deny');
+        activeSandboxPromptRef.current = null;
       }
-      activeSandboxPromptRef.current = null;
-      setSandboxPromptRequest(null);
-
-      for (const queued of sandboxPromptQueueRef.current) {
-        queued.resolve(false);
+      for (const item of sandboxPromptQueueRef.current) {
+        item.resolve('deny');
       }
       sandboxPromptQueueRef.current = [];
     };
@@ -371,7 +369,7 @@ const App: FC<AppProps> = ({
   const handleApprove = useCallback(
     async (answer?: string) => {
       if (sandboxPromptRequest) {
-        resolveSandboxPrompt(true);
+        resolveSandboxPrompt((answer as NetworkApprovalAnswer) ?? 'allow-once');
         return;
       }
       await submitApprovalDecision(answer);
@@ -381,7 +379,7 @@ const App: FC<AppProps> = ({
 
   const handleReject = useCallback(() => {
     if (sandboxPromptRequest) {
-      resolveSandboxPrompt(false);
+      resolveSandboxPrompt('deny');
       return;
     }
     setWaitingForRejectionReason(true);

@@ -28,5 +28,6 @@ Thumbs.db
 
 # Cache
 .cache/
+.term2/
 eval/auto-approval/reports/
 eval/auto-approval/models.yaml

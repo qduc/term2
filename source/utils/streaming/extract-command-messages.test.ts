@@ -1,5 +1,10 @@
 import { it, expect, beforeEach, afterEach } from 'vitest';
-import { clearApprovalRejectionMarkers, extractCommandMessages } from './extract-command-messages.js';
+import {
+  clearApprovalRejectionMarkers,
+  clearLlmAutoApprovalMarkers,
+  extractCommandMessages,
+  markToolCallAsLlmAutoApproved,
+} from './extract-command-messages.js';
 import { clearToolFormatters, registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { formatApplyPatchCommandMessage } from '../../tools/file/apply-patch.js';
 import { formatAskMentorCommandMessage } from '../../tools/agent/ask-mentor.js';
@@ -21,6 +26,7 @@ const withStubbedNow = (value: number) => {
 
 beforeEach(() => {
   clearApprovalRejectionMarkers();
+  clearLlmAutoApprovalMarkers();
   clearToolFormatters();
   registerToolFormatters([
     { name: 'apply_patch', formatCommandMessage: formatApplyPatchCommandMessage },
@@ -35,6 +41,7 @@ beforeEach(() => {
 
 afterEach(() => {
   clearApprovalRejectionMarkers();
+  clearLlmAutoApprovalMarkers();
   clearToolFormatters();
 });
 
@@ -72,6 +79,31 @@ it('extracts failure reason from shell command outcome', () => {
   } finally {
     restore();
   }
+});
+
+it('marks a shell command auto-approved by the LLM', () => {
+  markToolCallAsLlmAutoApproved('call-auto-approved');
+
+  const messages = extractCommandMessages([
+    {
+      type: 'function_call',
+      id: 'call-auto-approved',
+      name: 'shell',
+      arguments: JSON.stringify({ command: 'echo hi' }),
+    },
+    {
+      type: 'tool_call_output_item',
+      output: 'exit 0\nhi',
+      rawItem: {
+        type: 'function_call_result',
+        name: 'shell',
+        callId: 'call-auto-approved',
+      },
+    },
+  ]);
+
+  expect(messages).toHaveLength(1);
+  expect(messages[0]?.autoApprovedByLlm).toBe(true);
 });
 
 it('extracts shell command from matching function_call item', () => {

@@ -8,6 +8,17 @@ import { getToolFormatter } from '../../tools/command-message-formatters.js';
 import type { CommandMessage } from '../../tools/types.js';
 
 const approvalRejectionCallIds = new Set<string>();
+const llmAutoApprovalCallIds = new Set<string>();
+
+export const markToolCallAsLlmAutoApproved = (callId?: string | null): void => {
+  if (callId) {
+    llmAutoApprovalCallIds.add(callId);
+  }
+};
+
+export const clearLlmAutoApprovalMarkers = (): void => {
+  llmAutoApprovalCallIds.clear();
+};
 
 export const markToolCallAsApprovalRejection = (callId?: string | null): void => {
   if (!callId) {
@@ -26,6 +37,11 @@ const isApprovalRejectionForItem = (item: ToolResultItem | null | undefined): bo
     return false;
   }
   return approvalRejectionCallIds.has(callId);
+};
+
+const isLlmAutoApprovalForItem = (item: ToolResultItem | null | undefined): boolean => {
+  const callId = getCallIdFromItem(item);
+  return Boolean(callId && llmAutoApprovalCallIds.has(callId));
 };
 
 const normalizeToolItem = (
@@ -105,15 +121,19 @@ export const extractCommandMessages = (items: readonly unknown[] = []): CommandM
     }
 
     const isApprovalRejection = isApprovalRejectionForItem(item);
+    const autoApprovedByLlm = isLlmAutoApprovalForItem(item);
 
     const formatter = getToolFormatter(normalizedItem.toolName);
     if (formatter) {
       const results = formatter(item as ToolResultItem, index, toolCallArgumentsById);
-      if (isApprovalRejection) {
-        results.forEach((msg: CommandMessage) => {
+      results.forEach((msg: CommandMessage) => {
+        if (isApprovalRejection) {
           msg.isApprovalRejection = true;
-        });
-      }
+        }
+        if (autoApprovedByLlm) {
+          msg.autoApprovedByLlm = true;
+        }
+      });
       messages.push(...results);
       continue;
     }
@@ -148,6 +168,7 @@ export const extractCommandMessages = (items: readonly unknown[] = []): CommandM
       output,
       success,
       isApprovalRejection,
+      ...(autoApprovedByLlm ? { autoApprovedByLlm: true } : {}),
       toolName: normalizedItem.toolName,
       toolArgs: args,
       ...(callId ? { callId } : {}),

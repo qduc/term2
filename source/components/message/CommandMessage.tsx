@@ -44,6 +44,7 @@ type Props = {
   toolName?: string;
   toolArgs?: any;
   isApprovalRejection?: boolean;
+  autoApprovedByLlm?: boolean;
   hadApproval?: boolean;
   displayMode?: 'standard' | 'concise';
   textColor?: string;
@@ -76,6 +77,7 @@ const CommandMessage: FC<Props> = ({
   toolName,
   toolArgs,
   isApprovalRejection,
+  autoApprovedByLlm,
   hadApproval,
   displayMode = 'standard',
   textColor,
@@ -657,6 +659,7 @@ const CommandMessage: FC<Props> = ({
       {renderStandardHeader()}
       {failureReason && <Text color={COLOR_ERROR}>Error: {failureReason}</Text>}
       <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
+      {autoApprovedByLlm && <Text color={COLOR_MUTED}>(Auto approved by LLM)</Text>}
     </Box>
   );
 };

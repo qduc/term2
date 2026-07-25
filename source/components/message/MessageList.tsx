@@ -406,6 +406,7 @@ const MessageList: FC<Props> = ({
             toolName={msg.toolName}
             toolArgs={msg.toolArgs}
             isApprovalRejection={msg.isApprovalRejection}
+            autoApprovedByLlm={msg.autoApprovedByLlm}
             hadApproval={msg.hadApproval}
             displayMode={displayMode}
           />

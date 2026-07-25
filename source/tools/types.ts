@@ -10,6 +10,7 @@ export interface CommandMessage {
   success?: boolean;
   failureReason?: string;
   isApprovalRejection?: boolean;
+  autoApprovedByLlm?: boolean;
   toolName?: string;
   toolArgs?: unknown;
   callId?: string;

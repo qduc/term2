@@ -457,6 +457,24 @@ it('CommandMessage truncates output and shows the last line when output is longe
   expect(output.includes('... (2 more lines)')).toBe(true);
 });
 
+it('CommandMessage notes LLM auto-approval below shell output', async () => {
+  const { lastFrame } = await renderInAct(
+    <CommandMessage
+      command="echo hi"
+      toolName="shell"
+      status="completed"
+      success={true}
+      output="hi"
+      autoApprovedByLlm={true}
+    />,
+  );
+
+  const output = toVisibleText(lastFrame() ?? '');
+  expect(output).toContain('hi');
+  expect(output).toContain('(Auto approved by LLM)');
+  expect(output.indexOf('(Auto approved by LLM)')).toBeGreaterThan(output.lastIndexOf('hi'));
+});
+
 it('CommandMessage does not truncate output and shows all lines when output is exactly 4 lines', async () => {
   const props = {
     command: 'shell: echo',

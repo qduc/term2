@@ -54,7 +54,10 @@ import {
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { SessionStreamProcessor } from './session-stream-processor.js';
 import type { AgentStream } from '../agent-stream.js';
-import { extractCommandMessages } from '../../utils/streaming/extract-command-messages.js';
+import {
+  extractCommandMessages,
+  markToolCallAsLlmAutoApproved,
+} from '../../utils/streaming/extract-command-messages.js';
 import { resolveAbortedApprovalCallIds, resolveResponseCycleCallIds } from './continuation-call-id-resolver.js';
 
 export interface TurnWorkflowDeps {
@@ -287,6 +290,9 @@ export class TurnWorkflow {
           }
 
           if (outcome.kind === 'auto_approve') {
+            if (outcome.advisory?.source === 'llm') {
+              markToolCallAsLlmAutoApproved(outcome.callId);
+            }
             this.deps.logger.debug('Shell command auto-approved by LLM', {
               eventType: 'approval.auto_approved',
               category: 'approval',
@@ -609,6 +615,9 @@ export class TurnWorkflow {
     const { kind } = outcome;
 
     if (kind === 'auto_approve') {
+      if (outcome.advisory?.source === 'llm') {
+        markToolCallAsLlmAutoApproved(outcome.callId);
+      }
       this.deps.logger.debug('Shell command auto-approved by LLM', {
         eventType: 'approval.auto_approved',
         category: 'approval',

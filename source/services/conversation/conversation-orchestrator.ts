@@ -111,7 +111,7 @@ export class ConversationOrchestrator {
     this.config.messages.setMessages((messages) =>
       messages.map((message) =>
         message.sender === 'command' && message.status === 'running'
-          ? { ...message, status: 'cancelled' as const }
+          ? { ...message, status: 'aborted' as const }
           : message,
       ),
     );

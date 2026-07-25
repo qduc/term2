@@ -120,6 +120,56 @@ it('queues foreground messages FIFO, returns each item terminal, and executes ea
   expect(service.listUserTurns().map((turn) => turn.text)).toEqual(['first', 'second']);
 });
 
+it('keeps queued messages behind a continuation that requests another approval', async () => {
+  const createApprovalStream = (callId: string) => {
+    const stream = new MockStream([]);
+    stream.interruptions = [
+      {
+        name: 'shell',
+        agent: { name: 'CLI Agent' },
+        arguments: JSON.stringify({ command: `echo ${callId}` }),
+        callId,
+      },
+    ];
+    stream.state = {
+      approve: () => {},
+      reject: () => {},
+    };
+    return stream;
+  };
+
+  const secondApproval = createApprovalStream('second-approval');
+  const finalStream = new MockStream([]);
+  finalStream.finalOutput = 'completed';
+  const initialStream = createApprovalStream('first-approval');
+  let continuationIndex = 0;
+  const service = new ConversationService({
+    agentClient: partialClient({
+      async startStream(input: unknown) {
+        if (input !== 'follow-up') return initialStream;
+        return finalStream;
+      },
+      async continueRunStream() {
+        return continuationIndex++ === 0 ? secondApproval : finalStream;
+      },
+    }),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  expect(asApproval(await service.sendMessage('first')).approval.callId).toBe('first-approval');
+  const queued = service.sendMessage('follow-up');
+  await flushQueue();
+
+  const secondApprovalResult = await service.handleApprovalDecision('y');
+  expect(secondApprovalResult?.type).toBe('approval_required');
+  if (!secondApprovalResult) throw new Error('Expected the continuation to request another approval');
+  expect(asApproval(secondApprovalResult).approval.callId).toBe('second-approval');
+  const completed = service.handleApprovalDecision('y');
+
+  await expect(queued).resolves.toMatchObject({ type: 'response', finalText: 'completed' });
+  await expect(completed).resolves.toMatchObject({ type: 'response', finalText: 'completed' });
+});
+
 it('pauses queued foreground messages after a failed execution until resumeQueue is requested', async () => {
   const inputs: unknown[] = [];
   const mockClient = partialClient({

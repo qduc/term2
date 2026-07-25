@@ -519,10 +519,25 @@ export class ConversationAdapter {
       });
       if (result && this.#queue && this.#approvalExecutionId) {
         const executionId = this.#approvalExecutionId;
-        this.#approvalExecutionId = null;
-        this.#approvalActionId = null;
-        await this.#queue.event({ kind: 'completed', executionId, terminal: result });
-        this.#notifyQueueState();
+        if (result.type === 'approval_required') {
+          // A continuation may request another tool approval. Keep the same
+          // queue execution active and replace its resolved action rather than
+          // retiring it and dispatching the next message while the turn is
+          // still awaiting approval.
+          this.#approvalActionId = `adapter-action-${this.#nextActionId++}` as ActionId;
+          await this.#queue.event({
+            kind: 'tool_approval_requested',
+            executionId,
+            actionId: this.#approvalActionId,
+            request: {},
+          });
+          this.#notifyQueueState();
+        } else {
+          this.#approvalExecutionId = null;
+          this.#approvalActionId = null;
+          await this.#queue.event({ kind: 'completed', executionId, terminal: result });
+          this.#notifyQueueState();
+        }
       }
       return result;
     } catch (error) {

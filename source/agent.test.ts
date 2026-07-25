@@ -13,6 +13,10 @@ const mockLogger = {
 } as any;
 
 const WORKTREE_HYGIENE_FRAGMENT_MARKER = 'Before making any code changes, inspect the repo worktree.';
+const orchestratorSubagentDeps = {
+  runSubagentAsync: async () => ({ runId: 'run-1' }),
+  getSubagentResult: async () => ({ finalText: 'done' }),
+};
 
 it('adds memory tools and summary-only context when memory is enabled, and neither when disabled', async () => {
   const { mkdtemp, writeFile, mkdir } = await import('node:fs/promises');
@@ -64,12 +68,12 @@ it('advertises librarian delegation when memory and subagent delegation are enab
   const enabled = getAgentDefinition({
     settingsService: createMockSettingsService({ 'app.orchestratorMode': true }),
     loggingService: mockLogger,
-    runSubagent: async () => ({ finalText: 'done' }),
+    ...orchestratorSubagentDeps,
   });
   const disabled = getAgentDefinition({
     settingsService: createMockSettingsService({ 'app.orchestratorMode': true, 'memory.enabled': false }),
     loggingService: mockLogger,
-    runSubagent: async () => ({ finalText: 'done' }),
+    ...orchestratorSubagentDeps,
   });
 
   expect(enabled.instructions).toContain('`librarian`');
@@ -211,7 +215,7 @@ it('getAgentDefinition includes ask_user in orchestrator mode when getAskUserAns
   const definition = getAgentDefinition({
     settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o', 'app.orchestratorMode': true }),
     loggingService: mockLogger,
-    runSubagent: async () => 'test',
+    ...orchestratorSubagentDeps,
     getAskUserAnswer: () => 'test answer',
   });
 
@@ -229,7 +233,7 @@ it('getAgentDefinition omits ask_user when getAskUserAnswer is absent', () => {
   expect(toolNames.includes('ask_user')).toBe(false);
 });
 
-it('getAgentDefinition injects delegation guidance in orchestrator mode when runSubagent is provided', () => {
+it('getAgentDefinition exposes only async delegation tools in orchestrator mode', () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'app.orchestratorMode': true,
@@ -239,9 +243,13 @@ it('getAgentDefinition injects delegation guidance in orchestrator mode when run
     settingsService,
     loggingService: mockLogger,
     runSubagent: async () => ({} as any),
+    ...orchestratorSubagentDeps,
   });
 
-  expect(definition.tools.map((tool) => tool.name).includes('run_subagent')).toBe(true);
+  expect(definition.tools.map((tool) => tool.name)).not.toContain('run_subagent');
+  expect(definition.tools.map((tool) => tool.name)).toEqual(
+    expect.arrayContaining(['run_subagent_async', 'get_subagent_result']),
+  );
   expect(definition.instructions.includes('### Delegating to subagents')).toBe(true);
 });
 
@@ -283,7 +291,7 @@ it('getAgentDefinition omits delegation guidance in lite mode', () => {
   const definition = getAgentDefinition({
     settingsService,
     loggingService: mockLogger,
-    runSubagent: async () => ({} as any),
+    ...orchestratorSubagentDeps,
   });
 
   expect(definition.tools.map((tool) => tool.name).includes('run_subagent')).toBe(false);
@@ -299,11 +307,12 @@ it('getAgentDefinition in orchestrator mode retains full memory authority', () =
   const definition = getAgentDefinition({
     settingsService,
     loggingService: mockLogger,
-    runSubagent: async () => ({} as any),
+    ...orchestratorSubagentDeps,
   });
 
   expect(definition.tools.map((tool) => tool.name)).toEqual([
-    'run_subagent',
+    'run_subagent_async',
+    'get_subagent_result',
     'shell',
     'read_file',
     'grep',
@@ -339,7 +348,7 @@ it('getAgentDefinition in orchestrator mode enables direct work while retaining 
   const definition = getAgentDefinition({
     settingsService,
     loggingService: mockLogger,
-    runSubagent: async () => ({} as any),
+    ...orchestratorSubagentDeps,
   });
 
   expect(definition.instructions.includes('Orchestrator mode')).toBe(true);
@@ -360,12 +369,13 @@ it('getAgentDefinition in orchestrator mode retains full memory authority for no
   const definition = getAgentDefinition({
     settingsService,
     loggingService: mockLogger,
-    runSubagent: async () => ({} as any),
+    ...orchestratorSubagentDeps,
   });
 
   expect(definition.tools.map((tool) => tool.name)).toEqual(
     expect.arrayContaining([
-      'run_subagent',
+      'run_subagent_async',
+      'get_subagent_result',
       'shell',
       'read_file',
       'grep',
@@ -380,7 +390,7 @@ it('getAgentDefinition in orchestrator mode retains full memory authority for no
   );
 });
 
-it('getAgentDefinition throws if orchestratorMode is true and runSubagent is missing', () => {
+it('getAgentDefinition throws if orchestratorMode is true and async delegation is missing', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
     'agent.model': 'gpt-4o',
@@ -391,7 +401,7 @@ it('getAgentDefinition throws if orchestratorMode is true and runSubagent is mis
       settingsService,
       loggingService: mockLogger,
     }),
-  ).toThrow(/orchestratorMode.*runSubagent|runSubagent.*orchestratorMode/i);
+  ).toThrow(/orchestratorMode.*runSubagentAsync.*getSubagentResult/i);
 });
 
 it('getAgentDefinition excludes grep and glob when searchViaShell is true', () => {
@@ -686,7 +696,7 @@ it('getAgentDefinition includes AGENTS.md and full envInfo for orchestrator mode
   const definitionOrchestrator = getAgentDefinition({
     settingsService: settingsOrchestrator,
     loggingService: mockLogger,
-    runSubagent: async () => ({} as any),
+    ...orchestratorSubagentDeps,
   });
   expect(definitionOrchestrator.instructions.includes('AGENTS.md contents:')).toBe(true);
   expect(definitionOrchestrator.instructions.includes('Project structure:')).toBe(true);
@@ -737,7 +747,7 @@ it('getAgentDefinition includes worktree hygiene fragment in standard, mentor, p
       'app.orchestratorMode': true,
     }),
     loggingService: mockLogger,
-    runSubagent: async () => ({} as any),
+    ...orchestratorSubagentDeps,
   });
   expect(orchestrator.instructions).toContain(WORKTREE_HYGIENE_FRAGMENT_MARKER);
   expect(orchestrator.instructions).toContain('Run `git status --short` or an equivalent read-only git status command');

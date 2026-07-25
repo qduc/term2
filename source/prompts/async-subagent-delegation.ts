@@ -23,7 +23,7 @@ Use these when you want to start a background investigation and continue with ot
 - You must call \`get_subagent_result\` with the exact \`runId\` returned by \`run_subagent_async\`.
 - Mentor and librarian fresh calls reuse their default session. Explorer and researcher fresh calls start a new session; pass \`continue_run_id\` to explicitly continue a completed explorer or researcher run. Worker runs are always fresh and cannot be continued.
 - Only completed runs can be continued. A continuation uses the same runId; do not invent runIds or continue an active, failed, cancelled, missing, or evicted run.
-- The result format is the same structured \`SubagentResult\` returned by \`run_subagent\`: status, final text, tools used, and files changed.`;
+- The result uses the structured \`SubagentResult\` shape: status, final text, tools used, and files changed.`;
 
   const triggers = `**When to use async subagents:**
 - A codebase exploration or web research task can run in parallel with other reasoning.
@@ -32,7 +32,7 @@ Use these when you want to start a background investigation and continue with ot
     orchestratorMode
       ? `
 
-In Orchestrator mode, use \`run_subagent_async\` by default for delegable work and return control after receiving the run handle. Use \`run_subagent\` only when the result is truly needed immediately; explicitly justify why the foreground wait is necessary.`
+In Orchestrator mode, use \`run_subagent_async\` for delegable work and return control after receiving the run handle. When the result is truly needed immediately, call \`get_subagent_result\` with that handle.`
       : ''
   }`;
 

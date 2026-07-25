@@ -153,6 +153,7 @@ export const getAgentDefinition = (
   const codeContextEnabled = !(executionContext?.isRemote() ?? false);
   const isGpt5 = shouldPreferPatchEditingModel(resolvedModel);
   const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled');
+  const asyncSubagentEnabled = Boolean(runSubagentAsync) && Boolean(getSubagentResult);
   const memoryCapability = new MemoryCapabilityBuilder(settingsService, {
     onWarning: (message) => loggingService.warn(message),
   }).build({ kind: 'main' }, { projectPath: executionContext?.getCwd() ?? process.cwd() });
@@ -164,8 +165,8 @@ export const getAgentDefinition = (
     planMode,
     searchViaShell,
     codeContextEnabled,
-    runSubagentEnabled: Boolean(runSubagent),
-    runSubagentAsyncEnabled: Boolean(runSubagentAsync) && Boolean(getSubagentResult),
+    runSubagentEnabled: orchestratorMode ? asyncSubagentEnabled : Boolean(runSubagent),
+    runSubagentAsyncEnabled: asyncSubagentEnabled,
     sandboxEnabled,
     memoryEnabled: memoryCapability.access !== 'none',
     memoryGuidance: memoryCapability.guidance,
@@ -204,18 +205,15 @@ export const getAgentDefinition = (
   }
 
   if (orchestratorMode) {
-    if (!runSubagent) {
+    if (!runSubagentAsync || !getSubagentResult) {
       throw new Error(
-        'orchestratorMode requires runSubagent: cannot build orchestrator agent without a runSubagent implementation.',
+        'orchestratorMode requires runSubagentAsync and getSubagentResult: cannot build orchestrator agent without asynchronous delegation.',
       );
     }
-    const tools: ToolDefinition[] = [createRunSubagentToolDefinition(runSubagent)];
-    if (runSubagentAsync && getSubagentResult) {
-      tools.push(
-        createRunSubagentAsyncToolDefinition(runSubagentAsync),
-        createGetSubagentResultToolDefinition(getSubagentResult),
-      );
-    }
+    const tools: ToolDefinition[] = [
+      createRunSubagentAsyncToolDefinition(runSubagentAsync),
+      createGetSubagentResultToolDefinition(getSubagentResult),
+    ];
     tools.push(
       createShellToolDefinition({
         settingsService,

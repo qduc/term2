@@ -10,9 +10,10 @@ export function getSubagentDelegationAddendum({
   orchestratorMode = false,
   memoryEnabled = true,
 }: { orchestratorMode?: boolean; memoryEnabled?: boolean } = {}): string {
+  const delegationTool = orchestratorMode ? 'run_subagent_async' : 'run_subagent';
   const header = `### Delegating to subagents
 
-You have a \`run_subagent\` tool. A subagent runs in its own context and returns only a summary — use it to keep your own context focused on high-level reasoning.`;
+You have a \`${delegationTool}\` tool. A subagent runs in its own context and returns only a summary — use it to keep your own context focused on high-level reasoning.`;
 
   const triggers = `**Delegate when it provides meaningful leverage:**
 - Need focused codebase investigation or context compression → \`explorer\`.

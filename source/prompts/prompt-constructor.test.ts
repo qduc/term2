@@ -126,7 +126,7 @@ it('buildPromptSpec includes async subagent guidance when async tools are enable
   expect(spec.inlineSections.some((s) => s.includes('mentor'))).toBe(true);
 });
 
-it('buildPromptSpec makes async delegation the orchestrator default while preserving justified foreground runs', () => {
+it('buildPromptSpec makes async delegation the orchestrator path and explains immediate retrieval', () => {
   const spec = buildPromptSpec({
     model: 'gpt-4o',
     liteMode: false,
@@ -136,10 +136,10 @@ it('buildPromptSpec makes async delegation the orchestrator default while preser
   });
   const guidance = spec.inlineSections.join('\n');
 
-  expect(guidance).toContain('use `run_subagent_async` by default');
+  expect(guidance).toContain('use `run_subagent_async` for delegable work');
   expect(guidance).toContain('return control after receiving the run handle');
-  expect(guidance).toContain('Use `run_subagent` only when the result is truly needed immediately');
-  expect(guidance).toContain('explicitly justify why the foreground wait is necessary');
+  expect(guidance).toContain('When the result is truly needed immediately, call `get_subagent_result`');
+  expect(guidance).not.toContain('Use `run_subagent` only');
 });
 
 it('buildPromptSpec excludes async subagent guidance in lite mode', () => {

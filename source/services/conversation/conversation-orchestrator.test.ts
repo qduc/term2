@@ -34,6 +34,7 @@ function mockConversationService(): ConversationService {
     sendMessage: vi.fn(),
     handleApprovalDecision: vi.fn(),
     abort: vi.fn(),
+    interruptFromUser: vi.fn(),
     undoLastUserTurn: vi.fn(),
     undoNUserTurns: vi.fn(),
     peekLastToolOutput: vi.fn(),
@@ -206,14 +207,65 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.conversationService.resetWithNewId).toHaveBeenCalled();
   });
 
-  it('stops processing by aborting and clearing transient state', () => {
+  it('stops processing by interrupting and clearing transient state', () => {
     const cfg = makeConfig();
     const orchestrator = new ConversationOrchestrator(cfg);
 
     orchestrator.stopProcessing();
 
-    expect(cfg.conversationService.abort).toHaveBeenCalled();
+    expect(cfg.conversationService.interruptFromUser).toHaveBeenCalled();
     expect(cfg.ui.onResetTransient).toHaveBeenCalled();
+  });
+
+  it('stopProcessing is a user interrupt, so background subagent runs are cancelled', () => {
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    orchestrator.stopProcessing();
+
+    expect(cfg.conversationService.interruptFromUser).toHaveBeenCalledTimes(1);
+    expect(cfg.conversationService.abort).not.toHaveBeenCalled();
+  });
+
+  it('undoLastUserMessage aborts the turn without cancelling background subagent runs', () => {
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    const messages = cfg.messages as ReturnType<typeof makeMessagePort>;
+    messages.appendMessages([createMessage('u1', 'user', 'hello'), createBotMessage('b1', 'hi')]);
+    vi.mocked(cfg.conversationService.undoLastUserTurn).mockReturnValue({ text: 'hello' });
+
+    orchestrator.undoLastUserMessage();
+
+    expect(cfg.conversationService.abort).toHaveBeenCalledTimes(1);
+    expect(cfg.conversationService.interruptFromUser).not.toHaveBeenCalled();
+  });
+
+  it('undoToUserMessage aborts the turn without cancelling background subagent runs', () => {
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    const messages = cfg.messages as ReturnType<typeof makeMessagePort>;
+    messages.appendMessages([
+      createMessage('u1', 'user', 'first'),
+      createBotMessage('b1', 'reply'),
+      createMessage('u2', 'user', 'second'),
+    ]);
+    vi.mocked(cfg.conversationService.undoNUserTurns).mockReturnValue({ text: 'second' });
+
+    orchestrator.undoToUserMessage(2);
+
+    expect(cfg.conversationService.abort).toHaveBeenCalledTimes(1);
+    expect(cfg.conversationService.interruptFromUser).not.toHaveBeenCalled();
+  });
+
+  it('retryLastToolOutput aborts the turn without cancelling background subagent runs', async () => {
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    vi.mocked(cfg.conversationService.peekLastToolOutput).mockReturnValue(null);
+
+    await orchestrator.retryLastToolOutput();
+
+    expect(cfg.conversationService.abort).toHaveBeenCalledTimes(1);
+    expect(cfg.conversationService.interruptFromUser).not.toHaveBeenCalled();
   });
 
   it('undoes the last undoable user message', () => {

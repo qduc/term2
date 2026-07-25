@@ -29,11 +29,18 @@ export class SubagentBridge {
   #subagentManager: SubagentManager | null;
   #sessionContextService: ISessionContextService;
   #subagentEventSink: ((event: ConversationEvent) => void) | null = null;
+  #backgroundEventSink: ((event: ConversationEvent) => void) | null = null;
   #activeSubagentsCount = 0;
   #pendingClearSink = false;
   #bufferedEvents: ConversationEvent[] = [];
   #logger: ILoggingService;
+  /** Per-turn scope: foreground subagent work belonging to the running turn. */
   #abortController = new AbortController();
+  /**
+   * Conversation scope: background (async) runs outlive the turn that launched
+   * them, so they must not share the per-turn controller.
+   */
+  #backgroundAbortController = new AbortController();
 
   constructor(deps: SubagentBridgeDeps) {
     this.#logger = deps.logger;
@@ -58,15 +65,34 @@ export class SubagentBridge {
   setEventSink(sink: ((event: ConversationEvent) => void) | null): void {
     this.#subagentEventSink = sink;
     this.#pendingClearSink = false;
-    if (sink) {
-      const buffered = this.#bufferedEvents.splice(0);
-      for (const event of buffered) sink(event);
-    }
+    if (sink) this.#flushBufferedEvents(sink);
+  }
+
+  /**
+   * Conversation-scoped sink that outlives individual turns. Unlike
+   * {@link setEventSink}, it is never torn down at turn end, so subagent
+   * activity that settles while the conversation is idle is still observed
+   * instead of being buffered until the next turn attaches a sink.
+   */
+  setBackgroundEventSink(sink: ((event: ConversationEvent) => void) | null): void {
+    this.#backgroundEventSink = sink;
+    if (sink) this.#flushBufferedEvents(sink);
+  }
+
+  #flushBufferedEvents(sink: (event: ConversationEvent) => void): void {
+    const buffered = this.#bufferedEvents.splice(0);
+    for (const event of buffered) sink(event);
   }
 
   #emitEvent(event: ConversationEvent): void {
-    if (this.#subagentEventSink) this.#subagentEventSink(event);
-    else this.#bufferedEvents.push(event);
+    const turnSink = this.#subagentEventSink;
+    const backgroundSink = this.#backgroundEventSink;
+    if (!turnSink && !backgroundSink) {
+      this.#bufferedEvents.push(event);
+      return;
+    }
+    turnSink?.(event);
+    backgroundSink?.(event);
   }
 
   /**
@@ -94,21 +120,42 @@ export class SubagentBridge {
     return this.#activeSubagentsCount;
   }
 
-  /** Abort signal shared by all subagent runs spawned through this bridge. */
+  /** Abort signal shared by the foreground subagent runs of the current turn. */
   get signal(): AbortSignal {
     return this.#abortController.signal;
   }
 
-  /** Replace the shared abort controller so a new parent run starts fresh. */
+  /**
+   * Conversation-scoped abort signal for background (async) runs. It is never
+   * reset or aborted by turn boundaries, only by {@link cancelBackgroundRuns}.
+   */
+  get backgroundSignal(): AbortSignal {
+    return this.#backgroundAbortController.signal;
+  }
+
+  /** Replace the per-turn abort controller so a new parent run starts fresh. */
   resetAbortController(): void {
     this.#abortController = new AbortController();
   }
 
-  /** Abort all active subagent runs and prepare a fresh controller. */
+  /**
+   * Abort the foreground subagent runs of the current turn and prepare a fresh
+   * controller. Background runs are conversation-bound and are deliberately
+   * left alone; use {@link cancelBackgroundRuns} for those.
+   */
   abort(): void {
     this.#abortController.abort();
-    this.#subagentManager?.cancelAllAsyncRuns();
     this.#abortController = new AbortController();
+  }
+
+  /**
+   * Cancel every conversation-bound background run. Reserved for an explicit
+   * user interrupt, conversation disposal, or shutdown.
+   */
+  cancelBackgroundRuns(): void {
+    this.#backgroundAbortController.abort();
+    this.#subagentManager?.cancelAllAsyncRuns();
+    this.#backgroundAbortController = new AbortController();
   }
 
   /** Increment active count and return a disposer that decrements + handles pending sink clear */
@@ -212,7 +259,9 @@ export class SubagentBridge {
       task: params.task,
       ...(params.continue_run_id ? { continueRunId: params.continue_run_id } : {}),
       parentTool: 'run_subagent_async',
-      signal: this.signal,
+      // Conversation-scoped, not per-turn: this run must survive the turn that
+      // launched it and every ordinary abort.
+      signal: this.backgroundSignal,
     };
 
     return this.#withSubagentTrafficContext(detailsRecord?.toolCall?.callId, () => {

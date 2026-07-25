@@ -35,6 +35,11 @@ export interface AskUserAnswerSink {
 
 export interface SubagentEventSinkHost {
   setSubagentEventSink(sink: ((event: ConversationEvent) => void) | null): void;
+  /**
+   * Optional conversation-scoped sink that stays attached across turns, so
+   * background (async) subagent activity is still observed while idle.
+   */
+  setBackgroundSubagentEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
   /** Optional hook to cancel live async subagent runs when the parent turn ends. */
   cancelSubagentRuns?(): void;
 }
@@ -48,6 +53,13 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   abort(): void;
   setModel(model: string): void;
   addToolInterceptor(interceptor: ToolInterceptor): () => void;
+
+  /**
+   * Cancel conversation-bound background (async) subagent runs. Only an
+   * explicit user interrupt, conversation disposal, or shutdown may call this;
+   * ordinary turn aborts must not.
+   */
+  cancelBackgroundRuns?(): void;
 
   clearConversations?(): void;
   getProvider?(): string;

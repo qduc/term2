@@ -41,6 +41,10 @@ import { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
 import { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
 import { SessionContinuityReset } from './session-continuity-reset.js';
 import { clearDockerHostControlSession } from '../../utils/shell/sandbox/docker-host-control-grants.js';
+import {
+  SubagentNotificationStore,
+  type BackgroundSubagentNotificationPort,
+} from '../subagents/subagent-notification-store.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
   value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
@@ -102,6 +106,8 @@ export type SessionRuntimeInternals = {
   resolvedAskUserAnswerSink: AskUserAnswerSink | null;
   /** @internal Resolved subagent event sink host (derived from option or agent client). */
   resolvedSubagentEventSinkHost: SubagentEventSinkHost | null;
+  /** Completions of background subagent runs still owed to the main agent. */
+  backgroundSubagentNotifications: BackgroundSubagentNotificationChannel;
 };
 
 // ── Options for the composition factory ──────────────────────────
@@ -156,6 +162,20 @@ export type SessionSinks = {
   subagentEvents: SubagentEventSinkHost | null;
 };
 
+/**
+ * Pending completions of background (async) subagent runs, plus the wake-up
+ * signal for whoever delivers them.
+ *
+ * The session owns the queue because the conversation-scoped background sink is
+ * installed here and outlives every turn; the observer exists so the delivering
+ * layer (which is the only one that knows whether the conversation is idle) does
+ * not have to poll.
+ */
+export type BackgroundSubagentNotificationChannel = BackgroundSubagentNotificationPort & {
+  /** Fires when a background run completion is newly queued. */
+  setObserver(observer: (() => void) | null): void;
+};
+
 // ── Session Runtime (public) ───────────────────────────────────────
 
 /**
@@ -178,6 +198,8 @@ export type SessionRuntime = {
   logs: SessionLogs;
   approval: SessionApprovalQuery;
   sinks: SessionSinks;
+  /** Completions of background subagent runs still owed to the main agent. */
+  backgroundSubagentNotifications: BackgroundSubagentNotificationChannel;
   /**
    * Idempotent disposal: aborts active SDK work, invalidates the active
    * generation, unsubscribes downgrade listeners, clears per-turn state.
@@ -203,6 +225,36 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const resolvedTurnAccumulator = turnAccumulator ?? new TurnItemAccumulator();
   const resolvedAskUserAnswerSink = askUserAnswerSink ?? asAskUserAnswerSink(agentClient);
   const resolvedSubagentEventSinkHost = subagentEventSinkHost ?? asSubagentEventSinkHost(agentClient);
+
+  // Background (async) subagent runs settle whenever they settle, including
+  // while the conversation is idle and no per-turn sink is attached. The
+  // conversation-scoped sink only records the completion: rendering belongs to
+  // the per-turn sink, so forwarding here would draw the same event twice.
+  const notificationStore = new SubagentNotificationStore();
+  let notificationObserver: (() => void) | null = null;
+  resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.((event) => {
+    if (!notificationStore.enqueue(event)) return;
+    try {
+      notificationObserver?.();
+    } catch (error) {
+      logger.warn('Background subagent notification observer threw', {
+        eventType: 'subagent.notification_observer_failed',
+        category: 'subagent',
+        sessionId: id,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+  const backgroundSubagentNotifications: BackgroundSubagentNotificationChannel = {
+    get pendingCount() {
+      return notificationStore.pendingCount;
+    },
+    drain: () => notificationStore.drain(),
+    retain: (notifications) => notificationStore.retain(notifications),
+    setObserver: (observer) => {
+      notificationObserver = observer;
+    },
+  };
 
   const generationGuard = new GenerationGuard();
 
@@ -422,6 +474,11 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       approvalFlow.abort();
       appState.statusMachine.abort();
     }
+    // Background subagent runs are bound to the conversation, not to a turn,
+    // so they must be cancelled even when no turn is in flight.
+    getMethod<[], void>(agentClient, 'cancelBackgroundRuns')?.call(agentClient);
+    notificationObserver = null;
+    resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(null);
     providerContinuity.clear();
     sessionReadAccess.clear(id);
     clearDockerHostControlSession(id);
@@ -458,6 +515,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     journal,
     resolvedAskUserAnswerSink,
     resolvedSubagentEventSinkHost,
+    backgroundSubagentNotifications,
   };
 }
 
@@ -479,6 +537,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     approvalFlow,
     resolvedAskUserAnswerSink,
     resolvedSubagentEventSinkHost,
+    backgroundSubagentNotifications,
   } = internals;
 
   return {
@@ -521,6 +580,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
       askUserAnswer: resolvedAskUserAnswerSink,
       subagentEvents: resolvedSubagentEventSinkHost,
     },
+    backgroundSubagentNotifications,
     dispose,
   };
 }

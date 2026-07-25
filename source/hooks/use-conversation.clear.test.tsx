@@ -201,6 +201,7 @@ it.sequential('useConversation adds a stopped message when processing is stopped
   const mockConversationService = {
     sessionId: 'session-id',
     abort: () => {},
+    interruptFromUser: () => {},
     setRetryCallback: () => {},
   } as any;
 
@@ -231,6 +232,7 @@ it.sequential('useConversation cancels running shell messages when processing is
   const mockConversationService = {
     sessionId: 'session-id',
     abort: () => {},
+    interruptFromUser: () => {},
     setRetryCallback: () => {},
     sendMessage: async (_input: string, options?: { onEvent?: (event: any) => void }) => {
       emitEvent = options?.onEvent;

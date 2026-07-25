@@ -15,6 +15,7 @@ import type {
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 import type { InputSurgeDecision } from '../input-surge-guard.js';
 import type { SessionRuntime } from '../session/session-composition.js';
+import type { BackgroundSubagentNotificationPort } from '../subagents/subagent-notification-store.js';
 import type { QueueStateObserver } from './conversation-adapter.js';
 import { createConversationRuntime } from './conversation-runtime-factory.js';
 
@@ -72,6 +73,23 @@ export class ConversationService {
     this.#adapter.setEventSink(sink);
   }
 
+  #backgroundSubagentNotificationObserver: (() => void) | null = null;
+
+  /**
+   * Observe background (async) subagent runs settling. The observer fires once
+   * per newly queued completion; the queued notifications themselves are read
+   * through {@link backgroundSubagentNotifications}.
+   */
+  setBackgroundSubagentNotificationObserver(observer: (() => void) | null): void {
+    this.#backgroundSubagentNotificationObserver = observer;
+    this.#runtime.backgroundSubagentNotifications.setObserver(observer);
+  }
+
+  /** Completions of background subagent runs still owed to the main agent. */
+  get backgroundSubagentNotifications(): BackgroundSubagentNotificationPort {
+    return this.#runtime.backgroundSubagentNotifications;
+  }
+
   get sessionId(): string {
     return this.#runtime.sessionId;
   }
@@ -96,6 +114,9 @@ export class ConversationService {
     if (previousEventSink) {
       this.#adapter.setEventSink(previousEventSink);
     }
+    // The previous runtime's notification queue died with it; re-attach the
+    // observer so the new conversation still wakes on background completions.
+    this.#runtime.backgroundSubagentNotifications.setObserver(this.#backgroundSubagentNotificationObserver);
   }
 
   #logSink: ((event: LogEvent) => void) | null = null;
@@ -163,8 +184,22 @@ export class ConversationService {
     this.#runtime.state.queueModeNotice(text);
   }
 
+  /**
+   * Abort the in-flight turn. Background (async) subagent runs are
+   * conversation-bound and survive this; they are only stopped by
+   * {@link interruptFromUser}, disposal, or shutdown.
+   */
   abort(): void {
     this.#adapter.abort();
+  }
+
+  /**
+   * Abort the in-flight turn *and* cancel conversation-bound background
+   * subagent runs, because the user explicitly asked everything to stop.
+   */
+  interruptFromUser(): void {
+    this.#adapter.abort();
+    this.#agentClient.cancelBackgroundRuns?.();
   }
 
   sendMessage(input: string | UserTurn, options?: SendMessageOptions): Promise<ConversationTerminal> {

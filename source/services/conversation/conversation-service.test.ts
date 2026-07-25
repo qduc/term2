@@ -1577,3 +1577,62 @@ it('failed user turn is dropped from history after non-retryable provider error'
     },
   ]);
 });
+
+// ── Background subagent cancellation scope ─────────────────────────
+
+it('abort() aborts the turn without cancelling conversation-bound background runs', () => {
+  let abortCalls = 0;
+  let cancelBackgroundCalls = 0;
+  const mockClient = partialClient({
+    abort: () => {
+      abortCalls++;
+    },
+    cancelBackgroundRuns: () => {
+      cancelBackgroundCalls++;
+    },
+  });
+
+  const service = new ConversationService({
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  service.abort();
+
+  expect(abortCalls).toBe(1);
+  expect(cancelBackgroundCalls).toBe(0);
+});
+
+it('interruptFromUser() aborts the turn and cancels conversation-bound background runs', () => {
+  let abortCalls = 0;
+  let cancelBackgroundCalls = 0;
+  const mockClient = partialClient({
+    abort: () => {
+      abortCalls++;
+    },
+    cancelBackgroundRuns: () => {
+      cancelBackgroundCalls++;
+    },
+  });
+
+  const service = new ConversationService({
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  service.interruptFromUser();
+
+  expect(abortCalls).toBe(1);
+  expect(cancelBackgroundCalls).toBe(1);
+});
+
+it('interruptFromUser() works with clients that cannot cancel background runs', () => {
+  const mockClient = partialClient({});
+
+  const service = new ConversationService({
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  expect(() => service.interruptFromUser()).not.toThrow();
+});

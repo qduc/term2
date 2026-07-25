@@ -140,6 +140,33 @@ export function createCompositeAbortSignal(
   return { signal: controller.signal, cleanup };
 }
 
+export const MAX_PREVIEW_LENGTH = 300;
+
+/**
+ * Condenses subagent output into a single-line, length-bounded preview: the
+ * first paragraph with whitespace collapsed, ellipsised at MAX_PREVIEW_LENGTH.
+ */
+export function truncatePreview(text: unknown): string {
+  if (typeof text !== 'string') {
+    return '';
+  }
+
+  const firstParagraph =
+    text
+      .split(/\n\s*\n/)[0]
+      ?.replace(/\s+/g, ' ')
+      .trim() || '';
+  if (!firstParagraph) {
+    return '';
+  }
+
+  if (firstParagraph.length <= MAX_PREVIEW_LENGTH) {
+    return firstParagraph;
+  }
+
+  return `${firstParagraph.slice(0, MAX_PREVIEW_LENGTH - 3)}...`;
+}
+
 export function createAbortError(message = 'The subagent run was aborted.'): Error {
   const error = new Error(message);
   error.name = 'AbortError';

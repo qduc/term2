@@ -1370,6 +1370,73 @@ it.sequential('AgentClient.abort aborts the injected SubagentBridge', () => {
   expect(abortSpy).toHaveBeenCalledTimes(1);
 });
 
+it.sequential('AgentClient.abort does not cancel conversation-bound background subagent runs', () => {
+  const settings = createMockSettings();
+  const mockBridge = new SubagentBridge({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+    chat: async () => '',
+    createClient: () => ({} as any),
+  });
+  const cancelBackgroundSpy = vi.spyOn(mockBridge, 'cancelBackgroundRuns');
+
+  const client = new AgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+    subagentBridge: mockBridge,
+  });
+
+  client.abort();
+
+  expect(cancelBackgroundSpy).not.toHaveBeenCalled();
+});
+
+it.sequential('AgentClient.cancelBackgroundRuns cancels background runs on the SubagentBridge', () => {
+  const settings = createMockSettings();
+  const mockBridge = new SubagentBridge({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+    chat: async () => '',
+    createClient: () => ({} as any),
+  });
+  const cancelBackgroundSpy = vi.spyOn(mockBridge, 'cancelBackgroundRuns');
+
+  const client = new AgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+    subagentBridge: mockBridge,
+  });
+
+  client.cancelBackgroundRuns();
+
+  expect(cancelBackgroundSpy).toHaveBeenCalledTimes(1);
+});
+
+it.sequential('AgentClient.setBackgroundSubagentEventSink delegates to the SubagentBridge', () => {
+  const settings = createMockSettings();
+  const mockBridge = new SubagentBridge({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+    chat: async () => '',
+    createClient: () => ({} as any),
+  });
+  const setBackgroundSpy = vi.spyOn(mockBridge, 'setBackgroundEventSink');
+
+  const client = new AgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+    subagentBridge: mockBridge,
+  });
+
+  const sink = () => {};
+  client.setBackgroundSubagentEventSink(sink);
+  client.setBackgroundSubagentEventSink(null);
+
+  expect(setBackgroundSpy).toHaveBeenCalledTimes(2);
+  expect(setBackgroundSpy).toHaveBeenNthCalledWith(1, sink);
+  expect(setBackgroundSpy).toHaveBeenNthCalledWith(2, null);
+});
+
 it.sequential('AgentClient.startStream resets the SubagentBridge abort controller', async () => {
   const settings = createMockSettings();
   const mockBridge = new SubagentBridge({

@@ -132,6 +132,30 @@ it('createSessionRuntime exposes runtime capabilities without conversation adapt
   runtime.dispose();
 });
 
+it('exposes the agent client background subagent event sink through runtime.sinks', () => {
+  const attached: Array<unknown> = [];
+  const runtime = createSessionRuntime({
+    sessionId: 'background-sink-test',
+    agentClient: makeMockClient({
+      setSubagentEventSink: noop,
+      setBackgroundSubagentEventSink: (sink: unknown) => {
+        attached.push(sink);
+      },
+    }),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+
+  // Composition installs its own conversation-scoped sink first; the host is
+  // still reachable through runtime.sinks for anyone who wants to replace it.
+  expect(attached).toHaveLength(1);
+
+  const sink = noop;
+  runtime.sinks.subagentEvents?.setBackgroundSubagentEventSink?.(sink);
+
+  expect(attached[attached.length - 1]).toBe(sink);
+  runtime.dispose();
+});
+
 it('session composition does not import the conversation adapter', () => {
   const source = readFileSync(new URL('./session-composition.ts', import.meta.url), 'utf8');
   expect(source).not.toContain('../conversation/conversation-adapter.js');
@@ -255,6 +279,35 @@ it('dispose() clears only the disposed session Docker grants', () => {
   expect(hasDockerHostControlSession('dispose-docker-a', process.cwd())).toBe(false);
   expect(hasDockerHostControlSession('dispose-docker-b', process.cwd())).toBe(true);
   resetDockerHostControlGrantsForTests();
+});
+
+it('dispose() cancels conversation-bound background subagent runs', () => {
+  let cancelBackgroundCalls = 0;
+  const { dispose } = createConversationSession({
+    sessionId: 'dispose-background-runs',
+    agentClient: makeMockClient({
+      cancelBackgroundRuns: () => {
+        cancelBackgroundCalls++;
+      },
+    }),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+
+  // No turn is in flight — background runs outlive turns, so disposal must
+  // still cancel them.
+  dispose();
+
+  expect(cancelBackgroundCalls).toBe(1);
+});
+
+it('dispose() tolerates clients that cannot cancel background subagent runs', () => {
+  const { dispose } = createConversationSession({
+    sessionId: 'dispose-background-runs-unsupported',
+    agentClient: makeMockClient(),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+
+  expect(() => dispose()).not.toThrow();
 });
 
 it('dispose() resets previousResponseId so next run starts fresh', () => {

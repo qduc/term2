@@ -50,6 +50,15 @@ export class AgentClient {
     this.#subagentBridge?.setEventSink(sink);
   }
 
+  /**
+   * Forward subagent activity events to a conversation-scoped consumer that
+   * stays attached across turns. Used to observe background (async) subagent
+   * runs that settle while no turn is in flight.
+   */
+  setBackgroundSubagentEventSink(sink: ((event: ConversationEvent) => void) | null): void {
+    this.#subagentBridge?.setBackgroundEventSink(sink);
+  }
+
   /** @deprecated Ordinary turn completion must not cancel background runs. */
   cancelSubagentRuns(): void {
     // Retained for the conversation adapter compatibility surface.
@@ -251,11 +260,21 @@ export class AgentClient {
   }
 
   /**
-   * Abort the current running stream/operation
+   * Abort the current running stream/operation, including the foreground
+   * subagent work of the running turn. Conversation-bound background (async)
+   * subagent runs are unaffected — see {@link cancelBackgroundRuns}.
    */
   abort(): void {
     this.#runOrchestrator.abort();
     this.#subagentBridge?.abort();
+  }
+
+  /**
+   * Cancel conversation-bound background (async) subagent runs. Reserved for an
+   * explicit user interrupt, conversation disposal, or shutdown.
+   */
+  cancelBackgroundRuns(): void {
+    this.#subagentBridge?.cancelBackgroundRuns();
   }
 
   clearConversations(): void {

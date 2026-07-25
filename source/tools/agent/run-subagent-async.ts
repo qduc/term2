@@ -9,7 +9,7 @@ import {
 } from '../format-helpers.js';
 import type { SubagentResult, SubagentRunHandle } from '../../services/subagents/types.js';
 import { SubagentRegistryError } from '../../services/subagents/subagent-async-registry.js';
-import { isAbortLike } from '../../services/subagents/utils.js';
+import { isAbortLike, truncatePreview } from '../../services/subagents/utils.js';
 
 const ASYNC_ROLES = ['explorer', 'worker', 'researcher', 'mentor', 'librarian'] as const;
 
@@ -28,29 +28,6 @@ const getSubagentResultSchema = z.object({
 
 export type RunSubagentAsyncParams = z.infer<typeof runSubagentAsyncSchema>;
 export type GetSubagentResultParams = z.infer<typeof getSubagentResultSchema>;
-
-const MAX_PREVIEW_LENGTH = 300;
-
-function truncatePreview(text: unknown): string {
-  if (typeof text !== 'string') {
-    return '';
-  }
-
-  const firstParagraph =
-    text
-      .split(/\n\s*\n/)[0]
-      ?.replace(/\s+/g, ' ')
-      .trim() || '';
-  if (!firstParagraph) {
-    return '';
-  }
-
-  if (firstParagraph.length <= MAX_PREVIEW_LENGTH) {
-    return firstParagraph;
-  }
-
-  return `${firstParagraph.slice(0, MAX_PREVIEW_LENGTH - 3)}...`;
-}
 
 function formatSubagentResult(result: SubagentResult): string {
   const lines: string[] = [];

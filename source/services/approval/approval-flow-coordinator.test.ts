@@ -133,6 +133,36 @@ it('abort delegates to agentClient and approvalState', () => {
   expect(result.aborted).toBe(true);
 });
 
+it('abort with a pending approval aborts the foreground stream without cancelling background runs', () => {
+  let abortCalled = false;
+  let cancelBackgroundCalled = false;
+  const client: any = {
+    abort: () => (abortCalled = true),
+    cancelBackgroundRuns: () => (cancelBackgroundCalled = true),
+  };
+  const approvalState = new ApprovalState();
+  approvalState.setPending({
+    state: {} as any,
+    interruption: {},
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+  });
+
+  const result = coord.abort();
+
+  expect(abortCalled).toBe(true);
+  expect(result.aborted).toBe(true);
+  expect(cancelBackgroundCalled).toBe(false);
+});
+
 it('abort returns false when no pending approval', () => {
   const client: any = { abort: () => undefined };
   const coord = new ApprovalFlowCoordinator({

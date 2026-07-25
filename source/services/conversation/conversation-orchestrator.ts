@@ -27,8 +27,34 @@ import {
   normalizeUserTurn,
   type UserTurn,
 } from '../../types/user-turn.js';
+import type { BackgroundSubagentNotification } from '../subagents/subagent-notification-store.js';
 
 const REASONING_RESPONSE_THROTTLE_MS = 200;
+
+/**
+ * Render settled background runs as one instruction to the main agent. Previews
+ * are already capped by the notification store, so the full output is offered
+ * by reference rather than inlined.
+ */
+function formatBackgroundSubagentNotifications(notifications: readonly BackgroundSubagentNotification[]): string {
+  const noun = notifications.length === 1 ? 'run' : 'runs';
+  const entries = notifications.map((notification) => {
+    const lines = [
+      `- runId: ${notification.runId} | role: ${notification.role} | status: ${notification.status}`,
+      ...(notification.error ? [`  error: ${notification.error}`] : []),
+      ...(notification.preview ? [`  preview: ${notification.preview}`] : []),
+    ];
+    return lines.join('\n');
+  });
+
+  return [
+    `Background subagent ${noun} finished (${notifications.length}). This is an automatic system notification, not a user message.`,
+    '',
+    ...entries,
+    '',
+    'Call get_subagent_result(runId) for the full report of any run above.',
+  ].join('\n');
+}
 
 export class ConversationOrchestrator {
   private pendingApproval: PendingApproval | null = null;
@@ -36,6 +62,14 @@ export class ConversationOrchestrator {
   private currentAskUserQuestionIndex = 0;
   private readonly createMessageId: () => string;
   readonly #directlyAppendedMessageIds = new Set<string>();
+  /**
+   * Turns this orchestrator currently owns. `ui.onTurnStart` cannot be counted
+   * instead: the queue observer emits it unbalanced when a queued submission is
+   * popped after the preceding turn already ended.
+   */
+  #activeTurns = 0;
+  /** True while {@link stopProcessing} is tearing the conversation down. */
+  #stoppingByUser = false;
 
   constructor(private config: ConversationOrchestratorConfig) {
     this.createMessageId = config.createMessageId ?? createMessageIdFactory(config.now);
@@ -58,6 +92,13 @@ export class ConversationOrchestrator {
           // turn actually becomes the queue head.
           config.ui.onTurnStart();
         }
+      });
+    }
+    // A background subagent run can settle at any time, including while the
+    // conversation is idle and nothing would otherwise wake the agent.
+    if (typeof config.conversationService.setBackgroundSubagentNotificationObserver === 'function') {
+      config.conversationService.setBackgroundSubagentNotificationObserver(() => {
+        void this.#deliverBackgroundSubagentNotifications();
       });
     }
   }
@@ -107,19 +148,32 @@ export class ConversationOrchestrator {
   }
 
   stopProcessing(): void {
-    this.config.conversationService.abort();
-    this.config.messages.setMessages((messages) =>
-      messages.map((message) =>
-        message.sender === 'command' && message.status === 'running'
-          ? { ...message, status: 'aborted' as const }
-          : message,
-      ),
-    );
-    this.config.approvedContext.current = null;
-    this.pendingApproval = null;
-    this.resetAskUserState();
-    this.config.ui.onResetTransient();
-    this.#directlyAppendedMessageIds.clear();
+    // The user asked everything to stop, so background subagent runs go too.
+    // Undo and retry, by contrast, only abort the turn.
+    //
+    // Cancelling those runs makes each of them emit its own completion event,
+    // so the notification queue must be suppressed and then dropped: the user
+    // already knows the runs stopped, and waking the agent to say so is the
+    // opposite of what they asked for.
+    this.#stoppingByUser = true;
+    try {
+      this.config.conversationService.interruptFromUser();
+      this.config.messages.setMessages((messages) =>
+        messages.map((message) =>
+          message.sender === 'command' && message.status === 'running'
+            ? { ...message, status: 'aborted' as const }
+            : message,
+        ),
+      );
+      this.config.approvedContext.current = null;
+      this.pendingApproval = null;
+      this.resetAskUserState();
+      this.config.ui.onResetTransient();
+      this.#directlyAppendedMessageIds.clear();
+      this.config.conversationService.backgroundSubagentNotifications?.drain();
+    } finally {
+      this.#stoppingByUser = false;
+    }
   }
 
   undoLastUserMessage(): { text: string; images?: UserTurn['images'] } | null {
@@ -179,10 +233,9 @@ export class ConversationOrchestrator {
     }
 
     this.config.messages.setMessages((prev) => trimTrailingAssistantMessages(prev));
-    this.config.ui.onTurnStart();
 
     const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
-      this.createTurnSession('retryLastToolOutput');
+      this.#beginTurn('retryLastToolOutput');
 
     try {
       const result = await this.config.conversationService.retryLastToolOutput({
@@ -213,7 +266,7 @@ export class ConversationOrchestrator {
       this.config.loggingService.debug('retryLastToolOutput finally block - resetting state');
       reasoningUpdater.flush();
       botResponseUpdater.cancel();
-      this.config.ui.onTurnEnd();
+      this.#endTurn();
     }
   }
 
@@ -274,10 +327,9 @@ export class ConversationOrchestrator {
       this.#directlyAppendedMessageIds.add(userMessage.id);
     }
     this.config.logWriter?.append({ type: 'user_message', message: userMessage });
-    this.config.ui.onTurnStart();
 
     const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
-      this.createTurnSession('sendUserMessage');
+      this.#beginTurn('sendUserMessage');
 
     try {
       const turnToSend = turn.skill ? injectSkillIntoTurn(turn) : turn;
@@ -331,7 +383,7 @@ export class ConversationOrchestrator {
       this.config.loggingService.debug('sendUserMessage finally block - resetting state');
       reasoningUpdater.flush();
       botResponseUpdater.cancel();
-      this.config.ui.onTurnEnd();
+      this.#endTurn();
     }
   }
 
@@ -393,15 +445,13 @@ export class ConversationOrchestrator {
     this.resetAskUserState();
 
     if (isMaxTurnsPrompt && answer === 'n') {
-      this.config.ui.onTurnEnd();
+      this.#endTurn();
       return;
     }
 
     if (isMaxTurnsPrompt && answer === 'y') {
-      this.config.ui.onTurnStart();
-
       const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
-        this.createTurnSession('maxTurnsContinuation');
+        this.#beginTurn('maxTurnsContinuation');
 
       try {
         const result = await this.config.conversationService.sendMessage('Please continue with your previous task.', {
@@ -424,15 +474,14 @@ export class ConversationOrchestrator {
       } finally {
         reasoningUpdater.flush();
         botResponseUpdater.cancel();
-        this.config.ui.onTurnEnd();
+        this.#endTurn();
       }
 
       return;
     }
 
-    this.config.ui.onTurnStart();
     const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
-      this.createTurnSession('approvalDecision');
+      this.#beginTurn('approvalDecision');
 
     try {
       const result = await this.config.conversationService.handleApprovalDecision(answer, rejectionReason, {
@@ -457,7 +506,82 @@ export class ConversationOrchestrator {
       this.config.loggingService.debug('handleApprovalDecision finally block - resetting state');
       reasoningUpdater.flush();
       botResponseUpdater.cancel();
-      this.config.ui.onTurnEnd();
+      this.#endTurn();
+    }
+  }
+
+  /** Open a turn this orchestrator owns, and its streaming session. */
+  #beginTurn(label: string) {
+    this.#activeTurns += 1;
+    this.config.ui.onTurnStart();
+    return this.createTurnSession(label);
+  }
+
+  /**
+   * Close a turn this orchestrator owns. `flushNotifications` is false only for
+   * the background-notification turn itself, which decides for itself whether
+   * another delivery attempt is safe.
+   */
+  #endTurn(flushNotifications = true): void {
+    this.#activeTurns = Math.max(0, this.#activeTurns - 1);
+    this.config.ui.onTurnEnd();
+    if (flushNotifications) {
+      void this.#deliverBackgroundSubagentNotifications();
+    }
+  }
+
+  /**
+   * Hand every settled background subagent run to the main agent as one
+   * system-initiated turn. Does nothing unless the conversation is idle: a
+   * running turn or a pending approval owns the agent, and the store keeps the
+   * notifications until the next terminal state re-attempts delivery.
+   */
+  async #deliverBackgroundSubagentNotifications(): Promise<void> {
+    const pending = this.config.conversationService.backgroundSubagentNotifications;
+    if (!pending || pending.pendingCount === 0) return;
+    if (this.#stoppingByUser) return;
+    if (this.#activeTurns > 0 || this.pendingApproval) return;
+    if (this.config.conversationService.isQueueActive?.()) return;
+
+    const notifications = pending.drain();
+    if (notifications.length === 0) return;
+
+    const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = this.#beginTurn(
+      'backgroundSubagentNotification',
+    );
+
+    let delivered = false;
+    try {
+      const result = await this.config.conversationService.sendMessage(
+        formatBackgroundSubagentNotifications(notifications),
+        { onEvent: this.createOnEventHandler(applyConversationEvent) },
+      );
+
+      // A turn the queue refused to admit resolves without a terminal, so the
+      // notifications were never seen and must go back on the queue.
+      delivered = Boolean(result);
+      applyConversationEvent({ type: 'final', finalText: '' } as any);
+      botResponseUpdater.flush();
+      this.applyServiceResult(result, streamingState, streamingState.latestUsage);
+    } catch (error) {
+      this.logError('Error delivering background subagent notifications', error);
+
+      if (isAbortLikeError(error)) {
+        this.config.loggingService.debug('Suppressing abort error in background subagent notification turn');
+        return;
+      }
+
+      this.appendBotError(enhanceApiKeyError(describeError(error)));
+      this.config.ui.onApprovalResolved();
+    } finally {
+      reasoningUpdater.flush();
+      botResponseUpdater.cancel();
+      if (!delivered) {
+        pending.retain(notifications);
+      }
+      // Only a delivered batch may chain: retrying a failed batch immediately
+      // would spin. Anything still queued waits for the next turn or completion.
+      this.#endTurn(delivered);
     }
   }
 

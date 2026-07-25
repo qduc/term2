@@ -85,7 +85,9 @@ export class ExecutionSubagentRunner {
     // Root executions do NOT consume a child slot; only actual nested
     // agent runs do. The root budget tracks children, not itself.
     let childSlot = providedChildSlot;
+    let executionBudget = definition.executionBudget;
     if (definition.executionBudget && !definition.isRootExecution && !childSlot) {
+      executionBudget = definition.executionBudget.createChildBudget();
       const slot = definition.executionBudget.tryAcquireChild();
       if (!(slot instanceof AcquiredChildSlot)) {
         return {
@@ -257,7 +259,7 @@ export class ExecutionSubagentRunner {
       }
       // Record usage to the budget on every terminal path
       if (childSlot && usage) {
-        definition.executionBudget!.recordUsage(usage);
+        executionBudget!.recordUsage(usage);
       }
       // Release the child slot
       childSlot?.release();

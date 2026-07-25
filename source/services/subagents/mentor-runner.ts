@@ -48,7 +48,9 @@ export class MentorRunner {
     executionBudget?: ExecutionBudget,
   ): Promise<SubagentResult> {
     let slot: AcquiredChildSlot | undefined;
+    let childBudget = executionBudget;
     if (executionBudget) {
+      childBudget = executionBudget.createChildBudget();
       const acquired = executionBudget.tryAcquireChild();
       if (!(acquired instanceof AcquiredChildSlot)) {
         return {
@@ -69,7 +71,7 @@ export class MentorRunner {
     if (session) this.#mentorSession = session;
     try {
       const result = await this.#runWithSession(agentId, task, signal);
-      if (slot && result.usage) executionBudget!.recordUsage(result.usage);
+      if (slot && result.usage) childBudget!.recordUsage(result.usage);
       return result;
     } finally {
       slot?.release();

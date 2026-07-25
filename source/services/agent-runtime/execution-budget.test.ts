@@ -188,6 +188,32 @@ describe('ExecutionBudget', () => {
     });
   });
 
+  describe('shared execution-tree state', () => {
+    it('shares aggregate child, concurrency, and token accounting across descendants', () => {
+      const root = createRootBudget({ maxChildren: 2, maxConcurrency: 1, maxTokens: 100 });
+      const child = root.createChildBudget();
+      const slot = child.tryAcquireChild() as AcquiredChildSlot;
+      root.recordUsage({ total_tokens: 60 });
+      expect(child.childCount).toBe(1);
+      expect(root.activeChildren).toBe(1);
+      expect(child.aggregateTokens).toBe(60);
+      expect(root.tryAcquireChild()).toMatchObject({ accepted: false, reason: 'max_concurrency_exceeded' });
+      slot.release();
+      root.recordUsage({ total_tokens: 30 });
+      const second = child.tryAcquireChild() as AcquiredChildSlot;
+      second.release();
+      expect(root.tryAcquireChild()).toMatchObject({ accepted: false, reason: 'max_children_exceeded' });
+    });
+
+    it('propagates depth exhaustion and abort through child scopes', () => {
+      const root = createRootBudget({ maxDepth: 1 });
+      const child = root.createChildBudget();
+      expect(() => child.createChildBudget()).toThrow(/Maximum agent depth/);
+      child.abort();
+      expect(root.signal.aborted).toBe(true);
+    });
+  });
+
   describe('slot.createChildBudget', () => {
     it('delegates to parent createChildBudget', () => {
       const budget = createRootBudget({ maxDepth: 3 });

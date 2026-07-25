@@ -50,6 +50,8 @@ export interface SubagentAsyncRegistryDeps {
   ttlMs?: number;
   messageCap?: number;
   sessionForRole?: (role: string) => SubagentSession | undefined;
+  setInterval?: (callback: () => void, delay: number) => ReturnType<typeof setInterval>;
+  clearInterval?: (timer: ReturnType<typeof setInterval>) => void;
 }
 
 /** Owns async subagent sessions, terminal records, continuation policy and retention. */
@@ -66,6 +68,7 @@ export class SubagentAsyncRegistry {
   #sessionCap = 50;
   #sessionForRole?: (role: string) => SubagentSession | undefined;
   #timer: ReturnType<typeof setInterval>;
+  #clearInterval: (timer: ReturnType<typeof setInterval>) => void;
   #disposed = false;
 
   constructor(deps: SubagentAsyncRegistryDeps) {
@@ -76,7 +79,11 @@ export class SubagentAsyncRegistry {
     this.#ttlMs = deps.ttlMs ?? 30 * 60 * 1000;
     this.#messageCap = deps.messageCap ?? 50;
     this.#sessionForRole = deps.sessionForRole;
-    this.#timer = setInterval(() => this.#evictExpired(), Math.max(1000, Math.min(this.#ttlMs, 60_000)));
+    this.#clearInterval = deps.clearInterval ?? clearInterval;
+    this.#timer = (deps.setInterval ?? setInterval)(
+      () => this.#evictExpired(),
+      Math.max(1000, Math.min(this.#ttlMs, 60_000)),
+    );
     this.#timer.unref?.();
   }
 
@@ -219,7 +226,7 @@ export class SubagentAsyncRegistry {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
-    clearInterval(this.#timer);
+    this.#clearInterval(this.#timer);
     this.reset();
   }
 
@@ -235,6 +242,10 @@ export class SubagentAsyncRegistry {
         for (const [key, session] of this.#sessions) if (session === candidate.session) this.#sessions.delete(key);
       }
     }
+  }
+
+  evictExpired(): void {
+    this.#evictExpired();
   }
 
   #evictExpired(): void {

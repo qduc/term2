@@ -100,6 +100,49 @@ it('returns terminal failures and cancellations instead of rejecting', async () 
   await expect(cancelled.getResult(cancelledRun.runId)).resolves.toMatchObject({ status: 'cancelled' });
 });
 
+it('evicts terminal runs from an injected clock and refreshes TTL on access', async () => {
+  let now = 0;
+  let tick!: () => void;
+  let cleared = false;
+  const registry = new SubagentAsyncRegistry({
+    logger: createMockLogger(),
+    now: () => now,
+    ttlMs: 1_800_000,
+    setInterval: (callback) => {
+      tick = callback;
+      return 1 as any;
+    },
+    clearInterval: () => {
+      cleared = true;
+    },
+    run: async ({ request }) => result(request.role),
+  });
+  const run = registry.startRun({ role: 'explorer', task: 'inspect' });
+  await registry.getResult(run.runId);
+  now = 1_700_000;
+  await registry.getResult(run.runId);
+  now = 3_500_001;
+  tick();
+  await expect(registry.getResult(run.runId)).rejects.toMatchObject({ code: 'evicted' });
+  registry.dispose();
+  expect(cleared).toBe(true);
+});
+
+it('preserves terminal cancellation when disposed during execution', async () => {
+  let resolve!: (value: SubagentResult) => void;
+  const registry = new SubagentAsyncRegistry({
+    logger: createMockLogger(),
+    setInterval: () => 1 as any,
+    clearInterval: () => {},
+    run: () => new Promise<SubagentResult>((r) => (resolve = r)),
+  });
+  const run = registry.startRun({ role: 'explorer', task: 'cancel' });
+  const resultPromise = registry.getResult(run.runId);
+  registry.dispose();
+  await expect(resultPromise).resolves.toMatchObject({ status: 'cancelled' });
+  resolve(result('explorer'));
+});
+
 it('reports typed not-found, active, worker, and evicted errors', async () => {
   const now = vi.fn(() => 0);
   const registry = new SubagentAsyncRegistry({

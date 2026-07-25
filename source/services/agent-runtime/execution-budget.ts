@@ -30,11 +30,7 @@ export class ExecutionBudget {
   /** Shared AbortController for the entire tree. */
   readonly abortController: AbortController;
 
-  #childCount = 0;
-  #activeChildren = 0;
-  #aggregateTokens = 0;
-  #released = false;
-
+  #state: { childCount: number; activeChildren: number; aggregateTokens: number; released: boolean };
   constructor(options: {
     maxChildren?: number;
     maxDepth?: number;
@@ -42,6 +38,7 @@ export class ExecutionBudget {
     maxTokens?: number;
     currentDepth?: number;
     abortController?: AbortController;
+    sharedState?: { childCount: number; activeChildren: number; aggregateTokens: number; released: boolean };
   }) {
     this.maxChildren = options.maxChildren;
     this.maxDepth = options.maxDepth;
@@ -49,6 +46,7 @@ export class ExecutionBudget {
     this.maxTokens = options.maxTokens;
     this.currentDepth = options.currentDepth ?? 0;
     this.abortController = options.abortController ?? new AbortController();
+    this.#state = options.sharedState ?? { childCount: 0, activeChildren: 0, aggregateTokens: 0, released: false };
   }
 
   /** Shared abort signal for the tree. */
@@ -58,22 +56,22 @@ export class ExecutionBudget {
 
   /** Current child count (for inspection). */
   get childCount(): number {
-    return this.#childCount;
+    return this.#state.childCount;
   }
 
   /** Current active (in-progress) children. */
   get activeChildren(): number {
-    return this.#activeChildren;
+    return this.#state.activeChildren;
   }
 
   /** Aggregate token usage across the tree. */
   get aggregateTokens(): number {
-    return this.#aggregateTokens;
+    return this.#state.aggregateTokens;
   }
 
   /** Whether any limit has been exceeded or the tree was aborted. */
   get isExhausted(): boolean {
-    return this.#released || this.abortController.signal.aborted;
+    return this.#state.released || this.abortController.signal.aborted;
   }
 
   /**
@@ -83,7 +81,7 @@ export class ExecutionBudget {
    * Callers MUST call `release()` on the returned slot in a finally block.
    */
   tryAcquireChild(): AcquiredChildSlot | ChildAcquireRejection {
-    if (this.#released) {
+    if (this.#state.released) {
       return { accepted: false, reason: 'budget_released' };
     }
 
@@ -92,40 +90,45 @@ export class ExecutionBudget {
     }
 
     // Check maxChildren
-    if (this.maxChildren !== undefined && this.#childCount >= this.maxChildren) {
-      return { accepted: false, reason: 'max_children_exceeded', current: this.#childCount, max: this.maxChildren };
+    if (this.maxChildren !== undefined && this.#state.childCount >= this.maxChildren) {
+      return {
+        accepted: false,
+        reason: 'max_children_exceeded',
+        current: this.#state.childCount,
+        max: this.maxChildren,
+      };
     }
 
     // Check maxConcurrency
-    if (this.maxConcurrency !== undefined && this.#activeChildren >= this.maxConcurrency) {
+    if (this.maxConcurrency !== undefined && this.#state.activeChildren >= this.maxConcurrency) {
       return {
         accepted: false,
         reason: 'max_concurrency_exceeded',
-        current: this.#activeChildren,
+        current: this.#state.activeChildren,
         max: this.maxConcurrency,
       };
     }
 
     // Check token budget
-    if (this.maxTokens !== undefined && this.#aggregateTokens >= this.maxTokens) {
+    if (this.maxTokens !== undefined && this.#state.aggregateTokens >= this.maxTokens) {
       return {
         accepted: false,
         reason: 'max_tokens_exceeded',
-        current: this.#aggregateTokens,
+        current: this.#state.aggregateTokens,
         max: this.maxTokens,
       };
     }
 
-    this.#childCount++;
-    this.#activeChildren++;
+    this.#state.childCount++;
+    this.#state.activeChildren++;
 
     return new AcquiredChildSlot(this, () => this.#releaseChild());
   }
 
   /** Called by AcquiredChildSlot to release a slot. */
   #releaseChild(): void {
-    if (this.#activeChildren > 0) {
-      this.#activeChildren--;
+    if (this.#state.activeChildren > 0) {
+      this.#state.activeChildren--;
     }
   }
 
@@ -135,10 +138,10 @@ export class ExecutionBudget {
    */
   recordUsage(usage: NormalizedUsage): void {
     const tokens = usage.total_tokens ?? (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0);
-    this.#aggregateTokens += tokens;
+    this.#state.aggregateTokens += tokens;
 
-    if (this.maxTokens !== undefined && this.#aggregateTokens >= this.maxTokens) {
-      this.#released = true;
+    if (this.maxTokens !== undefined && this.#state.aggregateTokens >= this.maxTokens) {
+      this.#state.released = true;
       try {
         this.abortController.abort();
       } catch {
@@ -149,7 +152,7 @@ export class ExecutionBudget {
 
   /** Abort the entire tree. */
   abort(): void {
-    this.#released = true;
+    this.#state.released = true;
     try {
       this.abortController.abort();
     } catch {
@@ -177,12 +180,13 @@ export class ExecutionBudget {
       maxTokens: this.maxTokens,
       currentDepth: depth,
       abortController: this.abortController,
+      sharedState: this.#state,
     });
   }
 
   /** Release all resources (called when root execution completes). */
   release(): void {
-    this.#released = true;
+    this.#state.released = true;
     try {
       this.abortController.abort();
     } catch {
@@ -198,6 +202,7 @@ export class ExecutionBudget {
 export class AcquiredChildSlot {
   #budget: ExecutionBudget;
   #releaseFn: () => void;
+  #released = false;
 
   constructor(budget: ExecutionBudget, releaseFn: () => void) {
     this.#budget = budget;
@@ -211,6 +216,8 @@ export class AcquiredChildSlot {
 
   /** Release the slot, decrementing active children count. */
   release(): void {
+    if (this.#released) return;
+    this.#released = true;
     this.#releaseFn();
   }
 

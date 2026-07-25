@@ -507,7 +507,10 @@ it('explicit Docker host control is not auto-approved by LLM advisory mode', asy
     conversationStore: new ConversationStore(),
     agentClient,
     logger,
-    settingsService: { get: () => 'auto' },
+    settingsService: {
+      get: <T>(): T => 'auto' as unknown as T,
+      set: () => {},
+    },
     sessionContextService: {
       runWithContext: <T>(_context: any, fn: () => T) => fn(),
       getContext: () => null,

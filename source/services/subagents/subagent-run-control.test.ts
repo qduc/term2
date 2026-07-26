@@ -63,6 +63,15 @@ describe('SubagentRunControl', () => {
     expect(control.pendingQuestion).toBeUndefined();
   });
 
+  it('reports one trimmed question text to both the asker and the run owner', () => {
+    const control = new SubagentRunControl({ createQuestionId: () => 'question-1' });
+
+    const asked = control.ask('  Which API should I use?  ');
+
+    expect(asked.question).toBe('Which API should I use?');
+    expect(control.pendingQuestion).toEqual({ messageId: 'question-1', question: 'Which API should I use?' });
+  });
+
   it('answers the one matching pending question and clears its waiter', async () => {
     const control = new SubagentRunControl({ createQuestionId: () => 'question-1' });
     const question = control.ask('Which API should I use?');

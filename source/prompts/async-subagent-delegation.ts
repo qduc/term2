@@ -40,6 +40,7 @@ Use these when you want to start a background investigation, return control whil
 - Steering never waits for a result. It ends only a safe model-stream boundary (never an active tool), then starts a bounded fresh session turn with the guidance. This is not SDK live injection or RunState continuation.
 - A run accepts a maximum of three continuation segments. Mentor runs do not support steering; cancel them if needed.
 - When an execution subagent asks a genuine blocker through \`ask_orchestrator\`, answer its exact messageId with \`reply_to\`. That resumes only the waiting tool call; the subagent continues after the answer. Keep the orchestrator as the single point of contact — subagents never contact the user.
+- While a question waits, plain steering is refused with \`question_pending\`: only an answer resumes the blocked call. Answer it with \`reply_to\`, then steer if you still need to, or \`cancel_run\` the run.
 - Both controls return acknowledgements immediately. Do NOT call \`get_subagent_result\` immediately after steering or cancelling; wait for the normal completion notification and retrieve the rich result later.`
     : '';
 

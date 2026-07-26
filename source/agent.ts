@@ -189,7 +189,6 @@ export const getAgentDefinition = (
     Boolean(getSubagentResult) &&
     Boolean(sendSubagentMessage) &&
     Boolean(cancelSubagentRun);
-  const asyncControlsEnabled = asyncSubagentEnabled && Boolean(sendSubagentMessage) && Boolean(cancelSubagentRun);
   const memoryCapability = new MemoryCapabilityBuilder(settingsService, {
     onWarning: (message) => loggingService.warn(message),
   }).build({ kind: 'main' }, { projectPath: executionContext?.getCwd() ?? process.cwd() });
@@ -203,7 +202,7 @@ export const getAgentDefinition = (
     codeContextEnabled,
     runSubagentEnabled: orchestratorMode ? asyncSubagentEnabled : Boolean(runSubagent),
     runSubagentAsyncEnabled: asyncSubagentEnabled,
-    asyncSubagentControlsEnabled: asyncControlsEnabled,
+    asyncSubagentControlsEnabled: asyncSubagentEnabled,
     sandboxEnabled,
     memoryEnabled: memoryCapability.access !== 'none',
     memoryGuidance: memoryCapability.guidance,
@@ -255,9 +254,8 @@ export const getAgentDefinition = (
       createRunSubagentAsyncToolDefinition(runSubagentAsync),
       createGetSubagentResultToolDefinition(getSubagentResult),
       ...(getSubagentStatus ? [createGetSubagentStatusToolDefinition(getSubagentStatus)] : []),
-      ...(asyncControlsEnabled
-        ? [createSendMessageToolDefinition(sendSubagentMessage!), createCancelRunToolDefinition(cancelSubagentRun!)]
-        : []),
+      createSendMessageToolDefinition(sendSubagentMessage),
+      createCancelRunToolDefinition(cancelSubagentRun),
     ];
     tools.push(
       createShellToolDefinition({
@@ -398,8 +396,10 @@ export const getAgentDefinition = (
       tools.push(createRunSubagentToolDefinition(runSubagent));
     }
 
-    // Add async subagent tools (not in lite mode)
-    if (runSubagentAsync && getSubagentResult) {
+    // Add async subagent tools (not in lite mode). The conjunction is
+    // `asyncSubagentEnabled` spelled out so the callbacks narrow: registering any
+    // of these without the rest would advertise delegation the prompt never explains.
+    if (runSubagentAsync && getSubagentResult && sendSubagentMessage && cancelSubagentRun) {
       tools.push(
         createRunSubagentAsyncToolDefinition(runSubagentAsync),
         createGetSubagentResultToolDefinition(getSubagentResult),
@@ -407,12 +407,10 @@ export const getAgentDefinition = (
       if (getSubagentStatus) {
         tools.push(createGetSubagentStatusToolDefinition(getSubagentStatus));
       }
-      if (asyncControlsEnabled) {
-        tools.push(
-          createSendMessageToolDefinition(sendSubagentMessage!),
-          createCancelRunToolDefinition(cancelSubagentRun!),
-        );
-      }
+      tools.push(
+        createSendMessageToolDefinition(sendSubagentMessage),
+        createCancelRunToolDefinition(cancelSubagentRun),
+      );
     }
   }
 

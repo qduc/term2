@@ -979,8 +979,14 @@ export class SubagentToolFactory {
               details,
             );
             const maxOutputLength = this.#settings.get<number | undefined>('shell.maxOutputChars');
-            const result = await definition.execute(params, _context, details);
-            options.onToolComplete?.(definition.name, result, _context, details);
+            let result: any;
+            try {
+              result = await definition.execute(params, _context, details);
+            } finally {
+              // Must pair with every onToolStart, including the throwing path: this
+              // callback closes the active-tool gate that defers steering interrupts.
+              options.onToolComplete?.(definition.name, result, _context, details);
+            }
             const trimmedResult = trimToolOutput(result, undefined, maxOutputLength ?? undefined);
             return injectTurnLimitWarning(trimmedResult, _context?.context);
           },

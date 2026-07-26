@@ -158,7 +158,7 @@ export class SubagentRunControl {
     });
     const pending = { messageId: this.#createQuestionId(), question: boundedQuestion, resolve, reject };
     this.#question = pending;
-    return { messageId: pending.messageId, question, answer };
+    return { messageId: pending.messageId, question: boundedQuestion, answer };
   }
 
   answer(messageId: string, answer: string): boolean {

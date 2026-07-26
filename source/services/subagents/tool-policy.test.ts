@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import path from 'node:path';
 import fs from 'node:fs';
+import { z } from 'zod';
 import {
   SubagentToolFactory,
   SubagentToolPolicy,
@@ -223,6 +224,48 @@ describe('SubagentToolFactory memory authority', () => {
     expect(buildToolNames(definition, memoryEnabled).filter((name) => name.startsWith('memory_'))).toEqual([]);
     expect(instructions).not.toContain('Persistent memory');
     expect(instructions).not.toContain('The following memories are summaries from previous sessions');
+  });
+});
+
+describe('SubagentToolFactory agent tool wrapping', () => {
+  function buildFailingTool(callbacks: {
+    onToolStart: (name: string) => void;
+    onToolComplete: (name: string) => void;
+  }) {
+    const settings = createMemorySettings();
+    const policy = new SubagentToolPolicy({
+      settings,
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+    return new SubagentToolFactory({ settings, logger: createMockLogger(), toolPolicy: policy }).buildAgentTools(
+      [
+        {
+          name: 'exploding_tool',
+          description: 'Always throws.',
+          parameters: z.object({}),
+          needsApproval: () => false,
+          execute: async () => {
+            throw new Error('tool exploded');
+          },
+          formatCommandMessage: () => [],
+        },
+      ],
+      { providerId: 'test', ...callbacks },
+    )[0] as any;
+  }
+
+  // The completion callback closes the active-tool gate that defers a steering
+  // interrupt; if a throwing tool skipped it, the gate would never reopen.
+  it('reports tool completion even when the tool throws', async () => {
+    const onToolStart = vi.fn();
+    const onToolComplete = vi.fn();
+    const tool = buildFailingTool({ onToolStart, onToolComplete });
+
+    await tool.invoke({}, '{}', {}).catch(() => undefined);
+
+    expect(onToolStart).toHaveBeenCalledOnce();
+    expect(onToolComplete).toHaveBeenCalledOnce();
   });
 });
 

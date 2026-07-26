@@ -15,6 +15,16 @@ Application code lives under `source/`. The non-obvious entry points:
 
 Everything else is discoverable by reading the tree. For module-design decisions, ownership boundaries, and the full turn lifecycle, use the `architecture` skill. For test scope and standards, use the `testing` skill.
 
+# Parallel Work Isolation
+
+Several agents share the primary checkout, so concurrent edits pile into one `git status` with no way to tell whose work is whose.
+
+Do each bug fix or feature in its own worktree: `git worktree add ../term2-<slug> -b <slug>`, then `pnpm install` there (`node_modules` is not shared). Commit inside it, merge back with `git merge --no-ff <slug>` from the primary checkout, then `git worktree remove` and `git branch -d`.
+
+- Never `git checkout` another branch in the primary checkout — other agents have HEAD-dependent work in flight.
+- Git refuses a merge that would clobber another agent's uncommitted edits. Coordinate; don't stash their files aside.
+- Trivial single-file edits can stay in place.
+
 # Shell Safety For Agents
 
 - Never run ad-hoc shell probes containing executable payloads such as `rm`, `find -exec`, `sed -i`, redirections, command substitution, backticks, or shell metacharacters. Shell quoting mistakes can turn test fixtures into real commands.

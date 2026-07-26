@@ -289,6 +289,23 @@ it('getAgentDefinition registers parent async controls in orchestrator and ordin
   }
 });
 
+it('getAgentDefinition registers no async delegation tools when the parent controls are absent', () => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'app.liteMode': false }),
+    loggingService: mockLogger,
+    runSubagentAsync: async () => ({ runId: 'run-1' }),
+    getSubagentResult: async () => ({ finalText: 'done' }),
+  });
+
+  // Async delegation is all-or-nothing: a partial callback set must not leave
+  // launch tools registered without their guidance or their control channel.
+  const toolNames = definition.tools.map((tool) => tool.name);
+  for (const name of ['run_subagent_async', 'get_subagent_result', 'send_message', 'cancel_run']) {
+    expect(toolNames).not.toContain(name);
+  }
+  expect(definition.instructions).not.toContain('### Asynchronous subagents');
+});
+
 it('getAgentDefinition requires parent controls when orchestrator mode enables async delegation', () => {
   expect(() =>
     getAgentDefinition({

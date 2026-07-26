@@ -86,6 +86,9 @@ function makeUIPort(): UIPort {
 function makeHarness() {
   const store = new SubagentNotificationStore({ now: () => 1_000 });
   let observer: (() => void) | null = null;
+  let queuedTurnStartObserver:
+    | ((execution: { requestId: string; input: string; suppressUserMessageDisplay?: boolean }) => void)
+    | null = null;
 
   const service = {
     sessionId: 'test-session',
@@ -95,7 +98,11 @@ function makeHarness() {
     interruptFromUser: vi.fn(),
     isQueueActive: vi.fn(() => false),
     setQueueStateObserver: vi.fn(),
-    setQueuedTurnStartObserver: vi.fn(),
+    setQueuedTurnStartObserver: vi.fn(
+      (next: (execution: { requestId: string; input: string; suppressUserMessageDisplay?: boolean }) => void) => {
+        queuedTurnStartObserver = next;
+      },
+    ),
     setBackgroundSubagentNotificationObserver: vi.fn((next: (() => void) | null) => {
       observer = next;
     }),
@@ -126,6 +133,9 @@ function makeHarness() {
     sentTexts(): string[] {
       return service.sendMessage.mock.calls.map((call) => String((call as unknown[])[0]));
     },
+    startQueuedTurn(input: string, suppressUserMessageDisplay?: boolean) {
+      queuedTurnStartObserver?.({ requestId: 'queued-background-notification', input, suppressUserMessageDisplay });
+    },
   };
 }
 
@@ -147,6 +157,14 @@ describe('ConversationOrchestrator background subagent notifications', () => {
     expect(h.store.pendingCount).toBe(0);
     expect(h.config.ui.onTurnStart).toHaveBeenCalledTimes(1);
     expect(h.config.ui.onTurnEnd).toHaveBeenCalledTimes(1);
+    expect(h.config.messages.getMessages()).toContainEqual(
+      expect.objectContaining({
+        sender: 'command',
+        toolName: 'background_subagent_notification',
+        status: 'completed',
+        success: true,
+      }),
+    );
   });
 
   it('does not start a turn for a completion that is not an async run', async () => {
@@ -157,6 +175,24 @@ describe('ConversationOrchestrator background subagent notifications', () => {
 
     expect(h.service.sendMessage).not.toHaveBeenCalled();
     expect(h.config.ui.onTurnStart).not.toHaveBeenCalled();
+  });
+
+  it('renders a completion as tool activity instead of a user message when its queued turn starts', async () => {
+    const h = makeHarness();
+    h.service.sendMessage.mockImplementation(
+      async (input: string, options?: { suppressUserMessageDisplay?: boolean }) => {
+        h.startQueuedTurn(input, options?.suppressUserMessageDisplay);
+        return response();
+      },
+    );
+
+    h.emit(completion());
+    await settle();
+
+    expect(h.config.messages.getMessages().some((message) => message.sender === 'user')).toBe(false);
+    expect(h.config.messages.getMessages()).toContainEqual(
+      expect.objectContaining({ sender: 'command', toolName: 'background_subagent_notification' }),
+    );
   });
 
   it('defers delivery until the in-flight turn reaches a terminal state, then delivers once', async () => {

@@ -150,7 +150,7 @@ const CommandMessage: FC<Props> = ({
       );
     }
 
-    const argsText = formattedArgs ? ` ${formattedArgs}` : '';
+    const argsText = toolName === 'background_subagent_notification' || !formattedArgs ? '' : ` ${formattedArgs}`;
     const renderAction = (verb: string) => (
       <>
         <Text dimColor>{verb}</Text>
@@ -190,6 +190,10 @@ const CommandMessage: FC<Props> = ({
         return renderAction('Delegated async');
       case 'get_subagent_result':
         return renderAction('Got subagent result');
+      case 'background_subagent_notification':
+        return renderAction(
+          `Background subagent ${toolArgs?.count === 1 ? 'run' : 'runs'} finished (${toolArgs?.count ?? 0})`,
+        );
       case 'memory_list':
         return renderAction('Listed memories');
       case 'memory_get':

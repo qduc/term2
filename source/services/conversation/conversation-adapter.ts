@@ -26,6 +26,8 @@ export type SendMessageOptions = {
   bypassInputSurgeGuard?: boolean;
   replayFromHistory?: boolean;
   preferredMessageId?: string;
+  /** The turn is model input only and must not be projected as a user message in the UI. */
+  suppressUserMessageDisplay?: boolean;
 };
 
 export type HandleApprovalDecisionOptions = {
@@ -81,6 +83,7 @@ export type ConversationEventSink = (event: ConversationEvent) => void;
 export type QueuedTurnStartObserver = (execution: {
   readonly requestId: string;
   readonly input: string | UserTurn;
+  readonly suppressUserMessageDisplay?: boolean;
 }) => void;
 
 export class ConversationAdapter {
@@ -237,6 +240,7 @@ export class ConversationAdapter {
       bypassInputSurgeGuard,
       replayFromHistory,
       preferredMessageId,
+      suppressUserMessageDisplay,
     }: SendMessageOptions = {},
   ): Promise<ConversationTerminal> {
     const queue = this.#queue;
@@ -263,6 +267,7 @@ export class ConversationAdapter {
           hallucinationRetryCount,
           bypassInputSurgeGuard,
           replayFromHistory,
+          suppressUserMessageDisplay,
         },
         resolve,
         reject,
@@ -343,6 +348,7 @@ export class ConversationAdapter {
         this.#queuedTurnStartObserver({
           requestId: execution.snapshot.requestId,
           input: message.input,
+          suppressUserMessageDisplay: message.options.suppressUserMessageDisplay,
         });
       } catch (error) {
         this.#logger.error('queuedTurnStartObserver threw', {

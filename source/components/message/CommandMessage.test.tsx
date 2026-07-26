@@ -112,6 +112,24 @@ const advanceClockInAct = async (clock: FakeTimer, ms: number) => {
   });
 };
 
+it('CommandMessage renders background subagent notifications as tool activity', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="background_subagent_notification"
+      toolName="background_subagent_notification"
+      status="completed"
+      success={true}
+      toolArgs={{ count: 1 }}
+      output="runId: run-1 | role: explorer | status: completed"
+    />,
+  );
+
+  const output = stripAnsi(lastFrame());
+  expect(output).toContain('Background subagent run finished (1)');
+  expect(output).toContain('runId: run-1');
+  unmount();
+});
+
 it('CommandMessage does not duplicate parameters when they are already in command string', async () => {
   const clock = createFakeTimerClock();
   const props = {

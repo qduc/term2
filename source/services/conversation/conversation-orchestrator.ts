@@ -56,12 +56,27 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
   ].join('\n');
 }
 
+/** The user-facing companion to the model-only completion instruction above. */
+function formatBackgroundSubagentNotificationDisplay(notifications: readonly BackgroundSubagentNotification[]): string {
+  return notifications
+    .map((notification) => {
+      const lines = [
+        `runId: ${notification.runId} | role: ${notification.role} | status: ${notification.status}`,
+        ...(notification.error ? [`error: ${notification.error}`] : []),
+        ...(notification.preview ? [`preview: ${notification.preview}`] : []),
+      ];
+      return lines.join('\n');
+    })
+    .join('\n\n');
+}
+
 export class ConversationOrchestrator {
   private pendingApproval: PendingApproval | null = null;
   private askUserAnswers: AskUserAnswer[] = [];
   private currentAskUserQuestionIndex = 0;
   private readonly createMessageId: () => string;
   readonly #directlyAppendedMessageIds = new Set<string>();
+  readonly #displayedBackgroundNotificationRunIds = new Set<string>();
   /**
    * Turns this orchestrator currently owns. `ui.onTurnStart` cannot be counted
    * instead: the queue observer emits it unbalanced when a queued submission is
@@ -85,6 +100,9 @@ export class ConversationOrchestrator {
     // indicator above the input box.
     if (typeof config.conversationService.setQueuedTurnStartObserver === 'function') {
       config.conversationService.setQueuedTurnStartObserver((execution) => {
+        if (execution.suppressUserMessageDisplay) {
+          return;
+        }
         const wasAlreadyStarted = this.moveQueuedMessageIntoList(execution.requestId, execution.input);
         if (!wasAlreadyStarted) {
           // A queued submission's original turn-start may have been balanced
@@ -145,6 +163,7 @@ export class ConversationOrchestrator {
     this.config.usageAccumulator?.reset();
     this.config.subagentUsageAccumulator?.reset();
     this.#directlyAppendedMessageIds.clear();
+    this.#displayedBackgroundNotificationRunIds.clear();
   }
 
   stopProcessing(): void {
@@ -170,6 +189,7 @@ export class ConversationOrchestrator {
       this.resetAskUserState();
       this.config.ui.onResetTransient();
       this.#directlyAppendedMessageIds.clear();
+      this.#displayedBackgroundNotificationRunIds.clear();
       this.config.conversationService.backgroundSubagentNotifications?.drain();
     } finally {
       this.#stoppingByUser = false;
@@ -194,6 +214,7 @@ export class ConversationOrchestrator {
     this.resetAskUserState();
     this.config.ui.onResetTransient();
     this.#directlyAppendedMessageIds.clear();
+    this.#displayedBackgroundNotificationRunIds.clear();
 
     return restored;
   }
@@ -546,6 +567,27 @@ export class ConversationOrchestrator {
     const notifications = pending.drain();
     if (notifications.length === 0) return;
 
+    const newlyDisplayed = notifications.filter(
+      (notification) => !this.#displayedBackgroundNotificationRunIds.has(notification.runId),
+    );
+    if (newlyDisplayed.length > 0) {
+      for (const notification of newlyDisplayed) {
+        this.#displayedBackgroundNotificationRunIds.add(notification.runId);
+      }
+      this.config.messages.appendMessages([
+        {
+          id: this.createMessageId(),
+          sender: 'command',
+          status: 'completed',
+          command: 'background_subagent_notification',
+          output: formatBackgroundSubagentNotificationDisplay(newlyDisplayed),
+          success: true,
+          toolName: 'background_subagent_notification',
+          toolArgs: { count: newlyDisplayed.length },
+        },
+      ]);
+    }
+
     const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = this.#beginTurn(
       'backgroundSubagentNotification',
     );
@@ -554,7 +596,10 @@ export class ConversationOrchestrator {
     try {
       const result = await this.config.conversationService.sendMessage(
         formatBackgroundSubagentNotifications(notifications),
-        { onEvent: this.createOnEventHandler(applyConversationEvent) },
+        {
+          onEvent: this.createOnEventHandler(applyConversationEvent),
+          suppressUserMessageDisplay: true,
+        },
       );
 
       // A turn the queue refused to admit resolves without a terminal, so the

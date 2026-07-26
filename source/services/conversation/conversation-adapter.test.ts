@@ -166,6 +166,37 @@ it('ConversationAdapter fires queuedTurnStartObserver when the queue starts a tu
   expect(startCalls[0]?.input).toBe('queued-1');
 });
 
+it('ConversationAdapter marks system-initiated queue turns so the UI does not render them as user messages', async () => {
+  const turnFlow = {
+    async *start() {
+      yield { type: 'final' as const, finalText: 'done' };
+    },
+    async *continueAfterApproval() {
+      yield { type: 'final' as const, finalText: 'done' };
+    },
+  };
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow,
+    queueForeground: true,
+  });
+
+  const startCalls: Array<{ suppressUserMessageDisplay?: boolean }> = [];
+  adapter.setQueuedTurnStartObserver((execution) => {
+    startCalls.push(execution);
+  });
+
+  await adapter.sendMessage('automatic notification', { suppressUserMessageDisplay: true });
+
+  expect(startCalls).toContainEqual(expect.objectContaining({ suppressUserMessageDisplay: true }));
+});
+
 it('removeLastQueuedItem returns null when there is no queue', async () => {
   const turnFlow = {
     async *start() {

@@ -390,6 +390,62 @@ describe('peek / getRunStatus', () => {
     registry.dispose();
   });
 
+  it('records text turns with the tools that preceded them', () => {
+    const registry = make(() => new Promise<SubagentResult>(() => undefined));
+    const handle = registry.startRun({ role: 'explorer', task: 'inspect' });
+
+    registry.handleSubagentEvent({
+      type: 'subagent_tool_started',
+      agentId: handle.runId,
+      role: 'explorer',
+      toolCallId: 'tc1',
+      toolName: 'grep',
+      arguments: {},
+    });
+    registry.handleSubagentEvent({
+      type: 'subagent_text_turn',
+      agentId: handle.runId,
+      role: 'explorer',
+      text: 'Looking at config loading...',
+    });
+
+    const status = registry.getRunStatus(handle.runId) as any;
+    expect(status.turnHistory).toEqual([
+      {
+        text: 'Looking at config loading...',
+        precedingToolCounts: { grep: 1 },
+        truncated: false,
+      },
+    ]);
+    expect(status.pendingToolCounts).toBeUndefined();
+    registry.dispose();
+  });
+
+  it('bounds truncated turn history and returns independent snapshot records', () => {
+    const registry = make(() => new Promise<SubagentResult>(() => undefined));
+    const handle = registry.startRun({ role: 'explorer', task: 'inspect' });
+
+    for (let index = 1; index <= 6; index++) {
+      registry.handleSubagentEvent({
+        type: 'subagent_text_turn',
+        agentId: handle.runId,
+        role: 'explorer',
+        text: index === 6 ? '6'.repeat(201) : `turn ${index}`,
+      });
+    }
+
+    const firstSnapshot = registry.getRunStatus(handle.runId) as any;
+    expect(firstSnapshot.turnHistory).toHaveLength(5);
+    expect(firstSnapshot.turnHistory[0]).toMatchObject({ text: 'turn 2', truncated: false });
+    expect(firstSnapshot.turnHistory[4]).toMatchObject({ text: '6'.repeat(200), truncated: true });
+
+    firstSnapshot.turnHistory[0].text = 'mutated';
+    firstSnapshot.turnHistory[0].precedingToolCounts.grep = 99;
+    const secondSnapshot = registry.getRunStatus(handle.runId) as any;
+    expect(secondSnapshot.turnHistory[0]).toEqual({ text: 'turn 2', precedingToolCounts: {}, truncated: false });
+    registry.dispose();
+  });
+
   it('handleSubagentEvent is a no-op for an agentId it does not own', () => {
     const registry = make(() => new Promise<SubagentResult>(() => undefined));
     const handle = registry.startRun({ role: 'explorer', task: 'mine' });
@@ -569,7 +625,7 @@ describe('outbound steering', () => {
     registry.dispose();
   });
 
-  it('queues steering while a question waits, then interrupts only after the answer completes its tool', async () => {
+  it('refuses plain steering while a question waits, then queues it once the answer resumes the tool', async () => {
     const segments: RunParams[] = [];
     const events: ConversationEvent[] = [];
     const resolutions: Array<(value: SubagentResult) => void> = [];
@@ -589,17 +645,26 @@ describe('outbound steering', () => {
     await vi.waitFor(() => expect(events.some((event) => event.type === 'subagent_question')).toBe(true));
     const pending = events.find((event) => event.type === 'subagent_question')!;
 
-    expect(registry.sendMessage(run.runId, 'Use the public API.')).toMatchObject({ ok: true, delivery: 'queued' });
-    expect(segments[0].signal.aborted).toBe(false);
+    // Steering that is not an answer can never reach the waiting tool call, so it is
+    // refused rather than queued behind a blocker only `reply_to` can clear.
+    expect(registry.sendMessage(run.runId, 'Use the public API.')).toEqual({
+      ok: false,
+      code: 'question_pending',
+      target: run.runId,
+    });
+    expect((registry.getRunStatus(run.runId) as any).status).toBe('waiting_for_answer');
+
     expect(registry.sendMessage(run.runId, 'Use the supported interface.', pending.messageId)).toMatchObject({
       ok: true,
       delivery: 'answered',
     });
+    expect(registry.sendMessage(run.runId, 'Then update the docs.')).toMatchObject({ ok: true, delivery: 'queued' });
+    expect(segments[0].signal.aborted).toBe(false);
     await vi.waitFor(() => expect(segments[0].signal.aborted).toBe(true));
 
     resolutions[0](result('worker', 'cancelled'));
     await vi.waitFor(() => expect(segments).toHaveLength(2));
-    expect(segments[1].input).toContain('Use the public API.');
+    expect(segments[1].input).toContain('Then update the docs.');
     resolutions[1](result('worker'));
     await expect(registry.getResult(run.runId)).resolves.toMatchObject({ status: 'completed' });
     registry.dispose();

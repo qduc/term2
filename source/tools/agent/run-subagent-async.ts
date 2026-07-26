@@ -300,6 +300,17 @@ function formatSubagentStatus(status: SubagentRunStatus | SubagentRunStatus[]): 
       .map(([name, count]) => `${name}(${count})`)
       .join(', ');
     if (toolSummary) parts.push(`tools: ${toolSummary}`);
+    for (const [index, turn] of (s.turnHistory ?? []).entries()) {
+      const precedingToolSummary = Object.entries(turn.precedingToolCounts)
+        .map(([name, count]) => `${name}(${count})`)
+        .join(', ');
+      parts.push(`turn ${index + 1}: ${turn.text}${precedingToolSummary ? ` → ${precedingToolSummary}` : ''}`);
+    }
+    if (s.currentText?.trim()) parts.push(`streaming: ${JSON.stringify(s.currentText)}`);
+    const pendingToolSummary = Object.entries(s.pendingToolCounts ?? {})
+      .map(([name, count]) => `${name}(${count})`)
+      .join(', ');
+    if (pendingToolSummary) parts.push(`pending: ${pendingToolSummary}`);
     return parts.join(' | ');
   };
 
@@ -440,6 +451,7 @@ export function createSendMessageToolDefinition(
       'Steering is delivered by safely ending the current model stream (never an active tool) and starting a bounded fresh session turn; it is not live SDK input injection. ' +
       'A logical run permits at most three steering continuation segments. Do not immediately call get_subagent_result after this acknowledgement; wait for normal completion notification. ' +
       'To answer a waiting ask_orchestrator question, provide its messageId as reply_to; the message then answers that exact question and its tool call continues. ' +
+      'While a question is waiting, steering without reply_to is refused with question_pending, because only an answer can resume the blocked tool call: answer it or cancel_run. ' +
       'The mentor role does not support steering. Use cancel_run to stop a run instead of sending a correction that must not continue.',
     parameters: sendMessageSchema,
     needsApproval: () => false,

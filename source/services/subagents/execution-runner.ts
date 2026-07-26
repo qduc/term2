@@ -21,6 +21,8 @@ import { createSessionRuntime } from '../session/session-composition.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import type { SkillsService } from '../skills/skills-service.js';
 
+const MAX_PEEK_TEXT_LENGTH = 200;
+
 export class ExecutionSubagentRunner {
   #logger: ILoggingService;
   #settings: ISettingsService;
@@ -215,6 +217,7 @@ export class ExecutionSubagentRunner {
     let error: Error | undefined;
     let subagentStatus: SubagentResult['status'] = 'completed';
     let loopProcessedError = false;
+    let currentText = '';
 
     try {
       for await (const event of runtime.turns.start(userTurn, {
@@ -222,7 +225,24 @@ export class ExecutionSubagentRunner {
         maxModelRetries: MAX_SUBAGENT_MODEL_RETRIES,
       })) {
         switch (event.type) {
+          case 'text_delta':
+            currentText = `${currentText}${event.delta}`.slice(0, MAX_PEEK_TEXT_LENGTH);
+            safeEmit(this.#logger, onEvent, {
+              type: 'subagent_streaming_text',
+              agentId,
+              text: currentText,
+            });
+            break;
           case 'tool_started':
+            if (currentText.trim()) {
+              safeEmit(this.#logger, onEvent, {
+                type: 'subagent_text_turn',
+                agentId,
+                role: request.role,
+                text: currentText,
+              });
+              currentText = '';
+            }
             if (event.toolName) {
               safeEmit(this.#logger, onEvent, {
                 type: 'subagent_tool_started',
@@ -243,6 +263,15 @@ export class ExecutionSubagentRunner {
             });
             break;
           case 'final':
+            if (currentText.trim()) {
+              safeEmit(this.#logger, onEvent, {
+                type: 'subagent_text_turn',
+                agentId,
+                role: request.role,
+                text: currentText,
+              });
+              currentText = '';
+            }
             finalText = event.finalText;
             if (event.usage) usage = event.usage;
             break;
@@ -255,6 +284,7 @@ export class ExecutionSubagentRunner {
             subagentStatus = isAbortLike(event.message, event) ? 'cancelled' : 'failed';
             break;
           case 'retry':
+            currentText = '';
             safeEmit(this.#logger, onEvent, {
               type: 'retry',
               toolName: event.toolName,

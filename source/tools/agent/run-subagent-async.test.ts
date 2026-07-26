@@ -248,6 +248,34 @@ describe('get_subagent_status tool', () => {
     expect(raw.startsWith('{')).toBe(false);
   });
 
+  it('formats completed text turns, streaming text, and pending tools for a rich peek', () => {
+    const tool = createGetSubagentStatusToolDefinition(() =>
+      makeStatus({
+        turnHistory: [
+          {
+            text: 'Looking at config loading...',
+            precedingToolCounts: { grep: 5, read_file: 3 },
+            truncated: false,
+          },
+          {
+            text: 'Found env overrides bypass validation',
+            precedingToolCounts: { grep: 3, read_file: 2 },
+            truncated: false,
+          },
+        ],
+        currentText: 'Checking if there are tests...',
+        pendingToolCounts: { grep: 2 },
+      }),
+    );
+
+    const raw = tool.execute({ runId: 'run-123' });
+
+    expect(raw).toContain('turn 1: Looking at config loading... → grep(5), read_file(3)');
+    expect(raw).toContain('turn 2: Found env overrides bypass validation → grep(3), read_file(2)');
+    expect(raw).toContain('streaming: "Checking if there are tests..."');
+    expect(raw).toContain('pending: grep(2)');
+  });
+
   it('treats a cancelling run as active until its runner settles', () => {
     const tool = createGetSubagentStatusToolDefinition(() => makeStatus({ status: 'cancelling' }));
 

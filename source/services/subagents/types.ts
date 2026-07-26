@@ -38,7 +38,8 @@ export type SubagentSteerErrorCode =
   | 'unsupported_control'
   | 'steer_limit_reached'
   | 'question_mismatch'
-  | 'question_not_pending';
+  | 'question_not_pending'
+  | 'question_pending';
 
 /** Immediate, non-blocking outcome of queueing a steering instruction. */
 export type SubagentSteerAcknowledgement =
@@ -172,6 +173,13 @@ export interface SubagentRunHandle {
   task: string;
 }
 
+/** A bounded subagent text turn and the tools it invoked immediately before it. */
+export interface TurnSnapshot {
+  text: string;
+  precedingToolCounts: Record<string, number>;
+  truncated: boolean;
+}
+
 /**
  * Non-blocking progress snapshot of an async run, for the orchestrator's
  * mid-run "what is it doing" query. Never carries completion detail
@@ -190,4 +198,7 @@ export interface SubagentRunStatus {
   lastToolName?: string;
   lastToolAt?: number;
   toolCounts: Record<string, number>;
+  turnHistory?: TurnSnapshot[];
+  currentText?: string;
+  pendingToolCounts?: Record<string, number>;
 }

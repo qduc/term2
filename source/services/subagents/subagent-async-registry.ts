@@ -19,6 +19,14 @@ import { isAbortLike, safeEmit, truncatePreview } from './utils.js';
 
 export const SUBAGENT_RUN_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 const MAX_STEERING_GUIDANCE_CHARACTERS = 2_000;
+const MAX_TURN_HISTORY = 5;
+const TURN_TEXT_CHAR_LIMIT = 200;
+
+type TurnSnapshot = {
+  text: string;
+  precedingToolCounts: Record<string, number>;
+  truncated: boolean;
+};
 
 export type SubagentRegistryErrorCode =
   | 'not_found'
@@ -69,6 +77,9 @@ type StoredRun = {
   lastToolName?: string;
   lastToolAt?: number;
   toolCounts: Map<string, number>;
+  turnHistory: TurnSnapshot[];
+  pendingToolCounts: Map<string, number>;
+  currentText: string;
 };
 
 export interface SubagentAsyncRegistryDeps {
@@ -201,6 +212,9 @@ export class SubagentAsyncRegistry {
       settled: false,
       startedAt: this.#now(),
       toolCounts: new Map(),
+      turnHistory: [],
+      pendingToolCounts: new Map(),
+      currentText: '',
     };
     this.#runs.set(runId, stored);
     if (name !== undefined) this.#activeNameToRunId.set(name, runId);
@@ -255,8 +269,8 @@ export class SubagentAsyncRegistry {
   }
 
   #snapshot(run: StoredRun): SubagentRunStatus {
-    const counts: Record<string, number> = {};
-    for (const [name, count] of run.toolCounts) counts[name] = count;
+    const counts = mapToRecord(run.toolCounts);
+    const pendingToolCounts = mapToRecord(run.pendingToolCounts);
     return {
       runId: run.runId,
       ...(run.name !== undefined ? { name: run.name } : {}),
@@ -269,6 +283,17 @@ export class SubagentAsyncRegistry {
       ...(run.lastToolName !== undefined ? { lastToolName: run.lastToolName } : {}),
       ...(run.lastToolAt !== undefined ? { lastToolAt: run.lastToolAt } : {}),
       toolCounts: counts,
+      ...(run.turnHistory.length > 0
+        ? {
+            turnHistory: run.turnHistory.map((turn) => ({
+              text: turn.text,
+              precedingToolCounts: { ...turn.precedingToolCounts },
+              truncated: turn.truncated,
+            })),
+          }
+        : {}),
+      ...(run.currentText.trim() ? { currentText: run.currentText } : {}),
+      ...(Object.keys(pendingToolCounts).length > 0 ? { pendingToolCounts } : {}),
     };
   }
 
@@ -279,12 +304,36 @@ export class SubagentAsyncRegistry {
    * the registry learns `subagent_tool_started` mid-run.
    */
   handleSubagentEvent(event: ConversationEvent): void {
-    if (event.type !== 'subagent_tool_started') return;
+    if (
+      event.type !== 'subagent_tool_started' &&
+      event.type !== 'subagent_text_turn' &&
+      event.type !== 'subagent_streaming_text'
+    )
+      return;
     const run = this.#runs.get(event.agentId);
     if (!run || !isActiveStatus(run.status)) return;
+
+    if (event.type === 'subagent_streaming_text') {
+      run.currentText = event.text;
+      return;
+    }
+
+    if (event.type === 'subagent_text_turn') {
+      run.turnHistory.push({
+        text: event.text.slice(0, TURN_TEXT_CHAR_LIMIT),
+        precedingToolCounts: mapToRecord(run.pendingToolCounts),
+        truncated: event.text.length > TURN_TEXT_CHAR_LIMIT,
+      });
+      if (run.turnHistory.length > MAX_TURN_HISTORY) run.turnHistory.shift();
+      run.pendingToolCounts.clear();
+      run.currentText = '';
+      return;
+    }
+
     const name = event.toolName;
     if (!name) return;
     run.toolCounts.set(name, (run.toolCounts.get(name) ?? 0) + 1);
+    run.pendingToolCounts.set(name, (run.pendingToolCounts.get(name) ?? 0) + 1);
     run.lastToolName = name;
     run.lastToolAt = this.#now();
   }
@@ -345,6 +394,10 @@ export class SubagentAsyncRegistry {
       run.status = 'running';
       return { ok: true, runId: run.runId, status: 'running', delivery: 'answered' };
     }
+    // Steering cannot reach a waiting `ask_orchestrator` call: it is queued behind a
+    // tool that only an answer resumes. Refusing it keeps the blocker visible instead
+    // of stranding the run on an acknowledgement the orchestrator reads as handled.
+    if (run.control.pendingQuestion) return { ok: false, code: 'question_pending', target };
     if (!run.control.canStartContinuation()) return { ok: false, code: 'steer_limit_reached', target };
     run.control.enqueueSteering(message);
     return { ok: true, runId: run.runId, status: 'running', delivery: 'queued' };
@@ -545,6 +598,10 @@ export class SubagentAsyncRegistry {
 
 function isActiveStatus(status: StoredRunStatus): status is 'running' | 'waiting_for_answer' | 'cancelling' {
   return status === 'running' || status === 'waiting_for_answer' || status === 'cancelling';
+}
+
+function mapToRecord(counts: Map<string, number>): Record<string, number> {
+  return Object.fromEntries(counts);
 }
 
 function buildContinuationInput(guidance: string): string {

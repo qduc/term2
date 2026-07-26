@@ -18,6 +18,8 @@ export type ConversationEvent =
   | ToolRecoveryEvent
   | SubagentStartedEvent
   | SubagentToolStartedEvent
+  | SubagentTextTurnEvent
+  | SubagentStreamingTextEvent
   | SubagentCommandMessageEvent
   | SubagentCompletedEvent
   | SubagentQuestionEvent
@@ -159,6 +161,21 @@ export interface SubagentToolStartedEvent {
   toolName: string;
   arguments?: unknown;
   commandMessages?: CommandMessage[];
+}
+
+/** A completed slice of a subagent's streamed text, for non-blocking progress peeks. */
+export interface SubagentTextTurnEvent {
+  type: 'subagent_text_turn';
+  agentId: string;
+  role: string;
+  text: string;
+}
+
+/** Lightweight in-flight text update for peek — overwrites, does not accumulate. */
+export interface SubagentStreamingTextEvent {
+  type: 'subagent_streaming_text';
+  agentId: string;
+  text: string;
 }
 
 export interface SubagentCommandMessageEvent {

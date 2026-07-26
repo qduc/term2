@@ -268,14 +268,161 @@ it('removeLastQueuedItem returns the text of the most recently queued item', asy
     queueForeground: true,
   });
 
-  void adapter.sendMessage('first');
-  void adapter.sendMessage('second');
+  void adapter.sendMessage('first').catch(noop);
+  void adapter.sendMessage('second').catch(noop);
   // Yield so the submissions land in the queue before we cancel.
   await new Promise((r) => setImmediate(r));
   await new Promise((r) => setImmediate(r));
 
   const restored = await adapter.removeLastQueuedItem();
-  expect(restored).toEqual({ text: 'second' });
+  expect(restored).toEqual({ id: '2', text: 'second' });
+});
+
+it('settles only the removed queued request and preserves FIFO execution for the others', async () => {
+  let releaseFirst!: () => void;
+  const firstReleased = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  const started: string[] = [];
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start(input: string | UserTurn) {
+        started.push(typeof input === 'string' ? input : input.text);
+        if (started.length === 1) await firstReleased;
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+    },
+    queueForeground: true,
+  });
+
+  const first = adapter.sendMessage('A', { preferredMessageId: 'A' });
+  const second = adapter.sendMessage('B', { preferredMessageId: 'B' });
+  const third = adapter.sendMessage('C', { preferredMessageId: 'C' });
+  const removed = await adapter.removeLastQueuedItem();
+
+  expect(removed).toEqual({ id: 'C', text: 'C' });
+  await expect(third).rejects.toMatchObject({ name: 'AbortError' });
+  releaseFirst();
+  await expect(first).resolves.toMatchObject({ type: 'response' });
+  await expect(second).resolves.toMatchObject({ type: 'response' });
+  expect(started).toEqual(['A', 'B']);
+});
+
+it('settles discarded paused requests without settling retained work on cancellation', async () => {
+  let abortActive!: () => void;
+  const activeAbort = new Promise<void>((resolve) => {
+    abortActive = resolve;
+  });
+  let queueState: string | undefined;
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      // eslint-disable-next-line require-yield
+      async *start() {
+        await activeAbort;
+        const error = new Error('cancelled');
+        error.name = 'AbortError';
+        throw error;
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      abort: () => abortActive(),
+    },
+    queueForeground: true,
+  });
+  adapter.setQueueStateObserver((state) => {
+    queueState = state.stateKind;
+  });
+
+  const active = adapter.sendMessage('A');
+  const retained = adapter.sendMessage('B');
+  adapter.abort();
+  await expect(active).rejects.toMatchObject({ name: 'AbortError' });
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(queueState).toBe('paused');
+
+  let retainedSettled = false;
+  void retained
+    .finally(() => {
+      retainedSettled = true;
+    })
+    .catch(noop);
+  await Promise.resolve();
+  expect(retainedSettled).toBe(false);
+  await adapter.discardQueue();
+  await expect(retained).rejects.toMatchObject({ name: 'AbortError' });
+});
+
+it('settles an enqueue rejection without retaining an adapter record', async () => {
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start() {
+        yield { type: 'final' as const, finalText: 'unexpected' };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+    },
+    queueForeground: true,
+    queueCapacity: 0,
+  });
+
+  await expect(adapter.sendMessage('rejected')).rejects.toThrow('Foreground queue rejected message: capacity');
+  expect(adapter.isQueueOwningSubmissions()).toBe(false);
+});
+
+it('executes a queued rich UserTurn from its in-memory snapshot', async () => {
+  const inputs: Array<string | UserTurn> = [];
+  const turn: UserTurn = {
+    text: '',
+    images: [{ id: 'image-1', data: 'data', mimeType: 'image/png', byteSize: 4, displayNumber: 1 }],
+  };
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start(input: string | UserTurn) {
+        inputs.push(input);
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+    },
+    queueForeground: true,
+  });
+
+  await adapter.sendMessage(turn);
+  expect(inputs).toEqual([turn]);
 });
 
 it('ConversationAdapter populates firstUserMessagePreview in session context', async () => {

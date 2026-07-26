@@ -51,6 +51,15 @@ type QueuedMessage = {
 
 type QueuedMessageSnapshot = { readonly requestId: string; readonly recovered?: boolean };
 
+const QUEUED_NON_TEXT_PLACEHOLDER = '[queued non-text user turn]';
+const LEGACY_QUEUED_MESSAGE_PLACEHOLDER = '\u0000queued-message';
+
+function queueCancellationError(message: string): Error {
+  const error = new Error(message);
+  error.name = 'AbortError';
+  return error;
+}
+
 export type QueueStateKind =
   | 'idle'
   | 'running'
@@ -99,10 +108,6 @@ export class ConversationAdapter {
   #logs: SessionLogs;
   #approval: SessionApprovalQuery;
   #turnFlow: TurnFlow;
-  readonly #pendingMessages: Array<{
-    readonly requestId: string;
-    readonly message: QueuedMessage;
-  }> = [];
   readonly #messagesById = new Map<string, QueuedMessage>();
   readonly #queue: QueueController<QueuedMessageSnapshot, ConversationTerminal> | null;
   #nextQueuedMessageId = 1;
@@ -127,6 +132,7 @@ export class ConversationAdapter {
     approval: SessionApprovalQuery;
     turnFlow: TurnFlow;
     queueForeground?: boolean;
+    queueCapacity?: number;
     queuePersistence?: QueuePersistence<QueuedMessageSnapshot>;
   }) {
     this.#sessionId = deps.sessionId;
@@ -150,12 +156,10 @@ export class ConversationAdapter {
       this.#queue = new QueueController({
         driver,
         snapshotFactory: (item) => {
-          if (Date.parse(item.submittedAt) < Date.parse(this.#startedAt)) {
-            return { requestId: `recovered:${item.id}`, recovered: true };
-          }
-          const pending = this.#pendingMessages.shift();
-          return pending ? { requestId: pending.requestId } : { requestId: `recovered:${item.id}`, recovered: true };
+          const message = this.#messagesById.get(item.id);
+          return message ? { requestId: item.id } : { requestId: item.id, recovered: true };
         },
+        capacity: deps.queueCapacity,
         persistence: deps.queuePersistence,
       });
     } else {
@@ -190,6 +194,13 @@ export class ConversationAdapter {
       state.kind === 'cancelling' ||
       state.kind === 'completing'
     );
+  }
+
+  /** Whether the foreground queue owns a new submission's UI lifecycle. */
+  isQueueOwningSubmissions(): boolean {
+    if (!this.#queue) return false;
+    const state = this.#queue.state();
+    return state.kind !== 'idle' || state.queue.length > 0;
   }
 
   #notifyQueueState(): void {
@@ -257,8 +268,12 @@ export class ConversationAdapter {
     }
     return new Promise<ConversationTerminal>((resolve, reject) => {
       const requestId = preferredMessageId ?? String(this.#nextQueuedMessageId++);
+      if (this.#messagesById.has(requestId)) {
+        reject(new Error(`A queued message already uses request id ${requestId}`));
+        return;
+      }
       const message = {
-        input,
+        input: typeof input === 'string' ? input : structuredClone(input),
         options: {
           onTextChunk,
           onReasoningChunk,
@@ -273,10 +288,21 @@ export class ConversationAdapter {
         reject,
       };
       this.#messagesById.set(requestId, message);
-      this.#pendingMessages.push({ requestId, message });
+      const displayText = normalizeUserTurn(input).text;
+      const controllerText = displayText.trim() ? displayText : QUEUED_NON_TEXT_PLACEHOLDER;
       void queue
-        .command({ kind: 'submit', text: normalizeUserTurn(input).text || '\u0000queued-message' })
-        .then(() => this.#notifyQueueState());
+        .command({ kind: 'submit', id: requestId, text: controllerText })
+        .then((result) => {
+          if (result.kind !== 'accepted') {
+            const reason = result.kind === 'rejected' ? result.reason : result.kind;
+            this.#settleFailure(requestId, new Error(`Foreground queue rejected message: ${reason}`));
+          }
+          this.#notifyQueueState();
+        })
+        .catch((error) => {
+          this.#settleFailure(requestId, error);
+          this.#notifyQueueState();
+        });
     });
   }
 
@@ -289,7 +315,13 @@ export class ConversationAdapter {
 
   async discardQueue(): Promise<void> {
     if (!this.#queue) return;
-    await this.#queue.command({ kind: 'discard_queue' });
+    const queuedIds = this.#queue.state().queue.map((item) => item.id);
+    const result = await this.#queue.command({ kind: 'discard_queue' });
+    if (result.kind === 'accepted') {
+      for (const requestId of queuedIds) {
+        this.#settleFailure(requestId, queueCancellationError('Queued message was discarded'));
+      }
+    }
     this.#notifyQueueState();
   }
 
@@ -299,10 +331,9 @@ export class ConversationAdapter {
    * the queue is empty, the adapter has no queue (pass-through mode), or the
    * underlying controller rejects the removal.
    *
-   * Also pops the matching pending message from the internal pending list so
-   * the queue/pending state observers fire consistently.
+   * The item is correlated by its controller id, never its queue position.
    */
-  async removeLastQueuedItem(): Promise<{ text: string } | null> {
+  async removeLastQueuedItem(): Promise<{ id: string; text: string } | null> {
     const queue = this.#queue;
     if (!queue) return null;
 
@@ -311,21 +342,20 @@ export class ConversationAdapter {
 
     // The queue is FIFO. The "last" queued item is the one at the tail.
     const lastItem = state.queue[state.queue.length - 1]!;
+    // Prefer the in-memory turn text: controller text may be a non-text placeholder.
+    const pending = this.#messagesById.get(lastItem.id);
+    const restoredText = pending
+      ? normalizeUserTurn(pending.input).text
+      : lastItem.text === QUEUED_NON_TEXT_PLACEHOLDER || lastItem.text === LEGACY_QUEUED_MESSAGE_PLACEHOLDER
+      ? ''
+      : lastItem.text;
 
     const result = await queue.command({ kind: 'remove_queued', itemId: lastItem.id });
     if (result.kind !== 'accepted') return null;
-
-    // The pending message list is in submission order. The corresponding
-    // pending entry for this item is the last one we added. Removing it keeps
-    // the adapter's internal bookkeeping consistent with the queue controller.
-    this.#pendingMessages.pop();
-    // Note: we don't need to touch #messagesById here because the queue head
-    // has not yet started executing this item (it was still queued), so there
-    // is no pending execution for it to resolve. The pending message entry
-    // was only there to support the snapshot factory if the head was popped.
+    this.#settleFailure(lastItem.id, queueCancellationError('Queued message was removed'));
 
     this.#notifyQueueState();
-    return { text: lastItem.text };
+    return { id: lastItem.id, text: restoredText };
   }
 
   abort(): void {
@@ -361,9 +391,15 @@ export class ConversationAdapter {
 
   async #runQueuedTurn(execution: ActiveExecution<QueuedMessageSnapshot>): Promise<void> {
     const message = this.#messagesById.get(execution.snapshot.requestId);
-    if (message) this.#messagesById.delete(execution.snapshot.requestId);
     try {
-      const result = await this.#executeMessage(message?.input ?? execution.item.text, message?.options ?? {});
+      const recoveredInput =
+        execution.item.text === QUEUED_NON_TEXT_PLACEHOLDER || execution.item.text === LEGACY_QUEUED_MESSAGE_PLACEHOLDER
+          ? null
+          : execution.item.text;
+      if (!message && !recoveredInput) {
+        throw new Error('Recovered queued message has no executable text input');
+      }
+      const result = await this.#executeMessage(message?.input ?? recoveredInput!, message?.options ?? {});
       if (result.type === 'approval_required') {
         this.#approvalExecutionId = execution.executionId;
         this.#approvalActionId = `adapter-action-${this.#nextActionId++}` as ActionId;
@@ -374,17 +410,31 @@ export class ConversationAdapter {
           request: {}, // existing runtime doesn't expose typed tool request details
         });
         this.#notifyQueueState();
-        message?.resolve(result);
+        this.#settleSuccess(execution.snapshot.requestId, result);
         return;
       }
       await this.#queue!.event({ kind: 'completed', executionId: execution.executionId, terminal: result });
       this.#notifyQueueState();
-      message?.resolve(result);
+      this.#settleSuccess(execution.snapshot.requestId, result);
     } catch (error) {
       await this.#queue!.event({ kind: 'failed', executionId: execution.executionId, failure: error });
       this.#notifyQueueState();
-      message?.reject(error);
+      this.#settleFailure(execution.snapshot.requestId, error);
     }
+  }
+
+  #settleSuccess(requestId: string, terminal: ConversationTerminal): void {
+    const message = this.#messagesById.get(requestId);
+    if (!message) return;
+    this.#messagesById.delete(requestId);
+    message.resolve(terminal);
+  }
+
+  #settleFailure(requestId: string, error: unknown): void {
+    const message = this.#messagesById.get(requestId);
+    if (!message) return;
+    this.#messagesById.delete(requestId);
+    message.reject(error);
   }
 
   async #executeMessage(

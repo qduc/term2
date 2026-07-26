@@ -538,6 +538,17 @@ it('queue/message_started preserves other pending messages', () => {
   expect(next.pendingQueuedMessages.map((m) => m.id)).toEqual(['m-1', 'm-3']);
 });
 
+it('queue/message_removed clears only the matching pending row', () => {
+  let state = createInitialUIState(null);
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-1', text: 'first', queuedAt: 1 });
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-2', text: 'second', queuedAt: 2 });
+  state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-3', text: 'third', queuedAt: 3 });
+
+  const next = conversationUIReducer(state, { type: 'queue/message_removed', id: 'm-2' });
+
+  expect(next.pendingQueuedMessages.map((message) => message.id)).toEqual(['m-1', 'm-3']);
+});
+
 it('queue/message_started is a no-op when the id is not pending', () => {
   let state = createInitialUIState(null);
   state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-1', text: 'first', queuedAt: 1 });

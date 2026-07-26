@@ -215,6 +215,29 @@ it('returns total results for capacity and queued item commands without mutating
   expect(await controller.command({ kind: 'resume_queue' })).toEqual({ kind: 'no_op' });
 });
 
+it('uses a caller-supplied item id and rejects duplicate queue identities', async () => {
+  const starts: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ item }) => {
+        starts.push(item.id);
+      },
+      cancel: async () => undefined,
+    },
+    snapshotFactory: () => ({}),
+    ids: { item: () => 'generated', execution: () => 'execution-1' },
+  });
+
+  await expect(controller.command({ kind: 'submit', id: 'request-1', text: 'first' })).resolves.toEqual({
+    kind: 'accepted',
+  });
+  expect(starts).toEqual(['request-1']);
+  await expect(controller.command({ kind: 'submit', id: 'request-1', text: 'duplicate' })).resolves.toEqual({
+    kind: 'rejected',
+    reason: 'invalid',
+  });
+});
+
 it('recovers queued work conservatively after an interrupted active execution', async () => {
   const records: unknown[] = [];
   const persistence: QueuePersistence = {

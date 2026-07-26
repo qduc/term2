@@ -50,6 +50,8 @@ export interface UIPort {
    * remove it from the pending indicator above the input box.
    */
   onQueuedMessageStarted?(id: string): void;
+  /** A queued submission was removed or rejected before it started. */
+  onQueuedMessageRemoved?(id: string): void;
   /**
    * A user-cancelled pending message was just removed from the queue (e.g.
    * by pressing up-arrow on an empty input box). The UI should drop the

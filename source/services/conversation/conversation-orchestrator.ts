@@ -280,7 +280,11 @@ export class ConversationOrchestrator {
     // The pending indicator above the input box is managed by the UI. The
     // adapter already removed the matching internal entry, but the UI state
     // is still showing it until we tell it to drop the last entry.
-    this.config.ui.onRemoveLastPendingMessage?.();
+    if (this.config.ui.onQueuedMessageRemoved) {
+      this.config.ui.onQueuedMessageRemoved(result.id);
+    } else {
+      this.config.ui.onRemoveLastPendingMessage?.();
+    }
 
     return result.text;
   }
@@ -377,8 +381,11 @@ export class ConversationOrchestrator {
     // second append. When a turn is already in flight, show the message
     // above the input box until the queue actually starts processing it; the
     // message list will be updated when the queue pops this turn.
-    const hasInflightTurn = this.config.conversationService.isQueueActive?.() ?? false;
-    if (hasInflightTurn) {
+    const queueOwnsSubmission =
+      this.config.conversationService.isQueueOwningSubmissions?.() ??
+      this.config.conversationService.isQueueActive?.() ??
+      false;
+    if (queueOwnsSubmission) {
       // A turn is already in flight. Show the message above the input box
       // until the queue actually starts processing it; the message list will
       // be updated when the queue pops this turn.
@@ -408,6 +415,10 @@ export class ConversationOrchestrator {
       this.applyServiceResult(result, streamingState, streamingState.latestUsage);
     } catch (error) {
       this.logError('Error in sendUserMessage', error);
+
+      if (queueOwnsSubmission) {
+        this.config.ui.onQueuedMessageRemoved?.(userMessage.id);
+      }
 
       if (isAbortLikeError(error)) {
         this.config.loggingService.debug('Suppressing abort error in sendUserMessage');

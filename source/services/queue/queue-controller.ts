@@ -96,7 +96,7 @@ export type QueueState<Snapshot> =
     };
 
 export type QueueCommand =
-  | { readonly kind: 'submit'; readonly text: string }
+  | { readonly kind: 'submit'; readonly text: string; readonly id?: string }
   | { readonly kind: 'cancel' }
   | {
       readonly kind: 'answer_preflight';
@@ -356,9 +356,13 @@ export class QueueController<Snapshot, Terminal = unknown> {
       case 'submit': {
         if (!cmd.text.trim()) return { kind: 'rejected', reason: 'invalid' };
         if (this.#queue.length >= this.#capacity) return { kind: 'rejected', reason: 'capacity' };
+        const id = cmd.id ?? this.#itemId();
+        if (!isNonEmptyString(id) || this.#queue.some((item) => item.id === id) || this.#active?.item.id === id) {
+          return { kind: 'rejected', reason: 'invalid' };
+        }
         this.#queue.push(
           freeze({
-            id: this.#itemId() as ItemId,
+            id: id as ItemId,
             text: cmd.text,
             sequence: this.#nextSequence++,
             submittedAt: this.#now(),

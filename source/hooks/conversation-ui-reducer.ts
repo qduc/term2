@@ -139,6 +139,8 @@ export type ConversationUIAction =
   | { type: 'queue/message_pending'; id: string; text: string; queuedAt: number }
   /** The queue has started executing the queued message; remove it from the pending list. */
   | { type: 'queue/message_started'; id: string }
+  /** A queued message was removed or rejected before execution started. */
+  | { type: 'queue/message_removed'; id: string }
   /** The user cancelled a pending queued message; drop the last entry from the pending list. */
   | { type: 'queue/remove_last_pending' }
 
@@ -470,6 +472,15 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
       };
 
     case 'queue/message_started':
+      if (!state.pendingQueuedMessages.some((m) => m.id === action.id)) {
+        return state;
+      }
+      return {
+        ...state,
+        pendingQueuedMessages: state.pendingQueuedMessages.filter((m) => m.id !== action.id),
+      };
+
+    case 'queue/message_removed':
       if (!state.pendingQueuedMessages.some((m) => m.id === action.id)) {
         return state;
       }

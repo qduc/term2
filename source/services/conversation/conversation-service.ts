@@ -237,7 +237,7 @@ export class ConversationService {
    * the queue is empty, the adapter has no queue, or the controller rejects
    * the removal.
    */
-  removeLastQueuedItem(): Promise<{ text: string } | null> {
+  removeLastQueuedItem(): Promise<{ id: string; text: string } | null> {
     if (typeof this.#adapter.removeLastQueuedItem !== 'function') {
       return Promise.resolve(null);
     }
@@ -252,6 +252,11 @@ export class ConversationService {
    */
   isQueueActive(): boolean {
     return this.#adapter.isQueueActive();
+  }
+
+  /** True while a foreground queue owns the display lifecycle of new submits. */
+  isQueueOwningSubmissions(): boolean {
+    return this.#adapter.isQueueOwningSubmissions();
   }
 
   /** Set an observer for queue state changes. The observer fires immediately with current state. */

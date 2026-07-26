@@ -56,6 +56,7 @@ function mockConversationService(): ConversationService {
     exportState: vi.fn(),
     importState: vi.fn(),
     isQueueActive: vi.fn(() => false),
+    isQueueOwningSubmissions: vi.fn(() => false),
     setQueueStateObserver: vi.fn(),
     setQueuedTurnStartObserver: vi.fn(),
     removeLastQueuedItem: vi.fn(async () => null),
@@ -96,6 +97,7 @@ function makeUIPort(): UIPort {
     onQueueStateChange: vi.fn(),
     onQueuedMessagePending: vi.fn(),
     onQueuedMessageStarted: vi.fn(),
+    onQueuedMessageRemoved: vi.fn(),
     onRemoveLastPendingMessage: vi.fn(),
   };
 }
@@ -336,6 +338,7 @@ describe('ConversationOrchestrator', () => {
   it('routes a queued message to onQueuedMessagePending instead of appending when a turn is in flight', async () => {
     const cfg = makeConfig();
     vi.mocked(cfg.conversationService.isQueueActive).mockReturnValue(true);
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
     // Return a never-resolving promise that we can settle from the test
     // so the orchestrator's sendUserMessage promise resolves.
     let release!: () => void;
@@ -405,6 +408,23 @@ describe('ConversationOrchestrator', () => {
     expect(sendMsg.preferredMessageId).toBe(appended.id);
   });
 
+  it('keeps a submission pending while the foreground queue is paused', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueActive).mockReturnValue(false);
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    await orchestrator.sendUserMessage('while paused');
+
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'while paused');
+    expect(cfg.messages.appendMessages).not.toHaveBeenCalled();
+  });
+
   it('appends a queued message into the list when the queue fires its start observer', async () => {
     const cfg = makeConfig();
     const orchestrator = new ConversationOrchestrator(cfg);
@@ -460,13 +480,16 @@ describe('ConversationOrchestrator', () => {
   it('cancels the last queued message and returns its text', async () => {
     const cfg = makeConfig();
     const orchestrator = new ConversationOrchestrator(cfg);
-    vi.mocked(cfg.conversationService.removeLastQueuedItem).mockResolvedValue({ text: 'restored message' });
+    vi.mocked(cfg.conversationService.removeLastQueuedItem).mockResolvedValue({
+      id: 'queued-1',
+      text: 'restored message',
+    });
 
     const restored = await orchestrator.removeLastQueuedPendingMessage();
 
     expect(restored).toBe('restored message');
     expect(cfg.conversationService.removeLastQueuedItem).toHaveBeenCalledTimes(1);
-    expect(cfg.ui.onRemoveLastPendingMessage).toHaveBeenCalledTimes(1);
+    expect(cfg.ui.onQueuedMessageRemoved).toHaveBeenCalledWith('queued-1');
   });
 
   it('does not retain directly-appended id across clearConversation', async () => {

@@ -439,6 +439,31 @@ it('getAgentDefinition in orchestrator mode retains full memory authority for no
   );
 });
 
+it('getAgentDefinition orchestrator mode registers grep and code_context_search but not glob', () => {
+  const settingsService = createMockSettingsService({
+    'app.orchestratorMode': true,
+    'agent.model': 'gpt-4o',
+  });
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+    ...orchestratorSubagentDeps,
+  });
+
+  const toolNames = definition.tools.map((tool) => tool.name);
+  expect(toolNames.includes('grep')).toBe(true);
+  expect(toolNames.includes('code_context_search')).toBe(true);
+  expect(toolNames.includes('glob')).toBe(false);
+
+  const grepTool = definition.tools.find((tool) => tool.name === 'grep');
+  const codeContextTool = definition.tools.find((tool) => tool.name === 'code_context_search');
+  expect(grepTool?.description).toContain('use shell');
+  expect(grepTool?.description).not.toContain('use glob');
+  expect(codeContextTool?.description).toContain('use shell');
+  expect(codeContextTool?.description).not.toContain('use glob');
+});
+
 it('getAgentDefinition throws if orchestratorMode is true and async delegation is missing', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
@@ -529,6 +554,28 @@ it('getAgentDefinition for gpt-5 omits grep and glob regardless of searchViaShel
   expect(toolNames.includes('read_code_outline')).toBe(true);
   expect(toolNames.includes('code_context_search')).toBe(true);
   expect(toolNames.includes('apply_patch')).toBe(true);
+
+  const codeContextTool = definition.tools.find((tool) => tool.name === 'code_context_search');
+  expect(codeContextTool?.description).toContain('use shell');
+  expect(codeContextTool?.description).not.toContain('use glob');
+});
+
+it('getAgentDefinition search tools do not reference glob when glob is omitted', () => {
+  const settingsService = createMockSettingsService({
+    'app.searchViaShell': 'on',
+    'agent.model': 'gpt-4o',
+  });
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+  });
+
+  const grepTool = definition.tools.find((tool) => tool.name === 'grep');
+  const codeContextTool = definition.tools.find((tool) => tool.name === 'code_context_search');
+  expect(grepTool).toBeUndefined();
+  expect(codeContextTool?.description).toContain('use shell');
+  expect(codeContextTool?.description).not.toContain('use glob');
 });
 
 it('getAgentDefinition defaults searchViaShell to true for gpt-5 models when not explicitly configured', () => {

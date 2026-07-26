@@ -86,6 +86,55 @@ describe('SubagentToolFactory editor capability selection', () => {
   });
 });
 
+describe('SubagentToolFactory search tool descriptions', () => {
+  function buildTools(definition: SubagentDefinition, searchViaShell: boolean) {
+    const settings = createMemorySettings();
+    const policy = new SubagentToolPolicy({
+      settings,
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+    return new SubagentToolFactory({ settings, logger: createMockLogger(), toolPolicy: policy }).buildToolDefinitions(
+      definition,
+      [],
+      '',
+      searchViaShell,
+      false,
+    );
+  }
+
+  it('references shell for file listing when glob is not registered (searchViaShell)', () => {
+    const definition = createDefinition({ role: 'explorer', canRead: true, canRunShell: true, model: 'gpt-4o' });
+    const tools = buildTools(definition, true);
+    const toolNames = tools.map((tool) => tool.name);
+
+    // When searchViaShell is enabled, grep/glob are omitted and shell handles search.
+    expect(toolNames).not.toContain('grep');
+    expect(toolNames).not.toContain('glob');
+    expect(toolNames).toContain('shell');
+
+    const codeContextTool = tools.find((tool) => tool.name === 'code_context_search');
+    expect(codeContextTool?.description).toContain('use shell');
+    expect(codeContextTool?.description).not.toContain('use glob');
+  });
+
+  it('references glob for file listing when glob is registered', () => {
+    const definition = createDefinition({ role: 'explorer', canRead: true, canRunShell: false, model: 'gpt-4o' });
+    const tools = buildTools(definition, false);
+    const toolNames = tools.map((tool) => tool.name);
+
+    expect(toolNames).toContain('grep');
+    expect(toolNames).toContain('glob');
+
+    const grepTool = tools.find((tool) => tool.name === 'grep');
+    const codeContextTool = tools.find((tool) => tool.name === 'code_context_search');
+    expect(grepTool?.description).toContain('use glob');
+    expect(grepTool?.description).not.toContain('use shell');
+    expect(codeContextTool?.description).toContain('use glob');
+    expect(codeContextTool?.description).not.toContain('use shell');
+  });
+});
+
 describe('SubagentToolFactory memory authority', () => {
   it.each(['explorer', 'worker', 'researcher', 'librarian'] as const)(
     'provisions ask_orchestrator only for an eligible async %s segment',

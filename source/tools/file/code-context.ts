@@ -77,11 +77,13 @@ const READ_CODE_OUTLINE_DESCRIPTION =
   'Use this to orient yourself before reading a file in full. ' +
   'Do NOT use this when you need the full file content; use read_file. ' +
   'Returns the compact outline.';
-const CODE_CONTEXT_SEARCH_DESCRIPTION =
+const buildCodeContextSearchDescription = (globAvailable: boolean): string =>
   'Find related files for a given path or declarations for a symbol name. ' +
   'Use this to discover code that depends on or is related to a file, or to locate where a symbol is declared. ' +
   'Note: symbol must be a valid identifier-safe name (letters, numbers, underscores, and dollar signs, and cannot start with a number). ' +
-  'Do NOT use this for plain text search across files (use grep) or for listing files by name (use glob). ' +
+  `Do NOT use this for plain text search across files (use grep) or for listing files by name (use ${
+    globAvailable ? 'glob' : 'shell'
+  }). ` +
   'Returns up to max_results related files or symbol declarations with relation tokens.';
 
 const SKIP_DIRS = ['.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.nuxt', '.cache', 'out', 'vendor'];
@@ -152,12 +154,12 @@ export const createReadCodeOutlineToolDefinition = (
 };
 
 export const createCodeContextSearchToolDefinition = (
-  deps: { executionContext?: ExecutionContext } = {},
+  deps: { executionContext?: ExecutionContext; globAvailable?: boolean } = {},
 ): ToolDefinition<CodeContextSearchToolParams> => {
-  const { executionContext } = deps;
+  const { executionContext, globAvailable = true } = deps;
   return {
     name: 'code_context_search',
-    description: CODE_CONTEXT_SEARCH_DESCRIPTION,
+    description: buildCodeContextSearchDescription(globAvailable),
     parameters: codeContextSearchParametersSchema,
     needsApproval: async (params) => {
       if (params.query_type !== 'related') {

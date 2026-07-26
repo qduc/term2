@@ -229,6 +229,10 @@ export const getAgentDefinition = (
 
   const cwd = executionContext?.getCwd() || process.cwd();
   const isLiteEnv = liteMode && !orchestratorMode && !planMode;
+  // The glob/find-files tool is only registered in certain configurations; keep
+  // the search-tool descriptions consistent so the model does not call a tool
+  // that is not on its allowlist.
+  const globAvailable = orchestratorMode ? false : !searchViaShell && (liteMode || !isGpt5);
   const envInfo = getEnvInfo(settingsService, executionContext, isLiteEnv);
   const skipAgentsMd = isLiteEnv || (executionContext?.isRemote() ?? false);
   const agentsInstructions = skipAgentsMd ? '' : getAgentsInstructions(cwd);
@@ -264,12 +268,12 @@ export const getAgentDefinition = (
         searchViaShell,
       }),
       createReadFileToolDefinition({ executionContext, allowOutsideWorkspace: true, orchestratorMode: true }),
-      createGrepToolDefinition({ executionContext, orchestratorMode: true }),
+      createGrepToolDefinition({ executionContext, orchestratorMode: true, globAvailable: false }),
     );
     if (codeContextEnabled) {
       tools.push(
         createReadCodeOutlineToolDefinition({ executionContext }),
-        createCodeContextSearchToolDefinition({ executionContext }),
+        createCodeContextSearchToolDefinition({ executionContext, globAvailable: false }),
       );
     }
     if (isGpt5) {
@@ -327,7 +331,7 @@ export const getAgentDefinition = (
   if (codeContextEnabled) {
     tools.push(
       createReadCodeOutlineToolDefinition({ executionContext }),
-      createCodeContextSearchToolDefinition({ executionContext }),
+      createCodeContextSearchToolDefinition({ executionContext, globAvailable }),
     );
   }
 
@@ -335,7 +339,7 @@ export const getAgentDefinition = (
     // Lite mode keeps lightweight context and delegation policy, but still allows file edits.
     if (!searchViaShell) {
       tools.push(
-        createGrepToolDefinition({ executionContext }),
+        createGrepToolDefinition({ executionContext, globAvailable }),
         createFindFilesToolDefinition({
           executionContext,
           allowOutsideWorkspace: true,
@@ -362,7 +366,10 @@ export const getAgentDefinition = (
       tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext }));
     } else {
       if (!searchViaShell) {
-        tools.push(createGrepToolDefinition({ executionContext }), createFindFilesToolDefinition({ executionContext }));
+        tools.push(
+          createGrepToolDefinition({ executionContext, globAvailable }),
+          createFindFilesToolDefinition({ executionContext }),
+        );
       }
       tools.push(
         createReadFileToolDefinition({ executionContext }),

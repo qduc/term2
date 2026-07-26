@@ -104,24 +104,35 @@ async function checkRgAvailability(executionContext?: ExecutionContext): Promise
   }
 }
 
-const GREP_DESCRIPTION =
-  'Search for text in the codebase. Uses normal JSON escaping. Regex mode is the default; use literal mode for exact fixed-string matching. ' +
-  'Use this to find where a symbol, string, or pattern appears in files. ' +
-  'Do NOT use this to list files by name (use glob) or to explore relationships between files (use code_context_search). ' +
-  'Returns up to 50 matches as path:line:matched_text, or a note if results are truncated.';
-const GREP_DESCRIPTION_ORCHESTRATOR =
-  'Search directly for a symbol, string, or pattern in the codebase. Uses normal JSON escaping. Regex mode is the default; use literal mode for exact fixed-string matching. ' +
-  'Delegate broad or separable investigation when it provides meaningful context compression or specialization. ' +
-  'Do NOT use this to list files by name (use glob) or to explore relationships between files (use code_context_search). ' +
-  'Returns up to 50 matches as path:line:matched_text, or a note if results are truncated.';
+const buildGrepDescription = (globAvailable: boolean, orchestratorMode: boolean): string => {
+  const fileListTool = globAvailable ? 'glob' : 'shell';
+  const base =
+    'Search for text in the codebase. Uses normal JSON escaping. Regex mode is the default; use literal mode for exact fixed-string matching. ' +
+    'Use this to find where a symbol, string, or pattern appears in files. ' +
+    `Do NOT use this to list files by name (use ${fileListTool}) or to explore relationships between files (use code_context_search). ` +
+    'Returns up to 50 matches as path:line:matched_text, or a note if results are truncated.';
+  if (!orchestratorMode) {
+    return base;
+  }
+  return (
+    'Search directly for a symbol, string, or pattern in the codebase. Uses normal JSON escaping. Regex mode is the default; use literal mode for exact fixed-string matching. ' +
+    'Delegate broad or separable investigation when it provides meaningful context compression or specialization. ' +
+    `Do NOT use this to list files by name (use ${fileListTool}) or to explore relationships between files (use code_context_search). ` +
+    'Returns up to 50 matches as path:line:matched_text, or a note if results are truncated.'
+  );
+};
 
 export const createGrepToolDefinition = (
-  deps: { executionContext?: ExecutionContext; orchestratorMode?: boolean } = {},
+  deps: {
+    executionContext?: ExecutionContext;
+    orchestratorMode?: boolean;
+    globAvailable?: boolean;
+  } = {},
 ): ToolDefinition<SearchToolParams> => {
-  const { executionContext, orchestratorMode = false } = deps;
+  const { executionContext, orchestratorMode = false, globAvailable = true } = deps;
   return {
     name: 'grep',
-    description: orchestratorMode ? GREP_DESCRIPTION_ORCHESTRATOR : GREP_DESCRIPTION,
+    description: buildGrepDescription(globAvailable, orchestratorMode),
     parameters: searchParametersSchema,
     argumentParsing: 'strict',
     needsApproval: () => false, // Search is read-only and safe

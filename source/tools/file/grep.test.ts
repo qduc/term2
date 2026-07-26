@@ -16,6 +16,20 @@ it('orchestrator grep description permits direct targeted investigation', () => 
   expect(tool.description).not.toContain('when you already have a target in mind');
 });
 
+it('description references glob when glob is available and shell when it is not', () => {
+  const defaultTool = createGrepToolDefinition();
+  expect(defaultTool.description).toContain('use glob');
+  expect(defaultTool.description).not.toContain('use shell');
+
+  const shellTool = createGrepToolDefinition({ globAvailable: false });
+  expect(shellTool.description).toContain('use shell');
+  expect(shellTool.description).not.toContain('use glob');
+
+  const orchestratorShellTool = createGrepToolDefinition({ orchestratorMode: true, globAvailable: false });
+  expect(orchestratorShellTool.description).toContain('use shell');
+  expect(orchestratorShellTool.description).not.toContain('use glob');
+});
+
 const execFileAsync = promisify(execFile);
 
 function createWrappedGrepTool() {

@@ -23,6 +23,15 @@ async function withTempWorkspace(run: (dir: string) => Promise<void>) {
 const readCodeOutlineToolDefinition = createReadCodeOutlineToolDefinition();
 const codeContextSearchToolDefinition = createCodeContextSearchToolDefinition();
 
+it('description references glob when glob is available and shell when it is not', () => {
+  expect(codeContextSearchToolDefinition.description).toContain('use glob');
+  expect(codeContextSearchToolDefinition.description).not.toContain('use shell');
+
+  const shellDescription = createCodeContextSearchToolDefinition({ globAvailable: false }).description;
+  expect(shellDescription).toContain('use shell');
+  expect(shellDescription).not.toContain('use glob');
+});
+
 it.sequential('needsApproval: code context tools are read-only', async () => {
   await withTempWorkspace(async () => {
     expect(await readCodeOutlineToolDefinition.needsApproval({ path: 'src/example.ts' })).toBe(false);

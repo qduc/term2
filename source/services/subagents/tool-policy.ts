@@ -758,6 +758,10 @@ export class SubagentToolFactory {
     const fsReadScope = definition.filesystemScope?.read;
     const fsWriteScope = definition.filesystemScope?.write;
     const netScope = definition.networkScope;
+    // The glob/find-files tool is only registered when the subagent can read
+    // the filesystem and is not using shell-based search. Keep descriptions
+    // consistent so the model does not call an unregistered tool.
+    const globAvailable = definition.canRead && !searchViaShell;
 
     if (definition.canRead) {
       tools.push(
@@ -771,7 +775,7 @@ export class SubagentToolFactory {
       if (!searchViaShell) {
         tools.push(
           this.#toolPolicy.wrapReadToolWithScope(
-            createGrepToolDefinition({ executionContext: this.#executionContext }),
+            createGrepToolDefinition({ executionContext: this.#executionContext, globAvailable }),
             fsReadScope,
             (params: any) => params?.path,
           ),
@@ -795,7 +799,7 @@ export class SubagentToolFactory {
             (params: any) => params?.path,
           ),
           this.#toolPolicy.wrapReadToolWithScope(
-            createCodeContextSearchToolDefinition({ executionContext: this.#executionContext }),
+            createCodeContextSearchToolDefinition({ executionContext: this.#executionContext, globAvailable }),
             fsReadScope,
             (params: any) => params?.path,
           ),

@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import fs from 'node:fs';
 import { tool as createTool, type Tool, type RunContext } from '@openai/agents';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
-import type { SubagentDefinition, SupportedSubagentRole } from './types.js';
+import type { SubagentDefinition, SupportedSubagentRole, ValidationEvidence } from './types.js';
 import type { CommandMessage, ToolDefinition } from '../../tools/types.js';
 import { isPathInScopeSafe, isHostInScope } from '../agent-runtime/scope-resolver.js';
 import { getProvider } from '../../providers/index.js';
@@ -36,6 +37,11 @@ import { MemoryCapabilityBuilder } from '../memory/memory-capabilities.js';
 
 const MODEL_FACING_EDITOR_TOOLS = new Set(['apply_patch', 'search_replace', 'create_file']);
 
+/** A mutable holder for the last validation evidence captured from a shell run. */
+export interface ValidationCapture {
+  value?: ValidationEvidence;
+}
+
 export type SubagentRunContext = {
   agentId: string;
   role: SupportedSubagentRole;
@@ -45,6 +51,10 @@ export type SubagentRunContext = {
   activeCommandMessages: Record<string, CommandMessage[]>;
   turnCount: number;
   maxTurns: number;
+  /** Per-file line deltas for diffStat, captured from editor-tool writes. */
+  diffDeltas?: Map<string, { added: number; deleted: number }>;
+  /** Last validation-shaped shell command evidence. */
+  lastValidation?: ValidationCapture;
 };
 
 export function getSubagentRunContext(context: unknown): SubagentRunContext | undefined {
@@ -109,6 +119,94 @@ function rejectUnsandboxedSubagentShell(params: unknown): string | undefined {
   }
   return undefined;
 }
+
+/** Heuristic for validation-shaped shell commands (test/lint/typecheck/build/tsc). */
+const VALIDATION_COMMAND_PATTERNS = [
+  /\bnpm\s+run\s+(test|lint|typecheck|tsc|build|check)\b/i,
+  /\bnpx\s+(vitest|jest|tsc|eslint|prettier)\b/i,
+  /\bpnpm\s+(run\s+)?(test|lint|typecheck|tsc|build|check)\b/i,
+  /\byarn\s+(test|lint|typecheck|tsc|build|check)\b/i,
+  /\bvitest\b/i,
+  /\bjest\b/i,
+  /\btsc\b/i,
+  /\beslint\b/i,
+  /\bprettier\b/i,
+  /\b(test|lint|typecheck|build)\s*$/i,
+  /\bpnpm\s+test\b/i,
+  /\bnpm\s+test\b/i,
+];
+
+function isValidationCommand(command: string): boolean {
+  return VALIDATION_COMMAND_PATTERNS.some((re) => re.test(command));
+}
+
+const MAX_VALIDATION_EXCERPT = 2000;
+
+/**
+ * Parse the exit status from a shell tool result string.
+ * Shell tool output in this codebase follows the format: `Exit: <number>` or
+ * includes `exit code: <number>`. Returns undefined when unparseable.
+ */
+function parseExitStatus(result: string): number | undefined {
+  const exitMatch = result.match(/\bExit:\s*(\d+)/i) || result.match(/\bexit\s+code:\s*(\d+)/i);
+  if (exitMatch) return parseInt(exitMatch[1], 10);
+  // Many commands output nothing on success (exit 0).
+  if (!result) return 0;
+  return undefined;
+}
+
+function buildValidationEvidence(command: string, result: string): ValidationEvidence {
+  const exitStatus = parseExitStatus(result) ?? 0;
+  const excerpt =
+    result.length > MAX_VALIDATION_EXCERPT ? result.slice(-(MAX_VALIDATION_EXCERPT - 20)) + '\n...(truncated)' : result;
+  return { command, exitStatus, outputExcerpt: excerpt };
+}
+
+/**
+ * Compute a line-count delta for a file. Reads the file before and after a
+ * write, then records net added/deleted. Best-effort: uses net line delta
+ * rather than a full LCS diff to stay cheap and dependency-free. Returns null
+ * when the file cannot be read.
+ */
+function computeLineDelta(
+  resolvedPath: string,
+  beforeContent: string | null,
+): { added: number; deleted: number } | null {
+  let afterContent: string | null;
+  try {
+    afterContent = fs.existsSync(resolvedPath) ? fs.readFileSync(resolvedPath, 'utf-8') : null;
+  } catch {
+    return null;
+  }
+  const beforeLines = beforeContent === null ? 0 : beforeContent.split('\n').length;
+  const afterLines = afterContent === null ? 0 : afterContent.split('\n').length;
+  const net = afterLines - beforeLines;
+  return {
+    added: Math.max(0, net),
+    deleted: Math.max(0, -net),
+  };
+}
+
+function readFileOrNull(resolvedPath: string): string | null {
+  try {
+    return fs.existsSync(resolvedPath) ? fs.readFileSync(resolvedPath, 'utf-8') : null;
+  } catch {
+    return null;
+  }
+}
+
+export function captureValidationIfMatch(
+  capture: ValidationCapture | undefined,
+  command: string,
+  result: unknown,
+): void {
+  if (!capture) return;
+  if (!isValidationCommand(command)) return;
+  const resultStr = typeof result === 'string' ? result : String(result ?? '');
+  capture.value = buildValidationEvidence(command, resultStr);
+}
+
+export { isValidationCommand };
 
 export class SubagentToolPolicy {
   #settings: ISettingsService;
@@ -239,7 +337,13 @@ export class SubagentToolPolicy {
     }
   }
 
-  wrapShellTool(definition: ToolDefinition, cwd: string, filesChanged: string[], taskContext: string): ToolDefinition {
+  wrapShellTool(
+    definition: ToolDefinition,
+    cwd: string,
+    filesChanged: string[],
+    taskContext: string,
+    validationCapture?: ValidationCapture,
+  ): ToolDefinition {
     const originalExecute = definition.execute.bind(definition);
     return {
       ...definition,
@@ -282,13 +386,16 @@ export class SubagentToolPolicy {
           try {
             const result = await originalExecute(params, context, details);
             filesChanged.push(...extractedPaths);
+            captureValidationIfMatch(validationCapture, command, result);
             return result;
           } finally {
             releaseWorkerLocks();
           }
         }
 
-        return originalExecute(params, context, details);
+        const result = await originalExecute(params, context, details);
+        captureValidationIfMatch(validationCapture, command, result);
+        return result;
       },
     };
   }
@@ -319,7 +426,11 @@ export class SubagentToolPolicy {
 
         try {
           const result = await originalExecute(params, context, details);
-          getSubagentRunContext(context)?.filesChanged.push(...extractedPaths);
+          const ctx = getSubagentRunContext(context);
+          ctx?.filesChanged.push(...extractedPaths);
+          if (ctx?.lastValidation) {
+            captureValidationIfMatch(ctx.lastValidation, command, result);
+          }
           return result;
         } finally {
           releaseWorkerLocks();
@@ -366,6 +477,7 @@ export class SubagentToolPolicy {
     filesChanged: string[],
     extractPaths: (params: any) => string[],
     nestedApprovals = false,
+    diffDeltas?: Map<string, { added: number; deleted: number }>,
   ): ToolDefinition {
     const originalExecute = definition.execute.bind(definition);
     const originalNeedsApproval = definition.needsApproval.bind(definition);
@@ -395,13 +507,30 @@ export class SubagentToolPolicy {
           return 'Error: Write rejected: one or more target files are already being modified by another worker.';
         }
 
+        // Snapshot before-write content for diffStat capture.
+        const beforeSnapshots = new Map<string, string | null>();
+        for (const filePath of paths) {
+          const resolved = path.resolve(cwd, filePath);
+          beforeSnapshots.set(resolved, readFileOrNull(resolved));
+        }
+
         try {
           const result = await originalExecute(params, context, details);
           for (const successfulPath of this.extractSuccessfulWritePaths(result)) {
+            const resolvedPath = path.resolve(cwd, successfulPath);
             if (nestedApprovals) {
               getSubagentRunContext(context)?.filesChanged.push(successfulPath);
+              const ctx = getSubagentRunContext(context);
+              if (ctx?.diffDeltas) {
+                const delta = computeLineDelta(resolvedPath, beforeSnapshots.get(resolvedPath) ?? null);
+                if (delta) ctx.diffDeltas.set(resolvedPath, delta);
+              }
             } else {
               filesChanged.push(successfulPath);
+              if (diffDeltas) {
+                const delta = computeLineDelta(resolvedPath, beforeSnapshots.get(resolvedPath) ?? null);
+                if (delta) diffDeltas.set(resolvedPath, delta);
+              }
             }
           }
           return result;
@@ -599,6 +728,8 @@ export class SubagentToolFactory {
     taskContext: string,
     searchViaShell: boolean,
     nestedApprovals = false,
+    diffDeltas?: Map<string, { added: number; deleted: number }>,
+    validationCapture?: ValidationCapture,
   ): ToolDefinition[] {
     const tools: ToolDefinition[] = [];
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
@@ -694,7 +825,7 @@ export class SubagentToolFactory {
         tools.push(
           nestedApprovals
             ? this.#toolPolicy.wrapNestedShellTool(shellDef, cwd)
-            : this.#toolPolicy.wrapShellTool(shellDef, cwd, filesChanged, taskContext),
+            : this.#toolPolicy.wrapShellTool(shellDef, cwd, filesChanged, taskContext, validationCapture),
         );
       } else {
         tools.push(this.#toolPolicy.wrapReadOnlyShellTool(shellDef));
@@ -721,6 +852,7 @@ export class SubagentToolFactory {
                 return params?.path ? [params.path] : [];
               },
               nestedApprovals,
+              diffDeltas,
             ),
             fsWriteScope,
             (params: any) => {
@@ -744,6 +876,7 @@ export class SubagentToolFactory {
               filesChanged,
               (params: any) => (params?.path ? [params.path] : []),
               nestedApprovals,
+              diffDeltas,
             ),
             fsWriteScope,
             (params: any) => (params?.path ? [params.path] : []),
@@ -759,6 +892,7 @@ export class SubagentToolFactory {
               filesChanged,
               (params: any) => (params?.path ? [params.path] : []),
               nestedApprovals,
+              diffDeltas,
             ),
             fsWriteScope,
             (params: any) => (params?.path ? [params.path] : []),

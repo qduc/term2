@@ -1,8 +1,9 @@
 import { Agent } from '@openai/agents';
+import path from 'node:path';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
-import type { SubagentRequest, SubagentDefinition, SubagentResult } from './types.js';
-import type { SubagentToolFactory } from './tool-policy.js';
+import type { SubagentRequest, SubagentDefinition, SubagentResult, DiffStatEntry } from './types.js';
+import { SubagentToolFactory, type ValidationCapture } from './tool-policy.js';
 import { SubagentSession } from './subagent-session.js';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
 import { isAbortLike, aggregateToolUsage, safeEmit } from './utils.js';
@@ -105,6 +106,8 @@ export class ExecutionSubagentRunner {
 
     const toolCounts = new Map<string, number>();
     const filesChanged: string[] = [];
+    const diffDeltas = new Map<string, { added: number; deleted: number }>();
+    const validationCapture: ValidationCapture = {};
 
     const searchViaShell = resolveSubagentSearchViaShell(this.#settings, definition.model, definition.canRunShell);
     const toolDefinitions = this.#toolFactory.buildToolDefinitions(
@@ -112,6 +115,9 @@ export class ExecutionSubagentRunner {
       filesChanged,
       request.task,
       searchViaShell,
+      false,
+      diffDeltas,
+      validationCapture,
     );
 
     const providerId = definition.provider;
@@ -266,6 +272,9 @@ export class ExecutionSubagentRunner {
       runtime.dispose();
     }
 
+    const diffStat = buildDiffStat(filesChanged, diffDeltas);
+    const validation = validationCapture.value;
+
     if (error) {
       return {
         agentId,
@@ -276,6 +285,8 @@ export class ExecutionSubagentRunner {
         toolsUsed: aggregateToolUsage(toolCounts),
         error: error.message,
         ...(usage ? { usage } : {}),
+        ...(diffStat.length > 0 ? { diffStat } : {}),
+        ...(validation ? { validation } : {}),
       };
     }
 
@@ -283,10 +294,46 @@ export class ExecutionSubagentRunner {
       agentId,
       role: request.role,
       status: 'completed',
-      finalText,
+      finalText: truncateResultText(finalText),
       filesChanged: [...new Set(filesChanged)],
       toolsUsed: aggregateToolUsage(toolCounts),
       ...(usage ? { usage } : {}),
+      ...(diffStat.length > 0 ? { diffStat } : {}),
+      ...(validation ? { validation } : {}),
     };
   }
+}
+
+function buildDiffStat(
+  filesChanged: string[],
+  diffDeltas: Map<string, { added: number; deleted: number }>,
+): DiffStatEntry[] {
+  const seen = new Set<string>();
+  const entries: DiffStatEntry[] = [];
+  for (const file of filesChanged) {
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const delta = diffDeltas.get(file) ?? diffDeltas.get(resolveSafe(file));
+    entries.push({
+      path: file,
+      added: delta?.added ?? 0,
+      deleted: delta?.deleted ?? 0,
+    });
+  }
+  return entries;
+}
+
+function resolveSafe(p: string): string {
+  try {
+    return path.resolve(p);
+  } catch {
+    return p;
+  }
+}
+
+const MAX_FINAL_TEXT_CHARS = 4000;
+
+function truncateResultText(text: string): string {
+  if (text.length <= MAX_FINAL_TEXT_CHARS) return text;
+  return text.slice(0, MAX_FINAL_TEXT_CHARS) + '\n...(truncated)';
 }

@@ -43,6 +43,25 @@ function formatSubagentResult(result: SubagentResult): string {
     lines.push(`Error: ${result.error}`);
   }
 
+  // Structured validation evidence (machine-checkable, before narrative).
+  if (result.validation) {
+    lines.push('');
+    const v = result.validation;
+    lines.push(`Validation: ${v.command} → exit ${v.exitStatus}`);
+    if (v.outputExcerpt) {
+      const excerpt = v.outputExcerpt.length > 500 ? v.outputExcerpt.slice(-500) + '...' : v.outputExcerpt;
+      lines.push(`Output excerpt: ${excerpt}`);
+    }
+  }
+
+  // Structured diff stat (machine-checkable, before narrative).
+  if (result.diffStat && result.diffStat.length > 0) {
+    lines.push('');
+    const stats = result.diffStat.map((d) => `  ${d.path} +${d.added}/-${d.deleted}`).join('\n');
+    lines.push(`Diff stat:`);
+    lines.push(stats);
+  }
+
   if (result.finalText) {
     lines.push('');
     lines.push(result.finalText);

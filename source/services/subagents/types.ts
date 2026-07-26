@@ -71,6 +71,24 @@ export interface SubagentDefinition {
   isRootExecution?: boolean;
 }
 
+/** Per-file line-change evidence captured automatically from write tools. */
+export interface DiffStatEntry {
+  path: string;
+  added: number;
+  deleted: number;
+}
+
+/**
+ * Validation command evidence captured automatically from the last
+ * validation-shaped shell command the worker ran (test/lint/typecheck/build).
+ * Makes verification independent of worker prose discipline.
+ */
+export interface ValidationEvidence {
+  command: string;
+  exitStatus: number;
+  outputExcerpt: string;
+}
+
 export interface SubagentResult {
   agentId: string;
   role: string;
@@ -85,6 +103,18 @@ export interface SubagentResult {
   error?: string;
   /** SDK nested run result used to propagate/resume delegated approvals. */
   nestedRunResult?: unknown;
+  /**
+   * Per-file line-change evidence over `filesChanged`, captured automatically
+   * by in-memory interception of editor-tool writes. Best-effort: shell-driven
+   * edits outside the editor-tool set may not appear here.
+   */
+  diffStat?: DiffStatEntry[];
+  /**
+   * The last validation-shaped shell command the worker ran, with its exit
+   * status and a truncated output excerpt. Absent when the worker ran no
+   * validation command.
+   */
+  validation?: ValidationEvidence;
 }
 
 /** The only state exposed while an asynchronous run is live. */

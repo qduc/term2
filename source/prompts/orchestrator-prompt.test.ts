@@ -48,3 +48,19 @@ it('orchestrator prompt keeps peek from substituting for the async completion di
   expect(lower).toContain('get_subagent_result');
   expect(lower).toContain('completion notification');
 });
+
+it('orchestrator prompt instructs checking structured evidence (validation/diffStat) before finalText', () => {
+  const lower = orchestratorPrompt.toLowerCase();
+
+  expect(lower).toContain('diffstat');
+  expect(lower).toContain('validation');
+  expect(lower).toContain('structured fields');
+  expect(lower).toContain('before trusting');
+});
+
+it('orchestrator prompt says to ask the worker to run validation when it is absent', () => {
+  const lower = orchestratorPrompt.toLowerCase();
+
+  expect(lower).toContain('is absent');
+  expect(lower).toContain('ask it to run one');
+});

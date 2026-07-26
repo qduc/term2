@@ -107,6 +107,33 @@ it('get_subagent_result returns a formatted SubagentResult', async () => {
   expect(raw.startsWith('{')).toBe(false);
 });
 
+it('get_subagent_result renders structured validation and diffStat evidence', async () => {
+  const tool = createGetSubagentResultToolDefinition(async () =>
+    makeResult({
+      finalText: 'Done.',
+      diffStat: [
+        { path: 'src/a.ts', added: 10, deleted: 3 },
+        { path: 'src/b.ts', added: 5, deleted: 0 },
+      ],
+      validation: {
+        command: 'pnpm vitest run',
+        exitStatus: 0,
+        outputExcerpt: 'Tests passed',
+      },
+    }),
+  );
+
+  const raw = await tool.execute({ runId: 'run-abc' });
+  // Structured evidence appears.
+  expect(raw).toContain('Validation: pnpm vitest run');
+  expect(raw).toContain('exit 0');
+  expect(raw).toContain('Diff stat:');
+  expect(raw).toContain('src/a.ts +10/-3');
+  expect(raw).toContain('src/b.ts +5/-0');
+  // Narrative still appears.
+  expect(raw).toContain('Done.');
+});
+
 it('preserves registry error codes through the async tool boundary', async () => {
   const tool = createRunSubagentAsyncToolDefinition(async () => {
     throw new SubagentRegistryError('worker_blocked', 'Worker runs cannot be continued asynchronously');

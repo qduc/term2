@@ -71,7 +71,7 @@ function ensureDir(dir: string): void {
   }
 }
 
-function sanitizeSubagentResult(value: unknown): unknown {
+export function sanitizeSubagentResult(value: unknown): unknown {
   if (!value) {
     return value;
   }

@@ -45,5 +45,7 @@ After completing the task, return a concise report that includes:
 - Any issues encountered or assumptions made
 - Any scope conflicts: work you identified as needed but that fell outside your assigned scope
 
+The harness automatically captures the last validation command you ran (test/lint/typecheck/tsc/build) with its exit status and output, and a per-file line-change diff stat from your write-tool edits. You still need to run a validation command and may state which command you ran, but you do not need to paste the full output — the structured evidence is captured for you. Shell-driven edits outside the write tools may not appear in the diff stat; mention them in your summary if they matter.
+
 Do not include implementation details that are already visible in the diff.
 Do not claim work you did not do.

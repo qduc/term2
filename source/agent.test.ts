@@ -17,6 +17,13 @@ const WORKTREE_HYGIENE_FRAGMENT_MARKER = 'Before making any code changes, inspec
 const orchestratorSubagentDeps = {
   runSubagentAsync: async () => ({ runId: 'run-1' }),
   getSubagentResult: async () => ({ finalText: 'done' }),
+  sendSubagentMessage: () => ({
+    ok: true as const,
+    runId: 'run-1',
+    status: 'running' as const,
+    delivery: 'queued' as const,
+  }),
+  cancelSubagentRun: () => ({ ok: true as const, runId: 'run-1', status: 'cancelling' as const }),
 };
 
 it('adds memory tools and summary-only context when memory is enabled, and neither when disabled', async () => {
@@ -254,6 +261,45 @@ it('getAgentDefinition exposes only async delegation tools in orchestrator mode'
   expect(definition.instructions.includes('### Delegating to subagents')).toBe(true);
 });
 
+it('getAgentDefinition registers parent async controls in orchestrator and ordinary non-lite async modes', () => {
+  const asyncControls = {
+    runSubagentAsync: async () => ({ runId: 'run-1' }),
+    getSubagentResult: async () => ({ finalText: 'done' }),
+    sendSubagentMessage: () => ({
+      ok: true as const,
+      runId: 'run-1',
+      status: 'running' as const,
+      delivery: 'queued' as const,
+    }),
+    cancelSubagentRun: () => ({ ok: true as const, runId: 'run-1', status: 'cancelling' as const }),
+  };
+  const orchestrator = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'app.orchestratorMode': true }),
+    loggingService: mockLogger,
+    ...asyncControls,
+  });
+  const ordinary = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'app.liteMode': false }),
+    loggingService: mockLogger,
+    ...asyncControls,
+  });
+
+  for (const definition of [orchestrator, ordinary]) {
+    expect(definition.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(['send_message', 'cancel_run']));
+  }
+});
+
+it('getAgentDefinition requires parent controls when orchestrator mode enables async delegation', () => {
+  expect(() =>
+    getAgentDefinition({
+      settingsService: createMockSettingsService({ 'app.orchestratorMode': true }),
+      loggingService: mockLogger,
+      runSubagentAsync: async () => ({ runId: 'run-1' }),
+      getSubagentResult: async () => ({ finalText: 'done' }),
+    }),
+  ).toThrow(/sendSubagentMessage.*cancelSubagentRun/);
+});
+
 it('getAgentDefinition omits delegation guidance in standard mode even if runSubagent is provided', () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
@@ -314,6 +360,8 @@ it('getAgentDefinition in orchestrator mode retains full memory authority', () =
   expect(definition.tools.map((tool) => tool.name)).toEqual([
     'run_subagent_async',
     'get_subagent_result',
+    'send_message',
+    'cancel_run',
     'shell',
     'read_file',
     'grep',

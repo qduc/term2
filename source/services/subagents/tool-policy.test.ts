@@ -45,7 +45,11 @@ function createMemorySettings(enabled = true) {
   });
 }
 
-function buildToolNames(definition: SubagentDefinition, memoryEnabled = true): string[] {
+function buildToolNames(
+  definition: SubagentDefinition,
+  memoryEnabled = true,
+  askOrchestrator?: (question: string) => Promise<string>,
+): string[] {
   const settings = createMemorySettings(memoryEnabled);
   const policy = new SubagentToolPolicy({
     settings,
@@ -53,7 +57,7 @@ function buildToolNames(definition: SubagentDefinition, memoryEnabled = true): s
     sessionContextService: createSessionContextService(),
   });
   return new SubagentToolFactory({ settings, logger: createMockLogger(), toolPolicy: policy })
-    .buildToolDefinitions(definition, [], '', false)
+    .buildToolDefinitions(definition, [], '', false, false, undefined, undefined, askOrchestrator)
     .map((tool) => tool.name);
 }
 
@@ -83,6 +87,20 @@ describe('SubagentToolFactory editor capability selection', () => {
 });
 
 describe('SubagentToolFactory memory authority', () => {
+  it.each(['explorer', 'worker', 'researcher', 'librarian'] as const)(
+    'provisions ask_orchestrator only for an eligible async %s segment',
+    (role) => {
+      expect(buildToolNames(createDefinition({ role }), true, async () => 'answer')).toContain('ask_orchestrator');
+      expect(buildToolNames(createDefinition({ role }))).not.toContain('ask_orchestrator');
+    },
+  );
+
+  it('never provisions ask_orchestrator for mentor segments', () => {
+    expect(buildToolNames(createDefinition({ role: 'mentor' }), true, async () => 'answer')).not.toContain(
+      'ask_orchestrator',
+    );
+  });
+
   it.each(['explorer', 'worker', 'researcher'] as const)('gives %s read-only memory tools', (role) => {
     const tools = buildToolNames(createDefinition({ role }));
 

@@ -132,6 +132,16 @@ export class ConversationLogger {
       case 'subagent_completed':
         this.log({ type: 'subagent_completed', result: event.result });
         return;
+      case 'subagent_question':
+        this.log({
+          type: 'subagent_question',
+          messageId: event.messageId,
+          runId: event.runId,
+          ...(event.name !== undefined ? { name: event.name } : {}),
+          role: event.role,
+          question: event.question,
+        });
+        return;
       case 'error':
         this.turnAccumulator.flushReasoningItem();
         this.turnAccumulator.flushAssistantTextItem();

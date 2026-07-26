@@ -35,6 +35,16 @@ const completion = (agentId: string, async = true): ConversationEvent =>
     },
   } as ConversationEvent);
 
+const question = (messageId: string, runId = 'run-1'): ConversationEvent =>
+  ({
+    type: 'subagent_question',
+    async: true,
+    messageId,
+    runId,
+    role: 'explorer',
+    question: 'Which public API should I use?',
+  } as ConversationEvent);
+
 const start = (agentId: string): ConversationEvent =>
   ({
     type: 'subagent_started',
@@ -100,6 +110,8 @@ it('queues async background subagent completions and notifies the observer once 
   });
 
   let notified = 0;
+  const logged: any[] = [];
+  runtime.logs.setLogSink((event) => logged.push(event));
   runtime.backgroundSubagentNotifications.setObserver(() => {
     notified += 1;
   });
@@ -114,6 +126,35 @@ it('queues async background subagent completions and notifies the observer once 
     expect.objectContaining({ runId: 'run-1', role: 'explorer', status: 'completed' }),
   ]);
 
+  runtime.dispose();
+});
+
+it('routes async subagent questions through the background queue and observer', () => {
+  const sinks: Sinks = { turn: null, background: null };
+  const runtime = createSessionRuntime({
+    sessionId: 'bg-question',
+    agentClient: makeClient(sinks),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  let notified = 0;
+  const logged: any[] = [];
+  runtime.logs.setLogSink((event) => logged.push(event));
+  runtime.backgroundSubagentNotifications.setObserver(() => {
+    notified += 1;
+  });
+
+  sinks.background?.(question('question-1'));
+  sinks.background?.(question('question-1'));
+  sinks.background?.(question('question-2'));
+
+  expect(notified).toBe(2);
+  expect(runtime.backgroundSubagentNotifications.drain()).toEqual([
+    expect.objectContaining({ kind: 'question', messageId: 'question-1', runId: 'run-1' }),
+    expect.objectContaining({ kind: 'question', messageId: 'question-2', runId: 'run-1' }),
+  ]);
+  expect(logged).toContainEqual(
+    expect.objectContaining({ type: 'subagent_question', messageId: 'question-1', runId: 'run-1' }),
+  );
   runtime.dispose();
 });
 

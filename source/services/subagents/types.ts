@@ -10,6 +10,8 @@ export type SubagentRole = SupportedSubagentRole | string;
 export interface SubagentRequest {
   role: SubagentRole;
   task: string;
+  /** Optional ergonomic alias, unique only while the asynchronous run is active. */
+  name?: string;
   /** Parent tool/run cancellation signal. */
   signal?: AbortSignal;
   /** SDK serialized run state for resuming a delegated agent-tool run (nested approvals). */
@@ -21,6 +23,49 @@ export interface SubagentRequest {
   /** Continue a completed async session. */
   continueRunId?: string;
 }
+
+/** Narrow per-segment callbacks supplied by the logical async-run owner. */
+export interface SubagentSegmentControl {
+  onToolStart(): void;
+  onToolComplete(): void;
+  /** Suspend only the current async execution tool until the orchestrator replies. */
+  askOrchestrator(question: string): Promise<string>;
+}
+
+export type SubagentSteerErrorCode =
+  | 'invalid_guidance'
+  | 'not_active'
+  | 'unsupported_control'
+  | 'steer_limit_reached'
+  | 'question_mismatch'
+  | 'question_not_pending';
+
+/** Immediate, non-blocking outcome of queueing a steering instruction. */
+export type SubagentSteerAcknowledgement =
+  | {
+      ok: true;
+      runId: string;
+      status: 'running';
+      delivery: 'queued' | 'answered';
+    }
+  | {
+      ok: false;
+      code: SubagentSteerErrorCode;
+      target: string;
+    };
+
+/** Immediate, non-blocking outcome of requesting cancellation by runId or active name. */
+export type SubagentCancelAcknowledgement =
+  | {
+      ok: true;
+      runId: string;
+      status: 'cancelling';
+    }
+  | {
+      ok: false;
+      code: 'not_active';
+      target: string;
+    };
 
 export interface SubagentDefinition {
   role: SubagentRole;
@@ -120,6 +165,8 @@ export interface SubagentResult {
 /** The only state exposed while an asynchronous run is live. */
 export interface SubagentRunHandle {
   runId: string;
+  /** Optional active-run alias; runId remains the canonical identity. */
+  name?: string;
   role: string;
   status: 'running';
   task: string;
@@ -132,8 +179,10 @@ export interface SubagentRunHandle {
  */
 export interface SubagentRunStatus {
   runId: string;
+  /** Optional active-run alias retained in status snapshots. */
+  name?: string;
   role: string;
-  status: 'running' | 'completed' | 'failed' | 'cancelled' | 'not_found';
+  status: 'running' | 'waiting_for_answer' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'not_found';
   task: string;
   taskPreview: string;
   startedAt: number;

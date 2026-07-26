@@ -20,6 +20,7 @@ export type ConversationEvent =
   | SubagentToolStartedEvent
   | SubagentCommandMessageEvent
   | SubagentCompletedEvent
+  | SubagentQuestionEvent
   | SubagentAsyncProgressEvent
   | CodexRateLimitEvent
   | UserMessageConsumedForAbortEvent;
@@ -172,6 +173,18 @@ export interface SubagentCompletedEvent {
   result: SubagentResult;
   /** True when this completion finishes an async run started by `run_subagent_async`. */
   async?: boolean;
+}
+
+/** A bounded blocker from a live async execution segment to its orchestrator. */
+export interface SubagentQuestionEvent {
+  type: 'subagent_question';
+  /** This event is only emitted by the async-run registry. */
+  async: true;
+  messageId: string;
+  runId: string;
+  name?: string;
+  role: string;
+  question: string;
 }
 
 export interface SubagentAsyncProgressEvent {

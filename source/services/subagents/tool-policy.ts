@@ -25,6 +25,7 @@ import { createSearchReplaceToolDefinition } from '../../tools/file/search-repla
 import { createCreateFileToolDefinition } from '../../tools/file/create-file.js';
 import { createShellToolDefinition } from '../../tools/system/shell.js';
 import { createActivateSkillToolDefinition } from '../../tools/agent/activate-skill.js';
+import { createAskOrchestratorToolDefinition } from '../../tools/agent/ask-orchestrator.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { trimToolOutput } from '../../utils/output/trim-tool-output.js';
@@ -730,6 +731,7 @@ export class SubagentToolFactory {
     nestedApprovals = false,
     diffDeltas?: Map<string, { added: number; deleted: number }>,
     validationCapture?: ValidationCapture,
+    askOrchestrator?: (question: string) => Promise<string>,
   ): ToolDefinition[] {
     const tools: ToolDefinition[] = [];
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
@@ -737,6 +739,12 @@ export class SubagentToolFactory {
 
     // Mentor is advisory-only; it must never inherit incidental capabilities.
     if (definition.role === 'mentor') return tools;
+
+    // This callback is supplied exclusively by the async execution-segment
+    // adapter. Sync and nested runners never receive it.
+    if (askOrchestrator && ['explorer', 'worker', 'researcher', 'librarian'].includes(definition.role)) {
+      tools.push(createAskOrchestratorToolDefinition(askOrchestrator));
+    }
 
     if (this.#skillsService && this.#skillsService.getAvailableSkillsForModel().length > 0) {
       tools.push(createActivateSkillToolDefinition(this.#skillsService));
@@ -916,7 +924,7 @@ export class SubagentToolFactory {
       // `canWrite` remains the sole authority grant for editor tools.
       const editorRequested = definition.canWrite && [...allowed].some((name) => MODEL_FACING_EDITOR_TOOLS.has(name));
       return tools.filter((tool) => {
-        if (tool.name === 'activate_skill') {
+        if (tool.name === 'activate_skill' || tool.name === 'ask_orchestrator') {
           return true;
         }
         return MODEL_FACING_EDITOR_TOOLS.has(tool.name) ? editorRequested : allowed.has(tool.name);

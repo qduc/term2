@@ -15,6 +15,7 @@ export type PromptConstructorOptions = {
   codeContextEnabled?: boolean;
   runSubagentEnabled?: boolean;
   runSubagentAsyncEnabled?: boolean;
+  asyncSubagentControlsEnabled?: boolean;
   sandboxEnabled?: boolean;
   memoryEnabled?: boolean;
   memoryGuidance?: string;
@@ -36,6 +37,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     searchViaShell = false,
     runSubagentEnabled = false,
     runSubagentAsyncEnabled = false,
+    asyncSubagentControlsEnabled = false,
     sandboxEnabled = true,
     memoryEnabled = false,
     memoryGuidance = '',
@@ -73,7 +75,13 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   }
 
   if (runSubagentAsyncEnabled && !liteMode) {
-    inlineSections.push(getAsyncSubagentDelegationAddendum({ memoryEnabled, orchestratorMode }));
+    inlineSections.push(
+      getAsyncSubagentDelegationAddendum({
+        memoryEnabled,
+        orchestratorMode,
+        controlsEnabled: asyncSubagentControlsEnabled,
+      }),
+    );
   }
 
   if (isRegularMode && isAgentMode) {

@@ -64,3 +64,14 @@ it('orchestrator prompt says to ask the worker to run validation when it is abse
   expect(lower).toContain('is absent');
   expect(lower).toContain('ask it to run one');
 });
+
+it('orchestrator prompt gives bounded, honest steering and cancellation guidance', () => {
+  const lower = orchestratorPrompt.toLowerCase();
+
+  expect(lower).toContain('send_message');
+  expect(lower).toContain('cancel_run');
+  expect(lower).toContain('reply_to');
+  expect(lower).toContain('fresh session turn');
+  expect(lower).toContain('not sdk live injection');
+  expect(lower).toContain('three continuation segments');
+});

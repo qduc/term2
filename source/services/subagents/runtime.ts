@@ -96,9 +96,9 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
 
   asyncRegistry = new SubagentAsyncRegistry({
     logger: deps.logger,
-    run: async ({ request, runId, session, signal }) => {
+    run: async ({ request, runId, session, signal, input, control }) => {
       if (request.role === 'mentor') {
-        return mentorRunner.run(runId, request.task, signal, session, request.executionBudget);
+        return mentorRunner.run(runId, input, signal, session, request.executionBudget);
       }
       const definition = loadRoleDefinition(request.role, deps.settings);
       return executionRunner.runInSession(
@@ -106,6 +106,11 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
         { ...request, signal },
         { ...definition, ...(request.executionBudget ? { executionBudget: request.executionBudget } : {}) },
         session,
+        undefined,
+        signal,
+        undefined,
+        control,
+        input,
       );
     },
     onEvent: deps.onEvent,

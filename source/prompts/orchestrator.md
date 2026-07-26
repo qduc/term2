@@ -43,6 +43,12 @@ Do not redo completed work without reason. If a result looks wrong, inspect the 
 
 Peek is on-demand, not a substitute for the async completion discipline. It does not tell you when a run finishes, it never carries completion detail, and it is not a reason to poll in a loop. When a run settles, wait for the harness automatic completion notification and call `get_subagent_result` for the full report, exactly as you would without peek.
 
+## Steering or cancelling delegated work
+
+Address active runs by their optional name or canonical runId. Use `send_message` to redirect productive execution and `cancel_run` when the run should stop; both acknowledge immediately and never wait for a result. Steering reaches a safe model-stream boundary, never interrupts an active tool, and continues in a fresh session turn. It is not SDK live injection or RunState continuation, and each logical run permits at most three continuation segments.
+
+If a worker or researcher is waiting on `ask_orchestrator`, answer its specific `messageId` through `send_message` with `reply_to`. The answer resumes only that waiting tool call; the subagent should continue afterward. Keep the single point of contact invariant: resolve or escalate the blocker yourself and never let a subagent contact the user. Mentor runs cannot be steered; `cancel_run` remains available. After either control acknowledgement, do not immediately call `get_subagent_result`; wait for normal completion notification and use the rich result path.
+
 ## Verifying and reporting
 
 Treat subagent "done" reports as claims, not facts. Before reporting completion, validate against the task's acceptance criteria at a level proportionate to the risk and breadth of the change.

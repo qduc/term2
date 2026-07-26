@@ -1,9 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import type { SubagentRequest, SubagentResult, SubagentRunHandle, SubagentRunStatus } from './types.js';
+import { addTokenUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
+import type {
+  DiffStatEntry,
+  SubagentRequest,
+  SubagentResult,
+  SubagentRunHandle,
+  SubagentRunStatus,
+  SubagentSegmentControl,
+  SubagentCancelAcknowledgement,
+  SubagentSteerAcknowledgement,
+  ValidationEvidence,
+} from './types.js';
+import { SubagentRunControl } from './subagent-run-control.js';
 import { SubagentSession } from './subagent-session.js';
 import { isAbortLike, safeEmit, truncatePreview } from './utils.js';
+
+export const SUBAGENT_RUN_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
+const MAX_STEERING_GUIDANCE_CHARACTERS = 2_000;
 
 export type SubagentRegistryErrorCode =
   | 'not_found'
@@ -11,7 +26,9 @@ export type SubagentRegistryErrorCode =
   | 'not_continuable'
   | 'already_active'
   | 'worker_blocked'
-  | 'evicted';
+  | 'evicted'
+  | 'invalid_name'
+  | 'name_in_use';
 
 export class SubagentRegistryError extends Error {
   readonly code: SubagentRegistryErrorCode;
@@ -22,14 +39,26 @@ export class SubagentRegistryError extends Error {
   }
 }
 
+type StoredRunStatus = 'running' | 'waiting_for_answer' | 'cancelling' | 'completed' | 'failed' | 'cancelled';
+
+type AccumulatedEvidence = {
+  filesChanged: Set<string>;
+  toolsUsed: Map<string, number>;
+  diffStat: Map<string, DiffStatEntry>;
+  validation?: ValidationEvidence;
+  usage?: NormalizedUsage;
+};
+
 type StoredRun = {
   runId: string;
   role: string;
   task: string;
+  name?: string;
   session: SubagentSession;
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  status: StoredRunStatus;
   result?: SubagentResult;
-  abortController: AbortController;
+  evidence: AccumulatedEvidence;
+  control: SubagentRunControl;
   lastUsedAt: number;
   resolve: (result: SubagentResult) => void;
   promise: Promise<SubagentResult>;
@@ -49,11 +78,15 @@ export interface SubagentAsyncRegistryDeps {
     runId: string;
     session: SubagentSession;
     signal: AbortSignal;
+    /** A fresh user-turn input for this segment, never SDK RunState reuse. */
+    input: string;
+    control: SubagentSegmentControl;
   }) => Promise<SubagentResult>;
   onEvent?: (event: ConversationEvent) => void;
   now?: () => number;
   ttlMs?: number;
   messageCap?: number;
+  createRunId?: () => string;
   sessionForRole?: (role: string) => SubagentSession | undefined;
   setInterval?: (callback: () => void, delay: number) => ReturnType<typeof setInterval>;
   clearInterval?: (timer: ReturnType<typeof setInterval>) => void;
@@ -65,11 +98,13 @@ export class SubagentAsyncRegistry {
   #run: SubagentAsyncRegistryDeps['run'];
   #onEvent?: (event: ConversationEvent) => void;
   #runs = new Map<string, StoredRun>();
+  #activeNameToRunId = new Map<string, string>();
   #sessions = new Map<string, SubagentSession>();
   #evicted = new Set<string>();
   #now: () => number;
   #ttlMs: number;
   #messageCap: number;
+  #createRunId: () => string;
   #sessionCap = 50;
   #sessionForRole?: (role: string) => SubagentSession | undefined;
   #timer: ReturnType<typeof setInterval>;
@@ -83,6 +118,7 @@ export class SubagentAsyncRegistry {
     this.#now = deps.now ?? Date.now;
     this.#ttlMs = deps.ttlMs ?? 30 * 60 * 1000;
     this.#messageCap = deps.messageCap ?? 50;
+    this.#createRunId = deps.createRunId ?? randomUUID;
     this.#sessionForRole = deps.sessionForRole;
     this.#clearInterval = deps.clearInterval ?? clearInterval;
     this.#timer = (deps.setInterval ?? setInterval)(
@@ -97,6 +133,13 @@ export class SubagentAsyncRegistry {
     const role = request.role;
     if (!['explorer', 'worker', 'researcher', 'mentor', 'librarian'].includes(role)) {
       throw new SubagentRegistryError('not_continuable', `Unknown subagent role: ${role}`);
+    }
+    const name = request.name;
+    if (name !== undefined && !SUBAGENT_RUN_NAME_PATTERN.test(name)) {
+      throw new SubagentRegistryError('invalid_name', `Invalid async subagent name: ${name}`);
+    }
+    if (name !== undefined && this.#activeNameToRunId.has(name)) {
+      throw new SubagentRegistryError('name_in_use', `Async subagent name is already active: ${name}`);
     }
     const continuation = request.continueRunId;
     let session: SubagentSession;
@@ -113,7 +156,7 @@ export class SubagentAsyncRegistry {
           'role_mismatch',
           `Run ${continuation} belongs to role ${previous.role}, not ${role}`,
         );
-      if (previous.status === 'running')
+      if (isActiveStatus(previous.status))
         throw new SubagentRegistryError('already_active', `Async subagent run ${continuation} is already active`);
       if (role === 'worker')
         throw new SubagentRegistryError('worker_blocked', 'Worker runs cannot be continued asynchronously');
@@ -129,23 +172,29 @@ export class SubagentAsyncRegistry {
     }
 
     for (const active of this.#runs.values()) {
-      if (active.status === 'running' && active.session === session) {
+      if (isActiveStatus(active.status) && active.session === session) {
         throw new SubagentRegistryError('already_active', `Session for role ${role} is already active`);
       }
     }
     this.#evictToSessionCap();
 
-    const runId = continuation ?? randomUUID();
-    const controller = new AbortController();
+    const runId = continuation ?? this.#createRunId();
+    const control = new SubagentRunControl();
     let resolve!: (result: SubagentResult) => void;
     const promise = new Promise<SubagentResult>((r) => (resolve = r));
     const stored: StoredRun = {
       runId,
       role,
       task: request.task,
+      ...(name !== undefined ? { name } : {}),
       session,
       status: 'running',
-      abortController: controller,
+      control,
+      evidence: {
+        filesChanged: new Set(),
+        toolsUsed: new Map(),
+        diffStat: new Map(),
+      },
       lastUsedAt: this.#now(),
       resolve,
       promise,
@@ -153,6 +202,8 @@ export class SubagentAsyncRegistry {
       startedAt: this.#now(),
       toolCounts: new Map(),
     };
+    this.#runs.set(runId, stored);
+    if (name !== undefined) this.#activeNameToRunId.set(name, runId);
     const parentSignal = request.signal ?? _legacyParentSignal;
     if (parentSignal) {
       const onAbort = () => this.#cancelRun(stored);
@@ -160,7 +211,6 @@ export class SubagentAsyncRegistry {
       stored.removeParentAbortListener = () => parentSignal.removeEventListener('abort', onAbort);
       if (parentSignal.aborted) onAbort();
     }
-    this.#runs.set(runId, stored);
     safeEmit(this.#logger, this.#onEvent, {
       type: 'subagent_started',
       agentId: runId,
@@ -169,12 +219,12 @@ export class SubagentAsyncRegistry {
       parentTool: request.parentTool ?? 'run_subagent_async',
       async: true,
     });
-    void this.#execute(stored, request);
-    return { runId, role, status: 'running', task: request.task };
+    this.#startSegment(stored, request, request.task);
+    return { runId, role, ...(name !== undefined ? { name } : {}), status: 'running', task: request.task };
   }
 
   hasActiveRunForRole(role: string): boolean {
-    return [...this.#runs.values()].some((run) => run.role === role && run.status === 'running');
+    return [...this.#runs.values()].some((run) => run.role === role && isActiveStatus(run.status));
   }
 
   /**
@@ -199,8 +249,8 @@ export class SubagentAsyncRegistry {
       return this.#snapshot(run);
     }
     // Live runs first, then settled; neither carries finalText.
-    const live = [...this.#runs.values()].filter((run) => run.status === 'running');
-    const settled = [...this.#runs.values()].filter((run) => run.status !== 'running');
+    const live = [...this.#runs.values()].filter((run) => isActiveStatus(run.status));
+    const settled = [...this.#runs.values()].filter((run) => !isActiveStatus(run.status));
     return [...live, ...settled].map((run) => this.#snapshot(run));
   }
 
@@ -209,6 +259,7 @@ export class SubagentAsyncRegistry {
     for (const [name, count] of run.toolCounts) counts[name] = count;
     return {
       runId: run.runId,
+      ...(run.name !== undefined ? { name: run.name } : {}),
       role: run.role,
       status: run.status,
       task: run.task,
@@ -230,7 +281,7 @@ export class SubagentAsyncRegistry {
   handleSubagentEvent(event: ConversationEvent): void {
     if (event.type !== 'subagent_tool_started') return;
     const run = this.#runs.get(event.agentId);
-    if (!run || run.status !== 'running') return;
+    if (!run || !isActiveStatus(run.status)) return;
     const name = event.toolName;
     if (!name) return;
     run.toolCounts.set(name, (run.toolCounts.get(name) ?? 0) + 1);
@@ -255,38 +306,65 @@ export class SubagentAsyncRegistry {
 
   abortRun(runId: string): void {
     const run = this.#runs.get(runId);
-    if (run?.status === 'running') this.#cancelRun(run);
+    if (run && isActiveStatus(run.status)) this.#cancelRun(run);
+  }
+
+  /**
+   * Non-blocking public cancellation addressed by canonical runId first, then
+   * its active name. `abortRun` remains the internal user-stop compatibility API.
+   */
+  cancelRun(target: string): SubagentCancelAcknowledgement {
+    const run = this.#resolveActiveTarget(target);
+    if (!run) return { ok: false, code: 'not_active', target };
+    this.#cancelRun(run);
+    return { ok: true, runId: run.runId, status: 'cancelling' };
+  }
+
+  /**
+   * Queue bounded steering for an active execution run without awaiting its result.
+   * Canonical active run ids are resolved before active names.
+   */
+  sendMessage(target: string, guidance: string, replyTo?: string): SubagentSteerAcknowledgement {
+    const run = this.#resolveActiveTarget(target);
+    if (!run) return { ok: false, code: 'not_active', target };
+    if (run.role === 'mentor') return { ok: false, code: 'unsupported_control', target };
+    const message = guidance.trim();
+    if (message.length === 0 || message.length > MAX_STEERING_GUIDANCE_CHARACTERS) {
+      return { ok: false, code: 'invalid_guidance', target };
+    }
+    if (run.status === 'cancelling') {
+      return replyTo === undefined
+        ? { ok: false, code: 'not_active', target }
+        : { ok: false, code: 'question_not_pending', target };
+    }
+    if (replyTo !== undefined) {
+      const pending = run.control.pendingQuestion;
+      if (!pending) return { ok: false, code: 'question_not_pending', target };
+      if (pending.messageId !== replyTo) return { ok: false, code: 'question_mismatch', target };
+      if (!run.control.answer(replyTo, message)) return { ok: false, code: 'question_not_pending', target };
+      run.status = 'running';
+      return { ok: true, runId: run.runId, status: 'running', delivery: 'answered' };
+    }
+    if (!run.control.canStartContinuation()) return { ok: false, code: 'steer_limit_reached', target };
+    run.control.enqueueSteering(message);
+    return { ok: true, runId: run.runId, status: 'running', delivery: 'queued' };
   }
 
   cancelAllRuns(): void {
-    for (const run of this.#runs.values()) if (run.status === 'running') this.#cancelRun(run);
+    for (const run of this.#runs.values()) if (isActiveStatus(run.status)) this.#cancelRun(run);
   }
 
   #cancelRun(run: StoredRun): void {
-    if (run.status !== 'running') return;
-    run.abortController.abort();
-    const result: SubagentResult = {
-      agentId: run.runId,
-      role: run.role,
-      status: 'cancelled',
-      finalText: '',
-      filesChanged: [],
-      toolsUsed: [],
-      error: 'The subagent run was aborted.',
-    };
-    run.status = 'cancelled';
-    run.result = result;
-    run.lastUsedAt = this.#now();
-    run.settled = true;
-    run.removeParentAbortListener?.();
-    run.resolve(result);
-    safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result, async: true });
+    if (run.status !== 'running' && run.status !== 'waiting_for_answer') return;
+    run.status = 'cancelling';
+    run.control.requestCancellation();
   }
 
   reset(): void {
-    for (const run of this.#runs.values()) if (run.status === 'running') run.abortController.abort();
     this.cancelAllRuns();
-    this.#runs.clear();
+    for (const [runId, run] of this.#runs) {
+      if (!isActiveStatus(run.status)) this.#runs.delete(runId);
+    }
     this.#sessions.clear();
     this.#evicted.clear();
   }
@@ -301,7 +379,7 @@ export class SubagentAsyncRegistry {
   #evictToSessionCap(): void {
     while (this.#sessions.size > this.#sessionCap) {
       const candidate = [...this.#runs.values()]
-        .filter((run) => run.status !== 'running')
+        .filter((run) => !isActiveStatus(run.status))
         .sort((a, b) => a.lastUsedAt - b.lastUsedAt)[0];
       if (!candidate) return;
       this.#runs.delete(candidate.runId);
@@ -319,21 +397,52 @@ export class SubagentAsyncRegistry {
   #evictExpired(): void {
     const cutoff = this.#now() - this.#ttlMs;
     for (const [id, run] of this.#runs) {
-      if (run.status !== 'running' && run.lastUsedAt <= cutoff) {
+      if (!isActiveStatus(run.status) && run.lastUsedAt <= cutoff) {
         this.#runs.delete(id);
         this.#evicted.add(id);
       }
     }
   }
 
-  async #execute(run: StoredRun, request: SubagentRequest): Promise<void> {
+  #resolveActiveTarget(target: string): StoredRun | undefined {
+    const byRunId = this.#runs.get(target);
+    if (byRunId && isActiveStatus(byRunId.status)) return byRunId;
+    const byName = this.#activeNameToRunId.get(target);
+    if (!byName) return undefined;
+    const run = this.#runs.get(byName);
+    return run && isActiveStatus(run.status) ? run : undefined;
+  }
+
+  #startSegment(run: StoredRun, request: SubagentRequest, input: string): void {
+    if (run.settled) return;
+    const controller = run.control.beginSegment();
+    void this.#executeSegment(run, request, input, controller);
+  }
+
+  async #executeSegment(
+    run: StoredRun,
+    request: SubagentRequest,
+    input: string,
+    controller: AbortController,
+  ): Promise<void> {
     let result: SubagentResult;
     try {
-      result = await this.#run({ request, runId: run.runId, session: run.session, signal: run.abortController.signal });
+      result = await this.#run({
+        request,
+        runId: run.runId,
+        session: run.session,
+        signal: controller.signal,
+        input,
+        control: {
+          onToolStart: () => run.control.onToolStart(),
+          onToolComplete: () => run.control.onToolComplete(),
+          askOrchestrator: (question) => this.#askOrchestrator(run, question),
+        },
+      });
       run.session.trimHistory(this.#messageCap);
       result = { ...result, agentId: run.runId };
     } catch (error: any) {
-      const cancelled = isAbortLike(error?.message, error) || run.abortController.signal.aborted;
+      const cancelled = isAbortLike(error?.message, error) || controller.signal.aborted;
       result = {
         agentId: run.runId,
         role: run.role,
@@ -344,14 +453,105 @@ export class SubagentAsyncRegistry {
         error: error?.message ?? String(error),
       };
     }
-    // Explicit cancellation is terminal and wins over a late executor result.
+    run.control.endSegment(controller);
+    this.#accumulateEvidence(run.evidence, result);
+    if (run.control.cancellationRequested) {
+      this.#settle(run, this.#assembleTerminalResult(run, result));
+      return;
+    }
+
+    const guidance = run.control.consumeSteering();
+    if (guidance !== undefined && run.control.startContinuation()) {
+      this.#startSegment(run, request, buildContinuationInput(guidance));
+      return;
+    }
+    this.#settle(run, this.#assembleTerminalResult(run, result));
+  }
+
+  #settle(run: StoredRun, result: SubagentResult): void {
     if (run.settled) return;
     run.status = result.status;
     run.result = result;
     run.lastUsedAt = this.#now();
     run.settled = true;
+    if (run.name !== undefined && this.#activeNameToRunId.get(run.name) === run.runId) {
+      this.#activeNameToRunId.delete(run.name);
+    }
+    run.control.settle();
     run.removeParentAbortListener?.();
     run.resolve(result);
-    safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result, async: true });
+    if (!this.#disposed) safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result, async: true });
   }
+
+  #askOrchestrator(run: StoredRun, question: string): Promise<string> {
+    if (run.status !== 'running')
+      return Promise.reject(new Error('The subagent run is no longer accepting questions.'));
+    const asked = run.control.ask(question);
+    run.status = 'waiting_for_answer';
+    safeEmit(this.#logger, this.#onEvent, {
+      type: 'subagent_question',
+      async: true,
+      messageId: asked.messageId,
+      runId: run.runId,
+      ...(run.name !== undefined ? { name: run.name } : {}),
+      role: run.role,
+      question: asked.question,
+    });
+    return asked.answer;
+  }
+
+  #assembleTerminalResult(run: StoredRun, segment: SubagentResult): SubagentResult {
+    const status = run.control.cancellationRequested ? 'cancelled' : segment.status;
+    const error =
+      status === 'cancelled'
+        ? segment.status === 'cancelled' && segment.error
+          ? segment.error
+          : 'The subagent run was aborted.'
+        : segment.error;
+    const usage = run.evidence.usage;
+    const diffStat = [...run.evidence.diffStat.values()];
+
+    return {
+      agentId: run.runId,
+      role: run.role,
+      status,
+      finalText: status === 'completed' ? segment.finalText : '',
+      filesChanged: [...run.evidence.filesChanged],
+      toolsUsed: [...run.evidence.toolsUsed].map(([toolName, count]) => ({ toolName, count })),
+      ...(error ? { error } : {}),
+      ...(usage ? { usage } : {}),
+      ...(diffStat.length > 0 ? { diffStat } : {}),
+      ...(run.evidence.validation ? { validation: run.evidence.validation } : {}),
+    };
+  }
+
+  #accumulateEvidence(evidence: AccumulatedEvidence, result: SubagentResult): void {
+    for (const path of result.filesChanged) evidence.filesChanged.add(path);
+    for (const { toolName, count } of result.toolsUsed) {
+      evidence.toolsUsed.set(toolName, (evidence.toolsUsed.get(toolName) ?? 0) + count);
+    }
+    for (const entry of result.diffStat ?? []) {
+      const existing = evidence.diffStat.get(entry.path);
+      evidence.diffStat.set(entry.path, {
+        path: entry.path,
+        added: (existing?.added ?? 0) + entry.added,
+        deleted: (existing?.deleted ?? 0) + entry.deleted,
+      });
+    }
+    if (result.validation) evidence.validation = result.validation;
+    if (result.usage) evidence.usage = addTokenUsage(evidence.usage, result.usage);
+  }
+}
+
+function isActiveStatus(status: StoredRunStatus): status is 'running' | 'waiting_for_answer' | 'cancelling' {
+  return status === 'running' || status === 'waiting_for_answer' || status === 'cancelling';
+}
+
+function buildContinuationInput(guidance: string): string {
+  return [
+    'Your prior segment was interrupted. Completed side effects may remain.',
+    'Before following this guidance, inspect and reconcile current work and any partial results.',
+    'Coalesced steering guidance:',
+    guidance,
+  ].join('\n\n');
 }

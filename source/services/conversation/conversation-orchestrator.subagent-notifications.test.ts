@@ -26,6 +26,20 @@ const completion = (overrides: Partial<SubagentResult> = {}, async = true): Conv
     },
   } as ConversationEvent);
 
+const question = (
+  overrides: Partial<Extract<ConversationEvent, { type: 'subagent_question' }>> = {},
+): ConversationEvent =>
+  ({
+    type: 'subagent_question',
+    async: true,
+    messageId: 'question-1',
+    runId: 'run-1',
+    name: 'scan',
+    role: 'explorer',
+    question: 'Which public API should I use?',
+    ...overrides,
+  } as ConversationEvent);
+
 /** Yield to the event loop so orchestrator-initiated turns can run to completion. */
 async function settle(times = 4): Promise<void> {
   for (let i = 0; i < times; i++) {
@@ -140,6 +154,39 @@ function makeHarness() {
 }
 
 describe('ConversationOrchestrator background subagent notifications', () => {
+  it('delivers a question as an idle-gated system turn with reply routing and no user message', async () => {
+    const h = makeHarness();
+
+    h.emit(question());
+    await settle();
+
+    expect(h.service.sendMessage).toHaveBeenCalledTimes(1);
+    const text = h.sentTexts()[0];
+    expect(text).toContain('question-1');
+    expect(text).toContain('target: scan');
+    expect(text).toContain('reply_to: messageId');
+    expect(text).toContain('Decide the answer, investigate it yourself, or escalate');
+    expect(text).toContain('no direct user channel');
+    expect(h.config.messages.getMessages().some((message) => message.sender === 'user')).toBe(false);
+  });
+
+  it('shows distinct questions from one run independently by message id', async () => {
+    const h = makeHarness();
+
+    h.emit(question({ messageId: 'question-1' }));
+    await settle();
+    h.emit(question({ messageId: 'question-2', question: 'Should I update callers too?' }));
+    await settle();
+
+    const display = h.config.messages
+      .getMessages()
+      .filter((message) => message.sender === 'command')
+      .map((message: any) => message.output)
+      .join('\n');
+    expect(display).toContain('question-1');
+    expect(display).toContain('question-2');
+  });
+
   it('starts one system turn when a background run settles while the conversation is idle', async () => {
     const h = makeHarness();
 
@@ -207,7 +254,7 @@ describe('ConversationOrchestrator background subagent notifications', () => {
     );
   });
 
-  it('defers delivery until the in-flight turn reaches a terminal state, then delivers once', async () => {
+  it('holds a question behind an in-flight parent turn, then delivers it once when idle', async () => {
     const h = makeHarness();
     let releaseUserTurn: (terminal: ConversationTerminal) => void = () => {};
     h.service.sendMessage.mockImplementationOnce(
@@ -217,7 +264,7 @@ describe('ConversationOrchestrator background subagent notifications', () => {
     const userTurn = h.orchestrator.sendUserMessage('hello');
     await settle(1);
 
-    h.emit(completion());
+    h.emit(question());
     await settle();
 
     expect(h.service.sendMessage).toHaveBeenCalledTimes(1);
@@ -228,11 +275,11 @@ describe('ConversationOrchestrator background subagent notifications', () => {
     await settle();
 
     expect(h.service.sendMessage).toHaveBeenCalledTimes(2);
-    expect(h.sentTexts()[1]).toContain('run-1');
+    expect(h.sentTexts()[1]).toContain('question-1');
     expect(h.store.pendingCount).toBe(0);
   });
 
-  it('does not start a turn while an approval is pending and leaves the approval flow intact', async () => {
+  it('holds a question while an approval is pending and leaves the approval flow intact', async () => {
     const h = makeHarness();
     const approval: ConversationTerminal = {
       type: 'approval_required',
@@ -241,7 +288,7 @@ describe('ConversationOrchestrator background subagent notifications', () => {
     h.service.sendMessage.mockResolvedValueOnce(approval);
 
     await h.orchestrator.sendUserMessage('run ls');
-    h.emit(completion());
+    h.emit(question());
     await settle();
 
     expect(h.service.sendMessage).toHaveBeenCalledTimes(1);
@@ -254,7 +301,7 @@ describe('ConversationOrchestrator background subagent notifications', () => {
 
     expect(h.service.handleApprovalDecision).toHaveBeenCalledTimes(1);
     expect(h.service.sendMessage).toHaveBeenCalledTimes(2);
-    expect(h.sentTexts()[1]).toContain('run-1');
+    expect(h.sentTexts()[1]).toContain('question-1');
   });
 
   it('announces a replayed completion for the same run only once', async () => {

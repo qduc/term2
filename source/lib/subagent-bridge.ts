@@ -2,7 +2,12 @@ import { SubagentManager } from '../services/subagents/subagent-manager.js';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import type { ExecutionContext } from '../services/execution-context.js';
-import type { SubagentResult, SubagentRunStatus } from '../services/subagents/types.js';
+import type {
+  SubagentCancelAcknowledgement,
+  SubagentResult,
+  SubagentRunStatus,
+  SubagentSteerAcknowledgement,
+} from '../services/subagents/types.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
 import { createAbortError } from '../services/subagents/utils.js';
 import type { SkillsService } from '../services/skills/skills-service.js';
@@ -272,7 +277,7 @@ export class SubagentBridge {
   };
 
   runSubagentAsync = async (
-    params: { role: string; task: string; continue_run_id?: string },
+    params: { role: string; task: string; name?: string; continue_run_id?: string },
     _context?: unknown,
     details?: unknown,
   ): Promise<SubagentRunHandle> => {
@@ -283,6 +288,7 @@ export class SubagentBridge {
     const request = {
       role: params.role,
       task: params.task,
+      ...(params.name ? { name: params.name } : {}),
       ...(params.continue_run_id ? { continueRunId: params.continue_run_id } : {}),
       parentTool: 'run_subagent_async',
       // Conversation-scoped, not per-turn: this run must survive the turn that
@@ -323,6 +329,26 @@ export class SubagentBridge {
       throw new Error('Transient agent clients cannot get subagent status.');
     }
     return this.#subagentManager.getRunStatus(params.runId);
+  };
+
+  /** Parent-only non-blocking control for active async execution runs. */
+  sendSubagentMessage = (params: {
+    target: string;
+    message: string;
+    reply_to?: string;
+  }): SubagentSteerAcknowledgement => {
+    if (!this.#subagentManager) {
+      throw new Error('Transient agent clients cannot control asynchronous subagents.');
+    }
+    return this.#subagentManager.sendMessageToAsyncRun(params);
+  };
+
+  /** Parent-only non-blocking two-phase cancellation by runId or active name. */
+  cancelSubagentRun = (params: { target: string }): SubagentCancelAcknowledgement => {
+    if (!this.#subagentManager) {
+      throw new Error('Transient agent clients cannot control asynchronous subagents.');
+    }
+    return this.#subagentManager.cancelAsyncRun(params.target);
   };
 
   abortAsyncRun = (runId: string): void => {

@@ -144,6 +144,15 @@ export interface SubagentCompletedLogEvent {
   result: SubagentResult;
 }
 
+export interface SubagentQuestionLogEvent {
+  type: 'subagent_question';
+  messageId: string;
+  runId: string;
+  name?: string;
+  role: string;
+  question: string;
+}
+
 export interface ErrorLogEvent {
   type: 'error';
   message: string;
@@ -186,6 +195,7 @@ export type LogEvent =
   | SubagentStartedLogEvent
   | SubagentToolStartedLogEvent
   | SubagentCompletedLogEvent
+  | SubagentQuestionLogEvent
   | ErrorLogEvent
   | AssistantTurnEvent
   | AssistantJournalDeltaLogEvent

@@ -2,8 +2,11 @@ import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { SubagentResult } from './types.js';
 import { truncatePreview } from './utils.js';
 
-/** A background subagent run that finished and still owes the main agent a notification. */
-export interface BackgroundSubagentNotification {
+/** A completed background run that still owes the main agent a notification. */
+export interface BackgroundSubagentCompletionNotification {
+  kind: 'completion';
+  /** Stable per logical run, so replay cannot duplicate a completion. */
+  messageId: string;
   runId: string;
   role: string;
   status: 'completed' | 'failed' | 'cancelled';
@@ -11,6 +14,22 @@ export interface BackgroundSubagentNotification {
   error?: string;
   completedAt: number;
 }
+
+/** A live execution segment's bounded request for its owning orchestrator. */
+export interface BackgroundSubagentQuestionNotification {
+  kind: 'question';
+  messageId: string;
+  runId: string;
+  name?: string;
+  role: string;
+  question: string;
+  askedAt: number;
+}
+
+/** A message-id-keyed queue item for a background async subagent. */
+export type BackgroundSubagentNotification =
+  | BackgroundSubagentCompletionNotification
+  | BackgroundSubagentQuestionNotification;
 
 export type BackgroundSubagentTaskStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 
@@ -46,9 +65,9 @@ export interface SubagentNotificationStoreDeps {
   /** How long terminal tasks remain visible in the background overview. */
   recentTaskRetentionMs?: number;
   /**
-   * Upper bound on remembered run ids. The async registry caps sessions at 50
-   * and TTLs terminal runs out after 30 minutes, so a few hundred ids covers
-   * every run that could still be replayed while staying O(1) in memory.
+   * Upper bound on remembered notification ids. The async registry caps
+   * sessions at 50 and TTLs terminal runs out after 30 minutes, so a few
+   * hundred ids covers replay protection while staying O(1) in memory.
    */
   deliveredIdCap?: number;
 }
@@ -60,21 +79,19 @@ export const BACKGROUND_TASK_RECENT_RETENTION_MS = 5_000;
  * Pending notifications for background (async) subagent runs.
  *
  * Owns three invariants the callers must not have to re-derive:
- *  - Only `subagent_completed` events flagged `async: true` are notifiable.
- *    Foreground and nested runs emit the same event type without the flag and
- *    must never surface a notification.
- *  - A run is announced at most once, ever. The registry already guards against
- *    double-settling a run, so the duplicates guarded here come from buffered
- *    event flushes and conversation replay, which can re-present an event long
- *    after it was first seen — including after it was already delivered.
+ *  - Only async completions and async registry questions are notifiable.
+ *    Foreground and nested activity has no async flag and never surfaces here.
+ *  - A message is announced at most once, ever. Completion ids are stable per
+ *    run while each question has its own id, allowing one live run to ask more
+ *    than once over its lifetime without replaying either message.
  *  - Delivery is confirmed by the caller, not by reading. `drain()` hands over
  *    the pending batch and clears it; a caller whose delivery failed calls
  *    `retain()` to put the batch back at the front of the queue. Drain/retain
  *    was chosen over peek/commit because the common path (delivery succeeds) is
  *    then a single call, and because retained notifications are handed back as
- *    values rather than leaving the store holding provisional state. A run id
- *    stays deduped across both paths, so a retained notification is redelivered
- *    exactly once and a replayed event for it is still dropped.
+ *    values rather than leaving the store holding provisional state. A message
+ *    id stays deduped across both paths, so a retained notification is
+ *    redelivered exactly once and a replayed event for it is still dropped.
  */
 export class SubagentNotificationStore implements BackgroundSubagentNotificationPort {
   #pending = new Map<string, BackgroundSubagentNotification>();
@@ -150,27 +167,13 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
     return [...this.#tasks.values()];
   }
 
-  /**
-   * Records a completion event when it belongs to a background run that has not
-   * been seen before. Returns whether the notification was novel, so a caller
-   * can act (wake a turn) only on first sight.
-   */
+  /** Records one novel async completion or question, returning whether it woke the queue. */
   enqueue(event: ConversationEvent): boolean {
-    if (event?.type !== 'subagent_completed' || event.async !== true) return false;
-    const result = (event as { result?: SubagentResult }).result;
-    const runId = result?.agentId;
-    if (!result || !runId) return false;
-    if (this.#seen.has(runId)) return false;
+    const notification = this.#notificationFor(event);
+    if (!notification || this.#seen.has(notification.messageId)) return false;
 
-    this.#pending.set(runId, {
-      runId,
-      role: result.role,
-      status: result.status,
-      preview: truncatePreview(result.finalText || result.error),
-      ...(result.error ? { error: result.error } : {}),
-      completedAt: this.#now(),
-    });
-    this.#seen.add(runId);
+    this.#pending.set(notification.messageId, notification);
+    this.#seen.add(notification.messageId);
     this.#evictOldestSeen();
     return true;
   }
@@ -195,10 +198,10 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
     const newer = [...this.#pending.values()];
     this.#pending.clear();
     for (const notification of notifications) {
-      this.#pending.set(notification.runId, notification);
-      this.#seen.add(notification.runId);
+      this.#pending.set(notification.messageId, notification);
+      this.#seen.add(notification.messageId);
     }
-    for (const notification of newer) this.#pending.set(notification.runId, notification);
+    for (const notification of newer) this.#pending.set(notification.messageId, notification);
   }
 
   /**
@@ -210,10 +213,40 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
    */
   #evictOldestSeen(): void {
     if (this.#seen.size <= this.#deliveredIdCap) return;
-    for (const runId of this.#seen) {
+    for (const messageId of this.#seen) {
       if (this.#seen.size <= this.#deliveredIdCap) return;
-      if (this.#pending.has(runId)) continue;
-      this.#seen.delete(runId);
+      if (this.#pending.has(messageId)) continue;
+      this.#seen.delete(messageId);
     }
+  }
+
+  #notificationFor(event: ConversationEvent): BackgroundSubagentNotification | undefined {
+    if (event.type === 'subagent_completed' && event.async === true) {
+      const result = (event as { result?: SubagentResult }).result;
+      const runId = result?.agentId;
+      if (!result || !runId) return undefined;
+      return {
+        kind: 'completion',
+        messageId: `completion:${runId}`,
+        runId,
+        role: result.role,
+        status: result.status,
+        preview: truncatePreview(result.finalText || result.error),
+        ...(result.error ? { error: result.error } : {}),
+        completedAt: this.#now(),
+      };
+    }
+    if (event.type === 'subagent_question' && event.async === true && event.messageId && event.runId) {
+      return {
+        kind: 'question',
+        messageId: event.messageId,
+        runId: event.runId,
+        ...(event.name !== undefined ? { name: event.name } : {}),
+        role: event.role,
+        question: event.question,
+        askedAt: this.#now(),
+      };
+    }
+    return undefined;
   }
 }

@@ -18,6 +18,19 @@ const result = (overrides: Partial<SubagentResult> = {}): SubagentResult => ({
 const completed = (overrides: Partial<SubagentResult> = {}): ConversationEvent =>
   ({ type: 'subagent_completed', result: result(overrides), async: true } as ConversationEvent);
 
+const question = (
+  overrides: Partial<Extract<ConversationEvent, { type: 'subagent_question' }>> = {},
+): ConversationEvent =>
+  ({
+    type: 'subagent_question',
+    async: true,
+    messageId: 'question-1',
+    runId: 'run-1',
+    role: 'explorer',
+    question: 'Which API should I use?',
+    ...overrides,
+  } as ConversationEvent);
+
 const started = (
   overrides: Partial<Extract<ConversationEvent, { type: 'subagent_started' }>> = {},
 ): ConversationEvent =>
@@ -41,6 +54,8 @@ it('records one notification carrying the run identity, status and preview', () 
 
   expect(store.drain()).toEqual([
     {
+      kind: 'completion',
+      messageId: 'completion:run-1',
       runId: 'run-1',
       role: 'explorer',
       status: 'completed',
@@ -48,6 +63,31 @@ it('records one notification carrying the run identity, status and preview', () 
       completedAt: 4_242,
     },
   ]);
+});
+
+it('keeps mixed questions and completions in message order and dedupes each by message id', () => {
+  const store = makeStore();
+
+  expect(store.enqueue(question())).toBe(true);
+  expect(store.enqueue(completed())).toBe(true);
+  expect(store.enqueue(question())).toBe(false);
+  expect(store.enqueue(question({ messageId: 'question-2', question: 'Should I update the call site?' }))).toBe(true);
+
+  expect(store.drain()).toEqual([
+    expect.objectContaining({ kind: 'question', messageId: 'question-1', runId: 'run-1' }),
+    expect.objectContaining({ kind: 'completion', messageId: 'completion:run-1', runId: 'run-1' }),
+    expect.objectContaining({ kind: 'question', messageId: 'question-2', runId: 'run-1' }),
+  ]);
+});
+
+it('retains a question ahead of newer completions using its message id', () => {
+  const store = makeStore();
+  store.enqueue(question());
+  const undelivered = store.drain();
+  store.enqueue(completed({ agentId: 'run-2' }));
+  store.retain(undelivered);
+
+  expect(store.drain().map((notification) => notification.messageId)).toEqual(['question-1', 'completion:run-2']);
 });
 
 it('projects an async start as a running background task with role, task, and start time', () => {
@@ -169,6 +209,8 @@ it('carries the failure status and error text of a failed run', () => {
 
   expect(store.drain()).toEqual([
     {
+      kind: 'completion',
+      messageId: 'completion:run-fail',
       runId: 'run-fail',
       role: 'explorer',
       status: 'failed',
@@ -187,6 +229,8 @@ it('carries the cancellation status and error text of a cancelled run', () => {
 
   expect(store.drain()).toEqual([
     {
+      kind: 'completion',
+      messageId: 'completion:run-cancel',
       runId: 'run-cancel',
       role: 'explorer',
       status: 'cancelled',
@@ -238,6 +282,8 @@ it('truncates a long preview to a bounded single paragraph', () => {
   store.enqueue(completed({ finalText: `${'x'.repeat(400)}\n\nsecond paragraph` }));
 
   const [notification] = store.drain();
+  expect(notification.kind).toBe('completion');
+  if (notification.kind !== 'completion') throw new Error('Expected a completion notification.');
   expect(notification.preview).toHaveLength(300);
   expect(notification.preview.endsWith('...')).toBe(true);
 });
@@ -265,6 +311,8 @@ it('records a notification for a real async registry run and nothing for its sta
 
   expect(store.drain()).toEqual([
     {
+      kind: 'completion',
+      messageId: `completion:${handle.runId}`,
       runId: handle.runId,
       role: 'explorer',
       status: 'completed',

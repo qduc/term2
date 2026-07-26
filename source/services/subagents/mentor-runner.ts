@@ -8,7 +8,7 @@ import { SubagentSession } from './subagent-session.js';
 import { loadRoleDefinition, resolvePrompt, PROMPTS_DIR } from './role-loader.js';
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import { getProvider } from '../../providers/index.js';
-import { runWithProvider, extractFinalText } from './utils.js';
+import { runWithProvider, extractFinalText, isAbortLike } from './utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
@@ -70,9 +70,25 @@ export class MentorRunner {
     const previousSession = this.#mentorSession;
     if (session) this.#mentorSession = session;
     try {
-      const result = await this.#runWithSession(agentId, task, signal);
-      if (slot && result.usage) childBudget!.recordUsage(result.usage);
-      return result;
+      try {
+        const result = await this.#runWithSession(agentId, task, signal);
+        if (slot && result.usage) childBudget!.recordUsage(result.usage);
+        return result;
+      } catch (error: any) {
+        if (!signal?.aborted && !isAbortLike(error?.message, error)) throw error;
+        const usage = normalizeAgentRunUsage(error?.state?.usage) ?? extractUsage(error);
+        if (slot && usage) childBudget!.recordUsage(usage);
+        return {
+          agentId,
+          role: 'mentor',
+          status: 'cancelled',
+          finalText: '',
+          filesChanged: [],
+          toolsUsed: [],
+          error: error?.message ?? 'The subagent run was aborted.',
+          ...(usage ? { usage } : {}),
+        };
+      }
     } finally {
       slot?.release();
       if (session) this.#mentorSession = previousSession;

@@ -8,7 +8,7 @@ import {
   safeJsonParse,
 } from '../format-helpers.js';
 import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from '../../services/subagents/types.js';
-import { SubagentRegistryError } from '../../services/subagents/subagent-async-registry.js';
+import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../../services/subagents/subagent-async-registry.js';
 import { isAbortLike, truncatePreview } from '../../services/subagents/utils.js';
 
 const ASYNC_ROLES = ['explorer', 'worker', 'researcher', 'mentor', 'librarian'] as const;
@@ -16,6 +16,13 @@ const ASYNC_ROLES = ['explorer', 'worker', 'researcher', 'mentor', 'librarian'] 
 const runSubagentAsyncSchema = z.object({
   role: z.enum(ASYNC_ROLES).describe('The subagent role to use: explorer, worker, researcher, mentor, or librarian.'),
   task: z.string().describe('The full task description.'),
+  name: z
+    .string()
+    .regex(SUBAGENT_RUN_NAME_PATTERN)
+    .optional()
+    .describe(
+      'Optional active-run alias: lowercase letter first, then up to 31 lowercase letters, digits, underscores, or hyphens.',
+    ),
   continue_run_id: z
     .string()
     .optional()
@@ -30,10 +37,41 @@ const getSubagentStatusSchema = z.object({
   runId: z.string().optional().describe('The runId to inspect. Omit to list the status of all current runs at once.'),
 });
 
+const sendMessageSchema = z.object({
+  target: z.string().trim().min(1).max(128).describe('The active run name or canonical runId to steer or answer.'),
+  message: z
+    .string()
+    .trim()
+    .min(1)
+    .max(2_000)
+    .describe('Bounded steering guidance, or the answer to the referenced ask_orchestrator question.'),
+  reply_to: z
+    .string()
+    .trim()
+    .min(1)
+    .max(256)
+    .optional()
+    .describe('Optional ask_orchestrator messageId. When provided, message answers that exact pending question.'),
+});
+
+const cancelRunSchema = z.object({
+  target: z.string().trim().min(1).max(128).describe('The active run name or canonical runId to cancel.'),
+});
+
 export type GetSubagentStatusParams = z.infer<typeof getSubagentStatusSchema>;
 
 export type RunSubagentAsyncParams = z.infer<typeof runSubagentAsyncSchema>;
 export type GetSubagentResultParams = z.infer<typeof getSubagentResultSchema>;
+export type SendMessageParams = z.infer<typeof sendMessageSchema>;
+export type CancelRunParams = z.infer<typeof cancelRunSchema>;
+
+export type SendMessageAcknowledgement =
+  | { ok: true; runId: string; status: 'running'; delivery: 'queued' | 'answered' }
+  | { ok: false; code: string; target: string };
+
+export type CancelRunAcknowledgement =
+  | { ok: true; runId: string; status: 'cancelling' }
+  | { ok: false; code: 'not_active'; target: string };
 
 function formatSubagentResult(result: SubagentResult): string {
   const lines: string[] = [];
@@ -91,12 +129,13 @@ export const formatRunSubagentAsyncCommandMessage: FormatCommandMessage = (item,
   const taskPreview = truncatePreview(args?.task);
   let command = taskPreview ? `run_subagent_async [${role}] ${taskPreview}` : `run_subagent_async [${role}]`;
 
-  const parsedOutput = safeJsonParse(rawOutput) as { runId?: string } | null;
+  const parsedOutput = safeJsonParse(rawOutput) as { runId?: string; name?: string } | null;
   const runId = parsedOutput?.runId ?? rawOutput;
 
   if (runId && typeof runId === 'string') {
     command += ` — runId: ${runId}`;
   }
+  if (parsedOutput?.name) command += ` — name: ${parsedOutput.name}`;
 
   return [
     createBaseMessage(item, index, 0, false, {
@@ -183,6 +222,7 @@ export function createRunSubagentAsyncToolDefinition(
       try {
         const handle = await runSubagentAsync(params, context, details);
         const handleOutput: Record<string, string> = { runId: handle.runId, status: handle.status };
+        if (handle.name) handleOutput.name = handle.name;
         if (handle.status === 'running') {
           handleOutput.hint =
             'Background run launched — do NOT call get_subagent_result now. End your turn and wait for the completion notification, then collect the result from a later turn.';
@@ -251,7 +291,7 @@ export function createGetSubagentResultToolDefinition(
 function formatSubagentStatus(status: SubagentRunStatus | SubagentRunStatus[]): string {
   const formatOne = (s: SubagentRunStatus): string => {
     const parts = [
-      `${s.runId} [${s.role}] ${s.status}`,
+      `${s.name ? `${s.name} (${s.runId})` : s.runId} [${s.role}] ${s.status}`,
       `task: ${s.taskPreview || '(none)'}`,
       `elapsed: ${Math.round(s.elapsedMs / 1000)}s`,
     ];
@@ -270,7 +310,7 @@ function formatSubagentStatus(status: SubagentRunStatus | SubagentRunStatus[]): 
   if (status.status === 'not_found') {
     return `Run ${status.runId} was not found (evicted or never existed).`;
   }
-  if (status.status === 'running') {
+  if (status.status === 'running' || status.status === 'waiting_for_answer' || status.status === 'cancelling') {
     return `${formatOne(
       status,
     )}\n\nThis run is still in progress. Call get_subagent_result for the full report once it completes.`;
@@ -330,5 +370,98 @@ export function createGetSubagentStatusToolDefinition(
       }
     },
     formatCommandMessage: formatGetSubagentStatusCommandMessage,
+  };
+}
+
+export const formatSendMessageCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+  const callId = getCallIdFromItem(item);
+  const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
+  const args =
+    normalizeToolArguments(item?.rawItem?.arguments ?? item?.arguments) ?? normalizeToolArguments(fallbackArgs) ?? {};
+  const rawOutput = getOutputText(item);
+  const acknowledgement = safeJsonParse(rawOutput) as SendMessageAcknowledgement | null;
+  const successfulAcknowledgement = acknowledgement !== null && acknowledgement.ok;
+  const failureCode = acknowledgement !== null && !acknowledgement.ok ? acknowledgement.code : undefined;
+  const target = args.target ?? (successfulAcknowledgement ? acknowledgement.runId : 'unknown');
+  const command = successfulAcknowledgement
+    ? `send_message [${target}] — ${acknowledgement.delivery}`
+    : `send_message [${target}] — ${failureCode ?? 'failed'}`;
+  const output = successfulAcknowledgement
+    ? `Message ${acknowledgement.delivery} for ${acknowledgement.runId}; run remains ${acknowledgement.status}.`
+    : `Message was not delivered: ${failureCode ?? rawOutput ?? 'unknown error'}.`;
+
+  return [
+    createBaseMessage(item, index, 0, false, {
+      command,
+      output,
+      success: successfulAcknowledgement,
+      toolName: 'send_message',
+      toolArgs: args,
+    }),
+  ];
+};
+
+export const formatCancelRunCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+  const callId = getCallIdFromItem(item);
+  const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
+  const args =
+    normalizeToolArguments(item?.rawItem?.arguments ?? item?.arguments) ?? normalizeToolArguments(fallbackArgs) ?? {};
+  const rawOutput = getOutputText(item);
+  const acknowledgement = safeJsonParse(rawOutput) as CancelRunAcknowledgement | null;
+  const successfulAcknowledgement = acknowledgement !== null && acknowledgement.ok;
+  const failureCode = acknowledgement !== null && !acknowledgement.ok ? acknowledgement.code : undefined;
+  const target = args.target ?? (successfulAcknowledgement ? acknowledgement.runId : 'unknown');
+  const command = successfulAcknowledgement
+    ? `cancel_run [${target}] — cancelling`
+    : `cancel_run [${target}] — ${failureCode ?? 'failed'}`;
+  const output = successfulAcknowledgement
+    ? `Cancellation requested for ${acknowledgement.runId}; awaiting normal completion.`
+    : `Run is not active: ${target}.`;
+
+  return [
+    createBaseMessage(item, index, 0, false, {
+      command,
+      output,
+      success: successfulAcknowledgement,
+      toolName: 'cancel_run',
+      toolArgs: args,
+    }),
+  ];
+};
+
+/** Parent-only, non-blocking control channel for an active async execution run. */
+export function createSendMessageToolDefinition(
+  sendMessage: (params: SendMessageParams) => SendMessageAcknowledgement,
+): ToolDefinition<SendMessageParams> {
+  return {
+    name: 'send_message',
+    description:
+      'Queue non-blocking steering for an active async execution run addressed by its active name or canonical runId; this does NOT wait for a result. ' +
+      'Steering is delivered by safely ending the current model stream (never an active tool) and starting a bounded fresh session turn; it is not live SDK input injection. ' +
+      'A logical run permits at most three steering continuation segments. Do not immediately call get_subagent_result after this acknowledgement; wait for normal completion notification. ' +
+      'To answer a waiting ask_orchestrator question, provide its messageId as reply_to; the message then answers that exact question and its tool call continues. ' +
+      'The mentor role does not support steering. Use cancel_run to stop a run instead of sending a correction that must not continue.',
+    parameters: sendMessageSchema,
+    needsApproval: () => false,
+    execute: (params) => JSON.stringify(sendMessage(params)),
+    formatCommandMessage: formatSendMessageCommandMessage,
+  };
+}
+
+/** Parent-only, non-blocking request for two-phase async run cancellation. */
+export function createCancelRunToolDefinition(
+  cancelRun: (params: CancelRunParams) => CancelRunAcknowledgement,
+): ToolDefinition<CancelRunParams> {
+  return {
+    name: 'cancel_run',
+    description:
+      'Request non-blocking two-phase cancellation of an active async run by active name or canonical runId. This does NOT wait for the result. ' +
+      'It returns cancelling immediately; the runner later settles through the normal completion path with truthful partial work, tool, diff, and validation evidence. ' +
+      'Do not immediately call get_subagent_result after this acknowledgement; wait for normal completion notification. ' +
+      'Use send_message to steer productive execution; use cancel_run when the run should stop.',
+    parameters: cancelRunSchema,
+    needsApproval: () => false,
+    execute: (params) => JSON.stringify(cancelRun(params)),
+    formatCommandMessage: formatCancelRunCommandMessage,
   };
 }

@@ -11,6 +11,8 @@ import {
   createRunSubagentAsyncToolDefinition,
   createGetSubagentResultToolDefinition,
   createGetSubagentStatusToolDefinition,
+  createSendMessageToolDefinition,
+  createCancelRunToolDefinition,
 } from './tools/agent/run-subagent-async.js';
 import { createWebSearchToolDefinition } from './tools/web/web-search.js';
 import { createWebFetchToolDefinition } from './tools/web/web-fetch.js';
@@ -140,6 +142,8 @@ export const getAgentDefinition = (
     runSubagentAsync?: (params: { role: string; task: string }, context?: unknown, details?: unknown) => Promise<any>;
     getSubagentResult?: (params: { runId: string }, context?: unknown, details?: unknown) => Promise<any>;
     getSubagentStatus?: (params: { runId?: string }, context?: unknown, details?: unknown) => any;
+    sendSubagentMessage?: (params: { target: string; message: string; reply_to?: string }) => any;
+    cancelSubagentRun?: (params: { target: string }) => any;
     getAskUserAnswer?: (callId?: string) => string | undefined;
     skillsService?: SkillsService;
     agentRuntime?: Pick<AgentRuntime, 'agent'> | null;
@@ -155,6 +159,8 @@ export const getAgentDefinition = (
     runSubagentAsync,
     getSubagentResult,
     getSubagentStatus,
+    sendSubagentMessage,
+    cancelSubagentRun,
     getAskUserAnswer,
     skillsService,
     agentRuntime,
@@ -176,7 +182,14 @@ export const getAgentDefinition = (
   const codeContextEnabled = !(executionContext?.isRemote() ?? false);
   const isGpt5 = shouldPreferPatchEditingModel(resolvedModel);
   const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled');
-  const asyncSubagentEnabled = Boolean(runSubagentAsync) && Boolean(getSubagentResult);
+  // Async delegation is an all-or-nothing parent capability: launch, result
+  // retrieval, and the two non-blocking control tools share one registry path.
+  const asyncSubagentEnabled =
+    Boolean(runSubagentAsync) &&
+    Boolean(getSubagentResult) &&
+    Boolean(sendSubagentMessage) &&
+    Boolean(cancelSubagentRun);
+  const asyncControlsEnabled = asyncSubagentEnabled && Boolean(sendSubagentMessage) && Boolean(cancelSubagentRun);
   const memoryCapability = new MemoryCapabilityBuilder(settingsService, {
     onWarning: (message) => loggingService.warn(message),
   }).build({ kind: 'main' }, { projectPath: executionContext?.getCwd() ?? process.cwd() });
@@ -190,6 +203,7 @@ export const getAgentDefinition = (
     codeContextEnabled,
     runSubagentEnabled: orchestratorMode ? asyncSubagentEnabled : Boolean(runSubagent),
     runSubagentAsyncEnabled: asyncSubagentEnabled,
+    asyncSubagentControlsEnabled: asyncControlsEnabled,
     sandboxEnabled,
     memoryEnabled: memoryCapability.access !== 'none',
     memoryGuidance: memoryCapability.guidance,
@@ -228,15 +242,18 @@ export const getAgentDefinition = (
   }
 
   if (orchestratorMode) {
-    if (!runSubagentAsync || !getSubagentResult) {
+    if (!runSubagentAsync || !getSubagentResult || !sendSubagentMessage || !cancelSubagentRun) {
       throw new Error(
-        'orchestratorMode requires runSubagentAsync and getSubagentResult: cannot build orchestrator agent without asynchronous delegation.',
+        'orchestratorMode requires runSubagentAsync, getSubagentResult, sendSubagentMessage, and cancelSubagentRun: cannot build orchestrator agent without asynchronous delegation.',
       );
     }
     const tools: ToolDefinition[] = [
       createRunSubagentAsyncToolDefinition(runSubagentAsync),
       createGetSubagentResultToolDefinition(getSubagentResult),
       ...(getSubagentStatus ? [createGetSubagentStatusToolDefinition(getSubagentStatus)] : []),
+      ...(asyncControlsEnabled
+        ? [createSendMessageToolDefinition(sendSubagentMessage!), createCancelRunToolDefinition(cancelSubagentRun!)]
+        : []),
     ];
     tools.push(
       createShellToolDefinition({
@@ -382,6 +399,12 @@ export const getAgentDefinition = (
       );
       if (getSubagentStatus) {
         tools.push(createGetSubagentStatusToolDefinition(getSubagentStatus));
+      }
+      if (asyncControlsEnabled) {
+        tools.push(
+          createSendMessageToolDefinition(sendSubagentMessage!),
+          createCancelRunToolDefinition(cancelSubagentRun!),
+        );
       }
     }
   }

@@ -140,6 +140,8 @@ export class AgentConfiguration implements AgentSource {
       runSubagentAsync: (...args) => this.#getSubagentBridge()!.runSubagentAsync(...args),
       getSubagentResult: (...args) => this.#getSubagentBridge()!.getSubagentResult(...args),
       getSubagentStatus: (...args) => this.#getSubagentBridge()!.getSubagentStatus(...args),
+      sendSubagentMessage: (...args) => this.#getSubagentBridge()!.sendSubagentMessage(...args),
+      cancelSubagentRun: (...args) => this.#getSubagentBridge()!.cancelSubagentRun(...args),
       getAskUserAnswer: (callId?: string) => {
         if (!callId) return undefined;
         return this.#askUserAnswerStore.consume(callId);

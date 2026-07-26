@@ -37,33 +37,76 @@ const REASONING_RESPONSE_THROTTLE_MS = 200;
  * by reference rather than inlined.
  */
 function formatBackgroundSubagentNotifications(notifications: readonly BackgroundSubagentNotification[]): string {
-  const noun = notifications.length === 1 ? 'run' : 'runs';
-  const entries = notifications.map((notification) => {
-    const lines = [
-      `- runId: ${notification.runId} | role: ${notification.role} | status: ${notification.status}`,
-      ...(notification.error ? [`  error: ${notification.error}`] : []),
-      ...(notification.preview ? [`  preview: ${notification.preview}`] : []),
-    ];
-    return lines.join('\n');
-  });
+  const completions = notifications.filter(
+    (notification): notification is Extract<BackgroundSubagentNotification, { kind: 'completion' }> =>
+      notification.kind === 'completion',
+  );
+  const questions = notifications.filter(
+    (notification): notification is Extract<BackgroundSubagentNotification, { kind: 'question' }> =>
+      notification.kind === 'question',
+  );
+  const sections: string[] = [];
 
-  return [
-    `Background subagent ${noun} finished (${notifications.length}). This is an automatic system notification, not a user message.`,
-    '',
-    ...entries,
-    '',
-    'Call get_subagent_result(runId) for the full report. Assess it against the task before you accept it, then continue through the next necessary steps yourself rather than stopping at the fact that a run finished. Tell the user concisely, in your own words, what you concluded — the report is input to your judgement, not a message to relay.',
-  ].join('\n');
+  if (completions.length > 0) {
+    const noun = completions.length === 1 ? 'run' : 'runs';
+    const entries = completions.map((notification) => {
+      const lines = [
+        `- runId: ${notification.runId} | role: ${notification.role} | status: ${notification.status}`,
+        ...(notification.error ? [`  error: ${notification.error}`] : []),
+        ...(notification.preview ? [`  preview: ${notification.preview}`] : []),
+      ];
+      return lines.join('\n');
+    });
+    sections.push(
+      [
+        `Background subagent ${noun} finished (${completions.length}). This is an automatic system notification, not a user message.`,
+        '',
+        ...entries,
+        '',
+        'Call get_subagent_result(runId) for the full report. Assess it against the task before you accept it, then continue through the next necessary steps yourself rather than stopping at the fact that a run finished. Tell the user concisely, in your own words, what you concluded — the report is input to your judgement, not a message to relay.',
+      ].join('\n'),
+    );
+  }
+
+  if (questions.length > 0) {
+    const entries = questions.map((notification) => {
+      const target = notification.name ?? notification.runId;
+      return [
+        `- messageId: ${notification.messageId} | target: ${target} | runId: ${notification.runId} | role: ${notification.role}`,
+        `  question: ${notification.question}`,
+      ].join('\n');
+    });
+    sections.push(
+      [
+        `Background subagent question${questions.length === 1 ? '' : 's'} pending (${
+          questions.length
+        }). This is an automatic system notification, not a user message.`,
+        '',
+        ...entries,
+        '',
+        'Decide the answer, investigate it yourself, or escalate to the user if needed. To answer a specific waiting subagent, call send_message({ target, reply_to: messageId, message }). The subagent has no direct user channel; an answer resumes only its waiting tool call.',
+      ].join('\n'),
+    );
+  }
+
+  return sections.join('\n\n');
 }
 
-/** The user-facing companion to the model-only completion instruction above. */
+/** The user-facing companion to the model-only background notification instruction. */
 function formatBackgroundSubagentNotificationDisplay(notifications: readonly BackgroundSubagentNotification[]): string {
   return notifications
     .map((notification) => {
+      if (notification.kind === 'question') {
+        const target = notification.name ?? notification.runId;
+        return [
+          `messageId: ${notification.messageId} | target: ${target} | runId: ${notification.runId} | role: ${notification.role}`,
+          `question: ${notification.question}`,
+        ].join('\n');
+      }
       const lines = [
-        `runId: ${notification.runId} | role: ${notification.role} | status: ${notification.status}`,
-        ...(notification.error ? [`error: ${notification.error}`] : []),
-        ...(notification.preview ? [`preview: ${notification.preview}`] : []),
+        `- runId: ${notification.runId} | role: ${notification.role} | status: ${notification.status}`,
+        ...(notification.error ? [`  error: ${notification.error}`] : []),
+        ...(notification.preview ? [`  preview: ${notification.preview}`] : []),
       ];
       return lines.join('\n');
     })
@@ -76,7 +119,7 @@ export class ConversationOrchestrator {
   private currentAskUserQuestionIndex = 0;
   private readonly createMessageId: () => string;
   readonly #directlyAppendedMessageIds = new Set<string>();
-  readonly #displayedBackgroundNotificationRunIds = new Set<string>();
+  readonly #displayedBackgroundNotificationMessageIds = new Set<string>();
   /**
    * Turns this orchestrator currently owns. `ui.onTurnStart` cannot be counted
    * instead: the queue observer emits it unbalanced when a queued submission is
@@ -163,7 +206,7 @@ export class ConversationOrchestrator {
     this.config.usageAccumulator?.reset();
     this.config.subagentUsageAccumulator?.reset();
     this.#directlyAppendedMessageIds.clear();
-    this.#displayedBackgroundNotificationRunIds.clear();
+    this.#displayedBackgroundNotificationMessageIds.clear();
   }
 
   stopProcessing(): void {
@@ -189,7 +232,7 @@ export class ConversationOrchestrator {
       this.resetAskUserState();
       this.config.ui.onResetTransient();
       this.#directlyAppendedMessageIds.clear();
-      this.#displayedBackgroundNotificationRunIds.clear();
+      this.#displayedBackgroundNotificationMessageIds.clear();
       this.config.conversationService.backgroundSubagentNotifications?.drain();
     } finally {
       this.#stoppingByUser = false;
@@ -214,7 +257,7 @@ export class ConversationOrchestrator {
     this.resetAskUserState();
     this.config.ui.onResetTransient();
     this.#directlyAppendedMessageIds.clear();
-    this.#displayedBackgroundNotificationRunIds.clear();
+    this.#displayedBackgroundNotificationMessageIds.clear();
 
     return restored;
   }
@@ -568,11 +611,11 @@ export class ConversationOrchestrator {
     if (notifications.length === 0) return;
 
     const newlyDisplayed = notifications.filter(
-      (notification) => !this.#displayedBackgroundNotificationRunIds.has(notification.runId),
+      (notification) => !this.#displayedBackgroundNotificationMessageIds.has(notification.messageId),
     );
     if (newlyDisplayed.length > 0) {
       for (const notification of newlyDisplayed) {
-        this.#displayedBackgroundNotificationRunIds.add(notification.runId);
+        this.#displayedBackgroundNotificationMessageIds.add(notification.messageId);
       }
       this.config.messages.appendMessages([
         {

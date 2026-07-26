@@ -2,7 +2,13 @@ import { Agent } from '@openai/agents';
 import path from 'node:path';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
-import type { SubagentRequest, SubagentDefinition, SubagentResult, DiffStatEntry } from './types.js';
+import type {
+  SubagentRequest,
+  SubagentDefinition,
+  SubagentResult,
+  DiffStatEntry,
+  SubagentSegmentControl,
+} from './types.js';
 import { SubagentToolFactory, type ValidationCapture } from './tool-policy.js';
 import { SubagentSession } from './subagent-session.js';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
@@ -54,6 +60,8 @@ export class ExecutionSubagentRunner {
       undefined,
       request.signal,
       undefined,
+      undefined,
+      request.task,
     );
   }
 
@@ -65,8 +73,20 @@ export class ExecutionSubagentRunner {
     providedChildSlot?: AcquiredChildSlot,
     signal?: AbortSignal,
     onEventOverride?: (event: ConversationEvent) => void,
+    segmentControl?: SubagentSegmentControl,
+    input = request.task,
   ): Promise<SubagentResult> {
-    return this.#execute(agentId, request, definition, session, providedChildSlot, signal, onEventOverride);
+    return this.#execute(
+      agentId,
+      request,
+      definition,
+      session,
+      providedChildSlot,
+      signal,
+      onEventOverride,
+      segmentControl,
+      input,
+    );
   }
 
   async #execute(
@@ -77,6 +97,8 @@ export class ExecutionSubagentRunner {
     providedChildSlot: AcquiredChildSlot | undefined,
     signal: AbortSignal | undefined,
     onEventOverride: ((event: ConversationEvent) => void) | undefined,
+    segmentControl: SubagentSegmentControl | undefined,
+    input: string,
   ): Promise<SubagentResult> {
     if (!this.#createClient) {
       throw new Error('SubagentManager: createClient factory not provided');
@@ -118,6 +140,7 @@ export class ExecutionSubagentRunner {
       false,
       diffDeltas,
       validationCapture,
+      segmentControl ? (question) => segmentControl.askOrchestrator(question) : undefined,
     );
 
     const providerId = definition.provider;
@@ -125,6 +148,10 @@ export class ExecutionSubagentRunner {
       providerId,
       onToolStart: (name) => {
         toolCounts.set(name, (toolCounts.get(name) ?? 0) + 1);
+        segmentControl?.onToolStart();
+      },
+      onToolComplete: () => {
+        segmentControl?.onToolComplete();
       },
     });
 
@@ -182,7 +209,7 @@ export class ExecutionSubagentRunner {
     }
 
     const onEvent = onEventOverride ?? this.#onEvent;
-    const userTurn = { text: request.task, images: [] as any[] };
+    const userTurn = { text: input, images: [] as any[] };
     let finalText = '';
     let usage: any = undefined;
     let error: Error | undefined;

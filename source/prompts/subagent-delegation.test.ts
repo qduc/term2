@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest';
 import { getSubagentDelegationAddendum } from './subagent-delegation.js';
+import { getAsyncSubagentDelegationAddendum } from './async-subagent-delegation.js';
 
 it('getSubagentDelegationAddendum returns non-empty delegation guidance', () => {
   const result = getSubagentDelegationAddendum();
@@ -69,4 +70,18 @@ it('includes librarian delegation trigger when persistent memory is enabled', ()
 it('does not advertise the librarian when persistent memory is disabled', () => {
   const result = getSubagentDelegationAddendum({ memoryEnabled: false });
   expect(result.includes('librarian')).toBe(false);
+});
+
+it('async control guidance distinguishes steering, cancellation, answers, and fresh-turn limits honestly', () => {
+  const result = getAsyncSubagentDelegationAddendum({ orchestratorMode: true, controlsEnabled: true });
+
+  expect(result).toContain('`send_message`');
+  expect(result).toContain('`cancel_run`');
+  expect(result).toContain('name or runId');
+  expect(result).toContain('`reply_to`');
+  expect(result).toContain('fresh session turn');
+  expect(result).toContain('maximum of three continuation segments');
+  expect(result).toContain('not SDK live injection');
+  expect(result).toContain('single point of contact');
+  expect(result).toContain('Do NOT call `get_subagent_result` immediately');
 });

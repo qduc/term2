@@ -13,7 +13,12 @@ import { adaptLegacyRole, adaptLegacyDefinition } from '../agent-runtime/legacy-
 import { createAgentRuntimeFromSubagentRuntime } from '../agent-runtime/compose-agent-runtime.js';
 import type { AgentRuntime } from '../agent-runtime/agent-runtime.js';
 import type { SkillsService } from '../skills/skills-service.js';
-import type { SubagentRunHandle, SubagentRunStatus } from './types.js';
+import type {
+  SubagentCancelAcknowledgement,
+  SubagentRunHandle,
+  SubagentRunStatus,
+  SubagentSteerAcknowledgement,
+} from './types.js';
 import { SubagentRegistryError } from './subagent-async-registry.js';
 
 export class SubagentManager {
@@ -174,6 +179,16 @@ export class SubagentManager {
    */
   getRunStatus(runId?: string): SubagentRunStatus | SubagentRunStatus[] {
     return this.#runtime.asyncRegistry.getRunStatus(runId);
+  }
+
+  /** Queue parent steering or an ask_orchestrator answer without awaiting a run. */
+  sendMessageToAsyncRun(params: { target: string; message: string; reply_to?: string }): SubagentSteerAcknowledgement {
+    return this.#runtime.asyncRegistry.sendMessage(params.target, params.message, params.reply_to);
+  }
+
+  /** Request two-phase parent cancellation by canonical runId or active name. */
+  cancelAsyncRun(target: string): SubagentCancelAcknowledgement {
+    return this.#runtime.asyncRegistry.cancelRun(target);
   }
 
   abortAsyncRun(runId: string): void {

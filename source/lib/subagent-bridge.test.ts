@@ -53,6 +53,8 @@ function createMockManager():
   const trackRunAsTool = { callCount: 0, lastArgs: null as any };
   const trackStartRunAsync = { callCount: 0, lastArgs: null as any };
   const trackGetRunResult = { callCount: 0, lastArgs: null as any };
+  const trackSendMessage = { callCount: 0, lastArgs: null as any };
+  const trackCancelRun = { callCount: 0, lastArgs: null as any };
   const trackCancelAllAsyncRuns = { callCount: 0 };
   const trackReset = { callCount: 0 };
   const trackClearCache = { callCount: 0 };
@@ -78,6 +80,16 @@ function createMockManager():
       trackGetRunResult.lastArgs = args;
       return { finalText: 'async-result', status: 'completed', toolsUsed: [], filesChanged: [] };
     },
+    sendMessageToAsyncRun: (args: any) => {
+      trackSendMessage.callCount++;
+      trackSendMessage.lastArgs = args;
+      return { ok: true, runId: 'run-1', status: 'running', delivery: 'queued' };
+    },
+    cancelAsyncRun: (target: string) => {
+      trackCancelRun.callCount++;
+      trackCancelRun.lastArgs = target;
+      return { ok: true, runId: 'run-1', status: 'cancelling' };
+    },
     cancelAllAsyncRuns: () => {
       trackCancelAllAsyncRuns.callCount++;
     },
@@ -95,6 +107,8 @@ function createMockManager():
     trackRunAsTool,
     trackStartRunAsync,
     trackGetRunResult,
+    trackSendMessage,
+    trackCancelRun,
     trackCancelAllAsyncRuns,
     trackReset,
     trackClearCache,
@@ -437,6 +451,15 @@ it('runSubagentAsync delegates to SubagentManager.startRunAsync', async () => {
   expect(handle.task).toBe('find files');
 });
 
+it('runSubagentAsync forwards an optional active-run name to the registry request', async () => {
+  const { manager, trackStartRunAsync } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  await bridge.runSubagentAsync({ role: 'explorer', task: 'find files', name: 'code_scan' });
+
+  expect(trackStartRunAsync.lastArgs.name).toBe('code_scan');
+});
+
 it('runSubagentAsync passes the bridge abort signal to startRunAsync', async () => {
   const { manager, trackStartRunAsync } = createMockManager();
   const bridge = makeBridge(manager);
@@ -465,6 +488,27 @@ it('getSubagentResult delegates to SubagentManager.getRunResult', async () => {
   expect(trackGetRunResult.callCount).toBe(1);
   expect(trackGetRunResult.lastArgs).toBe('run-123');
   expect(result.status).toBe('completed');
+});
+
+it('public async controls delegate non-blockingly while transient bridges reject them', () => {
+  const { manager, trackSendMessage, trackCancelRun } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  expect(bridge.sendSubagentMessage({ target: 'scan', message: 'Use the public API.', reply_to: 'message-1' })).toEqual(
+    {
+      ok: true,
+      runId: 'run-1',
+      status: 'running',
+      delivery: 'queued',
+    },
+  );
+  expect(trackSendMessage.lastArgs).toEqual({ target: 'scan', message: 'Use the public API.', reply_to: 'message-1' });
+  expect(bridge.cancelSubagentRun({ target: 'scan' })).toEqual({ ok: true, runId: 'run-1', status: 'cancelling' });
+  expect(trackCancelRun.lastArgs).toBe('scan');
+
+  const transient = makeBridge(null);
+  expect(() => transient.sendSubagentMessage({ target: 'scan', message: 'Nope.' })).toThrow(/Transient agent clients/);
+  expect(() => transient.cancelSubagentRun({ target: 'scan' })).toThrow(/Transient agent clients/);
 });
 
 it('cancelAsyncRuns delegates to SubagentManager.cancelAllAsyncRuns', () => {

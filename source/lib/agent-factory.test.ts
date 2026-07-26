@@ -71,6 +71,9 @@ const createDeps = (
       runSubagent: overrides.runSubagent ?? (async () => ({ finalText: 'subagent-response' })),
       runSubagentAsync: overrides.runSubagentAsync ?? (async () => ({ runId: 'run-1', status: 'running' } as any)),
       getSubagentResult: overrides.getSubagentResult ?? (async () => ({ status: 'completed', finalText: '' } as any)),
+      sendSubagentMessage:
+        overrides.sendSubagentMessage ?? (() => ({ ok: true, runId: 'run-1', status: 'running', delivery: 'queued' })),
+      cancelSubagentRun: overrides.cancelSubagentRun ?? (() => ({ ok: true, runId: 'run-1', status: 'cancelling' })),
       getAskUserAnswer: overrides.getAskUserAnswer ?? (() => undefined),
       checkToolInterceptors: overrides.checkToolInterceptors ?? (async () => null),
     },

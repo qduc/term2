@@ -18,7 +18,8 @@ import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { CodexRateLimitInfo } from '../../services/conversation/conversation-events.js';
 import type { PendingApproval } from '../../contracts/conversation.js';
 import type { UserTurn } from '../../types/user-turn.js';
-import type { UndoItem } from '../../hooks/use-undo-selection.js';
+import type { RewindItem } from '../../hooks/use-rewind-selection.js';
+import type { RewindDisposition } from '../../commands/rewind-command.js';
 import type { SkillsService } from '../../services/skills/skills-service.js';
 import type { StaticCommitBlocker } from '../message/MessageList.js';
 import type { QueuePauseReason } from '../../services/queue/queue-controller.js';
@@ -47,8 +48,10 @@ export type BottomAreaProps = {
   onTypeAnswer?: () => void;
   onNavigateQuestion?: (direction: 'prev' | 'next') => void;
   sshInfo?: SSHInfo;
-  undoMenuRef?: React.MutableRefObject<{ open: (items: UndoItem[]) => void } | null>;
-  onUndoSelect?: (item: UndoItem) => void;
+  rewindMenuRef?: React.MutableRefObject<{
+    open: (items: RewindItem[], disposition: RewindDisposition) => void;
+  } | null>;
+  onRewindSelect?: (item: RewindItem, disposition: RewindDisposition) => void;
   providersMenuRef?: React.MutableRefObject<{ open: () => void } | null>;
   onSettingChange?: (key: string, value: any) => void;
   onSystemMessage?: (text: string) => void;
@@ -109,8 +112,8 @@ const BottomArea: FC<BottomAreaProps> = ({
   sshInfo,
   lastUsage,
   lastCodexRateLimit,
-  undoMenuRef,
-  onUndoSelect,
+  rewindMenuRef,
+  onRewindSelect,
   providersMenuRef,
   onSettingChange,
   onSystemMessage,
@@ -284,8 +287,8 @@ const BottomArea: FC<BottomAreaProps> = ({
                 settingsService={settingsService}
                 loggingService={loggingService}
                 historyService={historyService}
-                undoMenuRef={undoMenuRef}
-                onUndoSelect={onUndoSelect}
+                rewindMenuRef={rewindMenuRef}
+                onRewindSelect={onRewindSelect}
                 providersMenuRef={providersMenuRef}
                 onSettingChange={onSettingChange}
                 onSystemMessage={onSystemMessage}

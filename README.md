@@ -19,9 +19,9 @@ https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 - 🔒 **Safe Execution** - Every command requires your explicit approval with diff preview
 - 🛠️ **Advanced Tools** - Shell execution, file patching, search/replace (with `<...>` gap matching), grep, find files, file reading, file creation, web search, web fetching, code outline & context search, mentor consultation, and subagent invocation
 - 👥 **Subagent Delegation** - Spawn specialized, synchronous subagents (`explorer`, `worker`, `researcher`, `mentor`) to perform sub-tasks in parallel while conserving your main context
-- ⏪ **Conversation Undo & Rewind** - Undo the last turn or select any past user message to rewind the conversation state back to that point
+- ⏪ **Conversation Rewind** - Rewind to any past user turn with `/rewind`, choosing whether to edit the turn again or resend it as-is. The picker states what each rewind discards (turns, replies, edited files) before you commit to it
 - 💾 **Conversation Resumption & Persistence** - Saved conversations are persisted using robust event logging and can be resumed later using the `--resume` flag
-- 💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/mentor`, `/lite`, `/copy`, `/auto-approve`, `/plan`, `/undo`, `/usage`, `/effort`, `/handoff`, `/retry`, and `/orchestrator` for easy control
+- 💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/mentor`, `/lite`, `/copy`, `/auto-approve`, `/plan`, `/rewind`, `/usage`, `/effort`, `/handoff`, and `/orchestrator` for easy control
 - 📝 **Smart Context** - The assistant understands your environment and provides relevant help
 - 🎯 **Streaming Responses** - See the AI's thoughts and reasoning in real-time
 - 🧠 **Reasoning Effort Control** - Configurable reasoning levels (minimal to high) for O1/O3 models
@@ -147,8 +147,10 @@ While in the chat, you can use these commands:
 - `/plan` - Toggle plan mode (read-only research/planning mode)
 - `/orchestrator` - Toggle orchestrator mode (delegates all tool-backed work to subagents; requires `/clear` first if a session is active)
 - `/skills` - Browse and manage available skills
-- `/undo [last]` - Open the conversation rewind menu, or revert the last turn immediately if `last` is specified
-- `/retry` - Undo the last user message and re-send it
+- `/rewind [last | <turn>] [edit | resend]` - Rewind the conversation to a user turn, discarding that turn and everything after it. With no arguments it opens a picker showing what each rewind would discard; `Tab` switches between putting the turn back in the input box (`edit`, the default) and resending it unchanged (`resend`)
+- `/undo` - Alias for `/rewind edit`
+- `/retry` - Alias for `/rewind resend`, acting on the last turn immediately
+- `/retry-tool` - Retry the last tool call (was `/retry tool`)
 - `/usage` - Show token usage breakdown for the current session (includes subagent usage)
 - `/effort [level]` - Set reasoning effort for O1/O3 models (e.g. none, minimal, low, medium, high)
 - `/copy` - Copy the latest assistant response to the clipboard

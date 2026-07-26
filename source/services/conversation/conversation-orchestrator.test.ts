@@ -229,31 +229,14 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.conversationService.abort).not.toHaveBeenCalled();
   });
 
-  it('undoLastUserMessage aborts the turn without cancelling background subagent runs', () => {
+  it('rewindToTurn aborts the turn without cancelling background subagent runs', () => {
     const cfg = makeConfig();
     const orchestrator = new ConversationOrchestrator(cfg);
     const messages = cfg.messages as ReturnType<typeof makeMessagePort>;
     messages.appendMessages([createMessage('u1', 'user', 'hello'), createBotMessage('b1', 'hi')]);
-    vi.mocked(cfg.conversationService.undoLastUserTurn).mockReturnValue({ text: 'hello' });
+    vi.mocked(cfg.conversationService.undoNUserTurns).mockReturnValue({ text: 'hello' });
 
-    orchestrator.undoLastUserMessage();
-
-    expect(cfg.conversationService.abort).toHaveBeenCalledTimes(1);
-    expect(cfg.conversationService.interruptFromUser).not.toHaveBeenCalled();
-  });
-
-  it('undoToUserMessage aborts the turn without cancelling background subagent runs', () => {
-    const cfg = makeConfig();
-    const orchestrator = new ConversationOrchestrator(cfg);
-    const messages = cfg.messages as ReturnType<typeof makeMessagePort>;
-    messages.appendMessages([
-      createMessage('u1', 'user', 'first'),
-      createBotMessage('b1', 'reply'),
-      createMessage('u2', 'user', 'second'),
-    ]);
-    vi.mocked(cfg.conversationService.undoNUserTurns).mockReturnValue({ text: 'second' });
-
-    orchestrator.undoToUserMessage(2);
+    orchestrator.rewindToTurn(1);
 
     expect(cfg.conversationService.abort).toHaveBeenCalledTimes(1);
     expect(cfg.conversationService.interruptFromUser).not.toHaveBeenCalled();
@@ -270,19 +253,43 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.conversationService.interruptFromUser).not.toHaveBeenCalled();
   });
 
-  it('undoes the last undoable user message', () => {
+  it('rewinds to the last user turn', () => {
     const cfg = makeConfig();
     const orchestrator = new ConversationOrchestrator(cfg);
     const messages = cfg.messages as ReturnType<typeof makeMessagePort>;
     messages.appendMessages([createMessage('u1', 'user', 'hello'), createBotMessage('b1', 'hi')]);
-    vi.mocked(cfg.conversationService.undoLastUserTurn).mockReturnValue({ text: 'hello' });
+    vi.mocked(cfg.conversationService.undoNUserTurns).mockReturnValue({ text: 'hello' });
 
-    const result = orchestrator.undoLastUserMessage();
+    const result = orchestrator.rewindToTurn(1);
 
     expect(result).toEqual({ text: 'hello' });
     expect(cfg.conversationService.abort).toHaveBeenCalled();
-    expect(cfg.conversationService.undoLastUserTurn).toHaveBeenCalled();
+    expect(cfg.conversationService.undoNUserTurns).toHaveBeenCalledWith(1);
     expect(cfg.ui.onResetTransient).toHaveBeenCalled();
+  });
+
+  it('rewindToTurn preserves images so a rewound multimodal turn can be resent', () => {
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    const messages = cfg.messages as ReturnType<typeof makeMessagePort>;
+    messages.appendMessages([createMessage('u1', 'user', 'look at this'), createBotMessage('b1', 'hi')]);
+    const images = [{ id: 'img-1', data: 'abc', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }];
+    vi.mocked(cfg.conversationService.undoNUserTurns).mockReturnValue({ text: 'look at this', images } as any);
+
+    const result = orchestrator.rewindToTurn(1);
+
+    expect(result).toEqual({ text: 'look at this', images });
+  });
+
+  it('rewindToTurn returns null for a turn number outside the conversation', () => {
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    const messages = cfg.messages as ReturnType<typeof makeMessagePort>;
+    messages.appendMessages([createMessage('u1', 'user', 'hello'), createBotMessage('b1', 'hi')]);
+
+    expect(orchestrator.rewindToTurn(0)).toBeNull();
+    expect(orchestrator.rewindToTurn(2)).toBeNull();
+    expect(cfg.conversationService.undoNUserTurns).not.toHaveBeenCalled();
   });
 
   it('returns false when retryLastToolOutput has nothing to retry', async () => {
@@ -294,7 +301,7 @@ describe('ConversationOrchestrator', () => {
     await expect(orchestrator.retryLastToolOutput()).resolves.toBe(false);
   });
 
-  it('undoes to a user message index', () => {
+  it('rewinds to an earlier turn and discards every turn from there on', () => {
     const cfg = makeConfig();
     const orchestrator = new ConversationOrchestrator(cfg);
     const messages = cfg.messages as ReturnType<typeof makeMessagePort>;
@@ -303,13 +310,14 @@ describe('ConversationOrchestrator', () => {
       createBotMessage('b1', 'reply'),
       createMessage('u2', 'user', 'second'),
     ]);
-    vi.mocked(cfg.conversationService.undoNUserTurns).mockReturnValue({ text: 'second' });
+    vi.mocked(cfg.conversationService.undoNUserTurns).mockReturnValue({ text: 'first' });
 
-    const restored = orchestrator.undoToUserMessage(2);
+    const restored = orchestrator.rewindToTurn(1);
 
-    expect(restored).toBe('second');
+    expect(restored).toEqual({ text: 'first' });
     expect(cfg.conversationService.abort).toHaveBeenCalled();
-    expect(cfg.conversationService.undoNUserTurns).toHaveBeenCalled();
+    // Turn 1 of 2 means both turns leave the transcript.
+    expect(cfg.conversationService.undoNUserTurns).toHaveBeenCalledWith(2);
   });
 
   it('moves through ask-user questions', async () => {
@@ -591,7 +599,33 @@ describe('ConversationOrchestrator', () => {
     expect(vi.mocked(cfg.messages.appendMessages).mock.calls.length).toBe(beforeCalls + 1);
   });
 
-  it('does not retain directly-appended id across undoLastUserMessage', async () => {
+  it('does not retain directly-appended id across a rewind to an earlier turn', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueActive).mockReturnValue(false);
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+    await orchestrator.sendUserMessage('first');
+    await orchestrator.sendUserMessage('second');
+
+    const firstAppendCall = vi.mocked(cfg.messages.appendMessages).mock.calls[0]!;
+    const directlyAppendedId = (firstAppendCall[0]![0] as any).id as string;
+
+    vi.mocked(cfg.conversationService.undoNUserTurns).mockReturnValue({ text: 'first' });
+    orchestrator.rewindToTurn(1);
+
+    const setObserver = vi.mocked(cfg.conversationService.setQueuedTurnStartObserver);
+    const observer = setObserver.mock.calls[0]?.[0] as (execution: { requestId: string; input: string }) => void;
+    expect(observer).toBeDefined();
+    const beforeCalls = vi.mocked(cfg.messages.appendMessages).mock.calls.length;
+    observer({ requestId: directlyAppendedId, input: 'first' });
+    expect(vi.mocked(cfg.messages.appendMessages).mock.calls.length).toBe(beforeCalls + 1);
+  });
+
+  it('does not retain directly-appended id across a rewind to the last turn', async () => {
     const cfg = makeConfig();
     vi.mocked(cfg.conversationService.isQueueActive).mockReturnValue(false);
     vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
@@ -605,8 +639,8 @@ describe('ConversationOrchestrator', () => {
     const firstAppendCall = vi.mocked(cfg.messages.appendMessages).mock.calls[0]!;
     const directlyAppendedId = (firstAppendCall[0][0] as any).id as string;
 
-    vi.mocked(cfg.conversationService.undoLastUserTurn).mockReturnValue({ text: 'first' });
-    orchestrator.undoLastUserMessage();
+    vi.mocked(cfg.conversationService.undoNUserTurns).mockReturnValue({ text: 'first' });
+    orchestrator.rewindToTurn(1);
 
     const setObserver = vi.mocked(cfg.conversationService.setQueuedTurnStartObserver);
     const observer = setObserver.mock.calls[0]?.[0] as (execution: { requestId: string; input: string }) => void;

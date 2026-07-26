@@ -59,11 +59,12 @@ it('toPopupProps forwards slash scrollOffset', () => {
       scrollOffset: 0,
       canSwitchProvider: false,
     } as any,
-    undo: {
+    rewind: {
       isOpen: false,
       items: [],
       selectedIndex: 0,
       scrollOffset: 0,
+      disposition: 'edit',
     } as any,
     providers: {
       isOpen: false,

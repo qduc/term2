@@ -1,7 +1,7 @@
 import type { UserTurn } from '../../types/user-turn.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ISettingsService } from '../service-interfaces.js';
-import { ConversationStore } from '../conversation/conversation-store.js';
+import { ConversationStore, type RewindTarget } from '../conversation/conversation-store.js';
 import { ConversationLogger } from '../logging/conversation-logger.js';
 import type { StateSnapshot } from '../logging/conversation-log-events.js';
 import { SessionLifecycle } from './session-lifecycle.js';
@@ -98,6 +98,10 @@ export class SessionManager {
 
   listUserTurns(): { index: number; text: string; imageCount: number }[] {
     return this.#conversationStore.listUserTurns();
+  }
+
+  listRewindTargets(): RewindTarget[] {
+    return this.#conversationStore.listRewindTargets();
   }
 
   // ── Snapshot / State ──────────────────────────────────────────────

@@ -577,3 +577,145 @@ it('removeNLastUserTurns() skips legacy mode notice items', () => {
   const history = store.getHistory();
   expect(history.length).toBe(0);
 });
+
+// listRewindTargets tests
+
+const assistantReply = (text: string): AgentInputItem[] =>
+  [
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text }] },
+  ] satisfies AgentInputItem[];
+
+const toolCall = (name: string, args: unknown): AgentInputItem[] =>
+  [
+    { type: 'function_call', name, callId: `call-${name}`, arguments: JSON.stringify(args) } as unknown,
+  ] as AgentInputItem[];
+
+it('listRewindTargets() numbers turns from 1 and reports their history index', () => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.appendOutput(assistantReply('Reply 1'));
+  store.addUserMessage('Second');
+
+  const targets = store.listRewindTargets();
+
+  expect(targets.map((t) => t.turnNumber)).toEqual([1, 2]);
+  expect(targets.map((t) => t.text)).toEqual(['First', 'Second']);
+  expect(targets[0]!.index).toBe(0);
+  expect(targets[1]!.index).toBe(2);
+});
+
+it('listRewindTargets() counts assistant replies discarded from each turn to the end', () => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.appendOutput(assistantReply('Reply 1'));
+  store.appendOutput(assistantReply('Reply 2'));
+  store.addUserMessage('Second');
+  store.appendOutput(assistantReply('Reply 3'));
+
+  const targets = store.listRewindTargets();
+
+  expect(targets[0]!.discardedReplies).toBe(3);
+  expect(targets[1]!.discardedReplies).toBe(1);
+});
+
+it('listRewindTargets() counts user turns discarded from each turn to the end', () => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.appendOutput(assistantReply('Reply 1'));
+  store.addUserMessage('Second');
+  store.addUserMessage('Third');
+
+  const targets = store.listRewindTargets();
+
+  expect(targets.map((t) => t.discardedTurns)).toEqual([3, 2, 1]);
+});
+
+it('listRewindTargets() reports zero discards for a trailing turn with no reply', () => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.appendOutput(assistantReply('Reply 1'));
+  store.addUserMessage('Unanswered');
+
+  const targets = store.listRewindTargets();
+
+  expect(targets[1]!.discardedReplies).toBe(0);
+  expect(targets[1]!.discardedFiles).toEqual([]);
+});
+
+it('listRewindTargets() collects distinct file paths from mutating tool calls', () => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.appendOutput(toolCall('create_file', { path: 'a.ts' }));
+  store.appendOutput(toolCall('search_replace', { path: 'b.ts' }));
+  store.addUserMessage('Second');
+  store.appendOutput(toolCall('search_replace', { path: 'b.ts' }));
+
+  const targets = store.listRewindTargets();
+
+  expect(targets[0]!.discardedFiles).toEqual(['a.ts', 'b.ts']);
+  expect(targets[1]!.discardedFiles).toEqual(['b.ts']);
+});
+
+it('listRewindTargets() ignores read-only tool calls when collecting files', () => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.appendOutput(toolCall('read_file', { path: 'untouched.ts' }));
+  store.appendOutput(toolCall('grep', { pattern: 'x' }));
+
+  const targets = store.listRewindTargets();
+
+  expect(targets[0]!.discardedFiles).toEqual([]);
+});
+
+it('listRewindTargets() extracts every path from an apply_patch operations array', () => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.appendOutput(
+    toolCall('apply_patch', {
+      operations: [
+        { path: 'x.ts', diff: '' },
+        { path: 'y.ts', diff: '' },
+      ],
+    }),
+  );
+
+  const targets = store.listRewindTargets();
+
+  expect(targets[0]!.discardedFiles).toEqual(['x.ts', 'y.ts']);
+});
+
+it('listRewindTargets() tolerates malformed tool call arguments', () => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.appendOutput([
+    { type: 'function_call', name: 'create_file', callId: 'c1', arguments: '{not json' } as unknown,
+  ] as AgentInputItem[]);
+
+  expect(() => store.listRewindTargets()).not.toThrow();
+  expect(store.listRewindTargets()[0]!.discardedFiles).toEqual([]);
+});
+
+it('listRewindTargets() excludes shell context and mode notice items', () => {
+  const store = new ConversationStore();
+  store.addShellContext(`${SHELL_CONTEXT_PREFIX}\n\n$ ls\nExit: 0`);
+  addLegacyModeNotice(store, 'Plan Mode ON');
+  store.addUserMessage('Only real turn');
+
+  const targets = store.listRewindTargets();
+
+  expect(targets.length).toBe(1);
+  expect(targets[0]!.turnNumber).toBe(1);
+  expect(targets[0]!.text).toBe('Only real turn');
+});
+
+it('listRewindTargets() carries imageCount for multimodal turns', () => {
+  const store = new ConversationStore();
+  store.addUserTurn({
+    text: 'Describe this',
+    images: [{ id: 'img-1', data: 'abc', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
+  });
+
+  const targets = store.listRewindTargets();
+
+  expect(targets[0]!.imageCount).toBe(1);
+});

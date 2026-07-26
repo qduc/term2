@@ -10,7 +10,7 @@ import { usePathCompletion } from '../hooks/use-path-completion.js';
 import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
 import { useSettingsValueCompletion } from '../hooks/use-settings-value-completion.js';
 import { useModelSelection } from '../hooks/use-model-selection.js';
-import { useUndoSelection } from '../hooks/use-undo-selection.js';
+import { useRewindSelection } from '../hooks/use-rewind-selection.js';
 import { useProviderSelection } from '../hooks/use-provider-selection.js';
 import type { ProviderSelectionPhase } from '../hooks/use-provider-selection.js';
 import { useSkillSelection } from '../hooks/use-skill-selection.js';
@@ -37,7 +37,8 @@ import { getPopupNavigationCursor } from './input/popup-key-navigation.js';
 import { useModeHandlers } from '../hooks/use-mode-handlers.js';
 import { toPopupProps } from './input/popup-props.js';
 import type { UserTurn } from '../types/user-turn.js';
-import type { UndoItem } from '../hooks/use-undo-selection.js';
+import type { RewindItem } from '../hooks/use-rewind-selection.js';
+import type { RewindDisposition } from '../commands/rewind-command.js';
 
 export { calculateInputWidth };
 
@@ -66,8 +67,10 @@ type Props = {
   settingsService: SettingsService;
   loggingService: LoggingService;
   historyService: HistoryService;
-  onUndoSelect?: (item: UndoItem) => void;
-  undoMenuRef?: React.MutableRefObject<{ open: (items: UndoItem[]) => void } | null>;
+  onRewindSelect?: (item: RewindItem, disposition: RewindDisposition) => void;
+  rewindMenuRef?: React.MutableRefObject<{
+    open: (items: RewindItem[], disposition: RewindDisposition) => void;
+  } | null>;
   providersMenuRef?: React.MutableRefObject<{ open: () => void } | null>;
   onSettingChange?: (key: string, value: any) => void;
   onSystemMessage?: (text: string) => void;
@@ -122,8 +125,8 @@ const InputBox: FC<Props> = ({
   waitingForRejectionReason = false,
   isShellMode = false,
   historyService,
-  onUndoSelect,
-  undoMenuRef,
+  onRewindSelect,
+  rewindMenuRef,
   providersMenuRef,
   onSettingChange,
   onSystemMessage,
@@ -192,7 +195,7 @@ const InputBox: FC<Props> = ({
     loggingService,
     settingsService,
   });
-  const undo = useUndoSelection();
+  const rewind = useRewindSelection();
   const providers = useProviderSelection(settingsService);
 
   const skills = useSkillSelection(
@@ -203,17 +206,17 @@ const InputBox: FC<Props> = ({
   const activePromptLabel = providerWizardPromptLabel ?? promptLabel;
   const terminalWidth = useTerminalWidth({ waitingForRejectionReason, isShellMode, promptLabel: activePromptLabel });
 
-  // Wire up the undo menu ref so app.tsx can open the menu
+  // Wire up the rewind menu ref so app.tsx can open the picker
   useEffect(() => {
-    if (undoMenuRef) {
-      undoMenuRef.current = { open: undo.open };
+    if (rewindMenuRef) {
+      rewindMenuRef.current = { open: rewind.open };
     }
     return () => {
-      if (undoMenuRef) {
-        undoMenuRef.current = null;
+      if (rewindMenuRef) {
+        rewindMenuRef.current = null;
       }
     };
-  }, [undo.open, undoMenuRef]);
+  }, [rewind.open, rewindMenuRef]);
 
   // Wire up the providers menu ref so app.tsx can control it
   useEffect(() => {
@@ -498,7 +501,7 @@ const InputBox: FC<Props> = ({
       pageUp: skills.pageUp,
       pageDown: skills.pageDown,
     },
-    undo,
+    rewind,
     providers,
     insertSelectedPath,
     insertSelectedSetting,
@@ -509,7 +512,7 @@ const InputBox: FC<Props> = ({
     onSubmit: submitTextOnly,
     onSlashCommandRemount: remountInput,
     onSlashTabComplete,
-    onUndoSelect,
+    onRewindSelect,
   });
 
   const stateRef = useRef({
@@ -689,7 +692,7 @@ const InputBox: FC<Props> = ({
       return;
     }
     if (key.backspace) {
-      if (currentMode === 'undo_selection') return;
+      if (currentMode === 'rewind_selection') return;
       if (currentMode === 'provider_selection') {
         if (providersPhase !== 'wizard_name' && providersPhase !== 'wizard_url' && providersPhase !== 'wizard_key') {
           currentHandlers[currentMode].onDelete?.();
@@ -707,7 +710,7 @@ const InputBox: FC<Props> = ({
       return;
     }
     if (key.delete) {
-      if (currentMode === 'undo_selection') return;
+      if (currentMode === 'rewind_selection') return;
       if (currentMode === 'provider_selection') {
         if (providersPhase !== 'wizard_name' && providersPhase !== 'wizard_url' && providersPhase !== 'wizard_key') {
           currentHandlers[currentMode].onDelete?.();
@@ -740,8 +743,8 @@ const InputBox: FC<Props> = ({
       !key.leftArrow &&
       !key.rightArrow
     ) {
-      // Ignore character input in undo_selection mode
-      if (currentMode === 'undo_selection') return;
+      // Ignore character input in rewind_selection mode
+      if (currentMode === 'rewind_selection') return;
       const nextValue = currentValue.slice(0, currentCursor) + _input + currentValue.slice(currentCursor);
       const nextCursor = currentCursor + _input.length;
       changeInput(nextValue);
@@ -840,7 +843,7 @@ const InputBox: FC<Props> = ({
   return (
     <Box flexDirection="column">
       <PopupManager
-        {...toPopupProps({ slash, path, settings, settingsValue, models, skills, undo, providers })}
+        {...toPopupProps({ slash, path, settings, settingsValue, models, skills, rewind, providers })}
         settingsService={settingsService}
       />
 

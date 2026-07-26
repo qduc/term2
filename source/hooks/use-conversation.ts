@@ -233,17 +233,17 @@ export const useConversation = ({
     addSystemMessage('Stopped');
   }, [stopProcessing, addSystemMessage]);
 
-  const undoLastUserMessage = useCallback<() => { text: string; images?: UserTurn['images'] } | null>(
-    () => orchestrator.undoLastUserMessage(),
+  const rewindToTurn = useCallback<(turnNumber: number) => { text: string; images?: UserTurn['images'] } | null>(
+    (turnNumber: number) => orchestrator.rewindToTurn(turnNumber),
     [orchestrator],
   );
+
+  const countRewindableTurns = useCallback<() => number>(() => orchestrator.countRewindableTurns(), [orchestrator]);
 
   const retryLastToolOutput = useCallback<() => Promise<boolean>>(
     () => orchestrator.retryLastToolOutput(),
     [orchestrator],
   );
-
-  const undoToUserMessage = useCallback((uiIndex: number) => orchestrator.undoToUserMessage(uiIndex), [orchestrator]);
 
   const removeLastQueuedPendingMessage = useCallback(
     () => orchestrator.removeLastQueuedPendingMessage(),
@@ -338,10 +338,10 @@ export const useConversation = ({
     onTypeAnswer,
     clearConversation,
     stopProcessing: stopProcessingWithNotice,
-    undoLastUserMessage,
+    rewindToTurn,
+    countRewindableTurns,
     retryLastToolOutput,
     getUserMessages,
-    undoToUserMessage,
     setModel,
     setReasoningEffort,
     setTemperature,

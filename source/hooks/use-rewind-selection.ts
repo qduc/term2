@@ -1,44 +1,57 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useInputContext } from '../context/InputContext.js';
 import { useSelection } from './use-selection.js';
+import type { RewindDisposition } from '../commands/rewind-command.js';
 
-export interface UndoItem {
-  uiIndex: number;
+/**
+ * A rewind candidate as the picker shows it: the turn plus what rewinding there
+ * would discard. Mirrors `RewindTarget` from the conversation store, minus the
+ * provider-history index the UI has no use for.
+ */
+export interface RewindItem {
+  turnNumber: number;
   text: string;
+  imageCount: number;
+  discardedTurns: number;
+  discardedReplies: number;
+  discardedFiles: string[];
 }
 
-type UndoSelectionResult = {
+type RewindSelectionResult = {
   isOpen: boolean;
-  items: UndoItem[];
+  items: RewindItem[];
   selectedIndex: number;
   scrollOffset: number;
-  open: (userMessages: UndoItem[]) => void;
+  disposition: RewindDisposition;
+  open: (items: RewindItem[], disposition: RewindDisposition) => void;
   close: () => void;
+  toggleDisposition: () => void;
   moveUp: () => void;
   moveDown: () => void;
   moveHome: () => void;
   moveEnd: () => void;
   pageUp: () => void;
   pageDown: () => void;
-  getSelectedItem: () => UndoItem | undefined;
-  confirmSelection: (onSelect: (item: UndoItem) => void) => void;
+  getSelectedItem: () => RewindItem | undefined;
+  confirmSelection: (onSelect: (item: RewindItem, disposition: RewindDisposition) => void) => void;
 };
 
-const MAX_VISIBLE_ITEMS = 10;
+const MAX_VISIBLE_ITEMS = 6;
 
-export const useUndoSelection = (): UndoSelectionResult => {
+export const useRewindSelection = (): RewindSelectionResult => {
   const { mode, setMode } = useInputContext();
 
-  const [items, setItems] = useState<UndoItem[]>([]);
+  const [items, setItems] = useState<RewindItem[]>([]);
   const [scrollOffset, setScrollOffset] = useState(0);
-  const isOpen = mode === 'undo_selection';
+  const [disposition, setDisposition] = useState<RewindDisposition>('edit');
+  const isOpen = mode === 'rewind_selection';
 
   const selection = useSelection(items);
 
-  // Auto-cleanup when mode changes away from undo_selection (e.g., via Escape)
+  // Auto-cleanup when mode changes away from rewind_selection (e.g., via Escape)
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
-    if (mode !== 'undo_selection') {
+    if (mode !== 'rewind_selection') {
       setItems([]);
       setScrollOffset(0);
     }
@@ -61,24 +74,29 @@ export const useUndoSelection = (): UndoSelectionResult => {
   }, [isOpen, items.length, selection.selectedIndex, scrollOffset]);
 
   const open = useCallback(
-    (userMessages: UndoItem[]) => {
-      setItems(userMessages);
-      setMode('undo_selection');
+    (nextItems: RewindItem[], nextDisposition: RewindDisposition) => {
+      setItems(nextItems);
+      setDisposition(nextDisposition);
+      setMode('rewind_selection');
       setScrollOffset(0);
       // Use setSelectedIndex directly because selection.moveEnd() would read the
       // stale items.length from its closure (items hasn't re-rendered yet).
-      selection.setSelectedIndex(Math.max(0, userMessages.length - 1));
+      selection.setSelectedIndex(Math.max(0, nextItems.length - 1));
     },
     [setMode, selection],
   );
 
   const close = useCallback(() => {
-    if (mode === 'undo_selection') {
+    if (mode === 'rewind_selection') {
       setMode('text');
       setItems([]);
       setScrollOffset(0);
     }
   }, [mode, setMode]);
+
+  const toggleDisposition = useCallback(() => {
+    setDisposition((previous) => (previous === 'edit' ? 'resend' : 'edit'));
+  }, []);
 
   const moveUp = useCallback(() => {
     selection.moveUp();
@@ -104,19 +122,19 @@ export const useUndoSelection = (): UndoSelectionResult => {
     selection.pageDown();
   }, [selection]);
 
-  const getSelectedItem = useCallback((): UndoItem | undefined => {
+  const getSelectedItem = useCallback((): RewindItem | undefined => {
     return selection.getSelectedItem();
   }, [selection]);
 
   const confirmSelection = useCallback(
-    (onSelect: (item: UndoItem) => void) => {
+    (onSelect: (item: RewindItem, disposition: RewindDisposition) => void) => {
       const item = selection.getSelectedItem();
       if (item) {
         close();
-        onSelect(item);
+        onSelect(item, disposition);
       }
     },
-    [selection, close],
+    [selection, close, disposition],
   );
 
   return {
@@ -124,8 +142,10 @@ export const useUndoSelection = (): UndoSelectionResult => {
     items,
     selectedIndex: selection.selectedIndex,
     scrollOffset,
+    disposition,
     open,
     close,
+    toggleDisposition,
     moveUp,
     moveDown,
     moveHome,

@@ -95,31 +95,35 @@ export function mergeCommandMessages(prev: Message[], newCommands: CommandMessag
 }
 
 /**
+ * List the indices of every user message that was not consumed for abort, in
+ * conversation order. Position N in the result is the UI index of user turn
+ * N+1, which is how a 1-based rewind turn number resolves to a message index.
+ */
+export function listUndoableUserMessageIndices(messages: readonly Message[]): number[] {
+  const indices: number[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (isUserMessage(m) && !m.consumedForAbort) {
+      indices.push(i);
+    }
+  }
+  return indices;
+}
+
+/**
  * Find the index of the last user message that was not consumed for abort.
  * Returns -1 if no undoable user message exists.
  */
 export function findLastUndoableUserMessage(messages: readonly Message[]): number {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (isUserMessage(m) && !m.consumedForAbort) {
-      return i;
-    }
-  }
-  return -1;
+  const indices = listUndoableUserMessageIndices(messages);
+  return indices.length > 0 ? indices[indices.length - 1]! : -1;
 }
 
 /**
  * Count how many undoable user turns exist at or after startIndex.
  */
 export function countUndoableUserTurnsFrom(messages: readonly Message[], startIndex: number): number {
-  let count = 0;
-  for (let i = startIndex; i < messages.length; i++) {
-    const m = messages[i];
-    if (isUserMessage(m) && !m.consumedForAbort) {
-      count++;
-    }
-  }
-  return count;
+  return listUndoableUserMessageIndices(messages).filter((index) => index >= startIndex).length;
 }
 
 /**

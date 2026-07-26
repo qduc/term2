@@ -46,8 +46,15 @@ type Models = Movable & {
   toggleProvider: (direction?: 'next' | 'prev') => void;
   refresh: () => void;
 };
-type Undo = Movable & {
-  confirmSelection: (onSelect: (item: import('../hooks/use-undo-selection.js').UndoItem) => void) => void;
+type Rewind = Movable & {
+  disposition: import('../commands/rewind-command.js').RewindDisposition;
+  toggleDisposition: () => void;
+  confirmSelection: (
+    onSelect: (
+      item: import('../hooks/use-rewind-selection.js').RewindItem,
+      disposition: import('../commands/rewind-command.js').RewindDisposition,
+    ) => void,
+  ) => void;
 };
 type Providers = {
   phase: ProviderSelectionPhase;
@@ -68,7 +75,7 @@ type Options = {
   settingsValue: Movable;
   models: Models;
   skills: Movable;
-  undo: Undo;
+  rewind: Rewind;
   providers: Providers;
   insertSelectedPath: (appendTrailingSpace: boolean) => boolean;
   insertSelectedSetting: () => boolean;
@@ -79,7 +86,10 @@ type Options = {
   onSubmit: (value: string) => void;
   onSlashCommandRemount: () => void;
   onSlashTabComplete?: (command: SlashCommand) => boolean;
-  onUndoSelect?: (item: import('../hooks/use-undo-selection.js').UndoItem) => void;
+  onRewindSelect?: (
+    item: import('../hooks/use-rewind-selection.js').RewindItem,
+    disposition: import('../commands/rewind-command.js').RewindDisposition,
+  ) => void;
 };
 
 export const useModeHandlers = ({
@@ -89,7 +99,7 @@ export const useModeHandlers = ({
   settingsValue,
   models,
   skills,
-  undo,
+  rewind,
   providers,
   insertSelectedPath,
   insertSelectedSetting,
@@ -100,7 +110,7 @@ export const useModeHandlers = ({
   onSubmit,
   onSlashCommandRemount,
   onSlashTabComplete,
-  onUndoSelect,
+  onRewindSelect,
 }: Options): Record<InputMode, ModeHandler> => {
   return useMemo(
     () => ({
@@ -214,16 +224,21 @@ export const useModeHandlers = ({
         moveEnd: skills.moveEnd,
         onSubmit: () => (insertSelectedSkill(true) ? 'handled' : 'fallthrough'),
       },
-      undo_selection: {
-        moveUp: undo.moveUp,
-        moveDown: undo.moveDown,
-        pageUp: undo.pageUp,
-        pageDown: undo.pageDown,
-        moveHome: undo.moveHome,
-        moveEnd: undo.moveEnd,
+      rewind_selection: {
+        moveUp: rewind.moveUp,
+        moveDown: rewind.moveDown,
+        pageUp: rewind.pageUp,
+        pageDown: rewind.pageDown,
+        moveHome: rewind.moveHome,
+        moveEnd: rewind.moveEnd,
+        // Tab switches between restoring the turn for editing and resending it,
+        // so the choice does not have to be made before opening the picker.
+        onTab: () => {
+          rewind.toggleDisposition();
+        },
         onSubmit: () => {
-          if (onUndoSelect) {
-            undo.confirmSelection(onUndoSelect);
+          if (onRewindSelect) {
+            rewind.confirmSelection(onRewindSelect);
           }
           return 'handled';
         },
@@ -269,7 +284,7 @@ export const useModeHandlers = ({
       settingsValue,
       models,
       skills,
-      undo,
+      rewind,
       providers,
       insertSelectedPath,
       insertSelectedSetting,
@@ -280,7 +295,7 @@ export const useModeHandlers = ({
       onSubmit,
       onSlashCommandRemount,
       onSlashTabComplete,
-      onUndoSelect,
+      onRewindSelect,
     ],
   );
 };

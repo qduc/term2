@@ -1,11 +1,38 @@
 import type { AgentInputItem } from '@openai/agents';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
 
 type RemovedUserTurn = { text: string; imageCount: number; images?: UserTurn['images'] };
 type RemovedToolOutput = { index: number; callId?: string; toolName?: string; output?: unknown; itemType: string };
 
+/**
+ * A user turn the conversation can be rewound to, plus what rewinding there
+ * would discard. Rewinding to a turn removes that turn and everything after it,
+ * so the discard counts are cumulative from the turn to the end of history.
+ */
+export interface RewindTarget {
+  /** 1-based, user-facing turn number. The only turn identifier the UI shows. */
+  turnNumber: number;
+  /** Index of this turn's item in the provider-facing history array. */
+  index: number;
+  text: string;
+  imageCount: number;
+  /** User turns removed by rewinding here, including this one. */
+  discardedTurns: number;
+  /** Assistant replies removed by rewinding here. */
+  discardedReplies: number;
+  /** Distinct paths of files mutated by tool calls that rewinding would discard. */
+  discardedFiles: string[];
+}
+
 export const SHELL_CONTEXT_PREFIX = '[Previous Shell Session]';
 const LEGACY_MODE_NOTICE_PREFIX = '[Mode Notice] ';
+
+/**
+ * Tools whose calls mutate files on disk. Rewinding does not revert these edits,
+ * so the picker names them to show what the conversation will stop accounting for.
+ */
+const FILE_MUTATING_TOOLS = new Set([TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE, TOOL_NAME_CREATE_FILE]);
 
 /**
  * ConversationStore maintains the live provider-facing transcript projection.
@@ -284,6 +311,81 @@ export class ConversationStore {
       turns.push({ index: i, text, imageCount });
     }
     return turns;
+  }
+
+  /**
+   * Returns every genuine user turn the conversation can be rewound to, each
+   * annotated with what rewinding there would discard. Turn numbers are 1-based
+   * and are the only turn identifier exposed to the UI or to `/rewind N`.
+   */
+  listRewindTargets(): RewindTarget[] {
+    const turns = this.listUserTurns();
+
+    return turns.map((turn, position) => {
+      let discardedReplies = 0;
+      const discardedFiles: string[] = [];
+
+      for (let i = turn.index; i < this.#history.length; i++) {
+        const item: any = this.#history[i];
+        const raw = item?.rawItem ?? item;
+
+        if (raw?.role === 'assistant') {
+          discardedReplies++;
+          continue;
+        }
+
+        for (const path of ConversationStore.#extractMutatedPaths(raw)) {
+          if (!discardedFiles.includes(path)) {
+            discardedFiles.push(path);
+          }
+        }
+      }
+
+      return {
+        turnNumber: position + 1,
+        index: turn.index,
+        text: turn.text,
+        imageCount: turn.imageCount,
+        discardedTurns: turns.length - position,
+        discardedReplies,
+        discardedFiles,
+      };
+    });
+  }
+
+  /**
+   * Pulls file paths out of a mutating tool call. Arguments arrive as a JSON
+   * string from most providers and as an object from some, and apply_patch nests
+   * one path per operation, so all three shapes are handled. Malformed arguments
+   * yield no paths rather than throwing — a preview must never break a rewind.
+   */
+  static #extractMutatedPaths(raw: any): string[] {
+    if (raw?.type !== 'function_call') return [];
+    const name = raw?.name;
+    if (typeof name !== 'string' || !FILE_MUTATING_TOOLS.has(name)) return [];
+
+    let args: any = raw?.arguments ?? raw?.args;
+    if (typeof args === 'string') {
+      try {
+        args = JSON.parse(args);
+      } catch {
+        return [];
+      }
+    }
+    if (!args || typeof args !== 'object') return [];
+
+    const paths: string[] = [];
+    if (typeof args.path === 'string' && args.path) {
+      paths.push(args.path);
+    }
+    if (Array.isArray(args.operations)) {
+      for (const operation of args.operations) {
+        if (operation && typeof operation.path === 'string' && operation.path) {
+          paths.push(operation.path);
+        }
+      }
+    }
+    return paths;
   }
 
   /**

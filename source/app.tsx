@@ -28,7 +28,9 @@ import { useAppKeyboardShortcuts } from './hooks/use-app-keyboard-shortcuts.js';
 import { hasUserTurnContent, type UserTurn } from './types/user-turn.js';
 import type { Message } from './types/message.js';
 import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumulator } from './utils/ai/token-usage.js';
-import type { UndoItem } from './hooks/use-undo-selection.js';
+import type { RewindItem } from './hooks/use-rewind-selection.js';
+import type { RewindDisposition } from './commands/rewind-command.js';
+import { buildRewindItems } from './utils/conversation/rewind-items.js';
 import { resolveSlashCommand } from './slash-commands.js';
 import type { SkillsService, SkillInfo } from './services/skills/skills-service.js';
 import { buildTerminalTitleLabel, setTerminalTitle } from './utils/output/terminal-title.js';
@@ -95,7 +97,7 @@ const App: FC<AppProps> = ({
   const { stdout } = useStdout();
   const { setInput, replaceInput, setMode, setTriggerIndex, setImages, setInputAndCursor } = useInputActions();
   const { input, mode, images } = useInputState();
-  const undoMenuRef = useRef<{ open: (items: UndoItem[]) => void } | null>(null);
+  const rewindMenuRef = useRef<{ open: (items: RewindItem[], disposition: RewindDisposition) => void } | null>(null);
   const providersMenuRef = useRef<{ open: () => void } | null>(null);
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
@@ -187,10 +189,10 @@ const App: FC<AppProps> = ({
     onTypeAnswer,
     clearConversation,
     stopProcessing,
-    undoLastUserMessage,
+    rewindToTurn,
+    countRewindableTurns,
     retryLastToolOutput,
     getUserMessages,
-    undoToUserMessage,
     setModel,
     setReasoningEffort,
     addSystemMessage,
@@ -323,6 +325,25 @@ const App: FC<AppProps> = ({
     pendingSkillRef.current = skill;
   }, []);
 
+  /**
+   * Put a rewound turn back where the user can edit it. Images ride along the
+   * same way history recall restores them, so rewinding a multimodal turn does
+   * not silently drop its attachments.
+   */
+  const restoreTurnToInput = useCallback(
+    (turn: { text: string; images?: UserTurn['images'] }) => {
+      replaceInput(turn.text);
+      setImages(turn.images ?? []);
+    },
+    [replaceInput, setImages],
+  );
+
+  /** Rewind candidates numbered as `rewindToTurn` resolves them, with discard costs. */
+  const openRewindPickerItems = useCallback(
+    () => buildRewindItems(getUserMessages(), conversationService.listRewindTargets()),
+    [getUserMessages, conversationService],
+  );
+
   const { slashCommands, cycleAppModes } = useAppCommands({
     settingsService,
     addSystemMessage,
@@ -333,18 +354,18 @@ const App: FC<AppProps> = ({
     exit: exitWithUsage,
     messages,
     setModel,
-    undoLastUserMessage,
+    rewindToTurn,
+    countRewindableTurns,
+    restoreTurnToInput,
     retryLastToolOutput,
-    onUndo: redrawMessageList,
-    openUndoMenu: () => {
-      const userMessages = getUserMessages().map((m) => ({ uiIndex: m.uiIndex, text: m.text }));
-      if (userMessages.length === 0) {
-        addSystemMessage('Nothing to undo.');
+    onRewind: redrawMessageList,
+    openRewindMenu: (disposition: RewindDisposition) => {
+      const items = openRewindPickerItems();
+      if (items.length === 0) {
+        addSystemMessage('Nothing to rewind.');
         return;
       }
-      if (undoMenuRef.current) {
-        undoMenuRef.current.open(userMessages);
-      }
+      rewindMenuRef.current?.open(items, disposition);
     },
     openProvidersMenu: () => {
       if (providersMenuRef.current) {
@@ -353,20 +374,23 @@ const App: FC<AppProps> = ({
     },
     onHandoff: handoff.startHandoff,
     sendUserMessage,
-    listUserTurns: () => conversationService.listUserTurns(),
     skillsService: skillsService ?? ({ getAvailableSkills: () => [] } as unknown as SkillsService),
     onSkillSelected: handleSkillSelected,
   });
 
-  const handleUndoSelect = useCallback(
-    (item: UndoItem) => {
-      const text = undoToUserMessage(item.uiIndex);
-      if (text !== null) {
-        redrawMessageList();
-        replaceInput(text);
+  const handleRewindSelect = useCallback(
+    (item: RewindItem, disposition: RewindDisposition) => {
+      const rewound = rewindToTurn(item.turnNumber);
+      if (!rewound) return;
+
+      redrawMessageList();
+      if (disposition === 'resend') {
+        void sendUserMessage({ text: rewound.text, ...(rewound.images?.length ? { images: rewound.images } : {}) });
+        return;
       }
+      restoreTurnToInput(rewound);
     },
-    [undoToUserMessage, redrawMessageList, replaceInput],
+    [rewindToTurn, redrawMessageList, restoreTurnToInput, sendUserMessage],
   );
 
   const handleApprove = useCallback(
@@ -573,8 +597,8 @@ const App: FC<AppProps> = ({
             sshInfo={sshInfo}
             lastCodexRateLimit={lastCodexRateLimit}
             staticCommitBlocker={staticCommitBlocker}
-            undoMenuRef={undoMenuRef}
-            onUndoSelect={handleUndoSelect}
+            rewindMenuRef={rewindMenuRef}
+            onRewindSelect={handleRewindSelect}
             providersMenuRef={providersMenuRef}
             onSettingChange={handleSettingChange}
             onSystemMessage={addSystemMessage}
@@ -594,15 +618,13 @@ const App: FC<AppProps> = ({
             onSurgeApprove={pendingGuards.handleSurgeApprove}
             onSurgeDecline={pendingGuards.handleSurgeDecline}
             onSlashTabComplete={(command) => {
-              if (command.name === 'undo') {
-                const userMessages = getUserMessages().map((m) => ({ uiIndex: m.uiIndex, text: m.text }));
-                if (userMessages.length === 0) {
-                  addSystemMessage('Nothing to undo.');
+              if (command.name === 'rewind' || command.name === 'undo' || command.name === 'retry') {
+                const items = openRewindPickerItems();
+                if (items.length === 0) {
+                  addSystemMessage('Nothing to rewind.');
                   return true;
                 }
-                if (undoMenuRef.current) {
-                  undoMenuRef.current.open(userMessages);
-                }
+                rewindMenuRef.current?.open(items, command.name === 'retry' ? 'resend' : 'edit');
                 return true;
               }
               return false;

@@ -6,8 +6,8 @@ import { useModeHelpers, createModeToggleCommand } from '../commands/mode-comman
 import { createCopySlashCommand } from '../commands/copy-command.js';
 import { createUsageSlashCommand } from '../commands/usage-command.js';
 import { createClearSlashCommand } from '../commands/clear-command.js';
-import { createUndoSlashCommand } from '../commands/undo-command.js';
-import { createRetrySlashCommand } from '../commands/retry-command.js';
+import { createRewindSlashCommand, type RewindDisposition } from '../commands/rewind-command.js';
+import { createRetryToolSlashCommand } from '../commands/retry-tool-command.js';
 import { createQuitSlashCommand } from '../commands/quit-command.js';
 import { createModelSlashCommand } from '../commands/model-command.js';
 import { createAutoApproveSlashCommand } from '../commands/auto-approve-command.js';
@@ -29,14 +29,15 @@ interface UseAppCommandsProps {
   exit: () => void;
   messages: Message[];
   setModel: (model: string) => void;
-  undoLastUserMessage: () => { text: string; images?: UserTurn['images'] } | null;
-  openUndoMenu: () => void;
+  rewindToTurn: (turnNumber: number) => { text: string; images?: UserTurn['images'] } | null;
+  countRewindableTurns: () => number;
+  restoreTurnToInput: (turn: { text: string; images?: UserTurn['images'] }) => void;
+  openRewindMenu: (disposition: RewindDisposition) => void;
   openProvidersMenu: () => void;
-  onUndo?: () => void;
+  onRewind?: () => void;
   onHandoff?: (capturedText: string) => void;
   sendUserMessage: (input: string | UserTurn) => Promise<void>;
   retryLastToolOutput: () => Promise<boolean>;
-  listUserTurns: () => { index: number; text: string; imageCount: number }[];
   skillsService: SkillsService;
   onSkillSelected: (skill: SkillInfo) => void;
 }
@@ -45,8 +46,8 @@ interface UseAppCommandsProps {
 export { getLastFinalAssistantText } from '../utils/conversation/message-utils.js';
 export { createCopySlashCommand } from '../commands/copy-command.js';
 export { createUsageSlashCommand } from '../commands/usage-command.js';
-export { createUndoSlashCommand } from '../commands/undo-command.js';
-export { createRetrySlashCommand } from '../commands/retry-command.js';
+export { createRewindSlashCommand } from '../commands/rewind-command.js';
+export { createRetryToolSlashCommand } from '../commands/retry-tool-command.js';
 
 export const useAppCommands = ({
   settingsService,
@@ -57,14 +58,15 @@ export const useAppCommands = ({
   getSessionUsage,
   exit,
   messages,
-  undoLastUserMessage,
-  openUndoMenu,
+  rewindToTurn,
+  countRewindableTurns,
+  restoreTurnToInput,
+  openRewindMenu,
   openProvidersMenu,
-  onUndo,
+  onRewind,
   onHandoff,
   sendUserMessage,
   retryLastToolOutput,
-  listUserTurns,
   skillsService,
   onSkillSelected,
 }: UseAppCommandsProps) => {
@@ -74,22 +76,47 @@ export const useAppCommands = ({
     addSystemMessage,
   });
 
-  const slashCommands = useMemo<SlashCommand[]>(
-    () => [
+  const slashCommands = useMemo<SlashCommand[]>(() => {
+    // Shared by /rewind and its two aliases so they cannot drift apart.
+    const rewindDeps = {
+      rewindToTurn,
+      countRewindableTurns,
+      restoreTurnToInput,
+      sendUserMessage,
+      addSystemMessage,
+      openRewindMenu,
+      onRewind,
+    };
+
+    return [
       createModelSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
       createEffortSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
       createClearSlashCommand(clearConversation, addSystemMessage),
       createCopySlashCommand({ messages, addSystemMessage }),
       createUsageSlashCommand(addSystemMessage, getSessionUsage),
-      createUndoSlashCommand({ undoLastUserMessage, replaceInput, addSystemMessage, openUndoMenu, onUndo }),
-      createRetrySlashCommand({
-        undoLastUserMessage,
-        sendUserMessage,
-        retryLastToolOutput,
-        addSystemMessage,
-        listUserTurns,
-        onUndo,
+      createRewindSlashCommand({
+        name: 'rewind',
+        defaultDisposition: 'edit',
+        bareTarget: 'picker',
+        ...rewindDeps,
       }),
+      // Aliases keep existing muscle memory working: bare /undo opened a picker
+      // and bare /retry acted on the last turn immediately, so each keeps that.
+      createRewindSlashCommand({
+        name: 'undo',
+        aliasOf: 'rewind',
+        defaultDisposition: 'edit',
+        bareTarget: 'picker',
+        ...rewindDeps,
+      }),
+      createRewindSlashCommand({
+        name: 'retry',
+        aliasOf: 'rewind',
+        defaultDisposition: 'resend',
+        bareTarget: 'last',
+        ...rewindDeps,
+      }),
+      createRetryToolSlashCommand({ retryLastToolOutput, addSystemMessage }),
       createModeToggleCommand(
         'app.liteMode',
         'lite',
@@ -150,30 +177,30 @@ export const useAppCommands = ({
       },
       createSkillsSlashCommand({ skillsService, onSkillSelected, addSystemMessage, replaceInput }),
       createQuitSlashCommand(exit),
-    ],
-    [
-      addSystemMessage,
-      applyRuntimeSetting,
-      clearConversation,
-      disableOtherModes,
-      exit,
-      getSessionUsage,
-      messages,
-      replaceInput,
-      settingsService,
-      undoLastUserMessage,
-      openUndoMenu,
-      openProvidersMenu,
-      onUndo,
-      onHandoff,
-      sendUserMessage,
-      retryLastToolOutput,
-      listUserTurns,
-      togglePlanMode,
-      skillsService,
-      onSkillSelected,
-    ],
-  );
+    ];
+  }, [
+    addSystemMessage,
+    applyRuntimeSetting,
+    clearConversation,
+    disableOtherModes,
+    exit,
+    getSessionUsage,
+    messages,
+    replaceInput,
+    settingsService,
+    rewindToTurn,
+    countRewindableTurns,
+    restoreTurnToInput,
+    openRewindMenu,
+    openProvidersMenu,
+    onRewind,
+    onHandoff,
+    sendUserMessage,
+    retryLastToolOutput,
+    togglePlanMode,
+    skillsService,
+    onSkillSelected,
+  ]);
 
   return {
     slashCommands,

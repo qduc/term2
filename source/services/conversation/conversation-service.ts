@@ -1,6 +1,7 @@
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ConversationTerminal, ReasoningEffortSetting } from '../../contracts/conversation.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
+import type { RewindTarget } from './conversation-store.js';
 import type { LogEvent, StateSnapshot } from '../logging/conversation-log-events.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
@@ -151,6 +152,14 @@ export class ConversationService {
 
   listUserTurns(): { index: number; text: string; imageCount: number }[] {
     return this.#runtime.state.listUserTurns();
+  }
+
+  /**
+   * Every turn the conversation can be rewound to, annotated with what
+   * rewinding there would discard. Drives the `/rewind` picker's cost preview.
+   */
+  listRewindTargets(): RewindTarget[] {
+    return this.#runtime.state.listRewindTargets();
   }
 
   undoNUserTurns(n: number): { text: string; images?: UserTurn['images'] } | null {

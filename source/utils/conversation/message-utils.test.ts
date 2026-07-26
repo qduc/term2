@@ -4,6 +4,7 @@ import type { Message } from '../../types/message.js';
 import {
   countUndoableUserTurnsFrom,
   findLastUndoableUserMessage,
+  listUndoableUserMessageIndices,
   getLastFinalAssistantText,
   getUserMessageEntries,
   mergeCommandMessages,
@@ -239,4 +240,40 @@ it('getUserMessageEntries excludes consumedForAbort messages', () => {
 
 it('getUserMessageEntries returns empty array for no user messages', () => {
   expect(getUserMessageEntries([botMsg('b1', 'hi')])).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// listUndoableUserMessageIndices
+// ---------------------------------------------------------------------------
+
+it('listUndoableUserMessageIndices returns empty array for empty list', () => {
+  expect(listUndoableUserMessageIndices([])).toEqual([]);
+});
+
+it('listUndoableUserMessageIndices returns indices in conversation order', () => {
+  const messages: Message[] = [userMsg('u1', 'first'), botMsg('b1', 'reply'), userMsg('u2', 'second')];
+  expect(listUndoableUserMessageIndices(messages)).toEqual([0, 2]);
+});
+
+it('listUndoableUserMessageIndices omits consumedForAbort messages', () => {
+  const messages: Message[] = [
+    userMsg('u1', 'first'),
+    { id: 'u2', sender: 'user', text: 'consumed', consumedForAbort: true } as Message,
+    userMsg('u3', 'third'),
+  ];
+  expect(listUndoableUserMessageIndices(messages)).toEqual([0, 2]);
+});
+
+it('listUndoableUserMessageIndices positions map 1-based turn numbers to UI indices', () => {
+  const messages: Message[] = [
+    botMsg('b0', 'banner'),
+    userMsg('u1', 'first'),
+    botMsg('b1', 'reply'),
+    userMsg('u2', 'second'),
+  ];
+  const indices = listUndoableUserMessageIndices(messages);
+
+  // Turn 1 is the first genuine user message, not the first message.
+  expect(indices[0]).toBe(1);
+  expect(indices[1]).toBe(3);
 });

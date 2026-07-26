@@ -5,8 +5,6 @@ import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import type { Message } from './use-conversation.js';
 import { createCopySlashCommand } from '../commands/copy-command.js';
-import { createRetrySlashCommand } from '../commands/retry-command.js';
-import { createUndoSlashCommand } from '../commands/undo-command.js';
 import { createUsageSlashCommand } from '../commands/usage-command.js';
 import { useAppCommands } from './use-app-commands.js';
 import { getLastFinalAssistantText } from '../utils/conversation/message-utils.js';
@@ -116,211 +114,6 @@ it.sequential('createCopySlashCommand reports clipboard failures asynchronously'
   expect(systemMessages).toEqual(['Failed to copy to clipboard: clipboard unavailable']);
 });
 
-it.sequential('createUndoSlashCommand opens undo menu when no args', () => {
-  let menuOpened = false;
-  const command = createUndoSlashCommand({
-    undoLastUserMessage: () => ({ text: 'Previous message' }),
-    replaceInput: () => {},
-    addSystemMessage: () => {},
-    openUndoMenu: () => {
-      menuOpened = true;
-    },
-  });
-
-  const result = command.action();
-  expect(result).toBe(true);
-  expect(menuOpened).toBe(true);
-});
-
-it.sequential('createUndoSlashCommand with "last" arg restores last user message to input and returns false', () => {
-  let input = '';
-  let undoRedraws = 0;
-  const command = createUndoSlashCommand({
-    undoLastUserMessage: () => ({ text: 'Previous message' }),
-    replaceInput: (value) => {
-      input = value;
-    },
-    addSystemMessage: () => {},
-    openUndoMenu: () => {},
-    onUndo: () => {
-      undoRedraws++;
-    },
-  });
-
-  expect(command.name).toBe('undo');
-  const result = command.action('last');
-  expect(result).toBe(false);
-  expect(input).toBe('Previous message');
-  expect(undoRedraws).toBe(1);
-});
-
-it.sequential(
-  'createUndoSlashCommand shows system message via undoLastUserMessage when nothing to undo with "last" arg',
-  () => {
-    const systemMessages: string[] = [];
-    let undoRedraws = 0;
-    const command = createUndoSlashCommand({
-      undoLastUserMessage: () => null,
-      replaceInput: () => {},
-      addSystemMessage: (text) => systemMessages.push(text),
-      openUndoMenu: () => {},
-      onUndo: () => {
-        undoRedraws++;
-      },
-    });
-
-    const result = command.action('last');
-    expect(result).toBe(true);
-    expect(systemMessages).toEqual(['Nothing to undo.']);
-    expect(undoRedraws).toBe(0);
-  },
-);
-
-it.sequential('createRetrySlashCommand undoes and re-sends the last user message', async () => {
-  const systemMessages: string[] = [];
-  let undoCalled = false;
-  let sentText: string | null = null;
-  let undoRedraws = 0;
-
-  const command = createRetrySlashCommand({
-    undoLastUserMessage: () => {
-      undoCalled = true;
-      return { text: 'hello' };
-    },
-    sendUserMessage: async (input) => {
-      sentText = typeof input === 'string' ? input : input.text;
-    },
-    retryLastToolOutput: async () => true,
-    addSystemMessage: (text) => systemMessages.push(text),
-    listUserTurns: () => [{ index: 0, text: 'hello', imageCount: 0 }],
-    onUndo: () => {
-      undoRedraws++;
-    },
-  });
-
-  expect(command.name).toBe('retry');
-  const result = command.action();
-  expect(result).toBe(true);
-  expect(undoCalled).toBe(true);
-  expect(sentText).not.toBe(null);
-  expect(sentText!).toBe('hello');
-  expect(undoRedraws).toBe(1);
-  expect(systemMessages).toEqual([]);
-});
-
-it.sequential('createRetrySlashCommand retries the last user message when explicitly asked', async () => {
-  const systemMessages: string[] = [];
-  let undoCalled = false;
-  let sentText: string | null = null;
-
-  const command = createRetrySlashCommand({
-    undoLastUserMessage: () => {
-      undoCalled = true;
-      return { text: 'hello' };
-    },
-    sendUserMessage: async (input) => {
-      sentText = typeof input === 'string' ? input : input.text;
-    },
-    retryLastToolOutput: async () => true,
-    addSystemMessage: (text) => systemMessages.push(text),
-    listUserTurns: () => [{ index: 0, text: 'hello', imageCount: 0 }],
-  });
-
-  expect(command.action('user')).toBe(true);
-  expect(undoCalled).toBe(true);
-  expect(sentText).toBe('hello');
-  expect(systemMessages).toEqual([]);
-});
-
-it.sequential('createRetrySlashCommand retries the last tool output', async () => {
-  const systemMessages: string[] = [];
-  let retryCalled = false;
-
-  const command = createRetrySlashCommand({
-    undoLastUserMessage: () => null,
-    sendUserMessage: async () => {},
-    retryLastToolOutput: async () => {
-      retryCalled = true;
-      return true;
-    },
-    addSystemMessage: (text) => systemMessages.push(text),
-    listUserTurns: () => [],
-  });
-
-  expect(command.action('tool')).toBe(true);
-  await flushMicrotasks();
-  expect(retryCalled).toBe(true);
-  expect(systemMessages).toEqual([]);
-});
-
-it.sequential('createRetrySlashCommand shows system message when no tool output can be retried', async () => {
-  const systemMessages: string[] = [];
-
-  const command = createRetrySlashCommand({
-    undoLastUserMessage: () => null,
-    sendUserMessage: async () => {},
-    retryLastToolOutput: async () => false,
-    addSystemMessage: (text) => systemMessages.push(text),
-    listUserTurns: () => [],
-  });
-
-  expect(command.action('tool')).toBe(true);
-  await flushMicrotasks();
-  expect(systemMessages).toEqual(['Nothing to retry.']);
-});
-
-it.sequential('createRetrySlashCommand shows system message when nothing to retry', () => {
-  const systemMessages: string[] = [];
-  let undoCalled = false;
-
-  const command = createRetrySlashCommand({
-    undoLastUserMessage: () => {
-      undoCalled = true;
-      return null;
-    },
-    sendUserMessage: async () => {},
-    retryLastToolOutput: async () => true,
-    addSystemMessage: (text) => systemMessages.push(text),
-    listUserTurns: () => [],
-  });
-
-  const result = command.action();
-  expect(result).toBe(true);
-  expect(undoCalled).toBe(true);
-  expect(systemMessages).toEqual(['Nothing to retry.']);
-});
-
-it.sequential('createRetrySlashCommand retries when previous turn included images', async () => {
-  const systemMessages: string[] = [];
-  let undoCalled = false;
-  let sentInput: any = null;
-
-  const command = createRetrySlashCommand({
-    undoLastUserMessage: () => {
-      undoCalled = true;
-      return {
-        text: 'hello',
-        images: [{ id: 'img-1', data: 'xyz', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
-      };
-    },
-    sendUserMessage: async (input) => {
-      sentInput = input;
-    },
-    retryLastToolOutput: async () => true,
-    addSystemMessage: (text) => systemMessages.push(text),
-    listUserTurns: () => [{ index: 0, text: 'hello', imageCount: 1 }],
-  });
-
-  const result = command.action();
-  expect(result).toBe(true);
-  expect(undoCalled).toBe(true);
-  expect(sentInput).toEqual({
-    text: 'hello',
-    images: [{ id: 'img-1', data: 'xyz', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
-  });
-  expect(systemMessages).toEqual([]);
-});
-
 const TestHookWrapper = ({
   settings,
   onHookResult,
@@ -349,12 +142,13 @@ const TestHookWrapper = ({
     exit: () => {},
     messages,
     setModel: () => {},
-    undoLastUserMessage: () => null,
-    openUndoMenu: () => {},
+    rewindToTurn: () => null,
+    countRewindableTurns: () => 0,
+    restoreTurnToInput: () => {},
+    openRewindMenu: () => {},
     openProvidersMenu: () => {},
     sendUserMessage: async () => {},
     retryLastToolOutput: async () => false,
-    listUserTurns: () => [],
     skillsService: { getAvailableSkills: () => [] } as any,
     onSkillSelected: () => {},
   });
@@ -362,6 +156,44 @@ const TestHookWrapper = ({
   onHookResult(hookResult);
   return null;
 };
+
+it.sequential('useAppCommands registers /rewind with its aliases and the separate tool retry', async () => {
+  const settings = new Map<string, any>();
+  let hookResult: any;
+
+  await renderInAct(
+    React.createElement(TestHookWrapper, {
+      settings,
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+
+  const names = hookResult.slashCommands.map((command: any) => command.name);
+  expect(names).toContain('rewind');
+  expect(names).toContain('undo');
+  expect(names).toContain('retry');
+  expect(names).toContain('retry-tool');
+});
+
+it.sequential('useAppCommands gives /retry a resend default and /undo an edit default', async () => {
+  const settings = new Map<string, any>();
+  let hookResult: any;
+
+  await renderInAct(
+    React.createElement(TestHookWrapper, {
+      settings,
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+
+  const find = (name: string) => hookResult.slashCommands.find((command: any) => command.name === name);
+  expect(find('retry').description).toContain('resend');
+  expect(find('undo').description).toContain('input box');
+});
 
 it.sequential('useAppCommands togglePlanMode toggles plan mode', async () => {
   const settings = new Map<string, any>();
@@ -647,15 +479,16 @@ it.sequential(
         exit: () => {},
         messages,
         setModel: () => {},
-        undoLastUserMessage: () => null,
-        openUndoMenu: () => {},
+        rewindToTurn: () => null,
+        countRewindableTurns: () => 0,
+        restoreTurnToInput: () => {},
+        openRewindMenu: () => {},
         openProvidersMenu: () => {},
         onHandoff: (text) => {
           handoffText = text;
         },
         sendUserMessage: async () => {},
         retryLastToolOutput: async () => false,
-        listUserTurns: () => [],
         skillsService: { getAvailableSkills: () => [] } as any,
         onSkillSelected: () => {},
       });

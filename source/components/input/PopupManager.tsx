@@ -5,7 +5,7 @@ import PathSelectionMenu from '../menu/PathSelectionMenu.js';
 import SettingsSelectionMenu from '../menu/SettingsSelectionMenu.js';
 import SettingsValueSelectionMenu from '../menu/SettingsValueSelectionMenu.js';
 import ModelSelectionMenu from '../menu/ModelSelectionMenu.js';
-import UndoSelectionMenu from '../menu/UndoSelectionMenu.js';
+import RewindMenu from '../menu/RewindMenu.js';
 import ProviderSelectionMenu from '../menu/ProviderSelectionMenu.js';
 import SkillSelectionMenu from '../menu/SkillSelectionMenu.js';
 import type { SkillInfo } from '../../services/skills/skills-service.js';
@@ -14,7 +14,7 @@ import type { SettingCompletionItem, SettingsCategory } from '../../hooks/use-se
 import type { SettingValueSuggestion } from '../../utils/value-suggestions.js';
 import type { ModelInfo } from '../../services/model-service.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
-import type { UndoItem } from '../../hooks/use-undo-selection.js';
+import type { RewindItem } from '../../hooks/use-rewind-selection.js';
 import type { ProviderSelectionMenuItem } from '../../hooks/use-provider-selection.js';
 
 interface PopupManagerProps {
@@ -66,9 +66,10 @@ interface PopupManagerProps {
     isNumericSettings?: boolean;
     isFreeFormString?: boolean;
   };
-  undo: {
+  rewind: {
     isOpen: boolean;
-    items: UndoItem[];
+    items: RewindItem[];
+    disposition: import('../../commands/rewind-command.js').RewindDisposition;
     selectedIndex: number;
     scrollOffset?: number;
   };
@@ -99,7 +100,7 @@ export const PopupManager: FC<PopupManagerProps> = ({
   models,
   settings,
   settingsValue,
-  undo,
+  rewind,
   skills,
   providers,
   settingsService,
@@ -159,8 +160,13 @@ export const PopupManager: FC<PopupManagerProps> = ({
           isFreeFormString={settingsValue.isFreeFormString}
         />
       )}
-      {undo.isOpen && (
-        <UndoSelectionMenu items={undo.items} selectedIndex={undo.selectedIndex} scrollOffset={undo.scrollOffset} />
+      {rewind.isOpen && (
+        <RewindMenu
+          items={rewind.items}
+          selectedIndex={rewind.selectedIndex}
+          scrollOffset={rewind.scrollOffset}
+          disposition={rewind.disposition}
+        />
       )}
       {skills?.isOpen && (
         <SkillSelectionMenu

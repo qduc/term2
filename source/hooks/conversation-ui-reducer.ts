@@ -5,7 +5,7 @@
  * flags, processing state, streaming indicators) into a single state object
  * with domain-meaningful actions. This eliminates the duplicated 10-line
  * reset blocks that were copy-pasted across clearConversation, stopProcessing,
- * undoLastUserMessage, undoToUserMessage, and error catch blocks.
+ * rewindToTurn and error catch blocks.
  *
  * Messages, lastUsage, and lastCodexRateLimit stay as separate state because
  * they have different update patterns (e.g. lastUsage is set via callbacks
@@ -145,7 +145,7 @@ export type ConversationUIAction =
   | { type: 'queue/remove_last_pending' }
 
   // --- Compound resets ---
-  /** Reset transient approval/processing/indicator state (used by stop, undo, etc.). */
+  /** Reset transient approval/processing/indicator state (used by stop, rewind, etc.). */
   | { type: 'reset_transient' }
   /** Full reset including usage (used by clearConversation). */
   | { type: 'reset_all' };

@@ -5,7 +5,7 @@ import type { usePathCompletion } from '../../hooks/use-path-completion.js';
 import type { useSettingsCompletion } from '../../hooks/use-settings-completion.js';
 import type { useSettingsValueCompletion } from '../../hooks/use-settings-value-completion.js';
 import type { useModelSelection } from '../../hooks/use-model-selection.js';
-import type { useUndoSelection } from '../../hooks/use-undo-selection.js';
+import type { useRewindSelection } from '../../hooks/use-rewind-selection.js';
 import type { useProviderSelection } from '../../hooks/use-provider-selection.js';
 import type { useSkillSelection } from '../../hooks/use-skill-selection.js';
 
@@ -18,7 +18,7 @@ type Sources = {
   settingsValue: ReturnType<typeof useSettingsValueCompletion>;
   models: ReturnType<typeof useModelSelection>;
   skills: ReturnType<typeof useSkillSelection>;
-  undo: ReturnType<typeof useUndoSelection>;
+  rewind: ReturnType<typeof useRewindSelection>;
   providers: ReturnType<typeof useProviderSelection>;
 };
 
@@ -29,7 +29,7 @@ export const toPopupProps = ({
   settingsValue,
   models,
   skills,
-  undo,
+  rewind,
   providers,
 }: Sources): Omit<PopupProps, 'settingsService'> => ({
   slash: {
@@ -78,11 +78,12 @@ export const toPopupProps = ({
     query: settingsValue.query,
     isNumericSettings: settingsValue.isNumericSettings,
   },
-  undo: {
-    isOpen: undo.isOpen,
-    items: undo.items,
-    selectedIndex: undo.selectedIndex,
-    scrollOffset: undo.scrollOffset,
+  rewind: {
+    isOpen: rewind.isOpen,
+    items: rewind.items,
+    selectedIndex: rewind.selectedIndex,
+    scrollOffset: rewind.scrollOffset,
+    disposition: rewind.disposition,
   },
   skills: {
     isOpen: skills.isOpen,

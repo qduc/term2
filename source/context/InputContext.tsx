@@ -9,7 +9,7 @@ export type InputMode =
   | 'settings_value_completion'
   | 'model_selection'
   | 'skill_selection'
-  | 'undo_selection'
+  | 'rewind_selection'
   | 'provider_selection';
 
 interface InputState {

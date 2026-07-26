@@ -78,8 +78,8 @@ export function executeSlashCommandSelection({
     const nextValue = `/${command.name} `;
     setInput(nextValue);
     setCursorOverride(nextValue.length);
-    // Close slash menu first so mode-changing actions (e.g. /undo opening
-    // undo_selection) can take effect; later setMode calls win.
+    // Close slash menu first so mode-changing actions (e.g. /rewind opening
+    // rewind_selection) can take effect; later setMode calls win.
     close();
     const shouldClose = command.action();
     if (shouldClose !== false) {
@@ -90,7 +90,7 @@ export function executeSlashCommandSelection({
   }
 
   const args = extractCommandArgs(filter, command.name);
-  // Close slash menu first. Mode-changing actions (e.g. /undo opening undo_selection)
+  // Close slash menu first. Mode-changing actions (e.g. /rewind opening rewind_selection)
   // can then take effect; later setMode calls win, and we avoid post-action override.
   close();
   const shouldClose = command.action(args || undefined);

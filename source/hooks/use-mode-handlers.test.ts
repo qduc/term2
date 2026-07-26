@@ -64,13 +64,15 @@ const TestComponent = ({
       canSwitchProvider: false,
       toggleProvider: () => {},
     }) as any,
-    undo: {
+    rewind: {
       moveUp: () => {},
       moveDown: () => {},
       moveHome: () => {},
       moveEnd: () => {},
       pageUp: () => {},
       pageDown: () => {},
+      disposition: 'edit',
+      toggleDisposition: () => {},
       confirmSelection: () => {},
     } as any,
     providers,

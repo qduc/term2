@@ -121,9 +121,15 @@ export class ConversationOrchestrator {
   readonly #directlyAppendedMessageIds = new Set<string>();
   readonly #displayedBackgroundNotificationMessageIds = new Set<string>();
   /**
-   * Turns this orchestrator currently owns. `ui.onTurnStart` cannot be counted
-   * instead: the queue observer emits it unbalanced when a queued submission is
-   * popped after the preceding turn already ended.
+   * Deferred queue submissions register an activator here. The orchestrator does
+   * not count them as active turns until the queue actually starts executing
+   * them — remove/discard/reject must not require a matching `#endTurn`.
+   */
+  readonly #deferredTurnActivators = new Map<string, () => void>();
+  /**
+   * Turns this orchestrator currently owns. Count only executions that have
+   * actually started (direct submit or queue-start activation), never merely
+   * queued awaits.
    */
   #activeTurns = 0;
   /** True while {@link stopProcessing} is tearing the conversation down. */
@@ -146,11 +152,16 @@ export class ConversationOrchestrator {
         if (execution.suppressUserMessageDisplay) {
           return;
         }
+        // Deferred submissions activate their orchestrator turn here — the only
+        // moment a queued await becomes an owned execution.
+        const activateDeferred = this.#deferredTurnActivators.get(execution.requestId);
+        if (activateDeferred) {
+          activateDeferred();
+        }
         const wasAlreadyStarted = this.moveQueuedMessageIntoList(execution.requestId, execution.input);
-        if (!wasAlreadyStarted) {
-          // A queued submission's original turn-start may have been balanced
-          // by the preceding turn completing. Reassert processing when this
-          // turn actually becomes the queue head.
+        if (!wasAlreadyStarted && !activateDeferred) {
+          // Recovered or test-only starts without a deferred activator still need
+          // the processing indicator when the message enters the transcript.
           config.ui.onTurnStart();
         }
       });
@@ -386,9 +397,10 @@ export class ConversationOrchestrator {
       this.config.conversationService.isQueueActive?.() ??
       false;
     if (queueOwnsSubmission) {
-      // A turn is already in flight. Show the message above the input box
-      // until the queue actually starts processing it; the message list will
-      // be updated when the queue pops this turn.
+      // A turn is already in flight or the queue is paused with retained work.
+      // Show the message above the input box until the queue actually starts
+      // processing it; the message list will be updated when the queue pops
+      // this turn.
       this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text);
     } else {
       // No turn is in flight — append directly. The queue observer will also
@@ -399,8 +411,22 @@ export class ConversationOrchestrator {
     }
     this.config.logWriter?.append({ type: 'user_message', message: userMessage });
 
-    const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
-      this.#beginTurn('sendUserMessage');
+    // Streaming callbacks are bound at submit time, but deferred submissions
+    // must not count as active turns until the queue starts them. Otherwise
+    // remove/discard would need a matching endTurn for work that never ran.
+    let turnActivated = !queueOwnsSubmission;
+    const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = queueOwnsSubmission
+      ? this.createTurnSession('sendUserMessage')
+      : this.#beginTurn('sendUserMessage');
+
+    if (queueOwnsSubmission) {
+      this.#deferredTurnActivators.set(userMessage.id, () => {
+        if (turnActivated) return;
+        turnActivated = true;
+        this.#activeTurns += 1;
+        this.config.ui.onTurnStart();
+      });
+    }
 
     try {
       const turnToSend = turn.skill ? injectSkillIntoTurn(turn) : turn;
@@ -422,6 +448,12 @@ export class ConversationOrchestrator {
 
       if (isAbortLikeError(error)) {
         this.config.loggingService.debug('Suppressing abort error in sendUserMessage');
+        return;
+      }
+
+      // Errors for work that never left the pending queue should not paint a bot
+      // error into the transcript; the submission simply did not run.
+      if (queueOwnsSubmission && !turnActivated) {
         return;
       }
 
@@ -456,9 +488,12 @@ export class ConversationOrchestrator {
       }
     } finally {
       this.config.loggingService.debug('sendUserMessage finally block - resetting state');
+      this.#deferredTurnActivators.delete(userMessage.id);
       reasoningUpdater.flush();
       botResponseUpdater.cancel();
-      this.#endTurn();
+      if (turnActivated) {
+        this.#endTurn();
+      }
     }
   }
 

@@ -370,6 +370,52 @@ it('settles discarded paused requests without settling retained work on cancella
   await expect(retained).rejects.toMatchObject({ name: 'AbortError' });
 });
 
+it('force-settles the active request when cancel completes even if the turn ignores abort', async () => {
+  let queueState: string | undefined;
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      // eslint-disable-next-line require-yield
+      async *start() {
+        // Never settles and ignores abort — cancel must still free the queue.
+        await new Promise(() => {});
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      abort: noop,
+    },
+    queueForeground: true,
+    activeCancelTimeoutMs: 20,
+  });
+  adapter.setQueueStateObserver((state) => {
+    queueState = state.stateKind;
+  });
+
+  const active = adapter.sendMessage('stuck');
+  const retained = adapter.sendMessage('later');
+  await new Promise((resolve) => setImmediate(resolve));
+  adapter.abort();
+
+  await expect(active).rejects.toMatchObject({ name: 'AbortError' });
+  expect(queueState).toBe('paused');
+
+  let retainedSettled = false;
+  void retained
+    .finally(() => {
+      retainedSettled = true;
+    })
+    .catch(noop);
+  await Promise.resolve();
+  expect(retainedSettled).toBe(false);
+});
+
 it('settles an enqueue rejection without retaining an adapter record', async () => {
   const adapter = new ConversationAdapter({
     sessionId: 'session-1',

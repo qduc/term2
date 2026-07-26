@@ -425,6 +425,54 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.messages.appendMessages).not.toHaveBeenCalled();
   });
 
+  it('does not begin an owned turn for deferred queue work until the queue starts it', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    let release!: (terminal: ConversationTerminal) => void;
+    const settled = new Promise<ConversationTerminal>((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(cfg.conversationService.sendMessage).mockReturnValue(settled as any);
+    const orchestrator = new ConversationOrchestrator(cfg);
+    const observer = vi.mocked(cfg.conversationService.setQueuedTurnStartObserver).mock.calls[0]?.[0] as (execution: {
+      requestId: string;
+      input: string;
+    }) => void;
+
+    const inFlight = orchestrator.sendUserMessage('deferred');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledTimes(1);
+    expect(cfg.ui.onTurnStart).not.toHaveBeenCalled();
+    expect(cfg.ui.onTurnEnd).not.toHaveBeenCalled();
+
+    const pendingId = vi.mocked(cfg.ui.onQueuedMessagePending).mock.calls[0]?.[0] as string;
+    observer({ requestId: pendingId, input: 'deferred' });
+    expect(cfg.ui.onTurnStart).toHaveBeenCalledOnce();
+    expect(cfg.messages.appendMessages).toHaveBeenCalledTimes(1);
+
+    release({ type: 'response', finalText: 'ok', commandMessages: [] });
+    await inFlight;
+    expect(cfg.ui.onTurnEnd).toHaveBeenCalledOnce();
+  });
+
+  it('does not end a turn when deferred queue work is removed before it starts', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    const abortError = Object.assign(new Error('Queued message was removed'), { name: 'AbortError' });
+    vi.mocked(cfg.conversationService.sendMessage).mockRejectedValue(abortError);
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    await orchestrator.sendUserMessage('never-started');
+
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledTimes(1);
+    expect(cfg.ui.onQueuedMessageRemoved).toHaveBeenCalledTimes(1);
+    expect(cfg.ui.onTurnStart).not.toHaveBeenCalled();
+    expect(cfg.ui.onTurnEnd).not.toHaveBeenCalled();
+    expect(cfg.messages.appendMessages).not.toHaveBeenCalled();
+  });
+
   it('appends a queued message into the list when the queue fires its start observer', async () => {
     const cfg = makeConfig();
     const orchestrator = new ConversationOrchestrator(cfg);

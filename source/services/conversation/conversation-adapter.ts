@@ -53,11 +53,19 @@ type QueuedMessageSnapshot = { readonly requestId: string; readonly recovered?: 
 
 const QUEUED_NON_TEXT_PLACEHOLDER = '[queued non-text user turn]';
 const LEGACY_QUEUED_MESSAGE_PLACEHOLDER = '\u0000queued-message';
+/** Upper bound for waiting on an active turn during cancel so the queue cannot stick in `cancelling`. */
+const ACTIVE_CANCEL_TIMEOUT_MS = 10_000;
 
 function queueCancellationError(message: string): Error {
   const error = new Error(message);
   error.name = 'AbortError';
   return error;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 export type QueueStateKind =
@@ -113,11 +121,13 @@ export class ConversationAdapter {
   #nextQueuedMessageId = 1;
   #nextActionId = 1;
   #activeTurn: Promise<void> = Promise.resolve();
+  #activeRequestId: string | null = null;
   #cancellation: Promise<void> = Promise.resolve();
   #approvalExecutionId: ExecutionId | null = null;
   #approvalActionId: ActionId | null = null;
   #queueStateObserver: QueueStateObserver | null = null;
   #queuedTurnStartObserver: QueuedTurnStartObserver | null = null;
+  readonly #activeCancelTimeoutMs: number;
 
   constructor(deps: {
     sessionId: string;
@@ -133,6 +143,8 @@ export class ConversationAdapter {
     turnFlow: TurnFlow;
     queueForeground?: boolean;
     queueCapacity?: number;
+    /** Test seam: bound how long cancel waits for a hung active turn. */
+    activeCancelTimeoutMs?: number;
     queuePersistence?: QueuePersistence<QueuedMessageSnapshot>;
   }) {
     this.#sessionId = deps.sessionId;
@@ -146,11 +158,20 @@ export class ConversationAdapter {
     this.#logs = deps.logs;
     this.#approval = deps.approval;
     this.#turnFlow = deps.turnFlow;
+    this.#activeCancelTimeoutMs = deps.activeCancelTimeoutMs ?? ACTIVE_CANCEL_TIMEOUT_MS;
     if (deps.queueForeground) {
       const driver: QueueTurnDriver<QueuedMessageSnapshot> = {
         start: (execution) => this.#startQueuedTurn(execution),
         cancel: async () => {
-          await this.#activeTurn;
+          // Prefer natural abort settlement, but never block queue cancel forever
+          // if the underlying turn ignores abort.
+          await Promise.race([
+            this.#activeTurn.then(
+              () => undefined,
+              () => undefined,
+            ),
+            delay(this.#activeCancelTimeoutMs),
+          ]);
         },
       };
       this.#queue = new QueueController({
@@ -363,8 +384,20 @@ export class ConversationAdapter {
       this.#turnFlow.abort?.();
       return;
     }
+    // Abort the live model/tool turn, then ask the controller to leave running
+    // and pause with retained work. If the active turn fails to settle on its
+    // own (a hung generator, missing abort hook, etc.), force-settle the active
+    // request so orchestrator awaits cannot stick forever. Retained queued
+    // requests stay pending — pause is not a terminal fate.
     this.#turnFlow.abort?.();
+    const activeRequestId = this.#activeRequestId;
     this.#cancellation = this.#queue.command({ kind: 'cancel' }).then(() => {
+      if (activeRequestId && this.#messagesById.has(activeRequestId)) {
+        this.#settleFailure(activeRequestId, queueCancellationError('Active turn was cancelled'));
+      }
+      if (this.#activeRequestId === activeRequestId) {
+        this.#activeRequestId = null;
+      }
       this.#notifyQueueState();
     });
   }
@@ -386,9 +419,22 @@ export class ConversationAdapter {
         });
       }
     }
-    this.#activeTurn = this.#runQueuedTurn(execution);
+    this.#activeRequestId = execution.snapshot.requestId;
+    this.#activeTurn = this.#runQueuedTurn(execution).finally(() => {
+      if (this.#activeRequestId === execution.snapshot.requestId) {
+        this.#activeRequestId = null;
+      }
+    });
   }
 
+  /**
+   * Run one foreground queue item.
+   *
+   * Failure policy: a failed active turn emits `failed` to the controller, which
+   * pauses the queue (`reason: 'failure'`) whenever retained work remains. The
+   * next item does not auto-start; the user must resume or discard. Cancellation
+   * of the active turn is the same shape with `reason: 'manual'`.
+   */
   async #runQueuedTurn(execution: ActiveExecution<QueuedMessageSnapshot>): Promise<void> {
     const message = this.#messagesById.get(execution.snapshot.requestId);
     try {
@@ -417,6 +463,7 @@ export class ConversationAdapter {
       this.#notifyQueueState();
       this.#settleSuccess(execution.snapshot.requestId, result);
     } catch (error) {
+      // Controller pauses with retained queue on failure when work remains.
       await this.#queue!.event({ kind: 'failed', executionId: execution.executionId, failure: error });
       this.#notifyQueueState();
       this.#settleFailure(execution.snapshot.requestId, error);

@@ -3,7 +3,7 @@ import { isPreviousResponseNotFoundError, isRetryableTransportError } from './re
 import type { ClassificationContext, ClassifiedFailure } from './retry-contracts.js';
 import { extractHistoryLength } from '../stream-snapshot.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
-import { isMissingChainedToolOutputError } from '../../lib/chained-input-filter.js';
+import { isMissingChainedToolOutputError, isOrphanedChainedToolOutputError } from '../../lib/chained-input-filter.js';
 
 const TRANSIENT_BASE_DELAY_MS = 500;
 const TRANSIENT_MAX_DELAY_MS = 30_000;
@@ -39,7 +39,11 @@ export class DefaultRetryClassifier {
       };
     }
 
-    if (isPreviousResponseNotFoundError(error) || isMissingChainedToolOutputError(error)) {
+    if (
+      isPreviousResponseNotFoundError(error) ||
+      isMissingChainedToolOutputError(error) ||
+      isOrphanedChainedToolOutputError(error)
+    ) {
       const nextAttempt = retryCounts.transientRetryCount + 1;
       if (nextAttempt > maxTransientRetries) {
         return { kind: 'unrecoverable' };

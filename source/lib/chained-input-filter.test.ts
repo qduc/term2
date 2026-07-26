@@ -2,10 +2,13 @@ import { it, expect } from 'vitest';
 import {
   filterChainedModelInput,
   findChainedDeltaStart,
+  getToolCallId,
   getToolResultCallId,
   isMissingChainedToolOutputError,
+  isOrphanedChainedToolOutputError,
   isToolResultItem,
   isUserInputMessage,
+  OrphanedChainedToolOutputError,
   TOOL_RESULT_ITEM_TYPES,
   asRecord,
 } from './chained-input-filter.js';
@@ -230,6 +233,111 @@ it('filterChainedModelInput returns full input when deltaStart is 0', () => {
   };
   const result = filterChainedModelInput(modelData);
   expect(result.input).toEqual(modelData.input);
+});
+
+// --- getToolCallId ---
+
+it('getToolCallId extracts callId from a function_call item', () => {
+  expect(getToolCallId({ type: 'function_call', callId: 'call_1', name: 'grep' })).toBe('call_1');
+});
+
+it('getToolCallId extracts call_id from a hosted call item', () => {
+  expect(getToolCallId({ type: 'local_shell_call', call_id: 'call_2' })).toBe('call_2');
+});
+
+it('getToolCallId extracts callId from rawItem', () => {
+  expect(getToolCallId({ type: 'function_call', rawItem: { callId: 'call_3' } })).toBe('call_3');
+});
+
+it('getToolCallId returns null for tool result items', () => {
+  expect(getToolCallId({ type: 'function_call_output', callId: 'call_4', output: 'ok' })).toBe(null);
+});
+
+it('getToolCallId returns null for non-call items', () => {
+  expect(getToolCallId({ role: 'user', content: 'hi' })).toBe(null);
+  expect(getToolCallId({ type: 'reasoning', content: [] })).toBe(null);
+  expect(getToolCallId(null)).toBe(null);
+});
+
+// --- orphaned tool outputs (chain rebuilt without the matching calls) ---
+
+// Regression: after a transport failure the turn was replayed statelessly and
+// the replayed history no longer carried the `function_call` items for two
+// already-executed tools. The next chained request selected only those tool
+// outputs, so the provider rejected it with
+// "No tool call found for function call output with call_id ...".
+it('filterChainedModelInput rejects an expected tool output whose function_call is missing from the input', () => {
+  const modelData = {
+    input: [
+      { role: 'user', content: 'hi' },
+      { type: 'function_call', callId: 'c1', name: 'grep', arguments: '{}' },
+      { type: 'function_call_output', callId: 'c1', output: 'r1' },
+      // c2's function_call was dropped when the chain root was rebuilt.
+      { type: 'function_call_output', callId: 'c2', output: 'r2' },
+    ],
+  };
+
+  let thrown: unknown;
+  try {
+    filterChainedModelInput(modelData, { toolResultCallIds: ['c1', 'c2'] });
+  } catch (error) {
+    thrown = error;
+  }
+
+  expect(isOrphanedChainedToolOutputError(thrown)).toBe(true);
+  expect((thrown as OrphanedChainedToolOutputError).callIds).toEqual(['c2']);
+});
+
+it('filterChainedModelInput reports every orphaned call id once', () => {
+  const modelData = {
+    input: [
+      { role: 'user', content: 'hi' },
+      { type: 'function_call', callId: 'kept', name: 'grep', arguments: '{}' },
+      { type: 'function_call_output', callId: 'kept', output: 'r0' },
+      { type: 'function_call_output', callId: 'c1', output: 'r1' },
+      { type: 'function_call_output', callId: 'c2', output: 'r2' },
+    ],
+  };
+
+  let thrown: unknown;
+  try {
+    filterChainedModelInput(modelData, { toolResultCallIds: ['c1', 'c2'] });
+  } catch (error) {
+    thrown = error;
+  }
+
+  expect((thrown as OrphanedChainedToolOutputError).callIds).toEqual(['c1', 'c2']);
+});
+
+it('filterChainedModelInput accepts expected tool outputs whose function_call is present in the input', () => {
+  const modelData = {
+    input: [
+      { role: 'user', content: 'hi' },
+      { type: 'function_call', callId: 'c1', name: 'grep', arguments: '{}' },
+      { type: 'function_call', callId: 'c2', name: 'read_file', arguments: '{}' },
+      { type: 'function_call_output', callId: 'c1', output: 'r1' },
+      { type: 'function_call_output', callId: 'c2', output: 'r2' },
+    ],
+  };
+
+  const result = filterChainedModelInput(modelData, { toolResultCallIds: ['c1', 'c2'] });
+
+  expect(result.input).toEqual([
+    { type: 'function_call_output', callId: 'c1', output: 'r1' },
+    { type: 'function_call_output', callId: 'c2', output: 'r2' },
+  ]);
+});
+
+it('filterChainedModelInput skips the orphan check when the input carries no tool calls', () => {
+  // A pre-trimmed delta holds only the outputs; the matching calls live in the
+  // chain the provider already has, so absence proves nothing here.
+  const modelData = {
+    input: [{ type: 'function_call_output', callId: 'c1', output: 'r1' }],
+  };
+
+  const result = filterChainedModelInput(modelData, { toolResultCallIds: ['c1'] });
+
+  expect(result.input).toEqual([{ type: 'function_call_output', callId: 'c1', output: 'r1' }]);
 });
 
 // Delta-mode safety (concern 4): toolResultCallIds may include call IDs from

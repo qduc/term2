@@ -1,7 +1,7 @@
 import { it, expect } from 'vitest';
 import { ModelBehaviorError } from '@openai/agents';
 import { OpenAICompatibleError } from '../../providers/common/provider-errors.js';
-import { MissingChainedToolOutputError } from '../../lib/chained-input-filter.js';
+import { MissingChainedToolOutputError, OrphanedChainedToolOutputError } from '../../lib/chained-input-filter.js';
 import type { ClassificationContext } from './retry-contracts.js';
 import { AmbiguousModelOutcomeError } from './retry-errors.js';
 import { DefaultRetryClassifier } from './retry-classifier.js';
@@ -145,6 +145,13 @@ it('classify returns transport_downgrade for previous_response_not_found websock
 it('classify returns transport_downgrade when a chained continuation is missing required tool output', () => {
   const classifier = makeClassifier();
   const error = new MissingChainedToolOutputError(['call-required']);
+
+  expect(classifier.classify(baseContext({ error })).kind).toBe('transport_downgrade');
+});
+
+it('classify returns transport_downgrade when a chained continuation has an orphaned tool output', () => {
+  const classifier = makeClassifier();
+  const error = new OrphanedChainedToolOutputError(['call-orphaned']);
 
   expect(classifier.classify(baseContext({ error })).kind).toBe('transport_downgrade');
 });

@@ -45,6 +45,36 @@ export const getToolResultCallId = (item: unknown): string | null => {
   return typeof callId === 'string' && callId ? callId : null;
 };
 
+/**
+ * Extracts the call id of a tool *call* item (`function_call`, `local_shell_call`,
+ * `computer_call`, …). Returns null for tool results and for items that are not
+ * tool calls at all.
+ */
+export const getToolCallId = (item: unknown): string | null => {
+  const record = asRecord(item);
+  if (!record || isToolResultItem(record)) {
+    return null;
+  }
+
+  const type = typeof record.type === 'string' ? record.type : '';
+  if (!type.endsWith('_call')) {
+    return null;
+  }
+
+  const topLevelCallId = record.callId ?? record.call_id ?? record.tool_call_id;
+  if (typeof topLevelCallId === 'string' && topLevelCallId) {
+    return topLevelCallId;
+  }
+
+  const raw = asRecord(record.rawItem);
+  if (!raw) {
+    return null;
+  }
+
+  const callId = raw.callId ?? raw.call_id ?? raw.tool_call_id;
+  return typeof callId === 'string' && callId ? callId : null;
+};
+
 export type ChainedModelInputFilterOptions = {
   toolResultCallIds?: readonly string[];
 };
@@ -62,6 +92,29 @@ export class MissingChainedToolOutputError extends Error {
 export const isMissingChainedToolOutputError = (error: unknown): error is MissingChainedToolOutputError =>
   error instanceof MissingChainedToolOutputError ||
   (asRecord(error)?.name === 'MissingChainedToolOutputError' && Array.isArray(asRecord(error)?.callIds));
+
+/**
+ * Raised when a chained delta would carry a `function_call_output` whose
+ * `function_call` exists in neither the outgoing input nor — by extension —
+ * the response chain the request is anchored to.
+ *
+ * The provider rejects such a request with `No tool call found for function
+ * call output with call_id ...`, so failing here lets recovery rebuild the
+ * chain instead of spending a round trip on a guaranteed 400.
+ */
+export class OrphanedChainedToolOutputError extends Error {
+  readonly callIds: string[];
+
+  constructor(callIds: readonly string[]) {
+    super(`Chained continuation has tool output(s) with no matching tool call: ${callIds.join(', ')}`);
+    this.name = 'OrphanedChainedToolOutputError';
+    this.callIds = [...callIds];
+  }
+}
+
+export const isOrphanedChainedToolOutputError = (error: unknown): error is OrphanedChainedToolOutputError =>
+  error instanceof OrphanedChainedToolOutputError ||
+  (asRecord(error)?.name === 'OrphanedChainedToolOutputError' && Array.isArray(asRecord(error)?.callIds));
 
 /**
  * Finds the starting index of the delta input when conversation chaining is active.
@@ -93,6 +146,40 @@ export const findChainedDeltaStart = (input: unknown[]): number => {
   return 0;
 };
 
+/**
+ * Guards the `toolResultCallIds` shortcut, which sends the selected tool
+ * outputs alone and relies on the response chain already holding their calls.
+ *
+ * The check only applies when the input is a full item list (it carries tool
+ * calls of its own). A caller that hands over an already-trimmed delta has no
+ * calls to match against, and their absence says nothing about the chain.
+ */
+const assertToolResultsHaveMatchingCalls = (input: unknown[], expectedToolResults: unknown[]): void => {
+  const callIdsInInput = new Set<string>();
+  for (const item of input) {
+    const callId = getToolCallId(item);
+    if (callId) {
+      callIdsInInput.add(callId);
+    }
+  }
+
+  if (callIdsInInput.size === 0) {
+    return;
+  }
+
+  const orphaned = new Set<string>();
+  for (const item of expectedToolResults) {
+    const callId = getToolResultCallId(item);
+    if (callId && !callIdsInInput.has(callId)) {
+      orphaned.add(callId);
+    }
+  }
+
+  if (orphaned.size > 0) {
+    throw new OrphanedChainedToolOutputError([...orphaned]);
+  }
+};
+
 export const filterChainedModelInput = (modelData: any, options: ChainedModelInputFilterOptions = {}): any => {
   const input = modelData?.input;
   if (!Array.isArray(input)) {
@@ -107,6 +194,7 @@ export const filterChainedModelInput = (modelData: any, options: ChainedModelInp
     });
 
     if (expectedToolResults.length > 0) {
+      assertToolResultsHaveMatchingCalls(input, expectedToolResults);
       return {
         ...modelData,
         input: expectedToolResults,

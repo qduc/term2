@@ -52,7 +52,7 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
     '',
     ...entries,
     '',
-    'Call get_subagent_result(runId) for the full report, then give the user one concise completion notification.',
+    'Call get_subagent_result(runId) for the full report. Assess it against the task before you accept it, then continue through the next necessary steps yourself rather than stopping at the fact that a run finished. Tell the user concisely, in your own words, what you concluded — the report is input to your judgement, not a message to relay.',
   ].join('\n');
 }
 

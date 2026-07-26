@@ -167,6 +167,18 @@ describe('ConversationOrchestrator background subagent notifications', () => {
     );
   });
 
+  it('tells the orchestrator to assess the result and continue instead of only announcing completion', async () => {
+    const h = makeHarness();
+
+    h.emit(completion());
+    await settle();
+
+    const text = h.sentTexts()[0].toLowerCase();
+    expect(text).toContain('assess');
+    expect(text).toContain('continue');
+    expect(text).toContain('your own words');
+  });
+
   it('does not start a turn for a completion that is not an async run', async () => {
     const h = makeHarness();
 

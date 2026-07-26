@@ -36,7 +36,7 @@ it('run_subagent_async tool guidance treats a running handle as successful non-d
   expect(tool.description).toContain('status: "running"');
   expect(tool.description).toContain('do not duplicate the delegated task');
   expect(tool.description).toContain('automatic completion notification');
-  expect(tool.description).toContain('explicitly need the result immediately');
+  expect(tool.description).toContain('do NOT immediately call get_subagent_result');
 });
 
 it('run_subagent_async schema accepts supported roles', () => {

@@ -145,18 +145,24 @@ export function createRunSubagentAsyncToolDefinition(
   return {
     name: 'run_subagent_async',
     description:
-      'Start a subagent that runs asynchronously in the background and returns a runId immediately. ' +
+      'Start a subagent that runs asynchronously in the background and returns a runId immediately — the call does NOT block. ' +
+      'After a successful launch, do NOT immediately call get_subagent_result; that call blocks until completion and freezes you out of doing other work or receiving the next user instruction. ' +
+      'Instead, end your turn and wait for the harness automatic completion notification, then collect the result with get_subagent_result from a later turn. ' +
       'A returned handle with status: "running" means the launch succeeded; do not duplicate the delegated task. ' +
-      'Return control and wait for the automatic completion notification. ' +
+      'Only call get_subagent_result inline if, after honest assessment, you truly cannot take any other useful action or reply to the user without the result at all. ' +
       'Fresh runs support explorer, worker, researcher, mentor, and librarian. ' +
-      'Only completed non-worker runs can be continued across turns; worker continuation is blocked. ' +
-      'Call get_subagent_result from the notification turn, or earlier only when you explicitly need the result immediately.',
+      'Only completed non-worker runs can be continued across turns; worker continuation is blocked.',
     parameters: runSubagentAsyncSchema,
     needsApproval: () => false,
     execute: async (params, context, details) => {
       try {
         const handle = await runSubagentAsync(params, context, details);
-        return JSON.stringify({ runId: handle.runId, status: handle.status });
+        const handleOutput: Record<string, string> = { runId: handle.runId, status: handle.status };
+        if (handle.status === 'running') {
+          handleOutput.hint =
+            'Background run launched — do NOT call get_subagent_result now. End your turn and wait for the completion notification, then collect the result from a later turn.';
+        }
+        return JSON.stringify(handleOutput);
       } catch (error: any) {
         if (isAbortLike(error?.message, error)) {
           throw error;
@@ -181,7 +187,9 @@ export function createGetSubagentResultToolDefinition(
     name: 'get_subagent_result',
     description:
       'Retrieve the final result of an asynchronous subagent run started with run_subagent_async. ' +
-      'Provide the runId returned by run_subagent_async. This call blocks until the run completes.',
+      'Provide the runId returned by run_subagent_async. This call BLOCKS until the run completes. ' +
+      'Do not call it immediately after launching a subagent — that defeats async and freezes you out of doing other work. ' +
+      'Prefer waiting for the harness automatic completion notification and call this from a later turn; only call it inline if you genuinely cannot proceed without the result now.',
     parameters: getSubagentResultSchema,
     needsApproval: () => false,
     execute: async (params, context, details) => {

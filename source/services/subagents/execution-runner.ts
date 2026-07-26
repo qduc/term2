@@ -1,4 +1,7 @@
 import { Agent } from '@openai/agents';
+import { randomBytes } from 'node:crypto';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
@@ -347,11 +350,13 @@ export class ExecutionSubagentRunner {
       };
     }
 
+    const resultText = await truncateResultText(finalText);
+
     return {
       agentId,
       role: request.role,
       status: 'completed',
-      finalText: truncateResultText(finalText),
+      ...resultText,
       filesChanged: [...new Set(filesChanged)],
       toolsUsed: aggregateToolUsage(toolCounts),
       ...(usage ? { usage } : {}),
@@ -388,9 +393,27 @@ function resolveSafe(p: string): string {
   }
 }
 
-const MAX_FINAL_TEXT_CHARS = 4000;
+const MAX_FINAL_TEXT_CHARS = 40_000;
+let subagentResultTempDirPromise: Promise<string> | undefined;
 
-function truncateResultText(text: string): string {
-  if (text.length <= MAX_FINAL_TEXT_CHARS) return text;
-  return text.slice(0, MAX_FINAL_TEXT_CHARS) + '\n...(truncated)';
+async function truncateResultText(
+  text: string,
+): Promise<Pick<SubagentResult, 'finalText' | 'finalTextTruncated' | 'finalTextArtifactPath'>> {
+  if (text.length <= MAX_FINAL_TEXT_CHARS) return { finalText: text };
+
+  const artifactPath = await saveSubagentResultArtifact(text);
+  return {
+    finalText:
+      text.slice(0, MAX_FINAL_TEXT_CHARS) + `\n...(truncated)\nFull subagent result saved to \`${artifactPath}\``,
+    finalTextTruncated: true,
+    finalTextArtifactPath: artifactPath,
+  };
+}
+
+async function saveSubagentResultArtifact(text: string): Promise<string> {
+  subagentResultTempDirPromise ??= mkdtemp(path.join(os.tmpdir(), 'term2-subagent-result-'));
+  const tempDir = await subagentResultTempDirPromise;
+  const artifactPath = path.join(tempDir, `result-${randomBytes(3).toString('hex')}.md`);
+  await writeFile(artifactPath, text, 'utf8');
+  return artifactPath;
 }

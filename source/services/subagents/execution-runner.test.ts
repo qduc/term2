@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const stream = vi.hoisted(() => ({ events: [] as any[] }));
@@ -118,5 +119,29 @@ describe('ExecutionSubagentRunner text-turn peek events', () => {
     await runner.run('run-1', { role: 'explorer', task: 'inspect' }, definition);
 
     expect(committedEvents(received)).not.toContainEqual(expect.objectContaining({ type: 'subagent_text_turn' }));
+  });
+
+  it('saves the complete final result when its display preview is truncated', async () => {
+    const fullText = `${'a'.repeat(40_000)}FULL-RESULT-SENTINEL${'b'.repeat(100)}`;
+    const { runner } = makeRunner([{ type: 'final', finalText: fullText }]);
+
+    const result = await runner.run('run-1', { role: 'explorer', task: 'inspect' }, definition);
+
+    expect(result.finalTextTruncated).toBe(true);
+    expect(result.finalTextArtifactPath).toBeTruthy();
+    expect(result.finalText).not.toContain('FULL-RESULT-SENTINEL');
+    expect(result.finalText).toContain('Full subagent result saved to');
+    expect(fs.readFileSync(result.finalTextArtifactPath!, 'utf8')).toBe(fullText);
+  });
+
+  it('keeps results slightly larger than the previous 4,000-character limit intact', async () => {
+    const fullText = 'a'.repeat(4_001);
+    const { runner } = makeRunner([{ type: 'final', finalText: fullText }]);
+
+    const result = await runner.run('run-1', { role: 'explorer', task: 'inspect' }, definition);
+
+    expect(result.finalText).toBe(fullText);
+    expect(result.finalTextTruncated).toBeUndefined();
+    expect(result.finalTextArtifactPath).toBeUndefined();
   });
 });

@@ -140,6 +140,10 @@ export interface SubagentResult {
   role: string;
   status: 'completed' | 'failed' | 'cancelled';
   finalText: string;
+  /** Whether finalText is a bounded preview rather than the complete final response. */
+  finalTextTruncated?: boolean;
+  /** Temporary artifact containing the complete final response when finalText is truncated. */
+  finalTextArtifactPath?: string;
   filesChanged: string[];
   toolsUsed: Array<{
     toolName: string;

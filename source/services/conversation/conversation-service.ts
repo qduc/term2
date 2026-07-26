@@ -15,7 +15,10 @@ import type {
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 import type { InputSurgeDecision } from '../input-surge-guard.js';
 import type { SessionRuntime } from '../session/session-composition.js';
-import type { BackgroundSubagentNotificationPort } from '../subagents/subagent-notification-store.js';
+import type {
+  BackgroundSubagentNotificationPort,
+  BackgroundSubagentTaskPort,
+} from '../subagents/subagent-notification-store.js';
 import type { QueueStateObserver } from './conversation-adapter.js';
 import { createConversationRuntime } from './conversation-runtime-factory.js';
 
@@ -74,6 +77,7 @@ export class ConversationService {
   }
 
   #backgroundSubagentNotificationObserver: (() => void) | null = null;
+  #backgroundSubagentTaskObserver: (() => void) | null = null;
 
   /**
    * Observe background (async) subagent runs settling. The observer fires once
@@ -88,6 +92,16 @@ export class ConversationService {
   /** Completions of background subagent runs still owed to the main agent. */
   get backgroundSubagentNotifications(): BackgroundSubagentNotificationPort {
     return this.#runtime.backgroundSubagentNotifications;
+  }
+
+  setBackgroundSubagentTaskObserver(observer: (() => void) | null): void {
+    this.#backgroundSubagentTaskObserver = observer;
+    this.#runtime.backgroundSubagentTasks.setObserver(observer);
+  }
+
+  /** Current running and briefly retained terminal background tasks. */
+  get backgroundSubagentTasks(): BackgroundSubagentTaskPort {
+    return this.#runtime.backgroundSubagentTasks;
   }
 
   get sessionId(): string {
@@ -115,8 +129,9 @@ export class ConversationService {
       this.#adapter.setEventSink(previousEventSink);
     }
     // The previous runtime's notification queue died with it; re-attach the
-    // observer so the new conversation still wakes on background completions.
+    // observers so the new conversation still wakes and updates its overview.
     this.#runtime.backgroundSubagentNotifications.setObserver(this.#backgroundSubagentNotificationObserver);
+    this.#runtime.backgroundSubagentTasks.setObserver(this.#backgroundSubagentTaskObserver);
   }
 
   #logSink: ((event: LogEvent) => void) | null = null;

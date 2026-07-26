@@ -52,7 +52,7 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
     '',
     ...entries,
     '',
-    'Call get_subagent_result(runId) for the full report of any run above.',
+    'Call get_subagent_result(runId) for the full report, then give the user one concise completion notification.',
   ].join('\n');
 }
 

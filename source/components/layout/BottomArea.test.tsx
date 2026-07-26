@@ -75,6 +75,31 @@ it.sequential('BottomArea shows input when idle', async () => {
   });
 });
 
+it.sequential('BottomArea places active background tasks directly above the input', async () => {
+  const { lastFrame, unmount } = await renderBottomArea({
+    ...baseProps,
+    backgroundSubagentTasks: [
+      {
+        runId: 'run-worker',
+        role: 'worker',
+        task: 'implement the background overview',
+        status: 'running',
+        startedAt: Date.now(),
+      },
+    ],
+    backgroundSubagentTasksNow: Date.now(),
+  });
+  const output = lastFrame() ?? '';
+  const panelIndex = output.indexOf('Background tasks · 1 active');
+  const inputIndex = output.indexOf('❯');
+
+  expect(panelIndex).toBeGreaterThanOrEqual(0);
+  expect(inputIndex).toBeGreaterThan(panelIndex);
+  act(() => {
+    unmount();
+  });
+});
+
 it.sequential('BottomArea shows approval prompt when waiting for approval', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,

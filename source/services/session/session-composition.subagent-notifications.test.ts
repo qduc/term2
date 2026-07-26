@@ -35,6 +35,16 @@ const completion = (agentId: string, async = true): ConversationEvent =>
     },
   } as ConversationEvent);
 
+const start = (agentId: string): ConversationEvent =>
+  ({
+    type: 'subagent_started',
+    agentId,
+    role: 'worker',
+    task: 'implement the panel',
+    parentTool: 'run_subagent_async',
+    async: true,
+  } as ConversationEvent);
+
 type Sinks = {
   turn: ((event: ConversationEvent) => void) | null;
   background: ((event: ConversationEvent) => void) | null;
@@ -102,6 +112,49 @@ it('queues async background subagent completions and notifies the observer once 
   expect(runtime.backgroundSubagentNotifications.pendingCount).toBe(1);
   expect(runtime.backgroundSubagentNotifications.drain()).toEqual([
     expect.objectContaining({ runId: 'run-1', role: 'explorer', status: 'completed' }),
+  ]);
+
+  runtime.dispose();
+});
+
+it('projects background lifecycle changes and ignores internal activity for task observers', () => {
+  const sinks: Sinks = { turn: null, background: null };
+  const runtime = createSessionRuntime({
+    sessionId: 'bg-tasks',
+    agentClient: makeClient(sinks),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  let notified = 0;
+  runtime.backgroundSubagentTasks.setObserver(() => {
+    notified += 1;
+  });
+
+  sinks.background?.(start('run-task'));
+  expect(runtime.backgroundSubagentTasks.getSnapshot()).toEqual([
+    expect.objectContaining({
+      runId: 'run-task',
+      role: 'worker',
+      task: 'implement the panel',
+      status: 'running',
+    }),
+  ]);
+
+  sinks.background?.({
+    type: 'subagent_tool_started',
+    agentId: 'run-task',
+    role: 'worker',
+    toolCallId: 'tool-1',
+    toolName: 'read_file',
+  } as ConversationEvent);
+  sinks.background?.(completion('run-task'));
+
+  expect(notified).toBe(2);
+  expect(runtime.backgroundSubagentTasks.getSnapshot()).toEqual([
+    expect.objectContaining({
+      runId: 'run-task',
+      role: 'worker',
+      status: 'completed',
+    }),
   ]);
 
   runtime.dispose();

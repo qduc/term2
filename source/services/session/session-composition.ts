@@ -44,6 +44,7 @@ import { clearDockerHostControlSession } from '../../utils/shell/sandbox/docker-
 import {
   SubagentNotificationStore,
   type BackgroundSubagentNotificationPort,
+  type BackgroundSubagentTaskPort,
 } from '../subagents/subagent-notification-store.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
@@ -108,6 +109,8 @@ export type SessionRuntimeInternals = {
   resolvedSubagentEventSinkHost: SubagentEventSinkHost | null;
   /** Completions of background subagent runs still owed to the main agent. */
   backgroundSubagentNotifications: BackgroundSubagentNotificationChannel;
+  /** Read-only lifecycle projection for background subagent UI. */
+  backgroundSubagentTasks: BackgroundSubagentTaskChannel;
 };
 
 // ── Options for the composition factory ──────────────────────────
@@ -176,6 +179,8 @@ export type BackgroundSubagentNotificationChannel = BackgroundSubagentNotificati
   setObserver(observer: (() => void) | null): void;
 };
 
+export type BackgroundSubagentTaskChannel = BackgroundSubagentTaskPort;
+
 // ── Session Runtime (public) ───────────────────────────────────────
 
 /**
@@ -200,6 +205,8 @@ export type SessionRuntime = {
   sinks: SessionSinks;
   /** Completions of background subagent runs still owed to the main agent. */
   backgroundSubagentNotifications: BackgroundSubagentNotificationChannel;
+  /** Read-only lifecycle projection for background subagent UI. */
+  backgroundSubagentTasks: BackgroundSubagentTaskChannel;
   /**
    * Idempotent disposal: aborts active SDK work, invalidates the active
    * generation, unsubscribes downgrade listeners, clears per-turn state.
@@ -230,6 +237,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   // while the conversation is idle and no per-turn sink is attached.
   const notificationStore = new SubagentNotificationStore();
   let notificationObserver: (() => void) | null = null;
+  let taskObserver: (() => void) | null = null;
   const backgroundSubagentNotifications: BackgroundSubagentNotificationChannel = {
     get pendingCount() {
       return notificationStore.pendingCount;
@@ -238,6 +246,12 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     retain: (notifications) => notificationStore.retain(notifications),
     setObserver: (observer) => {
       notificationObserver = observer;
+    },
+  };
+  const backgroundSubagentTasks: BackgroundSubagentTaskChannel = {
+    getSnapshot: () => notificationStore.getTaskSnapshot(),
+    setObserver: (observer) => {
+      taskObserver = observer;
     },
   };
 
@@ -292,6 +306,18 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   // terminal async events enter the main-agent notification queue.
   resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.((event) => {
     conversationLogger.dispatchEventToLog(event);
+    if (notificationStore.recordLifecycle(event)) {
+      try {
+        taskObserver?.();
+      } catch (error) {
+        logger.warn('Background subagent task observer threw', {
+          eventType: 'subagent.task_observer_failed',
+          category: 'subagent',
+          sessionId: id,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     if (!notificationStore.enqueue(event)) return;
     try {
       notificationObserver?.();
@@ -481,6 +507,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     // so they must be cancelled even when no turn is in flight.
     getMethod<[], void>(agentClient, 'cancelBackgroundRuns')?.call(agentClient);
     notificationObserver = null;
+    taskObserver = null;
     resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(null);
     providerContinuity.clear();
     sessionReadAccess.clear(id);
@@ -519,6 +546,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     resolvedAskUserAnswerSink,
     resolvedSubagentEventSinkHost,
     backgroundSubagentNotifications,
+    backgroundSubagentTasks,
   };
 }
 
@@ -541,6 +569,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     resolvedAskUserAnswerSink,
     resolvedSubagentEventSinkHost,
     backgroundSubagentNotifications,
+    backgroundSubagentTasks,
   } = internals;
 
   return {
@@ -584,6 +613,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
       subagentEvents: resolvedSubagentEventSinkHost,
     },
     backgroundSubagentNotifications,
+    backgroundSubagentTasks,
     dispose,
   };
 }

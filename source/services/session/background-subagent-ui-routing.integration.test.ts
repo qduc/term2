@@ -64,7 +64,7 @@ const sessionContextService = {
   getContext: () => null,
 };
 
-it('keeps background activity out of the foreground UI while queuing one completion notification', async () => {
+it('projects background lifecycle without making the foreground message history dynamic', async () => {
   managerInstances.length = 0;
   const bridge = new SubagentBridge({
     logger: logger as any,
@@ -85,6 +85,33 @@ it('keeps background activity out of the foreground UI while queuing one complet
         finalOutput: 'Background explorer created.',
         lastResponseId: null,
         async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'run_item_stream_event',
+            item: {
+              rawItem: {
+                type: 'function_call',
+                callId: 'async-call-1',
+                name: 'run_subagent_async',
+                arguments: JSON.stringify({ role: 'explorer', task: 'inspect the project' }),
+              },
+            },
+          };
+          yield {
+            type: 'run_item_stream_event',
+            item: {
+              rawItem: {
+                type: 'function_call_result',
+                callId: 'async-call-1',
+                name: 'run_subagent_async',
+                output: JSON.stringify({
+                  runId: 'background-run-1',
+                  role: 'explorer',
+                  task: 'inspect the project',
+                  status: 'running',
+                }),
+              },
+            },
+          };
           yield { type: 'response.output_text.delta', delta: 'Background explorer created.' };
         },
       };
@@ -126,6 +153,14 @@ it('keeps background activity out of the foreground UI while queuing one complet
   );
 
   await adapter.sendMessage('delegate this', { onEvent: handler });
+  expect(runtime.backgroundSubagentTasks.getSnapshot()).toEqual([
+    expect.objectContaining({
+      runId: 'background-run-1',
+      role: 'explorer',
+      task: 'inspect the project',
+      status: 'running',
+    }),
+  ]);
 
   const manager = managerInstances[0];
   manager.onEvent?.({
@@ -156,6 +191,13 @@ it('keeps background activity out of the foreground UI while queuing one complet
     'subagent_completed',
   ]);
   expect(messages.filter((message) => message.sender === 'subagent')).toEqual([]);
+  expect(messages.filter((message) => message.sender === 'command')).toEqual([]);
+  expect(runtime.backgroundSubagentTasks.getSnapshot()).toEqual([
+    expect.objectContaining({
+      status: 'completed',
+      runId: 'background-run-1',
+    }),
+  ]);
 
   const { history, active } = splitStaticHistory(messages);
   expect(active).toEqual([]);

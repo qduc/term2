@@ -22,6 +22,8 @@ import type { UndoItem } from '../../hooks/use-undo-selection.js';
 import type { SkillsService } from '../../services/skills/skills-service.js';
 import type { StaticCommitBlocker } from '../message/MessageList.js';
 import type { QueuePauseReason } from '../../services/queue/queue-controller.js';
+import type { BackgroundSubagentTask } from '../../services/subagents/subagent-notification-store.js';
+import BackgroundTasksPanel from './BackgroundTasksPanel.js';
 
 export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;
@@ -75,6 +77,8 @@ export type BottomAreaProps = {
   onResumeQueue?: () => void;
   onDiscardQueue?: () => void;
   pendingQueuedMessages?: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
+  backgroundSubagentTasks?: readonly BackgroundSubagentTask[];
+  backgroundSubagentTasksNow?: number;
   /**
    * Cancel the most recently queued message and resolve with its text so it
    * can be restored to the input box. The InputBox invokes this when the user
@@ -134,6 +138,8 @@ const BottomArea: FC<BottomAreaProps> = ({
   onResumeQueue,
   onDiscardQueue,
   pendingQueuedMessages = [],
+  backgroundSubagentTasks = [],
+  backgroundSubagentTasksNow = Date.now(),
   onCancelQueuedMessage,
 }) => {
   const [dotCount, setDotCount] = useState(1);
@@ -260,6 +266,7 @@ const BottomArea: FC<BottomAreaProps> = ({
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt == null && (
               <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>
             )}
+            <BackgroundTasksPanel tasks={backgroundSubagentTasks} now={backgroundSubagentTasksNow} />
             {showQueuePausedPrompt && (
               <QueuePausedPrompt
                 queueLength={queueLength}

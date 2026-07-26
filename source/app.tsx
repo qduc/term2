@@ -179,6 +179,8 @@ const App: FC<AppProps> = ({
     isProcessing,
     thinkingStartedAt,
     toolCallStreamingInfo,
+    backgroundSubagentTasks,
+    backgroundSubagentTasksNow,
     sendUserMessage,
     submitConversationTurn,
     submitApprovalDecision,
@@ -555,6 +557,8 @@ const App: FC<AppProps> = ({
             onResumeQueue={resumeQueue}
             onDiscardQueue={discardQueue}
             pendingQueuedMessages={pendingQueuedMessages}
+            backgroundSubagentTasks={backgroundSubagentTasks}
+            backgroundSubagentTasksNow={backgroundSubagentTasksNow}
             onCancelQueuedMessage={cancelQueuedMessage}
             onSubmit={handleSubmit}
             slashCommands={slashCommands}

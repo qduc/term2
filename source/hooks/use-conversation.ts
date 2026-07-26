@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { ConversationService } from '../services/conversation/conversation-service.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 import { useConversationMessages } from './use-conversation-messages.js';
@@ -15,6 +15,7 @@ import type { Message } from '../types/message.js';
 import { isBotMessage } from '../types/message.js';
 import type { UserTurn } from '../types/user-turn.js';
 import { conversationUIReducer, createInitialUIState, getConversationUIFlags } from './conversation-ui-reducer.js';
+import type { BackgroundSubagentTask } from '../services/subagents/subagent-notification-store.js';
 
 export type {
   BotMessage,
@@ -118,6 +119,30 @@ export const useConversation = ({
   >(null);
 
   const provider = useSetting<string>(settingsService || dummySettingsService, 'agent.provider') ?? 'openai';
+  const readBackgroundSubagentTasks = useCallback(
+    (): { tasks: readonly BackgroundSubagentTask[]; now: number } => ({
+      tasks: conversationService.backgroundSubagentTasks?.getSnapshot?.() ?? [],
+      now: Date.now(),
+    }),
+    [conversationService],
+  );
+  const [backgroundSubagentTaskState, setBackgroundSubagentTaskState] = useState(readBackgroundSubagentTasks);
+
+  const refreshBackgroundSubagentTasks = useCallback(() => {
+    setBackgroundSubagentTaskState(readBackgroundSubagentTasks());
+  }, [readBackgroundSubagentTasks]);
+
+  useEffect(() => {
+    if (typeof conversationService.setBackgroundSubagentTaskObserver !== 'function') return;
+    conversationService.setBackgroundSubagentTaskObserver(refreshBackgroundSubagentTasks);
+    return () => conversationService.setBackgroundSubagentTaskObserver(null);
+  }, [conversationService, refreshBackgroundSubagentTasks]);
+
+  useEffect(() => {
+    if (backgroundSubagentTaskState.tasks.length === 0) return;
+    const interval = setInterval(refreshBackgroundSubagentTasks, 1_000);
+    return () => clearInterval(interval);
+  }, [backgroundSubagentTaskState.tasks.length, refreshBackgroundSubagentTasks]);
 
   useEffect(() => {
     dispatch({ type: 'rate_limit/cleared' });
@@ -303,6 +328,8 @@ export const useConversation = ({
     isProcessing,
     thinkingStartedAt,
     toolCallStreamingInfo,
+    backgroundSubagentTasks: backgroundSubagentTaskState.tasks,
+    backgroundSubagentTasksNow: backgroundSubagentTaskState.now,
     sendUserMessage,
     submitConversationTurn,
     submitApprovalDecision,

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { SubagentNotificationStore } from './subagent-notification-store.js';
+import { BACKGROUND_TASK_RECENT_RETENTION_MS, SubagentNotificationStore } from './subagent-notification-store.js';
 import { SubagentAsyncRegistry } from './subagent-async-registry.js';
 import { createMockLogger } from './test-helpers/subagent-manager-fixtures.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
@@ -18,6 +18,19 @@ const result = (overrides: Partial<SubagentResult> = {}): SubagentResult => ({
 const completed = (overrides: Partial<SubagentResult> = {}): ConversationEvent =>
   ({ type: 'subagent_completed', result: result(overrides), async: true } as ConversationEvent);
 
+const started = (
+  overrides: Partial<Extract<ConversationEvent, { type: 'subagent_started' }>> = {},
+): ConversationEvent =>
+  ({
+    type: 'subagent_started',
+    agentId: 'run-1',
+    role: 'explorer',
+    task: 'inspect the project',
+    parentTool: 'run_subagent_async',
+    async: true,
+    ...overrides,
+  } as ConversationEvent);
+
 const makeStore = (options: { now?: () => number; deliveredIdCap?: number } = {}) =>
   new SubagentNotificationStore({ now: () => 1_000, ...options });
 
@@ -35,6 +48,86 @@ it('records one notification carrying the run identity, status and preview', () 
       completedAt: 4_242,
     },
   ]);
+});
+
+it('projects an async start as a running background task with role, task, and start time', () => {
+  const store = makeStore({ now: () => 4_242 });
+
+  expect(store.recordLifecycle(started())).toBe(true);
+  expect(store.getTaskSnapshot()).toEqual([
+    {
+      runId: 'run-1',
+      role: 'explorer',
+      task: 'inspect the project',
+      status: 'running',
+      startedAt: 4_242,
+    },
+  ]);
+});
+
+it('ignores foreground subagent lifecycle in the background task projection', () => {
+  const store = makeStore();
+
+  expect(store.recordLifecycle(started({ async: false }))).toBe(false);
+  expect(store.recordLifecycle({ ...started(), async: undefined } as ConversationEvent)).toBe(false);
+  expect(
+    store.recordLifecycle({ ...completed({ agentId: 'foreground-run' }), async: false } as ConversationEvent),
+  ).toBe(false);
+
+  expect(store.getTaskSnapshot()).toEqual([]);
+});
+
+it('retains a completed task briefly and expires it while active tasks remain', () => {
+  let now = 1_000;
+  const store = makeStore({ now: () => now });
+  store.recordLifecycle(started());
+
+  now = 4_000;
+  store.recordLifecycle(completed());
+  expect(store.getTaskSnapshot()).toEqual([
+    expect.objectContaining({
+      status: 'completed',
+      startedAt: 1_000,
+      completedAt: 4_000,
+    }),
+  ]);
+
+  now = 4_000 + BACKGROUND_TASK_RECENT_RETENTION_MS - 1;
+  expect(store.getTaskSnapshot()).toHaveLength(1);
+
+  now = 4_000 + BACKGROUND_TASK_RECENT_RETENTION_MS;
+  expect(store.getTaskSnapshot()).toEqual([]);
+  expect(store.recordLifecycle(completed())).toBe(false);
+  expect(store.getTaskSnapshot()).toEqual([]);
+
+  store.recordLifecycle(started({ agentId: 'run-active', role: 'worker', task: 'make the change' }));
+  now += BACKGROUND_TASK_RECENT_RETENTION_MS * 2;
+  expect(store.getTaskSnapshot()).toEqual([
+    expect.objectContaining({
+      runId: 'run-active',
+      role: 'worker',
+      status: 'running',
+    }),
+  ]);
+});
+
+it('reports only lifecycle events that change the visible task projection', () => {
+  const store = makeStore();
+
+  expect(store.recordLifecycle(started())).toBe(true);
+  expect(store.recordLifecycle(started())).toBe(false);
+  expect(
+    store.recordLifecycle({
+      type: 'subagent_tool_started',
+      agentId: 'run-1',
+      role: 'explorer',
+      toolCallId: 'tool-1',
+      toolName: 'read_file',
+    } as ConversationEvent),
+  ).toBe(false);
+  expect(store.recordLifecycle(completed())).toBe(true);
+  expect(store.recordLifecycle(started())).toBe(false);
+  expect(store.getTaskSnapshot()[0]?.status).toBe('completed');
 });
 
 it('ignores completion events that are not async runs', () => {

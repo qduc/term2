@@ -385,12 +385,14 @@ const App: FC<AppProps> = ({
 
       redrawMessageList();
       if (disposition === 'resend') {
+        replaceInput('');
+        setImages([]);
         void sendUserMessage({ text: rewound.text, ...(rewound.images?.length ? { images: rewound.images } : {}) });
         return;
       }
       restoreTurnToInput(rewound);
     },
-    [rewindToTurn, redrawMessageList, restoreTurnToInput, sendUserMessage],
+    [rewindToTurn, redrawMessageList, replaceInput, restoreTurnToInput, sendUserMessage, setImages],
   );
 
   const handleApprove = useCallback(

@@ -56,8 +56,12 @@ it('aligns from the end when the store holds fewer turns than the UI', () => {
     [target({ discardedReplies: 9 })],
   );
 
-  expect(items[0]!.discardedReplies).toBe(0);
-  expect(items[1]!.discardedReplies).toBe(9);
+  expect(items).toHaveLength(1);
+  expect(items[0]).toMatchObject({
+    turnNumber: 2,
+    text: 'newest',
+    discardedReplies: 9,
+  });
 });
 
 it('aligns from the end when the store holds more turns than the UI', () => {
@@ -69,16 +73,10 @@ it('aligns from the end when the store holds more turns than the UI', () => {
   expect(items[0]!.discardedReplies).toBe(5);
 });
 
-it('falls back to a single-turn discard when no store target matches', () => {
+it('does not offer a UI turn that has no matching store target', () => {
   const items = buildRewindItems([{ uiIndex: 0, text: 'a' }], []);
 
-  expect(items[0]).toMatchObject({
-    turnNumber: 1,
-    discardedTurns: 1,
-    discardedReplies: 0,
-    discardedFiles: [],
-    imageCount: 0,
-  });
+  expect(items).toEqual([]);
 });
 
 it('returns an empty list when there are no user messages', () => {

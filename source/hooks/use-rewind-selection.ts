@@ -36,7 +36,16 @@ type RewindSelectionResult = {
   confirmSelection: (onSelect: (item: RewindItem, disposition: RewindDisposition) => void) => void;
 };
 
-const MAX_VISIBLE_ITEMS = 6;
+export const REWIND_MENU_VISIBLE_ITEMS = 5;
+
+export function getRewindScrollOffset(itemsLength: number, selectedIndex: number, scrollOffset: number): number {
+  if (itemsLength <= REWIND_MENU_VISIBLE_ITEMS) return 0;
+  if (selectedIndex < scrollOffset) return selectedIndex;
+  if (selectedIndex >= scrollOffset + REWIND_MENU_VISIBLE_ITEMS) {
+    return selectedIndex - REWIND_MENU_VISIBLE_ITEMS + 1;
+  }
+  return scrollOffset;
+}
 
 export const useRewindSelection = (): RewindSelectionResult => {
   const { mode, setMode } = useInputContext();
@@ -61,15 +70,9 @@ export const useRewindSelection = (): RewindSelectionResult => {
   // Auto-scroll to keep selected item visible
   useEffect(() => {
     if (!isOpen) return;
-    if (items.length <= MAX_VISIBLE_ITEMS) {
-      if (scrollOffset !== 0) setScrollOffset(0); // eslint-disable-line react-hooks/set-state-in-effect
-      return;
-    }
-    const selectedIndex = selection.selectedIndex;
-    if (selectedIndex < scrollOffset) {
-      setScrollOffset(selectedIndex);
-    } else if (selectedIndex >= scrollOffset + MAX_VISIBLE_ITEMS) {
-      setScrollOffset(selectedIndex - MAX_VISIBLE_ITEMS + 1);
+    const nextOffset = getRewindScrollOffset(items.length, selection.selectedIndex, scrollOffset);
+    if (nextOffset !== scrollOffset) {
+      setScrollOffset(nextOffset); // eslint-disable-line react-hooks/set-state-in-effect
     }
   }, [isOpen, items.length, selection.selectedIndex, scrollOffset]);
 

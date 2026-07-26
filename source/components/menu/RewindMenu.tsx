@@ -1,6 +1,6 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
-import type { RewindItem } from '../../hooks/use-rewind-selection.js';
+import { REWIND_MENU_VISIBLE_ITEMS, type RewindItem } from '../../hooks/use-rewind-selection.js';
 import type { RewindDisposition } from '../../commands/rewind-command.js';
 import { MenuContainer } from '../common/MenuContainer.js';
 
@@ -16,7 +16,7 @@ type Props = {
  * Rows are two lines plus a separator, so fewer fit on screen than in a
  * single-line menu without pushing the transcript out of view.
  */
-export const MAX_VISIBLE_ITEMS = 5;
+export const MAX_VISIBLE_ITEMS = REWIND_MENU_VISIBLE_ITEMS;
 
 const TRUNCATE_LENGTH = 64;
 /** Naming two files is concrete; naming ten is noise. */

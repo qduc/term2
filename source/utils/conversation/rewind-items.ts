@@ -11,8 +11,8 @@ import type { RewindItem } from '../../hooks/use-rewind-selection.js';
  *
  * The two lists are aligned from the newest turn backwards: the store can be
  * trimmed independently of the rendered transcript, and it is the recent turns
- * whose costs a user is deciding about. A turn with no counterpart is reported
- * as discarding only itself rather than guessing.
+ * whose costs a user is deciding about. A turn with no store counterpart is not
+ * selectable because the rewind operation could not resolve it authoritatively.
  */
 export function buildRewindItems(
   userMessages: readonly { uiIndex: number; text: string }[],
@@ -20,16 +20,19 @@ export function buildRewindItems(
 ): RewindItem[] {
   const offset = storeTargets.length - userMessages.length;
 
-  return userMessages.map((message, position) => {
+  return userMessages.flatMap((message, position) => {
     const stats = storeTargets[position + offset];
+    if (!stats) return [];
 
-    return {
-      turnNumber: position + 1,
-      text: message.text,
-      imageCount: stats?.imageCount ?? 0,
-      discardedTurns: stats?.discardedTurns ?? 1,
-      discardedReplies: stats?.discardedReplies ?? 0,
-      discardedFiles: stats?.discardedFiles ?? [],
-    };
+    return [
+      {
+        turnNumber: position + 1,
+        text: message.text,
+        imageCount: stats.imageCount,
+        discardedTurns: stats.discardedTurns,
+        discardedReplies: stats.discardedReplies,
+        discardedFiles: stats.discardedFiles,
+      },
+    ];
   });
 }

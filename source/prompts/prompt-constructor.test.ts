@@ -11,6 +11,26 @@ it('buildPromptSpec preserves mode precedence for base prompts', () => {
   expect(buildPromptSpec({ model: 'gpt-4o', liteMode: false }).basePromptFile).toBe('simple_v4.md');
 });
 
+it('buildPromptSpec routes gpt-5.6 to its own base prompt without capturing other gpt-5 versions', () => {
+  expect(buildPromptSpec({ model: 'gpt-5.6', liteMode: false }).basePromptFile).toBe('gpt-5.6.md');
+  expect(buildPromptSpec({ model: 'gpt-5.6-2026-07-01', liteMode: false }).basePromptFile).toBe('gpt-5.6.md');
+
+  expect(buildPromptSpec({ model: 'gpt-5.5', liteMode: false }).basePromptFile).toBe('gpt-5.5.md');
+  expect(buildPromptSpec({ model: 'gpt-5.4', liteMode: false }).basePromptFile).toBe('gpt-5-modern.md');
+  expect(buildPromptSpec({ model: 'gpt-5.2', liteMode: false }).basePromptFile).toBe('gpt-5-modern.md');
+});
+
+it('buildPromptSpec keeps gpt-5.6 codex variants on the codex base prompt', () => {
+  expect(buildPromptSpec({ model: 'gpt-5.6-codex', liteMode: false }).basePromptFile).toBe('codex.md');
+});
+
+it('buildPromptSpec still applies mode precedence over the gpt-5.6 profile', () => {
+  expect(buildPromptSpec({ model: 'gpt-5.6', liteMode: true }).basePromptFile).toBe('lite.md');
+  expect(buildPromptSpec({ model: 'gpt-5.6', liteMode: false, orchestratorMode: true }).basePromptFile).toBe(
+    'orchestrator.md',
+  );
+});
+
 // it('buildPromptSpec adds GPT version fragments without changing the base GPT prompt fallback', () => {
 //   const gpt55 = buildPromptSpec({ model: 'gpt-5.5-2026-04-23', liteMode: false });
 //   expect(gpt55.basePromptFile).toBe('gpt-5-modern.md');

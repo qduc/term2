@@ -32,6 +32,11 @@ export const PROMPT_PROFILES: PromptProfile[] = [
     matches: ({ normalizedModel }) => normalizedModel.includes('gpt-5') && normalizedModel.includes('codex'),
   },
   {
+    id: 'gpt-5.6',
+    basePromptFile: 'gpt-5.6.md',
+    matches: ({ normalizedModel }) => normalizedModel.includes('gpt-5.6'),
+  },
+  {
     id: 'gpt-5.5',
     basePromptFile: 'gpt-5.5.md',
     matches: ({ normalizedModel }) => normalizedModel.includes('gpt-5.5'),

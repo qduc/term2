@@ -1,6 +1,7 @@
 import { it, expect, vi } from 'vitest';
-import { getAgentDefinition } from './agent.js';
+import { getAgentDefinition, getAgentsInstructions } from './agent.js';
 import { createMockSettingsService } from './services/settings/settings-service.mock.js';
+import os from 'os';
 
 const mockLogger = {
   debug: () => {},
@@ -712,6 +713,73 @@ it('getAgentDefinition includes AGENTS.md and full envInfo for orchestrator mode
   });
   expect(definitionPlan.instructions.includes('AGENTS.md contents:')).toBe(true);
   expect(definitionPlan.instructions.includes('Project structure:')).toBe(true);
+});
+
+it('getAgentsInstructions loads the global ~/.agents/AGENTS.md when present, before the project file', async () => {
+  const { mkdtemp, mkdir, writeFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+
+  const home = await mkdtemp(join(tmpdir(), 'term2-global-agents-'));
+  const project = await mkdtemp(join(tmpdir(), 'term2-project-agents-'));
+  await mkdir(join(home, '.agents'), { recursive: true });
+  await writeFile(join(home, '.agents', 'AGENTS.md'), 'Global agent guidance');
+  await writeFile(join(project, 'AGENTS.md'), 'Project agent guidance');
+
+  const spy = vi.spyOn(os, 'homedir').mockReturnValue(home);
+  try {
+    const instructions = getAgentsInstructions(project);
+    expect(instructions).toContain('Global AGENTS.md contents (~/.agents/AGENTS.md):');
+    expect(instructions).toContain('Global agent guidance');
+    expect(instructions).toContain('AGENTS.md contents:');
+    expect(instructions).toContain('Project agent guidance');
+    // Global guidance is appended first so project guidance stays closest to the model.
+    expect(instructions.indexOf('Global agent guidance')).toBeLessThan(instructions.indexOf('Project agent guidance'));
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it('getAgentsInstructions loads only the project AGENTS.md when no global file exists', async () => {
+  const { mkdtemp, writeFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+
+  const home = await mkdtemp(join(tmpdir(), 'term2-global-agents-none-'));
+  const project = await mkdtemp(join(tmpdir(), 'term2-project-agents-none-'));
+  await writeFile(join(project, 'AGENTS.md'), 'Project only guidance');
+
+  const spy = vi.spyOn(os, 'homedir').mockReturnValue(home);
+  try {
+    const instructions = getAgentsInstructions(project);
+    expect(instructions).not.toContain('Global AGENTS.md contents');
+    expect(instructions).toContain('AGENTS.md contents:');
+    expect(instructions).toContain('Project only guidance');
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it('getAgentsInstructions skips an empty global AGENTS.md but still loads the project file', async () => {
+  const { mkdtemp, mkdir, writeFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+
+  const home = await mkdtemp(join(tmpdir(), 'term2-global-agents-empty-'));
+  const project = await mkdtemp(join(tmpdir(), 'term2-project-agents-empty-'));
+  await mkdir(join(home, '.agents'), { recursive: true });
+  await writeFile(join(home, '.agents', 'AGENTS.md'), '   \n  \n');
+  await writeFile(join(project, 'AGENTS.md'), 'Project guidance only');
+
+  const spy = vi.spyOn(os, 'homedir').mockReturnValue(home);
+  try {
+    const instructions = getAgentsInstructions(project);
+    expect(instructions).not.toContain('Global AGENTS.md contents');
+    expect(instructions).toContain('AGENTS.md contents:');
+    expect(instructions).toContain('Project guidance only');
+  } finally {
+    spy.mockRestore();
+  }
 });
 
 it('getAgentDefinition includes worktree hygiene fragment in standard, mentor, plan, and orchestrator modes', () => {

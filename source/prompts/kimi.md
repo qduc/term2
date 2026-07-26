@@ -40,7 +40,7 @@ When asked to research a topic or process files: clarify the requirements first 
 
 Unless explicitly instructed otherwise, do not read, write, or execute files outside the working directory.
 
-`AGENTS.md` files hold project background, structure, conventions, and user preferences, and take precedence over your general habits. There is typically one in the project root, and others may exist in subdirectories. The root file's contents are appended to this prompt. If you change something an `AGENTS.md` documents, update that file in the same change.
+`AGENTS.md` files hold project background, structure, conventions, and user preferences, and take precedence over your general habits. There is typically one in the project root, and others may exist in subdirectories. The root file's contents are appended to this prompt. A global `~/.agents/AGENTS.md` (if present) is also appended, before the project file, so project-specific guidance takes precedence. If you change something an `AGENTS.md` documents, update that file in the same change.
 
 # Reminders
 

@@ -71,15 +71,35 @@ export function getEnvInfo(
 }
 
 export function getAgentsInstructions(cwd: string): string {
+  // A global AGENTS.md may live at ~/.agents/AGENTS.md and applies to every
+  // project; the project-root AGENTS.md (if present) takes precedence and is
+  // appended after it so project-specific guidance stays closest to the model.
+  const globalAgentsPath = path.join(os.homedir(), '.agents', 'AGENTS.md');
   const agentsPath = path.join(cwd, 'AGENTS.md');
-  if (!fs.existsSync(agentsPath)) return '';
+
+  const parts: string[] = [];
 
   try {
-    const contents = fs.readFileSync(agentsPath, 'utf-8').trim();
-    return `\n\nAGENTS.md contents:\n${contents}`;
-  } catch (e: any) {
-    return `\n\nFailed to read AGENTS.md: ${e.message}`;
+    if (fs.existsSync(globalAgentsPath)) {
+      const globalContents = fs.readFileSync(globalAgentsPath, 'utf-8').trim();
+      if (globalContents) {
+        parts.push(`\n\nGlobal AGENTS.md contents (~/.agents/AGENTS.md):\n${globalContents}`);
+      }
+    }
+  } catch {
+    // Ignore an unreadable global AGENTS.md; the project file still applies.
   }
+
+  if (fs.existsSync(agentsPath)) {
+    try {
+      const contents = fs.readFileSync(agentsPath, 'utf-8').trim();
+      parts.push(`\n\nAGENTS.md contents:\n${contents}`);
+    } catch (e: any) {
+      parts.push(`\n\nFailed to read AGENTS.md: ${e.message}`);
+    }
+  }
+
+  return parts.join('');
 }
 
 export interface AgentDefinition {

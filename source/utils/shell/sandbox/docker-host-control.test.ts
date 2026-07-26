@@ -79,7 +79,13 @@ it('uses only the canonical Docker Desktop socket and an isolated client config'
 });
 
 it('rejects a missing Docker Desktop socket', () => {
-  expect(() => createDockerHostControl(path.join(os.tmpdir(), 'missing-docker-home'))).toThrow(
-    'Docker Desktop socket is unavailable',
-  );
+  const missingHome = path.join(os.tmpdir(), 'missing-docker-home');
+  if (process.platform === 'darwin') {
+    expect(() => createDockerHostControl(missingHome)).toThrow('Docker Desktop socket is unavailable');
+  } else {
+    // On non-macOS platforms the platform guard rejects before the socket is even probed.
+    expect(() => createDockerHostControl(missingHome)).toThrow(
+      'Docker host control is currently supported only on macOS.',
+    );
+  }
 });

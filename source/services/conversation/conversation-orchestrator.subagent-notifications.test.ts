@@ -92,7 +92,7 @@ function makeHarness() {
 
   const service = {
     sessionId: 'test-session',
-    sendMessage: vi.fn(async () => response()),
+    sendMessage: vi.fn(async (_input: string, _options?: { suppressUserMessageDisplay?: boolean }) => response()),
     handleApprovalDecision: vi.fn(async () => response()),
     abort: vi.fn(),
     interruptFromUser: vi.fn(),

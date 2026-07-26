@@ -124,7 +124,7 @@ it('CommandMessage renders background subagent notifications as tool activity', 
     />,
   );
 
-  const output = stripAnsi(lastFrame());
+  const output = stripAnsi(lastFrame() ?? '');
   expect(output).toContain('Background subagent run finished (1)');
   expect(output).toContain('runId: run-1');
   unmount();

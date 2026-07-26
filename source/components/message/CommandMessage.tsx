@@ -214,7 +214,7 @@ const CommandMessage: FC<Props> = ({
           </>
         );
     }
-  }, [toolName, command, runtime, formattedArgs]);
+  }, [toolName, command, runtime, formattedArgs, toolArgs?.count]);
 
   const renderStandardHeader = () => {
     const headerColor = success === false ? COLOR_ERROR : isRunning ? COLOR_WARNING : COLOR_INFO;

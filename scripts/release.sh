@@ -9,29 +9,34 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# Parse arguments
-RESUME_MODE=false
-RESUME_VERSION=""
+# ---------------------------------------------------------------------------
+# Args
+# ---------------------------------------------------------------------------
+
+TARGET_VERSION_HINT=""
 
 print_usage() {
-    echo "Usage: $0 [--resume [VERSION]]"
+    echo "Usage: $0 [VERSION]"
+    echo ""
+    echo "Idempotent release script. Re-run the same command to continue after"
+    echo "a failure; completed steps are skipped automatically."
     echo ""
     echo "Options:"
-    echo "  --resume [VERSION]  Resume a failed release. If VERSION is not provided,"
-    echo "                      attempts to detect the version from package.json."
+    echo "  VERSION           Continue or finish this version (optional hint)"
+    echo "  --help, -h        Show this help"
     echo ""
     echo "Examples:"
-    echo "  $0                  # Start a new release"
-    echo "  $0 --resume         # Resume release using version from package.json"
-    echo "  $0 --resume 1.2.3   # Resume release for version 1.2.3"
+    echo "  $0                # Start a new release, or continue an in-flight one"
+    echo "  $0 1.2.3          # Continue/finish release 1.2.3"
 }
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --resume)
-            RESUME_MODE=true
-            if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
-                RESUME_VERSION="$2"
+            # Back-compat: formerly required for recovery. Now every run continues.
+            echo -e "${YELLOW}Note: --resume is no longer needed; continuing automatically.${NC}"
+            if [[ -n "${2:-}" && ! "$2" =~ ^-- ]]; then
+                TARGET_VERSION_HINT="$2"
                 shift
             fi
             shift
@@ -40,25 +45,33 @@ while [[ $# -gt 0 ]]; do
             print_usage
             exit 0
             ;;
-        *)
+        -*)
             echo -e "${RED}Unknown option: $1${NC}"
             print_usage
             exit 1
             ;;
+        *)
+            if [[ -n "$TARGET_VERSION_HINT" ]]; then
+                echo -e "${RED}Unexpected argument: $1${NC}"
+                print_usage
+                exit 1
+            fi
+            TARGET_VERSION_HINT="$1"
+            shift
+            ;;
     esac
 done
 
-CHANGELOG_PREWRITTEN=false
-CHANGELOG_PREWRITTEN_VERSION=""
-
 echo -e "${BLUE}=== Release Script ===${NC}"
 
-# Helper function to check if a tag exists
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
 tag_exists() {
     git rev-parse "v$1" >/dev/null 2>&1
 }
 
-# Helper function to check if changelog has version entry
 changelog_has_version() {
     if [ -f CHANGELOG.md ]; then
         grep -q "## \[$1\]" CHANGELOG.md 2>/dev/null
@@ -67,180 +80,262 @@ changelog_has_version() {
     fi
 }
 
-# Helper function to check if release commit exists
 release_commit_exists() {
-    git log --oneline -1 --grep="chore(release): v$1" 2>/dev/null | grep -q .
+    git log --oneline --grep="chore(release): v$1" -n 20 2>/dev/null | grep -q .
 }
 
-# Helper function to check if version is published on npm
 is_published_on_npm() {
     local pkg_name
     pkg_name=$(node -p "require('./package.json').name")
     pnpm view "${pkg_name}@$1" version >/dev/null 2>&1
 }
 
-# Helper function to extract the top version from CHANGELOG.md
 get_changelog_top_version() {
     if [ ! -f CHANGELOG.md ]; then
         return 1
     fi
-    grep -m1 '^## \[' CHANGELOG.md | sed -E 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/'
+    local ver
+    ver=$(grep -m1 '^## \[' CHANGELOG.md | sed -E 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/')
+    if [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "$ver"
+        return 0
+    fi
+    return 1
 }
 
-# 1. Check for uncommitted changes (skip in resume mode with appropriate conditions)
-if [[ "$RESUME_MODE" == "true" ]]; then
-    echo -e "${YELLOW}Resume mode: Skipping clean working directory check${NC}"
+get_package_version() {
+    node -p "require('./package.json').version"
+}
+
+get_latest_tag_version() {
+    git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true
+}
+
+# Return 0 if $1 > $2 (semver sort). Empty $2 means $1 wins.
+version_gt() {
+    local higher
+    if [[ -z "$2" ]]; then
+        return 0
+    fi
+    higher=$(printf "%s\n%s" "$2" "$1" | sort -V | tail -1)
+    [[ "$higher" == "$1" && "$1" != "$2" ]]
+}
+
+# Tracked dirty paths (unstaged + staged), one per line
+dirty_tracked_files() {
+    { git diff --name-only; git diff --name-only --cached; } | sort -u | sed '/^$/d'
+}
+
+file_is_dirty() {
+    local f=$1
+    if git diff --name-only -- "$f" | grep -q .; then
+        return 0
+    fi
+    if git diff --name-only --cached -- "$f" | grep -q .; then
+        return 0
+    fi
+    return 1
+}
+
+is_tag_on_remote() {
+    local v=$1
+    local remote
+    remote=$(git remote 2>/dev/null | head -1)
+    if [[ -z "$remote" ]]; then
+        return 1
+    fi
+    git ls-remote --tags "$remote" "refs/tags/v${v}" 2>/dev/null | grep -q .
+}
+
+# Bounded retries for transient operations. Usage: retry ATTEMPTS DELAY_SECS -- cmd args...
+# Progress messages go to stderr so command substitution captures only cmd stdout.
+retry() {
+    local attempts=$1
+    local delay=$2
+    shift 2
+    if [[ "${1:-}" == "--" ]]; then
+        shift
+    fi
+    local n=1
+    local current_delay=$delay
+    until "$@"; do
+        if (( n >= attempts )); then
+            return 1
+        fi
+        echo -e "${YELLOW}Attempt $n/$attempts failed; retrying in ${current_delay}s...${NC}" >&2
+        sleep "$current_delay"
+        current_delay=$((current_delay * 2))
+        n=$((n + 1))
+    done
+}
+
+run_health_checks() {
+    echo -e "${BLUE}Running lint, tests, and build...${NC}"
+    pnpm lint
+    pnpm run build
+    pnpm test
+}
+
+# ---------------------------------------------------------------------------
+# Dirty worktree: only package.json + CHANGELOG.md allowed
+# ---------------------------------------------------------------------------
+
+DIRTY_FILES=$(dirty_tracked_files || true)
+if [[ -n "$DIRTY_FILES" ]]; then
+    while IFS= read -r f; do
+        [[ -z "$f" ]] && continue
+        case "$f" in
+            package.json|CHANGELOG.md) ;;
+            *)
+                echo -e "${RED}Error: Working directory has unrelated changes. Only package.json and CHANGELOG.md may be dirty during a release.${NC}"
+                git status -s
+                exit 1
+                ;;
+        esac
+    done <<< "$DIRTY_FILES"
+fi
+
+CURRENT_VERSION=$(get_package_version)
+echo -e "Current version in package.json: ${YELLOW}$CURRENT_VERSION${NC}"
+
+LATEST_TAG=$(get_latest_tag_version)
+if [[ -n "$LATEST_TAG" ]]; then
+    echo -e "Latest tag: ${YELLOW}v$LATEST_TAG${NC}"
+fi
+
+# ---------------------------------------------------------------------------
+# Detect in-flight release vs start fresh
+# ---------------------------------------------------------------------------
+
+# True when local release work for this version is unfinished.
+# Push/publish-only recovery is opt-in via explicit VERSION argument so a
+# flaky npm/remote probe cannot trap the next release.
+is_in_flight() {
+    local v=$1
+
+    # Uncommitted release files for this version
+    if file_is_dirty package.json && [[ "$(get_package_version)" == "$v" ]]; then
+        return 0
+    fi
+    if file_is_dirty CHANGELOG.md; then
+        local top
+        top=$(get_changelog_top_version || true)
+        if [[ "$top" == "$v" ]]; then
+            return 0
+        fi
+    fi
+
+    # package.json already advanced past the latest tag (mid bump/commit/tag)
+    if version_gt "$v" "$LATEST_TAG"; then
+        return 0
+    fi
+
+    # Commit exists but tag does not
+    if release_commit_exists "$v" && ! tag_exists "$v"; then
+        return 0
+    fi
+
+    return 1
+}
+
+NEW_VERSION=""
+CHANGELOG_DONE=false
+VALIDATED=false
+
+if [[ -n "$TARGET_VERSION_HINT" ]]; then
+    NEW_VERSION="$TARGET_VERSION_HINT"
+    echo -e "Target version (from argument): ${GREEN}$NEW_VERSION${NC}"
+elif is_in_flight "$CURRENT_VERSION"; then
+    NEW_VERSION="$CURRENT_VERSION"
+    echo -e "${YELLOW}In-flight release detected for v$NEW_VERSION — continuing.${NC}"
 else
-    DIRTY_FILES=$(git status -s --untracked-files=no)
-    if [[ -n "$DIRTY_FILES" ]]; then
-        DIRTY_COUNT=$(echo "$DIRTY_FILES" | wc -l | tr -d ' ')
-        # Allow CHANGELOG.md-only changes if it contains a valid next version entry
-        if [[ "$DIRTY_COUNT" -eq 1 ]] && echo "$DIRTY_FILES" | grep -q 'CHANGELOG.md'; then
-            CHANGELOG_VERSION=$(get_changelog_top_version)
-            if [[ -z "$CHANGELOG_VERSION" ]]; then
-                echo -e "${RED}Error: CHANGELOG.md is modified but no valid version header (## [X.Y.Z]) found.${NC}"
-                exit 1
+    # Pre-written changelog for a not-yet-tagged next version?
+    CHANGELOG_TOP=$(get_changelog_top_version || true)
+    if [[ -n "$CHANGELOG_TOP" ]] \
+        && ! tag_exists "$CHANGELOG_TOP" \
+        && version_gt "$CHANGELOG_TOP" "$LATEST_TAG" \
+        && changelog_has_version "$CHANGELOG_TOP"; then
+        # package.json must be clean at the old version, or already at the new one
+        if [[ "$CURRENT_VERSION" == "$CHANGELOG_TOP" ]] || ! file_is_dirty package.json; then
+            if file_is_dirty CHANGELOG.md || ! release_commit_exists "$CHANGELOG_TOP"; then
+                NEW_VERSION="$CHANGELOG_TOP"
+                CHANGELOG_DONE=true
+                echo -e "${GREEN}Using pre-written changelog for v$NEW_VERSION.${NC}"
             fi
-            if tag_exists "$CHANGELOG_VERSION"; then
-                echo -e "${RED}Error: CHANGELOG.md version v$CHANGELOG_VERSION is already tagged.${NC}"
-                exit 1
-            fi
-            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "")
-            if [[ -n "$LATEST_TAG" ]]; then
-                HIGHER=$(printf "%s\n%s" "$LATEST_TAG" "$CHANGELOG_VERSION" | sort -V | tail -1)
-                if [[ "$HIGHER" != "$CHANGELOG_VERSION" ]]; then
-                    echo -e "${RED}Error: CHANGELOG.md version ($CHANGELOG_VERSION) is not greater than latest tag ($LATEST_TAG).${NC}"
-                    exit 1
-                fi
-            fi
-            CHANGELOG_PREWRITTEN=true
-            CHANGELOG_PREWRITTEN_VERSION="$CHANGELOG_VERSION"
-            echo -e "${GREEN}CHANGELOG.md modified with next version $CHANGELOG_VERSION. Using pre-written changelog.${NC}"
-        else
-            echo -e "${RED}Error: Working directory is not clean. Please commit or stash changes.${NC}"
-            git status -s
-            exit 1
         fi
     fi
 fi
 
-# 2. Get current version from package.json
-CURRENT_VERSION=$(node -p "require('./package.json').version")
-echo -e "Current version in package.json: ${YELLOW}$CURRENT_VERSION${NC}"
-
-# Determine the target version
-if [[ "$RESUME_MODE" == "true" ]]; then
-    if [[ -n "$RESUME_VERSION" ]]; then
-        NEW_VERSION="$RESUME_VERSION"
-    else
-        # Use current version from package.json as the target
-        NEW_VERSION="$CURRENT_VERSION"
-    fi
-    echo -e "${YELLOW}Resuming release for version: ${GREEN}$NEW_VERSION${NC}"
-
-    # Detect current state
-    echo -e "${BLUE}Detecting release state...${NC}"
-
-    if tag_exists "$NEW_VERSION"; then
-        echo -e "  ✓ Tag v$NEW_VERSION exists"
-        TAG_DONE=true
-    else
-        echo -e "  ○ Tag v$NEW_VERSION does not exist"
-        TAG_DONE=false
+if [[ -z "$NEW_VERSION" ]]; then
+    # Refuse to start a fresh release with a half-edited package.json
+    if file_is_dirty package.json; then
+        echo -e "${RED}Error: package.json is modified but no in-flight release matched version $CURRENT_VERSION.${NC}"
+        echo -e "${RED}Commit/stash it, or pass the version explicitly: $0 <version>${NC}"
+        exit 1
     fi
 
-    if release_commit_exists "$NEW_VERSION"; then
-        echo -e "  ✓ Release commit exists"
-        COMMIT_DONE=true
-    else
-        echo -e "  ○ Release commit does not exist"
-        COMMIT_DONE=false
+    run_health_checks
+    VALIDATED=true
+
+    echo "Select release type:"
+    options=("Patch" "Minor" "Major" "Custom")
+    select opt in "${options[@]}"; do
+        case $opt in
+            "Patch")
+                pnpm version patch --no-git-tag-version --no-commit-hooks >/dev/null
+                NEW_VERSION=$(get_package_version)
+                break
+                ;;
+            "Minor")
+                pnpm version minor --no-git-tag-version --no-commit-hooks >/dev/null
+                NEW_VERSION=$(get_package_version)
+                break
+                ;;
+            "Major")
+                pnpm version major --no-git-tag-version --no-commit-hooks >/dev/null
+                NEW_VERSION=$(get_package_version)
+                break
+                ;;
+            "Custom")
+                read -r -p "Enter version: " NEW_VERSION
+                pnpm version "$NEW_VERSION" --no-git-tag-version --no-commit-hooks >/dev/null
+                NEW_VERSION=$(get_package_version)
+                break
+                ;;
+            *) echo "Invalid option";;
+        esac
+    done
+fi
+
+if [[ -z "$NEW_VERSION" ]]; then
+    echo -e "${RED}Error: could not determine release version.${NC}"
+    exit 1
+fi
+
+# Validate dirty files match the target version
+if file_is_dirty package.json; then
+    if [[ "$(get_package_version)" != "$NEW_VERSION" ]]; then
+        echo -e "${RED}Error: package.json is dirty at version $(get_package_version), expected $NEW_VERSION.${NC}"
+        exit 1
     fi
-
-    if changelog_has_version "$NEW_VERSION"; then
-        echo -e "  ✓ Changelog has v$NEW_VERSION entry"
-        CHANGELOG_DONE=true
-    else
-        echo -e "  ○ Changelog does not have v$NEW_VERSION entry"
-        CHANGELOG_DONE=false
-    fi
-
-    if is_published_on_npm "$NEW_VERSION"; then
-        echo -e "  ✓ Version $NEW_VERSION is published on npm"
-        NPM_DONE=true
-    else
-        echo -e "  ○ Version $NEW_VERSION is not published on npm"
-        NPM_DONE=false
-    fi
-
-    echo ""
-else
-    # Normal mode: clean state
-    TAG_DONE=false
-    COMMIT_DONE=false
-    CHANGELOG_DONE=false
-    NPM_DONE=false
-
-    # 2.5 Run lint, tests, and build to ensure health
-    echo -e "${BLUE}Running lint, tests, and build to ensure health...${NC}"
-    pnpm lint
-    pnpm run build
-    pnpm test
-
-    if [[ "$CHANGELOG_PREWRITTEN" == "true" ]]; then
-        NEW_VERSION="$CHANGELOG_PREWRITTEN_VERSION"
-        CHANGELOG_DONE=true
-        echo -e "Preparing release for pre-written version: ${GREEN}$NEW_VERSION${NC}"
-
-        # Commit pre-written changelog to keep working tree clean for subsequent pnpm commands
-        echo -e "${BLUE}Committing pre-written changelog...${NC}"
-        git add CHANGELOG.md
-        git commit -m "chore: update CHANGELOG.md for v$NEW_VERSION"
-    else
-        # 3. Select bump type
-        echo "Select release type:"
-        options=("Patch" "Minor" "Major" "Custom")
-        select opt in "${options[@]}"
-        do
-            case $opt in
-                "Patch")
-                    pnpm version patch --no-git-tag-version --no-commit-hooks > /dev/null
-                    NEW_VERSION=$(node -p "require('./package.json').version")
-                    break
-                    ;;
-                "Minor")
-                    pnpm version minor --no-git-tag-version --no-commit-hooks > /dev/null
-                    NEW_VERSION=$(node -p "require('./package.json').version")
-                    break
-                    ;;
-                "Major")
-                    pnpm version major --no-git-tag-version --no-commit-hooks > /dev/null
-                    NEW_VERSION=$(node -p "require('./package.json').version")
-                    break
-                    ;;
-                "Custom")
-                    read -p "Enter version: " NEW_VERSION
-                    # validate version format if possible, or trust pnpm version to fail later if invalid
-                    pnpm version $NEW_VERSION --no-git-tag-version --no-commit-hooks > /dev/null
-                    break
-                    ;;
-                *) echo "Invalid option";;
-            esac
-        done
-
-        # Revert the pnpm version change for now, we will apply it properly later with changelog
-        git checkout package.json
+fi
+if file_is_dirty CHANGELOG.md; then
+    if ! changelog_has_version "$NEW_VERSION"; then
+        echo -e "${RED}Error: CHANGELOG.md is dirty but has no ## [$NEW_VERSION] entry.${NC}"
+        exit 1
     fi
 fi
 
-echo -e "Preparing release for version: ${GREEN}$NEW_VERSION${NC}"
-
-# Re-check if changelog already has an entry for this version
 if changelog_has_version "$NEW_VERSION"; then
     CHANGELOG_DONE=true
 fi
 
-# 4. Generate Changelog (skip if already done)
+echo -e "Preparing release for version: ${GREEN}$NEW_VERSION${NC}"
+
+# ---------------------------------------------------------------------------
+# Changelog
+# ---------------------------------------------------------------------------
+
 if [[ "$CHANGELOG_DONE" == "true" ]]; then
     echo -e "${YELLOW}Skipping changelog generation (already has v$NEW_VERSION entry)${NC}"
 else
@@ -253,12 +348,12 @@ else
         COMMITS=$(git log --pretty=format:"- %s (%h) by %an")
     else
         echo "Using commits since $LAST_TAG"
-        COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h) by %an")
+        COMMITS=$(git log "${LAST_TAG}"..HEAD --pretty=format:"- %s (%h) by %an")
     fi
 
     if [ -z "$COMMITS" ]; then
-        echo -e "${YELLOW}No commits found. Skipping changelog generation.${NC}"
-        CHANGELOG_ENTRY=""
+        echo -e "${YELLOW}No commits found. Skipping changelog body generation.${NC}"
+        CHANGELOG_ENTRY="## [$NEW_VERSION] - $(date +%Y-%m-%d)"
     else
         PROMPT="Generate a concise user-oriented CHANGELOG.md entry for version $NEW_VERSION.
         Group changes into sections: Features, Bug Fixes, Improvements.
@@ -276,93 +371,246 @@ else
         - ...
         "
 
-        # Call term2 and fail fast if it does not run successfully
-        if ! CHANGELOG_ENTRY=$(term2 -l -m gpt-5.4-mini -p openai "$PROMPT" 2> /dev/null | sed -E '/^ *```/d' | sed -E 's/<\!--.*-->//g'); then
-            echo -e "${RED}Error: Failed to generate changelog with term2.${NC}"
+        generate_changelog() {
+            term2 -l -m gpt-5.4-mini -p openai "$PROMPT" 2>/dev/null \
+                | sed -E '/^ *```/d' \
+                | sed -E 's/<\!--.*-->//g'
+        }
+
+        # Retry without mixing failed-attempt stdout into the captured entry.
+        CHANGELOG_ENTRY=""
+        changelog_ok=false
+        for changelog_attempt in 1 2 3; do
+            if CHANGELOG_ENTRY=$(generate_changelog) \
+                && [[ -n "$CHANGELOG_ENTRY" ]] \
+                && echo "$CHANGELOG_ENTRY" | grep -q "## \[$NEW_VERSION\]"; then
+                changelog_ok=true
+                break
+            fi
+            if [[ "$changelog_attempt" -lt 3 ]]; then
+                echo -e "${YELLOW}Changelog generation attempt $changelog_attempt failed; retrying...${NC}"
+                sleep $((changelog_attempt * 2))
+            fi
+        done
+        if [[ "$changelog_ok" != "true" ]]; then
+            echo -e "${RED}Error: Failed to generate changelog with term2 after retries.${NC}"
+            if [[ -n "$CHANGELOG_ENTRY" ]]; then
+                echo "$CHANGELOG_ENTRY"
+            fi
             exit 1
         fi
 
         echo -e "${BLUE}Generated Changelog:${NC}"
         echo "$CHANGELOG_ENTRY"
         echo "--------------------------------"
-        read -p "Press Enter to accept and continue, or Ctrl+C to abort..."
-
+        read -r -p "Press Enter to accept and continue, or Ctrl+C to abort..."
     fi
 
-    # 5. Apply changes - Generate new CHANGELOG.md
     if [ -f CHANGELOG.md ]; then
-        echo "$CHANGELOG_ENTRY" > CHANGELOG.tmp
-        echo "" >> CHANGELOG.tmp
-        cat CHANGELOG.md >> CHANGELOG.tmp
+        {
+            echo "$CHANGELOG_ENTRY"
+            echo ""
+            cat CHANGELOG.md
+        } > CHANGELOG.tmp
         mv CHANGELOG.tmp CHANGELOG.md
     else
-        echo "# Changelog" > CHANGELOG.md
-        echo "" >> CHANGELOG.md
-        echo "$CHANGELOG_ENTRY" >> CHANGELOG.md
+        {
+            echo "# Changelog"
+            echo ""
+            echo "$CHANGELOG_ENTRY"
+        } > CHANGELOG.md
     fi
 fi
 
-# Bump version (uses --allow-same-version for idempotency)
-echo -e "${BLUE}Setting version to $NEW_VERSION...${NC}"
-# CHANGELOG.md is intentionally uncommitted at this point. Disable pnpm's
-# clean-working-tree check; the release commit below records both files.
-pnpm version $NEW_VERSION --no-git-tag-version --allow-same-version --no-git-checks
+# ---------------------------------------------------------------------------
+# Version bump (idempotent)
+# ---------------------------------------------------------------------------
 
-# Skip verification if commit already exists (tests passed before)
-if [[ "$COMMIT_DONE" == "true" ]]; then
-    echo -e "${YELLOW}Skipping verification (release commit already exists)${NC}"
+if [[ "$(get_package_version)" == "$NEW_VERSION" ]]; then
+    echo -e "${YELLOW}package.json already at $NEW_VERSION${NC}"
 else
-    # Final verification before commit
-    echo -e "${BLUE}Building for v$NEW_VERSION...${NC}"
-    pnpm run build
-
-    # Commit
-    echo -e "${BLUE}Committing changes...${NC}"
-    git add package.json CHANGELOG.md
-    git commit -m "chore(release): v$NEW_VERSION"
+    echo -e "${BLUE}Setting version to $NEW_VERSION...${NC}"
+    # CHANGELOG.md may be uncommitted; disable pnpm's clean-working-tree check.
+    pnpm version "$NEW_VERSION" --no-git-tag-version --allow-same-version --no-git-checks
 fi
 
-# Tag (skip if already exists)
-if [[ "$TAG_DONE" == "true" ]]; then
+# ---------------------------------------------------------------------------
+# Commit
+# ---------------------------------------------------------------------------
+
+COMMIT_DONE=false
+if release_commit_exists "$NEW_VERSION"; then
+    if file_is_dirty package.json || file_is_dirty CHANGELOG.md; then
+        echo -e "${RED}Error: release commit for v$NEW_VERSION exists but package.json/CHANGELOG.md are still dirty.${NC}"
+        echo -e "${RED}Resolve the dirty files manually, then re-run.${NC}"
+        git status -s
+        exit 1
+    fi
+    echo -e "${YELLOW}Skipping commit (release commit already exists)${NC}"
+    COMMIT_DONE=true
+else
+    if [[ "$VALIDATED" != "true" ]]; then
+        run_health_checks
+        VALIDATED=true
+    else
+        echo -e "${BLUE}Building for v$NEW_VERSION...${NC}"
+        pnpm run build
+    fi
+
+    echo -e "${BLUE}Committing changes...${NC}"
+    git add package.json CHANGELOG.md
+    # Nothing to commit means version/changelog already match HEAD without a release commit message.
+    if git diff --cached --quiet; then
+        echo -e "${RED}Error: no staged release changes, and no existing 'chore(release): v$NEW_VERSION' commit.${NC}"
+        exit 1
+    fi
+    git commit -m "chore(release): v$NEW_VERSION"
+    COMMIT_DONE=true
+fi
+
+# ---------------------------------------------------------------------------
+# Tag
+# ---------------------------------------------------------------------------
+
+TAG_DONE=false
+if tag_exists "$NEW_VERSION"; then
     echo -e "${YELLOW}Skipping tag creation (v$NEW_VERSION already exists)${NC}"
+    TAG_DONE=true
 else
     echo -e "${BLUE}Tagging version v$NEW_VERSION...${NC}"
     git tag "v$NEW_VERSION"
+    TAG_DONE=true
 fi
 
-# 6. Publish
-if [[ "$NPM_DONE" == "true" ]]; then
-    echo -e "${YELLOW}Skipping npm publish (v$NEW_VERSION already published)${NC}"
+# ---------------------------------------------------------------------------
+# Push (before publish — git is easier to recover than npm)
+# ---------------------------------------------------------------------------
+
+WANT_PUSH=false
+PUSH_OK=false
+
+if is_tag_on_remote "$NEW_VERSION"; then
+    echo -e "${YELLOW}Skipping push (v$NEW_VERSION already on remote)${NC}"
+    PUSH_OK=true
 else
-    read -p "Do you want to publish to npm now? (y/N) " -n 1 -r
+    read -r -p "Do you want to push commits and tags to remote? (y/N) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        # Check if pnpm session is valid
-        echo -e "${BLUE}Checking pnpm authentication...${NC}"
-        if ! pnpm whoami &>/dev/null; then
-            echo -e "${YELLOW}Not logged in to npm. Please log in:${NC}"
-            pnpm login
-            if ! pnpm whoami &>/dev/null; then
-                echo -e "${RED}pnpm login failed. Skipping publish.${NC}"
+        WANT_PUSH=true
+        echo -e "${BLUE}Pushing to remote...${NC}"
+        if retry 3 2 -- bash -c 'git push && git push --tags'; then
+            if is_tag_on_remote "$NEW_VERSION"; then
+                PUSH_OK=true
             else
-                echo -e "${BLUE}Publishing to npm...${NC}"
-                pnpm publish
+                # Push exited 0 but probe failed (eventual consistency / different remote)
+                echo -e "${YELLOW}Push command succeeded but remote tag v$NEW_VERSION not visible yet.${NC}"
+                PUSH_OK=true
             fi
         else
-            NPM_USER=$(pnpm whoami)
-            echo -e "${GREEN}Logged in as: $NPM_USER${NC}"
-            echo -e "${BLUE}Publishing to npm...${NC}"
-            pnpm publish
+            echo -e "${RED}Push failed after retries.${NC}"
+            PUSH_OK=false
         fi
     fi
 fi
 
-# 7. Push
-read -p "Do you want to push commits and tags to remote? (y/N) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo -e "${BLUE}Pushing to remote...${NC}"
-    git push && git push --tags
+# ---------------------------------------------------------------------------
+# Publish
+# ---------------------------------------------------------------------------
+
+WANT_PUBLISH=false
+PUBLISH_OK=false
+
+if is_published_on_npm "$NEW_VERSION"; then
+    echo -e "${YELLOW}Skipping npm publish (v$NEW_VERSION already published)${NC}"
+    PUBLISH_OK=true
+else
+    read -r -p "Do you want to publish to npm now? (y/N) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        WANT_PUBLISH=true
+
+        ensure_npm_auth() {
+            if pnpm whoami &>/dev/null; then
+                return 0
+            fi
+            echo -e "${YELLOW}Not logged in to npm. Please log in:${NC}"
+            pnpm login
+            pnpm whoami &>/dev/null
+        }
+
+        do_publish() {
+            ensure_npm_auth
+            pnpm publish
+        }
+
+        echo -e "${BLUE}Publishing to npm...${NC}"
+        if retry 3 2 -- do_publish; then
+            if is_published_on_npm "$NEW_VERSION"; then
+                PUBLISH_OK=true
+            else
+                echo -e "${YELLOW}Publish command succeeded but registry does not list v$NEW_VERSION yet; probing once more...${NC}"
+                sleep 2
+                if is_published_on_npm "$NEW_VERSION"; then
+                    PUBLISH_OK=true
+                else
+                    echo -e "${RED}Could not confirm v$NEW_VERSION on npm.${NC}"
+                    PUBLISH_OK=false
+                fi
+            fi
+        else
+            # Lost response: publish may have succeeded
+            if is_published_on_npm "$NEW_VERSION"; then
+                echo -e "${GREEN}Publish reported failure but v$NEW_VERSION is on npm — treating as success.${NC}"
+                PUBLISH_OK=true
+            else
+                echo -e "${RED}npm publish failed after retries.${NC}"
+                PUBLISH_OK=false
+            fi
+        fi
+    fi
 fi
 
-echo -e "${GREEN}Release v$NEW_VERSION completed!${NC}"
+# ---------------------------------------------------------------------------
+# Summary / exit code
+# ---------------------------------------------------------------------------
+
+echo ""
+echo -e "${BLUE}Release v$NEW_VERSION summary${NC}"
+echo -e "  commit:  $([[ "$COMMIT_DONE" == "true" ]] && echo "yes" || echo "NO")"
+echo -e "  tag:     $([[ "$TAG_DONE" == "true" ]] && echo "yes" || echo "NO")"
+if [[ "$WANT_PUSH" == "true" ]]; then
+    echo -e "  push:    $([[ "$PUSH_OK" == "true" ]] && echo "yes" || echo "FAILED")"
+elif [[ "$PUSH_OK" == "true" ]]; then
+    echo -e "  push:    already on remote"
+else
+    echo -e "  push:    skipped"
+fi
+if [[ "$WANT_PUBLISH" == "true" ]]; then
+    echo -e "  npm:     $([[ "$PUBLISH_OK" == "true" ]] && echo "yes" || echo "FAILED")"
+elif [[ "$PUBLISH_OK" == "true" ]]; then
+    echo -e "  npm:     already published"
+else
+    echo -e "  npm:     skipped"
+fi
+
+EXIT_CODE=0
+if [[ "$COMMIT_DONE" != "true" || "$TAG_DONE" != "true" ]]; then
+    EXIT_CODE=1
+fi
+if [[ "$WANT_PUSH" == "true" && "$PUSH_OK" != "true" ]]; then
+    EXIT_CODE=1
+fi
+if [[ "$WANT_PUBLISH" == "true" && "$PUBLISH_OK" != "true" ]]; then
+    EXIT_CODE=1
+fi
+
+if [[ "$EXIT_CODE" -eq 0 ]]; then
+    echo -e "${GREEN}Release v$NEW_VERSION completed.${NC}"
+    if [[ "$PUSH_OK" != "true" || "$PUBLISH_OK" != "true" ]]; then
+        echo -e "${YELLOW}To push and/or publish later: $0 $NEW_VERSION${NC}"
+    fi
+else
+    echo -e "${RED}Release v$NEW_VERSION incomplete. Re-run: $0 $NEW_VERSION${NC}"
+fi
+
+exit "$EXIT_CODE"

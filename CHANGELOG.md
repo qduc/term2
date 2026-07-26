@@ -1,3 +1,21 @@
+## [0.11.0] - 2026-07-26
+
+### Features
+- Added a background task overview for async subagent work.
+- Async subagent sessions now persist across turns, and the main agent is notified when background runs finish.
+- Orchestrator mode now delegates background work asynchronously by default.
+- Added Remember options to network access approval prompts.
+- LLM auto-approved commands are now clearly labeled.
+
+### Bug Fixes
+- Fixed the default ordering of menu items.
+- Fixed Docker host-control approvals so they’re inferred correctly.
+
+### Improvements
+- Clarified delegation guidance and task ownership in Orchestrator mode.
+- Improved labeling of async subagent activity.
+- Made Codex rate-limit windows easier to read.
+
 ## [0.10.1] - 2026-07-25
 
 ### Features

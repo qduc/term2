@@ -49,3 +49,21 @@ it('getSearchViaShellAddendum falls back to grep and find when both missing', ()
   expect(includesWord(result, 'find')).toBe(true);
   expect(result.toLowerCase().includes('hygiene')).toBe(true);
 });
+
+it('getSearchViaShellAddendum warns that pathless rg reads stdin', () => {
+  const result = getSearchViaShellAddendum({
+    checkBinary: () => true,
+  });
+
+  expect(result.toLowerCase()).toContain('explicit path');
+  expect(result.toLowerCase()).toContain('stdin');
+});
+
+it('getSearchViaShellAddendum warns about find -regex alternation ordering', () => {
+  const result = getSearchViaShellAddendum({
+    checkBinary: () => false,
+  });
+
+  expect(result).toContain('-regex');
+  expect(result.toLowerCase()).toContain('longest alternative first');
+});

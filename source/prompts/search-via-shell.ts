@@ -32,33 +32,16 @@ export function getSearchViaShellAddendum(options: SearchViaShellOptions = {}): 
 Use the \`shell\` tool with the standard CLI binaries.`;
 
   const textSearch = hasRg
-    ? `**For text search**, use \`rg\` (ripgrep). Examples:
-- \`rg "pattern" src/\` — basic search, respects \`.gitignore\` by default.
-- \`rg -i "pattern" .\` — case-insensitive.
-- \`rg --no-ignore "pattern" .\` — when you need to search \`node_modules\`, build output, or anything in \`.gitignore\`.
-- \`rg -uu "pattern" .\` — include hidden + gitignored.
-- \`rg -g '*.ts' "pattern" .\` — restrict by glob.
-- \`rg -t ts "pattern" .\` — restrict by language preset.
-- \`rg -n "pattern" .\` — show line numbers (useful for follow-up edits).
-- \`rg -l "pattern" .\` — list files only.
-- \`rg -C 3 "pattern" .\` — 3 lines of context.
-- **Always pass an explicit path** (e.g. \`.\` or \`src/\`) to \`rg\`. When no path is given and stdin is a pipe, ripgrep reads stdin instead of searching the filesystem, returning no results.`
-    : `**For text search**, use \`grep\`. Examples:
-- \`grep -rn "pattern" src/\` — recursive search with line numbers.
-- \`grep -ri "pattern" src/\` — case-insensitive recursive search.
-- \`grep -rl "pattern" src/\` — list matching files only.
-- \`grep -C 3 "pattern" src/\` — show 3 lines of context.`;
+    ? `**For text search**, use \`rg\` (ripgrep). It respects \`.gitignore\` by default; \`--no-ignore\` or \`-uu\` when you need to search past it.
+
+**Always pass an explicit path** (e.g. \`.\` or \`src/\`). With no path given and stdin attached to a pipe, ripgrep reads stdin instead of searching the filesystem and silently returns no results.`
+    : `**For text search**, use \`grep\`, with \`-rn\` for a recursive search reporting line numbers.`;
 
   const fileSearch = hasFd
-    ? `**For file search**, use \`fd\`. Examples:
-- \`fd '\\.ts$'\` — regex over basenames.
-- \`fd -e ts\` — by extension.
-- \`fd -H -I\` — include hidden + gitignored (\`-uu\` style).
-- \`fd 'pattern' path/\` — scoped to a directory.`
-    : `**For file search**, use \`find\`. Examples:
-- \`find src/ -type f -name '*.ts'\` — search a subtree by basename glob.
-- **Always search from a specific path, not \`/\`.** Scanning the whole filesystem can exhaust resources on large trees.
-- When using \`find -regex\` with alternation, put the longest alternative first: \`'.*\\.(tsx|ts)'\` works; \`'.*\\.(ts|tsx)'\` silently skips \`.tsx\`.`;
+    ? `**For file search**, use \`fd\`. It also respects \`.gitignore\`; \`-H -I\` includes hidden and ignored files.`
+    : `**For file search**, use \`find\`, scoped to a specific path rather than \`/\` — scanning the whole filesystem can exhaust resources on large trees.
+
+With \`find -regex\` alternation, put the longest alternative first: \`'.*\\.(tsx|ts)'\` matches, while \`'.*\\.(ts|tsx)'\` silently skips \`.tsx\`.`;
 
   const hygiene = `**General shell hygiene:**
 - Quote paths that contain spaces.

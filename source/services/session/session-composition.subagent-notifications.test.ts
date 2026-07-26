@@ -1,6 +1,5 @@
 import { it, expect } from 'vitest';
 import { createSessionRuntime } from './session-composition.js';
-import { createConversationRuntime } from '../conversation/conversation-runtime-factory.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 
@@ -119,53 +118,4 @@ it('detaches the background sink on disposal', () => {
   expect(typeof sinks.background).toBe('function');
   runtime.dispose();
   expect(sinks.background).toBeNull();
-});
-
-it('does not double-render: a completion during an active turn reaches the UI sink exactly once', async () => {
-  const sinks: Sinks = { turn: null, background: null };
-  const client = makeClient(sinks, {
-    async startStream(_input: any, _opts: any) {
-      // The SubagentBridge fans a single emission out to both sinks.
-      const event = completion('run-1');
-      sinks.turn?.(event);
-      sinks.background?.(event);
-      return {
-        interruptions: [],
-        state: null,
-        history: [],
-        newItems: [],
-        finalOutput: 'ok',
-        lastResponseId: null,
-        [Symbol.asyncIterator]() {
-          let done = false;
-          return {
-            next() {
-              if (!done) {
-                done = true;
-                return Promise.resolve({
-                  done: false,
-                  value: { type: 'response.output_text.delta', delta: 'ok' },
-                });
-              }
-              return Promise.resolve({ done: true, value: undefined });
-            },
-          };
-        },
-      };
-    },
-  });
-
-  const { runtime, adapter } = createConversationRuntime({
-    sessionId: 'bg-no-double-render',
-    agentClient: client,
-    deps: { logger: makeLogger(), sessionContextService },
-  });
-
-  const seen: ConversationEvent[] = [];
-  await adapter.sendMessage('hi', { onEvent: (event) => seen.push(event) });
-
-  expect(seen.filter((event) => event.type === 'subagent_completed')).toHaveLength(1);
-  expect(runtime.backgroundSubagentNotifications.pendingCount).toBe(1);
-
-  runtime.dispose();
 });

@@ -30,6 +30,15 @@ it('run_subagent_async tool is registered with the correct name', () => {
   expect(tool.name).toBe('run_subagent_async');
 });
 
+it('run_subagent_async tool guidance treats a running handle as successful non-duplicated delegation', () => {
+  const tool = createRunSubagentAsyncToolDefinition(async () => makeHandle());
+
+  expect(tool.description).toContain('status: "running"');
+  expect(tool.description).toContain('do not duplicate the delegated task');
+  expect(tool.description).toContain('automatic completion notification');
+  expect(tool.description).toContain('explicitly need the result immediately');
+});
+
 it('run_subagent_async schema accepts supported roles', () => {
   const tool = createRunSubagentAsyncToolDefinition(async () => makeHandle());
 

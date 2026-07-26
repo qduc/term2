@@ -25,14 +25,17 @@ export interface SubagentBridgeDeps {
   skillsService?: SkillsService;
 }
 
+type SubagentEventScope = 'foreground' | 'background';
+
 export class SubagentBridge {
   #subagentManager: SubagentManager | null;
   #sessionContextService: ISessionContextService;
   #subagentEventSink: ((event: ConversationEvent) => void) | null = null;
   #backgroundEventSink: ((event: ConversationEvent) => void) | null = null;
+  #backgroundRunIds = new Set<string>();
   #activeSubagentsCount = 0;
   #pendingClearSink = false;
-  #bufferedEvents: ConversationEvent[] = [];
+  #bufferedEvents: Array<{ event: ConversationEvent; scope: SubagentEventScope }> = [];
   #logger: ILoggingService;
   /** Per-turn scope: foreground subagent work belonging to the running turn. */
   #abortController = new AbortController();
@@ -65,7 +68,7 @@ export class SubagentBridge {
   setEventSink(sink: ((event: ConversationEvent) => void) | null): void {
     this.#subagentEventSink = sink;
     this.#pendingClearSink = false;
-    if (sink) this.#flushBufferedEvents(sink);
+    if (sink) this.#flushBufferedEvents('foreground', sink);
   }
 
   /**
@@ -76,23 +79,46 @@ export class SubagentBridge {
    */
   setBackgroundEventSink(sink: ((event: ConversationEvent) => void) | null): void {
     this.#backgroundEventSink = sink;
-    if (sink) this.#flushBufferedEvents(sink);
+    if (sink) this.#flushBufferedEvents('background', sink);
   }
 
-  #flushBufferedEvents(sink: (event: ConversationEvent) => void): void {
-    const buffered = this.#bufferedEvents.splice(0);
-    for (const event of buffered) sink(event);
+  #flushBufferedEvents(scope: SubagentEventScope, sink: (event: ConversationEvent) => void): void {
+    const pending: Array<{ event: ConversationEvent; scope: SubagentEventScope }> = [];
+    for (const buffered of this.#bufferedEvents) {
+      if (buffered.scope === scope) {
+        sink(buffered.event);
+      } else {
+        pending.push(buffered);
+      }
+    }
+    this.#bufferedEvents = pending;
   }
 
   #emitEvent(event: ConversationEvent): void {
-    const turnSink = this.#subagentEventSink;
-    const backgroundSink = this.#backgroundEventSink;
-    if (!turnSink && !backgroundSink) {
-      this.#bufferedEvents.push(event);
-      return;
+    const agentId =
+      event.type === 'subagent_completed'
+        ? event.result.agentId
+        : 'agentId' in event && typeof event.agentId === 'string'
+        ? event.agentId
+        : undefined;
+
+    const explicitlyAsync = 'async' in event && event.async === true;
+    if (event.type === 'subagent_started' && explicitlyAsync && agentId) {
+      this.#backgroundRunIds.add(agentId);
     }
-    turnSink?.(event);
-    backgroundSink?.(event);
+
+    const scope: SubagentEventScope =
+      explicitlyAsync || (agentId !== undefined && this.#backgroundRunIds.has(agentId)) ? 'background' : 'foreground';
+    const sink = scope === 'background' ? this.#backgroundEventSink : this.#subagentEventSink;
+    if (sink) {
+      sink(event);
+    } else {
+      this.#bufferedEvents.push({ event, scope });
+    }
+
+    if (scope === 'background' && event.type === 'subagent_completed' && agentId) {
+      this.#backgroundRunIds.delete(agentId);
+    }
   }
 
   /**

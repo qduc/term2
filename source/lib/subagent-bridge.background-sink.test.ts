@@ -48,8 +48,26 @@ const asyncCompletedEvent = (runId: string): ConversationEvent =>
   ({
     type: 'subagent_completed',
     async: true,
-    result: { runId, status: 'completed' },
+    result: { agentId: runId, status: 'completed' },
   } as unknown as ConversationEvent);
+
+const startedEvent = (runId: string, async = false): ConversationEvent =>
+  ({
+    type: 'subagent_started',
+    agentId: runId,
+    role: 'explorer',
+    task: 'inspect the project',
+    parentTool: async ? 'run_subagent_async' : 'run_subagent',
+    ...(async ? { async: true } : {}),
+  } as ConversationEvent);
+
+const commandEvent = (runId: string): ConversationEvent =>
+  ({
+    type: 'subagent_command_message',
+    agentId: runId,
+    role: 'explorer',
+    message: { toolName: 'read_file', command: 'read_file source/app.tsx', success: true, output: '' },
+  } as ConversationEvent);
 
 /** Builds a bridge plus an `emit` function that fires the manager's onEvent. */
 function makeBridge() {
@@ -87,17 +105,36 @@ it('delivers events to the background sink when no per-turn sink is attached', (
   expect(background.events[0]).toMatchObject({ type: 'subagent_completed', async: true });
 });
 
-it('delivers each event exactly once to both the per-turn and background sinks', () => {
+it('keeps synchronous events on the turn sink and async lifecycle events on the background sink', () => {
   const { bridge, emit } = makeBridge();
   const turn = collector();
   const background = collector();
 
   bridge.setEventSink(turn.sink);
   bridge.setBackgroundEventSink(background.sink);
-  emit(asyncCompletedEvent('run-1'));
 
-  expect(turn.events).toHaveLength(1);
-  expect(background.events).toHaveLength(1);
+  emit(startedEvent('foreground-run'));
+  emit(commandEvent('foreground-run'));
+  emit(startedEvent('background-run', true));
+  emit(commandEvent('background-run'));
+  emit(asyncCompletedEvent('background-run'));
+
+  expect(turn.events.map((event) => event.type)).toEqual(['subagent_started', 'subagent_command_message']);
+  expect(turn.events.every((event) => 'agentId' in event && event.agentId === 'foreground-run')).toBe(true);
+  expect(background.events.map((event) => event.type)).toEqual([
+    'subagent_started',
+    'subagent_command_message',
+    'subagent_completed',
+  ]);
+  expect(
+    background.events.map((event) =>
+      event.type === 'subagent_completed'
+        ? event.result.agentId
+        : 'agentId' in event && typeof event.agentId === 'string'
+        ? event.agentId
+        : undefined,
+    ),
+  ).toEqual(['background-run', 'background-run', 'background-run']);
 });
 
 it('flushes events buffered while no sink was attached to the background sink attaching first', () => {
@@ -113,12 +150,12 @@ it('flushes events buffered while no sink was attached to the background sink at
   expect(turn.events).toHaveLength(0);
 });
 
-it('flushes events buffered while no sink was attached to the per-turn sink attaching first', () => {
+it('flushes buffered synchronous events only to the per-turn sink', () => {
   const { bridge, emit } = makeBridge();
   const background = collector();
   const turn = collector();
 
-  emit(asyncCompletedEvent('run-1'));
+  emit(startedEvent('foreground-run'));
   bridge.setEventSink(turn.sink);
   bridge.setBackgroundEventSink(background.sink);
 

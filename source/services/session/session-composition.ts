@@ -227,24 +227,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const resolvedSubagentEventSinkHost = subagentEventSinkHost ?? asSubagentEventSinkHost(agentClient);
 
   // Background (async) subagent runs settle whenever they settle, including
-  // while the conversation is idle and no per-turn sink is attached. The
-  // conversation-scoped sink only records the completion: rendering belongs to
-  // the per-turn sink, so forwarding here would draw the same event twice.
+  // while the conversation is idle and no per-turn sink is attached.
   const notificationStore = new SubagentNotificationStore();
   let notificationObserver: (() => void) | null = null;
-  resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.((event) => {
-    if (!notificationStore.enqueue(event)) return;
-    try {
-      notificationObserver?.();
-    } catch (error) {
-      logger.warn('Background subagent notification observer threw', {
-        eventType: 'subagent.notification_observer_failed',
-        category: 'subagent',
-        sessionId: id,
-        errorMessage: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
   const backgroundSubagentNotifications: BackgroundSubagentNotificationChannel = {
     get pendingCount() {
       return notificationStore.pendingCount;
@@ -300,6 +285,24 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     getCurrentTurnId: () => toolTracker.getCurrentTurnId(),
     getToolLedger: () => toolTracker.export(),
     journal,
+  });
+
+  // Background lifecycle belongs to the conversation-scoped sink, not the
+  // active turn's UI sink. Dispatch it through conversation logging, while only
+  // terminal async events enter the main-agent notification queue.
+  resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.((event) => {
+    conversationLogger.dispatchEventToLog(event);
+    if (!notificationStore.enqueue(event)) return;
+    try {
+      notificationObserver?.();
+    } catch (error) {
+      logger.warn('Background subagent notification observer threw', {
+        eventType: 'subagent.notification_observer_failed',
+        category: 'subagent',
+        sessionId: id,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
   });
 
   const approvalFlow = new ApprovalFlowCoordinator({

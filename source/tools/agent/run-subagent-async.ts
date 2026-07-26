@@ -146,10 +146,11 @@ export function createRunSubagentAsyncToolDefinition(
     name: 'run_subagent_async',
     description:
       'Start a subagent that runs asynchronously in the background and returns a runId immediately. ' +
-      'Use this when you want to launch a subagent and continue with other work before retrieving the result. ' +
+      'A returned handle with status: "running" means the launch succeeded; do not duplicate the delegated task. ' +
+      'Return control and wait for the automatic completion notification. ' +
       'Fresh runs support explorer, worker, researcher, mentor, and librarian. ' +
       'Only completed non-worker runs can be continued across turns; worker continuation is blocked. ' +
-      'Call get_subagent_result with the returned runId to retrieve the final SubagentResult.',
+      'Call get_subagent_result from the notification turn, or earlier only when you explicitly need the result immediately.',
     parameters: runSubagentAsyncSchema,
     needsApproval: () => false,
     execute: async (params, context, details) => {

@@ -126,7 +126,7 @@ it('buildPromptSpec includes async subagent guidance when async tools are enable
   expect(spec.inlineSections.some((s) => s.includes('mentor'))).toBe(true);
 });
 
-it('buildPromptSpec makes async delegation the orchestrator path and explains immediate retrieval', () => {
+it('buildPromptSpec tells orchestrators to trust successful delegation and wait without duplicating it', () => {
   const spec = buildPromptSpec({
     model: 'gpt-4o',
     liteMode: false,
@@ -137,8 +137,11 @@ it('buildPromptSpec makes async delegation the orchestrator path and explains im
   const guidance = spec.inlineSections.join('\n');
 
   expect(guidance).toContain('use `run_subagent_async` for delegable work');
-  expect(guidance).toContain('return control after receiving the run handle');
-  expect(guidance).toContain('When the result is truly needed immediately, call `get_subagent_result`');
+  expect(guidance).toContain('A returned handle with `status: "running"` means delegation succeeded');
+  expect(guidance).toContain('Do not duplicate or independently perform the delegated unit');
+  expect(guidance).toContain('end the current turn and wait for the automatic completion notification');
+  expect(guidance).toContain('Use `get_subagent_result` from that notification turn');
+  expect(guidance).toContain('only when the result is explicitly needed immediately');
   expect(guidance).not.toContain('Use `run_subagent` only');
 });
 

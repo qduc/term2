@@ -1,3 +1,18 @@
+## [0.11.1]
+
+### Features
+- Background subagent activity now appears in the UI.
+- Added a subagent status peek tool with richer turn history.
+- Added subagent steering and blocker questions.
+- Agent instructions now load from both the project `AGENTS.md` and your global `~/.agents/AGENTS.md`.
+
+### Bug Fixes
+- Search-tool descriptions now stay consistent when a glob pattern is omitted.
+
+### Improvements
+- Subagent completion messages now provide clearer status and outcome details.
+- Subagent results now retain more useful evidence, including diffs and validation notes.
+
 ## [0.11.0] - 2026-07-26
 
 ### Features

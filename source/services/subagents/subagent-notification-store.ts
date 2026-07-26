@@ -1,5 +1,10 @@
-import type { ConversationEvent } from '../conversation/conversation-events.js';
+import type {
+  ConversationEvent,
+  SubagentCommandMessageEvent,
+  SubagentToolStartedEvent,
+} from '../conversation/conversation-events.js';
 import type { SubagentResult } from './types.js';
+import { formatToolCommand, parseToolArguments } from '../../utils/conversation/conversation-utils.js';
 import { truncatePreview } from './utils.js';
 
 /** A completed background run that still owes the main agent a notification. */
@@ -33,6 +38,13 @@ export type BackgroundSubagentNotification =
 
 export type BackgroundSubagentTaskStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 
+/** The single most recent tool call observed for a live background run. */
+export interface BackgroundSubagentTaskTool {
+  /** Display-ready command line, e.g. `grep "TODO" src/`. */
+  label: string;
+  state: 'running' | 'success' | 'failed';
+}
+
 /** Conversation-scoped projection of one background subagent lifecycle. */
 export interface BackgroundSubagentTask {
   runId: string;
@@ -41,6 +53,8 @@ export interface BackgroundSubagentTask {
   status: BackgroundSubagentTaskStatus;
   startedAt: number;
   completedAt?: number;
+  /** Absent until the run calls its first tool; dropped once the run settles. */
+  lastTool?: BackgroundSubagentTaskTool;
 }
 
 /**
@@ -109,10 +123,15 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
   }
 
   /**
-   * Updates the read-only task projection for async starts and completions.
-   * Internal tool events intentionally do not enter this state.
+   * Updates the read-only task projection for async starts, tool activity, and
+   * completions. Only the newest tool call of a live run is kept: the overview
+   * answers "what is it doing now", not "what has it done".
    */
   recordLifecycle(event: ConversationEvent): boolean {
+    if (event.type === 'subagent_tool_started' || event.type === 'subagent_command_message') {
+      return this.#recordToolActivity(event);
+    }
+
     if (event.type === 'subagent_started' && event.async === true) {
       if (this.#settledTaskIds.has(event.agentId)) return false;
       const existing = this.#tasks.get(event.agentId);
@@ -154,6 +173,33 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
       if (oldest === undefined) break;
       this.#settledTaskIds.delete(oldest);
     }
+    return true;
+  }
+
+  /**
+   * Projects the newest tool call of a live run. Tool events carry no `async`
+   * flag, so membership in the running task map is what scopes this to
+   * background runs — foreground and nested activity never registers a task.
+   */
+  #recordToolActivity(event: SubagentToolStartedEvent | SubagentCommandMessageEvent): boolean {
+    const task = this.#tasks.get(event.agentId);
+    if (!task || task.status !== 'running') return false;
+
+    const lastTool: BackgroundSubagentTaskTool =
+      event.type === 'subagent_tool_started'
+        ? {
+            label: formatToolCommand(event.toolName, parseToolArguments(event.arguments) as Record<string, unknown>),
+            state: 'running',
+          }
+        : {
+            label: event.message?.command ?? '',
+            state: event.message?.success === false ? 'failed' : 'success',
+          };
+
+    if (!lastTool.label) return false;
+    if (task.lastTool?.label === lastTool.label && task.lastTool.state === lastTool.state) return false;
+
+    this.#tasks.set(event.agentId, { ...task, lastTool });
     return true;
   }
 

@@ -69,9 +69,13 @@ export function createConversationEventHandler(
   const activeRunningToolCallIds = new Set<string>();
   const pendingSubagentToolCalls = new Map<string, { role?: string; task?: string; [key: string]: unknown }>();
 
+  // Only the synchronous delegation tool: its call is rendered by
+  // SubagentActivityMessage, so a CommandMessage would duplicate it. Background
+  // runs (run_subagent_async) route their lifecycle to the background sink and
+  // never produce a SubagentActivityMessage here, so their tool call must be
+  // rendered as an ordinary CommandMessage.
   const isSubagentDelegationTool = (toolName: string | undefined): boolean => {
-    if (!toolName) return false;
-    return toolName === 'run_subagent' || toolName.startsWith('run_subagent_');
+    return toolName === 'run_subagent';
   };
 
   const markCurrentReasoningFinalized = () => {

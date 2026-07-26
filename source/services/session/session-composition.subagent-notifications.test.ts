@@ -158,7 +158,7 @@ it('routes async subagent questions through the background queue and observer', 
   runtime.dispose();
 });
 
-it('projects background lifecycle changes and ignores internal activity for task observers', () => {
+it('projects background starts, tool activity, and completions to task observers', () => {
   const sinks: Sinks = { turn: null, background: null };
   const runtime = createSessionRuntime({
     sessionId: 'bg-tasks',
@@ -187,9 +187,13 @@ it('projects background lifecycle changes and ignores internal activity for task
     toolCallId: 'tool-1',
     toolName: 'read_file',
   } as ConversationEvent);
+  expect(runtime.backgroundSubagentTasks.getSnapshot()).toEqual([
+    expect.objectContaining({ lastTool: { label: 'read_file', state: 'running' } }),
+  ]);
+
   sinks.background?.(completion('run-task'));
 
-  expect(notified).toBe(2);
+  expect(notified).toBe(3);
   expect(runtime.backgroundSubagentTasks.getSnapshot()).toEqual([
     expect.objectContaining({
       runId: 'run-task',

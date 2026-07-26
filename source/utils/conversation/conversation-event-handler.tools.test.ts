@@ -153,6 +153,52 @@ it('tool_started: skips pending message for run_subagent (SubagentActivityMessag
   expect(deps.calls.appendedMessages.length).toBe(0);
 });
 
+it('tool_started: appends a pending message for run_subagent_async (no SubagentActivityMessage covers background runs)', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'tool_started',
+    toolCallId: 'call-async-1',
+    toolName: 'run_subagent_async',
+    arguments: { role: 'explorer', task: 'inspect the project' },
+  } as ConversationEvent);
+
+  expect(deps.calls.appendedMessages.length).toBe(1);
+  const cmdMsg = deps.calls.appendedMessages[0][0];
+  expect(cmdMsg.toolName).toBe('run_subagent_async');
+  expect(cmdMsg.callId).toBe('call-async-1');
+  expect(cmdMsg.status).toBe('running');
+});
+
+it('command_message: finalizes the run_subagent_async pending message instead of dropping it', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'command_message',
+    message: {
+      id: 'call-async-1',
+      sender: 'command',
+      status: 'completed',
+      command: 'run_subagent_async [explorer] inspect the project — runId: run-1',
+      output: '{"runId":"run-1","status":"running"}',
+      callId: 'call-async-1',
+      toolName: 'run_subagent_async',
+    },
+  } as ConversationEvent);
+
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
+  const updater = deps.calls.setMessagesCalls[0]!;
+  const existingMessages = [{ id: 'call-async-1', sender: 'command', status: 'running', callId: 'call-async-1' }];
+  const result = updater(existingMessages);
+  expect(result.length).toBe(1);
+  expect(result[0].status).toBe('completed');
+  expect(result[0].toolName).toBe('run_subagent_async');
+});
+
 it('tool_started: does not append duplicate running message for the same callId', () => {
   const deps = createMockDeps();
   const state = createStreamingState();

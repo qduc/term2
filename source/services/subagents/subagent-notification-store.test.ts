@@ -44,6 +44,39 @@ const started = (
     ...overrides,
   } as ConversationEvent);
 
+const toolStarted = (
+  overrides: Partial<Extract<ConversationEvent, { type: 'subagent_tool_started' }>> = {},
+): ConversationEvent =>
+  ({
+    type: 'subagent_tool_started',
+    agentId: 'run-1',
+    role: 'explorer',
+    toolCallId: 'tool-1',
+    toolName: 'grep',
+    arguments: { pattern: 'TODO', path: 'src/' },
+    ...overrides,
+  } as ConversationEvent);
+
+const toolFinished = (
+  message: Record<string, unknown> = {},
+  overrides: Partial<Extract<ConversationEvent, { type: 'subagent_command_message' }>> = {},
+): ConversationEvent =>
+  ({
+    type: 'subagent_command_message',
+    agentId: 'run-1',
+    role: 'explorer',
+    message: {
+      id: 'cmd-1',
+      sender: 'command',
+      status: 'completed',
+      command: 'grep "TODO" src/',
+      success: true,
+      toolName: 'grep',
+      ...message,
+    },
+    ...overrides,
+  } as ConversationEvent);
+
 const makeStore = (options: { now?: () => number; deliveredIdCap?: number } = {}) =>
   new SubagentNotificationStore({ now: () => 1_000, ...options });
 
@@ -156,18 +189,69 @@ it('reports only lifecycle events that change the visible task projection', () =
 
   expect(store.recordLifecycle(started())).toBe(true);
   expect(store.recordLifecycle(started())).toBe(false);
-  expect(
-    store.recordLifecycle({
-      type: 'subagent_tool_started',
-      agentId: 'run-1',
-      role: 'explorer',
-      toolCallId: 'tool-1',
-      toolName: 'read_file',
-    } as ConversationEvent),
-  ).toBe(false);
+  expect(store.recordLifecycle(toolStarted())).toBe(true);
+  expect(store.recordLifecycle(toolStarted())).toBe(false);
   expect(store.recordLifecycle(completed())).toBe(true);
   expect(store.recordLifecycle(started())).toBe(false);
   expect(store.getTaskSnapshot()[0]?.status).toBe('completed');
+});
+
+it('projects the running tool a live background run just started', () => {
+  const store = makeStore();
+  store.recordLifecycle(started());
+
+  expect(store.recordLifecycle(toolStarted())).toBe(true);
+  expect(store.getTaskSnapshot()[0]?.lastTool).toEqual({ label: 'grep "TODO" src/', state: 'running' });
+});
+
+it('parses JSON-string tool arguments into the projected tool label', () => {
+  const store = makeStore();
+  store.recordLifecycle(started());
+
+  store.recordLifecycle(toolStarted({ toolName: 'shell', arguments: '{"command":"pnpm test"}' }));
+
+  expect(store.getTaskSnapshot()[0]?.lastTool).toEqual({ label: 'pnpm test', state: 'running' });
+});
+
+it('settles the projected tool to its outcome when the background tool call finishes', () => {
+  const store = makeStore();
+  store.recordLifecycle(started());
+  store.recordLifecycle(toolStarted());
+
+  expect(store.recordLifecycle(toolFinished())).toBe(true);
+  expect(store.getTaskSnapshot()[0]?.lastTool).toEqual({ label: 'grep "TODO" src/', state: 'success' });
+
+  expect(store.recordLifecycle(toolFinished({ command: 'pnpm test', success: false, toolName: 'shell' }))).toBe(true);
+  expect(store.getTaskSnapshot()[0]?.lastTool).toEqual({ label: 'pnpm test', state: 'failed' });
+});
+
+it('replaces the projected tool so only the most recent background tool call is visible', () => {
+  const store = makeStore();
+  store.recordLifecycle(started());
+  store.recordLifecycle(toolStarted());
+  store.recordLifecycle(toolFinished());
+
+  store.recordLifecycle(toolStarted({ toolCallId: 'tool-2', toolName: 'shell', arguments: { command: 'pnpm build' } }));
+
+  expect(store.getTaskSnapshot()[0]?.lastTool).toEqual({ label: 'pnpm build', state: 'running' });
+});
+
+it('ignores tool activity for runs that are unknown or already settled', () => {
+  const store = makeStore();
+  store.recordLifecycle(started());
+  store.recordLifecycle(completed());
+
+  expect(store.recordLifecycle(toolStarted())).toBe(false);
+  expect(store.recordLifecycle(toolStarted({ agentId: 'foreground-run' }))).toBe(false);
+  expect(store.getTaskSnapshot()[0]?.lastTool).toBeUndefined();
+});
+
+it('ignores tool activity that carries no displayable command', () => {
+  const store = makeStore();
+  store.recordLifecycle(started());
+
+  expect(store.recordLifecycle(toolFinished({ command: undefined }))).toBe(false);
+  expect(store.getTaskSnapshot()[0]?.lastTool).toBeUndefined();
 });
 
 it('ignores completion events that are not async runs', () => {

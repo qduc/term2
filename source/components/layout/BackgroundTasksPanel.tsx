@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import type {
   BackgroundSubagentTask,
   BackgroundSubagentTaskStatus,
+  BackgroundSubagentTaskTool,
 } from '../../services/subagents/subagent-notification-store.js';
 
 type Props = {
@@ -11,6 +12,7 @@ type Props = {
 };
 
 const TASK_LABEL_LIMIT = 60;
+const TOOL_LABEL_LIMIT = 60;
 
 const formatRole = (role: string): string => {
   if (!role) return 'Agent';
@@ -22,6 +24,19 @@ const formatTaskLabel = (task: BackgroundSubagentTask): string => {
   const fallback = `${formatRole(task.role)} background task`;
   const label = normalized || fallback;
   return label.length > TASK_LABEL_LIMIT ? `${label.slice(0, TASK_LABEL_LIMIT - 1)}…` : label;
+};
+
+// Matches the status vocabulary of SubagentActivityMessage so foreground and
+// background subagent activity read the same way.
+const TOOL_STATE_MARKER: Record<BackgroundSubagentTaskTool['state'], string> = {
+  running: '▶',
+  success: '✔',
+  failed: '✖',
+};
+
+const formatToolLabel = (tool: BackgroundSubagentTaskTool): string => {
+  const label = tool.label.replaceAll(/\s+/g, ' ').trim();
+  return label.length > TOOL_LABEL_LIMIT ? `${label.slice(0, TOOL_LABEL_LIMIT - 1)}…` : label;
 };
 
 export const formatBackgroundTaskElapsed = (elapsedMs: number): string => {
@@ -53,17 +68,27 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now }) => {
     <Box flexDirection="column" marginBottom={1}>
       <Text color="#94a3b8">Background tasks · {activeCount} active</Text>
       {tasks.map((task) => (
-        <Box key={task.runId} flexDirection="row">
-          <Text color="#64748b">• </Text>
-          <Text color="#a5b4fc">[{formatRole(task.role)}]</Text>
-          <Text> {formatTaskLabel(task)}</Text>
-          <Text color="#94a3b8">
-            {' '}
-            —{' '}
-            {task.status === 'running'
-              ? `Running · ${formatBackgroundTaskElapsed(now - task.startedAt)}`
-              : formatTerminalStatus(task.status)}
-          </Text>
+        <Box key={task.runId} flexDirection="column">
+          <Box flexDirection="row">
+            <Text color="#64748b">• </Text>
+            <Text color="#a5b4fc">[{formatRole(task.role)}]</Text>
+            <Text> {formatTaskLabel(task)}</Text>
+            <Text color="#94a3b8">
+              {' '}
+              —{' '}
+              {task.status === 'running'
+                ? `Running · ${formatBackgroundTaskElapsed(now - task.startedAt)}`
+                : formatTerminalStatus(task.status)}
+            </Text>
+          </Box>
+          {task.status === 'running' && task.lastTool && (
+            <Box flexDirection="row">
+              <Text color="#475569">{'  └ '}</Text>
+              <Text color="#64748b">
+                {TOOL_STATE_MARKER[task.lastTool.state]} {formatToolLabel(task.lastTool)}
+              </Text>
+            </Box>
+          )}
         </Box>
       ))}
     </Box>

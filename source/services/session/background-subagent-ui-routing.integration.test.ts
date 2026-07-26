@@ -168,9 +168,16 @@ it('projects background lifecycle without making the foreground message history 
     agentId: 'background-run-1',
     role: 'explorer',
     toolCallId: 'read-call-1',
-    toolName: 'read_file',
-    arguments: { path: 'source/app.tsx' },
+    toolName: 'shell',
+    arguments: { command: 'pnpm test' },
   } as ConversationEvent);
+  expect(runtime.backgroundSubagentTasks.getSnapshot()).toEqual([
+    expect.objectContaining({
+      runId: 'background-run-1',
+      status: 'running',
+      lastTool: { label: 'pnpm test', state: 'running' },
+    }),
+  ]);
   manager.onEvent?.({
     type: 'subagent_completed',
     async: true,
@@ -191,7 +198,16 @@ it('projects background lifecycle without making the foreground message history 
     'subagent_completed',
   ]);
   expect(messages.filter((message) => message.sender === 'subagent')).toEqual([]);
-  expect(messages.filter((message) => message.sender === 'command')).toEqual([]);
+  // The launch itself stays in the transcript as a finalized command message;
+  // only the live lifecycle is kept out of the foreground history.
+  expect(messages.filter((message) => message.sender === 'command')).toEqual([
+    expect.objectContaining({
+      sender: 'command',
+      toolName: 'run_subagent_async',
+      callId: 'async-call-1',
+      status: 'completed',
+    }),
+  ]);
   expect(runtime.backgroundSubagentTasks.getSnapshot()).toEqual([
     expect.objectContaining({
       status: 'completed',
@@ -202,6 +218,11 @@ it('projects background lifecycle without making the foreground message history 
   const { history, active } = splitStaticHistory(messages);
   expect(active).toEqual([]);
   expect(history).toEqual([
+    expect.objectContaining({
+      sender: 'command',
+      toolName: 'run_subagent_async',
+      status: 'completed',
+    }),
     expect.objectContaining({
       id: 'main-acknowledgement',
       sender: 'bot',

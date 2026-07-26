@@ -65,6 +65,54 @@ it.sequential('keeps long task labels compact', async () => {
   expect(output).not.toContain(longTask.trim());
 });
 
+it.sequential('nests the most recent tool call under its running task', async () => {
+  const renderer = await renderInAct(
+    <BackgroundTasksPanel
+      tasks={[runningTask({ lastTool: { label: 'grep "TODO" src/', state: 'running' } })]}
+      now={1_000}
+    />,
+  );
+
+  const lines = (renderer.lastFrame() ?? '').split('\n');
+  const taskLine = lines.findIndex((line) => line.includes('Explorer'));
+  const toolLine = lines[taskLine + 1] ?? '';
+
+  expect(toolLine).toContain('└');
+  expect(toolLine).toContain('▶');
+  expect(toolLine).toContain('grep "TODO" src/');
+  expect(toolLine.indexOf('└')).toBeGreaterThan(lines[taskLine]!.indexOf('•'));
+});
+
+it.sequential('marks a settled tool call with its outcome', async () => {
+  const renderer = await renderInAct(
+    <BackgroundTasksPanel tasks={[runningTask({ lastTool: { label: 'pnpm test', state: 'success' } })]} now={1_000} />,
+  );
+  expect(renderer.lastFrame() ?? '').toContain('✔ pnpm test');
+
+  await rerenderInAct(
+    renderer,
+    <BackgroundTasksPanel tasks={[runningTask({ lastTool: { label: 'pnpm test', state: 'failed' } })]} now={1_000} />,
+  );
+  expect(renderer.lastFrame() ?? '').toContain('✖ pnpm test');
+});
+
+it.sequential('keeps long tool labels compact', async () => {
+  const longLabel = `grep "${'pattern-fragment '.repeat(10)}" source/`;
+  const renderer = await renderInAct(
+    <BackgroundTasksPanel tasks={[runningTask({ lastTool: { label: longLabel, state: 'running' } })]} now={1_000} />,
+  );
+
+  const output = renderer.lastFrame() ?? '';
+  expect(output).toContain('…');
+  expect(output).not.toContain(longLabel);
+});
+
+it.sequential('omits the tool line for a task with no observed tool activity', async () => {
+  const renderer = await renderInAct(<BackgroundTasksPanel tasks={[runningTask()]} now={1_000} />);
+
+  expect(renderer.lastFrame() ?? '').not.toContain('└');
+});
+
 it.sequential('shows a concise recently completed indication without counting it as active', async () => {
   const renderer = await renderInAct(
     <BackgroundTasksPanel
@@ -72,6 +120,7 @@ it.sequential('shows a concise recently completed indication without counting it
         runningTask({
           status: 'completed',
           completedAt: 6_000,
+          lastTool: { label: 'pnpm test', state: 'success' },
         }),
       ]}
       now={7_000}
@@ -83,4 +132,6 @@ it.sequential('shows a concise recently completed indication without counting it
   expect(output).toContain('Explorer');
   expect(output).toContain('Completed recently');
   expect(output).not.toContain('Running');
+  // A settled task's tool history is stale; the completion status carries it.
+  expect(output).not.toContain('pnpm test');
 });

@@ -609,7 +609,7 @@ it('tool_started: links subagent delegation tools to subagent activity', () => {
   handler({
     type: 'tool_started',
     toolCallId: 'call-sa-nested',
-    toolName: 'run_subagent_worker',
+    toolName: 'run_subagent',
     arguments: { role: 'worker', task: 'nested work' },
   } as any);
 

@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import type { SubagentRequest, SubagentResult, SubagentRunHandle } from './types.js';
+import type { SubagentRequest, SubagentResult, SubagentRunHandle, SubagentRunStatus } from './types.js';
 import { SubagentSession } from './subagent-session.js';
-import { isAbortLike, safeEmit } from './utils.js';
+import { isAbortLike, safeEmit, truncatePreview } from './utils.js';
 
 export type SubagentRegistryErrorCode =
   | 'not_found'
@@ -35,6 +35,11 @@ type StoredRun = {
   promise: Promise<SubagentResult>;
   settled: boolean;
   removeParentAbortListener?: () => void;
+  /** Peek progress state — live, captured from subagent_tool_started events. */
+  startedAt: number;
+  lastToolName?: string;
+  lastToolAt?: number;
+  toolCounts: Map<string, number>;
 };
 
 export interface SubagentAsyncRegistryDeps {
@@ -145,6 +150,8 @@ export class SubagentAsyncRegistry {
       resolve,
       promise,
       settled: false,
+      startedAt: this.#now(),
+      toolCounts: new Map(),
     };
     const parentSignal = request.signal ?? _legacyParentSignal;
     if (parentSignal) {
@@ -168,6 +175,67 @@ export class SubagentAsyncRegistry {
 
   hasActiveRunForRole(role: string): boolean {
     return [...this.#runs.values()].some((run) => run.role === role && run.status === 'running');
+  }
+
+  /**
+   * Non-blocking progress snapshot for one run, or all non-evicted runs when
+   * `runId` is omitted. Never awaits a run promise and never carries
+   * completion detail — that stays on `get_subagent_result`.
+   */
+  getRunStatus(runId?: string): SubagentRunStatus | SubagentRunStatus[] {
+    if (runId !== undefined) {
+      const run = this.#runs.get(runId);
+      if (!run)
+        return {
+          runId,
+          role: '',
+          status: 'not_found',
+          task: '',
+          taskPreview: '',
+          startedAt: 0,
+          elapsedMs: 0,
+          toolCounts: {},
+        };
+      return this.#snapshot(run);
+    }
+    // Live runs first, then settled; neither carries finalText.
+    const live = [...this.#runs.values()].filter((run) => run.status === 'running');
+    const settled = [...this.#runs.values()].filter((run) => run.status !== 'running');
+    return [...live, ...settled].map((run) => this.#snapshot(run));
+  }
+
+  #snapshot(run: StoredRun): SubagentRunStatus {
+    const counts: Record<string, number> = {};
+    for (const [name, count] of run.toolCounts) counts[name] = count;
+    return {
+      runId: run.runId,
+      role: run.role,
+      status: run.status,
+      task: run.task,
+      taskPreview: truncatePreview(run.task),
+      startedAt: run.startedAt,
+      elapsedMs: this.#now() - run.startedAt,
+      ...(run.lastToolName !== undefined ? { lastToolName: run.lastToolName } : {}),
+      ...(run.lastToolAt !== undefined ? { lastToolAt: run.lastToolAt } : {}),
+      toolCounts: counts,
+    };
+  }
+
+  /**
+   * Receive a conversation event and update the owning run's peek progress.
+   * No-op for events whose `agentId` is not a run this registry owns (sync /
+   * nested subagent events are ignored here). This is the only path by which
+   * the registry learns `subagent_tool_started` mid-run.
+   */
+  handleSubagentEvent(event: ConversationEvent): void {
+    if (event.type !== 'subagent_tool_started') return;
+    const run = this.#runs.get(event.agentId);
+    if (!run || run.status !== 'running') return;
+    const name = event.toolName;
+    if (!name) return;
+    run.toolCounts.set(name, (run.toolCounts.get(name) ?? 0) + 1);
+    run.lastToolName = name;
+    run.lastToolAt = this.#now();
   }
 
   getResult(runId: string, signal?: AbortSignal): Promise<SubagentResult> {

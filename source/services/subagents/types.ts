@@ -94,3 +94,21 @@ export interface SubagentRunHandle {
   status: 'running';
   task: string;
 }
+
+/**
+ * Non-blocking progress snapshot of an async run, for the orchestrator's
+ * mid-run "what is it doing" query. Never carries completion detail
+ * (`finalText` and diff evidence stay on `SubagentResult` / `get_subagent_result`).
+ */
+export interface SubagentRunStatus {
+  runId: string;
+  role: string;
+  status: 'running' | 'completed' | 'failed' | 'cancelled' | 'not_found';
+  task: string;
+  taskPreview: string;
+  startedAt: number;
+  elapsedMs: number;
+  lastToolName?: string;
+  lastToolAt?: number;
+  toolCounts: Record<string, number>;
+}

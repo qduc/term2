@@ -13,7 +13,7 @@ import { adaptLegacyRole, adaptLegacyDefinition } from '../agent-runtime/legacy-
 import { createAgentRuntimeFromSubagentRuntime } from '../agent-runtime/compose-agent-runtime.js';
 import type { AgentRuntime } from '../agent-runtime/agent-runtime.js';
 import type { SkillsService } from '../skills/skills-service.js';
-import type { SubagentRunHandle } from './types.js';
+import type { SubagentRunHandle, SubagentRunStatus } from './types.js';
 import { SubagentRegistryError } from './subagent-async-registry.js';
 
 export class SubagentManager {
@@ -165,6 +165,15 @@ export class SubagentManager {
    */
   getRunResult(runId: string, signal?: AbortSignal): Promise<SubagentResult> {
     return this.#runtime.asyncRegistry.getResult(runId, signal);
+  }
+
+  /**
+   * Non-blocking progress snapshot for the peek (get_subagent_status) tool.
+   * One run when `runId` is provided, all non-evicted runs otherwise. Never
+   * awaits and never carries completion detail.
+   */
+  getRunStatus(runId?: string): SubagentRunStatus | SubagentRunStatus[] {
+    return this.#runtime.asyncRegistry.getRunStatus(runId);
   }
 
   abortAsyncRun(runId: string): void {

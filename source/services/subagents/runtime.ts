@@ -33,6 +33,17 @@ export interface SubagentRuntime {
 }
 
 export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntime {
+  // Peek (get_subagent_status): route subagent_tool_started events into the
+  // registry so it can capture live per-run progress. The registry is assigned
+  // after the runners below (its `run` callback references them), so the
+  // optional chaining keeps this safe until then. Events fire only during
+  // execution, which always happens after the registry is assigned.
+  let asyncRegistry: SubagentAsyncRegistry | undefined;
+  const onEventWithPeek = (event: ConversationEvent): void => {
+    deps.onEvent?.(event);
+    asyncRegistry?.handleSubagentEvent(event);
+  };
+
   const toolPolicy = new SubagentToolPolicy({
     settings: deps.settings,
     logger: deps.logger,
@@ -57,7 +68,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     sessionContextService: deps.sessionContextService,
     executionContext: deps.executionContext,
     toolFactory,
-    onEvent: deps.onEvent,
+    onEvent: onEventWithPeek,
     roleToolCache,
     skillsService: deps.skillsService,
   });
@@ -69,7 +80,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     executionContext: deps.executionContext,
     createClient: deps.createClient,
     toolFactory,
-    onEvent: deps.onEvent,
+    onEvent: onEventWithPeek,
     skillsService: deps.skillsService,
   });
 
@@ -79,11 +90,11 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     settings: deps.settings,
     sessionContextService: deps.sessionContextService,
     executionContext: deps.executionContext,
-    onEvent: deps.onEvent,
+    onEvent: onEventWithPeek,
     session: mentorSession,
   });
 
-  const asyncRegistry = new SubagentAsyncRegistry({
+  asyncRegistry = new SubagentAsyncRegistry({
     logger: deps.logger,
     run: async ({ request, runId, session, signal }) => {
       if (request.role === 'mentor') {

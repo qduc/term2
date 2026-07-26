@@ -10,6 +10,7 @@ import { createRunSubagentToolDefinition } from './tools/agent/run-subagent.js';
 import {
   createRunSubagentAsyncToolDefinition,
   createGetSubagentResultToolDefinition,
+  createGetSubagentStatusToolDefinition,
 } from './tools/agent/run-subagent-async.js';
 import { createWebSearchToolDefinition } from './tools/web/web-search.js';
 import { createWebFetchToolDefinition } from './tools/web/web-fetch.js';
@@ -138,6 +139,7 @@ export const getAgentDefinition = (
     runSubagent?: (params: { role: string; task: string }, context?: unknown, details?: unknown) => Promise<any>;
     runSubagentAsync?: (params: { role: string; task: string }, context?: unknown, details?: unknown) => Promise<any>;
     getSubagentResult?: (params: { runId: string }, context?: unknown, details?: unknown) => Promise<any>;
+    getSubagentStatus?: (params: { runId?: string }, context?: unknown, details?: unknown) => any;
     getAskUserAnswer?: (callId?: string) => string | undefined;
     skillsService?: SkillsService;
     agentRuntime?: Pick<AgentRuntime, 'agent'> | null;
@@ -152,6 +154,7 @@ export const getAgentDefinition = (
     runSubagent,
     runSubagentAsync,
     getSubagentResult,
+    getSubagentStatus,
     getAskUserAnswer,
     skillsService,
     agentRuntime,
@@ -233,6 +236,7 @@ export const getAgentDefinition = (
     const tools: ToolDefinition[] = [
       createRunSubagentAsyncToolDefinition(runSubagentAsync),
       createGetSubagentResultToolDefinition(getSubagentResult),
+      ...(getSubagentStatus ? [createGetSubagentStatusToolDefinition(getSubagentStatus)] : []),
     ];
     tools.push(
       createShellToolDefinition({
@@ -376,6 +380,9 @@ export const getAgentDefinition = (
         createRunSubagentAsyncToolDefinition(runSubagentAsync),
         createGetSubagentResultToolDefinition(getSubagentResult),
       );
+      if (getSubagentStatus) {
+        tools.push(createGetSubagentStatusToolDefinition(getSubagentStatus));
+      }
     }
   }
 

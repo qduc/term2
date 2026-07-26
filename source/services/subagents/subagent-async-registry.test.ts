@@ -160,6 +160,130 @@ it('reports typed not-found, active, worker, and evicted errors', async () => {
   registry.dispose();
 });
 
+describe('peek / getRunStatus', () => {
+  it('returns running status with startedAt and empty toolCounts before any tool fires', async () => {
+    const now = vi.fn(() => 5000);
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      now,
+      setInterval: () => 1 as any,
+      clearInterval: () => {},
+      run: () => new Promise<SubagentResult>(() => undefined),
+    });
+    const handle = registry.startRun({ role: 'explorer', task: 'inspect' });
+    const status = registry.getRunStatus(handle.runId) as any;
+    expect(status).toMatchObject({
+      runId: handle.runId,
+      role: 'explorer',
+      status: 'running',
+      task: 'inspect',
+      startedAt: 5000,
+      toolCounts: {},
+    });
+    expect(status.elapsedMs).toBe(0);
+    expect(status.lastToolName).toBeUndefined();
+    registry.dispose();
+  });
+
+  it('captures lastToolName and toolCounts from subagent_tool_started events it owns', async () => {
+    const now = vi.fn(() => 1000);
+    const events: any[] = [];
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      now,
+      setInterval: () => 1 as any,
+      clearInterval: () => {},
+      onEvent: (e) => events.push(e),
+      run: () => new Promise<SubagentResult>(() => undefined),
+    });
+    const handle = registry.startRun({ role: 'worker', task: 'edit' });
+    registry.handleSubagentEvent({
+      type: 'subagent_tool_started',
+      agentId: handle.runId,
+      role: 'worker',
+      toolCallId: 'tc1',
+      toolName: 'search_replace',
+      arguments: {},
+    });
+    now.mockReturnValue(1500);
+    registry.handleSubagentEvent({
+      type: 'subagent_tool_started',
+      agentId: handle.runId,
+      role: 'worker',
+      toolCallId: 'tc2',
+      toolName: 'search_replace',
+      arguments: {},
+    });
+    const status = registry.getRunStatus(handle.runId) as any;
+    expect(status.lastToolName).toBe('search_replace');
+    expect(status.lastToolAt).toBe(1500);
+    expect(status.toolCounts).toEqual({ search_replace: 2 });
+    expect(status.elapsedMs).toBe(500);
+    registry.dispose();
+  });
+
+  it('handleSubagentEvent is a no-op for an agentId it does not own', () => {
+    const registry = make(() => new Promise<SubagentResult>(() => undefined));
+    const handle = registry.startRun({ role: 'explorer', task: 'mine' });
+    registry.handleSubagentEvent({
+      type: 'subagent_tool_started',
+      agentId: 'not-a-real-run-id',
+      role: 'explorer',
+      toolName: 'read_file',
+      arguments: {},
+    } as any);
+    const status = registry.getRunStatus(handle.runId) as any;
+    expect(status.toolCounts).toEqual({});
+    expect(status.lastToolName).toBeUndefined();
+    registry.dispose();
+  });
+
+  it('getRunStatus for an unknown id returns a not-found sentinel, not a throw', () => {
+    const registry = make(() => new Promise<SubagentResult>(() => undefined));
+    const status = registry.getRunStatus('does-not-exist');
+    expect(status).toMatchObject({ runId: 'does-not-exist', status: 'not_found' });
+    registry.dispose();
+  });
+
+  it('getRunStatus() with no id lists live runs first, without finalText', async () => {
+    const now = vi.fn(() => 0);
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      now,
+      setInterval: () => 1 as any,
+      clearInterval: () => {},
+      // Worker stays pending (live); explorer resolves immediately (finished).
+      run: async ({ request }) =>
+        request.role === 'worker' ? new Promise<SubagentResult>(() => undefined) : result(request.role),
+    });
+    const live = registry.startRun({ role: 'worker', task: 'running task' });
+    const finished = registry.startRun({ role: 'explorer', task: 'done task' });
+    await registry.getResult(finished.runId);
+    now.mockReturnValue(1000);
+    const list = registry.getRunStatus() as any[];
+    expect(Array.isArray(list)).toBe(true);
+    const liveEntry = list.find((s) => s.runId === live.runId);
+    const finishedEntry = list.find((s) => s.runId === finished.runId);
+    expect(liveEntry.status).toBe('running');
+    expect(finishedEntry.status).toBe('completed');
+    expect(liveEntry.finalText).toBeUndefined();
+    expect(finishedEntry.finalText).toBeUndefined();
+    registry.dispose();
+  });
+
+  it('getRunStatus is synchronous and does not await the run promise', async () => {
+    const registry = make(() => new Promise<SubagentResult>(() => undefined));
+    const handle = registry.startRun({ role: 'explorer', task: 'blocking' });
+    // Non-blocking: returns immediately even though the run never settles.
+    let returned = false;
+    const status = registry.getRunStatus(handle.runId);
+    returned = true;
+    expect(returned).toBe(true);
+    expect((status as any).status).toBe('running');
+    registry.dispose();
+  });
+});
+
 describe('retention and events', () => {
   it('buffers ordered events at the bridge-facing callback and retains terminal records until reset', async () => {
     const events: string[] = [];

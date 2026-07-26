@@ -1,6 +1,10 @@
-import { it, expect } from 'vitest';
-import { createRunSubagentAsyncToolDefinition, createGetSubagentResultToolDefinition } from './run-subagent-async.js';
-import type { SubagentRunHandle, SubagentResult } from '../../services/subagents/types.js';
+import { it, expect, describe } from 'vitest';
+import {
+  createRunSubagentAsyncToolDefinition,
+  createGetSubagentResultToolDefinition,
+  createGetSubagentStatusToolDefinition,
+} from './run-subagent-async.js';
+import type { SubagentRunHandle, SubagentResult, SubagentRunStatus } from '../../services/subagents/types.js';
 import { SubagentRegistryError } from '../../services/subagents/subagent-async-registry.js';
 
 function makeHandle(overrides: Partial<SubagentRunHandle> = {}): SubagentRunHandle {
@@ -9,6 +13,22 @@ function makeHandle(overrides: Partial<SubagentRunHandle> = {}): SubagentRunHand
     role: 'explorer',
     task: 'find files',
     status: 'running',
+    ...overrides,
+  };
+}
+
+function makeStatus(overrides: Partial<SubagentRunStatus> = {}): SubagentRunStatus {
+  return {
+    runId: 'run-123',
+    role: 'explorer',
+    status: 'running',
+    task: 'find files',
+    taskPreview: 'find files',
+    startedAt: 1000,
+    elapsedMs: 5000,
+    toolCounts: { read_file: 2, grep: 1 },
+    lastToolName: 'grep',
+    lastToolAt: 4500,
     ...overrides,
   };
 }
@@ -143,4 +163,84 @@ it('get_subagent_result formatCommandMessage renders completed result', () => {
   expect(messages[0].command).toContain('get_subagent_result');
   expect(messages[0].output).toContain('Found the relevant files.');
   expect(messages[0].success).toBe(true);
+});
+
+describe('get_subagent_status tool', () => {
+  it('is registered with the correct name', () => {
+    const tool = createGetSubagentStatusToolDefinition(() => makeStatus());
+    expect(tool.name).toBe('get_subagent_status');
+  });
+
+  it('never needs approval', () => {
+    const tool = createGetSubagentStatusToolDefinition(() => makeStatus());
+    expect(tool.needsApproval({} as any)).toBe(false);
+  });
+
+  it('description states the non-blocking contract and the boundary with get_subagent_result', () => {
+    const tool = createGetSubagentStatusToolDefinition(() => makeStatus());
+    expect(tool.description).toContain('never blocks');
+    expect(tool.description).toContain('get_subagent_result');
+    expect(tool.description).toContain('never the final report');
+  });
+
+  it('accepts an optional runId (single run or all-runs listing)', () => {
+    const tool = createGetSubagentStatusToolDefinition(() => makeStatus());
+    expect(tool.parameters.safeParse({ runId: 'run-abc' }).success).toBe(true);
+    expect(tool.parameters.safeParse({}).success).toBe(true);
+  });
+
+  it('formats a single running run and points to get_subagent_result for completion', () => {
+    const tool = createGetSubagentStatusToolDefinition(() => makeStatus());
+    const raw = tool.execute({ runId: 'run-123' });
+    expect(raw).toContain('running');
+    expect(raw).toContain('grep');
+    expect(raw).toContain('get_subagent_result');
+    // Peek must not leak completion detail.
+    expect(raw).not.toContain('final');
+    expect(raw.startsWith('{')).toBe(false);
+  });
+
+  it('formats an all-runs listing when runId is omitted', () => {
+    const tool = createGetSubagentStatusToolDefinition(() => [
+      makeStatus({ runId: 'run-a', role: 'explorer' }),
+      makeStatus({
+        runId: 'run-b',
+        role: 'worker',
+        status: 'running',
+        task: 'edit',
+        taskPreview: 'edit',
+        toolCounts: { search_replace: 3 },
+      }),
+    ]);
+    const raw = tool.execute({});
+    expect(raw).toContain('run-a');
+    expect(raw).toContain('run-b');
+    expect(raw).toContain('explorer');
+    expect(raw).toContain('worker');
+  });
+
+  it('reports a not-found run without throwing', () => {
+    const tool = createGetSubagentStatusToolDefinition(() =>
+      makeStatus({
+        runId: 'ghost',
+        status: 'not_found',
+        task: '',
+        taskPreview: '',
+        toolCounts: {},
+        lastToolName: undefined,
+        lastToolAt: undefined,
+        elapsedMs: 0,
+        startedAt: 0,
+      }),
+    );
+    const raw = tool.execute({ runId: 'ghost' });
+    expect(raw).toContain('not found');
+  });
+
+  it('execute is synchronous and does not await a run promise', () => {
+    const tool = createGetSubagentStatusToolDefinition(() => makeStatus());
+    // Structural assertion: execute does not return a Promise for the happy path.
+    const out = tool.execute({ runId: 'run-123' });
+    expect(typeof out).toBe('string');
+  });
 });

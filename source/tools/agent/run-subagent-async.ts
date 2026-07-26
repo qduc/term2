@@ -7,7 +7,7 @@ import {
   getCallIdFromItem,
   safeJsonParse,
 } from '../format-helpers.js';
-import type { SubagentResult, SubagentRunHandle } from '../../services/subagents/types.js';
+import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from '../../services/subagents/types.js';
 import { SubagentRegistryError } from '../../services/subagents/subagent-async-registry.js';
 import { isAbortLike, truncatePreview } from '../../services/subagents/utils.js';
 
@@ -25,6 +25,12 @@ const runSubagentAsyncSchema = z.object({
 const getSubagentResultSchema = z.object({
   runId: z.string().describe('The runId returned by run_subagent_async.'),
 });
+
+const getSubagentStatusSchema = z.object({
+  runId: z.string().optional().describe('The runId to inspect. Omit to list the status of all current runs at once.'),
+});
+
+export type GetSubagentStatusParams = z.infer<typeof getSubagentStatusSchema>;
 
 export type RunSubagentAsyncParams = z.infer<typeof runSubagentAsyncSchema>;
 export type GetSubagentResultParams = z.infer<typeof getSubagentResultSchema>;
@@ -220,5 +226,90 @@ export function createGetSubagentResultToolDefinition(
       }
     },
     formatCommandMessage: formatGetSubagentResultCommandMessage,
+  };
+}
+
+function formatSubagentStatus(status: SubagentRunStatus | SubagentRunStatus[]): string {
+  const formatOne = (s: SubagentRunStatus): string => {
+    const parts = [
+      `${s.runId} [${s.role}] ${s.status}`,
+      `task: ${s.taskPreview || '(none)'}`,
+      `elapsed: ${Math.round(s.elapsedMs / 1000)}s`,
+    ];
+    if (s.lastToolName) parts.push(`lastTool: ${s.lastToolName}`);
+    const toolSummary = Object.entries(s.toolCounts)
+      .map(([name, count]) => `${name}(${count})`)
+      .join(', ');
+    if (toolSummary) parts.push(`tools: ${toolSummary}`);
+    return parts.join(' | ');
+  };
+
+  if (Array.isArray(status)) {
+    if (status.length === 0) return 'No subagent runs.';
+    return status.map(formatOne).join('\n');
+  }
+  if (status.status === 'not_found') {
+    return `Run ${status.runId} was not found (evicted or never existed).`;
+  }
+  if (status.status === 'running') {
+    return `${formatOne(
+      status,
+    )}\n\nThis run is still in progress. Call get_subagent_result for the full report once it completes.`;
+  }
+  return `${formatOne(status)}\n\nThis run has finished. Call get_subagent_result for the full report.`;
+}
+
+export const formatGetSubagentStatusCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+  const callId = getCallIdFromItem(item);
+  const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
+  const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+  const args = normalizeToolArguments(normalizedArgs) ?? normalizeToolArguments(fallbackArgs) ?? {};
+
+  const rawOutput = getOutputText(item);
+  const runId = args?.runId ?? 'all';
+  const command = rawOutput?.includes('not found')
+    ? `get_subagent_status [${runId}] — not found`
+    : `get_subagent_status [${runId}]`;
+
+  return [
+    createBaseMessage(item, index, 0, false, {
+      command,
+      output: rawOutput || 'No status',
+      success: true,
+      toolName: 'get_subagent_status',
+      toolArgs: args,
+    }),
+  ];
+};
+
+export function createGetSubagentStatusToolDefinition(
+  getSubagentStatus: (
+    params: GetSubagentStatusParams,
+    context?: unknown,
+    details?: unknown,
+  ) => SubagentRunStatus | SubagentRunStatus[],
+): ToolDefinition<GetSubagentStatusParams> {
+  return {
+    name: 'get_subagent_status',
+    description:
+      'Non-blocking status of one async subagent run (runId provided) or all runs (runId omitted). ' +
+      'Use this to answer a mid-run "what is it doing" question without blocking your turn. ' +
+      'Returns status, elapsed, last tool, and tool counts only — never the final report or diff evidence. ' +
+      'For a finished or settled run, call get_subagent_result to retrieve the full report. ' +
+      'This call never blocks and never awaits a run.',
+    parameters: getSubagentStatusSchema,
+    needsApproval: () => false,
+    execute: (params, context, details) => {
+      try {
+        const status = getSubagentStatus(params, context, details);
+        return formatSubagentStatus(status);
+      } catch (error: any) {
+        return JSON.stringify({
+          status: 'failed',
+          error: { code: 'execution_failed', message: error?.message || String(error) },
+        });
+      }
+    },
+    formatCommandMessage: formatGetSubagentStatusCommandMessage,
   };
 }

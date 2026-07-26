@@ -30,6 +30,7 @@ export interface AgentFactoryDeps {
   runSubagent: (params: { role: string; task: string }) => Promise<{ finalText: string }>;
   runSubagentAsync: (params: { role: string; task: string }, context?: unknown, details?: unknown) => Promise<any>;
   getSubagentResult: (params: { runId: string }, context?: unknown, details?: unknown) => Promise<any>;
+  getSubagentStatus?: (params: { runId?: string }, context?: unknown, details?: unknown) => any;
   getAskUserAnswer: (callId?: string) => string | undefined;
   checkToolInterceptors: (name: string, params: unknown, toolCallId?: string) => Promise<string | null>;
   skillsService?: SkillsService;
@@ -283,6 +284,7 @@ export function buildAgent(
       runSubagent: deps.runSubagent,
       runSubagentAsync: deps.runSubagentAsync,
       getSubagentResult: deps.getSubagentResult,
+      getSubagentStatus: deps.getSubagentStatus,
       getAskUserAnswer: deps.getAskUserAnswer,
       skillsService: deps.skillsService,
       agentRuntime: deps.getAgentRuntime?.() ?? null,

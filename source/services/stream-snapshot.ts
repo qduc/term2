@@ -15,7 +15,6 @@ import type { AgentStream } from './agent-stream.js';
 export type StreamReplaySnapshot = {
   history: unknown[];
   newItems: unknown[];
-  generatedItems: unknown[];
 };
 
 /**
@@ -38,13 +37,11 @@ export const extractReplaySnapshot = (stream: AgentStream): StreamReplaySnapshot
   const streamRecord = stream as unknown as {
     history?: unknown;
     newItems?: unknown;
-    state?: { _generatedItems?: unknown };
   };
 
   return {
     history: asArray(streamRecord.history),
     newItems: asArray(streamRecord.newItems),
-    generatedItems: asArray(streamRecord.state?._generatedItems),
   };
 };
 

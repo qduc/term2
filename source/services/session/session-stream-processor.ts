@@ -49,13 +49,12 @@ const warnIfStreamHistoryReplayedTools = ({
   source: StreamHistorySource;
   snapshot: StreamReplaySnapshot;
 }): void => {
-  const { history, newItems, generatedItems } = snapshot;
+  const { history, newItems } = snapshot;
 
   const historyDuplicates = collectDuplicateToolCallResultPairs(history);
   const newItemsDuplicates = collectDuplicateToolCallResultPairs(newItems);
-  const stateGeneratedItemsDuplicates = collectDuplicateToolCallResultPairs(generatedItems);
 
-  if (historyDuplicates.pairs === 0 && newItemsDuplicates.pairs === 0 && stateGeneratedItemsDuplicates.pairs === 0) {
+  if (historyDuplicates.pairs === 0 && newItemsDuplicates.pairs === 0) {
     return;
   }
 
@@ -68,13 +67,10 @@ const warnIfStreamHistoryReplayedTools = ({
     source,
     historyLength: history.length,
     newItemsLength: newItems.length,
-    stateGeneratedItemsLength: generatedItems.length,
     historyDuplicatePairs: historyDuplicates.pairs,
     historyMaxCopies: historyDuplicates.maxCopies,
     newItemsDuplicatePairs: newItemsDuplicates.pairs,
     newItemsMaxCopies: newItemsDuplicates.maxCopies,
-    stateGeneratedItemsDuplicatePairs: stateGeneratedItemsDuplicates.pairs,
-    stateGeneratedItemsMaxCopies: stateGeneratedItemsDuplicates.maxCopies,
   });
 };
 

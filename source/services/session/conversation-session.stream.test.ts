@@ -53,7 +53,7 @@ it('run() streams ConversationEvents (text_delta → final) in order', async () 
   expect((emitted[2] as FinalResponseEvent).finalText).toBe('Hello world');
 });
 
-it('run() warns when completed stream history already contains duplicated tool pairs', async () => {
+it('run() warns from public stream items without inspecting private generated state', async () => {
   const warnings: { message: string; meta?: Record<string, unknown> }[] = [];
   const logger = {
     ...mockLogger,
@@ -96,7 +96,7 @@ it('run() warns when completed stream history already contains duplicated tool p
   expect(warning!.meta!.source as string).toBe('startStream');
   expect((warning!.meta! as Record<string, unknown>).historyDuplicatePairs).toBe(1);
   expect((warning!.meta! as Record<string, unknown>).newItemsDuplicatePairs).toBe(1);
-  expect((warning!.meta! as Record<string, unknown>).stateGeneratedItemsDuplicatePairs).toBe(1);
+  expect('stateGeneratedItemsDuplicatePairs' in (warning!.meta! as Record<string, unknown>)).toBe(false);
   expect('output' in (warning!.meta! as Record<string, unknown>)).toBe(false);
 });
 

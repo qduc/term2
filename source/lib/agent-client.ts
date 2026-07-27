@@ -24,6 +24,7 @@ type ChainedRunOptions = {
   previousResponseId?: string | null;
   sessionId?: string;
   toolResultCallIds?: readonly string[];
+  knownToolCallIds?: readonly string[];
 };
 
 /**

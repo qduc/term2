@@ -11,6 +11,7 @@ type ChainedRunOptions = {
   previousResponseId?: string | null;
   sessionId?: string;
   toolResultCallIds?: readonly string[];
+  knownToolCallIds?: readonly string[];
 };
 
 export interface AgentRunOrchestratorDeps {
@@ -129,7 +130,7 @@ export class AgentRunOrchestrator {
 
   async startStream(
     userInput: string | AgentInputItem | AgentInputItem[],
-    { previousResponseId, sessionId, toolResultCallIds }: ChainedRunOptions = {},
+    { previousResponseId, sessionId, toolResultCallIds, knownToolCallIds }: ChainedRunOptions = {},
   ): Promise<StreamedRunResult<any, any>> {
     // Abort any previous operation
     this.abort();
@@ -198,7 +199,7 @@ export class AgentRunOrchestrator {
           }
           const chainingActive = supportsConversationChaining && previousResponseId;
           return chainingActive
-            ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds })
+            ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds, knownToolCallIds })
             : args.modelData;
         },
       };
@@ -230,7 +231,7 @@ export class AgentRunOrchestrator {
 
   async continueRunStream(
     state: RunState<any, any>,
-    { previousResponseId, sessionId, toolResultCallIds }: ChainedRunOptions = {},
+    { previousResponseId, sessionId, toolResultCallIds, knownToolCallIds }: ChainedRunOptions = {},
   ): Promise<StreamedRunResult<any, any>> {
     this.abort();
     this.#currentAbortController = new AbortController();
@@ -269,7 +270,7 @@ export class AgentRunOrchestrator {
         }
         const chainingActive = supportsConversationChaining && previousResponseId;
         return chainingActive
-          ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds })
+          ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds, knownToolCallIds })
           : args.modelData;
       },
     };

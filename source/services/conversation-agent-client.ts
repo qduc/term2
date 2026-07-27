@@ -9,6 +9,7 @@ export type AgentClientRunOptions = {
   previousResponseId?: string | null;
   sessionId?: string;
   toolResultCallIds?: readonly string[];
+  knownToolCallIds?: readonly string[];
 };
 
 export type AgentClientChatOptions = {

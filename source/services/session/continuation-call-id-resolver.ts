@@ -1,4 +1,5 @@
 import { asRecord, getCallIdFromObject } from '../interruption-info.js';
+import { getToolCallId } from '../../lib/chained-input-filter.js';
 
 const addCallId = (callIds: Set<string>, value: unknown): void => {
   if (typeof value === 'string' && value.length > 0) {
@@ -55,6 +56,23 @@ export const resolveResponseCycleCallIds = ({
   }
 
   return callIds.size > 0 ? [...callIds] : [...fallbackCallIds];
+};
+
+/**
+ * Collects the tool-call ids recorded in conversation history.
+ *
+ * These are the calls a chained continuation can safely answer: an output whose
+ * call is absent here exists in no local record, so the provider's response
+ * chain cannot be assumed to hold it either.
+ */
+export const collectKnownToolCallIds = (conversationHistory: readonly unknown[]): string[] => {
+  const callIds = new Set<string>();
+  for (const item of conversationHistory) {
+    // Any `*_call` item counts — function calls, shell calls, computer calls —
+    // so a non-function tool is never mistaken for an orphan.
+    addCallId(callIds, getToolCallId(item));
+  }
+  return [...callIds];
 };
 
 export type AbortedApprovalCallIdResolutionInput = {

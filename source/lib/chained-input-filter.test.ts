@@ -340,6 +340,62 @@ it('filterChainedModelInput skips the orphan check when the input carries no too
   expect(result.input).toEqual([{ type: 'function_call_output', callId: 'c1', output: 'r1' }]);
 });
 
+// Regression: a pre-trimmed delta carrying an output whose function_call the
+// chain anchor never recorded is a guaranteed provider 400 ("No tool call found
+// for function call output with call_id ..."). The input alone cannot reveal
+// this, so the caller supplies the call ids the anchor is known to hold.
+it('filterChainedModelInput rejects a pre-trimmed delta whose call is absent from the known call ids', () => {
+  const modelData = {
+    input: [{ type: 'function_call_output', callId: 'orphan', output: 'r1' }],
+  };
+
+  let thrown: unknown;
+  try {
+    filterChainedModelInput(modelData, {
+      toolResultCallIds: ['orphan'],
+      knownToolCallIds: ['other'],
+    });
+  } catch (error) {
+    thrown = error;
+  }
+
+  expect(isOrphanedChainedToolOutputError(thrown)).toBe(true);
+  expect((thrown as OrphanedChainedToolOutputError).callIds).toEqual(['orphan']);
+});
+
+it('filterChainedModelInput accepts a pre-trimmed delta whose call is among the known call ids', () => {
+  const modelData = {
+    input: [{ type: 'function_call_output', callId: 'c1', output: 'r1' }],
+  };
+
+  const result = filterChainedModelInput(modelData, {
+    toolResultCallIds: ['c1'],
+    knownToolCallIds: ['c1'],
+  });
+
+  expect(result.input).toEqual([{ type: 'function_call_output', callId: 'c1', output: 'r1' }]);
+});
+
+it('filterChainedModelInput accepts an output whose call is known only to the anchor, not the input', () => {
+  const modelData = {
+    input: [
+      { type: 'function_call', callId: 'c2', name: 'grep', arguments: '{}' },
+      { type: 'function_call_output', callId: 'c1', output: 'r1' },
+      { type: 'function_call_output', callId: 'c2', output: 'r2' },
+    ],
+  };
+
+  const result = filterChainedModelInput(modelData, {
+    toolResultCallIds: ['c1', 'c2'],
+    knownToolCallIds: ['c1'],
+  });
+
+  expect(result.input).toEqual([
+    { type: 'function_call_output', callId: 'c1', output: 'r1' },
+    { type: 'function_call_output', callId: 'c2', output: 'r2' },
+  ]);
+});
+
 // Delta-mode safety (concern 4): toolResultCallIds may include call IDs from
 // prior continuation cycles (a superset from the cumulative ledger). Call IDs
 // that have no matching item in the current modelData.input are silently

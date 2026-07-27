@@ -77,6 +77,13 @@ export const getToolCallId = (item: unknown): string | null => {
 
 export type ChainedModelInputFilterOptions = {
   toolResultCallIds?: readonly string[];
+  /**
+   * Tool-call ids the response chain is known to hold, supplied by the caller
+   * that owns the conversation history. A pre-trimmed delta carries no calls of
+   * its own, so without this the orphan check has nothing to match against and
+   * abstains.
+   */
+  knownToolCallIds?: readonly string[];
 };
 
 export class MissingChainedToolOutputError extends Error {
@@ -150,27 +157,32 @@ export const findChainedDeltaStart = (input: unknown[]): number => {
  * Guards the `toolResultCallIds` shortcut, which sends the selected tool
  * outputs alone and relies on the response chain already holding their calls.
  *
- * The check only applies when the input is a full item list (it carries tool
- * calls of its own). A caller that hands over an already-trimmed delta has no
- * calls to match against, and their absence says nothing about the chain.
+ * A call counts as present when it appears in the input itself or in
+ * `knownToolCallIds`, the ids the caller knows the chain anchor holds. When
+ * neither source offers a single call id there is nothing to match against, so
+ * the check abstains rather than rejecting a delta it cannot judge.
  */
-const assertToolResultsHaveMatchingCalls = (input: unknown[], expectedToolResults: unknown[]): void => {
-  const callIdsInInput = new Set<string>();
+const assertToolResultsHaveMatchingCalls = (
+  input: unknown[],
+  expectedToolResults: unknown[],
+  knownToolCallIds: readonly string[],
+): void => {
+  const knownCallIds = new Set<string>(knownToolCallIds.filter(Boolean));
   for (const item of input) {
     const callId = getToolCallId(item);
     if (callId) {
-      callIdsInInput.add(callId);
+      knownCallIds.add(callId);
     }
   }
 
-  if (callIdsInInput.size === 0) {
+  if (knownCallIds.size === 0) {
     return;
   }
 
   const orphaned = new Set<string>();
   for (const item of expectedToolResults) {
     const callId = getToolResultCallId(item);
-    if (callId && !callIdsInInput.has(callId)) {
+    if (callId && !knownCallIds.has(callId)) {
       orphaned.add(callId);
     }
   }
@@ -194,7 +206,7 @@ export const filterChainedModelInput = (modelData: any, options: ChainedModelInp
     });
 
     if (expectedToolResults.length > 0) {
-      assertToolResultsHaveMatchingCalls(input, expectedToolResults);
+      assertToolResultsHaveMatchingCalls(input, expectedToolResults, options.knownToolCallIds ?? []);
       return {
         ...modelData,
         input: expectedToolResults,

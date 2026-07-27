@@ -58,7 +58,11 @@ import {
   extractCommandMessages,
   markToolCallAsLlmAutoApproved,
 } from '../../utils/streaming/extract-command-messages.js';
-import { resolveAbortedApprovalCallIds, resolveResponseCycleCallIds } from './continuation-call-id-resolver.js';
+import {
+  collectKnownToolCallIds,
+  resolveAbortedApprovalCallIds,
+  resolveResponseCycleCallIds,
+} from './continuation-call-id-resolver.js';
 
 export interface TurnWorkflowDeps {
   agentClient: ConversationAgentClient;
@@ -707,6 +711,7 @@ export class TurnWorkflow {
       previousResponseId: state.currentResumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
       sessionId: this.deps.sessionId,
       toolResultCallIds: state.currentCallIds,
+      knownToolCallIds: collectKnownToolCallIds(this.deps.conversationStore.getHistory()),
     })) as AgentStream;
     state.setLastStream(stream);
 

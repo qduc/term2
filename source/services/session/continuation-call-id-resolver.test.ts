@@ -1,5 +1,9 @@
 import { expect, it } from 'vitest';
-import { resolveAbortedApprovalCallIds, resolveResponseCycleCallIds } from './continuation-call-id-resolver.js';
+import {
+  collectKnownToolCallIds,
+  resolveAbortedApprovalCallIds,
+  resolveResponseCycleCallIds,
+} from './continuation-call-id-resolver.js';
 
 it('deduplicates interrupted and completed response-cycle call ids', () => {
   const result = resolveResponseCycleCallIds({
@@ -53,4 +57,21 @@ it('keeps interrupted and completed sibling ids during abort resolution', () => 
   });
 
   expect(result).toEqual(['call-rejected', 'call-approved']);
+});
+
+it('collects tool-call ids of every call shape in history', () => {
+  const history = [
+    { role: 'user', content: 'hi' },
+    { type: 'function_call', callId: 'call-fn', name: 'grep', arguments: '{}' },
+    { type: 'local_shell_call', callId: 'call-shell' },
+    { type: 'function_call_output', callId: 'call-fn', output: 'done' },
+  ];
+
+  expect(collectKnownToolCallIds(history)).toEqual(['call-fn', 'call-shell']);
+});
+
+it('collects no ids from history holding only tool outputs', () => {
+  const history = [{ type: 'function_call_output', callId: 'call-orphan', output: 'done' }];
+
+  expect(collectKnownToolCallIds(history)).toEqual([]);
 });

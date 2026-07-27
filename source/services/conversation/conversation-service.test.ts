@@ -679,6 +679,7 @@ it('emits approval interruptions and resumes after approval', async () => {
         previousResponseId: 'resp_test',
         sessionId: 'default',
         toolResultCallIds: [],
+        knownToolCallIds: [],
       });
       return continuationStream;
     },
@@ -1411,6 +1412,7 @@ it('handleApprovalDecision() rejects interruption when answer is n', async () =>
         previousResponseId: 'resp_test',
         sessionId: 'default',
         toolResultCallIds: [],
+        knownToolCallIds: [],
       });
       return continuationStream;
     },

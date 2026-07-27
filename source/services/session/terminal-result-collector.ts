@@ -96,6 +96,7 @@ export async function collectTerminalResult(
             rawInterruption: getRawInterruption?.(),
             callId: event.approval.callId,
             llmAdvisory: event.approval.llmAdvisory,
+            postExecute: event.approval.postExecute,
           },
           ...(usage ? { usage } : {}),
         };

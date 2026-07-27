@@ -6,6 +6,9 @@ import { TurnAttempt } from './turn-attempt.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
 import type { AbortedApprovalContext } from '../approval/approval-state.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { createPostExecutePausePolicy } from './post-execute-pause-policy.js';
+import { PostExecutePauseCapability } from './post-execute-pause-capability.js';
+import { PostExecutePendingRegistry } from './post-execute-pending-registry.js';
 
 const createSessionRuntimeInternals = (
   options: Omit<Parameters<typeof createProductionSessionRuntimeInternals>[0], 'toolOwnership'>,
@@ -56,7 +59,7 @@ it('executes initial turn successfully', async () => {
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello response' }]);
   stream.finalOutput = 'hello response';
 
-  const mockClient = {
+  const mockClient: any = {
     getProvider() {
       return 'openai';
     },
@@ -152,6 +155,167 @@ it('executes continuation turn successfully', async () => {
   } else {
     expect(true).toBe(false);
   }
+});
+
+it('resumes one post-execute-gated stream without consuming it twice', async () => {
+  const mockClient: any = {
+    getProvider: () => 'openai',
+    continueRunStream: async () => {
+      throw new Error('post-execute continuation must not create a second stream');
+    },
+  };
+  const { workflow, composition } = setupWorkflow(mockClient);
+  const policy = createPostExecutePausePolicy({
+    pending: composition.postExecutePending,
+    runId: 'test-session:live:1',
+    describe: () => ({ toolName: 'shell', argumentsText: '{"command":"pwd"}' }),
+  });
+  let consumed = 0;
+  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'resumed' }]);
+  stream.finalOutput = 'resumed';
+  (stream as any)[Symbol.asyncIterator] = async function* () {
+    consumed++;
+    await policy({
+      params: {},
+      result: 'original',
+      details: { toolCall: { callId: 'call-a' } },
+      executeAgain: async () => 'retried',
+    });
+    yield { type: 'response.output_text.delta', delta: 'resumed' };
+  };
+  mockClient.startStream = async () => stream;
+
+  const token = composition.generationGuard.capture();
+  const attempt = new TurnAttempt({
+    turn: { text: 'run' },
+    token,
+    initialRetryCounts: defaultRetryCounts,
+    initialJournalSnapshot: [],
+    maxTransientRetries: 3,
+  });
+  const first = await collect(workflow.executeInitial(attempt));
+  expect(first.outcome).toMatchObject({ kind: 'approval_required', terminal: { type: 'approval_required' } });
+  expect(consumed).toBe(1);
+
+  const snapshot = composition.postExecutePending.snapshot();
+  expect(
+    composition.postExecutePending.decide({
+      revision: snapshot.revision,
+      ids: [snapshot.entries[0].id],
+      decision: 'approve',
+    }),
+  ).toMatchObject({ kind: 'settled' });
+  const resumed = await collect(
+    workflow.executeContinuation({ kind: 'approval_decision', answer: 'y', generation: token }),
+  );
+  expect(resumed.outcome).toMatchObject({ kind: 'response', terminal: { finalText: 'resumed' } });
+  expect(consumed).toBe(1);
+});
+
+it('establishes the active live-run id before a synchronously starting client can reach an opted-in tool', async () => {
+  const pending = new PostExecutePendingRegistry({ sessionId: 'test-session', epoch: 'epoch-a' });
+  const capability = new PostExecutePauseCapability(pending);
+  const definition: any = {
+    postExecutePause: { describe: () => ({ toolName: 'shell', argumentsText: '{}' }) },
+  };
+  let gate!: Promise<unknown>;
+  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'done' }]);
+  stream.finalOutput = 'done';
+  const mockClient: any = {
+    getProvider: () => 'openai',
+    async startStream() {
+      // This models a client whose stream startup begins tool work before its
+      // startStream promise resolves.
+      gate = Promise.resolve(
+        capability.forTool(definition)!({
+          params: {},
+          result: 'first',
+          details: { toolCall: { callId: 'call-sync' } },
+          executeAgain: async () => 'second',
+        }),
+      );
+      return stream;
+    },
+  };
+  const composition = createSessionRuntimeInternals({
+    sessionId: 'test-session',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+    turnAccumulator: new TurnItemAccumulator(),
+    postExecutePending: pending,
+    postExecutePauseCapability: capability,
+  });
+  const token = composition.generationGuard.capture();
+  const attempt = new TurnAttempt({
+    turn: { text: 'run' },
+    token,
+    initialRetryCounts: defaultRetryCounts,
+    initialJournalSnapshot: [],
+    maxTransientRetries: 3,
+  });
+
+  const first = await collect(composition.turnWorkflow.executeInitial(attempt));
+  expect(first.outcome).toMatchObject({ kind: 'approval_required' });
+  expect(pending.snapshot().entries).toMatchObject([{ toolCallId: 'call-sync', runId: 'test-session:live:1' }]);
+  const snapshot = pending.snapshot();
+  pending.decide({ revision: snapshot.revision, ids: [snapshot.entries[0]!.id], decision: 'approve' });
+  await expect(gate).resolves.toBe('second');
+});
+
+it('returns each later post-execute pause from the same live stream', async () => {
+  const mockClient: any = { getProvider: () => 'openai', startStream: async () => stream };
+  const { workflow, composition } = setupWorkflow(mockClient);
+  const policy = createPostExecutePausePolicy({
+    pending: composition.postExecutePending,
+    runId: 'test-session:live:1',
+    describe: () => ({ toolName: 'shell', argumentsText: '{}' }),
+  });
+  let consumed = 0;
+  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'done' }]);
+  stream.finalOutput = 'done';
+  (stream as any)[Symbol.asyncIterator] = async function* () {
+    consumed++;
+    for (const callId of ['call-a', 'call-b']) {
+      await policy({
+        params: {},
+        result: 'original',
+        details: { toolCall: { callId } },
+        executeAgain: async () => 'retried',
+      });
+    }
+    yield { type: 'response.output_text.delta', delta: 'done' };
+  };
+  const token = composition.generationGuard.capture();
+  const attempt = new TurnAttempt({
+    turn: { text: 'run' },
+    token,
+    initialRetryCounts: defaultRetryCounts,
+    initialJournalSnapshot: [],
+    maxTransientRetries: 3,
+  });
+
+  await collect(workflow.executeInitial(attempt));
+  let snapshot = composition.postExecutePending.snapshot();
+  composition.postExecutePending.decide({
+    revision: snapshot.revision,
+    ids: [snapshot.entries[0].id],
+    decision: 'approve',
+  });
+  const secondPause = await collect(
+    workflow.executeContinuation({ kind: 'approval_decision', answer: 'y', generation: token }),
+  );
+  expect(secondPause.outcome).toMatchObject({ kind: 'approval_required', terminal: { type: 'approval_required' } });
+  snapshot = composition.postExecutePending.snapshot();
+  composition.postExecutePending.decide({
+    revision: snapshot.revision,
+    ids: [snapshot.entries[0].id],
+    decision: 'reject',
+  });
+  const final = await collect(
+    workflow.executeContinuation({ kind: 'approval_decision', answer: 'n', generation: token }),
+  );
+  expect(final.outcome).toMatchObject({ kind: 'response', terminal: { finalText: 'done' } });
+  expect(consumed).toBe(1);
 });
 
 const collect = async (iterable: AsyncGenerator<any, any, void>) => {

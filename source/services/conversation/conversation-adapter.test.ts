@@ -24,6 +24,163 @@ const sessionContextService = {
   getContext: () => null,
 };
 
+const postExecuteApprovalEvent = (revision: number, id: string) => ({
+  type: 'approval_required' as const,
+  approval: {
+    agentName: 'Agent',
+    toolName: 'shell',
+    argumentsText: '{}',
+    postExecute: { kind: 'post_execute' as const, sessionId: 'session-1', epoch: 'epoch-1', revision, ids: [id] },
+  },
+});
+
+it('routes typed post-execute approvals through the registry before resuming the retained live run', async () => {
+  let revision = 1;
+  let ids = ['gate-1'];
+  const calls: string[] = [];
+  const approval = {
+    getPending: () => null,
+    getPendingInterruption: () => ({ sdk: 'must not be used' }),
+    getPostExecutePending: () => ({
+      sessionId: 'session-1',
+      epoch: 'epoch-1',
+      revision,
+      entries: ids.map((id) => ({ id })),
+      closed: false,
+    }),
+    decidePostExecutePending: ({ revision: requested, ids: selected, decision }: any) => {
+      calls.push(`settle:${decision}:${selected.join(',')}`);
+      if (requested !== revision || selected.some((id: string) => !ids.includes(id))) return { kind: 'invalid' };
+      ids = ids.filter((id) => !selected.includes(id));
+      revision++;
+      return { kind: 'settled' };
+    },
+  } as unknown as SessionApprovalQuery;
+  const turnFlow = {
+    async *start() {
+      yield postExecuteApprovalEvent(1, 'gate-1');
+    },
+    async *continueAfterApproval() {
+      calls.push('sdk-continuation');
+      yield { type: 'final' as const, finalText: 'wrong' };
+    },
+    async *continueAfterPostExecuteApproval() {
+      calls.push(`post-continuation:${ids.join(',')}`);
+      if (calls.filter((call) => call.startsWith('post-continuation')).length === 1) {
+        ids = ['gate-2'];
+        revision++;
+        yield postExecuteApprovalEvent(revision, 'gate-2');
+        return;
+      }
+      yield { type: 'final' as const, finalText: 'done' };
+    },
+  };
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: 'now',
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval,
+    turnFlow,
+  });
+
+  expect((await adapter.sendMessage('run')).type).toBe('approval_required');
+  expect((await adapter.handleApprovalDecision('y'))?.type).toBe('approval_required');
+  expect(await adapter.handleApprovalDecision('n')).toMatchObject({ type: 'response', finalText: 'done' });
+  expect(calls).toEqual(['settle:approve:gate-1', 'post-continuation:', 'settle:reject:gate-2', 'post-continuation:']);
+  expect(calls).not.toContain('sdk-continuation');
+});
+
+it('does not settle a typed post-execute token whose session or epoch no longer matches', async () => {
+  let settled = false;
+  const approval = {
+    getPending: () => null,
+    getPendingInterruption: () => null,
+    getPostExecutePending: () => ({
+      sessionId: 'replacement',
+      epoch: 'epoch-2',
+      revision: 1,
+      entries: [{ id: 'gate-1' }],
+      closed: false,
+    }),
+    decidePostExecutePending: () => {
+      settled = true;
+      return { kind: 'settled' };
+    },
+  } as unknown as SessionApprovalQuery;
+  const turnFlow = {
+    async *start() {
+      yield postExecuteApprovalEvent(1, 'gate-1');
+    },
+    async *continueAfterApproval() {
+      throw new Error('SDK continuation must not run');
+    },
+    async *continueAfterPostExecuteApproval() {
+      throw new Error('post-execute continuation must not run');
+    },
+  };
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: 'now',
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval,
+    turnFlow,
+  });
+
+  await adapter.sendMessage('run');
+  await expect(adapter.handleApprovalDecision('y')).resolves.toBeNull();
+  expect(settled).toBe(false);
+});
+
+it('does not continue when a typed post-execute token revision is stale', async () => {
+  let decisionCalls = 0;
+  const approval = {
+    getPending: () => null,
+    getPendingInterruption: () => null,
+    getPostExecutePending: () => ({
+      sessionId: 'session-1',
+      epoch: 'epoch-1',
+      revision: 2,
+      entries: [{ id: 'gate-1' }],
+      closed: false,
+    }),
+    decidePostExecutePending: () => {
+      decisionCalls++;
+      return { kind: 'invalid', reason: 'revision_mismatch' };
+    },
+  } as unknown as SessionApprovalQuery;
+  const turnFlow = {
+    async *start() {
+      yield postExecuteApprovalEvent(1, 'gate-1');
+    },
+    async *continueAfterApproval() {
+      throw new Error('SDK continuation must not run');
+    },
+    async *continueAfterPostExecuteApproval() {
+      throw new Error('post-execute continuation must not run');
+    },
+  };
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: 'now',
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval,
+    turnFlow,
+  });
+
+  await adapter.sendMessage('run');
+  await expect(adapter.handleApprovalDecision('y')).resolves.toBeNull();
+  expect(decisionCalls).toBe(1);
+});
+
 it('ConversationAdapter delegates turn execution through an explicit turnFlow dependency', async () => {
   const calls: Array<{ method: string; input?: any; options?: any }> = [];
   const turnFlow = {

@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through A4 tool ownership, the first bounded Step B representation slice is landed, and Step C has retired every production `_generatedItems` read. The application-owned post-execute tool seam is landed: a policy can hold a tool promise, then re-execute under the same call ID before returning one final result. Session/UI/TurnWorkflow handoff and denied-read metadata/override migration remain explicit follow-ups.
+**Status:** Step A is complete through A4 tool ownership, the first bounded Step B representation slice is landed, and Step C has retired every production `_generatedItems` read. The application-owned post-execute seam now carries selected root tools through the session registry, LiveRun, adapter decision, and same-stream continuation. Denied-read metadata/override migration remains the next explicit follow-up.
 **Last updated:** 2026-07-27
 
 ---
@@ -26,12 +26,13 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
+| Step C post-execute handoff | Selected root tools can pause after execution through a session-owned registry; the UI settles revisioned entries and resumes the same live stream consumer, with fail-closed abort/reset/disposal |
 | Bug fix | Denied-read approval never fired for `cd`-prefixed commands (record/lookup key mismatch) |
 | Bug fix | Docker host-control denials leaked across sessions (process-global `#deniedCommands`) |
 
 Each landed as a `--no-ff` merge from its own worktree branch; branch history is preserved.
 
-### In flight
+### Current boundary
 
 The post-execute seam is now deliberately limited to tool construction. `ToolDefinition.postExecute`
 runs after its original `execute` resolves and before the SDK receives a result. It receives
@@ -39,12 +40,14 @@ normalized parameters, the original result, SDK details (including the call ID),
 `executeAgain()` that retains those details. A policy may wait for an external decision; the SDK
 then cannot issue request B until it returns exactly one final result.
 
-The session/UI/TurnWorkflow handoff remains unimplemented. It needs a session/turn-owned
-post-execute batch channel, a suspended-stream handoff that does not dispose the stream, and a
-continuation path that settles selected entries and resumes that same stream. It must settle all
-entries fail-closed on abort, reset, and disposal. Do not substitute a `callModelInputFilter`
-sentinel: that would require SDK-specific black-box guarantees and does not solve the current
-UI/channel ownership gap.
+The session/UI/TurnWorkflow handoff is session-owned: the owned client factory creates a fresh
+registry and explicit epoch token, gives its root `AgentClient` a lazy active-live-run capability,
+and preserves that closure through agent rebuilds. Selected root definitions opt in at tool
+construction; nested tools deliberately do not inherit this capability in this slice. The adapter
+settles the displayed revision/entry before re-observing the same LiveRun, without building an SDK
+approval decision. Registry snapshots remain selective and revisioned; a later entry produces a
+new boundary after the selected one settles. Abort, reset, and disposal fail-close gates and stop
+late event projection. Do not substitute a `callModelInputFilter` sentinel.
 
 Do not migrate denied-read metadata or execution overrides yet: the stock SDK can retry a
 completed denied read as a new call ID, so CallId-only storage cannot safely bridge that boundary.
@@ -76,11 +79,15 @@ production session contract.
   execution completes, the policy holds request B pending, approval re-executes with the same call
   ID, and exactly one final result reaches request B. Ordinary factory-built tools remain without
   a policy and retain their existing behavior.
-- The scoped plan format check passes: `pnpm exec prettier --check
-  docs/plans/decouple-from-openai-agents-sdk.md`. Worktree-local `pnpm` validation could not run:
-  its automatic install fails with sandbox `EPERM` while reflinking the package store. Root-level
-  `pnpm lint` is also not a meaningful baseline with sibling worktrees present: ESLint traverses
-  them and reports their files as outside the root TypeScript project.
+- Post-execute session handoff focused set passes: registry, policy (including missing SDK call
+  ID), LiveRun, TurnWorkflow repeated-boundary, root tool factory, adapter, session-client
+  factory, turn coordinator, conversation service, and session composition tests: 10 files / 128
+  tests. `tsc --noEmit` reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Worktree-local `pnpm` validation runs with the existing `node_modules` symlink; no dependency
+  installation was performed. Root-level `pnpm lint` is not a meaningful baseline with sibling
+  worktrees present: ESLint traverses them and reports their files as outside the root TypeScript
+  project.
 - Full `tsc --noEmit` reaches only the known pre-existing
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
 - Continuation-call-id resolver slice: resolver, ledger, tracker, TurnWorkflow parity, and
@@ -98,7 +105,7 @@ production session contract.
 - Focused tool-ownership clusters pass: 23 files / 364 tests, plus the 4-test conversation
   integration fixture. Formatting and lint pass except the pre-existing `prefer-const` warning
   in `services/subagents/runtime.ts`.
-- After building `dist/`, full Vitest reaches 4,566 passing / 1 skipped / 1 failing. The sole
+- After building `dist/`, full Vitest reaches 4,615 passing / 1 skipped / 1 failing. The sole
   failure is the pre-existing sandbox terminal E2E failure in `source/cli.e2e.test.ts` (the child
   terminal exits before rendering `Lite`); it reproduces on the baseline checkout.
 - No dependency installation was run; this worktree uses its existing `node_modules` symlink.

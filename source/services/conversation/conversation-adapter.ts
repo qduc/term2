@@ -1,7 +1,7 @@
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../service-interfaces.js';
 import type { ConversationEvent } from './conversation-events.js';
 import type { CommandMessage } from '../../tools/types.js';
-import type { ConversationTerminal } from '../../contracts/conversation.js';
+import type { ConversationTerminal, PostExecuteApprovalToken } from '../../contracts/conversation.js';
 import { collectTerminalResult } from '../session/terminal-result-collector.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
@@ -39,6 +39,7 @@ export type HandleApprovalDecisionOptions = {
 };
 
 export type TurnFlow = Pick<SessionRuntime['turns'], 'start' | 'continueAfterApproval'> & {
+  continueAfterPostExecuteApproval?: SessionRuntime['turns']['continueAfterPostExecuteApproval'];
   abort?: () => void;
 };
 
@@ -125,6 +126,7 @@ export class ConversationAdapter {
   #cancellation: Promise<void> = Promise.resolve();
   #approvalExecutionId: ExecutionId | null = null;
   #approvalActionId: ActionId | null = null;
+  #postExecuteApproval: PostExecuteApprovalToken | null = null;
   #queueStateObserver: QueueStateObserver | null = null;
   #queuedTurnStartObserver: QueuedTurnStartObserver | null = null;
   readonly #activeCancelTimeoutMs: number;
@@ -540,6 +542,8 @@ export class ConversationAdapter {
         });
       }
 
+      this.#postExecuteApproval = result.type === 'approval_required' ? result.approval.postExecute ?? null : null;
+
       return result;
     });
   }
@@ -549,8 +553,23 @@ export class ConversationAdapter {
     rejectionReason?: string,
     { onTextChunk, onReasoningChunk, onCommandMessage, onEvent, approvalAnswer }: HandleApprovalDecisionOptions = {},
   ): Promise<ConversationTerminal | null> {
-    if (!this.#approval.getPending()) {
+    const postExecuteApproval = this.#postExecuteApproval;
+    if (!this.#approval.getPending() && !postExecuteApproval) {
       return null;
+    }
+
+    if (postExecuteApproval) {
+      const snapshot = this.#approval.getPostExecutePending();
+      if (snapshot.sessionId !== postExecuteApproval.sessionId || snapshot.epoch !== postExecuteApproval.epoch) {
+        return null;
+      }
+      const decision = this.#approval.decidePostExecutePending({
+        revision: postExecuteApproval.revision,
+        ids: postExecuteApproval.ids,
+        decision: answer === 'y' ? 'approve' : 'reject',
+      });
+      if (decision.kind !== 'settled') return null;
+      this.#postExecuteApproval = null;
     }
 
     if (answer === 'y' && approvalAnswer) {
@@ -593,20 +612,25 @@ export class ConversationAdapter {
         this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
         let result: ConversationTerminal | null;
         try {
-          result = await collectTerminalResult(this.#turnFlow.continueAfterApproval({ answer, rejectionReason }), {
-            onTextChunk,
-            onReasoningChunk,
-            onCommandMessage,
-            onEvent: wrappedOnEvent,
-            getRawInterruption: () => this.#approval.getPendingInterruption(),
-            onFinalEvent: (event) => {
-              this.#logger.debug('handleApprovalDecision received final event', {
-                sessionId: this.#sessionId,
-                hasUsage: Boolean(event.usage),
-                usage: event.usage,
-              });
+          result = await collectTerminalResult(
+            postExecuteApproval
+              ? this.#turnFlow.continueAfterPostExecuteApproval!()
+              : this.#turnFlow.continueAfterApproval({ answer, rejectionReason }),
+            {
+              onTextChunk,
+              onReasoningChunk,
+              onCommandMessage,
+              onEvent: wrappedOnEvent,
+              getRawInterruption: () => this.#approval.getPendingInterruption(),
+              onFinalEvent: (event) => {
+                this.#logger.debug('handleApprovalDecision received final event', {
+                  sessionId: this.#sessionId,
+                  hasUsage: Boolean(event.usage),
+                  usage: event.usage,
+                });
+              },
             },
-          });
+          );
         } finally {
           this.#subagentEventSinkHost?.cancelSubagentRuns?.();
           this.#subagentEventSinkHost?.setSubagentEventSink(null);
@@ -622,6 +646,7 @@ export class ConversationAdapter {
 
         return result;
       });
+      this.#postExecuteApproval = result?.type === 'approval_required' ? result.approval.postExecute ?? null : null;
       if (result && this.#queue && this.#approvalExecutionId) {
         const executionId = this.#approvalExecutionId;
         if (result.type === 'approval_required') {

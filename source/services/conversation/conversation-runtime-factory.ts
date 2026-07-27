@@ -7,6 +7,8 @@ import type {
 import { createSessionRuntime, type SessionRuntime } from '../session/session-composition.js';
 import { createConversationAdapterForRuntime } from './conversation-adapter-factory.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import type { PostExecutePendingRegistry } from '../session/post-execute-pending-registry.js';
+import type { PostExecutePauseCapability } from '../session/post-execute-pause-capability.js';
 
 export type ConversationRuntimeBundle = {
   /** The clean session runtime (no adapter). */
@@ -23,6 +25,8 @@ export type CreateConversationRuntimeOptions = {
   sessionStartedAt?: string;
   agentClient: ConversationAgentClient;
   toolOwnership: ToolOwnershipRegistry;
+  postExecutePending?: PostExecutePendingRegistry;
+  postExecutePauseCapability?: PostExecutePauseCapability;
   askUserAnswerSink?: AskUserAnswerSink | null;
   subagentEventSinkHost?: SubagentEventSinkHost | null;
   deps: {

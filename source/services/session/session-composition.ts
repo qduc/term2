@@ -47,6 +47,13 @@ import {
   type BackgroundSubagentTaskPort,
 } from '../subagents/subagent-notification-store.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import {
+  PostExecutePendingRegistry,
+  type PostExecuteDecisionRequest,
+  type PostExecuteDecisionResult,
+  type PostExecutePendingSnapshot,
+} from './post-execute-pending-registry.js';
+import type { PostExecutePauseCapability } from './post-execute-pause-capability.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
   value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
@@ -112,6 +119,8 @@ export type SessionRuntimeInternals = {
   backgroundSubagentNotifications: BackgroundSubagentNotificationChannel;
   /** Read-only lifecycle projection for background subagent UI. */
   backgroundSubagentTasks: BackgroundSubagentTaskChannel;
+  /** Session-owned fail-closed gates for post-execute policies. */
+  postExecutePending: PostExecutePendingRegistry;
 };
 
 // ── Options for the composition factory ──────────────────────────
@@ -123,6 +132,8 @@ export type CreateSessionRuntimeInternalsOptions = {
   sessionStartedAt?: string;
   agentClient: ConversationAgentClient;
   toolOwnership: ToolOwnershipRegistry;
+  postExecutePending?: PostExecutePendingRegistry;
+  postExecutePauseCapability?: PostExecutePauseCapability;
   askUserAnswerSink?: AskUserAnswerSink | null;
   subagentEventSinkHost?: SubagentEventSinkHost | null;
   deps: {
@@ -154,6 +165,10 @@ export type ConversationSessionBundle = Pick<
 export type SessionApprovalQuery = {
   getPending(): PendingApprovalContext | null;
   getPendingInterruption(): unknown;
+  /** Authoritative post-execute batch; notifications must re-read this snapshot. */
+  getPostExecutePending(): PostExecutePendingSnapshot;
+  /** Atomically settle selected post-execute entries from the displayed revision. */
+  decidePostExecutePending(request: PostExecuteDecisionRequest): PostExecuteDecisionResult;
 };
 
 export type SessionLogs = {
@@ -196,6 +211,7 @@ export type SessionRuntime = {
   turns: {
     start: (input: string | UserTurn, options?: TurnStartOptions) => AsyncIterable<ConversationEvent>;
     continueAfterApproval: (options: { answer: string; rejectionReason?: string }) => AsyncIterable<ConversationEvent>;
+    continueAfterPostExecuteApproval: () => AsyncIterable<ConversationEvent>;
     abort: () => void;
   };
   /** Facade for state/persistence/undo/snapshot operations. */
@@ -224,6 +240,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     sessionStartedAt,
     agentClient,
     toolOwnership,
+    postExecutePending: suppliedPostExecutePending,
+    postExecutePauseCapability,
     askUserAnswerSink,
     subagentEventSinkHost,
     deps,
@@ -259,6 +277,10 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   };
 
   const generationGuard = new GenerationGuard();
+  // Factory-owned handles supply this same registry to the root tool policy.
+  // Compatibility callers receive a fresh explicit token, never a wall-clock epoch.
+  const postExecutePending =
+    suppliedPostExecutePending ?? new PostExecutePendingRegistry({ sessionId: id, epoch: crypto.randomUUID() });
 
   const conversationStore = new ConversationStore();
   const approvalState = new ApprovalState();
@@ -473,6 +495,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     planApplier,
     continuationRecoveryHandler,
     providerContinuity,
+    postExecutePending,
+    setActivePostExecuteRunId: postExecutePauseCapability?.setActiveRunId.bind(postExecutePauseCapability),
   });
 
   const turnCoordinator = new TurnCoordinator({
@@ -501,6 +525,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
+    turnWorkflow.abortLiveRun();
+    postExecutePending.close();
     generationGuard.invalidate();
     // Abort any active SDK work only if a turn is currently running.
     if (!appState.statusMachine.is('idle')) {
@@ -551,6 +577,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     resolvedSubagentEventSinkHost,
     backgroundSubagentNotifications,
     backgroundSubagentTasks,
+    postExecutePending,
   };
 }
 
@@ -574,6 +601,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     resolvedSubagentEventSinkHost,
     backgroundSubagentNotifications,
     backgroundSubagentTasks,
+    postExecutePending,
   } = internals;
 
   return {
@@ -582,6 +610,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     turns: {
       start: turnCoordinator.start.bind(turnCoordinator),
       continueAfterApproval: turnCoordinator.continueAfterApproval.bind(turnCoordinator),
+      continueAfterPostExecuteApproval: turnCoordinator.continueAfterPostExecuteApproval.bind(turnCoordinator),
       abort: turnCoordinator.abort.bind(turnCoordinator),
     },
     state: stateFacade,
@@ -611,6 +640,8 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     approval: {
       getPending: approvalFlow.getPending.bind(approvalFlow),
       getPendingInterruption: approvalFlow.getPendingInterruption.bind(approvalFlow),
+      getPostExecutePending: postExecutePending.snapshot.bind(postExecutePending),
+      decidePostExecutePending: postExecutePending.decide.bind(postExecutePending),
     },
     sinks: {
       askUserAnswer: resolvedAskUserAnswerSink,

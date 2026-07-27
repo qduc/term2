@@ -19,7 +19,7 @@ import { type CommandMessage } from '../../tools/types.js';
 import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { isDockerHostControlShellApproval, requiresHumanShellApproval } from '../approval/shell-sandbox-approval.js';
 import { deniedReadStore } from '../../utils/shell/sandbox/denied-read-stores.js';
-import type { DeniedReadMetadata } from '../../contracts/conversation.js';
+import type { DeniedReadMetadata, PostExecuteApprovalToken } from '../../contracts/conversation.js';
 
 export type BuildResultOutcome =
   | { kind: 'response'; result: Extract<ConversationTerminal, { type: 'response' }> }
@@ -62,6 +62,7 @@ export function createApprovalRequiredTerminal(options: {
   llmAdvisory?: LLMAdvisory;
   deniedRead?: DeniedReadMetadata;
   dockerHostControl?: boolean;
+  postExecute?: PostExecuteApprovalToken;
   usage?: NormalizedUsage;
 }): ApprovalRequiredTerminal {
   return {
@@ -75,6 +76,7 @@ export function createApprovalRequiredTerminal(options: {
       ...(options.llmAdvisory ? { llmAdvisory: options.llmAdvisory } : {}),
       ...(options.deniedRead ? { deniedRead: options.deniedRead } : {}),
       ...(options.dockerHostControl ? { dockerHostControl: true } : {}),
+      ...(options.postExecute ? { postExecute: options.postExecute } : {}),
     },
     ...(options.usage ? { usage: options.usage } : {}),
   };

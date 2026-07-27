@@ -48,3 +48,36 @@ it('never disposes a caller-owned compatibility client', () => {
   expect(handle.toolOwnership).toBe(toolOwnership);
   expect(callerOwned.dispose).not.toHaveBeenCalled();
 });
+
+it('disposal fail-closes its suspended gates and clears the capability without affecting a replacement', async () => {
+  const factory = createOwnedSessionClientFactory((_sessionId, _ownership, _capability) => client());
+  const oldHandle = factory.create('session-a');
+  const replacement = factory.create('session-a');
+  const oldPending = oldHandle.postExecutePending!;
+  const oldCapability = oldHandle.postExecutePauseCapability!;
+  oldCapability.setActiveRunId('old-run');
+  const oldGate = oldPending.register({
+    runId: 'old-run',
+    toolCallId: 'call-old',
+    toolName: 'shell',
+    argumentsText: '{}',
+  });
+  const oldToken = oldPending.snapshot();
+
+  oldHandle.dispose();
+
+  await expect(oldGate).resolves.toBe('reject');
+  expect(
+    oldCapability.forTool({
+      postExecutePause: { describe: () => ({ toolName: 'shell', argumentsText: '{}' }) },
+    } as any),
+  ).toBeTruthy();
+  expect(
+    oldPending.decide({
+      revision: oldToken.revision,
+      ids: oldToken.entries.map((entry) => entry.id),
+      decision: 'approve',
+    }),
+  ).toEqual({ kind: 'invalid', reason: 'closed' });
+  expect(replacement.postExecutePending!.snapshot().closed).toBe(false);
+});

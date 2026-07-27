@@ -85,6 +85,8 @@ export class ConversationService {
     const { runtime, adapter } = createConversationRuntime({
       agentClient: this.#clientHandle.agentClient,
       toolOwnership: this.#clientHandle.toolOwnership,
+      postExecutePending: this.#clientHandle.postExecutePending,
+      postExecutePauseCapability: this.#clientHandle.postExecutePauseCapability,
       deps,
       queueForeground: true,
       sessionId: sessionId ?? 'default',
@@ -142,6 +144,8 @@ export class ConversationService {
     const { runtime, adapter } = createConversationRuntime({
       agentClient: this.#clientHandle.agentClient,
       toolOwnership: this.#clientHandle.toolOwnership,
+      postExecutePending: this.#clientHandle.postExecutePending,
+      postExecutePauseCapability: this.#clientHandle.postExecutePauseCapability,
       deps: this.#deps,
       queueForeground: true,
       sessionId: newId,

@@ -9,6 +9,7 @@ const makeHarness = () => {
   const continuationCalls: any[] = [];
   const initialResults: any[] = [];
   const continuationResults: any[] = [];
+  let liveRunAborted = false;
   const turnWorkflow = {
     executeInitial: async function* (input: any, options: any) {
       initialCalls.push({ input, options });
@@ -35,6 +36,9 @@ const makeHarness = () => {
     },
     setNextContinuationResult: (outcome: any, events: any[] = []) => {
       continuationResults.push({ outcome, events });
+    },
+    abortLiveRun: () => {
+      liveRunAborted = true;
     },
   } as any;
 
@@ -81,6 +85,7 @@ const makeHarness = () => {
     continuationCalls,
     approvalFlow,
     getAbortCalled: () => abortCalled,
+    getLiveRunAborted: () => liveRunAborted,
     getProviderContinuityCleared: () => providerContinuityCleared,
   };
 };
@@ -315,12 +320,13 @@ it('continuation completion releases the turn for the next user message', async 
 });
 
 it('Abort to idle with pending approval reconciliation', async () => {
-  const { coordinator, statusMachine, getAbortCalled, getProviderContinuityCleared } = makeHarness();
+  const { coordinator, statusMachine, getAbortCalled, getLiveRunAborted, getProviderContinuityCleared } = makeHarness();
   statusMachine.beginTurn();
   statusMachine.requestApproval(); // awaiting_approval
 
   coordinator.abort();
 
+  expect(getLiveRunAborted()).toBe(true);
   expect(getAbortCalled()).toBe(true);
   expect(getProviderContinuityCleared()).toBe(true);
   expect(statusMachine.current).toBe('idle');

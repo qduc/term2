@@ -24,7 +24,7 @@ import {
 import { getModelDefaultReasoningLevel } from '../services/model-service.js';
 import { toolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
-import type { ToolDefinition } from '../tools/types.js';
+import type { PostExecutePauseCapability, ToolDefinition } from '../tools/types.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
@@ -45,6 +45,8 @@ export interface AgentFactoryDeps {
   skillsService?: SkillsService;
   /** Optional lazy bridge to the production one-shot agent runtime. */
   getAgentRuntime?: () => Pick<AgentRuntime, 'agent'> | null;
+  /** Root-session-only policy capability for explicitly opted-in definitions. */
+  postExecutePauseCapability?: PostExecutePauseCapability;
 }
 
 export interface AgentBuildResult {
@@ -82,6 +84,13 @@ export function buildAgentTools({
   shouldUseNativePatchTool: boolean;
   deps: AgentFactoryDeps;
 }): Tool[] {
+  for (const definition of toolDefinitions) {
+    if (definition.postExecute && definition.postExecutePause) {
+      throw new Error(
+        `Tool ${definition.name} cannot define both postExecute and postExecutePause; compose them explicitly in postExecute.`,
+      );
+    }
+  }
   const providerCapabilities = getProviderCapabilities(deps.providerId);
   const useStrictToolSchema = shouldUseStrictToolSchema({
     providerId: deps.providerId,
@@ -134,8 +143,9 @@ export function buildAgentTools({
 
             const executeOriginal = () => Promise.resolve(definition.execute(params, _context, details));
             const result = await executeOriginal();
-            const finalResult = definition.postExecute
-              ? await definition.postExecute({
+            const postExecute = definition.postExecute ?? deps.postExecutePauseCapability?.forTool(definition);
+            const finalResult = postExecute
+              ? await postExecute({
                   params: normalizeObjectParams(params, definition.parameters) as typeof params,
                   result,
                   details,

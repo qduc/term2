@@ -38,6 +38,16 @@ export type PostExecutePolicy<Params = unknown> = (
   context: PostExecutePolicyContext<Params>,
 ) => Promise<unknown> | unknown;
 
+/** Opt-in descriptor for the session-owned post-execute approval seam. */
+export interface PostExecutePauseDescriptor<Params = unknown> {
+  describe(params: Params): { toolName: string; argumentsText: string };
+}
+
+/** Construction-time capability. Root tools only in this slice; nested tools do not inherit it. */
+export interface PostExecutePauseCapability {
+  forTool<Params>(definition: ToolDefinition<Params>): PostExecutePolicy<Params> | undefined;
+}
+
 export interface ToolDefinition<Params = any> {
   name: string;
   description: string;
@@ -47,6 +57,8 @@ export interface ToolDefinition<Params = any> {
   needsApproval: (params: Params, context?: unknown) => Promise<boolean> | boolean;
   execute: (params: Params, context?: unknown, details?: unknown) => Promise<any> | any;
   postExecute?: PostExecutePolicy<Params>;
+  /** Selectively opt this root definition into session-owned post-execute approval. */
+  postExecutePause?: PostExecutePauseDescriptor<Params>;
   /**
    * Formats tool execution results into command messages for display.
    * @param item - The raw tool execution item from the conversation

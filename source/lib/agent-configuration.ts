@@ -10,6 +10,7 @@ import { buildAgent } from './agent-factory.js';
 import { createEditorImpl } from './editor-impl.js';
 import { getProvider } from '../providers/index.js';
 import { SkillsService } from '../services/skills/skills-service.js';
+import type { PostExecutePauseCapability } from '../tools/types.js';
 
 /** Narrow capability interface consumed by AgentRunOrchestrator and AgentChatService. */
 export interface AgentSource {
@@ -30,6 +31,7 @@ export interface AgentConfigurationDeps {
   /** Called when agent is about to be rebuilt — for side effects like cache clearing */
   onConfigChanged?: (changedKey?: string) => void;
   skillsService?: SkillsService;
+  postExecutePauseCapability?: PostExecutePauseCapability;
 }
 
 export class AgentConfiguration implements AgentSource {
@@ -53,6 +55,7 @@ export class AgentConfiguration implements AgentSource {
   #getSubagentBridge: () => SubagentBridge | null;
   #serviceTierOverrideForNextRequest: 'standard' | null = null;
   #skillsService?: SkillsService;
+  #postExecutePauseCapability?: PostExecutePauseCapability;
   #unsubscribeSettings: (() => void) | null = null;
   #isDisposed = false;
 
@@ -75,6 +78,7 @@ export class AgentConfiguration implements AgentSource {
     this.#getSubagentBridge = deps.getSubagentBridge;
     this.#onConfigChanged = deps.onConfigChanged;
     this.#skillsService = deps.skillsService;
+    this.#postExecutePauseCapability = deps.postExecutePauseCapability;
 
     // Create editor
     this.#editor = createEditorImpl({
@@ -158,6 +162,7 @@ export class AgentConfiguration implements AgentSource {
           return runtime.agent(config);
         },
       }),
+      postExecutePauseCapability: this.#postExecutePauseCapability,
     };
   }
 

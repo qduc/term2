@@ -19,6 +19,7 @@ import { RunnerManager } from './runner-manager.js';
 import { AgentRunOrchestrator } from './agent-run-orchestrator.js';
 import { AgentChatService } from './agent-chat-service.js';
 import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
+import type { PostExecutePauseCapability } from '../tools/types.js';
 
 type ChainedRunOptions = {
   previousResponseId?: string | null;
@@ -81,6 +82,7 @@ export class AgentClient {
     deps,
     subagentBridge,
     toolOwnership,
+    postExecutePauseCapability,
   }: {
     model?: string;
     reasoningEffort?: ModelSettingsReasoningEffort | 'default';
@@ -99,6 +101,8 @@ export class AgentClient {
     subagentBridge?: SubagentBridge;
     /** Session-owned registry shared by approval and nested subagent paths. */
     toolOwnership: ToolOwnershipRegistry;
+    /** Root-session-only capability for selected post-execute gates. */
+    postExecutePauseCapability?: PostExecutePauseCapability;
   }) {
     this.#logger = deps.logger;
     this.#toolInterceptorRegistry = new ToolInterceptorRegistry({ logger: this.#logger });
@@ -118,6 +122,7 @@ export class AgentClient {
         askUserAnswerStore: this.#askUserAnswerStore,
         getSubagentBridge: () => this.#subagentBridge,
         skillsService: deps.skillsService,
+        postExecutePauseCapability,
         onConfigChanged: (changedKey?: string) => {
           // Runner invalidation for specific keys
           if (changedKey === 'agent.transport' || changedKey === 'agent.retryAttempts') {

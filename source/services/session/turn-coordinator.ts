@@ -79,7 +79,23 @@ export class TurnCoordinator {
     }
   }
 
+  async *continueAfterPostExecuteApproval(): AsyncIterable<ConversationEvent> {
+    if (!this.deps.statusMachine.is('awaiting_approval')) {
+      throw new Error('No pending approval to continue.');
+    }
+    this.deps.statusMachine.beginContinuation();
+    let processed = false;
+    try {
+      const turnOutcome = yield* this.deps.turnWorkflow.continuePostExecute();
+      processed = true;
+      yield* this.#executeTerminalCommand(this.deps.statusMachine.completeContinuationOutcome(turnOutcome));
+    } finally {
+      if (!processed) this.deps.statusMachine.complete();
+    }
+  }
+
   abort(): void {
+    this.deps.turnWorkflow.abortLiveRun();
     this.deps.approvalFlow.abort();
     this.deps.statusMachine.abort();
     this.deps.providerContinuity.clear();

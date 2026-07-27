@@ -9,6 +9,8 @@ import type { AgentFactoryDeps } from './agent-factory.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { createEditorImpl } from './editor-impl.js';
 import type { ToolDefinition } from '../tools/types.js';
+import { PostExecutePendingRegistry } from '../services/session/post-execute-pending-registry.js';
+import { PostExecutePauseCapability } from '../services/session/post-execute-pause-capability.js';
 
 type MockLogger = ILoggingService & { debugCalls: any[][] };
 
@@ -80,6 +82,7 @@ const createDeps = (
       cancelSubagentRun: overrides.cancelSubagentRun ?? (() => ({ ok: true, runId: 'run-1', status: 'cancelling' })),
       getAskUserAnswer: overrides.getAskUserAnswer ?? (() => undefined),
       checkToolInterceptors: overrides.checkToolInterceptors ?? (async () => null),
+      postExecutePauseCapability: overrides.postExecutePauseCapability,
     },
   };
 };
@@ -155,27 +158,26 @@ it.sequential('post-execute policy re-executes without recursively invoking itse
 });
 
 it.sequential('tools without a post-execute policy return their ordinary result', async () => {
-  const { deps } = createDeps();
+  const pending = new PostExecutePendingRegistry({ sessionId: 'session-a', epoch: 'epoch-a' });
+  const capability = new PostExecutePauseCapability(pending);
+  capability.setActiveRunId('run-a');
+  const { deps } = createDeps({ postExecutePauseCapability: capability });
   const tool = buildTestTool(createToolDefinition(), deps);
 
   const result = await tool.invoke({}, JSON.stringify({ value: 'unchanged' }), { toolCall: { callId: 'call-plain' } });
 
   expect(result).toBe('original:unchanged');
+  expect(pending.snapshot().entries).toEqual([]);
 });
 
-it.sequential('streaming Runner waits for post-execute approval before the next model request', async () => {
+it.sequential('streaming Runner pauses an opted-in root tool until the session capability approves it', async () => {
   const callId = 'call-post-execute-pause';
   let requestCount = 0;
   let firstExecutionComplete!: () => void;
   const firstExecution = new Promise<void>((resolve) => {
     firstExecutionComplete = resolve;
   });
-  let approve!: () => void;
-  const approval = new Promise<void>((resolve) => {
-    approve = resolve;
-  });
   const executionCallIds: Array<string | undefined> = [];
-  const reexecutionCallIds: Array<string | undefined> = [];
   const nextRequestResults: unknown[][] = [];
   const definition = createToolDefinition({
     execute: async (_params, _context, details) => {
@@ -183,13 +185,14 @@ it.sequential('streaming Runner waits for post-execute approval before the next 
       if (executionCallIds.length === 1) firstExecutionComplete();
       return executionCallIds.length === 1 ? 'denied result' : 'approved result';
     },
-    postExecute: async ({ details, executeAgain }) => {
-      await approval;
-      reexecutionCallIds.push((details as any)?.toolCall?.callId);
-      return executeAgain();
+    postExecutePause: {
+      describe: () => ({ toolName: 'post_execute_test', argumentsText: '{"value":"approved"}' }),
     },
   });
-  const { deps } = createDeps();
+  const pending = new PostExecutePendingRegistry({ sessionId: 'session-a', epoch: 'epoch-a' });
+  const capability = new PostExecutePauseCapability(pending);
+  capability.setActiveRunId('run-a');
+  const { deps } = createDeps({ postExecutePauseCapability: capability });
   const appOwnedTool = buildTestTool(definition, deps);
   // Production routes approval through the application coordinator. This test
   // isolates the post-execute seam after that gate has allowed the tool call.
@@ -251,15 +254,33 @@ it.sequential('streaming Runner waits for post-execute approval before the next 
   await firstExecution;
   expect(requestCount).toBe(1);
 
-  approve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const snapshot = pending.snapshot();
+  expect(snapshot.entries).toMatchObject([{ runId: 'run-a', toolCallId: callId }]);
+  expect(pending.decide({ revision: snapshot.revision, ids: [snapshot.entries[0]!.id], decision: 'approve' })).toEqual({
+    kind: 'settled',
+    settledIds: [snapshot.entries[0]!.id],
+  });
   await iteration;
   await stream.completed;
 
   expect(executionCallIds).toEqual([callId, callId]);
-  expect(reexecutionCallIds).toEqual([callId]);
   expect(nextRequestResults).toHaveLength(1);
   expect(nextRequestResults[0]).toHaveLength(1);
   expect((nextRequestResults[0][0] as any).output.text).toBe('approved result');
+});
+
+it.sequential('rejects a tool that ambiguously defines both post-execute mechanisms', () => {
+  const { deps } = createDeps();
+  expect(() =>
+    buildTestTool(
+      createToolDefinition({
+        postExecute: ({ result }) => result,
+        postExecutePause: { describe: () => ({ toolName: 'post_execute_test', argumentsText: '{}' }) },
+      }),
+      deps,
+    ),
+  ).toThrow('cannot define both postExecute and postExecutePause');
 });
 
 it.sequential('buildAgent creates Agent with correct model name', () => {

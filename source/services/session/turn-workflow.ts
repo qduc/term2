@@ -63,6 +63,8 @@ import {
   resolveAbortedApprovalCallIds,
   resolveResponseCycleCallIds,
 } from './continuation-call-id-resolver.js';
+import { LiveRun } from './live-run.js';
+import type { PostExecutePendingRegistry, PostExecutePendingEntry } from './post-execute-pending-registry.js';
 
 export interface TurnWorkflowDeps {
   agentClient: ConversationAgentClient;
@@ -85,10 +87,15 @@ export interface TurnWorkflowDeps {
   continuationRecoveryHandler: ContinuationRecoveryHandler;
   providerContinuity: ProviderContinuity;
   batchCoordinator?: ToolApprovalBatchCoordinator;
+  postExecutePending: PostExecutePendingRegistry;
+  setActivePostExecuteRunId?: (runId: string | null) => void;
 }
 
 export class TurnWorkflow {
   readonly #batchCoordinator: ToolApprovalBatchCoordinator;
+  readonly #liveAttemptOwners = new WeakSet<TurnAttempt>();
+  #liveRun: LiveRun<ConversationEvent, { kind: 'completed'; outcome: any } | { kind: 'stale' }> | null = null;
+  #nextLiveRunId = 0;
 
   constructor(private readonly deps: TurnWorkflowDeps) {
     this.#batchCoordinator =
@@ -160,6 +167,9 @@ export class TurnWorkflow {
     init: ContinuationInit,
     policy?: ApprovalDecisionPolicy,
   ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
+    if (this.#liveRun) {
+      return yield* this.#continuePostExecuteRun();
+    }
     const driveResult = yield* this.executeContinuationAttempt(init, policy);
 
     if (driveResult.kind !== 'fresh_start_required') {
@@ -167,6 +177,11 @@ export class TurnWorkflow {
     }
 
     return yield* this.#replayFromFreshStart(init.generation, driveResult);
+  }
+
+  /** Re-observe an already-running post-execute stream without involving SDK approvals. */
+  async *continuePostExecute(): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
+    return yield* this.#continuePostExecuteRun();
   }
 
   #freshStartReplayOptions(
@@ -287,6 +302,9 @@ export class TurnWorkflow {
           if (cycleResult.kind === 'stale') {
             return { kind: 'stale' };
           }
+          if (cycleResult.kind === 'post_execute_approval_required') {
+            return { kind: 'approval_required', terminal: this.#postExecuteApprovalTerminal(cycleResult.entries) };
+          }
           const { outcome } = cycleResult;
 
           if (outcome.kind === 'response') {
@@ -363,22 +381,109 @@ export class TurnWorkflow {
         }
       }
     } finally {
-      attempt.close();
+      // A post-execute gate hands this attempt to its live consumer. That task
+      // owns terminal cleanup; closing here would detach abort handling while
+      // the SDK is still waiting at the tool boundary.
+      if (!this.#liveAttemptOwners.has(attempt)) attempt.close();
     }
   }
 
   async *#executeInitialStreamCycle(
     attempt: TurnAttempt,
     options: { resumeState?: RunState<any, any>; resumePreviousResponseId?: string | null },
-  ): AsyncGenerator<ConversationEvent, { kind: 'completed'; outcome: any } | { kind: 'stale' }, void> {
-    const stream = await this.#startInitialStream(attempt, options);
+  ): AsyncGenerator<
+    ConversationEvent,
+    | { kind: 'completed'; outcome: any }
+    | { kind: 'stale' }
+    | { kind: 'post_execute_approval_required'; entries: readonly PostExecutePendingEntry[] },
+    void
+  > {
+    // Establish ownership before asking the client for a stream. Some clients
+    // can start consuming synchronously while constructing their stream.
+    const runId = `${this.deps.sessionId}:live:${++this.#nextLiveRunId}`;
+    this.deps.setActivePostExecuteRunId?.(runId);
+    let stream: AgentStream;
+    try {
+      stream = await this.#startInitialStream(attempt, options);
+    } catch (error) {
+      this.deps.setActivePostExecuteRunId?.(null);
+      throw error;
+    }
     attempt.attachStream(stream);
 
-    const accumulated = yield* this.deps.streamProcessor.process(stream, {
+    const liveRun = new LiveRun<ConversationEvent, { kind: 'completed'; outcome: any } | { kind: 'stale' }>(
+      runId,
+      this.deps.postExecutePending,
+      async (emit) => {
+        try {
+          return await this.#consumeInitialStream(stream, attempt, emit);
+        } finally {
+          this.#liveAttemptOwners.delete(attempt);
+          attempt.close();
+        }
+      },
+    );
+    this.#liveAttemptOwners.add(attempt);
+    this.#liveRun = liveRun;
+    return yield* this.#drainLiveRun(liveRun);
+  }
+
+  async *#drainLiveRun(
+    liveRun: LiveRun<ConversationEvent, { kind: 'completed'; outcome: any } | { kind: 'stale' }>,
+  ): AsyncGenerator<
+    ConversationEvent,
+    | { kind: 'completed'; outcome: any }
+    | { kind: 'stale' }
+    | { kind: 'post_execute_approval_required'; entries: readonly PostExecutePendingEntry[] },
+    void
+  > {
+    while (true) {
+      let state: Awaited<ReturnType<typeof liveRun.next>>;
+      try {
+        state = await liveRun.next();
+      } catch (error) {
+        if (this.#liveRun === liveRun) {
+          this.#liveRun = null;
+          this.deps.setActivePostExecuteRunId?.(null);
+        }
+        throw error;
+      }
+      if (state.kind === 'event') {
+        yield state.event;
+        continue;
+      }
+      if (state.kind === 'post_execute_approval_required') return state;
+      if (state.kind === 'cancelled') {
+        if (this.#liveRun === liveRun) {
+          this.#liveRun = null;
+          this.deps.setActivePostExecuteRunId?.(null);
+        }
+        return { kind: 'stale' };
+      }
+      if (this.#liveRun === liveRun) {
+        this.#liveRun = null;
+        this.deps.setActivePostExecuteRunId?.(null);
+      }
+      return state.result;
+    }
+  }
+
+  async #consumeInitialStream(
+    stream: AgentStream,
+    attempt: TurnAttempt,
+    emit: (event: ConversationEvent) => void,
+  ): Promise<{ kind: 'completed'; outcome: any } | { kind: 'stale' }> {
+    const processor = this.deps.streamProcessor.process(stream, {
       gen: attempt.token,
       source: 'startStream',
       preserveExistingToolArgs: false,
     });
+    let next = await processor.next();
+    while (!next.done) {
+      emit(next.value);
+      next = await processor.next();
+    }
+    const accumulated = next.value;
 
     const finalized = this.deps.streamProcessor.finalize(stream, attempt.token, attempt.inputMode!, 'startStream');
     if (finalized.kind === 'stale') {
@@ -413,6 +518,45 @@ export class TurnWorkflow {
     );
 
     return { kind: 'completed', outcome };
+  }
+
+  async *#continuePostExecuteRun(): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
+    const liveRun = this.#liveRun;
+    if (!liveRun) return { kind: 'failed' };
+    try {
+      const result = yield* this.#drainLiveRun(liveRun);
+      if (result.kind === 'stale') return { kind: 'stale' };
+      if (result.kind === 'post_execute_approval_required') {
+        return { kind: 'approval_required', terminal: this.#postExecuteApprovalTerminal(result.entries) };
+      }
+      const { outcome } = result;
+      if (outcome.kind === 'response') return { kind: 'response', terminal: outcome.result };
+      if (outcome.kind === 'approval_required') return { kind: 'approval_required', terminal: outcome.result };
+      return { kind: 'failed' };
+    } catch (error) {
+      this.#liveRun = null;
+      this.deps.setActivePostExecuteRunId?.(null);
+      throw error;
+    }
+  }
+
+  #postExecuteApprovalTerminal(entries: readonly PostExecutePendingEntry[]): ConversationTerminal {
+    const entry = entries[0];
+    const snapshot = this.deps.postExecutePending.snapshot();
+    return createApprovalRequiredTerminal({
+      agentName: 'Agent',
+      toolName: entry.toolName,
+      argumentsText: entry.argumentsText,
+      rawInterruption: { type: 'post_execute', runId: entry.runId, id: entry.id },
+      callId: entry.toolCallId,
+      postExecute: {
+        kind: 'post_execute',
+        sessionId: snapshot.sessionId,
+        epoch: snapshot.epoch,
+        revision: snapshot.revision,
+        ids: [entry.id],
+      },
+    });
   }
 
   async #startInitialStream(
@@ -811,6 +955,17 @@ export class TurnWorkflow {
         ? { kind: state.inputMode }
         : { kind: state.inputMode, previousInput: previousInputForSurge },
     );
+  }
+
+  abortLiveRun(): void {
+    const liveRun = this.#liveRun;
+    this.#liveRun = null;
+    liveRun?.cancel();
+    this.deps.setActivePostExecuteRunId?.(null);
+  }
+
+  get activePostExecuteRunId(): string | null {
+    return this.#liveRun?.runId ?? null;
   }
 
   #createApprovalRequiredFromAutoApprove(

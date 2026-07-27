@@ -540,24 +540,27 @@ const skillsService = new SkillsService(logger, executionContext.getCwd());
 skillsService.discoverSkills();
 const terminalTitleBase = buildProjectFolderTitle(executionContext.getCwd());
 
-const sessionClientFactory = createOwnedSessionClientFactory((_sessionId, toolOwnership) => {
-  const agentClient = new AgentClient({
-    model: settings.get('agent.model'),
-    reasoningEffort: settings.get('agent.reasoningEffort') as ModelSettingsReasoningEffort,
-    maxTurns: settings.get('agent.maxTurns'),
-    retryAttempts: settings.get('agent.retryAttempts'),
-    deps: {
-      logger: logger,
-      settings: settings,
-      executionContext: executionContext,
-      sessionContextService,
-      skillsService,
-    },
-    toolOwnership,
-  });
-  installPlanModeInterceptor(agentClient, { settingsService: settings });
-  return agentClient;
-});
+const sessionClientFactory = createOwnedSessionClientFactory(
+  (_sessionId, toolOwnership, postExecutePauseCapability) => {
+    const agentClient = new AgentClient({
+      model: settings.get('agent.model'),
+      reasoningEffort: settings.get('agent.reasoningEffort') as ModelSettingsReasoningEffort,
+      maxTurns: settings.get('agent.maxTurns'),
+      retryAttempts: settings.get('agent.retryAttempts'),
+      deps: {
+        logger: logger,
+        settings: settings,
+        executionContext: executionContext,
+        sessionContextService,
+        skillsService,
+      },
+      toolOwnership,
+      postExecutePauseCapability,
+    });
+    installPlanModeInterceptor(agentClient, { settingsService: settings });
+    return agentClient;
+  },
+);
 
 if (hasPositionalPrompt) {
   const { runNonInteractive } = await import('./non-interactive.js');

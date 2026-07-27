@@ -80,6 +80,16 @@ export interface ApprovalDescriptor {
    * ordinary one.
    */
   dockerHostControl?: boolean;
+  /** Application-owned post-execute gate; never pass this through SDK approval APIs. */
+  postExecute?: PostExecuteApprovalToken;
+}
+
+export interface PostExecuteApprovalToken {
+  kind: 'post_execute';
+  sessionId: string;
+  epoch: string | number;
+  revision: number;
+  ids: readonly string[];
 }
 
 /** Canonical approval data. Reuses the established approval descriptor shape. */

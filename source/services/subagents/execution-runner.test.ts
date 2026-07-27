@@ -24,6 +24,7 @@ import {
   createMockSettings,
   createSessionContextService,
 } from './test-helpers/subagent-manager-fixtures.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 
 const committedEvents = (events: any[]) => events.filter((e) => e.type !== 'subagent_streaming_text');
 
@@ -54,6 +55,7 @@ const makeRunner = (events: any[]) => {
       buildAgentTools: () => [],
     } as any,
     onEvent: (event) => received.push(event),
+    toolOwnership: new ToolOwnershipRegistry(),
   });
   return { runner, received };
 };

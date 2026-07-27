@@ -6,7 +6,11 @@ import { randomUUID } from 'node:crypto';
 import { Agent, RunContext, RunToolApprovalItem, Runner, RunState, tool as createTool } from '@openai/agents';
 import type { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents-core';
 import { z } from 'zod';
-import { NestedSubagentRunner, incrementSubagentTurnCount, type CachedRoleTool } from './nested-runner.js';
+import {
+  NestedSubagentRunner as ProductionNestedSubagentRunner,
+  incrementSubagentTurnCount,
+  type CachedRoleTool,
+} from './nested-runner.js';
 import { SubagentToolPolicy, SubagentToolFactory } from './tool-policy.js';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
@@ -15,6 +19,16 @@ import type { ExecutionContext } from '../execution-context.js';
 import { registerProvider } from '../../providers/registry.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { PARENT_TOOL_OWNER } from '../approval/tool-owner.js';
+
+class NestedSubagentRunner extends ProductionNestedSubagentRunner {
+  constructor(
+    deps: Omit<ConstructorParameters<typeof ProductionNestedSubagentRunner>[0], 'toolOwnership'> & {
+      toolOwnership?: ToolOwnershipRegistry;
+    },
+  ) {
+    super({ ...deps, toolOwnership: deps.toolOwnership ?? new ToolOwnershipRegistry() });
+  }
+}
 
 const createSessionContextService = () => ({
   runWithContext: <T>(_context: any, fn: () => T) => fn(),
@@ -93,7 +107,7 @@ function createRunner(options: {
     toolFactory,
     roleToolCache: new Map(),
     onEvent: options.onEvent,
-    ...(options.toolOwnership ? { toolOwnership: options.toolOwnership } : {}),
+    toolOwnership: options.toolOwnership ?? new ToolOwnershipRegistry(),
   });
 }
 

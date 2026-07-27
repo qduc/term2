@@ -1,5 +1,6 @@
 import { it, expect, vi, beforeEach } from 'vitest';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
+import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 
 /**
  * Captured SubagentManager instances. The bridge wires its own `#emitEvent`
@@ -78,6 +79,7 @@ function makeBridge() {
     sessionContextService: noopSessionContextService as any,
     chat: async () => '',
     createClient: () => ({}),
+    toolOwnership: new ToolOwnershipRegistry(),
   });
   const manager = managerInstances[0];
   if (!manager?.onEvent) throw new Error('Bridge did not wire an onEvent callback into SubagentManager');

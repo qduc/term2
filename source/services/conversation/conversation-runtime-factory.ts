@@ -6,6 +6,7 @@ import type {
 } from '../conversation-agent-client.js';
 import { createSessionRuntime, type SessionRuntime } from '../session/session-composition.js';
 import { createConversationAdapterForRuntime } from './conversation-adapter-factory.js';
+import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 
 export type ConversationRuntimeBundle = {
   /** The clean session runtime (no adapter). */
@@ -21,6 +22,7 @@ export type CreateConversationRuntimeOptions = {
   /** ISO timestamp; defaults to now. */
   sessionStartedAt?: string;
   agentClient: ConversationAgentClient;
+  toolOwnership: ToolOwnershipRegistry;
   askUserAnswerSink?: AskUserAnswerSink | null;
   subagentEventSinkHost?: SubagentEventSinkHost | null;
   deps: {

@@ -5,6 +5,7 @@ import type { SubagentSession } from './subagent-session.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AgentClient } from '../../lib/agent-client.js';
 import { createSubagentRuntime } from './runtime.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import {
   createMockLogger,
   createMockSettings,
@@ -931,10 +932,12 @@ describe('outbound steering', () => {
     const settings = createMockSettings({ 'agent.model': 'mock-model', 'agent.provider': providerId });
     const logger = createMockLogger();
     const sessionContextService = createSessionContextService();
+    const toolOwnership = new ToolOwnershipRegistry();
     const runtime = createSubagentRuntime({
       logger,
       settings,
       sessionContextService,
+      toolOwnership,
       createClient: ({ agent, provider, maxTurns, retryAttempts }) =>
         new AgentClient({
           model: agent.model,
@@ -943,6 +946,7 @@ describe('outbound steering', () => {
           deps: { logger, settings, sessionContextService },
           agentOverride: agent,
           providerOverride: provider,
+          toolOwnership,
         }),
     });
     const run = runtime.asyncRegistry.startRun({ role: 'explorer', task: 'Inspect package metadata.' });

@@ -1,8 +1,15 @@
 import { expect, it, vi } from 'vitest';
-import { AgentClient } from './agent-client.js';
+import { AgentClient as ProductionAgentClient } from './agent-client.js';
 import { registerProvider } from '../providers/registry.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import type { SubagentBridge } from './subagent-bridge.js';
+import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
+
+class AgentClient extends ProductionAgentClient {
+  constructor(options: Omit<ConstructorParameters<typeof ProductionAgentClient>[0], 'toolOwnership'>) {
+    super({ ...options, toolOwnership: new ToolOwnershipRegistry() });
+  }
+}
 
 const providerId = 'mock-provider-agent-client-dispose';
 

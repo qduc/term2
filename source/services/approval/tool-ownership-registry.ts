@@ -69,14 +69,3 @@ export class ToolOwnershipRegistry {
     }
   }
 }
-
-/**
- * Process-wide default, shared by the nested subagent runner (which claims) and
- * the approval flow (which reads). The two sit on opposite sides of the agent
- * client and have no common composition root to be injected from; both accept
- * an explicit registry so tests can scope one per run.
- *
- * Claims are keyed by tool call ID, which is unique per call, so entries never
- * collide across runs — a stale entry can only ever be evicted, never misread.
- */
-export const toolOwnershipRegistry = new ToolOwnershipRegistry();

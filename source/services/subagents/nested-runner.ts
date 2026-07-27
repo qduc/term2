@@ -21,7 +21,7 @@ import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage
 import { replayApprovals, type ApprovalRecord } from '../approval/approval-replay.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
-import { ToolOwnershipRegistry, toolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 
 export type CachedRoleTool = {
@@ -118,11 +118,8 @@ export class NestedSubagentRunner {
     /** Optional role resolver for shared resolution path. */
     resolveRole?: (role: SupportedSubagentRole) => SubagentDefinition;
     skillsService?: SkillsService;
-    /**
-     * Where this runner records which subagent owns a pending tool call.
-     * Defaults to the process-wide registry the approval flow reads from.
-     */
-    toolOwnership?: ToolOwnershipRegistry;
+    /** Session-owned registry where this runner records pending tool owners. */
+    toolOwnership: ToolOwnershipRegistry;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
@@ -133,7 +130,7 @@ export class NestedSubagentRunner {
     this.#roleToolCache = deps.roleToolCache;
     this.#resolveRole = deps.resolveRole;
     this.#skillsService = deps.skillsService;
-    this.#toolOwnership = deps.toolOwnership ?? toolOwnershipRegistry;
+    this.#toolOwnership = deps.toolOwnership;
   }
 
   clearCache(): void {

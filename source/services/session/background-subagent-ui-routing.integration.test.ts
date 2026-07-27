@@ -6,6 +6,7 @@ import { createStreamingState } from '../../utils/conversation/conversation-util
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { createConversationRuntime } from '../conversation/conversation-runtime-factory.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 
 const managerInstances = vi.hoisted(
   () => [] as Array<{ onEvent?: (event: ConversationEvent) => void; startRunAsync: (request: any) => any }>,
@@ -72,6 +73,7 @@ it('projects background lifecycle without making the foreground message history 
     sessionContextService: sessionContextService as any,
     chat: async () => '',
     createClient: () => ({}),
+    toolOwnership: new ToolOwnershipRegistry(),
   });
 
   const client = {
@@ -129,6 +131,7 @@ it('projects background lifecycle without making the foreground message history 
   const { runtime, adapter } = createConversationRuntime({
     sessionId: 'background-ui-routing',
     agentClient: client,
+    toolOwnership: new ToolOwnershipRegistry(),
     deps: { logger: logger as any, sessionContextService: sessionContextService as any },
   });
   const loggedEvents: Array<{ type: string }> = [];

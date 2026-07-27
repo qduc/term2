@@ -9,7 +9,7 @@ import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { SessionToolTracker } from '../session/session-tool-tracker.js';
 import { GenerationGuard } from '../generation-guard.js';
 import type { ToolOwner } from './tool-owner.js';
-import { ToolOwnershipRegistry, toolOwnershipRegistry } from './tool-ownership-registry.js';
+import { ToolOwnershipRegistry } from './tool-ownership-registry.js';
 import {
   deniedReadStore,
   executionOverrideStore,
@@ -35,8 +35,8 @@ export interface ApprovalFlowCoordinatorDeps {
   sessionId: string;
   toolTracker: SessionToolTracker;
   generationGuard: GenerationGuard;
-  /** Defaults to the process-wide registry the subagent runner claims into. */
-  toolOwnership?: ToolOwnershipRegistry;
+  /** Session-owned registry shared with nested subagent runners. */
+  toolOwnership: ToolOwnershipRegistry;
 }
 
 export interface AbortResolutionPlan {
@@ -59,7 +59,7 @@ export class ApprovalFlowCoordinator {
   readonly #toolOwnership: ToolOwnershipRegistry;
 
   constructor(private readonly deps: ApprovalFlowCoordinatorDeps) {
-    this.#toolOwnership = deps.toolOwnership ?? toolOwnershipRegistry;
+    this.#toolOwnership = deps.toolOwnership;
   }
 
   /**

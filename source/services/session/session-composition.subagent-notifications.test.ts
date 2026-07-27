@@ -1,7 +1,11 @@
 import { it, expect } from 'vitest';
-import { createSessionRuntime } from './session-composition.js';
+import { createSessionRuntime as createProductionSessionRuntime } from './session-composition.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+
+const createSessionRuntime = (options: Omit<Parameters<typeof createProductionSessionRuntime>[0], 'toolOwnership'>) =>
+  createProductionSessionRuntime({ ...options, toolOwnership: new ToolOwnershipRegistry() });
 
 const noop = () => {};
 

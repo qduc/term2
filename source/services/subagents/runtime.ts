@@ -11,6 +11,7 @@ import type { SkillsService } from '../skills/skills-service.js';
 import { SubagentAsyncRegistry } from './subagent-async-registry.js';
 import { SubagentSession } from './subagent-session.js';
 import { loadRoleDefinition } from './role-loader.js';
+import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 
 export interface SubagentRuntimeDeps {
   logger: ILoggingService;
@@ -21,6 +22,7 @@ export interface SubagentRuntimeDeps {
   agentClient?: ISubagentClient;
   createClient?: ISubagentClientFactory['createClient'];
   skillsService?: SkillsService;
+  toolOwnership: ToolOwnershipRegistry;
 }
 
 export interface SubagentRuntime {
@@ -71,6 +73,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     onEvent: onEventWithPeek,
     roleToolCache,
     skillsService: deps.skillsService,
+    toolOwnership: deps.toolOwnership,
   });
 
   const executionRunner = new ExecutionSubagentRunner({
@@ -82,6 +85,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     toolFactory,
     onEvent: onEventWithPeek,
     skillsService: deps.skillsService,
+    toolOwnership: deps.toolOwnership,
   });
 
   const mentorSession = new SubagentSession('mentor', 'mentor');

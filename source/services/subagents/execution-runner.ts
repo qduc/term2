@@ -23,6 +23,7 @@ import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { createSessionRuntime } from '../session/session-composition.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import type { SkillsService } from '../skills/skills-service.js';
+import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 
 const MAX_PEEK_TEXT_LENGTH = 200;
 
@@ -35,6 +36,7 @@ export class ExecutionSubagentRunner {
   #toolFactory: SubagentToolFactory;
   #onEvent?: (event: ConversationEvent) => void;
   #skillsService?: SkillsService;
+  #toolOwnership: ToolOwnershipRegistry;
 
   constructor(deps: {
     logger: ILoggingService;
@@ -45,6 +47,7 @@ export class ExecutionSubagentRunner {
     toolFactory: SubagentToolFactory;
     onEvent?: (event: ConversationEvent) => void;
     skillsService?: SkillsService;
+    toolOwnership: ToolOwnershipRegistry;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
@@ -54,6 +57,7 @@ export class ExecutionSubagentRunner {
     this.#toolFactory = deps.toolFactory;
     this.#onEvent = deps.onEvent;
     this.#skillsService = deps.skillsService;
+    this.#toolOwnership = deps.toolOwnership;
   }
 
   async run(agentId: string, request: SubagentRequest, definition: SubagentDefinition): Promise<SubagentResult> {
@@ -198,6 +202,7 @@ export class ExecutionSubagentRunner {
     const runtime = createSessionRuntime({
       sessionId: `subagent-${agentId}`,
       agentClient: subClient,
+      toolOwnership: this.#toolOwnership,
       deps: {
         logger: this.#logger,
         settingsService: this.#settings,

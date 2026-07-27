@@ -2,6 +2,7 @@ import { it, expect } from 'vitest';
 import { Writable } from 'node:stream';
 import { runNonInteractive, runWithSession, createNonInteractiveSessionId } from './non-interactive.js';
 import { MockStream } from './services/test-helpers/mock-stream.js';
+import { ToolOwnershipRegistry } from './services/approval/tool-ownership-registry.js';
 
 const createStringWritable = () => {
   let output = '';
@@ -532,7 +533,7 @@ it('runNonInteractive() disposes its factory-owned client after the runtime', as
           startStream: async () => new MockStream([]),
           continueRunStream: async () => new MockStream([]),
         };
-        return { agentClient, dispose: () => disposed.push('client') };
+        return { agentClient, toolOwnership: new ToolOwnershipRegistry(), dispose: () => disposed.push('client') };
       },
     },
   });

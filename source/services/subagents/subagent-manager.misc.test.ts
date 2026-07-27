@@ -20,6 +20,7 @@ import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
 import { ModelBehaviorError } from '@openai/agents';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 
 it('run() returns failed result when createClient factory is not provided', async () => {
   const manager = new RealSubagentManager({
@@ -29,6 +30,7 @@ it('run() returns failed result when createClient factory is not provided', asyn
       'agent.provider': 'openai',
     }),
     sessionContextService: createSessionContextService() as any,
+    toolOwnership: new ToolOwnershipRegistry(),
   });
 
   const result = await manager.run({ role: 'explorer', task: 'some task' });

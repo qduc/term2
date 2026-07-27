@@ -11,6 +11,7 @@ import { ExecutionSubagentRunner } from '../subagents/execution-runner.js';
 import { MentorRunner } from '../subagents/mentor-runner.js';
 import { createExecutor } from './executor.js';
 import { adaptLegacyRole, adaptLegacyDefinition } from './legacy-adapter.js';
+import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 
 /**
  * Dependencies for creating a production-ready AgentRuntime that wires
@@ -29,6 +30,8 @@ export interface CreateAgentRuntimeDeps {
   skillsService?: SkillsService;
   /** Event sink for subagent lifecycle events. */
   onEvent?: (event: ConversationEvent) => void;
+  /** Registry owned by the enclosing session/runtime composition. */
+  toolOwnership: ToolOwnershipRegistry;
   /** Parent agent context for nested agent creation. */
   parent?: {
     permissions?: AgentPermissions;
@@ -132,6 +135,7 @@ export function createAgentRuntime(deps: CreateAgentRuntimeDeps): AgentRuntimeCo
     createClient: deps.createClient,
     toolFactory,
     onEvent: deps.onEvent,
+    toolOwnership: deps.toolOwnership,
   });
 
   const mentorRunner = new MentorRunner({

@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createAgentRuntime } from './compose-agent-runtime.js';
+import { createAgentRuntime as createProductionAgentRuntime } from './compose-agent-runtime.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ISubagentClientFactory } from '../subagents/subagent-client-types.js';
 import type { ResolvedAgentDefinition } from './resolved-agent.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+
+const createAgentRuntime = (deps: Omit<Parameters<typeof createProductionAgentRuntime>[0], 'toolOwnership'>) =>
+  createProductionAgentRuntime({ ...deps, toolOwnership: new ToolOwnershipRegistry() });
 
 // ── Mocks ──────────────────────────────────────────────────────────
 

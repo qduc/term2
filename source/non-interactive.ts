@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto';
 import { classifyCommandDetailed } from './utils/shell/command-safety/index.js';
 import { SafetyStatus } from './utils/shell/command-safety/constants.js';
 import { evaluateShellAutoApprovalAdvisories } from './services/approval/shell-auto-approval-evaluator.js';
+import { ToolOwnershipRegistry } from './services/approval/tool-ownership-registry.js';
 
 export interface NonInteractiveConfig {
   prompt: string;
@@ -27,6 +28,8 @@ export interface NonInteractiveConfig {
   settingsService?: ISettingsService;
   /** Compatibility seam; the caller continues to own this client. */
   agentClient?: ConversationAgentClient;
+  /** Required with a caller-owned client to preserve approval/nested identity. */
+  toolOwnership?: ToolOwnershipRegistry;
   /** Production seam; creates a client owned by this one-shot session. */
   sessionClientFactory?: SessionClientFactory;
   logger?: ILoggingService;
@@ -235,12 +238,17 @@ export async function runNonInteractive(
   if (!config.sessionClientFactory && !config.agentClient) {
     throw new Error('runNonInteractive requires an agentClient or sessionClientFactory');
   }
-  const clientFactory = config.sessionClientFactory ?? createCallerOwnedSessionClientFactory(config.agentClient!);
+  if (!config.sessionClientFactory && !config.toolOwnership) {
+    throw new Error('runNonInteractive requires toolOwnership with an agentClient');
+  }
+  const clientFactory =
+    config.sessionClientFactory ?? createCallerOwnedSessionClientFactory(config.agentClient!, config.toolOwnership!);
   const sessionId = createNonInteractiveSessionId();
   const clientHandle = clientFactory.create(sessionId);
   const { runtime, adapter } = createConversationRuntime({
     sessionId,
     agentClient: clientHandle.agentClient,
+    toolOwnership: clientHandle.toolOwnership,
     deps: {
       logger: config.logger,
       settingsService: config.settingsService,

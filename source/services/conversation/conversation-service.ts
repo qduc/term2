@@ -27,6 +27,7 @@ import type {
 } from '../subagents/subagent-notification-store.js';
 import type { QueueStateObserver } from './conversation-adapter.js';
 import { createConversationRuntime } from './conversation-runtime-factory.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../../contracts/conversation.js';
 export type { CommandMessage } from '../../tools/types.js';
@@ -55,6 +56,7 @@ export class ConversationService {
     deps,
     sessionId = 'default',
     sessionStartedAt,
+    toolOwnership,
   }: {
     /** Compatibility seam: caller retains ownership of a prebuilt client. */
     agentClient?: ConversationAgentClient;
@@ -68,15 +70,21 @@ export class ConversationService {
     };
     sessionId?: string;
     sessionStartedAt?: string;
+    /** Required with a caller-owned client to preserve approval/nested identity. */
+    toolOwnership?: ToolOwnershipRegistry;
   }) {
     if (!sessionClientFactory && !agentClient) {
       throw new Error('ConversationService requires an agentClient or sessionClientFactory');
     }
-    this.#clientFactory = sessionClientFactory ?? createCallerOwnedSessionClientFactory(agentClient!);
+    if (!sessionClientFactory && !toolOwnership) {
+      throw new Error('ConversationService requires toolOwnership with an agentClient');
+    }
+    this.#clientFactory = sessionClientFactory ?? createCallerOwnedSessionClientFactory(agentClient!, toolOwnership!);
     this.#clientHandle = this.#clientFactory.create(sessionId ?? 'default');
     this.#deps = deps;
     const { runtime, adapter } = createConversationRuntime({
       agentClient: this.#clientHandle.agentClient,
+      toolOwnership: this.#clientHandle.toolOwnership,
       deps,
       queueForeground: true,
       sessionId: sessionId ?? 'default',
@@ -133,6 +141,7 @@ export class ConversationService {
     this.#clientHandle = this.#clientFactory.create(newId);
     const { runtime, adapter } = createConversationRuntime({
       agentClient: this.#clientHandle.agentClient,
+      toolOwnership: this.#clientHandle.toolOwnership,
       deps: this.#deps,
       queueForeground: true,
       sessionId: newId,

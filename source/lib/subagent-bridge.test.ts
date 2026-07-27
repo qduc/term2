@@ -1,7 +1,14 @@
 import { it, expect } from 'vitest';
-import { SubagentBridge } from './subagent-bridge.js';
+import { SubagentBridge as ProductionSubagentBridge } from './subagent-bridge.js';
 import { SessionContextService } from '../services/session/session-context-service.js';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
+import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
+
+class SubagentBridge extends ProductionSubagentBridge {
+  constructor(options: Omit<ConstructorParameters<typeof ProductionSubagentBridge>[0], 'toolOwnership'>) {
+    super({ ...options, toolOwnership: new ToolOwnershipRegistry() });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers

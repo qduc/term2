@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { AgentClient } from '../../../lib/agent-client.js';
+import { ToolOwnershipRegistry } from '../../approval/tool-ownership-registry.js';
 import { registerProvider, unregisterProvider, type ProviderDefinition } from '../../../providers/registry.js';
 import { ExecutionContext } from '../../execution-context.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../service-interfaces.js';
@@ -179,6 +180,7 @@ export class TestSubagentManager extends RealSubagentManager {
   }) {
     const logger = deps.logger ?? createMockLogger();
     const sessionContextService = deps.sessionContextService ?? createSessionContextService();
+    const toolOwnership = new ToolOwnershipRegistry();
     super({
       logger,
       settings: deps.settings,
@@ -187,6 +189,7 @@ export class TestSubagentManager extends RealSubagentManager {
       onEvent: deps.onEvent,
       agentClient: deps.agentClient,
       skillsService: deps.skillsService,
+      toolOwnership,
       createClient:
         deps.createClient ??
         (({ agent, provider, maxTurns, retryAttempts }: any) =>
@@ -203,6 +206,7 @@ export class TestSubagentManager extends RealSubagentManager {
             },
             agentOverride: agent,
             providerOverride: provider,
+            toolOwnership,
           })),
     });
   }

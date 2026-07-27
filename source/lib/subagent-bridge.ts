@@ -12,6 +12,7 @@ import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
 import { createAbortError } from '../services/subagents/utils.js';
 import type { SkillsService } from '../services/skills/skills-service.js';
 import type { SubagentRunHandle } from '../services/subagents/types.js';
+import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 
 export interface SubagentBridgeDeps {
   logger: ILoggingService;
@@ -28,6 +29,7 @@ export interface SubagentBridgeDeps {
    */
   subagentManager?: SubagentManager;
   skillsService?: SkillsService;
+  toolOwnership: ToolOwnershipRegistry;
 }
 
 type SubagentEventScope = 'foreground' | 'background';
@@ -67,6 +69,7 @@ export class SubagentBridge {
         agentClient: { chat: (message, options) => deps.chat(message, options) },
         createClient: deps.createClient,
         skillsService: deps.skillsService,
+        toolOwnership: deps.toolOwnership,
       });
     }
   }

@@ -1,6 +1,6 @@
 import { it, expect, beforeEach, afterEach } from 'vitest';
 import { buildConversationResult, toTerminalEvent } from './conversation-result-builder.js';
-import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
+import { ApprovalFlowCoordinator as ProductionApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import { ApprovalState } from '../approval/approval-state.js';
 import { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
 import { ConversationStore } from './conversation-store.js';
@@ -16,6 +16,16 @@ import {
   executionOverrideStore,
   resetSandboxDeniedReadStoresForTest,
 } from '../../utils/shell/sandbox/denied-read-stores.js';
+
+class ApprovalFlowCoordinator extends ProductionApprovalFlowCoordinator {
+  constructor(
+    deps: Omit<ConstructorParameters<typeof ProductionApprovalFlowCoordinator>[0], 'toolOwnership'> & {
+      toolOwnership?: ToolOwnershipRegistry;
+    },
+  ) {
+    super({ ...deps, toolOwnership: deps.toolOwnership ?? new ToolOwnershipRegistry() });
+  }
+}
 
 beforeEach(() => {
   clearToolFormatters();

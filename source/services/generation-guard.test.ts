@@ -3,6 +3,7 @@ import { GenerationGuard } from './generation-guard.js';
 import { createSessionRuntimeInternals } from './session/session-composition.js';
 import { TurnItemAccumulator } from './session/turn-item-accumulator.js';
 import { MockStream } from './test-helpers/mock-stream.js';
+import { ToolOwnershipRegistry } from './approval/tool-ownership-registry.js';
 
 it('capture returns a token and increments generation', () => {
   const guard = new GenerationGuard();
@@ -107,6 +108,7 @@ function setupSession(mockClient: any) {
   const composition = createSessionRuntimeInternals({
     sessionId: 'test-session',
     agentClient: mockClient,
+    toolOwnership: new ToolOwnershipRegistry(),
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
     turnAccumulator: new TurnItemAccumulator(),
   });

@@ -4,6 +4,7 @@ import { createMockSettingsService } from '../../services/settings/settings-serv
 import { LoggingService } from '../../services/logging/logging-service.js';
 import { SessionContextService } from '../../services/session/session-context-service.js';
 import { AgentClient } from '../../lib/agent-client.js';
+import { ToolOwnershipRegistry } from '../../services/approval/tool-ownership-registry.js';
 import {
   evaluateShellAutoApprovalAdvisories,
   SHELL_AUTO_APPROVAL_PROMPT_VERSION,
@@ -208,6 +209,7 @@ async function run() {
         settings: settingsService,
         sessionContextService,
       },
+      toolOwnership: new ToolOwnershipRegistry(),
     });
 
     const queue = [...filteredCases.flatMap((c) => Array.from({ length: flags.repeat }, () => c))];

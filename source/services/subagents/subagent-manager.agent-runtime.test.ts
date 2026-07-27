@@ -2,6 +2,17 @@ import { describe, it, expect, vi } from 'vitest';
 import { SubagentManager } from './subagent-manager.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { AgentRuntime } from '../agent-runtime/agent-runtime.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+
+class TestSubagentManager extends SubagentManager {
+  constructor(
+    deps: Omit<ConstructorParameters<typeof SubagentManager>[0], 'toolOwnership'> & {
+      toolOwnership?: ToolOwnershipRegistry;
+    },
+  ) {
+    super({ ...deps, toolOwnership: deps.toolOwnership ?? new ToolOwnershipRegistry() });
+  }
+}
 
 function logger(): ILoggingService {
   return {
@@ -56,7 +67,7 @@ function stubCreateClient() {
 
 describe('SubagentManager.getAgentRuntime()', () => {
   it('returns an AgentRuntime backed by the same subagent infrastructure', () => {
-    const manager = new SubagentManager({
+    const manager = new TestSubagentManager({
       logger: logger(),
       settings: settings(),
       sessionContextService: sessionContextService(),
@@ -69,7 +80,7 @@ describe('SubagentManager.getAgentRuntime()', () => {
   });
 
   it('AgentRuntime from SubagentManager can create AgentHandles', () => {
-    const manager = new SubagentManager({
+    const manager = new TestSubagentManager({
       logger: logger(),
       settings: settings(),
       sessionContextService: sessionContextService(),
@@ -90,7 +101,7 @@ describe('SubagentManager.getAgentRuntime()', () => {
   });
 
   it('returns the same type of AgentRuntime as standalone createAgentRuntime', () => {
-    const manager = new SubagentManager({
+    const manager = new TestSubagentManager({
       logger: logger(),
       settings: settings(),
       sessionContextService: sessionContextService(),
@@ -112,7 +123,7 @@ describe('SubagentManager.getAgentRuntime()', () => {
   });
 
   it('AgentRuntime handles respect parent permission attenuation', () => {
-    const manager = new SubagentManager({
+    const manager = new TestSubagentManager({
       logger: logger(),
       settings: settings(),
       sessionContextService: sessionContextService(),
@@ -136,7 +147,7 @@ describe('SubagentManager.getAgentRuntime()', () => {
   });
 
   it('multiple calls return fresh handles sharing the same executors', () => {
-    const manager = new SubagentManager({
+    const manager = new TestSubagentManager({
       logger: logger(),
       settings: settings(),
       sessionContextService: sessionContextService(),

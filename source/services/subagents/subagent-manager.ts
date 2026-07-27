@@ -20,6 +20,7 @@ import type {
   SubagentSteerAcknowledgement,
 } from './types.js';
 import { SubagentRegistryError } from './subagent-async-registry.js';
+import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 
 export class SubagentManager {
   #logger: ILoggingService;
@@ -37,6 +38,7 @@ export class SubagentManager {
     agentClient?: ISubagentClient;
     createClient?: ISubagentClientFactory['createClient'];
     skillsService?: SkillsService;
+    toolOwnership: ToolOwnershipRegistry;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;

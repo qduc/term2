@@ -18,6 +18,7 @@ import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
 import { RunnerManager } from './runner-manager.js';
 import { AgentRunOrchestrator } from './agent-run-orchestrator.js';
 import { AgentChatService } from './agent-chat-service.js';
+import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 
 type ChainedRunOptions = {
   previousResponseId?: string | null;
@@ -78,6 +79,7 @@ export class AgentClient {
     providerOverride,
     deps,
     subagentBridge,
+    toolOwnership,
   }: {
     model?: string;
     reasoningEffort?: ModelSettingsReasoningEffort | 'default';
@@ -94,6 +96,8 @@ export class AgentClient {
     };
     /** Test seam: inject a pre-built SubagentBridge instead of creating one. */
     subagentBridge?: SubagentBridge;
+    /** Session-owned registry shared by approval and nested subagent paths. */
+    toolOwnership: ToolOwnershipRegistry;
   }) {
     this.#logger = deps.logger;
     this.#toolInterceptorRegistry = new ToolInterceptorRegistry({ logger: this.#logger });
@@ -188,8 +192,10 @@ export class AgentClient {
             },
             agentOverride: agent,
             providerOverride: provider,
+            toolOwnership,
           }),
         skillsService: deps.skillsService,
+        toolOwnership,
       });
     }
 

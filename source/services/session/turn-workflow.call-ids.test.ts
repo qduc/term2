@@ -1,7 +1,12 @@
 import { expect, it } from 'vitest';
-import { createSessionRuntimeInternals } from './session-composition.js';
+import { createSessionRuntimeInternals as createProductionSessionRuntimeInternals } from './session-composition.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+
+const createSessionRuntimeInternals = (
+  options: Omit<Parameters<typeof createProductionSessionRuntimeInternals>[0], 'toolOwnership'>,
+) => createProductionSessionRuntimeInternals({ ...options, toolOwnership: new ToolOwnershipRegistry() });
 
 const mockLogger = {
   info: () => {},

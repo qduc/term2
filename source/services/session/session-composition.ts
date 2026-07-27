@@ -46,6 +46,7 @@ import {
   type BackgroundSubagentNotificationPort,
   type BackgroundSubagentTaskPort,
 } from '../subagents/subagent-notification-store.js';
+import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
   value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
@@ -121,6 +122,7 @@ export type CreateSessionRuntimeInternalsOptions = {
   /** ISO timestamp; defaults to now. */
   sessionStartedAt?: string;
   agentClient: ConversationAgentClient;
+  toolOwnership: ToolOwnershipRegistry;
   askUserAnswerSink?: AskUserAnswerSink | null;
   subagentEventSinkHost?: SubagentEventSinkHost | null;
   deps: {
@@ -221,6 +223,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     sessionId: id,
     sessionStartedAt,
     agentClient,
+    toolOwnership,
     askUserAnswerSink,
     subagentEventSinkHost,
     deps,
@@ -338,6 +341,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     sessionId: id,
     toolTracker,
     generationGuard,
+    toolOwnership,
   });
 
   const continuityReset = new SessionContinuityReset({

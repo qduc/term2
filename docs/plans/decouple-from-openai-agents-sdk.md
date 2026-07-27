@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A mostly done — A1–A3, R1, and the session client-factory boundary landed on `main`. The A4 call ledger is next.
+**Status:** Step A mostly done — A1–A3, R1, the session client-factory boundary, and A4 tool ownership are landed. The remaining A4 call-ledger metadata migration is next.
 **Last updated:** 2026-07-27
 
 ---
@@ -20,6 +20,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | A3 | `_mergeApprovals` retired via `services/approval/approval-replay.ts` — **2 of 9 reach-ins done** |
 | R1 | Resume-after-approval preserves `details.toolCall.callId`; pinned by `source/lib/sdk-approval-resume.test.ts` |
 | A4 groundwork | Session factory owns/disposes the closure-bound client; reset and both CLI modes replace the handle |
+| A4 tool ownership | `ToolOwnershipRegistry` is created by each session handle and explicitly propagated through root clients, session runtime composition, approval flow, subagent bridge/manager/runtime, and nested runners; no process singleton/default remains |
 | Bug fix | Denied-read approval never fired for `cd`-prefixed commands (record/lookup key mismatch) |
 | Bug fix | Docker host-control denials leaked across sessions (process-global `#deniedCommands`) |
 
@@ -27,7 +28,35 @@ Each landed as a `--no-ff` merge from its own worktree branch; branch history is
 
 ### In flight
 
-Nothing. No worktrees or agent branches outstanding.
+Nothing. The session-owned tool-ownership milestone is complete. Resume with the call-ledger
+metadata migration below; do not re-derive the composition root or restore singleton fallbacks.
+
+### A4 tool-ownership lifecycle
+
+`createOwnedSessionClientFactory()` creates one fresh `ToolOwnershipRegistry` per session handle
+and gives that exact instance to the root `AgentClient`. The handle exposes it to
+`createConversationRuntime()`, which passes it to `ApprovalFlowCoordinator`; `AgentClient` passes
+the same instance through its `SubagentBridge`, `SubagentManager`, subagent runtime, execution
+runner, and nested runner. Thus a nested call can be claimed and later resolved by the approval
+flow without a process-global registry. Caller-owned client seams explicitly receive a registry.
+On reset, `ConversationService` disposes the old handle and creates a new one, so its registry is
+not reused; disposal clears the registry along with the old session epoch.
+
+Test fixtures now explicitly create fresh registries, sharing one only when a fixture exercises
+the parent/nested ownership relationship. This keeps test identity/lifecycle aligned with the
+production session contract.
+
+### Validation at pause
+
+- Full `tsc --noEmit` reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Focused tool-ownership clusters pass: 23 files / 364 tests, plus the 4-test conversation
+  integration fixture. Formatting and lint pass except the pre-existing `prefer-const` warning
+  in `services/subagents/runtime.ts`.
+- After building `dist/`, full Vitest reaches 4,566 passing / 1 skipped / 1 failing. The sole
+  failure is the pre-existing sandbox terminal E2E failure in `source/cli.e2e.test.ts` (the child
+  terminal exits before rendering `Lite`); it reproduces on the baseline checkout.
+- No dependency installation was run; this worktree uses its existing `node_modules` symlink.
 
 ### `ApprovalRecord` semantics, established by reading the SDK source
 
@@ -112,8 +141,9 @@ Migration order:
    seams for tests.
 2. **DONE.** Route both CLI modes and `resetWithNewId()` through that factory; prove replacement
    and disposal before moving policy state.
-3. Introduce the session-owned call ledger and migrate tool ownership.
-4. Migrate denied-read metadata and execution overrides one vertical path at a time; delete the
+3. **DONE.** Introduce the session-owned call ledger and migrate tool ownership.
+4. **Next:** expand the call ledger to denied-read metadata and execution overrides one vertical
+   path at a time. Do not use command-key or singleton fallback; delete the
    command-keyed stores and add the concurrent-identical-command regression.
 5. Move session read access and transient docker state into the handle, keeping project grants
    persistent; bind nested client caches to handle disposal.

@@ -1,17 +1,28 @@
 import { readFileSync } from 'node:fs';
 import { it, expect } from 'vitest';
 import {
-  createConversationSession,
-  createSessionRuntimeInternals,
-  createSessionRuntime,
+  createConversationSession as createProductionConversationSession,
+  createSessionRuntimeInternals as createProductionSessionRuntimeInternals,
+  createSessionRuntime as createProductionSessionRuntime,
 } from './session-composition.js';
-import { createConversationRuntime } from '../conversation/conversation-runtime-factory.js';
+import { createConversationRuntime as createProductionConversationRuntime } from '../conversation/conversation-runtime-factory.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import {
   grantDockerHostControl,
   hasDockerHostControlSession,
   resetDockerHostControlGrantsForTests,
 } from '../../utils/shell/sandbox/docker-host-control-grants.js';
+
+const createSessionRuntimeInternals = (
+  options: Omit<Parameters<typeof createProductionSessionRuntimeInternals>[0], 'toolOwnership'>,
+) => createProductionSessionRuntimeInternals({ ...options, toolOwnership: new ToolOwnershipRegistry() });
+const createConversationSession = createSessionRuntimeInternals;
+const createSessionRuntime = (options: Omit<Parameters<typeof createProductionSessionRuntime>[0], 'toolOwnership'>) =>
+  createProductionSessionRuntime({ ...options, toolOwnership: new ToolOwnershipRegistry() });
+const createConversationRuntime = (
+  options: Omit<Parameters<typeof createProductionConversationRuntime>[0], 'toolOwnership'>,
+) => createProductionConversationRuntime({ ...options, toolOwnership: new ToolOwnershipRegistry() });
 
 const noop = () => {};
 

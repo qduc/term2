@@ -1,6 +1,13 @@
 import { it, expect } from 'vitest';
 import { ModelBehaviorError } from '@openai/agents';
-import { ConversationService } from './conversation-service.js';
+import { ConversationService as ProductionConversationService } from './conversation-service.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+
+class ConversationService extends ProductionConversationService {
+  constructor(options: Omit<ConstructorParameters<typeof ProductionConversationService>[0], 'toolOwnership'>) {
+    super({ ...options, toolOwnership: new ToolOwnershipRegistry() });
+  }
+}
 
 const createSessionContextService = () => ({
   runWithContext: <T>(_context: any, fn: () => T) => fn(),

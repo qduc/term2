@@ -2,7 +2,7 @@ import { it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
+import { ApprovalFlowCoordinator as ProductionApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 import { ApprovalState } from './approval-state.js';
 import { ToolOwnershipRegistry } from './tool-ownership-registry.js';
 import { PARENT_TOOL_OWNER } from './tool-owner.js';
@@ -22,6 +22,16 @@ import {
   requiresDockerHostControlApproval,
   resetDockerHostControlGrantsForTests,
 } from '../../utils/shell/sandbox/docker-host-control-grants.js';
+
+class ApprovalFlowCoordinator extends ProductionApprovalFlowCoordinator {
+  constructor(
+    deps: Omit<ConstructorParameters<typeof ProductionApprovalFlowCoordinator>[0], 'toolOwnership'> & {
+      toolOwnership?: ToolOwnershipRegistry;
+    },
+  ) {
+    super({ ...deps, toolOwnership: deps.toolOwnership ?? new ToolOwnershipRegistry() });
+  }
+}
 
 const SENSITIVE_PATH = '/home/testuser/.ssh/id_rsa';
 const SENSITIVE_SUGGESTED = '/home/testuser/.ssh';

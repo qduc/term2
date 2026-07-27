@@ -1,5 +1,5 @@
 import { it, expect, beforeAll, beforeEach } from 'vitest';
-import { ConversationService } from './conversation-service.js';
+import { ConversationService as ProductionConversationService } from './conversation-service.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { AgentStream } from '../agent-stream.js';
 import type { ConversationTerminal, FinalTerminal, ApprovalRequiredTerminal } from '../../contracts/conversation.js';
@@ -10,6 +10,17 @@ import {
 } from '../../utils/streaming/extract-command-messages.js';
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { formatShellCommandMessage } from '../../tools/system/shell.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+
+class ConversationService extends ProductionConversationService {
+  constructor(
+    options: Omit<ConstructorParameters<typeof ProductionConversationService>[0], 'toolOwnership'> & {
+      toolOwnership?: ToolOwnershipRegistry;
+    },
+  ) {
+    super({ ...options, toolOwnership: options.toolOwnership ?? new ToolOwnershipRegistry() });
+  }
+}
 
 const mockLogger = {
   info: () => {},
@@ -1180,7 +1191,7 @@ it('resetWithNewId() replaces and disposes the factory-owned client', async () =
           { dispose: () => disposed.push(index) },
         );
         clients.push(client);
-        return { agentClient: client, dispose: client.dispose };
+        return { agentClient: client, toolOwnership: new ToolOwnershipRegistry(), dispose: client.dispose };
       },
     },
     deps: { logger: mockLogger, sessionContextService },

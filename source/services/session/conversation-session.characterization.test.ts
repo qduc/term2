@@ -1,11 +1,16 @@
 import { it, expect } from 'vitest';
-import { createSessionRuntimeInternals } from './session-composition.js';
+import { createSessionRuntimeInternals as createProductionSessionRuntimeInternals } from './session-composition.js';
 import { createConversationSession } from '../../test-helpers/conversation-session-with-adapter.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import type { ILoggingService, ISessionContextService } from '../service-interfaces.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+
+const createSessionRuntimeInternals = (
+  options: Omit<Parameters<typeof createProductionSessionRuntimeInternals>[0], 'toolOwnership'>,
+) => createProductionSessionRuntimeInternals({ ...options, toolOwnership: new ToolOwnershipRegistry() });
 
 // ── Shared mocks ───────────────────────────────────────────────────────────
 

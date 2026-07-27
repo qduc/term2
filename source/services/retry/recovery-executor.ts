@@ -5,7 +5,7 @@ import type { NextRunInstruction, RecoveryResult, RecoveryExecutor, RecoveryExec
 import type { ConversationStore } from '../conversation/conversation-store.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { SessionToolTracker } from '../session/session-tool-tracker.js';
-import { projectProviderHistory, ProjectionWarningCode } from '../conversation/conversation-state-projector.js';
+import { projectProviderHistory } from '../conversation/conversation-state-projector.js';
 
 const journalSnapshotToLedger = (
   snapshot: import('../logging/conversation-log-events.js').AssistantJournalItemLogEvent[] | undefined,
@@ -60,14 +60,17 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
       case 'retry_fresh': {
         if (state.stream) {
           this.deps.providerContinuity.clear();
+          // Mark in-flight tool calls as aborted with synthetic error results
+          // before restoring the snapshot. This ensures the reconciler injects
+          // proper function_call_output pairs into history instead of leaving
+          // dangling function_call items that confuse the provider API on retry.
+          this.deps.toolTracker.recordAbortedApproval('Stream failed', 'Stream failed');
           this.deps.toolTracker.restoreCompletedEntries(journalSnapshotToLedger(state.journalSnapshot));
           const projected = projectProviderHistory({
             history: this.deps.conversationStore.getHistory(),
             toolLedger: this.deps.toolTracker.export(),
           });
-          if (
-            projected.warnings.some((warning) => warning.code === ProjectionWarningCode.CompletedToolHistoryInserted)
-          ) {
+          if (projected.warnings.length > 0) {
             this.deps.conversationStore.replaceHistory(projected.history);
           }
         } else {

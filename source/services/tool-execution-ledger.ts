@@ -454,7 +454,11 @@ export function reconcileHistoryWithToolLedger(
         0,
         ...entry.historyItems!.map((item: unknown) => normalizeAbortedHistoryItem(item, entry.status === 'aborted')),
       );
-      if (entry.status === 'completed') {
+      // Count both completed and aborted pairs as injected so the warning fires
+      // and replaceHistory is called. Without this, aborted pairs injected from
+      // markOpenCallsAborted (with synthetic error results) would not trigger a
+      // history replacement, leaving dangling function_call items in the store.
+      if (entry.status === 'completed' || entry.status === 'aborted') {
         addedCompletedPairs++;
       }
       continue;

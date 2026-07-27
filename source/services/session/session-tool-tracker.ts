@@ -132,7 +132,12 @@ export class SessionToolTracker {
   }
 
   /**
-   * Restore completed tool ledger entries from a snapshot.
+   * Restore completed and aborted tool ledger entries from a snapshot.
+   *
+   * Completed entries carry their results forward so they can be reprojected
+   * into history. Aborted entries (with synthetic error results) are also
+   * preserved so the reconciler injects error-result pairs for interrupted
+   * tool calls instead of leaving dangling function_call items.
    */
   restoreCompletedEntries(snapshot: SavedToolExecution[]): void {
     const merged = [...snapshot];
@@ -143,7 +148,7 @@ export class SessionToolTracker {
     });
 
     for (const entry of this.toolLedger.export()) {
-      if (entry.status !== 'completed') {
+      if (entry.status !== 'completed' && entry.status !== 'aborted') {
         continue;
       }
 

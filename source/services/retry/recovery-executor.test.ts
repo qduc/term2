@@ -148,6 +148,53 @@ it('retry_fresh with stream reconciles history and restores ledger', () => {
   expect(deps.providerContinuity.previousResponseId).toBe(null);
 });
 
+it('retry_fresh with stream marks in-flight calls as aborted and injects error results', () => {
+  const { executor, deps } = makeExecutor();
+  deps.conversationStore.addUserMessage('do work');
+  deps.toolTracker.beginTurn();
+  deps.toolTracker.recordFunctionCall({
+    type: 'function_call',
+    callId: 'call-inflight',
+    name: 'shell',
+    arguments: '{"command":"ls"}',
+  });
+
+  const result = executor.apply({
+    plan: { kind: 'retry_fresh', inputMode: 'full_history' },
+    state: baseRecoveryState({
+      stream: { completed: Promise.resolve(undefined) } as any,
+      journalSnapshot: [],
+    }),
+    retryCounts: baseCounts(),
+  });
+
+  expect(result.kind).toBe('run');
+
+  // The in-flight call should be marked aborted in the ledger with a synthetic
+  // error result so the reconciler injects it into history.
+  const ledgerEntries = deps.toolTracker.export();
+  const abortedEntry = ledgerEntries.find((e) => e.callId === 'call-inflight');
+  expect(abortedEntry).toBeTruthy();
+  expect(abortedEntry!.status).toBe('aborted');
+  expect(abortedEntry!.historyItems).toBeTruthy();
+  expect(abortedEntry!.historyItems!.length).toBe(2);
+
+  // The conversation history should now contain the injected error result.
+  // Aborted entries are normalized to tool_call_output_item type.
+  const history = deps.conversationStore.getHistory();
+  const resultItems = history.filter((item) => (item as { callId?: string }).callId === 'call-inflight');
+  expect(resultItems).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: 'function_call', callId: 'call-inflight' }),
+      expect.objectContaining({
+        type: 'tool_call_output_item',
+        callId: 'call-inflight',
+        output: 'Stream failed',
+      }),
+    ]),
+  );
+});
+
 it('retry_fresh uses completed outputs already present in the live ledger instead of run-state internals', () => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('run both commands');

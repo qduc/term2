@@ -309,7 +309,8 @@ export function createShellToolDefinition(deps: {
         const cwd = executionContext?.getCwd() || process.cwd();
         const sessionId = getConversationSessionId(context);
         const sandboxEnabled = isSandboxEnabled();
-        const dockerHostControlRequested = sandboxEnabled && requiresDockerHostControlApproval(params.command);
+        const dockerHostControlRequested =
+          sandboxEnabled && requiresDockerHostControlApproval(sessionId, params.command);
         if (
           dockerHostControlRequested &&
           !hasDockerHostControlProject(cwd) &&
@@ -355,7 +356,7 @@ export function createShellToolDefinition(deps: {
       const cwd = executionContext?.getCwd() || process.cwd();
       const sessionId = getConversationSessionId(_context);
       const sandboxEnabled = isSandboxEnabled();
-      const dockerHostControlRequested = sandboxEnabled && requiresDockerHostControlApproval(command);
+      const dockerHostControlRequested = sandboxEnabled && requiresDockerHostControlApproval(sessionId, command);
       const hasDockerGrant =
         dockerHostControlRequested &&
         (hasDockerHostControlProject(cwd) ||
@@ -435,7 +436,7 @@ export function createShellToolDefinition(deps: {
             dockerHostControl = dockerHostControlFactory();
             // The run that uses the approval settles the pending block, so a
             // later run of the same command is judged on its own.
-            consumeDockerHostControlDenial(command);
+            consumeDockerHostControlDenial(sessionId, command);
             loggingService.security('Docker host-control capability granted for shell command', {
               command: optimizedCommand.substring(0, 100),
               cwd,
@@ -529,12 +530,16 @@ export function createShellToolDefinition(deps: {
         if (sandboxFailure?.type === 'docker_blocked') {
           // Keyed by the command the model passed, because that is what the
           // approval flow and the retry will present.
-          recordDockerHostControlDenial(command);
+          recordDockerHostControlDenial(sessionId, command);
           loggingService.security('Sandbox blocked Docker daemon access; agent retry will prompt for approval', {
             confidence: sandboxFailure.confidence,
             command: command.substring(0, 100),
             cwd,
             correlationId,
+            sessionId,
+            // Without a session the block is unattributable, so it is not
+            // remembered and the retry will be sandboxed again.
+            denialRecorded: Boolean(sessionId),
           });
           return `Error: ${DOCKER_HOST_CONTROL_RETRY_INSTRUCTION}`;
         }

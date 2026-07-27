@@ -340,7 +340,7 @@ it('prepareContinuation grants Docker host control to a command the sandbox bloc
     toolTracker: mockToolTracker,
     generationGuard: mockGenerationGuard,
   });
-  recordDockerHostControlDenial('pnpm test');
+  recordDockerHostControlDenial('s1', 'pnpm test');
 
   coord.prepareContinuation('docker-allow-once', undefined);
 
@@ -348,7 +348,7 @@ it('prepareContinuation grants Docker host control to a command the sandbox bloc
   expect(consumeDockerHostControlOnce('s1', 'pnpm test')).toBe(true);
   // The pending block must survive approval: for a command that does not read as
   // Docker, it is what tells the resumed execution to take host control.
-  expect(requiresDockerHostControlApproval('pnpm test')).toBe(true);
+  expect(requiresDockerHostControlApproval('s1', 'pnpm test')).toBe(true);
 });
 
 it('prepareContinuation clears the pending Docker request when the user denies it', () => {
@@ -369,12 +369,12 @@ it('prepareContinuation clears the pending Docker request when the user denies i
     toolTracker: mockToolTracker,
     generationGuard: mockGenerationGuard,
   });
-  recordDockerHostControlDenial('pnpm test');
+  recordDockerHostControlDenial('s1', 'pnpm test');
 
   coord.prepareContinuation('n', 'no docker');
 
   expect(rejected).toBe(true);
-  expect(requiresDockerHostControlApproval('pnpm test')).toBe(false);
+  expect(requiresDockerHostControlApproval('s1', 'pnpm test')).toBe(false);
 });
 
 it('prepareContinuation rejects Docker-specific answers for non-Docker commands', () => {

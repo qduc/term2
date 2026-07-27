@@ -17,7 +17,7 @@ import { buildPersistedAssistantTurnItems } from './conversation-turn-items.js';
 import { type GenerationToken } from '../generation-guard.js';
 import { type CommandMessage } from '../../tools/types.js';
 import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
-import { requiresHumanShellApproval } from '../approval/shell-sandbox-approval.js';
+import { isDockerHostControlShellApproval, requiresHumanShellApproval } from '../approval/shell-sandbox-approval.js';
 import { deniedReadStore } from '../../utils/shell/sandbox/denied-read-stores.js';
 import type { DeniedReadMetadata } from '../../contracts/conversation.js';
 
@@ -61,6 +61,7 @@ export function createApprovalRequiredTerminal(options: {
   callId?: string;
   llmAdvisory?: LLMAdvisory;
   deniedRead?: DeniedReadMetadata;
+  dockerHostControl?: boolean;
   usage?: NormalizedUsage;
 }): ApprovalRequiredTerminal {
   return {
@@ -73,6 +74,7 @@ export function createApprovalRequiredTerminal(options: {
       ...(options.callId ? { callId: options.callId } : {}),
       ...(options.llmAdvisory ? { llmAdvisory: options.llmAdvisory } : {}),
       ...(options.deniedRead ? { deniedRead: options.deniedRead } : {}),
+      ...(options.dockerHostControl ? { dockerHostControl: true } : {}),
     },
     ...(options.usage ? { usage: options.usage } : {}),
   };
@@ -137,7 +139,10 @@ export async function buildConversationResult(
       deniedReadStore.stageForDescriptor(shellCommandForDeniedRead, deniedReadInfo);
     }
 
-    const forceHumanApproval = requiresHumanShellApproval(toolName, parseResult.arguments) || hasDeniedRead;
+    const forceHumanApproval = requiresHumanShellApproval(toolName, parseResult.arguments, sessionId) || hasDeniedRead;
+    // Resolved here rather than in the UI: it depends on this session's record of
+    // sandbox Docker blocks, and the prompt has no session identity to consult.
+    const dockerHostControl = isDockerHostControlShellApproval(toolName, parseResult.arguments, sessionId);
 
     approvalFlow.recordPending({
       state: result.state,
@@ -218,6 +223,7 @@ export async function buildConversationResult(
         rawInterruption: interruption,
         callId: callId ? String(callId) : undefined,
         llmAdvisory,
+        dockerHostControl,
         usage: usage ?? extractUsage(result),
         ...(deniedReadInfo
           ? {
@@ -274,6 +280,7 @@ export const toTerminalEvent = (result: ConversationTerminal): ConversationEvent
         ...(result.approval.callId ? { callId: result.approval.callId } : {}),
         ...(result.approval.llmAdvisory ? { llmAdvisory: result.approval.llmAdvisory } : {}),
         ...(result.approval.deniedRead ? { deniedRead: result.approval.deniedRead } : {}),
+        ...(result.approval.dockerHostControl ? { dockerHostControl: true } : {}),
       },
       ...(result.usage ? { usage: result.usage } : {}),
     };

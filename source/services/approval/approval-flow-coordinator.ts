@@ -25,8 +25,8 @@ import { sessionReadAccess } from './session-read-access.js';
 import {
   consumeDockerHostControlDenial,
   grantDockerHostControl,
-  requiresDockerHostControlApproval,
 } from '../../utils/shell/sandbox/docker-host-control-grants.js';
+import { isDockerHostControlShellApproval } from './shell-sandbox-approval.js';
 
 export interface ApprovalFlowCoordinatorDeps {
   agentClient: ConversationAgentClient;
@@ -161,10 +161,7 @@ export class ApprovalFlowCoordinator {
       traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
     }).arguments as { command?: unknown; cwd?: unknown } | null;
     const dockerDecision = isDockerHostControlApproveAnswer(answer);
-    const isDockerRequest =
-      decisionToolName === 'shell' &&
-      typeof parsedDecisionArgs?.command === 'string' &&
-      requiresDockerHostControlApproval(parsedDecisionArgs.command);
+    const isDockerRequest = isDockerHostControlShellApproval(decisionToolName, parsedDecisionArgs, this.deps.sessionId);
     let allowReadFolderForSession = false;
     if (isReadFileSessionApproveAnswer(answer) && decisionToolName === 'read_file') {
       const parsedReadArgs = parseToolCallArguments(decisionRawArguments, {
@@ -288,7 +285,7 @@ export class ApprovalFlowCoordinator {
       // A refused Docker request is settled: drop the pending block so the same
       // command runs sandboxed again instead of stalling on approval forever.
       if (isDockerRequest && typeof parsedDecisionArgs?.command === 'string') {
-        consumeDockerHostControlDenial(parsedDecisionArgs.command);
+        consumeDockerHostControlDenial(this.deps.sessionId, parsedDecisionArgs.command);
       }
 
       markToolCallAsApprovalRejection(expectedCallId);

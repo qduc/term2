@@ -71,6 +71,16 @@ export interface ApprovalDescriptor {
   callId?: string;
   llmAdvisory?: LLMAdvisory;
   deniedRead?: DeniedReadMetadata;
+  /**
+   * This approval is the Docker host-control capability prompt, not an ordinary one.
+   *
+   * Resolved here because the answer depends on a per-session record of sandbox
+   * Docker blocks, and the UI has no session identity to consult it with. The
+   * prompt and the continuation must agree, or a Docker request stalls forever:
+   * an ordinary `y` cannot resume it, and a Docker grant cannot resume an
+   * ordinary one.
+   */
+  dockerHostControl?: boolean;
 }
 
 export interface ApprovalRequiredTerminal {

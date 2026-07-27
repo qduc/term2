@@ -162,6 +162,40 @@ it.sequential('ApprovalPrompt denies a Docker host-control request', async () =>
   expect(rejected).toBe(true);
 });
 
+it.sequential('ApprovalPrompt renders the Docker menu for a command that does not read as Docker', async () => {
+  // Indirect invocation: the command never mentions docker, so only the
+  // producer -- which knows the session -- can tell this is a host-control
+  // request. Without the resolved flag the prompt would offer ordinary choices
+  // that the continuation refuses, stranding the command on approval.
+  const approval: ApprovalDescriptor = {
+    agentName: 'Agent',
+    toolName: 'shell',
+    argumentsText: JSON.stringify({ command: 'pnpm test' }),
+    rawInterruption: { type: 'shell' },
+    dockerHostControl: true,
+  };
+  const { lastFrame } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output).toContain('Docker Host Control');
+  expect(output).toContain('Allow for this session');
+  expect(output).not.toContain('Approve');
+});
+
+it.sequential('ApprovalPrompt keeps ordinary choices when no Docker host control was resolved', async () => {
+  const approval: ApprovalDescriptor = {
+    agentName: 'Agent',
+    toolName: 'shell',
+    argumentsText: JSON.stringify({ command: 'pnpm test' }),
+    rawInterruption: { type: 'shell' },
+  };
+  const { lastFrame } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} />,
+  );
+  expect(lastFrame() ?? '').not.toContain('Docker Host Control');
+});
+
 it.sequential('ApprovalPrompt identifies Docker host control from raw interruption arguments', async () => {
   const approval = {
     ...baseApproval,

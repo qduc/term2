@@ -13,6 +13,7 @@ import { createMockSettingsService } from '../../services/settings/settings-serv
 import { ExecutionContext } from '../../services/execution-context.js';
 import type { ILoggingService, ISSHService } from '../../services/service-interfaces.js';
 import {
+  clearDockerHostControlSession,
   consumeDockerHostControlDenial,
   grantDockerHostControl,
   recordDockerHostControlDenial,
@@ -323,13 +324,47 @@ it('grants Docker host control on the retry the approval flow actually produces'
   const sessionA = { context: { sessionId: 'session-a' } };
 
   // Exactly what prepareContinuation does when the user approves a blocked command.
-  recordDockerHostControlDenial('pnpm test');
+  recordDockerHostControlDenial('session-a', 'pnpm test');
   grantDockerHostControl({ command: 'pnpm test', cwd: process.cwd(), scope: 'once', sessionId: 'session-a' });
 
   expect(await tool.execute({ command: 'pnpm test' }, sessionA)).not.toContain('requires explicit approval');
   expect(dockerFactoryCalled).toBe(true);
   // The request is settled by the run that used it, not before.
-  expect(requiresDockerHostControlApproval('pnpm test')).toBe(false);
+  expect(requiresDockerHostControlApproval('session-a', 'pnpm test')).toBe(false);
+});
+
+it('does not force a second session through approval because another session was blocked from Docker', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    shellSandboxRunner: createFakeSandboxRunner(),
+    executeShellCommandImpl: async () => ({ stdout: '', stderr: '', exitCode: 0, timedOut: false }),
+  });
+  const sessionA = { context: { sessionId: 'session-a' } };
+  const sessionB = { context: { sessionId: 'session-b' } };
+
+  recordDockerHostControlDenial('session-a', 'pnpm test');
+
+  // Session A earned the prompt; session B never hit the block and must not
+  // inherit it, nor be refused for lacking a grant it was never asked for.
+  expect(await tool.needsApproval({ command: 'pnpm test' }, sessionA)).toBe(true);
+  expect(await tool.needsApproval({ command: 'pnpm test' }, sessionB)).toBe(false);
+  expect(await tool.execute({ command: 'pnpm test' }, sessionB)).not.toContain('requires explicit approval');
+});
+
+it('forgets a session’s Docker block when that session ends', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
+    shellSandboxRunner: createFakeSandboxRunner(),
+    executeShellCommandImpl: async () => ({ stdout: '', stderr: '', exitCode: 0, timedOut: false }),
+  });
+  const sessionA = { context: { sessionId: 'session-a' } };
+  recordDockerHostControlDenial('session-a', 'pnpm test');
+
+  clearDockerHostControlSession('session-a');
+
+  expect(await tool.needsApproval({ command: 'pnpm test' }, sessionA)).toBe(false);
 });
 
 it('a denied Docker request lets the command run sandboxed again instead of looping on approval', async () => {
@@ -340,10 +375,10 @@ it('a denied Docker request lets the command run sandboxed again instead of loop
     executeShellCommandImpl: async () => ({ stdout: '', stderr: '', exitCode: 0, timedOut: false }),
   });
   const sessionA = { context: { sessionId: 'session-a' } };
-  recordDockerHostControlDenial('pnpm test');
+  recordDockerHostControlDenial('session-a', 'pnpm test');
 
   // The approval flow clears the pending request when the user decides.
-  consumeDockerHostControlDenial('pnpm test');
+  consumeDockerHostControlDenial('session-a', 'pnpm test');
 
   expect(await tool.needsApproval({ command: 'pnpm test' }, sessionA)).toBe(false);
   expect(await tool.execute({ command: 'pnpm test' }, sessionA)).not.toContain('requires explicit approval');

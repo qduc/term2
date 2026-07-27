@@ -13,7 +13,7 @@ import {
   ASK_USER_NEXT_QUESTION_LABEL,
 } from '../../tools/agent/ask-user-constants.js';
 import DiffView from '../layout/DiffView.js';
-import { requiresDockerHostControlApproval } from '../../utils/shell/sandbox/docker-host-control-grants.js';
+import { requestsDockerHostControl } from '../../utils/shell/sandbox/docker-host-control.js';
 
 type Props = {
   approval: ApprovalDescriptor;
@@ -258,20 +258,24 @@ const ApprovalPrompt: FC<Props> = ({
 
   const isDockerHostControlApproval = React.useMemo(() => {
     if (approval.toolName !== 'shell') return false;
+    // The producer already resolved this against the session's record of sandbox
+    // Docker blocks; the prompt has no session identity, so it cannot re-derive
+    // that half. Only the session-independent check is safe to evaluate here.
+    if (approval.dockerHostControl) return true;
     try {
       const parsed = JSON.parse(approval.argumentsText) as ShellApprovalArgs;
-      if (typeof parsed?.command === 'string') return requiresDockerHostControlApproval(parsed.command);
+      if (typeof parsed?.command === 'string') return requestsDockerHostControl(parsed.command);
     } catch {
       // Try the raw interruption below.
     }
     try {
       const args = (approval.rawInterruption as Record<string, any> | undefined)?.arguments;
       const parsed = (typeof args === 'string' ? JSON.parse(args) : args) as ShellApprovalArgs | undefined;
-      return typeof parsed?.command === 'string' && requiresDockerHostControlApproval(parsed.command);
+      return typeof parsed?.command === 'string' && requestsDockerHostControl(parsed.command);
     } catch {
       return false;
     }
-  }, [approval.argumentsText, approval.rawInterruption, approval.toolName]);
+  }, [approval.argumentsText, approval.dockerHostControl, approval.rawInterruption, approval.toolName]);
 
   const isSandboxNetworkApproval = approval.toolName === 'sandbox_network_access';
   const deniedRead = approval.deniedRead;

@@ -26,19 +26,34 @@ class DockerHostControlGrants {
   #settings: ISettingsService | undefined;
   #onceBySession = new Map<string, Set<string>>();
   #sessionRootsBySession = new Map<string, Set<string>>();
-  #deniedCommands = new Set<string>();
+  #deniedBySession = new Map<string, Set<string>>();
 
-  /** A sandboxed run of this command was blocked from the Docker daemon. */
-  recordDenial(command: string): void {
-    this.#deniedCommands.add(command);
+  /**
+   * A sandboxed run of this command was blocked from the Docker daemon.
+   *
+   * Scoped to the session that hit the block: the record is what later grants a
+   * command host control, so another session must not inherit it. A run with no
+   * session identity cannot be attributed, so it is dropped rather than recorded
+   * globally — the command stays sandboxed instead of gaining unearned access.
+   */
+  recordDenial(sessionId: string | undefined, command: string): void {
+    if (!sessionId) return;
+    const commands = this.#deniedBySession.get(sessionId) ?? new Set<string>();
+    commands.add(command);
+    this.#deniedBySession.set(sessionId, commands);
   }
 
-  consumeDenial(command: string): boolean {
-    return this.#deniedCommands.delete(command);
+  consumeDenial(sessionId: string | undefined, command: string): boolean {
+    if (!sessionId) return false;
+    const commands = this.#deniedBySession.get(sessionId);
+    if (!commands?.delete(command)) return false;
+    if (commands.size === 0) this.#deniedBySession.delete(sessionId);
+    return true;
   }
 
-  hasDenial(command: string): boolean {
-    return this.#deniedCommands.has(command);
+  hasDenial(sessionId: string | undefined, command: string): boolean {
+    if (!sessionId) return false;
+    return this.#deniedBySession.get(sessionId)?.has(command) ?? false;
   }
 
   configure(settings: ISettingsService): void {
@@ -84,12 +99,13 @@ class DockerHostControlGrants {
   clearSession(sessionId: string): void {
     this.#onceBySession.delete(sessionId);
     this.#sessionRootsBySession.delete(sessionId);
+    this.#deniedBySession.delete(sessionId);
   }
 
   resetForTests(): void {
     this.#onceBySession.clear();
     this.#sessionRootsBySession.clear();
-    this.#deniedCommands.clear();
+    this.#deniedBySession.clear();
     this.#settings = undefined;
   }
 }
@@ -104,15 +120,23 @@ export const hasDockerHostControlSession = (sessionId: string, cwd: string) =>
   dockerHostControlGrants.hasSession(sessionId, cwd);
 export const hasDockerHostControlProject = (cwd: string) => dockerHostControlGrants.hasProject(cwd);
 export const clearDockerHostControlSession = (sessionId: string) => dockerHostControlGrants.clearSession(sessionId);
-export const recordDockerHostControlDenial = (command: string) => dockerHostControlGrants.recordDenial(command);
-export const consumeDockerHostControlDenial = (command: string) => dockerHostControlGrants.consumeDenial(command);
+export const recordDockerHostControlDenial = (sessionId: string | undefined, command: string) =>
+  dockerHostControlGrants.recordDenial(sessionId, command);
+export const consumeDockerHostControlDenial = (sessionId: string | undefined, command: string) =>
+  dockerHostControlGrants.consumeDenial(sessionId, command);
 
 /**
  * Whether this command must go through the Docker host-control approval prompt:
- * either it reads as a Docker invocation, or a sandboxed run of it was already
- * blocked from the daemon (the only signal for indirect invocations).
+ * either it reads as a Docker invocation, or a sandboxed run of it in *this*
+ * session was already blocked from the daemon (the only signal for indirect
+ * invocations).
+ *
+ * Every caller that decides approval must pass the same session, or the prompt
+ * and the execution disagree about Docker and the command stalls on approval.
+ * The UI cannot see a session, so it must not call this — see
+ * `ApprovalDescriptor.dockerHostControl`, resolved by the producer that can.
  */
-export const requiresDockerHostControlApproval = (command: string) =>
-  requestsDockerHostControl(command) || dockerHostControlGrants.hasDenial(command);
+export const requiresDockerHostControlApproval = (sessionId: string | undefined, command: string) =>
+  requestsDockerHostControl(command) || dockerHostControlGrants.hasDenial(sessionId, command);
 export const resetDockerHostControlGrantsForTests = () => dockerHostControlGrants.resetForTests();
 export const normalizeDockerHostControlWorkspaceRoot = realRoot;

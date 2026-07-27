@@ -2,7 +2,7 @@ import type { AgentInputItem } from '@openai/agents';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { ToolExecutionLedger, type SavedToolExecution, callIdOf } from '../tool-execution-ledger.js';
 import type { ConversationStore } from '../conversation/conversation-store.js';
-import { projectProviderHistory, ProjectionWarningCode } from '../conversation/conversation-state-projector.js';
+import { projectProviderHistory } from '../conversation/conversation-state-projector.js';
 
 /**
  * Owns all tool-tracking state for a conversation session.
@@ -161,54 +161,6 @@ export class SessionToolTracker {
   }
 
   /**
-   * Recover approved tool results from stream state.
-   *
-   * In chaining/delta mode the conversation store never receives
-   * function_call_output items (they are server-managed deltas). They live
-   * transiently in the SDK RunState's _generatedItems. When a transport
-   * failure triggers a stateless full-history retry, this method bridges
-   * those outputs from _generatedItems into the ledger and store.
-   *
-   * All function_call_output items in _generatedItems are recovered, not just
-   * those matching expectedCallIds: a single failure can leave multiple
-   * cycles' outputs un-transferred, and filtering by expectedCallIds (the
-   * latest delta's calls) would drop earlier cycles' outputs — leaving
-   * unpaired function_calls that the Responses API rejects with
-   * "No tool output found for function call".
-   */
-  recoverApprovedResultsFromState(state: unknown, expectedCallIds: readonly string[]): void {
-    // expectedCallIds is retained as a guard: when empty there are no pending
-    // tool results to recover, so skip the work entirely.
-    const hasExpected = expectedCallIds.some((callId) => typeof callId === 'string' && callId.length > 0);
-    if (!hasExpected) {
-      return;
-    }
-
-    const generatedItems = this.extractGeneratedItems(state);
-    let recoveredAny = false;
-    for (const item of generatedItems) {
-      const callId = callIdOf(item);
-      if (!callId) {
-        continue;
-      }
-      this.toolLedger.recordFunctionResult(item);
-      recoveredAny = true;
-    }
-
-    if (!recoveredAny) {
-      return;
-    }
-
-    const projected = projectProviderHistory({
-      history: this.conversationStore.getHistory(),
-      toolLedger: this.toolLedger.export(),
-    });
-    if (projected.warnings.some((warning) => warning.code === ProjectionWarningCode.CompletedToolHistoryInserted)) {
-      this.conversationStore.replaceHistory(projected.history);
-    }
-  }
-
-  /**
    * Prune the tool ledger to only include entries from the current history.
    */
   pruneToCurrentHistory(): void {
@@ -310,11 +262,5 @@ export class SessionToolTracker {
    */
   reset(): void {
     this.toolLedger = new ToolExecutionLedger();
-  }
-
-  private extractGeneratedItems(state: unknown): unknown[] {
-    const record = state && typeof state === 'object' ? (state as { _generatedItems?: unknown }) : null;
-    const items = record?._generatedItems;
-    return Array.isArray(items) ? items : [];
   }
 }

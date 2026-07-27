@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through A4 tool ownership, the first bounded Step B representation slice is landed, and Step C has retired `_generatedItems` from continuation call-ID resolution and replay diagnostics. The transport-failure recovery read remains; CallId-only migration of denied-read metadata/overrides is still blocked under the stock SDK.
+**Status:** Step A is complete through A4 tool ownership, the first bounded Step B representation slice is landed, and Step C has retired every production `_generatedItems` read. CallId-only migration of denied-read metadata/overrides remains blocked under the stock SDK until the separate post-execute pause/resume seam.
 **Last updated:** 2026-07-27
 
 ---
@@ -25,6 +25,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step B representation slice | `contracts/conversation-items.ts` owns canonical `Item`, `Turn`, `ToolCall`, and related serializable shapes; `Approval` aliases `ApprovalDescriptor`; legacy persisted names alias those contracts; `run-item-normalizer.ts` contains raw SDK/provider item normalization while replay remains provider-facing |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
+| Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
 | Bug fix | Denied-read approval never fired for `cd`-prefixed commands (record/lookup key mismatch) |
 | Bug fix | Docker host-control denials leaked across sessions (process-global `#deniedCommands`) |
 
@@ -32,11 +33,9 @@ Each landed as a `--no-ff` merge from its own worktree branch; branch history is
 
 ### In flight
 
-The next Step C slice is the remaining transport-failure recovery read in
-`SessionToolTracker.recoverApprovedResultsFromState()`. Prove whether all required outputs are
-observable from public stream events/collections before changing it; do not merely relocate the
-private read. Do not migrate denied-read metadata or execution overrides until Step C owns a
-post-execute pause/resume seam.
+The remaining Step C work is the separate post-execute pause/resume seam. Do not migrate
+denied-read metadata or execution overrides yet: the stock SDK can retry a completed denied read
+as a new call id, so CallId-only storage cannot safely bridge that boundary.
 
 ### A4 tool-ownership lifecycle
 
@@ -68,6 +67,12 @@ production session contract.
 - Replay-diagnostics slice: conversation stream and stream-processor tests pass (2 files / 27
   tests); diagnostics retain public history/new-item duplicate detection and drop private-state
   metadata.
+- Transport-recovery slice: a real streaming SDK `Runner` executes two tool cycles and rejects
+  the following model request; public stream events plus `history`, `newItems`, and `output`
+  retain both completed outputs. The regression separately awaits the iterator and `completed`
+  rejections. Session stream processing and recovery-executor regressions prove completed outputs
+  enter the live ledger before fresh recovery projects them, with the journal only an older
+  snapshot. Focused set: 4 files / 35 tests.
 - Focused tool-ownership clusters pass: 23 files / 364 tests, plus the 4-test conversation
   integration fixture. Formatting and lint pass except the pre-existing `prefer-const` warning
   in `services/subagents/runtime.ts`.
@@ -104,9 +109,9 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **Step C** — own the post-execute pause/resume seam in the run loop before migrating
-   denied-read metadata or execution overrides. The completed Step B representation slice
-   contains raw-item normalization but does not retire SDK reach-ins or change run behavior.
+1. **Step C follow-up** — own the post-execute pause/resume seam in the run loop before migrating
+   denied-read metadata or execution overrides. The transport-recovery slice is complete; this
+   follow-up changes the run behavior needed to bridge a completed denied read to a retry call.
 
 ### R1 gate — PASSED
 
@@ -212,7 +217,7 @@ The actual thing being eliminated. Every entry is a private-API reach-in.
 |---|---|---|---|
 | ~~`_pendingAgentToolRuns`~~ | ~~`services/approval/tool-owner.ts`~~ | approval | **DONE** (A2) |
 | ~~`_mergeApprovals`~~ | ~~`services/subagents/nested-runner.ts`~~ | approval | **DONE** (A3) |
-| `_generatedItems` | ~~`services/stream-snapshot.ts`~~, `services/session/session-tool-tracker.ts`, ~~`services/session/continuation-call-id-resolver.ts`~~ | run loop | **Resolver + replay diagnostics DONE**; tracker recovery remains Step C/E |
+| ~~`_generatedItems`~~ | ~~`services/stream-snapshot.ts`~~, ~~`services/session/session-tool-tracker.ts`~~, ~~`services/session/continuation-call-id-resolver.ts`~~ | run loop | **DONE** (Step C public stream/ledger recovery) |
 | `_buildResponsesCreateRequest` | `providers/codex-responses-model.ts`, `providers/fallback-responses-model.ts`, `providers/openai.provider.ts` | provider | Step D/E |
 | `_fetchResponse` | `providers/codex-responses-model.ts` | provider | Step E |
 

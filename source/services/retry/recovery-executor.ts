@@ -58,12 +58,6 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
       }
 
       case 'retry_fresh': {
-        if (state.toolResultCallIds) {
-          const recoveryStates = new Set([state.currentState, state.stream?.state].filter(Boolean));
-          for (const runState of recoveryStates) {
-            this.deps.toolTracker.recoverApprovedResultsFromState(runState, state.toolResultCallIds);
-          }
-        }
         if (state.stream) {
           this.deps.providerContinuity.clear();
           this.deps.toolTracker.restoreCompletedEntries(journalSnapshotToLedger(state.journalSnapshot));

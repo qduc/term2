@@ -134,3 +134,98 @@ it('does not reuse a denied call ID when the model retries the same tool call', 
   expect(executedCallIds).toEqual([DENIED_CALL_ID]);
   expect(interrupted.interruptions).toHaveLength(1);
 });
+
+it('retains completed tool outputs from every streamed model cycle when the next request fails', async () => {
+  const firstCallId = 'call-stream-first';
+  const secondCallId = 'call-stream-second';
+  let requestCount = 0;
+  const model: Model = {
+    async getResponse(): Promise<ModelResponse> {
+      throw new Error('This regression must use the streaming model path.');
+    },
+    async *getStreamedResponse(_request: ModelRequest): AsyncIterable<StreamEvent> {
+      requestCount++;
+      if (requestCount === 3) {
+        throw new Error('transport disconnected after two completed tool cycles');
+      }
+
+      const callId = requestCount === 1 ? firstCallId : secondCallId;
+      yield {
+        type: 'response_done',
+        response: {
+          id: `response-${requestCount}`,
+          usage: { requests: 1, inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          output: [
+            {
+              type: 'function_call',
+              callId,
+              name: 'cycle_tool',
+              arguments: JSON.stringify({ cycle: requestCount }),
+            },
+          ],
+        },
+      } as StreamEvent;
+    },
+  };
+  const executedCallIds: string[] = [];
+  const cycleTool = tool({
+    name: 'cycle_tool',
+    description: 'Completes one scripted tool cycle.',
+    parameters: z.object({ cycle: z.number() }),
+    execute: async (_input, _context, details) => {
+      const callId = details?.toolCall?.callId;
+      if (callId) executedCallIds.push(callId);
+      return `output for ${callId}`;
+    },
+  });
+  const agent = new Agent({
+    name: 'streamed-transport-recovery-test',
+    instructions: 'Call the scripted tool twice.',
+    model: 'scripted-model',
+    tools: [cycleTool],
+  });
+  const runner = new Runner({ modelProvider: { getModel: () => model } });
+
+  const stream = await runner.run(agent, 'run both cycles', { stream: true });
+  const events: any[] = [];
+  const iteration = (async () => {
+    for await (const event of stream) {
+      events.push(event);
+    }
+  })();
+
+  await Promise.all([
+    expect(iteration).rejects.toThrow('transport disconnected after two completed tool cycles'),
+    expect(stream.completed).rejects.toThrow('transport disconnected after two completed tool cycles'),
+  ]);
+  expect(executedCallIds).toEqual([firstCallId, secondCallId]);
+
+  const completedResultCallIds = (items: unknown[]) =>
+    items
+      .filter((item: any) => {
+        const rawItem = item.rawItem ?? item;
+        return [
+          'function_call_result',
+          'function_call_output',
+          'function_call_output_result',
+          'tool_call_output_item',
+        ].includes(rawItem.type);
+      })
+      .map((item: any) => (item.rawItem ?? item).callId);
+  expect(completedResultCallIds(stream.history)).toEqual(expect.arrayContaining([firstCallId, secondCallId]));
+  expect(completedResultCallIds(stream.newItems)).toEqual(expect.arrayContaining([firstCallId, secondCallId]));
+  expect(completedResultCallIds(stream.output)).toEqual(expect.arrayContaining([firstCallId, secondCallId]));
+  const eventResultCallIds = events
+    .filter(
+      (event) =>
+        event.type === 'run_item_stream_event' &&
+        [
+          'function_call_result',
+          'function_call_output',
+          'function_call_output_result',
+          'tool_call_output_item',
+        ].includes(event.item.rawItem?.type),
+    )
+    .map((event) => event.item.rawItem.callId);
+  expect(eventResultCallIds).toEqual(expect.arrayContaining([firstCallId, secondCallId]));
+});

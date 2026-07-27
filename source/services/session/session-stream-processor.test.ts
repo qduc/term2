@@ -9,6 +9,7 @@ import { ProviderContinuity } from '../provider-continuity.js';
 import type { AgentStream } from '../agent-stream.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { GenerationGuard } from '../generation-guard.js';
+import { DefaultRecoveryExecutor } from '../retry/recovery-executor.js';
 
 const logger = new LoggingService({ disableLogging: true });
 
@@ -742,6 +743,84 @@ it('SessionStreamProcessor.process() feeds every raw run item into the journal',
   expect(journalItems.length).toBe(2);
   expect((journalItems[0] as any).rawItem.type).toBe('function_call');
   expect((journalItems[1] as any).rawItem.type).toBe('function_call_result');
+});
+
+it('SessionStreamProcessor.process() records completed outputs in the live ledger before fresh recovery', async () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.addUserMessage('run both commands');
+  const toolTracker = new SessionToolTracker(conversationStore);
+  toolTracker.beginTurn();
+  const generationGuard = new GenerationGuard();
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger: { hasSink: () => false } as ConversationLogger,
+    providerContinuity: new ProviderContinuity(),
+    generationGuard,
+    journal: makeJournal(),
+  });
+  const stream = makeStream([
+    {
+      type: 'run_item_stream_event',
+      item: { rawItem: { type: 'function_call', callId: 'call-a', name: 'shell', arguments: '{}' } },
+    },
+    {
+      type: 'run_item_stream_event',
+      item: { rawItem: { type: 'function_call_result', callId: 'call-a', output: 'a' } },
+    },
+    {
+      type: 'run_item_stream_event',
+      item: { rawItem: { type: 'function_call', callId: 'call-b', name: 'shell', arguments: '{}' } },
+    },
+    {
+      type: 'run_item_stream_event',
+      item: { rawItem: { type: 'function_call_result', callId: 'call-b', output: 'b' } },
+    },
+  ]);
+
+  for await (const _ of processor.process(stream, {
+    gen: generationGuard.capture(),
+    source: 'continueRunStream',
+    preserveExistingToolArgs: false,
+  })) {
+    // Drain the public stream events before simulating the following request failure.
+  }
+
+  expect(toolTracker.completedResultCallIdsForCurrentTurn()).toEqual(['call-a', 'call-b']);
+  expect(toolTracker.export()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ callId: 'call-a', status: 'completed', output: 'a' }),
+      expect.objectContaining({ callId: 'call-b', status: 'completed', output: 'b' }),
+    ]),
+  );
+
+  new DefaultRecoveryExecutor({
+    toolTracker,
+    conversationStore,
+    providerContinuity: new ProviderContinuity(),
+  }).apply({
+    plan: { kind: 'retry_fresh', inputMode: 'full_history' },
+    state: {
+      journalSnapshot: [],
+      addedUserMessage: false,
+      stream: { completed: Promise.resolve(null) } as unknown as AgentStream,
+    },
+    retryCounts: {
+      transientRetryCount: 0,
+      serviceTierFallbackCount: 0,
+      modelRetryCount: 0,
+      transportDowngradeCount: 0,
+    },
+  });
+
+  expect(
+    conversationStore
+      .getHistory()
+      .map((item: any) => item.callId)
+      .filter(Boolean),
+  ).toEqual(['call-a', 'call-a', 'call-b', 'call-b']);
 });
 
 it('SessionStreamProcessor.process() drops journal writes after generation invalidation', async () => {

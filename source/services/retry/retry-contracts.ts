@@ -61,8 +61,6 @@ export type RecoveryState = {
   journalSnapshot: AssistantJournalItemLogEvent[];
   addedUserMessage: boolean;
   stream: AgentStream | null;
-  currentState?: RunState<any, any>;
-  toolResultCallIds?: string[];
 };
 
 // ── Execution Instruction ──────────────────────────────────────

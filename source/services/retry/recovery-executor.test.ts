@@ -148,7 +148,7 @@ it('retry_fresh with stream reconciles history and restores ledger', () => {
   expect(deps.providerContinuity.previousResponseId).toBe(null);
 });
 
-it('retry_fresh recovers approved outputs from continuation state when the failed stream state is empty', () => {
+it('retry_fresh uses completed outputs already present in the live ledger instead of run-state internals', () => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('run both commands');
   deps.toolTracker.beginTurn();
@@ -158,26 +158,57 @@ it('retry_fresh recovers approved outputs from continuation state when the faile
     name: 'shell',
     arguments: '{"command":"pwd"}',
   });
+  deps.toolTracker.recordFunctionResult({
+    type: 'function_call_output',
+    callId: 'call-approved',
+    output: '/workspace',
+  });
 
   executor.apply({
     plan: { kind: 'retry_fresh', inputMode: 'full_history' },
     state: baseRecoveryState({
-      currentState: {
-        _generatedItems: [{ type: 'function_call_output', callId: 'call-approved', output: '/workspace' }],
-      } as any,
-      stream: { state: { _generatedItems: [] } } as any,
-      toolResultCallIds: ['call-approved'],
+      stream: { completed: Promise.resolve(undefined) } as any,
+      journalSnapshot: [
+        {
+          type: 'assistant_journal_item',
+          turnId: 'turn-1',
+          seq: 1,
+          item: {
+            type: 'tool_call',
+            callId: 'call-approved',
+            toolName: 'shell',
+            arguments: '{"command":"pwd"}',
+          },
+        },
+        {
+          type: 'assistant_journal_item',
+          turnId: 'turn-1',
+          seq: 2,
+          item: {
+            type: 'tool_result',
+            callId: 'call-approved',
+            toolName: 'shell',
+            status: 'completed',
+            output: 'stale journal output',
+          },
+        },
+      ],
     }),
     retryCounts: baseCounts(),
   });
 
+  expect(deps.toolTracker.export()).toEqual(
+    expect.arrayContaining([expect.objectContaining({ callId: 'call-approved', output: '/workspace' })]),
+  );
   const replayItems = deps.conversationStore
     .getHistory()
     .filter((item) => (item as { callId?: string }).callId === 'call-approved');
-  expect(replayItems.map((item) => (item as { type?: string }).type)).toEqual([
-    'function_call',
-    'function_call_output',
-  ]);
+  expect(replayItems).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: 'function_call', callId: 'call-approved' }),
+      expect.objectContaining({ type: 'function_call_output', callId: 'call-approved', output: '/workspace' }),
+    ]),
+  );
 });
 
 it('retry_fresh without stream preserves user message and clears continuity', () => {

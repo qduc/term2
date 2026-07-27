@@ -83,8 +83,6 @@ export class ContinuationRecoveryHandler {
       journalSnapshot: state.journalSnapshot,
       addedUserMessage: false,
       stream: retryStream,
-      currentState: state.currentState,
-      toolResultCallIds: state.currentCallIds,
     };
     const transientDelayMs = classified.kind === 'transient' ? classified.delayMs : undefined;
 

@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A in progress. A1, A2 landed on `main`. A3 in flight.
+**Status:** Step A mostly done — A1, A2, A3 landed on `main`. A4 is next, gated on R1.
 **Last updated:** 2026-07-27
 
 ---
@@ -16,7 +16,8 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Work | Result |
 |---|---|
 | A1 | Dead `removeInterceptor` plumbing deleted (was always `noop`) |
-| A2 | `_pendingAgentToolRuns` retired behind `services/approval/tool-ownership-registry.ts` — **1 of 9 reach-ins** |
+| A2 | `_pendingAgentToolRuns` retired behind `services/approval/tool-ownership-registry.ts` |
+| A3 | `_mergeApprovals` retired via `services/approval/approval-replay.ts` — **2 of 9 reach-ins done** |
 | Bug fix | Denied-read approval never fired for `cd`-prefixed commands (record/lookup key mismatch) |
 | Bug fix | Docker host-control denials leaked across sessions (process-global `#deniedCommands`) |
 
@@ -24,14 +25,33 @@ Each landed as a `--no-ff` merge from its own worktree branch; branch history is
 
 ### In flight
 
-**A3** — replacing our `_mergeApprovals` call in `nested-runner.ts` with public
-`approveTool`/`rejectTool`. Was running in a worktree, unmerged, when work paused. Check
-`git worktree list` and `git branch --list 'worktree-agent-*'` for its state before redoing it.
+Nothing. No worktrees or agent branches outstanding.
 
-When verifying A3: the load-bearing detail is the semantics of `ApprovalRecord.approved`
-(`boolean | string[]`, `runContext.d.ts:4-9`). Getting `boolean` vs `string[]` backwards
-over-grants approvals across the parent/subagent boundary **silently**. Demand a test that
-distinguishes them.
+### `ApprovalRecord` semantics, established by reading the SDK source
+
+Recorded because the plan previously only guessed at this, and getting it wrong over-grants
+approvals across the parent/subagent boundary **silently**. From
+`node_modules/@openai/agents-core/dist/runContext.js` (`approveTool`, `rejectTool`,
+`isToolApproved`, `#setApprovalRecord`, `#getApprovalStorageKey`):
+
+- **Keys are tool names, not call ids.** (`computer` / `computer_use_preview` share one key.)
+  The repo's old `nested-runner.test.ts` used a call-id key and encoded the wrong model.
+- **`approved: true`** = blanket; `isToolApproved` returns `true` for *any* call id.
+- **`approved: string[]`** = exactly those call ids; anything else returns `undefined`
+  (still prompt).
+- **`approved: false`** carries no decision — it is residue from
+  `rejectTool(…, { alwaysReject: true })`.
+- **Precedence:** blanket approval outranks blanket rejection.
+
+Consequence for `approval-replay.ts`: **rejections are replayed before approvals**, because
+`approveTool(…, { alwaysApprove: true })` resets `rejected` and vice versa, so ordering decides
+which survives a record holding both.
+
+**Known fidelity limit:** a record that is blanket-rejected *and* carries per-call rejection
+messages keeps only `stickyRejectMessage`; the public API cannot express both. Message text
+only — every such call is rejected either way. Moot here: this repo never calls
+`getRejectionMessage`, `alwaysApprove`, or `alwaysReject`, and only does per-call
+`state.approve` / `state.reject` at `approval-flow-coordinator.ts:270,288`.
 
 ### Next, in order
 
@@ -83,7 +103,7 @@ The actual thing being eliminated. Every entry is a private-API reach-in.
 | Reach-in | Files | Layer | Retired in |
 |---|---|---|---|
 | ~~`_pendingAgentToolRuns`~~ | ~~`services/approval/tool-owner.ts`~~ | approval | **DONE** (A2) |
-| `_mergeApprovals` | `services/subagents/nested-runner.ts` | approval | Step A3 |
+| ~~`_mergeApprovals`~~ | ~~`services/subagents/nested-runner.ts`~~ | approval | **DONE** (A3) |
 | `_generatedItems` | `services/stream-snapshot.ts`, `services/session/session-tool-tracker.ts`, `services/session/continuation-call-id-resolver.ts` | run loop | Step C/E |
 | `_buildResponsesCreateRequest` | `providers/codex-responses-model.ts`, `providers/fallback-responses-model.ts`, `providers/openai.provider.ts` | provider | Step D/E |
 | `_fetchResponse` | `providers/codex-responses-model.ts` | provider | Step E |

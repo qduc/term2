@@ -1030,6 +1030,43 @@ it.sequential('shell execute detects denied reads under strict and returns retry
   expect(info?.sensitive).toBe(false);
 });
 
+it.sequential('shell records a denied read under the raw command so a cd-prefixed retry still prompts', async () => {
+  const cwd = process.cwd();
+  // The model commonly re-states the cwd it is already in; `stripRedundantCd`
+  // rewrites this before execution, so the recorded key must still be the raw
+  // string the model emitted — that is the only key the approval lookups have.
+  const rawCommand = `cd ${cwd} && cargo build`;
+  let executedCommand: string | undefined;
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({
+      'sandbox.enabled': true,
+      'sandbox.readPolicy': 'strict',
+    }),
+    shellSandboxRunner: createFakeSandboxRunner({
+      annotateFailure: (_command: string, stderr: string) =>
+        `${stderr}\n<sandbox_violations>\nSandbox: cargo(123) deny file-read* /home/testuser/.cargo/registry/cache\n</sandbox_violations>`,
+    }),
+    executeShellCommandImpl: async (command: string) => {
+      executedCommand = command;
+      return { stdout: '', stderr: 'cargo: error', exitCode: 1, timedOut: false };
+    },
+  });
+
+  const output = await tool.execute({ command: rawCommand, sandbox: 'default' });
+  expect(output.toLowerCase()).toContain('retry');
+
+  // Precondition guard: the redundant `cd` really was stripped, so the executed
+  // command and the model-emitted command genuinely differ.
+  expect(executedCommand).not.toContain('cd ');
+
+  // Both approval lookups key off the raw model-emitted command. The conversation
+  // layer has no cwd, so it cannot re-derive the stripped form.
+  expect(deniedReadStore.has(rawCommand)).toBe(true);
+  expect(await tool.needsApproval({ command: rawCommand, sandbox: 'default' })).toBe(true);
+});
+
 it.sequential('shell execute detects hidden existing home paths reported as no-such-file under strict', async () => {
   const target = path.join(os.homedir(), '.cache');
   const tool = createShellToolDefinition({

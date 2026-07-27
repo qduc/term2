@@ -540,7 +540,11 @@ export function createShellToolDefinition(deps: {
         }
 
         if (sandboxFailure?.type === 'denied_read') {
-          deniedReadStore.record(optimizedCommand, sandboxFailure.deniedRead);
+          // Keyed by the command the model passed, not `optimizedCommand`: the
+          // retry and both approval lookups (needsApproval here, and the
+          // conversation layer, which has no cwd to re-derive the stripped form)
+          // only ever see the raw string.
+          deniedReadStore.record(command, sandboxFailure.deniedRead);
           loggingService.security('Sandbox denied read; agent retry will prompt for approval', {
             deniedPath: sandboxFailure.deniedRead.path,
             suggestedParent: sandboxFailure.deniedRead.suggestedParent,

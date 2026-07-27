@@ -38,6 +38,7 @@ import { createConversationLogWriter, LockConflictError } from './services/loggi
 import { AGENT_AFFECTING_SETTINGS } from './services/logging/conversation-log-events.js';
 import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
 import { normalizeAppModes } from './services/settings/settings-schema.js';
+import { createOwnedSessionClientFactory } from './services/session/session-client-factory.js';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
@@ -539,31 +540,30 @@ const skillsService = new SkillsService(logger, executionContext.getCwd());
 skillsService.discoverSkills();
 const terminalTitleBase = buildProjectFolderTitle(executionContext.getCwd());
 
-const usedModel = settings.get('agent.model');
-const usedReasoningEffort = settings.get('agent.reasoningEffort');
-
-const agentClient = new AgentClient({
-  model: usedModel,
-  reasoningEffort: usedReasoningEffort as ModelSettingsReasoningEffort,
-  maxTurns: settings.get('agent.maxTurns'),
-  retryAttempts: settings.get('agent.retryAttempts'),
-  deps: {
-    logger: logger,
-    settings: settings,
-    executionContext: executionContext,
-    sessionContextService,
-    skillsService,
-  },
+const sessionClientFactory = createOwnedSessionClientFactory(() => {
+  const agentClient = new AgentClient({
+    model: settings.get('agent.model'),
+    reasoningEffort: settings.get('agent.reasoningEffort') as ModelSettingsReasoningEffort,
+    maxTurns: settings.get('agent.maxTurns'),
+    retryAttempts: settings.get('agent.retryAttempts'),
+    deps: {
+      logger: logger,
+      settings: settings,
+      executionContext: executionContext,
+      sessionContextService,
+      skillsService,
+    },
+  });
+  installPlanModeInterceptor(agentClient, { settingsService: settings });
+  return agentClient;
 });
-
-installPlanModeInterceptor(agentClient, { settingsService: settings });
 
 if (hasPositionalPrompt) {
   const { runNonInteractive } = await import('./non-interactive.js');
   const exitCode = await runNonInteractive({
     prompt: positionalPrompt,
     autoApprove: cli.flags.autoApprove,
-    agentClient,
+    sessionClientFactory,
     logger,
     settingsService: settings,
     sessionContextService,
@@ -618,7 +618,7 @@ if (!forkRequested) {
 }
 
 const conversationService = new ConversationService({
-  agentClient,
+  sessionClientFactory,
   sessionId: effectiveSessionId,
   deps: {
     logger: logger,

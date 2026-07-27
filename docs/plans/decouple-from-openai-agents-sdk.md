@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A mostly done — A1, A2, A3 and the R1 gate landed on `main`. Resolve the composition root before A4.
+**Status:** Step A mostly done — A1–A3, R1, and the session client-factory boundary landed on `main`. The A4 call ledger is next.
 **Last updated:** 2026-07-27
 
 ---
@@ -19,6 +19,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | A2 | `_pendingAgentToolRuns` retired behind `services/approval/tool-ownership-registry.ts` |
 | A3 | `_mergeApprovals` retired via `services/approval/approval-replay.ts` — **2 of 9 reach-ins done** |
 | R1 | Resume-after-approval preserves `details.toolCall.callId`; pinned by `source/lib/sdk-approval-resume.test.ts` |
+| A4 groundwork | Session factory owns/disposes the closure-bound client; reset and both CLI modes replace the handle |
 | Bug fix | Denied-read approval never fired for `cd`-prefixed commands (record/lookup key mismatch) |
 | Bug fix | Docker host-control denials leaked across sessions (process-global `#deniedCommands`) |
 
@@ -56,13 +57,7 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **Solve the composition-root problem once.** `agentClient` is constructed before
-   `session-composition` runs, so there is no common root for per-session injection. This
-   already forced A2 into a module-scoped registry, and A4's `SessionSandboxState` will hit
-   the identical wall. The repo has five such singletons already (`deniedReadStore`,
-   `executionOverrideStore`, `sessionReadAccess`, the docker grants, the new registry) —
-   don't add a sixth. Implement the session-handle/client-factory boundary recorded below.
-2. **A4** — absorb the approval side-channels into a session-owned call ledger keyed by
+1. **A4** — absorb the approval side-channels into a session-owned call ledger keyed by
    `callId`. Migrate vertical producer→consumer paths without dual-writing or command-key
    fallback. The risky paths are the delivery seam, the batch coordinator (which retargets
    one shared pending context across siblings), nested subagents, reset/disposal, and docker.
@@ -93,6 +88,13 @@ own records keyed by `callId`: tool ownership, denied-read metadata, and the exe
 The SDK-specific extraction stays at the tool boundary; approval services receive a domain call
 id. R1 proves the execution path has that identity, including after serialized approval resume.
 
+**Implemented groundwork:** `session-client-factory.ts` now creates an owned client handle;
+`ConversationService` owns that handle beside the runtime and replaces both on
+`resetWithNewId()`. Interactive and non-interactive CLI paths use the same factory, while the
+prebuilt-client seam remains caller-owned for compatibility tests. `AgentClient`, its settings
+subscription, and its subagent bridge have idempotent disposal. This establishes the common
+lifetime into which the call ledger can now be injected.
+
 Required invariants:
 
 - duplicate active call ids in one session fail closed rather than overwrite;
@@ -105,10 +107,11 @@ Required invariants:
 
 Migration order:
 
-1. Add disposal support for the closure-bound client (including settings subscriptions), then
-   introduce a session client factory/handle while retaining compatibility seams for tests.
-2. Route both CLI modes and `resetWithNewId()` through that factory; prove replacement and late
-   callback isolation before moving policy state.
+1. **DONE.** Add disposal support for the closure-bound client (including settings
+   subscriptions), then introduce a session client factory/handle while retaining compatibility
+   seams for tests.
+2. **DONE.** Route both CLI modes and `resetWithNewId()` through that factory; prove replacement
+   and disposal before moving policy state.
 3. Introduce the session-owned call ledger and migrate tool ownership.
 4. Migrate denied-read metadata and execution overrides one vertical path at a time; delete the
    command-keyed stores and add the concurrent-identical-command regression.

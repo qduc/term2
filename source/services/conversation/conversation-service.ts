@@ -6,6 +6,11 @@ import type { LogEvent, StateSnapshot } from '../logging/conversation-log-events
 import type { UserTurn } from '../../types/user-turn.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { SkillsService } from '../skills/skills-service.js';
+import {
+  createCallerOwnedSessionClientFactory,
+  type SessionClientFactory,
+  type SessionClientHandle,
+} from '../session/session-client-factory.js';
 import type {
   SendMessageOptions,
   HandleApprovalDecisionOptions,
@@ -34,7 +39,8 @@ export type { CommandMessage } from '../../tools/types.js';
 export class ConversationService {
   #runtime: SessionRuntime;
   #adapter: ConversationAdapter;
-  readonly #agentClient: ConversationAgentClient;
+  #clientHandle: SessionClientHandle;
+  readonly #clientFactory: SessionClientFactory;
   #eventSink: ConversationEventSink | null = null;
   readonly #deps: {
     logger: ILoggingService;
@@ -45,11 +51,15 @@ export class ConversationService {
 
   constructor({
     agentClient,
+    sessionClientFactory,
     deps,
     sessionId = 'default',
     sessionStartedAt,
   }: {
-    agentClient: ConversationAgentClient;
+    /** Compatibility seam: caller retains ownership of a prebuilt client. */
+    agentClient?: ConversationAgentClient;
+    /** Production seam: each session receives a newly owned client. */
+    sessionClientFactory?: SessionClientFactory;
     deps: {
       logger: ILoggingService;
       settingsService?: ISettingsService;
@@ -59,10 +69,14 @@ export class ConversationService {
     sessionId?: string;
     sessionStartedAt?: string;
   }) {
-    this.#agentClient = agentClient;
+    if (!sessionClientFactory && !agentClient) {
+      throw new Error('ConversationService requires an agentClient or sessionClientFactory');
+    }
+    this.#clientFactory = sessionClientFactory ?? createCallerOwnedSessionClientFactory(agentClient!);
+    this.#clientHandle = this.#clientFactory.create(sessionId ?? 'default');
     this.#deps = deps;
     const { runtime, adapter } = createConversationRuntime({
-      agentClient,
+      agentClient: this.#clientHandle.agentClient,
       deps,
       queueForeground: true,
       sessionId: sessionId ?? 'default',
@@ -114,9 +128,11 @@ export class ConversationService {
     const previousEventSink = this.#eventSink;
     this.#runtime.state.reset();
     this.#runtime.dispose();
+    this.#clientHandle.dispose();
     this.#deps.skillsService?.discoverSkills();
+    this.#clientHandle = this.#clientFactory.create(newId);
     const { runtime, adapter } = createConversationRuntime({
-      agentClient: this.#agentClient,
+      agentClient: this.#clientHandle.agentClient,
       deps: this.#deps,
       queueForeground: true,
       sessionId: newId,
@@ -223,7 +239,13 @@ export class ConversationService {
    */
   interruptFromUser(): void {
     this.#adapter.abort();
-    this.#agentClient.cancelBackgroundRuns?.();
+    this.#clientHandle.agentClient.cancelBackgroundRuns?.();
+  }
+
+  /** Release the current runtime and, when factory-owned, its session client. */
+  dispose(): void {
+    this.#runtime.dispose();
+    this.#clientHandle.dispose();
   }
 
   sendMessage(input: string | UserTurn, options?: SendMessageOptions): Promise<ConversationTerminal> {

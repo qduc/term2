@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import { Writable } from 'node:stream';
-import { runWithSession, createNonInteractiveSessionId } from './non-interactive.js';
+import { runNonInteractive, runWithSession, createNonInteractiveSessionId } from './non-interactive.js';
+import { MockStream } from './services/test-helpers/mock-stream.js';
 
 const createStringWritable = () => {
   let output = '';
@@ -490,4 +491,53 @@ it('with autoApprove=true: uses LLM to evaluate YELLOW commands', async () => {
   expect(exitCode).toBe(0);
   expect(chatCalled).toBe(true);
   expect(calls).toEqual([{ answer: 'y', rejectionReason: undefined }]);
+});
+
+it('runNonInteractive() disposes its factory-owned client after the runtime', async () => {
+  const disposed: string[] = [];
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  const logger: any = {
+    info() {},
+    warn() {},
+    error() {},
+    debug() {},
+    security() {},
+    getCorrelationId() {
+      return undefined;
+    },
+    setCorrelationId() {},
+    clearCorrelationId() {},
+  };
+  const settingsService: any = {
+    get() {
+      return undefined;
+    },
+  };
+
+  const exitCode = await runNonInteractive({
+    prompt: 'hello',
+    autoApprove: false,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    logger,
+    settingsService,
+    sessionClientFactory: {
+      create() {
+        const agentClient: any = {
+          chat: async () => '',
+          abort() {},
+          setModel() {},
+          addToolInterceptor: () => () => {},
+          startStream: async () => new MockStream([]),
+          continueRunStream: async () => new MockStream([]),
+        };
+        return { agentClient, dispose: () => disposed.push('client') };
+      },
+    },
+  });
+
+  expect(stderr.getOutput()).toBe('');
+  expect(exitCode).toBe(0);
+  expect(disposed).toEqual(['client']);
 });

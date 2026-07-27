@@ -1,7 +1,11 @@
-import type { AgentClient } from './lib/agent-client.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from './services/service-interfaces.js';
 import { createConversationRuntime } from './services/conversation/conversation-runtime-factory.js';
 import { SessionContextService } from './services/session/session-context-service.js';
+import {
+  createCallerOwnedSessionClientFactory,
+  type SessionClientFactory,
+} from './services/session/session-client-factory.js';
+import type { ConversationAgentClient } from './services/conversation-agent-client.js';
 import type { ConversationEvent } from './services/conversation/conversation-events.js';
 import type { UserTurn } from './types/user-turn.js';
 import type { ApprovalDescriptor, ConversationTerminal } from './contracts/conversation.js';
@@ -21,7 +25,10 @@ export interface NonInteractiveConfig {
   stdout?: NodeJS.WritableStream;
   stderr?: NodeJS.WritableStream;
   settingsService?: ISettingsService;
-  agentClient?: AgentClient;
+  /** Compatibility seam; the caller continues to own this client. */
+  agentClient?: ConversationAgentClient;
+  /** Production seam; creates a client owned by this one-shot session. */
+  sessionClientFactory?: SessionClientFactory;
   logger?: ILoggingService;
   sessionContextService?: ISessionContextService;
 }
@@ -220,15 +227,20 @@ export async function runWithSession(session: ConversationSessionLike, config: N
 
 export async function runNonInteractive(
   config: NonInteractiveConfig & {
-    agentClient: AgentClient;
     logger: ILoggingService;
     settingsService: ISettingsService;
   },
 ): Promise<number> {
   const sessionContextService = config.sessionContextService ?? new SessionContextService();
+  if (!config.sessionClientFactory && !config.agentClient) {
+    throw new Error('runNonInteractive requires an agentClient or sessionClientFactory');
+  }
+  const clientFactory = config.sessionClientFactory ?? createCallerOwnedSessionClientFactory(config.agentClient!);
+  const sessionId = createNonInteractiveSessionId();
+  const clientHandle = clientFactory.create(sessionId);
   const { runtime, adapter } = createConversationRuntime({
-    sessionId: createNonInteractiveSessionId(),
-    agentClient: config.agentClient,
+    sessionId,
+    agentClient: clientHandle.agentClient,
     deps: {
       logger: config.logger,
       settingsService: config.settingsService,
@@ -237,8 +249,9 @@ export async function runNonInteractive(
   });
 
   try {
-    return await runWithSession(adapter, { ...config, sessionContextService });
+    return await runWithSession(adapter, { ...config, agentClient: clientHandle.agentClient, sessionContextService });
   } finally {
     runtime.dispose();
+    clientHandle.dispose();
   }
 }

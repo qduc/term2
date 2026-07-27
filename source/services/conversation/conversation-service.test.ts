@@ -1161,6 +1161,53 @@ it('resetWithNewId() rediscover skills when skills service is available', async 
   expect(discoverCalls).toBe(1);
 });
 
+it('resetWithNewId() replaces and disposes the factory-owned client', async () => {
+  const clients: Array<ConversationAgentClient & { dispose: () => void }> = [];
+  const disposed: number[] = [];
+  const started: number[] = [];
+  const service = new ConversationService({
+    sessionId: 'old-id',
+    sessionClientFactory: {
+      create() {
+        const index = clients.length;
+        const client = Object.assign(
+          partialClient({
+            async startStream() {
+              started.push(index);
+              return new MockStream([]);
+            },
+          }),
+          { dispose: () => disposed.push(index) },
+        );
+        clients.push(client);
+        return { agentClient: client, dispose: client.dispose };
+      },
+    },
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  service.resetWithNewId('new-id');
+  await service.sendMessage('uses replacement');
+
+  expect(clients).toHaveLength(2);
+  expect(disposed).toEqual([0]);
+  expect(started).toEqual([1]);
+});
+
+it('does not dispose a caller-owned compatibility client during reset or service disposal', () => {
+  let disposeCalls = 0;
+  const client = Object.assign(partialClient(), { dispose: () => disposeCalls++ });
+  const service = new ConversationService({
+    agentClient: client,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  service.resetWithNewId('new-id');
+  service.dispose();
+
+  expect(disposeCalls).toBe(0);
+});
+
 it('setModel() delegates to agent client', () => {
   let setModelCalledWith: any = null;
   const mockClient = partialClient({

@@ -47,6 +47,7 @@ function createMockManager():
       trackRunAsTool: { callCount: number; lastArgs: any };
       trackReset: { callCount: number };
       trackClearCache: { callCount: number };
+      trackDispose: { callCount: number };
     }
   | any {
   const trackRun = { callCount: 0, lastArgs: null as any };
@@ -58,6 +59,7 @@ function createMockManager():
   const trackCancelAllAsyncRuns = { callCount: 0 };
   const trackReset = { callCount: 0 };
   const trackClearCache = { callCount: 0 };
+  const trackDispose = { callCount: 0 };
 
   const manager = {
     run: async (args: any) => {
@@ -99,6 +101,9 @@ function createMockManager():
     clearCache: () => {
       trackClearCache.callCount++;
     },
+    dispose: () => {
+      trackDispose.callCount++;
+    },
   };
 
   return {
@@ -112,6 +117,7 @@ function createMockManager():
     trackCancelAllAsyncRuns,
     trackReset,
     trackClearCache,
+    trackDispose,
   };
 }
 
@@ -180,6 +186,19 @@ it('clearCache delegates to SubagentManager.clearCache', () => {
 
   (bridge as any).clearCache();
   expect(trackClearCache.callCount).toBe(2);
+});
+
+it('dispose cancels session work and clears manager-owned state once', () => {
+  const { manager, trackCancelAllAsyncRuns, trackClearCache, trackReset, trackDispose } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  bridge.dispose();
+  bridge.dispose();
+
+  expect(trackCancelAllAsyncRuns.callCount).toBe(1);
+  expect(trackClearCache.callCount).toBe(1);
+  expect(trackReset.callCount).toBe(1);
+  expect(trackDispose.callCount).toBe(1);
 });
 
 it('createMentor calls SubagentManager.run with role mentor', async () => {

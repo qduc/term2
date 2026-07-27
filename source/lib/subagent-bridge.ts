@@ -34,6 +34,7 @@ type SubagentEventScope = 'foreground' | 'background';
 
 export class SubagentBridge {
   #subagentManager: SubagentManager | null;
+  #isDisposed = false;
   #sessionContextService: ISessionContextService;
   #subagentEventSink: ((event: ConversationEvent) => void) | null = null;
   #backgroundEventSink: ((event: ConversationEvent) => void) | null = null;
@@ -87,6 +88,24 @@ export class SubagentBridge {
     if (sink) this.#flushBufferedEvents('background', sink);
   }
 
+  /** End session-scoped subagent work and release its event sinks and caches. */
+  dispose(): void {
+    if (this.#isDisposed) return;
+    this.#isDisposed = true;
+
+    this.#abortController.abort();
+    this.#backgroundAbortController.abort();
+    this.#subagentManager?.cancelAllAsyncRuns();
+    this.#subagentManager?.clearCache();
+    this.#subagentManager?.resetMentorSession();
+    this.#subagentManager?.dispose();
+    this.#subagentManager = null;
+    this.#subagentEventSink = null;
+    this.#backgroundEventSink = null;
+    this.#backgroundRunIds.clear();
+    this.#bufferedEvents = [];
+  }
+
   #flushBufferedEvents(scope: SubagentEventScope, sink: (event: ConversationEvent) => void): void {
     const pending: Array<{ event: ConversationEvent; scope: SubagentEventScope }> = [];
     for (const buffered of this.#bufferedEvents) {
@@ -100,6 +119,8 @@ export class SubagentBridge {
   }
 
   #emitEvent(event: ConversationEvent): void {
+    if (this.#isDisposed) return;
+
     const agentId =
       event.type === 'subagent_completed'
         ? event.result.agentId

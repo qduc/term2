@@ -40,6 +40,7 @@ export class AgentClient {
   #sessionContextService: ISessionContextService;
   #subagentBridge: SubagentBridge | null = null;
   #askUserAnswerStore: AskUserAnswerStore;
+  #isDisposed = false;
 
   /**
    * Forward real-time subagent activity events to the active conversation
@@ -275,6 +276,17 @@ export class AgentClient {
    */
   cancelBackgroundRuns(): void {
     this.#subagentBridge?.cancelBackgroundRuns();
+  }
+
+  /** End all session-bound activity and release resources held by this client. */
+  dispose(): void {
+    if (this.#isDisposed) return;
+    this.#isDisposed = true;
+
+    this.#runOrchestrator.abort();
+    this.#runnerManager.invalidateRunner();
+    this.#subagentBridge?.dispose();
+    this.#agentConfig.dispose();
   }
 
   clearConversations(): void {

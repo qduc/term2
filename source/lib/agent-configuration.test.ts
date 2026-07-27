@@ -42,11 +42,11 @@ function createMockSettings(values: Record<string, any> = {}): ISettingsService 
     set: (key: string, value: any) => {
       store[key] = value;
     },
-    onChange: (listener: (key?: string) => void) => {
-      listeners.push(listener);
+    onChange(listener: (key?: string) => void) {
+      this._listeners.push(listener);
       return () => {
-        const idx = listeners.indexOf(listener);
-        if (idx >= 0) listeners.splice(idx, 1);
+        const idx = this._listeners.indexOf(listener);
+        if (idx >= 0) this._listeners.splice(idx, 1);
       };
     },
   };
@@ -303,6 +303,33 @@ it.sequential('subscribeToSettings installs onChange handler', () => {
   config.subscribeToSettings();
 
   expect(settings._listeners.length, 'one listener after subscribeToSettings').toBe(1);
+});
+
+it.sequential('subscribeToSettings is idempotent and dispose removes its listener', () => {
+  ensureProviderRegistered();
+
+  const result = createDeps();
+  const settings = result.settings as ReturnType<typeof createMockSettings>;
+  const config = new AgentConfiguration({}, result.deps);
+
+  config.subscribeToSettings();
+  config.subscribeToSettings();
+  expect(settings._listeners.length, 'one listener after repeated subscription').toBe(1);
+
+  config.dispose();
+  config.dispose();
+  expect(settings._listeners.length, 'no listener after repeated disposal').toBe(0);
+});
+
+it.sequential('subscribeToSettings accepts settings without onChange', () => {
+  ensureProviderRegistered();
+
+  const result = createDeps();
+  const settingsWithoutOnChange = { ...result.settings, onChange: undefined } as ISettingsService;
+  const config = new AgentConfiguration({}, { ...result.deps, settings: settingsWithoutOnChange });
+
+  expect(() => config.subscribeToSettings()).not.toThrow();
+  expect(() => config.dispose()).not.toThrow();
 });
 
 it.sequential('subscribeToSettings is no-op for transient client', () => {

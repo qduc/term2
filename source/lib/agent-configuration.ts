@@ -53,6 +53,8 @@ export class AgentConfiguration implements AgentSource {
   #getSubagentBridge: () => SubagentBridge | null;
   #serviceTierOverrideForNextRequest: 'standard' | null = null;
   #skillsService?: SkillsService;
+  #unsubscribeSettings: (() => void) | null = null;
+  #isDisposed = false;
 
   constructor(
     config: {
@@ -181,7 +183,7 @@ export class AgentConfiguration implements AgentSource {
 
   /** Subscribe to settings changes that affect agent definition and rebuild automatically. */
   subscribeToSettings(): void {
-    if (this.#isTransientClient) return;
+    if (this.#isTransientClient || this.#isDisposed || this.#unsubscribeSettings) return;
 
     const rebuildKeys = [
       'app.liteMode',
@@ -225,13 +227,25 @@ export class AgentConfiguration implements AgentSource {
       'shell.useRtkCompression',
     ];
 
-    this.#settings.onChange?.((changedKey) => {
+    if (typeof this.#settings.onChange !== 'function') return;
+
+    this.#unsubscribeSettings = this.#settings.onChange((changedKey) => {
+      if (this.#isDisposed) return;
       if (!changedKey) return;
       if (rebuildKeys.includes(changedKey)) {
         this.#onConfigChanged?.(changedKey);
         this.rebuildAgent();
       }
     });
+  }
+
+  /** Stop receiving settings changes from this session-bound configuration. */
+  dispose(): void {
+    if (this.#isDisposed) return;
+    this.#isDisposed = true;
+    const unsubscribe = this.#unsubscribeSettings;
+    this.#unsubscribeSettings = null;
+    unsubscribe?.();
   }
 
   /**

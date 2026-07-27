@@ -16,7 +16,6 @@ import { parseToolCallArguments } from '../tool-call-arguments.js';
 import { buildPersistedAssistantTurnItems } from './conversation-turn-items.js';
 import { type GenerationToken } from '../generation-guard.js';
 import { type CommandMessage } from '../../tools/types.js';
-import { resolveToolOwner } from '../approval/tool-owner.js';
 import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { requiresHumanShellApproval } from '../approval/shell-sandbox-approval.js';
 import { deniedReadStore } from '../../utils/shell/sandbox/denied-read-stores.js';
@@ -148,7 +147,7 @@ export async function buildConversationResult(
       promptedCallId: callId,
       emittedCommandIds: emittedCommandIds ?? new Set(),
       toolCallArgumentsById: new Map(toolCallArgumentsById),
-      owner: resolveToolOwner(result.state, interruption, logger),
+      owner: approvalFlow.resolveOwner(interruption),
       token: input.token,
       inputMode: input.inputMode,
       cumulativeUsage: input.cumulativeUsage ?? usage ?? extractUsage(result),

@@ -20,6 +20,8 @@ import {
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
+import { ToolOwnershipRegistry, toolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { getCallIdFromObject } from '../interruption-info.js';
 
 export type CachedRoleTool = {
   agent: Agent<SubagentRunContext>;
@@ -47,6 +49,20 @@ export function incrementSubagentTurnCount(args: { context?: unknown; modelData:
   return args.modelData;
 }
 
+function collectApprovalCallIds(interruptions: unknown): string[] {
+  if (!Array.isArray(interruptions)) {
+    return [];
+  }
+  const callIds: string[] = [];
+  for (const interruption of interruptions) {
+    const callId = getCallIdFromObject(interruption);
+    if (callId) {
+      callIds.push(callId);
+    }
+  }
+  return callIds;
+}
+
 function parseNestedSubagentResult(raw: unknown): SubagentResult & { interrupted?: boolean } {
   const output = String(raw);
   if (output.startsWith(AGENT_TOOL_ERROR_PREFIX)) {
@@ -65,6 +81,7 @@ export class NestedSubagentRunner {
   #onEvent?: (event: ConversationEvent) => void;
   #roleToolCache: Map<SupportedSubagentRole, CachedRoleTool>;
   #skillsService?: SkillsService;
+  #toolOwnership: ToolOwnershipRegistry;
   /**
    * Optional resolver that overrides the default `loadRoleDefinition`.
    * When set, all role loads in `#getOrCreateRoleTool` go through this
@@ -85,6 +102,11 @@ export class NestedSubagentRunner {
     /** Optional role resolver for shared resolution path. */
     resolveRole?: (role: SupportedSubagentRole) => SubagentDefinition;
     skillsService?: SkillsService;
+    /**
+     * Where this runner records which subagent owns a pending tool call.
+     * Defaults to the process-wide registry the approval flow reads from.
+     */
+    toolOwnership?: ToolOwnershipRegistry;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
@@ -95,6 +117,7 @@ export class NestedSubagentRunner {
     this.#roleToolCache = deps.roleToolCache;
     this.#resolveRole = deps.resolveRole;
     this.#skillsService = deps.skillsService;
+    this.#toolOwnership = deps.toolOwnership ?? toolOwnershipRegistry;
   }
 
   clearCache(): void {
@@ -244,8 +267,9 @@ export class NestedSubagentRunner {
       },
       resumeState: { contextStrategy: 'merge' },
       customOutputExtractor: (completedResult: any) => {
+        const identifiedContext = getSubagentRunContext(completedResult?.state?._context);
         const runContext =
-          getSubagentRunContext(completedResult?.state?._context) ??
+          identifiedContext ??
           ({
             agentId: randomUUID(),
             role,
@@ -256,6 +280,19 @@ export class NestedSubagentRunner {
             turnCount: 0,
             maxTurns: definition.maxTurns,
           } satisfies SubagentRunContext);
+        // This run is the only place that knows both the pending approvals it
+        // raised and the identity that raised them. Claim them now so the
+        // parent's approval flow can attribute them without reconstructing
+        // ownership from the SDK's run state. Skipped when the run's identity
+        // could not be recovered — a synthesized agentId matches no subagent
+        // the UI has seen, so parent ownership is the safer default.
+        if (identifiedContext) {
+          this.#toolOwnership.claim(collectApprovalCallIds(completedResult?.interruptions), {
+            kind: 'subagent',
+            agentId: identifiedContext.agentId,
+            role,
+          });
+        }
         const result: SubagentResult & { interrupted?: boolean } = {
           agentId: runContext.agentId,
           role,

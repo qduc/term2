@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 import { ApprovalState } from './approval-state.js';
+import { ToolOwnershipRegistry } from './tool-ownership-registry.js';
+import { PARENT_TOOL_OWNER } from './tool-owner.js';
 import { LoggingService } from '../logging/logging-service.js';
 import {
   deniedReadStore,
@@ -631,7 +633,7 @@ it('prepareAbortResolution calls state.reject with the correct rejection message
 
 it('retargetPendingInterruption preserves batch context', () => {
   const approvalState = new ApprovalState();
-  const state = { _pendingAgentToolRuns: new Map() } as any;
+  const state = { id: 'state-1' } as any;
   approvalState.setPending({
     state,
     interruption: { name: 'shell', callId: 'call-1', arguments: { command: 'pwd' } },
@@ -647,6 +649,7 @@ it('retargetPendingInterruption preserves batch context', () => {
     sessionId: 's1',
     toolTracker: mockToolTracker,
     generationGuard: mockGenerationGuard,
+    toolOwnership: new ToolOwnershipRegistry(),
   });
   const nextInterruption = { name: 'shell', callId: 'call-2', arguments: { command: 'ls' } };
 
@@ -656,6 +659,76 @@ it('retargetPendingInterruption preserves batch context', () => {
   expect(pending?.state).toBe(state);
   expect(pending?.emittedCommandIds).toEqual(new Set(['message-1']));
   expect(pending?.toolCallArgumentsById).toEqual(new Map([['call-1', { command: 'pwd' }]]));
+});
+
+it('retargetPendingInterruption re-resolves the owner for the newly targeted call', () => {
+  // Within one approval batch a parent-owned call and a subagent-owned call can
+  // sit side by side; retargeting must move ownership with the interruption.
+  const approvalState = new ApprovalState();
+  const toolOwnership = new ToolOwnershipRegistry();
+  toolOwnership.claim(['call-2'], { kind: 'subagent', agentId: 'worker-1', role: 'worker' });
+  approvalState.setPending({
+    state: { id: 'state-1' } as any,
+    interruption: { name: 'shell', callId: 'call-1', arguments: { command: 'pwd' } },
+    emittedCommandIds: new Set<string>(),
+    toolCallArgumentsById: new Map(),
+  });
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+    toolOwnership,
+  });
+
+  expect(coord.getPending()?.owner).toEqual(PARENT_TOOL_OWNER);
+
+  const pending = coord.retargetPendingInterruption({
+    name: 'shell',
+    callId: 'call-2',
+    arguments: { command: 'ls' },
+  });
+
+  expect(pending?.owner).toEqual({ kind: 'subagent', agentId: 'worker-1', role: 'worker' });
+});
+
+it('resolveOwner attributes an unclaimed interruption to the parent', () => {
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState: new ApprovalState(),
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+    toolOwnership: new ToolOwnershipRegistry(),
+  });
+
+  expect(coord.resolveOwner({ name: 'shell', callId: 'unclaimed' })).toEqual(PARENT_TOOL_OWNER);
+});
+
+it('resolveOwner reads the call id out of a nested rawItem', () => {
+  const toolOwnership = new ToolOwnershipRegistry();
+  toolOwnership.claim(['nested-call'], { kind: 'subagent', agentId: 'explorer-1', role: 'explorer' });
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState: new ApprovalState(),
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+    toolOwnership,
+  });
+
+  expect(coord.resolveOwner({ name: 'shell', rawItem: { callId: 'nested-call' } })).toEqual({
+    kind: 'subagent',
+    agentId: 'explorer-1',
+    role: 'explorer',
+  });
 });
 
 // --- Denied-read approval decision tests ---

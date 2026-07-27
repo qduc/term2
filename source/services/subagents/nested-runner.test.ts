@@ -13,6 +13,8 @@ import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { SupportedSubagentRole } from './types.js';
 import type { ExecutionContext } from '../execution-context.js';
 import { registerProvider } from '../../providers/registry.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { PARENT_TOOL_OWNER } from '../approval/tool-owner.js';
 
 const createSessionContextService = () => ({
   runWithContext: <T>(_context: any, fn: () => T) => fn(),
@@ -49,6 +51,7 @@ function createRunner(options: {
   executionContext?: ExecutionContext;
   onEvent?: (event: ConversationEvent) => void;
   sandboxEnabled?: boolean;
+  toolOwnership?: ToolOwnershipRegistry;
 }): NestedSubagentRunner {
   const settings = createMockSettings({
     'agent.model': 'scripted-model',
@@ -90,6 +93,7 @@ function createRunner(options: {
     toolFactory,
     roleToolCache: new Map(),
     onEvent: options.onEvent,
+    ...(options.toolOwnership ? { toolOwnership: options.toolOwnership } : {}),
   });
 }
 
@@ -693,6 +697,64 @@ it.sequential('NestedSubagentRunner resumes a real Agent.asTool run after nested
     'parent-subagent-call',
   ]);
   expect(events.filter((event) => event.type === 'subagent_completed').length).toBe(1);
+});
+
+it.sequential('NestedSubagentRunner claims ownership of a nested run pending approval', async () => {
+  // The parent approval UI must attribute a nested tool call to the subagent
+  // that issued it. The nested run registers its own pending approvals, so the
+  // parent never has to introspect SDK-private run state to find the owner.
+  const providerId = `nested-ownership-${randomUUID()}`;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-nested-ownership-'));
+  const toolOwnership = new ToolOwnershipRegistry();
+
+  const model = scriptedApprovalModel();
+  const runner = createRunner({
+    providerId,
+    model,
+    sandboxEnabled: false,
+    executionContext: {
+      getCwd: () => tmpDir,
+      isRemote: () => false,
+      getSSHService: () => undefined,
+    } as unknown as ExecutionContext,
+    toolOwnership,
+  });
+  const { parentAgent, parentRunner } = createParentHarness(runner, model);
+
+  const interrupted = await parentRunner.run(parentAgent, 'delegate this task');
+
+  expect(interrupted.interruptions.length).toBe(1);
+  expect(toolOwnership.ownerOf('nested-shell-call')).toEqual({
+    kind: 'subagent',
+    agentId: 'parent-subagent-call',
+    role: 'worker',
+  });
+});
+
+it.sequential('NestedSubagentRunner leaves the parent tool call unclaimed', async () => {
+  // Only the nested call is the subagent's. The `run_subagent` call that
+  // spawned it is the parent's own tool call and must stay attributed to it.
+  const providerId = `nested-ownership-parent-${randomUUID()}`;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-nested-ownership-parent-'));
+  const toolOwnership = new ToolOwnershipRegistry();
+
+  const model = scriptedApprovalModel();
+  const runner = createRunner({
+    providerId,
+    model,
+    sandboxEnabled: false,
+    executionContext: {
+      getCwd: () => tmpDir,
+      isRemote: () => false,
+      getSSHService: () => undefined,
+    } as unknown as ExecutionContext,
+    toolOwnership,
+  });
+  const { parentAgent, parentRunner } = createParentHarness(runner, model);
+
+  await parentRunner.run(parentAgent, 'delegate this task');
+
+  expect(toolOwnership.ownerOf('parent-subagent-call')).toEqual(PARENT_TOOL_OWNER);
 });
 
 it.sequential('NestedSubagentRunner rejects malformed real Agent.asTool resume state', async () => {

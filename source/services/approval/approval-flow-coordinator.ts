@@ -8,7 +8,8 @@ import { createInvalidToolCallDiagnostic } from '../logging/logging-contract.js'
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { SessionToolTracker } from '../session/session-tool-tracker.js';
 import { GenerationGuard } from '../generation-guard.js';
-import { resolveToolOwner } from './tool-owner.js';
+import type { ToolOwner } from './tool-owner.js';
+import { ToolOwnershipRegistry, toolOwnershipRegistry } from './tool-ownership-registry.js';
 import {
   deniedReadStore,
   executionOverrideStore,
@@ -34,6 +35,8 @@ export interface ApprovalFlowCoordinatorDeps {
   sessionId: string;
   toolTracker: SessionToolTracker;
   generationGuard: GenerationGuard;
+  /** Defaults to the process-wide registry the subagent runner claims into. */
+  toolOwnership?: ToolOwnershipRegistry;
 }
 
 export interface AbortResolutionPlan {
@@ -53,7 +56,19 @@ export type ApprovalDecisionInput = {
 };
 
 export class ApprovalFlowCoordinator {
-  constructor(private readonly deps: ApprovalFlowCoordinatorDeps) {}
+  readonly #toolOwnership: ToolOwnershipRegistry;
+
+  constructor(private readonly deps: ApprovalFlowCoordinatorDeps) {
+    this.#toolOwnership = deps.toolOwnership ?? toolOwnershipRegistry;
+  }
+
+  /**
+   * Which agent issued this pending tool call. A subagent claims its own
+   * approvals when it raises them; anything unclaimed is the parent's.
+   */
+  resolveOwner(interruption: unknown): ToolOwner {
+    return this.#toolOwnership.ownerOf(getCallIdFromObject(interruption));
+  }
 
   buildApprovalDecision(answer: string, rejectionReason?: string): ApprovalDecisionInput {
     return {
@@ -321,7 +336,7 @@ export class ApprovalFlowCoordinator {
       ...pending,
       interruption,
       promptedCallId: getCallIdFromObject(interruption),
-      owner: resolveToolOwner(pending.state, interruption, this.deps.logger),
+      owner: this.resolveOwner(interruption),
     });
     return this.deps.approvalState.getPending();
   }

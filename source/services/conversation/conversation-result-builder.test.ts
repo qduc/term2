@@ -10,6 +10,7 @@ import { clearToolFormatters, registerToolFormatters } from '../../tools/command
 import { formatShellCommandMessage } from '../../tools/system/shell.js';
 import { clearApprovalRejectionMarkers } from '../../utils/streaming/extract-command-messages.js';
 import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import {
   deniedReadStore,
   executionOverrideStore,
@@ -39,7 +40,7 @@ const makeStream = (extras: any = {}): AgentStream =>
     ...extras,
   } as any);
 
-const makeDeps = (mode: 'off' | 'advisory' | 'auto' = 'off') => {
+const makeDeps = (mode: 'off' | 'advisory' | 'auto' = 'off', toolOwnership?: ToolOwnershipRegistry) => {
   const conversationStore = new ConversationStore();
   const agentClient: any = { chat: async () => '{"results":[]}' };
   const settingsService: any = {
@@ -63,6 +64,7 @@ const makeDeps = (mode: 'off' | 'advisory' | 'auto' = 'off') => {
     sessionId: 's1',
     toolTracker: { recordAbortedApproval: () => {}, export: () => [] } as any,
     generationGuard: { isCurrent: () => true } as any,
+    toolOwnership: toolOwnership ?? new ToolOwnershipRegistry(),
   });
   return { approvalFlow, shellAutoApproval, logger, sessionId: 's1' };
 };
@@ -269,8 +271,10 @@ it('denied-read approval metadata is staged so approval sets the retry override'
   expect(executionOverrideStore.consume(command)).toEqual({ extraAllowRead: [suggestedParent] });
 });
 
-it('approval_required records the matching nested subagent owner', async () => {
-  const deps = makeDeps('off');
+it('approval_required records the nested subagent that claimed the call', async () => {
+  const toolOwnership = new ToolOwnershipRegistry();
+  toolOwnership.claim(['nested-shell-call'], { kind: 'subagent', agentId: 'worker-1', role: 'worker' });
+  const deps = makeDeps('off', toolOwnership);
   const stream = makeStream({
     interruptions: [
       {
@@ -280,20 +284,7 @@ it('approval_required records the matching nested subagent owner', async () => {
         agent: { name: 'Worker' },
       },
     ],
-    state: {
-      _pendingAgentToolRuns: new Map([
-        [
-          'run_subagent:parent-call',
-          JSON.stringify({
-            context: { context: { agentId: 'worker-1', role: 'worker' } },
-            currentStep: {
-              type: 'next_step_interruption',
-              data: { interruptions: [{ callId: 'nested-shell-call' }] },
-            },
-          }),
-        ],
-      ]),
-    },
+    state: { id: 'state-nested' },
   });
 
   const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
@@ -307,15 +298,10 @@ it('approval_required records the matching nested subagent owner', async () => {
 });
 
 it('approval_required matches the correct owner when multiple subagents are pending', async () => {
-  const deps = makeDeps('off');
-  const nestedState = (agentId: string, role: string, callId: string) =>
-    JSON.stringify({
-      context: { context: { agentId, role } },
-      currentStep: {
-        type: 'next_step_interruption',
-        data: { interruptions: [{ callId }] },
-      },
-    });
+  const toolOwnership = new ToolOwnershipRegistry();
+  toolOwnership.claim(['other-call'], { kind: 'subagent', agentId: 'worker-1', role: 'worker' });
+  toolOwnership.claim(['target-call'], { kind: 'subagent', agentId: 'explorer-1', role: 'explorer' });
+  const deps = makeDeps('off', toolOwnership);
   const stream = makeStream({
     interruptions: [
       {
@@ -325,12 +311,7 @@ it('approval_required matches the correct owner when multiple subagents are pend
         agent: { name: 'Worker' },
       },
     ],
-    state: {
-      _pendingAgentToolRuns: new Map([
-        ['run_subagent:first', nestedState('worker-1', 'worker', 'other-call')],
-        ['run_subagent:second', nestedState('explorer-1', 'explorer', 'target-call')],
-      ]),
-    },
+    state: { id: 'state-multi' },
   });
 
   await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
@@ -342,8 +323,10 @@ it('approval_required matches the correct owner when multiple subagents are pend
   });
 });
 
-it('approval_required defaults to parent owner for malformed nested state', async () => {
-  const deps = makeDeps('off');
+it('approval_required defaults to parent owner for an unclaimed call', async () => {
+  const toolOwnership = new ToolOwnershipRegistry();
+  toolOwnership.claim(['some-other-call'], { kind: 'subagent', agentId: 'worker-1', role: 'worker' });
+  const deps = makeDeps('off', toolOwnership);
   const stream = makeStream({
     interruptions: [
       {
@@ -353,9 +336,7 @@ it('approval_required defaults to parent owner for malformed nested state', asyn
         agent: { name: 'CLI Agent' },
       },
     ],
-    state: {
-      _pendingAgentToolRuns: new Map([['run_subagent:broken', '{invalid-json']]),
-    },
+    state: { id: 'state-parent' },
   });
 
   await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);

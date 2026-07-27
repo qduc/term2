@@ -14,7 +14,7 @@ export function getAsyncSubagentDelegationAddendum({
 You have the following tools for running and controlling background subagents:
 
 - \`run_subagent_async\`: starts a subagent and returns a \`runId\` immediately — the call does NOT block.
-- \`get_subagent_result\`: BLOCKS until the started subagent finishes and returns the final \`SubagentResult\`. Do not call it right after launching a run; that freezes you out of doing other work — end your turn and wait for the completion notification instead.
+- \`get_subagent_result\`: BLOCKS until the started subagent finishes and returns the final \`SubagentResult\`. Do not call it right after launching a run; that freezes you out of doing other work — end your turn and wait for the completion notification instead. The notification already inlines the full result, so you normally will not need this tool at all; use it only to re-fetch a result you already saw.
 ${
   controlsEnabled
     ? `- \`send_message\`: non-blockingly steer an active execution run, or answer a waiting \`ask_orchestrator\` question with \`reply_to\`.
@@ -22,14 +22,14 @@ ${
     : ''
 }
 
-Use these when you want to start a background investigation, return control while it runs, and collect the result after the automatic completion notification.`;
+Use these when you want to start a background investigation, return control while it runs, and continue from the inlined result after the completion notification.`;
 
   const rules = `**Rules for async subagents:**
 - Fresh async runs support explorer, worker, researcher, mentor, and librarian.
 - Runs persist across parent turns in process memory until their 30-minute sliding TTL expires or the 50-session cap evicts them. Ordinary turn completion does not cancel them.
 - A returned handle with \`status: "running"\` means delegation succeeded.
 - Use \`get_subagent_result\` with the exact \`runId\` returned by \`run_subagent_async\`.
-- Do NOT call \`get_subagent_result\` immediately after \`run_subagent_async\` returns — it blocks until completion and freezes you out of doing other work or receiving the next user instruction. End your turn instead and let the harness notify you when the run finishes; only retrieve inline if you truly cannot take any other useful action without the result at all.
+- Do NOT call \`get_subagent_result\` immediately after \`run_subagent_async\` returns — it blocks until completion and freezes you out of doing other work or receiving the next user instruction. End your turn instead and let the harness notify you when the run finishes. The notification inlines the full result, so retrieval is unnecessary in normal use.
 - Mentor and librarian fresh calls reuse their default session. Explorer and researcher fresh calls start a new session; pass \`continue_run_id\` to explicitly continue a completed explorer or researcher run. Worker runs are always fresh and cannot be continued.
 - Only completed runs can be continued. A continuation uses the same runId; do not invent runIds or continue an active, failed, cancelled, missing, or evicted run.
 - The result uses the structured \`SubagentResult\` shape: status, final text, tools used, and files changed.`;
@@ -41,7 +41,7 @@ Use these when you want to start a background investigation, return control whil
 - A run accepts a maximum of three continuation segments. Mentor runs do not support steering; cancel them if needed.
 - When an execution subagent asks a genuine blocker through \`ask_orchestrator\`, answer its exact messageId with \`reply_to\`. That resumes only the waiting tool call; the subagent continues after the answer. Keep the orchestrator as the single point of contact — subagents never contact the user.
 - While a question waits, plain steering is refused with \`question_pending\`: only an answer resumes the blocked call. Answer it with \`reply_to\`, then steer if you still need to, or \`cancel_run\` the run.
-- Both controls return acknowledgements immediately. Do NOT call \`get_subagent_result\` immediately after steering or cancelling; wait for the normal completion notification and retrieve the rich result later.`
+- Both controls return acknowledgements immediately. Do NOT call \`get_subagent_result\` immediately after steering or cancelling; the completion notification inlines the full result.`
     : '';
 
   const triggers = `**When to use async subagents:**
@@ -51,7 +51,7 @@ Use these when you want to start a background investigation, return control whil
     orchestratorMode
       ? `
 
-In Orchestrator mode, use \`run_subagent_async\` for delegable work. A returned handle with \`status: "running"\` means delegation succeeded. Do not duplicate or independently perform the delegated unit. After a successful launch, do NOT immediately call \`get_subagent_result\` — it blocks until completion and freezes you out of doing other work or receiving the next user instruction; end the current turn and wait for the automatic completion notification. Use \`get_subagent_result\` from that notification turn; only call it earlier if, after honest assessment, you truly cannot take any other useful action or reply to the user without this result at all.`
+In Orchestrator mode, use \`run_subagent_async\` for delegable work. A returned handle with \`status: "running"\` means delegation succeeded. Do not duplicate or independently perform the delegated unit. After a successful launch, do NOT immediately call \`get_subagent_result\` — it blocks until completion and freezes you out of doing other work. End the current turn and wait for the completion notification, which inlines the full result so you can continue directly without a second tool call.`
       : ''
   }`;
 

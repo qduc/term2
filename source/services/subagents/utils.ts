@@ -1,5 +1,6 @@
 import { run } from '@openai/agents';
 import { getProvider } from '../../providers/index.js';
+import type { SubagentResult } from './types.js';
 
 export function isAbortLike(message: string | undefined, obj?: unknown): boolean {
   if (message?.includes('abort') || message?.includes('cancel')) return true;
@@ -165,6 +166,57 @@ export function truncatePreview(text: unknown): string {
   }
 
   return `${firstParagraph.slice(0, MAX_PREVIEW_LENGTH - 3)}...`;
+}
+
+/**
+ * Formats a SubagentResult into the model-facing report string: status,
+ * error, structured validation and diff evidence, then the full final
+ * text. Used both by the get_subagent_result tool and by the completion
+ * notification so the same evidence shape reaches the main agent either way.
+ */
+export function formatSubagentResult(result: SubagentResult): string {
+  const lines: string[] = [];
+  lines.push(`Status: ${result.status}`);
+
+  if (result.error) {
+    lines.push(`Error: ${result.error}`);
+  }
+
+  // Structured validation evidence (machine-checkable, before narrative).
+  if (result.validation) {
+    lines.push('');
+    const v = result.validation;
+    lines.push(`Validation: ${v.command} → exit ${v.exitStatus}`);
+    if (v.outputExcerpt) {
+      const excerpt = v.outputExcerpt.length > 500 ? v.outputExcerpt.slice(-500) + '...' : v.outputExcerpt;
+      lines.push(`Output excerpt: ${excerpt}`);
+    }
+  }
+
+  // Structured diff stat (machine-checkable, before narrative).
+  if (result.diffStat && result.diffStat.length > 0) {
+    lines.push('');
+    const stats = result.diffStat.map((d) => `  ${d.path} +${d.added}/-${d.deleted}`).join('\n');
+    lines.push(`Diff stat:`);
+    lines.push(stats);
+  }
+
+  if (result.finalText) {
+    lines.push('');
+    lines.push(result.finalText);
+  }
+
+  if (result.toolsUsed && result.toolsUsed.length > 0) {
+    lines.push('');
+    lines.push(`Tools used: ${result.toolsUsed.map((t) => `${t.toolName}(${t.count})`).join(', ')}`);
+  }
+
+  if (result.filesChanged && result.filesChanged.length > 0) {
+    lines.push('');
+    lines.push(`Files changed: ${result.filesChanged.join(', ')}`);
+  }
+
+  return lines.join('\n') || `Status: ${result.status}`;
 }
 
 export function createAbortError(message = 'The subagent run was aborted.'): Error {

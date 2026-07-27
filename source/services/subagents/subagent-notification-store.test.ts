@@ -93,6 +93,7 @@ it('records one notification carrying the run identity, status and preview', () 
       role: 'explorer',
       status: 'completed',
       preview: 'found the bug',
+      formattedResult: expect.stringMatching(/^Status: completed/),
       completedAt: 4_242,
     },
   ]);
@@ -299,6 +300,7 @@ it('carries the failure status and error text of a failed run', () => {
       role: 'explorer',
       status: 'failed',
       preview: 'model exploded',
+      formattedResult: expect.stringMatching(/^Status: failed/),
       error: 'model exploded',
       completedAt: 1_000,
     },
@@ -319,6 +321,7 @@ it('carries the cancellation status and error text of a cancelled run', () => {
       role: 'explorer',
       status: 'cancelled',
       preview: 'The subagent run was aborted.',
+      formattedResult: expect.stringMatching(/^Status: cancelled/),
       error: 'The subagent run was aborted.',
       completedAt: 1_000,
     },
@@ -401,6 +404,7 @@ it('records a notification for a real async registry run and nothing for its sta
       role: 'explorer',
       status: 'completed',
       preview: 'registry output',
+      formattedResult: expect.stringMatching(/^Status: completed/),
       completedAt: 1_000,
     },
   ]);

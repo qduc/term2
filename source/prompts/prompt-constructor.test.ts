@@ -159,8 +159,8 @@ it('buildPromptSpec tells orchestrators to trust successful delegation and wait 
   expect(guidance).toContain('use `run_subagent_async` for delegable work');
   expect(guidance).toContain('A returned handle with `status: "running"` means delegation succeeded');
   expect(guidance).toContain('Do not duplicate or independently perform the delegated unit');
-  expect(guidance).toContain('end the current turn and wait for the automatic completion notification');
-  expect(guidance).toContain('Use `get_subagent_result` from that notification turn');
+  expect(guidance.toLowerCase()).toContain('end the current turn and wait for the completion notification');
+  expect(guidance).toContain('inlines the full result so you can continue directly');
   expect(guidance).toContain('do NOT immediately call');
   expect(guidance).toContain('blocks until completion');
   expect(guidance).not.toContain('Use `run_subagent` only');

@@ -5,7 +5,7 @@ import type {
 } from '../conversation/conversation-events.js';
 import type { SubagentResult } from './types.js';
 import { formatToolCommand, parseToolArguments } from '../../utils/conversation/conversation-utils.js';
-import { truncatePreview } from './utils.js';
+import { formatSubagentResult, truncatePreview } from './utils.js';
 
 /** A completed background run that still owes the main agent a notification. */
 export interface BackgroundSubagentCompletionNotification {
@@ -15,7 +15,10 @@ export interface BackgroundSubagentCompletionNotification {
   runId: string;
   role: string;
   status: 'completed' | 'failed' | 'cancelled';
+  /** Compact one-line preview for the user-facing display. */
   preview: string;
+  /** Full model-facing report, inlined so the main agent need not call get_subagent_result. */
+  formattedResult: string;
   error?: string;
   completedAt: number;
 }
@@ -278,6 +281,7 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
         role: result.role,
         status: result.status,
         preview: truncatePreview(result.finalText || result.error),
+        formattedResult: formatSubagentResult(result),
         ...(result.error ? { error: result.error } : {}),
         completedAt: this.#now(),
       };

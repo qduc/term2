@@ -52,7 +52,11 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
       const lines = [
         `- runId: ${notification.runId} | role: ${notification.role} | status: ${notification.status}`,
         ...(notification.error ? [`  error: ${notification.error}`] : []),
-        ...(notification.preview ? [`  preview: ${notification.preview}`] : []),
+        '  result:',
+        notification.formattedResult
+          .split('\n')
+          .map((line) => `    ${line}`)
+          .join('\n'),
       ];
       return lines.join('\n');
     });
@@ -62,7 +66,7 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
         '',
         ...entries,
         '',
-        'Call get_subagent_result(runId) for the full report. Assess it against the task before you accept it, then continue through the next necessary steps yourself rather than stopping at the fact that a run finished. Tell the user concisely, in your own words, what you concluded — the report is input to your judgement, not a message to relay.',
+        'The full result is inlined above; you do not need to call get_subagent_result. Assess it against the task before you accept it, then continue through the next necessary steps yourself rather than stopping at the fact that a run finished. Tell the user concisely, in your own words, what you concluded — the report is input to your judgement, not a message to relay.',
       ].join('\n'),
     );
   }

@@ -57,7 +57,7 @@ it('run_subagent_async tool guidance treats a running handle as successful non-d
 
   expect(tool.description).toContain('status: "running"');
   expect(tool.description).toContain('do not duplicate the delegated task');
-  expect(tool.description).toContain('automatic completion notification');
+  expect(tool.description).toContain('completion notification');
   expect(tool.description).toContain('do NOT immediately call get_subagent_result');
 });
 
@@ -237,12 +237,12 @@ describe('get_subagent_status tool', () => {
     expect(tool.parameters.safeParse({}).success).toBe(true);
   });
 
-  it('formats a single running run and points to get_subagent_result for completion', () => {
+  it('formats a single running run and references the completion notification', () => {
     const tool = createGetSubagentStatusToolDefinition(() => makeStatus());
     const raw = tool.execute({ runId: 'run-123' });
     expect(raw).toContain('running');
     expect(raw).toContain('grep');
-    expect(raw).toContain('get_subagent_result');
+    expect(raw).toContain('completion notification');
     // Peek must not leak completion detail.
     expect(raw).not.toContain('final');
     expect(raw.startsWith('{')).toBe(false);

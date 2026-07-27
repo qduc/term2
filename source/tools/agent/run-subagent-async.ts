@@ -9,7 +9,7 @@ import {
 } from '../format-helpers.js';
 import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from '../../services/subagents/types.js';
 import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../../services/subagents/subagent-async-registry.js';
-import { isAbortLike, truncatePreview } from '../../services/subagents/utils.js';
+import { isAbortLike, truncatePreview, formatSubagentResult } from '../../services/subagents/utils.js';
 
 const ASYNC_ROLES = ['explorer', 'worker', 'researcher', 'mentor', 'librarian'] as const;
 
@@ -72,51 +72,6 @@ export type SendMessageAcknowledgement =
 export type CancelRunAcknowledgement =
   | { ok: true; runId: string; status: 'cancelling' }
   | { ok: false; code: 'not_active'; target: string };
-
-function formatSubagentResult(result: SubagentResult): string {
-  const lines: string[] = [];
-  lines.push(`Status: ${result.status}`);
-
-  if (result.error) {
-    lines.push(`Error: ${result.error}`);
-  }
-
-  // Structured validation evidence (machine-checkable, before narrative).
-  if (result.validation) {
-    lines.push('');
-    const v = result.validation;
-    lines.push(`Validation: ${v.command} → exit ${v.exitStatus}`);
-    if (v.outputExcerpt) {
-      const excerpt = v.outputExcerpt.length > 500 ? v.outputExcerpt.slice(-500) + '...' : v.outputExcerpt;
-      lines.push(`Output excerpt: ${excerpt}`);
-    }
-  }
-
-  // Structured diff stat (machine-checkable, before narrative).
-  if (result.diffStat && result.diffStat.length > 0) {
-    lines.push('');
-    const stats = result.diffStat.map((d) => `  ${d.path} +${d.added}/-${d.deleted}`).join('\n');
-    lines.push(`Diff stat:`);
-    lines.push(stats);
-  }
-
-  if (result.finalText) {
-    lines.push('');
-    lines.push(result.finalText);
-  }
-
-  if (result.toolsUsed && result.toolsUsed.length > 0) {
-    lines.push('');
-    lines.push(`Tools used: ${result.toolsUsed.map((t) => `${t.toolName}(${t.count})`).join(', ')}`);
-  }
-
-  if (result.filesChanged && result.filesChanged.length > 0) {
-    lines.push('');
-    lines.push(`Files changed: ${result.filesChanged.join(', ')}`);
-  }
-
-  return lines.join('\n') || `Status: ${result.status}`;
-}
 
 export const formatRunSubagentAsyncCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
@@ -211,7 +166,7 @@ export function createRunSubagentAsyncToolDefinition(
     description:
       'Start a subagent that runs asynchronously in the background and returns a runId immediately — the call does NOT block. ' +
       'After a successful launch, do NOT immediately call get_subagent_result; that call blocks until completion and freezes you out of doing other work or receiving the next user instruction. ' +
-      'Instead, end your turn and wait for the harness automatic completion notification, then collect the result with get_subagent_result from a later turn. ' +
+      'Instead, end your turn and wait for the harness completion notification, which inlines the full result so you can continue without a second tool call. ' +
       'A returned handle with status: "running" means the launch succeeded; do not duplicate the delegated task. ' +
       'Only call get_subagent_result inline if, after honest assessment, you truly cannot take any other useful action or reply to the user without the result at all. ' +
       'Fresh runs support explorer, worker, researcher, mentor, and librarian. ' +
@@ -225,7 +180,7 @@ export function createRunSubagentAsyncToolDefinition(
         if (handle.name) handleOutput.name = handle.name;
         if (handle.status === 'running') {
           handleOutput.hint =
-            'Background run launched — do NOT call get_subagent_result now. End your turn and wait for the completion notification, then collect the result from a later turn.';
+            'Background run launched — do NOT call get_subagent_result now. End your turn; the completion notification will inline the full result.';
         }
         return JSON.stringify(handleOutput);
       } catch (error: any) {
@@ -254,7 +209,7 @@ export function createGetSubagentResultToolDefinition(
       'Retrieve the final result of an asynchronous subagent run started with run_subagent_async. ' +
       'Provide the runId returned by run_subagent_async. This call BLOCKS until the run completes. ' +
       'Do not call it immediately after launching a subagent — that defeats async and freezes you out of doing other work. ' +
-      'Prefer waiting for the harness automatic completion notification and call this from a later turn; only call it inline if you genuinely cannot proceed without the result now.',
+      'The completion notification already inlines the full result, so you normally will not need this tool at all; use it only if you need to re-fetch a result you already saw.',
     parameters: getSubagentResultSchema,
     needsApproval: () => false,
     execute: async (params, context, details) => {
@@ -324,9 +279,11 @@ function formatSubagentStatus(status: SubagentRunStatus | SubagentRunStatus[]): 
   if (status.status === 'running' || status.status === 'waiting_for_answer' || status.status === 'cancelling') {
     return `${formatOne(
       status,
-    )}\n\nThis run is still in progress. Call get_subagent_result for the full report once it completes.`;
+    )}\n\nThis run is still in progress. The completion notification will inline the full result once it settles.`;
   }
-  return `${formatOne(status)}\n\nThis run has finished. Call get_subagent_result for the full report.`;
+  return `${formatOne(
+    status,
+  )}\n\nThis run has finished. The completion notification inlined its full result; call get_subagent_result only to re-fetch it.`;
 }
 
 export const formatGetSubagentStatusCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
@@ -365,7 +322,7 @@ export function createGetSubagentStatusToolDefinition(
       'Non-blocking status of one async subagent run (runId provided) or all runs (runId omitted). ' +
       'Use this to answer a mid-run "what is it doing" question without blocking your turn. ' +
       'Returns status, elapsed, last tool, and tool counts only — never the final report or diff evidence. ' +
-      'For a finished or settled run, call get_subagent_result to retrieve the full report. ' +
+      'For a finished or settled run, the completion notification inlines the full result; use get_subagent_result only to re-fetch one you already saw. ' +
       'This call never blocks and never awaits a run.',
     parameters: getSubagentStatusSchema,
     needsApproval: () => false,
@@ -449,7 +406,7 @@ export function createSendMessageToolDefinition(
     description:
       'Queue non-blocking steering for an active async execution run addressed by its active name or canonical runId; this does NOT wait for a result. ' +
       'Steering is delivered by safely ending the current model stream (never an active tool) and starting a bounded fresh session turn; it is not live SDK input injection. ' +
-      'A logical run permits at most three steering continuation segments. Do not immediately call get_subagent_result after this acknowledgement; wait for normal completion notification. ' +
+      'A logical run permits at most three steering continuation segments. Do not immediately call get_subagent_result after this acknowledgement; the completion notification inlines the full result. ' +
       'To answer a waiting ask_orchestrator question, provide its messageId as reply_to; the message then answers that exact question and its tool call continues. ' +
       'While a question is waiting, steering without reply_to is refused with question_pending, because only an answer can resume the blocked tool call: answer it or cancel_run. ' +
       'The mentor role does not support steering. Use cancel_run to stop a run instead of sending a correction that must not continue.',
@@ -469,7 +426,7 @@ export function createCancelRunToolDefinition(
     description:
       'Request non-blocking two-phase cancellation of an active async run by active name or canonical runId. This does NOT wait for the result. ' +
       'It returns cancelling immediately; the runner later settles through the normal completion path with truthful partial work, tool, diff, and validation evidence. ' +
-      'Do not immediately call get_subagent_result after this acknowledgement; wait for normal completion notification. ' +
+      'Do not immediately call get_subagent_result after this acknowledgement; the completion notification inlines the full result. ' +
       'Use send_message to steer productive execution; use cancel_run when the run should stop.',
     parameters: cancelRunSchema,
     needsApproval: () => false,

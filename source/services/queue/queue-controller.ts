@@ -552,6 +552,12 @@ export class QueueController<Snapshot, Terminal = unknown> {
       return { kind: 'no_op' };
     }
     const active = this.#active;
+    // Capture how much work was already queued when the user stopped. A manual
+    // pause exists only to retain that pre-existing work; items submitted
+    // after the stop (including ones raced in while cancel cleanup awaits the
+    // active turn) reflect fresh intent and must run, not stick behind an
+    // empty pause with nothing to resume.
+    const retainedQueueLength = this.#queue.length;
     this.#phase = 'cancelling';
     this.#pendingAction = undefined;
     await this.#persist();
@@ -560,9 +566,22 @@ export class QueueController<Snapshot, Terminal = unknown> {
     } finally {
       if (this.#active?.executionId === active.executionId) {
         this.#active = undefined;
-        this.#phase = 'paused';
-        this.#pauseReason = 'manual';
+        // Invariant: a paused queue must contain retained work. When nothing
+        // was queued at stop time, return to idle so the next submission
+        // starts immediately instead of being queued behind a manual pause
+        // with nothing to resume. A submission raced in during cleanup is
+        // dispatched below.
+        if (retainedQueueLength === 0) {
+          this.#phase = 'idle';
+          this.#pauseReason = undefined;
+        } else {
+          this.#phase = 'paused';
+          this.#pauseReason = 'manual';
+        }
         await this.#persist();
+        if (retainedQueueLength === 0) {
+          await this.#dispatch();
+        }
       }
     }
     return { kind: 'accepted' };

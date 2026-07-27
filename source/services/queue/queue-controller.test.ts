@@ -130,6 +130,93 @@ it('awaits cancellation cleanup, ignores late terminal events, and retains queue
   expect(controller.state()).toMatchObject({ kind: 'paused', reason: 'manual', queue: [{ text: 'queued' }] });
 });
 
+it('manual cancel with no retained queue returns to idle so the next submission runs immediately', async () => {
+  const starts: string[] = [];
+  let releaseCleanup!: () => void;
+  const cleanup = new Promise<void>((resolve) => {
+    releaseCleanup = resolve;
+  });
+  const controller = new QueueController({
+    driver: {
+      start: ({ executionId }) => {
+        starts.push(String(executionId));
+      },
+      cancel: () => cleanup,
+    },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let number = 0;
+        return () => `item-${++number}`;
+      })(),
+      execution: (() => {
+        let number = 0;
+        return () => `execution-${++number}`;
+      })(),
+    },
+  });
+
+  await controller.command({ kind: 'submit', text: 'active' });
+  // No queued items: stopping the active turn must not park the queue behind
+  // a manual pause with nothing to resume. Otherwise a follow-up submission
+  // gets registered as queued and never runs.
+  const cancelling = controller.command({ kind: 'cancel' });
+  expect(controller.state()).toMatchObject({ kind: 'cancelling', queue: [] });
+  releaseCleanup();
+  await cancelling;
+
+  expect(controller.state()).toMatchObject({ kind: 'idle', queue: [] });
+
+  // A subsequent submission starts right away, not queued behind a pause.
+  await controller.command({ kind: 'submit', text: 'follow-up' });
+  expect(starts).toEqual(['execution-1', 'execution-2']);
+  expect(controller.state()).toMatchObject({ kind: 'running' });
+});
+
+it('submit raced in while a manual cancel is cleaning up runs once cancel completes', async () => {
+  const starts: string[] = [];
+  let releaseCleanup!: () => void;
+  const cleanup = new Promise<void>((resolve) => {
+    releaseCleanup = resolve;
+  });
+  const controller = new QueueController({
+    driver: {
+      start: ({ executionId }) => {
+        starts.push(String(executionId));
+      },
+      cancel: () => cleanup,
+    },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let number = 0;
+        return () => `item-${++number}`;
+      })(),
+      execution: (() => {
+        let number = 0;
+        return () => `execution-${++number}`;
+      })(),
+    },
+  });
+
+  await controller.command({ kind: 'submit', text: 'active' });
+  const cancelling = controller.command({ kind: 'cancel' });
+  // During the cancel cleanup window (state is 'cancelling'), the user sends a
+  // fresh message. It is accepted but must not auto-start while the active turn
+  // is still tearing down.
+  await controller.command({ kind: 'submit', text: 'raced-in' });
+  expect(controller.state()).toMatchObject({ kind: 'cancelling', queue: [{ text: 'raced-in' }] });
+  expect(starts).toEqual(['execution-1']);
+
+  releaseCleanup();
+  await cancelling;
+
+  // Once cleanup finishes, the fresh submission runs; it must not be retained
+  // behind a manual pause.
+  expect(starts).toEqual(['execution-1', 'execution-2']);
+  expect(controller.state()).toMatchObject({ kind: 'running', active: { item: { text: 'raced-in' } } });
+});
+
 it('pauses on matching failure, suppresses stale events, and resumes queued work FIFO', async () => {
   const starts: string[] = [];
   const controller = new QueueController({
@@ -832,7 +919,7 @@ it('cancels from awaiting_preflight and pauses', async () => {
   expect(controller.state()).toMatchObject({ kind: 'paused', reason: 'manual', queue: [{ text: 'large' }] });
 });
 
-it('cancels from awaiting_active_action and pauses', async () => {
+it('cancels from awaiting_active_action and returns to idle when no work is retained', async () => {
   let cancelled = false;
   const controller = new QueueController({
     driver: {
@@ -860,7 +947,10 @@ it('cancels from awaiting_active_action and pauses', async () => {
   });
 
   expect(await controller.command({ kind: 'cancel' })).toEqual({ kind: 'accepted' });
-  expect(controller.state()).toMatchObject({ kind: 'paused', reason: 'manual' });
+  // The active turn was waiting on an approval, so there is no retained queued
+  // work. A manual stop must return to idle (a paused queue must contain
+  // retained work) so a follow-up submission sends right away.
+  expect(controller.state()).toMatchObject({ kind: 'idle', queue: [] });
   expect(cancelled).toBe(true);
 });
 

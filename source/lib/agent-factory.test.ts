@@ -1,10 +1,14 @@
+import { Agent, Runner } from '@openai/agents';
+import type { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents-core';
 import { it, expect } from 'vitest';
-import { buildAgent } from './agent-factory.js';
+import { z } from 'zod';
+import { buildAgent, buildAgentTools } from './agent-factory.js';
 import { clearModelCache, fetchModels } from '../services/model-service.js';
 import { registerProvider, type ProviderDefinition } from '../providers/registry.js';
 import type { AgentFactoryDeps } from './agent-factory.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { createEditorImpl } from './editor-impl.js';
+import type { ToolDefinition } from '../tools/types.js';
 
 type MockLogger = ILoggingService & { debugCalls: any[][] };
 
@@ -79,6 +83,184 @@ const createDeps = (
     },
   };
 };
+
+const createToolDefinition = (
+  overrides: Partial<ToolDefinition<{ value: string }>> = {},
+): ToolDefinition<{ value: string }> => ({
+  name: 'post_execute_test',
+  description: 'Exercises the application-owned post-execute seam.',
+  parameters: z.object({ value: z.string() }),
+  needsApproval: () => false,
+  execute: async ({ value }) => `original:${value}`,
+  formatCommandMessage: () => [],
+  ...overrides,
+});
+
+const buildTestTool = (definition: ToolDefinition<{ value: string }>, deps: AgentFactoryDeps) =>
+  buildAgentTools({
+    toolDefinitions: [definition],
+    resolvedModel: 'gpt-4o',
+    shouldUseNativePatchTool: false,
+    deps,
+  })[0] as any;
+
+it.sequential('post-execute policy can reject by returning the original result', async () => {
+  const executions: string[] = [];
+  let policyInput: unknown;
+  const definition = createToolDefinition({
+    execute: async ({ value }) => {
+      executions.push(value);
+      return `denied:${value}`;
+    },
+    postExecute: async ({ params, result, details }) => {
+      policyInput = { params, result, callId: (details as any)?.toolCall?.callId };
+      return result;
+    },
+  });
+  const { deps } = createDeps();
+  const tool = buildTestTool(definition, deps);
+
+  const result = await tool.invoke({}, JSON.stringify({ value: 'no' }), { toolCall: { callId: 'call-reject' } });
+
+  expect(result).toBe('denied:no');
+  expect(executions).toEqual(['no']);
+  expect(policyInput).toEqual({
+    params: { value: 'no' },
+    result: 'denied:no',
+    callId: 'call-reject',
+  });
+});
+
+it.sequential('post-execute policy re-executes without recursively invoking itself', async () => {
+  const executions: string[] = [];
+  let policyCalls = 0;
+  const definition = createToolDefinition({
+    execute: async ({ value }) => {
+      executions.push(value);
+      return `result-${executions.length}`;
+    },
+    postExecute: async ({ executeAgain }) => {
+      policyCalls++;
+      return executeAgain();
+    },
+  });
+  const { deps } = createDeps();
+  const tool = buildTestTool(definition, deps);
+
+  const result = await tool.invoke({}, JSON.stringify({ value: 'again' }), { toolCall: { callId: 'call-again' } });
+
+  expect(result).toBe('result-2');
+  expect(executions).toEqual(['again', 'again']);
+  expect(policyCalls).toBe(1);
+});
+
+it.sequential('tools without a post-execute policy return their ordinary result', async () => {
+  const { deps } = createDeps();
+  const tool = buildTestTool(createToolDefinition(), deps);
+
+  const result = await tool.invoke({}, JSON.stringify({ value: 'unchanged' }), { toolCall: { callId: 'call-plain' } });
+
+  expect(result).toBe('original:unchanged');
+});
+
+it.sequential('streaming Runner waits for post-execute approval before the next model request', async () => {
+  const callId = 'call-post-execute-pause';
+  let requestCount = 0;
+  let firstExecutionComplete!: () => void;
+  const firstExecution = new Promise<void>((resolve) => {
+    firstExecutionComplete = resolve;
+  });
+  let approve!: () => void;
+  const approval = new Promise<void>((resolve) => {
+    approve = resolve;
+  });
+  const executionCallIds: Array<string | undefined> = [];
+  const reexecutionCallIds: Array<string | undefined> = [];
+  const nextRequestResults: unknown[][] = [];
+  const definition = createToolDefinition({
+    execute: async (_params, _context, details) => {
+      executionCallIds.push((details as any)?.toolCall?.callId);
+      if (executionCallIds.length === 1) firstExecutionComplete();
+      return executionCallIds.length === 1 ? 'denied result' : 'approved result';
+    },
+    postExecute: async ({ details, executeAgain }) => {
+      await approval;
+      reexecutionCallIds.push((details as any)?.toolCall?.callId);
+      return executeAgain();
+    },
+  });
+  const { deps } = createDeps();
+  const appOwnedTool = buildTestTool(definition, deps);
+  // Production routes approval through the application coordinator. This test
+  // isolates the post-execute seam after that gate has allowed the tool call.
+  appOwnedTool.needsApproval = async () => false;
+  const model: Model = {
+    async getResponse(): Promise<ModelResponse> {
+      throw new Error('This regression must use the streaming model path.');
+    },
+    async *getStreamedResponse(request: ModelRequest): AsyncIterable<StreamEvent> {
+      requestCount++;
+      if (requestCount === 2) {
+        nextRequestResults.push(
+          (request.input as any[]).filter(
+            (item) => item.type === 'function_call_result' || item.type === 'function_call_output',
+          ),
+        );
+      }
+      yield {
+        type: 'response_done',
+        response: {
+          id: `response-${requestCount}`,
+          usage: { requests: 1, inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          output:
+            requestCount === 1
+              ? [
+                  {
+                    type: 'function_call',
+                    callId,
+                    name: definition.name,
+                    arguments: JSON.stringify({ value: 'approved' }),
+                  },
+                ]
+              : [
+                  {
+                    type: 'message',
+                    role: 'assistant',
+                    status: 'completed',
+                    content: [{ type: 'output_text', text: 'done' }],
+                  },
+                ],
+        },
+      } as StreamEvent;
+    },
+  };
+  const agent = new Agent({
+    name: 'post-execute-pause-test',
+    instructions: 'Use the tool.',
+    model: 'scripted-model',
+    tools: [appOwnedTool],
+  });
+  const runner = new Runner({ modelProvider: { getModel: () => model } });
+  const stream = await runner.run(agent, 'run the tool', { stream: true });
+  const iteration = (async () => {
+    for await (const _event of stream) {
+      // Consume the SDK stream so the Runner reaches the tool execution.
+    }
+  })();
+
+  await firstExecution;
+  expect(requestCount).toBe(1);
+
+  approve();
+  await iteration;
+  await stream.completed;
+
+  expect(executionCallIds).toEqual([callId, callId]);
+  expect(reexecutionCallIds).toEqual([callId]);
+  expect(nextRequestResults).toHaveLength(1);
+  expect(nextRequestResults[0]).toHaveLength(1);
+  expect((nextRequestResults[0][0] as any).output.text).toBe('approved result');
+});
 
 it.sequential('buildAgent creates Agent with correct model name', () => {
   const { deps } = createDeps({ settingsValues: { 'agent.model': 'gpt-4o-mini' } });

@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through A4 tool ownership, the first bounded Step B representation slice is landed, and Step C has retired every production `_generatedItems` read. A post-execute pause assessment stopped without code: the safe pending-tool design requires a coherent session/UI/TurnWorkflow handoff beyond this bounded slice. CallId-only migration of denied-read metadata/overrides remains blocked under the stock SDK.
+**Status:** Step A is complete through A4 tool ownership, the first bounded Step B representation slice is landed, and Step C has retired every production `_generatedItems` read. The application-owned post-execute tool seam is landed: a policy can hold a tool promise, then re-execute under the same call ID before returning one final result. Session/UI/TurnWorkflow handoff and denied-read metadata/override migration remain explicit follow-ups.
 **Last updated:** 2026-07-27
 
 ---
@@ -33,23 +33,21 @@ Each landed as a `--no-ff` merge from its own worktree branch; branch history is
 
 ### In flight
 
-The remaining Step C work is the separate post-execute pause/resume seam. Do not migrate
-denied-read metadata or execution overrides yet: the stock SDK can retry a completed denied read
-as a new call id, so CallId-only storage cannot safely bridge that boundary.
+The post-execute seam is now deliberately limited to tool construction. `ToolDefinition.postExecute`
+runs after its original `execute` resolves and before the SDK receives a result. It receives
+normalized parameters, the original result, SDK details (including the call ID), and a non-recursive
+`executeAgain()` that retains those details. A policy may wait for an external decision; the SDK
+then cannot issue request B until it returns exactly one final result.
 
-**2026-07-27 pause assessment — stopped boundary.** The safe design can suspend the SDK tool
-promise in an application-owned registry, but the current session contract has no out-of-band
-approval channel. `TurnWorkflow` only learns of approvals after `SessionStreamProcessor` consumes
-the stream; while the tool promise is pending, that stream cannot complete or expose a terminal
-approval. Returning the existing approval terminal would abandon the live stream, while resolving
-the promise without a stored/resumable stream consumer would let the SDK issue request B before
-the UI is able to continue the turn. A correct next slice therefore needs one coherent boundary:
-a session/turn-owned post-execute batch channel, a `TurnWorkflow` suspended-stream handoff that
-returns an approval terminal without disposing the stream, and a continuation path that settles
-the selected entries and resumes consuming that same stream. It must also settle all entries
-fail-closed on abort, reset, and disposal. Do not substitute a `callModelInputFilter` sentinel:
-that would require SDK-specific black-box guarantees and does not solve the current UI/channel
-ownership gap.
+The session/UI/TurnWorkflow handoff remains unimplemented. It needs a session/turn-owned
+post-execute batch channel, a suspended-stream handoff that does not dispose the stream, and a
+continuation path that settles selected entries and resumes that same stream. It must settle all
+entries fail-closed on abort, reset, and disposal. Do not substitute a `callModelInputFilter`
+sentinel: that would require SDK-specific black-box guarantees and does not solve the current
+UI/channel ownership gap.
+
+Do not migrate denied-read metadata or execution overrides yet: the stock SDK can retry a
+completed denied read as a new call ID, so CallId-only storage cannot safely bridge that boundary.
 
 ### A4 tool-ownership lifecycle
 
@@ -66,16 +64,18 @@ Test fixtures now explicitly create fresh registries, sharing one only when a fi
 the parent/nested ownership relationship. This keeps test identity/lifecycle aligned with the
 production session contract.
 
-### Validation at pause
+### Validation at post-execute seam
 
 - Step B's focused normalizer, turn-item compatibility, turn accumulator, stream, replay,
   state projector, tool-ledger, and chained-filter set passes: 6 files / 108 tests.
 - `source/lib/sdk-approval-resume.test.ts` passes its real-Runner approval-resume and
   denied-read model-retry regressions. The latter observes call A at execute, then a distinct
   call B at `needsApproval`, where B interrupts before execute.
-- Pause assessment baseline: `pnpm test source/lib/sdk-approval-resume.test.ts` passes (3 tests).
-  No seam tests were added because no production seam was landed; the required regression set
-  belongs with the coherent suspended-stream/channel boundary above.
+- The post-execute seam has focused unit coverage for rejection and non-recursive reexecution,
+  plus a real streaming SDK `Runner` regression through `buildAgentTools`. It proves the original
+  execution completes, the policy holds request B pending, approval re-executes with the same call
+  ID, and exactly one final result reaches request B. Ordinary factory-built tools remain without
+  a policy and retain their existing behavior.
 - The scoped plan format check passes: `pnpm exec prettier --check
   docs/plans/decouple-from-openai-agents-sdk.md`. Worktree-local `pnpm` validation could not run:
   its automatic install fails with sandbox `EPERM` while reflinking the package store. Root-level

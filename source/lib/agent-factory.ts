@@ -4,7 +4,13 @@ import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import { getAgentDefinition } from '../agent.js';
 import { getProvider } from '../providers/index.js';
 import { createEditorImpl } from './editor-impl.js';
-import { normalizeToolInput, toolErrorFunction, wrapNeedsApproval, wrapToolInvoke } from './tool-invoke.js';
+import {
+  normalizeObjectParams,
+  normalizeToolInput,
+  toolErrorFunction,
+  wrapNeedsApproval,
+  wrapToolInvoke,
+} from './tool-invoke.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { trimToolOutput } from '../utils/output/trim-tool-output.js';
@@ -18,6 +24,7 @@ import {
 import { getModelDefaultReasoningLevel } from '../services/model-service.js';
 import { toolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
+import type { ToolDefinition } from '../tools/types.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
@@ -64,13 +71,13 @@ function getProviderCapabilities(providerId: string): ProviderCapabilities {
   };
 }
 
-function buildAgentTools({
+export function buildAgentTools({
   toolDefinitions,
   resolvedModel,
   shouldUseNativePatchTool,
   deps,
 }: {
-  toolDefinitions: any[];
+  toolDefinitions: ToolDefinition[];
   resolvedModel: string;
   shouldUseNativePatchTool: boolean;
   deps: AgentFactoryDeps;
@@ -125,8 +132,17 @@ function buildAgentTools({
               return trimToolOutput(rejected, undefined, maxOutputLengthValue ?? undefined);
             }
 
-            const result = await definition.execute(params, _context, details);
-            const trimmedResult = trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
+            const executeOriginal = () => Promise.resolve(definition.execute(params, _context, details));
+            const result = await executeOriginal();
+            const finalResult = definition.postExecute
+              ? await definition.postExecute({
+                  params: normalizeObjectParams(params, definition.parameters) as typeof params,
+                  result,
+                  details,
+                  executeAgain: executeOriginal,
+                })
+              : result;
+            const trimmedResult = trimToolOutput(finalResult, undefined, maxOutputLengthValue ?? undefined);
             return injectTurnLimitWarning(trimmedResult, _context?.context);
           },
         }),

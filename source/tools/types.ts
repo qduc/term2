@@ -22,6 +22,22 @@ export type FormatCommandMessage = (
   toolCallArgumentsById: Map<string, unknown>,
 ) => CommandMessage[];
 
+/** Application-owned policy invoked before a tool result returns to the SDK. */
+export interface PostExecutePolicyContext<Params = unknown> {
+  /** Parameters normalized against this tool's schema. */
+  params: Params;
+  /** The result returned by the original tool execution. */
+  result: unknown;
+  /** SDK execution details, including `toolCall.callId` when the runner supplies it. */
+  details: unknown;
+  /** Re-runs the original execution with the same params, context, and SDK details. */
+  executeAgain: () => Promise<unknown>;
+}
+
+export type PostExecutePolicy<Params = unknown> = (
+  context: PostExecutePolicyContext<Params>,
+) => Promise<unknown> | unknown;
+
 export interface ToolDefinition<Params = any> {
   name: string;
   description: string;
@@ -30,6 +46,7 @@ export interface ToolDefinition<Params = any> {
   approvalPresentation?: ApprovalPresentationCapability;
   needsApproval: (params: Params, context?: unknown) => Promise<boolean> | boolean;
   execute: (params: Params, context?: unknown, details?: unknown) => Promise<any> | any;
+  postExecute?: PostExecutePolicy<Params>;
   /**
    * Formats tool execution results into command messages for display.
    * @param item - The raw tool execution item from the conversation

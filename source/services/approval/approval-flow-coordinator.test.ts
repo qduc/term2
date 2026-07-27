@@ -626,7 +626,7 @@ it('prepareAbortResolution calls state.reject with the correct rejection message
   expect(rejectedOptions).toEqual({
     message: 'Tool execution was not approved. User provided new input instead: a new question',
   });
-  expect(typeof plan.removeInterceptor).toBe('function');
+  expect(plan.abortedContext).toBe(aborted);
 });
 
 it('retargetPendingInterruption preserves batch context', () => {

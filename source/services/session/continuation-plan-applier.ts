@@ -40,7 +40,6 @@ export class ContinuationPlanApplier {
         toolCallArgumentsById: plan.pendingApprovalContext.toolCallArgumentsById,
         previouslyEmittedCommandIds: plan.pendingApprovalContext.emittedCommandIds,
         toolStartedEvent: plan.toolStartedEvent,
-        removeInterceptor: plan.removeInterceptor,
         source: 'continueRunStream',
         token: plan.pendingApprovalContext.token,
         inputMode: plan.pendingApprovalContext.inputMode,
@@ -51,7 +50,7 @@ export class ContinuationPlanApplier {
     }
 
     const { abortedContext } = init;
-    const plan = this.deps.approvalFlow.prepareAbortResolution(abortedContext, init.userText);
+    this.deps.approvalFlow.prepareAbortResolution(abortedContext, init.userText);
 
     return {
       state: abortedContext.state,
@@ -59,7 +58,6 @@ export class ContinuationPlanApplier {
       toolCallArgumentsById: abortedContext.toolCallArgumentsById,
       previouslyEmittedCommandIds: abortedContext.emittedCommandIds,
       toolStartedEvent: undefined,
-      removeInterceptor: plan.removeInterceptor,
       source: 'abortResolution',
       token: abortedContext.token,
       inputMode: abortedContext.inputMode,

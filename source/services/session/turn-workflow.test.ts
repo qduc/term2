@@ -124,7 +124,6 @@ it('executes continuation turn successfully', async () => {
         cumulativeTurnItems: [],
       },
       toolStartedEvent: undefined,
-      removeInterceptor: () => {},
     } as any);
 
   const events: any[] = [];

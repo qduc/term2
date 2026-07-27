@@ -540,8 +540,6 @@ export class TurnWorkflow {
         ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
       };
       throw error;
-    } finally {
-      prepared.removeInterceptor();
     }
   }
 

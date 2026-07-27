@@ -26,7 +26,6 @@ it('initializeFrom populates all fields from prepared continuation', () => {
     interruption: { callId: 'call-1' },
     toolCallArgumentsById: new Map(),
     previouslyEmittedCommandIds: new Set(['id-1']),
-    removeInterceptor: () => {},
     source: 'abortResolution' as const,
     token: 7,
     inputMode: 'full_history' as const,
@@ -55,7 +54,6 @@ it('initializeFrom uses the passed-in currentCallIds verbatim', () => {
     interruption: { callId: 'call-1' },
     toolCallArgumentsById: new Map(),
     previouslyEmittedCommandIds: new Set<string>(),
-    removeInterceptor: () => {},
     source: 'continueRunStream' as const,
   };
 
@@ -73,7 +71,6 @@ it('initializeFrom does not derive call IDs from the run state interruptions', (
     interruption: { callId: 'call-1' },
     toolCallArgumentsById: new Map(),
     previouslyEmittedCommandIds: new Set<string>(),
-    removeInterceptor: () => {},
     source: 'continueRunStream' as const,
   };
 
@@ -89,7 +86,6 @@ it('initializeFrom falls back to constructor token when prepared token is missin
     interruption: { callId: 'call-1' },
     toolCallArgumentsById: new Map(),
     previouslyEmittedCommandIds: new Set<string>(),
-    removeInterceptor: () => {},
     source: 'continueRunStream' as const,
   };
 
@@ -105,7 +101,6 @@ it('advanceFromPlan updates state for next iteration', () => {
       interruption: { callId: 'call-1' },
       toolCallArgumentsById: new Map(),
       previouslyEmittedCommandIds: new Set(['id-1']),
-      removeInterceptor: () => {},
       source: 'abortResolution' as const,
     },
     ['call-1'],
@@ -141,7 +136,6 @@ it('advanceFromPlan uses the passed-in currentCallIds (superset from ledger)', (
       interruption: { callId: 'call-1' },
       toolCallArgumentsById: new Map(),
       previouslyEmittedCommandIds: new Set<string>(),
-      removeInterceptor: () => {},
       source: 'continueRunStream' as const,
     },
     ['call-1'],
@@ -165,7 +159,6 @@ it('advanceFromPlan preserves inputMode when nextInputMode is undefined', () => 
       interruption: { callId: 'call-1' },
       toolCallArgumentsById: new Map(),
       previouslyEmittedCommandIds: new Set<string>(),
-      removeInterceptor: () => {},
       source: 'continueRunStream' as const,
       inputMode: 'full_history',
     },

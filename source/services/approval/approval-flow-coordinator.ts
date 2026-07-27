@@ -27,8 +27,6 @@ import {
   requiresDockerHostControlApproval,
 } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 
-const noop = () => undefined;
-
 export interface ApprovalFlowCoordinatorDeps {
   agentClient: ConversationAgentClient;
   approvalState: ApprovalState;
@@ -40,15 +38,11 @@ export interface ApprovalFlowCoordinatorDeps {
 
 export interface AbortResolutionPlan {
   abortedContext: AbortedApprovalContext;
-  /** Cleanup that removes the rejection interceptor; always safe to call. */
-  removeInterceptor: () => void;
 }
 
 export interface ContinuationPlan {
   pendingApprovalContext: PendingApprovalContext;
   toolStartedEvent?: ConversationEvent;
-  /** Cleanup that removes the rejection interceptor; always safe to call. */
-  removeInterceptor: () => void;
 }
 
 export type ApprovalDecisionInput = {
@@ -122,13 +116,12 @@ export class ApprovalFlowCoordinator {
       abortedContext.decisionsByCallId.set(expectedCallId, 'rejected');
     }
 
-    return { abortedContext, removeInterceptor: noop };
+    return { abortedContext };
   }
 
   /**
    * Prepare for a continuation after the user makes an approval decision.
-   * Returns null if there is no pending approval. Caller is responsible for invoking
-   * `removeInterceptor` in a finally block once the continuation stream completes.
+   * Returns null if there is no pending approval.
    */
   prepareContinuation(answer: string, rejectionReason: string | undefined): ContinuationPlan | null {
     const pendingApprovalContext = this.deps.approvalState.getPending();
@@ -299,9 +292,7 @@ export class ApprovalFlowCoordinator {
       });
     }
 
-    const removeInterceptor = noop;
-
-    return { pendingApprovalContext, toolStartedEvent, removeInterceptor };
+    return { pendingApprovalContext, toolStartedEvent };
   }
 
   recordPending(pending: PendingApprovalContext): void {

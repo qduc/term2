@@ -18,7 +18,7 @@ function createMockDeps(): any {
   return {
     approvalFlow: {
       prepareContinuation: () => null as any,
-      prepareAbortResolution: () => ({ removeInterceptor: () => {} } as any),
+      prepareAbortResolution: (context: any) => ({ abortedContext: context } as any),
     },
     toolTracker: tracker,
     logger: { debug: () => {}, getCorrelationId: () => undefined },
@@ -59,7 +59,6 @@ it('prepareInit returns prepared continuation for approval_decision', () => {
       cumulativeTurnItems: [{ type: 'text' } as any],
     },
     toolStartedEvent: { type: 'tool_started', toolCallId: 'c1' },
-    removeInterceptor: () => {},
   });
 
   const applier = new ContinuationPlanApplier(deps);
@@ -89,7 +88,6 @@ it('prepareInit records aborted approval for rejection', () => {
       toolCallArgumentsById: new Map(),
       emittedCommandIds: new Set<string>(),
     },
-    removeInterceptor: () => {},
   });
 
   const applier = new ContinuationPlanApplier(deps);
@@ -105,8 +103,8 @@ it('prepareInit records aborted approval for rejection', () => {
 
 it('prepareInit returns prepared continuation for abort_resolution', () => {
   const deps = createMockDeps();
-  deps.approvalFlow.prepareAbortResolution = (_context: any, _text: string) => ({
-    removeInterceptor: () => {},
+  deps.approvalFlow.prepareAbortResolution = (context: any, _text: string) => ({
+    abortedContext: context,
   });
 
   const applier = new ContinuationPlanApplier(deps);

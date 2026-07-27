@@ -16,22 +16,6 @@ it('set/get pending context', () => {
   expect(state.getPending()).toBe(pending);
 });
 
-it('setPendingRemoveInterceptor stores cleanup on pending', () => {
-  const state = new ApprovalState();
-  const pending = {
-    state: { id: 'state' } as any,
-    interruption: { name: 'tool' },
-    emittedCommandIds: new Set(['cmd-1']),
-    toolCallArgumentsById: new Map(),
-  };
-  const removeInterceptor = () => undefined;
-
-  state.setPending(pending);
-  state.setPendingRemoveInterceptor(removeInterceptor);
-
-  expect(state.getPending()?.removeInterceptor).toBe(removeInterceptor);
-});
-
 it('abortPending() moves pending to aborted and clears pending', () => {
   const state = new ApprovalState();
   const pending = {
@@ -71,32 +55,6 @@ it('consumeAborted() returns aborted context and clears it', () => {
   const aborted = state.consumeAborted();
   expect(aborted).toBeTruthy();
   expect(state.consumeAborted()).toBe(null);
-});
-
-it('abortPending carries forward removeInterceptor when set', () => {
-  const state = new ApprovalState();
-  let interceptorCalled = false;
-  const removeInterceptor = () => {
-    interceptorCalled = true;
-  };
-
-  state.setPending({
-    state: { id: 'state' } as any,
-    interruption: { name: 'tool' },
-    emittedCommandIds: new Set(),
-    toolCallArgumentsById: new Map(),
-    removeInterceptor,
-  });
-
-  state.abortPending();
-
-  const aborted = state.consumeAborted();
-  expect(aborted).toBeTruthy();
-  expect(typeof aborted?.removeInterceptor, 'removeInterceptor should be carried to aborted context').toBe('function');
-
-  // Calling it should invoke the original cleanup
-  aborted?.removeInterceptor?.();
-  expect(interceptorCalled).toBe(true);
 });
 
 it('abortPending carries forward batch decisions and the prompted call', () => {

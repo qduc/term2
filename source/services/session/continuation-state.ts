@@ -16,7 +16,6 @@ export interface PreparedContinuation {
   toolCallArgumentsById: Map<string, unknown>;
   previouslyEmittedCommandIds: Set<string>;
   toolStartedEvent?: ConversationEvent;
-  removeInterceptor: () => void;
   source: StreamHistorySource;
   token?: GenerationToken;
   inputMode?: 'delta' | 'full_history';

@@ -81,7 +81,6 @@ const runResponseContinuation = async ({
         cumulativeTurnItems: [],
       },
       toolStartedEvent: undefined,
-      removeInterceptor: () => {},
     } as any);
 
   const outcome = await collect(
@@ -176,7 +175,6 @@ it('keeps rejected and approved sibling ids during abort resolution', async () =
 
   composition.approvalFlow.prepareAbortResolution = () => ({
     abortedContext: abortedContext as any,
-    removeInterceptor: () => {},
   });
 
   const outcome = await collect(

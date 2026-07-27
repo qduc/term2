@@ -15,7 +15,6 @@ export type PendingApprovalContext = {
   promptedCallId?: string;
   emittedCommandIds: Set<string>;
   toolCallArgumentsById: Map<string, unknown>;
-  removeInterceptor?: () => void;
   owner: ToolOwner;
   token?: GenerationToken;
   inputMode?: 'delta' | 'full_history';
@@ -32,7 +31,6 @@ export type AbortedApprovalContext = {
   promptedCallId?: string;
   emittedCommandIds: Set<string>;
   toolCallArgumentsById: Map<string, unknown>;
-  removeInterceptor?: () => void;
   owner: ToolOwner;
   token?: GenerationToken;
   inputMode?: 'delta' | 'full_history';
@@ -58,17 +56,6 @@ export class ApprovalState {
     this.pending = null;
   }
 
-  setPendingRemoveInterceptor(removeInterceptor: (() => void) | null): void {
-    if (!this.pending) {
-      return;
-    }
-
-    this.pending = {
-      ...this.pending,
-      ...(removeInterceptor ? { removeInterceptor } : {}),
-    };
-  }
-
   abortPending(): boolean {
     if (!this.pending) {
       return false;
@@ -82,7 +69,6 @@ export class ApprovalState {
       promptedCallId: this.pending.promptedCallId,
       emittedCommandIds: this.pending.emittedCommandIds,
       toolCallArgumentsById: this.pending.toolCallArgumentsById,
-      removeInterceptor: this.pending.removeInterceptor,
       owner: this.pending.owner,
       token: this.pending.token,
       inputMode: this.pending.inputMode,

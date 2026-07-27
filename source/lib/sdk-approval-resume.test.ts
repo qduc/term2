@@ -82,8 +82,8 @@ it('preserves the tool call ID in execution details when resuming after approval
 });
 
 it('does not reuse a denied call ID when the model retries the same tool call', async () => {
-  const approvalCalls: Array<{ callId: string; command: string }> = [];
-  const executedCallIds: string[] = [];
+  const approvalCalls: Array<{ callId: string | undefined; command: string }> = [];
+  const executedCallIds: Array<string | undefined> = [];
   const retryModel: Model = {
     async getResponse(request: ModelRequest): Promise<ModelResponse> {
       const hasToolOutput =

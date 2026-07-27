@@ -53,9 +53,8 @@ production session contract.
 
 - Step B's focused normalizer, turn-item compatibility, turn accumulator, stream, replay,
   state projector, tool-ledger, and chained-filter set passes: 6 files / 108 tests.
-- `tsc --noEmit` still fails only on known test baselines:
-  `source/lib/sdk-approval-resume.test.ts:112,116 TS2322/TS2345` and
-  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532`.
+- `tsc --noEmit` reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
 - `source/lib/sdk-approval-resume.test.ts` passes its real-Runner approval-resume and
   denied-read model-retry regressions. The latter observes call A at execute, then a distinct
   call B at `needsApproval`, where B interrupts before execute.

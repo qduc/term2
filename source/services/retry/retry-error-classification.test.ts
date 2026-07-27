@@ -66,6 +66,14 @@ it('isRetryableTransportError separates retryable errors from HTTP fallback cand
     transportFallback: true,
   });
   expect(
+    isRetryableTransportError(
+      new Error('Responses websocket error: {"error":{"code":"websocket_connection_limit_reached"},"status":400}'),
+    ),
+  ).toEqual({
+    retryable: true,
+    transportFallback: true,
+  });
+  expect(
     isRetryableTransportError(new Error('WebSocket connection closed before response completed (code=1006)')),
   ).toEqual({
     retryable: true,

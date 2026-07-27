@@ -1,5 +1,9 @@
 import { decideRetry } from './conversation-retry-policy.js';
-import { isPreviousResponseNotFoundError, isRetryableTransportError } from './retry-error-classification.js';
+import {
+  isPreviousResponseNotFoundError,
+  isRetryableTransportError,
+  isWebSocketConnectionLimitReachedError,
+} from './retry-error-classification.js';
 import type { ClassificationContext, ClassifiedFailure } from './retry-contracts.js';
 import { extractHistoryLength } from '../stream-snapshot.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
@@ -41,6 +45,7 @@ export class DefaultRetryClassifier {
 
     if (
       isPreviousResponseNotFoundError(error) ||
+      isWebSocketConnectionLimitReachedError(error) ||
       isMissingChainedToolOutputError(error) ||
       isOrphanedChainedToolOutputError(error)
     ) {

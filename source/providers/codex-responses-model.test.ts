@@ -1912,11 +1912,14 @@ it.sequential('CodexResponsesWSModel leaves warmup connection failures to the ou
   }
 });
 
-it.sequential('CodexResponsesWSModel leaves chained connection failures to the outer retry policy', async () => {
+it.sequential('CodexResponsesWSModel invalidates chained state when the websocket connection lifetime expires', async () => {
   const seenRequests: any[] = [];
-  const networkError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
-    code: 'connection_closed_before_opening',
-  });
+  const networkError = Object.assign(
+    new Error(
+      'Responses websocket error: {"error":{"code":"websocket_connection_limit_reached","message":"Responses websocket connection limit reached (60 minutes). Create a new websocket connection to continue."},"status":400}',
+    ),
+    { status: 400 },
+  );
 
   const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
   (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
@@ -2004,6 +2007,20 @@ it.sequential('CodexResponsesWSModel leaves chained connection failures to the o
     expect(seenRequests.length).toBe(2);
     expect(seenRequests[1].previousResponseId).toBe('resp-stale-chain');
     expect(seenRequests[1].input).toEqual([continuationInput[1]]);
+
+    for await (const _event of model.getStreamedResponse({
+      input: [{ role: 'user', type: 'message', content: 'retry from durable history' }],
+      modelSettings: {},
+      tools: [],
+      handoffs: [],
+    } as any)) {
+    }
+
+    expect(seenRequests.length).toBe(4);
+    expect(seenRequests[2].previousResponseId).toBe(undefined);
+    expect(seenRequests[2].modelSettings.providerData?.generate).toBe(false);
+    expect(seenRequests[3].previousResponseId).toBe('resp-recovered');
+    expect(seenRequests[3].previousResponseId).not.toBe('resp-stale-chain');
   } finally {
     (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
   }

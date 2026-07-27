@@ -21,6 +21,7 @@ const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
 import {
   isPreviousResponseNotFoundError,
   isRetryableTransportError,
+  isWebSocketConnectionLimitReachedError,
 } from '../services/retry/retry-error-classification.js';
 
 type DiagnosticLogger = {
@@ -381,6 +382,11 @@ const isPreviousResponseUnavailableError = (error: unknown): boolean => {
 const isDefinitelyUnsentWebSocketError = (error: unknown, seen = new Set<unknown>()): boolean => {
   if (!error || seen.has(error)) return false;
   seen.add(error);
+
+  // The server explicitly rejects this request before model generation and
+  // instructs the client to reconnect. Retrying from durable history is safe;
+  // treating it as an ambiguous model outcome would suppress recovery.
+  if (isWebSocketConnectionLimitReachedError(error)) return true;
 
   if (typeof error === 'string') {
     const message = error.toLowerCase();

@@ -62,6 +62,24 @@ export function isPreviousResponseNotFoundError(error: unknown, seen = new Set<u
   return false;
 }
 
+export function isWebSocketConnectionLimitReachedError(error: unknown, seen = new Set<unknown>()): boolean {
+  if (!error || seen.has(error)) return false;
+  seen.add(error);
+
+  if (typeof error === 'string') {
+    return error.toLowerCase().includes('websocket_connection_limit_reached');
+  }
+  if (typeof error !== 'object') return false;
+
+  const value = error as Record<string, unknown>;
+  if (value.code === 'websocket_connection_limit_reached') return true;
+  if (isWebSocketConnectionLimitReachedError(value.message, seen)) return true;
+  if (isWebSocketConnectionLimitReachedError(value.body, seen)) return true;
+  if (isWebSocketConnectionLimitReachedError(value.error, seen)) return true;
+  if (isWebSocketConnectionLimitReachedError(value.cause, seen)) return true;
+  return false;
+}
+
 const logWebSocketCloseCode = (
   logger: Pick<ILoggingService, 'info'> | undefined,
   error: unknown,
@@ -159,6 +177,13 @@ export function isNetworkProtocolError(error: unknown, seen = new Set<unknown>()
     return false;
   }
   seen.add(error);
+
+  // The Responses WebSocket has a provider-enforced maximum lifetime. Once
+  // reached, the current connection and its server-managed response chain must
+  // be replaced even though the provider reports the condition as a 400.
+  if (isWebSocketConnectionLimitReachedError(error)) {
+    return true;
+  }
 
   // 1. Explicit status/authentication rejection takes precedence over cause checks.
   const message = getMessage(error).toLowerCase();

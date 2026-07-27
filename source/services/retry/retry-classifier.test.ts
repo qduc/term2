@@ -142,6 +142,18 @@ it('classify returns transport_downgrade for previous_response_not_found websock
   expect(classifier.classify(baseContext({ error })).kind).toBe('transport_downgrade');
 });
 
+it('classify returns transport_downgrade when the Responses websocket reaches its connection lifetime', () => {
+  const classifier = makeClassifier();
+  const error = Object.assign(
+    new Error(
+      'Responses websocket error: {"type":"error","error":{"type":"invalid_request_error","code":"websocket_connection_limit_reached","message":"Responses websocket connection limit reached (60 minutes). Create a new websocket connection to continue."},"status":400}',
+    ),
+    { status: 400 },
+  );
+
+  expect(classifier.classify(baseContext({ error })).kind).toBe('transport_downgrade');
+});
+
 it('classify returns transport_downgrade when a chained continuation is missing required tool output', () => {
   const classifier = makeClassifier();
   const error = new MissingChainedToolOutputError(['call-required']);

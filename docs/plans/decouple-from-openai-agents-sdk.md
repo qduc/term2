@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A mostly done — A1–A3, R1, the session client-factory boundary, and A4 tool ownership are landed. The remaining A4 call-ledger metadata migration is next.
+**Status:** Step A is complete only through A4 tool ownership — A1–A3, R1, the session client-factory boundary, and A4 tool ownership are landed. CallId-only migration of denied-read metadata/overrides is blocked under the stock SDK; Step B is next.
 **Last updated:** 2026-07-27
 
 ---
@@ -21,6 +21,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | R1 | Resume-after-approval preserves `details.toolCall.callId`; pinned by `source/lib/sdk-approval-resume.test.ts` |
 | A4 groundwork | Session factory owns/disposes the closure-bound client; reset and both CLI modes replace the handle |
 | A4 tool ownership | `ToolOwnershipRegistry` is created by each session handle and explicitly propagated through root clients, session runtime composition, approval flow, subagent bridge/manager/runtime, and nested runners; no process singleton/default remains |
+| A4 retry proof | A real SDK `Runner` proves a denied-read-like output from call A can cause the model to emit the same shell arguments as a new call B; B is not correlated to A by call id |
 | Bug fix | Denied-read approval never fired for `cd`-prefixed commands (record/lookup key mismatch) |
 | Bug fix | Docker host-control denials leaked across sessions (process-global `#deniedCommands`) |
 
@@ -28,8 +29,9 @@ Each landed as a `--no-ff` merge from its own worktree branch; branch history is
 
 ### In flight
 
-Nothing. The session-owned tool-ownership milestone is complete. Resume with the call-ledger
-metadata migration below; do not re-derive the composition root or restore singleton fallbacks.
+Nothing. The session-owned tool-ownership milestone is complete. Start Step B; do not re-derive
+the composition root or restore singleton fallbacks. Do not migrate denied-read metadata or
+execution overrides until Step C owns a post-execute pause/resume seam.
 
 ### A4 tool-ownership lifecycle
 
@@ -48,6 +50,9 @@ production session contract.
 
 ### Validation at pause
 
+- `source/lib/sdk-approval-resume.test.ts` passes its real-Runner approval-resume and
+  denied-read model-retry regressions. The latter observes call A at execute, then a distinct
+  call B at `needsApproval`, where B interrupts before execute.
 - Full `tsc --noEmit` reaches only the known pre-existing
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
 - Focused tool-ownership clusters pass: 23 files / 364 tests, plus the 4-test conversation
@@ -86,10 +91,9 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **A4** — absorb the approval side-channels into a session-owned call ledger keyed by
-   `callId`. Migrate vertical producer→consumer paths without dual-writing or command-key
-   fallback. The risky paths are the delivery seam, the batch coordinator (which retargets
-   one shared pending context across siblings), nested subagents, reset/disposal, and docker.
+1. **Step B** — define the canonical `Item`, `Turn`, `ToolCall`, and `Approval` types at the
+   boundary. A4's tool-ownership work is complete; its denied-read/override migration is
+   deferred to Step C, where the run loop can pause after execute and resume the same call.
 
 ### R1 gate — PASSED
 
@@ -98,6 +102,14 @@ only — every such call is rejected either way. Moot here: this repo never call
 resumes the run, and asserts that the tool receives the original call id through
 `details.toolCall.callId`. The carrier assumed by A4 is therefore available on the risky
 resume path; mocks do not supply the execution details in this test.
+
+This applies only to **approval resume**: the SDK pauses before execute and resumes that same
+tool call, so its call id remains stable. A distinct real-Runner regression in the same file
+also proves the different **model retry** path: execute receives call A and returns an ordinary
+denied-read-like function output; after seeing that output the model emits identical shell
+arguments under call B. `needsApproval` receives A then B, and B interrupts before execute.
+Call B has an unrelated call id, so callId alone cannot bridge denied-read discovery to that
+future retry under the stock SDK.
 
 ### Composition-root decision — client and runtime share one session handle
 
@@ -112,10 +124,11 @@ handle and ask the factory for a replacement. It must not clear and reuse state 
 old client: late callbacks from the disposed session must be unable to mutate the replacement.
 Persistent project-level docker grants remain settings-backed and outside the handle.
 
-The call ledger is not a generic `SessionSandboxState` service locator. Its narrow capabilities
-own records keyed by `callId`: tool ownership, denied-read metadata, and the execution override.
-The SDK-specific extraction stays at the tool boundary; approval services receive a domain call
-id. R1 proves the execution path has that identity, including after serialized approval resume.
+The call ledger is not a generic `SessionSandboxState` service locator. Its landed narrow
+capability owns tool ownership keyed by `callId`. Denied-read metadata and execution overrides
+are intentionally not added yet: their discovery is post-execute, while a model retry is a new
+call id. The SDK-specific extraction stays at the tool boundary; approval services receive a
+domain call id. R1 proves that identity only for serialized approval resume.
 
 **Implemented groundwork:** `session-client-factory.ts` now creates an owned client handle;
 `ConversationService` owns that handle beside the runtime and replaces both on
@@ -127,7 +140,8 @@ lifetime into which the call ledger can now be injected.
 Required invariants:
 
 - duplicate active call ids in one session fail closed rather than overwrite;
-- approval and execution correlate only by call id — never by command string;
+- approval resume and execution correlate by call id; a post-execute model retry requires a
+  Step C run-loop seam rather than call-id correlation or command matching;
 - parent and nested agents share the ledger but retain distinct tool owners;
 - records are removed on success, denial, failure, cancellation, and session disposal;
 - reset replaces the session epoch, so reused call ids and late callbacks cannot cross sessions;
@@ -142,9 +156,11 @@ Migration order:
 2. **DONE.** Route both CLI modes and `resetWithNewId()` through that factory; prove replacement
    and disposal before moving policy state.
 3. **DONE.** Introduce the session-owned call ledger and migrate tool ownership.
-4. **Next:** expand the call ledger to denied-read metadata and execution overrides one vertical
-   path at a time. Do not use command-key or singleton fallback; delete the
-   command-keyed stores and add the concurrent-identical-command regression.
+4. **STOPPED:** do not expand the ledger to denied-read metadata or execution overrides under
+   the stock SDK. Call A's denied result causes a newly emitted retry call B, so callId-only A4
+   has no bridge. Reject both command-key fallback and a temporary token protocol for now;
+   retain current behavior. Defer this migration until Step C owns a post-execute pause/resume
+   seam, then add the concurrent-identical-command regression.
 5. Move session read access and transient docker state into the handle, keeping project grants
    persistent; bind nested client caches to handle disposal.
 6. Delete singleton fallbacks and compatibility wiring after all production roots inject the
@@ -152,11 +168,12 @@ Migration order:
 
 ### Deliberately left open
 
-A concurrency bug: `maxParallelToolCalls` defaults to 3 (`agent-run-orchestrator.ts:61-68`)
-while `ExecutionOverrideStore` is command-keyed with a consuming read, so two concurrent
-identical `shell` calls can cross-contaminate grants — one executes with permissions the user
-granted to a different call. **Do not write a stopgap.** A4's callId keying fixes it
-structurally and the stopgap would be thrown away.
+A concurrency bug remains: `maxParallelToolCalls` defaults to 3
+(`agent-run-orchestrator.ts:61-68`) while `ExecutionOverrideStore` is command-keyed with a
+consuming read, so two concurrent identical `shell` calls can cross-contaminate grants — one
+executes with permissions the user granted to a different call. **Do not write a stopgap.**
+CallId-only A4 cannot fix this under the stock SDK's model-retry behavior; Step C must provide
+the post-execute pause/resume seam before this migration can be made safely.
 
 ---
 
@@ -282,7 +299,7 @@ the normal `store` flag.
 |---|---|
 | Driver | Fragility — private-API dependence. Not LOC, not capability. |
 | Durable mid-turn approvals | Design for it (plain-data, serializable turns); ship later. |
-| Approval type scope | **Absorbs the side-channels.** The pending call carries its own execution override (`extraAllowRead`, `forceUnsandboxed`, denied-read metadata) as data. Kills command-string keying; approve→execute becomes a pure function of the turn. |
+| Approval type scope | Step B defines the types, but does **not** absorb denied-read side-channels yet. The stock SDK emits a new call id on model retry after execute, so callId-only A4 is blocked. Reject command fallback and a temporary token protocol; Step C will own a post-execute pause/resume seam before migrating overrides. |
 | Chaining | **Keep the dual mode as-is for now.** Not touched in Steps A–D. |
 | Endpoint | Zero SDK imports, **codex included**. |
 
@@ -318,20 +335,25 @@ Re-ordered from the original types-first plan. Each step retires named reach-ins
   path, gated by `resumeContextStrategy === 'merge'` (set at `nested-runner.ts:268`). That
   is the library's own internal use reached through a *public* option, not our reach-in.
   A3 retires ours; the SDK's goes away with the SDK.
-- **A4.** Absorb `ExecutionOverrideStore` / `DeniedReadStore` / session grants into the
-  pending call. R1 passed; resolve the composition root before implementation.
+- **A4 — PARTIAL / BLOCKED.** Session-owned tool ownership is landed. R1 remains valid for an
+  approval resume of the same call id, but it does not apply to a model retry after execute.
+  The real-Runner denied-read regression proves that retry is a new call id, so do not migrate
+  `ExecutionOverrideStore` / `DeniedReadStore` / session grants by call id under the stock SDK.
+  Reject command fallback and a temporary token protocol; defer this work to Step C's
+  post-execute pause/resume seam while keeping current behavior unchanged.
 
-**Live bugs found during this work** (independent of decoupling; the command-string keying
-that A4 removes was actively broken):
+**Live bugs found during this work** (independent of decoupling; the command-string keying is
+actively broken and remains until Step C can replace it safely):
 
 - **FIXED** — denied-read approval never fired for `cd`-prefixed commands. `shell.ts` recorded
   under `optimizedCommand` (post-`stripRedundantCd`) while both lookups used the raw
   model-emitted command. Six of seven store call sites already used raw; `record` was the sole
   outlier. The Docker branch ten lines above already had the correct reasoning in a comment.
-- **OPEN, rides with A4** — concurrent identical commands cross-contaminate grants.
+- **OPEN, deferred to Step C** — concurrent identical commands cross-contaminate grants.
   `maxParallelToolCalls` defaults to 3 (`agent-run-orchestrator.ts:61-68`) and
   `ExecutionOverrideStore` is command-keyed with a consuming read, so one call can execute
-  with permissions the user granted to a different call. Fixed structurally by callId keying.
+  with permissions the user granted to a different call. CallId-only A4 cannot fix this because
+   a denied-read model retry receives a new id; Step C needs a post-execute pause/resume seam.
 - **FIXED** — `#deniedCommands` was process-global with no sessionId and never cleared
   per-session, so one session's blocked docker command forced an approval prompt in every
   other session, permanently. Now `#deniedBySession`, mirroring `#onceBySession`.
@@ -355,6 +377,10 @@ A2's claim-at-source design depends on this ordering.
 imports `ModelSettingsReasoningEffort` from the SDK — the contracts layer is not currently
 SDK-free.
 **Retires 0 reach-ins directly; contains them and collapses blast radius.**
+
+**Next implementation step.** Keep current denied-read recovery behavior unchanged. Do not add
+command matching or a temporary token protocol; Step C must first own the post-execute
+pause/resume seam needed to migrate denied-read metadata and execution overrides safely.
 
 ### Step C — Own the run loop
 Contained, because downstream already speaks our language.
@@ -396,8 +422,8 @@ feature), guardrails, MCP, sessions/memory, voice, realtime.
 
 ## Open questions
 
-- Shape of `Item`, `Turn`, `ToolCall`, `Approval` (Step B) — now constrained by the Step A
-  decision that `Approval` carries its own execution override.
+- Shape of `Item`, `Turn`, `ToolCall`, `Approval` (Step B) — do not prematurely encode the
+  denied-read execution override; Step C must establish its post-execute pause/resume seam.
 - Whether to keep a `Model`-shaped interface at all, or expose something closer to what `ai`
   already gives us (Step D).
 - Chaining disposition (blocks Step E).

@@ -61,12 +61,11 @@ only — every such call is rejected either way. Moot here: this repo never call
    already forced A2 into a module-scoped registry, and A4's `SessionSandboxState` will hit
    the identical wall. The repo has five such singletons already (`deniedReadStore`,
    `executionOverrideStore`, `sessionReadAccess`, the docker grants, the new registry) —
-   don't add a sixth by default.
-2. **A4** — absorb the approval side-channels into the pending call. Full design was produced
-   separately; its staged sequence is Stage 0-7 with the risky stages being the delivery seam,
-   the batch path in `tool-approval-batch-coordinator.ts` (which retargets one shared pending
-   context across siblings — reusing an object there reintroduces the exact
-   cross-contamination bug being fixed), and docker.
+   don't add a sixth. Implement the session-handle/client-factory boundary recorded below.
+2. **A4** — absorb the approval side-channels into a session-owned call ledger keyed by
+   `callId`. Migrate vertical producer→consumer paths without dual-writing or command-key
+   fallback. The risky paths are the delivery seam, the batch coordinator (which retargets
+   one shared pending context across siblings), nested subagents, reset/disposal, and docker.
 
 ### R1 gate — PASSED
 
@@ -75,6 +74,48 @@ only — every such call is rejected either way. Moot here: this repo never call
 resumes the run, and asserts that the tool receives the original call id through
 `details.toolCall.callId`. The carrier assumed by A4 is therefore available on the risky
 resume path; mocks do not supply the execution details in this test.
+
+### Composition-root decision — client and runtime share one session handle
+
+`session-composition.ts` remains the session composition root. The interactive and
+non-interactive entry points will provide long-lived application dependencies to one session
+factory; they will no longer independently construct the closure-bound `AgentClient`.
+
+The factory creates one session handle containing the runtime, approval coordinator,
+session-bound root client and nested clients, read-access state, transient docker state, and a
+session-owned tool-call ledger. `ConversationService.resetWithNewId()` must dispose that whole
+handle and ask the factory for a replacement. It must not clear and reuse state captured by the
+old client: late callbacks from the disposed session must be unable to mutate the replacement.
+Persistent project-level docker grants remain settings-backed and outside the handle.
+
+The call ledger is not a generic `SessionSandboxState` service locator. Its narrow capabilities
+own records keyed by `callId`: tool ownership, denied-read metadata, and the execution override.
+The SDK-specific extraction stays at the tool boundary; approval services receive a domain call
+id. R1 proves the execution path has that identity, including after serialized approval resume.
+
+Required invariants:
+
+- duplicate active call ids in one session fail closed rather than overwrite;
+- approval and execution correlate only by call id — never by command string;
+- parent and nested agents share the ledger but retain distinct tool owners;
+- records are removed on success, denial, failure, cancellation, and session disposal;
+- reset replaces the session epoch, so reused call ids and late callbacks cannot cross sessions;
+- session read access and transient docker grants die with the handle; project grants survive;
+- no module-global current-session accessor, `AsyncLocalStorage` workaround, or fallback store.
+
+Migration order:
+
+1. Add disposal support for the closure-bound client (including settings subscriptions), then
+   introduce a session client factory/handle while retaining compatibility seams for tests.
+2. Route both CLI modes and `resetWithNewId()` through that factory; prove replacement and late
+   callback isolation before moving policy state.
+3. Introduce the session-owned call ledger and migrate tool ownership.
+4. Migrate denied-read metadata and execution overrides one vertical path at a time; delete the
+   command-keyed stores and add the concurrent-identical-command regression.
+5. Move session read access and transient docker state into the handle, keeping project grants
+   persistent; bind nested client caches to handle disposal.
+6. Delete singleton fallbacks and compatibility wiring after all production roots inject the
+   session-owned capabilities.
 
 ### Deliberately left open
 

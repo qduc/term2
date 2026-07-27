@@ -373,6 +373,21 @@ it('activeCallIdsForTurn excludes entries from other turns', () => {
   expect(ledger.activeCallIdsForTurn('turn-1')).toEqual(['call-prior']);
 });
 
+it('completedResultCallIdsForCurrentTurn includes only completed entries in the current turn', () => {
+  const ledger = new ToolExecutionLedger();
+  ledger.beginTurn();
+  ledger.recordFunctionCall({ type: 'function_call', callId: 'call-prior', name: 'shell', arguments: '{}' });
+  ledger.recordFunctionResult({ type: 'function_call_output', callId: 'call-prior', output: 'ok' });
+  ledger.beginTurn();
+  ledger.recordFunctionCall({ type: 'function_call', callId: 'call-completed', name: 'shell', arguments: '{}' });
+  ledger.recordFunctionResult({ type: 'function_call_output', callId: 'call-completed', output: 'ok' });
+  ledger.recordFunctionCall({ type: 'function_call', callId: 'call-started', name: 'shell', arguments: '{}' });
+  ledger.recordFunctionCall({ type: 'function_call', callId: 'call-aborted', name: 'shell', arguments: '{}' });
+  ledger.markOpenCallsAborted('cancelled', 'call-aborted');
+
+  expect(ledger.completedResultCallIdsForCurrentTurn()).toEqual(['call-completed']);
+});
+
 it('activeCallIdsForTurn includes aborted/rejected call IDs (regression: provider requires output for every call)', () => {
   const ledger = new ToolExecutionLedger();
   ledger.beginTurn();

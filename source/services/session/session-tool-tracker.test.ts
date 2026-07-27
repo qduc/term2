@@ -37,6 +37,16 @@ it('activeCallIdsForCurrentTurn delegates to the ledger for the current turn', (
   expect(tracker.activeCallIdsForCurrentTurn()).toEqual(['call-a', 'call-b']);
 });
 
+it('completedResultCallIdsForCurrentTurn exposes only completed current-turn results', () => {
+  const tracker = new SessionToolTracker(new ConversationStore());
+  tracker.beginTurn();
+  tracker.recordFunctionCall({ type: 'function_call', callId: 'call-completed', name: 'shell', arguments: '{}' });
+  tracker.recordFunctionResult({ type: 'function_call_output', callId: 'call-completed', output: 'ok' });
+  tracker.recordFunctionCall({ type: 'function_call', callId: 'call-pending', name: 'shell', arguments: '{}' });
+
+  expect(tracker.completedResultCallIdsForCurrentTurn()).toEqual(['call-completed']);
+});
+
 it('activeCallIdsForCurrentTurn includes aborted call IDs (provider requires output for every call)', () => {
   const tracker = new SessionToolTracker(new ConversationStore());
   tracker.beginTurn();

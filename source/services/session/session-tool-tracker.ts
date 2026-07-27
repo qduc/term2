@@ -70,6 +70,11 @@ export class SessionToolTracker {
     return this.toolLedger.activeCallIdsForTurn();
   }
 
+  /** Returns only completed tool-result call IDs recorded during the current turn. */
+  completedResultCallIdsForCurrentTurn(): string[] {
+    return this.toolLedger.completedResultCallIdsForCurrentTurn();
+  }
+
   /**
    * Export the current ledger state.
    */

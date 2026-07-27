@@ -33,17 +33,18 @@ const collect = async (iterable: AsyncGenerator<unknown, unknown, void>) => {
 
 type ContinuationRunState = {
   getInterruptions: () => unknown[];
-  _generatedItems?: unknown[];
 };
 
 const runResponseContinuation = async ({
   runState,
   history = [],
-  ledgerCallIds = [],
+  startedLedgerCallIds = [],
+  completedResultCallIds = [],
 }: {
   runState: ContinuationRunState;
   history?: unknown[];
-  ledgerCallIds?: string[];
+  startedLedgerCallIds?: string[];
+  completedResultCallIds?: string[];
 }) => {
   let receivedCallIds: string[] | undefined;
 
@@ -65,10 +66,13 @@ const runResponseContinuation = async ({
   });
 
   composition.conversationStore.replaceHistory(history as any);
-  if (ledgerCallIds.length > 0) {
+  if (startedLedgerCallIds.length > 0 || completedResultCallIds.length > 0) {
     composition.toolTracker.beginTurn();
-    for (const callId of ledgerCallIds) {
+    for (const callId of [...startedLedgerCallIds, ...completedResultCallIds]) {
       composition.toolTracker.recordFunctionCall({ type: 'function_call', callId, name: 'shell', arguments: '{}' });
+    }
+    for (const callId of completedResultCallIds) {
+      composition.toolTracker.recordFunctionResult({ type: 'function_call_output', callId, output: 'ok' });
     }
   }
   const token = composition.generationGuard.capture();
@@ -103,23 +107,20 @@ it('passes interrupted and completed parallel tool call ids to continuation', as
   const { outcome, receivedCallIds } = await runResponseContinuation({
     runState: {
       getInterruptions: () => [{ callId: 'call-interrupted', name: 'shell', arguments: '{}' }],
-      _generatedItems: [{ type: 'function_call_output', callId: 'call-completed-parallel', output: 'ok' }],
     },
+    completedResultCallIds: ['call-completed-parallel'],
   });
 
   expect((outcome as any).kind).toBe('response');
   expect(receivedCallIds?.sort()).toEqual(['call-completed-parallel', 'call-interrupted']);
 });
 
-it('excludes generated tool outputs already consumed in conversation history', async () => {
+it('excludes completed tool outputs already consumed in conversation history', async () => {
   const { outcome, receivedCallIds } = await runResponseContinuation({
     runState: {
       getInterruptions: () => [{ callId: 'call-interrupted', name: 'shell', arguments: '{}' }],
-      _generatedItems: [
-        { type: 'function_call_output', callId: 'call-consumed', output: 'already sent' },
-        { type: 'function_call_output', callId: 'call-new-parallel', output: 'new' },
-      ],
     },
+    completedResultCallIds: ['call-consumed', 'call-new-parallel'],
     history: [
       { role: 'user', type: 'message', content: 'hello' },
       { type: 'function_call', callId: 'call-consumed', name: 'shell', arguments: '{}' },
@@ -135,9 +136,8 @@ it('uses only the current response cycle instead of the whole turn ledger', asyn
   const { outcome, receivedCallIds } = await runResponseContinuation({
     runState: {
       getInterruptions: () => [{ callId: 'call-current', name: 'shell', arguments: '{}' }],
-      _generatedItems: [],
     },
-    ledgerCallIds: ['call-old'],
+    startedLedgerCallIds: ['call-old'],
   });
 
   expect((outcome as any).kind).toBe('response');
@@ -164,8 +164,15 @@ it('keeps rejected and approved sibling ids during abort resolution', async () =
   const token = composition.generationGuard.capture();
   const interruptedState = {
     getInterruptions: () => [{ callId: 'call-rejected', name: 'shell', arguments: '{}' }],
-    _generatedItems: [{ type: 'function_call_output', callId: 'call-approved', output: 'ok' }],
   };
+  composition.toolTracker.beginTurn();
+  composition.toolTracker.recordFunctionCall({
+    type: 'function_call',
+    callId: 'call-approved',
+    name: 'shell',
+    arguments: '{}',
+  });
+  composition.toolTracker.recordFunctionResult({ type: 'function_call_output', callId: 'call-approved', output: 'ok' });
   const abortedContext = {
     state: interruptedState,
     interruption: { callId: 'call-rejected', name: 'shell', arguments: '{}' },

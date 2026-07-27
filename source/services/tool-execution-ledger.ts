@@ -357,6 +357,13 @@ export class ToolExecutionLedger {
     return this.#entries.filter((entry) => entry.turnId === target).map((entry) => entry.callId);
   }
 
+  /** Returns completed tool-result call IDs recorded during the current turn. */
+  completedResultCallIdsForCurrentTurn(): string[] {
+    return this.#entries
+      .filter((entry) => entry.turnId === this.#currentTurnId && entry.status === 'completed')
+      .map((entry) => entry.callId);
+  }
+
   getRecoverySummary(): ToolLedgerRecoverySummary | null {
     const currentTurnEntries = this.#entries.filter((entry) => entry.turnId === this.#currentTurnId);
     if (currentTurnEntries.length === 0) {

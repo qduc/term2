@@ -1,16 +1,10 @@
 import { expect, it } from 'vitest';
 import { resolveAbortedApprovalCallIds, resolveResponseCycleCallIds } from './continuation-call-id-resolver.js';
 
-it('deduplicates interrupted and generated response-cycle call ids', () => {
+it('deduplicates interrupted and completed response-cycle call ids', () => {
   const result = resolveResponseCycleCallIds({
-    runState: {
-      getInterruptions: () => [{ callId: 'call-1' }],
-      _generatedItems: [
-        { type: 'function_call_output', callId: 'call-1' },
-        { rawItem: { type: 'function_call_output', callId: 'call-2' } },
-      ],
-    },
-    primaryInterruption: { callId: 'call-1' },
+    interruptionCallIds: ['call-1'],
+    completedResultCallIds: ['call-1', 'call-2'],
     fallbackCallIds: ['fallback'],
     conversationHistory: [],
   });
@@ -18,16 +12,10 @@ it('deduplicates interrupted and generated response-cycle call ids', () => {
   expect(result).toEqual(['call-1', 'call-2']);
 });
 
-it('excludes generated outputs already represented in history', () => {
+it('excludes completed outputs already represented in history', () => {
   const result = resolveResponseCycleCallIds({
-    runState: {
-      getInterruptions: () => [{ callId: 'call-current' }],
-      _generatedItems: [
-        { type: 'function_call_output', callId: 'call-consumed' },
-        { type: 'function_call_output', callId: 'call-new' },
-      ],
-    },
-    primaryInterruption: undefined,
+    interruptionCallIds: ['call-current'],
+    completedResultCallIds: ['call-consumed', 'call-new'],
     fallbackCallIds: [],
     conversationHistory: [{ type: 'function_call_output', callId: 'call-consumed' }],
   });
@@ -37,8 +25,8 @@ it('excludes generated outputs already represented in history', () => {
 
 it('preserves fallback ids only when the response-cycle caller requests them', () => {
   const input = {
-    runState: { getInterruptions: () => [{ callId: 'call-new' }] },
-    primaryInterruption: undefined,
+    interruptionCallIds: ['call-new'],
+    completedResultCallIds: [],
     fallbackCallIds: ['call-approved'],
     conversationHistory: [],
   };
@@ -50,8 +38,8 @@ it('preserves fallback ids only when the response-cycle caller requests them', (
 it('falls back when no response-cycle ids can be resolved', () => {
   expect(
     resolveResponseCycleCallIds({
-      runState: {},
-      primaryInterruption: undefined,
+      interruptionCallIds: [],
+      completedResultCallIds: [],
       fallbackCallIds: ['call-fallback'],
       conversationHistory: [],
     }),
@@ -60,11 +48,8 @@ it('falls back when no response-cycle ids can be resolved', () => {
 
 it('keeps interrupted and completed sibling ids during abort resolution', () => {
   const result = resolveAbortedApprovalCallIds({
-    runState: {
-      getInterruptions: () => [{ callId: 'call-rejected' }],
-      _generatedItems: [{ type: 'function_call_output', callId: 'call-approved' }],
-    },
-    primaryInterruption: { callId: 'call-rejected' },
+    interruptionCallIds: ['call-rejected'],
+    completedResultCallIds: ['call-approved'],
   });
 
   expect(result).toEqual(['call-rejected', 'call-approved']);

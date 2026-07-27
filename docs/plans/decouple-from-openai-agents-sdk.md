@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through A4 tool ownership, and the first bounded Step B representation slice is landed: canonical serializable item/turn/tool-call/approval contracts and raw run-item normalization at the conversation boundary. CallId-only migration of denied-read metadata/overrides remains blocked under the stock SDK; Step C is next.
+**Status:** Step A is complete through A4 tool ownership, and the first bounded Step B representation slice is landed: canonical serializable item/turn/tool-call/approval contracts and raw run-item normalization at the conversation boundary. Step C's continuation-call-id slice no longer reads private generated items in its resolver; CallId-only migration of denied-read metadata/overrides remains blocked under the stock SDK.
 **Last updated:** 2026-07-27
 
 ---
@@ -30,9 +30,13 @@ Each landed as a `--no-ff` merge from its own worktree branch; branch history is
 
 ### In flight
 
-Nothing. The bounded representation slice is complete. Start Step C's run-loop ownership work; do not re-derive
-the composition root or restore singleton fallbacks. Do not migrate denied-read metadata or
-execution overrides until Step C owns a post-execute pause/resume seam.
+Step C continuation-call-id slice: `continuation-call-id-resolver.ts` receives only call IDs from
+`RunState.getInterruptions()`/the pending interruption plus current-turn completed result IDs from
+`SessionToolTracker`. It retains fallback ordering, deduplication, history filtering, and abort
+resolution without reading `_generatedItems`. The remaining private reads in `stream-snapshot.ts`
+and `SessionToolTracker.recoverApprovedResultsFromState()` are deliberately unchanged. Do not
+migrate denied-read metadata or execution overrides until Step C owns a post-execute pause/resume
+seam.
 
 ### A4 tool-ownership lifecycle
 
@@ -59,6 +63,9 @@ production session contract.
   denied-read model-retry regressions. The latter observes call A at execute, then a distinct
   call B at `needsApproval`, where B interrupts before execute.
 - Full `tsc --noEmit` reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Continuation-call-id resolver slice: resolver, ledger, tracker, TurnWorkflow parity, and
+  approval-batch tests pass (5 files / 50 tests). `tsc --noEmit` again reaches only the known
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
 - Focused tool-ownership clusters pass: 23 files / 364 tests, plus the 4-test conversation
   integration fixture. Formatting and lint pass except the pre-existing `prefer-const` warning
@@ -204,7 +211,7 @@ The actual thing being eliminated. Every entry is a private-API reach-in.
 |---|---|---|---|
 | ~~`_pendingAgentToolRuns`~~ | ~~`services/approval/tool-owner.ts`~~ | approval | **DONE** (A2) |
 | ~~`_mergeApprovals`~~ | ~~`services/subagents/nested-runner.ts`~~ | approval | **DONE** (A3) |
-| `_generatedItems` | `services/stream-snapshot.ts`, `services/session/session-tool-tracker.ts`, `services/session/continuation-call-id-resolver.ts` | run loop | Step C/E |
+| `_generatedItems` | `services/stream-snapshot.ts`, `services/session/session-tool-tracker.ts`, ~~`services/session/continuation-call-id-resolver.ts`~~ | run loop | **Resolver slice DONE**; remaining Step C/E |
 | `_buildResponsesCreateRequest` | `providers/codex-responses-model.ts`, `providers/fallback-responses-model.ts`, `providers/openai.provider.ts` | provider | Step D/E |
 | `_fetchResponse` | `providers/codex-responses-model.ts` | provider | Step E |
 
@@ -398,7 +405,10 @@ alter requests, RunState, chaining, approval/resume, denied-read, execution over
 
 ### Step C — Own the run loop
 Contained, because downstream already speaks our language.
-**Retires `_generatedItems` in `stream-snapshot.ts` / `continuation-call-id-resolver.ts`.**
+**Resolver slice DONE:** `continuation-call-id-resolver.ts` no longer reads `_generatedItems`; it
+uses public interruption IDs and current-turn completed IDs from the session ledger. The
+`stream-snapshot.ts` and `SessionToolTracker.recoverApprovedResultsFromState()` reads remain for
+their chaining-recovery responsibilities until their dedicated Step C/E work.
 
 ### Step D — Non-codex providers off the SDK
 Delete `ai-sdk-agents-adapter.ts` (112); ai-sdk providers implement our interface directly.

@@ -498,8 +498,11 @@ export class TurnWorkflow {
               approvalResult.isApproved,
             );
             state.currentCallIds = resolveResponseCycleCallIds({
-              runState: approvalResult.nextPlan.pendingApprovalContext.state,
-              primaryInterruption: approvalResult.nextPlan.pendingApprovalContext.interruption,
+              interruptionCallIds: this.#interruptionCallIds(
+                approvalResult.nextPlan.pendingApprovalContext.state,
+                approvalResult.nextPlan.pendingApprovalContext.interruption,
+              ),
+              completedResultCallIds: this.deps.toolTracker.completedResultCallIdsForCurrentTurn(),
               fallbackCallIds: state.currentCallIds,
               conversationHistory: this.deps.conversationStore.getHistory(),
             });
@@ -562,8 +565,8 @@ export class TurnWorkflow {
     if (result.kind === 'ready') {
       const pending = this.deps.approvalFlow.getPending?.();
       state.currentCallIds = resolveResponseCycleCallIds({
-        runState: state.currentState,
-        primaryInterruption: pending?.interruption,
+        interruptionCallIds: this.#interruptionCallIds(state.currentState, pending?.interruption),
+        completedResultCallIds: this.deps.toolTracker.completedResultCallIdsForCurrentTurn(),
         fallbackCallIds: state.currentCallIds,
         conversationHistory: this.deps.conversationStore.getHistory(),
         preserveFallback: true,
@@ -765,16 +768,35 @@ export class TurnWorkflow {
   #activeCallIdsForInit(init: ContinuationInit, prepared: PreparedContinuation): string[] {
     if (init.kind === 'abort_resolution') {
       return resolveAbortedApprovalCallIds({
-        runState: init.abortedContext.state,
-        primaryInterruption: init.abortedContext.interruption,
+        interruptionCallIds: this.#interruptionCallIds(init.abortedContext.state, init.abortedContext.interruption),
+        completedResultCallIds: this.deps.toolTracker.completedResultCallIdsForCurrentTurn(),
       });
     }
     return resolveResponseCycleCallIds({
-      runState: prepared.state,
-      primaryInterruption: prepared.interruption,
+      interruptionCallIds: this.#interruptionCallIds(prepared.state, prepared.interruption),
+      completedResultCallIds: this.deps.toolTracker.completedResultCallIdsForCurrentTurn(),
       fallbackCallIds: this.deps.toolTracker.activeCallIdsForCurrentTurn(),
       conversationHistory: this.deps.conversationStore.getHistory(),
     });
+  }
+
+  #interruptionCallIds(state: unknown, primaryInterruption: unknown): string[] {
+    const callIds = new Set<string>();
+    const interruptions = getMethod<[], unknown>(state, 'getInterruptions')?.();
+    if (Array.isArray(interruptions)) {
+      for (const interruption of interruptions) {
+        const callId = getCallIdFromObject(interruption);
+        if (callId) {
+          callIds.add(callId);
+        }
+      }
+    }
+
+    const primaryCallId = getCallIdFromObject(primaryInterruption);
+    if (primaryCallId) {
+      callIds.add(primaryCallId);
+    }
+    return [...callIds];
   }
 
   #recordSuccess(state: ContinuationState, previousInputForSurge?: unknown): void {

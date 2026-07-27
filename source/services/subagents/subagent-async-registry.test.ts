@@ -702,6 +702,22 @@ describe('outbound steering', () => {
     registry.dispose();
   });
 
+  it('treats a null reply_to as plain steering rather than an answer to a question', () => {
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      run: () => new Promise<SubagentResult>(() => {}),
+    });
+    const run = registry.startRun({ role: 'explorer', task: 'Inspect the repository.', name: 'scan' });
+
+    expect(registry.sendMessage('scan', 'Focus on the command parser.', null)).toEqual({
+      ok: true,
+      runId: run.runId,
+      status: 'running',
+      delivery: 'queued',
+    });
+    registry.dispose();
+  });
+
   it('restarts an interrupted execution run in the same session with a fresh guided user turn', async () => {
     const segments: RunParams[] = [];
     const resolutions: Array<(value: SubagentResult) => void> = [];

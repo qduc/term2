@@ -373,7 +373,10 @@ export class SubagentAsyncRegistry {
    * Queue bounded steering for an active execution run without awaiting its result.
    * Canonical active run ids are resolved before active names.
    */
-  sendMessage(target: string, guidance: string, replyTo?: string): SubagentSteerAcknowledgement {
+  sendMessage(target: string, guidance: string, replyToParam?: string | null): SubagentSteerAcknowledgement {
+    // OpenAI strict tool schemas turn optional params into nullable-with-null-default,
+    // so an absent reply_to arrives as null. Treat it as absent, not as an answer.
+    const replyTo = replyToParam ?? undefined;
     const run = this.#resolveActiveTarget(target);
     if (!run) return { ok: false, code: 'not_active', target };
     if (run.role === 'mentor') return { ok: false, code: 'unsupported_control', target };

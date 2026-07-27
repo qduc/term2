@@ -182,7 +182,11 @@ export class SubagentManager {
   }
 
   /** Queue parent steering or an ask_orchestrator answer without awaiting a run. */
-  sendMessageToAsyncRun(params: { target: string; message: string; reply_to?: string }): SubagentSteerAcknowledgement {
+  sendMessageToAsyncRun(params: {
+    target: string;
+    message: string;
+    reply_to?: string | null;
+  }): SubagentSteerAcknowledgement {
     return this.#runtime.asyncRegistry.sendMessage(params.target, params.message, params.reply_to);
   }
 

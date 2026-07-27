@@ -356,7 +356,7 @@ export class SubagentBridge {
   sendSubagentMessage = (params: {
     target: string;
     message: string;
-    reply_to?: string;
+    reply_to?: string | null;
   }): SubagentSteerAcknowledgement => {
     if (!this.#subagentManager) {
       throw new Error('Transient agent clients cannot control asynchronous subagents.');

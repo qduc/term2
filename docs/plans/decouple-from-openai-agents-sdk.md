@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through A4 tool ownership, the first bounded Step B representation slice is landed, and Step C has retired every production `_generatedItems` read. CallId-only migration of denied-read metadata/overrides remains blocked under the stock SDK until the separate post-execute pause/resume seam.
+**Status:** Step A is complete through A4 tool ownership, the first bounded Step B representation slice is landed, and Step C has retired every production `_generatedItems` read. A post-execute pause assessment stopped without code: the safe pending-tool design requires a coherent session/UI/TurnWorkflow handoff beyond this bounded slice. CallId-only migration of denied-read metadata/overrides remains blocked under the stock SDK.
 **Last updated:** 2026-07-27
 
 ---
@@ -37,6 +37,20 @@ The remaining Step C work is the separate post-execute pause/resume seam. Do not
 denied-read metadata or execution overrides yet: the stock SDK can retry a completed denied read
 as a new call id, so CallId-only storage cannot safely bridge that boundary.
 
+**2026-07-27 pause assessment — stopped boundary.** The safe design can suspend the SDK tool
+promise in an application-owned registry, but the current session contract has no out-of-band
+approval channel. `TurnWorkflow` only learns of approvals after `SessionStreamProcessor` consumes
+the stream; while the tool promise is pending, that stream cannot complete or expose a terminal
+approval. Returning the existing approval terminal would abandon the live stream, while resolving
+the promise without a stored/resumable stream consumer would let the SDK issue request B before
+the UI is able to continue the turn. A correct next slice therefore needs one coherent boundary:
+a session/turn-owned post-execute batch channel, a `TurnWorkflow` suspended-stream handoff that
+returns an approval terminal without disposing the stream, and a continuation path that settles
+the selected entries and resumes consuming that same stream. It must also settle all entries
+fail-closed on abort, reset, and disposal. Do not substitute a `callModelInputFilter` sentinel:
+that would require SDK-specific black-box guarantees and does not solve the current UI/channel
+ownership gap.
+
 ### A4 tool-ownership lifecycle
 
 `createOwnedSessionClientFactory()` creates one fresh `ToolOwnershipRegistry` per session handle
@@ -59,6 +73,14 @@ production session contract.
 - `source/lib/sdk-approval-resume.test.ts` passes its real-Runner approval-resume and
   denied-read model-retry regressions. The latter observes call A at execute, then a distinct
   call B at `needsApproval`, where B interrupts before execute.
+- Pause assessment baseline: `pnpm test source/lib/sdk-approval-resume.test.ts` passes (3 tests).
+  No seam tests were added because no production seam was landed; the required regression set
+  belongs with the coherent suspended-stream/channel boundary above.
+- The scoped plan format check passes: `pnpm exec prettier --check
+  docs/plans/decouple-from-openai-agents-sdk.md`. Worktree-local `pnpm` validation could not run:
+  its automatic install fails with sandbox `EPERM` while reflinking the package store. Root-level
+  `pnpm lint` is also not a meaningful baseline with sibling worktrees present: ESLint traverses
+  them and reports their files as outside the root TypeScript project.
 - Full `tsc --noEmit` reaches only the known pre-existing
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
 - Continuation-call-id resolver slice: resolver, ledger, tracker, TurnWorkflow parity, and
@@ -411,11 +433,16 @@ alter requests, RunState, chaining, approval/resume, denied-read, execution over
 
 ### Step C — Own the run loop
 Contained, because downstream already speaks our language.
-**Resolver + replay-diagnostics slices DONE:** `continuation-call-id-resolver.ts` uses public
-interruption IDs and current-turn completed IDs from the session ledger. `stream-snapshot.ts`
-uses only public stream history/new items for duplicate-tool diagnostics. Only
-`SessionToolTracker.recoverApprovedResultsFromState()` still reads `_generatedItems`, for its
-transport-failure recovery responsibility; retire it only after proving a complete public source.
+**Resolver + replay-diagnostics + transport-recovery slices DONE:**
+`continuation-call-id-resolver.ts` uses public interruption IDs and current-turn completed IDs
+from the session ledger; `stream-snapshot.ts` uses only public stream history/new items for
+duplicate-tool diagnostics; and public completed tool results are recorded in the live ledger
+before recovery projects them. No production `_generatedItems` read remains.
+
+**Post-execute pause seam — STOPPED at the current boundary:** see *Resume here / In flight* for
+the required session/turn channel and suspended-stream continuation design. Do not add an inert
+registry or migrate command-keyed denied-read stores until that complete behavior can be landed
+and tested end-to-end.
 
 ### Step D — Non-codex providers off the SDK
 Delete `ai-sdk-agents-adapter.ts` (112); ai-sdk providers implement our interface directly.

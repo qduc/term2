@@ -1,3 +1,12 @@
+import type {
+  AssistantTextItem,
+  Item,
+  ReasoningItem,
+  ToolCall,
+  ToolResult,
+  Turn,
+} from '../../contracts/conversation-items.js';
+
 export interface SavedMessage {
   id: string;
   sender: string;
@@ -13,44 +22,15 @@ export interface SavedAppMode {
   orchestratorMode?: boolean;
 }
 
-export interface PersistedReasoningItem {
-  type: 'reasoning';
-  text: string;
-  providerMetadata?: Record<string, unknown>;
-  providerItemId?: string;
-  sequence?: number;
-}
-
-export interface PersistedAssistantTextItem {
-  type: 'assistant_text';
-  text: string;
-  providerMetadata?: Record<string, unknown>;
-  providerItemId?: string;
-}
-
-export interface PersistedToolCallItem {
-  type: 'tool_call';
-  callId: string;
-  toolName: string;
-  arguments: unknown;
-  providerItem?: Record<string, unknown>;
-}
-
-export interface PersistedToolResultItem {
-  type: 'tool_result';
-  callId: string;
-  toolName: string;
-  status: 'completed' | 'failed' | 'aborted';
-  output: unknown;
-  providerItem?: Record<string, unknown>;
-}
-
-export type PersistedAssistantTurnItem =
-  | PersistedReasoningItem
-  | PersistedAssistantTextItem
-  | PersistedToolCallItem
-  | PersistedToolResultItem;
-
-export interface PersistedAssistantTurn {
-  items: PersistedAssistantTurnItem[];
-}
+/** @deprecated Use the canonical contract types from `contracts/conversation-items`. */
+export type PersistedReasoningItem = ReasoningItem;
+/** @deprecated Use the canonical contract types from `contracts/conversation-items`. */
+export type PersistedAssistantTextItem = AssistantTextItem;
+/** @deprecated Use the canonical contract types from `contracts/conversation-items`. */
+export type PersistedToolCallItem = ToolCall;
+/** @deprecated Use the canonical contract types from `contracts/conversation-items`. */
+export type PersistedToolResultItem = ToolResult;
+/** @deprecated Use `Item` from `contracts/conversation-items`. */
+export type PersistedAssistantTurnItem = Item;
+/** @deprecated Use `Turn` from `contracts/conversation-items`. */
+export type PersistedAssistantTurn = Turn;

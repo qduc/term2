@@ -1,0 +1,180 @@
+import type {
+  AssistantTextItem,
+  Item,
+  ReasoningItem,
+  ToolCall,
+  ToolResult,
+} from '../../contracts/conversation-items.js';
+
+const clone = <T>(value: T): T => {
+  try {
+    return structuredClone(value);
+  } catch {
+    return JSON.parse(JSON.stringify(value)) as T;
+  }
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+const rawItem = (value: unknown): Record<string, unknown> | null => {
+  const record = asRecord(value);
+  return record ? asRecord(record.rawItem) ?? record : null;
+};
+const getString = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined);
+const cloneRecord = (value: unknown): Record<string, unknown> | undefined => {
+  const record = asRecord(value);
+  return record ? clone(record) : undefined;
+};
+const extractTextParts = (content: unknown): string => {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((part) => {
+      const record = asRecord(part);
+      const type = getString(record?.type);
+      return (type === 'output_text' || type === 'text') && typeof record?.text === 'string';
+    })
+    .map((part) => String((part as { text: string }).text))
+    .join('');
+};
+const extractReasoningParts = (content: unknown): string => {
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((part) => {
+      const record = asRecord(part);
+      const type = getString(record?.type);
+      return (type === 'reasoning_text' || type === 'reasoning') && typeof record?.text === 'string';
+    })
+    .map((part) => String((part as { text: string }).text))
+    .join('');
+};
+const getProviderMetadata = (item: unknown): Record<string, unknown> | undefined => {
+  const raw = rawItem(item);
+  const providerData =
+    cloneRecord(raw?.providerData) ?? cloneRecord(raw?.provider_data) ?? cloneRecord(asRecord(item)?.providerData);
+  const reasoning = getString(raw?.reasoning) ?? getString(asRecord(item)?.reasoning);
+  const reasoningContent =
+    getString(raw?.reasoning_content) ??
+    getString(asRecord(item)?.reasoning_content) ??
+    getString(providerData?.reasoning_content);
+  const reasoningDetails =
+    raw?.reasoning_details ?? asRecord(item)?.reasoning_details ?? providerData?.reasoning_details;
+  const metadata: Record<string, unknown> = providerData ? clone(providerData) : {};
+  if (reasoning) metadata.reasoning = reasoning;
+  if (reasoningContent) metadata.reasoning_content = reasoningContent;
+  if (reasoningDetails != null) metadata.reasoning_details = clone(reasoningDetails);
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+};
+const getReasoningText = (item: unknown): string => {
+  const raw = rawItem(item);
+  if (!raw) return '';
+  const direct =
+    getString(raw.text) ??
+    getString(raw.delta) ??
+    getString(raw.summary) ??
+    getString(raw.reasoning_content) ??
+    getString(asRecord(item)?.reasoning_content);
+  if (direct) return direct;
+  const fromMetadata = getString(getProviderMetadata(item)?.reasoning_content);
+  if (fromMetadata) return fromMetadata;
+  return (
+    extractReasoningParts(raw.rawContent) ||
+    extractReasoningParts(asRecord(item)?.rawContent) ||
+    extractTextParts(raw.content)
+  );
+};
+const getProviderItemId = (item: unknown): string | undefined => {
+  const raw = rawItem(item);
+  return getString(raw?.id) ?? getString(asRecord(item)?.id);
+};
+const makeReasoningItem = (item: unknown): ReasoningItem | null => {
+  const text = getReasoningText(item);
+  const providerMetadata = getProviderMetadata(item);
+  const providerItemId = getProviderItemId(item);
+  const raw = rawItem(item);
+  const sequence = typeof raw?.index === 'number' ? raw.index : undefined;
+  if (!text && !providerMetadata) return null;
+  return {
+    type: 'reasoning',
+    text,
+    ...(providerMetadata ? { providerMetadata } : {}),
+    ...(providerItemId ? { providerItemId } : {}),
+    ...(sequence !== undefined ? { sequence } : {}),
+  };
+};
+const pushAssistantMessageItems = (target: Item[], item: unknown): void => {
+  const text = extractTextParts(rawItem(item)?.content);
+  const providerMetadata = getProviderMetadata(item);
+  const providerItemId = getProviderItemId(item);
+  const reasoningText = getString(providerMetadata?.reasoning_content);
+  if (reasoningText)
+    target.push({ type: 'reasoning', text: reasoningText, ...(providerMetadata ? { providerMetadata } : {}) });
+  if (!text) return;
+  const assistantTextItem: AssistantTextItem = {
+    type: 'assistant_text',
+    text,
+    ...(providerMetadata ? { providerMetadata } : {}),
+    ...(providerItemId ? { providerItemId } : {}),
+  };
+  target.push(assistantTextItem);
+};
+const getCallId = (raw: Record<string, unknown>): string =>
+  getString(raw.callId) ?? getString(raw.call_id) ?? getString(raw.tool_call_id) ?? getString(raw.id) ?? 'unknown-call';
+const pushToolCallItem = (target: Item[], item: unknown): void => {
+  const raw = rawItem(item);
+  if (!raw) return;
+  const providerMetadata = getProviderMetadata(item);
+  const reasoningText = getString(providerMetadata?.reasoning_content);
+  if (reasoningText)
+    target.push({ type: 'reasoning', text: reasoningText, ...(providerMetadata ? { providerMetadata } : {}) });
+  const toolCallItem: ToolCall = {
+    type: 'tool_call',
+    callId: getCallId(raw),
+    toolName: getString(raw.name) ?? getString(asRecord(item)?.name) ?? 'unknown',
+    arguments: raw.arguments ?? raw.args ?? asRecord(item)?.arguments ?? asRecord(item)?.args,
+    providerItem: clone(raw),
+  };
+  target.push(toolCallItem);
+};
+const pushToolResultItem = (target: Item[], item: unknown): void => {
+  const raw = rawItem(item);
+  if (!raw) return;
+  const toolResultItem: ToolResult = {
+    type: 'tool_result',
+    callId: getCallId(raw),
+    toolName: getString(raw.name) ?? getString(asRecord(item)?.name) ?? 'unknown',
+    status: typeof raw.is_error === 'boolean' && raw.is_error ? 'failed' : 'completed',
+    output: raw.output ?? asRecord(item)?.output,
+    providerItem: clone(raw),
+  };
+  target.push(toolResultItem);
+};
+
+/** Converts raw provider run items to serializable domain items at the conversation boundary. */
+export function normalizeRunItem(item: unknown): Item[] {
+  const raw = rawItem(item);
+  if (!raw) return [];
+  const role = getString(raw.role);
+  const type = getString(raw.type) ?? '';
+  if (type === 'reasoning') {
+    const reasoning = makeReasoningItem(item);
+    return reasoning ? [reasoning] : [];
+  }
+  const normalized: Item[] = [];
+  if (role === 'assistant' && type === 'message') pushAssistantMessageItems(normalized, item);
+  else if (type === 'function_call' || type === 'apply_patch_call') pushToolCallItem(normalized, item);
+  else if (
+    type === 'function_call_result' ||
+    type === 'function_call_output' ||
+    type === 'function_call_output_result' ||
+    type === 'tool_call_output_item' ||
+    type === 'apply_patch_call_output'
+  )
+    pushToolResultItem(normalized, item);
+  return normalized;
+}
+
+export function normalizeRunItems(items: readonly unknown[] | undefined): Item[] {
+  if (!Array.isArray(items)) return [];
+  return items.flatMap(normalizeRunItem);
+}

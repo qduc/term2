@@ -1,12 +1,10 @@
 import type { AgentInputItem } from '@openai/agents';
 import type {
-  PersistedAssistantTextItem,
   PersistedAssistantTurn,
   PersistedAssistantTurnItem,
   PersistedReasoningItem,
-  PersistedToolCallItem,
-  PersistedToolResultItem,
 } from './conversation-persistence-types.js';
+import { normalizeRunItem, normalizeRunItems } from './run-item-normalizer.js';
 
 const clone = <T>(value: T): T => {
   try {
@@ -41,40 +39,6 @@ const serializeToolCallArgumentsForReplay = (value: unknown): unknown => {
   }
 };
 
-const extractTextParts = (content: unknown): string => {
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (!Array.isArray(content)) {
-    return '';
-  }
-  return content
-    .filter((part) => {
-      const record = asRecord(part);
-      const type = getString(record?.type);
-      return (type === 'output_text' || type === 'text') && typeof record?.text === 'string';
-    })
-    .map((part) => String((part as { text: string }).text))
-    .join('');
-};
-
-// Some providers store reasoning in a `rawContent` array of
-// `{ type: 'reasoning_text', text }` parts (rather than in `content`, `text`,
-// or `reasoning_content`). Pull text out of those parts.
-const extractReasoningParts = (content: unknown): string => {
-  if (!Array.isArray(content)) {
-    return '';
-  }
-  return content
-    .filter((part) => {
-      const record = asRecord(part);
-      const type = getString(record?.type);
-      return (type === 'reasoning_text' || type === 'reasoning') && typeof record?.text === 'string';
-    })
-    .map((part) => String((part as { text: string }).text))
-    .join('');
-};
-
 const cloneRecord = (value: unknown): Record<string, unknown> | undefined => {
   const record = asRecord(value);
   return record ? clone(record) : undefined;
@@ -92,67 +56,6 @@ const stripReasoningFields = (
   }
   const { reasoning: _reasoning, reasoning_content: _rc, reasoning_details: _rd, ...rest } = providerData;
   return Object.keys(rest).length > 0 ? rest : undefined;
-};
-
-const getProviderMetadata = (item: unknown): Record<string, unknown> | undefined => {
-  const raw = rawItem(item);
-  const providerData =
-    cloneRecord(raw?.providerData) ?? cloneRecord(raw?.provider_data) ?? cloneRecord(asRecord(item)?.providerData);
-  const reasoning = getString(raw?.reasoning) ?? getString(asRecord(item)?.reasoning);
-  const reasoningContent =
-    getString(raw?.reasoning_content) ??
-    getString(asRecord(item)?.reasoning_content) ??
-    getString(providerData?.reasoning_content);
-  const reasoningDetails =
-    raw?.reasoning_details ?? asRecord(item)?.reasoning_details ?? providerData?.reasoning_details;
-
-  const metadata: Record<string, unknown> = providerData ? clone(providerData) : {};
-  if (reasoning) {
-    metadata.reasoning = reasoning;
-  }
-  if (reasoningContent) {
-    metadata.reasoning_content = reasoningContent;
-  }
-  if (reasoningDetails != null) {
-    metadata.reasoning_details = clone(reasoningDetails);
-  }
-
-  return Object.keys(metadata).length > 0 ? metadata : undefined;
-};
-
-const getReasoningText = (item: unknown): string => {
-  const raw = rawItem(item);
-  if (!raw) {
-    return '';
-  }
-
-  const direct =
-    getString(raw.text) ??
-    getString(raw.delta) ??
-    getString(raw.summary) ??
-    getString(raw.reasoning_content) ??
-    getString(asRecord(item)?.reasoning_content);
-  if (direct) {
-    return direct;
-  }
-
-  const metadata = getProviderMetadata(item);
-  const fromMetadata = getString(metadata?.reasoning_content);
-  if (fromMetadata) {
-    return fromMetadata;
-  }
-
-  const fromRawContent = extractReasoningParts(raw.rawContent) || extractReasoningParts(asRecord(item)?.rawContent);
-  if (fromRawContent) {
-    return fromRawContent;
-  }
-
-  return extractTextParts(raw.content);
-};
-
-const getProviderItemId = (item: unknown): string | undefined => {
-  const raw = rawItem(item);
-  return getString(raw?.id) ?? getString(asRecord(item)?.id);
 };
 
 /**
@@ -190,113 +93,6 @@ const mergeReasoningProviderData = (reasoningItems: PersistedReasoningItem[]): R
   return Object.keys(merged).length > 0 ? merged : undefined;
 };
 
-const makeReasoningItem = (item: unknown): PersistedReasoningItem | null => {
-  const text = getReasoningText(item);
-  const providerMetadata = getProviderMetadata(item);
-  const providerItemId = getProviderItemId(item);
-  const raw = rawItem(item);
-  const sequence = typeof raw?.index === 'number' ? raw.index : undefined;
-
-  if (!text && !providerMetadata) {
-    return null;
-  }
-
-  return {
-    type: 'reasoning',
-    text,
-    ...(providerMetadata ? { providerMetadata } : {}),
-    ...(providerItemId ? { providerItemId } : {}),
-    ...(sequence !== undefined ? { sequence } : {}),
-  };
-};
-
-const pushAssistantMessageItems = (target: PersistedAssistantTurnItem[], item: unknown): void => {
-  const text = extractTextParts(rawItem(item)?.content);
-  const providerMetadata = getProviderMetadata(item);
-  const providerItemId = getProviderItemId(item);
-  const reasoningText = getString(providerMetadata?.reasoning_content);
-
-  if (reasoningText) {
-    target.push({
-      type: 'reasoning',
-      text: reasoningText,
-      ...(providerMetadata ? { providerMetadata } : {}),
-    });
-  }
-
-  if (!text) {
-    return;
-  }
-
-  const assistantTextItem: PersistedAssistantTextItem = {
-    type: 'assistant_text',
-    text,
-    ...(providerMetadata ? { providerMetadata } : {}),
-    ...(providerItemId ? { providerItemId } : {}),
-  };
-  target.push(assistantTextItem);
-};
-
-const pushToolCallItem = (target: PersistedAssistantTurnItem[], item: unknown): void => {
-  const raw = rawItem(item);
-  if (!raw) {
-    return;
-  }
-
-  const providerMetadata = getProviderMetadata(item);
-  const reasoningText = getString(providerMetadata?.reasoning_content);
-  if (reasoningText) {
-    target.push({
-      type: 'reasoning',
-      text: reasoningText,
-      ...(providerMetadata ? { providerMetadata } : {}),
-    });
-  }
-
-  const callId =
-    getString(raw.callId) ??
-    getString(raw.call_id) ??
-    getString(raw.tool_call_id) ??
-    getString(raw.id) ??
-    'unknown-call';
-  const toolName = getString(raw.name) ?? getString(asRecord(item)?.name) ?? 'unknown';
-
-  const toolCallItem: PersistedToolCallItem = {
-    type: 'tool_call',
-    callId,
-    toolName,
-    arguments: raw.arguments ?? raw.args ?? asRecord(item)?.arguments ?? asRecord(item)?.args,
-    providerItem: clone(raw),
-  };
-  target.push(toolCallItem);
-};
-
-const pushToolResultItem = (target: PersistedAssistantTurnItem[], item: unknown): void => {
-  const raw = rawItem(item);
-  if (!raw) {
-    return;
-  }
-
-  const callId =
-    getString(raw.callId) ??
-    getString(raw.call_id) ??
-    getString(raw.tool_call_id) ??
-    getString(raw.id) ??
-    'unknown-call';
-  const toolName = getString(raw.name) ?? getString(asRecord(item)?.name) ?? 'unknown';
-  const status = typeof raw.is_error === 'boolean' && raw.is_error ? 'failed' : 'completed';
-
-  const toolResultItem: PersistedToolResultItem = {
-    type: 'tool_result',
-    callId,
-    toolName,
-    status,
-    output: raw.output ?? asRecord(item)?.output,
-    providerItem: clone(raw),
-  };
-  target.push(toolResultItem);
-};
-
 /**
  * Normalize a single raw provider run item into zero or more persisted item
  * shapes. Returns an empty array if the item is not a recognized
@@ -307,44 +103,7 @@ const pushToolResultItem = (target: PersistedAssistantTurnItem[], item: unknown)
  * full set should use this instead of `buildPersistedAssistantItemFromRaw`.
  */
 export function buildPersistedAssistantItemsFromRaw(item: unknown): PersistedAssistantTurnItem[] {
-  const raw = rawItem(item);
-  if (!raw) {
-    return [];
-  }
-
-  const role = getString(raw.role);
-  const type = getString(raw.type) ?? '';
-
-  if (type === 'reasoning') {
-    const reasoningItem = makeReasoningItem(item);
-    return reasoningItem ? [reasoningItem] : [];
-  }
-
-  if (role === 'assistant' && type === 'message') {
-    const target: PersistedAssistantTurnItem[] = [];
-    pushAssistantMessageItems(target, item);
-    return target;
-  }
-
-  if (type === 'function_call' || type === 'apply_patch_call') {
-    const target: PersistedAssistantTurnItem[] = [];
-    pushToolCallItem(target, item);
-    return target;
-  }
-
-  if (
-    type === 'function_call_result' ||
-    type === 'function_call_output' ||
-    type === 'function_call_output_result' ||
-    type === 'tool_call_output_item' ||
-    type === 'apply_patch_call_output'
-  ) {
-    const target: PersistedAssistantTurnItem[] = [];
-    pushToolResultItem(target, item);
-    return target;
-  }
-
-  return [];
+  return normalizeRunItem(item);
 }
 
 /**
@@ -361,50 +120,7 @@ export function buildPersistedAssistantItemFromRaw(item: unknown): PersistedAssi
 }
 
 export function buildPersistedAssistantTurnItems(items: readonly unknown[] | undefined): PersistedAssistantTurnItem[] {
-  if (!Array.isArray(items) || items.length === 0) {
-    return [];
-  }
-
-  const persisted: PersistedAssistantTurnItem[] = [];
-  for (const item of items) {
-    const raw = rawItem(item);
-    if (!raw) {
-      continue;
-    }
-
-    const role = getString(raw.role);
-    const type = getString(raw.type) ?? '';
-
-    if (type === 'reasoning') {
-      const reasoningItem = makeReasoningItem(item);
-      if (reasoningItem) {
-        persisted.push(reasoningItem);
-      }
-      continue;
-    }
-
-    if (role === 'assistant' && type === 'message') {
-      pushAssistantMessageItems(persisted, item);
-      continue;
-    }
-
-    if (type === 'function_call' || type === 'apply_patch_call') {
-      pushToolCallItem(persisted, item);
-      continue;
-    }
-
-    if (
-      type === 'function_call_result' ||
-      type === 'function_call_output' ||
-      type === 'function_call_output_result' ||
-      type === 'tool_call_output_item' ||
-      type === 'apply_patch_call_output'
-    ) {
-      pushToolResultItem(persisted, item);
-    }
-  }
-
-  return persisted;
+  return normalizeRunItems(items);
 }
 
 export function synthesizeHistoryFromAssistantTurn(

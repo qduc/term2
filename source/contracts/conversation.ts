@@ -1,9 +1,8 @@
-import type { ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import type { CommandMessage } from '../tools/types.js';
 import type { NormalizedUsage } from '../utils/ai/token-usage.js';
-import type { PersistedAssistantTurnItem } from '../services/conversation/conversation-persistence-types.js';
+import type { Item } from './conversation-items.js';
 
-export type ReasoningEffortSetting = ModelSettingsReasoningEffort | 'default';
+export type ReasoningEffortSetting = 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export interface LLMAdvisory {
   reasoning: string;
@@ -83,6 +82,9 @@ export interface ApprovalDescriptor {
   dockerHostControl?: boolean;
 }
 
+/** Canonical approval data. Reuses the established approval descriptor shape. */
+export type Approval = ApprovalDescriptor;
+
 export interface ApprovalRequiredTerminal {
   type: 'approval_required';
   approval: ApprovalDescriptor;
@@ -96,7 +98,7 @@ export interface FinalTerminal {
   /** @deprecated derived compatibility only; turnItems is authoritative. */
   reasoningText?: string;
   usage?: NormalizedUsage;
-  turnItems?: PersistedAssistantTurnItem[];
+  turnItems?: Item[];
 }
 
 export type ConversationTerminal = ApprovalRequiredTerminal | FinalTerminal;

@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete only through A4 tool ownership — A1–A3, R1, the session client-factory boundary, and A4 tool ownership are landed. CallId-only migration of denied-read metadata/overrides is blocked under the stock SDK; Step B is next.
+**Status:** Step A is complete through A4 tool ownership, and the first bounded Step B representation slice is landed: canonical serializable item/turn/tool-call/approval contracts and raw run-item normalization at the conversation boundary. CallId-only migration of denied-read metadata/overrides remains blocked under the stock SDK; Step C is next.
 **Last updated:** 2026-07-27
 
 ---
@@ -22,6 +22,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | A4 groundwork | Session factory owns/disposes the closure-bound client; reset and both CLI modes replace the handle |
 | A4 tool ownership | `ToolOwnershipRegistry` is created by each session handle and explicitly propagated through root clients, session runtime composition, approval flow, subagent bridge/manager/runtime, and nested runners; no process singleton/default remains |
 | A4 retry proof | A real SDK `Runner` proves a denied-read-like output from call A can cause the model to emit the same shell arguments as a new call B; B is not correlated to A by call id |
+| Step B representation slice | `contracts/conversation-items.ts` owns canonical `Item`, `Turn`, `ToolCall`, and related serializable shapes; `Approval` aliases `ApprovalDescriptor`; legacy persisted names alias those contracts; `run-item-normalizer.ts` contains raw SDK/provider item normalization while replay remains provider-facing |
 | Bug fix | Denied-read approval never fired for `cd`-prefixed commands (record/lookup key mismatch) |
 | Bug fix | Docker host-control denials leaked across sessions (process-global `#deniedCommands`) |
 
@@ -29,7 +30,7 @@ Each landed as a `--no-ff` merge from its own worktree branch; branch history is
 
 ### In flight
 
-Nothing. The session-owned tool-ownership milestone is complete. Start Step B; do not re-derive
+Nothing. The bounded representation slice is complete. Start Step C's run-loop ownership work; do not re-derive
 the composition root or restore singleton fallbacks. Do not migrate denied-read metadata or
 execution overrides until Step C owns a post-execute pause/resume seam.
 
@@ -50,6 +51,11 @@ production session contract.
 
 ### Validation at pause
 
+- Step B's focused normalizer, turn-item compatibility, turn accumulator, stream, replay,
+  state projector, tool-ledger, and chained-filter set passes: 6 files / 108 tests.
+- `tsc --noEmit` still fails only on known test baselines:
+  `source/lib/sdk-approval-resume.test.ts:112,116 TS2322/TS2345` and
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532`.
 - `source/lib/sdk-approval-resume.test.ts` passes its real-Runner approval-resume and
   denied-read model-retry regressions. The latter observes call A at execute, then a distinct
   call B at `needsApproval`, where B interrupts before execute.
@@ -91,9 +97,9 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **Step B** — define the canonical `Item`, `Turn`, `ToolCall`, and `Approval` types at the
-   boundary. A4's tool-ownership work is complete; its denied-read/override migration is
-   deferred to Step C, where the run loop can pause after execute and resume the same call.
+1. **Step C** — own the post-execute pause/resume seam in the run loop before migrating
+   denied-read metadata or execution overrides. The completed Step B representation slice
+   contains raw-item normalization but does not retire SDK reach-ins or change run behavior.
 
 ### R1 gate — PASSED
 
@@ -381,6 +387,15 @@ SDK-free.
 **Next implementation step.** Keep current denied-read recovery behavior unchanged. Do not add
 command matching or a temporary token protocol; Step C must first own the post-execute
 pause/resume seam needed to migrate denied-read metadata and execution overrides safely.
+
+**Landed representation slice.** `source/contracts/conversation-items.ts` now owns the canonical
+serializable item and turn shapes; compatibility aliases in `conversation-persistence-types.ts`
+preserve existing persisted imports. `Approval` reuses `ApprovalDescriptor`, and
+`ReasoningEffortSetting` is the app-supported string union instead of an SDK import.
+`run-item-normalizer.ts` owns the raw-item-to-`Item[]` adapter, while
+`conversation-turn-items.ts` delegates its legacy builders and retains provider-facing replay.
+This contains normalization only: it does not remove SDK reach-ins, migrate all raw items, or
+alter requests, RunState, chaining, approval/resume, denied-read, execution overrides, or run-loop behavior.
 
 ### Step C — Own the run loop
 Contained, because downstream already speaks our language.

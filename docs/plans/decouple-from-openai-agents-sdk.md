@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A mostly done — A1, A2, A3 landed on `main`. A4 is next, gated on R1.
+**Status:** Step A mostly done — A1, A2, A3 and the R1 gate landed on `main`. Resolve the composition root before A4.
 **Last updated:** 2026-07-27
 
 ---
@@ -18,6 +18,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | A1 | Dead `removeInterceptor` plumbing deleted (was always `noop`) |
 | A2 | `_pendingAgentToolRuns` retired behind `services/approval/tool-ownership-registry.ts` |
 | A3 | `_mergeApprovals` retired via `services/approval/approval-replay.ts` — **2 of 9 reach-ins done** |
+| R1 | Resume-after-approval preserves `details.toolCall.callId`; pinned by `source/lib/sdk-approval-resume.test.ts` |
 | Bug fix | Denied-read approval never fired for `cd`-prefixed commands (record/lookup key mismatch) |
 | Bug fix | Docker host-control denials leaked across sessions (process-global `#deniedCommands`) |
 
@@ -55,22 +56,25 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **Verify the R1 gate before writing any A4 code.** A4's entire design assumes
-   `details.toolCall.callId` is populated on the *resume-after-approval* path. It is used in
-   production at `agent-factory.ts:107`, but not on that path — the SDK replays the call from
-   `RunState` there rather than from a fresh stream. If it is absent, the carrier changes and
-   the A4 design is void. Cheap to prove; do it first.
-2. **Solve the composition-root problem once.** `agentClient` is constructed before
+1. **Solve the composition-root problem once.** `agentClient` is constructed before
    `session-composition` runs, so there is no common root for per-session injection. This
    already forced A2 into a module-scoped registry, and A4's `SessionSandboxState` will hit
    the identical wall. The repo has five such singletons already (`deniedReadStore`,
    `executionOverrideStore`, `sessionReadAccess`, the docker grants, the new registry) —
    don't add a sixth by default.
-3. **A4** — absorb the approval side-channels into the pending call. Full design was produced
+2. **A4** — absorb the approval side-channels into the pending call. Full design was produced
    separately; its staged sequence is Stage 0-7 with the risky stages being the delivery seam,
    the batch path in `tool-approval-batch-coordinator.ts` (which retargets one shared pending
    context across siblings — reusing an object there reintroduces the exact
    cross-contamination bug being fixed), and docker.
+
+### R1 gate — PASSED
+
+`source/lib/sdk-approval-resume.test.ts` uses a real SDK `Runner` and a serialized/restored
+`RunState`: it interrupts for a function-tool approval, approves the restored interruption,
+resumes the run, and asserts that the tool receives the original call id through
+`details.toolCall.callId`. The carrier assumed by A4 is therefore available on the risky
+resume path; mocks do not supply the execution details in this test.
 
 ### Deliberately left open
 
@@ -234,14 +238,14 @@ Re-ordered from the original types-first plan. Each step retires named reach-ins
   *Correction:* `tool-owner.ts` was **not** deleted — it went 81 → 14 lines. `ToolOwner` and
   `PARENT_TOOL_OWNER` are consumed by `approval-state.ts` and approval event shaping; only
   the 67 lines of SDK archaeology and its three drift warnings died.
-- **A3 — next.** Replace our `_mergeApprovals` call (`nested-runner.ts:337`, at initial
-  nested-run creation) with public `approveTool`/`rejectTool` replay.
+- **A3 — DONE.** Replaced our `_mergeApprovals` call at initial nested-run creation with
+  public `approveTool`/`rejectTool` replay in `approval-replay.ts`.
   *Note:* the SDK also calls `_mergeApprovals` itself at `agent.js:259` on the **resume**
   path, gated by `resumeContextStrategy === 'merge'` (set at `nested-runner.ts:268`). That
   is the library's own internal use reached through a *public* option, not our reach-in.
   A3 retires ours; the SDK's goes away with the SDK.
 - **A4.** Absorb `ExecutionOverrideStore` / `DeniedReadStore` / session grants into the
-  pending call. See the separate design; gated on R1 below.
+  pending call. R1 passed; resolve the composition root before implementation.
 
 **Live bugs found during this work** (independent of decoupling; the command-string keying
 that A4 removes was actively broken):

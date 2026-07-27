@@ -15,6 +15,14 @@ Application code lives under `source/`. The non-obvious entry points:
 
 Everything else is discoverable by reading the tree. For module-design decisions, ownership boundaries, and the full turn lifecycle, use the `architecture` skill. For test scope and standards, use the `testing` skill.
 
+# Work In Progress
+
+Active multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Resume here** section: read it before touching the areas it covers, because it records decisions already taken and premises already disproven. Re-deriving them wastes a session and tends to reintroduce the framing the plan corrected.
+
+Currently active:
+
+- `docs/plans/decouple-from-openai-agents-sdk.md` — removing `@openai/agents*`. Touches the approval layer, the run loop, and `source/providers/`. Progress is measured by the plan's risk register (private-API reach-ins retired), not by lines deleted.
+
 # Parallel Work Isolation
 
 Several agents share the primary checkout, so concurrent edits pile into one `git status` with no way to tell whose work is whose.

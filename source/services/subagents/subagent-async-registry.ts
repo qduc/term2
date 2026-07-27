@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { createCodenameRunId } from './codename-run-id.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { addTokenUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
@@ -19,6 +20,8 @@ import { isAbortLike, safeEmit, truncatePreview } from './utils.js';
 
 export const SUBAGENT_RUN_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 const MAX_STEERING_GUIDANCE_CHARACTERS = 2_000;
+/** Defensive retry bound before accepting a (vanishingly unlikely) id collision. */
+const MAX_RUN_ID_ATTEMPTS = 16;
 const MAX_TURN_HISTORY = 5;
 const TURN_TEXT_CHAR_LIMIT = 200;
 
@@ -129,7 +132,7 @@ export class SubagentAsyncRegistry {
     this.#now = deps.now ?? Date.now;
     this.#ttlMs = deps.ttlMs ?? 30 * 60 * 1000;
     this.#messageCap = deps.messageCap ?? 50;
-    this.#createRunId = deps.createRunId ?? randomUUID;
+    this.#createRunId = deps.createRunId ?? createCodenameRunId;
     this.#sessionForRole = deps.sessionForRole;
     this.#clearInterval = deps.clearInterval ?? clearInterval;
     this.#timer = (deps.setInterval ?? setInterval)(
@@ -189,7 +192,7 @@ export class SubagentAsyncRegistry {
     }
     this.#evictToSessionCap();
 
-    const runId = continuation ?? this.#createRunId();
+    const runId = continuation ?? this.#allocateRunId();
     const control = new SubagentRunControl();
     let resolve!: (result: SubagentResult) => void;
     const promise = new Promise<SubagentResult>((r) => (resolve = r));
@@ -458,6 +461,20 @@ export class SubagentAsyncRegistry {
         this.#evicted.add(id);
       }
     }
+  }
+
+  /**
+   * Allocate a fresh run id, retrying the factory against an active, settled, or
+   * evicted id. A collision would silently overwrite a stored run, so even the
+   * vanishingly unlikely codename collision is defended here rather than
+   * relying on the factory's entropy alone.
+   */
+  #allocateRunId(): string {
+    for (let attempt = 0; attempt < MAX_RUN_ID_ATTEMPTS; attempt++) {
+      const candidate = this.#createRunId();
+      if (!this.#runs.has(candidate) && !this.#evicted.has(candidate)) return candidate;
+    }
+    return this.#createRunId();
   }
 
   #resolveActiveTarget(target: string): StoredRun | undefined {

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { CODENAME_RUN_ID_PATTERN } from './codename-run-id.js';
 import { SubagentAsyncRegistry, SubagentRegistryError } from './subagent-async-registry.js';
 import type { SubagentRequest, SubagentResult } from './types.js';
 import type { SubagentSession } from './subagent-session.js';
@@ -965,5 +966,37 @@ describe('outbound steering', () => {
     expect(JSON.stringify(inputs[1])).toContain('prior segment was interrupted');
     await expect(runtime.asyncRegistry.getResult(run.runId)).resolves.toMatchObject({ status: 'completed' });
     runtime.asyncRegistry.dispose();
+  });
+});
+
+describe('default run id allocation', () => {
+  it('allocates a codename runId by default instead of a UUID', () => {
+    const registry = make(() => new Promise<SubagentResult>(() => undefined));
+    const handle = registry.startRun({ role: 'explorer', task: 'inspect' });
+    expect(handle.runId).toMatch(CODENAME_RUN_ID_PATTERN);
+    expect(handle.runId).not.toMatch(/[0-9a-f]{8}-/);
+    registry.dispose();
+  });
+
+  it('defends against a factory collision by retrying distinct ids', () => {
+    // A factory that always collides on the first call forces the allocator to
+    // retry; the second call yields a distinct id the registry can accept.
+    let calls = 0;
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      createRunId: () => {
+        calls += 1;
+        // First two draws collide against a run seeded below; third is fresh.
+        return calls <= 2 ? 'nascent-finch-10' : 'calm-otter-42';
+      },
+      run: () => new Promise<SubagentResult>(() => undefined),
+    });
+    // Seed the collision target as an active run under the colliding id.
+    const first = registry.startRun({ role: 'explorer', task: 'seed' });
+    expect(first.runId).toBe('nascent-finch-10');
+    // The next allocation must avoid the in-use id.
+    const second = registry.startRun({ role: 'researcher', task: 'next' });
+    expect(second.runId).toBe('calm-otter-42');
+    registry.dispose();
   });
 });

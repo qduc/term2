@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { Agent, RunContext, Runner, RunState, tool as createTool } from '@openai/agents';
+import { Agent, RunContext, RunToolApprovalItem, Runner, RunState, tool as createTool } from '@openai/agents';
 import type { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents-core';
 import { z } from 'zod';
 import { NestedSubagentRunner, incrementSubagentTurnCount, type CachedRoleTool } from './nested-runner.js';
@@ -400,7 +400,7 @@ it.sequential('NestedSubagentRunner.runAsTool restores context from resumeState'
   expect(events.some((e) => e.type === 'subagent_completed')).toBe(true);
 });
 
-it.sequential('NestedSubagentRunner.runAsTool propagates parent approvals', async () => {
+function createApprovalPropagationHarness() {
   const settings = createMockSettings({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
@@ -420,35 +420,19 @@ it.sequential('NestedSubagentRunner.runAsTool propagates parent approvals', asyn
     toolPolicy,
   });
 
-  const roleToolCache = new Map<SupportedSubagentRole, CachedRoleTool>();
-
   const runner = new NestedSubagentRunner({
     logger,
     settings,
     sessionContextService,
     toolFactory,
-    roleToolCache,
+    roleToolCache: new Map<SupportedSubagentRole, CachedRoleTool>(),
   });
 
-  const parentContext = {
-    toJSON: () => ({
-      approvals: {
-        'tool-call-123': { approved: true },
-      },
-    }),
-  };
-
-  const request = {
-    role: 'explorer' as SupportedSubagentRole,
-    task: 'check approvals',
-  };
-
-  let invokedNestedContext: any = null;
+  const captured: { nestedContext: RunContext<any> | null } = { nestedContext: null };
 
   const tool = runner.getRoleAgentTool('explorer');
-
-  (tool as any).invoke = async (contextParam: any, _input: any, _details: any) => {
-    invokedNestedContext = contextParam;
+  (tool as any).invoke = async (contextParam: any) => {
+    captured.nestedContext = contextParam;
     return JSON.stringify({
       agentId: contextParam.toJSON().context.agentId,
       role: 'explorer',
@@ -459,14 +443,71 @@ it.sequential('NestedSubagentRunner.runAsTool propagates parent approvals', asyn
     });
   };
 
-  await runner.runAsTool(request, parentContext);
+  const run = async (parentContext: unknown) => {
+    await runner.runAsTool({ role: 'explorer' as SupportedSubagentRole, task: 'check approvals' }, parentContext);
+    if (!captured.nestedContext) throw new Error('nested context was never captured');
+    return captured.nestedContext;
+  };
 
-  expect(invokedNestedContext).toBeTruthy();
-  // Verify that parent approvals were merged
-  const nestedApprovals = invokedNestedContext.toJSON().approvals;
-  expect(nestedApprovals).toEqual({
-    'tool-call-123': { approved: true },
+  return { run };
+}
+
+function createParentApprovalItem(toolName: string, callId: string): RunToolApprovalItem {
+  return new RunToolApprovalItem(
+    { type: 'function_call', callId, name: toolName, arguments: '{}', status: 'completed' },
+    new Agent({ name: 'parent-agent', instructions: '' }),
+    toolName,
+  );
+}
+
+it.sequential('NestedSubagentRunner.runAsTool does not re-prompt for a call the parent already approved', async () => {
+  const parentContext = new RunContext<unknown>({});
+  parentContext.approveTool(createParentApprovalItem('shell_command', 'call_parent_approved'));
+
+  const nestedContext = await createApprovalPropagationHarness().run(parentContext);
+
+  expect(nestedContext.isToolApproved({ toolName: 'shell_command', callId: 'call_parent_approved' })).toBe(true);
+});
+
+it.sequential('NestedSubagentRunner.runAsTool propagates a parent rejection into the nested run', async () => {
+  const parentContext = new RunContext<unknown>({});
+  parentContext.rejectTool(createParentApprovalItem('shell_command', 'call_parent_denied'), {
+    message: 'denied by user',
   });
+
+  const nestedContext = await createApprovalPropagationHarness().run(parentContext);
+
+  expect(nestedContext.isToolApproved({ toolName: 'shell_command', callId: 'call_parent_denied' })).toBe(false);
+  expect(nestedContext.getRejectionMessage('shell_command', 'call_parent_denied')).toBe('denied by user');
+});
+
+it.sequential('NestedSubagentRunner.runAsTool keeps a per-call parent approval scoped to that call', async () => {
+  const parentContext = new RunContext<unknown>({});
+  parentContext.approveTool(createParentApprovalItem('shell_command', 'call_parent_approved'));
+
+  const nestedContext = await createApprovalPropagationHarness().run(parentContext);
+
+  // A different shell call raised inside the subagent must still reach the user.
+  expect(
+    nestedContext.isToolApproved({ toolName: 'shell_command', callId: 'call_raised_in_subagent' }),
+  ).toBeUndefined();
+});
+
+it.sequential('NestedSubagentRunner.runAsTool propagates a blanket parent approval to unseen calls', async () => {
+  const parentContext = new RunContext<unknown>({});
+  parentContext.approveTool(createParentApprovalItem('shell_command', 'call_parent_approved'), {
+    alwaysApprove: true,
+  });
+
+  const nestedContext = await createApprovalPropagationHarness().run(parentContext);
+
+  expect(nestedContext.isToolApproved({ toolName: 'shell_command', callId: 'call_raised_in_subagent' })).toBe(true);
+});
+
+it.sequential('NestedSubagentRunner.runAsTool runs with no approvals when there is no parent context', async () => {
+  const nestedContext = await createApprovalPropagationHarness().run(undefined);
+
+  expect(nestedContext.toJSON().approvals).toEqual({});
 });
 
 it.sequential('NestedSubagentRunner.runAsTool handles cancellation via abort signal', async () => {

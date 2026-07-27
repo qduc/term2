@@ -18,6 +18,7 @@ import {
   isAbortLike,
 } from './utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
+import { replayApprovals, type ApprovalRecord } from '../approval/approval-replay.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import { ToolOwnershipRegistry, toolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
@@ -61,6 +62,21 @@ function collectApprovalCallIds(interruptions: unknown): string[] {
     }
   }
   return callIds;
+}
+
+/**
+ * Reads the approvals of the run context the subagent tool was invoked from.
+ *
+ * The parent is whatever the SDK handed to the tool, so it is validated structurally rather
+ * than assumed to be a `RunContext`: a caller without one simply contributes no approvals.
+ */
+function readParentApprovals(context: unknown): Record<string, ApprovalRecord> | undefined {
+  const parent = context as { toJSON?: () => { approvals?: Record<string, ApprovalRecord> } } | undefined;
+  if (!parent || typeof parent.toJSON !== 'function') {
+    return undefined;
+  }
+  const approvals = parent.toJSON()?.approvals;
+  return approvals && typeof approvals === 'object' ? approvals : undefined;
 }
 
 function parseNestedSubagentResult(raw: unknown): SubagentResult & { interrupted?: boolean } {
@@ -369,14 +385,14 @@ export class NestedSubagentRunner {
     }
 
     const nestedContext = new RunContext(runContext);
-    const parentContext = context as RunContext<unknown> | undefined;
-    if (parentContext && typeof (nestedContext as any)._mergeApprovals === 'function') {
-      (nestedContext as any)._mergeApprovals(parentContext.toJSON().approvals);
-    }
 
     let abortListener: (() => void) | undefined;
     try {
-      const tool = this.#getOrCreateRoleTool(role).tool as any;
+      const { tool: roleTool, agent: roleAgent } = this.#getOrCreateRoleTool(role);
+      const tool = roleTool as any;
+      // The subagent runs in its own context, so decisions the user already made in the
+      // parent have to be carried across or the same tool call prompts twice.
+      replayApprovals(nestedContext, readParentApprovals(context), roleAgent);
       const effectiveDetails = signal ? { ...detailsRecord, signal } : detailsRecord;
 
       const abortPromise = signal

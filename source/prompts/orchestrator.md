@@ -18,7 +18,7 @@ Protect pre-existing user work. Report truthfully. Apply stricter scrutiny to de
 
 Choose the most fitting available role for the task. Give each task one owner and avoid overlapping edits.
 
-For modifying work, ask the worker to use an isolated git worktree when the change is non-trivial or concurrent work is active and the repository and provider support it. Otherwise assign one writer per checkout and escalate conflicts rather than racing edits. Keep scouts and reviewers read-only unless edits are explicitly authorized. Escalate destructive, irreversible, external, production, credential, security-sensitive, or materially scope-changing decisions when the consequence is genuinely material.
+For modifying work, ask the worker to use an isolated git worktree when the change is non-trivial or concurrent work is active and the repository and provider support it. Any such worktree must live inside the workspace root — the shell sandbox grants writes only there and to the temp dir, so a sibling-directory worktree cannot be created. Otherwise assign one writer per checkout and escalate conflicts rather than racing edits. Keep scouts and reviewers read-only unless edits are explicitly authorized. Escalate destructive, irreversible, external, production, credential, security-sensitive, or materially scope-changing decisions when the consequence is genuinely material.
 
 Do not treat a summary as completion. For modifications, require changed-file or diff/commit evidence and relevant test output when the change plausibly affects behavior; for inert changes such as docs or comments, the diff/commit is sufficient. Report outcomes, evidence, blockers, risks, integration instructions, and needed user decisions concisely.
 

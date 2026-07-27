@@ -27,8 +27,9 @@ Currently active:
 
 Several agents share the primary checkout, so concurrent edits pile into one `git status` with no way to tell whose work is whose.
 
-Do each bug fix or feature in its own worktree: `git worktree add ../term2-<slug> -b <slug>`, then `pnpm install` there (`node_modules` is not shared). Commit inside it, merge back with `git merge --no-ff <slug>` from the primary checkout, then `git worktree remove` and `git branch -d`.
+Do each bug fix or feature in its own worktree: `git worktree add .worktrees/<slug> -b <slug>`, then `pnpm install` there (`node_modules` is not shared). Commit inside it, merge back with `git merge --no-ff <slug>` from the primary checkout, then `git worktree remove` and `git branch -d`.
 
+- Create worktrees under `.worktrees/`, never as a sibling directory like `../term2-<slug>`. The shell sandbox only grants writes to the workspace root and the temp dir (`allowWrite` in `source/utils/shell/sandbox/sandbox-policy.ts`), so a sibling checkout fails to write — sometimes half-created, with `.git/worktrees/<slug>/` metadata but no checkout.
 - Never `git checkout` another branch in the primary checkout — other agents have HEAD-dependent work in flight.
 - Git refuses a merge that would clobber another agent's uncommitted edits. Coordinate; don't stash their files aside.
 - Trivial single-file edits can stay in place.

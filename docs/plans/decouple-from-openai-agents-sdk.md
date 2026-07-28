@@ -25,6 +25,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | A4 nested/test compatibility retirement | Root tools and approval/result/lifecycle paths no longer fall back to session-id or command-keyed stores; nested tools receive a fresh explicit `NestedToolCompatibilityState` and never receive root post-execute state |
 | A4 retry proof | A real SDK `Runner` proves a denied-read-like output from call A can cause the model to emit the same shell arguments as a new call B; B is not correlated to A by call id |
 | Step B representation slice | `contracts/conversation-items.ts` owns canonical `Item`, `Turn`, `ToolCall`, and related serializable shapes; `Approval` aliases `ApprovalDescriptor`; legacy persisted names alias those contracts; `run-item-normalizer.ts` contains raw SDK/provider item normalization while replay remains provider-facing |
+| Step B journal slice | `AssistantTurnJournal` deduplicates normalized canonical item groups; it no longer inspects `rawItem`, and wrapped/direct tool items share one identity |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -506,6 +507,11 @@ formatting. Cached arguments live on an enriched local result rather than mutati
 items; `providerItem` remains available for provider-specific formatting (including native
 `apply_patch` details). Call-ID fallbacks, stable command-message IDs, annotations, output
 coercion, and existing formatting behavior remain intact.
+
+**Step B assistant-journal slice.** `AssistantTurnJournal` now normalizes before deduplication and
+derives identity only from canonical tool call/result IDs or provider item IDs. It no longer
+inspects `rawItem`. Provider wrappers and equivalent direct canonical tool items deduplicate as
+one item group, and multi-item normalizations remain all-or-nothing on replay.
 
 ### Step C — Own the run loop
 Contained, because downstream already speaks our language.

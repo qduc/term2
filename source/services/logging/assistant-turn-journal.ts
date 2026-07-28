@@ -34,7 +34,7 @@ export class AssistantTurnJournal {
   #getCurrentTurnId: () => string;
   #sink: ((event: LogEvent) => void) | null;
   #seq = 0;
-  #emittedRawItemKeys: Set<string> = new Set();
+  #emittedItemKeys: Set<string> = new Set();
   #itemEvents: AssistantJournalItemLogEvent[] = [];
 
   constructor(opts: AssistantTurnJournalOptions) {
@@ -65,7 +65,7 @@ export class AssistantTurnJournal {
    */
   resetForNewTurn(): void {
     this.#seq = 0;
-    this.#emittedRawItemKeys.clear();
+    this.#emittedItemKeys.clear();
   }
 
   /**
@@ -122,7 +122,7 @@ export class AssistantTurnJournal {
   /**
    * Record a provider-backed run item (function call, tool result,
    * assistant message, or reasoning). Duplicates within the same turn are
-   * suppressed by the dedup key on the raw item's callId / type / id.
+   * suppressed by the normalized item's call or provider identity.
    *
    * Returns the normalized persisted item so callers can layer additional
    * recovery logic on top.
@@ -131,18 +131,17 @@ export class AssistantTurnJournal {
     if (item == null) {
       return [];
     }
-    const dedupKey = makeRunItemDedupKey(item);
-    if (dedupKey && this.#emittedRawItemKeys.has(dedupKey)) {
-      return [];
-    }
-
     const items = buildPersistedAssistantItemsFromRaw(item);
     if (items.length === 0) {
       return [];
     }
 
+    const dedupKey = makeItemDedupKey(items);
+    if (dedupKey && this.#emittedItemKeys.has(dedupKey)) {
+      return [];
+    }
     if (dedupKey) {
-      this.#emittedRawItemKeys.add(dedupKey);
+      this.#emittedItemKeys.add(dedupKey);
     }
 
     for (const persisted of items) {
@@ -183,40 +182,23 @@ export class AssistantTurnJournal {
 }
 
 /**
- * Compute a stable dedup key for a raw run item. Returns `null` if the
- * item doesn't carry enough information to dedup, in which case the journal
- * keeps the entry.
+ * Compute one stable identity for a normalized run item group. Tool identity
+ * wins so a provider wrapper and its equivalent canonical tool item share a
+ * key. The group is suppressed as a whole to avoid partially replaying items
+ * produced by one provider record.
  */
-function makeRunItemDedupKey(item: unknown): string | null {
-  if (!item || typeof item !== 'object') {
-    return null;
+function makeItemDedupKey(items: readonly PersistedAssistantTurnItem[]): string | null {
+  for (const item of items) {
+    if (item.type === 'tool_call' || item.type === 'tool_result') {
+      return `${item.type}:${item.callId}`;
+    }
   }
-  const record = item as Record<string, unknown>;
-  const raw = (record.rawItem && typeof record.rawItem === 'object' ? record.rawItem : record) as Record<
-    string,
-    unknown
-  >;
-  const type = typeof raw.type === 'string' ? raw.type : '';
-  if (!type) {
-    return null;
+
+  for (const item of items) {
+    if ((item.type === 'reasoning' || item.type === 'assistant_text') && item.providerItemId) {
+      return `${item.type}:${item.providerItemId}`;
+    }
   }
-  const callId =
-    typeof raw.callId === 'string'
-      ? raw.callId
-      : typeof raw.call_id === 'string'
-      ? raw.call_id
-      : typeof raw.tool_call_id === 'string'
-      ? raw.tool_call_id
-      : typeof raw.id === 'string'
-      ? raw.id
-      : null;
-  if (callId) {
-    return `${type}:${callId}`;
-  }
-  // For reasoning / assistant-message items, use (type, id) when available.
-  const id = typeof raw.id === 'string' ? raw.id : null;
-  if (id) {
-    return `${type}:${id}`;
-  }
+
   return null;
 }

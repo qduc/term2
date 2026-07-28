@@ -127,3 +127,46 @@ it('AssistantTurnJournal: dedupes duplicate raw items within the same turn', () 
   expect(second).toEqual([]);
   expect(events.filter((e) => e.type === 'assistant_journal_item').length).toBe(1);
 });
+
+it('AssistantTurnJournal: dedupes duplicate canonical tool calls within the same turn', () => {
+  const { events, sink } = makeSink();
+  const journal = new AssistantTurnJournal({ getCurrentTurnId: () => 'turn-1', sink });
+  const item = { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: '{}' } as const;
+
+  expect(journal.recordRunItem(item)).toEqual([item]);
+  expect(journal.recordRunItem(item)).toEqual([]);
+  expect(events.filter((event) => event.type === 'assistant_journal_item')).toHaveLength(1);
+});
+
+it('AssistantTurnJournal: treats wrapped and canonical tool calls as the same item', () => {
+  const { events, sink } = makeSink();
+  const journal = new AssistantTurnJournal({ getCurrentTurnId: () => 'turn-1', sink });
+
+  expect(
+    journal.recordRunItem({
+      rawItem: { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{}' },
+    }),
+  ).toHaveLength(1);
+  expect(journal.recordRunItem({ type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: '{}' })).toEqual(
+    [],
+  );
+  expect(events.filter((event) => event.type === 'assistant_journal_item')).toHaveLength(1);
+});
+
+it('AssistantTurnJournal: suppresses an entire duplicate multi-item normalization', () => {
+  const { events, sink } = makeSink();
+  const journal = new AssistantTurnJournal({ getCurrentTurnId: () => 'turn-1', sink });
+  const item = {
+    rawItem: {
+      type: 'message',
+      id: 'message-1',
+      role: 'assistant',
+      content: [{ type: 'output_text', text: 'Done' }],
+      providerData: { reasoning_content: 'Checked the result' },
+    },
+  };
+
+  expect(journal.recordRunItem(item).map(({ type }) => type)).toEqual(['reasoning', 'assistant_text']);
+  expect(journal.recordRunItem(item)).toEqual([]);
+  expect(events.filter((event) => event.type === 'assistant_journal_item')).toHaveLength(2);
+});

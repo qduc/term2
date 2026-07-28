@@ -38,7 +38,8 @@
   "engineStrict": true,
   "scripts": {
     "start": "node dist/cli.js",
-    "build": "node scripts/clean-build-output.mjs && tsc --project tsconfig.build.json && pnpm run post-build",
+    "build": "node scripts/build-with-rollback.mjs",
+    "build:restore": "node scripts/restore-build-output.mjs",
     "dev": "tsc --build tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --reporter=minimal",

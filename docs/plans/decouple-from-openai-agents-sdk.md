@@ -33,6 +33,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
 | Step C post-execute handoff | Selected root tools can pause after execution through a session-owned registry; the UI settles revisioned entries and resumes the same live stream consumer, with fail-closed abort/reset/disposal |
 | Step C denied-read migration | Root shell denied reads pause before the SDK sees a result; typed choices re-execute the held call with call-ID-isolated overrides, while rejection returns the original denial |
+| Bug fix | Chained-continuation orphan checks include current-turn call IDs from the session ledger, not only terminal history |
 | Bug fix | Denied-read approval never fired for `cd`-prefixed commands (record/lookup key mismatch) |
 | Bug fix | Docker host-control denials leaked across sessions (process-global `#deniedCommands`) |
 
@@ -118,6 +119,8 @@ production session contract.
 - Continuation-call-id resolver slice: resolver, ledger, tracker, TurnWorkflow parity, and
   approval-batch tests pass (5 files / 50 tests). `tsc --noEmit` again reaches only the known
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Chained orphan-guard regression: TurnWorkflow now proves a continuation receives both committed
+  history call IDs and uncommitted current-turn call IDs from `SessionToolTracker`.
 - Replay-diagnostics slice: conversation stream and stream-processor tests pass (2 files / 27
   tests); diagnostics retain public history/new-item duplicate detection and drop private-state
   metadata.

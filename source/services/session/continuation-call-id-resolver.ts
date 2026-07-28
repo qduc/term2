@@ -59,18 +59,24 @@ export const resolveResponseCycleCallIds = ({
 };
 
 /**
- * Collects the tool-call ids recorded in conversation history.
+ * Collects the tool-call ids known to the current provider response chain.
  *
- * These are the calls a chained continuation can safely answer: an output whose
- * call is absent here exists in no local record, so the provider's response
- * chain cannot be assumed to hold it either.
+ * Terminal turns contribute calls through conversation history. Interrupted
+ * turns have not committed their generated items yet, so their calls must come
+ * from the session-owned current-turn ledger.
  */
-export const collectKnownToolCallIds = (conversationHistory: readonly unknown[]): string[] => {
+export const collectKnownToolCallIds = (
+  conversationHistory: readonly unknown[],
+  currentTurnCallIds: readonly string[] = [],
+): string[] => {
   const callIds = new Set<string>();
   for (const item of conversationHistory) {
     // Any `*_call` item counts — function calls, shell calls, computer calls —
     // so a non-function tool is never mistaken for an orphan.
     addCallId(callIds, getToolCallId(item));
+  }
+  for (const callId of currentTurnCallIds) {
+    addCallId(callIds, callId);
   }
   return [...callIds];
 };

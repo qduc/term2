@@ -47,11 +47,16 @@ const runResponseContinuation = async ({
   completedResultCallIds?: string[];
 }) => {
   let receivedCallIds: string[] | undefined;
+  let receivedKnownCallIds: readonly string[] | undefined;
 
   const mockClient = {
     getProvider: () => 'openai',
-    async continueRunStream(_state: unknown, options: { toolResultCallIds?: string[] }) {
+    async continueRunStream(
+      _state: unknown,
+      options: { toolResultCallIds?: string[]; knownToolCallIds?: readonly string[] },
+    ) {
       receivedCallIds = options.toolResultCallIds;
+      receivedKnownCallIds = options.knownToolCallIds;
       const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'done' }]);
       stream.finalOutput = 'done';
       return stream;
@@ -100,7 +105,7 @@ const runResponseContinuation = async ({
     }),
   );
 
-  return { outcome, receivedCallIds };
+  return { outcome, receivedCallIds, receivedKnownCallIds };
 };
 
 it('passes interrupted and completed parallel tool call ids to continuation', async () => {
@@ -142,6 +147,19 @@ it('uses only the current response cycle instead of the whole turn ledger', asyn
 
   expect((outcome as any).kind).toBe('response');
   expect(receivedCallIds).toEqual(['call-current']);
+});
+
+it('includes current-turn calls among calls known to the chained response', async () => {
+  const { outcome, receivedKnownCallIds } = await runResponseContinuation({
+    runState: {
+      getInterruptions: () => [{ callId: 'call-current', name: 'shell', arguments: '{}' }],
+    },
+    completedResultCallIds: ['call-current'],
+    history: [{ type: 'function_call', callId: 'call-earlier', name: 'shell', arguments: '{}' }],
+  });
+
+  expect((outcome as any).kind).toBe('response');
+  expect(receivedKnownCallIds ? [...receivedKnownCallIds].sort() : undefined).toEqual(['call-current', 'call-earlier']);
 });
 
 it('keeps rejected and approved sibling ids during abort resolution', async () => {

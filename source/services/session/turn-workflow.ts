@@ -861,7 +861,10 @@ export class TurnWorkflow {
       previousResponseId: state.currentResumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
       sessionId: this.deps.sessionId,
       toolResultCallIds: state.currentCallIds,
-      knownToolCallIds: collectKnownToolCallIds(this.deps.conversationStore.getHistory()),
+      knownToolCallIds: collectKnownToolCallIds(
+        this.deps.conversationStore.getHistory(),
+        this.deps.toolTracker.activeCallIdsForCurrentTurn(),
+      ),
     })) as AgentStream;
     state.setLastStream(stream);
 

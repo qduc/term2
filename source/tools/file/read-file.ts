@@ -3,8 +3,9 @@ import * as fs from 'fs/promises';
 import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
 import { trimOutput } from '../../utils/output/output-trim.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
-import { getSessionIdFromToolContext, sessionReadAccess } from '../../services/approval/session-read-access.js';
+import { getSessionIdFromToolContext } from '../../services/approval/session-read-access.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
+import type { NestedToolCompatibilityState } from '../../services/session/nested-tool-compatibility-state.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
 
 const READ_FILE_DESCRIPTION =
@@ -80,9 +81,11 @@ export const createReadFileToolDefinition = (
     orchestratorMode?: boolean;
     /** Root clients receive this handle-owned capability. */
     sessionAccess?: SessionAccessState;
+    /** Isolated legacy protocol for nested tools only. */
+    nestedCompatibility?: NestedToolCompatibilityState;
   } = {},
 ): ToolDefinition<ReadFileToolParams> => {
-  const { executionContext, allowOutsideWorkspace = false, orchestratorMode = false, sessionAccess } = deps;
+  const { executionContext, allowOutsideWorkspace = false, orchestratorMode = false, sessionAccess, nestedCompatibility } = deps;
   return {
     name: 'read_file',
     description: orchestratorMode
@@ -103,9 +106,7 @@ export const createReadFileToolDefinition = (
         if (sessionAccess?.allowsRead(resolvedPath, cwd)) {
           return false;
         }
-        // Nested compatibility tools deliberately retain their established
-        // session-id path; root tools are constructed with sessionAccess.
-        if (!sessionAccess && sessionId && sessionReadAccess.allows(sessionId, resolvedPath, cwd)) {
+        if (!sessionAccess && sessionId && nestedCompatibility?.allowsRead(sessionId, resolvedPath, cwd)) {
           return false;
         }
 

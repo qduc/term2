@@ -35,6 +35,7 @@ import { classifyCommand, SafetyStatus } from '../../utils/shell/command-safety/
 import { evaluateShellAutoApprovalAdvisories } from '../approval/shell-auto-approval-evaluator.js';
 import type { ISubagentClient } from './subagent-client-types.js';
 import { MemoryCapabilityBuilder } from '../memory/memory-capabilities.js';
+import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 
 const MODEL_FACING_EDITOR_TOOLS = new Set(['apply_patch', 'search_replace', 'create_file']);
 
@@ -707,6 +708,7 @@ export class SubagentToolFactory {
   #toolPolicy: SubagentToolPolicy;
   #skillsService?: SkillsService;
   #memoryCapabilities: MemoryCapabilityBuilder;
+  #nestedCompatibility?: NestedToolCompatibilityState;
 
   constructor(deps: {
     settings: ISettingsService;
@@ -714,12 +716,14 @@ export class SubagentToolFactory {
     executionContext?: ExecutionContext;
     toolPolicy: SubagentToolPolicy;
     skillsService?: SkillsService;
+    nestedCompatibility?: NestedToolCompatibilityState;
   }) {
     this.#settings = deps.settings;
     this.#logger = deps.logger;
     this.#executionContext = deps.executionContext;
     this.#toolPolicy = deps.toolPolicy;
     this.#skillsService = deps.skillsService;
+    this.#nestedCompatibility = deps.nestedCompatibility;
     this.#memoryCapabilities = new MemoryCapabilityBuilder(deps.settings);
   }
 
@@ -766,7 +770,11 @@ export class SubagentToolFactory {
     if (definition.canRead) {
       tools.push(
         this.#toolPolicy.wrapReadToolWithScope(
-          createReadFileToolDefinition({ executionContext: this.#executionContext, allowOutsideWorkspace: false }),
+          createReadFileToolDefinition({
+            executionContext: this.#executionContext,
+            allowOutsideWorkspace: false,
+            nestedCompatibility: this.#nestedCompatibility,
+          }),
           fsReadScope,
           (params: any) => params?.path ?? params?.filePath,
         ),
@@ -829,6 +837,7 @@ export class SubagentToolFactory {
           loggingService: this.#logger,
           executionContext: this.#executionContext,
           searchViaShell,
+          nestedCompatibility: this.#nestedCompatibility,
         }),
         fsReadScope,
       );

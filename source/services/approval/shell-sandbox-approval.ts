@@ -1,5 +1,5 @@
-import { requiresDockerHostControlApproval } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
+import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 
 export function isUnsandboxedShell(toolName: string | undefined, args: unknown): boolean {
   if (toolName !== 'shell' && toolName !== 'bash') {
@@ -21,26 +21,26 @@ export function isDockerHostControlShellApproval(
   args: unknown,
   sessionId: string | undefined,
   sessionAccess?: SessionAccessState,
+  nestedCompatibility?: NestedToolCompatibilityState,
 ): boolean {
   if (toolName !== 'shell') return false;
   const command = args && typeof args === 'object' ? (args as Record<string, unknown>).command : undefined;
   return (
     typeof command === 'string' &&
-    (sessionAccess
-      ? sessionAccess.requiresDockerApproval(command)
-      : requiresDockerHostControlApproval(sessionId, command))
+    (sessionAccess?.requiresDockerApproval(command) ?? nestedCompatibility?.docker.requiresApproval(sessionId, command) ?? false)
   );
 }
 
 /**
- * `sessionId` scopes the Docker host-control check: a block recorded in another
- * session must not force this one through the prompt.
+ * Nested callers must supply their isolated compatibility state; root callers
+ * use only their handle-owned access capability.
  */
 export function requiresHumanShellApproval(
   toolName: string | undefined,
   args: unknown,
   sessionId: string | undefined,
   sessionAccess?: SessionAccessState,
+  nestedCompatibility?: NestedToolCompatibilityState,
 ): boolean {
   if (isUnsandboxedShell(toolName, args)) return true;
   const command =
@@ -49,8 +49,6 @@ export function requiresHumanShellApproval(
       : undefined;
   return (
     typeof command === 'string' &&
-    (sessionAccess
-      ? sessionAccess.requiresDockerApproval(command)
-      : requiresDockerHostControlApproval(sessionId, command))
+    (sessionAccess?.requiresDockerApproval(command) ?? nestedCompatibility?.docker.requiresApproval(sessionId, command) ?? false)
   );
 }

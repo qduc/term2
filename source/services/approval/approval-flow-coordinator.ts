@@ -11,8 +11,6 @@ import { GenerationGuard } from '../generation-guard.js';
 import type { ToolOwner } from './tool-owner.js';
 import { ToolOwnershipRegistry } from './tool-ownership-registry.js';
 import {
-  deniedReadStore,
-  executionOverrideStore,
   getProjectAllowReadStore,
 } from '../../utils/shell/sandbox/denied-read-stores.js';
 import {
@@ -21,13 +19,9 @@ import {
   isReadFileSessionApproveAnswer,
 } from '../../contracts/conversation.js';
 import path from 'node:path';
-import { sessionReadAccess } from './session-read-access.js';
-import {
-  consumeDockerHostControlDenial,
-  grantDockerHostControl,
-} from '../../utils/shell/sandbox/docker-host-control-grants.js';
 import { isDockerHostControlShellApproval } from './shell-sandbox-approval.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
+import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 
 export interface ApprovalFlowCoordinatorDeps {
   agentClient: ConversationAgentClient;
@@ -40,6 +34,8 @@ export interface ApprovalFlowCoordinatorDeps {
   toolOwnership: ToolOwnershipRegistry;
   /** Handle-owned root capability; omitted only by nested compatibility fixtures. */
   sessionAccess?: SessionAccessState;
+  /** Explicit nested/test-only legacy approval state. */
+  nestedCompatibility?: NestedToolCompatibilityState;
 }
 
 export interface AbortResolutionPlan {
@@ -169,6 +165,7 @@ export class ApprovalFlowCoordinator {
       parsedDecisionArgs,
       this.deps.sessionId,
       this.deps.sessionAccess,
+      this.deps.nestedCompatibility,
     );
     let allowReadFolderForSession = false;
     if (isReadFileSessionApproveAnswer(answer) && decisionToolName === 'read_file') {
@@ -181,7 +178,7 @@ export class ApprovalFlowCoordinator {
       const requestedPath = (parsedReadArgs.arguments as { path?: unknown } | null)?.path;
       if (typeof requestedPath === 'string' && requestedPath.length > 0) {
         if (this.deps.sessionAccess) this.deps.sessionAccess.allowReadFolder(path.dirname(requestedPath));
-        else sessionReadAccess.allowFolder(this.deps.sessionId, path.dirname(requestedPath));
+        else this.deps.nestedCompatibility?.readAccess.allowFolder(this.deps.sessionId, path.dirname(requestedPath));
         allowReadFolderForSession = true;
       }
     }
@@ -204,10 +201,10 @@ export class ApprovalFlowCoordinator {
         });
         const shellCommand = (parsedArgs.arguments as { command?: string } | null)?.command;
         if (typeof shellCommand === 'string') {
-          const stagedInfo = deniedReadStore.consumeStaged(shellCommand);
+          const stagedInfo = this.deps.nestedCompatibility?.deniedReads.consumeStaged(shellCommand);
           if (stagedInfo) {
             if (answer === 'allow-once' || answer === 'allow-remember') {
-              executionOverrideStore.set(shellCommand, {
+              this.deps.nestedCompatibility?.executionOverrides.set(shellCommand, {
                 extraAllowRead: [stagedInfo.suggestedParent],
               });
               if (answer === 'allow-remember') {
@@ -220,7 +217,7 @@ export class ApprovalFlowCoordinator {
                 });
               }
             } else if (answer === 'unsandboxed-once') {
-              executionOverrideStore.set(shellCommand, { forceUnsandboxed: true });
+              this.deps.nestedCompatibility?.executionOverrides.set(shellCommand, { forceUnsandboxed: true });
             }
           }
         }
@@ -230,8 +227,7 @@ export class ApprovalFlowCoordinator {
         const scope =
           answer === 'docker-allow-once' ? 'once' : answer === 'docker-allow-session' ? 'session' : 'project';
         if (this.deps.sessionAccess) this.deps.sessionAccess.grantDocker(parsedDecisionArgs.command, cwd, scope);
-        else
-          grantDockerHostControl({ command: parsedDecisionArgs.command, cwd, scope, sessionId: this.deps.sessionId });
+        else this.deps.nestedCompatibility?.docker.grant({ command: parsedDecisionArgs.command, cwd, scope, sessionId: this.deps.sessionId });
         // The pending block is left in place deliberately: for an indirect
         // invocation it is the only thing that tells `execute` this command
         // needs host control. `execute` consumes it when it creates the control.
@@ -297,7 +293,7 @@ export class ApprovalFlowCoordinator {
       // command runs sandboxed again instead of stalling on approval forever.
       if (isDockerRequest && typeof parsedDecisionArgs?.command === 'string') {
         if (this.deps.sessionAccess) this.deps.sessionAccess.consumeDockerDenial(parsedDecisionArgs.command);
-        else consumeDockerHostControlDenial(this.deps.sessionId, parsedDecisionArgs.command);
+        else this.deps.nestedCompatibility?.docker.consumeDenial(this.deps.sessionId, parsedDecisionArgs.command);
       }
 
       markToolCallAsApprovalRejection(expectedCallId);

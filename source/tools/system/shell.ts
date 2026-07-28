@@ -37,8 +37,6 @@ import { getDefaultShellSandboxRunner } from '../../utils/shell/sandbox/shell-sa
 import { DETAILED_DENIED_READ_INSTRUCTION } from '../../utils/shell/sandbox/denied-read-detector.js';
 import type { DeniedReadInfo } from '../../utils/shell/sandbox/denied-read-detector.js';
 import {
-  deniedReadStore,
-  executionOverrideStore,
   getProjectAllowReadStore,
 } from '../../utils/shell/sandbox/denied-read-stores.js';
 import { classifySandboxFailure } from '../../utils/shell/sandbox/sandbox-failure-classifier.js';
@@ -47,16 +45,8 @@ import {
   DOCKER_HOST_CONTROL_RETRY_INSTRUCTION,
   type DockerHostControl,
 } from '../../utils/shell/sandbox/docker-host-control.js';
-import {
-  configureDockerHostControlGrants,
-  consumeDockerHostControlDenial,
-  consumeDockerHostControlOnce,
-  recordDockerHostControlDenial,
-  requiresDockerHostControlApproval,
-  hasDockerHostControlProject,
-  hasDockerHostControlSession,
-} from '../../utils/shell/sandbox/docker-host-control-grants.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
+import type { NestedToolCompatibilityState } from '../../services/session/nested-tool-compatibility-state.js';
 
 const shellSandboxModeSchema = z.enum(['default', 'unsandboxed']).optional().default('default');
 
@@ -268,6 +258,8 @@ export function createShellToolDefinition(deps: {
   postExecuteDeniedRead?: boolean;
   /** Root clients receive this handle-owned Docker capability. */
   sessionAccess?: SessionAccessState;
+  /** Isolated legacy protocol for nested tools only. */
+  nestedCompatibility?: NestedToolCompatibilityState;
 }): ToolDefinition<ShellToolParams> {
   const {
     loggingService,
@@ -281,11 +273,10 @@ export function createShellToolDefinition(deps: {
     searchViaShell: searchViaShellExplicit,
     postExecuteDeniedRead = false,
     sessionAccess,
+    nestedCompatibility,
   } = deps;
   const deniedReadByCallId = new Map<string, DeniedReadInfo>();
   const overrideByCallId = new Map<string, { extraAllowRead?: string[]; forceUnsandboxed?: boolean }>();
-  configureDockerHostControlGrants(settingsService);
-
   // Create command logger function with dependencies
   const logValidationError = (message: string) => logValidationErrorUtil(settingsService, message);
 
@@ -321,15 +312,15 @@ export function createShellToolDefinition(deps: {
         const sandboxEnabled = isSandboxEnabled();
         const dockerHostControlRequested =
           sandboxEnabled &&
-          (sessionAccess
-            ? sessionAccess.requiresDockerApproval(params.command)
-            : requiresDockerHostControlApproval(sessionId, params.command));
+          (sessionAccess?.requiresDockerApproval(params.command) ??
+            nestedCompatibility?.docker.requiresApproval(sessionId, params.command) ??
+            false);
         if (
           dockerHostControlRequested &&
-          !(sessionAccess ? sessionAccess.hasDockerProject(cwd) : hasDockerHostControlProject(cwd)) &&
-          !(sessionAccess
-            ? sessionAccess.hasDockerSessionGrant(cwd)
-            : sessionId && hasDockerHostControlSession(sessionId, cwd))
+          !(sessionAccess?.hasDockerProject(cwd) ?? nestedCompatibility?.docker.hasProject(cwd) ?? false) &&
+          !(sessionAccess?.hasDockerSessionGrant(cwd) ??
+            (sessionId ? nestedCompatibility?.docker.hasSession(sessionId, cwd) : false) ??
+            false)
         ) {
           return true;
         }
@@ -337,7 +328,7 @@ export function createShellToolDefinition(deps: {
         if (!sshService && sandboxEnabled) {
           // If a previous sandboxed run denied a read for this command, require
           // approval so the user can allow/remember the path or escape unsandboxed.
-          if (!postExecuteDeniedRead && deniedReadStore.peek(params.command)) {
+          if (!postExecuteDeniedRead && nestedCompatibility?.deniedReads.peek(params.command)) {
             return true;
           }
           const availability = await shellSandboxRunner.availability();
@@ -374,16 +365,16 @@ export function createShellToolDefinition(deps: {
       const sandboxEnabled = isSandboxEnabled();
       const dockerHostControlRequested =
         sandboxEnabled &&
-        (sessionAccess
-          ? sessionAccess.requiresDockerApproval(command)
-          : requiresDockerHostControlApproval(sessionId, command));
+        (sessionAccess?.requiresDockerApproval(command) ?? nestedCompatibility?.docker.requiresApproval(sessionId, command) ?? false);
       const hasDockerGrant =
         dockerHostControlRequested &&
-        (sessionAccess
-          ? sessionAccess.hasDockerGrant(command, cwd)
-          : hasDockerHostControlProject(cwd) ||
-            (sessionId &&
-              (hasDockerHostControlSession(sessionId, cwd) || consumeDockerHostControlOnce(sessionId, command))));
+        (sessionAccess?.hasDockerGrant(command, cwd) ??
+          (nestedCompatibility
+            ? nestedCompatibility.docker.hasProject(cwd) ||
+              (sessionId &&
+                (nestedCompatibility.docker.hasSession(sessionId, cwd) ||
+                  nestedCompatibility.docker.consumeOnce(sessionId, command)))
+            : false));
       if (dockerHostControlRequested && !hasDockerGrant) {
         return 'Error: Docker host control requires explicit approval.';
       }
@@ -444,7 +435,7 @@ export function createShellToolDefinition(deps: {
         const override =
           postExecuteDeniedRead && typeof toolCallId === 'string'
             ? overrideByCallId.get(toolCallId) ?? null
-            : executionOverrideStore.consume(command);
+            : nestedCompatibility?.executionOverrides.consume(command) ?? null;
         if (postExecuteDeniedRead && typeof toolCallId === 'string') overrideByCallId.delete(toolCallId);
         if (override?.forceUnsandboxed) {
           sandbox = 'unsandboxed';
@@ -463,7 +454,7 @@ export function createShellToolDefinition(deps: {
             // The run that uses the approval settles the pending block, so a
             // later run of the same command is judged on its own.
             if (sessionAccess) sessionAccess.consumeDockerDenial(command);
-            else consumeDockerHostControlDenial(sessionId, command);
+            else nestedCompatibility?.docker.consumeDenial(sessionId, command);
             loggingService.security('Docker host-control capability granted for shell command', {
               command: optimizedCommand.substring(0, 100),
               cwd,
@@ -558,7 +549,7 @@ export function createShellToolDefinition(deps: {
           // Keyed by the command the model passed, because that is what the
           // approval flow and the retry will present.
           if (sessionAccess) sessionAccess.recordDockerDenial(command);
-          else recordDockerHostControlDenial(sessionId, command);
+          else nestedCompatibility?.docker.recordDenial(sessionId, command);
           loggingService.security('Sandbox blocked Docker daemon access; agent retry will prompt for approval', {
             confidence: sandboxFailure.confidence,
             command: command.substring(0, 100),
@@ -583,7 +574,7 @@ export function createShellToolDefinition(deps: {
           if (postExecuteDeniedRead) {
             deniedReadByCallId.set(toolCallId as string, sandboxFailure.deniedRead);
           } else {
-            deniedReadStore.record(command, sandboxFailure.deniedRead);
+            nestedCompatibility?.deniedReads.record(command, sandboxFailure.deniedRead);
           }
           loggingService.security('Sandbox denied read; agent retry will prompt for approval', {
             deniedPath: sandboxFailure.deniedRead.path,

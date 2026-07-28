@@ -167,11 +167,7 @@ export class ProjectSandboxAllowReadStore {
   }
 }
 
-/**
- * Module-level singletons shared between the shell tool and the approval flow.
- * A conversation is single-threaded in this CLI, so entries are consumed in order.
- * Each entry is one-shot (consumed on use), so no cross-turn contamination occurs.
- */
+/** Module-level compatibility singletons shared by nested tools and approval flow. */
 export const deniedReadStore = new DeniedReadStore();
 export const executionOverrideStore = new ExecutionOverrideStore();
 
@@ -191,12 +187,10 @@ export function getProjectAllowReadStore(workspaceRoot: string): ProjectSandboxA
   return projectAllowReadStore;
 }
 
-/**
- * Test-only: reset all module-level singletons. Not for production use.
- */
 export function resetSandboxDeniedReadStoresForTest(): void {
   deniedReadStore.clear();
   executionOverrideStore.clear();
   projectAllowReadStore = null;
   projectAllowReadStoreRoot = null;
 }
+

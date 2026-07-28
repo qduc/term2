@@ -12,6 +12,7 @@ import { SubagentAsyncRegistry } from './subagent-async-registry.js';
 import { SubagentSession } from './subagent-session.js';
 import { loadRoleDefinition } from './role-loader.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 
 export interface SubagentRuntimeDeps {
   logger: ILoggingService;
@@ -23,6 +24,8 @@ export interface SubagentRuntimeDeps {
   createClient?: ISubagentClientFactory['createClient'];
   skillsService?: SkillsService;
   toolOwnership: ToolOwnershipRegistry;
+  /** Session-owned state for nested tools' legacy approval protocol only. */
+  nestedCompatibility?: NestedToolCompatibilityState;
 }
 
 export interface SubagentRuntime {
@@ -35,6 +38,7 @@ export interface SubagentRuntime {
 }
 
 export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntime {
+  const nestedCompatibility = deps.nestedCompatibility ?? new NestedToolCompatibilityState(deps.settings);
   // Peek (get_subagent_status): route subagent_tool_started events into the
   // registry so it can capture live per-run progress. The registry is assigned
   // after the runners below (its `run` callback references them), so the
@@ -60,6 +64,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     executionContext: deps.executionContext,
     toolPolicy,
     skillsService: deps.skillsService,
+    nestedCompatibility,
   });
 
   const roleToolCache = new Map<SupportedSubagentRole, CachedRoleTool>();

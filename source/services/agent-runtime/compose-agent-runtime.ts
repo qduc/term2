@@ -12,6 +12,7 @@ import { MentorRunner } from '../subagents/mentor-runner.js';
 import { createExecutor } from './executor.js';
 import { adaptLegacyRole, adaptLegacyDefinition } from './legacy-adapter.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 
 /**
  * Dependencies for creating a production-ready AgentRuntime that wires
@@ -112,6 +113,7 @@ export function createAgentRuntimeFromSubagentRuntime(deps: AgentRuntimeFromSuba
  *   adaptation path consumed by NestedSubagentRunner.
  */
 export function createAgentRuntime(deps: CreateAgentRuntimeDeps): AgentRuntimeComposition {
+  const nestedCompatibility = new NestedToolCompatibilityState(deps.settings);
   const toolPolicy = new SubagentToolPolicy({
     settings: deps.settings,
     logger: deps.logger,
@@ -125,6 +127,7 @@ export function createAgentRuntime(deps: CreateAgentRuntimeDeps): AgentRuntimeCo
     logger: deps.logger,
     executionContext: deps.executionContext,
     toolPolicy,
+    nestedCompatibility,
   });
 
   const executionRunner = new ExecutionSubagentRunner({

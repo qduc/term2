@@ -22,7 +22,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | A4 groundwork | Session factory owns/disposes the closure-bound client; reset and both CLI modes replace the handle |
 | A4 tool ownership | `ToolOwnershipRegistry` is created by each session handle and explicitly propagated through root clients, session runtime composition, approval flow, subagent bridge/manager/runtime, and nested runners; no process singleton/default remains |
 | A4 lifecycle follow-up | Each owned handle now creates/disposes its root read/Docker access capability; project Docker grants remain settings-backed, and transient execution subclients dispose after state transfer |
-| A4 root fallback cleanup | Root Docker classification and reset/import use the injected handle-owned access state; legacy session-id stores remain only at explicit nested/test compatibility seams |
+| A4 nested/test compatibility retirement | Root tools and approval/result/lifecycle paths no longer fall back to session-id or command-keyed stores; nested tools receive a fresh explicit `NestedToolCompatibilityState` and never receive root post-execute state |
 | A4 retry proof | A real SDK `Runner` proves a denied-read-like output from call A can cause the model to emit the same shell arguments as a new call B; B is not correlated to A by call id |
 | Step B representation slice | `contracts/conversation-items.ts` owns canonical `Item`, `Turn`, `ToolCall`, and related serializable shapes; `Approval` aliases `ApprovalDescriptor`; legacy persisted names alias those contracts; `run-item-normalizer.ts` contains raw SDK/provider item normalization while replay remains provider-facing |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
@@ -72,8 +72,13 @@ classification/result building/batch handling, and `ApprovalFlowCoordinator` rec
 capability through the composition path; they do not resolve a current session or a fallback
 store. Reset/import clear its transient read folders, Docker one-shot/session grants, and
 indirect-Docker denials; disposal does the same. Docker project grants remain settings-backed.
-Nested denied-read compatibility deliberately continues to use its existing isolated path and is
-not granted the root post-execute capability.
+
+**A4 compatibility decision:** the old command-keyed denied-read protocol remains only as
+`NestedToolCompatibilityState`, created explicitly for a nested-tool runtime (or injected by a
+test). It owns its denied-read/override, read-access, and Docker compatibility stores; root
+tools do not import or select those stores. It is intentionally not a `SessionAccessState`, does
+not carry the root post-execute capability, and cannot inherit held root calls or their
+call-ID-isolated overrides. The remaining module-level store exports are test reset seams only.
 
 Test fixtures now explicitly create fresh registries, sharing one only when a fixture exercises
 the parent/nested ownership relationship. This keeps test identity/lifecycle aligned with the
@@ -158,10 +163,7 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **A4 nested/test compatibility retirement.** Explicitly migrate or retire the remaining
-   nested/test singleton callers before deleting the compatibility stores. This bounded root
-   cleanup is not generic Step B work.
-2. Continue Step B representation migration from the current risk register boundary only after
+1. Continue Step B representation migration from the current risk register boundary after
    that compatibility decision.
 
 ### R1 gate — PASSED

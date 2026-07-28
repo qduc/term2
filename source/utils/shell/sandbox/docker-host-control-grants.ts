@@ -22,7 +22,7 @@ const realRoot = (cwd: string) => {
 };
 
 /** Narrow capability grant store. Persistence is intentionally limited to user settings. */
-class DockerHostControlGrants {
+export class DockerHostControlGrants {
   #settings: ISettingsService | undefined;
   #onceBySession = new Map<string, Set<string>>();
   #sessionRootsBySession = new Map<string, Set<string>>();
@@ -54,6 +54,10 @@ class DockerHostControlGrants {
   hasDenial(sessionId: string | undefined, command: string): boolean {
     if (!sessionId) return false;
     return this.#deniedBySession.get(sessionId)?.has(command) ?? false;
+  }
+
+  requiresApproval(sessionId: string | undefined, command: string): boolean {
+    return requestsDockerHostControl(command) || this.hasDenial(sessionId, command);
   }
 
   configure(settings: ISettingsService): void {
@@ -90,8 +94,8 @@ class DockerHostControlGrants {
   }
 
   grantProject(cwd: string): void {
-    if (!this.#settings) throw new Error('Docker host-control grants are not configured.');
     const root = realRoot(cwd);
+    if (!this.#settings) throw new Error('Docker host-control grants are not configured.');
     const projects = this.#settings.get<string[]>('sandbox.dockerHostControlProjects') ?? [];
     if (!projects.includes(root)) this.#settings.set('sandbox.dockerHostControlProjects', [...projects, root]);
   }
@@ -111,20 +115,14 @@ class DockerHostControlGrants {
 }
 
 const dockerHostControlGrants = new DockerHostControlGrants();
-export const configureDockerHostControlGrants = (settings: ISettingsService) =>
-  dockerHostControlGrants.configure(settings);
+export const configureDockerHostControlGrants = (settings: ISettingsService) => dockerHostControlGrants.configure(settings);
 export const grantDockerHostControl = (grant: DockerHostControlGrantRequest) => dockerHostControlGrants.grant(grant);
-export const consumeDockerHostControlOnce = (sessionId: string, command: string) =>
-  dockerHostControlGrants.consumeOnce(sessionId, command);
-export const hasDockerHostControlSession = (sessionId: string, cwd: string) =>
-  dockerHostControlGrants.hasSession(sessionId, cwd);
+export const consumeDockerHostControlOnce = (sessionId: string, command: string) => dockerHostControlGrants.consumeOnce(sessionId, command);
+export const hasDockerHostControlSession = (sessionId: string, cwd: string) => dockerHostControlGrants.hasSession(sessionId, cwd);
 export const hasDockerHostControlProject = (cwd: string) => dockerHostControlGrants.hasProject(cwd);
 export const clearDockerHostControlSession = (sessionId: string) => dockerHostControlGrants.clearSession(sessionId);
-export const recordDockerHostControlDenial = (sessionId: string | undefined, command: string) =>
-  dockerHostControlGrants.recordDenial(sessionId, command);
-export const consumeDockerHostControlDenial = (sessionId: string | undefined, command: string) =>
-  dockerHostControlGrants.consumeDenial(sessionId, command);
-
+export const recordDockerHostControlDenial = (sessionId: string | undefined, command: string) => dockerHostControlGrants.recordDenial(sessionId, command);
+export const consumeDockerHostControlDenial = (sessionId: string | undefined, command: string) => dockerHostControlGrants.consumeDenial(sessionId, command);
 /**
  * Whether this command must go through the Docker host-control approval prompt:
  * either it reads as a Docker invocation, or a sandboxed run of it in *this*
@@ -136,7 +134,6 @@ export const consumeDockerHostControlDenial = (sessionId: string | undefined, co
  * The UI cannot see a session, so it must not call this — see
  * `ApprovalDescriptor.dockerHostControl`, resolved by the producer that can.
  */
-export const requiresDockerHostControlApproval = (sessionId: string | undefined, command: string) =>
-  requestsDockerHostControl(command) || dockerHostControlGrants.hasDenial(sessionId, command);
-export const resetDockerHostControlGrantsForTests = () => dockerHostControlGrants.resetForTests();
 export const normalizeDockerHostControlWorkspaceRoot = realRoot;
+export const requiresDockerHostControlApproval = (sessionId: string | undefined, command: string) => requestsDockerHostControl(command) || dockerHostControlGrants.hasDenial(sessionId, command);
+export const resetDockerHostControlGrantsForTests = () => dockerHostControlGrants.resetForTests();

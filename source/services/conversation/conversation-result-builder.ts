@@ -18,9 +18,9 @@ import { type GenerationToken } from '../generation-guard.js';
 import { type CommandMessage } from '../../tools/types.js';
 import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { isDockerHostControlShellApproval, requiresHumanShellApproval } from '../approval/shell-sandbox-approval.js';
-import { deniedReadStore } from '../../utils/shell/sandbox/denied-read-stores.js';
 import type { DeniedReadMetadata, PostExecuteApprovalToken } from '../../contracts/conversation.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
+import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 
 export type BuildResultOutcome =
   | { kind: 'response'; result: Extract<ConversationTerminal, { type: 'response' }> }
@@ -39,6 +39,8 @@ export interface ResultBuilderDeps {
   sessionId: string;
   /** Handle-owned root capability; omitted only by nested compatibility callers. */
   sessionAccess?: SessionAccessState;
+  /** Explicit nested/test-only legacy approval state. */
+  nestedCompatibility?: NestedToolCompatibilityState;
 }
 
 export interface ResultBuilderInput {
@@ -103,7 +105,7 @@ export async function buildConversationResult(
 ): Promise<BuildResultOutcome> {
   const { result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage, toolCallArgumentsById } =
     input;
-  const { approvalFlow, shellAutoApproval, logger, sessionId, sessionAccess } = deps;
+  const { approvalFlow, shellAutoApproval, logger, sessionId, sessionAccess, nestedCompatibility } = deps;
 
   if (result.interruptions && result.interruptions.length > 0) {
     const interruption = result.interruptions[0];
@@ -134,18 +136,18 @@ export async function buildConversationResult(
         ? (parseResult.arguments as { command?: string } | null)?.command
         : undefined;
     const deniedReadInfo =
-      typeof shellCommandForDeniedRead === 'string' && deniedReadStore.has(shellCommandForDeniedRead)
-        ? deniedReadStore.consume(shellCommandForDeniedRead)
+      typeof shellCommandForDeniedRead === 'string' && nestedCompatibility?.deniedReads.has(shellCommandForDeniedRead)
+        ? nestedCompatibility.deniedReads.consume(shellCommandForDeniedRead)
         : null;
     const hasDeniedRead = deniedReadInfo !== null;
     // Re-stage so prepareContinuation can access the info when the user chooses
     // allow-once / allow-remember / unsandboxed-once for this command.
     if (deniedReadInfo && typeof shellCommandForDeniedRead === 'string') {
-      deniedReadStore.stageForDescriptor(shellCommandForDeniedRead, deniedReadInfo);
+      nestedCompatibility?.deniedReads.stageForDescriptor(shellCommandForDeniedRead, deniedReadInfo);
     }
 
     const forceHumanApproval =
-      requiresHumanShellApproval(toolName, parseResult.arguments, sessionId, sessionAccess) || hasDeniedRead;
+      requiresHumanShellApproval(toolName, parseResult.arguments, sessionId, sessionAccess, nestedCompatibility) || hasDeniedRead;
     // Resolved here rather than in the UI: it depends on this session's record of
     // sandbox Docker blocks, and the prompt has no session identity to consult.
     const dockerHostControl = isDockerHostControlShellApproval(
@@ -153,6 +155,7 @@ export async function buildConversationResult(
       parseResult.arguments,
       sessionId,
       sessionAccess,
+      nestedCompatibility,
     );
 
     approvalFlow.recordPending({

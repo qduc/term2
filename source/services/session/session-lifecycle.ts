@@ -10,8 +10,6 @@ import { GenerationGuard } from '../generation-guard.js';
 import { SessionContinuityReset } from './session-continuity-reset.js';
 import { projectImportedState, ProjectionWarningCode } from '../conversation/conversation-state-projector.js';
 import { ImportedConversationStateSchema } from '../conversation/conversation-state-schema.js';
-import { sessionReadAccess } from '../approval/session-read-access.js';
-import { clearDockerHostControlSession } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 import type { SessionAccessState } from './session-access-state.js';
 
 /**
@@ -195,7 +193,5 @@ export class SessionLifecycle {
       this.#sessionAccess.clearTransient();
       return;
     }
-    sessionReadAccess.clear(this.#sessionId);
-    clearDockerHostControlSession(this.#sessionId);
   }
 }

@@ -5,6 +5,7 @@ import type {
   PersistedToolCallItem,
   PersistedToolResultItem,
 } from './conversation-persistence-types.js';
+import { normalizeRunItems } from './run-item-normalizer.js';
 
 const clone = <T>(value: T): T => {
   try {
@@ -55,40 +56,16 @@ const makeHistoryItemForReasoning = (item: Extract<PersistedAssistantTurnItem, {
   };
 };
 
-const historyItemType = (item: unknown): string => {
-  const record = item && typeof item === 'object' ? (item as Record<string, unknown>) : null;
-  const raw =
-    record?.rawItem && typeof record.rawItem === 'object' ? (record.rawItem as Record<string, unknown>) : record;
-  return typeof raw?.type === 'string' ? raw.type : '';
-};
-
 const withMissingReasoningPrefix = (historyItems: unknown[] | undefined, reasoningItems: unknown[]): unknown[] => {
   const existing = historyItems ?? [];
-  if (reasoningItems.length === 0 || existing.some((item) => historyItemType(item) === 'reasoning')) {
+  if (reasoningItems.length === 0 || normalizeRunItems(existing).some((item) => item.type === 'reasoning')) {
     return existing;
   }
   return [...reasoningItems, ...existing];
 };
 
 const hasToolResultForCall = (historyItems: readonly unknown[], callId: string): boolean =>
-  historyItems.some((item) => {
-    const type = historyItemType(item);
-    return (
-      (type === 'function_call_result' ||
-        type === 'function_call_output' ||
-        type === 'function_call_output_result' ||
-        type === 'tool_call_output_item') &&
-      callIdOf(item) === callId
-    );
-  });
-
-const callIdOf = (item: unknown): string | null => {
-  const record = item && typeof item === 'object' ? (item as Record<string, unknown>) : null;
-  const raw =
-    record?.rawItem && typeof record.rawItem === 'object' ? (record.rawItem as Record<string, unknown>) : record;
-  const callId = raw?.callId ?? raw?.call_id ?? raw?.tool_call_id ?? raw?.toolCallId ?? raw?.id;
-  return typeof callId === 'string' && callId ? callId : null;
-};
+  normalizeRunItems(historyItems).some((item) => item.type === 'tool_result' && item.callId === callId);
 
 const appendToolResultIfMissing = (
   historyItems: unknown[] | undefined,
@@ -167,10 +144,9 @@ export function buildToolLedgerFromAssistantTurnItems(
       entries.push(existing);
     }
 
-    const callHistoryItem = existing.historyItems?.find((historyItem) => {
-      const record = historyItem && typeof historyItem === 'object' ? (historyItem as Record<string, unknown>) : null;
-      return record?.type === 'function_call';
-    });
+    const callHistoryItem = existing.historyItems?.find((historyItem) =>
+      normalizeRunItems([historyItem]).some((normalizedItem) => normalizedItem.type === 'tool_call'),
+    );
     existing.toolName = item.toolName;
     existing.status = item.status;
     existing.output = item.output;

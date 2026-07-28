@@ -30,6 +30,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step B stream-event slice | Run-item tool lifecycle interpretation uses canonical calls/results while journal and recovery hooks retain the original provider items |
 | Step B replay slice | Replay detects existing reasoning, tool calls, and tool results through canonical normalization while retaining the original provider history objects |
 | Step B tool-ledger slice | `ToolExecutionLedger` derives tool call/result classification, identity, name, arguments, output, reasoning detection, and reconciliation from `run-item-normalizer.ts`; equivalent wrapped, direct-provider, and canonical forms share one identity while stored history remains provider-facing |
+| Step B journal-to-ledger slice | Durable journal recovery detects missing reasoning and existing tool results through `run-item-normalizer.ts`; wrapped, direct-provider, and canonical items deduplicate equivalently while reconstructed history preserves original provider items, ordering, and ledger persistence behavior |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -573,6 +574,12 @@ the application-owned run-item normalizer. Wrapped SDK, direct-provider, and can
 `call_id`, `tool_call_id`, `toolCallId`, and `id` fallback compatibility. Ledger recovery continues
 to store and reconstruct the original provider-facing item rather than a canonical replacement;
 ordering and reasoning-prefix insertion remain unchanged. Unknown items remain untouched.
+
+**Step B journal-to-ledger slice.** Durable assistant-turn and journal-event recovery now uses
+`run-item-normalizer.ts` to detect an existing reasoning item and a completed tool result for a
+call. Wrapped SDK, direct-provider, and canonical reasoning/tool-call/tool-result history forms
+therefore make the same prefixing and deduplication decisions. Reconstruction still preserves the
+original provider-facing history object, ordering, and persisted ledger output.
 
 ### Step C — Own the run loop
 Contained, because downstream already speaks our language.

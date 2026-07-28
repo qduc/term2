@@ -200,3 +200,20 @@ it('RetryEventPresenter handles model retry with specific event', () => {
   expect(presentation.event).toBe(mockRetryEvent);
   expect(presentation.logMessage).toBe('Recoverable model error detected, retrying');
 });
+
+it('RetryEventPresenter describes empty-message transport errors instead of emitting a blank string', () => {
+  const presenter = new RetryEventPresenter();
+  // Undici surfaces a mid-response socket close as a TypeError with no message.
+  const error = new TypeError();
+  error.stack = 'TypeError\n    at #onSocketClose (node:internal/deps/undici/undici:15499:20)';
+
+  const presentation = presenter.present({
+    failure: { kind: 'transient', attempt: 1, delayMs: 500 },
+    maxTransientRetries: 5,
+    source: 'initial',
+    error,
+  });
+
+  expect((presentation.event as any).errorMessage).toBe('connection closed by server mid-response');
+  expect(presentation.logFields.errorMessage).toBe('connection closed by server mid-response');
+});

@@ -277,3 +277,53 @@ describe('run() aborted subagent', () => {
     expect(result.filesChanged).toEqual(['test.ts']);
   });
 });
+
+it('run() retries a mid-stream transport drop instead of failing the subagent', async () => {
+  // Regression: subagents disable fresh-start retries so they cannot replay a
+  // task from scratch. That must not also block recovery from a connection the
+  // server closed mid-response, which is a transient transport failure.
+  let runCount = 0;
+  const events: any[] = [];
+
+  const socketCloseError = new TypeError();
+  socketCloseError.stack = 'TypeError\n    at #onSocketClose (node:internal/deps/undici/undici:15499:20)';
+
+  const providerId = registerTestProvider({
+    label: 'Mock Mid-Stream Transport Drop Provider',
+    createRunner: () =>
+      ({
+        run: async () => {
+          runCount++;
+          if (runCount === 1) {
+            return wrapErrorAsAgentStream(socketCloseError);
+          }
+          return wrapResultAsAgentStream({
+            status: 'completed',
+            finalOutput: 'Recovered after transport drop',
+            history: [],
+            messages: [],
+          });
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new TestSubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': providerId,
+      'agent.retryAttempts': 2,
+    }),
+    sessionContextService: createSessionContextService() as any,
+    onEvent: (event: ConversationEvent) => events.push(event),
+  });
+
+  const result = await manager.run({ role: 'explorer', task: 'find all files' });
+
+  expect(result.status).toBe('completed');
+  expect(result.finalText).toBe('Recovered after transport drop');
+  expect(runCount).toBe(2);
+  const retryEvent = events.find((e) => e.type === 'retry');
+  expect(retryEvent?.retryType).toBe('upstream');
+});

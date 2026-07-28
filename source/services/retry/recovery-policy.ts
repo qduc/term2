@@ -4,7 +4,10 @@ export class DefaultConversationRecoveryPolicy {
   plan(context: RecoveryContext): RecoveryPlan {
     const { failure, stream, freshStartRetriesAllowed } = context;
 
-    if (!freshStartRetriesAllowed && failure.kind === 'transient') {
+    // Sessions that forbid fresh starts (subagents) must not replay their task
+    // from the beginning. Once a stream exists the retry resumes from durable
+    // history instead, so a mid-stream transport drop stays recoverable.
+    if (!freshStartRetriesAllowed && !stream && failure.kind === 'transient') {
       return { kind: 'terminate', events: [] };
     }
 

@@ -1,5 +1,6 @@
 import type { ClassifiedFailure } from './retry-contracts.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
+import { describeError } from '../../utils/error-helpers.js';
 
 export type RetryEventPresenterInput = {
   failure: ClassifiedFailure;
@@ -18,7 +19,9 @@ export type RetryPresentation = {
 export class RetryEventPresenter {
   present(input: RetryEventPresenterInput): RetryPresentation {
     const { failure, maxTransientRetries, maxModelRetries, source, error } = input;
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    // Some transport failures (undici mid-response socket close) carry an empty
+    // message; describeError keeps the retry event and its log line non-empty.
+    const errorMessage = describeError(error);
 
     switch (failure.kind) {
       case 'service_tier_fallback': {

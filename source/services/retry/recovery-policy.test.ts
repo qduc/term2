@@ -97,7 +97,10 @@ it('fresh-start retries disabled converts non-unrecoverable failure without stre
   expect(result).toEqual({ kind: 'terminate', events: [] });
 });
 
-it('fresh-start retries disabled terminates transport recovery even when stream exists', () => {
+it('fresh-start retries disabled still recovers a transient failure when a stream exists', () => {
+  // Blocking fresh starts exists to stop a subagent replaying its task from the
+  // beginning. Once a stream exists the retry resumes from durable history, so
+  // a mid-stream transport drop must stay recoverable.
   const result = policy.plan(
     baseRecoveryContext({
       failure: { kind: 'transient', attempt: 1, delayMs: 500 },
@@ -106,7 +109,7 @@ it('fresh-start retries disabled terminates transport recovery even when stream 
     }),
   );
 
-  expect(result).toEqual({ kind: 'terminate', events: [] });
+  expect(result).toEqual({ kind: 'retry_fresh', inputMode: 'full_history' });
 });
 
 // ── nextRetryCounts ────────────────────────────────────────────

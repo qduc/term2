@@ -33,6 +33,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step B journal-to-ledger slice | Durable journal recovery detects missing reasoning and existing tool results through `run-item-normalizer.ts`; wrapped, direct-provider, and canonical items deduplicate equivalently while reconstructed history preserves original provider items, ordering, and ledger persistence behavior |
 | Step B history-repair slice | Conversation-history repair normalizes tool calls/results for signatures, pair detection, and repair decisions; equivalent wrapped, direct-provider, and canonical forms repair alike while retained history keeps its original representation |
 | Step B conversation-store tool-policy slice | `ConversationStore` normalizes only tool-output retry anchors and mutating-tool rewind previews; wrapped SDK, direct-provider, and canonical items share classification/call ID/name/arguments/output while splice indices and original provider-facing history remain intact |
+| Step B conversation-message projection slice | `conversation-message-projection.ts` read-only projects direct or one-level wrapped user, assistant, and system messages for conversation-store turn handling and stream finalization message detection; provider history remains original |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -175,7 +176,8 @@ only — every such call is rejected either way. Moot here: this repo never call
 ### Next, in order
 
 1. Continue Step B representation migration from the next bounded raw-item interpretation at the
-   current risk-register boundary.
+   current risk-register boundary. Message projection is now limited to `ConversationStore` and
+   `SessionStreamProcessor`; keep canonical `Item` and `run-item-normalizer.ts` assistant-run-only.
 
 ### R1 gate — PASSED
 
@@ -597,6 +599,17 @@ keeps its original anchor index/splice behavior and history retains its original
 objects. The normalizer now explicitly covers every legacy result spelling the store supported.
 User/assistant message unwrapping, synthetic-message handling, turn counting/removal, and
 message text/image extraction intentionally remain local for a later slice.
+
+**Step B conversation-message projection slice.** `conversation-message-projection.ts` now owns
+a read-only projection of direct provider messages and one-level SDK `{ rawItem }` wrappers. It
+recognizes current user, assistant, and system message roles; string and input/output-text array
+content; input images; empty/malformed content; and shell-context/legacy-mode synthetic user
+notices, while returning null for tool and reasoning items. `ConversationStore` uses it for user
+turn anchoring/removal, text/image return values, synthetic filtering, and assistant rewind reply
+counts; `SessionStreamProcessor` uses it only for full-history message presence selection. Both
+retain original provider objects and existing clone/index/splice behavior. Canonical `Item` and
+`run-item-normalizer.ts` remain assistant-run/tool-only; no generic/user message variants were
+added there.
 
 ### Step C — Own the run loop
 Contained, because downstream already speaks our language.

@@ -62,6 +62,30 @@ it('getLastUserMessage() returns text from multimodal user content', () => {
   expect(store.getLastUserMessage()).toBe('What is in this image?');
 });
 
+it.each([
+  { label: 'direct provider messages', wrap: (item: unknown) => item },
+  { label: 'wrapped SDK messages', wrap: (item: unknown) => ({ rawItem: item }) },
+])('interprets $label identically without replacing stored provider objects', ({ wrap }) => {
+  const store = new ConversationStore();
+  const user = wrap({
+    role: 'user',
+    type: 'message',
+    content: [
+      { type: 'input_text', text: 'Question' },
+      { type: 'input_image', image: 'data:image/png;base64,AAAA' },
+    ],
+  });
+  const assistant = wrap({ role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Answer' }] });
+  store.appendOutput([user, assistant] as AgentInputItem[]);
+
+  expect(store.getLastUserMessage()).toBe('Question');
+  expect(store.listUserTurns()).toEqual([{ index: 0, text: 'Question', imageCount: 1 }]);
+  expect(store.listRewindTargets()[0]?.discardedReplies).toBe(1);
+  expect(store.getHistory()).toEqual([user, assistant]);
+  expect(store.removeLastUserTurn()?.images?.[0]).toMatchObject({ data: 'AAAA', mimeType: 'image/png' });
+  expect(store.getHistory()).toEqual([]);
+});
+
 it('getHistory() returns a copy (external mutation does not affect store)', () => {
   const store = new ConversationStore();
   store.addUserMessage('A');

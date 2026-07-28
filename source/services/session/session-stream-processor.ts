@@ -10,6 +10,7 @@ import { createStreamAccumulator, processStreamEvents, type StreamAccumulator } 
 import { extractReplaySnapshot, extractFinalizationSnapshot, type StreamReplaySnapshot } from '../stream-snapshot.js';
 import { collectDuplicateToolCallResultPairs } from '../input-surge-guard.js';
 import { callIdOf, toolNameOf, outputOf } from '../tool-execution-ledger.js';
+import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
 import { normalizeRunItem } from '../conversation/run-item-normalizer.js';
 import type { AgentInputItem } from '@openai/agents';
 import { GenerationGuard, type GenerationToken } from '../generation-guard.js';
@@ -22,13 +23,7 @@ export type StreamFinalizationResult =
   | { kind: 'partial' } // continuity applied; interrupted stream did not commit terminal history
   | { kind: 'committed' }; // continuity and terminal history applied
 
-const hasConversationMessageItems = (items: unknown[]): boolean =>
-  items.some((item) => {
-    const record = item && typeof item === 'object' ? (item as Record<string, unknown>) : null;
-    const raw = record?.rawItem;
-    const candidate = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : record;
-    return candidate?.type === 'message' && typeof candidate?.role === 'string';
-  });
+const hasConversationMessageItems = (items: unknown[]): boolean => items.some(projectConversationMessage);
 
 const hasToolResultItems = (items: unknown[]): boolean =>
   items.some((item) => normalizeRunItem(item).some((normalized) => normalized.type === 'tool_result'));

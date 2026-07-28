@@ -1,7 +1,10 @@
 import type { AgentInputItem } from '@openai/agents';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
+import { projectConversationMessage } from './conversation-message-projection.js';
 import { normalizeRunItem } from './run-item-normalizer.js';
+
+export { SHELL_CONTEXT_PREFIX } from './conversation-message-projection.js';
 
 type RemovedUserTurn = { text: string; imageCount: number; images?: UserTurn['images'] };
 type RemovedToolOutput = { index: number; callId?: string; toolName?: string; output?: unknown; itemType: string };
@@ -25,9 +28,6 @@ export interface RewindTarget {
   /** Distinct paths of files mutated by tool calls that rewinding would discard. */
   discardedFiles: string[];
 }
-
-export const SHELL_CONTEXT_PREFIX = '[Previous Shell Session]';
-const LEGACY_MODE_NOTICE_PREFIX = '[Mode Notice] ';
 
 /**
  * Tools whose calls mutate files on disk. Rewinding does not revert these edits,
@@ -137,24 +137,8 @@ export class ConversationStore {
 
   getLastUserMessage(): string {
     for (let i = this.#history.length - 1; i >= 0; i--) {
-      const item: any = this.#history[i];
-      const raw = item?.rawItem ?? item;
-      if (raw?.role !== 'user') {
-        continue;
-      }
-
-      const content = raw?.content;
-      if (typeof content === 'string') {
-        return content;
-      }
-      if (Array.isArray(content)) {
-        return content
-          .filter((c: any) => (c?.type === 'input_text' || c?.type === 'output_text') && typeof c?.text === 'string')
-          .map((c: any) => c.text)
-          .join('');
-      }
-
-      return '';
+      const message = projectConversationMessage(this.#history[i]);
+      if (message?.role === 'user') return message.text;
     }
 
     return '';
@@ -170,9 +154,7 @@ export class ConversationStore {
    */
   removeLastUserMessage(): void {
     for (let i = this.#history.length - 1; i >= 0; i--) {
-      const item: any = this.#history[i];
-      const raw = item?.rawItem ?? item;
-      if (raw?.role === 'user') {
+      if (projectConversationMessage(this.#history[i])?.role === 'user') {
         this.#history.splice(i, 1);
         return;
       }
@@ -198,31 +180,10 @@ export class ConversationStore {
     return removed;
   }
 
-  static #extractText(raw: any): string {
-    const content = raw?.content;
-    if (typeof content === 'string') return content;
-    if (Array.isArray(content)) {
-      return content
-        .filter((c: any) => (c?.type === 'input_text' || c?.type === 'output_text') && typeof c?.text === 'string')
-        .map((c: any) => c.text)
-        .join('');
-    }
-    return '';
-  }
-
-  static #extractImageCount(raw: any): number {
-    const content = raw?.content;
-    return Array.isArray(content) ? content.filter((c: any) => c?.type === 'input_image').length : 0;
-  }
-
-  static #extractImages(raw: any): UserTurn['images'] {
-    const content = raw?.content;
-    if (!Array.isArray(content)) return undefined;
-
-    const images = content
-      .filter((c: any) => c?.type === 'input_image' && typeof c.image === 'string')
-      .map((c: any, index: number) => {
-        const match = /^data:([^;,]+);base64,(.*)$/.exec(c.image as string);
+  static #extractImages(message: NonNullable<ReturnType<typeof projectConversationMessage>>): UserTurn['images'] {
+    const images = message.images
+      .map((image, index: number) => {
+        const match = /^data:([^;,]+);base64,(.*)$/.exec(image.image);
         if (!match) return null;
         const [, mimeType, data] = match;
         return {
@@ -238,10 +199,10 @@ export class ConversationStore {
     return images.length > 0 ? images : undefined;
   }
 
-  static #extractRemovedUserTurn(raw: any): RemovedUserTurn {
-    const images = ConversationStore.#extractImages(raw);
+  static #extractRemovedUserTurn(message: NonNullable<ReturnType<typeof projectConversationMessage>>): RemovedUserTurn {
+    const images = ConversationStore.#extractImages(message);
     const result: RemovedUserTurn = {
-      text: ConversationStore.#extractText(raw),
+      text: message.text,
       imageCount: images?.length ?? 0,
     };
     if (images) {
@@ -250,17 +211,17 @@ export class ConversationStore {
     return result;
   }
 
-  static #isSyntheticUserMessage(text: string): boolean {
-    return text.startsWith(SHELL_CONTEXT_PREFIX) || text.startsWith(LEGACY_MODE_NOTICE_PREFIX);
-  }
-
   static #extractRemovedToolOutput(item: any, index: number): RemovedToolOutput {
     const toolResult = normalizeRunItem(item).find((normalized) => normalized.type === 'tool_result');
+    const providerItem = item?.rawItem ?? item;
+    const providerToolName = providerItem?.name ?? providerItem?.toolName;
     return {
       index,
-      itemType: (item?.rawItem ?? item)?.type ?? 'unknown',
+      itemType: providerItem?.type ?? 'unknown',
       callId: toolResult?.callId,
-      toolName: toolResult?.toolName,
+      // Canonical normalization uses "unknown" when a provider omitted the
+      // name; preserve this public method's historical `undefined` result.
+      toolName: typeof providerToolName === 'string' && providerToolName ? toolResult?.toolName : undefined,
       output: toolResult?.output,
     };
   }
@@ -281,13 +242,9 @@ export class ConversationStore {
   listUserTurns(): { index: number; text: string; imageCount: number }[] {
     const turns: { index: number; text: string; imageCount: number }[] = [];
     for (let i = 0; i < this.#history.length; i++) {
-      const item: any = this.#history[i];
-      const raw = item?.rawItem ?? item;
-      if (raw?.role !== 'user') continue;
-      const text = ConversationStore.#extractText(raw);
-      if (ConversationStore.#isSyntheticUserMessage(text)) continue;
-      const imageCount = ConversationStore.#extractImageCount(raw);
-      turns.push({ index: i, text, imageCount });
+      const message = projectConversationMessage(this.#history[i]);
+      if (message?.role !== 'user' || message.isSynthetic) continue;
+      turns.push({ index: i, text: message.text, imageCount: message.imageCount });
     }
     return turns;
   }
@@ -306,9 +263,7 @@ export class ConversationStore {
 
       for (let i = turn.index; i < this.#history.length; i++) {
         const item: any = this.#history[i];
-        const raw = item?.rawItem ?? item;
-
-        if (raw?.role === 'assistant') {
+        if (projectConversationMessage(item)?.role === 'assistant') {
           discardedReplies++;
           continue;
         }
@@ -393,20 +348,17 @@ export class ConversationStore {
   removeLastUserTurn(): RemovedUserTurn | null {
     let anchor = -1;
     for (let i = this.#history.length - 1; i >= 0; i--) {
-      const item: any = this.#history[i];
-      const raw = item?.rawItem ?? item;
-      if (raw?.role !== 'user') continue;
-      const text = ConversationStore.#extractText(raw);
-      if (ConversationStore.#isSyntheticUserMessage(text)) continue;
+      const message = projectConversationMessage(this.#history[i]);
+      if (message?.role !== 'user' || message.isSynthetic) continue;
       anchor = i;
       break;
     }
 
     if (anchor === -1) return null;
 
-    const item: any = this.#history[anchor];
-    const raw = item?.rawItem ?? item;
-    const removed = ConversationStore.#extractRemovedUserTurn(raw);
+    const message = projectConversationMessage(this.#history[anchor]);
+    if (!message) return null;
+    const removed = ConversationStore.#extractRemovedUserTurn(message);
 
     this.#history.splice(anchor);
     return removed;
@@ -424,11 +376,8 @@ export class ConversationStore {
     let count = 0;
     let anchor = -1;
     for (let i = this.#history.length - 1; i >= 0; i--) {
-      const item: any = this.#history[i];
-      const raw = item?.rawItem ?? item;
-      if (raw?.role !== 'user') continue;
-      const text = ConversationStore.#extractText(raw);
-      if (ConversationStore.#isSyntheticUserMessage(text)) continue;
+      const message = projectConversationMessage(this.#history[i]);
+      if (message?.role !== 'user' || message.isSynthetic) continue;
       count++;
       if (count === n) {
         anchor = i;
@@ -439,20 +388,17 @@ export class ConversationStore {
     if (anchor === -1) {
       // Fewer than n genuine user turns exist; remove all from the first one
       for (let i = 0; i < this.#history.length; i++) {
-        const item: any = this.#history[i];
-        const raw = item?.rawItem ?? item;
-        if (raw?.role !== 'user') continue;
-        const text = ConversationStore.#extractText(raw);
-        if (ConversationStore.#isSyntheticUserMessage(text)) continue;
+        const message = projectConversationMessage(this.#history[i]);
+        if (message?.role !== 'user' || message.isSynthetic) continue;
         anchor = i;
         break;
       }
       if (anchor === -1) return null;
     }
 
-    const item: any = this.#history[anchor];
-    const raw = item?.rawItem ?? item;
-    const removed = ConversationStore.#extractRemovedUserTurn(raw);
+    const message = projectConversationMessage(this.#history[anchor]);
+    if (!message) return null;
+    const removed = ConversationStore.#extractRemovedUserTurn(message);
 
     this.#history.splice(anchor);
     return removed;

@@ -524,6 +524,34 @@ it('SessionStreamProcessor.finalize() prefers full replay history when full-hist
   expect(conversationStore.getHistory()).toEqual(fullHistory);
 });
 
+it('SessionStreamProcessor.finalize() detects wrapped messages and retains the offered provider objects', () => {
+  const conversationStore = new ConversationStore();
+  const toolTracker = new SessionToolTracker(conversationStore);
+  const generationGuard = new GenerationGuard();
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger: {} as ConversationLogger,
+    providerContinuity: new ProviderContinuity(),
+    generationGuard,
+    journal: makeJournal(),
+  });
+  const wrappedAssistant = {
+    rawItem: { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Kept as wrapped' }] },
+  };
+  const stream = makeStream([], { interruptions: [] });
+  (stream as any).output = [wrappedAssistant];
+  (stream as any).newItems = [];
+  (stream as any).history = [];
+
+  expect(processor.finalize(stream, generationGuard.capture(), 'full_history', 'startStream')).toEqual({
+    kind: 'committed',
+  });
+  expect(conversationStore.getHistory()).toEqual([wrappedAssistant]);
+});
+
 it('SessionStreamProcessor.finalize() appends tool-result-only output when full-history replay snapshot has no messages', () => {
   const conversationStore = new ConversationStore();
   conversationStore.addUserMessage('Initial request');

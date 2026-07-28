@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, the first bounded Step B representation slice is landed, and Step C has retired every production `_generatedItems` read. The application-owned post-execute seam now carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream. Nested tools retain their compatibility path.
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, several bounded Step B representation slices are landed, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
 **Last updated:** 2026-07-28
 
 ---
@@ -17,7 +17,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 |---|---|
 | A1 | Dead `removeInterceptor` plumbing deleted (was always `noop`) |
 | A2 | `_pendingAgentToolRuns` retired behind `services/approval/tool-ownership-registry.ts` |
-| A3 | `_mergeApprovals` retired via `services/approval/approval-replay.ts` — **2 of 9 reach-ins done** |
+| A3 | `_mergeApprovals` retired via `services/approval/approval-replay.ts` |
 | R1 | Resume-after-approval preserves `details.toolCall.callId`; pinned by `source/lib/sdk-approval-resume.test.ts` |
 | A4 groundwork | Session factory owns/disposes the closure-bound client; reset and both CLI modes replace the handle |
 | A4 tool ownership | `ToolOwnershipRegistry` is created by each session handle and explicitly propagated through root clients, session runtime composition, approval flow, subagent bridge/manager/runtime, and nested runners; no process singleton/default remains |
@@ -438,6 +438,34 @@ transport. The dual mode is the leak; chaining itself is not.
 
 Re-ordered from the original types-first plan. Each step retires named reach-ins.
 
+### Execution model — sequential seams, parallel implementations
+
+Use a hybrid execution strategy. Shared contracts and architectural seams proceed sequentially;
+independent provider implementations may proceed in parallel only after those seams are stable.
+
+1. **Sequential — continue Step B in bounded normalization slices.** Prefer the remaining
+   conversation/session consumers (`conversation-turn-items.ts`, `conversation-result-builder.ts`,
+   `conversation-replay.ts`, `session-tool-tracker.ts`, and `turn-workflow.ts`). Each slice defines
+   one canonical boundary, preserves the original provider item where replay or formatting needs it,
+   adds focused tests, and refreshes the coupling counts. Do not migrate all consumers concurrently:
+   they share canonical item definitions and provider-replay assumptions.
+2. **Sequential — establish the application-owned provider contract for Step D.** Settle request,
+   streamed-event, tool-call/result, usage/completion, and provider-native continuation boundaries
+   before assigning provider migrations. One owner integrates this contract.
+3. **Parallel — migrate independent AI SDK providers.** Once the contract is stable, Google,
+   Anthropic, and OpenRouter may move in separate worktrees. Integrate sequentially, then delete
+   `ai-sdk-agents-adapter.ts` and run the cross-provider suite.
+4. **Sequential — disposition chaining before Step E.** Prefer confining `previousResponseId` to
+   provider-private state while the domain model always carries full history. Do not split this
+   decision across session and provider layers or begin the Codex transport first.
+5. **Limited parallelism — retire provider reach-ins after chaining is settled.** OpenAI and the
+   fallback model may be separable once the transport contract is stable. Keep Codex request
+   construction, `_fetchResponse`, WebSocket behavior, and chaining under one owner; integrate it
+   last because it is the highest-risk behavior.
+
+Read-only audits, test-gap analysis, and review may run in parallel at any stage. Changes that share
+contracts, schemas, state flow, or transport semantics remain sequential.
+
 ### Step A — Approval layer (days)
 
 - **A1 — DONE.** `removeInterceptor` dead plumbing deleted (was always `noop`).
@@ -489,9 +517,10 @@ A2's claim-at-source design depends on this ordering.
 
 ### Step B — Canonical types + normalize at the boundary
 `source/contracts/`: `Item`, `Turn`, `ToolCall`, `Approval`. One adapter, SDK items → ours.
-`rawItem` leaves 39 files while still on the SDK. Note `contracts/conversation.ts:1` already
-imports `ModelSettingsReasoningEffort` from the SDK — the contracts layer is not currently
-SDK-free.
+`rawItem` remains in downstream consumers while the application is still on the SDK, but
+`source/contracts/` itself no longer imports `@openai/agents*`; `ReasoningEffortSetting` is an
+application-owned string union. Continue moving interpretation behind the canonical boundary
+without discarding provider-native items needed for replay or formatting.
 **Retires 0 reach-ins directly; contains them and collapses blast radius.**
 
 **Landed follow-up.** Root denied-read recovery uses the Step C post-execute seam without command
@@ -558,12 +587,15 @@ Related groundwork: `luna-responses-lite-wire-protocol.ts` (112),
 
 ---
 
-## Scale of coupling (verified 2026-07-27)
+## Scale of coupling (refreshed 2026-07-28)
 
-- **53 non-test source files** import `@openai/agents*`; 85 including tests.
-- **197 non-test `rawItem` sites**; 380 including tests.
-- **99 non-test `previousResponseId` references** across 24 files.
+- **53 non-test source files** import `@openai/agents*`; 87 including tests.
+- A current line-based scan finds **149 non-test `rawItem` lines**.
+- A current line-based scan finds **101 non-test `previousResponseId` lines**.
 - Out of 788 TS files total. Installed: `@openai/agents-core` **0.11.4**.
+
+These are navigation metrics, not progress measures. Record the counting method when refreshing
+them; the risk register remains authoritative.
 
 Three clusters: `source/providers/` (~7k LOC incl. tests); the run + approval loop
 (`lib/agent-*`, `services/session/`, `services/approval/`, `services/retry/`); and type-only
@@ -587,20 +619,20 @@ feature), guardrails, MCP, sessions/memory, voice, realtime.
 
 ## Key file references
 
-- `source/lib/agent-run-orchestrator.ts` (335) — run/stream lifecycle
-- `source/lib/agent-factory.ts` (351) — agent + tool construction; codex `store=false` at :254
-- `source/lib/agent-client.ts` (328)
+- `source/lib/agent-run-orchestrator.ts` (336) — run/stream lifecycle
+- `source/lib/agent-factory.ts` (382) — agent + tool construction
+- `source/lib/agent-client.ts` (357)
 - `source/lib/tool-invoke.ts` (502)
-- `source/lib/chained-input-filter.ts` (222)
-- `source/services/approval/approval-state.ts` (102) — `RunState` held in memory
+- `source/lib/chained-input-filter.ts` (234)
+- `source/services/approval/approval-state.ts` (88) — `RunState` held in memory
 - `source/services/approval/approval-flow-coordinator.ts` — approve/reject
-- `source/services/approval/tool-owner.ts` (81) — Step A deletion target
+- `source/services/approval/tool-owner.ts` (14) — application-owned owner types remain after A2
 - `source/services/provider-continuity.ts` (36) — chaining state
 - `source/services/session/session-input-planner.ts` (273) — chaining decision point
-- `source/services/session/session-stream-processor.ts` (287)
-- `source/services/stream-event-processor.ts` (503)
-- `source/services/subagents/nested-runner.ts` (395) — private-API `_mergeApprovals`
-- `source/providers/codex-responses-model.ts` (1204) — SDK subclassing
+- `source/services/session/session-stream-processor.ts` (350)
+- `source/services/stream-event-processor.ts` (490)
+- `source/services/subagents/nested-runner.ts` (445)
+- `source/providers/codex-responses-model.ts` (1210) — SDK subclassing
 - `source/providers/fallback-responses-model.ts` (344)
 - `source/providers/ai-sdk-agents-adapter.ts` (112) — Step D deletion target
 - `source/services/conversation/conversation-replay.ts` (1192)

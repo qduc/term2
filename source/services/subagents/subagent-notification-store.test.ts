@@ -185,6 +185,59 @@ it('retains a completed task briefly and expires it while active tasks remain', 
   ]);
 });
 
+it('projects a continuation of a settled run as a live task again', () => {
+  let now = 1_000;
+  const store = makeStore({ now: () => now });
+  store.recordLifecycle(started());
+  store.recordLifecycle(completed());
+
+  now += BACKGROUND_TASK_RECENT_RETENTION_MS;
+  expect(store.getTaskSnapshot()).toEqual([]);
+
+  // `continue_run_id` reuses the run id, so the second start carries the id of a
+  // run the store already saw settle.
+  expect(store.recordLifecycle(started({ task: 'continue the assessment' }))).toBe(true);
+  expect(store.getTaskSnapshot()).toEqual([
+    {
+      runId: 'run-1',
+      role: 'explorer',
+      task: 'continue the assessment',
+      status: 'running',
+      startedAt: now,
+    },
+  ]);
+});
+
+it('notifies the main agent again when a continued run completes', () => {
+  let now = 1_000;
+  const store = makeStore({ now: () => now });
+  store.recordLifecycle(started());
+  store.recordLifecycle(completed());
+  expect(store.enqueue(completed())).toBe(true);
+  store.drain();
+
+  now += BACKGROUND_TASK_RECENT_RETENTION_MS;
+  store.recordLifecycle(started({ task: 'continue the assessment' }));
+  store.recordLifecycle(completed());
+
+  expect(store.enqueue(completed())).toBe(true);
+  expect(store.drain()).toEqual([expect.objectContaining({ kind: 'completion', runId: 'run-1', status: 'completed' })]);
+});
+
+it('still drops a replayed completion of a run that was never continued', () => {
+  let now = 1_000;
+  const store = makeStore({ now: () => now });
+  store.recordLifecycle(started());
+  store.recordLifecycle(completed());
+  store.enqueue(completed());
+  store.drain();
+
+  now += BACKGROUND_TASK_RECENT_RETENTION_MS;
+
+  expect(store.enqueue(completed())).toBe(false);
+  expect(store.drain()).toEqual([]);
+});
+
 it('reports only lifecycle events that change the visible task projection', () => {
   const store = makeStore();
 

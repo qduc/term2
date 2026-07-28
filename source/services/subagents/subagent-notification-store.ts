@@ -115,6 +115,7 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
   #seen = new Set<string>();
   #tasks = new Map<string, BackgroundSubagentTask>();
   #settledTaskIds = new Set<string>();
+  #lifecycleEpochs = new Map<string, number>();
   #now: () => number;
   #deliveredIdCap: number;
   #recentTaskRetentionMs: number;
@@ -136,11 +137,20 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
     }
 
     if (event.type === 'subagent_started' && event.async === true) {
-      if (this.#settledTaskIds.has(event.agentId)) return false;
+      // Retention is what separates replay from continuation here, so it has to
+      // be current whether or not the UI has read a snapshot since.
+      this.#purgeExpiredTasks();
       const existing = this.#tasks.get(event.agentId);
+      // A terminal task still inside its retention window means this start is a
+      // replay of the run that just finished, not a continuation of it.
       if (existing && existing.status !== 'running') return false;
       if (existing?.status === 'running' && existing.role === event.role && existing.task === event.task) {
         return false;
+      }
+      // `continue_run_id` reuses a settled run id, so a start for one opens a
+      // fresh lifecycle rather than replaying the old one.
+      if (this.#settledTaskIds.delete(event.agentId)) {
+        this.#bumpLifecycleEpoch(event.agentId);
       }
 
       this.#tasks.set(event.agentId, {
@@ -207,13 +217,17 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
   }
 
   getTaskSnapshot(): readonly BackgroundSubagentTask[] {
+    this.#purgeExpiredTasks();
+    return [...this.#tasks.values()];
+  }
+
+  #purgeExpiredTasks(): void {
     const now = this.#now();
     for (const [runId, task] of this.#tasks) {
       if (task.completedAt !== undefined && now - task.completedAt >= this.#recentTaskRetentionMs) {
         this.#tasks.delete(runId);
       }
     }
-    return [...this.#tasks.values()];
   }
 
   /** Records one novel async completion or question, returning whether it woke the queue. */
@@ -269,6 +283,26 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
     }
   }
 
+  /**
+   * Completion ids are stable per lifecycle, not per run id. A run id that is
+   * continued completes once per continuation, and each of those completions
+   * owes the main agent its own notification; only a replay within one
+   * lifecycle is a duplicate.
+   */
+  #completionMessageId(runId: string): string {
+    const epoch = this.#lifecycleEpochs.get(runId) ?? 1;
+    return epoch > 1 ? `completion:${runId}#${epoch}` : `completion:${runId}`;
+  }
+
+  #bumpLifecycleEpoch(runId: string): void {
+    this.#lifecycleEpochs.set(runId, (this.#lifecycleEpochs.get(runId) ?? 1) + 1);
+    while (this.#lifecycleEpochs.size > this.#deliveredIdCap) {
+      const oldest = this.#lifecycleEpochs.keys().next().value;
+      if (oldest === undefined || oldest === runId) break;
+      this.#lifecycleEpochs.delete(oldest);
+    }
+  }
+
   #notificationFor(event: ConversationEvent): BackgroundSubagentNotification | undefined {
     if (event.type === 'subagent_completed' && event.async === true) {
       const result = (event as { result?: SubagentResult }).result;
@@ -276,7 +310,7 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
       if (!result || !runId) return undefined;
       return {
         kind: 'completion',
-        messageId: `completion:${runId}`,
+        messageId: this.#completionMessageId(runId),
         runId,
         role: result.role,
         status: result.status,

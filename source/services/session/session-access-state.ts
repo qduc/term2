@@ -56,11 +56,16 @@ export class SessionAccessState {
     return this.#dockerDenials.delete(command);
   }
 
-  dispose(): void {
+  /** Clears state that must not survive a reset or imported conversation. */
+  clearTransient(): void {
     this.#readFolders.clear();
     this.#dockerOnce.clear();
     this.#dockerRoots.clear();
     this.#dockerDenials.clear();
+  }
+
+  dispose(): void {
+    this.clearTransient();
   }
 
   #grantDockerProject(cwd: string): void {

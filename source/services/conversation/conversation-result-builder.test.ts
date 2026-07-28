@@ -11,6 +11,12 @@ import { formatShellCommandMessage } from '../../tools/system/shell.js';
 import { clearApprovalRejectionMarkers } from '../../utils/streaming/extract-command-messages.js';
 import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { SessionAccessState } from '../session/session-access-state.js';
+import { createMockSettingsService } from '../settings/settings-service.mock.js';
+import {
+  recordDockerHostControlDenial,
+  resetDockerHostControlGrantsForTests,
+} from '../../utils/shell/sandbox/docker-host-control-grants.js';
 import {
   deniedReadStore,
   executionOverrideStore,
@@ -40,6 +46,7 @@ afterEach(() => {
   clearApprovalRejectionMarkers();
   toolApprovalPolicyRegistry.clear();
   resetSandboxDeniedReadStoresForTest();
+  resetDockerHostControlGrantsForTests();
 });
 
 const logger = new LoggingService({ disableLogging: true });
@@ -78,6 +85,39 @@ const makeDeps = (mode: 'off' | 'advisory' | 'auto' = 'off', toolOwnership?: Too
   });
   return { approvalFlow, shellAutoApproval, logger, sessionId: 's1' };
 };
+
+it('classifies an indirect Docker denial from its injected access state, not another session singleton', async () => {
+  const access = new SessionAccessState(createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }));
+  access.recordDockerDenial('indirect-command');
+  recordDockerHostControlDenial('other-session', 'indirect-command');
+  const deps = { ...makeDeps(), sessionAccess: access };
+  const stream = makeStream({
+    interruptions: [{ name: 'shell', callId: 'indirect', arguments: { command: 'indirect-command' }, agent: {} }],
+    state: {},
+  });
+
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
+
+  expect(outcome.kind).toBe('approval_required');
+  if (outcome.kind === 'approval_required') expect(outcome.result.approval.dockerHostControl).toBe(true);
+});
+
+it('does not consult the matching session singleton when injected access has no Docker denial', async () => {
+  const access = new SessionAccessState(createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }));
+  recordDockerHostControlDenial('s1', 'indirect-command');
+  const stream = makeStream({
+    interruptions: [{ name: 'shell', callId: 'indirect', arguments: { command: 'indirect-command' }, agent: {} }],
+    state: {},
+  });
+
+  const outcome = await buildConversationResult(
+    { result: stream, toolCallArgumentsById: new Map() },
+    { ...makeDeps(), sessionAccess: access },
+  );
+
+  expect(outcome.kind).toBe('approval_required');
+  if (outcome.kind === 'approval_required') expect(outcome.result.approval.dockerHostControl).toBeUndefined();
+});
 
 it('response outcome when stream has no interruptions', async () => {
   const stream = makeStream({

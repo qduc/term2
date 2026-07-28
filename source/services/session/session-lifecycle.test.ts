@@ -8,7 +8,7 @@ import {
   resetDockerHostControlGrantsForTests,
 } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 
-const makeLifecycleHarness = () => {
+const makeLifecycleHarness = ({ sessionAccess = true }: { sessionAccess?: boolean } = {}) => {
   const calls = {
     approvalFlow: { clearPending: 0, consumeAborted: 0 },
     approvalState: { clearPending: 0, consumeAborted: 0 },
@@ -30,6 +30,7 @@ const makeLifecycleHarness = () => {
     agentClient: { clearConversations: 0 },
     statusMachine: { abort: 0 },
     logger: { warn: 0 },
+    sessionAccess: { clearTransient: 0 },
   };
 
   const approvalFlow = {
@@ -148,6 +149,11 @@ const makeLifecycleHarness = () => {
         calls.generationGuard.invalidate++;
       },
     },
+    sessionAccess: {
+      clearTransient: () => {
+        calls.sessionAccess.clearTransient++;
+      },
+    },
   };
 
   const continuityReset = new SessionContinuityReset({
@@ -160,7 +166,9 @@ const makeLifecycleHarness = () => {
     agentClient: deps.agentClient as any,
   });
 
-  return { calls, deps: { ...deps, continuityReset }, providerContinuity };
+  const lifecycleDeps = { ...deps, continuityReset };
+  if (!sessionAccess) delete (lifecycleDeps as { sessionAccess?: unknown }).sessionAccess;
+  return { calls, deps: lifecycleDeps, providerContinuity };
 };
 
 it('resetSession clears approval state through approvalFlow and keeps persistence on providerContinuity', () => {
@@ -186,7 +194,7 @@ it('resetSession clears approval state through approvalFlow and keeps persistenc
 });
 
 it('resetSession clears session-only read folder access', () => {
-  const { deps } = makeLifecycleHarness();
+  const { deps } = makeLifecycleHarness({ sessionAccess: false });
   const lifecycle = new SessionLifecycle(deps as any);
   sessionReadAccess.allowFolder('session-1', '/outside/docs');
 
@@ -195,8 +203,18 @@ it('resetSession clears session-only read folder access', () => {
   expect(sessionReadAccess.allows('session-1', '/outside/docs/guide.md')).toBe(false);
 });
 
+it('owned reset and import clear the injected transient capability instead of legacy session stores', () => {
+  const { calls, deps } = makeLifecycleHarness();
+  const lifecycle = new SessionLifecycle(deps as any);
+
+  lifecycle.resetSession();
+  lifecycle.importPersistedState({ history: [], previousResponseId: null, toolLedger: [] });
+
+  expect(calls.sessionAccess.clearTransient).toBe(2);
+});
+
 it('resetSession clears only its own Docker session grant', () => {
-  const { deps } = makeLifecycleHarness();
+  const { deps } = makeLifecycleHarness({ sessionAccess: false });
   const lifecycle = new SessionLifecycle(deps as any);
   grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'session', sessionId: 'session-1' });
   grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'session', sessionId: 'session-2' });

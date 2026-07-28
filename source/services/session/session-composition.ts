@@ -388,6 +388,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     providerContinuity,
     generationGuard,
     continuityReset,
+    sessionAccess,
   });
 
   const streamProcessor = new SessionStreamProcessor({
@@ -497,6 +498,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     planApplier,
     continuationRecoveryHandler,
     providerContinuity,
+    sessionAccess,
     postExecutePending,
     setActivePostExecuteRunId: postExecutePauseCapability?.setActiveRunId.bind(postExecutePauseCapability),
   });

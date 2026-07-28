@@ -22,6 +22,8 @@ import {
   requiresDockerHostControlApproval,
   resetDockerHostControlGrantsForTests,
 } from '../../utils/shell/sandbox/docker-host-control-grants.js';
+import { SessionAccessState } from '../session/session-access-state.js';
+import { createMockSettingsService } from '../settings/settings-service.mock.js';
 
 class ApprovalFlowCoordinator extends ProductionApprovalFlowCoordinator {
   constructor(
@@ -359,6 +361,38 @@ it('prepareContinuation grants Docker host control to a command the sandbox bloc
   // The pending block must survive approval: for a command that does not read as
   // Docker, it is what tells the resumed execution to take host control.
   expect(requiresDockerHostControlApproval('s1', 'pnpm test')).toBe(true);
+});
+
+it('prepareContinuation classifies an indirect Docker denial from injected access state', () => {
+  let approved = false;
+  const approvalState = new ApprovalState();
+  approvalState.setPending({
+    state: { approve: () => (approved = true) } as any,
+    interruption: {
+      name: 'shell',
+      callId: 'owned-blocked',
+      arguments: { command: 'indirect-command' },
+    },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+  const access = new SessionAccessState(createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }));
+  access.recordDockerDenial('indirect-command');
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+    sessionAccess: access,
+  });
+
+  coord.prepareContinuation('docker-allow-once', undefined);
+
+  expect(approved).toBe(true);
+  expect(access.hasDockerGrant('indirect-command', process.cwd())).toBe(true);
 });
 
 it('prepareContinuation clears the pending Docker request when the user denies it', () => {

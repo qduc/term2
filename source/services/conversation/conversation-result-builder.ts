@@ -20,6 +20,7 @@ import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-reg
 import { isDockerHostControlShellApproval, requiresHumanShellApproval } from '../approval/shell-sandbox-approval.js';
 import { deniedReadStore } from '../../utils/shell/sandbox/denied-read-stores.js';
 import type { DeniedReadMetadata, PostExecuteApprovalToken } from '../../contracts/conversation.js';
+import type { SessionAccessState } from '../session/session-access-state.js';
 
 export type BuildResultOutcome =
   | { kind: 'response'; result: Extract<ConversationTerminal, { type: 'response' }> }
@@ -36,6 +37,8 @@ export interface ResultBuilderDeps {
   shellAutoApproval: ShellAutoApprovalResolver;
   logger: ILoggingService;
   sessionId: string;
+  /** Handle-owned root capability; omitted only by nested compatibility callers. */
+  sessionAccess?: SessionAccessState;
 }
 
 export interface ResultBuilderInput {
@@ -100,7 +103,7 @@ export async function buildConversationResult(
 ): Promise<BuildResultOutcome> {
   const { result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage, toolCallArgumentsById } =
     input;
-  const { approvalFlow, shellAutoApproval, logger, sessionId } = deps;
+  const { approvalFlow, shellAutoApproval, logger, sessionId, sessionAccess } = deps;
 
   if (result.interruptions && result.interruptions.length > 0) {
     const interruption = result.interruptions[0];
@@ -141,10 +144,16 @@ export async function buildConversationResult(
       deniedReadStore.stageForDescriptor(shellCommandForDeniedRead, deniedReadInfo);
     }
 
-    const forceHumanApproval = requiresHumanShellApproval(toolName, parseResult.arguments, sessionId) || hasDeniedRead;
+    const forceHumanApproval =
+      requiresHumanShellApproval(toolName, parseResult.arguments, sessionId, sessionAccess) || hasDeniedRead;
     // Resolved here rather than in the UI: it depends on this session's record of
     // sandbox Docker blocks, and the prompt has no session identity to consult.
-    const dockerHostControl = isDockerHostControlShellApproval(toolName, parseResult.arguments, sessionId);
+    const dockerHostControl = isDockerHostControlShellApproval(
+      toolName,
+      parseResult.arguments,
+      sessionId,
+      sessionAccess,
+    );
 
     approvalFlow.recordPending({
       state: result.state,

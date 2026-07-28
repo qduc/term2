@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the A4 session-state lifecycle follow-up, the first bounded Step B representation slice is landed, and Step C has retired every production `_generatedItems` read. The application-owned post-execute seam now carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream. Nested tools retain their compatibility path.
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, the first bounded Step B representation slice is landed, and Step C has retired every production `_generatedItems` read. The application-owned post-execute seam now carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream. Nested tools retain their compatibility path.
 **Last updated:** 2026-07-28
 
 ---
@@ -22,6 +22,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | A4 groundwork | Session factory owns/disposes the closure-bound client; reset and both CLI modes replace the handle |
 | A4 tool ownership | `ToolOwnershipRegistry` is created by each session handle and explicitly propagated through root clients, session runtime composition, approval flow, subagent bridge/manager/runtime, and nested runners; no process singleton/default remains |
 | A4 lifecycle follow-up | Each owned handle now creates/disposes its root read/Docker access capability; project Docker grants remain settings-backed, and transient execution subclients dispose after state transfer |
+| A4 root fallback cleanup | Root Docker classification and reset/import use the injected handle-owned access state; legacy session-id stores remain only at explicit nested/test compatibility seams |
 | A4 retry proof | A real SDK `Runner` proves a denied-read-like output from call A can cause the model to emit the same shell arguments as a new call B; B is not correlated to A by call id |
 | Step B representation slice | `contracts/conversation-items.ts` owns canonical `Item`, `Turn`, `ToolCall`, and related serializable shapes; `Approval` aliases `ApprovalDescriptor`; legacy persisted names alias those contracts; `run-item-normalizer.ts` contains raw SDK/provider item normalization while replay remains provider-facing |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
@@ -66,12 +67,13 @@ flow without a process-global registry. Caller-owned client seams explicitly rec
 On reset, `ConversationService` disposes the old handle and creates a new one, so its registry is
 not reused; disposal clears the registry along with the old session epoch.
 
-The same handle now owns `SessionAccessState`. Root `read_file`, root `shell`, and
-`ApprovalFlowCoordinator` receive the exact capability through the composition path;
-they do not resolve a current session or a fallback store. Its read folders, Docker
-one-shot/session grants, and indirect-Docker denials disappear at handle disposal.
-Docker project grants remain settings-backed. Nested denied-read compatibility deliberately
-continues to use its existing isolated path and is not granted the root post-execute capability.
+The same handle now owns `SessionAccessState`. Root `read_file`, root `shell`, approval
+classification/result building/batch handling, and `ApprovalFlowCoordinator` receive the exact
+capability through the composition path; they do not resolve a current session or a fallback
+store. Reset/import clear its transient read folders, Docker one-shot/session grants, and
+indirect-Docker denials; disposal does the same. Docker project grants remain settings-backed.
+Nested denied-read compatibility deliberately continues to use its existing isolated path and is
+not granted the root post-execute capability.
 
 Test fixtures now explicitly create fresh registries, sharing one only when a fixture exercises
 the parent/nested ownership relationship. This keeps test identity/lifecycle aligned with the
@@ -156,9 +158,11 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **A4 compatibility cleanup.** Delete the remaining singleton fallbacks and duplicate
-   lifecycle cleanup after explicitly migrating or retiring their nested/test compatibility callers.
-2. Continue Step B representation migration from the current risk register boundary.
+1. **A4 nested/test compatibility retirement.** Explicitly migrate or retire the remaining
+   nested/test singleton callers before deleting the compatibility stores. This bounded root
+   cleanup is not generic Step B work.
+2. Continue Step B representation migration from the current risk register boundary only after
+   that compatibility decision.
 
 ### R1 gate — PASSED
 

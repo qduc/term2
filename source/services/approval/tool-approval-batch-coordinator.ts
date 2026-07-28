@@ -17,6 +17,7 @@ import { parseToolCallArguments } from '../tool-call-arguments.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import { toolApprovalPolicyRegistry, type ToolApprovalPolicyRegistry } from './tool-approval-policy-registry.js';
 import { isDockerHostControlShellApproval, requiresHumanShellApproval } from './shell-sandbox-approval.js';
+import type { SessionAccessState } from '../session/session-access-state.js';
 
 export type BatchStageResult =
   | { kind: 'ready' }
@@ -29,6 +30,8 @@ export interface ToolApprovalBatchCoordinatorDeps {
   shellAutoApproval: ShellAutoApprovalResolver;
   logger: ILoggingService;
   sessionId: string;
+  /** Handle-owned root capability; omitted only by nested compatibility callers. */
+  sessionAccess?: SessionAccessState;
   policyRegistry?: ToolApprovalPolicyRegistry;
   isCurrent?: (token: number) => boolean;
 }
@@ -99,8 +102,18 @@ export class ToolApprovalBatchCoordinator {
         sessionId: this.deps.sessionId,
         traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
       });
-      const forceHumanApproval = requiresHumanShellApproval(toolName, parseResult.arguments, this.deps.sessionId);
-      const dockerHostControl = isDockerHostControlShellApproval(toolName, parseResult.arguments, this.deps.sessionId);
+      const forceHumanApproval = requiresHumanShellApproval(
+        toolName,
+        parseResult.arguments,
+        this.deps.sessionId,
+        this.deps.sessionAccess,
+      );
+      const dockerHostControl = isDockerHostControlShellApproval(
+        toolName,
+        parseResult.arguments,
+        this.deps.sessionId,
+        this.deps.sessionAccess,
+      );
 
       const registryDecision = await this.#policyRegistry.evaluate({
         toolName,

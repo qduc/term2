@@ -12,6 +12,7 @@ import { projectImportedState, ProjectionWarningCode } from '../conversation/con
 import { ImportedConversationStateSchema } from '../conversation/conversation-state-schema.js';
 import { sessionReadAccess } from '../approval/session-read-access.js';
 import { clearDockerHostControlSession } from '../../utils/shell/sandbox/docker-host-control-grants.js';
+import type { SessionAccessState } from './session-access-state.js';
 
 /**
  * Owns and manages session-level state transitions:
@@ -37,6 +38,7 @@ export class SessionLifecycle {
   #providerContinuity: ProviderContinuity;
   #generationGuard: GenerationGuard;
   #continuityReset: SessionContinuityReset;
+  #sessionAccess: SessionAccessState | undefined;
 
   constructor(deps: {
     inputPlanner: SessionInputPlanner;
@@ -48,6 +50,8 @@ export class SessionLifecycle {
     providerContinuity: ProviderContinuity;
     generationGuard: GenerationGuard;
     continuityReset: SessionContinuityReset;
+    /** Handle-owned root capability; absent only for compatibility callers. */
+    sessionAccess?: SessionAccessState;
   }) {
     this.#inputPlanner = deps.inputPlanner;
     this.#toolTracker = deps.toolTracker;
@@ -58,6 +62,7 @@ export class SessionLifecycle {
     this.#providerContinuity = deps.providerContinuity;
     this.#generationGuard = deps.generationGuard;
     this.#continuityReset = deps.continuityReset;
+    this.#sessionAccess = deps.sessionAccess;
   }
 
   // ── Public lifecycle methods ─────────────────────────────────────
@@ -68,8 +73,7 @@ export class SessionLifecycle {
    */
   resetSession(options?: { clearConversations?: boolean }): void {
     this.#generationGuard.invalidate();
-    sessionReadAccess.clear(this.#sessionId);
-    clearDockerHostControlSession(this.#sessionId);
+    this.#clearAccessState();
     this.#continuityReset.reset(options);
     this.#conversationStore.clear();
     this.#toolTracker.reset();
@@ -140,8 +144,7 @@ export class SessionLifecycle {
     updatedAt?: string;
   }): void {
     const validatedState = ImportedConversationStateSchema.parse(state);
-    sessionReadAccess.clear(this.#sessionId);
-    clearDockerHostControlSession(this.#sessionId);
+    this.#clearAccessState();
     this.#conversationStore.clear();
     this.#toolTracker.import(validatedState.toolLedger);
     const projected = projectImportedState({
@@ -185,5 +188,14 @@ export class SessionLifecycle {
 
   #pruneToolLedgerToCurrentHistory(): void {
     this.#toolTracker.pruneToCurrentHistory();
+  }
+
+  #clearAccessState(): void {
+    if (this.#sessionAccess) {
+      this.#sessionAccess.clearTransient();
+      return;
+    }
+    sessionReadAccess.clear(this.#sessionId);
+    clearDockerHostControlSession(this.#sessionId);
   }
 }

@@ -1,4 +1,5 @@
 import { requiresDockerHostControlApproval } from '../../utils/shell/sandbox/docker-host-control-grants.js';
+import type { SessionAccessState } from '../session/session-access-state.js';
 
 export function isUnsandboxedShell(toolName: string | undefined, args: unknown): boolean {
   if (toolName !== 'shell' && toolName !== 'bash') {
@@ -19,10 +20,16 @@ export function isDockerHostControlShellApproval(
   toolName: string | undefined,
   args: unknown,
   sessionId: string | undefined,
+  sessionAccess?: SessionAccessState,
 ): boolean {
   if (toolName !== 'shell') return false;
   const command = args && typeof args === 'object' ? (args as Record<string, unknown>).command : undefined;
-  return typeof command === 'string' && requiresDockerHostControlApproval(sessionId, command);
+  return (
+    typeof command === 'string' &&
+    (sessionAccess
+      ? sessionAccess.requiresDockerApproval(command)
+      : requiresDockerHostControlApproval(sessionId, command))
+  );
 }
 
 /**
@@ -33,11 +40,17 @@ export function requiresHumanShellApproval(
   toolName: string | undefined,
   args: unknown,
   sessionId: string | undefined,
+  sessionAccess?: SessionAccessState,
 ): boolean {
   if (isUnsandboxedShell(toolName, args)) return true;
   const command =
     (toolName === 'shell' || toolName === 'bash') && args && typeof args === 'object'
       ? (args as Record<string, unknown>).command
       : undefined;
-  return typeof command === 'string' && requiresDockerHostControlApproval(sessionId, command);
+  return (
+    typeof command === 'string' &&
+    (sessionAccess
+      ? sessionAccess.requiresDockerApproval(command)
+      : requiresDockerHostControlApproval(sessionId, command))
+  );
 }

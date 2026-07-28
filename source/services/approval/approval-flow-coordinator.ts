@@ -164,7 +164,12 @@ export class ApprovalFlowCoordinator {
       traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
     }).arguments as { command?: unknown; cwd?: unknown } | null;
     const dockerDecision = isDockerHostControlApproveAnswer(answer);
-    const isDockerRequest = isDockerHostControlShellApproval(decisionToolName, parsedDecisionArgs, this.deps.sessionId);
+    const isDockerRequest = isDockerHostControlShellApproval(
+      decisionToolName,
+      parsedDecisionArgs,
+      this.deps.sessionId,
+      this.deps.sessionAccess,
+    );
     let allowReadFolderForSession = false;
     if (isReadFileSessionApproveAnswer(answer) && decisionToolName === 'read_file') {
       const parsedReadArgs = parseToolCallArguments(decisionRawArguments, {

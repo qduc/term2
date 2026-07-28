@@ -65,6 +65,7 @@ import {
 } from './continuation-call-id-resolver.js';
 import { LiveRun } from './live-run.js';
 import type { PostExecutePendingRegistry, PostExecutePendingEntry } from './post-execute-pending-registry.js';
+import type { SessionAccessState } from './session-access-state.js';
 
 export interface TurnWorkflowDeps {
   agentClient: ConversationAgentClient;
@@ -86,6 +87,8 @@ export interface TurnWorkflowDeps {
   planApplier: ContinuationPlanApplier;
   continuationRecoveryHandler: ContinuationRecoveryHandler;
   providerContinuity: ProviderContinuity;
+  /** Handle-owned root capability; omitted only by nested compatibility callers. */
+  sessionAccess?: SessionAccessState;
   batchCoordinator?: ToolApprovalBatchCoordinator;
   postExecutePending: PostExecutePendingRegistry;
   setActivePostExecuteRunId?: (runId: string | null) => void;
@@ -106,6 +109,7 @@ export class TurnWorkflow {
         shellAutoApproval: deps.shellAutoApproval,
         logger: deps.logger,
         sessionId: deps.sessionId,
+        sessionAccess: deps.sessionAccess,
         isCurrent: (token) => deps.generationGuard.isCurrent(token),
       });
   }
@@ -507,6 +511,7 @@ export class TurnWorkflow {
         shellAutoApproval: this.deps.shellAutoApproval,
         logger: this.deps.logger,
         sessionId: this.deps.sessionId,
+        sessionAccess: this.deps.sessionAccess,
       },
     );
 
@@ -902,6 +907,7 @@ export class TurnWorkflow {
         shellAutoApproval: this.deps.shellAutoApproval,
         logger: this.deps.logger,
         sessionId: this.deps.sessionId,
+        sessionAccess: this.deps.sessionAccess,
       },
     );
 

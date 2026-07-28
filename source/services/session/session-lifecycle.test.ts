@@ -1,14 +1,10 @@
 import { it, expect } from 'vitest';
 import { SessionContinuityReset } from './session-continuity-reset.js';
 import { SessionLifecycle } from './session-lifecycle.js';
-import { sessionReadAccess } from '../approval/session-read-access.js';
-import {
-  grantDockerHostControl,
-  hasDockerHostControlSession,
-  resetDockerHostControlGrantsForTests,
-} from '../../utils/shell/sandbox/docker-host-control-grants.js';
+import { SessionAccessState } from './session-access-state.js';
+import { createMockSettingsService } from '../settings/settings-service.mock.js';
 
-const makeLifecycleHarness = ({ sessionAccess = true }: { sessionAccess?: boolean } = {}) => {
+const makeLifecycleHarness = ({ sessionAccess }: { sessionAccess?: SessionAccessState | false } = {}) => {
   const calls = {
     approvalFlow: { clearPending: 0, consumeAborted: 0 },
     approvalState: { clearPending: 0, consumeAborted: 0 },
@@ -149,11 +145,15 @@ const makeLifecycleHarness = ({ sessionAccess = true }: { sessionAccess?: boolea
         calls.generationGuard.invalidate++;
       },
     },
-    sessionAccess: {
-      clearTransient: () => {
-        calls.sessionAccess.clearTransient++;
-      },
-    },
+    ...(sessionAccess === false
+      ? {}
+      : {
+          sessionAccess: sessionAccess ?? {
+            clearTransient: () => {
+              calls.sessionAccess.clearTransient++;
+            },
+          },
+        }),
   };
 
   const continuityReset = new SessionContinuityReset({
@@ -166,9 +166,7 @@ const makeLifecycleHarness = ({ sessionAccess = true }: { sessionAccess?: boolea
     agentClient: deps.agentClient as any,
   });
 
-  const lifecycleDeps = { ...deps, continuityReset };
-  if (!sessionAccess) delete (lifecycleDeps as { sessionAccess?: unknown }).sessionAccess;
-  return { calls, deps: lifecycleDeps, providerContinuity };
+  return { calls, deps: { ...deps, continuityReset }, providerContinuity };
 };
 
 it('resetSession clears approval state through approvalFlow and keeps persistence on providerContinuity', () => {
@@ -193,14 +191,15 @@ it('resetSession clears approval state through approvalFlow and keeps persistenc
   expect(providerContinuity.previousResponseId).toBe(null);
 });
 
-it('resetSession clears session-only read folder access', () => {
-  const { deps } = makeLifecycleHarness({ sessionAccess: false });
+it('resetSession clears session-only read folder access from its injected root capability', () => {
+  const sessionAccess = new SessionAccessState(createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }));
+  const { deps } = makeLifecycleHarness({ sessionAccess });
   const lifecycle = new SessionLifecycle(deps as any);
-  sessionReadAccess.allowFolder('session-1', '/outside/docs');
+  sessionAccess.allowReadFolder('/outside/docs');
 
   lifecycle.resetSession();
 
-  expect(sessionReadAccess.allows('session-1', '/outside/docs/guide.md')).toBe(false);
+  expect(sessionAccess.allowsRead('/outside/docs/guide.md')).toBe(false);
 });
 
 it('owned reset and import clear the injected transient capability instead of legacy session stores', () => {
@@ -213,17 +212,15 @@ it('owned reset and import clear the injected transient capability instead of le
   expect(calls.sessionAccess.clearTransient).toBe(2);
 });
 
-it('resetSession clears only its own Docker session grant', () => {
-  const { deps } = makeLifecycleHarness({ sessionAccess: false });
+it('resetSession clears Docker session grants from its injected root capability', () => {
+  const sessionAccess = new SessionAccessState(createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }));
+  const { deps } = makeLifecycleHarness({ sessionAccess });
   const lifecycle = new SessionLifecycle(deps as any);
-  grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'session', sessionId: 'session-1' });
-  grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'session', sessionId: 'session-2' });
+  sessionAccess.grantDocker('docker ps', process.cwd(), 'session');
 
   lifecycle.resetSession();
 
-  expect(hasDockerHostControlSession('session-1', process.cwd())).toBe(false);
-  expect(hasDockerHostControlSession('session-2', process.cwd())).toBe(true);
-  resetDockerHostControlGrantsForTests();
+  expect(sessionAccess.hasDockerSessionGrant(process.cwd())).toBe(false);
 });
 
 it('afterUndo routes approval cleanup through approvalFlow coordinator', () => {

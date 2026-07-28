@@ -2,7 +2,11 @@ import { it, expect } from 'vitest';
 import { ToolApprovalBatchCoordinator } from './tool-approval-batch-coordinator.js';
 import { toolApprovalPolicyRegistry } from './tool-approval-policy-registry.js';
 import { SessionAccessState } from '../session/session-access-state.js';
+import { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
+
+const makeNestedCompatibility = () =>
+  new NestedToolCompatibilityState(createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }));
 
 it('prompts for unsandboxed shell even when the registry would auto-approve', async () => {
   toolApprovalPolicyRegistry.clear();
@@ -44,6 +48,7 @@ it('prompts for unsandboxed shell even when the registry would auto-approve', as
     } as any,
     logger: { getCorrelationId: () => undefined } as any,
     sessionId: 's1',
+    nestedCompatibility: makeNestedCompatibility(),
   });
 
   const result = await drain(
@@ -101,6 +106,7 @@ it('does not auto-approve an explicit Docker host-control request', async () => 
     shellAutoApproval: { resolveAdvisoryForInterruption: async () => ({ approved: true }) } as any,
     logger: { getCorrelationId: () => undefined } as any,
     sessionId: 's1',
+    nestedCompatibility: makeNestedCompatibility(),
   });
 
   const result = await drain(
@@ -138,6 +144,7 @@ it('prompts for an indirect Docker denial recorded in its injected access state'
     logger: { getCorrelationId: () => undefined } as any,
     sessionId: 'root-session',
     sessionAccess: access,
+    nestedCompatibility: makeNestedCompatibility(),
   });
 
   const result = await drain(

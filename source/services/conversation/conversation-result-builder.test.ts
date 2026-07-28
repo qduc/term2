@@ -12,6 +12,7 @@ import { clearApprovalRejectionMarkers } from '../../utils/streaming/extract-com
 import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { SessionAccessState } from '../session/session-access-state.js';
+import { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 import {
   recordDockerHostControlDenial,
@@ -29,7 +30,11 @@ class ApprovalFlowCoordinator extends ProductionApprovalFlowCoordinator {
       toolOwnership?: ToolOwnershipRegistry;
     },
   ) {
-    super({ ...deps, toolOwnership: deps.toolOwnership ?? new ToolOwnershipRegistry() });
+    super({
+      ...deps,
+      toolOwnership: deps.toolOwnership ?? new ToolOwnershipRegistry(),
+      nestedCompatibility: deps.nestedCompatibility ?? makeNestedCompatibility(),
+    });
   }
 }
 
@@ -50,6 +55,8 @@ afterEach(() => {
 });
 
 const logger = new LoggingService({ disableLogging: true });
+const makeNestedCompatibility = () =>
+  new NestedToolCompatibilityState(createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }));
 const makeStream = (extras: any = {}): AgentStream =>
   ({
     [Symbol.asyncIterator]: async function* () {},
@@ -74,6 +81,7 @@ const makeDeps = (mode: 'off' | 'advisory' | 'auto' = 'off', toolOwnership?: Too
     settingsService,
     sessionContextService,
   });
+  const nestedCompatibility = makeNestedCompatibility();
   const approvalFlow = new ApprovalFlowCoordinator({
     agentClient,
     approvalState: new ApprovalState(),
@@ -82,8 +90,9 @@ const makeDeps = (mode: 'off' | 'advisory' | 'auto' = 'off', toolOwnership?: Too
     toolTracker: { recordAbortedApproval: () => {}, export: () => [] } as any,
     generationGuard: { isCurrent: () => true } as any,
     toolOwnership: toolOwnership ?? new ToolOwnershipRegistry(),
+    nestedCompatibility,
   });
-  return { approvalFlow, shellAutoApproval, logger, sessionId: 's1' };
+  return { approvalFlow, shellAutoApproval, logger, sessionId: 's1', nestedCompatibility };
 };
 
 it('classifies an indirect Docker denial from its injected access state, not another session singleton', async () => {
@@ -286,7 +295,7 @@ it('denied-read approval metadata is staged so approval sets the retry override'
   const suggestedParent = '/home/testuser/.cargo';
   const deps = makeDeps('off');
   let approved = false;
-  deniedReadStore.record(command, {
+  deps.nestedCompatibility.deniedReads.record(command, {
     path: '/home/testuser/.cargo/registry/cache/index',
     suggestedParent,
     sensitive: false,
@@ -318,7 +327,7 @@ it('denied-read approval metadata is staged so approval sets the retry override'
   deps.approvalFlow.prepareContinuation('allow-once', undefined);
 
   expect(approved).toBe(true);
-  expect(executionOverrideStore.consume(command)).toEqual({ extraAllowRead: [suggestedParent] });
+  expect(deps.nestedCompatibility.executionOverrides.consume(command)).toEqual({ extraAllowRead: [suggestedParent] });
 });
 
 it('approval_required records the nested subagent that claimed the call', async () => {
@@ -446,6 +455,7 @@ it('auto_approve outcome when LLM advises approval and mode=auto', async () => {
       getContext: () => null,
     },
   });
+  const nestedCompatibility = makeNestedCompatibility();
   const approvalFlow = new ApprovalFlowCoordinator({
     agentClient,
     approvalState: new ApprovalState(),
@@ -453,10 +463,11 @@ it('auto_approve outcome when LLM advises approval and mode=auto', async () => {
     sessionId: 's1',
     toolTracker: { recordAbortedApproval: () => {}, export: () => [] } as any,
     generationGuard: { isCurrent: () => true } as any,
+    nestedCompatibility,
   });
   const outcome = await buildConversationResult(
     { result: stream, toolCallArgumentsById: new Map() },
-    { approvalFlow, shellAutoApproval, logger, sessionId: 's1' },
+    { approvalFlow, shellAutoApproval, logger, sessionId: 's1', nestedCompatibility },
   );
 
   expect(outcome.kind).toBe('auto_approve');
@@ -495,6 +506,7 @@ it('unsandboxed shell is not auto-approved by LLM advisory mode', async () => {
       getContext: () => null,
     },
   });
+  const nestedCompatibility = makeNestedCompatibility();
   const approvalFlow = new ApprovalFlowCoordinator({
     agentClient,
     approvalState: new ApprovalState(),
@@ -502,11 +514,12 @@ it('unsandboxed shell is not auto-approved by LLM advisory mode', async () => {
     sessionId: 's1',
     toolTracker: { recordAbortedApproval: () => {}, export: () => [] } as any,
     generationGuard: { isCurrent: () => true } as any,
+    nestedCompatibility,
   });
 
   const outcome = await buildConversationResult(
     { result: stream, toolCallArgumentsById: new Map() },
-    { approvalFlow, shellAutoApproval, logger, sessionId: 's1' },
+    { approvalFlow, shellAutoApproval, logger, sessionId: 's1', nestedCompatibility },
   );
 
   expect(outcome.kind).toBe('approval_required');
@@ -547,6 +560,7 @@ it('explicit Docker host control is not auto-approved by LLM advisory mode', asy
       getContext: () => null,
     },
   });
+  const nestedCompatibility = makeNestedCompatibility();
   const approvalFlow = new ApprovalFlowCoordinator({
     agentClient,
     approvalState: new ApprovalState(),
@@ -554,11 +568,12 @@ it('explicit Docker host control is not auto-approved by LLM advisory mode', asy
     sessionId: 's1',
     toolTracker: { recordAbortedApproval: () => {}, export: () => [] } as any,
     generationGuard: { isCurrent: () => true } as any,
+    nestedCompatibility,
   });
 
   const outcome = await buildConversationResult(
     { result: stream, toolCallArgumentsById: new Map() },
-    { approvalFlow, shellAutoApproval, logger, sessionId: 's1' },
+    { approvalFlow, shellAutoApproval, logger, sessionId: 's1', nestedCompatibility },
   );
 
   expect(outcome.kind).toBe('approval_required');

@@ -11,6 +11,7 @@ import {
 } from '../../utils/shell/sandbox/denied-read-stores.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { ExecutionContext } from '../../services/execution-context.js';
+import { NestedToolCompatibilityState } from '../../services/session/nested-tool-compatibility-state.js';
 import type { ILoggingService, ISSHService } from '../../services/service-interfaces.js';
 import {
   clearDockerHostControlSession,
@@ -47,6 +48,9 @@ function createNoopLogger(overrides: Partial<ILoggingService> = {}): ILoggingSer
     ...overrides,
   };
 }
+
+const createNestedCompatibility = () =>
+  new NestedToolCompatibilityState(createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }));
 
 function createTmpDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-shell-test-'));
@@ -205,9 +209,11 @@ it('shell needsApproval always prompts for unsandboxed execution', async () => {
 });
 
 it('shell needsApproval prompts for Docker commands in the sandbox', async () => {
+  const nestedCompatibility = createNestedCompatibility();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService(),
+    nestedCompatibility,
   });
 
   expect(await tool.needsApproval({ command: 'docker ps' })).toBe(true);
@@ -215,25 +221,38 @@ it('shell needsApproval prompts for Docker commands in the sandbox', async () =>
 
 it('Docker session grants do not suppress approval in another session sharing the same cwd', async () => {
   const cwd = process.cwd();
+  const nestedCompatibility = createNestedCompatibility();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService(),
     shellSandboxRunner: createFakeSandboxRunner(),
+    nestedCompatibility,
   });
   const sessionA = { context: { sessionId: 'session-a' } };
   const sessionB = { context: { sessionId: 'session-b' } };
 
-  grantDockerHostControl({ command: 'docker ps', cwd: path.join(cwd, '.'), scope: 'session', sessionId: 'session-a' });
+  nestedCompatibility.docker.grant({
+    command: 'docker ps',
+    cwd: path.join(cwd, '.'),
+    scope: 'session',
+    sessionId: 'session-a',
+  });
   expect(await tool.needsApproval({ command: 'docker ps' }, sessionA)).toBe(false);
   expect(await tool.needsApproval({ command: 'docker ps' }, sessionB)).toBe(true);
 
-  resetDockerHostControlGrantsForTests();
+  const projectCompatibility = createNestedCompatibility();
   const projectTool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService(),
     shellSandboxRunner: createFakeSandboxRunner(),
+    nestedCompatibility: projectCompatibility,
   });
-  grantDockerHostControl({ command: 'docker ps', cwd, scope: 'project', sessionId: 'session-a' });
+  projectCompatibility.docker.grant({
+    command: 'docker ps',
+    cwd,
+    scope: 'project',
+    sessionId: 'session-a',
+  });
   expect(await projectTool.needsApproval({ command: 'docker ps' }, sessionB)).toBe(false);
 });
 
@@ -276,6 +295,7 @@ it('turns a sandboxed Docker daemon block into an approvable retry for an indire
     'permission denied while trying to connect to the docker API at unix:///var/run/docker.sock';
   let dockerFactoryCalled = false;
   const executed: string[] = [];
+  const nestedCompatibility = createNestedCompatibility();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
@@ -288,6 +308,7 @@ it('turns a sandboxed Docker daemon block into an approvable retry for an indire
       executed.push(command);
       return { stdout: '', stderr: dockerFactoryCalled ? '' : dockerStderr, exitCode: 1, timedOut: false };
     },
+    nestedCompatibility,
   });
   const sessionA = { context: { sessionId: 'session-a' } };
 
@@ -302,7 +323,12 @@ it('turns a sandboxed Docker daemon block into an approvable retry for an indire
   expect(await tool.execute({ command: 'pnpm test' }, sessionA)).toContain('requires explicit approval');
 
   // 3. Once granted, the same command runs with Docker host control.
-  grantDockerHostControl({ command: 'pnpm test', cwd: process.cwd(), scope: 'once', sessionId: 'session-a' });
+  nestedCompatibility.docker.grant({
+    command: 'pnpm test',
+    cwd: process.cwd(),
+    scope: 'once',
+    sessionId: 'session-a',
+  });
   const granted = await tool.execute({ command: 'pnpm test' }, sessionA);
   expect(dockerFactoryCalled).toBe(true);
   expect(granted).not.toContain('requires explicit approval');
@@ -311,6 +337,7 @@ it('turns a sandboxed Docker daemon block into an approvable retry for an indire
 
 it('grants Docker host control on the retry the approval flow actually produces', async () => {
   let dockerFactoryCalled = false;
+  const nestedCompatibility = createNestedCompatibility();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
@@ -320,30 +347,38 @@ it('grants Docker host control on the retry the approval flow actually produces'
       return { socketPath: '/tmp/docker.sock', configDir: createTmpDir(), cleanup: () => {} };
     },
     executeShellCommandImpl: async () => ({ stdout: '', stderr: '', exitCode: 0, timedOut: false }),
+    nestedCompatibility,
   });
   const sessionA = { context: { sessionId: 'session-a' } };
 
   // Exactly what prepareContinuation does when the user approves a blocked command.
-  recordDockerHostControlDenial('session-a', 'pnpm test');
-  grantDockerHostControl({ command: 'pnpm test', cwd: process.cwd(), scope: 'once', sessionId: 'session-a' });
+  nestedCompatibility.docker.recordDenial('session-a', 'pnpm test');
+  nestedCompatibility.docker.grant({
+    command: 'pnpm test',
+    cwd: process.cwd(),
+    scope: 'once',
+    sessionId: 'session-a',
+  });
 
   expect(await tool.execute({ command: 'pnpm test' }, sessionA)).not.toContain('requires explicit approval');
   expect(dockerFactoryCalled).toBe(true);
   // The request is settled by the run that used it, not before.
-  expect(requiresDockerHostControlApproval('session-a', 'pnpm test')).toBe(false);
+  expect(nestedCompatibility.docker.requiresApproval('session-a', 'pnpm test')).toBe(false);
 });
 
 it('does not force a second session through approval because another session was blocked from Docker', async () => {
+  const nestedCompatibility = createNestedCompatibility();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
     shellSandboxRunner: createFakeSandboxRunner(),
     executeShellCommandImpl: async () => ({ stdout: '', stderr: '', exitCode: 0, timedOut: false }),
+    nestedCompatibility,
   });
   const sessionA = { context: { sessionId: 'session-a' } };
   const sessionB = { context: { sessionId: 'session-b' } };
 
-  recordDockerHostControlDenial('session-a', 'pnpm test');
+  nestedCompatibility.docker.recordDenial('session-a', 'pnpm test');
 
   // Session A earned the prompt; session B never hit the block and must not
   // inherit it, nor be refused for lacking a grant it was never asked for.
@@ -385,14 +420,21 @@ it('a denied Docker request lets the command run sandboxed again instead of loop
 });
 
 it('consumes a one-shot Docker grant only for its exact command', async () => {
+  const nestedCompatibility = createNestedCompatibility();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
     shellSandboxRunner: createFakeSandboxRunner(),
     dockerHostControlFactory: () => ({ socketPath: '/tmp/docker.sock', configDir: createTmpDir(), cleanup: () => {} }),
     executeShellCommandImpl: async () => ({ stdout: '', stderr: '', exitCode: 0, timedOut: false }),
+    nestedCompatibility,
   });
-  grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'once', sessionId: 'session-a' });
+  nestedCompatibility.docker.grant({
+    command: 'docker ps',
+    cwd: process.cwd(),
+    scope: 'once',
+    sessionId: 'session-a',
+  });
   const sessionA = { context: { sessionId: 'session-a' } };
 
   expect(await tool.execute({ command: 'docker images' }, sessionA)).toContain('requires explicit approval');
@@ -402,6 +444,7 @@ it('consumes a one-shot Docker grant only for its exact command', async () => {
 
 it('shell execute refuses Docker host control when the local sandbox is unavailable', async () => {
   let executed = false;
+  const nestedCompatibility = createNestedCompatibility();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
@@ -417,9 +460,15 @@ it('shell execute refuses Docker host control when the local sandbox is unavaila
       executed = true;
       return { stdout: '', stderr: '', exitCode: 0, timedOut: false };
     },
+    nestedCompatibility,
   });
 
-  grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'once', sessionId: 'session-a' });
+  nestedCompatibility.docker.grant({
+    command: 'docker ps',
+    cwd: process.cwd(),
+    scope: 'once',
+    sessionId: 'session-a',
+  });
   const output = await tool.execute({ command: 'docker ps' }, { context: { sessionId: 'session-a' } });
 
   expect(executed).toBe(false);
@@ -427,6 +476,7 @@ it('shell execute refuses Docker host control when the local sandbox is unavaila
 });
 
 it('shell execute retains the Docker socket error after an approved grant', async () => {
+  const nestedCompatibility = createNestedCompatibility();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
@@ -434,8 +484,14 @@ it('shell execute retains the Docker socket error after an approved grant', asyn
     dockerHostControlFactory: () => {
       throw new Error('Docker socket is unavailable');
     },
+    nestedCompatibility,
   });
-  grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'once', sessionId: 'session-a' });
+  nestedCompatibility.docker.grant({
+    command: 'docker ps',
+    cwd: process.cwd(),
+    scope: 'once',
+    sessionId: 'session-a',
+  });
 
   const output = await tool.execute({ command: 'docker ps' }, { context: { sessionId: 'session-a' } });
 
@@ -741,6 +797,7 @@ it.sequential('shell execute grants Docker host control only to the approved san
   let cleanupCalls = 0;
   const configDir = createTmpDir();
   const socketPath = '/private/var/run/docker.sock';
+  const nestedCompatibility = createNestedCompatibility();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
@@ -761,9 +818,15 @@ it.sequential('shell execute grants Docker host control only to the approved san
       receivedEnv = options?.env;
       return { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
     },
+    nestedCompatibility,
   });
 
-  grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'once', sessionId: 'session-a' });
+  nestedCompatibility.docker.grant({
+    command: 'docker ps',
+    cwd: process.cwd(),
+    scope: 'once',
+    sessionId: 'session-a',
+  });
   const output = await tool.execute({ command: 'docker ps' }, { context: { sessionId: 'session-a' } });
 
   expect(receivedSocketPaths).toEqual([socketPath]);
@@ -1017,17 +1080,19 @@ afterEach(() => {
 });
 
 it.sequential('shell needsApproval returns true when a denied-read entry is pending', async () => {
+  const nestedCompatibility = createNestedCompatibility();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
     shellSandboxRunner: createFakeSandboxRunner(),
+    nestedCompatibility,
   });
 
   // Without a pending denied-read, a default sandboxed command is auto-approved.
   expect(await tool.needsApproval({ command: 'cargo build', sandbox: 'default' })).toBe(false);
 
   // Record a denied-read for this command — now the retry must require approval.
-  deniedReadStore.record('cargo build', {
+  nestedCompatibility.deniedReads.record('cargo build', {
     path: '/home/testuser/.cargo/registry/cache',
     suggestedParent: '/home/testuser/.cargo',
     sensitive: false,
@@ -1037,6 +1102,7 @@ it.sequential('shell needsApproval returns true when a denied-read entry is pend
 
 it.sequential('shell execute detects denied reads under strict and returns retry instruction', async () => {
   let executedCommand: string | undefined;
+  const nestedCompatibility = createNestedCompatibility();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({
@@ -1051,6 +1117,7 @@ it.sequential('shell execute detects denied reads under strict and returns retry
       executedCommand = command;
       return { stdout: '', stderr: 'cat: error', exitCode: 1, timedOut: false };
     },
+    nestedCompatibility,
   });
 
   const output = await tool.execute({ command: 'cat ~/.cargo/registry/cache', sandbox: 'default' });
@@ -1058,9 +1125,9 @@ it.sequential('shell execute detects denied reads under strict and returns retry
   // The denied-read detector records the info and returns the retry instruction.
   expect(output.toLowerCase()).toContain('retry');
   expect(output).not.toContain('sandbox="unsandboxed"');
-  expect(deniedReadStore.peek('cat ~/.cargo/registry/cache')).not.toBeNull();
+  expect(nestedCompatibility.deniedReads.peek('cat ~/.cargo/registry/cache')).not.toBeNull();
   // The denied-read entry should have the resolved path and suggested parent.
-  const info = deniedReadStore.peek('cat ~/.cargo/registry/cache');
+  const info = nestedCompatibility.deniedReads.peek('cat ~/.cargo/registry/cache');
   expect(info?.path).toBe('/home/testuser/.cargo/registry/cache');
   expect(info?.sensitive).toBe(false);
 });
@@ -1072,6 +1139,7 @@ it.sequential('shell records a denied read under the raw command so a cd-prefixe
   // string the model emitted — that is the only key the approval lookups have.
   const rawCommand = `cd ${cwd} && cargo build`;
   let executedCommand: string | undefined;
+  const nestedCompatibility = createNestedCompatibility();
 
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
@@ -1087,6 +1155,7 @@ it.sequential('shell records a denied read under the raw command so a cd-prefixe
       executedCommand = command;
       return { stdout: '', stderr: 'cargo: error', exitCode: 1, timedOut: false };
     },
+    nestedCompatibility,
   });
 
   const output = await tool.execute({ command: rawCommand, sandbox: 'default' });
@@ -1098,12 +1167,13 @@ it.sequential('shell records a denied read under the raw command so a cd-prefixe
 
   // Both approval lookups key off the raw model-emitted command. The conversation
   // layer has no cwd, so it cannot re-derive the stripped form.
-  expect(deniedReadStore.has(rawCommand)).toBe(true);
+  expect(nestedCompatibility.deniedReads.has(rawCommand)).toBe(true);
   expect(await tool.needsApproval({ command: rawCommand, sandbox: 'default' })).toBe(true);
 });
 
 it.sequential('shell execute detects hidden existing home paths reported as no-such-file under strict', async () => {
   const target = path.join(os.homedir(), '.cache');
+  const nestedCompatibility = createNestedCompatibility();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({
@@ -1117,12 +1187,13 @@ it.sequential('shell execute detects hidden existing home paths reported as no-s
       exitCode: 127,
       timedOut: false,
     }),
+    nestedCompatibility,
   });
 
   const output = await tool.execute({ command: target, sandbox: 'default' });
 
   expect(output.toLowerCase()).toContain('retry');
-  expect(deniedReadStore.peek(target)).not.toBeNull();
+  expect(nestedCompatibility.deniedReads.peek(target)).not.toBeNull();
 });
 
 it.sequential('shell execute does not detect denied reads under standard (V1 compatibility)', async () => {
@@ -1155,6 +1226,7 @@ it.sequential('shell execute consumes forceUnsandboxed override and skips sandbo
   let sandboxWrapped = false;
   let executedCommand: string | undefined;
   let receivedEnv: NodeJS.ProcessEnv | undefined;
+  const nestedCompatibility = createNestedCompatibility();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
@@ -1169,10 +1241,11 @@ it.sequential('shell execute consumes forceUnsandboxed override and skips sandbo
       receivedEnv = options?.env;
       return { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
     },
+    nestedCompatibility,
   });
 
   // Set a force-unsandboxed override (mocks a denied-read approval decision).
-  executionOverrideStore.set('cargo build', { forceUnsandboxed: true });
+  nestedCompatibility.executionOverrides.set('cargo build', { forceUnsandboxed: true });
 
   await tool.execute({ command: 'cargo build', sandbox: 'default' });
 
@@ -1181,11 +1254,12 @@ it.sequential('shell execute consumes forceUnsandboxed override and skips sandbo
   // Unsanctioned apps run with full env (env: undefined).
   expect(receivedEnv).toBeUndefined();
   // Override is consumed (one-shot).
-  expect(executionOverrideStore.consume('cargo build')).toBeNull();
+  expect(nestedCompatibility.executionOverrides.consume('cargo build')).toBeNull();
 });
 
 it.sequential('shell execute consumes extraAllowRead override and merges into sandbox config', async () => {
   let receivedAllowRead: string[] | undefined;
+  const nestedCompatibility = createNestedCompatibility();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({
@@ -1205,10 +1279,11 @@ it.sequential('shell execute consumes extraAllowRead override and merges into sa
       exitCode: 0,
       timedOut: false,
     }),
+    nestedCompatibility,
   });
 
   // Set an extraAllowRead override (mocks a denied-read "allow once" decision).
-  executionOverrideStore.set('cargo build', {
+  nestedCompatibility.executionOverrides.set('cargo build', {
     extraAllowRead: ['/home/testuser/.cargo'],
   });
 
@@ -1219,7 +1294,7 @@ it.sequential('shell execute consumes extraAllowRead override and merges into sa
   expect(receivedAllowRead).toContain('/home/testuser/.cargo');
   expect(receivedAllowRead).toContain('/tmp/global-extra');
   // Override is consumed (one-shot).
-  expect(executionOverrideStore.consume('cargo build')).toBeNull();
+  expect(nestedCompatibility.executionOverrides.consume('cargo build')).toBeNull();
 });
 
 it.sequential('root shell exposes denied-read metadata and re-executes only its held call override', async () => {

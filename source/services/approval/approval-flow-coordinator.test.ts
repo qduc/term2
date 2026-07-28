@@ -8,8 +8,6 @@ import { ToolOwnershipRegistry } from './tool-ownership-registry.js';
 import { PARENT_TOOL_OWNER } from './tool-owner.js';
 import { LoggingService } from '../logging/logging-service.js';
 import {
-  deniedReadStore,
-  executionOverrideStore,
   resetSandboxDeniedReadStoresForTest,
   getProjectAllowReadStore,
 } from '../../utils/shell/sandbox/denied-read-stores.js';
@@ -18,11 +16,10 @@ import { sessionReadAccess } from './session-read-access.js';
 import {
   consumeDockerHostControlOnce,
   hasDockerHostControlSession,
-  recordDockerHostControlDenial,
-  requiresDockerHostControlApproval,
   resetDockerHostControlGrantsForTests,
 } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 import { SessionAccessState } from '../session/session-access-state.js';
+import { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 
 class ApprovalFlowCoordinator extends ProductionApprovalFlowCoordinator {
@@ -31,7 +28,11 @@ class ApprovalFlowCoordinator extends ProductionApprovalFlowCoordinator {
       toolOwnership?: ToolOwnershipRegistry;
     },
   ) {
-    super({ ...deps, toolOwnership: deps.toolOwnership ?? new ToolOwnershipRegistry() });
+    super({
+      ...deps,
+      toolOwnership: deps.toolOwnership ?? new ToolOwnershipRegistry(),
+      nestedCompatibility: deps.nestedCompatibility ?? makeNestedCompatibility(),
+    });
   }
 }
 
@@ -48,8 +49,12 @@ const makeDeniedReadInfo = (
 
 const SHELL_COMMAND = 'cargo build';
 
+const makeNestedCompatibility = () =>
+  new NestedToolCompatibilityState(createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }));
+
 function setupDeniedReadPending(info: DeniedReadInfo = makeDeniedReadInfo()) {
-  deniedReadStore.stageForDescriptor(SHELL_COMMAND, info);
+  const nestedCompatibility = makeNestedCompatibility();
+  nestedCompatibility.deniedReads.stageForDescriptor(SHELL_COMMAND, info);
   let approved = false;
   let rejected = false;
   const state: any = {
@@ -72,8 +77,9 @@ function setupDeniedReadPending(info: DeniedReadInfo = makeDeniedReadInfo()) {
     sessionId: 'dr-test',
     toolTracker: mockToolTracker,
     generationGuard: mockGenerationGuard,
+    nestedCompatibility,
   });
-  return { coord, state, getApproved: () => approved, getRejected: () => rejected };
+  return { coord, state, nestedCompatibility, getApproved: () => approved, getRejected: () => rejected };
 }
 
 let originalCwd: string;
@@ -309,7 +315,7 @@ it('prepareContinuation rejects a generic approval for Docker host control witho
   expect(consumeDockerHostControlOnce('s1', 'docker ps')).toBe(false);
 });
 
-it('prepareContinuation stages but does not consume an explicit Docker one-shot grant', () => {
+it('prepareContinuation stages but does not consume an explicit nested Docker one-shot grant', () => {
   let approved = false;
   const approvalState = new ApprovalState();
   approvalState.setPending({
@@ -319,6 +325,7 @@ it('prepareContinuation stages but does not consume an explicit Docker one-shot 
     toolCallArgumentsById: new Map(),
   });
   const { client } = makeMockAgentClient();
+  const nestedCompatibility = makeNestedCompatibility();
   const coord = new ApprovalFlowCoordinator({
     agentClient: client,
     approvalState,
@@ -326,15 +333,16 @@ it('prepareContinuation stages but does not consume an explicit Docker one-shot 
     sessionId: 's1',
     toolTracker: mockToolTracker,
     generationGuard: mockGenerationGuard,
+    nestedCompatibility,
   });
 
   coord.prepareContinuation('docker-allow-once', undefined);
 
   expect(approved).toBe(true);
-  expect(consumeDockerHostControlOnce('s1', 'docker ps')).toBe(true);
+  expect(nestedCompatibility.docker.consumeOnce('s1', 'docker ps')).toBe(true);
 });
 
-it('prepareContinuation grants Docker host control to a command the sandbox blocked from the daemon', () => {
+it('prepareContinuation grants nested Docker host control to a command the sandbox blocked from the daemon', () => {
   let approved = false;
   const approvalState = new ApprovalState();
   approvalState.setPending({
@@ -344,6 +352,7 @@ it('prepareContinuation grants Docker host control to a command the sandbox bloc
     toolCallArgumentsById: new Map(),
   });
   const { client } = makeMockAgentClient();
+  const nestedCompatibility = makeNestedCompatibility();
   const coord = new ApprovalFlowCoordinator({
     agentClient: client,
     approvalState,
@@ -351,16 +360,17 @@ it('prepareContinuation grants Docker host control to a command the sandbox bloc
     sessionId: 's1',
     toolTracker: mockToolTracker,
     generationGuard: mockGenerationGuard,
+    nestedCompatibility,
   });
-  recordDockerHostControlDenial('s1', 'pnpm test');
+  nestedCompatibility.docker.recordDenial('s1', 'pnpm test');
 
   coord.prepareContinuation('docker-allow-once', undefined);
 
   expect(approved).toBe(true);
-  expect(consumeDockerHostControlOnce('s1', 'pnpm test')).toBe(true);
+  expect(nestedCompatibility.docker.consumeOnce('s1', 'pnpm test')).toBe(true);
   // The pending block must survive approval: for a command that does not read as
   // Docker, it is what tells the resumed execution to take host control.
-  expect(requiresDockerHostControlApproval('s1', 'pnpm test')).toBe(true);
+  expect(nestedCompatibility.docker.requiresApproval('s1', 'pnpm test')).toBe(true);
 });
 
 it('prepareContinuation classifies an indirect Docker denial from injected access state', () => {
@@ -395,7 +405,7 @@ it('prepareContinuation classifies an indirect Docker denial from injected acces
   expect(access.hasDockerGrant('indirect-command', process.cwd())).toBe(true);
 });
 
-it('prepareContinuation clears the pending Docker request when the user denies it', () => {
+it('prepareContinuation clears the pending nested Docker request when the user denies it', () => {
   let rejected = false;
   const approvalState = new ApprovalState();
   approvalState.setPending({
@@ -405,6 +415,7 @@ it('prepareContinuation clears the pending Docker request when the user denies i
     toolCallArgumentsById: new Map(),
   });
   const { client } = makeMockAgentClient();
+  const nestedCompatibility = makeNestedCompatibility();
   const coord = new ApprovalFlowCoordinator({
     agentClient: client,
     approvalState,
@@ -412,13 +423,14 @@ it('prepareContinuation clears the pending Docker request when the user denies i
     sessionId: 's1',
     toolTracker: mockToolTracker,
     generationGuard: mockGenerationGuard,
+    nestedCompatibility,
   });
-  recordDockerHostControlDenial('s1', 'pnpm test');
+  nestedCompatibility.docker.recordDenial('s1', 'pnpm test');
 
   coord.prepareContinuation('n', 'no docker');
 
   expect(rejected).toBe(true);
-  expect(requiresDockerHostControlApproval('s1', 'pnpm test')).toBe(false);
+  expect(nestedCompatibility.docker.requiresApproval('s1', 'pnpm test')).toBe(false);
 });
 
 it('prepareContinuation rejects Docker-specific answers for non-Docker commands', () => {
@@ -446,7 +458,7 @@ it('prepareContinuation rejects Docker-specific answers for non-Docker commands'
   expect(hasDockerHostControlSession('s1', process.cwd())).toBe(false);
 });
 
-it('prepareContinuation allow-folder-session allows the read file parent recursively for this session', () => {
+it('prepareContinuation allow-folder-session allows the read file parent recursively in nested compatibility state', () => {
   let approved = false;
   const state: any = { approve: () => (approved = true) };
   const approvalState = new ApprovalState();
@@ -459,6 +471,7 @@ it('prepareContinuation allow-folder-session allows the read file parent recursi
   });
 
   const { client } = makeMockAgentClient();
+  const nestedCompatibility = makeNestedCompatibility();
   const coord = new ApprovalFlowCoordinator({
     agentClient: client,
     approvalState,
@@ -466,13 +479,14 @@ it('prepareContinuation allow-folder-session allows the read file parent recursi
     sessionId: 's1',
     toolTracker: mockToolTracker,
     generationGuard: mockGenerationGuard,
+    nestedCompatibility,
   });
 
   coord.prepareContinuation('allow-folder-session', undefined);
 
   expect(approved).toBe(true);
-  expect(sessionReadAccess.allows('s1', path.join(tmpDir, 'docs', 'nested', 'other.md'))).toBe(true);
-  expect(sessionReadAccess.allows('s1', path.join(tmpDir, 'sibling', 'other.md'))).toBe(false);
+  expect(nestedCompatibility.allowsRead('s1', path.join(tmpDir, 'docs', 'nested', 'other.md'))).toBe(true);
+  expect(nestedCompatibility.allowsRead('s1', path.join(tmpDir, 'sibling', 'other.md'))).toBe(false);
 });
 
 it('prepareContinuation answer=y normalizes JSON string tool_started arguments', () => {
@@ -777,65 +791,67 @@ it('resolveOwner reads the call id out of a nested rawItem', () => {
 
 // --- Denied-read approval decision tests ---
 
-it('prepareContinuation allow-once sets execution override with extraAllowRead and approves', () => {
-  const { coord, getApproved } = setupDeniedReadPending(makeDeniedReadInfo());
+it('prepareContinuation allow-once sets nested execution override with extraAllowRead and approves', () => {
+  const { coord, nestedCompatibility, getApproved } = setupDeniedReadPending(makeDeniedReadInfo());
   const plan = coord.prepareContinuation('allow-once', undefined);
   expect(plan).toBeTruthy();
   expect(getApproved()).toBe(true);
-  const override = executionOverrideStore.consume(SHELL_COMMAND);
+  const override = nestedCompatibility.executionOverrides.consume(SHELL_COMMAND);
   expect(override).toEqual({ extraAllowRead: [NON_SENSITIVE_SUGGESTED] });
 });
 
-it('prepareContinuation unsandboxed-once sets forceUnsandboxed override and approves', () => {
-  const { coord, getApproved } = setupDeniedReadPending(makeDeniedReadInfo());
+it('prepareContinuation unsandboxed-once sets nested forceUnsandboxed override and approves', () => {
+  const { coord, nestedCompatibility, getApproved } = setupDeniedReadPending(makeDeniedReadInfo());
   const plan = coord.prepareContinuation('unsandboxed-once', undefined);
   expect(plan).toBeTruthy();
   expect(getApproved()).toBe(true);
-  const override = executionOverrideStore.consume(SHELL_COMMAND);
+  const override = nestedCompatibility.executionOverrides.consume(SHELL_COMMAND);
   expect(override).toEqual({ forceUnsandboxed: true });
 });
 
-it('prepareContinuation allow-remember persists path to project store and approves', () => {
-  const { coord, getApproved } = setupDeniedReadPending(makeDeniedReadInfo());
+it('prepareContinuation allow-remember persists path from nested state to the project store and approves', () => {
+  const { coord, nestedCompatibility, getApproved } = setupDeniedReadPending(makeDeniedReadInfo());
   const plan = coord.prepareContinuation('allow-remember', undefined);
   expect(plan).toBeTruthy();
   expect(getApproved()).toBe(true);
-  const override = executionOverrideStore.consume(SHELL_COMMAND);
+  const override = nestedCompatibility.executionOverrides.consume(SHELL_COMMAND);
   expect(override).toEqual({ extraAllowRead: [NON_SENSITIVE_SUGGESTED] });
   // The path is persisted in the project store for future loads.
   expect(getProjectAllowReadStore(process.cwd()).load()).toEqual([NON_SENSITIVE_SUGGESTED]);
 });
 
 it('prepareContinuation denied-read approval without staged metadata approves without sandbox override', () => {
-  const { coord, getApproved } = setupDeniedReadPending(makeDeniedReadInfo());
-  deniedReadStore.consumeStaged(SHELL_COMMAND);
+  const { coord, nestedCompatibility, getApproved } = setupDeniedReadPending(makeDeniedReadInfo());
+  nestedCompatibility.deniedReads.consumeStaged(SHELL_COMMAND);
 
   const plan = coord.prepareContinuation('allow-remember', undefined);
 
   expect(plan).toBeTruthy();
   expect(getApproved()).toBe(true);
-  expect(executionOverrideStore.consume(SHELL_COMMAND)).toBeNull();
+  expect(nestedCompatibility.executionOverrides.consume(SHELL_COMMAND)).toBeNull();
   expect(getProjectAllowReadStore(process.cwd()).load()).toEqual([]);
 });
 
 it('prepareContinuation deny calls state.reject and sets no override', () => {
-  const { coord, getApproved, getRejected } = setupDeniedReadPending(makeDeniedReadInfo());
+  const { coord, nestedCompatibility, getApproved, getRejected } = setupDeniedReadPending(makeDeniedReadInfo());
   const plan = coord.prepareContinuation('deny', undefined);
   expect(plan).toBeTruthy();
   expect(getApproved()).toBe(false);
   expect(getRejected()).toBe(true);
   // No override is set — the agent gets the rejection.
-  expect(executionOverrideStore.consume(SHELL_COMMAND)).toBeNull();
+  expect(nestedCompatibility.executionOverrides.consume(SHELL_COMMAND)).toBeNull();
   // The staged denied-read info lingers but is harmless (cleared on the next
   // denied-read detection or on session reset). Deny goes through the generic
   // rejection branch, which does not clean up denied-read-specific state.
 });
 
-it('prepareContinuation allow-once for sensitive path still sets the override (not suppressed at this layer)', () => {
-  const { coord, getApproved } = setupDeniedReadPending(makeDeniedReadInfo(SENSITIVE_PATH, SENSITIVE_SUGGESTED, true));
+it('prepareContinuation allow-once for a sensitive nested path still sets the override', () => {
+  const { coord, nestedCompatibility, getApproved } = setupDeniedReadPending(
+    makeDeniedReadInfo(SENSITIVE_PATH, SENSITIVE_SUGGESTED, true),
+  );
   const plan = coord.prepareContinuation('allow-once', undefined);
   expect(plan).toBeTruthy();
   expect(getApproved()).toBe(true);
-  const override = executionOverrideStore.consume(SHELL_COMMAND);
+  const override = nestedCompatibility.executionOverrides.consume(SHELL_COMMAND);
   expect(override).toEqual({ extraAllowRead: [SENSITIVE_SUGGESTED] });
 });

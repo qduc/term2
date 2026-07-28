@@ -32,6 +32,7 @@ it.each([
   expect(projectConversationMessage(item)).toEqual({
     role: 'user',
     text: 'Describe this',
+    allText: 'Describe this',
     images: [{ image: 'data:image/png;base64,AAAA', detail: 'auto' }],
     imageCount: 1,
     isSynthetic: false,
@@ -59,6 +60,13 @@ it('projects malformed or empty message content without treating non-messages as
     imageCount: 0,
   });
   expect(projectConversationMessage({ role: 'assistant', type: 'message', content: [] })).toMatchObject({ text: '' });
+  expect(
+    projectConversationMessage({
+      role: 'user',
+      type: 'message',
+      content: [{ type: 'provider_extension', text: 'hint' }],
+    }),
+  ).toMatchObject({ text: '', allText: 'hint' });
   expect(
     projectConversationMessage({ role: 'user', type: 'message', content: [{ type: 'input_image' }] }),
   ).toMatchObject({ images: [], imageCount: 1 });

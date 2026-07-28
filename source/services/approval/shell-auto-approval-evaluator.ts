@@ -8,6 +8,7 @@ import {
 } from '../../prompts/shell-auto-approval.js';
 import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
 import { resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
+import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
 
 export type ShellAutoApprovalCommand = {
   id: string;
@@ -60,34 +61,12 @@ const truncate = (text: string, maxChars: number): string => {
 const asRecord = (value: unknown): Record<string, any> | undefined =>
   value && typeof value === 'object' ? (value as Record<string, any>) : undefined;
 
-const extractTextContent = (content: unknown): string => {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-
-  return content
-    .map((part) => {
-      const record = asRecord(part);
-      return typeof record?.text === 'string' ? record.text : '';
-    })
-    .filter(Boolean)
-    .join('');
-};
-
 const getCompactHistoryLine = (item: AgentInputItem): string | undefined => {
-  const record = asRecord(item);
-  const raw = asRecord(record?.rawItem) ?? record;
-  if (!raw) return undefined;
+  const message = projectConversationMessage(item);
+  if (!message || (message.role !== 'user' && message.role !== 'assistant')) return undefined;
 
-  const type = typeof raw.type === 'string' ? raw.type : 'item';
-  const role = typeof raw.role === 'string' ? raw.role : undefined;
-
-  if (role === 'user' || role === 'assistant') {
-    const text = extractTextContent(raw.content);
-    if (!text.trim()) return `[${role}] (${type})`;
-    return `[${role}] ${truncate(text.replace(/\s+/g, ' ').trim(), MAX_MESSAGE_CHARS)}`;
-  }
-
-  return undefined;
+  if (!message.allText.trim()) return `[${message.role}] (message)`;
+  return `[${message.role}] ${truncate(message.allText.replace(/\s+/g, ' ').trim(), MAX_MESSAGE_CHARS)}`;
 };
 
 const buildCompactHistoryContext = (history: AgentInputItem[]): string => {

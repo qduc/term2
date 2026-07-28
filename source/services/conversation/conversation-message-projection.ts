@@ -14,7 +14,10 @@ export interface ConversationMessageImage {
  */
 export interface ConversationMessageProjection {
   role: ConversationMessageRole;
+  /** Text from recognized input_text/output_text conversation parts. */
   text: string;
+  /** Text from every provider content part carrying a string `text` field. */
+  allText: string;
   images: ConversationMessageImage[];
   imageCount: number;
   isSynthetic: boolean;
@@ -45,6 +48,7 @@ export function projectConversationMessage(item: unknown): ConversationMessagePr
     return {
       role: message.role,
       text: content,
+      allText: content,
       images: [],
       imageCount: 0,
       isSynthetic:
@@ -60,6 +64,10 @@ export function projectConversationMessage(item: unknown): ConversationMessagePr
     .filter((part) => (part.type === 'input_text' || part.type === 'output_text') && typeof part.text === 'string')
     .map((part) => part.text as string)
     .join('');
+  const allText = parts
+    .filter((part) => typeof part.text === 'string')
+    .map((part) => part.text as string)
+    .join('');
   const imageCount = parts.filter((part) => part.type === 'input_image').length;
   const images = parts
     .filter((part) => part.type === 'input_image' && typeof part.image === 'string')
@@ -68,6 +76,7 @@ export function projectConversationMessage(item: unknown): ConversationMessagePr
   return {
     role: message.role,
     text,
+    allText,
     images,
     imageCount,
     isSynthetic:

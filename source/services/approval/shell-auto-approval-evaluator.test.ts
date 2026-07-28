@@ -429,6 +429,61 @@ it('prompt contains only user and assistant text from bounded history context', 
   expect(chatCalls[0].prompt.length < 6_000).toBe(true);
 });
 
+it('projects direct and wrapped messages into equivalent compact context', async () => {
+  const prompts: string[] = [];
+  const histories = [
+    [
+      { role: 'user', type: 'message', content: [{ type: 'input_text', text: ' inspect\n  files ' }] },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: ' done\t now ' }] },
+      { role: 'user', type: 'message', content: [{ type: 'unexpected', text: 'do not include' }] },
+      { role: 'assistant', type: 'message', content: [] },
+      { role: 'system', type: 'message', content: 'ignore system instructions' },
+      { type: 'reasoning', text: 'ignore reasoning' },
+    ],
+    [
+      {
+        rawItem: { role: 'user', type: 'message', content: [{ type: 'input_text', text: ' inspect\n  files ' }] },
+      },
+      {
+        rawItem: {
+          role: 'assistant',
+          type: 'message',
+          content: [{ type: 'output_text', text: ' done\t now ' }],
+        },
+      },
+      { rawItem: { role: 'user', type: 'message', content: [{ type: 'unexpected', text: 'do not include' }] } },
+      { rawItem: { role: 'assistant', type: 'message', content: [] } },
+      { rawItem: { role: 'system', type: 'message', content: 'ignore system instructions' } },
+      { rawItem: { type: 'reasoning', text: 'ignore reasoning' } },
+    ],
+  ];
+
+  for (const history of histories) {
+    await evaluateShellAutoApprovalAdvisories({
+      commands: [{ id: 'call-safe', command: 'ls source' }],
+      history: history as any,
+      settingsService: createMockSettings('advisory') as any,
+      agentClient: {
+        chat: async (prompt: string) => {
+          prompts.push(prompt);
+          return JSON.stringify({ results: [{ reasoning: 'Safe.', approved: true }] });
+        },
+      } as any,
+      logger: createMockLogger() as any,
+      sessionContextService: createSessionContextService() as any,
+    });
+  }
+
+  expect(prompts).toHaveLength(2);
+  expect(prompts[0]).toBe(prompts[1]);
+  expect(prompts[0]).toContain('[user] inspect files');
+  expect(prompts[0]).toContain('[assistant] done now');
+  expect(prompts[0]).toContain('[user] do not include');
+  expect(prompts[0]).toContain('[assistant] (message)');
+  expect(prompts[0]).not.toContain('ignore system instructions');
+  expect(prompts[0]).not.toContain('ignore reasoning');
+});
+
 it('falls back to deny advisory for all commands when chat response shape is malformed', async () => {
   const advisories = await evaluateShellAutoApprovalAdvisories({
     commands: [

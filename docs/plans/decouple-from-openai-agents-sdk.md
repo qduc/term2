@@ -34,6 +34,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step B history-repair slice | Conversation-history repair normalizes tool calls/results for signatures, pair detection, and repair decisions; equivalent wrapped, direct-provider, and canonical forms repair alike while retained history keeps its original representation |
 | Step B conversation-store tool-policy slice | `ConversationStore` normalizes only tool-output retry anchors and mutating-tool rewind previews; wrapped SDK, direct-provider, and canonical items share classification/call ID/name/arguments/output while splice indices and original provider-facing history remain intact |
 | Step B conversation-message projection slice | `conversation-message-projection.ts` read-only projects direct or one-level wrapped user, assistant, and system messages for conversation-store turn handling and stream finalization message detection; provider history remains original |
+| Step B approval-history projection slice | Shell auto-approval compact context uses `conversation-message-projection.ts`; direct and one-level wrapped user/assistant messages render equivalently while system, tool, and reasoning items remain excluded and history remains original |
 | Step B input-surge guard slice | `InputSurgeGuard` derives duplicate tool signatures and call/result pair counts from canonical `ToolCall`/`ToolResult` projections; wrapped SDK, direct-provider, and canonical tool inputs share policy behavior while serialized input bytes and message counts remain original |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
@@ -177,8 +178,8 @@ only — every such call is rejected either way. Moot here: this repo never call
 ### Next, in order
 
 1. Continue Step B representation migration from the next bounded raw-item interpretation at the
-   current risk-register boundary. Message projection is now limited to `ConversationStore` and
-   `SessionStreamProcessor`; keep canonical `Item` and `run-item-normalizer.ts` assistant-run-only.
+   current risk-register boundary. Message projection now also serves shell auto-approval compact
+   history context; keep canonical `Item` and `run-item-normalizer.ts` assistant-run/tool-only.
 
 ### R1 gate — PASSED
 
@@ -611,6 +612,15 @@ counts; `SessionStreamProcessor` uses it only for full-history message presence 
 retain original provider objects and existing clone/index/splice behavior. Canonical `Item` and
 `run-item-normalizer.ts` remain assistant-run/tool-only; no generic/user message variants were
 added there.
+
+**Step B approval-history projection slice.** Shell auto-approval compact history now uses that
+read-only message projection instead of separately unwrapping `rawItem` and parsing message
+content. Direct provider messages and one-level SDK wrappers render the same user/assistant
+context; existing whitespace normalization, per-message/context truncation, eight-item source
+limit, empty-message `(message)` fallback, and no-context fallback remain unchanged. System,
+tool, reasoning, and malformed non-message items remain excluded, while the evaluator retains the
+original history objects and does not change approval decisions or prompt semantics beyond
+representation equivalence.
 
 **Step B input-surge guard slice.** `InputSurgeGuard` now uses `run-item-normalizer.ts` to inspect
 duplicate tool signatures and duplicated call/result pairs. Wrapped SDK, direct-provider, and

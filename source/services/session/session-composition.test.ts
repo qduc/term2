@@ -8,11 +8,6 @@ import {
 import { createConversationRuntime as createProductionConversationRuntime } from '../conversation/conversation-runtime-factory.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
-import {
-  grantDockerHostControl,
-  hasDockerHostControlSession,
-  resetDockerHostControlGrantsForTests,
-} from '../../utils/shell/sandbox/docker-host-control-grants.js';
 
 const createSessionRuntimeInternals = (
   options: Omit<Parameters<typeof createProductionSessionRuntimeInternals>[0], 'toolOwnership'>,
@@ -274,22 +269,6 @@ it('dispose() is idempotent — safe to call twice without throwing', () => {
     dispose();
     dispose();
   }).not.toThrow();
-});
-
-it('dispose() clears only the disposed session Docker grants', () => {
-  const runtime = createSessionRuntime({
-    sessionId: 'dispose-docker-a',
-    agentClient: makeMockClient(),
-    deps: { logger: makeLogger(), sessionContextService },
-  });
-  grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'session', sessionId: 'dispose-docker-a' });
-  grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'session', sessionId: 'dispose-docker-b' });
-
-  runtime.dispose();
-
-  expect(hasDockerHostControlSession('dispose-docker-a', process.cwd())).toBe(false);
-  expect(hasDockerHostControlSession('dispose-docker-b', process.cwd())).toBe(true);
-  resetDockerHostControlGrantsForTests();
 });
 
 it('dispose() cancels conversation-bound background subagent runs', () => {

@@ -124,10 +124,12 @@ const getCallId = (raw: Record<string, unknown>, item?: unknown): string => {
     getString(raw.callId) ??
     getString(raw.call_id) ??
     getString(raw.tool_call_id) ??
+    getString(raw.toolCallId) ??
     getString(raw.id) ??
     getString(outer?.callId) ??
     getString(outer?.call_id) ??
     getString(outer?.tool_call_id) ??
+    getString(outer?.toolCallId) ??
     getString(outer?.id) ??
     'unknown-call'
   );

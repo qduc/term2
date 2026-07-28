@@ -51,6 +51,77 @@ it('ToolExecutionLedger records completed function call pairs', () => {
   ]);
 });
 
+it('ToolExecutionLedger gives wrapped SDK, provider, and canonical tool items equivalent entries', () => {
+  const call = {
+    type: 'function_call',
+    call_id: 'call-equivalent',
+    name: 'shell',
+    arguments: '{"command":"pwd"}',
+  };
+  const result = { type: 'function_call_output', call_id: 'call-equivalent', output: 'ok' };
+  const representations = [
+    { call: { rawItem: call }, result: { rawItem: result } },
+    { call, result },
+    {
+      call: {
+        type: 'tool_call' as const,
+        callId: 'call-equivalent',
+        toolName: 'shell',
+        arguments: '{"command":"pwd"}',
+      },
+      result: {
+        type: 'tool_result' as const,
+        callId: 'call-equivalent',
+        toolName: 'shell',
+        status: 'completed' as const,
+        output: 'ok',
+      },
+    },
+  ];
+
+  const entries = representations.map(({ call: callItem, result: resultItem }) => {
+    const ledger = new ToolExecutionLedger();
+    ledger.recordFunctionCall(callItem);
+    ledger.recordFunctionResult(resultItem);
+    return ledger.export()[0];
+  });
+
+  expect(
+    entries.map(({ callId, toolName, arguments: args, output, status }) => ({
+      callId,
+      toolName,
+      args,
+      output,
+      status,
+    })),
+  ).toEqual([
+    { callId: 'call-equivalent', toolName: 'shell', args: '{"command":"pwd"}', output: 'ok', status: 'completed' },
+    { callId: 'call-equivalent', toolName: 'shell', args: '{"command":"pwd"}', output: 'ok', status: 'completed' },
+    { callId: 'call-equivalent', toolName: 'shell', args: '{"command":"pwd"}', output: 'ok', status: 'completed' },
+  ]);
+});
+
+it('ToolExecutionLedger preserves wrapped provider objects while reconciling them only once across forms', () => {
+  const wrappedCall = {
+    rawItem: { type: 'function_call', call_id: 'call-wrapped', name: 'read_file', arguments: '{}' },
+    sdkOnly: { sequence: 1 },
+  };
+  const wrappedResult = {
+    rawItem: { type: 'function_call_output', tool_call_id: 'call-wrapped', output: 'contents' },
+    sdkOnly: { sequence: 2 },
+  };
+  const ledger = new ToolExecutionLedger();
+  ledger.recordFunctionCall(wrappedCall);
+  ledger.recordFunctionResult(wrappedResult);
+
+  const saved = ledger.export()[0];
+  expect(saved.historyItems).toEqual([wrappedCall.rawItem, wrappedResult.rawItem]);
+
+  const recovered = reconcileHistoryWithToolLedger([], [saved]);
+  expect(recovered.history).toEqual([wrappedCall.rawItem, wrappedResult.rawItem]);
+  expect(reconcileHistoryWithToolLedger(recovered.history, [saved]).addedCompletedPairs).toBe(0);
+});
+
 it('ToolExecutionLedger marks unfinished calls as aborted', () => {
   const ledger = new ToolExecutionLedger();
 

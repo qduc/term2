@@ -29,6 +29,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step B stream-finalization slice | Resume replay deduplication and tool-result detection use canonical tool identities while preserving original provider items in conversation history |
 | Step B stream-event slice | Run-item tool lifecycle interpretation uses canonical calls/results while journal and recovery hooks retain the original provider items |
 | Step B replay slice | Replay detects existing reasoning, tool calls, and tool results through canonical normalization while retaining the original provider history objects |
+| Step B tool-ledger slice | `ToolExecutionLedger` derives tool call/result classification, identity, name, arguments, output, reasoning detection, and reconciliation from `run-item-normalizer.ts`; equivalent wrapped, direct-provider, and canonical forms share one identity while stored history remains provider-facing |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -170,8 +171,8 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. Continue Step B representation migration from the current risk register boundary after
-   that compatibility decision.
+1. Continue Step B representation migration from the next bounded raw-item interpretation at the
+   current risk-register boundary.
 
 ### R1 gate — PASSED
 
@@ -564,6 +565,14 @@ provider-facing persistence and replay.
 run-item boundary before detecting reasoning, tool calls, or tool results. Wrapped provider,
 direct-provider, and canonical representations are equivalent for deduplication, but the original
 history objects remain in the ledger and provider replay history.
+
+**Step B tool-ledger slice.** `ToolExecutionLedger` now obtains tool call/result classification,
+call identity, tool name, arguments, output, reasoning detection, and reconciliation matching from
+the application-owned run-item normalizer. Wrapped SDK, direct-provider, and canonical `ToolCall` /
+`ToolResult` inputs therefore have one ledger identity, including the established `callId`,
+`call_id`, `tool_call_id`, `toolCallId`, and `id` fallback compatibility. Ledger recovery continues
+to store and reconstruct the original provider-facing item rather than a canonical replacement;
+ordering and reasoning-prefix insertion remain unchanged. Unknown items remain untouched.
 
 ### Step C — Own the run loop
 Contained, because downstream already speaks our language.

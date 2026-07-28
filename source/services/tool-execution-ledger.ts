@@ -1,3 +1,6 @@
+import type { Item, ToolCall, ToolResult } from '../contracts/conversation-items.js';
+import { normalizeRunItem } from './conversation/run-item-normalizer.js';
+
 export type ToolExecutionStatus = 'started' | 'completed' | 'failed' | 'approval_required' | 'aborted';
 
 export interface SavedToolExecution {
@@ -36,6 +39,16 @@ export const rawItem = (item: unknown): Record<string, unknown> | null => {
   return asRecord(record.rawItem) ?? record;
 };
 
+type CanonicalToolItem = ToolCall | ToolResult;
+
+const canonicalToolItem = (item: unknown): CanonicalToolItem | null =>
+  normalizeRunItem(item).find(
+    (candidate): candidate is CanonicalToolItem => candidate.type === 'tool_call' || candidate.type === 'tool_result',
+  ) ?? null;
+
+const hasCanonicalType = (item: unknown, type: Item['type']): boolean =>
+  normalizeRunItem(item).some((candidate) => candidate.type === type);
+
 const clone = <T>(value: T): T => {
   try {
     return structuredClone(value);
@@ -45,35 +58,25 @@ const clone = <T>(value: T): T => {
 };
 
 export const callIdOf = (item: unknown): string | null => {
-  const raw = rawItem(item);
-  const callId = raw?.callId ?? raw?.call_id ?? raw?.tool_call_id ?? raw?.toolCallId ?? raw?.id;
-  return typeof callId === 'string' && callId ? callId : null;
+  return canonicalToolItem(item)?.callId ?? null;
 };
 
-const typeOf = (item: unknown): string => {
-  const type = rawItem(item)?.type;
-  return typeof type === 'string' ? type : '';
-};
+const isToolCall = (item: unknown): boolean => canonicalToolItem(item)?.type === 'tool_call';
+const isToolResult = (item: unknown): boolean => canonicalToolItem(item)?.type === 'tool_result';
 
 export const toolNameOf = (item: unknown): string => {
-  const raw = rawItem(item);
-  const name = raw?.name ?? asRecord(item)?.name;
-  return typeof name === 'string' && name ? name : 'unknown';
-};
-
-const argumentsOf = (item: unknown): unknown => {
-  const raw = rawItem(item);
-  return raw?.arguments ?? raw?.args ?? asRecord(item)?.arguments ?? asRecord(item)?.args;
+  return canonicalToolItem(item)?.toolName ?? 'unknown';
 };
 
 export const outputOf = (item: unknown): unknown => {
-  const raw = rawItem(item);
-  return raw?.output ?? asRecord(item)?.output;
+  const normalized = canonicalToolItem(item);
+  return normalized?.type === 'tool_result' ? normalized.output : undefined;
 };
 
-const normalizedRawItem = (item: unknown): unknown => {
-  const raw = rawItem(item);
-  return raw ? clone(raw) : clone(item);
+/** History remains provider-facing even when the stream hands us an SDK wrapper. */
+const providerHistoryItem = (item: unknown): unknown => {
+  const canonical = canonicalToolItem(item);
+  return clone(canonical?.providerItem ?? rawItem(item) ?? item);
 };
 
 const turnNumberOf = (turnId: string | undefined): number | null => {
@@ -123,15 +126,9 @@ const hasCallPair = (history: unknown[], callId: string): boolean => {
     if (callIdOf(item) !== callId) {
       continue;
     }
-    const type = typeOf(item);
-    if (type === 'function_call') {
+    if (isToolCall(item)) {
       hasCall = true;
-    } else if (
-      type === 'function_call_result' ||
-      type === 'function_call_output' ||
-      type === 'function_call_output_result' ||
-      type === 'tool_call_output_item'
-    ) {
+    } else if (isToolResult(item)) {
       hasResult = true;
     }
   }
@@ -145,17 +142,9 @@ const isCompleteLedgerEntry = (entry: SavedToolExecution): boolean =>
   entry.status === 'completed' && hasRecoverableCallPair(entry);
 
 const hasReasoningHistoryItem = (items: readonly unknown[] | undefined): boolean =>
-  Array.isArray(items) && items.some((item) => typeOf(item) === 'reasoning');
+  Array.isArray(items) && items.some((item) => hasCanonicalType(item, 'reasoning'));
 
-const isResultHistoryItem = (item: unknown): boolean => {
-  const type = typeOf(item);
-  return (
-    type === 'function_call_result' ||
-    type === 'function_call_output' ||
-    type === 'function_call_output_result' ||
-    type === 'tool_call_output_item'
-  );
-};
+const isResultHistoryItem = isToolResult;
 
 const hasResultHistoryItem = (items: readonly unknown[] | undefined, callId: string): boolean =>
   Array.isArray(items) && items.some((item) => callIdOf(item) === callId && isResultHistoryItem(item));
@@ -205,21 +194,19 @@ export class ToolExecutionLedger {
   }
 
   recordFunctionCall(item: unknown): void {
-    if (typeOf(item) !== 'function_call') {
+    const toolCall = canonicalToolItem(item);
+    if (toolCall?.type !== 'tool_call') {
       return;
     }
-    const callId = callIdOf(item);
-    if (!callId) {
-      return;
-    }
+    const { callId } = toolCall;
 
     const existing = this.#entries.find((entry) => entry.callId === callId && entry.status !== 'completed');
     if (existing) {
-      existing.toolName = toolNameOf(item);
-      existing.arguments = argumentsOf(item);
+      existing.toolName = toolCall.toolName;
+      existing.arguments = toolCall.arguments;
       existing.status = 'started';
       if (!existing.historyItems || existing.historyItems.length === 0) {
-        existing.historyItems = [...this.#pendingReasoningHistoryItems, normalizedRawItem(item)];
+        existing.historyItems = [...this.#pendingReasoningHistoryItems, providerHistoryItem(item)];
       } else if (this.#pendingReasoningHistoryItems.length > 0 && !hasReasoningHistoryItem(existing.historyItems)) {
         existing.historyItems = [...this.#pendingReasoningHistoryItems, ...existing.historyItems];
       }
@@ -230,36 +217,28 @@ export class ToolExecutionLedger {
     this.#entries.push({
       turnId: this.#currentTurnId,
       callId,
-      toolName: toolNameOf(item),
-      arguments: argumentsOf(item),
+      toolName: toolCall.toolName,
+      arguments: toolCall.arguments,
       status: 'started',
       startedAt: new Date().toISOString(),
-      historyItems: [...this.#pendingReasoningHistoryItems, normalizedRawItem(item)],
+      historyItems: [...this.#pendingReasoningHistoryItems, providerHistoryItem(item)],
     });
     this.#pendingReasoningHistoryItems = [];
   }
 
   recordFunctionResult(item: unknown): void {
-    const type = typeOf(item);
-    if (
-      type !== 'function_call_result' &&
-      type !== 'function_call_output' &&
-      type !== 'function_call_output_result' &&
-      type !== 'tool_call_output_item'
-    ) {
+    const toolResult = canonicalToolItem(item);
+    if (toolResult?.type !== 'tool_result') {
       return;
     }
-    const callId = callIdOf(item);
-    if (!callId) {
-      return;
-    }
+    const { callId } = toolResult;
 
     let entry = [...this.#entries].reverse().find((candidate) => candidate.callId === callId);
     if (!entry) {
       entry = {
         turnId: this.#currentTurnId,
         callId,
-        toolName: toolNameOf(item),
+        toolName: toolResult.toolName,
         status: 'started',
         startedAt: new Date().toISOString(),
         historyItems: [],
@@ -267,10 +246,10 @@ export class ToolExecutionLedger {
       this.#entries.push(entry);
     }
 
-    const callItem = entry.historyItems?.find((historyItem) => typeOf(historyItem) === 'function_call');
-    const resultItem = normalizedRawItem(item);
+    const callItem = entry.historyItems?.find(isToolCall);
+    const resultItem = providerHistoryItem(item);
     entry.status = 'completed';
-    entry.output = outputOf(item);
+    entry.output = toolResult.output;
     entry.completedAt = new Date().toISOString();
     const previousHistoryItems = entry.historyItems ?? (callItem ? [callItem] : []);
     entry.historyItems = hasResultHistoryItem(previousHistoryItems, callId)
@@ -300,7 +279,7 @@ export class ToolExecutionLedger {
     const targets = callId ? candidates.filter((c) => c.callId === callId) : candidates;
 
     for (const entry of targets) {
-      const callItem = entry.historyItems?.find((historyItem) => typeOf(historyItem) === 'function_call');
+      const callItem = entry.historyItems?.find(isToolCall);
       if (!callItem) {
         entry.status = 'aborted';
         entry.failureReason = reason;
@@ -387,7 +366,7 @@ export function dropUnpairedFunctionCalls(history: readonly unknown[]): unknown[
   const callIdsWithCall = new Set<string>();
   const callIdsWithResult = new Set<string>();
   for (const item of history) {
-    if (typeOf(item) === 'function_call') {
+    if (isToolCall(item)) {
       const callId = callIdOf(item);
       if (callId) {
         callIdsWithCall.add(callId);
@@ -403,7 +382,7 @@ export function dropUnpairedFunctionCalls(history: readonly unknown[]): unknown[
 
   const filtered = history.filter((item) => {
     const callId = callIdOf(item);
-    if (typeOf(item) === 'function_call') {
+    if (isToolCall(item)) {
       return !callId || callIdsWithResult.has(callId);
     }
     if (isResultHistoryItem(item)) {
@@ -481,7 +460,7 @@ const isMalformedJsonString = (value: unknown): boolean => {
  */
 export function hasMalformedToolCallArguments(history: readonly unknown[]): boolean {
   return history.some((item) => {
-    if (typeOf(item) !== 'function_call') {
+    if (!isToolCall(item)) {
       return false;
     }
     const raw = rawItem(item);
@@ -507,7 +486,7 @@ export function hasMalformedToolCallArguments(history: readonly unknown[]): bool
 export function sanitizeMalformedToolCallArguments(history: readonly unknown[]): unknown[] {
   let changed = false;
   const result = history.map((item): unknown => {
-    if (typeOf(item) !== 'function_call') {
+    if (!isToolCall(item)) {
       return item;
     }
     const raw = rawItem(item);

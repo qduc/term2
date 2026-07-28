@@ -179,15 +179,16 @@ it('retry_fresh with stream marks in-flight calls as aborted and injects error r
   expect(abortedEntry!.historyItems).toBeTruthy();
   expect(abortedEntry!.historyItems!.length).toBe(2);
 
-  // The conversation history should now contain the injected error result.
-  // Aborted entries are normalized to tool_call_output_item type.
+  // The conversation history should now contain the injected error result, and
+  // it must keep a wire-valid item type: the provider converter rejects
+  // `tool_call_output_item` (an SDK run-item class name) with `Unsupported item`.
   const history = deps.conversationStore.getHistory();
   const resultItems = history.filter((item) => (item as { callId?: string }).callId === 'call-inflight');
   expect(resultItems).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ type: 'function_call', callId: 'call-inflight' }),
       expect.objectContaining({
-        type: 'tool_call_output_item',
+        type: 'function_call_output',
         callId: 'call-inflight',
         output: 'Stream failed',
       }),

@@ -76,26 +76,6 @@ const normalizedRawItem = (item: unknown): unknown => {
   return raw ? clone(raw) : clone(item);
 };
 
-const normalizeAbortedHistoryItem = (item: unknown, isAbortedEntry: boolean): unknown => {
-  if (!isAbortedEntry) {
-    return clone(item);
-  }
-
-  const raw = rawItem(item);
-  if (!raw) {
-    return clone(item);
-  }
-
-  const type = typeof raw.type === 'string' ? raw.type : '';
-  if (type !== 'function_call_output' && type !== 'function_call_output_result') {
-    return clone(item);
-  }
-
-  const normalized = clone(raw) as Record<string, unknown>;
-  normalized.type = 'tool_call_output_item';
-  return normalized;
-};
-
 const turnNumberOf = (turnId: string | undefined): number | null => {
   if (typeof turnId !== 'string') {
     return null;
@@ -449,11 +429,7 @@ export function reconcileHistoryWithToolLedger(
       if (hasCallPair(next, entry.callId)) {
         continue;
       }
-      next.splice(
-        insertionIndexForEntry(next, entry),
-        0,
-        ...entry.historyItems!.map((item: unknown) => normalizeAbortedHistoryItem(item, entry.status === 'aborted')),
-      );
+      next.splice(insertionIndexForEntry(next, entry), 0, ...clone(entry.historyItems!));
       // Count both completed and aborted pairs as injected so the warning fires
       // and replaceHistory is called. Without this, aborted pairs injected from
       // markOpenCallsAborted (with synthetic error results) would not trigger a

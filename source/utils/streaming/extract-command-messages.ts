@@ -6,6 +6,8 @@ import {
 } from '../../tools/format-helpers.js';
 import { getToolFormatter } from '../../tools/command-message-formatters.js';
 import type { CommandMessage } from '../../tools/types.js';
+import type { Item, ToolResult } from '../../contracts/conversation-items.js';
+import { normalizeRunItem } from '../../services/conversation/run-item-normalizer.js';
 
 const approvalRejectionCallIds = new Set<string>();
 const llmAutoApprovalCallIds = new Set<string>();
@@ -48,88 +50,51 @@ const consumeLlmAutoApprovalForItem = (item: ToolResultItem | null | undefined):
   return true;
 };
 
-const normalizeToolItem = (
-  item: ToolResultItem | null | undefined,
-): { toolName: string; arguments: unknown; outputText: string } | null => {
-  if (!item) {
-    return null;
-  }
-
-  const rawItem = item.rawItem ?? item;
-  const type = item.type ?? rawItem?.type;
-  const isFunctionResult =
-    type === 'function_call_result' ||
-    rawItem?.type === 'function_call_result' ||
-    type === 'function_call_output' ||
-    rawItem?.type === 'function_call_output' ||
-    type === 'function_call_output_result' ||
-    rawItem?.type === 'function_call_output_result' ||
-    type === 'apply_patch_call_output' ||
-    rawItem?.type === 'apply_patch_call_output';
-  const isToolCallOutput = type === 'tool_call_output_item';
-
-  if (!isFunctionResult && !isToolCallOutput) {
-    return null;
-  }
-
-  const toolName =
-    rawItem?.name ??
-    item.name ??
-    (type === 'apply_patch_call_output' || rawItem?.type === 'apply_patch_call_output' ? 'apply_patch' : undefined);
-  if (!toolName) {
+const normalizeToolItem = (item: Item): { toolName: string; arguments: unknown; outputText: string } | null => {
+  if (item.type !== 'tool_result') {
     return null;
   }
 
   return {
-    toolName,
-    arguments: rawItem?.arguments ?? item.arguments,
+    toolName: item.toolName,
+    arguments: undefined,
     outputText: getOutputText(item),
   };
+};
+
+const getProviderArguments = (item: ToolResult): unknown => {
+  const providerItem = item.providerItem;
+  return providerItem?.arguments ?? providerItem?.args ?? providerItem?.operation;
 };
 
 export const extractCommandMessages = (items: readonly unknown[] = []): CommandMessage[] => {
   const messages: CommandMessage[] = [];
   const toolCallArgumentsById = new Map<string, unknown>();
+  const normalizedItems = items.flatMap(normalizeRunItem);
 
-  for (const rawItem of items ?? []) {
-    const item = rawItem as ToolResultItem | null | undefined;
-    const innerRaw = item?.rawItem ?? item;
-    if (!rawItem) {
-      continue;
-    }
-
-    const type = innerRaw?.type ?? item?.type;
-    if (type !== 'function_call' && type !== 'apply_patch_call') {
-      continue;
-    }
-
-    const callId = getCallIdFromItem(innerRaw) ?? getCallIdFromItem(item);
-    if (!callId) {
-      continue;
-    }
-
-    const args =
-      innerRaw?.arguments ?? innerRaw?.args ?? innerRaw?.operation ?? item?.arguments ?? item?.args ?? item?.operation;
-    if (!args) {
-      continue;
-    }
-
-    toolCallArgumentsById.set(callId, args);
+  for (const item of normalizedItems) {
+    if (item.type === 'tool_call' && item.arguments) toolCallArgumentsById.set(item.callId, item.arguments);
   }
 
-  for (const [index, rawItem] of (items ?? []).entries()) {
-    const item = rawItem as ToolResultItem | null | undefined;
+  for (const [index, item] of normalizedItems.entries()) {
     const normalizedItem = normalizeToolItem(item);
     if (!normalizedItem) {
       continue;
     }
 
-    const isApprovalRejection = isApprovalRejectionForItem(item);
-    const autoApprovedByLlm = consumeLlmAutoApprovalForItem(item);
+    const resultItem = item as ToolResult & { arguments?: unknown };
+
+    const isApprovalRejection = isApprovalRejectionForItem(resultItem);
+    const autoApprovedByLlm = consumeLlmAutoApprovalForItem(resultItem);
 
     const formatter = getToolFormatter(normalizedItem.toolName);
     if (formatter) {
-      const results = formatter(item as ToolResultItem, index, toolCallArgumentsById);
+      const argumentsForCall = toolCallArgumentsById.get(resultItem.callId) ?? getProviderArguments(resultItem);
+      const enrichedItem = {
+        ...resultItem,
+        ...(argumentsForCall ? { arguments: argumentsForCall } : {}),
+      };
+      const results = formatter(enrichedItem, index, toolCallArgumentsById);
       results.forEach((msg: CommandMessage) => {
         if (isApprovalRejection) {
           msg.isApprovalRejection = true;
@@ -143,10 +108,13 @@ export const extractCommandMessages = (items: readonly unknown[] = []): CommandM
     }
 
     // Generic fallback for any other tools
-    const rawInner = item?.rawItem ?? item;
-    const callId = getCallIdFromItem(item);
+    const callId = getCallIdFromItem(resultItem);
     const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
-    const args = normalizeToolArguments(normalizedItem.arguments) ?? normalizeToolArguments(fallbackArgs) ?? {};
+    const args =
+      normalizeToolArguments(resultItem.arguments) ??
+      normalizeToolArguments(fallbackArgs) ??
+      normalizeToolArguments(getProviderArguments(resultItem)) ??
+      {};
 
     let command = normalizedItem.toolName;
     if (typeof args === 'string') {
@@ -161,7 +129,8 @@ export const extractCommandMessages = (items: readonly unknown[] = []): CommandM
     const output = normalizedItem.outputText || 'No output';
     const success = !output.startsWith('Error:');
 
-    const baseId = rawInner?.id ?? rawInner?.callId ?? item?.id ?? item?.callId ?? `${Date.now()}-${index}`;
+    const providerItem = resultItem.providerItem as ToolResultItem | undefined;
+    const baseId = providerItem?.id ?? providerItem?.callId ?? resultItem.callId ?? `${Date.now()}-${index}`;
     const stableId = `${baseId}-0`;
 
     messages.push({

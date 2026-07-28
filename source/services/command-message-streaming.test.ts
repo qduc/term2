@@ -20,33 +20,38 @@ it('captureToolCallArguments: stores args for function_call rawItem', () => {
   expect(toolCallArgumentsById.get('call-1')).toEqual({ command: 'ls' });
 });
 
-it('attachCachedArguments: adds cached args when missing on item', () => {
+it('attachCachedArguments: enriches canonical results without mutating them', () => {
   const toolCallArgumentsById = new Map<string, unknown>([['call-2', { command: 'pwd' }]]);
-  const items: any[] = [
+  const items = [
     {
-      rawItem: {
-        callId: 'call-2',
-      },
+      type: 'tool_result' as const,
+      callId: 'call-2',
+      toolName: 'shell',
+      status: 'completed' as const,
+      output: 'ok',
     },
   ];
 
-  attachCachedArguments(items, toolCallArgumentsById);
+  const enriched = attachCachedArguments(items, toolCallArgumentsById);
 
-  expect(items[0].arguments).toEqual({ command: 'pwd' });
+  expect(enriched[0]?.arguments).toEqual({ command: 'pwd' });
+  expect(items[0]).not.toHaveProperty('arguments');
 });
 
 it('emitCommandMessagesFromItems: attaches args and filters duplicates/rejections', () => {
   const toolCallArgumentsById = new Map<string, unknown>([['call-3', { command: 'whoami' }]]);
   const emittedCommandIds = new Set<string>(['dupe']);
-  const items: any[] = [
+  const items = [
     {
-      rawItem: {
-        callId: 'call-3',
-      },
+      type: 'tool_result' as const,
+      callId: 'call-3',
+      toolName: 'shell',
+      status: 'completed' as const,
+      output: 'ok',
     },
   ];
 
-  const extractCommandMessages = (passedItems: any[]) => {
+  const extractCommandMessages = (passedItems: readonly any[]) => {
     expect(passedItems[0].arguments).toEqual({ command: 'whoami' });
     return [
       {

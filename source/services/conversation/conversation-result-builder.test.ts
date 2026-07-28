@@ -790,6 +790,33 @@ it('response outcome preserves approval-rejected command messages for rendering'
   }
 });
 
+it('uses cached arguments to format command results without a matching result call item', async () => {
+  const resultItem = {
+    type: 'tool_result' as const,
+    callId: 'call-cached',
+    toolName: 'shell',
+    status: 'completed' as const,
+    output: 'exit 0\n/workspace',
+  };
+  const stream = makeStream({ newItems: [resultItem] });
+
+  const outcome = await buildConversationResult(
+    {
+      result: stream,
+      toolCallArgumentsById: new Map([['call-cached', { command: 'pwd' }]]),
+    },
+    makeDeps(),
+  );
+
+  expect(outcome.kind).toBe('response');
+  if (outcome.kind === 'response') {
+    expect(outcome.result.commandMessages).toMatchObject([
+      { callId: 'call-cached', command: 'pwd', output: '/workspace' },
+    ]);
+  }
+  expect(resultItem).not.toHaveProperty('arguments');
+});
+
 it('buildConversationResult and toTerminalEvent preserve turnItems', async () => {
   const stream = makeStream({
     finalOutput: 'Done.',

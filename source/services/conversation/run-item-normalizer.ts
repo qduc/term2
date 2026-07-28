@@ -118,8 +118,20 @@ const pushAssistantMessageItems = (target: Item[], item: unknown): void => {
   };
   target.push(assistantTextItem);
 };
-const getCallId = (raw: Record<string, unknown>): string =>
-  getString(raw.callId) ?? getString(raw.call_id) ?? getString(raw.tool_call_id) ?? getString(raw.id) ?? 'unknown-call';
+const getCallId = (raw: Record<string, unknown>, item?: unknown): string => {
+  const outer = asRecord(item);
+  return (
+    getString(raw.callId) ??
+    getString(raw.call_id) ??
+    getString(raw.tool_call_id) ??
+    getString(raw.id) ??
+    getString(outer?.callId) ??
+    getString(outer?.call_id) ??
+    getString(outer?.tool_call_id) ??
+    getString(outer?.id) ??
+    'unknown-call'
+  );
+};
 const pushToolCallItem = (target: Item[], item: unknown): void => {
   const raw = rawItem(item);
   if (!raw) return;
@@ -129,9 +141,15 @@ const pushToolCallItem = (target: Item[], item: unknown): void => {
     target.push({ type: 'reasoning', text: reasoningText, ...(providerMetadata ? { providerMetadata } : {}) });
   const toolCallItem: ToolCall = {
     type: 'tool_call',
-    callId: getCallId(raw),
+    callId: getCallId(raw, item),
     toolName: getString(raw.name) ?? getString(asRecord(item)?.name) ?? 'unknown',
-    arguments: raw.arguments ?? raw.args ?? asRecord(item)?.arguments ?? asRecord(item)?.args,
+    arguments:
+      raw.arguments ??
+      raw.args ??
+      raw.operation ??
+      asRecord(item)?.arguments ??
+      asRecord(item)?.args ??
+      asRecord(item)?.operation,
     providerItem: clone(raw),
   };
   target.push(toolCallItem);
@@ -139,21 +157,39 @@ const pushToolCallItem = (target: Item[], item: unknown): void => {
 const pushToolResultItem = (target: Item[], item: unknown): void => {
   const raw = rawItem(item);
   if (!raw) return;
+  const outer = asRecord(item);
+  const providerItem = {
+    ...raw,
+    ...(getString(raw.id) || !getString(outer?.id) ? {} : { id: outer?.id }),
+  };
   const toolResultItem: ToolResult = {
     type: 'tool_result',
-    callId: getCallId(raw),
-    toolName: getString(raw.name) ?? getString(asRecord(item)?.name) ?? 'unknown',
+    callId: getCallId(raw, item),
+    toolName:
+      getString(raw.name) ??
+      getString(asRecord(item)?.name) ??
+      (raw.type === 'apply_patch_call_output' ? 'apply_patch' : 'unknown'),
     status: typeof raw.is_error === 'boolean' && raw.is_error ? 'failed' : 'completed',
     output: raw.output ?? asRecord(item)?.output,
-    providerItem: clone(raw),
+    providerItem: clone(providerItem),
   };
   target.push(toolResultItem);
 };
 
+const isCanonicalItem = (item: unknown): item is Item => {
+  const record = asRecord(item);
+  return (
+    (record?.type === 'tool_call' && typeof record.callId === 'string' && typeof record.toolName === 'string') ||
+    (record?.type === 'tool_result' && typeof record.callId === 'string' && typeof record.toolName === 'string')
+  );
+};
+
 /** Converts raw provider run items to serializable domain items at the conversation boundary. */
 export function normalizeRunItem(item: unknown): Item[] {
+  if (isCanonicalItem(item)) return [item];
   const raw = rawItem(item);
   if (!raw) return [];
+  if (isCanonicalItem(raw)) return [raw];
   const role = getString(raw.role);
   const type = getString(raw.type) ?? '';
   if (type === 'reasoning') {

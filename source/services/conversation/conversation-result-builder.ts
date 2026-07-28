@@ -257,8 +257,8 @@ export async function buildConversationResult(
   shellAutoApproval.clearCache();
 
   const items = result.newItems || result.history || [];
-  attachCachedArguments(items, toolCallArgumentsById);
-  const allCommandMessages = extractCommandMessages(items);
+  const commandMessageItems = attachCachedArguments(items, toolCallArgumentsById);
+  const allCommandMessages = extractCommandMessages(commandMessageItems);
   const derivedTurnItems = buildPersistedAssistantTurnItems(items);
 
   const commandMessages = emittedCommandIds

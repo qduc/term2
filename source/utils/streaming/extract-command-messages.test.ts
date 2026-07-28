@@ -150,6 +150,68 @@ it('extracts shell command from matching function_call item', () => {
   }
 });
 
+it('formats direct and wrapped canonical tool items while retaining provider message IDs', () => {
+  const call = {
+    type: 'tool_call' as const,
+    callId: 'canonical-call',
+    toolName: 'shell',
+    arguments: JSON.stringify({ command: 'pwd' }),
+  };
+  const result = {
+    type: 'tool_result' as const,
+    callId: 'canonical-call',
+    toolName: 'shell',
+    status: 'completed' as const,
+    output: 'exit 0\n/workspace',
+    providerItem: { id: 'provider-result' },
+  };
+
+  expect(extractCommandMessages([call, result])).toMatchObject([
+    {
+      id: 'provider-result-0',
+      callId: 'canonical-call',
+      command: 'pwd',
+      output: '/workspace',
+    },
+  ]);
+  expect(extractCommandMessages([{ rawItem: call }, { rawItem: result }])).toMatchObject([
+    {
+      id: 'provider-result-0',
+      callId: 'canonical-call',
+      command: 'pwd',
+      output: '/workspace',
+    },
+  ]);
+});
+
+it.each(['arguments', 'args', 'operation'] as const)(
+  'uses provider result %s for generic tools when no call arguments are available',
+  (argumentField) => {
+    const items = [
+      {
+        type: 'tool_result' as const,
+        callId: 'generic-call',
+        toolName: 'generic_tool',
+        status: 'completed' as const,
+        output: 'done',
+        providerItem: {
+          id: 'generic-result',
+          [argumentField]: { path: '/tmp/example' },
+        },
+      },
+    ];
+
+    expect(extractCommandMessages(items)).toMatchObject([
+      {
+        id: 'generic-result-0',
+        callId: 'generic-call',
+        command: 'generic_tool "/tmp/example"',
+        toolArgs: { path: '/tmp/example' },
+      },
+    ]);
+  },
+);
+
 it('extracts shell command from output items using call_id', () => {
   const restore = withStubbedNow(1700000000261);
 

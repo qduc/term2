@@ -18,6 +18,9 @@ import type { CommandMessage } from './types.js';
  * helpers actually access.  Anything beyond these fields is invisible to this code.
  */
 export interface ToolResultItem {
+  /** Canonical result fields used at the command-message boundary. */
+  toolName?: string;
+  providerItem?: Record<string, unknown>;
   /** SDK wrapper exposes the raw protocol item; raw API items set this to themselves. */
   rawItem?: ToolResultItem;
   /** Discriminator: function_call, function_call_output, apply_patch_call, etc. */
@@ -43,7 +46,7 @@ export interface ToolResultItem {
   /** apply_patch_call uses `operation` instead of `arguments`. */
   operation?: { type?: string; path?: string; diff?: string; [key: string]: unknown };
   /** Tool output container (on function_call_output items). */
-  output?: { text?: unknown } | string;
+  output?: unknown;
 }
 
 /**
@@ -88,41 +91,39 @@ export const coerceToText = (value: unknown): string => {
  * Extracts call ID from various item formats.
  */
 export const getCallIdFromItem = (item: ToolResultItem | null | undefined): string | null => {
-  const rawItem = item?.rawItem ?? item;
-  if (!rawItem) {
-    return null;
-  }
+  const rawItem = (item?.providerItem as ToolResultItem | undefined) ?? item?.rawItem ?? item;
 
-  return (
-    rawItem.callId ??
-    rawItem.call_id ??
-    rawItem.tool_call_id ??
-    rawItem.toolCallId ??
-    rawItem.id ??
+  const callId =
+    item?.callId ??
+    rawItem?.callId ??
+    rawItem?.call_id ??
+    rawItem?.tool_call_id ??
+    rawItem?.toolCallId ??
+    rawItem?.id ??
     item?.callId ??
     item?.call_id ??
     item?.tool_call_id ??
     item?.toolCallId ??
     item?.id ??
-    null
-  );
+    null;
+  return typeof callId === 'string' && callId !== 'unknown-call' ? callId : null;
 };
 
 /**
  * Extracts output text from various item formats.
  */
 export const getOutputText = (item: ToolResultItem | null | undefined): string => {
-  const sources: Array<ToolResultItem | null | undefined> = [item, item?.rawItem];
+  const providerItem = item?.providerItem as ToolResultItem | undefined;
+  const sources: Array<ToolResultItem | null | undefined> = [item, providerItem, item?.rawItem];
 
   for (const source of sources) {
     if (!source) {
       continue;
     }
 
-    for (const candidate of [
-      source.output,
-      typeof source.output === 'object' && source.output ? source.output.text : undefined,
-    ]) {
+    const outputRecord =
+      source.output && typeof source.output === 'object' ? (source.output as { text?: unknown }) : undefined;
+    for (const candidate of [source.output, outputRecord?.text]) {
       const text = coerceToText(candidate);
       if (text) {
         return text;
@@ -227,8 +228,10 @@ export const generateMessageId = (
   index: number,
   subIndex: number = 0,
 ): string => {
-  const rawItem = item?.rawItem ?? item;
-  const baseId = rawItem?.id ?? rawItem?.callId ?? item?.id ?? item?.callId ?? `${Date.now()}-${index}`;
+  const rawItem = item?.providerItem ?? item?.rawItem ?? item;
+  const providerId = rawItem?.id ?? rawItem?.callId;
+  const baseId =
+    providerId && providerId !== 'unknown-call' ? providerId : getCallIdFromItem(item) ?? `${Date.now()}-${index}`;
   return `${baseId}-${subIndex}`;
 };
 

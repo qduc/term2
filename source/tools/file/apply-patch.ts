@@ -11,6 +11,7 @@ import {
   normalizeToolArguments,
   createBaseMessage,
   formatPatchOutputItems,
+  type ToolResultItem,
 } from '../format-helpers.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import { withFileLock } from './file-locks.js';
@@ -83,7 +84,7 @@ function getApplyPatchOperations(params: ApplyPatchToolParams): ApplyPatchOperat
 }
 
 export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
-  const rawItem = item?.rawItem ?? item;
+  const rawItem = (item?.providerItem as ToolResultItem | undefined) ?? item?.rawItem ?? item;
   const callId =
     rawItem?.callId ??
     rawItem?.call_id ??
@@ -97,7 +98,7 @@ export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index
     item?.id;
   const argsFromMap = callId ? toolCallArgumentsById.get(callId) : undefined;
   const normalizedArgs =
-    normalizeToolArguments(item?.rawItem?.arguments ?? item?.arguments ?? argsFromMap ?? rawItem?.operation) ?? {};
+    normalizeToolArguments(item?.arguments ?? argsFromMap ?? rawItem?.arguments ?? rawItem?.operation) ?? {};
   const isNativePatchResult = rawItem?.type === 'apply_patch_call_output' || item?.type === 'apply_patch_call_output';
   const rawStatus = rawItem?.status ?? item?.status;
 

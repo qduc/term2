@@ -1,81 +1,34 @@
 import type { CommandMessage } from '../tools/types.js';
+import type { Item, ToolCall, ToolResult } from '../contracts/conversation-items.js';
 import type { ConversationEvent } from './conversation/conversation-events.js';
+import { normalizeRunItem } from './conversation/run-item-normalizer.js';
 import { extractCommandMessages } from '../utils/streaming/extract-command-messages.js';
 
-type ExtractCommandMessages = (items: any[]) => CommandMessage[];
+type ExtractCommandMessages = (items: readonly unknown[]) => CommandMessage[];
+type EnrichedToolResult = ToolResult & { arguments?: unknown };
 
-export const captureToolCallArguments = (item: any, toolCallArgumentsById: Map<string, unknown>): void => {
-  const rawItem = item?.rawItem ?? item;
-  if (!rawItem) {
-    return;
+const normalizedItems = (item: unknown): Item[] => normalizeRunItem(item);
+
+export const captureToolCallArguments = (item: unknown, toolCallArgumentsById: Map<string, unknown>): void => {
+  for (const normalized of normalizedItems(item)) {
+    if (normalized.type !== 'tool_call' || !normalized.arguments) continue;
+    toolCallArgumentsById.set(normalized.callId, normalized.arguments);
   }
-
-  if (rawItem?.type !== 'function_call' && rawItem?.type !== 'apply_patch_call') {
-    return;
-  }
-
-  const callId = rawItem.callId ?? rawItem.call_id ?? rawItem.tool_call_id ?? rawItem.toolCallId ?? rawItem.id;
-  if (!callId) {
-    return;
-  }
-
-  const args =
-    rawItem.arguments ?? rawItem.args ?? rawItem.operation ?? item?.arguments ?? item?.args ?? item?.operation;
-  if (!args) {
-    return;
-  }
-
-  toolCallArgumentsById.set(callId, args);
 };
 
-export const attachCachedArguments = (items: any[] = [], toolCallArgumentsById: Map<string, unknown>): void => {
-  if (!items?.length) {
-    return;
-  }
-
-  for (const item of items) {
-    if (!item) {
-      continue;
-    }
-
-    if (
-      item.arguments ||
-      item.args ||
-      item.operation ||
-      item?.rawItem?.arguments ||
-      item?.rawItem?.args ||
-      item?.rawItem?.operation
-    ) {
-      continue;
-    }
-
-    const rawItem = item?.rawItem ?? item;
-    const callId =
-      rawItem?.callId ??
-      rawItem?.call_id ??
-      rawItem?.tool_call_id ??
-      rawItem?.toolCallId ??
-      rawItem?.id ??
-      item?.callId ??
-      item?.call_id ??
-      item?.tool_call_id ??
-      item?.toolCallId ??
-      item?.id;
-    if (!callId) {
-      continue;
-    }
-
-    const args = toolCallArgumentsById.get(callId);
-    if (!args) {
-      continue;
-    }
-
-    item.arguments = args;
-  }
+export const attachCachedArguments = (
+  items: readonly unknown[] = [],
+  toolCallArgumentsById: Map<string, unknown>,
+): EnrichedToolResult[] => {
+  return items.flatMap(normalizedItems).flatMap((item) => {
+    if (item.type !== 'tool_result') return [];
+    const argumentsForCall = toolCallArgumentsById.get(item.callId);
+    return [{ ...item, ...(argumentsForCall ? { arguments: argumentsForCall } : {}) }];
+  });
 };
 
 export const emitCommandMessagesFromItems = (
-  items: any[],
+  items: readonly unknown[],
   {
     toolCallArgumentsById,
     emittedCommandIds,
@@ -86,8 +39,7 @@ export const emitCommandMessagesFromItems = (
     extractCommandMessages?: ExtractCommandMessages;
   },
 ): ConversationEvent[] => {
-  attachCachedArguments(items, toolCallArgumentsById);
-  const commandMessages = extractCommandMessagesFn(items);
+  const commandMessages = extractCommandMessagesFn(attachCachedArguments(items, toolCallArgumentsById));
   const out: ConversationEvent[] = [];
 
   for (const cmdMsg of commandMessages) {

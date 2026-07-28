@@ -500,6 +500,13 @@ preserve existing persisted imports. `Approval` reuses `ApprovalDescriptor`, and
 This contains normalization only: it does not remove SDK reach-ins, migrate all raw items, or
 alter requests, RunState, chaining, approval/resume, denied-read, execution overrides, or run-loop behavior.
 
+**Step B command-message slice.** Command-message streaming and extraction now normalize direct
+or wrapped provider inputs once into canonical tool calls/results before caching arguments and
+formatting. Cached arguments live on an enriched local result rather than mutating canonical
+items; `providerItem` remains available for provider-specific formatting (including native
+`apply_patch` details). Call-ID fallbacks, stable command-message IDs, annotations, output
+coercion, and existing formatting behavior remain intact.
+
 ### Step C — Own the run loop
 Contained, because downstream already speaks our language.
 **Resolver + replay-diagnostics + transport-recovery slices DONE:**

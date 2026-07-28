@@ -98,6 +98,25 @@ it.each([
   ]);
 });
 
+it('preserves the outer wrapper output and accepts direct or wrapped canonical items', () => {
+  const canonical = {
+    type: 'tool_result' as const,
+    callId: 'call-canonical',
+    toolName: 'shell',
+    status: 'completed' as const,
+    output: 'ok',
+  };
+
+  expect(
+    normalizeRunItem({
+      rawItem: { type: 'function_call_result', callId: 'call-outer', name: 'shell' },
+      output: 'outer',
+    }),
+  ).toMatchObject([{ output: 'outer', toolName: 'shell' }]);
+  expect(normalizeRunItem(canonical)).toEqual([canonical]);
+  expect(normalizeRunItem({ rawItem: canonical })).toEqual([canonical]);
+});
+
 it('returns no items for unknown values and preserves multi-item ordering', () => {
   expect(normalizeRunItem({ type: 'unknown' })).toEqual([]);
   expect(normalizeRunItem(null)).toEqual([]);

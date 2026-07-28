@@ -6,6 +6,83 @@ const toolCall = (callId: string, type = 'function_call') => ({
   callId,
 });
 
+it('canonicalizes duplicate tool signatures and pairs across provider, wrapped, and canonical representations', () => {
+  const direct = [
+    toolCall('call-1'),
+    { type: 'function_call_result', call_id: 'call-1', output: 'ok' },
+    toolCall('call-1'),
+    { type: 'function_call_result', call_id: 'call-1', output: 'ok' },
+  ];
+  const wrapped = direct.map((rawItem) => ({ rawItem }));
+  const canonical = [
+    { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: {} },
+    { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: 'ok' },
+    { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: {} },
+    { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: 'ok' },
+  ];
+
+  for (const input of [direct, wrapped, canonical]) {
+    expect(collectInputSurgeStats(input)).toMatchObject({
+      messageCount: 4,
+      duplicateToolCallSignatures: 2,
+      maxDuplicateToolCallSignatureCount: 2,
+    });
+    expect(collectDuplicateToolCallResultPairs(input)).toEqual({ pairs: 1, maxCopies: 2 });
+  }
+});
+
+it.each([
+  'function_call_result',
+  'function_call_output',
+  'function_call_output_result',
+  'tool_call_output_item',
+  'tool_result',
+  'shell_call_output',
+  'tool_call_output',
+  'tool_call_result',
+  'local_shell_call_output',
+  'computer_call_output',
+  'computer_call_result',
+  'apply_patch_call_output',
+])('counts duplicate pairs for the supported %s result spelling', (type) => {
+  const input = [
+    toolCall('call-1'),
+    { type, tool_call_id: 'call-1', output: 'ok' },
+    toolCall('call-1'),
+    { type, tool_call_id: 'call-1', output: 'ok' },
+  ];
+
+  expect(collectDuplicateToolCallResultPairs(input)).toEqual({ pairs: 1, maxCopies: 2 });
+});
+
+it.each(['callId', 'call_id', 'tool_call_id', 'toolCallId', 'id'])(
+  'counts duplicate pairs with the supported %s call identifier',
+  (callIdField) => {
+    const item = (type: string) => ({ type, [callIdField]: 'call-1', output: 'ok' });
+    const input = [
+      item('function_call'),
+      item('function_call_result'),
+      item('function_call'),
+      item('function_call_result'),
+    ];
+
+    expect(collectDuplicateToolCallResultPairs(input)).toEqual({ pairs: 1, maxCopies: 2 });
+  },
+);
+
+it('ignores non-tool records that merely have an identifier', () => {
+  const input = [
+    { type: 'message', id: 'call-1', role: 'assistant', content: 'hello' },
+    { type: 'reasoning', id: 'call-1', text: 'thinking' },
+  ];
+
+  expect(collectInputSurgeStats(input)).toMatchObject({
+    duplicateToolCallSignatures: 0,
+    maxDuplicateToolCallSignatureCount: 0,
+  });
+  expect(collectDuplicateToolCallResultPairs(input)).toEqual({ pairs: 0, maxCopies: 0 });
+});
+
 it('collectInputSurgeStats counts messages and duplicated tool-call signatures', () => {
   const stats = collectInputSurgeStats([
     { role: 'user', type: 'message', content: 'hello' },

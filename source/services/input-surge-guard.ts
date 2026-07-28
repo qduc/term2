@@ -1,3 +1,6 @@
+import { normalizeRunItem } from './conversation/run-item-normalizer.js';
+import type { ToolCall, ToolResult } from '../contracts/conversation-items.js';
+
 export interface InputSurgeStats {
   messageCount: number;
   totalSerializedBytes: number;
@@ -33,39 +36,15 @@ export const DEFAULT_INPUT_SURGE_GUARD_CONFIG: InputSurgeGuardConfig = {
   minDuplicateToolCallSignaturesForBlock: 20,
 };
 
-const asRecord = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+const normalizedToolItems = (item: unknown): (ToolCall | ToolResult)[] =>
+  normalizeRunItem(item).filter(
+    (candidate): candidate is ToolCall | ToolResult =>
+      candidate.type === 'tool_call' || candidate.type === 'tool_result',
+  );
 
 const toolCallSignature = (item: unknown): string | null => {
-  const record = asRecord(item);
-  if (!record) {
-    return null;
-  }
-
-  const raw = asRecord(record.rawItem) ?? record;
-  const callId = raw.callId ?? raw.call_id ?? raw.tool_call_id;
-  const type = raw.type;
-  if (typeof callId !== 'string' || !callId || typeof type !== 'string' || !type) {
-    return null;
-  }
-
-  return `${type}:${callId}`;
-};
-
-const toolCallRecord = (item: unknown): { callId: string; type: string } | null => {
-  const record = asRecord(item);
-  if (!record) {
-    return null;
-  }
-
-  const raw = asRecord(record.rawItem) ?? record;
-  const callId = raw.callId ?? raw.call_id ?? raw.tool_call_id;
-  const type = raw.type;
-  if (typeof callId !== 'string' || !callId || typeof type !== 'string' || !type) {
-    return null;
-  }
-
-  return { callId, type };
+  const normalized = normalizedToolItems(item).find((candidate) => candidate.callId !== 'unknown-call');
+  return normalized ? `${normalized.type}:${normalized.callId}` : null;
 };
 
 const serializedBytes = (input: unknown): number => {
@@ -105,16 +84,14 @@ export const collectDuplicateToolCallResultPairs = (input: unknown): { pairs: nu
   const results = new Map<string, number>();
 
   for (const item of items) {
-    const record = toolCallRecord(item);
-    if (!record) {
-      continue;
-    }
-
-    if (record.type === 'function_call') {
-      calls.set(record.callId, (calls.get(record.callId) ?? 0) + 1);
-    }
-    if (record.type === 'function_call_result') {
-      results.set(record.callId, (results.get(record.callId) ?? 0) + 1);
+    for (const normalized of normalizedToolItems(item)) {
+      if (normalized.callId === 'unknown-call') continue;
+      if (normalized.type === 'tool_call') {
+        calls.set(normalized.callId, (calls.get(normalized.callId) ?? 0) + 1);
+      }
+      if (normalized.type === 'tool_result') {
+        results.set(normalized.callId, (results.get(normalized.callId) ?? 0) + 1);
+      }
     }
   }
 

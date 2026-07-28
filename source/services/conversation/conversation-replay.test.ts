@@ -1438,3 +1438,58 @@ it('replayEvents: command_message tool output is deduped when a richer tool resu
   expect(commandMsgs[0].status).toBe('completed');
   expect(commandMsgs[0].output).toBe('/repo');
 });
+
+it.each([
+  {
+    name: 'direct provider items',
+    reasoning: { type: 'reasoning', rawContent: [{ type: 'reasoning_text', text: 'check pwd' }] },
+    result: { type: 'function_call_result', callId: 'call-1', name: 'shell', output: '/repo' },
+  },
+  {
+    name: 'wrapped provider items',
+    reasoning: { rawItem: { type: 'reasoning', rawContent: [{ type: 'reasoning_text', text: 'check pwd' }] } },
+    result: { rawItem: { type: 'function_call_result', callId: 'call-1', name: 'shell', output: '/repo' } },
+  },
+  {
+    name: 'canonical items',
+    reasoning: { type: 'reasoning', text: 'check pwd' },
+    result: {
+      type: 'tool_result',
+      callId: 'call-1',
+      toolName: 'shell',
+      status: 'completed',
+      output: '/repo',
+    },
+  },
+])('replayEvents: preserves and recognizes $name in existing tool history', ({ reasoning, result }) => {
+  const historyItems = [
+    reasoning,
+    { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{"command":"pwd"}' },
+    result,
+  ];
+  const restored = replayEvents([
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run pwd' } }),
+    env({
+      type: 'tool_result',
+      callId: 'call-1',
+      toolName: 'shell',
+      status: 'completed',
+      output: '/repo',
+      historyItems,
+    }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'reasoning', text: 'check pwd' },
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: '{"command":"pwd"}' },
+          { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: '/repo' },
+        ],
+      },
+      state: { previousResponseId: 'resp-1' },
+    }),
+  ]);
+
+  expect(restored.toolLedger[0].historyItems).toEqual(historyItems);
+});

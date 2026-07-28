@@ -239,6 +239,51 @@ Concurrent identical root `shell` calls are now covered by a call-isolation regr
 post-execute seam holds and re-executes each live call by its own call ID. The old command-keyed
 stores remain only on the nested compatibility path; do not extend that fallback back to roots.
 
+### Resumed `RunState` replays generated items — contained, not fixed (2026-07-28)
+
+**Whoever owns the Step C run loop should fix this properly; do not re-diagnose it from scratch.**
+
+A resumed run re-offers the tool call/result pairs from every earlier segment. Across successive
+`continueRunStream` finalizations the same pairs arrive again and again, so appending them
+unfiltered grew provider history quadratically until the input surge guard blocked the turn.
+Observed in session `136e6e11` on 2026-07-28: duplicate copies per pair went 4 → 4 → 11 → 13 over
+about three minutes, ending at 73 items / 108 KB and a hard `input_surge_guard` block mid-turn.
+It surfaced through the background subagent notification path, so an orchestrator run can die on a
+leak the user did not cause.
+
+Confirmed from `conversation.stream_history.replayed_tools` warnings in the app log:
+
+- Every occurrence had `source: continueRunStream`. Never `startStream`. This is the resume path.
+- `history`, `newItems`, and (in the then-current build) `state.generatedItems` all showed the
+  *same* duplicate counts, so the accumulation is in the run state carried across resumes —
+  `continuation-state.ts` reuses `pendingApprovalContext.state` — not in our store logic.
+- The provider never saw the duplicates. All 59 provider-traffic files that day had max repetition
+  2 per `call_id` (the normal call + output), because `#filterAndGuardChainedModelInput` strips
+  them while chaining is active. The damage only became visible when a turn fell back to
+  `full_history`, which is the request that got blocked.
+
+**What is already done (`76ea0e0f`).** `SessionStreamProcessor.finalize` filters tool call/result
+items already present in the store before appending, keyed on `type:callId`. That is a containment
+at the commit seam, chosen because it is decouple-neutral: it touches no SDK type and survives
+whatever replaces `RunState`. Non-tool items are never filtered and `replaceHistory` stays
+authoritative. Regression: *"does not re-append tool call/result pairs already in history across
+resumes"* in `session-stream-processor.test.ts`.
+
+**What remains for the run-loop owner.** The resumed state still accumulates. When the run loop
+stops carrying accumulated generated items across resume segments, this stops at the source and the
+`finalize` filter becomes belt-and-braces — keep the regression test either way, since it pins a
+property (no duplicate pairs in committed history) that should hold under any run loop.
+
+**How to tell it is still happening.** `finalize` logs
+`conversation.stream_history.replay_dropped` with the dropped `type:callId` signatures whenever it
+filters something. That warning going quiet is the signal the underlying duplication is gone.
+
+**One unverified assumption in the containment.** It dedupes on `type:callId` without comparing
+content, so if a resumed call ever produced a *different* output under the same call ID, the newer
+one is dropped. Nothing in the traffic logs suggests this happens and the accumulated items are
+item-identical, but it was not proven. The `replay_dropped` signatures are the trail if it ever
+does.
+
 ---
 
 ## Goal

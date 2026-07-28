@@ -1221,3 +1221,71 @@ it.sequential('shell execute consumes extraAllowRead override and merges into sa
   // Override is consumed (one-shot).
   expect(executionOverrideStore.consume('cargo build')).toBeNull();
 });
+
+it.sequential('root shell exposes denied-read metadata and re-executes only its held call override', async () => {
+  let executions = 0;
+  let allowRead: string[] | undefined;
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true, 'sandbox.readPolicy': 'strict' }),
+    postExecuteDeniedRead: true,
+    shellSandboxRunner: createFakeSandboxRunner({
+      wrap: async (_command: string, options: any) => {
+        allowRead = options.config?.filesystem?.allowRead;
+        return { command: 'sandboxed' };
+      },
+      annotateFailure: (_command: string, stderr: string) =>
+        `${stderr}\n<sandbox_violations>\nSandbox: cat(123) deny file-read* /home/testuser/.cargo/registry/cache\n</sandbox_violations>`,
+    }),
+    executeShellCommandImpl: async () => {
+      executions++;
+      return executions === 1
+        ? {
+            stdout: '',
+            stderr: 'Sandbox: cat(123) deny file-read* /home/testuser/.cargo/registry/cache',
+            exitCode: 1,
+            timedOut: false,
+          }
+        : { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
+    },
+  });
+  const details = { toolCall: { callId: 'call-root-denied' } };
+  const first = await tool.execute({ command: 'cat ~/.cargo/registry/cache' }, undefined, details);
+  const descriptor = tool.postExecutePause!.describe({ command: 'cat ~/.cargo/registry/cache' }, first, details)!;
+  expect(descriptor.deniedRead).toMatchObject({ deniedPath: '/home/testuser/.cargo/registry/cache', sensitive: false });
+  await tool.postExecutePause!.resolve!(
+    {
+      params: { command: 'cat ~/.cargo/registry/cache' },
+      result: first,
+      details,
+      executeAgain: () => tool.execute({ command: 'cat ~/.cargo/registry/cache' }, undefined, details),
+    },
+    'allow-once',
+  );
+  expect(executions).toBe(2);
+  expect(allowRead).toContain(descriptor.deniedRead!.suggestedParent);
+  expect(deniedReadStore.has('cat ~/.cargo/registry/cache')).toBe(false);
+});
+
+it.sequential('root shell fails closed when a denied read has no SDK call ID', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true, 'sandbox.readPolicy': 'strict' }),
+    postExecuteDeniedRead: true,
+    shellSandboxRunner: createFakeSandboxRunner({
+      annotateFailure: (_command: string, stderr: string) =>
+        `${stderr}\n<sandbox_violations>\nSandbox: cat(123) deny file-read* /home/testuser/.cargo/registry/cache\n</sandbox_violations>`,
+    }),
+    executeShellCommandImpl: async () => ({
+      stdout: '',
+      stderr: 'Sandbox: cat(123) deny file-read* /home/testuser/.cargo/registry/cache',
+      exitCode: 1,
+      timedOut: false,
+    }),
+  });
+
+  await expect(tool.execute({ command: 'cat ~/.cargo/registry/cache' })).rejects.toThrow(
+    'requires an SDK tool call ID',
+  );
+  expect(deniedReadStore.has('cat ~/.cargo/registry/cache')).toBe(false);
+});

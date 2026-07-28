@@ -25,6 +25,7 @@ export class PostExecutePauseCapability implements PostExecutePauseCapabilityPor
       pending: this.pending,
       runId: () => this.#activeRunId,
       describe: definition.postExecutePause.describe,
+      resolve: definition.postExecutePause.resolve,
     });
   }
 }

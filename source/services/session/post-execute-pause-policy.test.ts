@@ -67,4 +67,73 @@ describe('createPostExecutePausePolicy', () => {
     expect(pending.snapshot().entries).toEqual([]);
     expect(executeAgain).not.toHaveBeenCalled();
   });
+
+  it('uses the rejection resolver to discard call state outside an owned foreground run', async () => {
+    const pending = new PostExecutePendingRegistry({ sessionId: 'session-a', epoch: 1 });
+    const resolve = vi.fn(({ result }) => result);
+    const policy = createPostExecutePausePolicy({
+      pending,
+      runId: null,
+      describe: () => ({ toolName: 'shell', argumentsText: '{}' }),
+      resolve,
+    });
+
+    await expect(
+      policy({ params: {}, result: 'original', details: { toolCall: { callId: 'call-a' } }, executeAgain: vi.fn() }),
+    ).resolves.toBe('original');
+    expect(resolve).toHaveBeenCalledWith(expect.anything(), 'reject');
+    expect(pending.snapshot().entries).toEqual([]);
+  });
+
+  it('keeps concurrent identical command decisions isolated by call ID', async () => {
+    const pending = new PostExecutePendingRegistry({ sessionId: 'session-a', epoch: 1 });
+    const overrides = new Map<string, string>();
+    const policy = createPostExecutePausePolicy({
+      pending,
+      runId: 'run-1',
+      describe: (_params, _result, details) => ({
+        toolName: 'shell',
+        argumentsText: '{"command":"cat private"}',
+        deniedRead: {
+          deniedPath: `/private/${(details as any).toolCall.callId}`,
+          suggestedParent: `/private/${(details as any).toolCall.callId}`,
+          sensitive: false,
+          command: 'cat private',
+        },
+      }),
+      resolve: ({ details, result, executeAgain }, decision) => {
+        const callId = (details as any).toolCall.callId;
+        if (decision !== 'allow-once') return result;
+        overrides.set(callId, `override:${callId}`);
+        return executeAgain();
+      },
+    });
+    const retryA = vi.fn(async () => overrides.get('call-a'));
+    const retryB = vi.fn(async () => overrides.get('call-b'));
+    const blockedA = policy({
+      params: {},
+      result: 'denied-a',
+      details: { toolCall: { callId: 'call-a' } },
+      executeAgain: retryA,
+    });
+    const blockedB = policy({
+      params: {},
+      result: 'denied-b',
+      details: { toolCall: { callId: 'call-b' } },
+      executeAgain: retryB,
+    });
+    await Promise.resolve();
+    const snapshot = pending.snapshot();
+    expect(snapshot.entries.map((entry) => entry.deniedRead?.deniedPath)).toEqual([
+      '/private/call-a',
+      '/private/call-b',
+    ]);
+    pending.decide({ revision: snapshot.revision, ids: [snapshot.entries[1]!.id], decision: 'reject' });
+    await expect(blockedB).resolves.toBe('denied-b');
+    expect(retryA).not.toHaveBeenCalled();
+    const afterB = pending.snapshot();
+    pending.decide({ revision: afterB.revision, ids: [afterB.entries[0]!.id], decision: 'allow-once' });
+    await expect(blockedA).resolves.toBe('override:call-a');
+    expect(retryB).not.toHaveBeenCalled();
+  });
 });

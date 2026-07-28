@@ -566,7 +566,12 @@ export class ConversationAdapter {
       const decision = this.#approval.decidePostExecutePending({
         revision: postExecuteApproval.revision,
         ids: postExecuteApproval.ids,
-        decision: answer === 'y' ? 'approve' : 'reject',
+        decision:
+          answer === 'y'
+            ? 'approve'
+            : answer === 'allow-once' || answer === 'allow-remember' || answer === 'unsandboxed-once'
+            ? answer
+            : 'reject',
       });
       if (decision.kind !== 'settled') return null;
       this.#postExecuteApproval = null;

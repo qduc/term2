@@ -318,6 +318,7 @@ export function buildAgent(
       getAskUserAnswer: deps.getAskUserAnswer,
       skillsService: deps.skillsService,
       agentRuntime: deps.getAgentRuntime?.() ?? null,
+      postExecuteDeniedRead: Boolean(deps.postExecutePauseCapability),
     },
     resolvedModel,
   );

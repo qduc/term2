@@ -1,7 +1,7 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through A4 tool ownership, the first bounded Step B representation slice is landed, and Step C has retired every production `_generatedItems` read. The application-owned post-execute seam now carries selected root tools through the session registry, LiveRun, adapter decision, and same-stream continuation. Denied-read metadata/override migration remains the next explicit follow-up.
-**Last updated:** 2026-07-27
+**Status:** Step A is complete through A4 tool ownership, the first bounded Step B representation slice is landed, and Step C has retired every production `_generatedItems` read. The application-owned post-execute seam now carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream. Nested tools retain their compatibility path.
+**Last updated:** 2026-07-28
 
 ---
 
@@ -27,6 +27,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
 | Step C post-execute handoff | Selected root tools can pause after execution through a session-owned registry; the UI settles revisioned entries and resumes the same live stream consumer, with fail-closed abort/reset/disposal |
+| Step C denied-read migration | Root shell denied reads pause before the SDK sees a result; typed choices re-execute the held call with call-ID-isolated overrides, while rejection returns the original denial |
 | Bug fix | Denied-read approval never fired for `cd`-prefixed commands (record/lookup key mismatch) |
 | Bug fix | Docker host-control denials leaked across sessions (process-global `#deniedCommands`) |
 
@@ -49,8 +50,9 @@ approval decision. Registry snapshots remain selective and revisioned; a later e
 new boundary after the selected one settles. Abort, reset, and disposal fail-close gates and stop
 late event projection. Do not substitute a `callModelInputFilter` sentinel.
 
-Do not migrate denied-read metadata or execution overrides yet: the stock SDK can retry a
-completed denied read as a new call ID, so CallId-only storage cannot safely bridge that boundary.
+Root denied-read metadata and one-shot execution overrides now use this seam. The held call
+retains its call ID, so no model retry, command matching, or token protocol is needed. Concurrent
+identical root commands retain separate metadata and decisions; nested tools remain unchanged.
 
 ### A4 tool-ownership lifecycle
 
@@ -84,6 +86,11 @@ production session contract.
   factory, turn coordinator, conversation service, and session composition tests: 10 files / 128
   tests. `tsc --noEmit` reaches only the known pre-existing
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Root denied-read migration focused sets pass: shell, post-execute policy/registry, TurnWorkflow,
+  adapter, and agent factory (6 files / 99 tests), plus approval flow and session composition,
+  client factory, conversation service, and turn coordinator (5 files / 106 tests). The migration
+  covers same-call re-execution, typed denied-read choices, concurrent identical-call isolation,
+  missing-call-ID failure, and compatibility behavior outside the root capability.
 - Worktree-local `pnpm` validation runs with the existing `node_modules` symlink; no dependency
   installation was performed. Root-level `pnpm lint` is not a meaningful baseline with sibling
   worktrees present: ESLint traverses them and reports their files as outside the root TypeScript
@@ -138,9 +145,8 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **Step C follow-up** — own the post-execute pause/resume seam in the run loop before migrating
-   denied-read metadata or execution overrides. The transport-recovery slice is complete; this
-   follow-up changes the run behavior needed to bridge a completed denied read to a retry call.
+1. **A4 lifecycle follow-up.** Move session read access and transient Docker state into the
+   session handle, keeping project grants persistent; bind nested client caches to disposal.
 
 ### R1 gate — PASSED
 
@@ -203,11 +209,9 @@ Migration order:
 2. **DONE.** Route both CLI modes and `resetWithNewId()` through that factory; prove replacement
    and disposal before moving policy state.
 3. **DONE.** Introduce the session-owned call ledger and migrate tool ownership.
-4. **STOPPED:** do not expand the ledger to denied-read metadata or execution overrides under
-   the stock SDK. Call A's denied result causes a newly emitted retry call B, so callId-only A4
-   has no bridge. Reject both command-key fallback and a temporary token protocol for now;
-   retain current behavior. Defer this migration until Step C owns a post-execute pause/resume
-   seam, then add the concurrent-identical-command regression.
+4. **DONE:** root denied-read metadata and execution overrides use the landed
+   post-execute seam. The held live call has stable identity; reject command-key fallback and a
+   temporary token protocol. Keep nested compatibility behavior outside this root capability.
 5. Move session read access and transient docker state into the handle, keeping project grants
    persistent; bind nested client caches to handle disposal.
 6. Delete singleton fallbacks and compatibility wiring after all production roots inject the
@@ -215,12 +219,9 @@ Migration order:
 
 ### Deliberately left open
 
-A concurrency bug remains: `maxParallelToolCalls` defaults to 3
-(`agent-run-orchestrator.ts:61-68`) while `ExecutionOverrideStore` is command-keyed with a
-consuming read, so two concurrent identical `shell` calls can cross-contaminate grants — one
-executes with permissions the user granted to a different call. **Do not write a stopgap.**
-CallId-only A4 cannot fix this under the stock SDK's model-retry behavior; Step C must provide
-the post-execute pause/resume seam before this migration can be made safely.
+Concurrent identical root `shell` calls are now covered by a call-isolation regression. The
+post-execute seam holds and re-executes each live call by its own call ID. The old command-keyed
+stores remain only on the nested compatibility path; do not extend that fallback back to roots.
 
 ---
 
@@ -346,7 +347,7 @@ the normal `store` flag.
 |---|---|
 | Driver | Fragility — private-API dependence. Not LOC, not capability. |
 | Durable mid-turn approvals | Design for it (plain-data, serializable turns); ship later. |
-| Approval type scope | Step B defines the types, but does **not** absorb denied-read side-channels yet. The stock SDK emits a new call id on model retry after execute, so callId-only A4 is blocked. Reject command fallback and a temporary token protocol; Step C will own a post-execute pause/resume seam before migrating overrides. |
+| Approval type scope | Step B defines the types. Step C's landed post-execute seam now owns the root denied-read migration: carry metadata and selected one-shot overrides by the held live call ID; reject command fallback and token protocols. Nested tools retain compatibility behavior until explicitly migrated. |
 | Chaining | **Keep the dual mode as-is for now.** Not touched in Steps A–D. |
 | Endpoint | Zero SDK imports, **codex included**. |
 
@@ -382,21 +383,20 @@ Re-ordered from the original types-first plan. Each step retires named reach-ins
   path, gated by `resumeContextStrategy === 'merge'` (set at `nested-runner.ts:268`). That
   is the library's own internal use reached through a *public* option, not our reach-in.
   A3 retires ours; the SDK's goes away with the SDK.
-- **A4 — PARTIAL / BLOCKED.** Session-owned tool ownership is landed. R1 remains valid for an
-  approval resume of the same call id, but it does not apply to a model retry after execute.
-  The real-Runner denied-read regression proves that retry is a new call id, so do not migrate
-  `ExecutionOverrideStore` / `DeniedReadStore` / session grants by call id under the stock SDK.
-  Reject command fallback and a temporary token protocol; defer this work to Step C's
-  post-execute pause/resume seam while keeping current behavior unchanged.
+- **A4 — PARTIAL; Step C migration landed.** Session-owned tool ownership is landed. R1 remains
+  valid only for a same-call approval resume; the model-retry regression still proves that a
+  completed denial would get a new ID. The landed Step C seam instead holds the completed root
+  call before the SDK sees it, so denied-read metadata and one-shot overrides can now migrate by
+  that stable live call ID. Reject command fallback and temporary token protocols.
 
-**Live bugs found during this work** (independent of decoupling; the command-string keying is
-actively broken and remains until Step C can replace it safely):
+**Live bugs found during this work** (the root command-keyed issue is now being replaced through
+the Step C seam; compatibility paths remain explicit):
 
 - **FIXED** — denied-read approval never fired for `cd`-prefixed commands. `shell.ts` recorded
   under `optimizedCommand` (post-`stripRedundantCd`) while both lookups used the raw
   model-emitted command. Six of seven store call sites already used raw; `record` was the sole
   outlier. The Docker branch ten lines above already had the correct reasoning in a comment.
-- **OPEN, deferred to Step C** — concurrent identical commands cross-contaminate grants.
+- **FIXED for roots in Step C** — concurrent identical commands previously cross-contaminated grants.
   `maxParallelToolCalls` defaults to 3 (`agent-run-orchestrator.ts:61-68`) and
   `ExecutionOverrideStore` is command-keyed with a consuming read, so one call can execute
   with permissions the user granted to a different call. CallId-only A4 cannot fix this because
@@ -425,9 +425,8 @@ imports `ModelSettingsReasoningEffort` from the SDK — the contracts layer is n
 SDK-free.
 **Retires 0 reach-ins directly; contains them and collapses blast radius.**
 
-**Next implementation step.** Keep current denied-read recovery behavior unchanged. Do not add
-command matching or a temporary token protocol; Step C must first own the post-execute
-pause/resume seam needed to migrate denied-read metadata and execution overrides safely.
+**Landed follow-up.** Root denied-read recovery uses the Step C post-execute seam without command
+matching or a temporary token protocol. Nested tools retain the compatibility path.
 
 **Landed representation slice.** `source/contracts/conversation-items.ts` now owns the canonical
 serializable item and turn shapes; compatibility aliases in `conversation-persistence-types.ts`
@@ -446,10 +445,9 @@ from the session ledger; `stream-snapshot.ts` uses only public stream history/ne
 duplicate-tool diagnostics; and public completed tool results are recorded in the live ledger
 before recovery projects them. No production `_generatedItems` read remains.
 
-**Post-execute pause seam — STOPPED at the current boundary:** see *Resume here / In flight* for
-the required session/turn channel and suspended-stream continuation design. Do not add an inert
-registry or migrate command-keyed denied-read stores until that complete behavior can be landed
-and tested end-to-end.
+**Post-execute pause seam — LANDED:** the session/turn channel holds the live stream and resumes
+the same consumer with fail-closed lifecycle gates. Root denied-read metadata and per-call
+overrides now pass through it; do not grant this root capability to nested tools.
 
 ### Step D — Non-codex providers off the SDK
 Delete `ai-sdk-agents-adapter.ts` (112); ai-sdk providers implement our interface directly.
@@ -487,8 +485,8 @@ feature), guardrails, MCP, sessions/memory, voice, realtime.
 
 ## Open questions
 
-- Shape of `Item`, `Turn`, `ToolCall`, `Approval` (Step B) — do not prematurely encode the
-  denied-read execution override; Step C must establish its post-execute pause/resume seam.
+- Nested denied-read disposition — retain its compatibility path until an explicit ownership
+  model exists; do not implicitly extend the root post-execute capability.
 - Whether to keep a `Model`-shaped interface at all, or expose something closer to what `ai`
   already gives us (Step D).
 - Chaining disposition (blocks Step E).

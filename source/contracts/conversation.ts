@@ -14,6 +14,7 @@ export interface LLMAdvisory {
 }
 
 export type DeniedReadApproveAnswer = 'allow-once' | 'allow-remember' | 'unsandboxed-once';
+export type PostExecuteDecision = 'approve' | 'reject' | DeniedReadApproveAnswer;
 export type DockerHostControlApproveAnswer = 'docker-allow-once' | 'docker-allow-session' | 'docker-allow-project';
 export const DOCKER_HOST_CONTROL_APPROVE_ANSWERS: ReadonlySet<DockerHostControlApproveAnswer> = new Set([
   'docker-allow-once',

@@ -147,6 +147,7 @@ export const getAgentDefinition = (
     getAskUserAnswer?: (callId?: string) => string | undefined;
     skillsService?: SkillsService;
     agentRuntime?: Pick<AgentRuntime, 'agent'> | null;
+    postExecuteDeniedRead?: boolean;
   },
   model?: string,
 ): AgentDefinition => {
@@ -164,6 +165,7 @@ export const getAgentDefinition = (
     getAskUserAnswer,
     skillsService,
     agentRuntime,
+    postExecuteDeniedRead = false,
   } = deps;
   const defaultModel = settingsService.get<string>('agent.model');
   const resolvedModel = model?.trim() || defaultModel;
@@ -301,7 +303,13 @@ export const getAgentDefinition = (
   }
 
   const tools: ToolDefinition[] = [
-    createShellToolDefinition({ settingsService, loggingService, executionContext, searchViaShell }),
+    createShellToolDefinition({
+      settingsService,
+      loggingService,
+      executionContext,
+      searchViaShell,
+      postExecuteDeniedRead,
+    }),
     createWebSearchToolDefinition({
       settingsService,
       loggingService,

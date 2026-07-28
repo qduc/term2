@@ -1,5 +1,6 @@
 import type { ZodObject } from 'zod';
 import type { ApprovalPresentationCapability } from './tool-capabilities.js';
+import type { DeniedReadMetadata, PostExecuteDecision } from '../contracts/conversation.js';
 
 export interface CommandMessage {
   id: string;
@@ -40,7 +41,12 @@ export type PostExecutePolicy<Params = unknown> = (
 
 /** Opt-in descriptor for the session-owned post-execute approval seam. */
 export interface PostExecutePauseDescriptor<Params = unknown> {
-  describe(params: Params): { toolName: string; argumentsText: string };
+  describe(
+    params: Params,
+    result: unknown,
+    details: unknown,
+  ): { toolName: string; argumentsText: string; deniedRead?: DeniedReadMetadata } | null;
+  resolve?(context: PostExecutePolicyContext<Params>, decision: PostExecuteDecision): Promise<unknown> | unknown;
 }
 
 /** Construction-time capability. Root tools only in this slice; nested tools do not inherit it. */

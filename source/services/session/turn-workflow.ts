@@ -547,6 +547,7 @@ export class TurnWorkflow {
       agentName: 'Agent',
       toolName: entry.toolName,
       argumentsText: entry.argumentsText,
+      deniedRead: entry.deniedRead,
       rawInterruption: { type: 'post_execute', runId: entry.runId, id: entry.id },
       callId: entry.toolCallId,
       postExecute: {

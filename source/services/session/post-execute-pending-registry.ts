@@ -1,4 +1,6 @@
-export type PostExecuteDecision = 'approve' | 'reject';
+import type { PostExecuteDecision } from '../../contracts/conversation.js';
+
+export type { PostExecuteDecision } from '../../contracts/conversation.js';
 
 export type PostExecutePendingEntry = {
   /** Stable across UI re-renders; includes the session epoch and live run identity. */
@@ -7,6 +9,7 @@ export type PostExecutePendingEntry = {
   toolCallId: string;
   toolName: string;
   argumentsText: string;
+  deniedRead?: import('../../contracts/conversation.js').DeniedReadMetadata;
 };
 
 export type PostExecutePendingSnapshot = {

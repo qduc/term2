@@ -11,25 +11,41 @@ import type { PostExecutePendingRegistry } from './post-execute-pending-registry
 export function createPostExecutePausePolicy<Params>(options: {
   pending: PostExecutePendingRegistry;
   /** A live run is created after tools are assembled, so production wiring may resolve lazily. */
-  runId: string | (() => string | null);
-  describe: (params: Params) => { toolName: string; argumentsText: string };
+  runId: string | null | (() => string | null);
+  describe: (
+    params: Params,
+    result: unknown,
+    details: unknown,
+  ) => {
+    toolName: string;
+    argumentsText: string;
+    deniedRead?: import('../../contracts/conversation.js').DeniedReadMetadata;
+  } | null;
+  resolve?: (
+    context: Parameters<PostExecutePolicy<Params>>[0],
+    decision: import('../../contracts/conversation.js').PostExecuteDecision,
+  ) => Promise<unknown> | unknown;
 }): PostExecutePolicy<Params> {
-  return async ({ params, result, details, executeAgain }) => {
+  return async (context) => {
+    const { params, result, details, executeAgain } = context;
     const runId = typeof options.runId === 'function' ? options.runId() : options.runId;
+    const descriptor = options.describe(params, result, details);
+    if (!descriptor) return result;
     // A policy accidentally invoked outside an owned foreground run must not
-    // manufacture an unresumable gate.
-    if (!runId) return result;
+    // manufacture an unresumable gate. Let a custom resolver discard any
+    // call-scoped state using the same fail-closed rejection path as disposal.
+    if (!runId) return options.resolve ? options.resolve(context, 'reject') : result;
     const toolCallId = getCallIdFromObject(asRecord(details)?.toolCall);
     if (!toolCallId) {
       throw new Error('Post-execute approval requires an SDK tool call ID');
     }
-    const descriptor = options.describe(params);
     const decision = await options.pending.register({
       runId,
       toolCallId,
       toolName: descriptor.toolName,
       argumentsText: descriptor.argumentsText,
+      deniedRead: descriptor.deniedRead,
     });
-    return decision === 'approve' ? executeAgain() : result;
+    return options.resolve ? options.resolve(context, decision) : decision === 'approve' ? executeAgain() : result;
   };
 }

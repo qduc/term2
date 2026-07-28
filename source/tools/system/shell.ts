@@ -35,6 +35,7 @@ import {
 } from '../../utils/shell/sandbox/sandbox-policy.js';
 import { getDefaultShellSandboxRunner } from '../../utils/shell/sandbox/shell-sandbox-runner.js';
 import { DETAILED_DENIED_READ_INSTRUCTION } from '../../utils/shell/sandbox/denied-read-detector.js';
+import type { DeniedReadInfo } from '../../utils/shell/sandbox/denied-read-detector.js';
 import {
   deniedReadStore,
   executionOverrideStore,
@@ -262,6 +263,8 @@ export function createShellToolDefinition(deps: {
   sessionId?: string;
   orchestratorMode?: boolean;
   searchViaShell?: boolean;
+  /** Root-only: pause denied reads through the application-owned post-execute seam. */
+  postExecuteDeniedRead?: boolean;
 }): ToolDefinition<ShellToolParams> {
   const {
     loggingService,
@@ -273,7 +276,10 @@ export function createShellToolDefinition(deps: {
     dockerHostControlFactory = createDockerHostControl,
     orchestratorMode = false,
     searchViaShell: searchViaShellExplicit,
+    postExecuteDeniedRead = false,
   } = deps;
+  const deniedReadByCallId = new Map<string, DeniedReadInfo>();
+  const overrideByCallId = new Map<string, { extraAllowRead?: string[]; forceUnsandboxed?: boolean }>();
   configureDockerHostControlGrants(settingsService);
 
   // Create command logger function with dependencies
@@ -322,7 +328,7 @@ export function createShellToolDefinition(deps: {
         if (!sshService && sandboxEnabled) {
           // If a previous sandboxed run denied a read for this command, require
           // approval so the user can allow/remember the path or escape unsandboxed.
-          if (deniedReadStore.peek(params.command)) {
+          if (!postExecuteDeniedRead && deniedReadStore.peek(params.command)) {
             return true;
           }
           const availability = await shellSandboxRunner.availability();
@@ -353,6 +359,7 @@ export function createShellToolDefinition(deps: {
       }
     },
     execute: async ({ command, timeout_ms, max_output_length, sandbox = 'default' }, _context, details) => {
+      const toolCallId = (details as { toolCall?: { callId?: unknown } } | undefined)?.toolCall?.callId;
       const cwd = executionContext?.getCwd() || process.cwd();
       const sessionId = getConversationSessionId(_context);
       const sandboxEnabled = isSandboxEnabled();
@@ -419,7 +426,11 @@ export function createShellToolDefinition(deps: {
 
         // Consume any execution override set by a denied-read approval decision.
         // This is a one-shot override for this single execution only.
-        const override = executionOverrideStore.consume(command);
+        const override =
+          postExecuteDeniedRead && typeof toolCallId === 'string'
+            ? overrideByCallId.get(toolCallId) ?? null
+            : executionOverrideStore.consume(command);
+        if (postExecuteDeniedRead && typeof toolCallId === 'string') overrideByCallId.delete(toolCallId);
         if (override?.forceUnsandboxed) {
           sandbox = 'unsandboxed';
           loggingService.debug('Shell executing unsandboxed by approved override', {
@@ -545,11 +556,18 @@ export function createShellToolDefinition(deps: {
         }
 
         if (sandboxFailure?.type === 'denied_read') {
+          if (postExecuteDeniedRead && typeof toolCallId !== 'string') {
+            throw new Error('Root shell denied-read handling requires an SDK tool call ID');
+          }
           // Keyed by the command the model passed, not `optimizedCommand`: the
           // retry and both approval lookups (needsApproval here, and the
           // conversation layer, which has no cwd to re-derive the stripped form)
           // only ever see the raw string.
-          deniedReadStore.record(command, sandboxFailure.deniedRead);
+          if (postExecuteDeniedRead) {
+            deniedReadByCallId.set(toolCallId as string, sandboxFailure.deniedRead);
+          } else {
+            deniedReadStore.record(command, sandboxFailure.deniedRead);
+          }
           loggingService.security('Sandbox denied read; agent retry will prompt for approval', {
             deniedPath: sandboxFailure.deniedRead.path,
             suggestedParent: sandboxFailure.deniedRead.suggestedParent,
@@ -618,6 +636,46 @@ export function createShellToolDefinition(deps: {
         }
       }
     },
+    postExecutePause: postExecuteDeniedRead
+      ? {
+          describe: (params, _result, details) => {
+            const callId = (details as { toolCall?: { callId?: unknown } } | undefined)?.toolCall?.callId;
+            if (typeof callId !== 'string') return null;
+            const info = deniedReadByCallId.get(callId);
+            if (!info) return null;
+            return {
+              toolName: 'shell',
+              argumentsText: JSON.stringify(params),
+              deniedRead: {
+                deniedPath: info.path,
+                suggestedParent: info.suggestedParent,
+                sensitive: info.sensitive,
+                command: params.command,
+              },
+            };
+          },
+          resolve: async ({ result, details, executeAgain }, decision) => {
+            const callId = (details as { toolCall?: { callId?: unknown } } | undefined)?.toolCall?.callId;
+            const info = typeof callId === 'string' ? deniedReadByCallId.get(callId) : undefined;
+            if (typeof callId === 'string') deniedReadByCallId.delete(callId);
+            if (
+              typeof callId !== 'string' ||
+              !info ||
+              (decision !== 'allow-once' && decision !== 'allow-remember' && decision !== 'unsandboxed-once')
+            ) {
+              return result;
+            }
+            if (decision === 'allow-remember') {
+              getProjectAllowReadStore(executionContext?.getCwd() || process.cwd()).append(info.suggestedParent);
+            }
+            overrideByCallId.set(
+              callId,
+              decision === 'unsandboxed-once' ? { forceUnsandboxed: true } : { extraAllowRead: [info.suggestedParent] },
+            );
+            return executeAgain();
+          },
+        }
+      : undefined,
     formatCommandMessage: formatShellCommandMessage,
   };
 }

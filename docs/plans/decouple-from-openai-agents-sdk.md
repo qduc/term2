@@ -32,6 +32,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step B tool-ledger slice | `ToolExecutionLedger` derives tool call/result classification, identity, name, arguments, output, reasoning detection, and reconciliation from `run-item-normalizer.ts`; equivalent wrapped, direct-provider, and canonical forms share one identity while stored history remains provider-facing |
 | Step B journal-to-ledger slice | Durable journal recovery detects missing reasoning and existing tool results through `run-item-normalizer.ts`; wrapped, direct-provider, and canonical items deduplicate equivalently while reconstructed history preserves original provider items, ordering, and ledger persistence behavior |
 | Step B history-repair slice | Conversation-history repair normalizes tool calls/results for signatures, pair detection, and repair decisions; equivalent wrapped, direct-provider, and canonical forms repair alike while retained history keeps its original representation |
+| Step B conversation-store tool-policy slice | `ConversationStore` normalizes only tool-output retry anchors and mutating-tool rewind previews; wrapped SDK, direct-provider, and canonical items share classification/call ID/name/arguments/output while splice indices and original provider-facing history remain intact |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -587,6 +588,15 @@ signatures, duplicate-pair counts, and duplicate-removal decisions from `run-ite
 Wrapped SDK, direct-provider, and canonical tool histories therefore repair equivalently; retained
 entries remain the original provider-facing objects. Message/user and provider-ID signatures remain
 local because canonical `Item` does not model those history shapes.
+
+**Step B conversation-store tool-policy slice.** `ConversationStore` now obtains only its
+last-tool-output retry anchor and mutating-file rewind preview fields from `run-item-normalizer.ts`.
+Wrapped SDK, direct-provider, and canonical tool calls/results therefore make equivalent anchor,
+truncation, call-ID/name/output, and malformed-argument decisions; `removeAfterLastToolOutput()`
+keeps its original anchor index/splice behavior and history retains its original provider-facing
+objects. The normalizer now explicitly covers every legacy result spelling the store supported.
+User/assistant message unwrapping, synthetic-message handling, turn counting/removal, and
+message text/image extraction intentionally remain local for a later slice.
 
 ### Step C — Own the run loop
 Contained, because downstream already speaks our language.

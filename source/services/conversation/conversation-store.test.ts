@@ -278,6 +278,40 @@ it('peekLastToolOutput() recognizes all provider and internal tool result types'
   }
 });
 
+it.each([
+  {
+    label: 'direct provider items',
+    call: { type: 'function_call', call_id: 'call-1', name: 'shell', arguments: '{"command":"date"}' },
+    result: { type: 'function_call_output', call_id: 'call-1', name: 'shell', output: 'done' },
+  },
+  {
+    label: 'wrapped SDK items',
+    call: { rawItem: { type: 'function_call', call_id: 'call-1', name: 'shell', arguments: '{"command":"date"}' } },
+    result: { rawItem: { type: 'function_call_output', call_id: 'call-1', name: 'shell' }, output: 'done' },
+  },
+  {
+    label: 'canonical items',
+    call: { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: '{"command":"date"}' },
+    result: { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: 'done' },
+  },
+])(
+  'keeps the last canonical tool result as the retry anchor for $label without rewriting history',
+  ({ call, result }) => {
+    const store = new ConversationStore();
+    const original = [call, result, { role: 'assistant', type: 'message', content: 'stale reply' }];
+    store.appendOutput(original as AgentInputItem[]);
+
+    expect(store.peekLastToolOutput()).toMatchObject({ index: 1, callId: 'call-1', toolName: 'shell', output: 'done' });
+    expect(store.removeAfterLastToolOutput()).toMatchObject({
+      index: 1,
+      callId: 'call-1',
+      toolName: 'shell',
+      output: 'done',
+    });
+    expect(store.getHistory()).toEqual(original.slice(0, 2));
+  },
+);
+
 it('removeLastUserTurn() returns null when no user message exists', () => {
   const store = new ConversationStore();
   store.appendOutput([
@@ -692,6 +726,57 @@ it('listRewindTargets() tolerates malformed tool call arguments', () => {
   ] as AgentInputItem[]);
 
   expect(() => store.listRewindTargets()).not.toThrow();
+  expect(store.listRewindTargets()[0]!.discardedFiles).toEqual([]);
+});
+
+it.each([
+  {
+    label: 'direct provider items',
+    item: {
+      type: 'function_call',
+      call_id: 'call-1',
+      name: 'apply_patch',
+      arguments: '{"operations":[{"path":"x.ts"}]}',
+    },
+  },
+  {
+    label: 'wrapped SDK items',
+    item: {
+      rawItem: {
+        type: 'function_call',
+        call_id: 'call-1',
+        name: 'apply_patch',
+        arguments: '{"operations":[{"path":"x.ts"}]}',
+      },
+    },
+  },
+  {
+    label: 'canonical items',
+    item: {
+      type: 'tool_call',
+      callId: 'call-1',
+      toolName: 'apply_patch',
+      arguments: '{"operations":[{"path":"x.ts"}]}',
+    },
+  },
+])('extracts mutating-file previews from $label while preserving the original history item', ({ item }) => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.appendOutput([item] as AgentInputItem[]);
+
+  expect(store.listRewindTargets()[0]!.discardedFiles).toEqual(['x.ts']);
+  expect(store.getHistory()[1]).toEqual(item);
+});
+
+it.each([
+  { type: 'function_call', name: 'create_file', callId: 'c1', arguments: '{not json' },
+  { rawItem: { type: 'function_call', name: 'create_file', callId: 'c1', arguments: '{not json' } },
+  { type: 'tool_call', callId: 'c1', toolName: 'create_file', arguments: '{not json' },
+])('tolerates malformed mutating arguments in every normalized tool-call representation', (item) => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.appendOutput([item] as AgentInputItem[]);
+
   expect(store.listRewindTargets()[0]!.discardedFiles).toEqual([]);
 });
 

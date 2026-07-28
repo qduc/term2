@@ -1,6 +1,7 @@
 import type { AgentInputItem } from '@openai/agents';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
+import { normalizeRunItem } from './run-item-normalizer.js';
 
 type RemovedUserTurn = { text: string; imageCount: number; images?: UserTurn['images'] };
 type RemovedToolOutput = { index: number; callId?: string; toolName?: string; output?: unknown; itemType: string };
@@ -253,42 +254,20 @@ export class ConversationStore {
     return text.startsWith(SHELL_CONTEXT_PREFIX) || text.startsWith(LEGACY_MODE_NOTICE_PREFIX);
   }
 
-  static #isToolOutputItem(raw: any): boolean {
-    switch (raw?.type) {
-      case 'function_call_result':
-      case 'function_call_output':
-      case 'function_call_output_result':
-      case 'tool_call_output_item':
-      case 'tool_result':
-      case 'shell_call_output':
-      case 'tool_call_output':
-      case 'tool_call_result':
-      case 'local_shell_call_output':
-      case 'computer_call_output':
-      case 'computer_call_result':
-      case 'apply_patch_call_output':
-        return true;
-      default:
-        return false;
-    }
-  }
-
   static #extractRemovedToolOutput(item: any, index: number): RemovedToolOutput {
-    const raw = item?.rawItem ?? item;
+    const toolResult = normalizeRunItem(item).find((normalized) => normalized.type === 'tool_result');
     return {
       index,
-      itemType: raw?.type ?? 'unknown',
-      callId: raw?.callId ?? raw?.call_id ?? raw?.tool_call_id ?? raw?.id,
-      toolName: raw?.name ?? raw?.toolName,
-      output: raw?.output,
+      itemType: (item?.rawItem ?? item)?.type ?? 'unknown',
+      callId: toolResult?.callId,
+      toolName: toolResult?.toolName,
+      output: toolResult?.output,
     };
   }
 
   #findLastToolOutputIndex(): number {
     for (let i = this.#history.length - 1; i >= 0; i--) {
-      const item: any = this.#history[i];
-      const raw = item?.rawItem ?? item;
-      if (ConversationStore.#isToolOutputItem(raw)) {
+      if (normalizeRunItem(this.#history[i]).some((item) => item.type === 'tool_result')) {
         return i;
       }
     }
@@ -334,7 +313,7 @@ export class ConversationStore {
           continue;
         }
 
-        for (const path of ConversationStore.#extractMutatedPaths(raw)) {
+        for (const path of ConversationStore.#extractMutatedPaths(item)) {
           if (!discardedFiles.includes(path)) {
             discardedFiles.push(path);
           }
@@ -359,12 +338,11 @@ export class ConversationStore {
    * one path per operation, so all three shapes are handled. Malformed arguments
    * yield no paths rather than throwing — a preview must never break a rewind.
    */
-  static #extractMutatedPaths(raw: any): string[] {
-    if (raw?.type !== 'function_call') return [];
-    const name = raw?.name;
-    if (typeof name !== 'string' || !FILE_MUTATING_TOOLS.has(name)) return [];
+  static #extractMutatedPaths(item: unknown): string[] {
+    const toolCall = normalizeRunItem(item).find((normalized) => normalized.type === 'tool_call');
+    if (!toolCall || !FILE_MUTATING_TOOLS.has(toolCall.toolName)) return [];
 
-    let args: any = raw?.arguments ?? raw?.args;
+    let args: any = toolCall.arguments;
     if (typeof args === 'string') {
       try {
         args = JSON.parse(args);

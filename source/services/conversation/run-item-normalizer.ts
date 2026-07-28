@@ -206,6 +206,13 @@ export function normalizeRunItem(item: unknown): Item[] {
     type === 'function_call_output' ||
     type === 'function_call_output_result' ||
     type === 'tool_call_output_item' ||
+    type === 'tool_result' ||
+    type === 'shell_call_output' ||
+    type === 'tool_call_output' ||
+    type === 'tool_call_result' ||
+    type === 'local_shell_call_output' ||
+    type === 'computer_call_output' ||
+    type === 'computer_call_result' ||
     type === 'apply_patch_call_output'
   )
     pushToolResultItem(normalized, item);

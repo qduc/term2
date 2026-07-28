@@ -84,6 +84,12 @@ it.each([
   'function_call_output',
   'function_call_output_result',
   'tool_call_output_item',
+  'shell_call_output',
+  'tool_call_output',
+  'tool_call_result',
+  'local_shell_call_output',
+  'computer_call_output',
+  'computer_call_result',
   'apply_patch_call_output',
 ])('normalizes supported %s tool-result spelling', (type) => {
   expect(normalizeRunItem({ type, callId: 'call-1', name: 'shell', output: 'ok' })).toEqual([
@@ -95,6 +101,12 @@ it.each([
       output: 'ok',
       providerItem: { type, callId: 'call-1', name: 'shell', output: 'ok' },
     },
+  ]);
+});
+
+it('normalizes the legacy store tool_result spelling when it has provider-style fields', () => {
+  expect(normalizeRunItem({ type: 'tool_result', callId: 'call-1', name: 'shell', output: 'ok' })).toMatchObject([
+    { type: 'tool_result', callId: 'call-1', toolName: 'shell', output: 'ok' },
   ]);
 });
 

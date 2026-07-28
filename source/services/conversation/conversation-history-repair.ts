@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import type { ToolCall, ToolResult } from '../../contracts/conversation-items.js';
+import { normalizeRunItem } from './run-item-normalizer.js';
 
 export interface ConversationHistoryRepairStats {
   count: number;
@@ -38,15 +40,23 @@ const rawItem = (item: unknown): Record<string, unknown> | null => {
   return asRecord(record.rawItem) ?? record;
 };
 
-const callIdOf = (raw: Record<string, unknown> | null): string | null => {
-  const callId = raw?.callId ?? raw?.call_id ?? raw?.tool_call_id;
-  return typeof callId === 'string' && callId ? callId : null;
-};
-
 const typeOf = (raw: Record<string, unknown> | null): string => {
   const type = raw?.type;
   return typeof type === 'string' ? type : '';
 };
+
+type CanonicalToolItem = ToolCall | ToolResult;
+
+const canonicalToolItem = (item: unknown): CanonicalToolItem | null => {
+  for (const normalized of normalizeRunItem(item)) {
+    if (normalized.type === 'tool_call' || normalized.type === 'tool_result') {
+      return normalized;
+    }
+  }
+  return null;
+};
+
+const toolSignature = (item: CanonicalToolItem): string => `call:${item.callId}:${item.type}`;
 
 const cloneHistory = (history: unknown[]): unknown[] => {
   try {
@@ -65,12 +75,13 @@ const hashString = (str: string): string => {
 };
 
 const itemSignature = (item: unknown): string => {
-  const raw = rawItem(item);
-  const callId = callIdOf(raw);
-  const type = typeOf(raw);
-  if (callId) {
-    return `call:${callId}:${type}`;
+  const toolItem = canonicalToolItem(item);
+  if (toolItem) {
+    return toolSignature(toolItem);
   }
+
+  const raw = rawItem(item);
+  const type = typeOf(raw);
 
   const id = raw?.id;
   if (typeof id === 'string' && id) {
@@ -143,17 +154,15 @@ const countDuplicatePairs = (
   const results = new Map<string, number>();
 
   for (const item of items) {
-    const raw = rawItem(item);
-    const callId = callIdOf(raw);
-    if (!callId) {
+    const toolItem = canonicalToolItem(item);
+    if (!toolItem) {
       continue;
     }
 
-    const type = typeOf(raw);
-    if (type === 'function_call') {
-      calls.set(callId, (calls.get(callId) ?? 0) + 1);
-    } else if (type === 'function_call_result') {
-      results.set(callId, (results.get(callId) ?? 0) + 1);
+    if (toolItem.type === 'tool_call') {
+      calls.set(toolItem.callId, (calls.get(toolItem.callId) ?? 0) + 1);
+    } else {
+      results.set(toolItem.callId, (results.get(toolItem.callId) ?? 0) + 1);
     }
   }
 
@@ -269,16 +278,14 @@ const repairDuplicatedToolPairs = (input: unknown[]): { history: unknown[]; repa
   const calls = new Map<string, number>();
   const results = new Map<string, number>();
   for (const item of input) {
-    const raw = rawItem(item);
-    const callId = callIdOf(raw);
-    if (!callId) {
+    const toolItem = canonicalToolItem(item);
+    if (!toolItem) {
       continue;
     }
-    const type = typeOf(raw);
-    if (type === 'function_call') {
-      calls.set(callId, (calls.get(callId) ?? 0) + 1);
-    } else if (type === 'function_call_result') {
-      results.set(callId, (results.get(callId) ?? 0) + 1);
+    if (toolItem.type === 'tool_call') {
+      calls.set(toolItem.callId, (calls.get(toolItem.callId) ?? 0) + 1);
+    } else {
+      results.set(toolItem.callId, (results.get(toolItem.callId) ?? 0) + 1);
     }
   }
 
@@ -296,29 +303,23 @@ const repairDuplicatedToolPairs = (input: unknown[]): { history: unknown[]; repa
   const keptCalls = new Set<string>();
   const keptResults = new Set<string>();
   const repaired = input.filter((item) => {
-    const raw = rawItem(item);
-    const callId = callIdOf(raw);
-    if (!callId || !duplicatedPairCallIds.has(callId)) {
+    const toolItem = canonicalToolItem(item);
+    if (!toolItem || !duplicatedPairCallIds.has(toolItem.callId)) {
       return true;
     }
 
-    const type = typeOf(raw);
-    if (type === 'function_call') {
-      if (keptCalls.has(callId)) {
+    if (toolItem.type === 'tool_call') {
+      if (keptCalls.has(toolItem.callId)) {
         return false;
       }
-      keptCalls.add(callId);
+      keptCalls.add(toolItem.callId);
       return true;
     }
 
-    if (type === 'function_call_result') {
-      if (keptResults.has(callId)) {
-        return false;
-      }
-      keptResults.add(callId);
-      return true;
+    if (keptResults.has(toolItem.callId)) {
+      return false;
     }
-
+    keptResults.add(toolItem.callId);
     return true;
   });
 

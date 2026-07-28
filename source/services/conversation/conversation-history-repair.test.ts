@@ -91,3 +91,59 @@ it('repairConversationHistory handles rawItem wrappers and camel or snake call i
   expect(result.history.length).toBe(3);
   expect(result.history.slice(1).map((item: any) => item.rawItem.id)).toEqual(['fc_1', 'fcr_1']);
 });
+
+it('repairConversationHistory makes duplicate-pair decisions equally for provider, wrapped, and canonical tool items', () => {
+  const providerHistory = [
+    { type: 'function_call', call_id: 'call-shell', id: 'fc_1', name: 'shell', arguments: '{}' },
+    { type: 'function_call_result', tool_call_id: 'call-shell', id: 'fr_1', output: 'ok' },
+    { type: 'function_call', callId: 'call-shell', id: 'fc_2', name: 'shell', arguments: '{}' },
+    { type: 'function_call_result', callId: 'call-shell', id: 'fr_2', output: 'ok' },
+  ];
+  const wrappedHistory = providerHistory.map((rawItem) => ({ rawItem }));
+  const canonicalHistory = [
+    { type: 'tool_call' as const, callId: 'call-shell', toolName: 'shell', arguments: '{}' },
+    {
+      type: 'tool_result' as const,
+      callId: 'call-shell',
+      toolName: 'shell',
+      status: 'completed' as const,
+      output: 'ok',
+    },
+    { type: 'tool_call' as const, callId: 'call-shell', toolName: 'shell', arguments: '{}' },
+    {
+      type: 'tool_result' as const,
+      callId: 'call-shell',
+      toolName: 'shell',
+      status: 'completed' as const,
+      output: 'ok',
+    },
+  ];
+
+  const results = [providerHistory, wrappedHistory, canonicalHistory].map(repairConversationHistory);
+
+  expect(results.map((result) => result.repaired)).toEqual([true, true, true]);
+  expect(results.map((result) => result.statsBefore.duplicatePairs)).toEqual([1, 1, 1]);
+  expect(results.map((result) => result.history.length)).toEqual([2, 2, 2]);
+});
+
+it('repairConversationHistory retains the original provider representation after canonical inspection', () => {
+  const replayedCall = {
+    rawItem: { type: 'function_call', call_id: 'call-shell', id: 'fc_1', name: 'shell', arguments: '{}' },
+  };
+  const replayedResult = {
+    rawItem: { type: 'function_call_result', tool_call_id: 'call-shell', id: 'fr_1', output: 'ok' },
+  };
+  const retainedCall = {
+    rawItem: { type: 'function_call', callId: 'call-shell', id: 'fc_2', name: 'shell', arguments: '{}' },
+    providerOnly: { retained: true },
+  };
+  const retainedResult = {
+    rawItem: { type: 'function_call_result', callId: 'call-shell', id: 'fr_2', output: 'ok' },
+    providerOnly: { retained: true },
+  };
+  const result = repairConversationHistory([replayedCall, replayedResult, retainedCall, retainedResult]);
+
+  expect(result.history).toEqual([retainedCall, retainedResult]);
+  expect((result.history[0] as { rawItem: { type: string } }).rawItem.type).toBe('function_call');
+  expect((result.history[1] as { rawItem: { type: string } }).rawItem.type).toBe('function_call_result');
+});

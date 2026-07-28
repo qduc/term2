@@ -681,6 +681,67 @@ it('SessionStreamProcessor.finalize() does not re-append tool call/result pairs 
   ]);
 });
 
+it('SessionStreamProcessor.finalize() dedupes equivalent wrapped, canonical, and provider result representations', () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.appendOutput([
+    {
+      rawItem: { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{}' },
+    } as unknown as AgentInputItem,
+    {
+      type: 'tool_result',
+      callId: 'call-1',
+      toolName: 'shell',
+      status: 'completed',
+      output: 'first result',
+    } as unknown as AgentInputItem,
+  ]);
+  const toolTracker = new SessionToolTracker(conversationStore);
+  const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger: {} as ConversationLogger,
+    providerContinuity,
+    generationGuard,
+    journal: makeJournal(),
+  });
+  const providerItem = {
+    rawItem: {
+      type: 'function_call_result',
+      callId: 'call-2',
+      name: 'shell',
+      output: 'second result',
+      provider_field: 'preserved',
+    },
+  };
+  const stream = makeStream([], { interruptions: [], lastResponseId: 'resp-1' });
+  (stream as any).output = [
+    { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: '{}' },
+    { type: 'function_call_output', callId: 'call-1', output: 'first result' },
+    providerItem,
+  ];
+
+  expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'continueRunStream')).toEqual({
+    kind: 'committed',
+  });
+  expect(conversationStore.getHistory()).toEqual([
+    {
+      rawItem: { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{}' },
+    },
+    {
+      type: 'tool_result',
+      callId: 'call-1',
+      toolName: 'shell',
+      status: 'completed',
+      output: 'first result',
+    },
+    providerItem,
+  ]);
+});
+
 it('SessionStreamProcessor.finalize() - stale finalization mutates neither continuity nor history and returns stale', () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);

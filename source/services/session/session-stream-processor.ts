@@ -10,7 +10,7 @@ import { createStreamAccumulator, processStreamEvents, type StreamAccumulator } 
 import { extractReplaySnapshot, extractFinalizationSnapshot, type StreamReplaySnapshot } from '../stream-snapshot.js';
 import { collectDuplicateToolCallResultPairs } from '../input-surge-guard.js';
 import { callIdOf, toolNameOf, outputOf } from '../tool-execution-ledger.js';
-import { TOOL_RESULT_ITEM_TYPES } from '../../lib/chained-input-filter.js';
+import { normalizeRunItem } from '../conversation/run-item-normalizer.js';
 import type { AgentInputItem } from '@openai/agents';
 import { GenerationGuard, type GenerationToken } from '../generation-guard.js';
 import { RepetitionDetector, RepetitiveModelOutputError } from './repetition-detector.js';
@@ -31,28 +31,15 @@ const hasConversationMessageItems = (items: unknown[]): boolean =>
   });
 
 const hasToolResultItems = (items: unknown[]): boolean =>
-  items.some((item) => {
-    const record = item && typeof item === 'object' ? (item as Record<string, unknown>) : null;
-    const raw = record?.rawItem;
-    const candidate = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : record;
-    return typeof candidate?.type === 'string' && TOOL_RESULT_ITEM_TYPES.has(candidate.type);
-  });
-
-const TOOL_ITEM_TYPES = new Set(['function_call', 'function_call_output', 'function_call_result']);
+  items.some((item) => normalizeRunItem(item).some((normalized) => normalized.type === 'tool_result'));
 
 const toolItemSignature = (item: unknown): string | null => {
-  const record = item && typeof item === 'object' ? (item as Record<string, unknown>) : null;
-  if (!record) {
-    return null;
+  for (const normalized of normalizeRunItem(item)) {
+    if (normalized.type === 'tool_call' || normalized.type === 'tool_result') {
+      return `${normalized.type}:${normalized.callId}`;
+    }
   }
-  const raw =
-    record.rawItem && typeof record.rawItem === 'object' ? (record.rawItem as Record<string, unknown>) : record;
-  const type = raw.type;
-  const callId = raw.callId ?? raw.call_id ?? raw.tool_call_id;
-  if (typeof type !== 'string' || !TOOL_ITEM_TYPES.has(type) || typeof callId !== 'string' || !callId) {
-    return null;
-  }
-  return `${type}:${callId}`;
+  return null;
 };
 
 /**
@@ -61,9 +48,11 @@ const toolItemSignature = (item: unknown): string | null => {
  * An interrupted run carries its accumulated generated items forward into every
  * later resume segment, so each `continueRunStream` finalization re-offers the
  * pairs from all earlier segments. Appending them unfiltered grows history
- * quadratically until the input surge guard blocks the turn. A `type:callId`
- * pair is unique within a conversation, so an item already present is a replay,
- * not new output. Non-tool items (messages, reasoning) are never filtered.
+ * quadratically until the input surge guard blocks the turn. A canonical
+ * tool-kind/call-id pair is unique within a conversation, so equivalent SDK,
+ * provider, and domain representations share an identity. An item already
+ * present is a replay, not new output. Non-tool items are never filtered, and
+ * kept items retain their original provider representation.
  */
 const dropAlreadyCommittedToolItems = (
   items: readonly unknown[],

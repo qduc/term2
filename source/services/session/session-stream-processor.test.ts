@@ -623,6 +623,64 @@ it('SessionStreamProcessor.finalize() appends tool results in full-history mode 
   });
 });
 
+it('SessionStreamProcessor.finalize() does not re-append tool call/result pairs already in history across resumes', () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.addUserMessage('Run the tools');
+
+  const toolTracker = new SessionToolTracker(conversationStore);
+  const conversationLogger = {} as unknown as ConversationLogger;
+  const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger,
+    providerContinuity,
+    generationGuard,
+    journal: makeJournal(),
+  });
+
+  // Each approval resume carries the whole run's generated items forward, so
+  // the pairs from earlier segments reappear in every later stream output.
+  const pair = (callId: string) => [
+    { type: 'function_call', callId, name: 'shell', arguments: '{}' },
+    { type: 'function_call_output', callId, output: `result for ${callId}` },
+  ];
+
+  const resumeSegments = [
+    [...pair('call-1')],
+    [...pair('call-1'), ...pair('call-2')],
+    [...pair('call-1'), ...pair('call-2'), ...pair('call-3')],
+  ];
+
+  for (const segment of resumeSegments) {
+    const token = generationGuard.capture();
+    const stream = makeStream([], { interruptions: [], lastResponseId: 'resp-1' });
+    (stream as any).history = segment;
+    (stream as any).output = segment;
+    (stream as any).newItems = segment;
+
+    expect(processor.finalize(stream, token, 'full_history', 'continueRunStream')).toEqual({ kind: 'committed' });
+  }
+
+  const committedCallIds = conversationStore
+    .getHistory()
+    .filter((item: any) => item.type === 'function_call' || item.type === 'function_call_output')
+    .map((item: any) => `${item.type}:${item.callId}`);
+
+  expect(committedCallIds).toEqual([
+    'function_call:call-1',
+    'function_call_output:call-1',
+    'function_call:call-2',
+    'function_call_output:call-2',
+    'function_call:call-3',
+    'function_call_output:call-3',
+  ]);
+});
+
 it('SessionStreamProcessor.finalize() - stale finalization mutates neither continuity nor history and returns stale', () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);

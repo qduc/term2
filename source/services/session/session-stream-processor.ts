@@ -38,6 +38,62 @@ const hasToolResultItems = (items: unknown[]): boolean =>
     return typeof candidate?.type === 'string' && TOOL_RESULT_ITEM_TYPES.has(candidate.type);
   });
 
+const TOOL_ITEM_TYPES = new Set(['function_call', 'function_call_output', 'function_call_result']);
+
+const toolItemSignature = (item: unknown): string | null => {
+  const record = item && typeof item === 'object' ? (item as Record<string, unknown>) : null;
+  if (!record) {
+    return null;
+  }
+  const raw =
+    record.rawItem && typeof record.rawItem === 'object' ? (record.rawItem as Record<string, unknown>) : record;
+  const type = raw.type;
+  const callId = raw.callId ?? raw.call_id ?? raw.tool_call_id;
+  if (typeof type !== 'string' || !TOOL_ITEM_TYPES.has(type) || typeof callId !== 'string' || !callId) {
+    return null;
+  }
+  return `${type}:${callId}`;
+};
+
+/**
+ * Drops tool call/result items the store already holds.
+ *
+ * An interrupted run carries its accumulated generated items forward into every
+ * later resume segment, so each `continueRunStream` finalization re-offers the
+ * pairs from all earlier segments. Appending them unfiltered grows history
+ * quadratically until the input surge guard blocks the turn. A `type:callId`
+ * pair is unique within a conversation, so an item already present is a replay,
+ * not new output. Non-tool items (messages, reasoning) are never filtered.
+ */
+const dropAlreadyCommittedToolItems = (
+  items: readonly unknown[],
+  existingHistory: readonly unknown[],
+): { kept: unknown[]; droppedSignatures: string[] } => {
+  const committed = new Set<string>();
+  for (const item of existingHistory) {
+    const signature = toolItemSignature(item);
+    if (signature) {
+      committed.add(signature);
+    }
+  }
+
+  const kept: unknown[] = [];
+  const droppedSignatures: string[] = [];
+  for (const item of items) {
+    const signature = toolItemSignature(item);
+    if (signature && committed.has(signature)) {
+      droppedSignatures.push(signature);
+      continue;
+    }
+    if (signature) {
+      committed.add(signature);
+    }
+    kept.push(item);
+  }
+
+  return { kept, droppedSignatures };
+};
+
 const warnIfStreamHistoryReplayedTools = ({
   logger,
   sessionId,
@@ -250,10 +306,32 @@ export class SessionStreamProcessor {
         source,
         snapshot: extractReplaySnapshot(stream),
       });
+      const appendWithoutReplayedTools = (items: unknown[]): void => {
+        const { kept, droppedSignatures } = dropAlreadyCommittedToolItems(
+          items,
+          this.deps.conversationStore.getHistory(),
+        );
+        if (droppedSignatures.length > 0) {
+          this.deps.logger.warn('Dropped replayed tool call/result items before committing stream history', {
+            eventType: 'conversation.stream_history.replay_dropped',
+            category: 'provider',
+            phase: 'post_stream',
+            sessionId: this.deps.sessionId,
+            traceId: this.deps.logger.getCorrelationId(),
+            source,
+            inputMode,
+            offeredCount: items.length,
+            droppedCount: droppedSignatures.length,
+            droppedSignatures,
+          });
+        }
+        this.deps.conversationStore.appendOutput(kept as AgentInputItem[]);
+      };
+
       const terminal = !stream.interruptions || stream.interruptions.length === 0;
       if (terminal) {
         if (inputMode === 'delta') {
-          this.deps.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
+          appendWithoutReplayedTools(snapshot.output);
         } else {
           // In full-history mode, prefer message-bearing incremental items so we
           // preserve assistant text that SDK history reconstruction may strip.
@@ -263,13 +341,13 @@ export class SessionStreamProcessor {
           // output contains tool results, append those so retry and subsequent
           // turns can see the new tool output.
           if (hasConversationMessageItems(snapshot.output)) {
-            this.deps.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
+            appendWithoutReplayedTools(snapshot.output);
           } else if (hasConversationMessageItems(snapshot.newItems)) {
-            this.deps.conversationStore.appendOutput(snapshot.newItems as AgentInputItem[]);
+            appendWithoutReplayedTools(snapshot.newItems);
           } else if (hasConversationMessageItems(snapshot.history)) {
             this.deps.conversationStore.replaceHistory(snapshot.history as AgentInputItem[]);
           } else if (hasToolResultItems(snapshot.output)) {
-            this.deps.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
+            appendWithoutReplayedTools(snapshot.output);
           }
         }
         result = { kind: 'committed' };

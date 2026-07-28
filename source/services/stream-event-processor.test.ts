@@ -110,6 +110,115 @@ it('emits tool_started for function_call run_item_stream_event', async () => {
   expect(toolStarted.arguments).toEqual({ command: 'ls' });
 });
 
+it('interprets wrapped, direct, and canonical tool calls identically while preserving hook inputs', async () => {
+  const items = [
+    {
+      rawItem: {
+        type: 'function_call',
+        callId: 'call-wrapped',
+        name: 'shell',
+        arguments: JSON.stringify({ command: 'wrapped' }),
+      },
+    },
+    {
+      type: 'function_call',
+      call_id: 'call-direct',
+      name: 'shell',
+      arguments: JSON.stringify({ command: 'direct' }),
+    },
+    {
+      type: 'tool_call',
+      callId: 'call-canonical',
+      toolName: 'shell',
+      arguments: { command: 'canonical' },
+    },
+  ];
+  const seenRunItems: unknown[] = [];
+  const seenCallItems: unknown[] = [];
+  const opts: StreamProcessorOptions = {
+    ...baseOpts(),
+    onRunItem: (item) => seenRunItems.push(item),
+    onFunctionCallItem: (item) => seenCallItems.push(item),
+  };
+  const events: any[] = [];
+
+  for await (const event of processStreamEvents(
+    makeStream(items.map((item) => ({ type: 'run_item_stream_event', item }))),
+    createStreamAccumulator(),
+    opts,
+    baseDeps(),
+  )) {
+    events.push(event);
+  }
+
+  expect(events.filter(({ type }) => type === 'tool_started')).toEqual([
+    { type: 'tool_started', toolCallId: 'call-wrapped', toolName: 'shell', arguments: { command: 'wrapped' } },
+    { type: 'tool_started', toolCallId: 'call-direct', toolName: 'shell', arguments: { command: 'direct' } },
+    {
+      type: 'tool_started',
+      toolCallId: 'call-canonical',
+      toolName: 'shell',
+      arguments: { command: 'canonical' },
+    },
+  ]);
+  expect(seenRunItems).toEqual(items);
+  expect(seenCallItems).toEqual(items);
+  expect(seenCallItems[0]).toBe(items[0]);
+  expect(seenCallItems[1]).toBe(items[1]);
+  expect(seenCallItems[2]).toBe(items[2]);
+});
+
+it('dispatches normalized tool results while preserving each original result item', async () => {
+  const items = [
+    { rawItem: { type: 'function_call_result', callId: 'call-1', name: 'shell', output: 'one' } },
+    { type: 'function_call_output', call_id: 'call-2', output: 'two' },
+    { type: 'function_call_output_result', tool_call_id: 'call-3', output: 'three' },
+    { type: 'tool_call_output_item', callId: 'call-4', output: 'four' },
+    {
+      type: 'tool_result',
+      callId: 'call-5',
+      toolName: 'shell',
+      status: 'completed',
+      output: 'five',
+    },
+  ];
+  const seenResults: unknown[] = [];
+  const opts: StreamProcessorOptions = {
+    ...baseOpts(),
+    onFunctionResultItem: (item) => seenResults.push(item),
+  };
+
+  for await (const _ of processStreamEvents(
+    makeStream(items.map((item) => ({ type: 'run_item_stream_event', item }))),
+    createStreamAccumulator(),
+    opts,
+    baseDeps(),
+  )) {
+    void _;
+  }
+
+  expect(seenResults).toEqual(items);
+  items.forEach((item, index) => expect(seenResults[index]).toBe(item));
+});
+
+it('does not invent a tool_started identity when a provider function call has no call ID', async () => {
+  const item = { rawItem: { type: 'function_call', name: 'shell', arguments: '{}' } };
+  const seenCalls: unknown[] = [];
+  const events: any[] = [];
+
+  for await (const event of processStreamEvents(
+    makeStream([{ type: 'run_item_stream_event', item }]),
+    createStreamAccumulator(),
+    { ...baseOpts(), onFunctionCallItem: (seen) => seenCalls.push(seen) },
+    baseDeps(),
+  )) {
+    events.push(event);
+  }
+
+  expect(seenCalls).toEqual([item]);
+  expect(events.some(({ type }) => type === 'tool_started')).toBe(false);
+});
+
 it('emits one tool_started for duplicate function_call events with the same callId', async () => {
   const functionCall = {
     type: 'run_item_stream_event',

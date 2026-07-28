@@ -27,6 +27,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step B representation slice | `contracts/conversation-items.ts` owns canonical `Item`, `Turn`, `ToolCall`, and related serializable shapes; `Approval` aliases `ApprovalDescriptor`; legacy persisted names alias those contracts; `run-item-normalizer.ts` contains raw SDK/provider item normalization while replay remains provider-facing |
 | Step B journal slice | `AssistantTurnJournal` deduplicates normalized canonical item groups; it no longer inspects `rawItem`, and wrapped/direct tool items share one identity |
 | Step B stream-finalization slice | Resume replay deduplication and tool-result detection use canonical tool identities while preserving original provider items in conversation history |
+| Step B stream-event slice | Run-item tool lifecycle interpretation uses canonical calls/results while journal and recovery hooks retain the original provider items |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -519,6 +520,12 @@ detection in `SessionStreamProcessor` now normalize through the canonical item b
 inspecting `rawItem`, provider result type spellings, or call-ID field variants. Equivalent wrapped,
 direct-provider, and canonical tool representations share one identity. Items that survive the
 filter retain their original provider representation in conversation history.
+
+**Step B stream-event slice.** `run_item_stream_event` tool lifecycle interpretation now uses
+canonical tool calls and results for `tool_started`, argument diagnostics, and recovery-hook
+dispatch. Wrapped SDK items, direct provider items, and canonical items behave identically, while
+generic journal and function call/result hooks continue receiving the original item object for
+provider-facing persistence and replay.
 
 ### Step C — Own the run loop
 Contained, because downstream already speaks our language.

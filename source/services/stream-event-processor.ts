@@ -7,6 +7,7 @@ import type { ILoggingService } from './service-interfaces.js';
 import { extractUsage, mergeUsage, normalizeAgentRunUsage, type NormalizedUsage } from '../utils/ai/token-usage.js';
 import { extractReasoningDelta, extractTextDelta } from './stream-event-parsing.js';
 import { captureToolCallArguments, emitCommandMessagesFromItems } from './command-message-streaming.js';
+import { normalizeRunItem } from './conversation/run-item-normalizer.js';
 import { createInvalidToolCallDiagnostic } from './logging/logging-contract.js';
 import { asRecord, getString } from './interruption-info.js';
 import { parseToolCallArguments } from './tool-call-arguments.js';
@@ -349,7 +350,6 @@ export async function* processStreamEvents(
 
     if (eventType === 'run_item_stream_event') {
       const eventItem = event?.item;
-      const eventItemRecord = asRecord(eventItem);
       captureToolCallArguments(eventItem, toolCallArgumentsById);
 
       // Generic journal hook: every raw run item (function call, tool result,
@@ -357,40 +357,33 @@ export async function* processStreamEvents(
       // it can be replayed on resume after a crash.
       opts.onRunItem?.(eventItem);
 
-      const rawItem = asRecord(eventItemRecord?.rawItem) ?? eventItemRecord;
-      if (getString(rawItem, 'type') === 'function_call') {
+      const normalizedItems = normalizeRunItem(eventItem);
+      const toolCall = normalizedItems.find((item) => item.type === 'tool_call');
+      if (toolCall?.type === 'tool_call') {
         opts.onFunctionCallItem?.(eventItem);
-        const callId =
-          getString(rawItem, 'callId') ??
-          getString(rawItem, 'call_id') ??
-          getString(rawItem, 'tool_call_id') ??
-          getString(rawItem, 'toolCallId') ??
-          getString(rawItem, 'id');
-        if (callId) {
-          const toolName = getString(rawItem, 'name') ?? getString(eventItemRecord, 'name');
-          const args = rawItem?.arguments ?? rawItem?.args ?? eventItemRecord?.arguments ?? eventItemRecord?.args;
-
+        const { callId, toolName, arguments: args } = toolCall;
+        if (callId !== 'unknown-call') {
           const parseResult = parseToolCallArguments(args, {
-            callId: String(callId),
-            toolName: toolName ?? 'unknown',
+            callId,
+            toolName,
             sessionId,
             traceId: logger.getCorrelationId() ?? 'trace-unknown',
           });
 
-          if (parseResult.invalidJsonDiagnostic && !emittedInvalidToolCallPackets.has(String(callId))) {
-            emittedInvalidToolCallPackets.add(String(callId));
+          if (parseResult.invalidJsonDiagnostic && !emittedInvalidToolCallPackets.has(callId)) {
+            emittedInvalidToolCallPackets.add(callId);
             const diagnostic = createInvalidToolCallDiagnostic(parseResult.invalidJsonDiagnostic);
             logger.error('Invalid tool call argument payload', {
               ...diagnostic,
               sessionId,
-              messageId: String(callId),
+              messageId: callId,
             });
           }
 
           yield {
             type: 'tool_started' as const,
             toolCallId: callId,
-            toolName: toolName ?? 'unknown',
+            toolName,
             arguments: parseResult.arguments,
           };
 
@@ -400,20 +393,14 @@ export async function* processStreamEvents(
             phase: 'execution',
             sessionId,
             traceId: logger.getCorrelationId(),
-            toolName: toolName ?? 'unknown',
-            toolCallId: String(callId),
-            messageId: String(callId),
+            toolName,
+            toolCallId: callId,
+            messageId: callId,
           });
         }
       }
 
-      const rawItemType = getString(rawItem, 'type');
-      if (
-        rawItemType === 'function_call_result' ||
-        rawItemType === 'function_call_output' ||
-        rawItemType === 'function_call_output_result' ||
-        rawItemType === 'tool_call_output_item'
-      ) {
+      if (normalizedItems.some((item) => item.type === 'tool_result')) {
         opts.onFunctionResultItem?.(eventItem);
       }
 

@@ -4,6 +4,7 @@ import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
 import { trimOutput } from '../../utils/output/output-trim.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { getSessionIdFromToolContext, sessionReadAccess } from '../../services/approval/session-read-access.js';
+import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
 
 const READ_FILE_DESCRIPTION =
@@ -77,9 +78,11 @@ export const createReadFileToolDefinition = (
     executionContext?: ExecutionContext;
     allowOutsideWorkspace?: boolean;
     orchestratorMode?: boolean;
+    /** Root clients receive this handle-owned capability. */
+    sessionAccess?: SessionAccessState;
   } = {},
 ): ToolDefinition<ReadFileToolParams> => {
-  const { executionContext, allowOutsideWorkspace = false, orchestratorMode = false } = deps;
+  const { executionContext, allowOutsideWorkspace = false, orchestratorMode = false, sessionAccess } = deps;
   return {
     name: 'read_file',
     description: orchestratorMode
@@ -97,7 +100,12 @@ export const createReadFileToolDefinition = (
         const cwd = executionContext?.getCwd() || process.cwd();
         const resolvedPath = resolveWorkspacePath(params.path, cwd, { allowOutsideWorkspace: true });
         const sessionId = getSessionIdFromToolContext(context);
-        if (sessionId && sessionReadAccess.allows(sessionId, resolvedPath, cwd)) {
+        if (sessionAccess?.allowsRead(resolvedPath, cwd)) {
+          return false;
+        }
+        // Nested compatibility tools deliberately retain their established
+        // session-id path; root tools are constructed with sessionAccess.
+        if (!sessionAccess && sessionId && sessionReadAccess.allows(sessionId, resolvedPath, cwd)) {
           return false;
         }
 

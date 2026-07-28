@@ -2,11 +2,14 @@ import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { PostExecutePendingRegistry } from './post-execute-pending-registry.js';
 import { PostExecutePauseCapability } from './post-execute-pause-capability.js';
+import { SessionAccessState } from './session-access-state.js';
+import type { ISettingsService } from '../service-interfaces.js';
 
 /** A client whose lifetime is owned by the session that requested it. */
 export type SessionClientHandle = {
   readonly agentClient: ConversationAgentClient;
   readonly toolOwnership: ToolOwnershipRegistry;
+  readonly access?: SessionAccessState;
   readonly postExecutePending?: PostExecutePendingRegistry;
   readonly postExecutePauseCapability?: PostExecutePauseCapability;
   /** Idempotently release resources captured by this session's client. */
@@ -26,22 +29,26 @@ type DisposableConversationAgentClient = ConversationAgentClient & { dispose?: (
  * client or its subscriptions.
  */
 export function createOwnedSessionClientFactory(
+  settings: ISettingsService,
   createClient: (
     sessionId: string,
     toolOwnership: ToolOwnershipRegistry,
     postExecutePauseCapability: PostExecutePauseCapability,
+    access: SessionAccessState,
   ) => DisposableConversationAgentClient,
 ): SessionClientFactory {
   return {
     create(sessionId) {
       const toolOwnership = new ToolOwnershipRegistry();
+      const access = new SessionAccessState(settings);
       const postExecutePending = new PostExecutePendingRegistry({ sessionId, epoch: crypto.randomUUID() });
       const postExecutePauseCapability = new PostExecutePauseCapability(postExecutePending);
-      const agentClient = createClient(sessionId, toolOwnership, postExecutePauseCapability);
+      const agentClient = createClient(sessionId, toolOwnership, postExecutePauseCapability, access);
       let disposed = false;
       return {
         agentClient,
         toolOwnership,
+        access,
         postExecutePending,
         postExecutePauseCapability,
         dispose() {
@@ -51,6 +58,7 @@ export function createOwnedSessionClientFactory(
           postExecutePauseCapability.setActiveRunId(null);
           postExecutePending.close();
           toolOwnership.clear();
+          access.dispose();
         },
       };
     },

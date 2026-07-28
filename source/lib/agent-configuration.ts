@@ -11,6 +11,7 @@ import { createEditorImpl } from './editor-impl.js';
 import { getProvider } from '../providers/index.js';
 import { SkillsService } from '../services/skills/skills-service.js';
 import type { PostExecutePauseCapability } from '../tools/types.js';
+import type { SessionAccessState } from '../services/session/session-access-state.js';
 
 /** Narrow capability interface consumed by AgentRunOrchestrator and AgentChatService. */
 export interface AgentSource {
@@ -32,6 +33,7 @@ export interface AgentConfigurationDeps {
   onConfigChanged?: (changedKey?: string) => void;
   skillsService?: SkillsService;
   postExecutePauseCapability?: PostExecutePauseCapability;
+  sessionAccess?: SessionAccessState;
 }
 
 export class AgentConfiguration implements AgentSource {
@@ -56,6 +58,7 @@ export class AgentConfiguration implements AgentSource {
   #serviceTierOverrideForNextRequest: 'standard' | null = null;
   #skillsService?: SkillsService;
   #postExecutePauseCapability?: PostExecutePauseCapability;
+  #sessionAccess?: SessionAccessState;
   #unsubscribeSettings: (() => void) | null = null;
   #isDisposed = false;
 
@@ -79,6 +82,7 @@ export class AgentConfiguration implements AgentSource {
     this.#onConfigChanged = deps.onConfigChanged;
     this.#skillsService = deps.skillsService;
     this.#postExecutePauseCapability = deps.postExecutePauseCapability;
+    this.#sessionAccess = deps.sessionAccess;
 
     // Create editor
     this.#editor = createEditorImpl({
@@ -163,6 +167,7 @@ export class AgentConfiguration implements AgentSource {
         },
       }),
       postExecutePauseCapability: this.#postExecutePauseCapability,
+      sessionAccess: this.#sessionAccess,
     };
   }
 

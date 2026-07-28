@@ -25,6 +25,7 @@ import { getModelDefaultReasoningLevel } from '../services/model-service.js';
 import { toolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
 import type { PostExecutePauseCapability, ToolDefinition } from '../tools/types.js';
+import type { SessionAccessState } from '../services/session/session-access-state.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
@@ -47,6 +48,8 @@ export interface AgentFactoryDeps {
   getAgentRuntime?: () => Pick<AgentRuntime, 'agent'> | null;
   /** Root-session-only policy capability for explicitly opted-in definitions. */
   postExecutePauseCapability?: PostExecutePauseCapability;
+  /** Handle-owned state for root read and Docker capabilities. */
+  sessionAccess?: SessionAccessState;
 }
 
 export interface AgentBuildResult {
@@ -319,6 +322,7 @@ export function buildAgent(
       skillsService: deps.skillsService,
       agentRuntime: deps.getAgentRuntime?.() ?? null,
       postExecuteDeniedRead: Boolean(deps.postExecutePauseCapability),
+      sessionAccess: deps.sessionAccess,
     },
     resolvedModel,
   );

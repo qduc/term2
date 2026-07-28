@@ -56,6 +56,7 @@ import {
   hasDockerHostControlProject,
   hasDockerHostControlSession,
 } from '../../utils/shell/sandbox/docker-host-control-grants.js';
+import type { SessionAccessState } from '../../services/session/session-access-state.js';
 
 const shellSandboxModeSchema = z.enum(['default', 'unsandboxed']).optional().default('default');
 
@@ -265,6 +266,8 @@ export function createShellToolDefinition(deps: {
   searchViaShell?: boolean;
   /** Root-only: pause denied reads through the application-owned post-execute seam. */
   postExecuteDeniedRead?: boolean;
+  /** Root clients receive this handle-owned Docker capability. */
+  sessionAccess?: SessionAccessState;
 }): ToolDefinition<ShellToolParams> {
   const {
     loggingService,
@@ -277,6 +280,7 @@ export function createShellToolDefinition(deps: {
     orchestratorMode = false,
     searchViaShell: searchViaShellExplicit,
     postExecuteDeniedRead = false,
+    sessionAccess,
   } = deps;
   const deniedReadByCallId = new Map<string, DeniedReadInfo>();
   const overrideByCallId = new Map<string, { extraAllowRead?: string[]; forceUnsandboxed?: boolean }>();
@@ -316,11 +320,16 @@ export function createShellToolDefinition(deps: {
         const sessionId = getConversationSessionId(context);
         const sandboxEnabled = isSandboxEnabled();
         const dockerHostControlRequested =
-          sandboxEnabled && requiresDockerHostControlApproval(sessionId, params.command);
+          sandboxEnabled &&
+          (sessionAccess
+            ? sessionAccess.requiresDockerApproval(params.command)
+            : requiresDockerHostControlApproval(sessionId, params.command));
         if (
           dockerHostControlRequested &&
-          !hasDockerHostControlProject(cwd) &&
-          (!sessionId || !hasDockerHostControlSession(sessionId, cwd))
+          !(sessionAccess ? sessionAccess.hasDockerProject(cwd) : hasDockerHostControlProject(cwd)) &&
+          !(sessionAccess
+            ? sessionAccess.hasDockerSessionGrant(cwd)
+            : sessionId && hasDockerHostControlSession(sessionId, cwd))
         ) {
           return true;
         }
@@ -363,12 +372,18 @@ export function createShellToolDefinition(deps: {
       const cwd = executionContext?.getCwd() || process.cwd();
       const sessionId = getConversationSessionId(_context);
       const sandboxEnabled = isSandboxEnabled();
-      const dockerHostControlRequested = sandboxEnabled && requiresDockerHostControlApproval(sessionId, command);
+      const dockerHostControlRequested =
+        sandboxEnabled &&
+        (sessionAccess
+          ? sessionAccess.requiresDockerApproval(command)
+          : requiresDockerHostControlApproval(sessionId, command));
       const hasDockerGrant =
         dockerHostControlRequested &&
-        (hasDockerHostControlProject(cwd) ||
-          (sessionId &&
-            (hasDockerHostControlSession(sessionId, cwd) || consumeDockerHostControlOnce(sessionId, command))));
+        (sessionAccess
+          ? sessionAccess.hasDockerGrant(command, cwd)
+          : hasDockerHostControlProject(cwd) ||
+            (sessionId &&
+              (hasDockerHostControlSession(sessionId, cwd) || consumeDockerHostControlOnce(sessionId, command))));
       if (dockerHostControlRequested && !hasDockerGrant) {
         return 'Error: Docker host control requires explicit approval.';
       }
@@ -447,7 +462,8 @@ export function createShellToolDefinition(deps: {
             dockerHostControl = dockerHostControlFactory();
             // The run that uses the approval settles the pending block, so a
             // later run of the same command is judged on its own.
-            consumeDockerHostControlDenial(sessionId, command);
+            if (sessionAccess) sessionAccess.consumeDockerDenial(command);
+            else consumeDockerHostControlDenial(sessionId, command);
             loggingService.security('Docker host-control capability granted for shell command', {
               command: optimizedCommand.substring(0, 100),
               cwd,
@@ -541,7 +557,8 @@ export function createShellToolDefinition(deps: {
         if (sandboxFailure?.type === 'docker_blocked') {
           // Keyed by the command the model passed, because that is what the
           // approval flow and the retry will present.
-          recordDockerHostControlDenial(sessionId, command);
+          if (sessionAccess) sessionAccess.recordDockerDenial(command);
+          else recordDockerHostControlDenial(sessionId, command);
           loggingService.security('Sandbox blocked Docker daemon access; agent retry will prompt for approval', {
             confidence: sandboxFailure.confidence,
             command: command.substring(0, 100),

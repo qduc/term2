@@ -335,6 +335,9 @@ export class ExecutionSubagentRunner {
       // Release the child slot
       childSlot?.release();
       runtime.dispose();
+      // This client is created for exactly one execution. State has already
+      // been transferred above, so release its subscriptions/bridge now.
+      (subClient as { dispose?: () => void }).dispose?.();
     }
 
     const diffStat = buildDiffStat(filesChanged, diffDeltas);

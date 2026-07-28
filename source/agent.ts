@@ -1,5 +1,6 @@
 import { createGrepToolDefinition } from './tools/file/grep.js';
 import { createReadFileToolDefinition } from './tools/file/read-file.js';
+import type { SessionAccessState } from './services/session/session-access-state.js';
 import { createFindFilesToolDefinition } from './tools/file/glob.js';
 import { createSearchReplaceToolDefinition } from './tools/file/search-replace.js';
 import { createApplyPatchToolDefinition } from './tools/file/apply-patch.js';
@@ -148,6 +149,7 @@ export const getAgentDefinition = (
     skillsService?: SkillsService;
     agentRuntime?: Pick<AgentRuntime, 'agent'> | null;
     postExecuteDeniedRead?: boolean;
+    sessionAccess?: SessionAccessState;
   },
   model?: string,
 ): AgentDefinition => {
@@ -166,6 +168,7 @@ export const getAgentDefinition = (
     skillsService,
     agentRuntime,
     postExecuteDeniedRead = false,
+    sessionAccess,
   } = deps;
   const defaultModel = settingsService.get<string>('agent.model');
   const resolvedModel = model?.trim() || defaultModel;
@@ -309,6 +312,7 @@ export const getAgentDefinition = (
       executionContext,
       searchViaShell,
       postExecuteDeniedRead,
+      sessionAccess,
     }),
     createWebSearchToolDefinition({
       settingsService,
@@ -378,7 +382,7 @@ export const getAgentDefinition = (
         );
       }
       tools.push(
-        createReadFileToolDefinition({ executionContext }),
+        createReadFileToolDefinition({ executionContext, sessionAccess }),
         createCreateFileToolDefinition({
           settingsService,
           loggingService,

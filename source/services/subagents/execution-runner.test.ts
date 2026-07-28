@@ -45,11 +45,16 @@ const definition = {
 const makeRunner = (events: any[]) => {
   stream.events = events;
   const received: any[] = [];
+  const clients: Array<{ dispose: ReturnType<typeof vi.fn> }> = [];
   const runner = new ExecutionSubagentRunner({
     logger: createMockLogger(),
     settings: createMockSettings(),
     sessionContextService: createSessionContextService(),
-    createClient: () => ({} as any),
+    createClient: () => {
+      const client = { dispose: vi.fn() };
+      clients.push(client);
+      return client as any;
+    },
     toolFactory: {
       buildToolDefinitions: () => [],
       buildAgentTools: () => [],
@@ -57,7 +62,7 @@ const makeRunner = (events: any[]) => {
     onEvent: (event) => received.push(event),
     toolOwnership: new ToolOwnershipRegistry(),
   });
-  return { runner, received };
+  return { runner, received, clients };
 };
 
 beforeEach(() => {
@@ -145,5 +150,13 @@ describe('ExecutionSubagentRunner text-turn peek events', () => {
     expect(result.finalText).toBe(fullText);
     expect(result.finalTextTruncated).toBeUndefined();
     expect(result.finalTextArtifactPath).toBeUndefined();
+  });
+
+  it('disposes its transient client after transferring session state', async () => {
+    const { runner, clients } = makeRunner([{ type: 'final', finalText: 'Done.' }]);
+
+    await runner.run('run-1', { role: 'explorer', task: 'inspect' }, definition);
+
+    expect(clients[0]?.dispose).toHaveBeenCalledTimes(1);
   });
 });

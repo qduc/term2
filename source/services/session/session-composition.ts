@@ -8,7 +8,6 @@ import {
   DelegatingShellAutoApprovalResolver,
 } from '../approval/shell-auto-approval-resolver.js';
 import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
-import { sessionReadAccess } from '../approval/session-read-access.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { ConversationLogger } from '../logging/conversation-logger.js';
 import type { AssistantTurnState, LogEvent } from '../logging/conversation-log-events.js';
@@ -40,7 +39,6 @@ import { InitialInputPreparer } from './initial-input-preparer.js';
 import { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
 import { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
 import { SessionContinuityReset } from './session-continuity-reset.js';
-import { clearDockerHostControlSession } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 import {
   SubagentNotificationStore,
   type BackgroundSubagentNotificationPort,
@@ -54,6 +52,7 @@ import {
   type PostExecutePendingSnapshot,
 } from './post-execute-pending-registry.js';
 import type { PostExecutePauseCapability } from './post-execute-pause-capability.js';
+import type { SessionAccessState } from './session-access-state.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
   value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
@@ -134,6 +133,7 @@ export type CreateSessionRuntimeInternalsOptions = {
   toolOwnership: ToolOwnershipRegistry;
   postExecutePending?: PostExecutePendingRegistry;
   postExecutePauseCapability?: PostExecutePauseCapability;
+  sessionAccess?: SessionAccessState;
   askUserAnswerSink?: AskUserAnswerSink | null;
   subagentEventSinkHost?: SubagentEventSinkHost | null;
   deps: {
@@ -242,6 +242,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     toolOwnership,
     postExecutePending: suppliedPostExecutePending,
     postExecutePauseCapability,
+    sessionAccess,
     askUserAnswerSink,
     subagentEventSinkHost,
     deps,
@@ -364,6 +365,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     toolTracker,
     generationGuard,
     toolOwnership,
+    sessionAccess,
   });
 
   const continuityReset = new SessionContinuityReset({
@@ -540,8 +542,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     taskObserver = null;
     resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(null);
     providerContinuity.clear();
-    sessionReadAccess.clear(id);
-    clearDockerHostControlSession(id);
   };
 
   return {

@@ -27,6 +27,7 @@ import {
   grantDockerHostControl,
 } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 import { isDockerHostControlShellApproval } from './shell-sandbox-approval.js';
+import type { SessionAccessState } from '../session/session-access-state.js';
 
 export interface ApprovalFlowCoordinatorDeps {
   agentClient: ConversationAgentClient;
@@ -37,6 +38,8 @@ export interface ApprovalFlowCoordinatorDeps {
   generationGuard: GenerationGuard;
   /** Session-owned registry shared with nested subagent runners. */
   toolOwnership: ToolOwnershipRegistry;
+  /** Handle-owned root capability; omitted only by nested compatibility fixtures. */
+  sessionAccess?: SessionAccessState;
 }
 
 export interface AbortResolutionPlan {
@@ -172,7 +175,8 @@ export class ApprovalFlowCoordinator {
       });
       const requestedPath = (parsedReadArgs.arguments as { path?: unknown } | null)?.path;
       if (typeof requestedPath === 'string' && requestedPath.length > 0) {
-        sessionReadAccess.allowFolder(this.deps.sessionId, path.dirname(requestedPath));
+        if (this.deps.sessionAccess) this.deps.sessionAccess.allowReadFolder(path.dirname(requestedPath));
+        else sessionReadAccess.allowFolder(this.deps.sessionId, path.dirname(requestedPath));
         allowReadFolderForSession = true;
       }
     }
@@ -220,7 +224,9 @@ export class ApprovalFlowCoordinator {
         const cwd = typeof parsedDecisionArgs.cwd === 'string' ? parsedDecisionArgs.cwd : process.cwd();
         const scope =
           answer === 'docker-allow-once' ? 'once' : answer === 'docker-allow-session' ? 'session' : 'project';
-        grantDockerHostControl({ command: parsedDecisionArgs.command, cwd, scope, sessionId: this.deps.sessionId });
+        if (this.deps.sessionAccess) this.deps.sessionAccess.grantDocker(parsedDecisionArgs.command, cwd, scope);
+        else
+          grantDockerHostControl({ command: parsedDecisionArgs.command, cwd, scope, sessionId: this.deps.sessionId });
         // The pending block is left in place deliberately: for an indirect
         // invocation it is the only thing that tells `execute` this command
         // needs host control. `execute` consumes it when it creates the control.
@@ -285,7 +291,8 @@ export class ApprovalFlowCoordinator {
       // A refused Docker request is settled: drop the pending block so the same
       // command runs sandboxed again instead of stalling on approval forever.
       if (isDockerRequest && typeof parsedDecisionArgs?.command === 'string') {
-        consumeDockerHostControlDenial(this.deps.sessionId, parsedDecisionArgs.command);
+        if (this.deps.sessionAccess) this.deps.sessionAccess.consumeDockerDenial(parsedDecisionArgs.command);
+        else consumeDockerHostControlDenial(this.deps.sessionId, parsedDecisionArgs.command);
       }
 
       markToolCallAsApprovalRejection(expectedCallId);

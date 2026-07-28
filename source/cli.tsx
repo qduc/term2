@@ -541,7 +541,8 @@ skillsService.discoverSkills();
 const terminalTitleBase = buildProjectFolderTitle(executionContext.getCwd());
 
 const sessionClientFactory = createOwnedSessionClientFactory(
-  (_sessionId, toolOwnership, postExecutePauseCapability) => {
+  settings,
+  (_sessionId, toolOwnership, postExecutePauseCapability, access) => {
     const agentClient = new AgentClient({
       model: settings.get('agent.model'),
       reasoningEffort: settings.get('agent.reasoningEffort') as ModelSettingsReasoningEffort,
@@ -556,6 +557,7 @@ const sessionClientFactory = createOwnedSessionClientFactory(
       },
       toolOwnership,
       postExecutePauseCapability,
+      sessionAccess: access,
     });
     installPlanModeInterceptor(agentClient, { settingsService: settings });
     return agentClient;

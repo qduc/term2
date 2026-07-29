@@ -32,6 +32,16 @@ it('orchestrator prompt requires the final report to be the orchestrator’s own
   expect(lower).toContain('never a substitute for it');
 });
 
+it('orchestrator prompt delegates bounded mechanical follow-through while retaining integration judgement', () => {
+  const lower = orchestratorPrompt.toLowerCase();
+
+  expect(lower).toContain('mechanical follow-through');
+  expect(lower).toContain('commits');
+  expect(lower).toContain('worktree cleanup');
+  expect(lower).toContain('integration judgement');
+  expect(lower).toContain('coordination costs more than direct execution');
+});
+
 it('orchestrator prompt documents get_subagent_status as the non-blocking mid-run peek', () => {
   const lower = orchestratorPrompt.toLowerCase();
 

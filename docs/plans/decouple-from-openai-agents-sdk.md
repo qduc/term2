@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, several bounded Step B representation slices are landed, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. The next action is Step D provider-contract design. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
 **Last updated:** 2026-07-29
 
 ---
@@ -37,6 +37,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step B conversation-message projection slice | `conversation-message-projection.ts` read-only projects direct or one-level wrapped user, assistant, and system messages for conversation-store turn handling and stream finalization message detection; provider history remains original |
 | Step B approval-history projection slice | Shell auto-approval compact context uses `conversation-message-projection.ts`; direct and one-level wrapped user/assistant messages render equivalently while system, tool, and reasoning items remain excluded and history remains original |
 | Step B input-surge guard slice | `InputSurgeGuard` derives duplicate tool signatures and call/result pair counts from canonical `ToolCall`/`ToolResult` projections; wrapped SDK, direct-provider, and canonical tool inputs share policy behavior while serialized input bytes and message counts remain original |
+| Step B chained-input-filter slice | Chained request delta selection and recognized tool call/result classification use `run-item-normalizer.ts`; direct, one-level wrapped, and canonical tool forms retain original input object identity/order/slicing, while explicit call-ID precedence, generic `*_call` compatibility, and user-message detection remain local policy |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -153,6 +154,13 @@ production session contract.
   pass (2 files / 53 tests). They cover native field retention, `call_id` / `tool_call_id`,
   `args` / `result`, object argument serialization, reasoning de-duplication, completed replay,
   interrupted journal recovery, and ledger history ordering.
+- Chained-input tool projection slice: chained filtering and run-item normalization focused tests
+  pass (2 files / 65 tests), plus all 49 Codex response-model regressions. They cover direct,
+  one-level wrapped, and canonical forms; supported call/result spellings; wrapper-first call-ID
+  precedence; provider item IDs kept distinct from tool-call correlation; original result identity;
+  and unchanged missing/orphan validation.
+- Full Vitest after the chained-input slice reaches 4,723 passing / 1 skipped / 1 failing. The sole
+  failure remains the pre-existing sandbox terminal E2E failure in `source/cli.e2e.test.ts`.
 
 ### `ApprovalRecord` semantics, established by reading the SDK source
 
@@ -182,12 +190,12 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. Audit the remaining Step B representation consumers for the next bounded raw-item
-   interpretation seam. `conversation-result-builder.ts`, `session-tool-tracker.ts`, and
-   `turn-workflow.ts` already delegate their remaining item interpretation; do not turn their
-   SDK run-state or orchestration types into a representation-only slice. Retain provider-facing
-   history at its boundary, and keep canonical `Item` and `run-item-normalizer.ts`
-   assistant-run/tool-only.
+1. **Step D provider-contract design.** Establish the application-owned request, streamed-event,
+   tool-call/result, usage/completion, and provider-native continuation contract before assigning
+   provider migrations. Step B's remaining candidate consumers were audited: their item
+   interpretation already delegates where it is representation-only, while provider logging,
+   history projection, RunState, and orchestration remain deliberately outside this bounded
+   migration.
 
 ### R1 gate — PASSED
 
@@ -460,22 +468,16 @@ Re-ordered from the original types-first plan. Each step retires named reach-ins
 Use a hybrid execution strategy. Shared contracts and architectural seams proceed sequentially;
 independent provider implementations may proceed in parallel only after those seams are stable.
 
-1. **Sequential — continue Step B in bounded normalization slices.** Prefer the remaining
-   conversation/session consumers (`conversation-turn-items.ts`, `conversation-result-builder.ts`,
-   `conversation-replay.ts`, `session-tool-tracker.ts`, and `turn-workflow.ts`). Each slice defines
-   one canonical boundary, preserves the original provider item where replay or formatting needs it,
-   adds focused tests, and refreshes the coupling counts. Do not migrate all consumers concurrently:
-   they share canonical item definitions and provider-replay assumptions.
-2. **Sequential — establish the application-owned provider contract for Step D.** Settle request,
+1. **Sequential — establish the application-owned provider contract for Step D.** Settle request,
    streamed-event, tool-call/result, usage/completion, and provider-native continuation boundaries
    before assigning provider migrations. One owner integrates this contract.
-3. **Parallel — migrate independent AI SDK providers.** Once the contract is stable, Google,
+2. **Parallel — migrate independent AI SDK providers.** Once the contract is stable, Google,
    Anthropic, and OpenRouter may move in separate worktrees. Integrate sequentially, then delete
    `ai-sdk-agents-adapter.ts` and run the cross-provider suite.
-4. **Sequential — disposition chaining before Step E.** Prefer confining `previousResponseId` to
+3. **Sequential — disposition chaining before Step E.** Prefer confining `previousResponseId` to
    provider-private state while the domain model always carries full history. Do not split this
    decision across session and provider layers or begin the Codex transport first.
-5. **Limited parallelism — retire provider reach-ins after chaining is settled.** OpenAI and the
+4. **Limited parallelism — retire provider reach-ins after chaining is settled.** OpenAI and the
    fallback model may be separable once the transport contract is stable. Keep Codex request
    construction, `_fetchResponse`, WebSocket behavior, and chaining under one owner; integrate it
    last because it is the highest-risk behavior.
@@ -638,6 +640,21 @@ Unknown and non-tool items remain ignored. The guard still serializes the origin
 counts and uses the original input array for message counts, so thresholds and reason strings are
 unchanged.
 
+**Step B chained-input-filter slice.** `chained-input-filter.ts` now derives recognized tool
+call/result classification through `run-item-normalizer.ts`, including direct and one-level wrapped
+provider items, canonical `ToolCall` / `ToolResult`, and result spellings. Explicit call-ID precedence
+and the prior generic `_call` extension compatibility remain narrow filter policy: provider item IDs
+are not treated as tool-call correlation, and hosted calls do not leak into ledger classification.
+User-message detection remains local. The filter continues to return the original input objects in
+their original order, selecting or slicing only the input array; missing/orphan validation and
+known-call behavior are unchanged.
+
+**Step B bounded representation migration complete.** The remaining representation-only consumers
+have been audited and now normalize through the canonical boundary where they need assistant-run or
+tool identity. Provider history/replay projection, logging, RunState, orchestration, request
+construction, and transports deliberately retain their own boundaries. Proceed with Step D
+provider-contract design rather than broadening Step B.
+
 ### Step C — Own the run loop
 Contained, because downstream already speaks our language.
 **Resolver + replay-diagnostics + transport-recovery slices DONE:**
@@ -671,11 +688,12 @@ Related groundwork: `luna-responses-lite-wire-protocol.ts` (112),
 - **53 non-test source files** import `@openai/agents*`; 87 including tests.
 - A current line-based scan finds **124 non-test `rawItem` lines**.
 - A current line-based scan finds **101 non-test `previousResponseId` lines**.
-- Out of 814 TS/TSX files under `source/`. Installed: `@openai/agents-core` **0.11.4**.
+- Out of **814 TS/TSX files under `source/`** (440 non-test). Installed: `@openai/agents-core` **0.11.4**.
 
 These are navigation metrics, not progress measures. Record the counting method when refreshing
-them; the risk register remains authoritative. The 2026-07-29 scan uses `rg` over TS and TSX files
-under `source/`, then excludes `*.test.*` and `*.e2e.test.*` paths for non-test counts.
+them; the risk register remains authoritative. The 2026-07-29 scan uses `fd` for TS/TSX files under
+`source/`, then `rg` for line/import counts; every non-test count excludes paths matching
+`*.test.*` and `*.e2e.test.*`.
 
 Three clusters: `source/providers/` (~7k LOC incl. tests); the run + approval loop
 (`lib/agent-*`, `services/session/`, `services/approval/`, `services/retry/`); and type-only
@@ -703,7 +721,7 @@ feature), guardrails, MCP, sessions/memory, voice, realtime.
 - `source/lib/agent-factory.ts` (382) — agent + tool construction
 - `source/lib/agent-client.ts` (357)
 - `source/lib/tool-invoke.ts` (502)
-- `source/lib/chained-input-filter.ts` (234)
+- `source/lib/chained-input-filter.ts` (208)
 - `source/services/approval/approval-state.ts` (88) — `RunState` held in memory
 - `source/services/approval/approval-flow-coordinator.ts` — approve/reject
 - `source/services/approval/tool-owner.ts` (14) — application-owned owner types remain after A2

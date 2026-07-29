@@ -1,16 +1,4 @@
-export const TOOL_RESULT_ITEM_TYPES = new Set([
-  'function_call_output',
-  'function_call_result',
-  'function_call_output_result',
-  'tool_call_output',
-  'tool_call_result',
-  'tool_call_output_item',
-  'local_shell_call_output',
-  'shell_call_output',
-  'computer_call_output',
-  'computer_call_result',
-  'apply_patch_call_output',
-]);
+import { normalizeRunItem } from '../services/conversation/run-item-normalizer.js';
 
 export const asRecord = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -21,28 +9,24 @@ export const isUserInputMessage = (item: unknown): boolean => {
 };
 
 export const isToolResultItem = (item: unknown): boolean => {
-  const record = asRecord(item);
-  return typeof record?.type === 'string' && TOOL_RESULT_ITEM_TYPES.has(record.type);
+  return normalizeRunItem(item).some((normalized) => normalized.type === 'tool_result');
+};
+
+const getExplicitToolCallId = (item: unknown): string | null => {
+  const outer = asRecord(item);
+  const raw = asRecord(outer?.rawItem);
+  for (const record of [outer, raw]) {
+    const callId = record?.callId ?? record?.call_id ?? record?.tool_call_id ?? record?.toolCallId;
+    if (typeof callId === 'string' && callId) {
+      return callId;
+    }
+  }
+  return null;
 };
 
 export const getToolResultCallId = (item: unknown): string | null => {
-  const record = asRecord(item);
-  if (!record || !isToolResultItem(record)) {
-    return null;
-  }
-
-  const topLevelCallId = record.callId ?? record.call_id ?? record.tool_call_id;
-  if (typeof topLevelCallId === 'string' && topLevelCallId) {
-    return topLevelCallId;
-  }
-
-  const raw = asRecord(record.rawItem);
-  if (!raw) {
-    return null;
-  }
-
-  const callId = raw.callId ?? raw.call_id ?? raw.tool_call_id;
-  return typeof callId === 'string' && callId ? callId : null;
+  const result = normalizeRunItem(item).find((normalized) => normalized.type === 'tool_result');
+  return result ? getExplicitToolCallId(item) : null;
 };
 
 /**
@@ -51,28 +35,18 @@ export const getToolResultCallId = (item: unknown): string | null => {
  * tool calls at all.
  */
 export const getToolCallId = (item: unknown): string | null => {
-  const record = asRecord(item);
-  if (!record || isToolResultItem(record)) {
-    return null;
+  const call = normalizeRunItem(item).find((normalized) => normalized.type === 'tool_call');
+  if (call) {
+    return getExplicitToolCallId(item);
   }
 
-  const type = typeof record.type === 'string' ? record.type : '';
-  if (!type.endsWith('_call')) {
-    return null;
-  }
-
-  const topLevelCallId = record.callId ?? record.call_id ?? record.tool_call_id;
-  if (typeof topLevelCallId === 'string' && topLevelCallId) {
-    return topLevelCallId;
-  }
-
-  const raw = asRecord(record.rawItem);
-  if (!raw) {
-    return null;
-  }
-
-  const callId = raw.callId ?? raw.call_id ?? raw.tool_call_id;
-  return typeof callId === 'string' && callId ? callId : null;
+  // Keep the filter's legacy provider-extension compatibility narrow and local.
+  // The canonical normalizer deliberately does not classify every `*_call` item:
+  // hosted calls such as image generation are provider items, not tool-ledger calls.
+  const outer = asRecord(item);
+  const raw = asRecord(outer?.rawItem);
+  const type = typeof outer?.type === 'string' ? outer.type : typeof raw?.type === 'string' ? raw.type : '';
+  return type.endsWith('_call') ? getExplicitToolCallId(item) : null;
 };
 
 export type ChainedModelInputFilterOptions = {

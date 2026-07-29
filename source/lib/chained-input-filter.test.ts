@@ -9,7 +9,6 @@ import {
   isToolResultItem,
   isUserInputMessage,
   OrphanedChainedToolOutputError,
-  TOOL_RESULT_ITEM_TYPES,
   asRecord,
 } from './chained-input-filter.js';
 
@@ -47,7 +46,19 @@ it('isUserInputMessage returns false for non-objects', () => {
 // --- isToolResultItem ---
 
 it('isToolResultItem returns true for known tool result types', () => {
-  for (const type of TOOL_RESULT_ITEM_TYPES) {
+  for (const type of [
+    'function_call_output',
+    'function_call_result',
+    'function_call_output_result',
+    'tool_call_output',
+    'tool_call_result',
+    'tool_call_output_item',
+    'local_shell_call_output',
+    'shell_call_output',
+    'computer_call_output',
+    'computer_call_result',
+    'apply_patch_call_output',
+  ]) {
     expect(isToolResultItem({ type })).toBe(true);
   }
 });
@@ -89,12 +100,25 @@ it('getToolResultCallId falls back to top-level call_id when rawItem lacks call 
   expect(getToolResultCallId(item)).toBe('top_001');
 });
 
+it('getToolResultCallId preserves top-level ID precedence over a wrapped provider ID', () => {
+  const item = {
+    type: 'function_call_output',
+    callId: 'top_001',
+    rawItem: { type: 'function_call_output', callId: 'raw_001', output: 'ok' },
+  };
+  expect(getToolResultCallId(item)).toBe('top_001');
+});
+
 it('getToolResultCallId returns null for non-tool-result items', () => {
   expect(getToolResultCallId({ role: 'user', content: 'hi' })).toBe(null);
 });
 
 it('getToolResultCallId returns null when callId is missing', () => {
   expect(getToolResultCallId({ type: 'function_call_output', output: 'ok' })).toBe(null);
+});
+
+it('getToolCallId does not treat a provider item id as tool-call correlation', () => {
+  expect(getToolCallId({ type: 'image_generation_call', id: 'ig_1', status: 'completed' })).toBe(null);
 });
 
 // --- findChainedDeltaStart ---
@@ -257,6 +281,44 @@ it('getToolCallId returns null for non-call items', () => {
   expect(getToolCallId({ role: 'user', content: 'hi' })).toBe(null);
   expect(getToolCallId({ type: 'reasoning', content: [] })).toBe(null);
   expect(getToolCallId(null)).toBe(null);
+});
+
+it.each([
+  {
+    label: 'direct provider items',
+    call: { type: 'local_shell_call', call_id: 'call-representation', name: 'shell', arguments: '{}' },
+    result: { type: 'local_shell_call_output', tool_call_id: 'call-representation', output: 'ok' },
+  },
+  {
+    label: 'one-level wrapped provider items',
+    call: { rawItem: { type: 'local_shell_call', call_id: 'call-representation', name: 'shell', arguments: '{}' } },
+    result: { rawItem: { type: 'local_shell_call_output', tool_call_id: 'call-representation' }, output: 'ok' },
+  },
+  {
+    label: 'canonical items',
+    call: { type: 'tool_call', callId: 'call-representation', toolName: 'shell', arguments: '{}' },
+    result: {
+      type: 'tool_result',
+      callId: 'call-representation',
+      toolName: 'shell',
+      status: 'completed',
+      output: 'ok',
+    },
+  },
+])('filters and pairs $label without replacing provider objects', ({ call, result }) => {
+  const input = [{ role: 'user', content: 'hi' }, call, result];
+
+  expect(getToolCallId(call)).toBe('call-representation');
+  expect(isToolResultItem(result)).toBe(true);
+  expect(getToolResultCallId(result)).toBe('call-representation');
+
+  const filtered = filterChainedModelInput(
+    { input },
+    { toolResultCallIds: ['call-representation'], knownToolCallIds: ['another-call'] },
+  );
+
+  expect(filtered.input).toHaveLength(1);
+  expect(filtered.input[0]).toBe(result);
 });
 
 // --- orphaned tool outputs (chain rebuilt without the matching calls) ---

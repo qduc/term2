@@ -121,19 +121,33 @@ const pushAssistantMessageItems = (target: Item[], item: unknown): void => {
 const getCallId = (raw: Record<string, unknown>, item?: unknown): string => {
   const outer = asRecord(item);
   return (
-    getString(raw.callId) ??
-    getString(raw.call_id) ??
-    getString(raw.tool_call_id) ??
-    getString(raw.toolCallId) ??
-    getString(raw.id) ??
     getString(outer?.callId) ??
     getString(outer?.call_id) ??
     getString(outer?.tool_call_id) ??
     getString(outer?.toolCallId) ??
     getString(outer?.id) ??
+    getString(raw.callId) ??
+    getString(raw.call_id) ??
+    getString(raw.tool_call_id) ??
+    getString(raw.toolCallId) ??
+    getString(raw.id) ??
     'unknown-call'
   );
 };
+const toolResultItemTypes = new Set([
+  'function_call_result',
+  'function_call_output',
+  'function_call_output_result',
+  'tool_call_output_item',
+  'tool_result',
+  'shell_call_output',
+  'tool_call_output',
+  'tool_call_result',
+  'local_shell_call_output',
+  'computer_call_output',
+  'computer_call_result',
+  'apply_patch_call_output',
+]);
 const pushToolCallItem = (target: Item[], item: unknown): void => {
   const raw = rawItem(item);
   if (!raw) return;
@@ -192,8 +206,9 @@ export function normalizeRunItem(item: unknown): Item[] {
   const raw = rawItem(item);
   if (!raw) return [];
   if (isCanonicalItem(raw)) return [raw];
-  const role = getString(raw.role);
-  const type = getString(raw.type) ?? '';
+  const outer = asRecord(item);
+  const role = getString(raw.role) ?? getString(outer?.role);
+  const type = getString(raw.type) ?? getString(outer?.type) ?? '';
   if (type === 'reasoning') {
     const reasoning = makeReasoningItem(item);
     return reasoning ? [reasoning] : [];
@@ -201,21 +216,7 @@ export function normalizeRunItem(item: unknown): Item[] {
   const normalized: Item[] = [];
   if (role === 'assistant' && type === 'message') pushAssistantMessageItems(normalized, item);
   else if (type === 'function_call' || type === 'apply_patch_call') pushToolCallItem(normalized, item);
-  else if (
-    type === 'function_call_result' ||
-    type === 'function_call_output' ||
-    type === 'function_call_output_result' ||
-    type === 'tool_call_output_item' ||
-    type === 'tool_result' ||
-    type === 'shell_call_output' ||
-    type === 'tool_call_output' ||
-    type === 'tool_call_result' ||
-    type === 'local_shell_call_output' ||
-    type === 'computer_call_output' ||
-    type === 'computer_call_result' ||
-    type === 'apply_patch_call_output'
-  )
-    pushToolResultItem(normalized, item);
+  else if (toolResultItemTypes.has(type)) pushToolResultItem(normalized, item);
   return normalized;
 }
 

@@ -129,6 +129,16 @@ it('preserves the outer wrapper output and accepts direct or wrapped canonical i
   expect(normalizeRunItem({ rawItem: canonical })).toEqual([canonical]);
 });
 
+it('prefers wrapper call identity over conflicting provider-item identity', () => {
+  expect(
+    normalizeRunItem({
+      type: 'function_call_output',
+      callId: 'outer-call',
+      rawItem: { type: 'function_call_output', callId: 'provider-call', output: 'done' },
+    }),
+  ).toMatchObject([{ type: 'tool_result', callId: 'outer-call' }]);
+});
+
 it('returns no items for unknown values and preserves multi-item ordering', () => {
   expect(normalizeRunItem({ type: 'unknown' })).toEqual([]);
   expect(normalizeRunItem(null)).toEqual([]);

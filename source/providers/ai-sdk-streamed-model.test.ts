@@ -25,6 +25,7 @@ it('translates one application turn to an AI SDK stream and publishes its author
           yield { type: 'response-metadata', id: 'response-1' };
           yield { type: 'reasoning-start', id: 'thought-1', providerMetadata: { anthropic: { signature: 'sig' } } };
           yield { type: 'reasoning-delta', id: 'thought-1', delta: 'Think.' };
+          yield { type: 'reasoning-end', id: 'thought-1', providerMetadata: { anthropic: { signature: 'final' } } };
           yield { type: 'text-delta', id: 'text-1', delta: 'Done.' };
           yield { type: 'tool-call', toolCallId: 'call-1', toolName: 'shell', input: '{"command":"pwd"}' };
           yield {
@@ -46,8 +47,17 @@ it('translates one application turn to an AI SDK stream and publishes its author
       instructions: 'Be concise.',
       input: [
         { type: 'message', role: 'user', content: [{ type: 'text', text: 'List files.' }] },
+        { type: 'message', role: 'assistant', content: [{ type: 'image', image: 'data:image/png;base64,aW1n' }] },
         { type: 'tool_call', id: 'old-call', name: 'shell', arguments: '{"command":"pwd"}' },
-        { type: 'tool_result', id: 'old-call', output: 'ok' },
+        {
+          type: 'tool_result',
+          id: 'old-call',
+          output: [
+            { type: 'text', text: 'ok' },
+            { type: 'image', image: 'https://example.test/image.png' },
+            { type: 'file', file: { url: 'file:///tmp/out', filename: 'out.txt' } },
+          ],
+        },
       ],
       tools: [{ name: 'shell', description: 'Run shell.', parameters: { type: 'object' }, strict: true }],
       toolChoice: { name: 'shell' },
@@ -68,12 +78,27 @@ it('translates one application turn to an AI SDK stream and publishes its author
       { role: 'user', content: [{ type: 'text', text: 'List files.' }] },
       {
         role: 'assistant',
-        content: [{ type: 'tool-call', toolCallId: 'old-call', toolName: 'shell', input: { command: 'pwd' } }],
+        content: [
+          { type: 'file', data: 'data:image/png;base64,aW1n', mediaType: 'image/png' },
+          { type: 'tool-call', toolCallId: 'old-call', toolName: 'shell', input: { command: 'pwd' } },
+        ],
       },
       {
         role: 'tool',
         content: [
-          { type: 'tool-result', toolCallId: 'old-call', toolName: 'shell', output: { type: 'text', value: 'ok' } },
+          {
+            type: 'tool-result',
+            toolCallId: 'old-call',
+            toolName: 'shell',
+            output: {
+              type: 'content',
+              value: [
+                { type: 'text', text: 'ok' },
+                { type: 'image-url', url: 'https://example.test/image.png' },
+                { type: 'file-url', url: 'file:///tmp/out' },
+              ],
+            },
+          },
         ],
       },
     ],
@@ -104,7 +129,7 @@ it('translates one application turn to an AI SDK stream and publishes its author
         responseId: 'response-1',
       },
       output: [
-        { type: 'reasoning', id: 'thought-1', text: 'Think.', providerMetadata: { anthropic: { signature: 'sig' } } },
+        { type: 'reasoning', id: 'thought-1', text: 'Think.', providerMetadata: { anthropic: { signature: 'final' } } },
         { type: 'message', content: [{ type: 'text', text: 'Done.' }] },
         { type: 'tool_call', id: 'call-1', name: 'shell', arguments: '{"command":"pwd"}' },
       ],
@@ -143,4 +168,43 @@ it('preserves exact string tool arguments, streams live deltas, and propagates c
   controller.abort();
   await expect(next).rejects.toBe(cancelled);
   expect(seenSignal).toBe(controller.signal);
+});
+
+it('rejects provider errors and streams that cannot authoritatively complete', async () => {
+  const providerError = new Error('provider error');
+  const modelFor = (parts: readonly unknown[]) =>
+    createAiSdkStreamedModel({
+      provider: 'example',
+      modelId: 'model',
+      specificationVersion: 'v3',
+      supportedUrls: {},
+      async doGenerate() {
+        return {} as any;
+      },
+      async doStream() {
+        return {
+          stream: (async function* () {
+            yield* parts;
+          })(),
+        };
+      },
+    } as any);
+
+  await expect(
+    collect(modelFor([{ type: 'error', error: providerError }]).stream({ input: [], tools: [] })),
+  ).rejects.toBe(providerError);
+  await expect(
+    collect(
+      modelFor([
+        {
+          type: 'finish',
+          finishReason: { unified: 'stop' },
+          usage: { inputTokens: {}, outputTokens: {} },
+        },
+      ]).stream({ input: [], tools: [] }),
+    ),
+  ).rejects.toThrow('response id');
+  await expect(
+    collect(modelFor([{ type: 'response-metadata', id: 'response-1' }]).stream({ input: [], tools: [] })),
+  ).rejects.toThrow('without a finish event');
 });

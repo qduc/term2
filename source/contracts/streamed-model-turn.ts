@@ -4,8 +4,10 @@ export type StreamedModelProviderOptions = Readonly<Record<string, unknown>>;
 export type StreamedModelImageReference = string | { readonly id: string };
 export type StreamedModelFileReference = string | { readonly id: string } | { readonly url: string };
 
+export type StreamedModelTextPart = { readonly type: 'text'; readonly text: string };
+
 export type StreamedModelMessagePart =
-  | { readonly type: 'text'; readonly text: string }
+  | StreamedModelTextPart
   | { readonly type: 'image'; readonly image?: StreamedModelImageReference; readonly detail?: string };
 
 export type StreamedModelToolResultPart =
@@ -52,7 +54,17 @@ export interface StreamedModelTurnRequest {
 export type StreamedModelTurnInput =
   | {
       readonly type: 'message';
-      readonly role: 'user' | 'assistant' | 'system';
+      readonly role: 'system';
+      readonly content: readonly StreamedModelTextPart[];
+    }
+  | {
+      readonly type: 'message';
+      readonly role: 'user';
+      readonly content: readonly StreamedModelMessagePart[];
+    }
+  | {
+      readonly type: 'message';
+      readonly role: 'assistant';
       readonly content: readonly StreamedModelMessagePart[];
     }
   | {

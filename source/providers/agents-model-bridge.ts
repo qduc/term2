@@ -13,6 +13,7 @@ import type {
   StreamedModelTurnEvent,
   StreamedModelTurnInput,
   StreamedModelMessagePart,
+  StreamedModelTextPart,
   StreamedModelTurnOutput,
   StreamedModelToolResultPart,
   StreamedModelTurnRequest,
@@ -109,7 +110,13 @@ function toInput(item: AgentInputItem): StreamedModelTurnInput[] {
       typeof item.content === 'string'
         ? [{ type: 'text' as const, text: item.content }]
         : item.content.map(toMessagePart);
-    return [{ type: 'message', role: item.role, content }];
+    if (item.role === 'system') {
+      if (!content.every(isTextPart)) throw new Error('Unsupported system message content: only text is supported');
+      return [{ type: 'message', role: 'system', content }];
+    }
+    return item.role === 'user'
+      ? [{ type: 'message', role: 'user', content }]
+      : [{ type: 'message', role: 'assistant', content }];
   }
   if (item.type === 'reasoning') {
     return [
@@ -143,6 +150,10 @@ function toMessagePart(content: unknown): StreamedModelMessagePart {
     };
   }
   throw new Error(`Unsupported message content: ${content.type}`);
+}
+
+function isTextPart(part: StreamedModelMessagePart): part is StreamedModelTextPart {
+  return part.type === 'text';
 }
 
 function toToolResultOutput(item: FunctionCallResultItem): string | readonly StreamedModelToolResultPart[] {

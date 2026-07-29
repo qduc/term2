@@ -371,6 +371,15 @@ it('propagates application failures and rejects unsupported SDK shapes', async (
     ),
   ).rejects.toThrow('message content');
   await expect(
+    collect(
+      model.getStreamedResponse(
+        request({
+          input: [{ type: 'message', role: 'system', content: [{ type: 'input_image', image: 'nope' }] }],
+        } as unknown as ModelRequest),
+      ),
+    ),
+  ).rejects.toThrow('system message content');
+  await expect(
     collect(model.getStreamedResponse(request({ tools: [{ type: 'computer' }] } as unknown as ModelRequest))),
   ).rejects.toThrow('tool type');
 });

@@ -179,10 +179,12 @@ production session contract.
   terminal-event enforcement. No provider routing, registry, Codex, chaining, or AI SDK
   implementation changed.
 - Step D unrouted AI SDK streamed turn: focused implementation, contract/bridge, and adapter
-  characterization tests pass (4 files / 25 tests). The implementation preserves characterized
-  request settings, assistant normalization, exact tool-call arguments, live text/reasoning/tool
-  events, completion metadata/usage, abort-signal identity, and provider-error propagation. Full
-  `tsc --noEmit` reaches only the known pre-existing
+  characterization tests pass (5 files / 38 tests). The implementation preserves system text-only
+  validation while converting user/assistant media, structured text/image/file results, assistant
+  normalization, exact tool-call arguments, live text/reasoning/tool events (including
+  reasoning-end metadata), completion metadata/usage with missing-versus-zero totals, abort-signal
+  identity, provider-error propagation, response-ID/finish enforcement, and terminal completion.
+  Full `tsc --noEmit` reaches only the known pre-existing
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
 
 ### `ApprovalRecord` semantics, established by reading the SDK source

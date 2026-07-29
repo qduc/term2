@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization and inert application-owned one-streamed-turn contract/Agents bridge slices are landed; the next action is an unrouted AI SDK implementation of that contract. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, and unrouted AI SDK implementation slices are landed; the next action is to choose and prove the first provider-routing slice without broadening into Codex, chaining, or registry migration. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
 **Last updated:** 2026-07-29
 
 ---
@@ -39,6 +39,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step B input-surge guard slice | `InputSurgeGuard` derives duplicate tool signatures and call/result pair counts from canonical `ToolCall`/`ToolResult` projections; wrapped SDK, direct-provider, and canonical tool inputs share policy behavior while serialized input bytes and message counts remain original |
 | Step B chained-input-filter slice | Chained request delta selection and recognized tool call/result classification use `run-item-normalizer.ts`; direct, one-level wrapped, and canonical tool forms retain original input object identity/order/slicing, while explicit call-ID precedence, generic `*_call` compatibility, and user-message detection remain local policy |
 | Step D inert streamed-turn contract + Agents bridge | `contracts/streamed-model-turn.ts` owns a closed text/image, reasoning, function-call/result, and structured tool-result protocol for one turn; `agents-model-bridge.ts` temporarily adapts it to public Agents Model events without routing or provider changes |
+| Step D unrouted AI SDK streamed turn | `providers/ai-sdk-streamed-model.ts` translates the closed turn protocol directly to a normalized LanguageModelV3 stream and returns deltas plus one authoritative completion; no production provider is routed through it |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -177,6 +178,12 @@ production session contract.
   required response IDs/provider metadata, signal identity, errors, missing-versus-zero usage, and
   terminal-event enforcement. No provider routing, registry, Codex, chaining, or AI SDK
   implementation changed.
+- Step D unrouted AI SDK streamed turn: focused implementation, contract/bridge, and adapter
+  characterization tests pass (4 files / 25 tests). The implementation preserves characterized
+  request settings, assistant normalization, exact tool-call arguments, live text/reasoning/tool
+  events, completion metadata/usage, abort-signal identity, and provider-error propagation. Full
+  `tsc --noEmit` reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
 
 ### `ApprovalRecord` semantics, established by reading the SDK source
 
@@ -206,12 +213,12 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **Step D unrouted AI SDK implementation.** Implement `StreamedModelTurn` behind the new
-   contract using the existing AI SDK behavior and its characterized provider metadata, but do
-   not route production requests through it yet. Do not add speculative generate support,
-   continuation, a raw event/history bag, a broad error taxonomy, or provider-registry migration.
-   Provider logging, history projection, RunState, and orchestration remain outside this bounded
-   migration.
+1. **Choose the first Step D routing slice.** Route one non-Codex AI SDK provider through the
+   landed `StreamedModelTurn` implementation and temporary Agents bridge, proving its provider
+   metadata and transport behavior before deleting the legacy adapter. Do not add speculative
+   generate support, continuation, a raw event/history bag, a broad error taxonomy, or
+   provider-registry migration. Provider logging, history projection, RunState, and orchestration
+   remain outside this bounded migration.
 
 ### R1 gate — PASSED
 
@@ -695,8 +702,10 @@ includes request translation, assistant-message normalization, stream event orde
 output, usage, cancellation, errors, and current reasoning/provider-option forwarding needed by
 Google, Anthropic, and OpenRouter. It intentionally does **not** characterize Codex, chaining,
 Runner orchestration, private implementation details, speculative non-stream generation,
-continuation, a raw event/history bag, a broad error taxonomy, or registry migration. Next: add
-only the inert streamed-turn contract and bridge, with routing unchanged.
+  continuation, a raw event/history bag, a broad error taxonomy, or registry migration. The
+  contract, temporary bridge, and unrouted direct LanguageModelV3 implementation are now landed;
+  routing remains unchanged. Next: choose one provider-routing slice and prove it before retiring
+  the legacy adapter.
 
 ### Step E — Chaining disposition, then the Codex WS transport
 The irreducible risk. Resolve the interlock first. Driven by the existing

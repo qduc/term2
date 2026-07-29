@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed; the now-unreferenced legacy adapter, its characterization test, and direct `@openai/agents-extensions` dependency are retired. Focused routed-provider, direct-turn, bridge, custom-provider, and message-normalizer validation passes. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed; the now-unreferenced legacy adapter, its characterization test, and direct `@openai/agents-extensions` dependency are retired. Focused routed-provider, direct-turn, bridge, custom-provider, and message-normalizer validation passes. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path. **Step E's chaining disposition is now decided:** full provider-facing history is the application’s semantic record, while OpenAI/Codex continuation is a provider-private compatibility projection. The immediate next slice is Stage 0 characterization/instrumentation only; it changes no wire behavior.
 **Last updated:** 2026-07-29
 
 ---
@@ -43,6 +43,8 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step D OpenRouter routing slice | `AiSdkOpenRouterProvider` routes its LanguageModelV3 through `createAiSdkStreamedModel()` and the temporary Agents bridge; its OpenRouter-specific forwarding retains legacy reasoning, provider options, extra request fields, configuration/fetch, stream signal/error, and completion behavior |
 | Step D Google routing slice | `AiSdkGoogleProvider` routes its LanguageModelV3 through `createAiSdkStreamedModel()` and the temporary Agents bridge; the shared narrow call-settings wrapper retains Google’s explicit provider-data convention while OpenRouter’s reasoning special case remains local |
 | Step D Anthropic routing slice | `AiSdkAnthropicProvider` routes its cache/max-token-wrapped LanguageModelV3 through `createAiSdkStreamedModel()` and the temporary Agents bridge; the shared explicit-provider settings rule preserves Anthropic’s top-level provider data and nested precedence while caching/max-token policy stays local |
+| Step D adapter retirement | The unused AI SDK Agents adapter, its characterization test, and direct `@openai/agents-extensions` dependency/lockfile entries are deleted; routed-provider and application-owned boundary tests retain the behavior |
+| Step E chaining disposition | Full provider-facing history is authoritative; OpenAI/Codex continuation becomes an opaque provider-private, exact-prefix-anchored checkpoint with candidate → accepted → retired lifecycle and provider-classified replay |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -74,6 +76,49 @@ late event projection. Do not substitute a `callModelInputFilter` sentinel.
 Root denied-read metadata and one-shot execution overrides now use this seam. The held call
 retains its call ID, so no model retry, command matching, or token protocol is needed. Concurrent
 identical root commands retain separate metadata and decisions; nested tools remain unchanged.
+
+### Step E chaining disposition — decided
+
+The application’s complete provider-facing history is the authoritative semantic record. Remove the
+global `delta | full_history` policy incrementally; it is an application-wide ownership leak, not a
+durable conversation model. At the OpenAI/Codex provider boundary, the application supplies an
+**immutable full-history snapshot**. A provider compatibility seam may privately project its suffix
+and attach an opaque continuation checkpoint. Stage 1 must preserve the exact current projected
+wire inputs before changing ownership; do not move in-flight approvals or sessions between the old
+and new ownership modes.
+
+A checkpoint is **not** a floating response ID. It binds a response ID and any transport state to:
+
+- provider, account, endpoint, and model identity;
+- reset lineage/epoch; and
+- the exact transcript-prefix revision and identity it represents.
+
+Its lifecycle is explicit: a response may create a **candidate** checkpoint when observed; it is
+**accepted** only when that response’s terminal output is committed to authoritative history; it is
+**retired** when reset, identity/prefix mismatch, invalid-continuation rejection, or reconciliation
+supersedes it. Checkpoint promotion and terminal-history commit are one logical operation. A stale
+completion, including one arriving after reset, cannot promote a candidate.
+
+Full replay is a provider-classified recovery path, not a generic retry. It is permitted only after
+an explicit pre-generation invalid-continuation rejection or reliable provider reconciliation. It is
+not permitted after an ambiguous timeout or disconnect, where the provider may have generated a
+response; retain the candidate and surface/recover through the provider’s ambiguity policy instead.
+
+OpenAI migrates first: it is lower risk than Codex, but the completed trace does **not** prove that
+chaining is a pure optimization, so do not claim that. Codex begins with full replay unsupported
+until tests prove semantic sufficiency: `store = false`, server chaining, and WebSocket transport
+state are load-bearing. This is deliberately a compatibility seam, not a new shared continuation
+framework.
+
+**Evidence map / current owners.** `SessionInputPlanner` currently selects `delta` versus
+`full_history`; `ProviderContinuity` owns the mutable previous-response state; `TurnWorkflow`
+passes `previousResponseId`; `AgentRunOrchestrator` passes it to the SDK and applies
+`chained-input-filter`; and `SessionStreamProcessor.finalize` currently updates continuity beside
+terminal history handling. Existing evidence is concentrated in the input-planner and
+`provider-continuity` tests, `turn-workflow.call-ids.test.ts`, `agent-run-orchestrator` /
+`chained-input-filter` tests, `session-stream-processor.test.ts` (including stale finalization),
+and session lifecycle/reset plus recovery-executor/continuation-recovery tests. Stage 0 extends
+these seams rather than inventing parallel ownership.
 
 ### A4 tool-ownership lifecycle
 
@@ -253,11 +298,12 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **Resolve and record the chaining disposition before request-construction migration.** The live
-   risk register leaves `_buildResponsesCreateRequest` in `codex-responses-model.ts` and
-   `openai.provider.ts`, plus Codex `_fetchResponse`; `fallback-responses-model.ts` no longer
-   exists. Do not begin either transport/request-construction migration until the Step E chaining
-   interlock is settled.
+1. **Stage 0 — characterize and instrument the decided boundary; no wire change.** Establish
+   immutable snapshot identity and exact prefix anchoring, and pin candidate → accepted → retired
+   lifecycle behavior at the current owners. Cover stale completion after reset and the atomic
+   terminal-history-commit/checkpoint-promotion boundary. Record exact existing suffix projections
+   for OpenAI/Codex compatibility comparisons. Do not change request payloads, continuation
+   ownership, approval/session migration, or fallback behavior in this slice.
 
 ### R1 gate — PASSED
 
@@ -480,11 +526,13 @@ Critically, **chaining is the root cause of the `_generatedItems` reach-ins.**
 receives `function_call_output` items… They live transiently in the SDK RunState's
 `_generatedItems`."*
 
-Asymmetry: for `openai` chaining is a pure optimization. For `codex` it is load-bearing —
-`agent-factory.ts:254-256` sets `store = false`, yet `codex-responses-model.ts` threads
-`previousResponseId` through ~20 sites including a remembered-response-id cache and
-consumed-tool-result tracking (`:590,596,711`). The WS transport holds server state outside
-the normal `store` flag.
+Asymmetry: OpenAI is lower risk, but the completed trace does not prove chaining is a pure
+optimization there. Codex chaining is load-bearing — `agent-factory.ts:254-256` sets
+`store = false`, while `codex-responses-model.ts` threads `previousResponseId` through its
+remembered-response-id cache and consumed-tool-result tracking. The WS transport holds server
+state outside the normal `store` flag. Therefore the application must retain full provider-facing
+history as its semantic record and treat both providers’ continuation details as private,
+prefix-anchored compatibility state; Codex cannot claim full-replay support until tests prove it.
 
 ### 5. Two smaller findings, actionable now
 
@@ -504,20 +552,23 @@ the normal `store` flag.
 | Driver | Fragility — private-API dependence. Not LOC, not capability. |
 | Durable mid-turn approvals | Design for it (plain-data, serializable turns); ship later. |
 | Approval type scope | Step B defines the types. Step C's landed post-execute seam now owns the root denied-read migration: carry metadata and selected one-shot overrides by the held live call ID; reject command fallback and token protocols. Nested tools retain compatibility behavior until explicitly migrated. |
-| Chaining | **Keep the dual mode as-is for now.** Not touched in Steps A–D. |
+| Chaining semantic record | **Full provider-facing history is authoritative.** Remove the global `delta | full_history` policy incrementally; provider suffixing is a private compatibility projection. |
+| Continuation checkpoint | **Opaque, identity- and prefix-anchored state, not a floating response ID.** It binds response/transport state to provider, account, endpoint, model, reset lineage/epoch, and exact transcript-prefix revision/identity. Candidate → accepted promotion is atomic with terminal history commit; reset/stale completion cannot promote. |
+| Continuation recovery | **Provider-classified.** Full replay is allowed only after explicit pre-generation invalid-continuation rejection or reliable reconciliation, never after ambiguous timeout/disconnect. |
+| Migration order | **OpenAI first; Codex later.** OpenAI is lower risk but not proven “pure optimization.” Codex full replay is unsupported until tests prove it despite `store = false`, chaining, and WS state. |
 | Endpoint | Zero SDK imports, **codex included**. |
 
-### Known interlock — must be resolved before Step E
+### Resolved interlock — Step E implementation gate
 
-Keeping the dual mode while removing the SDK from the codex provider is close to
-contradictory: `_generatedItems` recovery exists to serve chaining, and codex is the one
-provider where chaining is load-bearing. Step E cannot start until chaining is dispositioned.
-
-The option not taken, recorded because it is the likely resolution: **confine chaining to
-the provider layer** — domain model always carries full history, codex's model keeps
-`previousResponseId` internally as a wire detail it manages itself. That removes the
-`delta | full_history` axis and the `_generatedItems` reach-ins without rewriting the
-transport. The dual mode is the leak; chaining itself is not.
+The disposition removes the contradiction without pretending Codex can replay today: application
+history remains complete, and provider continuation becomes a compatibility projection anchored to
+that history. Stage 0 must first characterize snapshot identity, exact prefix anchoring, and
+candidate/accepted/retired transitions with no wire change. Stage 1 moves existing suffix
+projection behind the provider seam and compares exact projected inputs. Only then may OpenAI
+change ownership. Codex remains in its current compatible chaining mode until its server-state,
+`store = false`, and WebSocket assumptions have direct proof. Never migrate an in-flight approval
+or session across modes; rollback retains the established mode and its checkpoint until a fresh
+session/reset boundary.
 
 ---
 
@@ -536,13 +587,21 @@ independent provider implementations may proceed in parallel only after those se
 2. **Parallel — migrate independent AI SDK providers.** Once the contract is stable, Google,
    Anthropic, and OpenRouter may move in separate worktrees. Integrate sequentially, then retire
    the legacy adapter and run the cross-provider suite.
-3. **Sequential — disposition chaining before Step E.** Prefer confining `previousResponseId` to
-   provider-private state while the domain model always carries full history. Do not split this
-   decision across session and provider layers or begin the Codex transport first.
-4. **Limited parallelism — retire provider reach-ins after chaining is settled.** OpenAI request
-   construction may be separable once the transport contract is stable. Keep Codex request
-   construction, `_fetchResponse`, WebSocket behavior, and chaining under one owner; integrate it
-   last because it is the highest-risk behavior.
+3. **Sequential — Stage 0 characterization/instrumentation.** Pin immutable snapshot identity,
+   prefix anchoring, and candidate → accepted → retired lifecycle at the existing session seams,
+   with no wire change. Gate on exact current suffix-projection captures and stale-after-reset
+   coverage; rollback is deletion of instrumentation/characterization only.
+4. **Sequential — Stage 1 compatibility seam.** Supply full-history snapshots at the provider
+   boundary, move the current suffix projection behind OpenAI/Codex-private seams, and compare
+   exact projected inputs. Do not migrate in-flight approvals/sessions. Gate on parity; rollback
+   keeps the old global path for newly started sessions.
+5. **OpenAI first — narrow ownership migration.** Promote only accepted terminal checkpoints with
+   the history commit; classify invalid-continuation recovery. Gate on no payload regression and
+   explicit/reconciled-only replay; rollback disables the OpenAI seam for new sessions.
+6. **Codex last — validate before enabling replay.** Keep chaining, `store = false`, and WS state
+   compatible while retiring reach-ins. Full replay remains unsupported until provider tests prove
+   semantic sufficiency; ambiguous timeout/disconnect never triggers replay. Roll back to the
+   compatible checkpoint path at a fresh session/reset boundary.
 
 Read-only audits, test-gap analysis, and review may run in parallel at any stage. Changes that share
 contracts, schemas, state flow, or transport semantics remain sequential.
@@ -749,10 +808,13 @@ explicit-provider-data semantics; Anthropic retains cache/max-token policy and O
 its local extra-field/reasoning policy rather than adding either to generic turn orchestration.
 
 ### Step E — Chaining disposition, then the Codex WS transport
-The irreducible risk. Resolve the interlock first. Driven by the existing
-`codex-responses-model.test.ts` and `openai.provider.test.ts` — that is hard-won production
-knowledge and effectively the spec. **Port those assertions first and let them drive the
-implementation. Do not discard them.**
+The irreducible risk. **Disposition decided; begin only with bounded Stage 0.** Driven by the
+existing `codex-responses-model.test.ts` and `openai.provider.test.ts` — that is hard-won
+production knowledge and effectively the spec. Preserve and extend those assertions; do not
+discard them. Stage 0 characterizes immutable full-history snapshot identity, exact prefix
+anchoring, and candidate → accepted lifecycle without changing wire behavior. Stage 1 places the
+current suffix projection behind provider compatibility seams and compares exact projected inputs.
+OpenAI migrates first; Codex full replay is unsupported until its tests prove semantic sufficiency.
 Related groundwork: `luna-responses-lite-wire-protocol.ts` (112),
 `websocket-receive-watchdog.ts` (95).
 **Retires the remaining reach-ins.**
@@ -788,7 +850,8 @@ feature), guardrails, MCP, sessions/memory, voice, realtime.
   model exists; do not implicitly extend the root post-execute capability.
 - Whether to keep a `Model`-shaped interface at all, or expose something closer to what `ai`
   already gives us (Step D).
-- Chaining disposition (blocks Step E).
+- Codex full-replay semantic sufficiency — explicitly unsupported until its provider/transport
+  tests prove it; this no longer blocks bounded Stage 0 characterization.
 - Audit the remaining 11 mediation-tax rows — only if LOC becomes decision-relevant again.
 
 ## Key file references
@@ -804,6 +867,7 @@ feature), guardrails, MCP, sessions/memory, voice, realtime.
 - `source/services/provider-continuity.ts` (36) — chaining state
 - `source/services/session/session-input-planner.ts` (273) — chaining decision point
 - `source/services/session/session-stream-processor.ts` (350)
+- `source/services/session/turn-workflow.ts` — passes `previousResponseId` into run options
 - `source/services/stream-event-processor.ts` (490)
 - `source/services/subagents/nested-runner.ts` (445)
 - `source/providers/codex-responses-model.ts` (1210) — SDK subclassing

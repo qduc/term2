@@ -131,12 +131,7 @@ export const createGrepToolDefinition = (
     allowOutsideWorkspace?: boolean;
   } = {},
 ): ToolDefinition<SearchToolParams> => {
-  const {
-    executionContext,
-    orchestratorMode = false,
-    globAvailable = true,
-    allowOutsideWorkspace = false,
-  } = deps;
+  const { executionContext, orchestratorMode = false, globAvailable = true, allowOutsideWorkspace = false } = deps;
   return {
     name: 'grep',
     description: buildGrepDescription(globAvailable, orchestratorMode),

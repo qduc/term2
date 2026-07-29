@@ -1,7 +1,8 @@
 # Subagent Oversight — Plan 2: Richer Results
 
-Status: plan. Implement after the Peek plan is shipped, test-first per the `testing`
-skill.
+Status: **shipped.** Implemented as the optional `diffStat` and `validation` fields on
+`SubagentResult` (`source/services/subagents/types.ts`). Retained for rationale, not as
+pending work.
 
 Parent: `docs/plans/subagent-oversight-goal.md` (feature 1). This plan implements the
 **Richer subagent results** feature and answers the questions the goal doc requires each

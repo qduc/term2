@@ -1,6 +1,9 @@
 # Subagent Oversight — Goal
 
-Status: goal only. Each numbered feature below gets its own plan document before any
+Status: **shipped.** All three features below are implemented; see the individual
+plan documents. Retained for the rationale and acceptance criteria, not as pending work.
+
+Originally: goal only. Each numbered feature gets its own plan document before any
 implementation. This document defines what we are trying to achieve and how we will
 know we got it, not how to build it.
 

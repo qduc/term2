@@ -1,8 +1,8 @@
 # Subagent Oversight — Plan 3: Steer
 
-Status: **plan to implement test-first.** Implement only after Peek and Richer Results
-are shipped; write each slice's tests before its production changes, per the `testing`
-skill.
+Status: **shipped.** Implemented as `sendMessage` / `cancelRun` on
+`SubagentAsyncRegistry` (`source/services/subagents/subagent-async-registry.ts`).
+Retained for rationale, not as pending work.
 
 Parent: `docs/plans/subagent-oversight-goal.md` (feature 3). Research basis:
 `docs/plans/subagent-oversight-steer-research.md`. This plan supersedes the research

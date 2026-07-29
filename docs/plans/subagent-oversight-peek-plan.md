@@ -1,6 +1,7 @@
 # Subagent Oversight — Plan 1: Peek
 
-Status: plan. Implement after this document is accepted, test-first per the `testing` skill.
+Status: **shipped.** Implemented as the `get_subagent_status` tool
+(`source/tools/agent/run-subagent-async.ts`). Retained for rationale, not as pending work.
 
 Parent: `docs/plans/subagent-oversight-goal.md` (feature 2). This plan implements the
 **Peek** feature and answers the questions the goal doc requires each plan to answer.

@@ -202,15 +202,19 @@ export class AgentRunOrchestrator {
     baseline: OpenAIChainedInputCompatibilityProjection,
   ): void {
     if (this.#agentConfig.getProvider() !== 'openai' || !snapshot) return;
-    const compatibility = projectOpenAIChainedModelInput(snapshot, modelData, { ...options, previousResponseId });
-    const observation: OpenAIChainedInputParityObservation = {
-      baseline,
-      compatibility,
-      matches:
-        isDeepStrictEqual(baseline.projectedModelData, compatibility.projectedModelData) &&
-        isDeepStrictEqual(baseline.error, compatibility.error),
-    };
-    this.#openAIChainedInputParityObserver?.record(observation);
+    try {
+      const compatibility = projectOpenAIChainedModelInput(snapshot, modelData, { ...options, previousResponseId });
+      const observation: OpenAIChainedInputParityObservation = {
+        baseline,
+        compatibility,
+        matches:
+          isDeepStrictEqual(baseline.projectedModelData, compatibility.projectedModelData) &&
+          isDeepStrictEqual(baseline.error, compatibility.error),
+      };
+      this.#openAIChainedInputParityObserver?.record(observation);
+    } catch {
+      // Parity observation is diagnostic only; it must never affect the SDK request.
+    }
   }
 
   async startStream(

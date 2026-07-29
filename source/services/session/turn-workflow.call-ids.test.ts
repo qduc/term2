@@ -40,23 +40,34 @@ const runResponseContinuation = async ({
   history = [],
   startedLedgerCallIds = [],
   completedResultCallIds = [],
+  previousResponseId,
 }: {
   runState: ContinuationRunState;
   history?: unknown[];
   startedLedgerCallIds?: string[];
   completedResultCallIds?: string[];
+  previousResponseId?: string;
 }) => {
   let receivedCallIds: string[] | undefined;
   let receivedKnownCallIds: readonly string[] | undefined;
+  let receivedPreviousResponseId: string | null | undefined;
+  let receivedProviderHistorySnapshot: unknown;
 
   const mockClient = {
     getProvider: () => 'openai',
     async continueRunStream(
       _state: unknown,
-      options: { toolResultCallIds?: string[]; knownToolCallIds?: readonly string[] },
+      options: {
+        previousResponseId?: string | null;
+        toolResultCallIds?: string[];
+        knownToolCallIds?: readonly string[];
+        providerHistorySnapshot?: unknown;
+      },
     ) {
       receivedCallIds = options.toolResultCallIds;
       receivedKnownCallIds = options.knownToolCallIds;
+      receivedPreviousResponseId = options.previousResponseId;
+      receivedProviderHistorySnapshot = options.providerHistorySnapshot;
       const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'done' }]);
       stream.finalOutput = 'done';
       return stream;
@@ -71,6 +82,7 @@ const runResponseContinuation = async ({
   });
 
   composition.conversationStore.replaceHistory(history as any);
+  composition.providerContinuity.update(previousResponseId ?? null);
   if (startedLedgerCallIds.length > 0 || completedResultCallIds.length > 0) {
     composition.toolTracker.beginTurn();
     for (const callId of [...startedLedgerCallIds, ...completedResultCallIds]) {
@@ -105,7 +117,14 @@ const runResponseContinuation = async ({
     }),
   );
 
-  return { outcome, receivedCallIds, receivedKnownCallIds };
+  return {
+    outcome,
+    receivedCallIds,
+    receivedKnownCallIds,
+    receivedPreviousResponseId,
+    receivedProviderHistorySnapshot,
+    composition,
+  };
 };
 
 it('passes interrupted and completed parallel tool call ids to continuation', async () => {
@@ -160,6 +179,32 @@ it('includes current-turn calls among calls known to the chained response', asyn
 
   expect((outcome as any).kind).toBe('response');
   expect(receivedKnownCallIds ? [...receivedKnownCallIds].sort() : undefined).toEqual(['call-current', 'call-earlier']);
+});
+
+it('passes the authoritative history snapshot without changing continuation options', async () => {
+  const history = [{ type: 'function_call', callId: 'call-earlier', name: 'shell', arguments: '{}' }];
+  const {
+    outcome,
+    receivedCallIds,
+    receivedKnownCallIds,
+    receivedPreviousResponseId,
+    receivedProviderHistorySnapshot,
+    composition,
+  } = await runResponseContinuation({
+    runState: {
+      getInterruptions: () => [{ callId: 'call-current', name: 'shell', arguments: '{}' }],
+    },
+    history,
+    completedResultCallIds: ['call-current'],
+    previousResponseId: 'response-before-approval',
+  });
+
+  expect((outcome as any).kind).toBe('response');
+  expect(receivedPreviousResponseId).toBe('response-before-approval');
+  expect(receivedCallIds?.sort()).toEqual(['call-current']);
+  expect(receivedKnownCallIds ? [...receivedKnownCallIds].sort() : undefined).toEqual(['call-current', 'call-earlier']);
+  expect(receivedProviderHistorySnapshot).toMatchObject(composition.conversationStore.getProviderHistorySnapshot());
+  expect(Object.isFrozen(receivedProviderHistorySnapshot)).toBe(true);
 });
 
 it('keeps rejected and approved sibling ids during abort resolution', async () => {

@@ -58,12 +58,14 @@ const defaultRetryCounts: RetryCounts = {
 it('executes initial turn successfully', async () => {
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello response' }]);
   stream.finalOutput = 'hello response';
+  let receivedProviderHistorySnapshot: unknown;
 
   const mockClient: any = {
     getProvider() {
       return 'openai';
     },
-    async startStream() {
+    async startStream(_input: unknown, options: { providerHistorySnapshot?: unknown }) {
+      receivedProviderHistorySnapshot = options.providerHistorySnapshot;
       return stream;
     },
   };
@@ -96,6 +98,47 @@ it('executes initial turn successfully', async () => {
     expect(true).toBe(false);
   }
   expect(attempt.closed).toBe(true);
+  expect(receivedProviderHistorySnapshot).toBe(attempt.providerHistorySnapshot);
+  expect(Object.isFrozen(receivedProviderHistorySnapshot)).toBe(true);
+});
+
+it('passes a fresh authoritative store snapshot when resuming an initial stream', async () => {
+  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'resumed response' }]);
+  stream.finalOutput = 'resumed response';
+  let receivedProviderHistorySnapshot: any;
+  const mockClient: any = {
+    getProvider: () => 'openai',
+    async continueRunStream(_state: unknown, options: { providerHistorySnapshot?: unknown }) {
+      receivedProviderHistorySnapshot = options.providerHistorySnapshot;
+      return stream;
+    },
+  };
+  const { workflow, composition } = setupWorkflow(mockClient);
+  composition.conversationStore.replaceHistory([{ role: 'user', type: 'message', content: 'authoritative' }] as any);
+  const getAuthoritativeSnapshot = composition.conversationStore.getProviderHistorySnapshot.bind(
+    composition.conversationStore,
+  );
+  const plannedSnapshot = getAuthoritativeSnapshot();
+  const resumedSnapshot = getAuthoritativeSnapshot();
+  let snapshotReads = 0;
+  composition.conversationStore.getProviderHistorySnapshot = () =>
+    [plannedSnapshot, resumedSnapshot][snapshotReads++] ?? getAuthoritativeSnapshot();
+  const token = composition.generationGuard.capture();
+  const attempt = new TurnAttempt({
+    turn: { text: 'resume' },
+    token,
+    initialRetryCounts: defaultRetryCounts,
+    initialJournalSnapshot: [],
+    maxTransientRetries: 3,
+  });
+
+  const result = await collect(workflow.executeInitial(attempt, { resumeState: {} as any }));
+
+  expect(result.outcome).toMatchObject({ kind: 'response', terminal: { finalText: 'resumed response' } });
+  expect(attempt.providerHistorySnapshot).toBe(plannedSnapshot);
+  expect(receivedProviderHistorySnapshot).toBe(resumedSnapshot);
+  expect(snapshotReads).toBeGreaterThanOrEqual(2);
+  expect(Object.isFrozen(receivedProviderHistorySnapshot)).toBe(true);
 });
 
 it('executes continuation turn successfully', async () => {

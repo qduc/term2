@@ -331,6 +331,81 @@ it('returns the established OpenAI projection while recording compatibility pari
   expect(observations[0].baseline.projectedModelData).toEqual(observations[0].compatibility.projectedModelData);
 });
 
+it('keeps the established projection and executes the request when the parity observer throws', async () => {
+  const agentConfig = createMockAgentConfig();
+  agentConfig.setProvider('openai');
+  let filtered: any;
+  let runCount = 0;
+  const runner = {
+    run: async (_agent: any, _input: any, options: any) => {
+      runCount++;
+      filtered = options.callModelInputFilter({
+        context: options.context,
+        modelData: {
+          input: [
+            { role: 'user', type: 'message', content: 'before' },
+            { role: 'user', type: 'message', content: 'now' },
+          ],
+        },
+      });
+      return { streamed: true };
+    },
+  };
+  const orchestrator = createOrchestrator({
+    agentConfig: agentConfig as any,
+    runnerManager: { maxTurns: 20, getOrCreateRunner: () => runner } as any,
+    openAIChainedInputParityObserver: {
+      record: () => {
+        throw new Error('observer failure');
+      },
+    },
+  });
+  const snapshot = Object.freeze({
+    revision: 1,
+    identity: 'history:test:1',
+    history: Object.freeze([{ role: 'user', type: 'message', content: 'before' }]),
+  });
+
+  await expect(
+    orchestrator.startStream('now', { previousResponseId: 'response-1', providerHistorySnapshot: snapshot as any }),
+  ).resolves.toEqual({ streamed: true });
+
+  expect(runCount).toBe(1);
+  expect(filtered.input).toEqual([{ role: 'user', type: 'message', content: 'now' }]);
+});
+
+it('keeps baseline chained-input errors as throws while parity records a structured error', async () => {
+  const agentConfig = createMockAgentConfig();
+  agentConfig.setProvider('openai');
+  const observations: any[] = [];
+  const runner = {
+    run: async (_agent: any, _input: any, options: any) =>
+      options.callModelInputFilter({
+        context: options.context,
+        modelData: { input: [] },
+      }),
+  };
+  const orchestrator = createOrchestrator({
+    agentConfig: agentConfig as any,
+    runnerManager: { maxTurns: 20, getOrCreateRunner: () => runner } as any,
+    openAIChainedInputParityObserver: { record: (observation) => observations.push(observation) },
+  });
+
+  await expect(
+    orchestrator.startStream('now', {
+      previousResponseId: 'response-1',
+      toolResultCallIds: ['missing'],
+      providerHistorySnapshot: { revision: 1, identity: 'history:test:1', history: [] },
+    }),
+  ).rejects.toMatchObject({ name: 'MissingChainedToolOutputError', callIds: ['missing'] });
+
+  expect(observations).toMatchObject([{ baseline: { error: { name: 'MissingChainedToolOutputError' } } }]);
+  expect(observations[0].compatibility.error).toMatchObject({
+    name: 'MissingChainedToolOutputError',
+    callIds: ['missing'],
+  });
+});
+
 it('does not invoke the OpenAI parity observer for Codex', async () => {
   const agentConfig = createMockAgentConfig();
   agentConfig.setProvider('codex');

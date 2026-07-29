@@ -55,6 +55,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step C post-execute handoff | Selected root tools can pause after execution through a session-owned registry; the UI settles revisioned entries and resumes the same live stream consumer, with fail-closed abort/reset/disposal |
 | Step C denied-read migration | Root shell denied reads pause before the SDK sees a result; typed choices re-execute the held call with call-ID-isolated overrides, while rejection returns the original denial |
 | Bug fix | Chained-continuation orphan checks include current-turn call IDs from the session ledger, not only terminal history |
+| Bug fix | Codex WebSocket lifetime expiry abandons only the rejected request attempt while retaining the last acknowledged response chain, so an already-executed tool output remains paired with its function call after reconnect |
 | Bug fix | Denied-read approval never fired for `cd`-prefixed commands (record/lookup key mismatch) |
 | Bug fix | Docker host-control denials leaked across sessions (process-global `#deniedCommands`) |
 

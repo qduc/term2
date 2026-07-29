@@ -552,7 +552,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
           yield event;
         }
       } catch (error) {
-        if (wireStateKey) {
+        if (wireStateKey && !isWebSocketConnectionLimitReachedError(error)) {
           wireState.invalidate(wireStateKey);
         }
         logFailed(requestId, requestData, error);
@@ -767,6 +767,13 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   }
 
   #shouldForgetCodexServerHistory(error: unknown): boolean {
+    // This rejects the new request before generation; it expires the socket,
+    // not the last acknowledged response. Retaining that response keeps an
+    // already-executed tool output paired with the call that introduced it.
+    if (isWebSocketConnectionLimitReachedError(error)) {
+      return false;
+    }
+
     const message = getErrorMessage(error);
     return (
       isPreviousResponseNotFoundError(error) ||
@@ -1045,11 +1052,16 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       } catch (error) {
         const timeoutError = watchdog.timeoutError();
         watchdog.close();
+        const failure = timeoutError ?? error;
         if (wireStateKey) {
-          this.chainedWireState.invalidate(wireStateKey);
+          if (isWebSocketConnectionLimitReachedError(failure)) {
+            if (wireStateToken) this.chainedWireState.abandon(wireStateKey, wireStateToken);
+          } else {
+            this.chainedWireState.invalidate(wireStateKey);
+          }
         }
-        this.#logTrafficFailed(requestId, requestData, timeoutError ?? error);
-        throw timeoutError ?? error;
+        this.#logTrafficFailed(requestId, requestData, failure);
+        throw failure;
       }
     }
 
@@ -1060,11 +1072,16 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     } catch (error) {
       const timeoutError = watchdog.timeoutError();
       watchdog.close();
+      const failure = timeoutError ?? error;
       if (wireStateKey) {
-        this.chainedWireState.invalidate(wireStateKey);
+        if (isWebSocketConnectionLimitReachedError(failure)) {
+          if (wireStateToken) this.chainedWireState.abandon(wireStateKey, wireStateToken);
+        } else {
+          this.chainedWireState.invalidate(wireStateKey);
+        }
       }
-      this.#logTrafficFailed(requestId, requestData, timeoutError ?? error);
-      throw timeoutError ?? error;
+      this.#logTrafficFailed(requestId, requestData, failure);
+      throw failure;
     }
   }
 }

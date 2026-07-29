@@ -1958,15 +1958,23 @@ it.sequential('CodexResponsesWSModel leaves warmup connection failures to the ou
 });
 
 it.sequential(
-  'CodexResponsesWSModel invalidates chained state when the websocket connection lifetime expires',
+  'CodexResponsesWSModel preserves a tool-call chain when the websocket connection lifetime expires',
   async () => {
     const seenRequests: any[] = [];
+    const trafficBodies: any[] = [];
     const networkError = Object.assign(
       new Error(
         'Responses websocket error: {"error":{"code":"websocket_connection_limit_reached","message":"Responses websocket connection limit reached (60 minutes). Create a new websocket connection to continue."},"status":400}',
       ),
       { status: 400 },
     );
+    const functionCall = {
+      id: 'fc_1',
+      type: 'function_call',
+      call_id: 'call_tool_1',
+      name: 'run_subagent_async',
+      arguments: '{}',
+    };
 
     const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
     (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
@@ -1976,8 +1984,8 @@ it.sequential(
           {
             type: 'response.completed',
             response: {
-              id: 'resp-stale-chain',
-              output: [],
+              id: 'resp-tool-call',
+              output: [functionCall],
               usage: {},
             },
           } as any,
@@ -2000,74 +2008,83 @@ it.sequential(
       ]);
     };
 
-    const mockClient = {
-      baseURL: 'https://api.openai.com',
-      apiKey: 'test-key',
-      _options: {},
+    const mockProviderTraffic: IProviderTraffic = {
+      recordRequestStart(input) {
+        trafficBodies.push(input.sentBody);
+      },
+      async recordResponseReceived() {},
+      recordRequestFailed() {},
     };
-    const tokenManager = {
-      getOrRefreshAccessToken: async () => 'token',
-      getAccountId: () => 'acc_123',
-    };
-
     const continuationInput = [
-      { role: 'user', type: 'message', content: 'continue' },
+      { role: 'user', type: 'message', content: 'start the worker' },
       {
         type: 'function_call_result',
-        callId: 'call_kQ5FnDgiK4ZWWNTvzPglQtEU',
-        output: 'tool output',
+        callId: 'call_tool_1',
+        output: 'worker is running',
       },
     ];
 
     try {
       const model = new CodexResponsesWSModel(
-        mockClient as any,
-        'gpt-5-codex',
-        tokenManager as any,
+        { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+        'gpt-5.6-luna',
+        { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
         undefined,
-        undefined,
+        mockProviderTraffic,
         {
           getContext: () => ({ sessionId: 'session-network-repro', traceId: 'trace-network-repro' } as any),
           runWithContext: <T>(_context: any, fn: () => T) => fn(),
         },
       );
 
-      for await (const _event of model.getStreamedResponse({
-        previousResponseId: 'resp-root',
-        input: [{ role: 'user', type: 'message', content: 'first turn' }],
-        modelSettings: {},
-        tools: [],
-        handoffs: [],
-      } as any)) {
-      }
+      await collect(
+        model.getStreamedResponse({
+          previousResponseId: 'resp-root',
+          input: [{ role: 'user', type: 'message', content: 'start the worker' }],
+          modelSettings: {},
+          tools: [],
+          handoffs: [],
+        } as any),
+      );
 
-      await expect(async () => {
-        for await (const _event of model.getStreamedResponse({
+      await expect(
+        collect(
+          model.getStreamedResponse({
+            input: continuationInput,
+            modelSettings: {},
+            tools: [],
+            handoffs: [],
+          } as any),
+        ),
+      ).rejects.toBe(networkError);
+
+      expect(trafficBodies).toHaveLength(2);
+      expect(trafficBodies[1].previous_response_id).toBe('resp-tool-call');
+      expect(trafficBodies[1].input).toEqual([
+        expect.objectContaining({ type: 'function_call_output', call_id: 'call_tool_1' }),
+      ]);
+
+      await collect(
+        model.getStreamedResponse({
           input: continuationInput,
           modelSettings: {},
           tools: [],
           handoffs: [],
-        } as any)) {
-        }
-      }).rejects.toBe(networkError);
+        } as any),
+      );
 
-      expect(seenRequests.length).toBe(2);
-      expect(seenRequests[1].previousResponseId).toBe('resp-stale-chain');
-      expect(seenRequests[1].input).toEqual([continuationInput[1]]);
-
-      for await (const _event of model.getStreamedResponse({
-        input: [{ role: 'user', type: 'message', content: 'retry from durable history' }],
-        modelSettings: {},
-        tools: [],
-        handoffs: [],
-      } as any)) {
-      }
-
-      expect(seenRequests.length).toBe(4);
-      expect(seenRequests[2].previousResponseId).toBe(undefined);
-      expect(seenRequests[2].modelSettings.providerData?.generate).toBe(false);
-      expect(seenRequests[3].previousResponseId).toBe('resp-recovered');
-      expect(seenRequests[3].previousResponseId).not.toBe('resp-stale-chain');
+      expect(seenRequests).toHaveLength(3);
+      expect(trafficBodies).toHaveLength(3);
+      expect(trafficBodies[2].previous_response_id).toBe('resp-tool-call');
+      expect(trafficBodies[2].input).toEqual([
+        expect.objectContaining({
+          type: 'function_call_output',
+          call_id: 'call_tool_1',
+          output: 'worker is running',
+        }),
+      ]);
+      expect(trafficBodies[2].input).not.toContainEqual(expect.objectContaining({ type: 'function_call' }));
+      expect(trafficBodies[2].generate).not.toBe(false);
     } finally {
       (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
     }

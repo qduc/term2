@@ -2,9 +2,9 @@
  * Shared upstream/provider retry policy.
  *
  * This module classifies transient provider/upstream failures and computes
- * backoff for the shared retry loop used by retry-handler, retry-executor,
- * and provider fallback paths. It does not cover model repair retries or the
- * user-initiated /retry command flow.
+ * backoff for the shared retry loop used by retry-handler and the provider
+ * retry paths. It does not cover model repair retries or the user-initiated
+ * /retry command flow.
  */
 import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
 import { OpenAICompatibleError, OpenRouterError, LongRetryDelayError } from '../../providers/common/provider-errors.js';

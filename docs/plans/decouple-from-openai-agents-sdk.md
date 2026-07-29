@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization slice is landed; the next action is an inert application-owned contract and bridge for one streamed model turn. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization and inert application-owned one-streamed-turn contract/Agents bridge slices are landed; the next action is an unrouted AI SDK implementation of that contract. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
 **Last updated:** 2026-07-29
 
 ---
@@ -38,6 +38,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step B approval-history projection slice | Shell auto-approval compact context uses `conversation-message-projection.ts`; direct and one-level wrapped user/assistant messages render equivalently while system, tool, and reasoning items remain excluded and history remains original |
 | Step B input-surge guard slice | `InputSurgeGuard` derives duplicate tool signatures and call/result pair counts from canonical `ToolCall`/`ToolResult` projections; wrapped SDK, direct-provider, and canonical tool inputs share policy behavior while serialized input bytes and message counts remain original |
 | Step B chained-input-filter slice | Chained request delta selection and recognized tool call/result classification use `run-item-normalizer.ts`; direct, one-level wrapped, and canonical tool forms retain original input object identity/order/slicing, while explicit call-ID precedence, generic `*_call` compatibility, and user-message detection remain local policy |
+| Step D inert streamed-turn contract + Agents bridge | `contracts/streamed-model-turn.ts` owns a closed text/image, reasoning, function-call/result, and structured tool-result protocol for one turn; `agents-model-bridge.ts` temporarily adapts it to public Agents Model events without routing or provider changes |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -168,6 +169,14 @@ production session contract.
   usage semantics, AbortSignal forwarding/cancellation, provider-error propagation, and the
   existing reasoning/provider-option forwarding. Focused adapter and message-normalizer tests:
   2 files / 25 tests pass.
+- Step D inert contract + bridge: focused contract/bridge, adapter/message-normalizer, and real
+  Runner approval-resume tests pass (5 files / 37 tests). A real streaming Runner also consumes the
+  temporary bridge through terminal output. The set covers live delta delivery before completion,
+  image input, structured text/image/file tool results, exact tool arguments, explicit model
+  settings/provider options, reasoning and tool-call model events, authoritative completion,
+  required response IDs/provider metadata, signal identity, errors, missing-versus-zero usage, and
+  terminal-event enforcement. No provider routing, registry, Codex, chaining, or AI SDK
+  implementation changed.
 
 ### `ApprovalRecord` semantics, established by reading the SDK source
 
@@ -197,13 +206,12 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **Step D inert contract + bridge.** Based on the landed adapter characterization, establish
-   an application-owned contract for **one streamed model turn only**, then bridge the current
-   adapter without changing routing. Do not add speculative generate support, continuation,
-   a raw event/history bag, a broad error taxonomy, or provider-registry migration yet. Step B's
-   remaining candidate consumers were audited: their item interpretation already delegates where
-   it is representation-only, while provider logging, history projection, RunState, and
-   orchestration remain deliberately outside this bounded migration.
+1. **Step D unrouted AI SDK implementation.** Implement `StreamedModelTurn` behind the new
+   contract using the existing AI SDK behavior and its characterized provider metadata, but do
+   not route production requests through it yet. Do not add speculative generate support,
+   continuation, a raw event/history bag, a broad error taxonomy, or provider-registry migration.
+   Provider logging, history projection, RunState, and orchestration remain outside this bounded
+   migration.
 
 ### R1 gate — PASSED
 

@@ -1,0 +1,111 @@
+/** Provider-owned options and metadata retained at characterized protocol boundaries. */
+export type StreamedModelProviderOptions = Readonly<Record<string, unknown>>;
+
+export type StreamedModelImageReference = string | { readonly id: string };
+export type StreamedModelFileReference = string | { readonly id: string } | { readonly url: string };
+
+export type StreamedModelMessagePart =
+  | { readonly type: 'text'; readonly text: string }
+  | { readonly type: 'image'; readonly image?: StreamedModelImageReference; readonly detail?: string };
+
+export type StreamedModelToolResultPart =
+  | { readonly type: 'text'; readonly text: string }
+  | {
+      readonly type: 'image';
+      readonly image?:
+        | string
+        | { readonly id: string }
+        | { readonly data: string | Uint8Array; readonly mediaType?: string }
+        | { readonly url: string }
+        | { readonly fileId: string };
+      readonly detail?: string;
+    }
+  | {
+      readonly type: 'file';
+      readonly file:
+        | string
+        | { readonly data: string | Uint8Array; readonly mediaType: string; readonly filename: string }
+        | { readonly url: string; readonly filename?: string }
+        | { readonly id: string; readonly filename?: string };
+    };
+
+/** One application-owned streamed model invocation. */
+export interface StreamedModelTurn {
+  stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent>;
+}
+
+export interface StreamedModelTurnRequest {
+  readonly instructions?: string;
+  readonly input: readonly StreamedModelTurnInput[];
+  readonly tools: readonly StreamedModelTool[];
+  readonly toolChoice?: 'auto' | 'required' | 'none' | { readonly name: string };
+  readonly temperature?: number;
+  readonly topP?: number;
+  readonly frequencyPenalty?: number;
+  readonly presencePenalty?: number;
+  readonly maxTokens?: number;
+  readonly reasoning?: { readonly effort?: string | null; readonly summary?: 'auto' | 'concise' | 'detailed' | null };
+  readonly providerOptions?: StreamedModelProviderOptions;
+  readonly signal?: AbortSignal;
+}
+
+export type StreamedModelTurnInput =
+  | {
+      readonly type: 'message';
+      readonly role: 'user' | 'assistant' | 'system';
+      readonly content: readonly StreamedModelMessagePart[];
+    }
+  | {
+      readonly type: 'reasoning';
+      readonly id?: string;
+      readonly text: string;
+      readonly providerMetadata?: StreamedModelProviderOptions;
+    }
+  | { readonly type: 'tool_call'; readonly id: string; readonly name: string; readonly arguments: string }
+  | {
+      readonly type: 'tool_result';
+      readonly id: string;
+      readonly output: string | readonly StreamedModelToolResultPart[];
+    };
+
+export interface StreamedModelTool {
+  readonly name: string;
+  readonly description?: string;
+  readonly parameters: Readonly<Record<string, unknown>>;
+  readonly strict?: boolean;
+}
+
+export type StreamedModelTurnEvent =
+  | { readonly type: 'text_delta'; readonly text: string }
+  | {
+      readonly type: 'reasoning_delta';
+      readonly id?: string;
+      readonly text: string;
+      readonly providerMetadata?: StreamedModelProviderOptions;
+    }
+  | { readonly type: 'tool_call'; readonly id: string; readonly name: string; readonly arguments: string }
+  | {
+      readonly type: 'completion';
+      readonly responseId: string;
+      readonly output: readonly StreamedModelTurnOutput[];
+      readonly providerMetadata?: StreamedModelProviderOptions;
+      readonly finishReason?: string;
+      readonly usage?: StreamedModelUsage;
+    };
+
+export type StreamedModelTurnOutput =
+  | { readonly type: 'message'; readonly content: readonly { readonly type: 'text'; readonly text: string }[] }
+  | {
+      readonly type: 'reasoning';
+      readonly id?: string;
+      readonly text: string;
+      readonly providerMetadata?: StreamedModelProviderOptions;
+    }
+  | { readonly type: 'tool_call'; readonly id: string; readonly name: string; readonly arguments: string };
+
+export interface StreamedModelUsage {
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+  readonly cachedInputTokens?: number;
+  readonly cacheWriteTokens?: number;
+}

@@ -46,7 +46,14 @@ it('translates one application turn to an AI SDK stream and publishes its author
     model.stream({
       instructions: 'Be concise.',
       input: [
-        { type: 'message', role: 'user', content: [{ type: 'text', text: 'List files.' }] },
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'text', text: 'List files.' },
+            { type: 'image', image: 'data:image/jpeg;base64,dXNlcg==' },
+          ],
+        },
         { type: 'message', role: 'assistant', content: [{ type: 'image', image: 'data:image/png;base64,aW1n' }] },
         { type: 'tool_call', id: 'old-call', name: 'shell', arguments: '{"command":"pwd"}' },
         {
@@ -75,7 +82,13 @@ it('translates one application turn to an AI SDK stream and publishes its author
   expect(seenOptions).toMatchObject({
     prompt: [
       { role: 'system', content: 'Be concise.' },
-      { role: 'user', content: [{ type: 'text', text: 'List files.' }] },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'List files.' },
+          { type: 'file', data: 'data:image/jpeg;base64,dXNlcg==', mediaType: 'image/jpeg' },
+        ],
+      },
       {
         role: 'assistant',
         content: [
@@ -111,6 +124,7 @@ it('translates one application turn to an AI SDK stream and publishes its author
     frequencyPenalty: 0,
     presencePenalty: 0,
     maxOutputTokens: 0,
+    reasoning: { effort: 'high' },
     providerOptions: { openrouter: { transforms: ['middle-out'] } },
     abortSignal: signal,
   });
@@ -207,4 +221,41 @@ it('rejects provider errors and streams that cannot authoritatively complete', a
   await expect(
     collect(modelFor([{ type: 'response-metadata', id: 'response-1' }]).stream({ input: [], tools: [] })),
   ).rejects.toThrow('without a finish event');
+});
+
+it('preserves missing token totals without turning them into zero', async () => {
+  const model = createAiSdkStreamedModel({
+    provider: 'example',
+    modelId: 'model',
+    specificationVersion: 'v3',
+    supportedUrls: {},
+    async doGenerate() {
+      return {} as any;
+    },
+    async doStream() {
+      return {
+        stream: (async function* () {
+          yield { type: 'response-metadata', id: 'response-usage' };
+          yield {
+            type: 'finish',
+            finishReason: { unified: 'stop' },
+            usage: { inputTokens: {}, outputTokens: {} },
+          };
+        })(),
+      };
+    },
+  } as any);
+
+  const events = await collect(model.stream({ input: [], tools: [] }));
+
+  expect(events).toEqual([
+    {
+      type: 'completion',
+      responseId: 'response-usage',
+      output: [],
+      finishReason: 'stop',
+      usage: {},
+      providerMetadata: { model: 'example:model', responseId: 'response-usage' },
+    },
+  ]);
 });

@@ -203,11 +203,7 @@ export const ShellSettingsSchema = z.object({
 
 export const SandboxSettingsSchema = z.object({
   enabled: z.boolean().optional().default(true),
-  readPolicy: z
-    .enum(['standard', 'strict', 'standard', 'strict'])
-    .optional()
-    .default('standard')
-    .transform((v) => (v === 'standard' ? 'standard' : v === 'strict' ? 'strict' : v)),
+  readPolicy: z.enum(['standard', 'strict']).optional().default('standard'),
   allowReadExtra: z.array(z.string()).optional().default([]),
   dockerHostControlProjects: z.array(z.string()).optional().default([]),
   allowNetworking: z.boolean().optional().default(false),
@@ -530,6 +526,7 @@ export interface SettingsWithSources {
     readPolicy: SettingWithSource<'standard' | 'strict'>;
     allowReadExtra: SettingWithSource<string[]>;
     dockerHostControlProjects: SettingWithSource<string[]>;
+    allowNetworking: SettingWithSource<boolean>;
   };
   subagent: {
     asyncSessionTtlMs: SettingWithSource<number>;

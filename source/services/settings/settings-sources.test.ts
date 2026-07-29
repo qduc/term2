@@ -71,3 +71,14 @@ it('buildSettingsWithSources maps nested values and sources including optional u
   expect(codex.websocketInterFrameTimeoutMs.value).toBe(67_890);
   expect(codex.websocketInterFrameTimeoutMs.source).toBe('default');
 });
+
+// Regression: sandbox.allowNetworking existed in the zod schema, SETTING_KEYS,
+// RUNTIME_MODIFIABLE_SETTINGS and DEFAULT_SETTINGS, but was missing from both
+// SettingsWithSources and the SETTINGS_SOURCE_KEYS runtime map, so `/settings`
+// could not report where its value came from. The source map is a plain object
+// literal with no compiler link to the schema, so nothing caught the omission.
+it('reports a source for every sandbox setting, including allowNetworking', () => {
+  const withSources = buildSettingsWithSources(DEFAULT_SETTINGS, () => 'default');
+  expect(withSources.sandbox.allowNetworking).toBeDefined();
+  expect(withSources.sandbox.allowNetworking.source).toBe('default');
+});

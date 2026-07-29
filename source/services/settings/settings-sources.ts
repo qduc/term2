@@ -49,6 +49,7 @@ const SETTINGS_SOURCE_KEYS = {
     readPolicy: 'sandbox.readPolicy',
     allowReadExtra: 'sandbox.allowReadExtra',
     dockerHostControlProjects: 'sandbox.dockerHostControlProjects',
+    allowNetworking: 'sandbox.allowNetworking',
   },
   ui: {
     historySize: 'ui.historySize',

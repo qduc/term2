@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, and unrouted AI SDK implementation slices are landed; the next action is to choose and prove the first provider-routing slice without broadening into Codex, chaining, or registry migration. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and first OpenRouter routing slice are landed; the next action is the next independent non-Codex provider slice, without broadening into chaining or registry migration. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
 **Last updated:** 2026-07-29
 
 ---
@@ -40,6 +40,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step B chained-input-filter slice | Chained request delta selection and recognized tool call/result classification use `run-item-normalizer.ts`; direct, one-level wrapped, and canonical tool forms retain original input object identity/order/slicing, while explicit call-ID precedence, generic `*_call` compatibility, and user-message detection remain local policy |
 | Step D inert streamed-turn contract + Agents bridge | `contracts/streamed-model-turn.ts` owns a closed text/image, reasoning, function-call/result, and structured tool-result protocol for one turn; `agents-model-bridge.ts` temporarily adapts it to public Agents Model events without routing or provider changes |
 | Step D unrouted AI SDK streamed turn | `providers/ai-sdk-streamed-model.ts` translates the closed turn protocol directly to a normalized LanguageModelV3 stream and returns deltas plus one authoritative completion; no production provider is routed through it |
+| Step D OpenRouter routing slice | `AiSdkOpenRouterProvider` routes its LanguageModelV3 through `createAiSdkStreamedModel()` and the temporary Agents bridge; its provider-local forwarding retains legacy reasoning, provider options, extra request fields, configuration/fetch, stream signal/error, and completion behavior |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -186,6 +187,14 @@ production session contract.
   identity, provider-error propagation, response-ID/finish enforcement, and terminal completion.
   Full `tsc --noEmit` reaches only the known pre-existing
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Step D OpenRouter routing slice: focused OpenRouter provider, direct implementation, temporary
+  bridge, and legacy adapter-characterization tests pass (4 files / 31 tests). A fake
+  LanguageModelV3 proves configuration/custom fetch preservation; public Agents stream request
+  settings, OpenRouter reasoning/provider options and extra request fields; live reasoning/text/tool
+  events; completion metadata/usage; signal identity; and provider-error propagation through the
+  routed direct turn and bridge. Formatting/lint pass for the changed files. Full `tsc --noEmit`
+  reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
 
 ### `ApprovalRecord` semantics, established by reading the SDK source
 
@@ -215,10 +224,10 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **Choose the first Step D routing slice.** Route one non-Codex AI SDK provider through the
-   landed `StreamedModelTurn` implementation and temporary Agents bridge, proving its provider
-   metadata and transport behavior before deleting the legacy adapter. Do not add speculative
-   generate support, continuation, a raw event/history bag, a broad error taxonomy, or
+1. **Route the next independent non-Codex provider slice: `AiSdkGoogleProvider`.** Route it
+   through the landed `StreamedModelTurn` implementation and temporary Agents bridge, proving its
+   provider metadata and transport behavior before considering legacy-adapter deletion. Do not add
+   speculative generate support, continuation, a raw event/history bag, a broad error taxonomy, or
    provider-registry migration. Provider logging, history projection, RunState, and orchestration
    remain outside this bounded migration.
 
@@ -705,9 +714,11 @@ output, usage, cancellation, errors, and current reasoning/provider-option forwa
 Google, Anthropic, and OpenRouter. It intentionally does **not** characterize Codex, chaining,
 Runner orchestration, private implementation details, speculative non-stream generation,
   continuation, a raw event/history bag, a broad error taxonomy, or registry migration. The
-  contract, temporary bridge, and unrouted direct LanguageModelV3 implementation are now landed;
-  routing remains unchanged. Next: choose one provider-routing slice and prove it before retiring
-  the legacy adapter.
+   contract, temporary bridge, unrouted direct LanguageModelV3 implementation, and OpenRouter
+   routing slice are now landed. OpenRouter retains its legacy provider-data convention in a
+   provider-local forwarding boundary, rather than adding OpenRouter policy to generic turn
+   orchestration. Next: route `AiSdkGoogleProvider` as the next independent non-Codex slice before
+   considering legacy-adapter retirement.
 
 ### Step E — Chaining disposition, then the Codex WS transport
 The irreducible risk. Resolve the interlock first. Driven by the existing

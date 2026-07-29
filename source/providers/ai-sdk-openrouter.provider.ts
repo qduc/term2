@@ -1,6 +1,8 @@
 import { createOpenRouter, type OpenRouterProviderSettings } from '@openrouter/ai-sdk-provider';
+import type { JSONValue, LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider';
 import { type ModelProvider, type Model } from '@openai/agents-core';
-import { adaptAiSdkModelForAgents } from './ai-sdk-agents-adapter.js';
+import { adaptStreamedModelTurnForAgents } from './agents-model-bridge.js';
+import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
 
 export type AiSdkOpenRouterConfig = Pick<
   OpenRouterProviderSettings,
@@ -9,7 +11,7 @@ export type AiSdkOpenRouterConfig = Pick<
 
 export type AiSdkOpenRouterProviderFactory = (
   options: AiSdkOpenRouterConfig & { compatibility?: 'strict' | 'compatible' },
-) => (modelId: string) => any;
+) => (modelId: string) => LanguageModelV3;
 
 export class AiSdkOpenRouterProvider implements ModelProvider {
   #defaultModel: string;
@@ -33,6 +35,52 @@ export class AiSdkOpenRouterProvider implements ModelProvider {
       compatibility: 'strict',
     });
 
-    return adaptAiSdkModelForAgents(provider(modelName || this.#defaultModel));
+    return adaptStreamedModelTurnForAgents(
+      createAiSdkStreamedModel(withOpenRouterSettings(provider(modelName || this.#defaultModel))),
+    );
   }
+}
+
+/** Retains the legacy adapter's OpenRouter-specific provider-data convention at the provider boundary. */
+function withOpenRouterSettings(model: LanguageModelV3): LanguageModelV3 {
+  return new Proxy(model, {
+    get(target, property, receiver) {
+      if (property === 'doStream') {
+        return (options: LanguageModelV3CallOptions) => target.doStream(forwardOpenRouterSettings(options));
+      }
+      const value = Reflect.get(target, property, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+type OpenRouterCallOptions = LanguageModelV3CallOptions & {
+  reasoning?: JSONValue;
+  providerOptions?: SharedV3ProviderOptions & {
+    providerOptions?: SharedV3ProviderOptions;
+    reasoning?: JSONValue;
+  };
+};
+
+function forwardOpenRouterSettings(options: OpenRouterCallOptions): OpenRouterCallOptions {
+  const providerData = options.providerOptions;
+  if (!providerData || typeof providerData !== 'object') return options;
+
+  const { providerOptions, reasoning: providerReasoning, ...extraBody } = providerData;
+  if (!Object.keys(extraBody).length && !providerReasoning) {
+    return providerOptions ? { ...options, providerOptions } : options;
+  }
+
+  return {
+    ...options,
+    ...extraBody,
+    providerOptions: {
+      ...(providerOptions ?? {}),
+      openrouter: {
+        ...extraBody,
+        ...(providerOptions?.openrouter ?? {}),
+        ...(providerReasoning || options.reasoning ? { reasoning: providerReasoning ?? options.reasoning } : {}),
+      },
+    },
+  };
 }

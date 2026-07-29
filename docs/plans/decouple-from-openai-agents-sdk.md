@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed; the now-unreferenced legacy adapter, its characterization test, and direct `@openai/agents-extensions` dependency are retired. Focused routed-provider, direct-turn, bridge, custom-provider, and message-normalizer validation passes. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path. **Step E's chaining disposition is now decided:** full provider-facing history is the application’s semantic record, while OpenAI/Codex continuation is a provider-private compatibility projection. The immediate next slice is Stage 0 characterization/instrumentation only; it changes no wire behavior.
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed; the now-unreferenced legacy adapter, its characterization test, and direct `@openai/agents-extensions` dependency are retired. Focused routed-provider, direct-turn, bridge, custom-provider, and message-normalizer validation passes. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path. **Step E's chaining disposition is now decided and Stage 0 characterization/instrumentation is landed:** full provider-facing history remains the application’s semantic record, while OpenAI/Codex continuation remains a provider-private compatibility projection. Stage 0 records no wire behavior changes and retires no reach-in; Stage 1 is next.
 **Last updated:** 2026-07-29
 
 ---
@@ -45,6 +45,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step D Anthropic routing slice | `AiSdkAnthropicProvider` routes its cache/max-token-wrapped LanguageModelV3 through `createAiSdkStreamedModel()` and the temporary Agents bridge; the shared explicit-provider settings rule preserves Anthropic’s top-level provider data and nested precedence while caching/max-token policy stays local |
 | Step D adapter retirement | The unused AI SDK Agents adapter, its characterization test, and direct `@openai/agents-extensions` dependency/lockfile entries are deleted; routed-provider and application-owned boundary tests retain the behavior |
 | Step E chaining disposition | Full provider-facing history is authoritative; OpenAI/Codex continuation becomes an opaque provider-private, exact-prefix-anchored checkpoint with candidate → accepted → retired lifecycle and provider-classified replay |
+| Step E Stage 0 characterization/instrumentation | Immutable provider-history snapshots, exact prefix-bound checkpoint lifecycle/reset lineage, terminal-commit-only promotion, and optional exact OpenAI/Codex request-projection capture are pinned without changing wire selection or provider behavior |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -269,6 +270,14 @@ production session contract.
   Formatting of retained changed files passes; this deletion-only source change leaves no retained
   lintable source file. Full `tsc --noEmit` reaches only the known
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Step E Stage 0 characterization/instrumentation: focused store, continuity, input-planner,
+  stream-processor/reset/composition, chained-wire, OpenAI, and Codex coverage passes (9 files /
+  186 tests). It pins immutable snapshot identity, exact checkpoint binding and lifecycle, reset
+  retirement/stale non-promotion, terminal-commit-only promotion, and structured exact request
+  capture after OpenAI builder/prompt-cache forwarding and Codex normalization/private-fetch seam.
+  Formatting passes. Full `tsc --noEmit` reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532`; the attempted full
+  Vitest run was sandbox-blocked on Docker host control before tests began.
 
 ### `ApprovalRecord` semantics, established by reading the SDK source
 
@@ -298,12 +307,15 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **Stage 0 — characterize and instrument the decided boundary; no wire change.** Establish
-   immutable snapshot identity and exact prefix anchoring, and pin candidate → accepted → retired
-   lifecycle behavior at the current owners. Cover stale completion after reset and the atomic
-   terminal-history-commit/checkpoint-promotion boundary. Record exact existing suffix projections
-   for OpenAI/Codex compatibility comparisons. Do not change request payloads, continuation
-   ownership, approval/session migration, or fallback behavior in this slice.
+1. **DONE — Stage 0 characterization/instrumentation; no wire change.** Immutable snapshot identity
+   and exact prefix anchoring, candidate → accepted → retired lifecycle behavior, stale completion
+   after reset, and terminal-history-commit/checkpoint-promotion ordering are pinned at the current
+   owners. Optional structured capture records exact existing OpenAI/Codex request projections for
+   later parity comparison. This neither changes request payloads, continuation ownership,
+   approval/session migration, nor fallback behavior, and retires no reach-in.
+2. **Next — Stage 1 compatibility seam.** Supply full-history snapshots at the provider boundary,
+   move the current suffix projection behind OpenAI/Codex-private seams, and compare exact projected
+   inputs. Do not migrate in-flight approvals/sessions or change Codex replay support.
 
 ### R1 gate — PASSED
 

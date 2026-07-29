@@ -100,3 +100,42 @@ it.sequential('OpenAIResponsesWSModelWithPromptCacheKey forwards prompt_cache_ke
     (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = original;
   }
 });
+
+it.sequential('OpenAI request capture records the exact post-builder HTTP and WebSocket request projection', () => {
+  const captures: any[] = [];
+  const capture = { record: (entry: any) => captures.push(entry) };
+  const originalHttp = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+  const originalWs = (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest;
+  const builder = function () {
+    return { requestData: { input: [{ role: 'user', content: 'hello' }], previous_response_id: 'resp-1' } };
+  };
+  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = builder;
+  (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = builder;
+  try {
+    for (const ModelClass of [OpenAIResponsesModelWithPromptCacheKey, OpenAIResponsesWSModelWithPromptCacheKey]) {
+      const model = new ModelClass({} as any, 'gpt-5', capture as any);
+      (model as any)._buildResponsesCreateRequest({ modelSettings: { prompt_cache_key: 'cache-key' } }, true);
+    }
+    expect(captures).toEqual([
+      expect.objectContaining({
+        transport: 'http',
+        requestData: {
+          input: [{ role: 'user', content: 'hello' }],
+          previous_response_id: 'resp-1',
+          prompt_cache_key: 'cache-key',
+        },
+      }),
+      expect.objectContaining({
+        transport: 'websocket',
+        requestData: {
+          input: [{ role: 'user', content: 'hello' }],
+          previous_response_id: 'resp-1',
+          prompt_cache_key: 'cache-key',
+        },
+      }),
+    ]);
+  } finally {
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = originalHttp;
+    (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = originalWs;
+  }
+});

@@ -442,6 +442,46 @@ it.sequential('CodexResponsesModel._buildResponsesCreateRequest forwards prompt_
   }
 });
 
+it.sequential('Codex request capture records the exact normalized suffix projection without changing it', () => {
+  const captures: any[] = [];
+  const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+    return {
+      requestData: {
+        model: 'gpt-5-codex',
+        previous_response_id: 'resp-1',
+        input: [{ type: 'function_call_output', call_id: 'call-1', output: 'result' }],
+        temperature: 0.2,
+      },
+    };
+  };
+  try {
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex', undefined, {
+      record: (projection) => captures.push(projection),
+    });
+    const built = (model as any)._buildResponsesCreateRequest(
+      { modelSettings: { prompt_cache_key: 'cache-key' } },
+      true,
+    );
+
+    expect(captures).toEqual([
+      {
+        provider: 'codex',
+        transport: 'http',
+        requestData: {
+          model: 'gpt-5-codex',
+          previous_response_id: 'resp-1',
+          input: [{ type: 'function_call_output', call_id: 'call-1', output: 'result' }],
+          prompt_cache_key: 'cache-key',
+        },
+      },
+    ]);
+    expect(built.requestData).toEqual(captures[0].requestData);
+  } finally {
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+  }
+});
+
 it.sequential('CodexResponsesModel sends gpt-5.6-luna through the Responses Lite protocol', () => {
   const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
   (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
@@ -705,6 +745,7 @@ it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed r
 it.sequential('CodexResponsesWSModel sends only new input after a Responses-Lite prefix is established', async () => {
   const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
   const trafficBodies: any[] = [];
+  const captures: any[] = [];
   let responseCount = 0;
 
   const mockProviderTraffic: IProviderTraffic = {
@@ -736,6 +777,8 @@ it.sequential('CodexResponsesWSModel sends only new input after a Responses-Lite
         getContext: () => ({ sessionId: 'session-lite-prefix', traceId: 'trace-lite-prefix' } as any),
         runWithContext: <T>(_context: any, fn: () => T) => fn(),
       } as any,
+      undefined,
+      { record: (projection) => captures.push(projection) },
     );
 
     const tool = { type: 'function', name: 'shell', parameters: { type: 'object' } };
@@ -768,6 +811,8 @@ it.sequential('CodexResponsesWSModel sends only new input after a Responses-Lite
     expect(trafficBodies[1].input).toEqual([expect.objectContaining({ role: 'user', content: 'hello' })]);
     expect(trafficBodies[2].previous_response_id).toBe('resp_lite_2');
     expect(trafficBodies[2].input).toEqual([expect.objectContaining({ role: 'user', content: 'how are you?' })]);
+    expect(captures.map((capture) => capture.requestData)).toEqual(trafficBodies);
+    expect(captures.map((capture) => capture.transport)).toEqual(['websocket', 'websocket', 'websocket']);
   } finally {
     (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
   }
@@ -1912,119 +1957,122 @@ it.sequential('CodexResponsesWSModel leaves warmup connection failures to the ou
   }
 });
 
-it.sequential('CodexResponsesWSModel invalidates chained state when the websocket connection lifetime expires', async () => {
-  const seenRequests: any[] = [];
-  const networkError = Object.assign(
-    new Error(
-      'Responses websocket error: {"error":{"code":"websocket_connection_limit_reached","message":"Responses websocket connection limit reached (60 minutes). Create a new websocket connection to continue."},"status":400}',
-    ),
-    { status: 400 },
-  );
+it.sequential(
+  'CodexResponsesWSModel invalidates chained state when the websocket connection lifetime expires',
+  async () => {
+    const seenRequests: any[] = [];
+    const networkError = Object.assign(
+      new Error(
+        'Responses websocket error: {"error":{"code":"websocket_connection_limit_reached","message":"Responses websocket connection limit reached (60 minutes). Create a new websocket connection to continue."},"status":400}',
+      ),
+      { status: 400 },
+    );
 
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
-    seenRequests.push(request);
-    if (seenRequests.length === 1) {
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+      seenRequests.push(request);
+      if (seenRequests.length === 1) {
+        return makeStream([
+          {
+            type: 'response.completed',
+            response: {
+              id: 'resp-stale-chain',
+              output: [],
+              usage: {},
+            },
+          } as any,
+        ]);
+      }
+
+      if (seenRequests.length === 2) {
+        throw networkError;
+      }
+
       return makeStream([
         {
           type: 'response.completed',
           response: {
-            id: 'resp-stale-chain',
+            id: 'resp-recovered',
             output: [],
             usage: {},
           },
         } as any,
       ]);
-    }
+    };
 
-    if (seenRequests.length === 2) {
-      throw networkError;
-    }
+    const mockClient = {
+      baseURL: 'https://api.openai.com',
+      apiKey: 'test-key',
+      _options: {},
+    };
+    const tokenManager = {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'acc_123',
+    };
 
-    return makeStream([
+    const continuationInput = [
+      { role: 'user', type: 'message', content: 'continue' },
       {
-        type: 'response.completed',
-        response: {
-          id: 'resp-recovered',
-          output: [],
-          usage: {},
-        },
-      } as any,
-    ]);
-  };
-
-  const mockClient = {
-    baseURL: 'https://api.openai.com',
-    apiKey: 'test-key',
-    _options: {},
-  };
-  const tokenManager = {
-    getOrRefreshAccessToken: async () => 'token',
-    getAccountId: () => 'acc_123',
-  };
-
-  const continuationInput = [
-    { role: 'user', type: 'message', content: 'continue' },
-    {
-      type: 'function_call_result',
-      callId: 'call_kQ5FnDgiK4ZWWNTvzPglQtEU',
-      output: 'tool output',
-    },
-  ];
-
-  try {
-    const model = new CodexResponsesWSModel(
-      mockClient as any,
-      'gpt-5-codex',
-      tokenManager as any,
-      undefined,
-      undefined,
-      {
-        getContext: () => ({ sessionId: 'session-network-repro', traceId: 'trace-network-repro' } as any),
-        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+        type: 'function_call_result',
+        callId: 'call_kQ5FnDgiK4ZWWNTvzPglQtEU',
+        output: 'tool output',
       },
-    );
+    ];
 
-    for await (const _event of model.getStreamedResponse({
-      previousResponseId: 'resp-root',
-      input: [{ role: 'user', type: 'message', content: 'first turn' }],
-      modelSettings: {},
-      tools: [],
-      handoffs: [],
-    } as any)) {
-    }
+    try {
+      const model = new CodexResponsesWSModel(
+        mockClient as any,
+        'gpt-5-codex',
+        tokenManager as any,
+        undefined,
+        undefined,
+        {
+          getContext: () => ({ sessionId: 'session-network-repro', traceId: 'trace-network-repro' } as any),
+          runWithContext: <T>(_context: any, fn: () => T) => fn(),
+        },
+      );
 
-    await expect(async () => {
       for await (const _event of model.getStreamedResponse({
-        input: continuationInput,
+        previousResponseId: 'resp-root',
+        input: [{ role: 'user', type: 'message', content: 'first turn' }],
         modelSettings: {},
         tools: [],
         handoffs: [],
       } as any)) {
       }
-    }).rejects.toBe(networkError);
 
-    expect(seenRequests.length).toBe(2);
-    expect(seenRequests[1].previousResponseId).toBe('resp-stale-chain');
-    expect(seenRequests[1].input).toEqual([continuationInput[1]]);
+      await expect(async () => {
+        for await (const _event of model.getStreamedResponse({
+          input: continuationInput,
+          modelSettings: {},
+          tools: [],
+          handoffs: [],
+        } as any)) {
+        }
+      }).rejects.toBe(networkError);
 
-    for await (const _event of model.getStreamedResponse({
-      input: [{ role: 'user', type: 'message', content: 'retry from durable history' }],
-      modelSettings: {},
-      tools: [],
-      handoffs: [],
-    } as any)) {
+      expect(seenRequests.length).toBe(2);
+      expect(seenRequests[1].previousResponseId).toBe('resp-stale-chain');
+      expect(seenRequests[1].input).toEqual([continuationInput[1]]);
+
+      for await (const _event of model.getStreamedResponse({
+        input: [{ role: 'user', type: 'message', content: 'retry from durable history' }],
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any)) {
+      }
+
+      expect(seenRequests.length).toBe(4);
+      expect(seenRequests[2].previousResponseId).toBe(undefined);
+      expect(seenRequests[2].modelSettings.providerData?.generate).toBe(false);
+      expect(seenRequests[3].previousResponseId).toBe('resp-recovered');
+      expect(seenRequests[3].previousResponseId).not.toBe('resp-stale-chain');
+    } finally {
+      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
     }
-
-    expect(seenRequests.length).toBe(4);
-    expect(seenRequests[2].previousResponseId).toBe(undefined);
-    expect(seenRequests[2].modelSettings.providerData?.generate).toBe(false);
-    expect(seenRequests[3].previousResponseId).toBe('resp-recovered');
-    expect(seenRequests[3].previousResponseId).not.toBe('resp-stale-chain');
-  } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
-  }
-});
+  },
+);
 
 it.sequential('CodexResponsesWSModel invalidates Luna wire state on previous_response_not_found error', async () => {
   const seenRequests: any[] = [];

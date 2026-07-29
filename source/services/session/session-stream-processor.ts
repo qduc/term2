@@ -314,6 +314,7 @@ export class SessionStreamProcessor {
 
       const terminal = !stream.interruptions || stream.interruptions.length === 0;
       if (terminal) {
+        const historyRevisionBeforeCommit = this.deps.conversationStore.getProviderHistorySnapshot().revision;
         if (inputMode === 'delta') {
           appendWithoutReplayedTools(snapshot.output);
         } else {
@@ -333,6 +334,12 @@ export class SessionStreamProcessor {
           } else if (hasToolResultItems(snapshot.output)) {
             appendWithoutReplayedTools(snapshot.output);
           }
+        }
+        // Candidate checkpoint acceptance is intentionally adjacent to the
+        // authoritative terminal-history mutation. An empty/no-op terminal
+        // output cannot make a candidate eligible for future ownership work.
+        if (this.deps.conversationStore.getProviderHistorySnapshot().revision !== historyRevisionBeforeCommit) {
+          this.deps.providerContinuity.promoteCandidate(snapshot.lastResponseId);
         }
         result = { kind: 'committed' };
       } else {

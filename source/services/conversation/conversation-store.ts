@@ -6,6 +6,12 @@ import { normalizeRunItem } from './run-item-normalizer.js';
 
 export { SHELL_CONTEXT_PREFIX } from './conversation-message-projection.js';
 
+export type ProviderHistorySnapshot = {
+  revision: number;
+  identity: string;
+  history: readonly AgentInputItem[];
+};
+
 type RemovedUserTurn = { text: string; imageCount: number; images?: UserTurn['images'] };
 type RemovedToolOutput = { index: number; callId?: string; toolName?: string; output?: unknown; itemType: string };
 
@@ -49,6 +55,7 @@ const FILE_MUTATING_TOOLS = new Set([TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REP
  */
 export class ConversationStore {
   #history: AgentInputItem[] = [];
+  #historyRevision = 0;
 
   addUserTurn(input: string | UserTurn): void {
     const turn = normalizeUserTurn(input);
@@ -78,6 +85,7 @@ export class ConversationStore {
       content,
     } as AgentInputItem;
     this.#history.push(item);
+    this.#historyRevision++;
   }
 
   addUserMessage(text: string): void {
@@ -88,6 +96,7 @@ export class ConversationStore {
       content: trimmed,
     };
     this.#history.push(item);
+    this.#historyRevision++;
   }
 
   /**
@@ -98,6 +107,7 @@ export class ConversationStore {
    */
   addImportedItem(item: AgentInputItem): void {
     this.#history.push(item);
+    this.#historyRevision++;
   }
 
   addShellContext(historyText: string): void {
@@ -111,6 +121,7 @@ export class ConversationStore {
       content: trimmed,
     };
     this.#history.push(item);
+    this.#historyRevision++;
   }
 
   /**
@@ -120,6 +131,7 @@ export class ConversationStore {
   appendOutput(items: AgentInputItem[]): void {
     if (!Array.isArray(items) || items.length === 0) return;
     this.#history.push(...this.#cloneHistory(items));
+    this.#historyRevision++;
   }
 
   /**
@@ -129,10 +141,25 @@ export class ConversationStore {
   replaceHistory(items: AgentInputItem[]): void {
     if (!Array.isArray(items) || items.length === 0) return;
     this.#history = this.#cloneHistory(items);
+    this.#historyRevision++;
   }
 
   getHistory(): AgentInputItem[] {
     return this.#cloneHistory(this.#history);
+  }
+
+  /**
+   * Returns a read-only copy of the complete provider-facing transcript. The
+   * revision/identity pair is the prefix anchor for provider-private
+   * continuation instrumentation; callers cannot mutate the store through it.
+   */
+  getProviderHistorySnapshot(): ProviderHistorySnapshot {
+    const history = this.#freezeHistory(this.#cloneSnapshotHistory(this.#history));
+    return Object.freeze({
+      revision: this.#historyRevision,
+      identity: `history:${this.#historyRevision}`,
+      history,
+    });
   }
 
   getLastUserMessage(): string {
@@ -146,6 +173,7 @@ export class ConversationStore {
 
   clear(): void {
     this.#history = [];
+    this.#historyRevision++;
   }
 
   /**
@@ -156,6 +184,7 @@ export class ConversationStore {
     for (let i = this.#history.length - 1; i >= 0; i--) {
       if (projectConversationMessage(this.#history[i])?.role === 'user') {
         this.#history.splice(i, 1);
+        this.#historyRevision++;
         return;
       }
     }
@@ -177,6 +206,7 @@ export class ConversationStore {
 
     const removed = ConversationStore.#extractRemovedToolOutput(this.#history[anchor], anchor);
     this.#history.splice(anchor + 1);
+    this.#historyRevision++;
     return removed;
   }
 
@@ -329,6 +359,7 @@ export class ConversationStore {
   trimUserTurns(maxUserTurns: number): void {
     if (maxUserTurns <= 0) {
       this.#history = [];
+      this.#historyRevision++;
       return;
     }
     const turns = this.listUserTurns();
@@ -337,6 +368,7 @@ export class ConversationStore {
     }
     const keepIndex = turns[turns.length - maxUserTurns]!.index;
     this.#history = this.#history.slice(keepIndex);
+    this.#historyRevision++;
   }
 
   /**
@@ -361,6 +393,7 @@ export class ConversationStore {
     const removed = ConversationStore.#extractRemovedUserTurn(message);
 
     this.#history.splice(anchor);
+    this.#historyRevision++;
     return removed;
   }
 
@@ -401,6 +434,7 @@ export class ConversationStore {
     const removed = ConversationStore.#extractRemovedUserTurn(message);
 
     this.#history.splice(anchor);
+    this.#historyRevision++;
     return removed;
   }
 
@@ -416,6 +450,7 @@ export class ConversationStore {
       content: errorMessage,
     };
     this.#history.push(item);
+    this.#historyRevision++;
   }
 
   #cloneHistory(items: AgentInputItem[]): AgentInputItem[] {
@@ -429,6 +464,33 @@ export class ConversationStore {
       } catch {
         return items.slice();
       }
+    }
+  }
+
+  #freezeHistory(items: AgentInputItem[]): readonly AgentInputItem[] {
+    const freeze = (value: any): any => {
+      if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+      for (const child of Object.values(value)) freeze(child);
+      return Object.freeze(value);
+    };
+    return freeze(items);
+  }
+
+  #cloneSnapshotHistory(items: AgentInputItem[]): AgentInputItem[] {
+    try {
+      return structuredClone(items);
+    } catch {
+      const seen = new WeakMap<object, unknown>();
+      const clone = (value: any): any => {
+        if (!value || typeof value !== 'object') return value;
+        const existing = seen.get(value);
+        if (existing) return existing;
+        const copy: any = Array.isArray(value) ? [] : {};
+        seen.set(value, copy);
+        for (const [key, child] of Object.entries(value)) copy[key] = clone(child);
+        return copy;
+      };
+      return clone(items);
     }
   }
 }

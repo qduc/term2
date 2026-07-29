@@ -303,6 +303,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     agentClient,
     toolTracker,
     providerContinuity,
+    getProviderHistorySnapshot: () => conversationStore.getProviderHistorySnapshot(),
   });
 
   const journal = new AssistantTurnJournal({

@@ -104,6 +104,24 @@ it('getHistory() returns a copy (external mutation does not affect store)', () =
   expect(item.content).toBe('A');
 });
 
+it('provides an immutable full provider-history snapshot with stable identity until history changes', () => {
+  const store = new ConversationStore();
+  store.addUserMessage('A');
+
+  const first = store.getProviderHistorySnapshot();
+  const sameRevision = store.getProviderHistorySnapshot();
+  expect(sameRevision.identity).toBe(first.identity);
+  expect(sameRevision.revision).toBe(first.revision);
+  expect(() => ((first.history[0] as any).content = 'mutated')).toThrow();
+  expect(store.getHistory()[0]).toMatchObject({ content: 'A' });
+
+  store.addUserMessage('B');
+  const second = store.getProviderHistorySnapshot();
+  expect(second.identity).not.toBe(first.identity);
+  expect(second.revision).toBeGreaterThan(first.revision);
+  expect(first.history).toEqual([{ role: 'user', type: 'message', content: 'A' }]);
+});
+
 it('getLastUserMessage() returns the most recent user message text', () => {
   const store = new ConversationStore();
   store.addUserMessage('First');

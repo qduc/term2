@@ -479,6 +479,61 @@ it('SessionStreamProcessor.finalize() updates providerContinuity previousRespons
   expect(providerContinuity.previousResponseId).toBe('resp-123');
 });
 
+it('SessionStreamProcessor.finalize() promotes a matching checkpoint only after terminal history commit', () => {
+  const conversationStore = new ConversationStore();
+  const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker: new SessionToolTracker(conversationStore),
+    conversationStore,
+    conversationLogger: {} as ConversationLogger,
+    providerContinuity,
+    generationGuard,
+    journal: makeJournal(),
+  });
+  providerContinuity.observeCandidate({
+    identity: { provider: 'openai', account: 'account-1', endpoint: 'responses', model: 'gpt-5' },
+    prefix: { revision: 0, identity: 'history:0' },
+    responseId: 'resp-commit',
+  });
+  const stream = makeStream([], { interruptions: [], lastResponseId: 'resp-commit' });
+  (stream as any).output = [{ role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'done' }] }];
+
+  expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
+  expect(conversationStore.getHistory()).toHaveLength(1);
+  expect(providerContinuity.checkpoint?.state).toBe('accepted');
+});
+
+it('SessionStreamProcessor.finalize() cannot promote a candidate retired by reset before a late completion', () => {
+  const conversationStore = new ConversationStore();
+  const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker: new SessionToolTracker(conversationStore),
+    conversationStore,
+    conversationLogger: {} as ConversationLogger,
+    providerContinuity,
+    generationGuard,
+    journal: makeJournal(),
+  });
+  providerContinuity.observeCandidate({
+    identity: { provider: 'openai', account: 'account-1', endpoint: 'responses', model: 'gpt-5' },
+    prefix: { revision: 0, identity: 'history:0' },
+    responseId: 'resp-late',
+  });
+  providerContinuity.clear();
+  const stream = makeStream([], { interruptions: [], lastResponseId: 'resp-late' });
+  (stream as any).output = [{ role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'late' }] }];
+
+  processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream');
+  expect(providerContinuity.checkpoint).toBeNull();
+  expect(providerContinuity.retiredCheckpoints).toHaveLength(1);
+});
+
 it('SessionStreamProcessor.finalize() prefers full replay history when full-history output only contains tool results', () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);

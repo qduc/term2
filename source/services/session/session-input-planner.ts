@@ -3,6 +3,7 @@ import type { ISettingsService } from '../service-interfaces.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
+import type { ProviderHistorySnapshot } from '../conversation/conversation-store.js';
 import { InputSurgeGuard, type InputSurgeInputKind, type InputSurgeDecision } from '../input-surge-guard.js';
 import { LargeUncachedInputGuard, type LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 import { getProvider } from '../../providers/index.js';
@@ -23,6 +24,8 @@ export type SessionInputPlan = {
   streamInput: string | AgentInputItem | AgentInputItem[];
   inputSurgeKind: 'delta' | 'full_history';
   effectiveTurn: UserTurn;
+  /** Stage 0 observation only; never used to select or alter wire input. */
+  providerHistorySnapshot?: ProviderHistorySnapshot;
 };
 
 /**
@@ -42,6 +45,7 @@ export class SessionInputPlanner {
   #agentClient: ConversationAgentClient;
   #toolTracker: SessionToolTracker;
   #providerContinuity: ProviderContinuity;
+  #getProviderHistorySnapshot?: () => ProviderHistorySnapshot;
   #inputSurgeGuard = new InputSurgeGuard();
   #largeUncachedInputGuard = new LargeUncachedInputGuard();
 
@@ -50,11 +54,13 @@ export class SessionInputPlanner {
     agentClient: ConversationAgentClient;
     toolTracker: SessionToolTracker;
     providerContinuity: ProviderContinuity;
+    getProviderHistorySnapshot?: () => ProviderHistorySnapshot;
   }) {
     this.#settingsService = deps.settingsService;
     this.#agentClient = deps.agentClient;
     this.#toolTracker = deps.toolTracker;
     this.#providerContinuity = deps.providerContinuity;
+    this.#getProviderHistorySnapshot = deps.getProviderHistorySnapshot;
   }
 
   /**
@@ -149,6 +155,7 @@ export class SessionInputPlanner {
         streamInput: statelessHistory as AgentInputItem[],
         inputSurgeKind: 'full_history',
         effectiveTurn: turn,
+        providerHistorySnapshot: this.#getProviderHistorySnapshot?.(),
       };
     }
     const effectiveTurn = options.includeTurn ? this.#turnWithModeNotice(turn, options.pendingModeNotice) : turn;
@@ -182,6 +189,7 @@ export class SessionInputPlanner {
         : (statelessHistory as AgentInputItem[]),
       inputSurgeKind: useChaining ? 'delta' : 'full_history',
       effectiveTurn,
+      providerHistorySnapshot: this.#getProviderHistorySnapshot?.(),
     };
   }
 

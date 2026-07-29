@@ -6,6 +6,7 @@ import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
 import { RetryingModel } from './retrying-model.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
+import { captureProviderRequest, type ProviderRequestCapture } from './provider-request-capture.js';
 
 function forwardPromptCacheKey(request: any, requestData: Record<string, unknown>): Record<string, unknown> {
   const promptCacheKey = request?.modelSettings?.prompt_cache_key;
@@ -20,22 +21,42 @@ function forwardPromptCacheKey(request: any, requestData: Record<string, unknown
 }
 
 export class OpenAIResponsesModelWithPromptCacheKey extends OpenAIResponsesModel {
+  constructor(client: any, model: string, private readonly requestCapture?: ProviderRequestCapture) {
+    super(client, model);
+  }
+
   _buildResponsesCreateRequest(request: any, stream: boolean): any {
     const built = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest.call(this, request, stream);
-    return {
+    const result = {
       ...built,
       requestData: forwardPromptCacheKey(request, built.requestData),
     };
+    captureProviderRequest(this.requestCapture, {
+      provider: 'openai',
+      transport: 'http',
+      requestData: result.requestData,
+    });
+    return result;
   }
 }
 
 export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesWSModel {
+  constructor(client: any, model: string, private readonly requestCapture?: ProviderRequestCapture) {
+    super(client, model);
+  }
+
   _buildResponsesCreateRequest(request: any, stream: boolean): any {
     const built = super._buildResponsesCreateRequest(request, stream);
-    return {
+    const result = {
       ...built,
       requestData: forwardPromptCacheKey(request, built.requestData),
     };
+    captureProviderRequest(this.requestCapture, {
+      provider: 'openai',
+      transport: 'websocket',
+      requestData: result.requestData,
+    });
+    return result;
   }
 
   override async getResponse(request: any): Promise<any> {

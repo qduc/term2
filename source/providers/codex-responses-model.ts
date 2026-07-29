@@ -7,6 +7,7 @@ import { dropUnpairedFunctionCalls } from '../services/tool-execution-ledger.js'
 import { AmbiguousModelOutcomeError } from '../services/retry/retry-errors.js';
 import { ChainedWireState, type ChainedWireStateKey, type ChainedRequestToken } from './chained-wire-state.js';
 import { LunaResponsesLiteWireProtocol } from './luna-responses-lite-wire-protocol.js';
+import { captureProviderRequest, type ProviderRequestCapture } from './provider-request-capture.js';
 import {
   createWebSocketReceiveWatchdog,
   DEFAULT_WEBSOCKET_RECEIVE_TIMEOUTS,
@@ -466,6 +467,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     providerTraffic?: IProviderTraffic,
     private readonly sessionContextService?: ISessionContextService,
     private readonly websocketReceiveTimeouts: WebSocketReceiveTimeouts = DEFAULT_WEBSOCKET_RECEIVE_TIMEOUTS,
+    private readonly requestCapture?: ProviderRequestCapture,
   ) {
     super(client, modelId);
     this.providerTraffic = providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
@@ -1021,6 +1023,9 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     const builtRequest = (this as any)._buildResponsesCreateRequest(updatedRequest, true);
     const requestData = (asRecord(builtRequest?.requestData) ?? {}) as Record<string, unknown>;
     const wireStateToken = this.requestTokens.get(updatedRequest);
+    // This is the last application-owned point before the SDK's private fetch
+    // path. Capture it without changing the prepared request or wire state.
+    captureProviderRequest(this.requestCapture, { provider: 'codex', transport: 'websocket', requestData });
     this.#logTrafficStarted(requestId, requestData, extraHeaders);
 
     if (!stream) {
@@ -1065,17 +1070,28 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 }
 
 export class CodexResponsesModel extends OpenAIResponsesModel {
-  constructor(client: any, private readonly modelId: string, private readonly diagnosticLogger?: DiagnosticLogger) {
+  constructor(
+    client: any,
+    private readonly modelId: string,
+    private readonly diagnosticLogger?: DiagnosticLogger,
+    private readonly requestCapture?: ProviderRequestCapture,
+  ) {
     super(client, modelId);
   }
 
   override _buildResponsesCreateRequest(request: any, stream: boolean): any {
     const built = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest.call(this, request, stream);
 
-    return {
+    const result = {
       ...built,
       requestData: normalizeCodexRequestData(built.requestData, request, this.modelId),
     };
+    captureProviderRequest(this.requestCapture, {
+      provider: 'codex',
+      transport: 'http',
+      requestData: result.requestData,
+    });
+    return result;
   }
 
   protected override async _fetchResponse(request: any, stream: boolean): Promise<any> {

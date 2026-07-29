@@ -139,3 +139,155 @@ it.sequential('OpenAI request capture records the exact post-builder HTTP and We
     (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = originalWs;
   }
 });
+
+it.sequential(
+  'OpenAI lifecycle observations pair each HTTP and WebSocket public attempt with its builder and terminal response',
+  async () => {
+    const observations: any[] = [];
+    const originalBuild = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+    const originalWsBuild = (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest;
+    const originalUnary = (OpenAIResponsesModel.prototype as any).getResponse;
+    const originalStream = (OpenAIResponsesModel.prototype as any).getStreamedResponse;
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function (request: any) {
+      return { requestData: { input: request.input } };
+    };
+    (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = (
+      OpenAIResponsesModel.prototype as any
+    )._buildResponsesCreateRequest;
+    (OpenAIResponsesModel.prototype as any).getResponse = async function (request: any) {
+      this._buildResponsesCreateRequest(request, false);
+      return { responseId: request.responseId };
+    };
+    (OpenAIResponsesModel.prototype as any).getStreamedResponse = async function* (request: any) {
+      this._buildResponsesCreateRequest(request, true);
+      yield { type: 'response_done', response: { id: request.responseId } };
+    };
+
+    try {
+      for (const [ModelClass, transport] of [
+        [OpenAIResponsesModelWithPromptCacheKey, 'http'],
+        [OpenAIResponsesWSModelWithPromptCacheKey, 'websocket'],
+      ] as const) {
+        const model = new ModelClass({ baseURL: 'https://example.test/v1/' } as any, 'gpt-test', {
+          record() {},
+          observe: (entry: any) => observations.push(entry),
+        });
+        await (model as any).getResponse({ input: `${transport}-unary`, responseId: `${transport}-unary-id` });
+        for await (const _event of (model as any).getStreamedResponse({
+          input: `${transport}-stream`,
+          responseId: `${transport}-stream-id`,
+        })) {
+          // Exhaust the normalized stream so the response_done observation is emitted.
+        }
+      }
+
+      expect(observations).toHaveLength(8);
+      for (let index = 0; index < observations.length; index += 2) {
+        const [built, terminal] = observations.slice(index, index + 2);
+        expect(built).toMatchObject({
+          phase: 'request-built',
+          provider: 'openai',
+          model: 'gpt-test',
+          endpoint: 'https://example.test/v1',
+        });
+        expect(terminal).toMatchObject({ phase: 'terminal', token: built.token, requestData: built.requestData });
+        expect(terminal.responseId).toBe(`${built.requestData.input}-id`);
+      }
+    } finally {
+      (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = originalBuild;
+      (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = originalWsBuild;
+      (OpenAIResponsesModel.prototype as any).getResponse = originalUnary;
+      (OpenAIResponsesModel.prototype as any).getStreamedResponse = originalStream;
+    }
+  },
+);
+
+it.sequential(
+  'OpenAI lifecycle state isolates concurrent request objects and cleans up failed or abandoned attempts',
+  async () => {
+    const observations: any[] = [];
+    const originalBuild = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+    const originalUnary = (OpenAIResponsesModel.prototype as any).getResponse;
+    const originalStream = (OpenAIResponsesModel.prototype as any).getStreamedResponse;
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function (request: any) {
+      return { requestData: { input: request.input } };
+    };
+    (OpenAIResponsesModel.prototype as any).getResponse = async function (request: any) {
+      this._buildResponsesCreateRequest(request, false);
+      if (request.fail) throw new Error('ambiguous transport failure');
+      await Promise.resolve();
+      return { responseId: request.responseId };
+    };
+    (OpenAIResponsesModel.prototype as any).getStreamedResponse = async function* (request: any) {
+      this._buildResponsesCreateRequest(request, true);
+      yield { type: 'output_text_delta', delta: 'partial' };
+    };
+
+    try {
+      const model = new OpenAIResponsesModelWithPromptCacheKey({} as any, 'gpt-test', {
+        record() {},
+        observe: (entry: any) => observations.push(entry),
+      });
+      await Promise.all([
+        (model as any).getResponse({ input: 'first', responseId: 'resp-first' }),
+        (model as any).getResponse({ input: 'second', responseId: 'resp-second' }),
+      ]);
+      const concurrent = observations.splice(0);
+      expect(concurrent.map((entry) => [entry.phase, entry.requestData.input, entry.responseId])).toEqual([
+        ['request-built', 'first', undefined],
+        ['request-built', 'second', undefined],
+        ['terminal', 'first', 'resp-first'],
+        ['terminal', 'second', 'resp-second'],
+      ]);
+      expect(concurrent[0].token).toBe(concurrent[2].token);
+      expect(concurrent[1].token).toBe(concurrent[3].token);
+      expect(concurrent[0].token).not.toBe(concurrent[1].token);
+      expect(concurrent[0]).toMatchObject({ model: 'gpt-test', endpoint: 'https://api.openai.com/v1' });
+
+      await expect((model as any).getResponse({ input: 'failed', fail: true })).rejects.toThrow(
+        'ambiguous transport failure',
+      );
+      const stream = (model as any).getStreamedResponse({ input: 'abandoned' });
+      await stream.next();
+      await stream.return();
+      expect(observations.map((entry) => entry.phase)).toEqual([
+        'request-built',
+        'failed',
+        'request-built',
+        'abandoned',
+      ]);
+      expect(observations[1].responseId).toBeUndefined();
+      expect(observations[3].responseId).toBeUndefined();
+    } finally {
+      (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = originalBuild;
+      (OpenAIResponsesModel.prototype as any).getResponse = originalUnary;
+      (OpenAIResponsesModel.prototype as any).getStreamedResponse = originalStream;
+    }
+  },
+);
+
+it.sequential('OpenAI request capture and lifecycle observer failures cannot change a request', async () => {
+  const originalBuild = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+  const originalUnary = (OpenAIResponsesModel.prototype as any).getResponse;
+  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+    return { requestData: { input: 'unchanged' } };
+  };
+  (OpenAIResponsesModel.prototype as any).getResponse = async function (request: any) {
+    this._buildResponsesCreateRequest(request, false);
+    return { responseId: 'resp-ok' };
+  };
+  try {
+    const model = new OpenAIResponsesModelWithPromptCacheKey({} as any, 'gpt-test', {
+      record() {
+        throw new Error('capture failure');
+      },
+      observe() {
+        throw new Error('observer failure');
+      },
+    });
+    await expect((model as any).getResponse({})).resolves.toEqual({ responseId: 'resp-ok' });
+  } finally {
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = originalBuild;
+    (OpenAIResponsesModel.prototype as any).getResponse = originalUnary;
+  }
+});

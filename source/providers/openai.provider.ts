@@ -6,7 +6,70 @@ import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
 import { RetryingModel } from './retrying-model.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
-import { captureProviderRequest, type ProviderRequestCapture } from './provider-request-capture.js';
+import {
+  captureProviderRequest,
+  observeOpenAIRequestLifecycle,
+  type OpenAIRequestLifecycleObservation,
+  type ProviderRequestCapture,
+} from './provider-request-capture.js';
+import { randomUUID } from 'node:crypto';
+
+const DEFAULT_OPENAI_ENDPOINT = 'https://api.openai.com/v1';
+
+type OpenAIRequestAttempt = Omit<OpenAIRequestLifecycleObservation, 'phase' | 'responseId'>;
+
+const clientEndpoint = (client: any): string => {
+  const endpoint = client?.baseURL ?? client?._options?.baseURL;
+  if (endpoint instanceof URL) return endpoint.toString().replace(/\/$/, '');
+  return typeof endpoint === 'string' && endpoint.length > 0 ? endpoint.replace(/\/$/, '') : DEFAULT_OPENAI_ENDPOINT;
+};
+
+/**
+ * The SDK invokes its private builder below each public model call. State is
+ * keyed by the request object, so separate concurrent requests cannot pair a
+ * builder invocation with another request's response. SDK retries that reuse
+ * one request object intentionally retain its one public-call token.
+ */
+abstract class OpenAIRequestLifecycleModel {
+  private readonly attempts = new WeakMap<object, OpenAIRequestAttempt>();
+
+  beginAttempt(request: any, transport: 'http' | 'websocket', model: string, client: any): void {
+    if (request && typeof request === 'object') {
+      this.attempts.set(request, {
+        token: randomUUID(),
+        provider: 'openai',
+        transport,
+        model,
+        endpoint: clientEndpoint(client),
+        requestData: {},
+      });
+    }
+  }
+
+  observeBuilt(request: any, requestData: Record<string, unknown>, capture?: ProviderRequestCapture): void {
+    const attempt = request && typeof request === 'object' ? this.attempts.get(request) : undefined;
+    if (!attempt) return;
+    try {
+      attempt.requestData = structuredClone(requestData);
+      observeOpenAIRequestLifecycle(capture, { ...attempt, phase: 'request-built' });
+    } catch {
+      // A non-cloneable diagnostic payload must not affect the SDK request.
+    }
+  }
+
+  finishAttempt(
+    request: any,
+    phase: Extract<OpenAIRequestLifecycleObservation['phase'], 'terminal' | 'failed' | 'abandoned'>,
+    capture?: ProviderRequestCapture,
+    responseId?: string,
+  ): void {
+    if (!request || typeof request !== 'object') return;
+    const attempt = this.attempts.get(request);
+    if (!attempt) return;
+    this.attempts.delete(request);
+    observeOpenAIRequestLifecycle(capture, { ...attempt, phase, ...(responseId ? { responseId } : {}) });
+  }
+}
 
 function forwardPromptCacheKey(request: any, requestData: Record<string, unknown>): Record<string, unknown> {
   const promptCacheKey = request?.modelSettings?.prompt_cache_key;
@@ -21,6 +84,8 @@ function forwardPromptCacheKey(request: any, requestData: Record<string, unknown
 }
 
 export class OpenAIResponsesModelWithPromptCacheKey extends OpenAIResponsesModel {
+  private readonly lifecycle = new (class extends OpenAIRequestLifecycleModel {})();
+
   constructor(client: any, model: string, private readonly requestCapture?: ProviderRequestCapture) {
     super(client, model);
   }
@@ -36,11 +101,45 @@ export class OpenAIResponsesModelWithPromptCacheKey extends OpenAIResponsesModel
       transport: 'http',
       requestData: result.requestData,
     });
+    this.lifecycle.observeBuilt(request, result.requestData, this.requestCapture);
     return result;
+  }
+
+  override async getResponse(request: any): Promise<any> {
+    this.lifecycle.beginAttempt(request, 'http', (this as any)._model, (this as any)._client);
+    try {
+      const response = await super.getResponse(request);
+      this.lifecycle.finishAttempt(request, 'terminal', this.requestCapture, response?.responseId);
+      return response;
+    } catch (error) {
+      this.lifecycle.finishAttempt(request, 'failed', this.requestCapture);
+      throw error;
+    }
+  }
+
+  override async *getStreamedResponse(request: any): AsyncIterable<any> {
+    this.lifecycle.beginAttempt(request, 'http', (this as any)._model, (this as any)._client);
+    let terminal = false;
+    try {
+      for await (const event of super.getStreamedResponse(request)) {
+        if (event?.type === 'response_done') {
+          terminal = true;
+          this.lifecycle.finishAttempt(request, 'terminal', this.requestCapture, event.response?.id);
+        }
+        yield event;
+      }
+    } catch (error) {
+      this.lifecycle.finishAttempt(request, 'failed', this.requestCapture);
+      throw error;
+    } finally {
+      if (!terminal) this.lifecycle.finishAttempt(request, 'abandoned', this.requestCapture);
+    }
   }
 }
 
 export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesWSModel {
+  private readonly lifecycle = new (class extends OpenAIRequestLifecycleModel {})();
+
   constructor(client: any, model: string, private readonly requestCapture?: ProviderRequestCapture) {
     super(client, model);
   }
@@ -56,15 +155,42 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesWSM
       transport: 'websocket',
       requestData: result.requestData,
     });
+    this.lifecycle.observeBuilt(request, result.requestData, this.requestCapture);
     return result;
   }
 
   override async getResponse(request: any): Promise<any> {
+    this.lifecycle.beginAttempt(request, 'websocket', (this as any)._model, (this as any)._client);
     const currentTrace = getCurrentTrace();
-    if (currentTrace) {
-      return super.getResponse(request);
+    try {
+      const response = currentTrace
+        ? await super.getResponse(request)
+        : await withTrace('openai-responses-ws-model-trace', () => super.getResponse(request));
+      this.lifecycle.finishAttempt(request, 'terminal', this.requestCapture, response?.responseId);
+      return response;
+    } catch (error) {
+      this.lifecycle.finishAttempt(request, 'failed', this.requestCapture);
+      throw error;
     }
-    return withTrace('openai-responses-ws-model-trace', () => super.getResponse(request));
+  }
+
+  override async *getStreamedResponse(request: any): AsyncIterable<any> {
+    this.lifecycle.beginAttempt(request, 'websocket', (this as any)._model, (this as any)._client);
+    let terminal = false;
+    try {
+      for await (const event of super.getStreamedResponse(request)) {
+        if (event?.type === 'response_done') {
+          terminal = true;
+          this.lifecycle.finishAttempt(request, 'terminal', this.requestCapture, event.response?.id);
+        }
+        yield event;
+      }
+    } catch (error) {
+      this.lifecycle.finishAttempt(request, 'failed', this.requestCapture);
+      throw error;
+    } finally {
+      if (!terminal) this.lifecycle.finishAttempt(request, 'abandoned', this.requestCapture);
+    }
   }
 }
 

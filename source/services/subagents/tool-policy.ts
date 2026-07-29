@@ -347,6 +347,7 @@ export class SubagentToolPolicy {
     validationCapture?: ValidationCapture,
   ): ToolDefinition {
     const originalExecute = definition.execute.bind(definition);
+    const originalNeedsApproval = definition.needsApproval.bind(definition);
     return {
       ...definition,
       needsApproval: () => false,
@@ -361,14 +362,21 @@ export class SubagentToolPolicy {
           return originalExecute(params, context, details);
         }
 
-        const status = classifyCommand(command, this.#logger);
-        if (status === SafetyStatus.RED) {
-          return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. Command: ${command}`;
-        }
-        if (status === SafetyStatus.YELLOW) {
-          const approved = await this.isYellowCommandApproved(command, taskContext);
-          if (!approved) {
+        // The shell definition owns sandbox-aware approval policy. When it says
+        // no approval is needed, the sandbox is the safety boundary just as it
+        // is for the root agent; do not re-block the command by classification.
+        // Keep the worker's non-interactive fallback only when the underlying
+        // shell actually requires approval (for example, without a sandbox).
+        if (await originalNeedsApproval(params, context)) {
+          const status = classifyCommand(command, this.#logger);
+          if (status === SafetyStatus.RED) {
             return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. Command: ${command}`;
+          }
+          if (status === SafetyStatus.YELLOW) {
+            const approved = await this.isYellowCommandApproved(command, taskContext);
+            if (!approved) {
+              return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. Command: ${command}`;
+            }
           }
         }
 

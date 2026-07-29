@@ -269,6 +269,33 @@ describe('SubagentToolFactory agent tool wrapping', () => {
   });
 });
 
+describe('worker shell sandbox approval parity', () => {
+  it('executes a YELLOW command when the underlying sandboxed shell does not require approval', async () => {
+    const execute = vi.fn(async () => 'executed');
+    const policy = new SubagentToolPolicy({
+      settings: createMockSettings({ 'sandbox.enabled': true }),
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+    const wrapped = policy.wrapShellTool(
+      {
+        name: 'shell',
+        description: 'test shell',
+        parameters: z.object({ command: z.string() }),
+        needsApproval: async () => false,
+        execute,
+        formatCommandMessage: () => [],
+      },
+      process.cwd(),
+      [],
+      'run the project tests',
+    );
+
+    await expect(wrapped.execute({ command: 'npm test' })).resolves.toBe('executed');
+    expect(execute).toHaveBeenCalledOnce();
+  });
+});
+
 describe('shell-edit-hole measurement (plan D2)', () => {
   // Documents the coverage gap of extractPathsFromCommand: it only captures
   // redirection (>/>>/tee), so most shell-edit commands are invisible to

@@ -457,7 +457,7 @@ describe('worker shell tool safety gating', () => {
     expect(shellResult!.includes('blocked for safety')).toBe(false);
   });
 
-  it('worker shell tool blocks dangerous/destructive commands and returns error string', async () => {
+  it('worker shell tool blocks dangerous/destructive commands without a sandbox', async () => {
     let shellResult: string | null = null;
 
     const providerId = registerTestProvider({
@@ -490,6 +490,7 @@ describe('worker shell tool safety gating', () => {
       settings: createMockSettings({
         'agent.model': 'mock-model',
         'agent.provider': providerId,
+        'sandbox.enabled': false,
       }),
       sessionContextService: createSessionContextService() as any,
       executionContext: createMockExecutionContext(tmpDir),
@@ -503,7 +504,7 @@ describe('worker shell tool safety gating', () => {
     expect(shellResult!.includes('exit 0')).toBe(false);
   });
 
-  it('worker shell tool allows YELLOW command when auto-approval evaluator approves', async () => {
+  it('worker shell tool allows YELLOW command without a sandbox when auto-approval evaluator approves', async () => {
     let shellResult: string | null = null;
     let chatCalls = 0;
     let evaluatorPrompt = '';
@@ -535,6 +536,7 @@ describe('worker shell tool safety gating', () => {
         'shell.autoApproveMode': 'auto',
         'agent.autoApproveModel': 'mock-auto-approve-model',
         'agent.autoApproveProvider': providerId,
+        'sandbox.enabled': false,
       }),
       sessionContextService: createSessionContextService() as any,
       agentClient: {
@@ -555,7 +557,7 @@ describe('worker shell tool safety gating', () => {
     expect(shellResult!.includes('blocked for safety')).toBe(false);
   });
 
-  it('worker shell tool blocks YELLOW command when auto-approval evaluator rejects', async () => {
+  it('worker shell tool blocks YELLOW command without a sandbox when auto-approval evaluator rejects', async () => {
     let shellResult: string | null = null;
     let chatCalls = 0;
 
@@ -586,6 +588,7 @@ describe('worker shell tool safety gating', () => {
         'shell.autoApproveMode': 'auto',
         'agent.autoApproveModel': 'mock-auto-approve-model',
         'agent.autoApproveProvider': providerId,
+        'sandbox.enabled': false,
       }),
       sessionContextService: createSessionContextService() as any,
       agentClient: {

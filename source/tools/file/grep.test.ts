@@ -295,3 +295,31 @@ it.sequential('execute: include with brace expansion filters files correctly', a
     expect(result.includes('source/notes.txt')).toBe(false);
   });
 });
+
+// Regression: grep declared `needsApproval: () => false` with the comment
+// "Search is read-only and safe". Read-only is not the same as in-bounds — the
+// `path` parameter is passed through to a shell `rg`/`grep -r` invocation with
+// no sandbox wrapper, so an out-of-workspace path was an unapproved filesystem
+// read. glob and read_file already enforced this boundary; grep did not.
+it('grep requires approval for a path outside the workspace', async () => {
+  const definition = createGrepToolDefinition({
+    executionContext: { getCwd: () => '/tmp/some-workspace' } as any,
+  });
+
+  const inside = await definition.needsApproval!({ pattern: 'x', path: 'src' } as any, {} as any);
+  const outside = await definition.needsApproval!({ pattern: 'x', path: '/etc' } as any, {} as any);
+  const traversal = await definition.needsApproval!({ pattern: 'x', path: '../../..' } as any, {} as any);
+
+  expect(inside).toBe(false);
+  expect(outside).toBe(true);
+  expect(traversal).toBe(true);
+});
+
+it('grep skips the workspace boundary check in lite mode (allowOutsideWorkspace)', async () => {
+  const definition = createGrepToolDefinition({
+    executionContext: { getCwd: () => '/tmp/some-workspace' } as any,
+    allowOutsideWorkspace: true,
+  });
+
+  expect(await definition.needsApproval!({ pattern: 'x', path: '/etc' } as any, {} as any)).toBe(false);
+});

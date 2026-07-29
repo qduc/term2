@@ -349,7 +349,7 @@ export const getAgentDefinition = (
     // Lite mode keeps lightweight context and delegation policy, but still allows file edits.
     if (!searchViaShell) {
       tools.push(
-        createGrepToolDefinition({ executionContext, globAvailable }),
+        createGrepToolDefinition({ executionContext, globAvailable, allowOutsideWorkspace: true }),
         createFindFilesToolDefinition({
           executionContext,
           allowOutsideWorkspace: true,

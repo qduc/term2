@@ -9,6 +9,7 @@ import {
   type OutputTrimConfig,
 } from '../../utils/output/output-trim.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import { resolveWorkspacePath } from '../utils.js';
 import {
   getOutputText,
   normalizeToolArguments,
@@ -127,15 +128,36 @@ export const createGrepToolDefinition = (
     executionContext?: ExecutionContext;
     orchestratorMode?: boolean;
     globAvailable?: boolean;
+    allowOutsideWorkspace?: boolean;
   } = {},
 ): ToolDefinition<SearchToolParams> => {
-  const { executionContext, orchestratorMode = false, globAvailable = true } = deps;
+  const {
+    executionContext,
+    orchestratorMode = false,
+    globAvailable = true,
+    allowOutsideWorkspace = false,
+  } = deps;
   return {
     name: 'grep',
     description: buildGrepDescription(globAvailable, orchestratorMode),
     parameters: searchParametersSchema,
     argumentParsing: 'strict',
-    needsApproval: () => false, // Search is read-only and safe
+    // Read-only, but not necessarily in-bounds: `path` is passed through to a
+    // shell `rg`/`grep -r` invocation, so an out-of-workspace path is an
+    // unapproved filesystem read. Mirrors the glob tool's boundary check.
+    needsApproval: async (params) => {
+      if (allowOutsideWorkspace) {
+        return false;
+      }
+
+      try {
+        const cwd = executionContext?.getCwd() || process.cwd();
+        resolveWorkspacePath(params.path?.trim() || '.', cwd);
+        return false;
+      } catch {
+        return true;
+      }
+    },
     execute: async (params) => {
       const {
         pattern,

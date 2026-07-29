@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed; the now-unreferenced legacy adapter, its characterization test, and direct `@openai/agents-extensions` dependency are retired. Focused routed-provider, direct-turn, bridge, custom-provider, and message-normalizer validation passes. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path. **Step E's chaining disposition and Stage 0 request/response correlation instrumentation are landed:** OpenAI-private HTTP/WebSocket observations pair an opaque public-call token, exact built request data, and normalized terminal response ID. Candidate creation remains inert: truthful account identity and exact snapshot-prefix binding into the provider token are unavailable. Stage 1 is not complete, no live checkpoint binding is claimed, and neither remaining private reach-in is retired.
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed; the now-unreferenced legacy adapter, its characterization test, and direct `@openai/agents-extensions` dependency are retired. Focused routed-provider, direct-turn, bridge, custom-provider, and message-normalizer validation passes. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path. **Step E's chaining disposition, Stage 0 characterization/instrumentation, bounded Stage 1 OpenAI parity/handoff, bounded fresh-session OpenAI provider projection switch, and request/response correlation prerequisite are landed:** full provider-facing history remains the application’s semantic record, while OpenAI/Codex continuation remains a provider-private compatibility projection. Newly created OpenAI session clients select the parity-proven projection through a frozen session-lifetime compatibility mode; legacy clients and Codex remain on the established baseline. OpenAI-private HTTP/WebSocket observations pair an opaque public-call token, exact built request data, and normalized terminal response ID. Production candidate observation remains blocked by truthful account identity and exact snapshot-prefix binding into the provider token; no reach-in is retired.
 **Last updated:** 2026-07-29
 
 ---
@@ -45,8 +45,10 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step D Anthropic routing slice | `AiSdkAnthropicProvider` routes its cache/max-token-wrapped LanguageModelV3 through `createAiSdkStreamedModel()` and the temporary Agents bridge; the shared explicit-provider settings rule preserves Anthropic’s top-level provider data and nested precedence while caching/max-token policy stays local |
 | Step D adapter retirement | The unused AI SDK Agents adapter, its characterization test, and direct `@openai/agents-extensions` dependency/lockfile entries are deleted; routed-provider and application-owned boundary tests retain the behavior |
 | Step E chaining disposition | Full provider-facing history is authoritative; OpenAI/Codex continuation becomes an opaque provider-private, exact-prefix-anchored checkpoint with candidate → accepted → retired lifecycle and provider-classified replay |
-| Step E Stage 0 characterization/instrumentation | Immutable provider-history snapshots, exact prefix-bound checkpoint lifecycle/reset lineage, terminal-commit-only promotion, optional exact OpenAI/Codex request-projection capture, and inert OpenAI request/response correlation are pinned without changing wire selection or provider behavior |
-| Step E Stage 1 OpenAI parity/handoff slice | Pending: it cannot truthfully bind a response observation to an account identity and exact immutable snapshot prefix; Codex remains unchanged |
+| Step E Stage 0 characterization/instrumentation | Immutable provider-history snapshots, exact prefix-bound checkpoint lifecycle/reset lineage, terminal-commit-only promotion, and optional exact OpenAI/Codex request-projection capture are pinned without changing wire selection or provider behavior |
+| Step E Stage 1 OpenAI parity/handoff slice | Immutable snapshots flow through initial and workflow-owned continuation run options to an OpenAI-private exact-prefix compatibility projection; parity observation returns the established global chained-input result and leaves Codex unchanged |
+| Step E fresh-session OpenAI provider projection switch | Newly created OpenAI session clients freeze a compatibility mode and select the parity-proven provider projection only for exact-prefix, structural-parity outcomes; legacy, Codex, mismatched, unequal, and failed cases retain the established baseline |
+| Step E request/response correlation prerequisite | OpenAI-private HTTP/WebSocket observations pair opaque public-call tokens, exact post-builder request projections, and normalized terminal response IDs without creating candidates; production candidate observation remains blocked by truthful account identity and exact snapshot-prefix binding into the provider token |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -287,18 +289,19 @@ production session contract.
   Formatting passes. Full `tsc --noEmit` reaches only the known pre-existing
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532`; the attempted full
    Vitest run was sandbox-blocked on Docker host control before tests began.
- - Step E request/response correlation prerequisite: OpenAI-private HTTP/WebSocket public-call
-   observations pair opaque attempt tokens with the exact post-builder request projection and the
-   normalized unary `responseId` or streamed `response_done.response.id`; concurrent request
-   objects remain isolated, terminal/failure/consumer-abandon paths clean state, and observer
-   failures are swallowed. This remains instrumentation only: it does not call `observeCandidate`,
-   attach snapshot metadata to wire settings, classify replay, or bind live checkpoints. Truthful
-   account identity and snapshot-prefix handoff into the provider token remain blockers for Stage 1.
- - Step E bounded fresh-session OpenAI projection ownership switch: newly created OpenAI handles
-   freeze and pass an explicit compatibility mode into their client/orchestrator, selecting the
-   parity-proven provider projection only for exact prefix and structural-parity outcomes. Legacy,
-   Codex, mismatched, unequal, and failed compatibility cases retain the established baseline;
-   checkpoint candidates, approvals, replay, and private reach-ins are unchanged.
+- Step E request/response correlation prerequisite: OpenAI-private HTTP/WebSocket public-call
+  observations pair opaque attempt tokens with the exact post-builder request projection and the
+  normalized unary `responseId` or streamed `response_done.response.id`; concurrent request
+  objects remain isolated, terminal/failure/consumer-abandon paths clean state, and observer
+  failures are swallowed. This remains instrumentation only: it does not call `observeCandidate`,
+  attach snapshot metadata to wire settings, classify replay, or bind live checkpoints. Truthful
+  account identity and snapshot-prefix handoff into the provider token remain blockers for production
+  candidate observation.
+- Step E bounded fresh-session OpenAI projection ownership switch: newly created OpenAI handles
+  freeze and pass an explicit compatibility mode into their client/orchestrator, selecting the
+  parity-proven provider projection only for exact prefix and structural-parity outcomes. Legacy,
+  Codex, mismatched, unequal, and failed compatibility cases retain the established baseline;
+  checkpoint candidates, approvals, replay, and private reach-ins are unchanged.
 
 ### `ApprovalRecord` semantics, established by reading the SDK source
 
@@ -331,18 +334,25 @@ only — every such call is rejected either way. Moot here: this repo never call
 1. **DONE — Stage 0 characterization/instrumentation; no wire change.** Immutable snapshot identity
    and exact prefix anchoring, candidate → accepted → retired lifecycle behavior, stale completion
    after reset, and terminal-history-commit/checkpoint-promotion ordering are pinned at the current
-   owners. Candidate creation remains an inert opt-in hook until Stage 1 can supply exact provider
-   identity and request-prefix binding; production checkpoint ownership has not migrated. Optional
+   owners. Candidate creation remains an inert opt-in hook until production observation can supply
+   truthful account identity and exact snapshot-prefix binding into the provider token; checkpoint
+   ownership has not migrated. Optional
    structured capture records exact existing OpenAI/Codex request projections for later parity
    comparison. This neither changes request payloads, continuation ownership, approval/session
    migration, nor fallback behavior, and retires no reach-in.
-2. **PARTIAL — Stage 1 OpenAI parity/handoff and bounded fresh-session ownership switch landed.** Full-history snapshots now reach the
+2. **DONE — Stage 1 OpenAI parity/handoff and bounded fresh-session ownership switch.** Full-history snapshots now reach the
    OpenAI boundary and an OpenAI-private compatibility projection records exact prefix evidence and
-    parity against the established global chained-input filter. New OpenAI session handles use that
-    projection only when its exact-prefix result remains structurally identical to the baseline;
-    legacy and Codex paths remain baseline. Checkpoint ownership has not migrated, no reach-in is
-    retired, and in-flight sessions/approvals are unchanged.
-3. **Next — production candidate checkpoint observation at the provider response seam only after
+   parity against the established global chained-input filter. New OpenAI session handles use that
+   projection only when its exact-prefix result remains structurally identical to the baseline;
+   legacy and Codex paths remain baseline. Checkpoint ownership has not migrated, no reach-in is
+   retired, and in-flight sessions/approvals are unchanged.
+3. **DONE — request/response correlation prerequisite; observation only.** OpenAI-private
+   HTTP/WebSocket public-call observations pair opaque attempt tokens, exact post-builder request
+   projections, and normalized terminal response IDs. Terminal observations without a response ID
+   remain terminal-but-not-candidate evidence; no ID is fabricated. This does not call
+   `observeCandidate`, attach snapshot metadata to wire settings, classify replay, bind live
+   checkpoints, or retire a reach-in.
+4. **Next — production candidate checkpoint observation at the provider response seam only after
    truthful provider/account/endpoint/model and request-prefix binding can be supplied.** Do not
    broaden this to Codex, change replay classification, or claim checkpoint ownership migration
    without the live evidence.

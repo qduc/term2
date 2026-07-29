@@ -266,6 +266,50 @@ it.sequential(
   },
 );
 
+it.sequential(
+  'OpenAI lifecycle normalizes unary responseId and preserves a terminal stream observation without an ID',
+  async () => {
+    const observations: any[] = [];
+    const originalBuild = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+    const originalUnary = (OpenAIResponsesModel.prototype as any).getResponse;
+    const originalStream = (OpenAIResponsesModel.prototype as any).getStreamedResponse;
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function (request: any) {
+      return { requestData: { input: request.input } };
+    };
+    (OpenAIResponsesModel.prototype as any).getResponse = async function (request: any) {
+      this._buildResponsesCreateRequest(request, false);
+      // The public Agents SDK ModelResponse shape exposes responseId, not id.
+      return { responseId: 'resp-unary' };
+    };
+    (OpenAIResponsesModel.prototype as any).getStreamedResponse = async function* (request: any) {
+      this._buildResponsesCreateRequest(request, true);
+      yield { type: 'response_done', response: {} };
+    };
+
+    try {
+      const model = new OpenAIResponsesModelWithPromptCacheKey({} as any, 'gpt-test', {
+        record() {},
+        observe: (entry: any) => observations.push(entry),
+      });
+      await (model as any).getResponse({ input: 'unary' });
+      for await (const _event of (model as any).getStreamedResponse({ input: 'stream-without-id' })) {
+        // Exhaust the stream so its terminal observation is emitted.
+      }
+
+      expect(observations.map((entry) => [entry.phase, entry.requestData.input, entry.responseId])).toEqual([
+        ['request-built', 'unary', undefined],
+        ['terminal', 'unary', 'resp-unary'],
+        ['request-built', 'stream-without-id', undefined],
+        ['terminal', 'stream-without-id', undefined],
+      ]);
+    } finally {
+      (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = originalBuild;
+      (OpenAIResponsesModel.prototype as any).getResponse = originalUnary;
+      (OpenAIResponsesModel.prototype as any).getStreamedResponse = originalStream;
+    }
+  },
+);
+
 it.sequential('OpenAI request capture and lifecycle observer failures cannot change a request', async () => {
   const originalBuild = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
   const originalUnary = (OpenAIResponsesModel.prototype as any).getResponse;

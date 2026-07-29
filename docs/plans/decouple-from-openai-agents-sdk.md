@@ -288,15 +288,15 @@ production session contract.
   capture after OpenAI builder/prompt-cache forwarding and Codex normalization/private-fetch seam.
   Formatting passes. Full `tsc --noEmit` reaches only the known pre-existing
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532`; the attempted full
-   Vitest run was sandbox-blocked on Docker host control before tests began.
+  Vitest run was sandbox-blocked on Docker host control before tests began.
 - Step E request/response correlation prerequisite: OpenAI-private HTTP/WebSocket public-call
   observations pair opaque attempt tokens with the exact post-builder request projection and the
   normalized unary `responseId` or streamed `response_done.response.id`; concurrent request
   objects remain isolated, terminal/failure/consumer-abandon paths clean state, and observer
   failures are swallowed. This remains instrumentation only: it does not call `observeCandidate`,
   attach snapshot metadata to wire settings, classify replay, or bind live checkpoints. Truthful
-  account identity and snapshot-prefix handoff into the provider token remain blockers for production
-  candidate observation.
+  account identity and snapshot-prefix handoff into the provider token remain blockers for
+  production candidate observation.
 - Step E bounded fresh-session OpenAI projection ownership switch: newly created OpenAI handles
   freeze and pass an explicit compatibility mode into their client/orchestrator, selecting the
   parity-proven provider projection only for exact prefix and structural-parity outcomes. Legacy,
@@ -336,16 +336,16 @@ only — every such call is rejected either way. Moot here: this repo never call
    after reset, and terminal-history-commit/checkpoint-promotion ordering are pinned at the current
    owners. Candidate creation remains an inert opt-in hook until production observation can supply
    truthful account identity and exact snapshot-prefix binding into the provider token; checkpoint
-   ownership has not migrated. Optional
-   structured capture records exact existing OpenAI/Codex request projections for later parity
-   comparison. This neither changes request payloads, continuation ownership, approval/session
-   migration, nor fallback behavior, and retires no reach-in.
-2. **DONE — Stage 1 OpenAI parity/handoff and bounded fresh-session ownership switch.** Full-history snapshots now reach the
-   OpenAI boundary and an OpenAI-private compatibility projection records exact prefix evidence and
-   parity against the established global chained-input filter. New OpenAI session handles use that
-   projection only when its exact-prefix result remains structurally identical to the baseline;
-   legacy and Codex paths remain baseline. Checkpoint ownership has not migrated, no reach-in is
-   retired, and in-flight sessions/approvals are unchanged.
+   ownership has not migrated. Optional structured capture records exact existing OpenAI/Codex
+   request projections for later parity comparison. This neither changes request payloads,
+   continuation ownership, approval/session migration, nor fallback behavior, and retires no
+   reach-in.
+2. **DONE — Stage 1 OpenAI parity/handoff and bounded fresh-session ownership switch.** Full-history
+   snapshots now reach the OpenAI boundary and an OpenAI-private compatibility projection records
+   exact prefix evidence and parity against the established global chained-input filter. New OpenAI
+   session handles use that projection only when its exact-prefix result remains structurally
+   identical to the baseline; legacy and Codex paths remain baseline. Checkpoint ownership has not
+   migrated, no reach-in is retired, and in-flight sessions/approvals are unchanged.
 3. **DONE — request/response correlation prerequisite; observation only.** OpenAI-private
    HTTP/WebSocket public-call observations pair opaque attempt tokens, exact post-builder request
    projections, and normalized terminal response IDs. Terminal observations without a response ID

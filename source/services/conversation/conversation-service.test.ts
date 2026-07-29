@@ -594,9 +594,34 @@ it('passes previous response ids into subsequent runs', async () => {
   const secondResult = await service.sendMessage('second');
 
   expect(startCalls).toEqual([
-    { text: 'first', options: { previousResponseId: null, sessionId: 'default' } },
-    { text: 'second', options: { previousResponseId: 'resp-1', sessionId: 'default' } },
+    {
+      text: 'first',
+      options: {
+        previousResponseId: null,
+        sessionId: 'default',
+        providerHistorySnapshot: expect.objectContaining({
+          revision: 1,
+          history: [{ role: 'user', type: 'message', content: 'first' }],
+        }),
+      },
+    },
+    {
+      text: 'second',
+      options: {
+        previousResponseId: 'resp-1',
+        sessionId: 'default',
+        providerHistorySnapshot: expect.objectContaining({
+          revision: 2,
+          history: [
+            { role: 'user', type: 'message', content: 'first' },
+            { role: 'user', type: 'message', content: 'second' },
+          ],
+        }),
+      },
+    },
   ]);
+  expect(Object.isFrozen(startCalls[0].options.providerHistorySnapshot)).toBe(true);
+  expect(Object.isFrozen(startCalls[1].options.providerHistorySnapshot.history)).toBe(true);
   expect(secondResult.type).toBe('response');
   expect(asFinal(secondResult).finalText).toBe('Second run done.');
 });
@@ -680,6 +705,10 @@ it('emits approval interruptions and resumes after approval', async () => {
         sessionId: 'default',
         toolResultCallIds: [],
         knownToolCallIds: [],
+        providerHistorySnapshot: expect.objectContaining({
+          identity: expect.stringMatching(/^history:/),
+          history: expect.any(Array),
+        }),
       });
       return continuationStream;
     },
@@ -1175,6 +1204,7 @@ it('resetWithNewId() rediscover skills when skills service is available', async 
 
 it('resetWithNewId() replaces and disposes the factory-owned client', async () => {
   const clients: Array<ConversationAgentClient & { dispose: () => void }> = [];
+  const createdModes: string[] = [];
   const disposed: number[] = [];
   const started: number[] = [];
   const service = new ConversationService({
@@ -1182,6 +1212,8 @@ it('resetWithNewId() replaces and disposes the factory-owned client', async () =
     sessionClientFactory: {
       create() {
         const index = clients.length;
+        const continuationProjectionMode = index === 0 ? 'legacy' : 'openai-provider';
+        createdModes.push(continuationProjectionMode);
         const client = Object.assign(
           partialClient({
             async startStream() {
@@ -1192,7 +1224,12 @@ it('resetWithNewId() replaces and disposes the factory-owned client', async () =
           { dispose: () => disposed.push(index) },
         );
         clients.push(client);
-        return { agentClient: client, toolOwnership: new ToolOwnershipRegistry(), dispose: client.dispose };
+        return {
+          agentClient: client,
+          continuationProjectionMode,
+          toolOwnership: new ToolOwnershipRegistry(),
+          dispose: client.dispose,
+        };
       },
     },
     deps: { logger: mockLogger, sessionContextService },
@@ -1202,6 +1239,7 @@ it('resetWithNewId() replaces and disposes the factory-owned client', async () =
   await service.sendMessage('uses replacement');
 
   expect(clients).toHaveLength(2);
+  expect(createdModes).toEqual(['legacy', 'openai-provider']);
   expect(disposed).toEqual([0]);
   expect(started).toEqual([1]);
 });
@@ -1413,6 +1451,10 @@ it('handleApprovalDecision() rejects interruption when answer is n', async () =>
         sessionId: 'default',
         toolResultCallIds: [],
         knownToolCallIds: [],
+        providerHistorySnapshot: expect.objectContaining({
+          identity: expect.stringMatching(/^history:/),
+          history: expect.any(Array),
+        }),
       });
       return continuationStream;
     },

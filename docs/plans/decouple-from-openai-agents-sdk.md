@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed; the now-unreferenced legacy adapter, its characterization test, and direct `@openai/agents-extensions` dependency are retired. Focused routed-provider, direct-turn, bridge, custom-provider, and message-normalizer validation passes. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path. **Step E's chaining disposition is decided, Stage 0 characterization/instrumentation is landed, and the bounded Stage 1 OpenAI parity/handoff slice is landed:** full provider-facing history remains the application’s semantic record, while OpenAI/Codex continuation remains a provider-private compatibility projection. This does not migrate ownership or retire a reach-in.
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed; the now-unreferenced legacy adapter, its characterization test, and direct `@openai/agents-extensions` dependency are retired. Focused routed-provider, direct-turn, bridge, custom-provider, and message-normalizer validation passes. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path. **Step E's chaining disposition is decided, Stage 0 characterization/instrumentation and bounded Stage 1 OpenAI parity/handoff are landed, and the bounded fresh-session OpenAI projection ownership switch is landed:** full provider-facing history remains the application’s semantic record, while OpenAI/Codex continuation remains a provider-private compatibility projection. Newly created OpenAI session clients select the parity-proven projection through a frozen session-lifetime compatibility mode; legacy clients and Codex remain on the established baseline. This does not migrate checkpoint ownership or retire a reach-in.
 **Last updated:** 2026-07-29
 
 ---
@@ -293,6 +293,11 @@ production session contract.
   remains observational: the orchestrator returns the established global filter result even on a
   prefix mismatch; Codex does not enter the seam. Full `tsc --noEmit` reaches only the known
   pre-existing `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532`.
+ - Step E bounded fresh-session OpenAI projection ownership switch: newly created OpenAI handles
+   freeze and pass an explicit compatibility mode into their client/orchestrator, selecting the
+   parity-proven provider projection only for exact prefix and structural-parity outcomes. Legacy,
+   Codex, mismatched, unequal, and failed compatibility cases retain the established baseline;
+   checkpoint candidates, approvals, replay, and private reach-ins are unchanged.
 
 ### `ApprovalRecord` semantics, established by reading the SDK source
 
@@ -330,14 +335,16 @@ only — every such call is rejected either way. Moot here: this repo never call
    structured capture records exact existing OpenAI/Codex request projections for later parity
    comparison. This neither changes request payloads, continuation ownership, approval/session
    migration, nor fallback behavior, and retires no reach-in.
-2. **PARTIAL — Stage 1 OpenAI parity/handoff slice landed.** Full-history snapshots now reach the
+2. **PARTIAL — Stage 1 OpenAI parity/handoff and bounded fresh-session ownership switch landed.** Full-history snapshots now reach the
    OpenAI boundary and an OpenAI-private compatibility projection records exact prefix evidence and
-   parity against the established global chained-input filter. It is observational only: ownership
-   has not migrated, no reach-in is retired, Codex remains on its existing path, and in-flight
-   sessions/approvals are unchanged.
-3. **Next — bounded OpenAI ownership switch.** Switch newly started OpenAI sessions to the proven
-   provider projection behind a session/reset compatibility mode, while retaining the established
-   mode for in-flight sessions. Do not broaden this to Codex or change replay classification.
+    parity against the established global chained-input filter. New OpenAI session handles use that
+    projection only when its exact-prefix result remains structurally identical to the baseline;
+    legacy and Codex paths remain baseline. Checkpoint ownership has not migrated, no reach-in is
+    retired, and in-flight sessions/approvals are unchanged.
+3. **Next — production candidate checkpoint observation at the provider response seam only after
+   truthful provider/account/endpoint/model and request-prefix binding can be supplied.** Do not
+   broaden this to Codex, change replay classification, or claim checkpoint ownership migration
+   without the live evidence.
 
 ### R1 gate — PASSED
 

@@ -57,10 +57,45 @@ it('sessions do not share previousResponseId', async () => {
   await terminalAdapterA.sendMessage('A2');
 
   expect(startCalls).toEqual([
-    { text: 'A1', options: { previousResponseId: null, sessionId: 'A' } },
-    { text: 'B1', options: { previousResponseId: null, sessionId: 'B' } },
-    { text: 'A2', options: { previousResponseId: 'resp-A1', sessionId: 'A' } },
+    {
+      text: 'A1',
+      options: {
+        previousResponseId: null,
+        sessionId: 'A',
+        providerHistorySnapshot: expect.objectContaining({
+          revision: 1,
+          history: [{ role: 'user', type: 'message', content: 'A1' }],
+        }),
+      },
+    },
+    {
+      text: 'B1',
+      options: {
+        previousResponseId: null,
+        sessionId: 'B',
+        providerHistorySnapshot: expect.objectContaining({
+          revision: 1,
+          history: [{ role: 'user', type: 'message', content: 'B1' }],
+        }),
+      },
+    },
+    {
+      text: 'A2',
+      options: {
+        previousResponseId: 'resp-A1',
+        sessionId: 'A',
+        providerHistorySnapshot: expect.objectContaining({
+          revision: 2,
+          history: [
+            { role: 'user', type: 'message', content: 'A1' },
+            { role: 'user', type: 'message', content: 'A2' },
+          ],
+        }),
+      },
+    },
   ]);
+  expect(Object.isFrozen(startCalls[0].options.providerHistorySnapshot)).toBe(true);
+  expect(startCalls[0].options.providerHistorySnapshot).not.toBe(startCalls[1].options.providerHistorySnapshot);
 });
 
 it('sessions do not share pending approval context', async () => {

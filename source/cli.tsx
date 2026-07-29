@@ -542,7 +542,7 @@ const terminalTitleBase = buildProjectFolderTitle(executionContext.getCwd());
 
 const sessionClientFactory = createOwnedSessionClientFactory(
   settings,
-  (_sessionId, toolOwnership, postExecutePauseCapability, access) => {
+  (_sessionId, toolOwnership, postExecutePauseCapability, access, continuationProjectionMode) => {
     const agentClient = new AgentClient({
       model: settings.get('agent.model'),
       reasoningEffort: settings.get('agent.reasoningEffort') as ModelSettingsReasoningEffort,
@@ -558,6 +558,7 @@ const sessionClientFactory = createOwnedSessionClientFactory(
       toolOwnership,
       postExecutePauseCapability,
       sessionAccess: access,
+      continuationProjectionMode,
     });
     installPlanModeInterceptor(agentClient, { settingsService: settings });
     return agentClient;

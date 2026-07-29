@@ -1,4 +1,4 @@
-import { it, expect, beforeAll } from 'vitest';
+import { it, expect, beforeAll, vi } from 'vitest';
 import { AgentRunOrchestrator, type AgentRunOrchestratorDeps } from './agent-run-orchestrator.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { registerProvider } from '../providers/registry.js';
@@ -331,6 +331,117 @@ it('returns the established OpenAI projection while recording compatibility pari
   expect(observations[0].baseline.projectedModelData).toEqual(observations[0].compatibility.projectedModelData);
 });
 
+it('selects an exact-match OpenAI provider projection only for the frozen provider mode', async () => {
+  const agentConfig = createMockAgentConfig();
+  agentConfig.setProvider('openai');
+  const providerProjection = { input: [{ role: 'user', type: 'message', content: 'now' }] };
+  let filtered: unknown;
+  const projector = vi.fn(() => ({
+    prefix: {
+      kind: 'match' as const,
+      snapshotIdentity: 'history:test:1',
+      snapshotItemCount: 1,
+      modelInputItemCount: 2,
+      currentTurnSuffix: [{ role: 'user', type: 'message', content: 'now' }],
+    },
+    projectedModelData: providerProjection,
+    projectedInput: providerProjection.input,
+  }));
+  const runner = {
+    run: async (_agent: any, _input: any, options: any) => {
+      filtered = options.callModelInputFilter({
+        context: options.context,
+        modelData: {
+          input: [
+            { role: 'user', type: 'message', content: 'before' },
+            { role: 'user', type: 'message', content: 'now' },
+          ],
+        },
+      });
+      return {};
+    },
+  };
+  const orchestrator = createOrchestrator({
+    agentConfig: agentConfig as any,
+    runnerManager: { maxTurns: 20, getOrCreateRunner: () => runner } as any,
+    continuationProjectionMode: 'openai-provider',
+    openAIChainedInputProjector: projector as any,
+  });
+
+  await orchestrator.startStream('now', {
+    previousResponseId: 'response-1',
+    providerHistorySnapshot: {
+      revision: 1,
+      identity: 'history:test:1',
+      history: [{ role: 'user', type: 'message', content: 'before' }],
+    },
+  });
+
+  expect(filtered).toBe(providerProjection);
+  expect(projector).toHaveBeenCalledTimes(1);
+});
+
+it('keeps the baseline projection for legacy, mismatched, unequal, or failed provider compatibility', async () => {
+  const agentConfig = createMockAgentConfig();
+  agentConfig.setProvider('openai');
+  const baseline = { input: [{ role: 'user', type: 'message', content: 'now' }] };
+  const cases = [
+    {
+      mode: 'legacy' as const,
+      projector: () => ({ prefix: { kind: 'match' as const }, projectedModelData: baseline }),
+    },
+    {
+      mode: 'openai-provider' as const,
+      projector: () => ({ prefix: { kind: 'mismatch' as const }, projectedModelData: baseline }),
+    },
+    {
+      mode: 'openai-provider' as const,
+      projector: () => ({ prefix: { kind: 'match' as const }, projectedModelData: { input: [] } }),
+    },
+    {
+      mode: 'openai-provider' as const,
+      projector: () => {
+        throw new Error('projection failed');
+      },
+    },
+  ];
+
+  for (const { mode, projector } of cases) {
+    let filtered: any;
+    const runner = {
+      run: async (_agent: any, _input: any, options: any) => {
+        filtered = options.callModelInputFilter({
+          context: options.context,
+          modelData: {
+            input: [
+              { role: 'user', type: 'message', content: 'before' },
+              { role: 'user', type: 'message', content: 'now' },
+            ],
+          },
+        });
+        return {};
+      },
+    };
+    const orchestrator = createOrchestrator({
+      agentConfig: agentConfig as any,
+      runnerManager: { maxTurns: 20, getOrCreateRunner: () => runner } as any,
+      continuationProjectionMode: mode,
+      openAIChainedInputProjector: projector as any,
+    });
+
+    await orchestrator.startStream('now', {
+      previousResponseId: 'response-1',
+      providerHistorySnapshot: {
+        revision: 1,
+        identity: 'history:test:1',
+        history: [{ role: 'user', type: 'message', content: 'before' }],
+      },
+    });
+    expect(filtered).not.toBe(baseline);
+    expect(filtered).toEqual(baseline);
+  }
+});
+
 it('keeps the established projection and executes the request when the parity observer throws', async () => {
   const agentConfig = createMockAgentConfig();
   agentConfig.setProvider('openai');
@@ -410,6 +521,7 @@ it('does not invoke the OpenAI parity observer for Codex', async () => {
   const agentConfig = createMockAgentConfig();
   agentConfig.setProvider('codex');
   const observations: any[] = [];
+  const projector = vi.fn();
   const runner = {
     run: async (_agent: any, _input: any, options: any) => {
       options.callModelInputFilter({
@@ -422,7 +534,9 @@ it('does not invoke the OpenAI parity observer for Codex', async () => {
   const orchestrator = createOrchestrator({
     agentConfig: agentConfig as any,
     runnerManager: { maxTurns: 20, getOrCreateRunner: () => runner } as any,
+    continuationProjectionMode: 'openai-provider',
     openAIChainedInputParityObserver: { record: (observation) => observations.push(observation) },
+    openAIChainedInputProjector: projector as any,
   });
 
   await orchestrator.startStream('now', {
@@ -431,4 +545,5 @@ it('does not invoke the OpenAI parity observer for Codex', async () => {
   });
 
   expect(observations).toEqual([]);
+  expect(projector).not.toHaveBeenCalled();
 });

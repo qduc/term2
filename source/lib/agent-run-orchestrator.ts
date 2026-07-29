@@ -12,6 +12,7 @@ import {
   projectOpenAIChainedModelInput,
   type OpenAIChainedInputCompatibilityProjection,
 } from '../providers/openai-chained-input-compatibility.js';
+import type { ContinuationProjectionMode } from './continuation-projection-mode.js';
 
 type ChainedRunOptions = {
   previousResponseId?: string | null;
@@ -36,7 +37,9 @@ export interface AgentRunOrchestratorDeps {
   runnerManager: RunnerManager;
   settings: ISettingsService;
   logger: ILoggingService;
+  continuationProjectionMode?: ContinuationProjectionMode;
   openAIChainedInputParityObserver?: OpenAIChainedInputParityObserver;
+  openAIChainedInputProjector?: typeof projectOpenAIChainedModelInput;
 }
 
 /**
@@ -57,14 +60,18 @@ export class AgentRunOrchestrator {
   #runnerManager: RunnerManager;
   #settings: ISettingsService;
   #logger: ILoggingService;
+  #continuationProjectionMode: ContinuationProjectionMode;
   #openAIChainedInputParityObserver?: OpenAIChainedInputParityObserver;
+  #openAIChainedInputProjector: typeof projectOpenAIChainedModelInput;
 
   constructor(deps: AgentRunOrchestratorDeps) {
     this.#agentConfig = deps.agentConfig;
     this.#runnerManager = deps.runnerManager;
     this.#settings = deps.settings;
     this.#logger = deps.logger;
+    this.#continuationProjectionMode = deps.continuationProjectionMode ?? 'legacy';
     this.#openAIChainedInputParityObserver = deps.openAIChainedInputParityObserver;
+    this.#openAIChainedInputProjector = deps.openAIChainedInputProjector ?? projectOpenAIChainedModelInput;
   }
 
   supportsConversationChaining(): boolean {
@@ -145,7 +152,16 @@ export class AgentRunOrchestrator {
       this.#observeOpenAICompatibilityParity(modelData, options, providerHistorySnapshot, previousResponseId, baseline);
       throw error;
     }
-    this.#observeOpenAICompatibilityParity(modelData, options, providerHistorySnapshot, previousResponseId, baseline);
+    const compatibility = this.#observeOpenAICompatibilityParity(
+      modelData,
+      options,
+      providerHistorySnapshot,
+      previousResponseId,
+      baseline,
+    );
+    if (this.#selectCompatibleOpenAIProjection(compatibility, providerHistorySnapshot, baseline)) {
+      filtered = compatibility.projectedModelData;
+    }
     const input = filtered?.input;
     if (!Array.isArray(input)) {
       return filtered;
@@ -200,10 +216,10 @@ export class AgentRunOrchestrator {
     snapshot: ProviderHistorySnapshot | undefined,
     previousResponseId: string | null | undefined,
     baseline: OpenAIChainedInputCompatibilityProjection,
-  ): void {
-    if (this.#agentConfig.getProvider() !== 'openai' || !snapshot) return;
+  ): OpenAIChainedInputCompatibilityProjection | undefined {
+    if (this.#agentConfig.getProvider() !== 'openai' || !snapshot) return undefined;
     try {
-      const compatibility = projectOpenAIChainedModelInput(snapshot, modelData, { ...options, previousResponseId });
+      const compatibility = this.#openAIChainedInputProjector(snapshot, modelData, { ...options, previousResponseId });
       const observation: OpenAIChainedInputParityObservation = {
         baseline,
         compatibility,
@@ -212,9 +228,31 @@ export class AgentRunOrchestrator {
           isDeepStrictEqual(baseline.error, compatibility.error),
       };
       this.#openAIChainedInputParityObserver?.record(observation);
+      return compatibility;
     } catch {
       // Parity observation is diagnostic only; it must never affect the SDK request.
+      return undefined;
     }
+  }
+
+  #selectCompatibleOpenAIProjection(
+    compatibility: OpenAIChainedInputCompatibilityProjection | undefined,
+    snapshot: ProviderHistorySnapshot | undefined,
+    baseline: OpenAIChainedInputCompatibilityProjection,
+  ): compatibility is OpenAIChainedInputCompatibilityProjection & { projectedModelData: any } {
+    if (
+      this.#continuationProjectionMode !== 'openai-provider' ||
+      this.#agentConfig.getProvider() !== 'openai' ||
+      !snapshot ||
+      !compatibility
+    ) {
+      return false;
+    }
+    return (
+      compatibility.prefix.kind === 'match' &&
+      isDeepStrictEqual(baseline.projectedModelData, compatibility.projectedModelData) &&
+      isDeepStrictEqual(baseline.error, compatibility.error)
+    );
   }
 
   async startStream(

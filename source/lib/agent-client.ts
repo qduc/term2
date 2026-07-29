@@ -16,8 +16,9 @@ import type { ConversationEvent } from '../services/conversation/conversation-ev
 import { SubagentBridge } from './subagent-bridge.js';
 import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
 import { RunnerManager } from './runner-manager.js';
-import { AgentRunOrchestrator } from './agent-run-orchestrator.js';
+import { AgentRunOrchestrator, type AgentRunOrchestratorDeps } from './agent-run-orchestrator.js';
 import { AgentChatService } from './agent-chat-service.js';
+import type { ContinuationProjectionMode } from './continuation-projection-mode.js';
 import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 import type { PostExecutePauseCapability } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
@@ -81,6 +82,7 @@ export class AgentClient {
     toolOwnership,
     postExecutePauseCapability,
     sessionAccess,
+    continuationProjectionMode = 'legacy',
   }: {
     model?: string;
     reasoningEffort?: ModelSettingsReasoningEffort | 'default';
@@ -94,6 +96,8 @@ export class AgentClient {
       executionContext?: ExecutionContext;
       sessionContextService: ISessionContextService;
       skillsService?: SkillsService;
+      /** Test seam for inspecting the immutable run-orchestrator dependencies. */
+      createRunOrchestrator?: (orchestratorDeps: AgentRunOrchestratorDeps) => AgentRunOrchestrator;
     };
     /** Test seam: inject a pre-built SubagentBridge instead of creating one. */
     subagentBridge?: SubagentBridge;
@@ -103,6 +107,8 @@ export class AgentClient {
     postExecutePauseCapability?: PostExecutePauseCapability;
     /** Handle-owned state for root read and Docker capabilities. */
     sessionAccess?: SessionAccessState;
+    /** Compatibility selection fixed by the owning session handle. */
+    continuationProjectionMode?: ContinuationProjectionMode;
   }) {
     this.#logger = deps.logger;
     this.#toolInterceptorRegistry = new ToolInterceptorRegistry({ logger: this.#logger });
@@ -149,12 +155,15 @@ export class AgentClient {
       },
     );
 
-    this.#runOrchestrator = new AgentRunOrchestrator({
+    const runOrchestratorDeps: AgentRunOrchestratorDeps = {
       agentConfig: this.#agentConfig,
       runnerManager: this.#runnerManager,
       settings: deps.settings,
       logger: deps.logger,
-    });
+      continuationProjectionMode,
+    };
+    this.#runOrchestrator =
+      deps.createRunOrchestrator?.(runOrchestratorDeps) ?? new AgentRunOrchestrator(runOrchestratorDeps);
 
     this.#chatService = new AgentChatService({
       agentConfig: this.#agentConfig,

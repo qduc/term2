@@ -533,7 +533,12 @@ it('runNonInteractive() disposes its factory-owned client after the runtime', as
           startStream: async () => new MockStream([]),
           continueRunStream: async () => new MockStream([]),
         };
-        return { agentClient, toolOwnership: new ToolOwnershipRegistry(), dispose: () => disposed.push('client') };
+        return {
+          agentClient,
+          continuationProjectionMode: 'legacy',
+          toolOwnership: new ToolOwnershipRegistry(),
+          dispose: () => disposed.push('client'),
+        };
       },
     },
   });

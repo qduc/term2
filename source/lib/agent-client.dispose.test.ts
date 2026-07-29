@@ -3,6 +3,7 @@ import { AgentClient as ProductionAgentClient } from './agent-client.js';
 import { registerProvider } from '../providers/registry.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import type { SubagentBridge } from './subagent-bridge.js';
+import type { AgentRunOrchestratorDeps } from './agent-run-orchestrator.js';
 import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 
 class AgentClient extends ProductionAgentClient {
@@ -74,4 +75,27 @@ it.sequential('dispose ends session-bound bridge work without changing ordinary 
 
   expect(bridge.dispose).toHaveBeenCalledTimes(1);
   expect(settings.listeners).toHaveLength(0);
+});
+
+it.sequential('passes an explicit frozen continuation projection mode to its run orchestrator', () => {
+  const settings = createSettings();
+  let received: AgentRunOrchestratorDeps | undefined;
+  new AgentClient({
+    deps: {
+      logger: createLogger(),
+      settings,
+      sessionContextService: { runWithContext: <T>(_context: unknown, fn: () => T) => fn(), getContext: () => null },
+      createRunOrchestrator: (orchestratorDeps) => {
+        received = orchestratorDeps;
+        return { abort() {} } as any;
+      },
+    },
+    subagentBridge: {
+      setEventSink() {},
+      setBackgroundEventSink() {},
+    } as unknown as SubagentBridge,
+    continuationProjectionMode: 'openai-provider',
+  });
+
+  expect(received?.continuationProjectionMode).toBe('openai-provider');
 });

@@ -51,8 +51,33 @@ it('never disposes a caller-owned compatibility client', () => {
   handle.dispose();
 
   expect(handle.agentClient).toBe(callerOwned);
+  expect(handle.continuationProjectionMode).toBe('legacy');
   expect(handle.toolOwnership).toBe(toolOwnership);
   expect(callerOwned.dispose).not.toHaveBeenCalled();
+});
+
+it('freezes the OpenAI projection mode at owned-handle creation and passes it to the client callback', () => {
+  let provider = 'openai';
+  const settings = {
+    get: (key: string) => (key === 'agent.provider' ? provider : undefined),
+  } as any;
+  const modes: string[] = [];
+  const factory = createOwnedSessionClientFactory(
+    settings,
+    (_sessionId, _ownership, _capability, _access, continuationProjectionMode) => {
+      modes.push(continuationProjectionMode);
+      return client();
+    },
+  );
+
+  const openAIHandle = factory.create('openai-session');
+  provider = 'codex';
+  const codexHandle = factory.create('codex-session');
+
+  expect(openAIHandle.continuationProjectionMode).toBe('openai-provider');
+  expect(openAIHandle.continuationProjectionMode).toBe('openai-provider');
+  expect(codexHandle.continuationProjectionMode).toBe('legacy');
+  expect(modes).toEqual(['openai-provider', 'legacy']);
 });
 
 it('disposal fail-closes its suspended gates and clears the capability without affecting a replacement', async () => {

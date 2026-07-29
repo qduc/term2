@@ -478,12 +478,12 @@ const CommandMessage: FC<Props> = ({
   // Standard mode custom tool renderers
   if (displayMode === 'standard' && success !== false && !failureReason && !isRunning) {
     if (toolName === 'read_file' || toolName === 'view_file') {
-      const result = <ReadFileRenderer output={output} renderStandardHeader={renderStandardHeader} />;
+      const result = ReadFileRenderer({ output, renderStandardHeader });
       if (result) return result;
     }
 
     if (toolName === 'grep') {
-      const result = <GrepRenderer output={output} renderStandardHeader={renderStandardHeader} />;
+      const result = GrepRenderer({ output, renderStandardHeader });
       if (result) return result;
     }
 
@@ -564,12 +564,12 @@ const CommandMessage: FC<Props> = ({
     }
 
     if (toolName === 'web_search') {
-      const result = <WebSearchRenderer output={output} renderStandardHeader={renderStandardHeader} />;
+      const result = WebSearchRenderer({ output, renderStandardHeader });
       if (result) return result;
     }
 
     if (toolName === 'web_fetch') {
-      const result = <WebFetchRenderer output={output} renderStandardHeader={renderStandardHeader} />;
+      const result = WebFetchRenderer({ output, renderStandardHeader });
       if (result) return result;
     }
 
@@ -664,12 +664,12 @@ const CommandMessage: FC<Props> = ({
     }
 
     if (toolName === 'code_context_search') {
-      const result = <CodeContextSearchRenderer output={output} renderStandardHeader={renderStandardHeader} />;
+      const result = CodeContextSearchRenderer({ output, renderStandardHeader });
       if (result) return result;
     }
 
     if (toolName && toolName.startsWith('memory_')) {
-      const result = <MemoryRenderer output={output} toolName={toolName} renderStandardHeader={renderStandardHeader} />;
+      const result = MemoryRenderer({ output, toolName, renderStandardHeader });
       if (result) return result;
     }
   }

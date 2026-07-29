@@ -1429,3 +1429,26 @@ it('CommandMessage limits the length of grep result in standard mode when there 
 
   expect(output.includes('2 matches in 1 more file truncated')).toBe(true);
 });
+
+// Regression: the custom standard-mode renderers (read_file, grep, web_search,
+// web_fetch, code_context_search, memory_*) return null when they cannot parse
+// the tool's text output. They must be invoked as functions, not as JSX, so that
+// the `if (result) return result;` guard can actually observe that null and fall
+// through to the generic output rendering. Rendering them as JSX made `result` an
+// always-truthy element, so an unparseable output silently displayed nothing.
+it('CommandMessage falls through to generic output when a standard renderer cannot parse', async () => {
+  const props = {
+    command: 'read_file src/file.ts',
+    toolName: 'read_file',
+    toolArgs: { path: 'src/file.ts' },
+    output: 'UNPARSEABLE_SENTINEL_TEXT not in read_file format',
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'standard' as const,
+  };
+
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  expect(output.includes('UNPARSEABLE_SENTINEL_TEXT')).toBe(true);
+});

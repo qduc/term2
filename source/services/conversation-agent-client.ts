@@ -4,12 +4,15 @@ import type { ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { ConversationEvent } from './conversation/conversation-events.js';
 import type { AgentStream } from './agent-stream.js';
+import type { ProviderHistorySnapshot } from './conversation/conversation-store.js';
 
 export type AgentClientRunOptions = {
   previousResponseId?: string | null;
   sessionId?: string;
   toolResultCallIds?: readonly string[];
   knownToolCallIds?: readonly string[];
+  /** Immutable, out-of-band authoritative history for provider compatibility seams. */
+  providerHistorySnapshot?: ProviderHistorySnapshot;
 };
 
 export type AgentClientChatOptions = {

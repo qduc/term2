@@ -74,14 +74,21 @@ it('attachInput sets streamInput and inputMode', () => {
     maxTransientRetries: 3,
   });
 
+  const providerHistorySnapshot = Object.freeze({
+    revision: 1,
+    identity: 'history:test:1',
+    history: Object.freeze([{ role: 'user', type: 'message', content: 'planned-input' }]),
+  });
   attempt.attachInput({
     streamInput: 'planned-input',
     inputSurgeKind: 'delta',
     effectiveTurn: mockTurn,
+    providerHistorySnapshot: providerHistorySnapshot as any,
   });
 
   expect(attempt.streamInput).toBe('planned-input');
   expect(attempt.inputMode).toBe('delta');
+  expect(attempt.providerHistorySnapshot).toBe(providerHistorySnapshot);
 });
 
 it('attachStream updates the current stream reference', () => {

@@ -21,13 +21,9 @@ import { AgentChatService } from './agent-chat-service.js';
 import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 import type { PostExecutePauseCapability } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
+import type { AgentClientRunOptions } from '../services/conversation-agent-client.js';
 
-type ChainedRunOptions = {
-  previousResponseId?: string | null;
-  sessionId?: string;
-  toolResultCallIds?: readonly string[];
-  knownToolCallIds?: readonly string[];
-};
+type ChainedRunOptions = AgentClientRunOptions;
 
 /**
  * Minimal adapter that isolates usage of @openai/agents.

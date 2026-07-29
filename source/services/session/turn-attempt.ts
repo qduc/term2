@@ -5,6 +5,7 @@ import type { RetryCounts } from '../retry/retry-contracts.js';
 import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-events.js';
 import type { SessionInputPlan } from './session-input-planner.js';
 import type { GenerationToken } from '../generation-guard.js';
+import type { ProviderHistorySnapshot } from '../conversation/conversation-store.js';
 
 export class TurnAttempt {
   readonly #turn: UserTurn;
@@ -18,6 +19,7 @@ export class TurnAttempt {
   #stream: AgentStream | null = null;
   #streamInput: string | AgentInputItem | AgentInputItem[] | undefined = undefined;
   #inputMode: 'delta' | 'full_history' | undefined = undefined;
+  #providerHistorySnapshot: ProviderHistorySnapshot | undefined = undefined;
   #addedUserMessage = false;
   #closed = false;
 
@@ -99,6 +101,10 @@ export class TurnAttempt {
     return this.#inputMode;
   }
 
+  get providerHistorySnapshot(): ProviderHistorySnapshot | undefined {
+    return this.#providerHistorySnapshot;
+  }
+
   get addedUserMessage(): boolean {
     return this.#addedUserMessage;
   }
@@ -114,6 +120,7 @@ export class TurnAttempt {
   attachInput(plan: SessionInputPlan): void {
     this.#streamInput = plan.streamInput;
     this.#inputMode = plan.inputSurgeKind;
+    this.#providerHistorySnapshot = plan.providerHistorySnapshot;
   }
 
   attachStream(stream: AgentStream | null): void {

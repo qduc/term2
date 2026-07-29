@@ -1,17 +1,34 @@
 import { Agent, run, type AgentInputItem, Runner, type RunState, type StreamedRunResult } from '@openai/agents';
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { getProvider } from '../providers/index.js';
 import { fetchModels } from '../services/model-service.js';
 import { filterChainedModelInput, type ChainedModelInputFilterOptions } from './chained-input-filter.js';
 import { AgentConfiguration } from './agent-configuration.js';
 import { RunnerManager } from './runner-manager.js';
+import type { ProviderHistorySnapshot } from '../services/conversation/conversation-store.js';
+import {
+  projectOpenAIChainedModelInput,
+  type OpenAIChainedInputCompatibilityProjection,
+} from '../providers/openai-chained-input-compatibility.js';
 
 type ChainedRunOptions = {
   previousResponseId?: string | null;
   sessionId?: string;
   toolResultCallIds?: readonly string[];
   knownToolCallIds?: readonly string[];
+  providerHistorySnapshot?: ProviderHistorySnapshot;
+};
+
+export type OpenAIChainedInputParityObservation = {
+  baseline: OpenAIChainedInputCompatibilityProjection;
+  compatibility: OpenAIChainedInputCompatibilityProjection;
+  matches: boolean;
+};
+
+export type OpenAIChainedInputParityObserver = {
+  record(observation: OpenAIChainedInputParityObservation): void;
 };
 
 export interface AgentRunOrchestratorDeps {
@@ -19,6 +36,7 @@ export interface AgentRunOrchestratorDeps {
   runnerManager: RunnerManager;
   settings: ISettingsService;
   logger: ILoggingService;
+  openAIChainedInputParityObserver?: OpenAIChainedInputParityObserver;
 }
 
 /**
@@ -39,12 +57,14 @@ export class AgentRunOrchestrator {
   #runnerManager: RunnerManager;
   #settings: ISettingsService;
   #logger: ILoggingService;
+  #openAIChainedInputParityObserver?: OpenAIChainedInputParityObserver;
 
   constructor(deps: AgentRunOrchestratorDeps) {
     this.#agentConfig = deps.agentConfig;
     this.#runnerManager = deps.runnerManager;
     this.#settings = deps.settings;
     this.#logger = deps.logger;
+    this.#openAIChainedInputParityObserver = deps.openAIChainedInputParityObserver;
   }
 
   supportsConversationChaining(): boolean {
@@ -102,8 +122,30 @@ export class AgentRunOrchestrator {
     this.#logger.debug('Conversation and agent refreshed');
   }
 
-  #filterAndGuardChainedModelInput(modelData: any, options: ChainedModelInputFilterOptions = {}): any {
-    const filtered = filterChainedModelInput(modelData, options);
+  #filterAndGuardChainedModelInput(
+    modelData: any,
+    options: ChainedModelInputFilterOptions = {},
+    providerHistorySnapshot?: ProviderHistorySnapshot,
+    previousResponseId?: string | null,
+  ): any {
+    let filtered: any;
+    let baseline: OpenAIChainedInputCompatibilityProjection;
+    try {
+      filtered = filterChainedModelInput(modelData, options);
+      baseline = {
+        prefix: this.#unanchoredPrefix(providerHistorySnapshot, modelData),
+        projectedModelData: filtered,
+        projectedInput: filtered?.input,
+      };
+    } catch (error) {
+      baseline = {
+        prefix: this.#unanchoredPrefix(providerHistorySnapshot, modelData),
+        error: this.#errorProjection(error),
+      };
+      this.#observeOpenAICompatibilityParity(modelData, options, providerHistorySnapshot, previousResponseId, baseline);
+      throw error;
+    }
+    this.#observeOpenAICompatibilityParity(modelData, options, providerHistorySnapshot, previousResponseId, baseline);
     const input = filtered?.input;
     if (!Array.isArray(input)) {
       return filtered;
@@ -128,9 +170,58 @@ export class AgentRunOrchestrator {
     return filtered;
   }
 
+  #unanchoredPrefix(
+    snapshot: ProviderHistorySnapshot | undefined,
+    modelData: any,
+  ): OpenAIChainedInputCompatibilityProjection['prefix'] {
+    const input = Array.isArray(modelData?.input) ? modelData.input : [];
+    return {
+      kind: 'mismatch',
+      snapshotIdentity: snapshot?.identity ?? 'unavailable',
+      snapshotItemCount: snapshot?.history.length ?? 0,
+      modelInputItemCount: input.length,
+      matchedPrefixItems: 0,
+      mismatchIndex: 0,
+    };
+  }
+
+  #errorProjection(error: unknown): { name: string; message: string; callIds?: readonly string[] } {
+    const value = error as { name?: unknown; message?: unknown; callIds?: unknown };
+    return {
+      name: typeof value?.name === 'string' ? value.name : 'Error',
+      message: typeof value?.message === 'string' ? value.message : String(error),
+      ...(Array.isArray(value?.callIds) ? { callIds: value.callIds as string[] } : {}),
+    };
+  }
+
+  #observeOpenAICompatibilityParity(
+    modelData: any,
+    options: ChainedModelInputFilterOptions,
+    snapshot: ProviderHistorySnapshot | undefined,
+    previousResponseId: string | null | undefined,
+    baseline: OpenAIChainedInputCompatibilityProjection,
+  ): void {
+    if (this.#agentConfig.getProvider() !== 'openai' || !snapshot) return;
+    const compatibility = projectOpenAIChainedModelInput(snapshot, modelData, { ...options, previousResponseId });
+    const observation: OpenAIChainedInputParityObservation = {
+      baseline,
+      compatibility,
+      matches:
+        isDeepStrictEqual(baseline.projectedModelData, compatibility.projectedModelData) &&
+        isDeepStrictEqual(baseline.error, compatibility.error),
+    };
+    this.#openAIChainedInputParityObserver?.record(observation);
+  }
+
   async startStream(
     userInput: string | AgentInputItem | AgentInputItem[],
-    { previousResponseId, sessionId, toolResultCallIds, knownToolCallIds }: ChainedRunOptions = {},
+    {
+      previousResponseId,
+      sessionId,
+      toolResultCallIds,
+      knownToolCallIds,
+      providerHistorySnapshot,
+    }: ChainedRunOptions = {},
   ): Promise<StreamedRunResult<any, any>> {
     // Abort any previous operation
     this.abort();
@@ -199,7 +290,12 @@ export class AgentRunOrchestrator {
           }
           const chainingActive = supportsConversationChaining && previousResponseId;
           return chainingActive
-            ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds, knownToolCallIds })
+            ? this.#filterAndGuardChainedModelInput(
+                args.modelData,
+                { toolResultCallIds, knownToolCallIds },
+                providerHistorySnapshot,
+                previousResponseId,
+              )
             : args.modelData;
         },
       };
@@ -231,7 +327,13 @@ export class AgentRunOrchestrator {
 
   async continueRunStream(
     state: RunState<any, any>,
-    { previousResponseId, sessionId, toolResultCallIds, knownToolCallIds }: ChainedRunOptions = {},
+    {
+      previousResponseId,
+      sessionId,
+      toolResultCallIds,
+      knownToolCallIds,
+      providerHistorySnapshot,
+    }: ChainedRunOptions = {},
   ): Promise<StreamedRunResult<any, any>> {
     this.abort();
     this.#currentAbortController = new AbortController();
@@ -270,7 +372,12 @@ export class AgentRunOrchestrator {
         }
         const chainingActive = supportsConversationChaining && previousResponseId;
         return chainingActive
-          ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds, knownToolCallIds })
+          ? this.#filterAndGuardChainedModelInput(
+              args.modelData,
+              { toolResultCallIds, knownToolCallIds },
+              providerHistorySnapshot,
+              previousResponseId,
+            )
           : args.modelData;
       },
     };

@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed. Anthropic is the final production consumer removed from `ai-sdk-agents-adapter.ts`; validate a separate adapter-retirement cleanup next, without broadening into chaining or registry migration. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed; the now-unreferenced legacy adapter, its characterization test, and direct `@openai/agents-extensions` dependency are retired. Focused routed-provider, direct-turn, bridge, custom-provider, and message-normalizer validation passes. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
 **Last updated:** 2026-07-29
 
 ---
@@ -216,6 +216,14 @@ production session contract.
   direct-turn, bridge, legacy-characterization, and custom-provider coverage passes: 7 files / 50
   tests. Full `tsc --noEmit` reaches only the known pre-existing
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Step D adapter retirement: deleted the now-unreferenced `ai-sdk-agents-adapter.ts` and its
+  characterization test, removed the direct `@openai/agents-extensions` manifest and lockfile
+  entries without installing dependencies, and retained the routed OpenRouter/Google/Anthropic,
+  direct-turn, bridge, custom-provider, and shared message-normalizer coverage. Focused retained
+  tests pass; source/dependency scans find no remaining adapter or extensions import/reference.
+  Formatting of retained changed files passes; this deletion-only source change leaves no retained
+  lintable source file. Full `tsc --noEmit` reaches only the known
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
 
 ### `ApprovalRecord` semantics, established by reading the SDK source
 
@@ -245,10 +253,11 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **Retire `ai-sdk-agents-adapter.ts` in a separate bounded cleanup.** Anthropic was its final
-   production consumer. Re-run the direct/bridge/legacy/custom-provider coverage before deleting
-   it; do not broaden into generate support, continuation, provider registry migration, logging,
-   history projection, RunState, or orchestration.
+1. **Resolve and record the chaining disposition before request-construction migration.** The live
+   risk register leaves `_buildResponsesCreateRequest` in `codex-responses-model.ts` and
+   `openai.provider.ts`, plus Codex `_fetchResponse`; `fallback-responses-model.ts` no longer
+   exists. Do not begin either transport/request-construction migration until the Step E chaining
+   interlock is settled.
 
 ### R1 gate — PASSED
 
@@ -395,7 +404,7 @@ The actual thing being eliminated. Every entry is a private-API reach-in.
 | ~~`_pendingAgentToolRuns`~~ | ~~`services/approval/tool-owner.ts`~~ | approval | **DONE** (A2) |
 | ~~`_mergeApprovals`~~ | ~~`services/subagents/nested-runner.ts`~~ | approval | **DONE** (A3) |
 | ~~`_generatedItems`~~ | ~~`services/stream-snapshot.ts`~~, ~~`services/session/session-tool-tracker.ts`~~, ~~`services/session/continuation-call-id-resolver.ts`~~ | run loop | **DONE** (Step C public stream/ledger recovery) |
-| `_buildResponsesCreateRequest` | `providers/codex-responses-model.ts`, `providers/fallback-responses-model.ts`, `providers/openai.provider.ts` | provider | Step D/E |
+| `_buildResponsesCreateRequest` | `providers/codex-responses-model.ts`, `providers/openai.provider.ts` | provider | Step D/E |
 | `_fetchResponse` | `providers/codex-responses-model.ts` | provider | Step E |
 
 Progress on this table is the measure of the project. LOC deleted is not.
@@ -525,13 +534,13 @@ independent provider implementations may proceed in parallel only after those se
    streamed-event, tool-call/result, usage/completion, and provider-native continuation boundaries
    before assigning provider migrations. One owner integrates this contract.
 2. **Parallel — migrate independent AI SDK providers.** Once the contract is stable, Google,
-   Anthropic, and OpenRouter may move in separate worktrees. Integrate sequentially, then delete
-   `ai-sdk-agents-adapter.ts` and run the cross-provider suite.
+   Anthropic, and OpenRouter may move in separate worktrees. Integrate sequentially, then retire
+   the legacy adapter and run the cross-provider suite.
 3. **Sequential — disposition chaining before Step E.** Prefer confining `previousResponseId` to
    provider-private state while the domain model always carries full history. Do not split this
    decision across session and provider layers or begin the Codex transport first.
-4. **Limited parallelism — retire provider reach-ins after chaining is settled.** OpenAI and the
-   fallback model may be separable once the transport contract is stable. Keep Codex request
+4. **Limited parallelism — retire provider reach-ins after chaining is settled.** OpenAI request
+   construction may be separable once the transport contract is stable. Keep Codex request
    construction, `_fetchResponse`, WebSocket behavior, and chaining under one owner; integrate it
    last because it is the highest-risk behavior.
 
@@ -721,30 +730,29 @@ the same consumer with fail-closed lifecycle gates. Root denied-read metadata an
 overrides now pass through it; do not grant this root capability to nested tools.
 
 ### Step D — Non-codex providers off the SDK
-Delete `ai-sdk-agents-adapter.ts` (112); ai-sdk providers implement our interface directly.
-Removes `@openai/agents-extensions`. `ai` and `@ai-sdk/*` are already dependencies.
-**Retires `_buildResponsesCreateRequest` in `openai.provider.ts` / `fallback-responses-model.ts`.**
+**DONE:** AI SDK providers implement our interface directly; the 112-line legacy
+`ai-sdk-agents-adapter.ts`, its characterization test, and direct
+`@openai/agents-extensions` dependency/lockfile entries are retired. `ai` and `@ai-sdk/*` remain
+dependencies. This does not retire the remaining `_buildResponsesCreateRequest` reach-ins in
+`openai.provider.ts` and `codex-responses-model.ts`.
 
 **Characterization decision — LANDED before contract work:** own one streamed model turn first.
-The adapter tests characterize the installed `@openai/agents-extensions/ai-sdk` behavior through
-our public `adaptAiSdkModelForAgents` `Model` boundary, using fake LanguageModelV3 models. This
-includes request translation, assistant-message normalization, stream event ordering and final
-output, usage, cancellation, errors, and current reasoning/provider-option forwarding needed by
-Google, Anthropic, and OpenRouter. It intentionally does **not** characterize Codex, chaining,
-Runner orchestration, private implementation details, speculative non-stream generation,
-continuation, a raw event/history bag, a broad error taxonomy, or registry migration. The contract,
-temporary bridge, unrouted direct LanguageModelV3 implementation, and OpenRouter, Google, and
-Anthropic routing slices are now landed. A narrow shared AI SDK call-settings wrapper captures only
-common doStream forwarding and explicit-provider-data semantics; Anthropic retains cache/max-token
-policy and OpenRouter retains its local extra-field/reasoning policy rather than adding either to
-generic turn orchestration. Anthropic was the final production consumer of
-`ai-sdk-agents-adapter.ts`; retire that adapter only in a separate cleanup.
+The removed adapter characterization informed the application-owned contract; its preserved
+behavior is now pinned by the routed OpenRouter/Google/Anthropic, direct-turn, bridge,
+custom-provider, and shared message-normalizer tests. That coverage retains request translation,
+assistant-message normalization, stream event ordering/final output, usage, cancellation, errors,
+and reasoning/provider-option forwarding without retaining the adapter. It intentionally does not
+broaden into Codex, chaining, Runner orchestration, speculative non-stream generation,
+continuation, a raw event/history bag, a broad error taxonomy, or registry migration. A narrow
+shared AI SDK call-settings wrapper captures only common doStream forwarding and
+explicit-provider-data semantics; Anthropic retains cache/max-token policy and OpenRouter retains
+its local extra-field/reasoning policy rather than adding either to generic turn orchestration.
 
 ### Step E — Chaining disposition, then the Codex WS transport
 The irreducible risk. Resolve the interlock first. Driven by the existing
-`codex-responses-model.test.ts` (2456 lines) and `fallback-responses-model.test.ts` (1356) —
-that is hard-won production knowledge and effectively the spec. **Port those assertions first
-and let them drive the implementation. Do not discard them.**
+`codex-responses-model.test.ts` and `openai.provider.test.ts` — that is hard-won production
+knowledge and effectively the spec. **Port those assertions first and let them drive the
+implementation. Do not discard them.**
 Related groundwork: `luna-responses-lite-wire-protocol.ts` (112),
 `websocket-receive-watchdog.ts` (95).
 **Retires the remaining reach-ins.**
@@ -799,6 +807,5 @@ feature), guardrails, MCP, sessions/memory, voice, realtime.
 - `source/services/stream-event-processor.ts` (490)
 - `source/services/subagents/nested-runner.ts` (445)
 - `source/providers/codex-responses-model.ts` (1210) — SDK subclassing
-- `source/providers/fallback-responses-model.ts` (344)
-- `source/providers/ai-sdk-agents-adapter.ts` (112) — Step D deletion target
+- `source/providers/openai.provider.ts` — remaining OpenAI request-construction reach-in
 - `source/services/conversation/conversation-replay.ts` (1149)

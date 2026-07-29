@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. The next action is Step D provider-contract design. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization slice is landed; the next action is an inert application-owned contract and bridge for one streamed model turn. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
 **Last updated:** 2026-07-29
 
 ---
@@ -161,6 +161,13 @@ production session contract.
   and unchanged missing/orphan validation.
 - Full Vitest after the chained-input slice reaches 4,723 passing / 1 skipped / 1 failing. The sole
   failure remains the pre-existing sandbox terminal E2E failure in `source/cli.e2e.test.ts`.
+- Step D adapter characterization: `ai-sdk-agents-adapter.test.ts` now pins public `Model`
+  behavior with fake LanguageModelV3 implementations: request translation (instructions,
+  messages, tools, named tool choice), assistant-message merging, exact streamed string tool
+  arguments, raw/derived event ordering, authoritative `response_done`, missing/zero/cached
+  usage semantics, AbortSignal forwarding/cancellation, provider-error propagation, and the
+  existing reasoning/provider-option forwarding. Focused adapter and message-normalizer tests:
+  2 files / 25 tests pass.
 
 ### `ApprovalRecord` semantics, established by reading the SDK source
 
@@ -190,12 +197,13 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **Step D provider-contract design.** Establish the application-owned request, streamed-event,
-   tool-call/result, usage/completion, and provider-native continuation contract before assigning
-   provider migrations. Step B's remaining candidate consumers were audited: their item
-   interpretation already delegates where it is representation-only, while provider logging,
-   history projection, RunState, and orchestration remain deliberately outside this bounded
-   migration.
+1. **Step D inert contract + bridge.** Based on the landed adapter characterization, establish
+   an application-owned contract for **one streamed model turn only**, then bridge the current
+   adapter without changing routing. Do not add speculative generate support, continuation,
+   a raw event/history bag, a broad error taxonomy, or provider-registry migration yet. Step B's
+   remaining candidate consumers were audited: their item interpretation already delegates where
+   it is representation-only, while provider logging, history projection, RunState, and
+   orchestration remain deliberately outside this bounded migration.
 
 ### R1 gate — PASSED
 
@@ -671,6 +679,16 @@ overrides now pass through it; do not grant this root capability to nested tools
 Delete `ai-sdk-agents-adapter.ts` (112); ai-sdk providers implement our interface directly.
 Removes `@openai/agents-extensions`. `ai` and `@ai-sdk/*` are already dependencies.
 **Retires `_buildResponsesCreateRequest` in `openai.provider.ts` / `fallback-responses-model.ts`.**
+
+**Characterization decision — LANDED before contract work:** own one streamed model turn first.
+The adapter tests characterize the installed `@openai/agents-extensions/ai-sdk` behavior through
+our public `adaptAiSdkModelForAgents` `Model` boundary, using fake LanguageModelV3 models. This
+includes request translation, assistant-message normalization, stream event ordering and final
+output, usage, cancellation, errors, and current reasoning/provider-option forwarding needed by
+Google, Anthropic, and OpenRouter. It intentionally does **not** characterize Codex, chaining,
+Runner orchestration, private implementation details, speculative non-stream generation,
+continuation, a raw event/history bag, a broad error taxonomy, or registry migration. Next: add
+only the inert streamed-turn contract and bridge, with routing unchanged.
 
 ### Step E — Chaining disposition, then the Codex WS transport
 The irreducible risk. Resolve the interlock first. Driven by the existing

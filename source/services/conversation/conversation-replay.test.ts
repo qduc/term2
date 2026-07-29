@@ -1153,6 +1153,67 @@ it('replayEvents: assistant_journal_item restores history and ledger on interrup
   expect(commandMsg?.output).toBe('/repo');
 });
 
+it('replayEvents: interrupted journal projects native tool aliases into history and ledger', () => {
+  const restored = replayEvents([
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run pwd' } }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 1,
+      item: {
+        type: 'tool_call',
+        callId: 'persisted-call',
+        toolName: 'shell',
+        arguments: 'fallback arguments',
+        providerItem: {
+          type: 'function_call',
+          tool_call_id: 'provider-call',
+          name: 'shell',
+          args: { command: 'pwd' },
+          providerData: { vendor_trace: 'trace-1' },
+        },
+      },
+    }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 2,
+      item: {
+        type: 'tool_result',
+        callId: 'persisted-call',
+        toolName: 'shell',
+        status: 'completed',
+        output: 'fallback output',
+        providerItem: {
+          type: 'function_call_result',
+          call_id: 'provider-call',
+          name: 'shell',
+          result: { stdout: '/repo' },
+          providerData: { vendor_trace: 'trace-2' },
+        },
+      },
+    }),
+  ]);
+
+  const call = restored.history.find((item: any) => item.type === 'function_call') as any;
+  const result = restored.history.find((item: any) => item.type === 'function_call_result') as any;
+
+  expect(call).toMatchObject({
+    tool_call_id: 'provider-call',
+    callId: 'provider-call',
+    arguments: '{"command":"pwd"}',
+    providerData: { vendor_trace: 'trace-1' },
+  });
+  expect(result).toMatchObject({
+    call_id: 'provider-call',
+    callId: 'provider-call',
+    output: { stdout: '/repo' },
+    providerData: { vendor_trace: 'trace-2' },
+  });
+  expect(restored.toolLedger[0].historyItems).toEqual([call, result]);
+});
+
 it('replayEvents: journal-backed pending tool call remains started after crash recovery', () => {
   const envelopes: LogEnvelope[] = [
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),

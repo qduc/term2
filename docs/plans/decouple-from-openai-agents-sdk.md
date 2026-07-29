@@ -1,7 +1,7 @@
 # Decoupling from `@openai/agents`
 
 **Status:** Step A is complete through the bounded A4 root fallback cleanup, several bounded Step B representation slices are landed, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
-**Last updated:** 2026-07-28
+**Last updated:** 2026-07-29
 
 ---
 
@@ -31,6 +31,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step B replay slice | Replay detects existing reasoning, tool calls, and tool results through canonical normalization while retaining the original provider history objects |
 | Step B tool-ledger slice | `ToolExecutionLedger` derives tool call/result classification, identity, name, arguments, output, reasoning detection, and reconciliation from `run-item-normalizer.ts`; equivalent wrapped, direct-provider, and canonical forms share one identity while stored history remains provider-facing |
 | Step B journal-to-ledger slice | Durable journal recovery detects missing reasoning and existing tool results through `run-item-normalizer.ts`; wrapped, direct-provider, and canonical items deduplicate equivalently while reconstructed history preserves original provider items, ordering, and ledger persistence behavior |
+| Step B provider-history projection slice | `conversation-turn-items.ts` owns canonical persisted tool call/result/reasoning projection back to provider history; completed-turn replay and interrupted-journal ledger recovery share it, retaining provider-native fields while reconciling aliases, serializing object arguments, and emitting reasoning once |
 | Step B history-repair slice | Conversation-history repair normalizes tool calls/results for signatures, pair detection, and repair decisions; equivalent wrapped, direct-provider, and canonical forms repair alike while retained history keeps its original representation |
 | Step B conversation-store tool-policy slice | `ConversationStore` normalizes only tool-output retry anchors and mutating-tool rewind previews; wrapped SDK, direct-provider, and canonical items share classification/call ID/name/arguments/output while splice indices and original provider-facing history remain intact |
 | Step B conversation-message projection slice | `conversation-message-projection.ts` read-only projects direct or one-level wrapped user, assistant, and system messages for conversation-store turn handling and stream finalization message detection; provider history remains original |
@@ -148,6 +149,10 @@ production session contract.
 - A4 lifecycle follow-up focused set passes: session access/handle, execution runner,
   root read/shell, and approval flow (6 files / 103 tests). Typecheck reaches only the
   known `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline.
+- Provider-history projection slice: turn-item synthesis and conversation replay focused tests
+  pass (2 files / 53 tests). They cover native field retention, `call_id` / `tool_call_id`,
+  `args` / `result`, object argument serialization, reasoning de-duplication, completed replay,
+  interrupted journal recovery, and ledger history ordering.
 
 ### `ApprovalRecord` semantics, established by reading the SDK source
 
@@ -177,9 +182,12 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. Continue Step B representation migration from the next bounded raw-item interpretation at the
-   current risk-register boundary. Message projection now also serves shell auto-approval compact
-   history context; keep canonical `Item` and `run-item-normalizer.ts` assistant-run/tool-only.
+1. Audit the remaining Step B representation consumers for the next bounded raw-item
+   interpretation seam. `conversation-result-builder.ts`, `session-tool-tracker.ts`, and
+   `turn-workflow.ts` already delegate their remaining item interpretation; do not turn their
+   SDK run-state or orchestration types into a representation-only slice. Retain provider-facing
+   history at its boundary, and keep canonical `Item` and `run-item-normalizer.ts`
+   assistant-run/tool-only.
 
 ### R1 gate — PASSED
 
@@ -658,15 +666,16 @@ Related groundwork: `luna-responses-lite-wire-protocol.ts` (112),
 
 ---
 
-## Scale of coupling (refreshed 2026-07-28)
+## Scale of coupling (refreshed 2026-07-29)
 
 - **53 non-test source files** import `@openai/agents*`; 87 including tests.
-- A current line-based scan finds **149 non-test `rawItem` lines**.
+- A current line-based scan finds **124 non-test `rawItem` lines**.
 - A current line-based scan finds **101 non-test `previousResponseId` lines**.
-- Out of 788 TS files total. Installed: `@openai/agents-core` **0.11.4**.
+- Out of 814 TS/TSX files under `source/`. Installed: `@openai/agents-core` **0.11.4**.
 
 These are navigation metrics, not progress measures. Record the counting method when refreshing
-them; the risk register remains authoritative.
+them; the risk register remains authoritative. The 2026-07-29 scan uses `rg` over TS and TSX files
+under `source/`, then excludes `*.test.*` and `*.e2e.test.*` paths for non-test counts.
 
 Three clusters: `source/providers/` (~7k LOC incl. tests); the run + approval loop
 (`lib/agent-*`, `services/session/`, `services/approval/`, `services/retry/`); and type-only
@@ -706,4 +715,4 @@ feature), guardrails, MCP, sessions/memory, voice, realtime.
 - `source/providers/codex-responses-model.ts` (1210) — SDK subclassing
 - `source/providers/fallback-responses-model.ts` (344)
 - `source/providers/ai-sdk-agents-adapter.ts` (112) — Step D deletion target
-- `source/services/conversation/conversation-replay.ts` (1192)
+- `source/services/conversation/conversation-replay.ts` (1149)

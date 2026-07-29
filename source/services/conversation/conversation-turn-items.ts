@@ -17,14 +17,6 @@ const clone = <T>(value: T): T => {
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 
-const rawItem = (value: unknown): Record<string, unknown> | null => {
-  const record = asRecord(value);
-  if (!record) {
-    return null;
-  }
-  return asRecord(record.rawItem) ?? record;
-};
-
 const getString = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined);
 
 const serializeToolCallArgumentsForReplay = (value: unknown): unknown => {
@@ -43,6 +35,74 @@ const cloneRecord = (value: unknown): Record<string, unknown> | undefined => {
   const record = asRecord(value);
   return record ? clone(record) : undefined;
 };
+
+/**
+ * Projects one canonical persisted assistant item back to the provider-facing
+ * history shape. This is deliberately the sole place that reconciles canonical
+ * fields with provider-native spellings retained for replay and journal recovery.
+ */
+export function projectPersistedAssistantItemToProviderHistory(item: PersistedAssistantTurnItem): AgentInputItem {
+  if (item.type === 'tool_call') {
+    const raw = cloneRecord(item.providerItem) ?? {};
+    const providerData = stripReasoningFields(cloneRecord(raw.providerData));
+    const callId =
+      getString(raw.callId) ??
+      getString(raw.call_id) ??
+      getString(raw.tool_call_id) ??
+      getString(raw.toolCallId) ??
+      item.callId;
+    return {
+      ...(raw as AgentInputItem),
+      type: getString(raw.type) ?? 'function_call',
+      callId,
+      name: getString(raw.name) ?? item.toolName,
+      arguments: serializeToolCallArgumentsForReplay(raw.arguments ?? raw.args ?? raw.operation ?? item.arguments),
+      ...(providerData ? { providerData } : {}),
+    } as AgentInputItem;
+  }
+
+  if (item.type === 'tool_result') {
+    const raw = cloneRecord(item.providerItem) ?? {};
+    const providerData = stripReasoningFields(cloneRecord(raw.providerData));
+    return {
+      ...(raw as AgentInputItem),
+      type: getString(raw.type) ?? 'function_call_result',
+      callId:
+        getString(raw.callId) ??
+        getString(raw.call_id) ??
+        getString(raw.tool_call_id) ??
+        getString(raw.toolCallId) ??
+        item.callId,
+      name: getString(raw.name) ?? item.toolName,
+      output: raw.output ?? raw.result ?? raw.content ?? item.output,
+      ...(providerData ? { providerData } : {}),
+    } as AgentInputItem;
+  }
+
+  if (item.type === 'assistant_text') {
+    const providerData = stripReasoningFields(cloneRecord(item.providerMetadata));
+    return {
+      role: 'assistant',
+      type: 'message',
+      ...(item.providerItemId ? { id: item.providerItemId } : {}),
+      status: 'completed',
+      content: [{ type: 'output_text', text: item.text }],
+      ...(providerData ? { providerData } : {}),
+    } as AgentInputItem;
+  }
+
+  const providerData = cloneRecord(item.providerMetadata);
+  if (providerData) {
+    delete providerData.reasoning_content;
+  }
+  return {
+    type: 'reasoning',
+    ...(item.providerItemId ? { id: item.providerItemId } : {}),
+    content: item.text ? [{ type: 'reasoning_text', text: item.text }] : [],
+    rawContent: item.text ? [{ type: 'reasoning_text', text: item.text }] : [],
+    ...(providerData && Object.keys(providerData).length > 0 ? { providerData } : {}),
+  } as unknown as AgentInputItem;
+}
 
 // Reasoning is reconstructed as standalone history items, so any reasoning fields
 // that may have been captured on an adjacent tool-call or assistant message's
@@ -170,44 +230,17 @@ export function synthesizeHistoryFromAssistantTurn(
     flushPendingReasoning();
 
     if (item.type === 'tool_call') {
-      const raw = cloneRecord(item.providerItem) ?? {};
-      const providerData = stripReasoningFields(cloneRecord(raw.providerData));
-      const callId = getString(raw.callId) ?? getString(raw.call_id) ?? getString(raw.tool_call_id) ?? item.callId;
-      const toolName = getString(raw.name) ?? item.toolName;
-      history.push({
-        ...(raw as AgentInputItem),
-        type: getString(raw.type) ?? 'function_call',
-        ...(getString(raw.id) ? { id: raw.id } : item.providerItem && 'id' in item.providerItem ? {} : {}),
-        callId,
-        name: toolName,
-        arguments: serializeToolCallArgumentsForReplay(raw.arguments ?? raw.args ?? item.arguments),
-        ...(providerData ? { providerData } : {}),
-      } as AgentInputItem);
+      history.push(projectPersistedAssistantItemToProviderHistory(item));
       continue;
     }
 
     if (item.type === 'tool_result') {
-      const raw = cloneRecord(item.providerItem) ?? {};
-      history.push({
-        ...(raw as AgentInputItem),
-        type: getString(raw.type) ?? 'function_call_result',
-        callId: getString(raw.callId) ?? getString(raw.call_id) ?? getString(raw.tool_call_id) ?? item.callId,
-        name: getString(raw.name) ?? item.toolName,
-        output: raw.output ?? item.output,
-      } as AgentInputItem);
+      history.push(projectPersistedAssistantItemToProviderHistory(item));
       continue;
     }
 
     if (item.type === 'assistant_text') {
-      const providerData = stripReasoningFields(cloneRecord(item.providerMetadata));
-      history.push({
-        role: 'assistant',
-        type: 'message',
-        ...(item.providerItemId ? { id: item.providerItemId } : {}),
-        status: 'completed',
-        content: [{ type: 'output_text', text: item.text }],
-        ...(providerData ? { providerData } : {}),
-      } as AgentInputItem);
+      history.push(projectPersistedAssistantItemToProviderHistory(item));
     }
   }
 

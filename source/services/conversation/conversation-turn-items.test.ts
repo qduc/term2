@@ -104,3 +104,64 @@ it('synthesizeHistoryFromAssistantTurn serializes persisted object tool-call arg
     },
   ]);
 });
+
+it('synthesizeHistoryFromAssistantTurn projects provider-native tool spellings without losing metadata', () => {
+  const turn = {
+    items: [
+      {
+        type: 'tool_call' as const,
+        callId: 'persisted-call',
+        toolName: 'shell',
+        arguments: 'fallback arguments',
+        providerItem: {
+          type: 'function_call',
+          id: 'provider-call-item',
+          tool_call_id: 'provider-call',
+          name: 'shell',
+          args: { command: 'pwd' },
+          providerData: { vendor_trace: 'trace-1' },
+        },
+      },
+      {
+        type: 'tool_result' as const,
+        callId: 'persisted-call',
+        toolName: 'shell',
+        status: 'completed' as const,
+        output: 'fallback output',
+        providerItem: {
+          type: 'function_call_result',
+          id: 'provider-result-item',
+          call_id: 'provider-call',
+          name: 'shell',
+          result: { stdout: '/repo' },
+          providerData: { vendor_trace: 'trace-2' },
+        },
+      },
+    ],
+  };
+
+  const history = synthesizeHistoryFromAssistantTurn([], turn) as Array<Record<string, any>>;
+
+  expect(history).toEqual([
+    {
+      type: 'function_call',
+      id: 'provider-call-item',
+      tool_call_id: 'provider-call',
+      name: 'shell',
+      args: { command: 'pwd' },
+      providerData: { vendor_trace: 'trace-1' },
+      callId: 'provider-call',
+      arguments: '{"command":"pwd"}',
+    },
+    {
+      type: 'function_call_result',
+      id: 'provider-result-item',
+      call_id: 'provider-call',
+      name: 'shell',
+      result: { stdout: '/repo' },
+      providerData: { vendor_trace: 'trace-2' },
+      callId: 'provider-call',
+      output: { stdout: '/repo' },
+    },
+  ]);
+});

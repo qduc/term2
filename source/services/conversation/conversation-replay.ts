@@ -10,7 +10,10 @@ import type {
   PersistedAssistantTurn,
   PersistedAssistantTurnItem,
 } from './conversation-persistence-types.js';
-import { synthesizeHistoryFromAssistantTurn } from './conversation-turn-items.js';
+import {
+  projectPersistedAssistantItemToProviderHistory,
+  synthesizeHistoryFromAssistantTurn,
+} from './conversation-turn-items.js';
 import { formatPatchOutputItems, coerceToText } from '../../tools/format-helpers.js';
 import { projectProviderHistory } from './conversation-state-projector.js';
 import { normalizeRunItems } from './run-item-normalizer.js';
@@ -141,18 +144,8 @@ interface ReplayState {
   pendingCommandMessages: SavedMessage[];
 }
 
-const makeHistoryItemForToolCall = (item: Extract<PersistedAssistantTurnItem, { type: 'tool_call' }>): unknown => {
-  const raw = item.providerItem;
-  if (raw && typeof raw === 'object') {
-    return cloneValue(raw);
-  }
-  return {
-    type: 'function_call',
-    callId: item.callId,
-    name: item.toolName,
-    arguments: item.arguments,
-  };
-};
+const makeHistoryItemForToolCall = (item: Extract<PersistedAssistantTurnItem, { type: 'tool_call' }>): unknown =>
+  projectPersistedAssistantItemToProviderHistory(item);
 
 /**
  * Returns the journal slot for the current user turn, allocating it on
@@ -178,33 +171,11 @@ const getOrCreateJournal = (state: ReplayState, ts: string, key: string, turnId?
   return journal;
 };
 
-const makeHistoryItemForToolResult = (item: Extract<PersistedAssistantTurnItem, { type: 'tool_result' }>): unknown => {
-  const raw = item.providerItem;
-  if (raw && typeof raw === 'object') {
-    return cloneValue(raw);
-  }
-  return {
-    type: 'function_call_result',
-    callId: item.callId,
-    name: item.toolName,
-    output: item.output,
-  };
-};
+const makeHistoryItemForToolResult = (item: Extract<PersistedAssistantTurnItem, { type: 'tool_result' }>): unknown =>
+  projectPersistedAssistantItemToProviderHistory(item);
 
-const makeHistoryItemForReasoning = (item: Extract<PersistedAssistantTurnItem, { type: 'reasoning' }>): unknown => {
-  const providerData = item.providerMetadata ? cloneValue(item.providerMetadata) : undefined;
-  if (providerData && 'reasoning_content' in providerData) {
-    delete providerData.reasoning_content;
-  }
-
-  return {
-    type: 'reasoning',
-    ...(item.providerItemId ? { id: item.providerItemId } : {}),
-    content: item.text ? [{ type: 'reasoning_text', text: item.text }] : [],
-    rawContent: item.text ? [{ type: 'reasoning_text', text: item.text }] : [],
-    ...(providerData && Object.keys(providerData).length > 0 ? { providerData } : {}),
-  };
-};
+const makeHistoryItemForReasoning = (item: Extract<PersistedAssistantTurnItem, { type: 'reasoning' }>): unknown =>
+  projectPersistedAssistantItemToProviderHistory(item);
 
 const withMissingReasoningPrefix = (historyItems: unknown[] | undefined, reasoningItems: unknown[]): unknown[] => {
   const existing = historyItems ?? [];

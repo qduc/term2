@@ -2,6 +2,7 @@ import { createOpenRouter, type OpenRouterProviderSettings } from '@openrouter/a
 import type { JSONValue, LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider';
 import { type ModelProvider, type Model } from '@openai/agents-core';
 import { adaptStreamedModelTurnForAgents } from './agents-model-bridge.js';
+import { withForwardedProviderSettings } from './ai-sdk-provider-settings.js';
 import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
 
 export type AiSdkOpenRouterConfig = Pick<
@@ -36,22 +37,11 @@ export class AiSdkOpenRouterProvider implements ModelProvider {
     });
 
     return adaptStreamedModelTurnForAgents(
-      createAiSdkStreamedModel(withOpenRouterSettings(provider(modelName || this.#defaultModel))),
+      createAiSdkStreamedModel(
+        withForwardedProviderSettings(provider(modelName || this.#defaultModel), forwardOpenRouterSettings),
+      ),
     );
   }
-}
-
-/** Retains the legacy adapter's OpenRouter-specific provider-data convention at the provider boundary. */
-function withOpenRouterSettings(model: LanguageModelV3): LanguageModelV3 {
-  return new Proxy(model, {
-    get(target, property, receiver) {
-      if (property === 'doStream') {
-        return (options: LanguageModelV3CallOptions) => target.doStream(forwardOpenRouterSettings(options));
-      }
-      const value = Reflect.get(target, property, receiver);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
 }
 
 type OpenRouterCallOptions = LanguageModelV3CallOptions & {

@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and first OpenRouter routing slice are landed; the next action is the next independent non-Codex provider slice, without broadening into chaining or registry migration. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter and Google routing slices are landed; the next action is the next independent non-Codex provider slice, without broadening into chaining or registry migration. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
 **Last updated:** 2026-07-29
 
 ---
@@ -40,7 +40,8 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step B chained-input-filter slice | Chained request delta selection and recognized tool call/result classification use `run-item-normalizer.ts`; direct, one-level wrapped, and canonical tool forms retain original input object identity/order/slicing, while explicit call-ID precedence, generic `*_call` compatibility, and user-message detection remain local policy |
 | Step D inert streamed-turn contract + Agents bridge | `contracts/streamed-model-turn.ts` owns a closed text/image, reasoning, function-call/result, and structured tool-result protocol for one turn; `agents-model-bridge.ts` temporarily adapts it to public Agents Model events without routing or provider changes |
 | Step D unrouted AI SDK streamed turn | `providers/ai-sdk-streamed-model.ts` translates the closed turn protocol directly to a normalized LanguageModelV3 stream and returns deltas plus one authoritative completion; no production provider is routed through it |
-| Step D OpenRouter routing slice | `AiSdkOpenRouterProvider` routes its LanguageModelV3 through `createAiSdkStreamedModel()` and the temporary Agents bridge; its provider-local forwarding retains legacy reasoning, provider options, extra request fields, configuration/fetch, stream signal/error, and completion behavior |
+| Step D OpenRouter routing slice | `AiSdkOpenRouterProvider` routes its LanguageModelV3 through `createAiSdkStreamedModel()` and the temporary Agents bridge; its OpenRouter-specific forwarding retains legacy reasoning, provider options, extra request fields, configuration/fetch, stream signal/error, and completion behavior |
+| Step D Google routing slice | `AiSdkGoogleProvider` routes its LanguageModelV3 through `createAiSdkStreamedModel()` and the temporary Agents bridge; the shared narrow call-settings wrapper retains Google’s explicit provider-data convention while OpenRouter’s reasoning special case remains local |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -195,6 +196,18 @@ production session contract.
   routed direct turn and bridge. Formatting/lint pass for the changed files. Full `tsc --noEmit`
   reaches only the known pre-existing
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Step D Google routing slice: focused Google/OpenRouter providers, direct implementation,
+  temporary bridge, legacy adapter characterization, and custom-provider adapter tests pass
+  (6 files / 40 tests).
+  A fake Google LanguageModelV3 proves configuration/custom fetch and selected/default model
+  preservation; public Agents stream request/tool settings; explicit `google` provider options
+  with nested-option precedence, top-level extra fields, and the legacy fallback response ID;
+  direct reasoning without OpenRouter nesting;
+  live reasoning/text/tool events; authoritative completion metadata/usage; signal identity; and
+  provider-error propagation. The only shared extraction is the cohesive doStream call-settings
+  wrapper; OpenRouter’s extra top-level forwarding and reasoning handling remain explicit. Full
+  `tsc --noEmit` reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
 
 ### `ApprovalRecord` semantics, established by reading the SDK source
 
@@ -224,8 +237,9 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **Route the next independent non-Codex provider slice: `AiSdkGoogleProvider`.** Route it
-   through the landed `StreamedModelTurn` implementation and temporary Agents bridge, proving its
+1. **Route the next independent non-Codex provider slice: `AiSdkAnthropicProvider`, if its
+   provider-specific behavior is independently characterized.** Route it through the landed
+   `StreamedModelTurn` implementation and temporary Agents bridge, proving its
    provider metadata and transport behavior before considering legacy-adapter deletion. Do not add
    speculative generate support, continuation, a raw event/history bag, a broad error taxonomy, or
    provider-registry migration. Provider logging, history projection, RunState, and orchestration
@@ -714,11 +728,13 @@ output, usage, cancellation, errors, and current reasoning/provider-option forwa
 Google, Anthropic, and OpenRouter. It intentionally does **not** characterize Codex, chaining,
 Runner orchestration, private implementation details, speculative non-stream generation,
   continuation, a raw event/history bag, a broad error taxonomy, or registry migration. The
-   contract, temporary bridge, unrouted direct LanguageModelV3 implementation, and OpenRouter
-   routing slice are now landed. OpenRouter retains its legacy provider-data convention in a
-   provider-local forwarding boundary, rather than adding OpenRouter policy to generic turn
-   orchestration. Next: route `AiSdkGoogleProvider` as the next independent non-Codex slice before
-   considering legacy-adapter retirement.
+    contract, temporary bridge, unrouted direct LanguageModelV3 implementation, and OpenRouter and
+    Google routing slices are now landed. A narrow shared AI SDK call-settings wrapper captures
+    only the common doStream forwarding mechanics; Google retains its explicit provider-data
+    convention and OpenRouter retains its local extra-field/reasoning policy rather than adding
+    either to generic turn orchestration. Next: characterize `AiSdkAnthropicProvider` before
+    routing it, if the evidence supports an independent slice, before considering legacy-adapter
+    retirement.
 
 ### Step E — Chaining disposition, then the Codex WS transport
 The irreducible risk. Resolve the interlock first. Driven by the existing

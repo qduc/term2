@@ -254,7 +254,7 @@ it('createCustomProviderModelProvider Google type gets logging fetch wrapper', a
       handoffs: [],
       outputType: 'text' as const,
       tracing: false as const,
-      input: [{ role: 'user', content: 'hello' }] as any,
+      input: [{ type: 'message', role: 'user', content: 'hello' }],
       modelSettings: {},
     } as any),
   );

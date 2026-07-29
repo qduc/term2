@@ -1,12 +1,12 @@
 import { createAnthropic, type AnthropicProviderSettings } from '@ai-sdk/anthropic';
 import { wrapLanguageModel, type LanguageModelMiddleware } from 'ai';
+import type { LanguageModelV3 } from '@ai-sdk/provider';
 import { type ModelProvider, type Model } from '@openai/agents-core';
-import { adaptAiSdkModelForAgents } from './ai-sdk-agents-adapter.js';
+import { adaptStreamedModelTurnForAgents } from './agents-model-bridge.js';
+import { forwardExplicitProviderSettings, withForwardedProviderSettings } from './ai-sdk-provider-settings.js';
+import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
 
-type AiSdkAnthropicModelLike = {
-  doGenerate: (options: any) => PromiseLike<any> | any;
-  doStream: (options: any) => PromiseLike<any> | any;
-};
+type AiSdkAnthropicModelLike = LanguageModelV3;
 
 export type AnthropicPromptCachingPredicate = (modelId: string) => boolean;
 
@@ -172,6 +172,10 @@ export class AiSdkAnthropicProvider implements ModelProvider {
       resolvedModelName,
     );
 
-    return adaptAiSdkModelForAgents(model, undefined, 'anthropic');
+    return adaptStreamedModelTurnForAgents(
+      createAiSdkStreamedModel(
+        withForwardedProviderSettings(model, (options) => forwardExplicitProviderSettings(options, 'anthropic')),
+      ),
+    );
   }
 }

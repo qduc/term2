@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter and Google routing slices are landed; the next action is the next independent non-Codex provider slice, without broadening into chaining or registry migration. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed. Anthropic is the final production consumer removed from `ai-sdk-agents-adapter.ts`; validate a separate adapter-retirement cleanup next, without broadening into chaining or registry migration. The application-owned post-execute seam carries root denied-read metadata and call-isolated one-shot overrides through the same held tool call and live stream; nested tools retain their compatibility path.
 **Last updated:** 2026-07-29
 
 ---
@@ -42,6 +42,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step D unrouted AI SDK streamed turn | `providers/ai-sdk-streamed-model.ts` translates the closed turn protocol directly to a normalized LanguageModelV3 stream and returns deltas plus one authoritative completion; no production provider is routed through it |
 | Step D OpenRouter routing slice | `AiSdkOpenRouterProvider` routes its LanguageModelV3 through `createAiSdkStreamedModel()` and the temporary Agents bridge; its OpenRouter-specific forwarding retains legacy reasoning, provider options, extra request fields, configuration/fetch, stream signal/error, and completion behavior |
 | Step D Google routing slice | `AiSdkGoogleProvider` routes its LanguageModelV3 through `createAiSdkStreamedModel()` and the temporary Agents bridge; the shared narrow call-settings wrapper retains Google’s explicit provider-data convention while OpenRouter’s reasoning special case remains local |
+| Step D Anthropic routing slice | `AiSdkAnthropicProvider` routes its cache/max-token-wrapped LanguageModelV3 through `createAiSdkStreamedModel()` and the temporary Agents bridge; the shared explicit-provider settings rule preserves Anthropic’s top-level provider data and nested precedence while caching/max-token policy stays local |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -208,6 +209,13 @@ production session contract.
   wrapper; OpenRouter’s extra top-level forwarding and reasoning handling remain explicit. Full
   `tsc --noEmit` reaches only the known pre-existing
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Step D Anthropic routing slice: characterization covers selected/default model and configuration,
+  forced per-model output limits, injected cache markers, explicit `anthropic` provider-data
+  forwarding, reasoning signature/end ordering, streamed text/tool calls, authoritative response
+  metadata/usage, signal identity, and provider errors. Focused Anthropic/Google/OpenRouter,
+  direct-turn, bridge, legacy-characterization, and custom-provider coverage passes: 7 files / 50
+  tests. Full `tsc --noEmit` reaches only the known pre-existing
+  `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
 
 ### `ApprovalRecord` semantics, established by reading the SDK source
 
@@ -237,13 +245,10 @@ only — every such call is rejected either way. Moot here: this repo never call
 
 ### Next, in order
 
-1. **Route the next independent non-Codex provider slice: `AiSdkAnthropicProvider`, if its
-   provider-specific behavior is independently characterized.** Route it through the landed
-   `StreamedModelTurn` implementation and temporary Agents bridge, proving its
-   provider metadata and transport behavior before considering legacy-adapter deletion. Do not add
-   speculative generate support, continuation, a raw event/history bag, a broad error taxonomy, or
-   provider-registry migration. Provider logging, history projection, RunState, and orchestration
-   remain outside this bounded migration.
+1. **Retire `ai-sdk-agents-adapter.ts` in a separate bounded cleanup.** Anthropic was its final
+   production consumer. Re-run the direct/bridge/legacy/custom-provider coverage before deleting
+   it; do not broaden into generate support, continuation, provider registry migration, logging,
+   history projection, RunState, or orchestration.
 
 ### R1 gate — PASSED
 
@@ -727,14 +732,13 @@ includes request translation, assistant-message normalization, stream event orde
 output, usage, cancellation, errors, and current reasoning/provider-option forwarding needed by
 Google, Anthropic, and OpenRouter. It intentionally does **not** characterize Codex, chaining,
 Runner orchestration, private implementation details, speculative non-stream generation,
-  continuation, a raw event/history bag, a broad error taxonomy, or registry migration. The
-    contract, temporary bridge, unrouted direct LanguageModelV3 implementation, and OpenRouter and
-    Google routing slices are now landed. A narrow shared AI SDK call-settings wrapper captures
-    only the common doStream forwarding mechanics; Google retains its explicit provider-data
-    convention and OpenRouter retains its local extra-field/reasoning policy rather than adding
-    either to generic turn orchestration. Next: characterize `AiSdkAnthropicProvider` before
-    routing it, if the evidence supports an independent slice, before considering legacy-adapter
-    retirement.
+continuation, a raw event/history bag, a broad error taxonomy, or registry migration. The contract,
+temporary bridge, unrouted direct LanguageModelV3 implementation, and OpenRouter, Google, and
+Anthropic routing slices are now landed. A narrow shared AI SDK call-settings wrapper captures only
+common doStream forwarding and explicit-provider-data semantics; Anthropic retains cache/max-token
+policy and OpenRouter retains its local extra-field/reasoning policy rather than adding either to
+generic turn orchestration. Anthropic was the final production consumer of
+`ai-sdk-agents-adapter.ts`; retire that adapter only in a separate cleanup.
 
 ### Step E — Chaining disposition, then the Codex WS transport
 The irreducible risk. Resolve the interlock first. Driven by the existing

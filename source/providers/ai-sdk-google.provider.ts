@@ -1,8 +1,8 @@
 import { createGoogleGenerativeAI, type GoogleGenerativeAIProviderSettings } from '@ai-sdk/google';
-import type { LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider';
+import type { LanguageModelV3, LanguageModelV3CallOptions } from '@ai-sdk/provider';
 import { type ModelProvider, type Model } from '@openai/agents-core';
 import { adaptStreamedModelTurnForAgents } from './agents-model-bridge.js';
-import { withForwardedProviderSettings } from './ai-sdk-provider-settings.js';
+import { forwardExplicitProviderSettings, withForwardedProviderSettings } from './ai-sdk-provider-settings.js';
 import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
 
 export type AiSdkGoogleConfig = Pick<
@@ -34,37 +34,14 @@ export class AiSdkGoogleProvider implements ModelProvider {
     return adaptStreamedModelTurnForAgents(
       createAiSdkStreamedModel(
         withFallbackResponseId(
-          withForwardedProviderSettings(provider(modelName || this.#defaultModel), forwardGoogleSettings),
+          withForwardedProviderSettings(provider(modelName || this.#defaultModel), (options) =>
+            forwardExplicitProviderSettings(options, 'google'),
+          ),
         ),
       ),
     );
   }
 }
-
-/** Retains the legacy adapter's explicit `google` provider-data convention at the provider boundary. */
-function forwardGoogleSettings(options: LanguageModelV3CallOptions): LanguageModelV3CallOptions {
-  const providerData = options.providerOptions as GoogleProviderData | undefined;
-  if (!providerData || typeof providerData !== 'object') return options;
-
-  const { providerOptions, ...extraProviderData } = providerData;
-  if (!Object.keys(extraProviderData).length) return providerOptions ? { ...options, providerOptions } : options;
-
-  return {
-    ...options,
-    ...extraProviderData,
-    providerOptions: {
-      ...(providerOptions ?? {}),
-      google: {
-        ...extraProviderData,
-        ...(providerOptions?.google ?? {}),
-      },
-    },
-  };
-}
-
-type GoogleProviderData = SharedV3ProviderOptions & {
-  providerOptions?: SharedV3ProviderOptions;
-};
 
 /** Google Generative AI streams may omit response metadata; retain the legacy adapter's fallback id locally. */
 function withFallbackResponseId(model: LanguageModelV3): LanguageModelV3 {

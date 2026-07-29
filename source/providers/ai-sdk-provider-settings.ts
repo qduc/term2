@@ -1,4 +1,4 @@
-import type { LanguageModelV3, LanguageModelV3CallOptions } from '@ai-sdk/provider';
+import type { LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider';
 
 /** Applies provider-specific call-option conventions at the AI SDK model boundary. */
 export function withForwardedProviderSettings<T extends LanguageModelV3>(
@@ -14,3 +14,35 @@ export function withForwardedProviderSettings<T extends LanguageModelV3>(
     },
   });
 }
+
+/**
+ * Retains the legacy explicit-provider convention: top-level provider data is
+ * available to the model and is copied into that provider's options, where
+ * explicitly nested options win.
+ */
+export function forwardExplicitProviderSettings(
+  options: LanguageModelV3CallOptions,
+  providerName: string,
+): LanguageModelV3CallOptions {
+  const providerData = options.providerOptions as ExplicitProviderData | undefined;
+  if (!providerData || typeof providerData !== 'object') return options;
+
+  const { providerOptions, ...extraProviderData } = providerData;
+  if (!Object.keys(extraProviderData).length) return providerOptions ? { ...options, providerOptions } : options;
+
+  return {
+    ...options,
+    ...extraProviderData,
+    providerOptions: {
+      ...(providerOptions ?? {}),
+      [providerName]: {
+        ...extraProviderData,
+        ...(providerOptions?.[providerName] ?? {}),
+      },
+    },
+  };
+}
+
+type ExplicitProviderData = SharedV3ProviderOptions & {
+  providerOptions?: SharedV3ProviderOptions;
+};

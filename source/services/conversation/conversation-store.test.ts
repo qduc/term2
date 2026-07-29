@@ -122,6 +122,36 @@ it('provides an immutable full provider-history snapshot with stable identity un
   expect(first.history).toEqual([{ role: 'user', type: 'message', content: 'A' }]);
 });
 
+it('gives independent authoritative histories distinct stable snapshot identities', () => {
+  const firstStore = new ConversationStore();
+  const secondStore = new ConversationStore();
+  firstStore.addUserMessage('same history');
+  secondStore.addUserMessage('same history');
+
+  const first = firstStore.getProviderHistorySnapshot();
+  const second = secondStore.getProviderHistorySnapshot();
+  expect(first.revision).toBe(second.revision);
+  expect(first.identity).not.toBe(second.identity);
+  expect(firstStore.getProviderHistorySnapshot().identity).toBe(first.identity);
+
+  firstStore.addUserMessage('changed');
+  expect(firstStore.getProviderHistorySnapshot().identity).not.toBe(first.identity);
+  expect(secondStore.getProviderHistorySnapshot().identity).toBe(second.identity);
+});
+
+it('deeply freezes cyclic provider-history snapshots', () => {
+  const store = new ConversationStore();
+  const item: any = { role: 'user', type: 'message', content: { text: 'cyclic' } };
+  item.content.self = item.content;
+  store.addImportedItem(item);
+
+  const snapshot = store.getProviderHistorySnapshot();
+  const content: any = (snapshot.history[0] as any).content;
+  expect(Object.isFrozen(content)).toBe(true);
+  expect(content.self).toBe(content);
+  expect(() => (content.text = 'mutated')).toThrow();
+});
+
 it('getLastUserMessage() returns the most recent user message text', () => {
   const store = new ConversationStore();
   store.addUserMessage('First');

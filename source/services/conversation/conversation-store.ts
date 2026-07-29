@@ -56,6 +56,7 @@ const FILE_MUTATING_TOOLS = new Set([TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REP
 export class ConversationStore {
   #history: AgentInputItem[] = [];
   #historyRevision = 0;
+  #historyIdentity = crypto.randomUUID();
 
   addUserTurn(input: string | UserTurn): void {
     const turn = normalizeUserTurn(input);
@@ -157,7 +158,7 @@ export class ConversationStore {
     const history = this.#freezeHistory(this.#cloneSnapshotHistory(this.#history));
     return Object.freeze({
       revision: this.#historyRevision,
-      identity: `history:${this.#historyRevision}`,
+      identity: `history:${this.#historyIdentity}:${this.#historyRevision}`,
       history,
     });
   }
@@ -468,8 +469,10 @@ export class ConversationStore {
   }
 
   #freezeHistory(items: AgentInputItem[]): readonly AgentInputItem[] {
+    const seen = new WeakSet<object>();
     const freeze = (value: any): any => {
-      if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+      if (!value || typeof value !== 'object' || Object.isFrozen(value) || seen.has(value)) return value;
+      seen.add(value);
       for (const child of Object.values(value)) freeze(child);
       return Object.freeze(value);
     };

@@ -121,6 +121,14 @@ terminal history handling. Existing evidence is concentrated in the input-planne
 and session lifecycle/reset plus recovery-executor/continuation-recovery tests. Stage 0 extends
 these seams rather than inventing parallel ownership.
 
+**Stage 0 observation boundary.** Candidate creation is deliberately an inert, opt-in
+instrumentation hook in Stage 0: production does not call `observeCandidate`, because no existing
+owner can truthfully supply both provider/account/endpoint/model identity and the exact request
+prefix binding at response observation. `SessionStreamProcessor` characterizes the terminal
+commit/promotion side only. Stage 1 must connect response-observed to terminal commit at the
+provider-private seam after it can provide that exact binding; Stage 0 does not migrate production
+checkpoint ownership or alter continuation/retry policy.
+
 ### A4 tool-ownership lifecycle
 
 `createOwnedSessionClientFactory()` creates one fresh `ToolOwnershipRegistry` per session handle
@@ -310,9 +318,11 @@ only — every such call is rejected either way. Moot here: this repo never call
 1. **DONE — Stage 0 characterization/instrumentation; no wire change.** Immutable snapshot identity
    and exact prefix anchoring, candidate → accepted → retired lifecycle behavior, stale completion
    after reset, and terminal-history-commit/checkpoint-promotion ordering are pinned at the current
-   owners. Optional structured capture records exact existing OpenAI/Codex request projections for
-   later parity comparison. This neither changes request payloads, continuation ownership,
-   approval/session migration, nor fallback behavior, and retires no reach-in.
+   owners. Candidate creation remains an inert opt-in hook until Stage 1 can supply exact provider
+   identity and request-prefix binding; production checkpoint ownership has not migrated. Optional
+   structured capture records exact existing OpenAI/Codex request projections for later parity
+   comparison. This neither changes request payloads, continuation ownership, approval/session
+   migration, nor fallback behavior, and retires no reach-in.
 2. **Next — Stage 1 compatibility seam.** Supply full-history snapshots at the provider boundary,
    move the current suffix projection behind OpenAI/Codex-private seams, and compare exact projected
    inputs. Do not migrate in-flight approvals/sessions or change Codex replay support.

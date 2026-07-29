@@ -81,12 +81,14 @@ it('retires a prior lineage and rejects its late candidate promotion after reset
   pc.clear();
 
   expect(pc.checkpoint).toBeNull();
-  expect(pc.retiredCheckpoints).toMatchObject([{ state: 'retired', responseId: 'resp-old', ...binding }]);
+  expect(pc.retiredCheckpoints).toMatchObject([
+    { state: 'retired', responseId: 'resp-old', retirement: { code: 'reset' }, ...binding },
+  ]);
   expect(pc.promoteCandidate('resp-old')).toBe(false);
   expect(pc.observeCandidate({ ...binding, lineage: 0, responseId: 'resp-late' })).toBe(false);
 });
 
-it('requires the exact current identity and transcript prefix to accept a checkpoint candidate', () => {
+it('records candidate, accepted, and superseded checkpoint lifecycle states with the complete binding', () => {
   const pc = new ProviderContinuity();
   const binding = {
     identity: { provider: 'openai', account: 'account-1', endpoint: 'responses', model: 'gpt-5' },
@@ -94,12 +96,54 @@ it('requires the exact current identity and transcript prefix to accept a checkp
   };
 
   pc.observeCandidate({ ...binding, responseId: 'resp-1' });
+  expect(pc.checkpoint).toEqual({ ...binding, lineage: 0, responseId: 'resp-1', state: 'candidate' });
+  expect(pc.promoteCandidate('resp-1', binding)).toBe(true);
+  expect(pc.checkpoint).toEqual({ ...binding, lineage: 0, responseId: 'resp-1', state: 'accepted' });
+
+  pc.observeCandidate({ ...binding, responseId: 'resp-2' });
+  expect(pc.retiredCheckpoints).toEqual([
+    { ...binding, lineage: 0, responseId: 'resp-1', state: 'retired', retirement: { code: 'superseded' } },
+  ]);
+  expect(pc.checkpoint).toEqual({ ...binding, lineage: 0, responseId: 'resp-2', state: 'candidate' });
+});
+
+it.each([
+  ['provider', { provider: 'codex' }, 'identity_mismatch', undefined],
+  ['account', { account: 'account-2' }, 'identity_mismatch', undefined],
+  ['endpoint', { endpoint: 'chat-completions' }, 'identity_mismatch', undefined],
+  ['model', { model: 'gpt-5-mini' }, 'identity_mismatch', undefined],
+  ['prefix revision', {}, 'prefix_mismatch', { revision: 3, identity: 'history:2' }],
+  ['prefix identity', {}, 'prefix_mismatch', { revision: 2, identity: 'other-store:2' }],
+])('retires a candidate on exact %s binding mismatch', (_field, identityPatch, retirementCode, prefixPatch) => {
+  const pc = new ProviderContinuity();
+  const binding = {
+    identity: { provider: 'openai', account: 'account-1', endpoint: 'responses', model: 'gpt-5' },
+    prefix: { revision: 2, identity: 'store-1:2' },
+  };
+
+  pc.observeCandidate({ ...binding, responseId: 'resp-1' });
   expect(
     pc.promoteCandidate('resp-1', {
-      ...binding,
-      prefix: { revision: 3, identity: 'history:3' },
+      identity: { ...binding.identity, ...identityPatch },
+      prefix: { ...binding.prefix, ...prefixPatch },
     }),
   ).toBe(false);
-  expect(pc.checkpoint?.state).toBe('candidate');
-  expect(pc.promoteCandidate('resp-1', binding)).toBe(true);
+  expect(pc.checkpoint).toBeNull();
+  expect(pc.retiredCheckpoints).toEqual([
+    { ...binding, lineage: 0, responseId: 'resp-1', state: 'retired', retirement: { code: retirementCode } },
+  ]);
+});
+
+it('retires a candidate when chaining breaks', () => {
+  const pc = new ProviderContinuity();
+  const binding = {
+    identity: { provider: 'openai', account: 'account-1', endpoint: 'responses', model: 'gpt-5' },
+    prefix: { revision: 2, identity: 'store-1:2' },
+  };
+
+  pc.observeCandidate({ ...binding, responseId: 'resp-1' });
+  pc.breakChaining();
+  expect(pc.retiredCheckpoints).toEqual([
+    { ...binding, lineage: 0, responseId: 'resp-1', state: 'retired', retirement: { code: 'chaining_broken' } },
+  ]);
 });

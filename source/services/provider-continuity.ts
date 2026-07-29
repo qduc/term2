@@ -15,11 +15,16 @@ export type ProviderCheckpointBinding = {
   prefix: ProviderCheckpointPrefix;
 };
 
+export type ProviderCheckpointRetirement = {
+  code: 'reset' | 'superseded' | 'chaining_broken' | 'identity_mismatch' | 'prefix_mismatch';
+};
+
 export type ProviderCheckpoint = ProviderCheckpointBinding & {
   state: 'candidate' | 'accepted' | 'retired';
   lineage: number;
   responseId: string;
   opaqueState?: unknown;
+  retirement?: ProviderCheckpointRetirement;
 };
 
 /**
@@ -86,8 +91,12 @@ export class ProviderContinuity {
     ) {
       return false;
     }
-    if (binding && !ProviderContinuity.#sameBinding(checkpoint, binding)) {
-      return false;
+    if (binding) {
+      const retirement = ProviderContinuity.#bindingMismatch(checkpoint, binding);
+      if (retirement) {
+        this.#retireCheckpoint(retirement);
+        return false;
+      }
     }
     this.#checkpoint = { ...checkpoint, state: 'accepted' };
     return true;
@@ -106,27 +115,34 @@ export class ProviderContinuity {
   breakChaining(): void {
     this.#previousResponseId = null;
     this.#chainingBroken = true;
-    this.#retireCheckpoint('chaining broken');
+    this.#retireCheckpoint('chaining_broken');
   }
 
   isChainingAvailable(historyLength?: number): boolean {
     return !this.#chainingBroken && (this.#previousResponseId !== null || (historyLength ?? 0) <= 1);
   }
 
-  #retireCheckpoint(_reason: string): void {
+  #retireCheckpoint(code: ProviderCheckpointRetirement['code']): void {
     if (!this.#checkpoint) return;
-    this.#retiredCheckpoints.push({ ...this.#checkpoint, state: 'retired' });
+    this.#retiredCheckpoints.push({ ...this.#checkpoint, state: 'retired', retirement: { code } });
     this.#checkpoint = null;
   }
 
-  static #sameBinding(left: ProviderCheckpointBinding, right: ProviderCheckpointBinding): boolean {
-    return (
-      left.identity.provider === right.identity.provider &&
-      left.identity.account === right.identity.account &&
-      left.identity.endpoint === right.identity.endpoint &&
-      left.identity.model === right.identity.model &&
-      left.prefix.revision === right.prefix.revision &&
-      left.prefix.identity === right.prefix.identity
-    );
+  static #bindingMismatch(
+    left: ProviderCheckpointBinding,
+    right: ProviderCheckpointBinding,
+  ): ProviderCheckpointRetirement['code'] | null {
+    if (
+      left.identity.provider !== right.identity.provider ||
+      left.identity.account !== right.identity.account ||
+      left.identity.endpoint !== right.identity.endpoint ||
+      left.identity.model !== right.identity.model
+    ) {
+      return 'identity_mismatch';
+    }
+    if (left.prefix.revision !== right.prefix.revision || left.prefix.identity !== right.prefix.identity) {
+      return 'prefix_mismatch';
+    }
+    return null;
   }
 }

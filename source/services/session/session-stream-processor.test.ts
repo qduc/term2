@@ -506,7 +506,39 @@ it('SessionStreamProcessor.finalize() promotes a matching checkpoint only after 
   expect(providerContinuity.checkpoint?.state).toBe('accepted');
 });
 
-it('SessionStreamProcessor.finalize() cannot promote a candidate retired by reset before a late completion', () => {
+it('SessionStreamProcessor.finalize() cannot promote a candidate from an empty terminal finalization', () => {
+  const conversationStore = new ConversationStore();
+  const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker: new SessionToolTracker(conversationStore),
+    conversationStore,
+    conversationLogger: {} as ConversationLogger,
+    providerContinuity,
+    generationGuard,
+    journal: makeJournal(),
+  });
+  providerContinuity.observeCandidate({
+    identity: { provider: 'openai', account: 'account-1', endpoint: 'responses', model: 'gpt-5' },
+    prefix: { revision: 0, identity: 'history:0' },
+    responseId: 'resp-no-op',
+  });
+
+  expect(
+    processor.finalize(
+      makeStream([], { interruptions: [], lastResponseId: 'resp-no-op' }),
+      generationGuard.capture(),
+      'delta',
+      'startStream',
+    ),
+  ).toEqual({ kind: 'committed' });
+  expect(conversationStore.getHistory()).toHaveLength(0);
+  expect(providerContinuity.checkpoint?.state).toBe('candidate');
+});
+
+it('SessionStreamProcessor.finalize() ignores a genuinely stale post-reset completion', () => {
   const conversationStore = new ConversationStore();
   const providerContinuity = new ProviderContinuity();
   const generationGuard = new GenerationGuard();
@@ -525,11 +557,15 @@ it('SessionStreamProcessor.finalize() cannot promote a candidate retired by rese
     prefix: { revision: 0, identity: 'history:0' },
     responseId: 'resp-late',
   });
+  const staleToken = generationGuard.capture();
   providerContinuity.clear();
+  generationGuard.invalidate();
   const stream = makeStream([], { interruptions: [], lastResponseId: 'resp-late' });
   (stream as any).output = [{ role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'late' }] }];
 
-  processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream');
+  expect(processor.finalize(stream, staleToken, 'delta', 'startStream')).toEqual({ kind: 'stale' });
+  expect(conversationStore.getHistory()).toEqual([]);
+  expect(providerContinuity.previousResponseId).toBeNull();
   expect(providerContinuity.checkpoint).toBeNull();
   expect(providerContinuity.retiredCheckpoints).toHaveLength(1);
 });

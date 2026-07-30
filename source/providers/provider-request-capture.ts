@@ -1,3 +1,5 @@
+import type { OpenAIRequestPrefixBinding } from './openai-request-prefix-binding.js';
+
 /**
  * Optional Stage 0 instrumentation for recording the exact provider request
  * projection at an established wire seam. It is deliberately observational:
@@ -28,6 +30,7 @@ export type OpenAIRequestLifecycleObservation = {
   requestData: Record<string, unknown>;
   phase: 'request-built' | 'terminal' | 'failed' | 'abandoned';
   responseId?: string;
+  prefixBinding?: OpenAIRequestPrefixBinding;
 };
 
 export const captureProviderRequest = (

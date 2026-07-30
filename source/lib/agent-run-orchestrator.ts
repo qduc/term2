@@ -12,6 +12,10 @@ import {
   projectOpenAIChainedModelInput,
   type OpenAIChainedInputCompatibilityProjection,
 } from '../providers/openai-chained-input-compatibility.js';
+import {
+  prepareOpenAIRequestPrefixBinding,
+  runWithOpenAIRequestPrefixBindingScope,
+} from '../providers/openai-request-prefix-binding.js';
 import type { ContinuationProjectionMode } from './continuation-projection-mode.js';
 
 type ChainedRunOptions = {
@@ -159,6 +163,7 @@ export class AgentRunOrchestrator {
       previousResponseId,
       baseline,
     );
+    this.#prepareOpenAIRequestPrefixBinding(compatibility, providerHistorySnapshot);
     if (this.#selectCompatibleOpenAIProjection(compatibility, providerHistorySnapshot, baseline)) {
       filtered = compatibility.projectedModelData;
     }
@@ -252,6 +257,24 @@ export class AgentRunOrchestrator {
       compatibility.prefix.kind === 'match' &&
       isDeepStrictEqual(baseline.projectedModelData, compatibility.projectedModelData) &&
       isDeepStrictEqual(baseline.error, compatibility.error)
+    );
+  }
+
+  #prepareOpenAIRequestPrefixBinding(
+    compatibility: OpenAIChainedInputCompatibilityProjection | undefined,
+    snapshot: ProviderHistorySnapshot | undefined,
+  ): void {
+    if (
+      this.#agentConfig.getProvider() !== 'openai' ||
+      !snapshot ||
+      compatibility?.prefix.kind !== 'match' ||
+      compatibility.projectedInput === undefined
+    ) {
+      return;
+    }
+    prepareOpenAIRequestPrefixBinding(
+      { snapshotIdentity: snapshot.identity, snapshotRevision: snapshot.revision },
+      compatibility.projectedInput,
     );
   }
 
@@ -468,13 +491,16 @@ export class AgentRunOrchestrator {
   async #runAgent(agent: Agent, input: any, options: any): Promise<any> {
     const shouldResetServiceTierOverride = this.#agentConfig.serviceTierOverrideForNextRequest === 'standard';
     try {
-      return await this.#runAgentWithProvider(
-        this.#agentConfig.getProvider(),
-        this.#runnerManager.getOrCreateRunner(this.#agentConfig.getProvider()),
-        agent,
-        input,
-        options,
-      );
+      const providerId = this.#agentConfig.getProvider();
+      const runAgent = () =>
+        this.#runAgentWithProvider(
+          providerId,
+          this.#runnerManager.getOrCreateRunner(providerId),
+          agent,
+          input,
+          options,
+        );
+      return await (providerId === 'openai' ? runWithOpenAIRequestPrefixBindingScope(runAgent) : runAgent());
     } finally {
       if (shouldResetServiceTierOverride) {
         this.#agentConfig.serviceTierOverrideForNextRequest = null;

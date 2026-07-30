@@ -3,6 +3,7 @@ import { AgentRunOrchestrator, type AgentRunOrchestratorDeps } from './agent-run
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { registerProvider } from '../providers/registry.js';
 import type { Runner } from '@openai/agents';
+import { consumeOpenAIRequestPrefixBinding } from '../providers/openai-request-prefix-binding.js';
 
 // ========== Mock types ==========
 
@@ -379,6 +380,42 @@ it('selects an exact-match OpenAI provider projection only for the frozen provid
 
   expect(filtered).toBe(providerProjection);
   expect(projector).toHaveBeenCalledTimes(1);
+});
+
+it('hands an exact OpenAI compatibility projection to the request lifecycle with immutable snapshot identity and revision', async () => {
+  const agentConfig = createMockAgentConfig();
+  agentConfig.setProvider('openai');
+  let binding: unknown;
+  const runner = {
+    run: async (_agent: any, _input: any, options: any) => {
+      const filtered = options.callModelInputFilter({
+        context: options.context,
+        modelData: {
+          input: [
+            { role: 'user', type: 'message', content: 'before' },
+            { role: 'user', type: 'message', content: 'now' },
+          ],
+        },
+      });
+      binding = consumeOpenAIRequestPrefixBinding({ input: filtered.input });
+      return {};
+    },
+  };
+  const orchestrator = createOrchestrator({
+    agentConfig: agentConfig as any,
+    runnerManager: { maxTurns: 20, getOrCreateRunner: () => runner } as any,
+  });
+
+  await orchestrator.startStream('now', {
+    previousResponseId: 'response-1',
+    providerHistorySnapshot: {
+      revision: 42,
+      identity: 'history:immutable-42',
+      history: [{ role: 'user', type: 'message', content: 'before' }],
+    },
+  });
+
+  expect(binding).toEqual({ snapshotIdentity: 'history:immutable-42', snapshotRevision: 42 });
 });
 
 it('keeps the baseline projection for legacy, mismatched, unequal, or failed provider compatibility', async () => {

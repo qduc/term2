@@ -12,6 +12,7 @@ import {
   type OpenAIRequestLifecycleObservation,
   type ProviderRequestCapture,
 } from './provider-request-capture.js';
+import { consumeOpenAIRequestPrefixBinding } from './openai-request-prefix-binding.js';
 import { randomUUID } from 'node:crypto';
 
 const DEFAULT_OPENAI_ENDPOINT = 'https://api.openai.com/v1';
@@ -51,6 +52,10 @@ abstract class OpenAIRequestLifecycleModel {
     if (!attempt) return;
     try {
       attempt.requestData = structuredClone(requestData);
+      const prefixBinding = consumeOpenAIRequestPrefixBinding(requestData);
+      if (prefixBinding) {
+        attempt.prefixBinding = prefixBinding;
+      }
       observeOpenAIRequestLifecycle(capture, { ...attempt, phase: 'request-built' });
     } catch {
       // A non-cloneable diagnostic payload must not affect the SDK request.

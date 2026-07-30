@@ -2,6 +2,11 @@ import { it, expect } from 'vitest';
 import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
 import { OpenAIResponsesModelWithPromptCacheKey, OpenAIResponsesWSModelWithPromptCacheKey } from './openai.provider.js';
 import { getProvider } from './registry.js';
+import {
+  consumeOpenAIRequestPrefixBinding,
+  prepareOpenAIRequestPrefixBinding,
+  runWithOpenAIRequestPrefixBindingScope,
+} from './openai-request-prefix-binding.js';
 
 const loggingService = {
   debug() {},
@@ -335,3 +340,139 @@ it.sequential('OpenAI request capture and lifecycle observer failures cannot cha
     (OpenAIResponsesModel.prototype as any).getResponse = originalUnary;
   }
 });
+
+it.sequential(
+  'OpenAI lifecycle binds an exact scoped snapshot prefix without leaking it across HTTP, WebSocket, or mismatch attempts',
+  async () => {
+    const observations: any[] = [];
+    const originalHttpBuild = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+    const originalWsBuild = (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest;
+    const originalUnary = (OpenAIResponsesModel.prototype as any).getResponse;
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function (request: any) {
+      return { requestData: { input: request.input } };
+    };
+    (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = (
+      OpenAIResponsesModel.prototype as any
+    )._buildResponsesCreateRequest;
+    (OpenAIResponsesModel.prototype as any).getResponse = async function (request: any) {
+      this._buildResponsesCreateRequest(request, false);
+      return { responseId: request.responseId };
+    };
+    try {
+      for (const [ModelClass, transport] of [
+        [OpenAIResponsesModelWithPromptCacheKey, 'http'],
+        [OpenAIResponsesWSModelWithPromptCacheKey, 'websocket'],
+      ] as const) {
+        const model = new ModelClass({} as any, 'gpt-test', {
+          record() {},
+          observe: (entry: any) => observations.push(entry),
+        });
+        await runWithOpenAIRequestPrefixBindingScope(async () => {
+          prepareOpenAIRequestPrefixBinding({ snapshotIdentity: `history:${transport}`, snapshotRevision: 7 }, [
+            { role: 'user', content: transport },
+          ]);
+          await (model as any).getResponse({
+            input: [{ role: 'user', content: transport }],
+            responseId: `${transport}-id`,
+          });
+          prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:wrong', snapshotRevision: 8 }, [
+            { role: 'user', content: 'expected' },
+          ]);
+          await (model as any).getResponse({ input: [{ role: 'user', content: 'other' }], responseId: 'mismatch-id' });
+        });
+      }
+
+      const terminals = observations.filter((entry) => entry.phase === 'terminal');
+      expect(terminals.map((entry) => entry.prefixBinding)).toEqual([
+        { snapshotIdentity: 'history:http', snapshotRevision: 7 },
+        undefined,
+        { snapshotIdentity: 'history:websocket', snapshotRevision: 7 },
+        undefined,
+      ]);
+      expect(terminals.map((entry) => entry.responseId)).toEqual([
+        'http-id',
+        'mismatch-id',
+        'websocket-id',
+        'mismatch-id',
+      ]);
+    } finally {
+      (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = originalHttpBuild;
+      (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = originalWsBuild;
+      (OpenAIResponsesModel.prototype as any).getResponse = originalUnary;
+    }
+  },
+);
+
+it('OpenAI prefix scopes isolate concurrent runs and reject ambiguous equal prepared invocations', async () => {
+  const seen = await Promise.all(
+    ['first', 'second'].map((name, revision) =>
+      runWithOpenAIRequestPrefixBindingScope(async () => {
+        prepareOpenAIRequestPrefixBinding({ snapshotIdentity: `history:${name}`, snapshotRevision: revision }, [name]);
+        await Promise.resolve();
+        return consumeOpenAIRequestPrefixBinding({ input: [name] });
+      }),
+    ),
+  );
+  expect(seen).toEqual([
+    { snapshotIdentity: 'history:first', snapshotRevision: 0 },
+    { snapshotIdentity: 'history:second', snapshotRevision: 1 },
+  ]);
+
+  await runWithOpenAIRequestPrefixBindingScope(async () => {
+    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:one', snapshotRevision: 1 }, ['same']);
+    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:two', snapshotRevision: 2 }, ['same']);
+    expect(consumeOpenAIRequestPrefixBinding({ input: ['same'] })).toBeUndefined();
+  });
+
+  await runWithOpenAIRequestPrefixBindingScope(async () => {
+    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:stale', snapshotRevision: 3 }, ['expected']);
+    expect(consumeOpenAIRequestPrefixBinding({ input: ['mismatch'] })).toBeUndefined();
+    expect(consumeOpenAIRequestPrefixBinding({ input: ['expected'] })).toBeUndefined();
+  });
+});
+
+it.sequential(
+  'OpenAI lifecycle retains a bound prefix across repeated builds and later prepared generations',
+  async () => {
+    const observations: any[] = [];
+    const originalBuild = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+    const originalUnary = (OpenAIResponsesModel.prototype as any).getResponse;
+    let releaseResponse: (() => void) | undefined;
+    const responseHeld = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function (request: any) {
+      return { requestData: { input: request.input } };
+    };
+    (OpenAIResponsesModel.prototype as any).getResponse = async function (request: any) {
+      this._buildResponsesCreateRequest(request, false);
+      this._buildResponsesCreateRequest(request, false); // SDK retry/request-object reuse
+      await responseHeld;
+      return { responseId: 'resp-first' };
+    };
+    try {
+      const model = new OpenAIResponsesModelWithPromptCacheKey({} as any, 'gpt-test', {
+        record() {},
+        observe: (entry: any) => observations.push(entry),
+      });
+      await runWithOpenAIRequestPrefixBindingScope(async () => {
+        prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:first', snapshotRevision: 1 }, ['first']);
+        const first = (model as any).getResponse({ input: ['first'] });
+        await Promise.resolve();
+        prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:later', snapshotRevision: 2 }, ['later']);
+        releaseResponse!();
+        await first;
+      });
+
+      expect(observations.map((entry) => entry.prefixBinding)).toEqual([
+        { snapshotIdentity: 'history:first', snapshotRevision: 1 },
+        { snapshotIdentity: 'history:first', snapshotRevision: 1 },
+        { snapshotIdentity: 'history:first', snapshotRevision: 1 },
+      ]);
+      expect(observations.at(-1)).toMatchObject({ phase: 'terminal', responseId: 'resp-first' });
+    } finally {
+      (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = originalBuild;
+      (OpenAIResponsesModel.prototype as any).getResponse = originalUnary;
+    }
+  },
+);

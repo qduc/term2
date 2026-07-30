@@ -403,7 +403,7 @@ it.sequential(
   },
 );
 
-it('OpenAI prefix scopes isolate concurrent runs and reject ambiguous equal prepared invocations', async () => {
+it('OpenAI prefix scopes isolate concurrent runs and fail closed for overlapping prepared invocations', async () => {
   const seen = await Promise.all(
     ['first', 'second'].map((name, revision) =>
       runWithOpenAIRequestPrefixBindingScope(async () => {
@@ -422,6 +422,14 @@ it('OpenAI prefix scopes isolate concurrent runs and reject ambiguous equal prep
     prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:one', snapshotRevision: 1 }, ['same']);
     prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:two', snapshotRevision: 2 }, ['same']);
     expect(consumeOpenAIRequestPrefixBinding({ input: ['same'] })).toBeUndefined();
+    expect(consumeOpenAIRequestPrefixBinding({ input: ['same'] })).toBeUndefined();
+  });
+
+  await runWithOpenAIRequestPrefixBindingScope(async () => {
+    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:first', snapshotRevision: 1 }, ['first']);
+    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:second', snapshotRevision: 2 }, ['second']);
+    expect(consumeOpenAIRequestPrefixBinding({ input: ['first'] })).toBeUndefined();
+    expect(consumeOpenAIRequestPrefixBinding({ input: ['second'] })).toBeUndefined();
   });
 
   await runWithOpenAIRequestPrefixBindingScope(async () => {
@@ -432,22 +440,27 @@ it('OpenAI prefix scopes isolate concurrent runs and reject ambiguous equal prep
 });
 
 it.sequential(
-  'OpenAI lifecycle retains a bound prefix across repeated builds and later prepared generations',
+  'OpenAI lifecycle retains a bound prefix when another invocation prepares the same input before a repeated build',
   async () => {
     const observations: any[] = [];
     const originalBuild = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
     const originalUnary = (OpenAIResponsesModel.prototype as any).getResponse;
-    let releaseResponse: (() => void) | undefined;
-    const responseHeld = new Promise<void>((resolve) => {
-      releaseResponse = resolve;
+    let releaseRepeatedBuild: (() => void) | undefined;
+    const repeatedBuildHeld = new Promise<void>((resolve) => {
+      releaseRepeatedBuild = resolve;
+    });
+    let firstBuildObserved: (() => void) | undefined;
+    const firstBuildComplete = new Promise<void>((resolve) => {
+      firstBuildObserved = resolve;
     });
     (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function (request: any) {
       return { requestData: { input: request.input } };
     };
     (OpenAIResponsesModel.prototype as any).getResponse = async function (request: any) {
       this._buildResponsesCreateRequest(request, false);
+      firstBuildObserved!();
+      await repeatedBuildHeld;
       this._buildResponsesCreateRequest(request, false); // SDK retry/request-object reuse
-      await responseHeld;
       return { responseId: 'resp-first' };
     };
     try {
@@ -458,10 +471,16 @@ it.sequential(
       await runWithOpenAIRequestPrefixBindingScope(async () => {
         prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:first', snapshotRevision: 1 }, ['first']);
         const first = (model as any).getResponse({ input: ['first'] });
-        await Promise.resolve();
-        prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:later', snapshotRevision: 2 }, ['later']);
-        releaseResponse!();
+        await firstBuildComplete;
+        prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:later', snapshotRevision: 2 }, ['first']);
+        releaseRepeatedBuild!();
         await first;
+
+        // The later invocation was not consumed by request A's repeated build.
+        expect(consumeOpenAIRequestPrefixBinding({ input: ['first'] })).toEqual({
+          snapshotIdentity: 'history:later',
+          snapshotRevision: 2,
+        });
       });
 
       expect(observations.map((entry) => entry.prefixBinding)).toEqual([

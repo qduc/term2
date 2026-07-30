@@ -10,36 +10,45 @@ export type OpenAIRequestPrefixBinding = Readonly<{
   snapshotRevision: number;
 }>;
 
-type PreparedInvocation = {
-  binding: OpenAIRequestPrefixBinding;
-  expectedInput: unknown;
-};
-
 class OpenAIRequestPrefixBindingScope {
-  #prepared: PreparedInvocation[] = [];
+  #prepared: { binding: OpenAIRequestPrefixBinding; expectedInput: unknown } | undefined;
+  #ambiguous = false;
 
-  prepare(binding: OpenAIRequestPrefixBinding, projectedInput: unknown): void {
+  prepare(binding: OpenAIRequestPrefixBinding, _projectedInput: unknown): void {
+    if (this.#ambiguous) return;
+    if (this.#prepared) {
+      // A scope does not have an invocation identity. Once two preparations
+      // overlap, input contents cannot establish which builder caused either.
+      this.#prepared = undefined;
+      this.#ambiguous = true;
+      return;
+    }
+
     try {
-      // Keep only the evidence needed to compare the final builder projection.
-      this.#prepared.push({ binding: Object.freeze({ ...binding }), expectedInput: structuredClone(projectedInput) });
+      this.#prepared = {
+        binding: Object.freeze({ ...binding }),
+        // Input equality can reject a mismatched builder, but cannot establish
+        // causality between two independently prepared invocations.
+        expectedInput: structuredClone(_projectedInput),
+      };
     } catch {
       // Instrumentation is fail-closed and must never alter a model call.
+      this.#prepared = undefined;
     }
   }
 
   consume(requestData: Record<string, unknown>): OpenAIRequestPrefixBinding | undefined {
     try {
-      const matches = this.#prepared.filter((prepared) => isDeepStrictEqual(prepared.expectedInput, requestData.input));
-      if (matches.length !== 1) {
-        // No exact causal correspondence (or identical overlapping calls) must
-        // not leave stale evidence available to a later builder invocation.
-        this.#prepared = [];
+      if (this.#ambiguous) {
+        // One consume retires the ambiguous overlap, leaving both invocations
+        // unbound rather than allowing stale evidence to bind a later build.
+        this.#ambiguous = false;
         return undefined;
       }
 
-      const [match] = matches;
-      this.#prepared = this.#prepared.filter((prepared) => prepared !== match);
-      return match.binding;
+      const prepared = this.#prepared;
+      this.#prepared = undefined;
+      return prepared && isDeepStrictEqual(prepared.expectedInput, requestData.input) ? prepared.binding : undefined;
     } catch {
       return undefined;
     }

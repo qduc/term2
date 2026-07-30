@@ -15,8 +15,8 @@ export type ProviderRequestCapture = {
   record(projection: ProviderRequestProjection): void;
   /**
    * Optional OpenAI-private lifecycle seam. It intentionally has no continuity
-   * or checkpoint dependency: account identity and prefix binding are not
-   * available at this boundary yet.
+   * or checkpoint dependency: it can carry observational prefix evidence, but
+   * truthful account identity is not available at this boundary.
    */
   observe?(observation: OpenAIRequestLifecycleObservation): void;
 };

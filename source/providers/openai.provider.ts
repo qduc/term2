@@ -52,9 +52,11 @@ abstract class OpenAIRequestLifecycleModel {
     if (!attempt) return;
     try {
       attempt.requestData = structuredClone(requestData);
-      const prefixBinding = consumeOpenAIRequestPrefixBinding(requestData);
-      if (prefixBinding) {
-        attempt.prefixBinding = prefixBinding;
+      if (!attempt.prefixBinding) {
+        const prefixBinding = consumeOpenAIRequestPrefixBinding(requestData);
+        if (prefixBinding) {
+          attempt.prefixBinding = prefixBinding;
+        }
       }
       observeOpenAIRequestLifecycle(capture, { ...attempt, phase: 'request-built' });
     } catch {

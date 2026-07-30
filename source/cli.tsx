@@ -542,7 +542,15 @@ const terminalTitleBase = buildProjectFolderTitle(executionContext.getCwd());
 
 const sessionClientFactory = createOwnedSessionClientFactory(
   settings,
-  (_sessionId, toolOwnership, postExecutePauseCapability, access, continuationProjectionMode) => {
+  (
+    _sessionId,
+    toolOwnership,
+    postExecutePauseCapability,
+    access,
+    continuationProjectionMode,
+    _continuity,
+    requestCapture,
+  ) => {
     const agentClient = new AgentClient({
       model: settings.get('agent.model'),
       reasoningEffort: settings.get('agent.reasoningEffort') as ModelSettingsReasoningEffort,
@@ -554,6 +562,7 @@ const sessionClientFactory = createOwnedSessionClientFactory(
         executionContext: executionContext,
         sessionContextService,
         skillsService,
+        requestCapture,
       },
       toolOwnership,
       postExecutePauseCapability,

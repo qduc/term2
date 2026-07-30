@@ -244,6 +244,7 @@ class OpenAIProvider implements ModelProvider {
     private readonly transport: 'websocket' | 'http',
     private readonly retryAttempts: number,
     private readonly onRetry?: () => void,
+    private readonly requestCapture?: ProviderRequestCapture,
   ) {}
 
   getModel(modelName?: string): Model {
@@ -255,8 +256,8 @@ class OpenAIProvider implements ModelProvider {
 
     const selectedModel =
       this.transport === 'http'
-        ? new OpenAIResponsesModelWithPromptCacheKey(this.openAIClient as any, model)
-        : new OpenAIResponsesWSModelWithPromptCacheKey(this.openAIClient as any, model);
+        ? new OpenAIResponsesModelWithPromptCacheKey(this.openAIClient as any, model, this.requestCapture)
+        : new OpenAIResponsesWSModelWithPromptCacheKey(this.openAIClient as any, model, this.requestCapture);
     const retryingModel = new RetryingModel(selectedModel, {
       retryAttempts: this.retryAttempts,
       loggingService: this.loggingService,
@@ -279,7 +280,7 @@ class OpenAIProvider implements ModelProvider {
 registerProvider({
   id: 'openai',
   label: 'OpenAI',
-  createRunner: ({ settingsService, loggingService, sessionContextService, onRetry }) => {
+  createRunner: ({ settingsService, loggingService, sessionContextService, onRetry, requestCapture }) => {
     const defaultModel = settingsService.get('agent.model') || 'gpt-4o';
     const apiKey = settingsService.get('agent.openai.apiKey') || process.env.OPENAI_API_KEY;
     const openAIClient = new OpenAI({
@@ -299,6 +300,7 @@ registerProvider({
         settingsService.get('agent.transport') ?? 'websocket',
         settingsService.get('agent.retryAttempts') ?? 2,
         onRetry,
+        requestCapture,
       ),
     });
   },

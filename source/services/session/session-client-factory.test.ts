@@ -56,6 +56,38 @@ it('never disposes a caller-owned compatibility client', () => {
   expect(callerOwned.dispose).not.toHaveBeenCalled();
 });
 
+it('binds each owned root observer to its handle continuity and leaves caller-owned handles inert', () => {
+  const captures: any[] = [];
+  const factory = createOwnedSessionClientFactory(
+    createMockSettingsService(),
+    (_id, _ownership, _capability, _access, _mode, continuity, capture) => {
+      captures.push({ continuity, capture });
+      return client();
+    },
+  );
+  const first = factory.create('first');
+  const second = factory.create('second');
+  captures[0].capture.observe({
+    token: 'a',
+    provider: 'openai',
+    transport: 'http',
+    model: 'gpt-5',
+    endpoint: 'https://api.openai.com/v1',
+    requestData: {},
+    phase: 'terminal',
+    responseId: 'response-a',
+    prefixBinding: { snapshotIdentity: 'first:1', snapshotRevision: 1, lineage: 0 },
+  });
+
+  expect(captures[0].continuity).toBe(first.providerContinuity);
+  expect(captures[1].continuity).toBe(second.providerContinuity);
+  expect(first.providerContinuity!.checkpoint?.responseId).toBe('response-a');
+  expect(second.providerContinuity!.checkpoint).toBeNull();
+  expect(
+    createCallerOwnedSessionClientFactory(client(), new ToolOwnershipRegistry()).create('caller').providerContinuity,
+  ).toBeDefined();
+});
+
 it('freezes the OpenAI projection mode at owned-handle creation and passes it to the client callback', () => {
   let provider = 'openai';
   const settings = {

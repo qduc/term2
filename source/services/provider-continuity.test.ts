@@ -54,7 +54,7 @@ it('update after breakChaining keeps chaining broken', () => {
 it('keeps a candidate checkpoint separate from existing previousResponseId behavior until terminal acceptance', () => {
   const pc = new ProviderContinuity();
   const binding = {
-    identity: { provider: 'openai', account: 'account-1', endpoint: 'responses', model: 'gpt-5' },
+    identity: { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },
     prefix: { revision: 4, identity: 'history:4' },
   };
 
@@ -73,7 +73,7 @@ it('keeps a candidate checkpoint separate from existing previousResponseId behav
 it('retires a prior lineage and rejects its late candidate promotion after reset', () => {
   const pc = new ProviderContinuity();
   const binding = {
-    identity: { provider: 'codex', account: 'account-1', endpoint: 'responses', model: 'gpt-5-codex' },
+    identity: { provider: 'codex', endpoint: 'responses', model: 'gpt-5-codex' },
     prefix: { revision: 7, identity: 'history:7' },
   };
 
@@ -91,7 +91,7 @@ it('retires a prior lineage and rejects its late candidate promotion after reset
 it('records candidate, accepted, and superseded checkpoint lifecycle states with the complete binding', () => {
   const pc = new ProviderContinuity();
   const binding = {
-    identity: { provider: 'openai', account: 'account-1', endpoint: 'responses', model: 'gpt-5' },
+    identity: { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },
     prefix: { revision: 2, identity: 'history:2' },
   };
 
@@ -109,7 +109,6 @@ it('records candidate, accepted, and superseded checkpoint lifecycle states with
 
 it.each([
   ['provider', { provider: 'codex' }, 'identity_mismatch', undefined],
-  ['account', { account: 'account-2' }, 'identity_mismatch', undefined],
   ['endpoint', { endpoint: 'chat-completions' }, 'identity_mismatch', undefined],
   ['model', { model: 'gpt-5-mini' }, 'identity_mismatch', undefined],
   ['prefix revision', {}, 'prefix_mismatch', { revision: 3, identity: 'history:2' }],
@@ -117,7 +116,7 @@ it.each([
 ])('retires a candidate on exact %s binding mismatch', (_field, identityPatch, retirementCode, prefixPatch) => {
   const pc = new ProviderContinuity();
   const binding = {
-    identity: { provider: 'openai', account: 'account-1', endpoint: 'responses', model: 'gpt-5' },
+    identity: { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },
     prefix: { revision: 2, identity: 'store-1:2' },
   };
 
@@ -137,7 +136,7 @@ it.each([
 it('retires a candidate when chaining breaks', () => {
   const pc = new ProviderContinuity();
   const binding = {
-    identity: { provider: 'openai', account: 'account-1', endpoint: 'responses', model: 'gpt-5' },
+    identity: { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },
     prefix: { revision: 2, identity: 'store-1:2' },
   };
 

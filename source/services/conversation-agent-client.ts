@@ -13,6 +13,8 @@ export type AgentClientRunOptions = {
   knownToolCallIds?: readonly string[];
   /** Immutable, out-of-band authoritative history for provider compatibility seams. */
   providerHistorySnapshot?: ProviderHistorySnapshot;
+  /** Provider continuity epoch frozen while this request is planned. */
+  providerContinuityLineage?: number;
 };
 
 export type AgentClientChatOptions = {

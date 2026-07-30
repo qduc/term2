@@ -24,6 +24,7 @@ type ChainedRunOptions = {
   toolResultCallIds?: readonly string[];
   knownToolCallIds?: readonly string[];
   providerHistorySnapshot?: ProviderHistorySnapshot;
+  providerContinuityLineage?: number;
 };
 
 export type OpenAIChainedInputParityObservation = {
@@ -138,6 +139,7 @@ export class AgentRunOrchestrator {
     options: ChainedModelInputFilterOptions = {},
     providerHistorySnapshot?: ProviderHistorySnapshot,
     previousResponseId?: string | null,
+    providerContinuityLineage?: number,
   ): any {
     let filtered: any;
     let baseline: OpenAIChainedInputCompatibilityProjection;
@@ -163,7 +165,7 @@ export class AgentRunOrchestrator {
       previousResponseId,
       baseline,
     );
-    this.#prepareOpenAIRequestPrefixBinding(compatibility, providerHistorySnapshot);
+    this.#prepareOpenAIRequestPrefixBinding(compatibility, providerHistorySnapshot, providerContinuityLineage);
     if (this.#selectCompatibleOpenAIProjection(compatibility, providerHistorySnapshot, baseline)) {
       filtered = compatibility.projectedModelData;
     }
@@ -263,17 +265,19 @@ export class AgentRunOrchestrator {
   #prepareOpenAIRequestPrefixBinding(
     compatibility: OpenAIChainedInputCompatibilityProjection | undefined,
     snapshot: ProviderHistorySnapshot | undefined,
+    lineage: number | undefined,
   ): void {
     if (
       this.#agentConfig.getProvider() !== 'openai' ||
       !snapshot ||
+      lineage === undefined ||
       compatibility?.prefix.kind !== 'match' ||
       compatibility.projectedInput === undefined
     ) {
       return;
     }
     prepareOpenAIRequestPrefixBinding(
-      { snapshotIdentity: snapshot.identity, snapshotRevision: snapshot.revision },
+      { snapshotIdentity: snapshot.identity, snapshotRevision: snapshot.revision, lineage },
       compatibility.projectedInput,
     );
   }
@@ -286,6 +290,7 @@ export class AgentRunOrchestrator {
       toolResultCallIds,
       knownToolCallIds,
       providerHistorySnapshot,
+      providerContinuityLineage,
     }: ChainedRunOptions = {},
   ): Promise<StreamedRunResult<any, any>> {
     // Abort any previous operation
@@ -360,6 +365,7 @@ export class AgentRunOrchestrator {
                 { toolResultCallIds, knownToolCallIds },
                 providerHistorySnapshot,
                 previousResponseId,
+                providerContinuityLineage,
               )
             : args.modelData;
         },
@@ -398,6 +404,7 @@ export class AgentRunOrchestrator {
       toolResultCallIds,
       knownToolCallIds,
       providerHistorySnapshot,
+      providerContinuityLineage,
     }: ChainedRunOptions = {},
   ): Promise<StreamedRunResult<any, any>> {
     this.abort();
@@ -442,6 +449,7 @@ export class AgentRunOrchestrator {
               { toolResultCallIds, knownToolCallIds },
               providerHistorySnapshot,
               previousResponseId,
+              providerContinuityLineage,
             )
           : args.modelData;
       },

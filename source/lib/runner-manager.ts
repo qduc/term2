@@ -1,6 +1,7 @@
 import type { Runner } from '@openai/agents';
 import type { ISettingsService, ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
 import { getProvider } from '../providers/index.js';
+import type { ProviderRequestCapture } from '../providers/provider-request-capture.js';
 
 export interface RunnerManagerDeps {
   settings: ISettingsService;
@@ -8,6 +9,7 @@ export interface RunnerManagerDeps {
   sessionContextService: ISessionContextService;
   /** Returns the current provider ID — used to key the cached runner */
   getProvider: () => string;
+  requestCapture?: ProviderRequestCapture;
 }
 
 export class RunnerManager {
@@ -20,6 +22,7 @@ export class RunnerManager {
   #logger: ILoggingService;
   #sessionContextService: ISessionContextService;
   #getProvider: () => string;
+  #requestCapture?: ProviderRequestCapture;
 
   constructor(config: { maxTurns: number; retryAttempts: number }, deps: RunnerManagerDeps) {
     this.#maxTurns = config.maxTurns;
@@ -28,6 +31,7 @@ export class RunnerManager {
     this.#logger = deps.logger;
     this.#sessionContextService = deps.sessionContextService;
     this.#getProvider = deps.getProvider;
+    this.#requestCapture = deps.requestCapture;
   }
 
   get maxTurns(): number {
@@ -72,6 +76,7 @@ export class RunnerManager {
       loggingService: this.#logger,
       sessionContextService: this.#sessionContextService,
       onRetry: () => this.#retryCallback?.(),
+      requestCapture: this.#requestCapture,
     });
   }
 }

@@ -1,12 +1,15 @@
 import type { Runner } from '@openai/agents';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import type { ISessionContextService } from '../services/service-interfaces.js';
+import type { ProviderRequestCapture } from './provider-request-capture.js';
 
 export interface ProviderDeps {
   settingsService: ISettingsService;
   loggingService: ILoggingService;
   sessionContextService?: ISessionContextService;
   onRetry?: () => void;
+  /** Root-session-only observational seam. Omitted for all other clients. */
+  requestCapture?: ProviderRequestCapture;
 }
 
 export type ProviderFetch = (url: string, options?: any) => Promise<any>;

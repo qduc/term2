@@ -10,6 +10,7 @@ import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.
 import type { PostExecutePendingRegistry } from '../session/post-execute-pending-registry.js';
 import type { PostExecutePauseCapability } from '../session/post-execute-pause-capability.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
+import type { ProviderContinuity } from '../provider-continuity.js';
 
 export type ConversationRuntimeBundle = {
   /** The clean session runtime (no adapter). */
@@ -25,6 +26,7 @@ export type CreateConversationRuntimeOptions = {
   /** ISO timestamp; defaults to now. */
   sessionStartedAt?: string;
   agentClient: ConversationAgentClient;
+  providerContinuity?: ProviderContinuity;
   toolOwnership: ToolOwnershipRegistry;
   postExecutePending?: PostExecutePendingRegistry;
   postExecutePauseCapability?: PostExecutePauseCapability;

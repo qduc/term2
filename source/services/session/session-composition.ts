@@ -130,6 +130,8 @@ export type CreateSessionRuntimeInternalsOptions = {
   /** ISO timestamp; defaults to now. */
   sessionStartedAt?: string;
   agentClient: ConversationAgentClient;
+  /** Handle-owned continuity shared with the root provider observer. */
+  providerContinuity?: ProviderContinuity;
   toolOwnership: ToolOwnershipRegistry;
   postExecutePending?: PostExecutePendingRegistry;
   postExecutePauseCapability?: PostExecutePauseCapability;
@@ -239,6 +241,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     sessionId: id,
     sessionStartedAt,
     agentClient,
+    providerContinuity: suppliedProviderContinuity,
     toolOwnership,
     postExecutePending: suppliedPostExecutePending,
     postExecutePauseCapability,
@@ -296,7 +299,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   });
 
   const appState = { statusMachine: new TurnStatusMachine() };
-  const providerContinuity = new ProviderContinuity();
+  const providerContinuity = suppliedProviderContinuity ?? new ProviderContinuity();
 
   const inputPlanner = new SessionInputPlanner({
     settingsService,

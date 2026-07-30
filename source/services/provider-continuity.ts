@@ -1,6 +1,5 @@
 export type ProviderCheckpointIdentity = {
   provider: string;
-  account: string;
   endpoint: string;
   model: string;
 };
@@ -51,6 +50,10 @@ export class ProviderContinuity {
 
   get checkpoint(): ProviderCheckpoint | null {
     return this.#checkpoint;
+  }
+
+  get lineage(): number {
+    return this.#lineage;
   }
 
   get retiredCheckpoints(): readonly ProviderCheckpoint[] {
@@ -134,7 +137,6 @@ export class ProviderContinuity {
   ): ProviderCheckpointRetirement['code'] | null {
     if (
       left.identity.provider !== right.identity.provider ||
-      left.identity.account !== right.identity.account ||
       left.identity.endpoint !== right.identity.endpoint ||
       left.identity.model !== right.identity.model
     ) {

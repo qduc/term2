@@ -84,6 +84,7 @@ export class ConversationService {
     this.#deps = deps;
     const { runtime, adapter } = createConversationRuntime({
       agentClient: this.#clientHandle.agentClient,
+      providerContinuity: this.#clientHandle.providerContinuity,
       toolOwnership: this.#clientHandle.toolOwnership,
       postExecutePending: this.#clientHandle.postExecutePending,
       postExecutePauseCapability: this.#clientHandle.postExecutePauseCapability,
@@ -144,6 +145,7 @@ export class ConversationService {
     this.#clientHandle = this.#clientFactory.create(newId);
     const { runtime, adapter } = createConversationRuntime({
       agentClient: this.#clientHandle.agentClient,
+      providerContinuity: this.#clientHandle.providerContinuity,
       toolOwnership: this.#clientHandle.toolOwnership,
       postExecutePending: this.#clientHandle.postExecutePending,
       postExecutePauseCapability: this.#clientHandle.postExecutePauseCapability,

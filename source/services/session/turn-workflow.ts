@@ -574,6 +574,7 @@ export class TurnWorkflow {
         previousResponseId: options.resumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
         sessionId: this.deps.sessionId,
         providerHistorySnapshot: this.deps.conversationStore.getProviderHistorySnapshot(),
+        providerContinuityLineage: this.deps.providerContinuity.lineage,
       })) as AgentStream;
     }
 
@@ -581,6 +582,7 @@ export class TurnWorkflow {
       previousResponseId: attempt.inputMode === 'delta' ? this.deps.providerContinuity.previousResponseId : null,
       sessionId: this.deps.sessionId,
       providerHistorySnapshot: attempt.providerHistorySnapshot,
+      providerContinuityLineage: this.deps.providerContinuity.lineage,
     })) as AgentStream;
   }
 
@@ -868,6 +870,7 @@ export class TurnWorkflow {
         this.deps.toolTracker.activeCallIdsForCurrentTurn(),
       ),
       providerHistorySnapshot: this.deps.conversationStore.getProviderHistorySnapshot(),
+      providerContinuityLineage: this.deps.providerContinuity.lineage,
     })) as AgentStream;
     state.setLastStream(stream);
 

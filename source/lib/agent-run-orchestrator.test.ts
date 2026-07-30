@@ -371,6 +371,7 @@ it('selects an exact-match OpenAI provider projection only for the frozen provid
 
   await orchestrator.startStream('now', {
     previousResponseId: 'response-1',
+    providerContinuityLineage: 9,
     providerHistorySnapshot: {
       revision: 1,
       identity: 'history:test:1',
@@ -408,6 +409,7 @@ it('hands an exact OpenAI compatibility projection to the request lifecycle with
 
   await orchestrator.startStream('now', {
     previousResponseId: 'response-1',
+    providerContinuityLineage: 9,
     providerHistorySnapshot: {
       revision: 42,
       identity: 'history:immutable-42',
@@ -415,7 +417,7 @@ it('hands an exact OpenAI compatibility projection to the request lifecycle with
     },
   });
 
-  expect(binding).toEqual({ snapshotIdentity: 'history:immutable-42', snapshotRevision: 42 });
+  expect(binding).toEqual({ snapshotIdentity: 'history:immutable-42', snapshotRevision: 42, lineage: 9 });
 });
 
 it('keeps the baseline projection for legacy, mismatched, unequal, or failed provider compatibility', async () => {

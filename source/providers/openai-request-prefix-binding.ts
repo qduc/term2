@@ -8,6 +8,8 @@ import { isDeepStrictEqual } from 'node:util';
 export type OpenAIRequestPrefixBinding = Readonly<{
   snapshotIdentity: string;
   snapshotRevision: number;
+  /** Captured while planning the request; never read from live session state. */
+  lineage?: number;
 }>;
 
 class OpenAIRequestPrefixBindingScope {

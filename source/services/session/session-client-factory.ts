@@ -5,10 +5,14 @@ import { PostExecutePendingRegistry } from './post-execute-pending-registry.js';
 import { PostExecutePauseCapability } from './post-execute-pause-capability.js';
 import { SessionAccessState } from './session-access-state.js';
 import type { ISettingsService } from '../service-interfaces.js';
+import { ProviderContinuity } from '../provider-continuity.js';
+import { OpenAICandidateObserver } from '../openai-candidate-observer.js';
 
 /** A client whose lifetime is owned by the session that requested it. */
 export type SessionClientHandle = {
   readonly agentClient: ConversationAgentClient;
+  /** The sole continuity instance shared by this handle's root client and runtime. */
+  readonly providerContinuity?: ProviderContinuity;
   /** Compatibility selection fixed when this handle's client was created. */
   readonly continuationProjectionMode: ContinuationProjectionMode;
   readonly toolOwnership: ToolOwnershipRegistry;
@@ -39,6 +43,8 @@ export function createOwnedSessionClientFactory(
     postExecutePauseCapability: PostExecutePauseCapability,
     access: SessionAccessState,
     continuationProjectionMode: ContinuationProjectionMode,
+    providerContinuity: ProviderContinuity,
+    requestCapture: OpenAICandidateObserver,
   ) => DisposableConversationAgentClient,
 ): SessionClientFactory {
   return {
@@ -49,16 +55,21 @@ export function createOwnedSessionClientFactory(
       const access = new SessionAccessState(settings);
       const postExecutePending = new PostExecutePendingRegistry({ sessionId, epoch: crypto.randomUUID() });
       const postExecutePauseCapability = new PostExecutePauseCapability(postExecutePending);
+      const providerContinuity = new ProviderContinuity();
+      const requestCapture = new OpenAICandidateObserver(providerContinuity);
       const agentClient = createClient(
         sessionId,
         toolOwnership,
         postExecutePauseCapability,
         access,
         continuationProjectionMode,
+        providerContinuity,
+        requestCapture,
       );
       let disposed = false;
       return {
         agentClient,
+        providerContinuity,
         continuationProjectionMode,
         toolOwnership,
         access,
@@ -88,12 +99,14 @@ export function createCallerOwnedSessionClientFactory(
 ): SessionClientFactory {
   return {
     create() {
+      const providerContinuity = new ProviderContinuity();
       const postExecutePending = new PostExecutePendingRegistry({
         sessionId: 'caller-owned',
         epoch: crypto.randomUUID(),
       });
       return {
         agentClient,
+        providerContinuity,
         continuationProjectionMode: 'legacy',
         toolOwnership,
         postExecutePending,

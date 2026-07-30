@@ -494,7 +494,7 @@ it('SessionStreamProcessor.finalize() promotes a matching checkpoint only after 
     journal: makeJournal(),
   });
   providerContinuity.observeCandidate({
-    identity: { provider: 'openai', account: 'account-1', endpoint: 'responses', model: 'gpt-5' },
+    identity: { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },
     prefix: { revision: 0, identity: 'history:0' },
     responseId: 'resp-commit',
   });
@@ -521,7 +521,7 @@ it('SessionStreamProcessor.finalize() cannot promote a candidate from an empty t
     journal: makeJournal(),
   });
   providerContinuity.observeCandidate({
-    identity: { provider: 'openai', account: 'account-1', endpoint: 'responses', model: 'gpt-5' },
+    identity: { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },
     prefix: { revision: 0, identity: 'history:0' },
     responseId: 'resp-no-op',
   });
@@ -553,7 +553,7 @@ it('SessionStreamProcessor.finalize() ignores a genuinely stale post-reset compl
     journal: makeJournal(),
   });
   providerContinuity.observeCandidate({
-    identity: { provider: 'openai', account: 'account-1', endpoint: 'responses', model: 'gpt-5' },
+    identity: { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },
     prefix: { revision: 0, identity: 'history:0' },
     responseId: 'resp-late',
   });

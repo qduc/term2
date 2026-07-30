@@ -23,6 +23,7 @@ import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-
 import type { PostExecutePauseCapability } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
 import type { AgentClientRunOptions } from '../services/conversation-agent-client.js';
+import type { ProviderRequestCapture } from '../providers/provider-request-capture.js';
 
 type ChainedRunOptions = AgentClientRunOptions;
 
@@ -96,6 +97,8 @@ export class AgentClient {
       executionContext?: ExecutionContext;
       sessionContextService: ISessionContextService;
       skillsService?: SkillsService;
+      /** Supplied only by an owned root session client. */
+      requestCapture?: ProviderRequestCapture;
       /** Test seam for inspecting the immutable run-orchestrator dependencies. */
       createRunOrchestrator?: (orchestratorDeps: AgentRunOrchestratorDeps) => AgentRunOrchestrator;
     };
@@ -152,6 +155,7 @@ export class AgentClient {
         logger: deps.logger,
         sessionContextService: deps.sessionContextService ?? this.#sessionContextService,
         getProvider: () => this.#agentConfig.getProvider(),
+        requestCapture: deps.requestCapture,
       },
     );
 

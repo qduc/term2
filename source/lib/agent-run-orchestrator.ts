@@ -282,6 +282,31 @@ export class AgentRunOrchestrator {
     );
   }
 
+  /**
+   * First and stateless OpenAI calls have no chained delta to project. They
+   * may be bound only when the immutable snapshot is exactly the final,
+   * unprojected SDK input; otherwise the observational path fails closed.
+   */
+  #prepareExactOpenAIRequestPrefixBinding(
+    modelData: any,
+    snapshot: ProviderHistorySnapshot | undefined,
+    lineage: number | undefined,
+  ): void {
+    if (
+      this.#agentConfig.getProvider() !== 'openai' ||
+      !snapshot ||
+      lineage === undefined ||
+      !Array.isArray(modelData?.input) ||
+      !isDeepStrictEqual(snapshot.history, modelData.input)
+    ) {
+      return;
+    }
+    prepareOpenAIRequestPrefixBinding(
+      { snapshotIdentity: snapshot.identity, snapshotRevision: snapshot.revision, lineage },
+      modelData.input,
+    );
+  }
+
   async startStream(
     userInput: string | AgentInputItem | AgentInputItem[],
     {
@@ -359,15 +384,21 @@ export class AgentRunOrchestrator {
             args.context.turnCount = (args.context.turnCount ?? 0) + 1;
           }
           const chainingActive = supportsConversationChaining && previousResponseId;
-          return chainingActive
-            ? this.#filterAndGuardChainedModelInput(
-                args.modelData,
-                { toolResultCallIds, knownToolCallIds },
-                providerHistorySnapshot,
-                previousResponseId,
-                providerContinuityLineage,
-              )
-            : args.modelData;
+          if (!chainingActive) {
+            this.#prepareExactOpenAIRequestPrefixBinding(
+              args.modelData,
+              providerHistorySnapshot,
+              providerContinuityLineage,
+            );
+            return args.modelData;
+          }
+          return this.#filterAndGuardChainedModelInput(
+            args.modelData,
+            { toolResultCallIds, knownToolCallIds },
+            providerHistorySnapshot,
+            previousResponseId,
+            providerContinuityLineage,
+          );
         },
       };
       const agentForRun = this.#agentConfig.getAgent(sessionId);
@@ -443,15 +474,21 @@ export class AgentRunOrchestrator {
           args.context.turnCount = (args.context.turnCount ?? 0) + 1;
         }
         const chainingActive = supportsConversationChaining && previousResponseId;
-        return chainingActive
-          ? this.#filterAndGuardChainedModelInput(
-              args.modelData,
-              { toolResultCallIds, knownToolCallIds },
-              providerHistorySnapshot,
-              previousResponseId,
-              providerContinuityLineage,
-            )
-          : args.modelData;
+        if (!chainingActive) {
+          this.#prepareExactOpenAIRequestPrefixBinding(
+            args.modelData,
+            providerHistorySnapshot,
+            providerContinuityLineage,
+          );
+          return args.modelData;
+        }
+        return this.#filterAndGuardChainedModelInput(
+          args.modelData,
+          { toolResultCallIds, knownToolCallIds },
+          providerHistorySnapshot,
+          previousResponseId,
+          providerContinuityLineage,
+        );
       },
     };
     const agentForRun = this.#agentConfig.getAgent(sessionId);

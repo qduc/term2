@@ -6,6 +6,7 @@ import { ConversationStore } from '../conversation/conversation-store.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { ConversationLogger } from '../logging/conversation-logger.js';
 import { ProviderContinuity } from '../provider-continuity.js';
+import { OpenAICandidateObserver } from '../openai-candidate-observer.js';
 import type { AgentStream } from '../agent-stream.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { GenerationGuard } from '../generation-guard.js';
@@ -504,6 +505,81 @@ it('SessionStreamProcessor.finalize() promotes a matching checkpoint only after 
   expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
   expect(conversationStore.getHistory()).toHaveLength(1);
   expect(providerContinuity.checkpoint?.state).toBe('accepted');
+});
+
+it('promotes only an observer candidate whose terminal response commits before its lineage is reset', () => {
+  const createHarness = () => {
+    const conversationStore = new ConversationStore();
+    const providerContinuity = new ProviderContinuity();
+    const generationGuard = new GenerationGuard();
+    return {
+      conversationStore,
+      providerContinuity,
+      generationGuard,
+      observer: new OpenAICandidateObserver(providerContinuity),
+      processor: new SessionStreamProcessor({
+        logger,
+        sessionId: 'test-session',
+        toolTracker: new SessionToolTracker(conversationStore),
+        conversationStore,
+        conversationLogger: {} as ConversationLogger,
+        providerContinuity,
+        generationGuard,
+        journal: makeJournal(),
+      }),
+    };
+  };
+  const observe = (observer: OpenAICandidateObserver, responseId: string, lineage = 0) =>
+    observer.observe({
+      token: 'attempt',
+      provider: 'openai',
+      transport: 'http',
+      model: 'gpt-5',
+      endpoint: 'responses',
+      requestData: {},
+      phase: 'terminal',
+      responseId,
+      prefixBinding: { snapshotIdentity: 'history:0', snapshotRevision: 0, lineage },
+    });
+  const output: any = [{ role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'done' }] }];
+
+  const matched = createHarness();
+  observe(matched.observer, 'resp-match');
+  expect(
+    matched.processor.finalize(
+      makeStream([], { interruptions: [], lastResponseId: 'resp-match', output }),
+      matched.generationGuard.capture(),
+      'delta',
+      'startStream',
+    ),
+  ).toEqual({ kind: 'committed' });
+  expect(matched.conversationStore.getHistory()).toHaveLength(1);
+  expect(matched.providerContinuity.checkpoint?.state).toBe('accepted');
+
+  const mismatched = createHarness();
+  observe(mismatched.observer, 'resp-candidate');
+  mismatched.processor.finalize(
+    makeStream([], { interruptions: [], lastResponseId: 'resp-other', output }),
+    mismatched.generationGuard.capture(),
+    'delta',
+    'startStream',
+  );
+  expect(mismatched.providerContinuity.checkpoint?.state).toBe('candidate');
+
+  const stale = createHarness();
+  observe(stale.observer, 'resp-stale');
+  const token = stale.generationGuard.capture();
+  stale.providerContinuity.clear();
+  stale.generationGuard.invalidate();
+  expect(
+    stale.processor.finalize(
+      makeStream([], { interruptions: [], lastResponseId: 'resp-stale', output }),
+      token,
+      'delta',
+      'startStream',
+    ),
+  ).toEqual({ kind: 'stale' });
+  expect(stale.providerContinuity.checkpoint).toBeNull();
 });
 
 it('SessionStreamProcessor.finalize() cannot promote a candidate from an empty terminal finalization', () => {

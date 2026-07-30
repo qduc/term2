@@ -194,3 +194,37 @@ it.sequential('setRetryCallback wires callback to runner creation', () => {
   // We can test that setRetryCallback doesn't throw and that the internal callback works
   expect(() => manager.setRetryCallback(() => {}));
 });
+
+it.sequential(
+  'passes an optional capture to a registered non-OpenAI provider without changing its runner behavior',
+  async () => {
+    const id = 'capture-ignoring-provider';
+    const capture = { record: () => expect.unreachable('non-OpenAI provider must not use OpenAI capture') };
+    const run = async () => ({ status: 'completed', finalOutput: 'unchanged' });
+    registerProvider(
+      {
+        id,
+        label: 'Capture ignoring provider',
+        createRunner: (deps) => {
+          expect(deps.requestCapture).toBe(capture);
+          return { run } as any;
+        },
+        fetchModels: async () => [],
+      },
+      { allowOverride: true },
+    );
+    try {
+      const manager = new RunnerManager(
+        { maxTurns: 1, retryAttempts: 0 },
+        { ...createRunnerManagerDeps({ getProvider: () => id }), requestCapture: capture },
+      );
+      const runner = manager.getOrCreateRunner(id)!;
+      await expect(runner.run({} as any, '' as any, {} as any)).resolves.toEqual({
+        status: 'completed',
+        finalOutput: 'unchanged',
+      });
+    } finally {
+      cleanupProvider(id);
+    }
+  },
+);

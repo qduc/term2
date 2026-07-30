@@ -368,14 +368,15 @@ it.sequential(
           observe: (entry: any) => observations.push(entry),
         });
         await runWithOpenAIRequestPrefixBindingScope(async () => {
-          prepareOpenAIRequestPrefixBinding({ snapshotIdentity: `history:${transport}`, snapshotRevision: 7 }, [
-            { role: 'user', content: transport },
-          ]);
+          prepareOpenAIRequestPrefixBinding(
+            { snapshotIdentity: `history:${transport}`, snapshotRevision: 7, lineage: 0 },
+            [{ role: 'user', content: transport }],
+          );
           await (model as any).getResponse({
             input: [{ role: 'user', content: transport }],
             responseId: `${transport}-id`,
           });
-          prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:wrong', snapshotRevision: 8 }, [
+          prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:wrong', snapshotRevision: 8, lineage: 0 }, [
             { role: 'user', content: 'expected' },
           ]);
           await (model as any).getResponse({ input: [{ role: 'user', content: 'other' }], responseId: 'mismatch-id' });
@@ -384,9 +385,9 @@ it.sequential(
 
       const terminals = observations.filter((entry) => entry.phase === 'terminal');
       expect(terminals.map((entry) => entry.prefixBinding)).toEqual([
-        { snapshotIdentity: 'history:http', snapshotRevision: 7 },
+        { snapshotIdentity: 'history:http', snapshotRevision: 7, lineage: 0 },
         undefined,
-        { snapshotIdentity: 'history:websocket', snapshotRevision: 7 },
+        { snapshotIdentity: 'history:websocket', snapshotRevision: 7, lineage: 0 },
         undefined,
       ]);
       expect(terminals.map((entry) => entry.responseId)).toEqual([
@@ -407,33 +408,42 @@ it('OpenAI prefix scopes isolate concurrent runs and fail closed for overlapping
   const seen = await Promise.all(
     ['first', 'second'].map((name, revision) =>
       runWithOpenAIRequestPrefixBindingScope(async () => {
-        prepareOpenAIRequestPrefixBinding({ snapshotIdentity: `history:${name}`, snapshotRevision: revision }, [name]);
+        prepareOpenAIRequestPrefixBinding(
+          { snapshotIdentity: `history:${name}`, snapshotRevision: revision, lineage: revision },
+          [name],
+        );
         await Promise.resolve();
         return consumeOpenAIRequestPrefixBinding({ input: [name] });
       }),
     ),
   );
   expect(seen).toEqual([
-    { snapshotIdentity: 'history:first', snapshotRevision: 0 },
-    { snapshotIdentity: 'history:second', snapshotRevision: 1 },
+    { snapshotIdentity: 'history:first', snapshotRevision: 0, lineage: 0 },
+    { snapshotIdentity: 'history:second', snapshotRevision: 1, lineage: 1 },
   ]);
 
   await runWithOpenAIRequestPrefixBindingScope(async () => {
-    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:one', snapshotRevision: 1 }, ['same']);
-    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:two', snapshotRevision: 2 }, ['same']);
+    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:one', snapshotRevision: 1, lineage: 0 }, ['same']);
+    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:two', snapshotRevision: 2, lineage: 0 }, ['same']);
     expect(consumeOpenAIRequestPrefixBinding({ input: ['same'] })).toBeUndefined();
     expect(consumeOpenAIRequestPrefixBinding({ input: ['same'] })).toBeUndefined();
   });
 
   await runWithOpenAIRequestPrefixBindingScope(async () => {
-    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:first', snapshotRevision: 1 }, ['first']);
-    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:second', snapshotRevision: 2 }, ['second']);
+    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:first', snapshotRevision: 1, lineage: 0 }, [
+      'first',
+    ]);
+    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:second', snapshotRevision: 2, lineage: 0 }, [
+      'second',
+    ]);
     expect(consumeOpenAIRequestPrefixBinding({ input: ['first'] })).toBeUndefined();
     expect(consumeOpenAIRequestPrefixBinding({ input: ['second'] })).toBeUndefined();
   });
 
   await runWithOpenAIRequestPrefixBindingScope(async () => {
-    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:stale', snapshotRevision: 3 }, ['expected']);
+    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:stale', snapshotRevision: 3, lineage: 0 }, [
+      'expected',
+    ]);
     expect(consumeOpenAIRequestPrefixBinding({ input: ['mismatch'] })).toBeUndefined();
     expect(consumeOpenAIRequestPrefixBinding({ input: ['expected'] })).toBeUndefined();
   });
@@ -469,10 +479,14 @@ it.sequential(
         observe: (entry: any) => observations.push(entry),
       });
       await runWithOpenAIRequestPrefixBindingScope(async () => {
-        prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:first', snapshotRevision: 1 }, ['first']);
+        prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:first', snapshotRevision: 1, lineage: 0 }, [
+          'first',
+        ]);
         const first = (model as any).getResponse({ input: ['first'] });
         await firstBuildComplete;
-        prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:later', snapshotRevision: 2 }, ['first']);
+        prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:later', snapshotRevision: 2, lineage: 0 }, [
+          'first',
+        ]);
         releaseRepeatedBuild!();
         await first;
 
@@ -480,13 +494,14 @@ it.sequential(
         expect(consumeOpenAIRequestPrefixBinding({ input: ['first'] })).toEqual({
           snapshotIdentity: 'history:later',
           snapshotRevision: 2,
+          lineage: 0,
         });
       });
 
       expect(observations.map((entry) => entry.prefixBinding)).toEqual([
-        { snapshotIdentity: 'history:first', snapshotRevision: 1 },
-        { snapshotIdentity: 'history:first', snapshotRevision: 1 },
-        { snapshotIdentity: 'history:first', snapshotRevision: 1 },
+        { snapshotIdentity: 'history:first', snapshotRevision: 1, lineage: 0 },
+        { snapshotIdentity: 'history:first', snapshotRevision: 1, lineage: 0 },
+        { snapshotIdentity: 'history:first', snapshotRevision: 1, lineage: 0 },
       ]);
       expect(observations.at(-1)).toMatchObject({ phase: 'terminal', responseId: 'resp-first' });
     } finally {

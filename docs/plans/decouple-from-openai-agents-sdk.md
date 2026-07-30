@@ -291,27 +291,22 @@ production session contract.
   Formatting passes. Full `tsc --noEmit` reaches only the known pre-existing
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532`; the attempted full
   Vitest run was sandbox-blocked on Docker host control before tests began.
-- Step E request/response correlation prerequisite: OpenAI-private HTTP/WebSocket public-call
-  observations pair opaque attempt tokens with the post-builder request projection and the
-  normalized unary `responseId` or streamed `response_done.response.id`; concurrent request
+- Step E request/response correlation and candidate observation: OpenAI-private HTTP/WebSocket
+  public-call observations pair opaque attempt tokens with the post-builder request projection and
+  the normalized unary `responseId` or streamed `response_done.response.id`; concurrent request
   objects remain isolated, terminal/failure/consumer-abandon paths clean state, and observer
-  failures are swallowed. This remains instrumentation only: it does not call `observeCandidate`,
-  attach snapshot metadata to wire settings, classify replay, or bind live checkpoints. Truthful
-   exact snapshot-prefix handoff into the provider token remained the blocker before the bounded
-   production candidate-observation slice.
-- Step E snapshot-prefix binding slice: the OpenAI compatibility projection now prepares only
-  immutable snapshot identity/revision in a per-run provider-private one-shot scope. A second
-  unconsumed preparation makes the next consumption ambiguous and clears it, regardless of whether
-  the prepared inputs are equal; no payload comparison is treated as causal evidence. The final
-  HTTP/WebSocket builder stores a binding in the request-object WeakMap attempt before terminal and
-  never replaces an already-bound value on repeated builds. Focused seam tests use fake private
-  builders because a local real `Runner` does not expose a controllable interleaving between its
-  private input filter and builder without reintroducing the private hooks under review. They cover
-  the observational owner boundaries directly; the residual assumption is that the SDK preserves
-  the observed prepare-before-builder ordering for a non-overlapping invocation. This remains
-   observation only, not proof of wire delivery or production candidate readiness: no account
-   identity is inferred, no payload is changed, and no continuity, replay,
-  retry, approval, Codex, or checkpoint ownership behavior changes.
+  failures are swallowed. The root-session capture is injected through `AgentClient`,
+  `RunnerManager`, and provider dependencies into both model lifecycles. Terminal observations with
+  exact immutable bindings become continuity candidates; promotion remains adjacent to the
+  authoritative terminal-history commit.
+- Step E snapshot-prefix binding slice: a per-run provider-private one-shot scope prepares immutable
+  snapshot identity, revision, and request-time lineage. Chained OpenAI calls prepare only after the
+  established delta compatibility path matches. First and stateless full-history calls prepare only
+  when immutable snapshot history exactly equals the final unprojected `modelData.input`; they do
+  not run the chained filter or alter returned model data. A mismatch, missing evidence, competing
+  preparation, or builder-input difference produces no binding. The final HTTP/WebSocket builder
+  stores a binding in the request-object WeakMap attempt before terminal and never replaces one on
+  repeated builds. No payload or wire settings are changed; mismatches fail closed.
 - Step E bounded fresh-session OpenAI projection ownership switch: newly created OpenAI handles
   freeze and pass an explicit compatibility mode into their client/orchestrator, selecting the
   parity-proven provider projection only for exact prefix and structural-parity outcomes. Legacy,

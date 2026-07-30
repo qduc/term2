@@ -59,13 +59,18 @@ it('executes initial turn successfully', async () => {
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello response' }]);
   stream.finalOutput = 'hello response';
   let receivedProviderHistorySnapshot: unknown;
+  let receivedLineage: unknown;
 
   const mockClient: any = {
     getProvider() {
       return 'openai';
     },
-    async startStream(_input: unknown, options: { providerHistorySnapshot?: unknown }) {
+    async startStream(
+      _input: unknown,
+      options: { providerHistorySnapshot?: unknown; providerContinuityLineage?: unknown },
+    ) {
       receivedProviderHistorySnapshot = options.providerHistorySnapshot;
+      receivedLineage = options.providerContinuityLineage;
       return stream;
     },
   };
@@ -99,6 +104,7 @@ it('executes initial turn successfully', async () => {
   }
   expect(attempt.closed).toBe(true);
   expect(receivedProviderHistorySnapshot).toBe(attempt.providerHistorySnapshot);
+  expect(receivedLineage).toBe(composition.providerContinuity.lineage);
   expect(Object.isFrozen(receivedProviderHistorySnapshot)).toBe(true);
 });
 
@@ -106,10 +112,15 @@ it('passes a fresh authoritative store snapshot when resuming an initial stream'
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'resumed response' }]);
   stream.finalOutput = 'resumed response';
   let receivedProviderHistorySnapshot: any;
+  let receivedLineage: unknown;
   const mockClient: any = {
     getProvider: () => 'openai',
-    async continueRunStream(_state: unknown, options: { providerHistorySnapshot?: unknown }) {
+    async continueRunStream(
+      _state: unknown,
+      options: { providerHistorySnapshot?: unknown; providerContinuityLineage?: unknown },
+    ) {
       receivedProviderHistorySnapshot = options.providerHistorySnapshot;
+      receivedLineage = options.providerContinuityLineage;
       return stream;
     },
   };
@@ -137,16 +148,19 @@ it('passes a fresh authoritative store snapshot when resuming an initial stream'
   expect(result.outcome).toMatchObject({ kind: 'response', terminal: { finalText: 'resumed response' } });
   expect(attempt.providerHistorySnapshot).toBe(plannedSnapshot);
   expect(receivedProviderHistorySnapshot).toBe(resumedSnapshot);
+  expect(receivedLineage).toBe(composition.providerContinuity.lineage);
   expect(snapshotReads).toBeGreaterThanOrEqual(2);
   expect(Object.isFrozen(receivedProviderHistorySnapshot)).toBe(true);
 });
 
 it('executes continuation turn successfully', async () => {
+  let receivedLineage: unknown;
   const mockClient = {
     getProvider() {
       return 'openai';
     },
-    async continueRunStream() {
+    async continueRunStream(_state: unknown, options: { providerContinuityLineage?: unknown }) {
+      receivedLineage = options.providerContinuityLineage;
       const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'continuation response' }]);
       stream.finalOutput = 'continuation response';
       return stream;
@@ -198,6 +212,7 @@ it('executes continuation turn successfully', async () => {
   } else {
     expect(true).toBe(false);
   }
+  expect(receivedLineage).toBe(composition.providerContinuity.lineage);
 });
 
 it('resumes one post-execute-gated stream without consuming it twice', async () => {

@@ -420,6 +420,66 @@ it('hands an exact OpenAI compatibility projection to the request lifecycle with
   expect(binding).toEqual({ snapshotIdentity: 'history:immutable-42', snapshotRevision: 42, lineage: 9 });
 });
 
+it('binds an exact first full-history OpenAI request without applying the chained delta filter', async () => {
+  const agentConfig = createMockAgentConfig();
+  agentConfig.setProvider('openai');
+  const input = [{ role: 'user', type: 'message', content: 'first' }];
+  let returned: unknown;
+  let binding: unknown;
+  const runner = {
+    run: async (_agent: any, _input: any, options: any) => {
+      const modelData = { input };
+      returned = options.callModelInputFilter({ context: options.context, modelData });
+      binding = consumeOpenAIRequestPrefixBinding({ input });
+      return {};
+    },
+  };
+  const orchestrator = createOrchestrator({
+    agentConfig: agentConfig as any,
+    runnerManager: { maxTurns: 20, getOrCreateRunner: () => runner } as any,
+  });
+
+  await orchestrator.startStream('first', {
+    providerContinuityLineage: 3,
+    providerHistorySnapshot: { revision: 7, identity: 'history:first:7', history: input as any },
+  });
+
+  expect(returned).toEqual({ input });
+  expect(binding).toEqual({ snapshotIdentity: 'history:first:7', snapshotRevision: 7, lineage: 3 });
+});
+
+it('does not bind a stateless OpenAI request whose final input differs from its immutable history', async () => {
+  const agentConfig = createMockAgentConfig();
+  agentConfig.setProvider('openai');
+  const modelInput = [{ role: 'user', type: 'message', content: 'fallback' }];
+  let returned: unknown;
+  let binding: unknown;
+  const runner = {
+    run: async (_agent: any, _input: any, options: any) => {
+      const modelData = { input: modelInput };
+      returned = options.callModelInputFilter({ context: options.context, modelData });
+      binding = consumeOpenAIRequestPrefixBinding({ input: modelInput });
+      return {};
+    },
+  };
+  const orchestrator = createOrchestrator({
+    agentConfig: agentConfig as any,
+    runnerManager: { maxTurns: 20, getOrCreateRunner: () => runner } as any,
+  });
+
+  await orchestrator.startStream('fallback', {
+    providerContinuityLineage: 3,
+    providerHistorySnapshot: {
+      revision: 7,
+      identity: 'history:before-fallback',
+      history: [{ role: 'user', type: 'message', content: 'before' }],
+    },
+  });
+
+  expect(returned).toEqual({ input: modelInput });
+  expect(binding).toBeUndefined();
+});
+
 it('keeps the baseline projection for legacy, mismatched, unequal, or failed provider compatibility', async () => {
   const agentConfig = createMockAgentConfig();
   agentConfig.setProvider('openai');

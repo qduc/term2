@@ -9,14 +9,14 @@ export type OpenAIRequestPrefixBinding = Readonly<{
   snapshotIdentity: string;
   snapshotRevision: number;
   /** Captured while planning the request; never read from live session state. */
-  lineage?: number;
+  lineage: number;
 }>;
 
 class OpenAIRequestPrefixBindingScope {
   #prepared: { binding: OpenAIRequestPrefixBinding; expectedInput: unknown } | undefined;
   #ambiguous = false;
 
-  prepare(binding: OpenAIRequestPrefixBinding, _projectedInput: unknown): void {
+  prepare(binding: OpenAIRequestPrefixBinding, expectedInput: unknown): void {
     if (this.#ambiguous) return;
     if (this.#prepared) {
       // A scope does not have an invocation identity. Once two preparations
@@ -31,7 +31,7 @@ class OpenAIRequestPrefixBindingScope {
         binding: Object.freeze({ ...binding }),
         // Input equality can reject a mismatched builder, but cannot establish
         // causality between two independently prepared invocations.
-        expectedInput: structuredClone(_projectedInput),
+        expectedInput: structuredClone(expectedInput),
       };
     } catch {
       // Instrumentation is fail-closed and must never alter a model call.
@@ -64,10 +64,10 @@ export const runWithOpenAIRequestPrefixBindingScope = <T>(run: () => Promise<T>)
 
 export const prepareOpenAIRequestPrefixBinding = (
   binding: OpenAIRequestPrefixBinding,
-  projectedInput: unknown,
+  expectedInput: unknown,
 ): void => {
   try {
-    scopeStorage.getStore()?.prepare(binding, projectedInput);
+    scopeStorage.getStore()?.prepare(binding, expectedInput);
   } catch {
     // AsyncLocalStorage/instrumentation failure is observational only.
   }

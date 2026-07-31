@@ -1,4 +1,5 @@
 import { it, expect } from 'vitest';
+import { withTrace } from '@openai/agents';
 import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
 import { OpenAIResponsesModelWithPromptCacheKey, OpenAIResponsesWSModelWithPromptCacheKey } from './openai.provider.js';
 import { getProvider } from './registry.js';
@@ -44,66 +45,35 @@ it('OpenAI provider defaults to websocket and honors explicit HTTP transport', a
   }
 });
 
-it.sequential('OpenAIResponsesModelWithPromptCacheKey forwards prompt_cache_key from modelSettings', () => {
-  const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
-    return {
-      requestData: {
-        include: [],
-        temperature: 0.4,
-      },
-      sdkRequestHeaders: {},
-      signal: undefined,
-    };
-  };
-
-  try {
-    const model = new OpenAIResponsesModelWithPromptCacheKey({} as any, 'gpt-4o');
-    const built = (model as any)._buildResponsesCreateRequest(
-      {
-        modelSettings: {
-          prompt_cache_key: 'conv_123',
+it('forwards prompt_cache_key through the public providerData extraBody setting', async () => {
+  const requestBodies: any[] = [];
+  const model = new OpenAIResponsesModelWithPromptCacheKey(
+    {
+      responses: {
+        create: async (requestData: any) => {
+          requestBodies.push(requestData);
+          return { id: 'resp-1', output: [], usage: {} };
         },
       },
-      true,
-    );
+    } as any,
+    'gpt-5',
+  );
 
-    expect(built.requestData.prompt_cache_key).toBe('conv_123');
-    expect(built.requestData.temperature).toBe(0.4);
-  } finally {
-    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
-  }
-});
+  await withTrace('openai-provider-extra-body-test', () =>
+    model.getResponse({
+      input: 'hello',
+      modelSettings: { providerData: { extraBody: { prompt_cache_key: 'session-1' } } },
+      tools: [],
+      handoffs: [],
+    } as any),
+  );
 
-it.sequential('OpenAIResponsesWSModelWithPromptCacheKey forwards prompt_cache_key from modelSettings', () => {
-  const original = (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest;
-  (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = function () {
-    return {
-      requestData: {
-        include: [],
-        temperature: 0.4,
-      },
-      sdkRequestHeaders: {},
-      signal: undefined,
-    };
-  };
-
-  try {
-    const model = new OpenAIResponsesWSModelWithPromptCacheKey({} as any, 'gpt-4o');
-    const built = (model as any)._buildResponsesCreateRequest(
-      {
-        modelSettings: {
-          prompt_cache_key: 'conv_456',
-        },
-      },
-      true,
-    );
-
-    expect(built.requestData.prompt_cache_key).toBe('conv_456');
-    expect(built.requestData.temperature).toBe(0.4);
-  } finally {
-    (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = original;
-  }
+  expect(requestBodies).toHaveLength(1);
+  expect(requestBodies[0]).toMatchObject({
+    input: [{ role: 'user', content: 'hello' }],
+    prompt_cache_key: 'session-1',
+    stream: false,
+  });
 });
 
 it.sequential('OpenAI request capture records the exact post-builder HTTP and WebSocket request projection', () => {
@@ -119,7 +89,7 @@ it.sequential('OpenAI request capture records the exact post-builder HTTP and We
   try {
     for (const ModelClass of [OpenAIResponsesModelWithPromptCacheKey, OpenAIResponsesWSModelWithPromptCacheKey]) {
       const model = new ModelClass({} as any, 'gpt-5', capture as any);
-      (model as any)._buildResponsesCreateRequest({ modelSettings: { prompt_cache_key: 'cache-key' } }, true);
+      (model as any)._buildResponsesCreateRequest({ modelSettings: {} }, true);
     }
     expect(captures).toEqual([
       expect.objectContaining({
@@ -127,7 +97,6 @@ it.sequential('OpenAI request capture records the exact post-builder HTTP and We
         requestData: {
           input: [{ role: 'user', content: 'hello' }],
           previous_response_id: 'resp-1',
-          prompt_cache_key: 'cache-key',
         },
       }),
       expect.objectContaining({
@@ -135,7 +104,6 @@ it.sequential('OpenAI request capture records the exact post-builder HTTP and We
         requestData: {
           input: [{ role: 'user', content: 'hello' }],
           previous_response_id: 'resp-1',
-          prompt_cache_key: 'cache-key',
         },
       }),
     ]);

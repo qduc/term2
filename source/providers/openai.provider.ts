@@ -78,18 +78,6 @@ abstract class OpenAIRequestLifecycleModel {
   }
 }
 
-function forwardPromptCacheKey(request: any, requestData: Record<string, unknown>): Record<string, unknown> {
-  const promptCacheKey = request?.modelSettings?.prompt_cache_key;
-  if (typeof promptCacheKey === 'string' && promptCacheKey.length > 0) {
-    return {
-      ...requestData,
-      prompt_cache_key: promptCacheKey,
-    };
-  }
-
-  return requestData;
-}
-
 export class OpenAIResponsesModelWithPromptCacheKey extends OpenAIResponsesModel {
   private readonly lifecycle = new (class extends OpenAIRequestLifecycleModel {})();
 
@@ -99,17 +87,13 @@ export class OpenAIResponsesModelWithPromptCacheKey extends OpenAIResponsesModel
 
   _buildResponsesCreateRequest(request: any, stream: boolean): any {
     const built = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest.call(this, request, stream);
-    const result = {
-      ...built,
-      requestData: forwardPromptCacheKey(request, built.requestData),
-    };
     captureProviderRequest(this.requestCapture, {
       provider: 'openai',
       transport: 'http',
-      requestData: result.requestData,
+      requestData: built.requestData,
     });
-    this.lifecycle.observeBuilt(request, result.requestData, this.requestCapture);
-    return result;
+    this.lifecycle.observeBuilt(request, built.requestData, this.requestCapture);
+    return built;
   }
 
   override async getResponse(request: any): Promise<any> {
@@ -153,17 +137,13 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesWSM
 
   _buildResponsesCreateRequest(request: any, stream: boolean): any {
     const built = super._buildResponsesCreateRequest(request, stream);
-    const result = {
-      ...built,
-      requestData: forwardPromptCacheKey(request, built.requestData),
-    };
     captureProviderRequest(this.requestCapture, {
       provider: 'openai',
       transport: 'websocket',
-      requestData: result.requestData,
+      requestData: built.requestData,
     });
-    this.lifecycle.observeBuilt(request, result.requestData, this.requestCapture);
-    return result;
+    this.lifecycle.observeBuilt(request, built.requestData, this.requestCapture);
+    return built;
   }
 
   override async getResponse(request: any): Promise<any> {

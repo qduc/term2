@@ -843,7 +843,7 @@ it.sequential('codex startStream puts prompt_cache_key on agent modelSettings, n
   expect('modelSettings' in codexRunnerCalls[0].options).toBe(false);
 });
 
-it.sequential('openai startStream puts prompt_cache_key on agent modelSettings, not run options', async () => {
+it.sequential('openai startStream puts prompt_cache_key in public providerData, not run options', async () => {
   const settings = createMockSettings({
     'agent.provider': 'openai',
   });
@@ -854,7 +854,7 @@ it.sequential('openai startStream puts prompt_cache_key on agent modelSettings, 
   await client.startStream('Hello', { sessionId: 'session-456' });
 
   expect(openaiRunnerCalls.length).toBe(1);
-  expect(openaiRunnerCalls[0].agent.modelSettings.prompt_cache_key).toBe('session-456');
+  expect(openaiRunnerCalls[0].agent.modelSettings.providerData.extraBody.prompt_cache_key).toBe('session-456');
   expect('modelSettings' in openaiRunnerCalls[0].options).toBe(false);
 });
 

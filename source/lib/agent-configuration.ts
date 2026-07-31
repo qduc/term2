@@ -118,10 +118,28 @@ export class AgentConfiguration implements AgentSource {
       if (!supportsPromptCacheKey || !sessionId) {
         return this.#agent;
       }
+      if (this.#provider !== 'openai') {
+        return this.#agent.clone({
+          modelSettings: {
+            ...(this.#agent.modelSettings || {}),
+            prompt_cache_key: sessionId,
+          } as any,
+        });
+      }
       return this.#agent.clone({
         modelSettings: {
           ...(this.#agent.modelSettings || {}),
-          prompt_cache_key: sessionId,
+          providerData: {
+            ...(this.#agent.modelSettings?.providerData || {}),
+            // `extraBody` is the public Agents SDK transport override. The
+            // Responses model copies it into the request body for both HTTP
+            // and WebSocket transports, so OpenAI does not need a private
+            // request-builder hook just to forward this setting.
+            extraBody: {
+              ...((this.#agent.modelSettings?.providerData as any)?.extraBody || {}),
+              prompt_cache_key: sessionId,
+            },
+          },
         } as any,
       });
     }

@@ -283,7 +283,6 @@ export class SessionStreamProcessor {
 
     const ran = this.deps.generationGuard.runIfCurrent(token, () => {
       const snapshot = extractFinalizationSnapshot(stream);
-      this.deps.providerContinuity.update(snapshot.lastResponseId);
       warnIfStreamHistoryReplayedTools({
         logger: this.deps.logger,
         sessionId: this.deps.sessionId,
@@ -338,11 +337,15 @@ export class SessionStreamProcessor {
         // Candidate checkpoint acceptance is intentionally adjacent to the
         // authoritative terminal-history mutation. An empty/no-op terminal
         // output cannot make a candidate eligible for future ownership work.
-        if (this.deps.conversationStore.getProviderHistorySnapshot().revision !== historyRevisionBeforeCommit) {
-          this.deps.providerContinuity.promoteCandidate(snapshot.lastResponseId);
-        }
+        this.deps.providerContinuity.publishTerminalResponse(
+          snapshot.lastResponseId,
+          this.deps.conversationStore.getProviderHistorySnapshot().revision !== historyRevisionBeforeCommit,
+        );
         result = { kind: 'committed' };
       } else {
+        // Interrupted streams retain the established response-ID behavior, but
+        // cannot corroborate an observed checkpoint without a history commit.
+        this.deps.providerContinuity.update(snapshot.lastResponseId);
         result = { kind: 'partial' };
       }
     });

@@ -109,6 +109,17 @@ export class ProviderContinuity {
     this.#previousResponseId = responseId;
   }
 
+  /**
+   * Publishes the terminal response ID using the established legacy state and,
+   * only after an authoritative history commit, accepts a matching observed
+   * checkpoint as corroborating evidence. This does not select a checkpoint
+   * for a future request.
+   */
+  publishTerminalResponse(responseId: string | null, historyCommitted: boolean): boolean {
+    this.update(responseId);
+    return historyCommitted && this.promoteCandidate(responseId);
+  }
+
   clear(): void {
     this.#previousResponseId = null;
     this.#retireCheckpoint('reset');

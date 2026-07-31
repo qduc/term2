@@ -70,6 +70,27 @@ it('keeps a candidate checkpoint separate from existing previousResponseId behav
   expect(pc.checkpoint).toMatchObject({ state: 'accepted', responseId: 'resp-candidate', ...binding });
 });
 
+it('publishes the legacy response ID and accepts only a matching committed candidate', () => {
+  const pc = new ProviderContinuity();
+  const binding = {
+    identity: { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },
+    prefix: { revision: 4, identity: 'history:4' },
+  };
+  pc.observeCandidate({ ...binding, responseId: 'resp-candidate' });
+
+  expect(pc.publishTerminalResponse('resp-other', true)).toBe(false);
+  expect(pc.previousResponseId).toBe('resp-other');
+  expect(pc.checkpoint).toMatchObject({ state: 'candidate', responseId: 'resp-candidate' });
+
+  expect(pc.publishTerminalResponse('resp-candidate', false)).toBe(false);
+  expect(pc.previousResponseId).toBe('resp-candidate');
+  expect(pc.checkpoint).toMatchObject({ state: 'candidate', responseId: 'resp-candidate' });
+
+  expect(pc.publishTerminalResponse('resp-candidate', true)).toBe(true);
+  expect(pc.previousResponseId).toBe('resp-candidate');
+  expect(pc.checkpoint).toMatchObject({ state: 'accepted', responseId: 'resp-candidate' });
+});
+
 it('retires a prior lineage and rejects its late candidate promotion after reset', () => {
   const pc = new ProviderContinuity();
   const binding = {

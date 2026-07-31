@@ -504,6 +504,7 @@ it('SessionStreamProcessor.finalize() promotes a matching checkpoint only after 
 
   expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
   expect(conversationStore.getHistory()).toHaveLength(1);
+  expect(providerContinuity.previousResponseId).toBe('resp-commit');
   expect(providerContinuity.checkpoint?.state).toBe('accepted');
 });
 

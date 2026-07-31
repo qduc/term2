@@ -1,7 +1,7 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed; the now-unreferenced legacy adapter, its characterization test, and direct `@openai/agents-extensions` dependency are retired. **Step E's bounded production OpenAI candidate-observation slice is landed:** each owned root handle shares one continuity instance with its runtime and OpenAI observer; terminal HTTP/WebSocket observations create only exact-prefix, request-lineage candidates, and the existing stream finalizer remains the only promotion owner. Provider identity is account-free because OpenAI authorizes `previous_response_id`. This remains neither proof of wire delivery nor a reach-in retirement; Codex and replay/approval ownership are unchanged.
-**Last updated:** 2026-07-30
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed; the now-unreferenced legacy adapter, its characterization test, and direct `@openai/agents-extensions` dependency are retired. **Step E's bounded production OpenAI candidate-observation, terminal-publication-corroboration, and successor-proof slices are landed:** each owned root handle shares one continuity instance with its runtime and OpenAI observer; terminal HTTP/WebSocket observations create only exact-prefix, request-lineage candidates, and the stream finalizer remains the only terminal-commit owner. It publishes the established legacy response ID and promotes only a matching candidate after authoritative history commit. An accepted checkpoint retains a frozen post-commit proof, and eligibility requires a same-origin, strict successor snapshot plus matching provider identity and lineage. Provider identity is account-free because OpenAI authorizes `previous_response_id`. This remains neither a change to outgoing wire selection nor a reach-in retirement; Codex and replay/approval ownership are unchanged.
+**Last updated:** 2026-07-31
 
 ---
 
@@ -49,6 +49,8 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step E Stage 1 OpenAI parity/handoff slice | Immutable snapshots flow through initial and workflow-owned continuation run options to an OpenAI-private exact-prefix compatibility projection; parity observation returns the established global chained-input result and leaves Codex unchanged |
 | Step E fresh-session OpenAI provider projection switch | Newly created OpenAI session clients freeze a compatibility mode and select the parity-proven provider projection only for exact-prefix, structural-parity outcomes; legacy, Codex, mismatched, unequal, and failed cases retain the established baseline |
 | Step E production candidate observation | OpenAI-private HTTP/WebSocket terminal observations create an account-free, exact-prefix and request-lineage candidate only for the root session observer; committed-history finalization alone promotes it. |
+| Step E terminal-publication corroboration | `ProviderContinuity.publishTerminalResponse()` preserves legacy response-ID publication and promotes only a matching candidate after authoritative terminal history commit; partial, mismatch, no-op, and stale paths retain their established behavior. |
+| Step E accepted-checkpoint successor proof | A matching accepted checkpoint retains a frozen post-commit provider-history proof. Eligibility for a later snapshot requires exact provider identity and lineage, stable session-history origin, a strictly later revision, and deep exact-prefix extension; malformed, missing, same/short, rewritten, reset, and mismatched inputs fail closed. It observes no wire behavior. |
 | Step E snapshot-prefix binding slice | AgentRunOrchestrator hands exact OpenAI compatibility projection evidence into a provider-private one-shot scope; HTTP/WebSocket lifecycle attempts bind immutable snapshot identity/revision only when one preparation is consumed before another, fail closed on overlapping, missing, or faulty instrumentation, and retain an already-bound value request-locally through terminal/failure/abandonment |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
@@ -370,9 +372,23 @@ only — every such call is rejected either way. Moot here: this repo never call
    finalization alone promotes the matching candidate. Caller-owned, nested, and transient clients
    have no observer. Do not broaden this to Codex, alter replay classification, or claim ownership
    migration or reach-in retirement.
-5. **Next — evaluate provider-private checkpoint consumption separately.** Preserve the current
-   previous-response, replay/retry, approval, and Codex behavior unless independent evidence proves
-   a safe migration.
+5. **DONE — acceptance-backed terminal publication corroboration; no wire selection change.**
+   `ProviderContinuity.publishTerminalResponse()` preserves the established response-ID publication
+   while promoting only a matching candidate after authoritative history commit. Partial, mismatch,
+   no-op, and stale/reset behavior remain on their established paths. This records a narrow
+   consumption seam but does not select outgoing `previous_response_id`, migrate ownership, or
+   retire a reach-in.
+6. **DONE — accepted-checkpoint successor proof; no wire selection change.** A matching terminal
+   commit freezes the post-commit provider-history proof alongside its accepted checkpoint.
+   `isEligibleForSuccessor()` requires a well-formed same-origin, strictly extending next snapshot
+   with matching provider identity and lineage, and fails closed for all absent, reset, rewritten,
+   or mismatched evidence. This proves the transcript relationship but does not select outgoing
+   `previous_response_id`, migrate ownership, or retire a reach-in.
+7. **Next — characterize OpenAI-only selector parity separately.** Observe whether a root-owned,
+   eligible checkpoint's response ID equals the established legacy `previousResponseId` at normal
+   fresh-turn boundaries. Keep approval continuations, replay/retry/resume recovery, Codex, and all
+   in-flight/caller-owned clients on legacy selection until independent parity evidence permits a
+   bounded fresh-session switch.
 
 ### R1 gate — PASSED
 

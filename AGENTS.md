@@ -23,6 +23,10 @@ Currently active:
 
 - `docs/plans/decouple-from-openai-agents-sdk.md` — removing `@openai/agents*`. Touches the approval layer, the run loop, and `source/providers/`. Progress is measured by the plan's risk register (private-API reach-ins retired), not by lines deleted.
 
+# Delegation
+
+For multi-step work with independently divisible parts, act as the coordinator: delegate bounded subtasks to subagents, remain the user's sole point of contact, integrate their results, and provide one verified final answer. Avoid parallel edits that could conflict, and do not delegate trivial tasks.
+
 # Parallel Work Isolation
 
 Several agents share the primary checkout, so concurrent edits pile into one `git status` with no way to tell whose work is whose.

@@ -9,29 +9,47 @@ export type OpenAIRootFreshTurnSelectorParityObservation = {
   matches: boolean;
 };
 
+/**
+ * The durable diagnostic shape intentionally excludes response IDs and all
+ * request/transcript data. It is evidence for a later review, never selector
+ * input or continuity state.
+ */
+export type OpenAIRootFreshTurnSelectorParityEvidence = {
+  type: 'openai_root_selector_parity';
+  version: 1;
+  eligible: boolean;
+  matches: boolean;
+};
+
 export interface OpenAIRootFreshTurnSelectorParityObserver {
   /** Most recent bounded observation; no transcript or request metadata is retained. */
   readonly latestObservation: Readonly<OpenAIRootFreshTurnSelectorParityObservation> | null;
+  setEvidenceRecorder?(recorder: (evidence: OpenAIRootFreshTurnSelectorParityEvidence) => void): void;
   observe(input: { legacyPreviousResponseId: string; plannedSnapshot: ProviderHistorySnapshot }): void;
 }
 
 /** Owned-root-only, fail-closed checkpoint/legacy parity observation. */
-export class ProviderContinuityOpenAIRootSelectorParityObserver
-  implements OpenAIRootFreshTurnSelectorParityObserver
-{
+export class ProviderContinuityOpenAIRootSelectorParityObserver implements OpenAIRootFreshTurnSelectorParityObserver {
   #latestObservation: Readonly<OpenAIRootFreshTurnSelectorParityObservation> | null = null;
 
   constructor(
     private readonly continuity: ProviderContinuity,
     private readonly getModel: () => string | undefined,
-    private readonly recordObservation: (observation: OpenAIRootFreshTurnSelectorParityObservation) => void = () => {},
+    private recordEvidence: (evidence: OpenAIRootFreshTurnSelectorParityEvidence) => void = () => {},
   ) {}
 
   get latestObservation(): Readonly<OpenAIRootFreshTurnSelectorParityObservation> | null {
     return this.#latestObservation;
   }
 
-  observe({ legacyPreviousResponseId, plannedSnapshot }: {
+  setEvidenceRecorder(recorder: (evidence: OpenAIRootFreshTurnSelectorParityEvidence) => void): void {
+    this.recordEvidence = recorder;
+  }
+
+  observe({
+    legacyPreviousResponseId,
+    plannedSnapshot,
+  }: {
     legacyPreviousResponseId: string;
     plannedSnapshot: ProviderHistorySnapshot;
   }): void {
@@ -54,7 +72,14 @@ export class ProviderContinuityOpenAIRootSelectorParityObserver
         matches: eligible && acceptedCheckpointResponseId === legacyPreviousResponseId,
       });
       this.#latestObservation = observation;
-      this.recordObservation(observation);
+      this.recordEvidence(
+        Object.freeze({
+          type: 'openai_root_selector_parity',
+          version: 1,
+          eligible,
+          matches: observation.matches,
+        }),
+      );
     } catch {
       // Observation must never affect an established request.
     }

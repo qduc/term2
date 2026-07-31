@@ -334,6 +334,13 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     getToolLedger: () => toolTracker.export(),
     journal,
   });
+  openAIRootFreshTurnSelectorParityObserver?.setEvidenceRecorder?.((evidence) => {
+    try {
+      conversationLogger.log(evidence);
+    } catch {
+      // Selector-parity diagnostics must never affect the request path.
+    }
+  });
 
   // Background lifecycle belongs to the conversation-scoped sink, not the
   // active turn's UI sink. Dispatch it through conversation logging, while only

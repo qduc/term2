@@ -91,6 +91,15 @@ export interface ApprovalResolvedLogEvent {
   rejectionReason?: string;
 }
 
+/** Observation-only evidence for a later OpenAI selector review. */
+export interface OpenAIRootSelectorParityLogEvent {
+  type: 'openai_root_selector_parity';
+  version: 1;
+  turnId?: string;
+  eligible: boolean;
+  matches: boolean;
+}
+
 /**
  * Streaming fragment of assistant output (text or reasoning) that has not yet
  * been materialized as a durable persisted item. These entries are intentionally
@@ -192,6 +201,7 @@ export type LogEvent =
   | CommandMessageLogEvent
   | ApprovalRequiredLogEvent
   | ApprovalResolvedLogEvent
+  | OpenAIRootSelectorParityLogEvent
   | SubagentStartedLogEvent
   | SubagentToolStartedLogEvent
   | SubagentCompletedLogEvent

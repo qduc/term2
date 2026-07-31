@@ -223,6 +223,7 @@ export class ConversationLogger {
       case 'tool_result':
       case 'approval_required':
       case 'approval_resolved':
+      case 'openai_root_selector_parity':
       case 'assistant_turn':
         return { ...event, turnId };
       default:

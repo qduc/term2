@@ -113,6 +113,7 @@ it('observes eligible owned-root OpenAI parity while preserving the legacy outgo
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello' }]);
   stream.finalOutput = 'hello';
   const observations: any[] = [];
+  const diagnostics: any[] = [];
   let outgoingOptions: any;
   const mockClient = {
     getProvider: () => 'openai',
@@ -122,7 +123,17 @@ it('observes eligible owned-root OpenAI parity while preserving the legacy outgo
       return stream;
     },
   };
-  const { workflow, composition } = setupWorkflow(mockClient, undefined, { observe: (value: unknown) => observations.push(value) });
+  let recordEvidence: ((value: unknown) => void) | undefined;
+  const { workflow, composition } = setupWorkflow(mockClient, undefined, {
+    setEvidenceRecorder: (recorder: (value: unknown) => void) => {
+      recordEvidence = recorder;
+    },
+    observe: (value: unknown) => {
+      observations.push(value);
+      recordEvidence?.({ type: 'openai_root_selector_parity', version: 1, eligible: true, matches: true });
+    },
+  });
+  composition.conversationLogger.setLogSink((event) => diagnostics.push(event));
   composition.conversationStore.replaceHistory([{ role: 'user', type: 'message', content: 'before' }] as any);
   const committed = composition.conversationStore.getProviderHistorySnapshot();
   const binding = {
@@ -137,6 +148,14 @@ it('observes eligible owned-root OpenAI parity while preserving the legacy outgo
   expect(outgoingOptions.previousResponseId).toBe('resp-legacy');
   expect(observations).toHaveLength(1);
   expect(observations[0]).toMatchObject({ legacyPreviousResponseId: 'resp-legacy' });
+  expect(diagnostics).toContainEqual({
+    type: 'openai_root_selector_parity',
+    version: 1,
+    eligible: true,
+    matches: true,
+    turnId: expect.any(String),
+  });
+  expect(JSON.stringify(diagnostics)).not.toContain('resp-legacy');
 });
 
 it('keeps the established outgoing response ID when parity observation throws', async () => {
@@ -167,18 +186,34 @@ it.each([
   ['Codex', { getProvider: () => 'codex', supportsConversationChaining: () => true }, {}],
   ['full-history', { getProvider: () => 'openai', supportsConversationChaining: () => false }, {}],
   ['replay', { getProvider: () => 'openai', supportsConversationChaining: () => true }, { replayFromHistory: true }],
-  ['retry', { getProvider: () => 'openai', supportsConversationChaining: () => true }, { retries: { transientRetryCount: 1 } }],
+  [
+    'retry',
+    { getProvider: () => 'openai', supportsConversationChaining: () => true },
+    { retries: { transientRetryCount: 1 } },
+  ],
 ])('does not observe %s initial paths', async (_name, clientShape, runOptions) => {
   const observations: any[] = [];
+  const diagnostics: any[] = [];
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello' }]);
   stream.finalOutput = 'hello';
   const mockClient = { ...clientShape, startStream: async () => stream };
-  const { workflow, composition } = setupWorkflow(mockClient, undefined, { observe: (value: unknown) => observations.push(value) });
+  let recordEvidence: ((value: unknown) => void) | undefined;
+  const { workflow, composition } = setupWorkflow(mockClient, undefined, {
+    setEvidenceRecorder: (recorder: (value: unknown) => void) => {
+      recordEvidence = recorder;
+    },
+    observe: (value: unknown) => {
+      observations.push(value);
+      recordEvidence?.({ type: 'openai_root_selector_parity', version: 1, eligible: true, matches: true });
+    },
+  });
+  composition.conversationLogger.setLogSink((event) => diagnostics.push(event));
   composition.providerContinuity.update('resp-legacy');
 
   await collect(workflow.executeInitial('next', runOptions));
 
   expect(observations).toEqual([]);
+  expect(diagnostics).toEqual([]);
 });
 
 it('passes a fresh authoritative store snapshot when resuming an initial stream', async () => {
@@ -198,7 +233,9 @@ it('passes a fresh authoritative store snapshot when resuming an initial stream'
     },
   };
   const observations: any[] = [];
-  const { workflow, composition } = setupWorkflow(mockClient, undefined, { observe: (value: unknown) => observations.push(value) });
+  const { workflow, composition } = setupWorkflow(mockClient, undefined, {
+    observe: (value: unknown) => observations.push(value),
+  });
   composition.conversationStore.replaceHistory([{ role: 'user', type: 'message', content: 'authoritative' }] as any);
   const getAuthoritativeSnapshot = composition.conversationStore.getProviderHistorySnapshot.bind(
     composition.conversationStore,

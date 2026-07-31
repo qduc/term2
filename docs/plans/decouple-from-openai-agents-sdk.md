@@ -407,6 +407,13 @@ only — every such call is rejected either way. Moot here: this repo never call
    do not infer it from a single successful session. Do not modify Codex transport/replay or the
    remaining Codex request-builder/fetch seams without dedicated characterization and review.
 
+**Telemetry review — no local OpenAI evidence (2026-07-31).** The available app logs contain no
+`provider=openai` entries and no `openai_root_selector_parity` or
+`openai_root_checkpoint_lifecycle` events. The matching provider-traffic records are Codex
+requests whose prompt data happens to contain the diagnostic strings. No parity or fallback
+threshold can therefore be established from the current logs; keep item 10 pending until an
+authorized OpenAI session produces bounded telemetry.
+
 ### OpenAI lifecycle-observer decision — RESOLVED 2026-07-31: retire both overrides at the public boundary
 
 **Correction to the previous framing.** This section previously claimed an exploratory unmerged

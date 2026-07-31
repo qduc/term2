@@ -2326,6 +2326,107 @@ it.sequential('CodexResponsesWSModel drops orphaned tool outputs before creating
   }
 });
 
+it.sequential(
+  'CodexResponsesWSModel does not chain a tool output whose call is absent from a rebuilt response chain',
+  async () => {
+    const seenRequests: any[] = [];
+    const orphanedCallId = 'call-rebuilt-chain-orphan';
+    const functionCall = {
+      type: 'function_call',
+      call_id: orphanedCallId,
+      name: 'apply_patch',
+      arguments: '{}',
+    };
+    const functionCallOutput = {
+      type: 'function_call_result',
+      callId: orphanedCallId,
+      output: 'Updated source/providers/openai.provider.ts',
+      status: 'completed',
+    };
+    const noToolCallForOutput = new Error(
+      `No tool call found for function call output with call_id ${orphanedCallId}.`,
+    );
+
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+      seenRequests.push(request);
+      if (request.input?.some((item: any) => (item?.call_id ?? item?.callId) === orphanedCallId)) {
+        throw noToolCallForOutput;
+      }
+      return makeStream([
+        {
+          type: 'response.completed',
+          response: {
+            id: 'resp-rebuilt-chain',
+            output: [],
+            usage: {},
+          },
+        } as any,
+      ]);
+    };
+
+    const mockClient = {
+      baseURL: 'https://api.openai.com',
+      apiKey: 'test-key',
+      _options: {},
+    };
+    const tokenManager = {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'acc_123',
+    };
+    const openingUser = { role: 'user', type: 'message', content: 'inspect the repo' };
+
+    try {
+      const model = new CodexResponsesWSModel(
+        mockClient as any,
+        'gpt-5-codex',
+        tokenManager as any,
+        undefined,
+        undefined,
+        {
+          getContext: () =>
+            ({ sessionId: 'session-rebuilt-chain-orphan', traceId: 'trace-rebuilt-chain-orphan' } as any),
+          runWithContext: <T>(_context: any, fn: () => T) => fn(),
+        },
+      );
+
+      // The rebuilt chain is established without the in-flight function call.
+      await collect(
+        model.getStreamedResponse({
+          input: [openingUser],
+          modelSettings: {},
+          tools: [],
+          handoffs: [],
+        } as any),
+      );
+
+      await expect(
+        collect(
+          model.getStreamedResponse({
+            previousResponseId: 'resp-rebuilt-chain',
+            input: [openingUser, functionCall, functionCallOutput],
+            modelSettings: {},
+            tools: [],
+            handoffs: [],
+          } as any),
+        ),
+      ).rejects.toMatchObject({
+        name: 'OrphanedChainedToolOutputError',
+        callIds: [orphanedCallId],
+      });
+
+      expect(seenRequests).toHaveLength(2);
+      expect(seenRequests).not.toContainEqual(
+        expect.objectContaining({
+          input: expect.arrayContaining([expect.objectContaining({ callId: orphanedCallId })]),
+        }),
+      );
+    } finally {
+      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    }
+  },
+);
+
 it.sequential('CodexResponsesWSModel unary path propagates stale tool continuations without fallback', async () => {
   const seenRequests: any[] = [];
   const previousResponseNotFound = Object.assign(new Error('Previous response not found for id resp-stale-unary'), {

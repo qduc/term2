@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { sanitizeHeaders } from '../utils/header-sanitizer.js';
 import type { ISessionContextService, IProviderTraffic } from '../services/service-interfaces.js';
 import { dropUnpairedFunctionCalls } from '../services/tool-execution-ledger.js';
+import { OrphanedChainedToolOutputError } from '../lib/chained-input-filter.js';
 import { AmbiguousModelOutcomeError } from '../services/retry/retry-errors.js';
 import { ChainedWireState, type ChainedWireStateKey, type ChainedRequestToken } from './chained-wire-state.js';
 import { LunaResponsesLiteWireProtocol } from './luna-responses-lite-wire-protocol.js';
@@ -305,6 +306,21 @@ const collectToolResultCallIds = (input: unknown): string[] => {
   return ids;
 };
 
+const collectFunctionCallIds = (input: unknown): string[] => {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const ids: string[] = [];
+  for (const item of input) {
+    const normalized = normalizeCodexServerHistoryItem(item);
+    if (normalized.isFunctionCall && normalized.callId) {
+      ids.push(normalized.callId);
+    }
+  }
+  return ids;
+};
+
 const filterServerManagedInput = (input: unknown, consumedToolResultCallIds?: ReadonlySet<string>): unknown => {
   if (!Array.isArray(input)) {
     return input;
@@ -363,6 +379,16 @@ const getResponseIdFromStreamEvent = (event: unknown): string | undefined => {
   }
 
   return getResponseIdFromResponse(record.response) ?? getResponseIdFromResponse(record);
+};
+
+const getResponseOutputFromStreamEvent = (event: unknown): unknown[] | undefined => {
+  const record = asRecord(event);
+  if (record?.type !== 'response_done') {
+    return undefined;
+  }
+
+  const response = asRecord(record.response);
+  return Array.isArray(response?.output) ? response.output : undefined;
 };
 
 const getErrorMessage = (error: unknown): string => {
@@ -452,6 +478,7 @@ type CodexWebSocketIdentity = {
 export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   private readonly codexPreviousResponseIds = new Map<string, string>();
   private readonly codexConsumedToolResultCallIdsByResponseId = new Map<string, Set<string>>();
+  private readonly codexFunctionCallIdsByResponseId = new Map<string, Set<string>>();
   private readonly codexTurnIdsBySession = new Map<string, string>();
   #serverHistoryReuseDisabled = false;
 
@@ -573,7 +600,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     }
     const response = await super.getResponse(request);
     const responseId = getResponseIdFromResponse(response);
-    this.#rememberCodexResponseId(responseId);
+    this.#rememberCodexResponseId(responseId, asRecord(response)?.output, request.input, true);
     return responseId;
   }
 
@@ -583,9 +610,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     }
     let responseId: string | undefined;
     for await (const event of super.getStreamedResponse(request)) {
-      responseId = getResponseIdFromStreamEvent(event) ?? responseId;
+      const eventResponseId = getResponseIdFromStreamEvent(event);
+      if (eventResponseId) {
+        responseId = eventResponseId;
+        this.#rememberCodexResponseId(responseId, getResponseOutputFromStreamEvent(event), request.input, true);
+      }
     }
-    this.#rememberCodexResponseId(responseId);
     return responseId;
   }
 
@@ -603,6 +633,15 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 
     const consumedToolResultCallIds = this.#getConsumedToolResultCallIds(previousResponseId);
     const filteredInput = filterServerManagedInput(input, consumedToolResultCallIds);
+    const knownFunctionCallIds = this.codexFunctionCallIdsByResponseId.get(previousResponseId);
+    if (request.previousResponseId === previousResponseId && knownFunctionCallIds) {
+      const orphanedCallIds = collectToolResultCallIds(filteredInput).filter(
+        (callId) => !knownFunctionCallIds.has(callId),
+      );
+      if (orphanedCallIds.length > 0) {
+        throw new OrphanedChainedToolOutputError([...new Set(orphanedCallIds)]);
+      }
+    }
     this.#warnIfConsumedToolResultsWereDropped(previousResponseId, input, filteredInput, consumedToolResultCallIds);
     if (request.previousResponseId === previousResponseId && filteredInput === input) {
       return request;
@@ -696,7 +735,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     });
   }
 
-  #rememberCodexResponseId(responseId: string | undefined): void {
+  #rememberCodexResponseId(
+    responseId: string | undefined,
+    output?: unknown,
+    input?: unknown,
+    recordChainAnchor = false,
+  ): void {
     if (!responseId) {
       return;
     }
@@ -705,6 +749,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     const key = this.#getCodexServerHistoryKey();
     if (key) {
       this.codexPreviousResponseIds.set(key, responseId);
+    }
+    if (recordChainAnchor && (Array.isArray(output) || Array.isArray(input))) {
+      this.codexFunctionCallIdsByResponseId.set(
+        responseId,
+        new Set([...collectFunctionCallIds(output), ...collectFunctionCallIds(input)]),
+      );
     }
   }
 
@@ -762,6 +812,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     this.#serverHistoryReuseDisabled = true;
     this.codexPreviousResponseIds.clear();
     this.codexConsumedToolResultCallIdsByResponseId.clear();
+    this.codexFunctionCallIdsByResponseId.clear();
     this.codexTurnIdsBySession.clear();
     this.chainedWireState.clear();
   }
@@ -870,7 +921,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 
         const response = await super.getResponse(effectiveRequest);
         const responseId = getResponseIdFromResponse(response);
-        this.#rememberCodexResponseId(responseId);
+        this.#rememberCodexResponseId(responseId, asRecord(response)?.output, effectiveRequest.input);
         this.#rememberConsumedToolResultCallIds(
           responseId,
           effectiveRequest.previousResponseId,
@@ -886,7 +937,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
           const fallbackRequest = this.#withoutCodexServerHistory(request);
           const response = await super.getResponse(fallbackRequest);
           const responseId = getResponseIdFromResponse(response);
-          this.#rememberCodexResponseId(responseId);
+          this.#rememberCodexResponseId(responseId, asRecord(response)?.output, fallbackRequest.input);
           this.#rememberConsumedToolResultCallIds(responseId, undefined, fallbackRequest.input);
           return response;
         }
@@ -917,8 +968,11 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 
       let responseId: string | undefined;
       for await (const event of super.getStreamedResponse(effectiveRequest)) {
-        responseId = getResponseIdFromStreamEvent(event) ?? responseId;
-        this.#rememberCodexResponseId(responseId);
+        const eventResponseId = getResponseIdFromStreamEvent(event);
+        if (eventResponseId) {
+          responseId = eventResponseId;
+          this.#rememberCodexResponseId(responseId, getResponseOutputFromStreamEvent(event), effectiveRequest.input);
+        }
         yieldedAnyEvent = true;
         yield event;
       }
@@ -932,8 +986,11 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         const fallbackRequest = this.#withoutCodexServerHistory(request);
         let responseId: string | undefined;
         for await (const event of super.getStreamedResponse(fallbackRequest)) {
-          responseId = getResponseIdFromStreamEvent(event) ?? responseId;
-          this.#rememberCodexResponseId(responseId);
+          const eventResponseId = getResponseIdFromStreamEvent(event);
+          if (eventResponseId) {
+            responseId = eventResponseId;
+            this.#rememberCodexResponseId(responseId, getResponseOutputFromStreamEvent(event), fallbackRequest.input);
+          }
           yield event;
         }
         this.#rememberConsumedToolResultCallIds(responseId, undefined, fallbackRequest.input);

@@ -401,6 +401,32 @@ only — every such call is rejected either way. Moot here: this repo never call
    do not infer it from a single successful session. Do not modify Codex transport/replay or the
    remaining private request-builder/fetch seams without dedicated characterization and review.
 
+### OpenAI HTTP lifecycle-observer decision — blocked pending review
+
+An exploratory, unmerged branch (`codex/openai-http-observer`) proves the OpenAI HTTP model can
+observe the final serialized Responses request through the public custom-`fetch` seam. A
+request-local `AsyncLocalStorage` attempt can retain the existing token, endpoint/model identity,
+exact-prefix binding, and terminal/failed/abandoned outcome correlation without overriding
+`_buildResponsesCreateRequest`. Native OpenAI WebSocket calls bypass that fetch seam, so their
+existing private builder hook must remain until an application-owned WebSocket transport is
+characterized.
+
+**The blocked decision is test ownership, not feasibility.** Existing lifecycle tests replace the
+SDK private builder with fakes and use that fake as the behavioral specification for both HTTP and
+WebSocket. They cannot validate a public-fetch implementation without continuing to depend on the
+private hook. The next slice must choose one of these explicit approaches:
+
+1. **Recommended:** replace the HTTP portions with a new public-fetch characterization suite that
+   verifies serialized `/responses` body capture, prefix binding, unary/stream terminal outcomes,
+   failure/abandonment, retry reuse, and concurrent isolation. Retain the existing private-builder
+   characterization only for WebSocket. This retires the HTTP half of the OpenAI builder reach-in
+   while leaving WebSocket explicitly unchanged.
+2. Keep the current shared private-builder test suite until an application-owned, transport-neutral
+   OpenAI Responses model (including WebSocket connection/reuse/locking semantics) is designed and
+   characterized. This avoids a split test surface but postpones the HTTP retirement.
+
+Do not merge the exploratory branch until one approach is selected and its resulting suite passes.
+
 ### R1 gate — PASSED
 
 `source/lib/sdk-approval-resume.test.ts` uses a real SDK `Runner` and a serialized/restored

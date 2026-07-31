@@ -384,11 +384,22 @@ only — every such call is rejected either way. Moot here: this repo never call
    with matching provider identity and lineage, and fails closed for all absent, reset, rewritten,
    or mismatched evidence. This proves the transcript relationship but does not select outgoing
    `previous_response_id`, migrate ownership, or retire a reach-in.
-7. **Next — characterize OpenAI-only selector parity separately.** Observe whether a root-owned,
-   eligible checkpoint's response ID equals the established legacy `previousResponseId` at normal
-   fresh-turn boundaries. Keep approval continuations, replay/retry/resume recovery, Codex, and all
-   in-flight/caller-owned clients on legacy selection until independent parity evidence permits a
-   bounded fresh-session switch.
+7. **DONE — characterize OpenAI-only selector parity and make the bounded fresh-session switch.**
+   A root-owned, eligible checkpoint observes whether its response ID equals the established legacy
+   `previousResponseId` at normal fresh-turn boundaries. A newly created OpenAI session selects the
+   checkpoint only for that exact equality-proven case; missing, ineligible, mismatched, or faulty
+   evidence retains legacy selection. Approval continuations, replay/retry/resume recovery, Codex,
+   and all in-flight/caller-owned clients remain on legacy selection. This retires neither remaining
+   provider reach-in.
+8. **DONE — OpenAI public prompt-cache settings slice.** OpenAI session clones now supply
+   `prompt_cache_key` through the public `modelSettings.providerData.extraBody` transport setting,
+   which the Responses SDK carries to both HTTP and WebSocket requests. The OpenAI private builder
+   remains only for post-normalization request/lifecycle and exact-prefix observation; Codex retains
+   its existing setting path. This narrows the eventual replacement but does not retire the category.
+9. **Next — collect and review bounded fresh-session OpenAI parity telemetry before proposing any
+   broader ownership migration.** Define a parity/fallback evidence threshold and scope explicitly;
+   do not infer it from a single successful session. Do not modify Codex transport/replay or the
+   remaining private request-builder/fetch seams without dedicated characterization and review.
 
 ### R1 gate — PASSED
 

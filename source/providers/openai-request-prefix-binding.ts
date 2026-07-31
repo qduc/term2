@@ -7,22 +7,6 @@ import { isDeepStrictEqual } from 'node:util';
  * change this scope can establish without guessing, normalize an SDK message
  * wrapper to its equivalent Responses message. Everything else is left exact.
  */
-const normalizeComparableInput = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(normalizeComparableInput);
-  if (!value || typeof value !== 'object') return value;
-
-  const record = value as Record<string, unknown>;
-  const normalized: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(record)) {
-    if (typeof entry === 'undefined') continue;
-    // `getMessageItem()` drops the SDK-only message discriminant before the
-    // Responses request is built. Do not normalize any other item type.
-    if (key === 'type' && entry === 'message' && typeof record.role === 'string') continue;
-    normalized[key] = normalizeComparableInput(entry);
-  }
-  return normalized;
-};
-
 /**
  * Provider-private, observational handoff between the Agents input filter and
  * the OpenAI model's final request builder. Nothing here is sent on the wire.
@@ -61,7 +45,7 @@ class OpenAIRequestPrefixBindingScope {
     }
   }
 
-  consume(requestData: Record<string, unknown>): OpenAIRequestPrefixBinding | undefined {
+  consume(input: unknown): OpenAIRequestPrefixBinding | undefined {
     try {
       if (this.#ambiguous) {
         // One consume retires the ambiguous overlap, leaving both invocations
@@ -72,10 +56,7 @@ class OpenAIRequestPrefixBindingScope {
 
       const prepared = this.#prepared;
       this.#prepared = undefined;
-      return prepared &&
-        isDeepStrictEqual(normalizeComparableInput(prepared.expectedInput), normalizeComparableInput(requestData.input))
-        ? prepared.binding
-        : undefined;
+      return prepared && isDeepStrictEqual(prepared.expectedInput, input) ? prepared.binding : undefined;
     } catch {
       return undefined;
     }
@@ -98,11 +79,9 @@ export const prepareOpenAIRequestPrefixBinding = (
   }
 };
 
-export const consumeOpenAIRequestPrefixBinding = (
-  requestData: Record<string, unknown>,
-): OpenAIRequestPrefixBinding | undefined => {
+export const consumeOpenAIRequestPrefixBinding = (input: unknown): OpenAIRequestPrefixBinding | undefined => {
   try {
-    return scopeStorage.getStore()?.consume(requestData);
+    return scopeStorage.getStore()?.consume(input);
   } catch {
     return undefined;
   }

@@ -76,43 +76,6 @@ it('forwards prompt_cache_key through the public providerData extraBody setting'
   });
 });
 
-it.sequential('OpenAI request capture records the exact post-builder HTTP and WebSocket request projection', () => {
-  const captures: any[] = [];
-  const capture = { record: (entry: any) => captures.push(entry) };
-  const originalHttp = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
-  const originalWs = (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest;
-  const builder = function () {
-    return { requestData: { input: [{ role: 'user', content: 'hello' }], previous_response_id: 'resp-1' } };
-  };
-  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = builder;
-  (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = builder;
-  try {
-    for (const ModelClass of [OpenAIResponsesModelWithPromptCacheKey, OpenAIResponsesWSModelWithPromptCacheKey]) {
-      const model = new ModelClass({} as any, 'gpt-5', capture as any);
-      (model as any)._buildResponsesCreateRequest({ modelSettings: {} }, true);
-    }
-    expect(captures).toEqual([
-      expect.objectContaining({
-        transport: 'http',
-        requestData: {
-          input: [{ role: 'user', content: 'hello' }],
-          previous_response_id: 'resp-1',
-        },
-      }),
-      expect.objectContaining({
-        transport: 'websocket',
-        requestData: {
-          input: [{ role: 'user', content: 'hello' }],
-          previous_response_id: 'resp-1',
-        },
-      }),
-    ]);
-  } finally {
-    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = originalHttp;
-    (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = originalWs;
-  }
-});
-
 it.sequential(
   'OpenAI lifecycle observations pair each HTTP and WebSocket public attempt with its builder and terminal response',
   async () => {
@@ -424,7 +387,7 @@ it('OpenAI prefix scopes isolate concurrent runs and fail closed for overlapping
           [name],
         );
         await Promise.resolve();
-        return consumeOpenAIRequestPrefixBinding({ input: [name] });
+        return consumeOpenAIRequestPrefixBinding([name]);
       }),
     ),
   );
@@ -436,8 +399,8 @@ it('OpenAI prefix scopes isolate concurrent runs and fail closed for overlapping
   await runWithOpenAIRequestPrefixBindingScope(async () => {
     prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:one', snapshotRevision: 1, lineage: 0 }, ['same']);
     prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:two', snapshotRevision: 2, lineage: 0 }, ['same']);
-    expect(consumeOpenAIRequestPrefixBinding({ input: ['same'] })).toBeUndefined();
-    expect(consumeOpenAIRequestPrefixBinding({ input: ['same'] })).toBeUndefined();
+    expect(consumeOpenAIRequestPrefixBinding(['same'])).toBeUndefined();
+    expect(consumeOpenAIRequestPrefixBinding(['same'])).toBeUndefined();
   });
 
   await runWithOpenAIRequestPrefixBindingScope(async () => {
@@ -447,16 +410,16 @@ it('OpenAI prefix scopes isolate concurrent runs and fail closed for overlapping
     prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:second', snapshotRevision: 2, lineage: 0 }, [
       'second',
     ]);
-    expect(consumeOpenAIRequestPrefixBinding({ input: ['first'] })).toBeUndefined();
-    expect(consumeOpenAIRequestPrefixBinding({ input: ['second'] })).toBeUndefined();
+    expect(consumeOpenAIRequestPrefixBinding(['first'])).toBeUndefined();
+    expect(consumeOpenAIRequestPrefixBinding(['second'])).toBeUndefined();
   });
 
   await runWithOpenAIRequestPrefixBindingScope(async () => {
     prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:stale', snapshotRevision: 3, lineage: 0 }, [
       'expected',
     ]);
-    expect(consumeOpenAIRequestPrefixBinding({ input: ['mismatch'] })).toBeUndefined();
-    expect(consumeOpenAIRequestPrefixBinding({ input: ['expected'] })).toBeUndefined();
+    expect(consumeOpenAIRequestPrefixBinding(['mismatch'])).toBeUndefined();
+    expect(consumeOpenAIRequestPrefixBinding(['expected'])).toBeUndefined();
   });
 
   for (const input of [
@@ -472,7 +435,7 @@ it('OpenAI prefix scopes isolate concurrent runs and fail closed for overlapping
       prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:exact', snapshotRevision: 4, lineage: 0 }, [
         { type: 'message', role: 'user', content: 'hello' },
       ]);
-      expect(consumeOpenAIRequestPrefixBinding({ input })).toBeUndefined();
+      expect(consumeOpenAIRequestPrefixBinding(input)).toBeUndefined();
     });
   }
 });
@@ -519,7 +482,7 @@ it.sequential(
         await first;
 
         // The later invocation was not consumed by request A's repeated build.
-        expect(consumeOpenAIRequestPrefixBinding({ input: ['first'] })).toEqual({
+        expect(consumeOpenAIRequestPrefixBinding(['first'])).toEqual({
           snapshotIdentity: 'history:later',
           snapshotRevision: 2,
           lineage: 0,
@@ -527,7 +490,6 @@ it.sequential(
       });
 
       expect(observations.map((entry) => entry.prefixBinding)).toEqual([
-        { snapshotIdentity: 'history:first', snapshotRevision: 1, lineage: 0 },
         { snapshotIdentity: 'history:first', snapshotRevision: 1, lineage: 0 },
         { snapshotIdentity: 'history:first', snapshotRevision: 1, lineage: 0 },
       ]);

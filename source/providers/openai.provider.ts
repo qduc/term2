@@ -7,7 +7,6 @@ import { createProviderFetch } from './fetch/composer.js';
 import { RetryingModel } from './retrying-model.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
 import {
-  captureProviderRequest,
   observeOpenAIRequestLifecycle,
   type OpenAIRequestLifecycleObservation,
   type ProviderRequestCapture,
@@ -47,20 +46,20 @@ abstract class OpenAIRequestLifecycleModel {
     }
   }
 
-  observeBuilt(request: any, requestData: Record<string, unknown>, capture?: ProviderRequestCapture): void {
+  bindPrefix(request: any, capture?: ProviderRequestCapture): void {
     const attempt = request && typeof request === 'object' ? this.attempts.get(request) : undefined;
     if (!attempt) return;
     try {
-      attempt.requestData = structuredClone(requestData);
+      attempt.requestData = { input: structuredClone(request.input) };
       if (!attempt.prefixBinding) {
-        const prefixBinding = consumeOpenAIRequestPrefixBinding(requestData);
+        const prefixBinding = consumeOpenAIRequestPrefixBinding(request.input);
         if (prefixBinding) {
           attempt.prefixBinding = prefixBinding;
         }
       }
       observeOpenAIRequestLifecycle(capture, { ...attempt, phase: 'request-built' });
     } catch {
-      // A non-cloneable diagnostic payload must not affect the SDK request.
+      // Binding must not affect the SDK request.
     }
   }
 
@@ -85,19 +84,9 @@ export class OpenAIResponsesModelWithPromptCacheKey extends OpenAIResponsesModel
     super(client, model);
   }
 
-  _buildResponsesCreateRequest(request: any, stream: boolean): any {
-    const built = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest.call(this, request, stream);
-    captureProviderRequest(this.requestCapture, {
-      provider: 'openai',
-      transport: 'http',
-      requestData: built.requestData,
-    });
-    this.lifecycle.observeBuilt(request, built.requestData, this.requestCapture);
-    return built;
-  }
-
   override async getResponse(request: any): Promise<any> {
     this.lifecycle.beginAttempt(request, 'http', (this as any)._model, (this as any)._client);
+    this.lifecycle.bindPrefix(request, this.requestCapture);
     try {
       const response = await super.getResponse(request);
       this.lifecycle.finishAttempt(request, 'terminal', this.requestCapture, response?.responseId);
@@ -110,6 +99,7 @@ export class OpenAIResponsesModelWithPromptCacheKey extends OpenAIResponsesModel
 
   override async *getStreamedResponse(request: any): AsyncIterable<any> {
     this.lifecycle.beginAttempt(request, 'http', (this as any)._model, (this as any)._client);
+    this.lifecycle.bindPrefix(request, this.requestCapture);
     let terminal = false;
     try {
       for await (const event of super.getStreamedResponse(request)) {
@@ -135,19 +125,9 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesWSM
     super(client, model);
   }
 
-  _buildResponsesCreateRequest(request: any, stream: boolean): any {
-    const built = super._buildResponsesCreateRequest(request, stream);
-    captureProviderRequest(this.requestCapture, {
-      provider: 'openai',
-      transport: 'websocket',
-      requestData: built.requestData,
-    });
-    this.lifecycle.observeBuilt(request, built.requestData, this.requestCapture);
-    return built;
-  }
-
   override async getResponse(request: any): Promise<any> {
     this.lifecycle.beginAttempt(request, 'websocket', (this as any)._model, (this as any)._client);
+    this.lifecycle.bindPrefix(request, this.requestCapture);
     const currentTrace = getCurrentTrace();
     try {
       const response = currentTrace
@@ -163,6 +143,7 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesWSM
 
   override async *getStreamedResponse(request: any): AsyncIterable<any> {
     this.lifecycle.beginAttempt(request, 'websocket', (this as any)._model, (this as any)._client);
+    this.lifecycle.bindPrefix(request, this.requestCapture);
     let terminal = false;
     try {
       for await (const event of super.getStreamedResponse(request)) {

@@ -402,17 +402,21 @@ only — every such call is rejected either way. Moot here: this repo never call
    SDK-shaped `request.input`; both overrides and `normalizeComparableInput` are gone. Binding
    diagnostics distinguish missing preparation, repeated consumption, and input mismatch. The
    existing focused OpenAI lifecycle and candidate-observer coverage passes; Codex is unchanged.
-10. **Next — collect and review bounded fresh-session OpenAI parity telemetry before proposing any
-   broader ownership migration.** Define a parity/fallback evidence threshold and scope explicitly;
-   do not infer it from a single successful session. Do not modify Codex transport/replay or the
-   remaining Codex request-builder/fetch seams without dedicated characterization and review.
+10. **IN PROGRESS — collect and review bounded fresh-session OpenAI parity telemetry before
+   proposing any broader ownership migration.** Proposed threshold: three independent owned-root
+   OpenAI sessions, each with two normal fresh turns; every parity observation must be
+   `eligible=true, matches=true`, and no normal turn may produce `not_prepared`, `input_mismatch`,
+   or `already_consumed`. Provider transport errors are recorded separately and do not count as
+   passing evidence. Do not modify Codex transport/replay or the remaining Codex request-builder/
+   fetch seams without dedicated characterization and review.
 
-**Telemetry review — no local OpenAI evidence (2026-07-31).** The available app logs contain no
-`provider=openai` entries and no `openai_root_selector_parity` or
-`openai_root_checkpoint_lifecycle` events. The matching provider-traffic records are Codex
-requests whose prompt data happens to contain the diagnostic strings. No parity or fallback
-threshold can therefore be established from the current logs; keep item 10 pending until an
-authorized OpenAI session produces bounded telemetry.
+**Telemetry review — first bounded sample (2026-07-31).** An authorized cmux session using
+`gpt-5-mini` produced `candidate:observed` then `publication:promoted` on turn 1. Turn 2 produced
+`openai_root_selector_parity { eligible: true, matches: true }` but its candidate observation was
+`not_prepared`; the fail-closed outcome means the threshold is not met. A separate `gpt-4o`
+probe failed before a response because the configured medium reasoning effort is unsupported by
+that model, so it is excluded from parity evidence. The next bounded work is to characterize why
+the normal chained fresh turn does not retain a prefix binding before collecting more sessions.
 
 ### OpenAI lifecycle-observer decision — RESOLVED 2026-07-31: retire both overrides at the public boundary
 

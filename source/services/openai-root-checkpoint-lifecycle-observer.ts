@@ -6,6 +6,9 @@ export type OpenAIRootCheckpointLifecycleEvidence = {
   outcome:
     | 'observed'
     | 'missing_prefix_binding'
+    | 'not_prepared'
+    | 'already_consumed'
+    | 'input_mismatch'
     | 'missing_response_id'
     | 'invalid_lineage'
     | 'lineage_rejected'
@@ -20,7 +23,14 @@ export interface OpenAIRootCheckpointLifecycleObserver {
   candidate(
     outcome: Extract<
       OpenAIRootCheckpointLifecycleEvidence['outcome'],
-      'observed' | 'missing_prefix_binding' | 'missing_response_id' | 'invalid_lineage' | 'lineage_rejected'
+      | 'observed'
+      | 'missing_prefix_binding'
+      | 'missing_response_id'
+      | 'invalid_lineage'
+      | 'lineage_rejected'
+      | 'not_prepared'
+      | 'already_consumed'
+      | 'input_mismatch'
     >,
   ): void;
   publication(

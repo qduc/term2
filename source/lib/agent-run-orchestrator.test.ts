@@ -398,7 +398,7 @@ it('hands an exact OpenAI compatibility projection to the request lifecycle with
           ],
         },
       });
-      binding = consumeOpenAIRequestPrefixBinding({ input: filtered.input });
+      binding = consumeOpenAIRequestPrefixBinding(filtered.input);
       return {};
     },
   };
@@ -430,7 +430,7 @@ it('binds an exact first full-history OpenAI request without applying the chaine
     run: async (_agent: any, _input: any, options: any) => {
       const modelData = { input };
       returned = options.callModelInputFilter({ context: options.context, modelData });
-      binding = consumeOpenAIRequestPrefixBinding({ input });
+      binding = consumeOpenAIRequestPrefixBinding(input);
       return {};
     },
   };
@@ -458,7 +458,7 @@ it('does not bind a stateless OpenAI request whose final input differs from its 
     run: async (_agent: any, _input: any, options: any) => {
       const modelData = { input: modelInput };
       returned = options.callModelInputFilter({ context: options.context, modelData });
-      binding = consumeOpenAIRequestPrefixBinding({ input: modelInput });
+      binding = consumeOpenAIRequestPrefixBinding(modelInput);
       return {};
     },
   };

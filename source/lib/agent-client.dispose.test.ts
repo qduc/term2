@@ -102,10 +102,10 @@ it.sequential('passes an explicit frozen continuation projection mode to its run
 });
 
 it.sequential(
-  'delivers a root request capture through AgentClient and RunnerManager to both OpenAI model builders',
+  'delivers a root request lifecycle observation through AgentClient and RunnerManager to both OpenAI transports',
   async () => {
-    const originalHttpBuilder = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
-    const originalWsBuilder = (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest;
+    const originalHttpGetResponse = (OpenAIResponsesModel.prototype as any).getResponse;
+    const originalWsGetResponse = (OpenAIResponsesWSModel.prototype as any).getResponse;
     const captures: any[] = [];
     let orchestratorDeps: AgentRunOrchestratorDeps | undefined;
     const settings = {
@@ -118,12 +118,12 @@ it.sequential(
       set() {},
       onChange: () => () => {},
     } as ISettingsService;
-    const capture = { record: (entry: unknown) => captures.push(entry) };
-    const builder = function () {
-      return { requestData: { input: [{ role: 'user', content: 'captured' }] } };
+    const capture = { record() {}, observe: (entry: unknown) => captures.push(entry) };
+    const respond = async function (request: any) {
+      return { responseId: request.responseId };
     };
-    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = builder;
-    (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = builder;
+    (OpenAIResponsesModel.prototype as any).getResponse = respond;
+    (OpenAIResponsesWSModel.prototype as any).getResponse = respond;
     try {
       new AgentClient({
         deps: {
@@ -151,10 +151,13 @@ it.sequential(
           }[key]);
         const runner = orchestratorDeps!.runnerManager.getOrCreateRunner('openai')!;
         const retryingModel: any = await runner.config.modelProvider!.getModel('gpt-test');
-        retryingModel.wrappedModel._buildResponsesCreateRequest({}, true);
+        await retryingModel.wrappedModel.getResponse({
+          input: [{ role: 'user', content: 'captured' }],
+          responseId: `${transport}-response`,
+        });
         orchestratorDeps!.runnerManager.invalidateRunner();
       }
-      expect(captures).toEqual([
+      expect(captures.filter((entry) => entry.phase === 'request-built')).toEqual([
         expect.objectContaining({
           provider: 'openai',
           transport: 'http',
@@ -166,9 +169,13 @@ it.sequential(
           requestData: { input: [{ role: 'user', content: 'captured' }] },
         }),
       ]);
+      expect(captures.filter((entry) => entry.phase === 'terminal').map((entry) => entry.responseId)).toEqual([
+        'http-response',
+        'websocket-response',
+      ]);
     } finally {
-      (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = originalHttpBuilder;
-      (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = originalWsBuilder;
+      (OpenAIResponsesModel.prototype as any).getResponse = originalHttpGetResponse;
+      (OpenAIResponsesWSModel.prototype as any).getResponse = originalWsGetResponse;
     }
   },
 );

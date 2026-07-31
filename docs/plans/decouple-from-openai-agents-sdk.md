@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are retired. The two remaining categories are provider-side `_buildResponsesCreateRequest` and `_fetchResponse` coupling in Steps D/E. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed; the now-unreferenced legacy adapter, its characterization test, and direct `@openai/agents-extensions` dependency are retired. **Step E's bounded production OpenAI candidate-observation, terminal-publication-corroboration, and successor-proof slices are landed:** each owned root handle shares one continuity instance with its runtime and OpenAI observer; terminal HTTP/WebSocket observations create only exact-prefix, request-lineage candidates, and the stream finalizer remains the only terminal-commit owner. It publishes the established legacy response ID and promotes only a matching candidate after authoritative history commit. An accepted checkpoint retains a frozen post-commit proof, and eligibility requires a same-origin, strict successor snapshot plus matching provider identity and lineage. Provider identity is account-free because OpenAI authorizes `previous_response_id`. This remains neither a change to outgoing wire selection nor a reach-in retirement; Codex and replay/approval ownership are unchanged.
+**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are fully retired; the `_buildResponsesCreateRequest` category is now narrowed to Codex after the OpenAI override retirement. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed; the now-unreferenced legacy adapter, its characterization test, and direct `@openai/agents-extensions` dependency are retired. **Step E's bounded production OpenAI candidate-observation, terminal-publication-corroboration, successor-proof, and public-boundary builder-retirement slices are landed:** each owned root handle shares one continuity instance with its runtime and OpenAI observer; terminal HTTP/WebSocket observations create only exact-prefix, request-lineage candidates, and the stream finalizer remains the only terminal-commit owner. It publishes the established legacy response ID and promotes only a matching candidate after authoritative history commit. An accepted checkpoint retains a frozen post-commit proof, and eligibility requires a same-origin, strict successor snapshot plus matching provider identity and lineage. Provider identity is account-free because OpenAI authorizes `previous_response_id`. This remains neither a change to outgoing wire selection nor a reach-in retirement in Codex; replay/approval ownership is unchanged. The next bounded work is telemetry review and characterization before touching the Codex transport.
 **Last updated:** 2026-07-31
 
 ---
@@ -52,6 +52,7 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step E terminal-publication corroboration | `ProviderContinuity.publishTerminalResponse()` preserves legacy response-ID publication and promotes only a matching candidate after authoritative terminal history commit; partial, mismatch, no-op, and stale paths retain their established behavior. |
 | Step E accepted-checkpoint successor proof | A matching accepted checkpoint retains a frozen post-commit provider-history proof. Eligibility for a later snapshot requires exact provider identity and lineage, stable session-history origin, a strictly later revision, and deep exact-prefix extension; malformed, missing, same/short, rewritten, reset, and mismatched inputs fail closed. It observes no wire behavior. |
 | Step E snapshot-prefix binding slice | AgentRunOrchestrator hands exact OpenAI compatibility projection evidence into a provider-private one-shot scope; HTTP/WebSocket lifecycle attempts bind immutable snapshot identity/revision only when one preparation is consumed before another, fail closed on overlapping, missing, or faulty instrumentation, and retain an already-bound value request-locally through terminal/failure/abandonment |
+| Step E OpenAI public-boundary builder retirement | Both OpenAI transports consume the prefix binding at their public model boundary; diagnostic outcomes distinguish absent preparation, repeated consumption, and input mismatch, while Codex remains unchanged |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -394,38 +395,97 @@ only — every such call is rejected either way. Moot here: this repo never call
 8. **DONE — OpenAI public prompt-cache settings slice.** OpenAI session clones now supply
    `prompt_cache_key` through the public `modelSettings.providerData.extraBody` transport setting,
    which the Responses SDK carries to both HTTP and WebSocket requests. The OpenAI private builder
-   remains only for post-normalization request/lifecycle and exact-prefix observation; Codex retains
-   its existing setting path. This narrows the eventual replacement but does not retire the category.
-9. **Next — collect and review bounded fresh-session OpenAI parity telemetry before proposing any
+   is now retired; Codex retains its existing setting path. This narrows the eventual replacement
+   but does not retire the remaining Codex provider category.
+9. **DONE — retire the OpenAI `_buildResponsesCreateRequest` override on both transports.** The
+   prefix binding is consumed at the public `getResponse` / `getStreamedResponse` boundary against
+   SDK-shaped `request.input`; both overrides and `normalizeComparableInput` are gone. Binding
+   diagnostics distinguish missing preparation, repeated consumption, and input mismatch. The
+   existing focused OpenAI lifecycle and candidate-observer coverage passes; Codex is unchanged.
+10. **Next — collect and review bounded fresh-session OpenAI parity telemetry before proposing any
    broader ownership migration.** Define a parity/fallback evidence threshold and scope explicitly;
    do not infer it from a single successful session. Do not modify Codex transport/replay or the
-   remaining private request-builder/fetch seams without dedicated characterization and review.
+   remaining Codex request-builder/fetch seams without dedicated characterization and review.
 
-### OpenAI HTTP lifecycle-observer decision — blocked pending review
+### OpenAI lifecycle-observer decision — RESOLVED 2026-07-31: retire both overrides at the public boundary
 
-An exploratory, unmerged branch (`codex/openai-http-observer`) proves the OpenAI HTTP model can
-observe the final serialized Responses request through the public custom-`fetch` seam. A
-request-local `AsyncLocalStorage` attempt can retain the existing token, endpoint/model identity,
-exact-prefix binding, and terminal/failed/abandoned outcome correlation without overriding
-`_buildResponsesCreateRequest`. Native OpenAI WebSocket calls bypass that fetch seam, so their
-existing private builder hook must remain until an application-owned WebSocket transport is
-characterized.
+**Correction to the previous framing.** This section previously claimed an exploratory unmerged
+branch (`codex/openai-http-observer`) proved a public custom-`fetch` HTTP observer. That branch is
+an **ancestor of `main`** (`git rev-list --count main..codex/openai-http-observer` → 0, empty
+diff); its tip is `5d34a5ea`. No such implementation exists. The two options recorded here (a
+public-fetch HTTP suite vs. deferring) were both framed as *test ownership* questions on the
+premise that the private builder was load-bearing for observation. It is not.
 
-**The blocked decision is test ownership, not feasibility.** Existing lifecycle tests replace the
-SDK private builder with fakes and use that fake as the behavioral specification for both HTTP and
-WebSocket. They cannot validate a public-fetch implementation without continuing to depend on the
-private hook. The next slice must choose one of these explicit approaches:
+**Why the private builder is not load-bearing.** `OpenAICandidateObserver`
+(`source/services/openai-candidate-observer.ts:14`) is the only implementation of
+`ProviderRequestCapture` in the codebase. Its `record()` is an explicit no-op, and its `observe()`
+never reads `observation.requestData`. So both `captureProviderRequest(...)` calls in
+`openai.provider.ts` (lines 90, 140) feed nothing in production. The entire remaining reason to
+override `_buildResponsesCreateRequest` there is one line: `consumeOpenAIRequestPrefixBinding(requestData)`,
+which compares `requestData.input` against the input prepared by `AgentRunOrchestrator`.
 
-1. **Recommended:** replace the HTTP portions with a new public-fetch characterization suite that
-   verifies serialized `/responses` body capture, prefix binding, unary/stream terminal outcomes,
-   failure/abandonment, retry reuse, and concurrent isolation. Retain the existing private-builder
-   characterization only for WebSocket. This retires the HTTP half of the OpenAI builder reach-in
-   while leaving WebSocket explicitly unchanged.
-2. Keep the current shared private-builder test suite until an application-owned, transport-neutral
-   OpenAI Responses model (including WebSocket connection/reuse/locking semantics) is designed and
-   characterized. This avoids a split test surface but postpones the HTTP retirement.
+**Why that comparison does not need the builder.** `_buildResponsesCreateRequest` touches input in
+exactly one place — `const input = getInputItems(request.input)`
+(`node_modules/@openai/agents-openai/dist/openaiResponsesModel.js:2130`). `getInputItems` spans
+lines 1322–1719 and contains zero references to `request.`, `this.`, `_model`, `_client`,
+`modelSettings`, `previousResponse`, `Date.now`, or any randomness source. It is pure, total, and
+deterministic in its one argument. Therefore
+`expected === request.input ⟹ getInputItems(expected) === wire input`. The implication runs in the
+direction soundness needs; the converse failure is a false reject → no binding → no candidate →
+legacy `previousResponseId` selection, which is the module's stated fail-closed contract.
 
-Do not merge the exploratory branch until one approach is selected and its resulting suite passes.
+**The status quo is the less sound design.** `prepareOpenAIRequestPrefixBinding` is called with
+SDK-shaped `AgentInputItem`s (`agent-run-orchestrator.ts:279,304`) and compared against
+provider-shaped `requestData.input`. `normalizeComparableInput` bridges that gap, but it models
+only *one* branch of `getInputItems` (stripping `type: 'message'`); `getInputItems` also rewrites
+`tool_search_call`, `tool_search_output`, and further item types with snake-casing and reserved-key
+filtering. So today's "exact-prefix" comparison silently false-rejects any turn containing an item
+type the normalizer does not model, and is structurally capable of false-accepting. Comparing
+pre-transform makes it a genuine deep-equal on one representation and deletes the approximation.
+
+**Decision: Option 3.** Delete the `_buildResponsesCreateRequest` override from **both** OpenAI
+classes and consume the prefix binding in the `getResponse` / `getStreamedResponse` overrides that
+already exist for `beginAttempt` / `finishAttempt`.
+
+Rejected alternatives and why:
+
+- *Public-fetch HTTP observer (old option 1).* Forks the observation mechanism inside the shared
+  `OpenAIRequestLifecycleModel` base — ALS+fetch for HTTP, WeakMap+builder for WS — because there
+  is no WS equivalent of custom `fetch` (`OpenAIResponsesWebSocketOptions` is keep-alive only:
+  `pingIntervalMs` / `pingTimeoutMs`; `ResponsesWebSocketConnection.connect` takes no injectable
+  transport). It also requires inventing a retry-dedupe rule, since `maxRetries: 2` retries occur
+  below the fetch seam, and replumbs endpoint/model identity across the client boundary. It crosses
+  off no risk-register row.
+- *Defer until a transport-neutral Responses model exists (old option 2).* Pays no cost but retires
+  nothing, on a premise now shown to be false.
+
+Option 3 keeps one mechanism for both transports, retains the existing WeakMap-by-request-object
+correlation unchanged, and removes `openai.provider.ts` from the `_buildResponsesCreateRequest`
+register row, leaving only `codex-responses-model.ts`.
+
+**This is a behaviour change, not a pure refactor.** Fixing the under-normalization means bindings
+that are silently rejected today will start succeeding — more candidates, more checkpoint
+promotions. That is the intended outcome but it changes production continuity behaviour and needs
+its own characterization; a green existing suite is not sufficient evidence.
+
+Slice sequence:
+
+1. **DONE — record binding-consumption diagnostics.** Public-boundary consumption now distinguishes
+   absent preparation, repeated consumption, and input mismatch; all outcomes fail closed for
+   continuity while retaining request-local lifecycle cleanup.
+2. **DONE — characterize and retire the OpenAI overrides.** The public-boundary tests cover binding
+   consumption and lifecycle isolation; both OpenAI transports no longer override the private
+   builder. The remaining builder reach-in is Codex-only.
+3. **Next — review bounded telemetry before broader ownership migration.** Establish whether
+   `input_mismatch`, `not_prepared`, or `already_consumed` occurs in production, then define the
+   parity/fallback evidence threshold before proposing any further continuity change.
+
+Separable, do **not** bundle: `captureProviderRequest` / `ProviderRequestProjection` appear to be
+dead production code (the only consumer's `record()` is a no-op, for Codex as well as OpenAI).
+Deleting them would also remove one of Codex's two builder touchpoints, but that is its own slice.
+
+Residual unverified: whether any existing test depends on post-normalization `requestData` in a way
+that cannot be re-expressed at the public boundary.
 
 ### R1 gate — PASSED
 
@@ -572,7 +632,7 @@ The actual thing being eliminated. Every entry is a private-API reach-in.
 | ~~`_pendingAgentToolRuns`~~ | ~~`services/approval/tool-owner.ts`~~ | approval | **DONE** (A2) |
 | ~~`_mergeApprovals`~~ | ~~`services/subagents/nested-runner.ts`~~ | approval | **DONE** (A3) |
 | ~~`_generatedItems`~~ | ~~`services/stream-snapshot.ts`~~, ~~`services/session/session-tool-tracker.ts`~~, ~~`services/session/continuation-call-id-resolver.ts`~~ | run loop | **DONE** (Step C public stream/ledger recovery) |
-| `_buildResponsesCreateRequest` | `providers/codex-responses-model.ts`, `providers/openai.provider.ts` | provider | Step D/E |
+| `_buildResponsesCreateRequest` | `providers/codex-responses-model.ts`, ~~`providers/openai.provider.ts`~~ (retired, slice 9) | provider | Step D/E |
 | `_fetchResponse` | `providers/codex-responses-model.ts` | provider | Step E |
 
 Progress on this table is the measure of the project. LOC deleted is not.
@@ -914,8 +974,8 @@ overrides now pass through it; do not grant this root capability to nested tools
 **DONE:** AI SDK providers implement our interface directly; the 112-line legacy
 `ai-sdk-agents-adapter.ts`, its characterization test, and direct
 `@openai/agents-extensions` dependency/lockfile entries are retired. `ai` and `@ai-sdk/*` remain
-dependencies. This does not retire the remaining `_buildResponsesCreateRequest` reach-ins in
-`openai.provider.ts` and `codex-responses-model.ts`.
+dependencies. The OpenAI builder reach-in is retired; the remaining
+`_buildResponsesCreateRequest` and `_fetchResponse` coupling is Codex-only.
 
 **Characterization decision — LANDED before contract work:** own one streamed model turn first.
 The removed adapter characterization informed the application-owned contract; its preserved
@@ -993,5 +1053,5 @@ feature), guardrails, MCP, sessions/memory, voice, realtime.
 - `source/services/stream-event-processor.ts` (490)
 - `source/services/subagents/nested-runner.ts` (445)
 - `source/providers/codex-responses-model.ts` (1210) — SDK subclassing
-- `source/providers/openai.provider.ts` — remaining OpenAI request-construction reach-in
+- `source/providers/openai.provider.ts` — OpenAI public-boundary lifecycle and continuity handoff
 - `source/services/conversation/conversation-replay.ts` (1149)

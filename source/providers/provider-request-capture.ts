@@ -1,4 +1,4 @@
-import type { OpenAIRequestPrefixBinding } from './openai-request-prefix-binding.js';
+import type { OpenAIRequestPrefixBinding, OpenAIRequestPrefixBindingOutcome } from './openai-request-prefix-binding.js';
 
 /**
  * Optional Stage 0 instrumentation for recording the exact provider request
@@ -31,6 +31,7 @@ export type OpenAIRequestLifecycleObservation = {
   phase: 'request-built' | 'terminal' | 'failed' | 'abandoned';
   responseId?: string;
   prefixBinding?: OpenAIRequestPrefixBinding;
+  prefixBindingOutcome?: OpenAIRequestPrefixBindingOutcome;
 };
 
 export const captureProviderRequest = (

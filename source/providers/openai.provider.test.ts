@@ -440,6 +440,31 @@ it('OpenAI prefix scopes isolate concurrent runs and fail closed for overlapping
   }
 });
 
+it('OpenAI prefix binding diagnostics distinguish preparation, consumption, and input mismatch', async () => {
+  const { consumeOpenAIRequestPrefixBindingWithOutcome } = await import('./openai-request-prefix-binding.js');
+
+  await runWithOpenAIRequestPrefixBindingScope(async () => {
+    expect(consumeOpenAIRequestPrefixBindingWithOutcome(['unprepared'])).toEqual({ outcome: 'not_prepared' });
+
+    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:consumed', snapshotRevision: 1, lineage: 0 }, [
+      'same',
+    ]);
+    expect(consumeOpenAIRequestPrefixBindingWithOutcome(['same']).binding).toEqual({
+      snapshotIdentity: 'history:consumed',
+      snapshotRevision: 1,
+      lineage: 0,
+    });
+    expect(consumeOpenAIRequestPrefixBindingWithOutcome(['same'])).toEqual({ outcome: 'already_consumed' });
+  });
+
+  await runWithOpenAIRequestPrefixBindingScope(async () => {
+    prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:mismatch', snapshotRevision: 2, lineage: 0 }, [
+      'expected',
+    ]);
+    expect(consumeOpenAIRequestPrefixBindingWithOutcome(['actual'])).toEqual({ outcome: 'input_mismatch' });
+  });
+});
+
 it.sequential(
   'OpenAI lifecycle retains a bound prefix when another invocation prepares the same input before a repeated build',
   async () => {

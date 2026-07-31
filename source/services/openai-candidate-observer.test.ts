@@ -84,3 +84,18 @@ it('records candidate observation only after continuity accepts it', () => {
     { type: 'openai_root_checkpoint_lifecycle', version: 1, stage: 'candidate', outcome: 'observed' },
   ]);
 });
+
+it.each(['not_prepared', 'already_consumed', 'input_mismatch'] as const)(
+  'preserves sanitized prefix binding diagnostic %s',
+  (outcome) => {
+    const evidence: unknown[] = [];
+    const lifecycle = new DefaultOpenAIRootCheckpointLifecycleObserver();
+    lifecycle.setEvidenceRecorder((value) => evidence.push(value));
+
+    new OpenAICandidateObserver(new ProviderContinuity(), lifecycle).observe(
+      terminal({ prefixBindingOutcome: outcome, prefixBinding: undefined }) as any,
+    );
+
+    expect(evidence).toEqual([{ type: 'openai_root_checkpoint_lifecycle', version: 1, stage: 'candidate', outcome }]);
+  },
+);

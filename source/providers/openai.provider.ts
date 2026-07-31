@@ -11,7 +11,7 @@ import {
   type OpenAIRequestLifecycleObservation,
   type ProviderRequestCapture,
 } from './provider-request-capture.js';
-import { consumeOpenAIRequestPrefixBinding } from './openai-request-prefix-binding.js';
+import { consumeOpenAIRequestPrefixBindingWithOutcome } from './openai-request-prefix-binding.js';
 import { randomUUID } from 'node:crypto';
 
 const DEFAULT_OPENAI_ENDPOINT = 'https://api.openai.com/v1';
@@ -51,11 +51,10 @@ abstract class OpenAIRequestLifecycleModel {
     if (!attempt) return;
     try {
       attempt.requestData = { input: structuredClone(request.input) };
-      if (!attempt.prefixBinding) {
-        const prefixBinding = consumeOpenAIRequestPrefixBinding(request.input);
-        if (prefixBinding) {
-          attempt.prefixBinding = prefixBinding;
-        }
+      if (!attempt.prefixBinding && !attempt.prefixBindingOutcome) {
+        const consumption = consumeOpenAIRequestPrefixBindingWithOutcome(request.input);
+        attempt.prefixBinding = consumption.binding;
+        attempt.prefixBindingOutcome = consumption.outcome;
       }
       observeOpenAIRequestLifecycle(capture, { ...attempt, phase: 'request-built' });
     } catch {

@@ -122,6 +122,9 @@ export interface OpenAIRootCheckpointLifecycleLogEvent {
   outcome:
     | 'observed'
     | 'missing_prefix_binding'
+    | 'not_prepared'
+    | 'already_consumed'
+    | 'input_mismatch'
     | 'missing_response_id'
     | 'invalid_lineage'
     | 'lineage_rejected'

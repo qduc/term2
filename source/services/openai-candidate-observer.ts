@@ -25,7 +25,7 @@ export class OpenAICandidateObserver implements ProviderRequestCapture {
   observe(observation: OpenAIRequestLifecycleObservation): void {
     if (observation.phase !== 'terminal') return;
     if (!observation.prefixBinding) {
-      this.lifecycleObserver?.candidate('missing_prefix_binding');
+      this.lifecycleObserver?.candidate(observation.prefixBindingOutcome ?? 'missing_prefix_binding');
       return;
     }
     if (!observation.responseId) {

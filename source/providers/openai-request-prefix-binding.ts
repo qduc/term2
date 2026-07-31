@@ -18,9 +18,17 @@ export type OpenAIRequestPrefixBinding = Readonly<{
   lineage: number;
 }>;
 
+export type OpenAIRequestPrefixBindingOutcome = 'not_prepared' | 'already_consumed' | 'input_mismatch';
+
+export type OpenAIRequestPrefixBindingConsumption = Readonly<{
+  binding?: OpenAIRequestPrefixBinding;
+  outcome?: OpenAIRequestPrefixBindingOutcome;
+}>;
+
 class OpenAIRequestPrefixBindingScope {
   #prepared: { binding: OpenAIRequestPrefixBinding; expectedInput: unknown } | undefined;
   #ambiguous = false;
+  #consumed = false;
 
   prepare(binding: OpenAIRequestPrefixBinding, expectedInput: unknown): void {
     if (this.#ambiguous) return;
@@ -45,20 +53,26 @@ class OpenAIRequestPrefixBindingScope {
     }
   }
 
-  consume(input: unknown): OpenAIRequestPrefixBinding | undefined {
+  consume(input: unknown): OpenAIRequestPrefixBindingConsumption {
     try {
       if (this.#ambiguous) {
         // One consume retires the ambiguous overlap, leaving both invocations
         // unbound rather than allowing stale evidence to bind a later build.
         this.#ambiguous = false;
-        return undefined;
+        this.#consumed = true;
+        return { outcome: 'already_consumed' };
       }
 
       const prepared = this.#prepared;
       this.#prepared = undefined;
-      return prepared && isDeepStrictEqual(prepared.expectedInput, input) ? prepared.binding : undefined;
+      const wasConsumed = this.#consumed;
+      this.#consumed = true;
+      if (!prepared) return { outcome: wasConsumed ? 'already_consumed' : 'not_prepared' };
+      return isDeepStrictEqual(prepared.expectedInput, input)
+        ? { binding: prepared.binding }
+        : { outcome: 'input_mismatch' };
     } catch {
-      return undefined;
+      return { outcome: 'input_mismatch' };
     }
   }
 }
@@ -80,9 +94,15 @@ export const prepareOpenAIRequestPrefixBinding = (
 };
 
 export const consumeOpenAIRequestPrefixBinding = (input: unknown): OpenAIRequestPrefixBinding | undefined => {
+  return consumeOpenAIRequestPrefixBindingWithOutcome(input).binding;
+};
+
+export const consumeOpenAIRequestPrefixBindingWithOutcome = (input: unknown): OpenAIRequestPrefixBindingConsumption => {
   try {
-    return scopeStorage.getStore()?.consume(input);
+    const scope = scopeStorage.getStore();
+    if (!scope) return { outcome: 'not_prepared' };
+    return scope.consume(input);
   } catch {
-    return undefined;
+    return { outcome: 'input_mismatch' };
   }
 };

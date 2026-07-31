@@ -4,6 +4,7 @@ import type {
 } from '../providers/provider-request-capture.js';
 import type { ProviderContinuity } from './provider-continuity.js';
 import type { OpenAIRootCheckpointLifecycleObserver } from './openai-root-checkpoint-lifecycle-observer.js';
+import type { OpenAIRootProviderIdentity } from './openai-root-provider-identity.js';
 
 /**
  * Session-owned, fail-closed bridge from the OpenAI private lifecycle seam to
@@ -14,6 +15,7 @@ export class OpenAICandidateObserver implements ProviderRequestCapture {
   constructor(
     private readonly continuity: ProviderContinuity,
     private readonly lifecycleObserver?: OpenAIRootCheckpointLifecycleObserver,
+    private readonly rootProviderIdentity?: OpenAIRootProviderIdentity,
   ) {}
 
   record(): void {
@@ -35,12 +37,14 @@ export class OpenAICandidateObserver implements ProviderRequestCapture {
       return;
     }
     try {
+      const identity = {
+        provider: observation.provider,
+        endpoint: observation.endpoint,
+        model: observation.model,
+      };
+      this.rootProviderIdentity?.observe(identity);
       const observed = this.continuity.observeCandidate({
-        identity: {
-          provider: observation.provider,
-          endpoint: observation.endpoint,
-          model: observation.model,
-        },
+        identity,
         prefix: {
           identity: observation.prefixBinding.snapshotIdentity,
           revision: observation.prefixBinding.snapshotRevision,

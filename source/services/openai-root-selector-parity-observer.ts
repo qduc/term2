@@ -1,7 +1,14 @@
 import type { ProviderHistorySnapshot } from './conversation/conversation-store.js';
-import type { ProviderContinuity, ProviderSuccessorEligibilityFailure } from './provider-continuity.js';
+import type {
+  ProviderCheckpointIdentity,
+  ProviderContinuity,
+  ProviderSuccessorEligibilityFailure,
+} from './provider-continuity.js';
 
-export type OpenAIRootSelectorParityFailure = ProviderSuccessorEligibilityFailure | 'model_unavailable';
+export type OpenAIRootSelectorParityFailure =
+  | ProviderSuccessorEligibilityFailure
+  | 'model_unavailable'
+  | 'identity_unavailable';
 
 /** Read-only evidence from a normal owned-root OpenAI turn, never a selector. */
 export type OpenAIRootFreshTurnSelectorParityObservation = {
@@ -40,6 +47,7 @@ export class ProviderContinuityOpenAIRootSelectorParityObserver implements OpenA
     private readonly continuity: ProviderContinuity,
     private readonly getModel: () => string | undefined,
     private recordEvidence: (evidence: OpenAIRootFreshTurnSelectorParityEvidence) => void = () => {},
+    private readonly getResolvedIdentity: () => Readonly<ProviderCheckpointIdentity> | null = () => null,
   ) {}
 
   get latestObservation(): Readonly<OpenAIRootFreshTurnSelectorParityObservation> | null {
@@ -59,16 +67,23 @@ export class ProviderContinuityOpenAIRootSelectorParityObserver implements OpenA
   }): void {
     try {
       const model = this.getModel();
+      const resolvedIdentity = this.getResolvedIdentity();
       const checkpoint = this.continuity.checkpoint;
       const acceptedCheckpointResponseId = checkpoint?.state === 'accepted' ? checkpoint.responseId : null;
       const assessment =
-        typeof model === 'string' && model.length > 0
+        typeof model === 'string' && model.length > 0 && resolvedIdentity
           ? this.continuity.assessSuccessorEligibility(
-              { provider: 'openai', endpoint: 'responses', model },
+              { ...resolvedIdentity, model },
               this.continuity.lineage,
               plannedSnapshot,
             )
-          : { eligible: false as const, failure: 'model_unavailable' as const };
+          : {
+              eligible: false as const,
+              failure:
+                typeof model === 'string' && model.length > 0
+                  ? ('identity_unavailable' as const)
+                  : ('model_unavailable' as const),
+            };
       const eligible = assessment.eligible;
       const observation = Object.freeze({
         eligible,

@@ -2,9 +2,17 @@ import { expect, it } from 'vitest';
 import { ProviderContinuity } from './provider-continuity.js';
 import { ProviderContinuityOpenAIRootSelectorParityObserver } from './openai-root-selector-parity-observer.js';
 
-const checkpoint = (continuity: ProviderContinuity, responseId = 'resp-accepted') => {
+const resolvedIdentity = () => ({ provider: 'openai', endpoint: 'https://api.openai.com/v1', model: 'gpt-5' });
+
+const checkpoint = (
+  continuity: ProviderContinuity,
+  responseId = 'resp-accepted',
+  endpoint = 'https://api.openai.com/v1',
+) => {
   const binding = {
-    identity: { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },
+    // OpenAI lifecycle candidates retain the actual resolved client base URL,
+    // not a route label. Keep this fixture aligned with the production default.
+    identity: { provider: 'openai', endpoint, model: 'gpt-5' },
     prefix: { identity: 'history:test:1', revision: 1 },
   };
   continuity.observeCandidate({ ...binding, responseId });
@@ -20,7 +28,12 @@ it('records equality only for an eligible accepted OpenAI checkpoint', () => {
   const continuity = new ProviderContinuity();
   checkpoint(continuity);
   const evidence: any[] = [];
-  const observer = new ProviderContinuityOpenAIRootSelectorParityObserver(continuity, () => 'gpt-5');
+  const observer = new ProviderContinuityOpenAIRootSelectorParityObserver(
+    continuity,
+    () => 'gpt-5',
+    undefined,
+    resolvedIdentity,
+  );
   observer.setEvidenceRecorder((value) => evidence.push(value));
 
   observer.observe({
@@ -45,6 +58,34 @@ it('records equality only for an eligible accepted OpenAI checkpoint', () => {
   });
   expect(Object.isFrozen(observer.latestObservation)).toBe(true);
   expect(Object.isFrozen(evidence[0])).toBe(true);
+});
+
+it('uses the shared resolved custom endpoint rather than a route label', () => {
+  const continuity = new ProviderContinuity();
+  const endpoint = 'https://openai.example.test/v1';
+  checkpoint(continuity, 'resp-custom', endpoint);
+  const evidence: any[] = [];
+  const observer = new ProviderContinuityOpenAIRootSelectorParityObserver(
+    continuity,
+    () => 'gpt-5',
+    (value) => evidence.push(value),
+    () => ({ provider: 'openai', endpoint, model: 'gpt-5' }),
+  );
+
+  observer.observe({
+    legacyPreviousResponseId: 'resp-custom',
+    plannedSnapshot: {
+      identity: 'history:test:3',
+      origin: 'history:test',
+      revision: 3,
+      history: [
+        { role: 'user', content: 'before' },
+        { role: 'user', content: 'next' },
+      ],
+    },
+  });
+
+  expect(evidence).toEqual([{ type: 'openai_root_selector_parity', version: 2, eligible: true, matches: true }]);
 });
 
 it.each([
@@ -103,6 +144,7 @@ it.each([
       continuity,
       () => model,
       (value) => evidence.push(value),
+      resolvedIdentity,
     );
 
     observer.observe({
@@ -126,6 +168,7 @@ it('records model_unavailable without provider metadata', () => {
     new ProviderContinuity(),
     () => undefined,
     (value) => evidence.push(value),
+    resolvedIdentity,
   );
 
   observer.observe({
@@ -138,6 +181,30 @@ it('records model_unavailable without provider metadata', () => {
   ]);
 });
 
+it('fails closed when the root client has not resolved an OpenAI endpoint', () => {
+  const evidence: any[] = [];
+  const observer = new ProviderContinuityOpenAIRootSelectorParityObserver(
+    new ProviderContinuity(),
+    () => 'gpt-5',
+    (value) => evidence.push(value),
+  );
+
+  observer.observe({
+    legacyPreviousResponseId: 'resp-legacy',
+    plannedSnapshot: { identity: 'history:test:1', origin: 'history:test', revision: 1, history: [] },
+  });
+
+  expect(evidence).toEqual([
+    {
+      type: 'openai_root_selector_parity',
+      version: 2,
+      eligible: false,
+      matches: false,
+      failure: 'identity_unavailable',
+    },
+  ]);
+});
+
 it('records an eligible checkpoint as a non-match when the legacy response differs', () => {
   const continuity = new ProviderContinuity();
   checkpoint(continuity);
@@ -146,6 +213,7 @@ it('records an eligible checkpoint as a non-match when the legacy response diffe
     continuity,
     () => 'gpt-5',
     (value) => evidence.push(value),
+    resolvedIdentity,
   );
 
   observer.observe({
@@ -173,6 +241,7 @@ it('swallows an evidence-recorder failure after retaining the local observation'
     () => {
       throw new Error('diagnostics unavailable');
     },
+    resolvedIdentity,
   );
 
   expect(() =>

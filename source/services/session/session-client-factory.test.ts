@@ -93,9 +93,13 @@ it('binds each owned root observer to its handle continuity and leaves caller-ow
 });
 
 it('retains the latest owned-root OpenAI selector parity observation', () => {
+  let capture: any;
   const factory = createOwnedSessionClientFactory(
     createMockSettingsService({ 'agent.provider': 'openai', 'agent.model': 'gpt-5' }),
-    () => client(),
+    (_id, _ownership, _capability, _access, _mode, _continuity, requestCapture) => {
+      capture = requestCapture;
+      return client();
+    },
   );
   const handle = factory.create('root');
   const continuity = handle.providerContinuity!;
@@ -105,10 +109,16 @@ it('retains the latest owned-root OpenAI selector parity observation', () => {
     revision: 2,
     history: [{ role: 'user', type: 'message', content: 'before' }] as AgentInputItem[],
   };
-  continuity.observeCandidate({
-    identity: { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },
-    prefix: { identity: 'history:root:1', revision: 1 },
+  capture.observe({
+    token: 'root-attempt',
+    provider: 'openai',
+    transport: 'http',
+    endpoint: 'https://api.openai.com/v1',
+    model: 'gpt-5',
+    requestData: {},
+    phase: 'terminal',
     responseId: 'resp-root',
+    prefixBinding: { snapshotIdentity: 'history:root:1', snapshotRevision: 1, lineage: 0 },
   });
   continuity.publishTerminalResponse('resp-root', true, committed);
 

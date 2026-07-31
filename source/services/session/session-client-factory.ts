@@ -15,6 +15,7 @@ import {
   DefaultOpenAIRootCheckpointLifecycleObserver,
   type OpenAIRootCheckpointLifecycleObserver,
 } from '../openai-root-checkpoint-lifecycle-observer.js';
+import { OpenAIRootProviderIdentity } from '../openai-root-provider-identity.js';
 
 /** A client whose lifetime is owned by the session that requested it. */
 export type SessionClientHandle = {
@@ -72,11 +73,19 @@ export function createOwnedSessionClientFactory(
         continuationProjectionMode === 'openai-provider'
           ? new DefaultOpenAIRootCheckpointLifecycleObserver()
           : undefined;
-      const requestCapture = new OpenAICandidateObserver(providerContinuity, openAIRootCheckpointLifecycleObserver);
+      const openAIRootProviderIdentity = new OpenAIRootProviderIdentity();
+      const requestCapture = new OpenAICandidateObserver(
+        providerContinuity,
+        openAIRootCheckpointLifecycleObserver,
+        openAIRootProviderIdentity,
+      );
       const openAIRootFreshTurnSelectorParityObserver =
         continuationProjectionMode === 'openai-provider'
-          ? new ProviderContinuityOpenAIRootSelectorParityObserver(providerContinuity, () =>
-              settings.get<string>('agent.model'),
+          ? new ProviderContinuityOpenAIRootSelectorParityObserver(
+              providerContinuity,
+              () => settings.get<string>('agent.model'),
+              undefined,
+              () => openAIRootProviderIdentity.current,
             )
           : undefined;
       const agentClient = createClient(

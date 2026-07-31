@@ -101,6 +101,7 @@ export interface OpenAIRootSelectorParityLogEvent {
   /** Fixed diagnostic enum, only emitted when eligibility is false. */
   failure?:
     | 'model_unavailable'
+    | 'identity_unavailable'
     | 'no_accepted_checkpoint'
     | 'missing_successor_proof'
     | 'lineage_mismatch'

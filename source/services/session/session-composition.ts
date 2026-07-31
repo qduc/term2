@@ -21,6 +21,7 @@ import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { SessionLifecycle } from './session-lifecycle.js';
 import { ProviderContinuity } from '../provider-continuity.js';
+import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-selector-parity-observer.js';
 import { TurnCoordinator, type TurnStartOptions } from './turn-coordinator.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
 import { SessionManager } from './session-manager.js';
@@ -132,6 +133,8 @@ export type CreateSessionRuntimeInternalsOptions = {
   agentClient: ConversationAgentClient;
   /** Handle-owned continuity shared with the root provider observer. */
   providerContinuity?: ProviderContinuity;
+  /** Owned-root-only, observation-only selector parity seam. */
+  openAIRootFreshTurnSelectorParityObserver?: OpenAIRootFreshTurnSelectorParityObserver;
   toolOwnership: ToolOwnershipRegistry;
   postExecutePending?: PostExecutePendingRegistry;
   postExecutePauseCapability?: PostExecutePauseCapability;
@@ -242,6 +245,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     sessionStartedAt,
     agentClient,
     providerContinuity: suppliedProviderContinuity,
+    openAIRootFreshTurnSelectorParityObserver,
     toolOwnership,
     postExecutePending: suppliedPostExecutePending,
     postExecutePauseCapability,
@@ -502,6 +506,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     planApplier,
     continuationRecoveryHandler,
     providerContinuity,
+    openAIRootFreshTurnSelectorParityObserver,
     sessionAccess,
     postExecutePending,
     setActivePostExecuteRunId: postExecutePauseCapability?.setActiveRunId.bind(postExecutePauseCapability),

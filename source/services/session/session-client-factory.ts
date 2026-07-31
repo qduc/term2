@@ -7,12 +7,18 @@ import { SessionAccessState } from './session-access-state.js';
 import type { ISettingsService } from '../service-interfaces.js';
 import { ProviderContinuity } from '../provider-continuity.js';
 import { OpenAICandidateObserver } from '../openai-candidate-observer.js';
+import {
+  ProviderContinuityOpenAIRootSelectorParityObserver,
+  type OpenAIRootFreshTurnSelectorParityObserver,
+} from '../openai-root-selector-parity-observer.js';
 
 /** A client whose lifetime is owned by the session that requested it. */
 export type SessionClientHandle = {
   readonly agentClient: ConversationAgentClient;
   /** The sole continuity instance shared by this handle's root client and runtime. */
   readonly providerContinuity?: ProviderContinuity;
+  /** Present only for an owned root session handle. */
+  readonly openAIRootFreshTurnSelectorParityObserver?: OpenAIRootFreshTurnSelectorParityObserver;
   /** Compatibility selection fixed when this handle's client was created. */
   readonly continuationProjectionMode: ContinuationProjectionMode;
   readonly toolOwnership: ToolOwnershipRegistry;
@@ -57,6 +63,13 @@ export function createOwnedSessionClientFactory(
       const postExecutePauseCapability = new PostExecutePauseCapability(postExecutePending);
       const providerContinuity = new ProviderContinuity();
       const requestCapture = new OpenAICandidateObserver(providerContinuity);
+      const openAIRootFreshTurnSelectorParityObserver =
+        continuationProjectionMode === 'openai-provider'
+          ? new ProviderContinuityOpenAIRootSelectorParityObserver(
+              providerContinuity,
+              () => settings.get<string>('agent.model'),
+            )
+          : undefined;
       const agentClient = createClient(
         sessionId,
         toolOwnership,
@@ -70,6 +83,7 @@ export function createOwnedSessionClientFactory(
       return {
         agentClient,
         providerContinuity,
+        openAIRootFreshTurnSelectorParityObserver,
         continuationProjectionMode,
         toolOwnership,
         access,

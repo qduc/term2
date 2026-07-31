@@ -85,6 +85,7 @@ export class ConversationService {
     const { runtime, adapter } = createConversationRuntime({
       agentClient: this.#clientHandle.agentClient,
       providerContinuity: this.#clientHandle.providerContinuity,
+      openAIRootFreshTurnSelectorParityObserver: this.#clientHandle.openAIRootFreshTurnSelectorParityObserver,
       toolOwnership: this.#clientHandle.toolOwnership,
       postExecutePending: this.#clientHandle.postExecutePending,
       postExecutePauseCapability: this.#clientHandle.postExecutePauseCapability,
@@ -146,6 +147,7 @@ export class ConversationService {
     const { runtime, adapter } = createConversationRuntime({
       agentClient: this.#clientHandle.agentClient,
       providerContinuity: this.#clientHandle.providerContinuity,
+      openAIRootFreshTurnSelectorParityObserver: this.#clientHandle.openAIRootFreshTurnSelectorParityObserver,
       toolOwnership: this.#clientHandle.toolOwnership,
       postExecutePending: this.#clientHandle.postExecutePending,
       postExecutePauseCapability: this.#clientHandle.postExecutePauseCapability,

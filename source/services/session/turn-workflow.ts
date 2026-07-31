@@ -66,6 +66,7 @@ import {
 import { LiveRun } from './live-run.js';
 import type { PostExecutePendingRegistry, PostExecutePendingEntry } from './post-execute-pending-registry.js';
 import type { SessionAccessState } from './session-access-state.js';
+import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-selector-parity-observer.js';
 
 export interface TurnWorkflowDeps {
   agentClient: ConversationAgentClient;
@@ -87,6 +88,8 @@ export interface TurnWorkflowDeps {
   planApplier: ContinuationPlanApplier;
   continuationRecoveryHandler: ContinuationRecoveryHandler;
   providerContinuity: ProviderContinuity;
+  /** Omitted for caller-owned, nested, and transient clients. */
+  openAIRootFreshTurnSelectorParityObserver?: OpenAIRootFreshTurnSelectorParityObserver;
   /** Handle-owned root capability; omitted only by nested compatibility callers. */
   sessionAccess?: SessionAccessState;
   batchCoordinator?: ToolApprovalBatchCoordinator;
@@ -302,6 +305,11 @@ export class TurnWorkflow {
           const cycleResult = yield* this.#executeInitialStreamCycle(attempt, {
             resumeState: currentResumeState,
             resumePreviousResponseId: currentResumePreviousResponseId,
+            observeOpenAIRootSelectorParity:
+              !options.replayFromHistory &&
+              !currentResumeState &&
+              !currentResumePreviousResponseId &&
+              this.#isFirstAttempt(attempt.retryCounts),
           });
           if (cycleResult.kind === 'stale') {
             return { kind: 'stale' };
@@ -394,7 +402,11 @@ export class TurnWorkflow {
 
   async *#executeInitialStreamCycle(
     attempt: TurnAttempt,
-    options: { resumeState?: RunState<any, any>; resumePreviousResponseId?: string | null },
+    options: {
+      resumeState?: RunState<any, any>;
+      resumePreviousResponseId?: string | null;
+      observeOpenAIRootSelectorParity: boolean;
+    },
   ): AsyncGenerator<
     ConversationEvent,
     | { kind: 'completed'; outcome: any }
@@ -567,7 +579,11 @@ export class TurnWorkflow {
 
   async #startInitialStream(
     attempt: TurnAttempt,
-    options: { resumeState?: RunState<any, any>; resumePreviousResponseId?: string | null },
+    options: {
+      resumeState?: RunState<any, any>;
+      resumePreviousResponseId?: string | null;
+      observeOpenAIRootSelectorParity: boolean;
+    },
   ): Promise<AgentStream> {
     if (options.resumeState && typeof this.deps.agentClient.continueRunStream === 'function') {
       return (await this.deps.agentClient.continueRunStream(options.resumeState, {
@@ -578,12 +594,37 @@ export class TurnWorkflow {
       })) as AgentStream;
     }
 
+    const legacyPreviousResponseId = attempt.inputMode === 'delta' ? this.deps.providerContinuity.previousResponseId : null;
+    if (
+      options.observeOpenAIRootSelectorParity &&
+      this.deps.agentClient.getProvider?.() === 'openai' &&
+      legacyPreviousResponseId &&
+      attempt.providerHistorySnapshot
+    ) {
+      try {
+        this.deps.openAIRootFreshTurnSelectorParityObserver?.observe({
+          legacyPreviousResponseId,
+          plannedSnapshot: attempt.providerHistorySnapshot,
+        });
+      } catch {
+        // Parity evidence must never change the established request path.
+      }
+    }
     return (await this.deps.agentClient.startStream(attempt.streamInput!, {
-      previousResponseId: attempt.inputMode === 'delta' ? this.deps.providerContinuity.previousResponseId : null,
+      previousResponseId: legacyPreviousResponseId,
       sessionId: this.deps.sessionId,
       providerHistorySnapshot: attempt.providerHistorySnapshot,
       providerContinuityLineage: this.deps.providerContinuity.lineage,
     })) as AgentStream;
+  }
+
+  #isFirstAttempt(retryCounts: RetryCounts): boolean {
+    return (
+      retryCounts.transientRetryCount === 0 &&
+      retryCounts.serviceTierFallbackCount === 0 &&
+      retryCounts.modelRetryCount === 0 &&
+      retryCounts.transportDowngradeCount === 0
+    );
   }
 
   async *executeContinuationAttempt(

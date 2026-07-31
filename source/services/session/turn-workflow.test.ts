@@ -36,13 +36,14 @@ const createSessionContextService = () => {
   };
 };
 
-function setupWorkflow(mockClient: any, retryOptions?: any) {
+function setupWorkflow(mockClient: any, retryOptions?: any, openAIRootFreshTurnSelectorParityObserver?: any) {
   const composition = createSessionRuntimeInternals({
     sessionId: 'test-session',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
     turnAccumulator: new TurnItemAccumulator(),
     retryOptions,
+    openAIRootFreshTurnSelectorParityObserver,
   });
 
   return { workflow: composition.turnWorkflow, composition };
@@ -108,6 +109,78 @@ it('executes initial turn successfully', async () => {
   expect(Object.isFrozen(receivedProviderHistorySnapshot)).toBe(true);
 });
 
+it('observes eligible owned-root OpenAI parity while preserving the legacy outgoing response ID', async () => {
+  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello' }]);
+  stream.finalOutput = 'hello';
+  const observations: any[] = [];
+  let outgoingOptions: any;
+  const mockClient = {
+    getProvider: () => 'openai',
+    supportsConversationChaining: () => true,
+    async startStream(_input: unknown, options: unknown) {
+      outgoingOptions = options;
+      return stream;
+    },
+  };
+  const { workflow, composition } = setupWorkflow(mockClient, undefined, { observe: (value: unknown) => observations.push(value) });
+  composition.conversationStore.replaceHistory([{ role: 'user', type: 'message', content: 'before' }] as any);
+  const committed = composition.conversationStore.getProviderHistorySnapshot();
+  const binding = {
+    identity: { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },
+    prefix: { identity: committed.identity, revision: committed.revision },
+  };
+  composition.providerContinuity.observeCandidate({ ...binding, responseId: 'resp-legacy' });
+  composition.providerContinuity.publishTerminalResponse('resp-legacy', true, committed);
+
+  await collect(workflow.executeInitial('next'));
+
+  expect(outgoingOptions.previousResponseId).toBe('resp-legacy');
+  expect(observations).toHaveLength(1);
+  expect(observations[0]).toMatchObject({ legacyPreviousResponseId: 'resp-legacy' });
+});
+
+it('keeps the established outgoing response ID when parity observation throws', async () => {
+  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello' }]);
+  stream.finalOutput = 'hello';
+  let outgoingOptions: any;
+  const mockClient = {
+    getProvider: () => 'openai',
+    supportsConversationChaining: () => true,
+    async startStream(_input: unknown, options: unknown) {
+      outgoingOptions = options;
+      return stream;
+    },
+  };
+  const { workflow, composition } = setupWorkflow(mockClient, undefined, {
+    observe: () => {
+      throw new Error('observation failed');
+    },
+  });
+  composition.providerContinuity.update('resp-legacy');
+
+  await collect(workflow.executeInitial('next'));
+
+  expect(outgoingOptions.previousResponseId).toBe('resp-legacy');
+});
+
+it.each([
+  ['Codex', { getProvider: () => 'codex', supportsConversationChaining: () => true }, {}],
+  ['full-history', { getProvider: () => 'openai', supportsConversationChaining: () => false }, {}],
+  ['replay', { getProvider: () => 'openai', supportsConversationChaining: () => true }, { replayFromHistory: true }],
+  ['retry', { getProvider: () => 'openai', supportsConversationChaining: () => true }, { retries: { transientRetryCount: 1 } }],
+])('does not observe %s initial paths', async (_name, clientShape, runOptions) => {
+  const observations: any[] = [];
+  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello' }]);
+  stream.finalOutput = 'hello';
+  const mockClient = { ...clientShape, startStream: async () => stream };
+  const { workflow, composition } = setupWorkflow(mockClient, undefined, { observe: (value: unknown) => observations.push(value) });
+  composition.providerContinuity.update('resp-legacy');
+
+  await collect(workflow.executeInitial('next', runOptions));
+
+  expect(observations).toEqual([]);
+});
+
 it('passes a fresh authoritative store snapshot when resuming an initial stream', async () => {
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'resumed response' }]);
   stream.finalOutput = 'resumed response';
@@ -124,7 +197,8 @@ it('passes a fresh authoritative store snapshot when resuming an initial stream'
       return stream;
     },
   };
-  const { workflow, composition } = setupWorkflow(mockClient);
+  const observations: any[] = [];
+  const { workflow, composition } = setupWorkflow(mockClient, undefined, { observe: (value: unknown) => observations.push(value) });
   composition.conversationStore.replaceHistory([{ role: 'user', type: 'message', content: 'authoritative' }] as any);
   const getAuthoritativeSnapshot = composition.conversationStore.getProviderHistorySnapshot.bind(
     composition.conversationStore,
@@ -151,6 +225,7 @@ it('passes a fresh authoritative store snapshot when resuming an initial stream'
   expect(receivedLineage).toBe(composition.providerContinuity.lineage);
   expect(snapshotReads).toBeGreaterThanOrEqual(2);
   expect(Object.isFrozen(receivedProviderHistorySnapshot)).toBe(true);
+  expect(observations).toEqual([]);
 });
 
 it('executes continuation turn successfully', async () => {

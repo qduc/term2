@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import type { AgentInputItem } from '@openai/agents';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { createCallerOwnedSessionClientFactory, createOwnedSessionClientFactory } from './session-client-factory.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
@@ -52,6 +53,7 @@ it('never disposes a caller-owned compatibility client', () => {
 
   expect(handle.agentClient).toBe(callerOwned);
   expect(handle.continuationProjectionMode).toBe('legacy');
+  expect(handle.openAIRootFreshTurnSelectorParityObserver).toBeUndefined();
   expect(handle.toolOwnership).toBe(toolOwnership);
   expect(callerOwned.dispose).not.toHaveBeenCalled();
 });
@@ -82,10 +84,49 @@ it('binds each owned root observer to its handle continuity and leaves caller-ow
   expect(captures[0].continuity).toBe(first.providerContinuity);
   expect(captures[1].continuity).toBe(second.providerContinuity);
   expect(first.providerContinuity!.checkpoint?.responseId).toBe('response-a');
+  expect(first.openAIRootFreshTurnSelectorParityObserver).toBeDefined();
   expect(second.providerContinuity!.checkpoint).toBeNull();
   expect(
     createCallerOwnedSessionClientFactory(client(), new ToolOwnershipRegistry()).create('caller').providerContinuity,
   ).toBeDefined();
+});
+
+it('retains the latest owned-root OpenAI selector parity observation', () => {
+  const factory = createOwnedSessionClientFactory(
+    createMockSettingsService({ 'agent.provider': 'openai', 'agent.model': 'gpt-5' }),
+    () => client(),
+  );
+  const handle = factory.create('root');
+  const continuity = handle.providerContinuity!;
+  const committed = {
+    identity: 'history:root:2',
+    origin: 'history:root',
+    revision: 2,
+    history: [{ role: 'user', type: 'message', content: 'before' }] as AgentInputItem[],
+  };
+  continuity.observeCandidate({
+    identity: { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },
+    prefix: { identity: 'history:root:1', revision: 1 },
+    responseId: 'resp-root',
+  });
+  continuity.publishTerminalResponse('resp-root', true, committed);
+
+  handle.openAIRootFreshTurnSelectorParityObserver!.observe({
+    legacyPreviousResponseId: 'resp-root',
+    plannedSnapshot: {
+      identity: 'history:root:3',
+      origin: 'history:root',
+      revision: 3,
+      history: [...committed.history, { role: 'user', type: 'message', content: 'next' } as AgentInputItem],
+    },
+  });
+
+  expect(handle.openAIRootFreshTurnSelectorParityObserver!.latestObservation).toEqual({
+    eligible: true,
+    legacyPreviousResponseId: 'resp-root',
+    acceptedCheckpointResponseId: 'resp-root',
+    matches: true,
+  });
 });
 
 it('freezes the OpenAI projection mode at owned-handle creation and passes it to the client callback', () => {
@@ -109,6 +150,8 @@ it('freezes the OpenAI projection mode at owned-handle creation and passes it to
   expect(openAIHandle.continuationProjectionMode).toBe('openai-provider');
   expect(openAIHandle.continuationProjectionMode).toBe('openai-provider');
   expect(codexHandle.continuationProjectionMode).toBe('legacy');
+  expect(openAIHandle.openAIRootFreshTurnSelectorParityObserver).toBeDefined();
+  expect(codexHandle.openAIRootFreshTurnSelectorParityObserver).toBeUndefined();
   expect(modes).toEqual(['openai-provider', 'legacy']);
 });
 

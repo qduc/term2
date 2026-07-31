@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 export type ProviderCheckpointIdentity = {
   provider: string;
   endpoint: string;
@@ -18,11 +20,24 @@ export type ProviderCheckpointRetirement = {
   code: 'reset' | 'superseded' | 'chaining_broken' | 'identity_mismatch' | 'prefix_mismatch';
 };
 
+export type ProviderCheckpointSuccessorProof = {
+  revision: number;
+  identity: string;
+  origin?: string;
+  history: readonly unknown[];
+};
+
 export type ProviderCheckpoint = ProviderCheckpointBinding & {
   state: 'candidate' | 'accepted' | 'retired';
   lineage: number;
   responseId: string;
   opaqueState?: unknown;
+  /**
+   * Immutable authoritative history captured immediately after the response was
+   * committed. It is evidence for a future provider-private selector only; it
+   * does not affect existing response-ID publication or wire selection.
+   */
+  successorProof?: ProviderCheckpointSuccessorProof;
   retirement?: ProviderCheckpointRetirement;
 };
 
@@ -115,9 +130,50 @@ export class ProviderContinuity {
    * checkpoint as corroborating evidence. This does not select a checkpoint
    * for a future request.
    */
-  publishTerminalResponse(responseId: string | null, historyCommitted: boolean): boolean {
+  publishTerminalResponse(
+    responseId: string | null,
+    historyCommitted: boolean,
+    postCommitSnapshot?: ProviderCheckpointSuccessorProof,
+  ): boolean {
     this.update(responseId);
-    return historyCommitted && this.promoteCandidate(responseId);
+    const promoted = historyCommitted && this.promoteCandidate(responseId);
+    if (promoted && postCommitSnapshot) {
+      this.#attachSuccessorProof(postCommitSnapshot);
+    }
+    return promoted;
+  }
+
+  /**
+   * Pure, fail-closed characterization for a future OpenAI-private selector.
+   * A successor must preserve the committed transcript exactly and add to it;
+   * this does not select or publish a previous response ID.
+   */
+  isEligibleForSuccessor(
+    identity: ProviderCheckpointIdentity,
+    lineage: number,
+    plannedSnapshot: ProviderCheckpointSuccessorProof,
+  ): boolean {
+    const checkpoint = this.#checkpoint;
+    const proof = checkpoint?.successorProof;
+    if (
+      !checkpoint ||
+      checkpoint.state !== 'accepted' ||
+      checkpoint.lineage !== lineage ||
+      !proof ||
+      !ProviderContinuity.#isSnapshotProof(plannedSnapshot) ||
+      !ProviderContinuity.#identityMatches(checkpoint.identity, identity) ||
+      !proof.origin ||
+      proof.origin !== plannedSnapshot.origin ||
+      plannedSnapshot.revision <= proof.revision ||
+      plannedSnapshot.history.length <= proof.history.length
+    ) {
+      return false;
+    }
+    try {
+      return proof.history.every((item, index) => isDeepStrictEqual(item, plannedSnapshot.history[index]));
+    } catch {
+      return false;
+    }
   }
 
   clear(): void {
@@ -142,15 +198,56 @@ export class ProviderContinuity {
     this.#checkpoint = null;
   }
 
+  #attachSuccessorProof(snapshot: ProviderCheckpointSuccessorProof): void {
+    const checkpoint = this.#checkpoint;
+    if (!checkpoint || checkpoint.state !== 'accepted') return;
+    try {
+      const proof = ProviderContinuity.#freezeSnapshot(snapshot);
+      this.#checkpoint = { ...checkpoint, successorProof: proof };
+    } catch {
+      // This is characterization evidence only. A cloning failure must not
+      // change the already-established terminal publication behavior.
+    }
+  }
+
+  static #freezeSnapshot(snapshot: ProviderCheckpointSuccessorProof): ProviderCheckpointSuccessorProof {
+    return Object.freeze({
+      revision: snapshot.revision,
+      identity: snapshot.identity,
+      origin: snapshot.origin,
+      history: ProviderContinuity.#deepFreeze(structuredClone(snapshot.history)),
+    });
+  }
+
+  static #deepFreeze<T>(value: T, seen = new WeakSet<object>()): T {
+    if (!value || typeof value !== 'object' || seen.has(value as object)) return value;
+    seen.add(value as object);
+    for (const child of Object.values(value as object)) ProviderContinuity.#deepFreeze(child, seen);
+    return Object.freeze(value);
+  }
+
+  static #identityMatches(left: ProviderCheckpointIdentity, right: ProviderCheckpointIdentity): boolean {
+    return left.provider === right.provider && left.endpoint === right.endpoint && left.model === right.model;
+  }
+
+  static #isSnapshotProof(value: unknown): value is ProviderCheckpointSuccessorProof {
+    const snapshot = value as Partial<ProviderCheckpointSuccessorProof> | null;
+    return !!(
+      snapshot &&
+      Number.isSafeInteger(snapshot.revision) &&
+      typeof snapshot.identity === 'string' &&
+      snapshot.identity.length > 0 &&
+      typeof snapshot.origin === 'string' &&
+      snapshot.origin.length > 0 &&
+      Array.isArray(snapshot.history)
+    );
+  }
+
   static #bindingMismatch(
     left: ProviderCheckpointBinding,
     right: ProviderCheckpointBinding,
   ): ProviderCheckpointRetirement['code'] | null {
-    if (
-      left.identity.provider !== right.identity.provider ||
-      left.identity.endpoint !== right.identity.endpoint ||
-      left.identity.model !== right.identity.model
-    ) {
+    if (!ProviderContinuity.#identityMatches(left.identity, right.identity)) {
       return 'identity_mismatch';
     }
     if (left.prefix.revision !== right.prefix.revision || left.prefix.identity !== right.prefix.identity) {

@@ -337,9 +337,11 @@ export class SessionStreamProcessor {
         // Candidate checkpoint acceptance is intentionally adjacent to the
         // authoritative terminal-history mutation. An empty/no-op terminal
         // output cannot make a candidate eligible for future ownership work.
+        const postCommitSnapshot = this.deps.conversationStore.getProviderHistorySnapshot();
         this.deps.providerContinuity.publishTerminalResponse(
           snapshot.lastResponseId,
-          this.deps.conversationStore.getProviderHistorySnapshot().revision !== historyRevisionBeforeCommit,
+          postCommitSnapshot.revision !== historyRevisionBeforeCommit,
+          postCommitSnapshot,
         );
         result = { kind: 'committed' };
       } else {

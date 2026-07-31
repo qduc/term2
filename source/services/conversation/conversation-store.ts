@@ -9,6 +9,8 @@ export { SHELL_CONTEXT_PREFIX } from './conversation-message-projection.js';
 export type ProviderHistorySnapshot = {
   revision: number;
   identity: string;
+  /** Stable transcript provenance across revisions of this store. */
+  origin?: string;
   history: readonly AgentInputItem[];
 };
 
@@ -156,9 +158,11 @@ export class ConversationStore {
    */
   getProviderHistorySnapshot(): ProviderHistorySnapshot {
     const history = this.#freezeHistory(this.#cloneSnapshotHistory(this.#history));
+    const origin = `history:${this.#historyIdentity}`;
     return Object.freeze({
       revision: this.#historyRevision,
-      identity: `history:${this.#historyIdentity}:${this.#historyRevision}`,
+      identity: `${origin}:${this.#historyRevision}`,
+      origin,
       history,
     });
   }

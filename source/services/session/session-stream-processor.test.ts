@@ -506,6 +506,11 @@ it('SessionStreamProcessor.finalize() promotes a matching checkpoint only after 
   expect(conversationStore.getHistory()).toHaveLength(1);
   expect(providerContinuity.previousResponseId).toBe('resp-commit');
   expect(providerContinuity.checkpoint?.state).toBe('accepted');
+  expect(providerContinuity.checkpoint?.successorProof).toMatchObject({
+    revision: 1,
+    history: [{ role: 'assistant', type: 'message' }],
+  });
+  expect(Object.isFrozen(providerContinuity.checkpoint?.successorProof?.history)).toBe(true);
 });
 
 it('promotes only an observer candidate whose terminal response commits before its lineage is reset', () => {
@@ -566,6 +571,7 @@ it('promotes only an observer candidate whose terminal response commits before i
     'startStream',
   );
   expect(mismatched.providerContinuity.checkpoint?.state).toBe('candidate');
+  expect(mismatched.providerContinuity.checkpoint?.successorProof).toBeUndefined();
 
   const stale = createHarness();
   observe(stale.observer, 'resp-stale');
@@ -613,6 +619,7 @@ it('SessionStreamProcessor.finalize() cannot promote a candidate from an empty t
   ).toEqual({ kind: 'committed' });
   expect(conversationStore.getHistory()).toHaveLength(0);
   expect(providerContinuity.checkpoint?.state).toBe('candidate');
+  expect(providerContinuity.checkpoint?.successorProof).toBeUndefined();
 });
 
 it('SessionStreamProcessor.finalize() ignores a genuinely stale post-reset completion', () => {

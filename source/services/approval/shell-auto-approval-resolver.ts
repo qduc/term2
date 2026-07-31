@@ -7,6 +7,19 @@ import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.
 
 export type AutoApproveMode = 'off' | 'advisory' | 'auto';
 
+const parseUnsandboxedFlag = (rawArguments: unknown): boolean => {
+  if (typeof rawArguments === 'string') {
+    try {
+      const parsed = JSON.parse(rawArguments) as { sandbox?: unknown };
+      return parsed?.sandbox === 'unsandboxed';
+    } catch {
+      return false;
+    }
+  }
+  if (!rawArguments || typeof rawArguments !== 'object') return false;
+  return (rawArguments as Record<string, unknown>).sandbox === 'unsandboxed';
+};
+
 export interface ShellAutoApprovalResolverDeps {
   conversationStore: ConversationStore;
   agentClient: ShellAutoApprovalAgentClient;
@@ -24,6 +37,19 @@ export class ShellAutoApprovalResolver {
     return this.deps.settingsService?.get<AutoApproveMode>('shell.autoApproveMode');
   }
 
+  /**
+   * Whether an unsandboxed shell request may be evaluated by the LLM
+   * auto-approval path instead of being forced to a human prompt. Requires the
+   * sandbox to be enabled (escape is meaningful) and auto-approval mode to be
+   * advisory or auto. Read per call so mid-session setting toggles apply
+   * immediately.
+   */
+  isUnsandboxedApprovalEligible(): boolean {
+    const mode = this.getAutoApproveMode();
+    const sandboxEnabled = this.deps.settingsService?.get<boolean>('sandbox.enabled') !== false;
+    return sandboxEnabled && (mode === 'advisory' || mode === 'auto');
+  }
+
   shouldAutoApprove(advisory: LLMAdvisory | undefined): boolean {
     return this.getAutoApproveMode() === 'auto' && advisory?.approved === true && advisory.source === 'llm';
   }
@@ -33,7 +59,7 @@ export class ShellAutoApprovalResolver {
     siblings: unknown[];
   }): Promise<LLMAdvisory | undefined> {
     const { interruption, siblings } = input;
-    const { toolName, argumentsText } = getToolInfoFromInterruption(interruption);
+    const { toolName, argumentsText, rawArguments } = getToolInfoFromInterruption(interruption);
     if (toolName !== 'shell' && toolName !== 'bash') {
       return undefined;
     }
@@ -44,17 +70,26 @@ export class ShellAutoApprovalResolver {
       .map((i) => {
         const info = getToolInfoFromInterruption(i);
         const id = getCallIdFromObject(i);
-        return { id, command: info.argumentsText, toolName: info.toolName };
+        return {
+          id,
+          command: info.argumentsText,
+          toolName: info.toolName,
+          unsandboxed: parseUnsandboxedFlag(info.rawArguments),
+        };
       })
       .filter(
-        (info): info is { id: string; command: string; toolName: string } =>
+        (info): info is { id: string; command: string; toolName: string; unsandboxed: boolean } =>
           !!info.id && (info.toolName === 'shell' || info.toolName === 'bash'),
       );
 
     const unevaluated = shellCommands.filter((c) => !this.advisoriesByCallId.has(c.id));
     if (unevaluated.length > 0) {
       const results = await evaluateShellAutoApprovalAdvisories({
-        commands: unevaluated.map(({ id, command }) => ({ id, command })),
+        commands: unevaluated.map(({ id, command, unsandboxed }) => ({
+          id,
+          command,
+          ...(unsandboxed ? { unsandboxed: true } : {}),
+        })),
         history: this.deps.conversationStore.getHistory(),
         settingsService: this.deps.settingsService,
         agentClient: this.deps.agentClient,
@@ -72,7 +107,13 @@ export class ShellAutoApprovalResolver {
 
     // No callId: evaluate this single command inline without caching.
     const single = await evaluateShellAutoApprovalAdvisories({
-      commands: [{ id: '__single__', command: argumentsText }],
+      commands: [
+        {
+          id: '__single__',
+          command: argumentsText,
+          ...(parseUnsandboxedFlag(rawArguments) ? { unsandboxed: true } : {}),
+        },
+      ],
       history: this.deps.conversationStore.getHistory(),
       settingsService: this.deps.settingsService,
       agentClient: this.deps.agentClient,
@@ -100,6 +141,10 @@ export class DelegatingShellAutoApprovalResolver extends ShellAutoApprovalResolv
 
   override getAutoApproveMode(): AutoApproveMode | undefined {
     return this.delegate ? this.delegate.getAutoApproveMode() : super.getAutoApproveMode();
+  }
+
+  override isUnsandboxedApprovalEligible(): boolean {
+    return this.delegate ? this.delegate.isUnsandboxedApprovalEligible() : super.isUnsandboxedApprovalEligible();
   }
 
   override shouldAutoApprove(advisory: LLMAdvisory | undefined): boolean {

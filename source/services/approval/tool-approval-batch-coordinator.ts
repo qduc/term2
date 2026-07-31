@@ -16,7 +16,11 @@ import {
 import { parseToolCallArguments } from '../tool-call-arguments.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import { toolApprovalPolicyRegistry, type ToolApprovalPolicyRegistry } from './tool-approval-policy-registry.js';
-import { isDockerHostControlShellApproval, requiresHumanShellApproval } from './shell-sandbox-approval.js';
+import {
+  isDockerHostControlShellApproval,
+  isUnsandboxedShell,
+  requiresHumanShellApproval,
+} from './shell-sandbox-approval.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 
@@ -110,6 +114,11 @@ export class ToolApprovalBatchCoordinator {
         this.deps.sessionId,
         this.deps.sessionAccess,
         this.deps.nestedCompatibility,
+        {
+          // Unsandboxed escapes may be evaluated by the LLM auto-approval path
+          // when the sandbox is enabled and auto-approval is in advisory/auto mode.
+          llmMayEvaluateUnsandboxed: this.deps.shellAutoApproval.isUnsandboxedApprovalEligible(),
+        },
       );
       const dockerHostControl = isDockerHostControlShellApproval(
         toolName,
@@ -129,7 +138,7 @@ export class ToolApprovalBatchCoordinator {
       let llmAdvisory;
       if (forceHumanApproval) {
         decision = 'prompt';
-      } else if (registryDecision.kind === 'auto_approve') {
+      } else if (registryDecision.kind === 'auto_approve' && !isUnsandboxedShell(toolName, parseResult.arguments)) {
         decision = 'approve';
       } else {
         llmAdvisory =

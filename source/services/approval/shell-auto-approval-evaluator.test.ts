@@ -112,6 +112,39 @@ it('evaluates non-RED commands via chat and parses valid JSON results', async ()
   expect(chatCalls[0].options.reasoningEffort).toBe('none');
 });
 
+it('annotates commands that run outside the sandbox in the evaluation prompt', async () => {
+  const chatCalls: Array<{ prompt: string }> = [];
+  const advisories = await evaluateShellAutoApprovalAdvisories({
+    commands: [
+      { id: 'call-sandboxed', command: 'ls source' },
+      { id: 'call-unsandboxed', command: 'curl https://example.com', unsandboxed: true },
+    ],
+    history: [{ role: 'user', type: 'message', content: 'fetch a page' }],
+    settingsService: createMockSettings('advisory') as any,
+    agentClient: {
+      chat: async (prompt: string) => {
+        chatCalls.push({ prompt });
+        return JSON.stringify({
+          results: [
+            { id: 'call-sandboxed', reasoning: 'Read-only listing is safe.', approved: true },
+            { id: 'call-unsandboxed', reasoning: 'Fetching a public page is safe.', approved: true },
+          ],
+        });
+      },
+    } as any,
+    logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  expect(chatCalls.length).toBe(1);
+  const prompt = chatCalls[0].prompt;
+  const sandboxedSection = prompt.slice(prompt.indexOf('ls source'), prompt.indexOf('curl https://example.com'));
+  expect(sandboxedSection).not.toMatch(/OUTSIDE the sandbox/);
+  const unsandboxedSection = prompt.slice(prompt.indexOf('curl https://example.com'));
+  expect(unsandboxedSection).toMatch(/OUTSIDE the sandbox/);
+  expect(advisories.get('call-unsandboxed')?.approved).toBe(true);
+});
+
 it('uses the chore tier model and provider ahead of legacy auto-approval settings', async () => {
   const calls: Array<Record<string, unknown>> = [];
   const settingsService = {

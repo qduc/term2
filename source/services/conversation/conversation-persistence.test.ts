@@ -916,6 +916,7 @@ it.sequential('session logging persists displayUsage separately from cumulative 
   (shellAutoApproval as any).setDelegate({
     resolveAdvisoryForInterruption: async () => ({ model: 'gpt-5', reasoning: 'allow', decision: 'approve' }),
     shouldAutoApprove: () => true,
+    isUnsandboxedApprovalEligible: () => false,
     clearCache: () => {},
   });
 
@@ -1052,6 +1053,7 @@ it.sequential(
     (shellAutoApproval as any).setDelegate({
       resolveAdvisoryForInterruption: async () => ({ model: 'gpt-5', reasoning: 'allow', decision: 'approve' }),
       shouldAutoApprove: () => true,
+      isUnsandboxedApprovalEligible: () => false,
       clearCache: () => {},
     });
 

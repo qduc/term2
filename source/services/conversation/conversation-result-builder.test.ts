@@ -64,11 +64,20 @@ const makeStream = (extras: any = {}): AgentStream =>
     ...extras,
   } as any);
 
-const makeDeps = (mode: 'off' | 'advisory' | 'auto' = 'off', toolOwnership?: ToolOwnershipRegistry) => {
+const makeDeps = (
+  mode: 'off' | 'advisory' | 'auto' = 'off',
+  toolOwnership?: ToolOwnershipRegistry,
+  sandboxEnabled: boolean = true,
+  chat: () => Promise<string> = async () => '{"results":[]}',
+) => {
   const conversationStore = new ConversationStore();
-  const agentClient: any = { chat: async () => '{"results":[]}' };
+  const agentClient: any = { chat };
   const settingsService: any = {
-    get: <T>(key: string): T | undefined => (key === 'shell.autoApproveMode' ? (mode as unknown as T) : undefined),
+    get: <T>(key: string): T | undefined => {
+      if (key === 'shell.autoApproveMode') return mode as unknown as T;
+      if (key === 'sandbox.enabled') return sandboxEnabled as unknown as T;
+      return undefined;
+    },
   };
   const sessionContextService = {
     runWithContext: <T>(_context: any, fn: () => T) => fn(),
@@ -478,7 +487,7 @@ it('auto_approve outcome when LLM advises approval and mode=auto', async () => {
   }
 });
 
-it('unsandboxed shell is not auto-approved by LLM advisory mode', async () => {
+it('unsandboxed shell auto-approves via LLM when sandbox enabled and mode auto', async () => {
   const stream = makeStream({
     interruptions: [
       {
@@ -489,44 +498,158 @@ it('unsandboxed shell is not auto-approved by LLM advisory mode', async () => {
     ],
     state: {},
   });
-  const conversationStore = new ConversationStore();
-  const agentClient: any = {
-    chat: async () => '{"results":[{"id":"c-unsandboxed","reasoning":"safe","approved":true}]}',
-  };
-  const settingsService: any = {
-    get: <T>(key: string): T | undefined => (key === 'shell.autoApproveMode' ? ('auto' as unknown as T) : undefined),
-  };
-  const shellAutoApproval = new ShellAutoApprovalResolver({
-    conversationStore,
-    agentClient,
-    logger,
-    settingsService,
-    sessionContextService: {
-      runWithContext: <T>(_context: any, fn: () => T) => fn(),
-      getContext: () => null,
-    },
-  });
-  const nestedCompatibility = makeNestedCompatibility();
-  const approvalFlow = new ApprovalFlowCoordinator({
-    agentClient,
-    approvalState: new ApprovalState(),
-    logger,
-    sessionId: 's1',
-    toolTracker: { recordAbortedApproval: () => {}, export: () => [] } as any,
-    generationGuard: { isCurrent: () => true } as any,
-    nestedCompatibility,
-  });
-
-  const outcome = await buildConversationResult(
-    { result: stream, toolCallArgumentsById: new Map() },
-    { approvalFlow, shellAutoApproval, logger, sessionId: 's1', nestedCompatibility },
+  const deps = makeDeps(
+    'auto',
+    undefined,
+    true,
+    async () => '{"results":[{"id":"c-unsandboxed","reasoning":"safe","approved":true}]}',
   );
+
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
+
+  expect(outcome.kind).toBe('auto_approve');
+  if (outcome.kind === 'auto_approve') {
+    expect(outcome.callId).toBe('c-unsandboxed');
+    expect(outcome.advisory?.approved).toBe(true);
+    expect(outcome.advisory?.source).toBe('llm');
+  }
+});
+
+it('unsandboxed shell with RED command is never auto-approved even in auto mode', async () => {
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'shell',
+        callId: 'c-red',
+        arguments: { command: 'rm -rf /', sandbox: 'unsandboxed' },
+      },
+    ],
+    state: {},
+  });
+  const deps = makeDeps(
+    'auto',
+    undefined,
+    true,
+    async () => '{"results":[{"id":"c-red","reasoning":"safe","approved":true}]}',
+  );
+
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
 
   expect(outcome.kind).toBe('approval_required');
   if (outcome.kind === 'approval_required') {
-    expect(outcome.result.approval.callId).toBe('c-unsandboxed');
+    expect(outcome.result.approval.callId).toBe('c-red');
+    expect(outcome.result.approval.llmAdvisory?.approved).toBe(false);
+    expect(outcome.result.approval.llmAdvisory?.source).toBe('system');
+  }
+});
+
+it('unsandboxed shell with sandbox enabled and mode advisory prompts with the LLM advisory', async () => {
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'shell',
+        callId: 'c-unsandboxed-advisory',
+        arguments: { command: 'curl https://example.com', sandbox: 'unsandboxed' },
+      },
+    ],
+    state: {},
+  });
+  const deps = makeDeps(
+    'advisory',
+    undefined,
+    true,
+    async () => '{"results":[{"id":"c-unsandboxed-advisory","reasoning":"safe","approved":true}]}',
+  );
+
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
+
+  expect(outcome.kind).toBe('approval_required');
+  if (outcome.kind === 'approval_required') {
+    expect(outcome.result.approval.callId).toBe('c-unsandboxed-advisory');
+    expect(outcome.result.approval.llmAdvisory?.approved).toBe(true);
+    expect(outcome.result.approval.llmAdvisory?.source).toBe('llm');
+  }
+});
+
+it('unsandboxed shell with sandbox enabled and mode off prompts without an advisory', async () => {
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'shell',
+        callId: 'c-unsandboxed-off',
+        arguments: { command: 'curl https://example.com', sandbox: 'unsandboxed' },
+      },
+    ],
+    state: {},
+  });
+  const deps = makeDeps(
+    'off',
+    undefined,
+    true,
+    async () => '{"results":[{"id":"c-unsandboxed-off","reasoning":"safe","approved":true}]}',
+  );
+
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
+
+  expect(outcome.kind).toBe('approval_required');
+  if (outcome.kind === 'approval_required') {
     expect(outcome.result.approval.llmAdvisory).toBeUndefined();
   }
+});
+
+it('unsandboxed shell with sandbox disabled and mode auto still prompts without an advisory', async () => {
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'shell',
+        callId: 'c-unsandboxed-sandbox-off',
+        arguments: { command: 'curl https://example.com', sandbox: 'unsandboxed' },
+      },
+    ],
+    state: {},
+  });
+  const deps = makeDeps(
+    'auto',
+    undefined,
+    false,
+    async () => '{"results":[{"id":"c-unsandboxed-sandbox-off","reasoning":"safe","approved":true}]}',
+  );
+
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
+
+  expect(outcome.kind).toBe('approval_required');
+  if (outcome.kind === 'approval_required') {
+    expect(outcome.result.approval.llmAdvisory).toBeUndefined();
+  }
+});
+
+it('unsandboxed shell is never auto-approved by the policy registry, even when LLM-eligible', async () => {
+  toolApprovalPolicyRegistry.register({
+    toolName: 'shell',
+    needsApproval: async () => false,
+  });
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'shell',
+        callId: 'shell-unsandboxed',
+        arguments: { command: 'curl https://example.com', sandbox: 'unsandboxed' },
+        agent: { name: 'TestAgent' },
+      },
+    ],
+    state: { id: 'state-1' },
+  });
+  // LLM declines, so a registry auto-approval (if it applied) would have approved.
+  const deps = makeDeps(
+    'auto',
+    undefined,
+    true,
+    async () => '{"results":[{"id":"shell-unsandboxed","reasoning":"risky","approved":false}]}',
+  );
+
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
+
+  expect(outcome.kind).toBe('approval_required');
 });
 
 it('explicit Docker host control is not auto-approved by LLM advisory mode', async () => {

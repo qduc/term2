@@ -15,6 +15,23 @@ const makeMockSettings = (mode: 'off' | 'advisory' | 'auto') => ({
   get: <T>(key: string): T | undefined => (key === 'shell.autoApproveMode' ? (mode as unknown as T) : undefined),
 });
 
+const makeSandboxAwareSettings = (mode: 'off' | 'advisory' | 'auto', sandboxEnabled: boolean) => ({
+  get: <T>(key: string): T | undefined => {
+    if (key === 'shell.autoApproveMode') return mode as unknown as T;
+    if (key === 'sandbox.enabled') return sandboxEnabled as unknown as T;
+    return undefined;
+  },
+});
+
+const makeResolver = (settings: any) =>
+  new ShellAutoApprovalResolver({
+    conversationStore: new ConversationStore(),
+    agentClient: makeMockAgentClient({}),
+    logger,
+    settingsService: settings,
+    sessionContextService: createSessionContextService() as any,
+  });
+
 const makeAdvisory = (overrides: Partial<LLMAdvisory> = {}): LLMAdvisory => ({
   approved: true,
   source: 'llm',
@@ -47,14 +64,24 @@ it('non-shell tools return undefined advisory', async () => {
 });
 
 it('getAutoApproveMode reads setting', () => {
-  const resolver = new ShellAutoApprovalResolver({
-    conversationStore: new ConversationStore(),
-    agentClient: makeMockAgentClient({}),
-    logger,
-    settingsService: makeMockSettings('advisory') as any,
-    sessionContextService: createSessionContextService() as any,
-  });
+  const resolver = makeResolver(makeMockSettings('advisory') as any);
   expect(resolver.getAutoApproveMode()).toBe('advisory');
+});
+
+it('isUnsandboxedApprovalEligible requires sandbox enabled and mode != off', () => {
+  expect(makeResolver(makeSandboxAwareSettings('off', true) as any).isUnsandboxedApprovalEligible()).toBe(false);
+  expect(makeResolver(makeSandboxAwareSettings('advisory', true) as any).isUnsandboxedApprovalEligible()).toBe(true);
+  expect(makeResolver(makeSandboxAwareSettings('auto', true) as any).isUnsandboxedApprovalEligible()).toBe(true);
+});
+
+it('isUnsandboxedApprovalEligible is false when sandbox is disabled regardless of mode', () => {
+  expect(makeResolver(makeSandboxAwareSettings('off', false) as any).isUnsandboxedApprovalEligible()).toBe(false);
+  expect(makeResolver(makeSandboxAwareSettings('advisory', false) as any).isUnsandboxedApprovalEligible()).toBe(false);
+  expect(makeResolver(makeSandboxAwareSettings('auto', false) as any).isUnsandboxedApprovalEligible()).toBe(false);
+});
+
+it('isUnsandboxedApprovalEligible treats missing sandbox.enabled as enabled', () => {
+  expect(makeResolver(makeMockSettings('auto') as any).isUnsandboxedApprovalEligible()).toBe(true);
 });
 
 it('shouldAutoApprove requires auto mode + approved + llm source', () => {
@@ -133,4 +160,63 @@ it('interruption without callId uses inline __single__ evaluation', async () => 
   expect(advisory?.approved).toBe(true);
   expect(chatCount).toBe(1);
   expect(promptSeen.includes('ls')).toBe(true);
+});
+
+it('flags unsandboxed siblings individually in the evaluation prompt', async () => {
+  const prompts: string[] = [];
+  const agentClient: any = {
+    chat: async (prompt: string) => {
+      prompts.push(prompt);
+      return JSON.stringify({
+        results: [
+          { id: 'c-sandboxed', reasoning: 'safe', approved: true },
+          { id: 'c-unsandboxed', reasoning: 'safe', approved: true },
+        ],
+      });
+    },
+  };
+  const resolver = new ShellAutoApprovalResolver({
+    conversationStore: new ConversationStore(),
+    agentClient,
+    logger,
+    settingsService: makeMockSettings('auto') as any,
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  const sandboxed = { name: 'shell', callId: 'c-sandboxed', arguments: { command: 'ls' } };
+  const unsandboxed = {
+    name: 'shell',
+    callId: 'c-unsandboxed',
+    arguments: { command: 'curl https://example.com', sandbox: 'unsandboxed' },
+  };
+
+  await resolver.resolveAdvisoryForInterruption({ interruption: unsandboxed, siblings: [sandboxed, unsandboxed] });
+
+  expect(prompts.length).toBe(1);
+  const prompt = prompts[0];
+  const sandboxedSection = prompt.slice(prompt.indexOf('ls'), prompt.indexOf('curl'));
+  expect(sandboxedSection).not.toMatch(/OUTSIDE the sandbox/);
+  expect(prompt.slice(prompt.indexOf('curl'))).toMatch(/OUTSIDE the sandbox/);
+});
+
+it('flags an unsandboxed no-callId interruption in the inline evaluation prompt', async () => {
+  let promptSeen = '';
+  const agentClient: any = {
+    chat: async (prompt: string) => {
+      promptSeen = prompt;
+      return '{"results":[{"id":"__single__","reasoning":"ok","approved":true}]}';
+    },
+  };
+  const resolver = new ShellAutoApprovalResolver({
+    conversationStore: new ConversationStore(),
+    agentClient,
+    logger,
+    settingsService: makeMockSettings('auto') as any,
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  const interruption = { name: 'shell', arguments: { command: 'curl https://example.com', sandbox: 'unsandboxed' } };
+  const advisory = await resolver.resolveAdvisoryForInterruption({ interruption, siblings: [interruption] });
+  expect(advisory?.approved).toBe(true);
+  expect(promptSeen).toMatch(/OUTSIDE the sandbox/);
 });

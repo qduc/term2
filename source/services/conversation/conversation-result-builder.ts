@@ -17,7 +17,11 @@ import { buildPersistedAssistantTurnItems } from './conversation-turn-items.js';
 import { type GenerationToken } from '../generation-guard.js';
 import { type CommandMessage } from '../../tools/types.js';
 import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
-import { isDockerHostControlShellApproval, requiresHumanShellApproval } from '../approval/shell-sandbox-approval.js';
+import {
+  isDockerHostControlShellApproval,
+  isUnsandboxedShell,
+  requiresHumanShellApproval,
+} from '../approval/shell-sandbox-approval.js';
 import type { DeniedReadMetadata, PostExecuteApprovalToken } from '../../contracts/conversation.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
@@ -147,7 +151,11 @@ export async function buildConversationResult(
     }
 
     const forceHumanApproval =
-      requiresHumanShellApproval(toolName, parseResult.arguments, sessionId, sessionAccess, nestedCompatibility) || hasDeniedRead;
+      requiresHumanShellApproval(toolName, parseResult.arguments, sessionId, sessionAccess, nestedCompatibility, {
+        // Unsandboxed escapes may be evaluated by the LLM auto-approval path when
+        // the sandbox is enabled and auto-approval is in advisory/auto mode.
+        llmMayEvaluateUnsandboxed: shellAutoApproval.isUnsandboxedApprovalEligible(),
+      }) || hasDeniedRead;
     // Resolved here rather than in the UI: it depends on this session's record of
     // sandbox Docker blocks, and the prompt has no session identity to consult.
     const dockerHostControl = isDockerHostControlShellApproval(
@@ -183,7 +191,11 @@ export async function buildConversationResult(
       context: runContext,
     });
 
-    if (!forceHumanApproval && registryDecision.kind === 'auto_approve') {
+    if (
+      !forceHumanApproval &&
+      !isUnsandboxedShell(toolName, parseResult.arguments) &&
+      registryDecision.kind === 'auto_approve'
+    ) {
       logger.debug('Tool auto-approved by original tool policy', {
         eventType: 'approval.auto_approved',
         category: 'approval',

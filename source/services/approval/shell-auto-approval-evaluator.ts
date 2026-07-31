@@ -13,6 +13,8 @@ import { projectConversationMessage } from '../conversation/conversation-message
 export type ShellAutoApprovalCommand = {
   id: string;
   command: string;
+  /** True when the command will run outside the sandbox with host access. */
+  unsandboxed?: boolean;
 };
 
 export type ShellAutoApprovalAdvisory = LLMAdvisory;
@@ -87,7 +89,14 @@ const buildRedSystemReasoning = (detail: string, llmReasoning?: string): string 
 const buildPrompt = (commands: ShellAutoApprovalCommand[], history: AgentInputItem[]): string => {
   const historyText = buildCompactHistoryContext(history);
 
-  const commandsToEvaluateText = commands.map((c, i) => `[Command ${i + 1}]\n${c.command}`).join('\n\n');
+  const commandsToEvaluateText = commands
+    .map(
+      (c, i) =>
+        `[Command ${i + 1}]\n${c.command}${
+          c.unsandboxed ? '\n[Execution context: runs OUTSIDE the sandbox with host access.]' : ''
+        }`,
+    )
+    .join('\n\n');
 
   return `Task context:
 ${historyText}
@@ -298,7 +307,7 @@ export async function evaluateShellAutoApprovalAdvisories({
 
   const toEvaluateByLLM: ShellAutoApprovalCommand[] = [];
   const redSafetyDetails = new Map<string, string>();
-  for (const { id, command } of commands) {
+  for (const { id, command, unsandboxed } of commands) {
     try {
       const { status: safetyStatus, reasons } = classifyCommandDetailed(command, logger);
       if (safetyStatus === SafetyStatus.RED) {
@@ -308,7 +317,7 @@ export async function evaluateShellAutoApprovalAdvisories({
     } catch {
       // Ignore parsing errors for LLM check fallback
     }
-    toEvaluateByLLM.push({ id, command });
+    toEvaluateByLLM.push({ id, command, ...(unsandboxed ? { unsandboxed: true } : {}) });
   }
 
   if (toEvaluateByLLM.length === 0) return out;

@@ -404,6 +404,49 @@ it.sequential(
   },
 );
 
+it.sequential('OpenAI lifecycle binds the pre-builder SDK message shape to the normalized request input', async () => {
+  const observations: any[] = [];
+  const originalUnary = (OpenAIResponsesModel.prototype as any).getResponse;
+  (OpenAIResponsesModel.prototype as any).getResponse = async function (request: any) {
+    this._buildResponsesCreateRequest(request, false);
+    return { responseId: 'resp-normalized' };
+  };
+  try {
+    const model = new OpenAIResponsesModelWithPromptCacheKey({} as any, 'gpt-test', {
+      record() {},
+      observe: (entry: any) => observations.push(entry),
+    });
+    const sdkInput = [{ type: 'message', role: 'user', content: 'hello' }];
+
+    await runWithOpenAIRequestPrefixBindingScope(async () => {
+      prepareOpenAIRequestPrefixBinding(
+        { snapshotIdentity: 'history:normalized', snapshotRevision: 1, lineage: 0 },
+        sdkInput,
+      );
+      await (model as any).getResponse({
+        input: sdkInput,
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      });
+    });
+
+    expect(observations).toMatchObject([
+      {
+        phase: 'request-built',
+        requestData: { input: [{ role: 'user', content: 'hello' }] },
+        prefixBinding: { snapshotIdentity: 'history:normalized', snapshotRevision: 1, lineage: 0 },
+      },
+      {
+        phase: 'terminal',
+        prefixBinding: { snapshotIdentity: 'history:normalized', snapshotRevision: 1, lineage: 0 },
+      },
+    ]);
+  } finally {
+    (OpenAIResponsesModel.prototype as any).getResponse = originalUnary;
+  }
+});
+
 it('OpenAI prefix scopes isolate concurrent runs and fail closed for overlapping prepared invocations', async () => {
   const seen = await Promise.all(
     ['first', 'second'].map((name, revision) =>
@@ -447,6 +490,23 @@ it('OpenAI prefix scopes isolate concurrent runs and fail closed for overlapping
     expect(consumeOpenAIRequestPrefixBinding({ input: ['mismatch'] })).toBeUndefined();
     expect(consumeOpenAIRequestPrefixBinding({ input: ['expected'] })).toBeUndefined();
   });
+
+  for (const input of [
+    [{ role: 'assistant', content: 'hello' }],
+    [{ role: 'user', content: 'changed' }],
+    [
+      { role: 'user', content: 'hello' },
+      { role: 'user', content: 'later' },
+    ],
+    [{ type: 'function_call', name: 'other', arguments: '{}' }],
+  ]) {
+    await runWithOpenAIRequestPrefixBindingScope(async () => {
+      prepareOpenAIRequestPrefixBinding({ snapshotIdentity: 'history:exact', snapshotRevision: 4, lineage: 0 }, [
+        { type: 'message', role: 'user', content: 'hello' },
+      ]);
+      expect(consumeOpenAIRequestPrefixBinding({ input })).toBeUndefined();
+    });
+  }
 });
 
 it.sequential(

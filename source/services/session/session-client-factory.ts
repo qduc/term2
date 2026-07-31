@@ -11,6 +11,10 @@ import {
   ProviderContinuityOpenAIRootSelectorParityObserver,
   type OpenAIRootFreshTurnSelectorParityObserver,
 } from '../openai-root-selector-parity-observer.js';
+import {
+  DefaultOpenAIRootCheckpointLifecycleObserver,
+  type OpenAIRootCheckpointLifecycleObserver,
+} from '../openai-root-checkpoint-lifecycle-observer.js';
 
 /** A client whose lifetime is owned by the session that requested it. */
 export type SessionClientHandle = {
@@ -19,6 +23,8 @@ export type SessionClientHandle = {
   readonly providerContinuity?: ProviderContinuity;
   /** Present only for an owned root session handle. */
   readonly openAIRootFreshTurnSelectorParityObserver?: OpenAIRootFreshTurnSelectorParityObserver;
+  /** Present only for an owned root OpenAI session handle. */
+  readonly openAIRootCheckpointLifecycleObserver?: OpenAIRootCheckpointLifecycleObserver;
   /** Compatibility selection fixed when this handle's client was created. */
   readonly continuationProjectionMode: ContinuationProjectionMode;
   readonly toolOwnership: ToolOwnershipRegistry;
@@ -62,12 +68,15 @@ export function createOwnedSessionClientFactory(
       const postExecutePending = new PostExecutePendingRegistry({ sessionId, epoch: crypto.randomUUID() });
       const postExecutePauseCapability = new PostExecutePauseCapability(postExecutePending);
       const providerContinuity = new ProviderContinuity();
-      const requestCapture = new OpenAICandidateObserver(providerContinuity);
+      const openAIRootCheckpointLifecycleObserver =
+        continuationProjectionMode === 'openai-provider'
+          ? new DefaultOpenAIRootCheckpointLifecycleObserver()
+          : undefined;
+      const requestCapture = new OpenAICandidateObserver(providerContinuity, openAIRootCheckpointLifecycleObserver);
       const openAIRootFreshTurnSelectorParityObserver =
         continuationProjectionMode === 'openai-provider'
-          ? new ProviderContinuityOpenAIRootSelectorParityObserver(
-              providerContinuity,
-              () => settings.get<string>('agent.model'),
+          ? new ProviderContinuityOpenAIRootSelectorParityObserver(providerContinuity, () =>
+              settings.get<string>('agent.model'),
             )
           : undefined;
       const agentClient = createClient(
@@ -84,6 +93,7 @@ export function createOwnedSessionClientFactory(
         agentClient,
         providerContinuity,
         openAIRootFreshTurnSelectorParityObserver,
+        openAIRootCheckpointLifecycleObserver,
         continuationProjectionMode,
         toolOwnership,
         access,

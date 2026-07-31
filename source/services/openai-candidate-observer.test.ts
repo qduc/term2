@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { OpenAICandidateObserver } from './openai-candidate-observer.js';
 import { ProviderContinuity } from './provider-continuity.js';
+import { DefaultOpenAIRootCheckpointLifecycleObserver } from './openai-root-checkpoint-lifecycle-observer.js';
 
 const terminal = (overrides: Record<string, unknown> = {}) => ({
   token: 'attempt-1',
@@ -52,4 +53,34 @@ it('swallows continuity observer failures', () => {
     },
   } as any);
   expect(() => observer.observe(terminal())).not.toThrow();
+});
+
+it.each([
+  ['missing binding', { prefixBinding: undefined }, 'missing_prefix_binding'],
+  ['missing response ID', { responseId: undefined }, 'missing_response_id'],
+  [
+    'invalid lineage',
+    { prefixBinding: { snapshotIdentity: 'history:1', snapshotRevision: 1, lineage: null } },
+    'invalid_lineage',
+  ],
+])('records sanitized candidate evidence for %s', (_name, overrides, outcome) => {
+  const evidence: unknown[] = [];
+  const lifecycle = new DefaultOpenAIRootCheckpointLifecycleObserver();
+  lifecycle.setEvidenceRecorder((value) => evidence.push(value));
+
+  new OpenAICandidateObserver(new ProviderContinuity(), lifecycle).observe(terminal(overrides) as any);
+
+  expect(evidence).toEqual([{ type: 'openai_root_checkpoint_lifecycle', version: 1, stage: 'candidate', outcome }]);
+});
+
+it('records candidate observation only after continuity accepts it', () => {
+  const evidence: unknown[] = [];
+  const lifecycle = new DefaultOpenAIRootCheckpointLifecycleObserver();
+  lifecycle.setEvidenceRecorder((value) => evidence.push(value));
+
+  new OpenAICandidateObserver(new ProviderContinuity(), lifecycle).observe(terminal());
+
+  expect(evidence).toEqual([
+    { type: 'openai_root_checkpoint_lifecycle', version: 1, stage: 'candidate', outcome: 'observed' },
+  ]);
 });

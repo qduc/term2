@@ -22,6 +22,7 @@ import { SessionInputPlanner } from './session-input-planner.js';
 import { SessionLifecycle } from './session-lifecycle.js';
 import { ProviderContinuity } from '../provider-continuity.js';
 import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-selector-parity-observer.js';
+import type { OpenAIRootCheckpointLifecycleObserver } from '../openai-root-checkpoint-lifecycle-observer.js';
 import { TurnCoordinator, type TurnStartOptions } from './turn-coordinator.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
 import { SessionManager } from './session-manager.js';
@@ -135,6 +136,8 @@ export type CreateSessionRuntimeInternalsOptions = {
   providerContinuity?: ProviderContinuity;
   /** Owned-root-only, observation-only selector parity seam. */
   openAIRootFreshTurnSelectorParityObserver?: OpenAIRootFreshTurnSelectorParityObserver;
+  /** Owned-root OpenAI checkpoint diagnostic seam. */
+  openAIRootCheckpointLifecycleObserver?: OpenAIRootCheckpointLifecycleObserver;
   toolOwnership: ToolOwnershipRegistry;
   postExecutePending?: PostExecutePendingRegistry;
   postExecutePauseCapability?: PostExecutePauseCapability;
@@ -246,6 +249,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     agentClient,
     providerContinuity: suppliedProviderContinuity,
     openAIRootFreshTurnSelectorParityObserver,
+    openAIRootCheckpointLifecycleObserver,
     toolOwnership,
     postExecutePending: suppliedPostExecutePending,
     postExecutePauseCapability,
@@ -341,6 +345,13 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       // Selector-parity diagnostics must never affect the request path.
     }
   });
+  openAIRootCheckpointLifecycleObserver?.setEvidenceRecorder?.((evidence) => {
+    try {
+      conversationLogger.log(evidence);
+    } catch {
+      // Checkpoint lifecycle diagnostics must never affect the stream path.
+    }
+  });
 
   // Background lifecycle belongs to the conversation-scoped sink, not the
   // active turn's UI sink. Dispatch it through conversation logging, while only
@@ -413,6 +424,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     conversationStore,
     conversationLogger,
     providerContinuity,
+    openAIRootCheckpointLifecycleObserver,
     generationGuard,
     journal,
     abortStream: () => agentClient.abort(),

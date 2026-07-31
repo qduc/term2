@@ -12,6 +12,7 @@ import type { PostExecutePauseCapability } from '../session/post-execute-pause-c
 import type { SessionAccessState } from '../session/session-access-state.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-selector-parity-observer.js';
+import type { OpenAIRootCheckpointLifecycleObserver } from '../openai-root-checkpoint-lifecycle-observer.js';
 
 export type ConversationRuntimeBundle = {
   /** The clean session runtime (no adapter). */
@@ -29,6 +30,7 @@ export type CreateConversationRuntimeOptions = {
   agentClient: ConversationAgentClient;
   providerContinuity?: ProviderContinuity;
   openAIRootFreshTurnSelectorParityObserver?: OpenAIRootFreshTurnSelectorParityObserver;
+  openAIRootCheckpointLifecycleObserver?: OpenAIRootCheckpointLifecycleObserver;
   toolOwnership: ToolOwnershipRegistry;
   postExecutePending?: PostExecutePendingRegistry;
   postExecutePauseCapability?: PostExecutePauseCapability;

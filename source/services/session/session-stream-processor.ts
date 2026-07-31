@@ -3,6 +3,7 @@ import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ConversationStore } from '../conversation/conversation-store.js';
 import type { ConversationLogger } from '../logging/conversation-logger.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
+import type { OpenAIRootCheckpointLifecycleObserver } from '../openai-root-checkpoint-lifecycle-observer.js';
 import type { AgentStream } from '../agent-stream.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
@@ -121,6 +122,8 @@ export interface SessionStreamProcessorDeps {
   conversationStore: ConversationStore;
   conversationLogger: ConversationLogger;
   providerContinuity: ProviderContinuity;
+  /** Owned-root OpenAI lifecycle diagnostics; absent for every other client. */
+  openAIRootCheckpointLifecycleObserver?: OpenAIRootCheckpointLifecycleObserver;
   generationGuard: GenerationGuard;
   /** Assistant-output journal; every raw run item is fed into it. */
   journal: AssistantTurnJournal;
@@ -338,11 +341,18 @@ export class SessionStreamProcessor {
         // authoritative terminal-history mutation. An empty/no-op terminal
         // output cannot make a candidate eligible for future ownership work.
         const postCommitSnapshot = this.deps.conversationStore.getProviderHistorySnapshot();
-        this.deps.providerContinuity.publishTerminalResponse(
+        const candidateWasObserved = this.deps.providerContinuity.checkpoint?.state === 'candidate';
+        const historyCommitted = postCommitSnapshot.revision !== historyRevisionBeforeCommit;
+        const promoted = this.deps.providerContinuity.publishTerminalResponse(
           snapshot.lastResponseId,
-          postCommitSnapshot.revision !== historyRevisionBeforeCommit,
+          historyCommitted,
           postCommitSnapshot,
         );
+        if (candidateWasObserved) {
+          this.deps.openAIRootCheckpointLifecycleObserver?.publication(
+            !historyCommitted ? 'history_not_committed' : promoted ? 'promoted' : 'candidate_not_promoted',
+          );
+        }
         result = { kind: 'committed' };
       } else {
         // Interrupted streams retain the established response-ID behavior, but

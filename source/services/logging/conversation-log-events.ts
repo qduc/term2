@@ -112,6 +112,23 @@ export interface OpenAIRootSelectorParityLogEvent {
     | 'history_prefix_mismatch';
 }
 
+/** Sanitized, observation-only evidence for the OpenAI root checkpoint lifecycle. */
+export interface OpenAIRootCheckpointLifecycleLogEvent {
+  type: 'openai_root_checkpoint_lifecycle';
+  version: 1;
+  turnId?: string;
+  stage: 'candidate' | 'publication';
+  outcome:
+    | 'observed'
+    | 'missing_prefix_binding'
+    | 'missing_response_id'
+    | 'invalid_lineage'
+    | 'lineage_rejected'
+    | 'promoted'
+    | 'history_not_committed'
+    | 'candidate_not_promoted';
+}
+
 /**
  * Streaming fragment of assistant output (text or reasoning) that has not yet
  * been materialized as a durable persisted item. These entries are intentionally
@@ -214,6 +231,7 @@ export type LogEvent =
   | ApprovalRequiredLogEvent
   | ApprovalResolvedLogEvent
   | OpenAIRootSelectorParityLogEvent
+  | OpenAIRootCheckpointLifecycleLogEvent
   | SubagentStartedLogEvent
   | SubagentToolStartedLogEvent
   | SubagentCompletedLogEvent

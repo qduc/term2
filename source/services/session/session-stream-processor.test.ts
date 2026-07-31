@@ -7,6 +7,7 @@ import { SessionToolTracker } from './session-tool-tracker.js';
 import { ConversationLogger } from '../logging/conversation-logger.js';
 import { ProviderContinuity } from '../provider-continuity.js';
 import { OpenAICandidateObserver } from '../openai-candidate-observer.js';
+import { DefaultOpenAIRootCheckpointLifecycleObserver } from '../openai-root-checkpoint-lifecycle-observer.js';
 import type { AgentStream } from '../agent-stream.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { GenerationGuard } from '../generation-guard.js';
@@ -511,6 +512,68 @@ it('SessionStreamProcessor.finalize() promotes a matching checkpoint only after 
     history: [{ role: 'assistant', type: 'message' }],
   });
   expect(Object.isFrozen(providerContinuity.checkpoint?.successorProof?.history)).toBe(true);
+});
+
+it('records only sanitized publication outcomes for an observed candidate', () => {
+  const makeProcessor = () => {
+    const conversationStore = new ConversationStore();
+    const providerContinuity = new ProviderContinuity();
+    const generationGuard = new GenerationGuard();
+    const evidence: unknown[] = [];
+    const lifecycle = new DefaultOpenAIRootCheckpointLifecycleObserver();
+    lifecycle.setEvidenceRecorder((value) => evidence.push(value));
+    const processor = new SessionStreamProcessor({
+      logger,
+      sessionId: 'test-session',
+      toolTracker: new SessionToolTracker(conversationStore),
+      conversationStore,
+      conversationLogger: {} as ConversationLogger,
+      providerContinuity,
+      openAIRootCheckpointLifecycleObserver: lifecycle,
+      generationGuard,
+      journal: makeJournal(),
+    });
+    providerContinuity.observeCandidate({
+      identity: { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },
+      prefix: { revision: 0, identity: 'history:0' },
+      responseId: 'resp-candidate',
+    });
+    return { processor, generationGuard, evidence };
+  };
+
+  const promoted = makeProcessor();
+  const output: any = [{ role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'done' }] }];
+  promoted.processor.finalize(
+    makeStream([], { interruptions: [], lastResponseId: 'resp-candidate', output }),
+    promoted.generationGuard.capture(),
+    'delta',
+    'startStream',
+  );
+  expect(promoted.evidence).toEqual([
+    { type: 'openai_root_checkpoint_lifecycle', version: 1, stage: 'publication', outcome: 'promoted' },
+  ]);
+
+  const noCommit = makeProcessor();
+  noCommit.processor.finalize(
+    makeStream([], { interruptions: [], lastResponseId: 'resp-candidate' }),
+    noCommit.generationGuard.capture(),
+    'delta',
+    'startStream',
+  );
+  expect(noCommit.evidence).toEqual([
+    { type: 'openai_root_checkpoint_lifecycle', version: 1, stage: 'publication', outcome: 'history_not_committed' },
+  ]);
+
+  const mismatch = makeProcessor();
+  mismatch.processor.finalize(
+    makeStream([], { interruptions: [], lastResponseId: 'resp-other', output }),
+    mismatch.generationGuard.capture(),
+    'delta',
+    'startStream',
+  );
+  expect(mismatch.evidence).toEqual([
+    { type: 'openai_root_checkpoint_lifecycle', version: 1, stage: 'publication', outcome: 'candidate_not_promoted' },
+  ]);
 });
 
 it('promotes only an observer candidate whose terminal response commits before its lineage is reset', () => {

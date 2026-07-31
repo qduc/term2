@@ -85,6 +85,7 @@ it('binds each owned root observer to its handle continuity and leaves caller-ow
   expect(captures[1].continuity).toBe(second.providerContinuity);
   expect(first.providerContinuity!.checkpoint?.responseId).toBe('response-a');
   expect(first.openAIRootFreshTurnSelectorParityObserver).toBeDefined();
+  expect(first.openAIRootCheckpointLifecycleObserver).toBeDefined();
   expect(second.providerContinuity!.checkpoint).toBeNull();
   expect(
     createCallerOwnedSessionClientFactory(client(), new ToolOwnershipRegistry()).create('caller').providerContinuity,
@@ -151,7 +152,9 @@ it('freezes the OpenAI projection mode at owned-handle creation and passes it to
   expect(openAIHandle.continuationProjectionMode).toBe('openai-provider');
   expect(codexHandle.continuationProjectionMode).toBe('legacy');
   expect(openAIHandle.openAIRootFreshTurnSelectorParityObserver).toBeDefined();
+  expect(openAIHandle.openAIRootCheckpointLifecycleObserver).toBeDefined();
   expect(codexHandle.openAIRootFreshTurnSelectorParityObserver).toBeUndefined();
+  expect(codexHandle.openAIRootCheckpointLifecycleObserver).toBeUndefined();
   expect(modes).toEqual(['openai-provider', 'legacy']);
 });
 

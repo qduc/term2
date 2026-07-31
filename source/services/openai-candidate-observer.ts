@@ -3,6 +3,7 @@ import type {
   OpenAIRequestLifecycleObservation,
 } from '../providers/provider-request-capture.js';
 import type { ProviderContinuity } from './provider-continuity.js';
+import type { OpenAIRootCheckpointLifecycleObserver } from './openai-root-checkpoint-lifecycle-observer.js';
 
 /**
  * Session-owned, fail-closed bridge from the OpenAI private lifecycle seam to
@@ -10,22 +11,31 @@ import type { ProviderContinuity } from './provider-continuity.js';
  * responsibility after the authoritative history commit.
  */
 export class OpenAICandidateObserver implements ProviderRequestCapture {
-  constructor(private readonly continuity: ProviderContinuity) {}
+  constructor(
+    private readonly continuity: ProviderContinuity,
+    private readonly lifecycleObserver?: OpenAIRootCheckpointLifecycleObserver,
+  ) {}
 
   record(): void {
     // Candidate observation intentionally ignores request-projection telemetry.
   }
 
   observe(observation: OpenAIRequestLifecycleObservation): void {
-    if (
-      observation.phase !== 'terminal' ||
-      !observation.responseId ||
-      !observation.prefixBinding ||
-      typeof observation.prefixBinding.lineage !== 'number'
-    )
+    if (observation.phase !== 'terminal') return;
+    if (!observation.prefixBinding) {
+      this.lifecycleObserver?.candidate('missing_prefix_binding');
       return;
+    }
+    if (!observation.responseId) {
+      this.lifecycleObserver?.candidate('missing_response_id');
+      return;
+    }
+    if (typeof observation.prefixBinding.lineage !== 'number') {
+      this.lifecycleObserver?.candidate('invalid_lineage');
+      return;
+    }
     try {
-      this.continuity.observeCandidate({
+      const observed = this.continuity.observeCandidate({
         identity: {
           provider: observation.provider,
           endpoint: observation.endpoint,
@@ -38,6 +48,7 @@ export class OpenAICandidateObserver implements ProviderRequestCapture {
         lineage: observation.prefixBinding.lineage,
         responseId: observation.responseId,
       });
+      this.lifecycleObserver?.candidate(observed ? 'observed' : 'lineage_rejected');
     } catch {
       // Provider observation must never alter a request or terminal stream.
     }

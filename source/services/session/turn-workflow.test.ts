@@ -131,6 +131,12 @@ it('observes eligible owned-root OpenAI parity while preserving the legacy outgo
     observe: (value: unknown) => {
       observations.push(value);
       recordEvidence?.({ type: 'openai_root_selector_parity', version: 2, eligible: true, matches: true });
+      return {
+        eligible: true,
+        legacyPreviousResponseId: 'resp-legacy',
+        acceptedCheckpointResponseId: 'resp-legacy',
+        matches: true,
+      };
     },
   });
   composition.conversationLogger.setLogSink((event) => diagnostics.push(event));
@@ -156,6 +162,70 @@ it('observes eligible owned-root OpenAI parity while preserving the legacy outgo
     turnId: expect.any(String),
   });
   expect(JSON.stringify(diagnostics)).not.toContain('resp-legacy');
+});
+
+it('keeps the legacy response ID when an eligible checkpoint does not match it', async () => {
+  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello' }]);
+  stream.finalOutput = 'hello';
+  let outgoingOptions: any;
+  const { workflow, composition } = setupWorkflow(
+    {
+      getProvider: () => 'openai',
+      supportsConversationChaining: () => true,
+      async startStream(_input: unknown, options: unknown) {
+        outgoingOptions = options;
+        return stream;
+      },
+    },
+    undefined,
+    {
+      observe: () => ({
+        eligible: true,
+        legacyPreviousResponseId: 'resp-legacy',
+        acceptedCheckpointResponseId: 'resp-checkpoint',
+        matches: false,
+      }),
+    },
+  );
+  composition.providerContinuity.update('resp-legacy');
+
+  await collect(workflow.executeInitial('next'));
+
+  expect(outgoingOptions.previousResponseId).toBe('resp-legacy');
+});
+
+it.each([
+  [
+    'ineligible checkpoint',
+    () => ({ eligible: false, acceptedCheckpointResponseId: 'resp-checkpoint', matches: false }),
+  ],
+  [
+    'faulty observer',
+    () => {
+      throw new Error('selector unavailable');
+    },
+  ],
+])('keeps the legacy response ID for a %s', async (_name, observe) => {
+  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello' }]);
+  stream.finalOutput = 'hello';
+  let outgoingOptions: any;
+  const { workflow, composition } = setupWorkflow(
+    {
+      getProvider: () => 'openai',
+      supportsConversationChaining: () => true,
+      async startStream(_input: unknown, options: unknown) {
+        outgoingOptions = options;
+        return stream;
+      },
+    },
+    undefined,
+    { observe },
+  );
+  composition.providerContinuity.update('resp-legacy');
+
+  await collect(workflow.executeInitial('next'));
+
+  expect(outgoingOptions.previousResponseId).toBe('resp-legacy');
 });
 
 it('keeps the established outgoing response ID when parity observation throws', async () => {
@@ -267,19 +337,31 @@ it('passes a fresh authoritative store snapshot when resuming an initial stream'
 
 it('executes continuation turn successfully', async () => {
   let receivedLineage: unknown;
+  let receivedPreviousResponseId: unknown;
+  let selectorCalls = 0;
   const mockClient = {
     getProvider() {
       return 'openai';
     },
-    async continueRunStream(_state: unknown, options: { providerContinuityLineage?: unknown }) {
+    async continueRunStream(
+      _state: unknown,
+      options: { providerContinuityLineage?: unknown; previousResponseId?: unknown },
+    ) {
       receivedLineage = options.providerContinuityLineage;
+      receivedPreviousResponseId = options.previousResponseId;
       const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'continuation response' }]);
       stream.finalOutput = 'continuation response';
       return stream;
     },
   };
 
-  const { workflow, composition } = setupWorkflow(mockClient);
+  const { workflow, composition } = setupWorkflow(mockClient, undefined, {
+    observe: () => {
+      selectorCalls++;
+      throw new Error('selector must not run for approval continuation');
+    },
+  });
+  composition.providerContinuity.update('resp-legacy');
 
   const token = composition.generationGuard.capture();
   composition.approvalFlow.prepareContinuation = () =>
@@ -325,6 +407,8 @@ it('executes continuation turn successfully', async () => {
     expect(true).toBe(false);
   }
   expect(receivedLineage).toBe(composition.providerContinuity.lineage);
+  expect(receivedPreviousResponseId).toBe('resp-legacy');
+  expect(selectorCalls).toBe(0);
 });
 
 it('resumes one post-execute-gated stream without consuming it twice', async () => {

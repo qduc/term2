@@ -36,7 +36,7 @@ it('records equality only for an eligible accepted OpenAI checkpoint', () => {
   );
   observer.setEvidenceRecorder((value) => evidence.push(value));
 
-  observer.observe({
+  const observation = observer.observe({
     legacyPreviousResponseId: 'resp-accepted',
     plannedSnapshot: {
       identity: 'history:test:3',
@@ -50,6 +50,12 @@ it('records equality only for an eligible accepted OpenAI checkpoint', () => {
   });
 
   expect(evidence).toEqual([{ type: 'openai_root_selector_parity', version: 2, eligible: true, matches: true }]);
+  expect(observation).toEqual({
+    eligible: true,
+    legacyPreviousResponseId: 'resp-accepted',
+    acceptedCheckpointResponseId: 'resp-accepted',
+    matches: true,
+  });
   expect(observer.latestObservation).toEqual({
     eligible: true,
     legacyPreviousResponseId: 'resp-accepted',
@@ -244,7 +250,40 @@ it('swallows an evidence-recorder failure after retaining the local observation'
     resolvedIdentity,
   );
 
-  expect(() =>
+  const decision = observer.observe({
+    legacyPreviousResponseId: 'resp-accepted',
+    plannedSnapshot: {
+      identity: 'history:test:3',
+      origin: 'history:test',
+      revision: 3,
+      history: [
+        { role: 'user', content: 'before' },
+        { role: 'user', content: 'next' },
+      ],
+    },
+  });
+  expect(decision).toEqual({
+    eligible: false,
+    legacyPreviousResponseId: 'resp-accepted',
+    acceptedCheckpointResponseId: null,
+    matches: false,
+  });
+  expect(observer.latestObservation).toMatchObject({ eligible: true, matches: true });
+});
+
+it('returns a fail-closed decision when checkpoint eligibility throws', () => {
+  const continuity = new ProviderContinuity();
+  checkpoint(continuity);
+  const observer = new ProviderContinuityOpenAIRootSelectorParityObserver(
+    continuity,
+    () => 'gpt-5',
+    undefined,
+    () => {
+      throw new Error('identity unavailable');
+    },
+  );
+
+  expect(
     observer.observe({
       legacyPreviousResponseId: 'resp-accepted',
       plannedSnapshot: {
@@ -257,6 +296,10 @@ it('swallows an evidence-recorder failure after retaining the local observation'
         ],
       },
     }),
-  ).not.toThrow();
-  expect(observer.latestObservation).toMatchObject({ eligible: true, matches: true });
+  ).toEqual({
+    eligible: false,
+    legacyPreviousResponseId: 'resp-accepted',
+    acceptedCheckpointResponseId: null,
+    matches: false,
+  });
 });

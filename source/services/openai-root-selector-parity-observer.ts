@@ -36,7 +36,15 @@ export interface OpenAIRootFreshTurnSelectorParityObserver {
   /** Most recent bounded observation; no transcript or request metadata is retained. */
   readonly latestObservation: Readonly<OpenAIRootFreshTurnSelectorParityObservation> | null;
   setEvidenceRecorder?(recorder: (evidence: OpenAIRootFreshTurnSelectorParityEvidence) => void): void;
-  observe(input: { legacyPreviousResponseId: string; plannedSnapshot: ProviderHistorySnapshot }): void;
+  /**
+   * Computes parity for this exact request snapshot. Callers may use the
+   * returned observation immediately, but must retain legacy selection unless
+   * the accepted checkpoint is both eligible and equal to the legacy ID.
+   */
+  observe(input: {
+    legacyPreviousResponseId: string;
+    plannedSnapshot: ProviderHistorySnapshot;
+  }): Readonly<OpenAIRootFreshTurnSelectorParityObservation>;
 }
 
 /** Owned-root-only, fail-closed checkpoint/legacy parity observation. */
@@ -64,7 +72,7 @@ export class ProviderContinuityOpenAIRootSelectorParityObserver implements OpenA
   }: {
     legacyPreviousResponseId: string;
     plannedSnapshot: ProviderHistorySnapshot;
-  }): void {
+  }): Readonly<OpenAIRootFreshTurnSelectorParityObservation> {
     try {
       const model = this.getModel();
       const resolvedIdentity = this.getResolvedIdentity();
@@ -101,8 +109,15 @@ export class ProviderContinuityOpenAIRootSelectorParityObserver implements OpenA
           ...(!eligible ? { failure: assessment.failure } : {}),
         }),
       );
+      return observation;
     } catch {
       // Observation must never affect an established request.
+      return Object.freeze({
+        eligible: false,
+        legacyPreviousResponseId,
+        acceptedCheckpointResponseId: null,
+        matches: false,
+      });
     }
   }
 }

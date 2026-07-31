@@ -594,7 +594,9 @@ export class TurnWorkflow {
       })) as AgentStream;
     }
 
-    const legacyPreviousResponseId = attempt.inputMode === 'delta' ? this.deps.providerContinuity.previousResponseId : null;
+    const legacyPreviousResponseId =
+      attempt.inputMode === 'delta' ? this.deps.providerContinuity.previousResponseId : null;
+    let selectedPreviousResponseId = legacyPreviousResponseId;
     if (
       options.observeOpenAIRootSelectorParity &&
       this.deps.agentClient.getProvider?.() === 'openai' &&
@@ -602,16 +604,28 @@ export class TurnWorkflow {
       attempt.providerHistorySnapshot
     ) {
       try {
-        this.deps.openAIRootFreshTurnSelectorParityObserver?.observe({
+        const observation = this.deps.openAIRootFreshTurnSelectorParityObserver?.observe({
           legacyPreviousResponseId,
           plannedSnapshot: attempt.providerHistorySnapshot,
         });
+        // This is intentionally an equality-gated ownership handoff: a
+        // checkpoint can only become the selector when it has proved the same
+        // ID the established legacy selector would send for this exact
+        // snapshot. Any absent, ineligible, mismatched, or faulty observation
+        // retains legacy selection.
+        if (
+          observation?.eligible &&
+          observation.matches &&
+          observation.acceptedCheckpointResponseId === legacyPreviousResponseId
+        ) {
+          selectedPreviousResponseId = observation.acceptedCheckpointResponseId;
+        }
       } catch {
-        // Parity evidence must never change the established request path.
+        // Parity must never change the established request path on failure.
       }
     }
     return (await this.deps.agentClient.startStream(attempt.streamInput!, {
-      previousResponseId: legacyPreviousResponseId,
+      previousResponseId: selectedPreviousResponseId,
       sessionId: this.deps.sessionId,
       providerHistorySnapshot: attempt.providerHistorySnapshot,
       providerContinuityLineage: this.deps.providerContinuity.lineage,

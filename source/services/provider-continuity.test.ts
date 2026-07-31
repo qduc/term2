@@ -117,6 +117,134 @@ it('records immutable post-commit successor proof only with matching accepted pu
 });
 
 it.each([
+  ['no accepted checkpoint', (pc: ProviderContinuity) => pc, 'no_accepted_checkpoint'],
+  [
+    'missing successor proof',
+    (pc: ProviderContinuity) => {
+      pc.observeCandidate({
+        identity: { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },
+        prefix: { revision: 1, identity: 'history:1' },
+        responseId: 'resp-candidate',
+      });
+      pc.promoteCandidate('resp-candidate');
+      return pc;
+    },
+    'missing_successor_proof',
+  ],
+])('assessSuccessorEligibility distinguishes %s', (_name, arrange, failure) => {
+  const pc = arrange(new ProviderContinuity());
+  expect(
+    pc.assessSuccessorEligibility({ provider: 'openai', endpoint: 'responses', model: 'gpt-5' }, 0, {
+      identity: 'history:test:3',
+      origin: 'history:test',
+      revision: 3,
+      history: [{ role: 'user', content: 'next' }],
+    }),
+  ).toEqual({ eligible: false, failure });
+});
+
+it.each([
+  [
+    'lineage mismatch',
+    1,
+    {
+      origin: 'history:test',
+      revision: 3,
+      history: [
+        { role: 'user', content: 'before' },
+        { role: 'user', content: 'next' },
+      ],
+    },
+    'lineage_mismatch',
+  ],
+  ['invalid planned snapshot', 0, { origin: '', revision: 3, history: [] }, 'invalid_planned_snapshot'],
+  [
+    'identity mismatch',
+    0,
+    {
+      origin: 'history:test',
+      revision: 3,
+      history: [
+        { role: 'user', content: 'before' },
+        { role: 'user', content: 'next' },
+      ],
+    },
+    'identity_mismatch',
+    { provider: 'openai', endpoint: 'responses', model: 'gpt-6' },
+  ],
+  [
+    'origin mismatch',
+    0,
+    {
+      origin: 'history:other',
+      revision: 3,
+      history: [
+        { role: 'user', content: 'before' },
+        { role: 'user', content: 'next' },
+      ],
+    },
+    'origin_mismatch',
+  ],
+  [
+    'revision not advanced',
+    0,
+    {
+      origin: 'history:test',
+      revision: 2,
+      history: [
+        { role: 'user', content: 'before' },
+        { role: 'user', content: 'next' },
+      ],
+    },
+    'revision_not_advanced',
+  ],
+  [
+    'history not extended',
+    0,
+    { origin: 'history:test', revision: 3, history: [{ role: 'user', content: 'before' }] },
+    'history_not_extended',
+  ],
+  [
+    'history prefix mismatch',
+    0,
+    {
+      origin: 'history:test',
+      revision: 3,
+      history: [
+        { role: 'user', content: 'rewritten' },
+        { role: 'user', content: 'next' },
+      ],
+    },
+    'history_prefix_mismatch',
+  ],
+])(
+  'assessSuccessorEligibility records %s',
+  (_name, lineage, planned, failure, identity = { provider: 'openai', endpoint: 'responses', model: 'gpt-5' }) => {
+    const pc = new ProviderContinuity();
+    pc.observeCandidate({
+      identity: { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },
+      prefix: { revision: 1, identity: 'history:test:1' },
+      responseId: 'resp-accepted',
+    });
+    pc.publishTerminalResponse('resp-accepted', true, {
+      identity: 'history:test:2',
+      origin: 'history:test',
+      revision: 2,
+      history: [{ role: 'user', content: 'before' }],
+    });
+    expect(
+      pc.assessSuccessorEligibility(identity, lineage, {
+        identity: `history:test:${planned.revision}`,
+        ...planned,
+      } as any),
+    ).toEqual({
+      eligible: false,
+      failure,
+    });
+  },
+);
+
+it.each([
   [
     'matching strict successor',
     { provider: 'openai', endpoint: 'responses', model: 'gpt-5' },

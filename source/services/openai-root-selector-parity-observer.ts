@@ -1,5 +1,7 @@
 import type { ProviderHistorySnapshot } from './conversation/conversation-store.js';
-import type { ProviderContinuity } from './provider-continuity.js';
+import type { ProviderContinuity, ProviderSuccessorEligibilityFailure } from './provider-continuity.js';
+
+export type OpenAIRootSelectorParityFailure = ProviderSuccessorEligibilityFailure | 'model_unavailable';
 
 /** Read-only evidence from a normal owned-root OpenAI turn, never a selector. */
 export type OpenAIRootFreshTurnSelectorParityObservation = {
@@ -16,9 +18,11 @@ export type OpenAIRootFreshTurnSelectorParityObservation = {
  */
 export type OpenAIRootFreshTurnSelectorParityEvidence = {
   type: 'openai_root_selector_parity';
-  version: 1;
+  version: 2;
   eligible: boolean;
   matches: boolean;
+  /** Present only for an ineligible observation; a fixed diagnostic enum. */
+  failure?: OpenAIRootSelectorParityFailure;
 };
 
 export interface OpenAIRootFreshTurnSelectorParityObserver {
@@ -57,14 +61,15 @@ export class ProviderContinuityOpenAIRootSelectorParityObserver implements OpenA
       const model = this.getModel();
       const checkpoint = this.continuity.checkpoint;
       const acceptedCheckpointResponseId = checkpoint?.state === 'accepted' ? checkpoint.responseId : null;
-      const eligible =
-        typeof model === 'string' &&
-        model.length > 0 &&
-        this.continuity.isEligibleForSuccessor(
-          { provider: 'openai', endpoint: 'responses', model },
-          this.continuity.lineage,
-          plannedSnapshot,
-        );
+      const assessment =
+        typeof model === 'string' && model.length > 0
+          ? this.continuity.assessSuccessorEligibility(
+              { provider: 'openai', endpoint: 'responses', model },
+              this.continuity.lineage,
+              plannedSnapshot,
+            )
+          : { eligible: false as const, failure: 'model_unavailable' as const };
+      const eligible = assessment.eligible;
       const observation = Object.freeze({
         eligible,
         legacyPreviousResponseId,
@@ -75,9 +80,10 @@ export class ProviderContinuityOpenAIRootSelectorParityObserver implements OpenA
       this.recordEvidence(
         Object.freeze({
           type: 'openai_root_selector_parity',
-          version: 1,
+          version: 2,
           eligible,
           matches: observation.matches,
+          ...(!eligible ? { failure: assessment.failure } : {}),
         }),
       );
     } catch {

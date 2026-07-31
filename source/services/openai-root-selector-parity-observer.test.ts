@@ -36,7 +36,7 @@ it('records equality only for an eligible accepted OpenAI checkpoint', () => {
     },
   });
 
-  expect(evidence).toEqual([{ type: 'openai_root_selector_parity', version: 1, eligible: true, matches: true }]);
+  expect(evidence).toEqual([{ type: 'openai_root_selector_parity', version: 2, eligible: true, matches: true }]);
   expect(observer.latestObservation).toEqual({
     eligible: true,
     legacyPreviousResponseId: 'resp-accepted',
@@ -58,6 +58,7 @@ it.each([
       { role: 'user', content: 'before' },
       { role: 'user', content: 'next' },
     ],
+    'identity_mismatch',
   ],
   [
     'origin mismatch',
@@ -69,6 +70,7 @@ it.each([
       { role: 'user', content: 'before' },
       { role: 'user', content: 'next' },
     ],
+    'origin_mismatch',
   ],
   [
     'rewritten prefix',
@@ -80,24 +82,60 @@ it.each([
       { role: 'user', content: 'rewritten' },
       { role: 'user', content: 'next' },
     ],
+    'history_prefix_mismatch',
   ],
-  ['same revision', 'resp-accepted', 'gpt-5', 'history:test', 2, [{ role: 'user', content: 'before' }]],
-])('fails closed for %s', (_name, legacyPreviousResponseId, model, origin, revision, history) => {
-  const continuity = new ProviderContinuity();
-  checkpoint(continuity);
+  [
+    'same revision',
+    'resp-accepted',
+    'gpt-5',
+    'history:test',
+    2,
+    [{ role: 'user', content: 'before' }],
+    'revision_not_advanced',
+  ],
+])(
+  'records the fixed failure enum for %s',
+  (_name, legacyPreviousResponseId, model, origin, revision, history, failure) => {
+    const continuity = new ProviderContinuity();
+    checkpoint(continuity);
+    const evidence: any[] = [];
+    const observer = new ProviderContinuityOpenAIRootSelectorParityObserver(
+      continuity,
+      () => model,
+      (value) => evidence.push(value),
+    );
+
+    observer.observe({
+      legacyPreviousResponseId,
+      plannedSnapshot: { identity: `history:test:${revision}`, origin, revision, history } as any,
+    });
+
+    expect(evidence[0]).toEqual({
+      type: 'openai_root_selector_parity',
+      version: 2,
+      eligible: false,
+      matches: false,
+      failure,
+    });
+  },
+);
+
+it('records model_unavailable without provider metadata', () => {
   const evidence: any[] = [];
   const observer = new ProviderContinuityOpenAIRootSelectorParityObserver(
-    continuity,
-    () => model,
+    new ProviderContinuity(),
+    () => undefined,
     (value) => evidence.push(value),
   );
 
   observer.observe({
-    legacyPreviousResponseId,
-    plannedSnapshot: { identity: `history:test:${revision}`, origin, revision, history } as any,
+    legacyPreviousResponseId: 'resp-legacy',
+    plannedSnapshot: { identity: 'history:test:1', origin: 'history:test', revision: 1, history: [] },
   });
 
-  expect(evidence[0]).toEqual({ type: 'openai_root_selector_parity', version: 1, eligible: false, matches: false });
+  expect(evidence).toEqual([
+    { type: 'openai_root_selector_parity', version: 2, eligible: false, matches: false, failure: 'model_unavailable' },
+  ]);
 });
 
 it('records an eligible checkpoint as a non-match when the legacy response differs', () => {
@@ -123,7 +161,7 @@ it('records an eligible checkpoint as a non-match when the legacy response diffe
     },
   });
 
-  expect(evidence[0]).toEqual({ type: 'openai_root_selector_parity', version: 1, eligible: true, matches: false });
+  expect(evidence[0]).toEqual({ type: 'openai_root_selector_parity', version: 2, eligible: true, matches: false });
 });
 
 it('swallows an evidence-recorder failure after retaining the local observation', () => {

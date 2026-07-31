@@ -27,6 +27,22 @@ export type ProviderCheckpointSuccessorProof = {
   history: readonly unknown[];
 };
 
+/** Fixed, non-sensitive explanation for why future-selector evidence is unavailable. */
+export type ProviderSuccessorEligibilityFailure =
+  | 'no_accepted_checkpoint'
+  | 'missing_successor_proof'
+  | 'lineage_mismatch'
+  | 'invalid_planned_snapshot'
+  | 'identity_mismatch'
+  | 'origin_mismatch'
+  | 'revision_not_advanced'
+  | 'history_not_extended'
+  | 'history_prefix_mismatch';
+
+export type ProviderSuccessorEligibility =
+  | { eligible: true }
+  | { eligible: false; failure: ProviderSuccessorEligibilityFailure };
+
 export type ProviderCheckpoint = ProviderCheckpointBinding & {
   state: 'candidate' | 'accepted' | 'retired';
   lineage: number;
@@ -153,26 +169,40 @@ export class ProviderContinuity {
     lineage: number,
     plannedSnapshot: ProviderCheckpointSuccessorProof,
   ): boolean {
+    return this.assessSuccessorEligibility(identity, lineage, plannedSnapshot).eligible;
+  }
+
+  /**
+   * Read-only, fail-closed eligibility assessment for bounded diagnostics.
+   * Its fixed failure enum contains no provider IDs, history, or request data.
+   */
+  assessSuccessorEligibility(
+    identity: ProviderCheckpointIdentity,
+    lineage: number,
+    plannedSnapshot: ProviderCheckpointSuccessorProof,
+  ): ProviderSuccessorEligibility {
     const checkpoint = this.#checkpoint;
     const proof = checkpoint?.successorProof;
-    if (
-      !checkpoint ||
-      checkpoint.state !== 'accepted' ||
-      checkpoint.lineage !== lineage ||
-      !proof ||
-      !ProviderContinuity.#isSnapshotProof(plannedSnapshot) ||
-      !ProviderContinuity.#identityMatches(checkpoint.identity, identity) ||
-      !proof.origin ||
-      proof.origin !== plannedSnapshot.origin ||
-      plannedSnapshot.revision <= proof.revision ||
-      plannedSnapshot.history.length <= proof.history.length
-    ) {
-      return false;
+    if (!checkpoint || checkpoint.state !== 'accepted') return { eligible: false, failure: 'no_accepted_checkpoint' };
+    if (checkpoint.lineage !== lineage) return { eligible: false, failure: 'lineage_mismatch' };
+    if (!proof) return { eligible: false, failure: 'missing_successor_proof' };
+    if (!ProviderContinuity.#isSnapshotProof(plannedSnapshot)) {
+      return { eligible: false, failure: 'invalid_planned_snapshot' };
     }
+    if (!ProviderContinuity.#identityMatches(checkpoint.identity, identity)) {
+      return { eligible: false, failure: 'identity_mismatch' };
+    }
+    if (!proof.origin || proof.origin !== plannedSnapshot.origin)
+      return { eligible: false, failure: 'origin_mismatch' };
+    if (plannedSnapshot.revision <= proof.revision) return { eligible: false, failure: 'revision_not_advanced' };
+    if (plannedSnapshot.history.length <= proof.history.length)
+      return { eligible: false, failure: 'history_not_extended' };
     try {
-      return proof.history.every((item, index) => isDeepStrictEqual(item, plannedSnapshot.history[index]));
+      return proof.history.every((item, index) => isDeepStrictEqual(item, plannedSnapshot.history[index]))
+        ? { eligible: true }
+        : { eligible: false, failure: 'history_prefix_mismatch' };
     } catch {
-      return false;
+      return { eligible: false, failure: 'history_prefix_mismatch' };
     }
   }
 

@@ -94,10 +94,22 @@ export interface ApprovalResolvedLogEvent {
 /** Observation-only evidence for a later OpenAI selector review. */
 export interface OpenAIRootSelectorParityLogEvent {
   type: 'openai_root_selector_parity';
-  version: 1;
+  version: 2;
   turnId?: string;
   eligible: boolean;
   matches: boolean;
+  /** Fixed diagnostic enum, only emitted when eligibility is false. */
+  failure?:
+    | 'model_unavailable'
+    | 'no_accepted_checkpoint'
+    | 'missing_successor_proof'
+    | 'lineage_mismatch'
+    | 'invalid_planned_snapshot'
+    | 'identity_mismatch'
+    | 'origin_mismatch'
+    | 'revision_not_advanced'
+    | 'history_not_extended'
+    | 'history_prefix_mismatch';
 }
 
 /**

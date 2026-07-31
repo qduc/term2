@@ -130,7 +130,7 @@ it('observes eligible owned-root OpenAI parity while preserving the legacy outgo
     },
     observe: (value: unknown) => {
       observations.push(value);
-      recordEvidence?.({ type: 'openai_root_selector_parity', version: 1, eligible: true, matches: true });
+      recordEvidence?.({ type: 'openai_root_selector_parity', version: 2, eligible: true, matches: true });
     },
   });
   composition.conversationLogger.setLogSink((event) => diagnostics.push(event));
@@ -150,7 +150,7 @@ it('observes eligible owned-root OpenAI parity while preserving the legacy outgo
   expect(observations[0]).toMatchObject({ legacyPreviousResponseId: 'resp-legacy' });
   expect(diagnostics).toContainEqual({
     type: 'openai_root_selector_parity',
-    version: 1,
+    version: 2,
     eligible: true,
     matches: true,
     turnId: expect.any(String),
@@ -204,7 +204,7 @@ it.each([
     },
     observe: (value: unknown) => {
       observations.push(value);
-      recordEvidence?.({ type: 'openai_root_selector_parity', version: 1, eligible: true, matches: true });
+      recordEvidence?.({ type: 'openai_root_selector_parity', version: 2, eligible: true, matches: true });
     },
   });
   composition.conversationLogger.setLogSink((event) => diagnostics.push(event));

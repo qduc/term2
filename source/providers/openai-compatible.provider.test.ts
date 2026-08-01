@@ -137,6 +137,60 @@ it('runtime openai-compatible createRunner returns a runner', () => {
   expect(runner).toBeTruthy();
 });
 
+it('resolves a stored provider config by legacy name alias when the stored id differs', async () => {
+  const provider = createOpenAICompatibleProviderDefinition({
+    name: 'alias-name',
+  });
+
+  let capturedUrl = '';
+  const fakeFetch = async (url: string, _options?: any) => {
+    capturedUrl = url;
+    return new Response(JSON.stringify({ data: [{ id: 'model-a' }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  const deps: ProviderDeps = {
+    settingsService: {
+      get: (key: any) => {
+        const values: Record<string, any> = {
+          providers: [
+            {
+              id: 'stable-id',
+              name: 'alias-name',
+              type: 'openai-compatible',
+              baseUrl: 'http://localhost:11434',
+            },
+          ],
+        };
+        return values[key];
+      },
+      getDynamic(key: string) {
+        return this.get(key as any);
+      },
+      set() {},
+      setDynamic() {},
+      setPersistent() {},
+      setPersistentDynamic() {},
+    },
+    loggingService: {
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      debug: () => {},
+      security: () => {},
+      setCorrelationId: () => {},
+      getCorrelationId: () => undefined,
+      clearCorrelationId: () => {},
+    },
+  };
+
+  const models = await provider.fetchModels(deps, fakeFetch);
+  expect(capturedUrl).toContain('http://localhost:11434');
+  expect(Array.isArray(models)).toBe(true);
+});
+
 it('providerData fields are forwarded into the chat-completions request body root', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);

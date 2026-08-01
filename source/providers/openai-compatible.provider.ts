@@ -26,6 +26,7 @@ import {
 import { applyClientResponseNormalization } from './openai-compatible-response-normalizer.js';
 import { getModelListItems, mapModelListItem } from './openai-compatible-models.js';
 import { OpenAIChatCompletionsModel } from './openai-chat-completions-model.js';
+import { decodeStoredCustomProviderConfigs, normalizeProviderIdentifier } from '../services/settings/custom-provider-normalization.js';
 
 export type CustomProviderConfig = {
   name: string;
@@ -56,20 +57,20 @@ export type CustomProviderRuntimeDeps = {
 };
 
 function findConfigFromSettings(settingsService: ISettingsService, providerId: string): CustomProviderConfig | null {
-  const list = settingsService?.getDynamic?.('providers');
-  if (!Array.isArray(list)) return null;
-  const entry = list.find((p: any) => p && (p.id === providerId || p.name === providerId));
+  const raw: unknown = settingsService?.getDynamic('providers');
+  const configs = decodeStoredCustomProviderConfigs(raw);
+  const normalizedProviderId = normalizeProviderIdentifier(providerId);
+  const entry =
+    configs.find((p) => p.id === providerId || p.name === providerId) ??
+    configs.find((p) => p.id === normalizedProviderId || p.name === normalizedProviderId);
   if (!entry) return null;
 
-  const id = entry.id ? String(entry.id) : String(entry.name);
-  const label = entry.name ? String(entry.name) : id;
-
   return {
-    name: id,
-    label,
-    type: entry.type ? String(entry.type) : 'openai-compatible',
-    baseUrl: entry.baseUrl ? String(entry.baseUrl) : undefined,
-    apiKey: entry.apiKey ? String(entry.apiKey) : undefined,
+    name: entry.id,
+    label: entry.name,
+    type: entry.type,
+    baseUrl: entry.baseUrl,
+    apiKey: entry.apiKey,
   };
 }
 

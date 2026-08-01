@@ -1,10 +1,11 @@
-import type { SettingsService } from '../services/settings/settings-service.js';
+import type { ISettingsService } from '../services/service-interfaces.js';
 import { getAllProviders, upsertProvider, unregisterProvider } from './index.js';
 import { createOpenAICompatibleProviderDefinition } from './openai-compatible-lazy.js';
 import {
+  decodeStoredCustomProviderConfigs,
   normalizeProviderIdentifier,
   resolveProviderId,
-  resolveProviderName,
+  type StoredCustomProviderConfig,
 } from '../services/settings/custom-provider-normalization.js';
 
 export type ProviderSelectionPhase =
@@ -43,26 +44,27 @@ export const PROVIDER_TYPES: CustomProviderDraft['type'][] = [
 
 export const PROVIDER_NAME_REGEX = /^[a-zA-Z0-9][-a-zA-Z0-9_.]*$/;
 
-export const getConfiguredProviderNames = (settingsService: SettingsService): Set<string> => {
+export const getCustomProviderConfigs = (settingsService: ISettingsService): StoredCustomProviderConfig[] => {
+  const raw: unknown = settingsService?.getDynamic('providers');
+  return decodeStoredCustomProviderConfigs(raw);
+};
+
+export const getConfiguredProviderNames = (settingsService: ISettingsService): Set<string> => {
   const names = new Set<string>();
 
   for (const provider of getAllProviders()) {
     names.add(provider.id);
   }
 
-  const configured = (settingsService.getDynamic('providers') as any[]) || [];
-  for (const provider of configured) {
-    const id = resolveProviderId(provider);
-    if (id) {
-      names.add(id);
-    }
+  for (const provider of getCustomProviderConfigs(settingsService)) {
+    names.add(provider.id);
   }
 
   return names;
 };
 
 export const hasProviderNameConflict = (
-  settingsService: SettingsService,
+  settingsService: ISettingsService,
   candidate: string,
   currentName?: string,
 ): boolean => {
@@ -80,9 +82,9 @@ export const hasProviderNameConflict = (
   return false;
 };
 
-export const loadProviderItems = (settingsService: SettingsService): ProviderSelectionItem[] => {
+export const loadProviderItems = (settingsService: ISettingsService): ProviderSelectionItem[] => {
   const all = getAllProviders();
-  const customList = (settingsService.getDynamic('providers') as any[]) || [];
+  const customList = getCustomProviderConfigs(settingsService);
   const activeProvider = settingsService.get('agent.provider') || 'openai';
 
   const providerItems: ProviderSelectionItem[] = all
@@ -95,17 +97,13 @@ export const loadProviderItems = (settingsService: SettingsService): ProviderSel
     }));
 
   for (const c of customList) {
-    const id = resolveProviderId(c);
-    if (id) {
-      if (!providerItems.some((p) => p.id === id)) {
-        const label = resolveProviderName(c, id);
-        providerItems.push({
-          id,
-          label,
-          isCustom: true,
-          isActive: id === activeProvider,
-        });
-      }
+    if (!providerItems.some((p) => p.id === c.id)) {
+      providerItems.push({
+        id: c.id,
+        label: c.name,
+        isCustom: true,
+        isActive: c.id === activeProvider,
+      });
     }
   }
 
@@ -113,7 +111,7 @@ export const loadProviderItems = (settingsService: SettingsService): ProviderSel
     providerItems.push({
       id: activeProvider,
       label: activeProvider,
-      isCustom: customList.some((c: any) => resolveProviderId(c) === activeProvider),
+      isCustom: customList.some((c) => c.id === activeProvider),
       isActive: true,
     });
   }
@@ -128,7 +126,7 @@ export interface SaveProviderResult {
 }
 
 export const saveProvider = (
-  settingsService: SettingsService,
+  settingsService: ISettingsService,
   draft: CustomProviderDraft,
   editingOriginalName: string | null,
 ): SaveProviderResult => {
@@ -139,10 +137,12 @@ export const saveProvider = (
 
   if (isEditingBuiltIn && editingOriginalName) {
     try {
-      settingsService.setPersistentDynamic(`agent.${editingOriginalName}.apiKey`, draft.apiKey || undefined);
+      const apiKeyKey = `agent.${editingOriginalName}.apiKey`;
+      settingsService?.setPersistentDynamic(apiKeyKey, draft.apiKey || undefined);
       return { success: true };
-    } catch (err: any) {
-      return { success: false, errorMessage: err.message || 'Failed to save provider API key.' };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, errorMessage: message || 'Failed to save provider API key.' };
     }
   }
 
@@ -172,12 +172,13 @@ export const saveProvider = (
   }
 
   try {
-    const list = (settingsService.getDynamic('providers') as any[]) || [];
+    const rawList: unknown = settingsService?.getDynamic('providers');
+    const list = Array.isArray(rawList) ? rawList : [];
     const isEdit = originalName !== null;
-    let updatedList;
+    let updatedList: unknown[];
 
     if (isEdit && originalName) {
-      updatedList = list.filter((p: any) => resolveProviderId(p) !== originalName);
+      updatedList = list.filter((p: unknown) => resolveProviderId(p) !== originalName);
       if (originalName !== providerIdentifier) {
         unregisterProvider(originalName);
       }
@@ -185,7 +186,7 @@ export const saveProvider = (
       updatedList = [...list];
     }
 
-    const newEntry: any = {
+    const newEntry: Record<string, unknown> = {
       id: providerIdentifier,
       name: draft.name.trim(),
       type: draft.type,
@@ -194,11 +195,11 @@ export const saveProvider = (
     if (draft.apiKey) newEntry.apiKey = draft.apiKey;
 
     updatedList.push(newEntry);
-    settingsService.setPersistentDynamic('providers', updatedList);
+    settingsService?.setPersistentDynamic('providers', updatedList);
 
     const def = createOpenAICompatibleProviderDefinition({
       name: providerIdentifier,
-      label: newEntry.name,
+      label: draft.name.trim(),
       type: draft.type,
       baseUrl: draft.baseUrl,
       apiKey: draft.apiKey,
@@ -210,15 +211,18 @@ export const saveProvider = (
     }
 
     return { success: true };
-  } catch (err: any) {
-    return { success: false, errorMessage: err.message || 'Failed to save provider.' };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, errorMessage: message || 'Failed to save provider.' };
   }
 };
 
-export const deleteCustomProvider = (settingsService: SettingsService, name: string): void => {
-  const list = (settingsService.getDynamic('providers') as any[]) || [];
-  const updated = list.filter((p: any) => resolveProviderId(p) !== name);
-  settingsService.setPersistentDynamic('providers', updated);
+export const deleteCustomProvider = (settingsService: ISettingsService, name: string): void => {
+  const rawList: unknown = settingsService?.getDynamic('providers');
+  const list = Array.isArray(rawList) ? rawList : [];
+  const updated = list.filter((p: unknown) => resolveProviderId(p) !== name);
+
+  settingsService?.setPersistentDynamic('providers', updated);
   unregisterProvider(name);
 
   const activeProvider = settingsService.get('agent.provider');
@@ -229,7 +233,7 @@ export const deleteCustomProvider = (settingsService: SettingsService, name: str
 
 export const validateWizardName = (
   value: string,
-  settingsService: SettingsService,
+  settingsService: ISettingsService,
   isEditingField: boolean,
   editingOriginalName?: string,
 ): { valid: boolean; errorMessage?: string } => {

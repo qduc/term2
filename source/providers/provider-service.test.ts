@@ -13,16 +13,19 @@ import {
   deleteCustomProvider,
 } from './provider-service.js';
 
-function createMockSettingsService(initialProviders: any[] = [], initialActive = 'openai') {
-  const settings = new Map<string, any>([
+function createMockSettingsService(initialProviders: unknown[] = [], initialActive = 'openai') {
+  const settings = new Map<string, unknown>([
     ['providers', initialProviders],
     ['agent.provider', initialActive],
   ]);
 
   return {
     get: (key: string) => settings.get(key),
-    set: (key: string, value: any) => settings.set(key, value),
-    setPersistent: (key: string, value: any) => settings.set(key, value),
+    getDynamic: (key: string) => settings.get(key),
+    set: (key: string, value: unknown) => settings.set(key, value),
+    setDynamic: (key: string, value: unknown) => settings.set(key, value),
+    setPersistent: (key: string, value: unknown) => settings.set(key, value),
+    setPersistentDynamic: (key: string, value: unknown) => settings.set(key, value),
   } as any;
 }
 
@@ -183,6 +186,56 @@ it('getConfiguredProviderNames includes built-in and custom names', () => {
   const names = getConfiguredProviderNames(settingsService);
   expect(names.has('openai')).toBe(true);
   expect(names.has('custom-ollama')).toBe(true);
+});
+
+it('getConfiguredProviderNames ignores malformed provider entries', () => {
+  const settingsService = createMockSettingsService(
+    [
+      { id: 'good', name: 'Good', type: 'openai-compatible', baseUrl: 'http://localhost:8080/v1' },
+      'not-an-object',
+      null,
+      42,
+      { noId: true },
+      { id: '   ', name: 'blank-id' },
+      { id: 'typed', name: 'Typed', type: 'unknown-type', baseUrl: 'http://localhost:8080/v1' },
+    ],
+    'openai',
+  );
+  const names = getConfiguredProviderNames(settingsService);
+  expect(names.has('good')).toBe(true);
+  // Unknown type falls back to openai-compatible; entry still resolves by id.
+  expect(names.has('typed')).toBe(true);
+  expect(names.has('not-an-object')).toBe(false);
+  expect(names.has('noId')).toBe(false);
+  expect(names.has('blank-id')).toBe(false);
+});
+
+it('loadProviderItems keeps malformed entries out of the custom list', () => {
+  const settingsService = createMockSettingsService(
+    [null, 'junk', 7, { id: 'good', name: 'Good', type: 'openai-compatible', baseUrl: 'http://localhost:8080/v1' }],
+    'openai',
+  );
+  const items = loadProviderItems(settingsService);
+  expect(items.find((i) => i.id === 'good')).toBeTruthy();
+  expect(items.some((i) => i.id === 'junk')).toBe(false);
+});
+
+it('saveProvider preserves unrelated malformed entries in the stored list', () => {
+  const settingsService = createMockSettingsService(
+    ['junk', { id: 'keep', name: 'Keep', type: 'openai-compatible', baseUrl: 'http://localhost:8080/v1' }],
+    'openai',
+  );
+  const result = saveProvider(
+    settingsService,
+    { name: 'new-provider', type: 'openai-compatible', baseUrl: 'http://localhost:8080/v1' },
+    null,
+  );
+  expect(result.success).toBe(true);
+  const providers = settingsService.get('providers');
+  expect(providers.length).toBe(3);
+  expect(providers[0]).toBe('junk');
+  expect(providers[1].id).toBe('keep');
+  expect(providers[2].id).toBe('new-provider');
 });
 
 it('loadProviderItems includes built-in providers without custom flag', () => {

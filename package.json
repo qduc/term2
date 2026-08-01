@@ -45,6 +45,7 @@
     "test": "vitest run --reporter=minimal",
     "test:e2e": "vitest run --reporter=minimal .e2e.test.ts",
     "test:codex-network": "vitest run --reporter=minimal scripts/fake-codex-server.e2e.test.ts",
+    "test:provider-black-box": "node scripts/run-provider-black-box.mjs",
     "test:docker-host-control-integration": "RUN_DOCKER_HOST_CONTROL_INTEGRATION=1 vitest run --reporter=minimal source/tools/system/docker-host-control.integration.test.ts",
     "fake:codex": "tsx scripts/fake-codex-server.ts",
     "test:verbose": "vitest run",

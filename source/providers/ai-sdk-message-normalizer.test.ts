@@ -366,7 +366,7 @@ it('withMergedAssistantMessages normalizes doGenerate messages before delegating
       return { text: 'ok' } as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
     },
     doStream: async () =>
-      ({ stream: (async function* () {})() }) as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>,
+      ({ stream: (async function* () {})() } as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>),
   } as LanguageModelV3);
 
   await model.doGenerate({
@@ -401,7 +401,7 @@ it('withMergedAssistantMessages normalizes doGenerate prompt before delegating',
       return { text: 'ok' } as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
     },
     doStream: async () =>
-      ({ stream: (async function* () {})() }) as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>,
+      ({ stream: (async function* () {})() } as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>),
   } as LanguageModelV3);
 
   await model.doGenerate({
@@ -425,8 +425,7 @@ it('withMergedAssistantMessages normalizes doStream messages before delegating',
     modelId: 'model',
     specificationVersion: 'v3',
     supportedUrls: {},
-    doGenerate: async () =>
-      ({ text: 'ok' }) as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>,
+    doGenerate: async () => ({ text: 'ok' } as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>),
     doStream: async (options: LanguageModelV3CallOptions) => {
       delegatedOptions = options as LanguageModelV3CallOptions & { messages?: unknown[] };
       return { stream: (async function* () {})() } as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>;

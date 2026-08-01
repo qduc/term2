@@ -90,7 +90,10 @@ it('creates a streamed model via provider registry and executes stream()', async
   const adaptedTurn = bridgeBackToTurn(modelInstance);
 
   const events: any[] = [];
-  for await (const event of adaptedTurn.stream({ input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }], tools: [] })) {
+  for await (const event of adaptedTurn.stream({
+    input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    tools: [],
+  })) {
     events.push(event);
   }
 

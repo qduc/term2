@@ -1,8 +1,16 @@
 import { afterEach, beforeEach, it, expect } from 'vitest';
 import type { SearchReplaceFullOperation } from './search-replace.js';
 import { healSearchReplaceParams } from './edit-healing.js';
-import { getProvider, registerProvider, unregisterProvider, type ProviderDefinition } from '../../providers/registry.js';
-import { createMockLogger, createMockSettings } from '../../services/subagents/test-helpers/subagent-manager-fixtures.js';
+import {
+  getProvider,
+  registerProvider,
+  unregisterProvider,
+  type ProviderDefinition,
+} from '../../providers/registry.js';
+import {
+  createMockLogger,
+  createMockSettings,
+} from '../../services/subagents/test-helpers/subagent-manager-fixtures.js';
 
 const baseParams: SearchReplaceFullOperation = {
   path: 'file.txt',

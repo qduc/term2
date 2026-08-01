@@ -108,9 +108,7 @@ export class SessionManager {
 
   getCurrentSnapshot(): StateSnapshot {
     const providerFn = getMethod<[], string>(this.#agentClient, 'getProvider');
-    const provider = providerFn
-      ? providerFn.call(this.#agentClient)
-      : this.#settingsService?.get('agent.provider');
+    const provider = providerFn ? providerFn.call(this.#agentClient) : this.#settingsService?.get('agent.provider');
     const model = this.#settingsService?.get('agent.model');
     return projectSnapshot({
       history: this.#conversationStore.getHistory(),

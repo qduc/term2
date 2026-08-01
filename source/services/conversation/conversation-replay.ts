@@ -3,7 +3,12 @@ import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import { createUsageAccumulator } from '../../utils/ai/token-usage.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
 import { repairConversationHistory } from './conversation-history-repair.js';
-import type { AssistantTurnState, LogEvent, PersistedLogEvent, StateSnapshot } from '../logging/conversation-log-events.js';
+import type {
+  AssistantTurnState,
+  LogEvent,
+  PersistedLogEvent,
+  StateSnapshot,
+} from '../logging/conversation-log-events.js';
 import { isTruncatedLogEvent } from '../logging/conversation-log-events.js';
 import type { PersistedLogEnvelope } from './conversation-decoder.js';
 import type { BotMessage, CommandMessage, SubagentActivityMessage } from '../../types/message.js';
@@ -626,7 +631,8 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
     }
     case 'subagent_tool_started': {
       const existing = state.messages.find(
-        (message): message is SubagentActivityMessage => message.sender === 'subagent' && message.agentId === event.agentId,
+        (message): message is SubagentActivityMessage =>
+          message.sender === 'subagent' && message.agentId === event.agentId,
       );
       if (existing) {
         existing.status = 'running';

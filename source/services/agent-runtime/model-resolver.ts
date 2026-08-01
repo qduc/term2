@@ -37,8 +37,10 @@ function resolveTierPolicy(tier: string, settings: ISettingsService): ExactModel
 }
 
 export function resolveAncillaryModelTier(tier: AncillaryModelTier, settings: ISettingsService): ExactModelPolicy {
-  const model = (settings.getDynamic(`agent.${tier}Model`) as string | undefined) ?? resolveLegacyTierModel(tier, settings);
-  const provider = (settings.getDynamic(`agent.${tier}Provider`) as string | undefined) ?? settings.get('agent.provider') ?? 'openai';
+  const model =
+    (settings.getDynamic(`agent.${tier}Model`) as string | undefined) ?? resolveLegacyTierModel(tier, settings);
+  const provider =
+    (settings.getDynamic(`agent.${tier}Provider`) as string | undefined) ?? settings.get('agent.provider') ?? 'openai';
   return { provider, model: model ?? settings.get('agent.model') ?? 'gpt-4o' };
 }
 
@@ -58,7 +60,8 @@ function resolveRelativePolicy(
     // MVP: all reasoning effort levels resolve to the same configured
     // reasoning model. Granular per-effort settings can be added later.
     const reasoningModel =
-      (settings.getDynamic(`agent.reasoning.${policy.reasoning}`) as string | undefined) ?? (settings.getDynamic('agent.reasoningModel') as string | undefined);
+      (settings.getDynamic(`agent.reasoning.${policy.reasoning}`) as string | undefined) ??
+      (settings.getDynamic('agent.reasoningModel') as string | undefined);
     if (reasoningModel) {
       return { provider: parentExact.provider, model: reasoningModel };
     }

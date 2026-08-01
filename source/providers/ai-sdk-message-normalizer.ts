@@ -175,9 +175,7 @@ function normalizeMessageOptions(options: LanguageModelV3CallOptions): LanguageM
 
   return {
     ...options,
-    ...(Array.isArray(opts.prompt)
-      ? { prompt: mergeAssistantMessages(opts.prompt as Record<string, unknown>[]) }
-      : {}),
+    ...(Array.isArray(opts.prompt) ? { prompt: mergeAssistantMessages(opts.prompt as Record<string, unknown>[]) } : {}),
     ...(Array.isArray(opts.messages)
       ? { messages: mergeAssistantMessages(opts.messages as Record<string, unknown>[]) }
       : {}),

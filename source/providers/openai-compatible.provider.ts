@@ -26,7 +26,10 @@ import {
 import { applyClientResponseNormalization } from './openai-compatible-response-normalizer.js';
 import { getModelListItems, mapModelListItem } from './openai-compatible-models.js';
 import { OpenAIChatCompletionsModel } from './openai-chat-completions-model.js';
-import { decodeStoredCustomProviderConfigs, normalizeProviderIdentifier } from '../services/settings/custom-provider-normalization.js';
+import {
+  decodeStoredCustomProviderConfigs,
+  normalizeProviderIdentifier,
+} from '../services/settings/custom-provider-normalization.js';
 
 export type CustomProviderConfig = {
   name: string;

@@ -144,8 +144,7 @@ export async function runWithSession(session: ConversationSessionLike, config: N
           } else if (classification.status === SafetyStatus.YELLOW) {
             const autoApproveModel =
               config.settingsService && config.agentClient
-                ? config.settingsService.get('agent.choreModel') ??
-                  config.settingsService.get('agent.autoApproveModel')
+                ? config.settingsService.get('agent.choreModel') ?? config.settingsService.get('agent.autoApproveModel')
                 : undefined;
             if (!autoApproveModel) {
               shouldApprove = false;

@@ -176,7 +176,7 @@ it('uses the chore tier model and provider ahead of legacy auto-approval setting
         'agent.choreProvider': 'chore-provider',
         'agent.autoApproveModel': 'legacy-auto-model',
         'agent.autoApproveProvider': 'legacy-auto-provider',
-      })[key],
+      }[key]),
   };
 
   await evaluateShellAutoApprovalAdvisories({

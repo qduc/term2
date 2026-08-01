@@ -325,10 +325,7 @@ export class AgentRunOrchestrator {
 
     let agentRefreshed = false;
     // Ensure Codex models are fetched/cached if reasoningEffort is default, so we can apply default_reasoning_level
-    if (
-      this.#agentConfig.getProvider() === 'codex' &&
-      this.#settings.get('agent.reasoningEffort') === 'default'
-    ) {
+    if (this.#agentConfig.getProvider() === 'codex' && this.#settings.get('agent.reasoningEffort') === 'default') {
       try {
         await fetchModels({ settingsService: this.#settings, loggingService: this.#logger }, 'codex');
         this.#agentConfig.refreshAgent();

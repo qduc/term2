@@ -3,10 +3,10 @@ import type { SettingsData } from './settings-schema.js';
 export type DeepPartial<T> = T extends (...args: never[]) => unknown
   ? T
   : T extends Array<infer U>
-    ? Array<U>
-    : T extends object
-      ? { [P in keyof T]?: DeepPartial<T[P]> }
-      : T;
+  ? Array<U>
+  : T extends object
+  ? { [P in keyof T]?: DeepPartial<T[P]> }
+  : T;
 
 /**
  * Build environment-derived overrides from process.env

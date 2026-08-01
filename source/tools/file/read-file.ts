@@ -85,7 +85,13 @@ export const createReadFileToolDefinition = (
     nestedCompatibility?: NestedToolCompatibilityState;
   } = {},
 ): ToolDefinition<typeof readFileParametersSchema> => {
-  const { executionContext, allowOutsideWorkspace = false, orchestratorMode = false, sessionAccess, nestedCompatibility } = deps;
+  const {
+    executionContext,
+    allowOutsideWorkspace = false,
+    orchestratorMode = false,
+    sessionAccess,
+    nestedCompatibility,
+  } = deps;
   return {
     name: 'read_file',
     description: orchestratorMode

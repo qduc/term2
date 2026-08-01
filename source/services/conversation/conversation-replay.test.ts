@@ -828,7 +828,11 @@ it('replayEvents: assistant_turn prefers persisted displayUsage for resumed foot
   const restored = replayEvents(envelopes);
 
   expect(restored.messages[2].sender).toBe('bot');
-  expect((restored.messages[2] as BotMessage).usage).toEqual({ prompt_tokens: 3000, completion_tokens: 120, total_tokens: 3120 });
+  expect((restored.messages[2] as BotMessage).usage).toEqual({
+    prompt_tokens: 3000,
+    completion_tokens: 120,
+    total_tokens: 3120,
+  });
   expect(restored.usage).toEqual({ prompt_tokens: 6000, completion_tokens: 280, total_tokens: 6280 });
 });
 
@@ -1149,7 +1153,9 @@ it('replayEvents: assistant_journal_item restores history and ledger on interrup
   expect((restored.toolLedger[0].historyItems?.[1] as any).type).toBe('function_call');
   expect((restored.toolLedger[0].historyItems?.[2] as any).type).toBe('function_call_result');
   // The corresponding command message in the UI shows the completed output.
-  const commandMsg = restored.messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1');
+  const commandMsg = restored.messages.find(
+    (m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1',
+  );
   expect(commandMsg).toBeTruthy();
   expect(commandMsg?.status).toBe('completed');
   expect(commandMsg?.output).toBe('/repo');
@@ -1496,7 +1502,9 @@ it('replayEvents: command_message tool output is deduped when a richer tool resu
   const restored = replayEvents(envelopes);
 
   // The journal's richer tool result wins; the running placeholder is gone.
-  const commandMsgs = restored.messages.filter((m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1');
+  const commandMsgs = restored.messages.filter(
+    (m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1',
+  );
   expect(commandMsgs.length).toBe(1);
   expect(commandMsgs[0].status).toBe('completed');
   expect(commandMsgs[0].output).toBe('/repo');

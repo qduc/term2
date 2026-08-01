@@ -298,9 +298,7 @@ export async function evaluateShellAutoApprovalAdvisories({
 
   const choreModel = resolveAncillaryModelTier('chore', settingsService);
   const autoApproveModel =
-    settingsService.get('agent.choreModel') ??
-    settingsService.get('agent.autoApproveModel') ??
-    choreModel.model;
+    settingsService.get('agent.choreModel') ?? settingsService.get('agent.autoApproveModel') ?? choreModel.model;
   const autoApproveProvider =
     settingsService.get('agent.choreProvider') ??
     settingsService.get('agent.autoApproveProvider') ??

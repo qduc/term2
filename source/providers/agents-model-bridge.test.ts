@@ -280,7 +280,12 @@ it('drives a real streaming Runner through the temporary bridge', async () => {
     },
   });
   const loop = new ApplicationRunLoop({ resolveModel: async () => bridgeBackToTurn(model) });
-  const agent: ApplicationAgent = { name: 'streamed-turn-bridge-test', instructions: 'Reply.', model: 'bridge-model', tools: [] };
+  const agent: ApplicationAgent = {
+    name: 'streamed-turn-bridge-test',
+    instructions: 'Reply.',
+    model: 'bridge-model',
+    tools: [],
+  };
 
   const stream = loop.startStream(agent, 'hello');
   for await (const _event of stream) {

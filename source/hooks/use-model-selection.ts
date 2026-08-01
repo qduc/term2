@@ -39,7 +39,7 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
       ? settingsService.getDynamic(modelSettingConfig.providerKey) ??
         settingsService.getDynamic(modelSettingConfig.fallbackProviderKey ?? modelSettingConfig.providerKey)
       : settingsService.get('agent.provider');
-    return (typeof raw === 'string' ? raw : null);
+    return typeof raw === 'string' ? raw : null;
   }, [modelSettingConfig, settingsService]);
 
   const setCurrentProvider = useCallback((nextProvider: string | null) => {

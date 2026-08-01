@@ -681,9 +681,7 @@ function buildInitMeta(id: string, createdAt: string) {
     },
     ...(settings.get('agent.model') ? { model: settings.get('agent.model') } : {}),
     ...(settings.get('agent.provider') ? { provider: settings.get('agent.provider') } : {}),
-    ...(settings.get('agent.reasoningEffort')
-      ? { reasoningEffort: settings.get('agent.reasoningEffort') }
-      : {}),
+    ...(settings.get('agent.reasoningEffort') ? { reasoningEffort: settings.get('agent.reasoningEffort') } : {}),
     ...(resumedConversation?.forkedFrom ? { forkedFrom: resumedConversation.forkedFrom } : {}),
   };
 }

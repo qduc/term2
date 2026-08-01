@@ -193,4 +193,3 @@ export function resetSandboxDeniedReadStoresForTest(): void {
   projectAllowReadStore = null;
   projectAllowReadStoreRoot = null;
 }
-

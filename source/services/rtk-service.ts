@@ -145,7 +145,6 @@ function collectRtkWrapOffsets(command: string): number[] | null {
   return offsets.sort((a, b) => b - a);
 }
 
-
 export interface RtkServiceDeps {
   loggingService: ILoggingService;
   fetchImpl?: (url: string) => Promise<Response>;

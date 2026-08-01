@@ -51,8 +51,10 @@ export const decodeStoredCustomProviderConfig = (entry: unknown): StoredCustomPr
   const rawType = typeof record.type === 'string' ? record.type : 'openai-compatible';
   const type: KnownCustomProviderType = isKnownCustomProviderType(rawType) ? rawType : 'openai-compatible';
 
-  const baseUrl = typeof record.baseUrl === 'string' && record.baseUrl.trim().length > 0 ? record.baseUrl.trim() : undefined;
-  const apiKey = typeof record.apiKey === 'string' && record.apiKey.trim().length > 0 ? record.apiKey.trim() : undefined;
+  const baseUrl =
+    typeof record.baseUrl === 'string' && record.baseUrl.trim().length > 0 ? record.baseUrl.trim() : undefined;
+  const apiKey =
+    typeof record.apiKey === 'string' && record.apiKey.trim().length > 0 ? record.apiKey.trim() : undefined;
 
   return {
     id,

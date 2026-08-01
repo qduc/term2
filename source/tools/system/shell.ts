@@ -517,11 +517,12 @@ export function createShellToolDefinition(deps: {
               });
               return `Error: ${SANDBOX_ESCAPE_INSTRUCTION}`;
             }
-          } else if (sandboxAvailability.type !== 'disabled') {
-            loggingService.warn('Shell sandbox unavailable; running command without sandbox', {
+          } else {
+            loggingService.warn('Shell sandbox unavailable; refusing unsandboxed fallback', {
               availability: sandboxAvailability.type,
               reason: 'reason' in sandboxAvailability ? sandboxAvailability.reason : undefined,
             });
+            return `Error: ${SANDBOX_ESCAPE_INSTRUCTION}`;
           }
         }
 

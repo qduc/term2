@@ -1,13 +1,7 @@
-type Tool = { type: string };
-type FunctionTool = Tool & {
-  type: 'function';
-  name?: string;
-  parameters: any;
-  invoke: (context: unknown, input: unknown, details: unknown) => Promise<unknown>;
-};
 import { z } from 'zod';
 import { isAbortLike } from '../services/subagents/utils.js';
 import { unwrapSchema } from '../services/settings/setting-schema-utils.js';
+import type { ToolDefinition } from '../tools/types.js';
 
 /**
  * Maximum payload size (in characters) for which JSON repair is attempted.
@@ -350,66 +344,90 @@ export const toolErrorFunction = (_context: unknown, error: unknown): string => 
   return `An error occurred while running the tool. Please try again. Error: ${details}`;
 };
 
-export const wrapToolInvoke = <T extends Tool>(
+/**
+ * Wraps a `ToolDefinition`'s `execute` with the input normalisation and schema
+ * diagnostics the SDK-era `tool()` + `invoke` pipeline provided: JSON-string
+ * params (direct invokers) go through the string pipeline (repair per mode),
+ * already-parsed objects get the schema-aware coercions directly, and
+ * structurally invalid params become a non-fatal diagnostic result string so
+ * the model can self-correct within the same turn.
+ */
+export const wrapToolInvoke = <T extends ToolDefinition>(
   tool: T,
   originalSchema?: z.ZodTypeAny,
   options: { argumentParsing?: ToolInputNormalizationMode } = {},
 ): T => {
-  // Only FunctionTool has an invoke method
-  if (tool.type !== 'function') {
-    return tool;
-  }
+  const targetSchema = originalSchema || tool.parameters;
+  const originalExecute = tool.execute.bind(tool);
 
-  const functionTool = tool as unknown as FunctionTool;
-  const originalInvoke = functionTool.invoke.bind(functionTool);
-  functionTool.invoke = async (context: any, input: unknown, details: any) => {
-    const targetSchema = originalSchema || functionTool.parameters;
-    const normalizedInput = normalizeToolInput(input, targetSchema as any, options.argumentParsing ?? 'repair');
+  const runDiagnostics = (toolName: string, schema: z.ZodTypeAny, rawInput: any): string => {
+    let parsedInput: any;
+    try {
+      parsedInput = typeof rawInput === 'string' ? JSON.parse(rawInput) : rawInput;
+    } catch {
+      parsedInput = rawInput;
+    }
 
-    const runDiagnostics = (toolName: string, schema: z.ZodTypeAny, rawInput: any): string => {
-      let parsedInput: any;
-      try {
-        parsedInput = typeof rawInput === 'string' ? JSON.parse(rawInput) : rawInput;
-      } catch {
-        parsedInput = rawInput;
+    const zodSchema = getZodSchema(schema);
+    if (zodSchema) {
+      const parseResult = zodSchema.safeParse(parsedInput);
+      if (!parseResult.success) {
+        const issues = parseResult.error.issues.map((issue: any) => {
+          const field = issue.path.join('.') || 'input';
+          let actualVal = parsedInput;
+          for (const segment of issue.path) {
+            if (actualVal && typeof actualVal === 'object') {
+              actualVal = (actualVal as any)[segment];
+            }
+          }
+          const valStr = typeof actualVal === 'string' ? `"${actualVal}"` : JSON.stringify(actualVal);
+          const typeStr = actualVal === null ? 'null' : typeof actualVal;
+
+          let msg = issue.message;
+          if (issue.code === 'invalid_type') {
+            msg = `must be ${issue.expected}`;
+          }
+          return `${field} ${msg}, got ${typeStr} ${valStr}`;
+        });
+        return `Tool input did not match schema for ${toolName}: ${issues.join(
+          '; ',
+        )}. Retry with valid JSON arguments.`;
       }
+    }
+    return `Tool input was invalid for this tool. Retry with arguments matching the tool schema.`;
+  };
 
-      const zodSchema = getZodSchema(schema);
-      if (zodSchema) {
-        const parseResult = zodSchema.safeParse(parsedInput);
-        if (!parseResult.success) {
-          const issues = parseResult.error.issues.map((issue: any) => {
-            const field = issue.path.join('.') || 'input';
-            let actualVal = parsedInput;
-            for (const segment of issue.path) {
-              if (actualVal && typeof actualVal === 'object') {
-                actualVal = (actualVal as any)[segment];
-              }
-            }
-            const valStr = typeof actualVal === 'string' ? `"${actualVal}"` : JSON.stringify(actualVal);
-            const typeStr = actualVal === null ? 'null' : typeof actualVal;
-
-            let msg = issue.message;
-            if (issue.code === 'invalid_type') {
-              msg = `must be ${issue.expected}`;
-            }
-            return `${field} ${msg}, got ${typeStr} ${valStr}`;
-          });
-          return `Tool input did not match schema for ${toolName}: ${issues.join(
-            '; ',
-          )}. Retry with valid JSON arguments.`;
+  tool.execute = async (params: any, context: unknown, details: any) => {
+    try {
+      let normalizedInput: unknown = params;
+      if (typeof params === 'string') {
+        const json = normalizeToolInput(params, targetSchema as any, options.argumentParsing ?? 'repair');
+        try {
+          normalizedInput = JSON.parse(json);
+        } catch (error) {
+          throw Object.assign(error as Error, { name: 'InvalidToolInputError' });
+        }
+      } else {
+        try {
+          normalizedInput = normalizeObjectParams(params, targetSchema as z.ZodTypeAny);
+        } catch {
+          normalizedInput = params;
         }
       }
-      return `Tool input was invalid for this tool. Retry with arguments matching the tool schema.`;
-    };
 
-    try {
-      return await originalInvoke(context, normalizedInput, details);
+      // Schema validation before execute: structurally invalid params become a
+      // non-fatal diagnostic result, matching the old invoke path.
+      const zodSchema = getZodSchema(targetSchema);
+      if (zodSchema && !zodSchema.safeParse(normalizedInput).success) {
+        return runDiagnostics(tool.name ?? 'unknown', targetSchema as any, normalizedInput);
+      }
+
+      return await originalExecute(normalizedInput, context, details);
     } catch (error: any) {
       if (isInvalidToolInputError(error)) {
         // Surface schema diagnostics as a non-fatal tool result so the model
         // can self-correct within the same turn, rather than aborting the run.
-        return runDiagnostics(functionTool.name ?? 'unknown', targetSchema as any, normalizedInput);
+        return runDiagnostics(tool.name ?? 'unknown', targetSchema as any, params);
       }
       throw error;
     }

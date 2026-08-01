@@ -1,6 +1,111 @@
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { ApplicationRunLoop, type ApplicationAgent } from '../agent-runtime/application-run-loop.js';
+import { NestedSubagentRunner } from './nested-runner.js';
+import { getSubagentRunContext, type SubagentRunContext } from './tool-policy.js';
+import { ApprovalLedger, type ToolInvocationContext } from '../agent-runtime/tool-invocation-context.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import type { SubagentToolFactory } from './tool-policy.js';
+import type { SubagentDefinition } from './types.js';
+import type { ToolDefinition } from '../../tools/types.js';
+import {
+  createMockLogger,
+  createMockSettings,
+  createSessionContextService,
+  registerTestProvider,
+} from './test-helpers/subagent-manager-fixtures.js';
+
+function workerDefinition(providerId: string): SubagentDefinition {
+  return {
+    role: 'worker',
+    name: 'worker',
+    instructions: 'You are a worker. Update the notes file.',
+    canRead: true,
+    canWrite: true,
+    canSearchWeb: false,
+    canRunShell: false,
+    maxTurns: 8,
+    model: 'nested-model',
+    provider: providerId,
+    reasoningEffort: 'default',
+  };
+}
+
+/**
+ * Builds a NestedSubagentRunner wired to a scripted provider whose model runs
+ * `fake_tool` once and then finishes with a summary message. The fake tool
+ * records its run through the SubagentRunContext — the bookkeeping that was
+ * inert before the ToolInvocationContext slot (F2).
+ */
+function buildNestedRunner() {
+  let first = true;
+  const providerId = registerTestProvider({
+    label: 'Nested scripted provider',
+    createStreamedModel: () => ({
+      async *stream(request: any) {
+        if (first) {
+          first = false;
+          yield { type: 'tool_call', id: 'nested-call-1', name: 'fake_tool', arguments: '{"path":"notes.md"}' };
+          yield { type: 'completion', responseId: 'resp-1', output: [] };
+        } else {
+          yield {
+            type: 'completion',
+            responseId: 'resp-2',
+            output: [{ type: 'message', content: [{ type: 'text', text: 'Summary: updated notes.' }] }],
+          };
+        }
+      },
+    }),
+    fetchModels: async () => [{ id: 'nested-model' }],
+  });
+
+  const fakeTool: ToolDefinition = {
+    name: 'fake_tool',
+    description: 'Fake tool that records its run through the subagent context',
+    parameters: z.object({ path: z.string() }),
+    needsApproval: () => false,
+    formatCommandMessage: () => [],
+    execute: async (_params: any, context: unknown) => {
+      const runContext = getSubagentRunContext(context);
+      runContext?.filesChanged.push('notes.md');
+      if (runContext) runContext.toolCounts.fake_tool = (runContext.toolCounts.fake_tool ?? 0) + 1;
+      return 'Updated notes.md';
+    },
+  };
+
+  const stubToolFactory = {
+    buildToolDefinitions: () => [fakeTool],
+    buildAgentTools: () => [fakeTool],
+  } as unknown as SubagentToolFactory;
+
+  const runner = new NestedSubagentRunner({
+    logger: createMockLogger(),
+    settings: createMockSettings({ 'agent.model': 'nested-model', 'agent.provider': providerId }),
+    sessionContextService: createSessionContextService(),
+    toolFactory: stubToolFactory,
+    roleToolCache: new Map(),
+    resolveRole: () => workerDefinition(providerId),
+    toolOwnership: new ToolOwnershipRegistry(),
+  });
+
+  return { runner, providerId };
+}
+
+function parentToolContext(): ToolInvocationContext<SubagentRunContext> {
+  return {
+    context: {
+      agentId: 'parent-agent',
+      role: 'explorer',
+      task: 'delegate',
+      filesChanged: [],
+      toolCounts: {},
+      activeCommandMessages: {},
+      turnCount: 0,
+      maxTurns: 8,
+    },
+    approvals: new ApprovalLedger(),
+  };
+}
 
 function nestedAgent(needsApproval: boolean, calls: string[]): ApplicationAgent {
   return {
@@ -23,57 +128,95 @@ function nestedAgent(needsApproval: boolean, calls: string[]): ApplicationAgent 
   };
 }
 
-it('executes a nested application-owned tool with a stable call ID', async () => {
-  const calls: string[] = [];
-  const loop = new ApplicationRunLoop({
-    resolveModel: async () => ({
-      async *stream(request) {
-        if (request.input.some((item) => item.type === 'tool_result')) {
-          yield {
-            type: 'completion',
-            responseId: 'response-2',
-            output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
-          };
-        } else {
-          const call = { id: 'nested-call-1', name: 'nested_tool', arguments: '{"value":"x"}' };
-          yield { type: 'tool_call', ...call };
-          yield { type: 'completion', responseId: 'response-1', output: [{ type: 'tool_call', ...call }] };
-        }
-      },
-    }),
+describe('ApplicationRunLoop nested tool', () => {
+  it('executes a nested application-owned tool with a stable call ID', async () => {
+    const calls: string[] = [];
+    const loop = new ApplicationRunLoop({
+      resolveModel: async () => ({
+        async *stream(request) {
+          if (request.input.some((item) => item.type === 'tool_result')) {
+            yield {
+              type: 'completion',
+              responseId: 'response-2',
+              output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+            };
+          } else {
+            const call = { id: 'nested-call-1', name: 'nested_tool', arguments: '{"value":"x"}' };
+            yield { type: 'tool_call', ...call };
+            yield { type: 'completion', responseId: 'response-1', output: [{ type: 'tool_call', ...call }] };
+          }
+        },
+      }),
+    });
+    const stream = loop.startStream(nestedAgent(false, calls), 'delegate');
+    await stream.completed;
+    expect(calls).toEqual(['nested-call-1']);
+    expect(stream.finalOutput).toBe('done');
   });
-  const stream = loop.startStream(nestedAgent(false, calls), 'delegate');
-  await stream.completed;
-  expect(calls).toEqual(['nested-call-1']);
-  expect(stream.finalOutput).toBe('done');
+
+  it('pauses and resumes an application-owned nested tool approval', async () => {
+    const calls: string[] = [];
+    const loop = new ApplicationRunLoop({
+      resolveModel: async () => ({
+        async *stream(request) {
+          if (request.input.some((item) => item.type === 'tool_result')) {
+            yield {
+              type: 'completion',
+              responseId: 'response-2',
+              output: [{ type: 'message', content: [{ type: 'text', text: 'approved' }] }],
+            };
+          } else {
+            const call = { id: 'nested-call-approval', name: 'nested_tool', arguments: '{"value":"x"}' };
+            yield { type: 'tool_call', ...call };
+            yield { type: 'completion', responseId: 'response-1', output: [{ type: 'tool_call', ...call }] };
+          }
+        },
+      }),
+    });
+    const stream = loop.startStream(nestedAgent(true, calls), 'delegate');
+    await stream.completed;
+    expect(stream.interruptions).toHaveLength(1);
+    const handle = stream.state!;
+    handle.approve?.(stream.interruptions![0]);
+    const resumed = loop.continueRunStream(handle);
+    await resumed.completed;
+    expect(calls).toEqual(['nested-call-approval']);
+    expect(resumed.finalOutput).toBe('approved');
+  });
 });
 
-it('pauses and resumes an application-owned nested tool approval', async () => {
-  const calls: string[] = [];
-  const loop = new ApplicationRunLoop({
-    resolveModel: async () => ({
-      async *stream(request) {
-        if (request.input.some((item) => item.type === 'tool_result')) {
-          yield {
-            type: 'completion',
-            responseId: 'response-2',
-            output: [{ type: 'message', content: [{ type: 'text', text: 'approved' }] }],
-          };
-        } else {
-          const call = { id: 'nested-call-approval', name: 'nested_tool', arguments: '{"value":"x"}' };
-          yield { type: 'tool_call', ...call };
-          yield { type: 'completion', responseId: 'response-1', output: [{ type: 'tool_call', ...call }] };
-        }
-      },
-    }),
+describe('NestedSubagentRunner end to end', () => {
+  it('runs a nested role tool, executes a tool, and returns a parseable SubagentResult with filesChanged and toolsUsed (F1 pin)', async () => {
+    const { runner } = buildNestedRunner();
+
+    const result = await runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'parent-call-1' },
+    });
+
+    expect(result).toMatchObject({
+      role: 'worker',
+      status: 'completed',
+      finalText: 'Summary: updated notes.',
+      filesChanged: ['notes.md'],
+      toolsUsed: [{ toolName: 'fake_tool', count: 1 }],
+    });
+    // The nested run's identity came from the parent tool call, so the result
+    // is attributable to the subagent the UI has seen.
+    expect(result.agentId).toBe('parent-call-1');
   });
-  const stream = loop.startStream(nestedAgent(true, calls), 'delegate');
-  await stream.completed;
-  expect(stream.interruptions).toHaveLength(1);
-  const handle = stream.state!;
-  handle.approve?.(stream.interruptions![0]);
-  const resumed = loop.continueRunStream(handle);
-  await resumed.completed;
-  expect(calls).toEqual(['nested-call-approval']);
-  expect(resumed.finalOutput).toBe('approved');
+
+  it('honors a parent-approved tool inside the nested run (F5 through the runner)', async () => {
+    const { runner } = buildNestedRunner();
+    const parent = parentToolContext();
+    // The user approved the nested tool call in the parent; replaying that
+    // decision into the nested run must prevent a second prompt.
+    parent.approvals.approveTool({ toolName: 'run_subagent_worker', callId: 'parent-call-1' });
+
+    const result = await runner.runAsTool({ role: 'worker', task: 'update notes' }, parent, {
+      toolCall: { callId: 'parent-call-1' },
+    });
+
+    expect(result.status).toBe('completed');
+    expect(result.finalText).toBe('Summary: updated notes.');
+  });
 });

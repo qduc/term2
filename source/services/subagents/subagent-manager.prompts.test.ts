@@ -46,9 +46,9 @@ it('subagent run injects warning into tool output when turns left <= 5', async (
             const mockRunContext = {
               context: options.context,
             };
-            executeOutput = await readFileTool.invoke(
-              mockRunContext as any,
+            executeOutput = await readFileTool.execute(
               JSON.stringify({ path: 'package.json' }),
+              mockRunContext as any,
               {},
             );
           }

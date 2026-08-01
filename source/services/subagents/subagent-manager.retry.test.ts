@@ -199,7 +199,7 @@ it('run() does not restart read-only subagent from the beginning after a recover
             // Call a read tool then throw a recoverable error
             const grep = agent.tools.find((tool: any) => tool.name === 'grep');
             if (grep) {
-              await grep.invoke({}, JSON.stringify({ pattern: 'foo', path: '.' }), {}).catch(() => {});
+              await grep.execute(JSON.stringify({ pattern: 'foo', path: '.' }), {}, {}).catch(() => {});
             }
             throw new ModelBehaviorError('Tool bash not found in agent Explorer.');
           }
@@ -249,7 +249,7 @@ describe('run() aborted subagent', () => {
             // Simulate using a tool
             const createFile = agent.tools.find((tool: any) => tool.name === 'create_file');
             if (createFile) {
-              await createFile.invoke({}, JSON.stringify({ path: 'test.ts', content: 'x' }), {});
+              await createFile.execute(JSON.stringify({ path: 'test.ts', content: 'x' }), {}, {});
             }
             const err = new Error('The operation was aborted');
             (err as any).name = 'AbortError';

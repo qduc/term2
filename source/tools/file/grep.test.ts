@@ -4,9 +4,9 @@ import * as path from 'path';
 import * as os from 'os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { tool as createTool, RunContext } from '../../services/agent-runtime/legacy-compat.js';
 import { createGrepToolDefinition, formatGrepCommandMessage } from './grep.js';
-import { toolErrorFunction, wrapToolInvoke } from '../../lib/tool-invoke.js';
+import { wrapToolInvoke } from '../../lib/tool-invoke.js';
+import type { ToolDefinition } from '../../tools/types.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 
 it('orchestrator grep description permits direct targeted investigation', () => {
@@ -34,18 +34,9 @@ const execFileAsync = promisify(execFile);
 
 function createWrappedGrepTool() {
   const definition = createGrepToolDefinition();
-  return wrapToolInvoke(
-    createTool({
-      name: definition.name,
-      description: definition.description,
-      parameters: definition.parameters,
-      strict: true,
-      errorFunction: toolErrorFunction,
-      execute: async (params, context, details) => definition.execute(params as any, context, details),
-    }),
-    definition.parameters,
-    { argumentParsing: definition.argumentParsing },
-  );
+  return wrapToolInvoke(definition, definition.parameters, {
+    argumentParsing: definition.argumentParsing,
+  }) as ToolDefinition & { name: string };
 }
 
 async function withTempDir(run: (dir: string) => Promise<void>) {
@@ -160,8 +151,8 @@ it.sequential('invoke: grep uses strict JSON parsing before regex execution', as
     await fs.writeFile(path.join(dir, 'notes.txt'), 'testabc\ntest123\ntest456\n');
     const grep = createWrappedGrepTool();
 
-    const validJsonResult = await grep.invoke({} as RunContext, String.raw`{"pattern":"test\\d+","path":"."}`, {});
-    const invalidJsonResult = await grep.invoke({} as RunContext, String.raw`{"pattern":"test\d+","path":"."}`, {});
+    const validJsonResult = await grep.execute(String.raw`{"pattern":"test\\d+","path":"."}`, undefined, {});
+    const invalidJsonResult = await grep.execute(String.raw`{"pattern":"test\d+","path":"."}`, undefined, {});
 
     expect(String(validJsonResult).includes('test123')).toBe(true);
     expect(String(validJsonResult).includes('test456')).toBe(true);

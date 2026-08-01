@@ -340,7 +340,7 @@ describe('explorer role', () => {
     expect(shell).toBeTruthy();
     expect(await shell.needsApproval({}, { command: 'pwd' })).toBe(false);
 
-    const invokeShell = async (command: string) => shell.invoke({}, JSON.stringify({ command }), {});
+    const invokeShell = async (command: string) => shell.execute(JSON.stringify({ command }), {}, {});
     for (const command of GREEN_SHELL_COMMANDS) {
       const output = await invokeShell(command);
       expect(output.includes('exit 0')).toBe(true);
@@ -394,7 +394,7 @@ describe('explorer role', () => {
       expect(shell).toBeTruthy();
 
       for (const { command, path: relativePath } of TEMP_BLOCKED_CASES) {
-        const output = await shell.invoke({}, JSON.stringify({ command }), {});
+        const output = await shell.execute(JSON.stringify({ command }), {}, {});
         expect(output.startsWith(EXPLORER_BLOCKED_PREFIX)).toBe(true);
         const { existsSync } = await import('node:fs');
         expect(existsSync(join(tmpDir, relativePath))).toBe(false);

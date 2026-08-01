@@ -262,7 +262,7 @@ describe('SubagentToolFactory agent tool wrapping', () => {
     const onToolComplete = vi.fn();
     const tool = buildFailingTool({ onToolStart, onToolComplete });
 
-    await tool.invoke({}, '{}', {}).catch(() => undefined);
+    await tool.execute('{}', {}, {}).catch(() => undefined);
 
     expect(onToolStart).toHaveBeenCalledOnce();
     expect(onToolComplete).toHaveBeenCalledOnce();

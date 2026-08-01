@@ -43,6 +43,7 @@ export function registerTestProvider(
     fetchModels: partial.fetchModels ?? (async () => []),
     capabilities: partial.capabilities,
     createRunner: partial.createRunner,
+    createStreamedModel: partial.createStreamedModel,
   });
   registeredProviderIds.add(id);
   return id;

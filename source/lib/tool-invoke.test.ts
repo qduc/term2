@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest';
-import { tool as createTool, RunContext } from '../services/agent-runtime/legacy-compat.js';
 import { z } from 'zod';
+import type { ToolDefinition } from '../tools/types.js';
 import {
   repairJson,
   normalizeObjectParams,
@@ -246,36 +246,38 @@ it('wrapNeedsApproval still bypasses approval when an interceptor rejects execut
 // wrapToolInvoke
 // ---------------------------------------------------------------------------
 
-it('wrapToolInvoke stringifies object inputs for tool invocations', async () => {
-  const rawTool = createTool({
+it('wrapToolInvoke normalises string arguments before executing the tool', async () => {
+  const rawTool: ToolDefinition = {
     name: 'echo_tool',
     description: 'A test tool that echoes the input value',
     parameters: z.object({
       value: z.string(),
     }),
-    strict: true,
-    execute: async (params) => `ok:${params.value}`,
-  });
+    needsApproval: () => false,
+    formatCommandMessage: () => [],
+    execute: async (params: any) => `ok:${params.value}`,
+  };
 
   const wrappedTool = wrapToolInvoke(rawTool);
-  const result = await wrappedTool.invoke({} as RunContext, '{"value":"hi"}');
+  const result = await wrappedTool.execute('{"value":"hi"}', undefined, {});
 
   expect(result).toBe('ok:hi');
 });
 
-it('wrapToolInvoke repairs multiline string arguments before SDK validation', async () => {
-  const rawTool = createTool({
+it('wrapToolInvoke repairs multiline string arguments before validation', async () => {
+  const rawTool: ToolDefinition = {
     name: 'patch_like_tool',
     description: 'A test tool with a multiline diff argument',
     parameters: z.object({
       diff: z.string(),
     }),
-    strict: true,
-    execute: async (params) => params.diff,
-  });
+    needsApproval: () => false,
+    formatCommandMessage: () => [],
+    execute: async (params: any) => params.diff,
+  };
 
   const wrappedTool = wrapToolInvoke(rawTool);
-  const result = await wrappedTool.invoke({} as RunContext, '{"diff":"+line 1\n+line 2\n"}');
+  const result = await wrappedTool.execute('{"diff":"+line 1\n+line 2\n"}', undefined, {});
 
   expect(result).toBe('+line 1\n+line 2\n');
 });
@@ -284,16 +286,17 @@ it('wrapToolInvoke strict parsing does not repair invalid JSON escapes', async (
   const parametersSchema = z.object({
     pattern: z.string(),
   });
-  const rawTool = createTool({
+  const rawTool: ToolDefinition = {
     name: 'grep',
     description: 'grep tool',
     parameters: parametersSchema,
-    errorFunction: toolErrorFunction,
-    execute: async (params) => params.pattern,
-  });
+    needsApproval: () => false,
+    formatCommandMessage: () => [],
+    execute: async (params: any) => params.pattern,
+  };
 
   const wrappedTool = wrapToolInvoke(rawTool, parametersSchema, { argumentParsing: 'strict' });
-  const result = await wrappedTool.invoke({} as RunContext, String.raw`{"pattern":"\w"}`);
+  const result = await wrappedTool.execute(String.raw`{"pattern":"\w"}`, undefined, {});
 
   expect(result).toMatch(/Tool input did not match schema for grep|Tool input was invalid for this tool/);
   expect(result).toMatch(/Retry with/);
@@ -303,16 +306,17 @@ it('wrapToolInvoke strict parsing accepts standard JSON regex escaping', async (
   const parametersSchema = z.object({
     pattern: z.string(),
   });
-  const rawTool = createTool({
+  const rawTool: ToolDefinition = {
     name: 'grep',
     description: 'grep tool',
     parameters: parametersSchema,
-    errorFunction: toolErrorFunction,
-    execute: async (params) => params.pattern,
-  });
+    needsApproval: () => false,
+    formatCommandMessage: () => [],
+    execute: async (params: any) => params.pattern,
+  };
 
   const wrappedTool = wrapToolInvoke(rawTool, parametersSchema, { argumentParsing: 'strict' });
-  const result = await wrappedTool.invoke({} as RunContext, String.raw`{"pattern":"\\w"}`);
+  const result = await wrappedTool.execute(String.raw`{"pattern":"\\w"}`, undefined, {});
 
   expect(result).toBe(String.raw`\w`);
 });
@@ -357,7 +361,7 @@ it('normalizeToolInput with schema coerces boolean string inputs', () => {
   });
 });
 
-// Integration: real createTool + errorFunction + wrapToolInvoke path. When the
+// Integration: wrapToolInvoke over a plain ToolDefinition. When the
 // SDK fails schema validation, the diagnostics are surfaced as a NON-FATAL
 // result string (not thrown) so the model can self-correct within the turn.
 it('wrapToolInvoke surfaces schema diagnostics as a non-fatal result for invalid input', async () => {
@@ -365,16 +369,17 @@ it('wrapToolInvoke surfaces schema diagnostics as a non-fatal result for invalid
     pattern: z.string(),
     no_ignore: z.boolean().optional(),
   });
-  const rawTool = createTool({
+  const rawTool: ToolDefinition = {
     name: 'grep',
     description: 'grep tool',
     parameters: parametersSchema,
-    errorFunction: toolErrorFunction,
+    needsApproval: () => false,
+    formatCommandMessage: () => [],
     execute: async () => 'ok',
-  });
+  };
 
   const wrappedTool = wrapToolInvoke(rawTool, parametersSchema);
-  const result = await wrappedTool.invoke({} as RunContext, '{"pattern": "test", "no_ignore": "not-a-bool"}');
+  const result = await wrappedTool.execute('{"pattern": "test", "no_ignore": "not-a-bool"}', undefined, {});
 
   expect(result).toBe(
     'Tool input did not match schema for grep: no_ignore must be boolean, got string "not-a-bool". Retry with valid JSON arguments.',
@@ -386,16 +391,17 @@ it('wrapToolInvoke surfaces schema diagnostics as a non-fatal result for invalid
 it('wrapToolInvoke returns tool output verbatim even when it mentions InvalidToolInputError', async () => {
   const parametersSchema = z.object({ path: z.string() });
   const toolOutput = 'File contents: throw new InvalidToolInputError("Invalid JSON input for tool")';
-  const rawTool = createTool({
+  const rawTool: ToolDefinition = {
     name: 'read_file',
     description: 'read file tool',
     parameters: parametersSchema,
-    errorFunction: toolErrorFunction,
+    needsApproval: () => false,
+    formatCommandMessage: () => [],
     execute: async () => toolOutput,
-  });
+  };
 
   const wrappedTool = wrapToolInvoke(rawTool, parametersSchema);
-  const result = await wrappedTool.invoke({} as RunContext, '{"path": "notes.md"}');
+  const result = await wrappedTool.execute('{"path": "notes.md"}', undefined, {});
 
   expect(result).toBe(toolOutput);
 });
@@ -403,16 +409,16 @@ it('wrapToolInvoke returns tool output verbatim even when it mentions InvalidToo
 it('toolErrorFunction rethrows schema-validation errors for diagnostics handling', () => {
   const err = new Error('Invalid JSON input for tool');
   err.name = 'InvalidToolInputError';
-  expect(() => toolErrorFunction({} as RunContext, err)).toThrow(err);
+  expect(() => toolErrorFunction({}, err)).toThrow(err);
 });
 
 it('toolErrorFunction rethrows abort errors', () => {
   const err = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
-  expect(() => toolErrorFunction({} as RunContext, err)).toThrow(err);
+  expect(() => toolErrorFunction({}, err)).toThrow(err);
 });
 
 it('toolErrorFunction returns a non-fatal message for other runtime errors', () => {
-  const result = toolErrorFunction({} as RunContext, new Error('disk on fire'));
+  const result = toolErrorFunction({}, new Error('disk on fire'));
   expect(result).toBe('An error occurred while running the tool. Please try again. Error: Error: disk on fire');
 });
 

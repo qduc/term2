@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
-import { tool as createTool, type Tool } from '../agent-runtime/legacy-compat.js';
 import type { ToolInvocationContext } from '../agent-runtime/tool-invocation-context.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
@@ -974,7 +973,7 @@ export class SubagentToolFactory {
         details?: unknown,
       ) => void;
     },
-  ): Tool[] {
+  ): ToolDefinition[] {
     const providerDef = getProvider(options.providerId);
     const capabilities = {
       supportsConversationChaining: providerDef?.capabilities?.supportsConversationChaining ?? false,
@@ -986,37 +985,33 @@ export class SubagentToolFactory {
       capabilities,
     });
 
-    return toolDefinitions.map((definition) =>
-      wrapToolInvoke(
-        createTool({
-          name: definition.name,
-          description: definition.description,
-          parameters: useStrictSchema ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
-          needsApproval: wrapNeedsApproval(definition),
-          execute: async (params: any, _context: any, details: any) => {
-            options.onToolStart?.(
-              definition.name,
-              params,
-              formatRunningCommandMessages(definition, params),
-              _context,
-              details,
-            );
-            const maxOutputLength = this.#settings.get<number | undefined>('shell.maxOutputChars');
-            let result: any;
-            try {
-              result = await definition.execute(params, _context, details);
-            } finally {
-              // Must pair with every onToolStart, including the throwing path: this
-              // callback closes the active-tool gate that defers steering interrupts.
-              options.onToolComplete?.(definition.name, result, _context, details);
-            }
-            const trimmedResult = trimToolOutput(result, undefined, maxOutputLength ?? undefined);
-            return injectTurnLimitWarning(trimmedResult, _context?.context);
-          },
-        }),
-        definition.parameters,
-        { argumentParsing: definition.argumentParsing },
-      ),
-    );
+    return toolDefinitions.map((definition) => {
+      const wrapped: ToolDefinition = {
+        ...definition,
+        parameters: useStrictSchema ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
+        needsApproval: wrapNeedsApproval(definition),
+        execute: async (params: any, _context: any, details: any) => {
+          options.onToolStart?.(
+            definition.name,
+            params,
+            formatRunningCommandMessages(definition, params),
+            _context,
+            details,
+          );
+          const maxOutputLength = this.#settings.get<number | undefined>('shell.maxOutputChars');
+          let result: any;
+          try {
+            result = await definition.execute(params, _context, details);
+          } finally {
+            // Must pair with every onToolStart, including the throwing path: this
+            // callback closes the active-tool gate that defers steering interrupts.
+            options.onToolComplete?.(definition.name, result, _context, details);
+          }
+          const trimmedResult = trimToolOutput(result, undefined, maxOutputLength ?? undefined);
+          return injectTurnLimitWarning(trimmedResult, _context?.context);
+        },
+      };
+      return wrapToolInvoke(wrapped, definition.parameters, { argumentParsing: definition.argumentParsing });
+    });
   }
 }

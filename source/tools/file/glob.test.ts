@@ -2,10 +2,10 @@ import { it, expect } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { tool as createTool, RunContext } from '../../services/agent-runtime/legacy-compat.js';
 import { createFindFilesToolDefinition } from './glob.js';
 import { ExecutionContext } from '../../services/execution-context.js';
-import { toolErrorFunction, wrapToolInvoke } from '../../lib/tool-invoke.js';
+import { wrapToolInvoke } from '../../lib/tool-invoke.js';
+import type { ToolDefinition } from '../../tools/types.js';
 
 const findFilesToolDefinition = createFindFilesToolDefinition();
 const findFilesToolDefinitionAllowOutside = createFindFilesToolDefinition({
@@ -21,18 +21,9 @@ const findFilesToolDefinitionAllowOutsideFindFallback = createFindFilesToolDefin
 
 function createWrappedFindFilesTool() {
   const definition = createFindFilesToolDefinition();
-  return wrapToolInvoke(
-    createTool({
-      name: definition.name,
-      description: definition.description,
-      parameters: definition.parameters,
-      strict: true,
-      errorFunction: toolErrorFunction,
-      execute: async (params, context, details) => definition.execute(params as any, context, details),
-    }),
-    definition.parameters,
-    { argumentParsing: definition.argumentParsing },
-  );
+  return wrapToolInvoke(definition, definition.parameters, {
+    argumentParsing: definition.argumentParsing,
+  }) as ToolDefinition & { name: string };
 }
 
 // Helper to create a temp dir and change cwd to it
@@ -74,7 +65,7 @@ it.sequential('invoke: glob uses strict JSON parsing for glob patterns', async (
   await withTempDir(async () => {
     const glob = createWrappedFindFilesTool();
 
-    const result = await glob.invoke({} as RunContext, '{"pattern":"*.ts\n"}', {});
+    const result = await glob.execute('{"pattern":"*.ts\n"}', undefined, {});
 
     expect(String(result)).toMatch(/Tool input did not match schema for glob|Tool input was invalid for this tool/);
     expect(String(result)).toMatch(/Retry with/);

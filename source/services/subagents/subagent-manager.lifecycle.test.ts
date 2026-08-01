@@ -69,7 +69,7 @@ it('run() emits started and completed events', async () => {
         run: async (agent: any) => {
           const readFile = agent.tools.find((tool: any) => tool.name === 'read_file');
           try {
-            await readFile.invoke({}, JSON.stringify({ path: '/nonexistent-subagent-event-test' }), {});
+            await readFile.execute(JSON.stringify({ path: '/nonexistent-subagent-event-test' }), {}, {});
           } catch {
             // Tool execution may fail (missing file); we only care that the
             // tool-started event fired before execution.

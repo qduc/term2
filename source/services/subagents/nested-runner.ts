@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { tool as createTool, type Tool } from '../agent-runtime/legacy-compat.js';
-import type { ApplicationAgent } from '../agent-runtime/application-run-loop.js';
+import { ApplicationRunLoop, type ApplicationAgent } from '../agent-runtime/application-run-loop.js';
 import { ApprovalLedger, type ToolInvocationContext } from '../agent-runtime/tool-invocation-context.js';
+import { getProvider } from '../../providers/index.js';
+import type { ToolDefinition } from '../../tools/types.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentRequest, SubagentResult, SupportedSubagentRole, SubagentDefinition } from './types.js';
@@ -27,7 +28,7 @@ import { getCallIdFromObject } from '../interruption-info.js';
 
 export type CachedRoleTool = {
   agent: ApplicationAgent;
-  tool: Tool<SubagentRunContext>;
+  tool: ToolDefinition;
 };
 
 const AGENT_TOOL_ERROR_PREFIX = 'An error occurred while running the tool. Please try again. Error:';
@@ -136,7 +137,7 @@ export class NestedSubagentRunner {
     this.#roleToolCache.clear();
   }
 
-  getRoleAgentTool(role: SupportedSubagentRole): Tool<SubagentRunContext> {
+  getRoleAgentTool(role: SupportedSubagentRole): ToolDefinition {
     return this.#getOrCreateRoleTool(role).tool;
   }
 
@@ -253,68 +254,103 @@ export class NestedSubagentRunner {
       tools,
     };
 
+    const tool = this.createSubagentTool(role, definition, agent);
+
+    const created = { agent, tool };
+    this.#roleToolCache.set(role, created);
+    return created;
+  }
+
+  /**
+   * Builds the `run_subagent_<role>` tool. Its `execute` actually runs the role
+   * agent through `ApplicationRunLoop` — replacing the legacy `Agent.asTool`
+   * stub whose execute returned the raw task string and dropped every run
+   * option, which is why nested subagents could never return a result (F1).
+   *
+   * The run's `SubagentRunContext` and the replayed parent approvals arrive on
+   * the `ToolInvocationContext` that `runAsTool` builds; the loop seeds its
+   * ledger from `toolContext.approvals`, so parent decisions are honored (F5)
+   * and the run's own decisions accumulate on the same ledger.
+   */
+  createSubagentTool(
+    role: SupportedSubagentRole,
+    definition: SubagentDefinition,
+    agent: ApplicationAgent,
+  ): ToolDefinition {
     const parameters = z.object({
       role: z.literal(role),
       task: z.string(),
     });
-    // Slice 4: the legacy Agent.asTool wrapper is replaced by a direct tool()
-    // call that preserves its current (broken, F1) behavior: execute returns
-    // the raw task string and everything else in the config is dropped.
-    // Slice 6 replaces this whole block with createSubagentTool().
-    const tool: Tool<SubagentRunContext> = createTool({
+    return {
       name: `run_subagent_${role}`,
       description: `Run the ${role} subagent.`,
       parameters,
-      execute: (params: any) => (params as { task: string }).task,
-      runOptions: {
-        maxTurns: definition.maxTurns,
-        callModelInputFilter: incrementSubagentTurnCount,
-      },
-      resumeState: { contextStrategy: 'merge' },
-      customOutputExtractor: (completedResult: any) => {
-        const identifiedContext = getSubagentRunContext(completedResult?.state?._context);
+      needsApproval: () => false,
+      formatCommandMessage: () => [],
+      execute: async (params: unknown, context: unknown, details: unknown) => {
+        const { task } = params as { task: string };
+        const toolContext = context as ToolInvocationContext<SubagentRunContext> | undefined;
         const runContext =
-          identifiedContext ??
+          toolContext?.context ??
           ({
             agentId: randomUUID(),
             role,
-            task: '',
+            task,
             filesChanged: [],
             toolCounts: {},
             activeCommandMessages: {},
             turnCount: 0,
             maxTurns: definition.maxTurns,
           } satisfies SubagentRunContext);
+        runContext.task = task;
+
+        const signal = (details as { signal?: AbortSignal } | undefined)?.signal;
+        const providerId = definition.provider;
+        const provider = getProvider(providerId);
+        if (!provider?.createStreamedModel) {
+          throw new Error(`Provider '${providerId}' has no application-owned model for nested subagents`);
+        }
+        const createStreamedModel = provider.createStreamedModel;
+        const loop = new ApplicationRunLoop({
+          resolveModel: (model) =>
+            createStreamedModel(model, {
+              settingsService: this.#settings,
+              loggingService: this.#logger,
+              sessionContextService: this.#sessionContextService,
+            }),
+        });
+
+        const stream = loop.startStream(agent, task, {
+          context: runContext,
+          signal,
+          // The nested run's ledger was seeded with the parent's decisions by
+          // runAsTool; use it so F5 holds and nested decisions land on it.
+          approvals: toolContext?.approvals,
+        });
+        const settled = await stream.completed;
+
         // This run is the only place that knows both the pending approvals it
         // raised and the identity that raised them. Claim them now so the
-        // parent's approval flow can attribute them without reconstructing
-        // ownership from the SDK's run state. Skipped when the run's identity
-        // could not be recovered — a synthesized agentId matches no subagent
-        // the UI has seen, so parent ownership is the safer default.
-        if (identifiedContext) {
-          this.#toolOwnership.claim(collectApprovalCallIds(completedResult?.interruptions), {
-            kind: 'subagent',
-            agentId: identifiedContext.agentId,
-            role,
-          });
-        }
+        // parent's approval flow can attribute them.
+        this.#toolOwnership.claim(collectApprovalCallIds(stream.interruptions), {
+          kind: 'subagent',
+          agentId: runContext.agentId,
+          role,
+        });
+
         const result: SubagentResult & { interrupted?: boolean } = {
           agentId: runContext.agentId,
           role,
           status: 'completed',
-          finalText: extractFinalText(completedResult),
+          finalText: extractFinalText(stream),
           filesChanged: [...new Set(runContext.filesChanged)],
           toolsUsed: aggregateContextToolUsage(runContext.toolCounts),
-          usage: normalizeAgentRunUsage(completedResult?.state?.usage) ?? extractUsage(completedResult),
-          ...(completedResult?.interruptions?.length ? { interrupted: true } : {}),
+          usage: normalizeAgentRunUsage((settled as { usage?: unknown } | undefined)?.usage) ?? extractUsage(stream),
+          ...(stream.interruptions?.length ? { interrupted: true } : {}),
         };
         return JSON.stringify(result);
       },
-    }) as Tool<SubagentRunContext>;
-
-    const created = { agent, tool };
-    this.#roleToolCache.set(role, created);
-    return created;
+    };
   }
 
   async runAsTool(request: SubagentRequest, context?: unknown, details?: unknown): Promise<SubagentResult> {
@@ -396,7 +432,7 @@ export class NestedSubagentRunner {
         : null;
 
       const promises: Array<Promise<any>> = [
-        tool.invoke(nestedToolContext, JSON.stringify({ role, task: request.task }), effectiveDetails),
+        tool.execute({ role, task: request.task }, nestedToolContext, effectiveDetails),
       ];
       if (abortPromise) {
         promises.push(abortPromise);

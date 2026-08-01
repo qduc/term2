@@ -125,26 +125,26 @@ describe('write boundary enforcement', () => {
     expect(agentGpt.tools.find((t: any) => t.name === 'search_replace')).toBeFalsy();
 
     // Call with a path inside the boundary — should NOT be rejected for boundary violation
-    const insideResult = await applyPatch.invoke(
-      {},
+    const insideResult = await applyPatch.execute(
       JSON.stringify({
         type: 'create_file',
         path: 'newfile.ts',
         diff: '+hello\n',
       }),
       {},
+      {},
     );
     const insideError = insideResult.startsWith('Error:') ? insideResult : undefined;
     expect(!insideError || !insideError.includes('outside the allowed write boundary')).toBe(true);
 
     // Call with a path outside the boundary — should be rejected
-    const outsideResult = await applyPatch.invoke(
-      {},
+    const outsideResult = await applyPatch.execute(
       JSON.stringify({
         type: 'create_file',
         path: '../outside/file.ts',
         diff: '+hello\n',
       }),
+      {},
       {},
     );
     expect(outsideResult.includes('outside the allowed write boundary')).toBe(true);
@@ -183,8 +183,7 @@ describe('write boundary enforcement', () => {
     expect(searchReplace).toBeTruthy();
     expect(agentNonGpt.tools.find((t: any) => t.name === 'apply_patch')).toBeFalsy();
 
-    const batchOutsideResult = await searchReplace.invoke(
-      {},
+    const batchOutsideResult = await searchReplace.execute(
       JSON.stringify({
         path: '../outside.ts',
         replacements: [
@@ -194,6 +193,7 @@ describe('write boundary enforcement', () => {
           },
         ],
       }),
+      {},
       {},
     );
     expect(batchOutsideResult.includes('outside the allowed write boundary')).toBe(true);
@@ -256,7 +256,7 @@ describe('write boundary enforcement', () => {
     const createFile = agent.tools.find((tool: any) => tool.name === 'create_file');
     expect(createFile).toBeTruthy();
 
-    const outsideResult = await createFile.invoke({}, JSON.stringify({ path: '../outside.ts', content: 'x' }), {});
+    const outsideResult = await createFile.execute(JSON.stringify({ path: '../outside.ts', content: 'x' }), {}, {});
     expect(outsideResult.includes('outside the allowed write boundary')).toBe(true);
     expect(outsideResult.startsWith('Error:')).toBe(true);
   });
@@ -271,8 +271,7 @@ describe('write boundary enforcement', () => {
             const searchReplace = agent.tools.find((tool: any) => tool.name === 'search_replace');
 
             if (applyPatch) {
-              await applyPatch.invoke(
-                {},
+              await applyPatch.execute(
                 JSON.stringify({
                   operations: [
                     { type: 'create_file', path: 'a.txt', diff: '+hello\n' },
@@ -280,24 +279,25 @@ describe('write boundary enforcement', () => {
                   ],
                 }),
                 {},
+                {},
               );
             }
 
             if (searchReplace) {
-              await searchReplace.invoke(
-                {},
+              await searchReplace.execute(
                 JSON.stringify({
                   path: 'b.txt',
                   replacements: [{ search_content: '', replace_content: 'created' }],
                 }),
                 {},
-              );
-              await searchReplace.invoke(
                 {},
+              );
+              await searchReplace.execute(
                 JSON.stringify({
                   path: 'missing2.txt',
                   replacements: [{ search_content: 'x', replace_content: 'y' }],
                 }),
+                {},
                 {},
               );
             }
@@ -350,20 +350,20 @@ describe('write boundary enforcement', () => {
             const createFile = agent.tools.find((tool: any) => tool.name === 'create_file');
 
             const [first, second] = await Promise.all([
-              createFile.invoke(
-                {},
+              createFile.execute(
                 JSON.stringify({
                   path: 'locked.txt',
                   content: 'one',
                 }),
                 {},
-              ),
-              createFile.invoke(
                 {},
+              ),
+              createFile.execute(
                 JSON.stringify({
                   path: 'locked.txt',
                   content: 'two',
                 }),
+                {},
                 {},
               ),
             ]);
@@ -427,7 +427,7 @@ describe('worker shell tool safety gating', () => {
             const needsApproval = await shellTool.needsApproval({}, { command: 'ls .' });
             expect(needsApproval, 'worker shell tool must never require approval').toBe(false);
 
-            shellResult = await shellTool.invoke({}, JSON.stringify({ command: 'echo hello' }), {});
+            shellResult = await shellTool.execute(JSON.stringify({ command: 'echo hello' }), {}, {});
             const result = {
               status: 'completed',
               finalOutput: 'done',
@@ -472,7 +472,7 @@ describe('worker shell tool safety gating', () => {
               false,
             );
 
-            shellResult = await shellTool.invoke({}, JSON.stringify({ command: 'rm -rf /tmp/something' }), {});
+            shellResult = await shellTool.execute(JSON.stringify({ command: 'rm -rf /tmp/something' }), {}, {});
             const result = {
               status: 'completed',
               finalOutput: 'done',
@@ -515,7 +515,11 @@ describe('worker shell tool safety gating', () => {
         ({
           run: async (agent: any, _input: any, _options: any) => {
             const shellTool = agent.tools.find((tool: any) => tool.name === 'shell');
-            shellResult = await shellTool.invoke({}, JSON.stringify({ command: 'npm run test:verbose -- --help' }), {});
+            shellResult = await shellTool.execute(
+              JSON.stringify({ command: 'npm run test:verbose -- --help' }),
+              {},
+              {},
+            );
             const result = {
               status: 'completed',
               finalOutput: 'done',
@@ -567,7 +571,11 @@ describe('worker shell tool safety gating', () => {
         ({
           run: async (agent: any, _input: any, _options: any) => {
             const shellTool = agent.tools.find((tool: any) => tool.name === 'shell');
-            shellResult = await shellTool.invoke({}, JSON.stringify({ command: 'npm run test:verbose -- --help' }), {});
+            shellResult = await shellTool.execute(
+              JSON.stringify({ command: 'npm run test:verbose -- --help' }),
+              {},
+              {},
+            );
             const result = {
               status: 'completed',
               finalOutput: 'done',

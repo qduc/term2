@@ -918,7 +918,7 @@ describe('outbound steering', () => {
             inputs.push(input);
             if (inputs.length === 1) {
               const readFile = agent.tools.find((tool: any) => tool.name === 'read_file');
-              await readFile.invoke({}, JSON.stringify({ path: 'package.json' }), {});
+              await readFile.execute(JSON.stringify({ path: 'package.json' }), {}, {});
               firstToolCompleted();
               firstSignal = options.signal;
               return new Promise((_resolve, reject) => {

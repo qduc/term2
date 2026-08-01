@@ -22,10 +22,30 @@ const isSnapshot = (value: unknown): boolean =>
   (typeof value['previousResponseId'] === 'string' || value['previousResponseId'] === null) &&
   Array.isArray(value['toolLedger']);
 
+const isOneOf = (value: unknown, allowed: readonly string[]): boolean =>
+  typeof value === 'string' && allowed.includes(value);
+
+const isAssistantItem = (value: unknown): boolean => {
+  if (!isObject(value) || !hasString(value, 'type')) return false;
+  switch (value['type']) {
+    case 'reasoning':
+    case 'assistant_text':
+      return hasString(value, 'text');
+    case 'tool_call':
+      return hasString(value, 'callId') && hasString(value, 'toolName');
+    case 'tool_result':
+      return (
+        hasString(value, 'callId') &&
+        hasString(value, 'toolName') &&
+        isOneOf(value['status'], ['completed', 'failed', 'aborted'])
+      );
+    default:
+      return true;
+  }
+};
+
 const isAssistantTurn = (value: unknown): boolean =>
-  isObject(value) &&
-  Array.isArray(value['items']) &&
-  value['items'].every((item) => isObject(item) && hasString(item, 'type'));
+  isObject(value) && Array.isArray(value['items']) && value['items'].every(isAssistantItem);
 
 /** Validate fields replay dereferences on known event types. Unknown event types stay opaque. */
 const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
@@ -39,23 +59,25 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
       return isMessage(event['message']);
     case 'assistant_journal_delta':
       return (
-        hasString(event, 'turnId') && hasNumber(event, 'seq') && hasString(event, 'kind') && hasString(event, 'delta')
-      );
-    case 'assistant_journal_item':
-      return (
         hasString(event, 'turnId') &&
         hasNumber(event, 'seq') &&
-        isObject(event['item']) &&
-        hasString(event['item'], 'type')
+        isOneOf(event['kind'], ['text', 'reasoning']) &&
+        hasString(event, 'delta')
       );
+    case 'assistant_journal_item':
+      return hasString(event, 'turnId') && hasNumber(event, 'seq') && isAssistantItem(event['item']);
     case 'tool_started':
       return hasString(event, 'toolCallId') && hasString(event, 'toolName');
     case 'tool_result':
-      return hasString(event, 'callId') && hasString(event, 'toolName') && hasString(event, 'status');
+      return (
+        hasString(event, 'callId') &&
+        hasString(event, 'toolName') &&
+        isOneOf(event['status'], ['completed', 'failed', 'aborted'])
+      );
     case 'approval_required':
       return isObject(event['approval']) && hasString(event['approval'], 'toolName');
     case 'approval_resolved':
-      return hasString(event, 'answer');
+      return isOneOf(event['answer'], ['y', 'n']);
     case 'subagent_started':
       return hasString(event, 'agentId') && hasString(event, 'role') && hasString(event, 'task');
     case 'subagent_tool_started':

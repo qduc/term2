@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   createIsolatedWorkspaceLease,
+  removeIsolatedWorkspaceRoot,
   withIsolatedWorkspace,
   type IsolatedWorkspaceLease,
 } from './provider-test-harness.js';
@@ -10,6 +11,21 @@ import {
 const CHILD = join(process.cwd(), 'scripts/provider-black-box/provider-harness-child.mjs');
 
 describe('provider black-box harness', () => {
+  it('passes bounded retry settings to isolated root removal', async () => {
+    let receivedOptions: RootRemovalOptionsForTest | undefined;
+
+    await removeIsolatedWorkspaceRoot('/tmp/term2-provider-blackbox-root', async (_root, options) => {
+      receivedOptions = options;
+    });
+
+    expect(receivedOptions).toEqual({
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 50,
+    });
+  });
+
   it('reuses one isolated lease across PTY child launches and relaunches', async () => {
     await withIsolatedWorkspace({}, async (workspace) => {
       const first = await workspace.start({
@@ -167,14 +183,52 @@ describe('provider black-box harness', () => {
 
   it('reclaims the root when preparation fails', async () => {
     let root = '';
+    let receivedOptions: RootRemovalOptionsForTest | undefined;
+    const preparationError = new Error('fixture preparation failed');
     await expect(
       createIsolatedWorkspaceLease({
+        removeRoot: async (preparedRoot, options) => {
+          receivedOptions = options;
+          await rm(preparedRoot, options);
+        },
         prepare: (preparedRoot) => {
           root = preparedRoot;
-          throw new Error('fixture preparation failed');
+          throw preparationError;
         },
       }),
-    ).rejects.toThrow('fixture preparation failed');
+    ).rejects.toBe(preparationError);
+    expect(receivedOptions).toEqual({
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 50,
+    });
+    await expect(access(root)).rejects.toThrow();
+  });
+
+  it('preserves persistent acquisition cleanup errors', async () => {
+    let root = '';
+    const preparationError = new Error('fixture preparation failed');
+    const cleanupError = new Error('persistent root cleanup failed');
+    let thrown: unknown;
+
+    try {
+      await createIsolatedWorkspaceLease({
+        removeRoot: async (preparedRoot, options) => {
+          await rm(preparedRoot, options);
+          throw cleanupError;
+        },
+        prepare: (preparedRoot) => {
+          root = preparedRoot;
+          throw preparationError;
+        },
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect((thrown as AggregateError).errors).toEqual([preparationError, cleanupError]);
     await expect(access(root)).rejects.toThrow();
   });
 
@@ -189,6 +243,13 @@ describe('provider black-box harness', () => {
     await expect(access(workspace!.root)).rejects.toThrow();
   });
 });
+
+type RootRemovalOptionsForTest = {
+  recursive?: boolean;
+  force?: boolean;
+  maxRetries?: number;
+  retryDelay?: number;
+};
 
 async function waitForProcessToExit(pid: number, timeoutMs = 2_000): Promise<void> {
   const startedAt = Date.now();

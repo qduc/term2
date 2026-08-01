@@ -11,7 +11,20 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 const DEFAULT_WRITE_TIMEOUT_MS = 5_000;
 const DEFAULT_TERMINATE_GRACE_MS = 500;
 const DEFAULT_TERMINATE_TIMEOUT_MS = 2_000;
+const ROOT_REMOVAL_MAX_RETRIES = 5;
+const ROOT_REMOVAL_RETRY_DELAY_MS = 50;
 const PYTHON_PTY_BRIDGE = ['import pty', 'import sys', 'sys.exit(pty.spawn(sys.argv[1:]))'].join('; ');
+
+const ROOT_REMOVAL_OPTIONS = {
+  recursive: true,
+  force: true,
+  maxRetries: ROOT_REMOVAL_MAX_RETRIES,
+  retryDelay: ROOT_REMOVAL_RETRY_DELAY_MS,
+} as const;
+
+type RootRemoval = (root: string, options: typeof ROOT_REMOVAL_OPTIONS) => Promise<void>;
+
+const removeRootWithFsRm: RootRemoval = (root, options) => rm(root, options);
 
 export interface BlackBoxRun {
   exitCode: number | null;
@@ -96,10 +109,18 @@ export interface CreateIsolatedWorkspaceOptions {
   env?: Record<string, string | undefined>;
   prepare?: (root: string, paths: IsolatedWorkspacePaths) => Promise<void> | void;
   /** Narrow test seam for exercising retryable root cleanup failures. */
-  removeRoot?: (root: string) => Promise<void>;
+  removeRoot?: RootRemoval;
 }
 
 type WorkspaceLeaseState = 'open' | 'closing' | 'cleanup-failed' | 'closed';
+
+/** Remove an isolated root with bounded retries for transient filesystem races. */
+export async function removeIsolatedWorkspaceRoot(
+  root: string,
+  removeRoot: RootRemoval = removeRootWithFsRm,
+): Promise<void> {
+  await removeRoot(root, ROOT_REMOVAL_OPTIONS);
+}
 
 /**
  * Create one disposable state root that can be reused by several child
@@ -189,8 +210,7 @@ export async function createIsolatedWorkspaceLease(
             }
           }
           try {
-            if (options.removeRoot) await options.removeRoot(root!);
-            else await rm(root!, { recursive: true, force: true });
+            await removeIsolatedWorkspaceRoot(root!, options.removeRoot);
           } catch (error) {
             failures.push(error);
           }
@@ -214,9 +234,9 @@ export async function createIsolatedWorkspaceLease(
     // receives a lease, so acquisition must reclaim the root itself.
     if (root) {
       try {
-        await rm(root, { recursive: true, force: true });
-      } catch {
-        /* preserve the preparation error */
+        await removeIsolatedWorkspaceRoot(root, options.removeRoot);
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], 'Failed to prepare and clean up isolated workspace lease.');
       }
     }
     throw error;

@@ -564,6 +564,10 @@ function toCodexTool(tool: StreamedModelTurnRequest['tools'][number]) {
 function normalizeCodexStreamEvent(raw: any): any {
   if (raw && typeof raw === 'object') {
     if (raw.type === 'response_done') {
+      const status = raw.response?.status;
+      if (status === 'incomplete' || status === 'failed') {
+        return { type: `response.${status}`, response: raw.response };
+      }
       return { type: 'response.completed', response: raw.response };
     }
     if (raw.type === undefined && raw.event && typeof raw.event === 'object') {
@@ -598,6 +602,7 @@ async function* codexStream(
   );
   const output: any[] = [];
   let responseId = '';
+  let sawCompletedResponse = false;
   const tools = request.tools?.map(toCodexTool);
   for await (const rawEvent of model.getStreamedResponse({
     model: modelName,
@@ -621,11 +626,8 @@ async function* codexStream(
       };
       output.push(call);
       yield call;
-    } else if (
-      event?.type === 'response.completed' ||
-      event?.type === 'response.incomplete' ||
-      event?.type === 'response.failed'
-    ) {
+    } else if (event?.type === 'response.completed') {
+      sawCompletedResponse = true;
       responseId = event.response?.id ?? responseId;
       for (const item of event.response?.output ?? []) {
         if (item.type === 'message')
@@ -634,8 +636,13 @@ async function* codexStream(
             content: [{ type: 'text', text: item.content?.map((part: any) => part.text ?? '').join('') ?? '' }],
           });
       }
+    } else if (event?.type === 'response.incomplete' || event?.type === 'response.failed') {
+      const status = event.type.slice('response.'.length);
+      const message = event.response?.error?.message ?? `Codex response ${status}`;
+      throw new Error(`Codex provider response ${status}: ${message}`);
     }
   }
+  if (!sawCompletedResponse) throw new Error('Codex streamed response ended without a completed response event.');
   yield { type: 'completion', responseId, output };
 }
 

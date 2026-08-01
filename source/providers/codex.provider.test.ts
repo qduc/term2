@@ -816,6 +816,39 @@ it.sequential('Codex provider uses CODEX_BASE_URL for local server simulation', 
   }
 });
 
+it.sequential('Codex HTTP stream rejects EOF before a completed response event', async () => {
+  const client = {
+    responses: {
+      create: async () =>
+        (async function* () {
+          yield { type: 'response.created', response: { id: 'resp_incomplete', status: 'in_progress' } };
+          yield { type: 'response.output_text.delta', delta: 'partial' };
+        })(),
+    },
+  };
+  const provider = new CodexProvider(
+    client as any,
+    {} as any,
+    {},
+    undefined,
+    'http',
+    0,
+    { firstFrameMs: 1_000, interFrameMs: 1_000 },
+  );
+  const model = provider.getStreamedModel('fixture-codex');
+
+  await expect(
+    (async () => {
+      for await (const _event of model.stream({
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        tools: [],
+      })) {
+        // drain
+      }
+    })(),
+  ).rejects.toThrow('without a completed response');
+});
+
 it.sequential('Codex provider reuses its streamed model so continuation state survives turns', async () => {
   const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).getStreamedResponse;
   const instances: unknown[] = [];

@@ -223,6 +223,18 @@ it('rejects provider errors and streams that cannot authoritatively complete', a
   await expect(
     collect(modelFor([{ type: 'response-metadata', id: 'response-1' }]).stream({ input: [], tools: [] })),
   ).rejects.toThrow('without a finish event');
+  await expect(
+    collect(
+      modelFor([
+        { type: 'response-metadata', id: 'response-2' },
+        {
+          type: 'finish',
+          finishReason: { unified: 'other' },
+          usage: { inputTokens: {}, outputTokens: {} },
+        },
+      ]).stream({ input: [], tools: [] }),
+    ),
+  ).rejects.toThrow('without an authoritative native finish reason');
 });
 
 it('maps reasoning effort to Anthropic thinking provider options', async () => {

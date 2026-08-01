@@ -1,7 +1,13 @@
 import { it, expect } from 'vitest';
 import { OpenAIChatCompletionsModel } from './openai-chat-completions-model.js';
 
-async function* emptyStream(): AsyncIterable<any> {}
+async function* emptyStream(): AsyncIterable<any> {
+  yield { choices: [{ delta: {}, finish_reason: 'stop' }] };
+}
+
+async function* incompleteTextStream(): AsyncIterable<any> {
+  yield { choices: [{ delta: { role: 'assistant', content: 'partial' } }] };
+}
 
 it('stream() sends message content as OpenAI-compatible content parts, not raw strings', async () => {
   let capturedBody: any;
@@ -40,6 +46,21 @@ it('stream() sends message content as OpenAI-compatible content parts, not raw s
   ]);
 });
 
+it('stream() rejects EOF before a finish_reason instead of synthesizing completion', async () => {
+  const client = {
+    chat: { completions: { create: async () => incompleteTextStream() } },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat');
+
+  await expect(
+    (async () => {
+      for await (const _event of model.stream({ input: [], tools: [] } as any)) {
+        // drain
+      }
+    })(),
+  ).rejects.toThrow('without a finish reason');
+});
+
 // Real streaming servers send `id` and `function.name` only on the first SSE
 // chunk for a tool call; every later chunk carries just
 // `{ index, function: { arguments } }` with no `id`. Keying the accumulator by
@@ -52,6 +73,7 @@ async function* chunkedToolCallStream(): AsyncIterable<any> {
   };
   yield { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"command":' } }] } }] };
   yield { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '"ls -la"}' } }] } }] };
+  yield { choices: [{ delta: {}, finish_reason: 'tool_calls' }] };
 }
 
 it('stream() reassembles a tool call whose arguments span multiple id-less SSE chunks', async () => {
@@ -117,6 +139,7 @@ async function* reasoningStream(): AsyncIterable<any> {
   yield { choices: [{ delta: { reasoning_content: 'Thinking' } }] };
   yield { choices: [{ delta: { reasoning_content: ' it through.' } }] };
   yield { choices: [{ delta: { content: 'Final answer.' } }] };
+  yield { choices: [{ delta: {}, finish_reason: 'stop' }] };
 }
 
 it('stream() surfaces reasoning_content as reasoning_delta events and in the completion output', async () => {

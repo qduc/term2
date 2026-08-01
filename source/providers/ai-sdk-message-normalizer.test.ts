@@ -1,4 +1,5 @@
 import { it, expect } from 'vitest';
+import type { LanguageModelV3, LanguageModelV3CallOptions } from '@ai-sdk/provider';
 import { mergeAssistantMessages, withMergedAssistantMessages } from './ai-sdk-message-normalizer.js';
 
 it('mergeAssistantMessages folds assistant reasoning into following assistant tool call', () => {
@@ -354,81 +355,95 @@ it('mergeAssistantMessages merges real-world split assistant turns before tool r
 });
 
 it('withMergedAssistantMessages normalizes doGenerate messages before delegating', async () => {
-  let delegatedOptions: any;
+  let delegatedOptions: (LanguageModelV3CallOptions & { messages?: unknown[] }) | undefined;
   const model = withMergedAssistantMessages({
     provider: 'example',
     modelId: 'model',
     specificationVersion: 'v3',
     supportedUrls: {},
-    doGenerate: async (options: any) => {
-      delegatedOptions = options;
-      return { text: 'ok' };
+    doGenerate: async (options: LanguageModelV3CallOptions) => {
+      delegatedOptions = options as LanguageModelV3CallOptions & { messages?: unknown[] };
+      return { text: 'ok' } as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
     },
-    doStream: async () => ({ stream: [] }),
-  });
+    doStream: async () =>
+      ({ stream: (async function* () {})() }) as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>,
+  } as LanguageModelV3);
 
   await model.doGenerate({
+    inputFormat: 'prompt',
+    mode: { type: 'regular' },
+    prompt: [],
     temperature: 0,
     messages: [
       { role: 'assistant', content: '', reasoning_content: 'reasoning' },
       { role: 'assistant', content: null, tool_calls: [{ id: 'call:0' }] },
     ],
-  });
+  } as unknown as LanguageModelV3CallOptions);
 
   expect(delegatedOptions).toEqual({
+    inputFormat: 'prompt',
+    mode: { type: 'regular' },
+    prompt: [],
     temperature: 0,
     messages: [{ role: 'assistant', content: null, reasoning_content: 'reasoning', tool_calls: [{ id: 'call:0' }] }],
   });
 });
 
 it('withMergedAssistantMessages normalizes doGenerate prompt before delegating', async () => {
-  let delegatedOptions: any;
+  let delegatedOptions: LanguageModelV3CallOptions | undefined;
   const model = withMergedAssistantMessages({
     provider: 'example',
     modelId: 'model',
     specificationVersion: 'v3',
     supportedUrls: {},
-    doGenerate: async (options: any) => {
+    doGenerate: async (options: LanguageModelV3CallOptions) => {
       delegatedOptions = options;
-      return { text: 'ok' };
+      return { text: 'ok' } as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
     },
-    doStream: async () => ({ stream: [] }),
-  });
+    doStream: async () =>
+      ({ stream: (async function* () {})() }) as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>,
+  } as LanguageModelV3);
 
   await model.doGenerate({
+    inputFormat: 'prompt',
+    mode: { type: 'regular' },
     prompt: [
       { role: 'assistant', content: '', reasoning_content: 'reasoning' },
       { role: 'assistant', content: null, tool_calls: [{ id: 'call:0' }] },
     ],
-  });
+  } as unknown as LanguageModelV3CallOptions);
 
-  expect(delegatedOptions.prompt).toEqual([
+  expect(delegatedOptions?.prompt).toEqual([
     { role: 'assistant', content: null, reasoning_content: 'reasoning', tool_calls: [{ id: 'call:0' }] },
   ]);
 });
 
 it('withMergedAssistantMessages normalizes doStream messages before delegating', async () => {
-  let delegatedOptions: any;
+  let delegatedOptions: (LanguageModelV3CallOptions & { messages?: unknown[] }) | undefined;
   const model = withMergedAssistantMessages({
     provider: 'example',
     modelId: 'model',
     specificationVersion: 'v3',
     supportedUrls: {},
-    doGenerate: async () => ({ text: 'ok' }),
-    doStream: async (options: any) => {
-      delegatedOptions = options;
-      return { stream: [] };
+    doGenerate: async () =>
+      ({ text: 'ok' }) as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>,
+    doStream: async (options: LanguageModelV3CallOptions) => {
+      delegatedOptions = options as LanguageModelV3CallOptions & { messages?: unknown[] };
+      return { stream: (async function* () {})() } as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>;
     },
-  });
+  } as LanguageModelV3);
 
   await model.doStream({
+    inputFormat: 'prompt',
+    mode: { type: 'regular' },
+    prompt: [],
     messages: [
       { role: 'assistant', content: '', reasoning_content: 'reasoning' },
       { role: 'assistant', content: null, tool_calls: [{ id: 'call:0' }] },
     ],
-  });
+  } as unknown as LanguageModelV3CallOptions);
 
-  expect(delegatedOptions.messages).toEqual([
+  expect(delegatedOptions?.messages).toEqual([
     { role: 'assistant', content: null, reasoning_content: 'reasoning', tool_calls: [{ id: 'call:0' }] },
   ]);
 });
@@ -447,7 +462,7 @@ it('withMergedAssistantMessages preserves model properties exposed by getters', 
     }
 
     get specificationVersion() {
-      return 'v3';
+      return 'v3' as const;
     }
 
     get supportedUrls() {
@@ -455,11 +470,11 @@ it('withMergedAssistantMessages preserves model properties exposed by getters', 
     }
 
     async doGenerate() {
-      return { text: 'ok' };
+      return { text: 'ok' } as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
     }
 
     async doStream() {
-      return { stream: [] };
+      return { stream: (async function* () {})() } as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>;
     }
   }
 

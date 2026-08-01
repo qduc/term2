@@ -19,13 +19,20 @@ import type {
   StreamedModelTurnOutput,
 } from '../contracts/streamed-model-turn.js';
 
+type UnaryGenerateResult = Awaited<ReturnType<LanguageModelV3['doGenerate']>> & {
+  /** Guarded vendor text, reasoning, and tool-call extensions for unary results. */
+  text?: string;
+  reasoning?: string;
+  toolCalls?: Array<{ toolCallId: string; toolName: string; input?: string }>;
+};
+
 /** Adapts one AI SDK LanguageModelV3 stream to the application-owned turn protocol. */
 export function createAiSdkStreamedModel(model: LanguageModelV3): StreamedModelTurn {
   const normalizedModel = withMergedAssistantMessages(model);
   return {
     async getResponse(request: StreamedModelTurnRequest) {
-      const result: any = await normalizedModel.doGenerate(toCallOptions(request));
-      const output: any[] = [];
+      const result = (await normalizedModel.doGenerate(toCallOptions(request))) as UnaryGenerateResult;
+      const output: StreamedModelTurnOutput[] = [];
       if (typeof result.reasoning === 'string' && result.reasoning) {
         output.push({ type: 'reasoning', text: result.reasoning });
       }

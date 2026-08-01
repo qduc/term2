@@ -1,31 +1,35 @@
 import { wrapLanguageModel, type LanguageModelMiddleware } from 'ai';
-import type { LanguageModelV3 } from '@ai-sdk/provider';
+import type { LanguageModelV3, LanguageModelV3CallOptions } from '@ai-sdk/provider';
 
-type AiSdkModelLike = {
-  doGenerate: (options: any) => PromiseLike<any> | any;
-  doStream: (options: any) => PromiseLike<any> | any;
-};
-
-function hasContent(content: any): boolean {
+function hasContent(content: unknown): boolean {
   return content !== null && content !== undefined && content !== '';
 }
 
-function hasReasoningPayload(message: any): boolean {
-  if (message?.role !== 'assistant') {
+function hasReasoningPayload(message: Record<string, unknown>): boolean {
+  if (message.role !== 'assistant') {
     return false;
   }
 
-  const candidates = [message, message?.providerData, message?.provider_data].filter(Boolean);
+  const candidates: Record<string, unknown>[] = [
+    message,
+    ...(typeof message.providerData === 'object' && message.providerData !== null
+      ? [message.providerData as Record<string, unknown>]
+      : []),
+    ...(typeof message.provider_data === 'object' && message.provider_data !== null
+      ? [message.provider_data as Record<string, unknown>]
+      : []),
+  ];
+
   return candidates.some(
-    (candidate: any) =>
+    (candidate) =>
       typeof candidate.reasoning === 'string' ||
       typeof candidate.reasoning_content === 'string' ||
       (Array.isArray(candidate.reasoning_details) && candidate.reasoning_details.length > 0),
   );
 }
 
-function hasAssistantPayload(message: any): boolean {
-  if (message?.role !== 'assistant') {
+function hasAssistantPayload(message: Record<string, unknown>): boolean {
+  if (message.role !== 'assistant') {
     return true;
   }
 
@@ -44,7 +48,7 @@ function hasAssistantPayload(message: any): boolean {
   return message.content.length > 0;
 }
 
-function contentToParts(content: any): any[] {
+function contentToParts(content: unknown): unknown[] {
   if (!hasContent(content)) {
     return [];
   }
@@ -56,7 +60,7 @@ function contentToParts(content: any): any[] {
   return [{ type: 'text', text: String(content) }];
 }
 
-function mergeAssistantContent(existing: any, incoming: any): any {
+function mergeAssistantContent(existing: unknown, incoming: unknown): unknown {
   if (!hasContent(existing)) {
     return incoming;
   }
@@ -72,15 +76,23 @@ function mergeAssistantContent(existing: any, incoming: any): any {
   return [...contentToParts(existing), ...contentToParts(incoming)];
 }
 
-function appendStringField(message: any, field: 'reasoning' | 'reasoning_content', value: any): void {
+function appendStringField(
+  message: Record<string, unknown>,
+  field: 'reasoning' | 'reasoning_content',
+  value: unknown,
+): void {
   if (typeof value !== 'string') {
     return;
   }
 
-  message[field] = typeof message[field] === 'string' ? `${message[field]}${value}` : value;
+  message[field] = typeof message[field] === 'string' ? `${message[field] as string}${value}` : value;
 }
 
-function appendArrayLikeField(message: any, field: 'tool_calls' | 'reasoning_details', value: any): void {
+function appendArrayLikeField(
+  message: Record<string, unknown>,
+  field: 'tool_calls' | 'reasoning_details',
+  value: unknown,
+): void {
   if (value == null) {
     return;
   }
@@ -90,11 +102,15 @@ function appendArrayLikeField(message: any, field: 'tool_calls' | 'reasoning_det
     return;
   }
 
-  message[field] = [...(Array.isArray(message[field]) ? message[field] : []), ...values];
+  const existingArray = Array.isArray(message[field]) ? (message[field] as unknown[]) : [];
+  message[field] = [...existingArray, ...values];
 }
 
-function mergeAssistantMessagePair(existing: any, incoming: any): any {
-  const merged = {
+function mergeAssistantMessagePair(
+  existing: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = {
     ...existing,
     ...incoming,
     role: 'assistant',
@@ -126,43 +142,56 @@ function mergeAssistantMessagePair(existing: any, incoming: any): any {
   return merged;
 }
 
-export function mergeAssistantMessages(messages: any[]): any[] {
-  const merged: any[] = [];
+export function mergeAssistantMessages<T extends Record<string, unknown>>(messages: readonly T[]): T[] {
+  const merged: T[] = [];
 
   for (const message of messages) {
+    if (!message || typeof message !== 'object') {
+      merged.push(message);
+      continue;
+    }
+
     const previous = merged[merged.length - 1];
 
-    if (previous?.role === 'assistant' && message?.role === 'assistant') {
-      merged[merged.length - 1] = mergeAssistantMessagePair(previous, message);
+    if (previous?.role === 'assistant' && message.role === 'assistant') {
+      merged[merged.length - 1] = mergeAssistantMessagePair(
+        previous as Record<string, unknown>,
+        message as Record<string, unknown>,
+      ) as unknown as T;
       continue;
     }
 
     merged.push(message);
   }
 
-  return merged.filter(hasAssistantPayload);
+  return merged.filter((msg) => hasAssistantPayload(msg as Record<string, unknown>));
 }
 
-function normalizeMessageOptions(options: any): any {
-  if (!Array.isArray(options?.prompt) && !Array.isArray(options?.messages)) {
+function normalizeMessageOptions(options: LanguageModelV3CallOptions): LanguageModelV3CallOptions {
+  const opts = options as unknown as Record<string, unknown>;
+  if (!Array.isArray(opts.prompt) && !Array.isArray(opts.messages)) {
     return options;
   }
 
   return {
     ...options,
-    ...(Array.isArray(options.prompt) ? { prompt: mergeAssistantMessages(options.prompt) } : {}),
-    ...(Array.isArray(options.messages) ? { messages: mergeAssistantMessages(options.messages) } : {}),
-  };
+    ...(Array.isArray(opts.prompt)
+      ? { prompt: mergeAssistantMessages(opts.prompt as Record<string, unknown>[]) }
+      : {}),
+    ...(Array.isArray(opts.messages)
+      ? { messages: mergeAssistantMessages(opts.messages as Record<string, unknown>[]) }
+      : {}),
+  } as unknown as LanguageModelV3CallOptions;
 }
 
 const mergeAssistantMessagesMiddleware: LanguageModelMiddleware = {
   specificationVersion: 'v3',
-  transformParams: ({ params }) => normalizeMessageOptions(params),
+  transformParams: async ({ params }) => normalizeMessageOptions(params as LanguageModelV3CallOptions),
 };
 
-export function withMergedAssistantMessages<T extends AiSdkModelLike>(model: T): T {
+export function withMergedAssistantMessages<T extends LanguageModelV3>(model: T): T {
   return wrapLanguageModel({
-    model: model as unknown as LanguageModelV3,
+    model,
     middleware: mergeAssistantMessagesMiddleware,
-  }) as unknown as T;
+  }) as T;
 }

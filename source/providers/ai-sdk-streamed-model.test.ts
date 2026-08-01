@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import type { LanguageModelV3, LanguageModelV3CallOptions } from '@ai-sdk/provider';
 import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
 
 async function collect(stream: AsyncIterable<unknown>) {
@@ -8,7 +9,7 @@ async function collect(stream: AsyncIterable<unknown>) {
 }
 
 it('translates one application turn to an AI SDK stream and publishes its authoritative completion', async () => {
-  let seenOptions: any;
+  let seenOptions: LanguageModelV3CallOptions | undefined;
   const signal = new AbortController().signal;
   const model = createAiSdkStreamedModel({
     provider: 'example.chat',
@@ -16,9 +17,9 @@ it('translates one application turn to an AI SDK stream and publishes its author
     specificationVersion: 'v3',
     supportedUrls: {},
     async doGenerate() {
-      return {} as any;
+      return {} as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
     },
-    async doStream(options: any) {
+    async doStream(options: LanguageModelV3CallOptions) {
       seenOptions = options;
       return {
         stream: (async function* () {
@@ -38,9 +39,9 @@ it('translates one application turn to an AI SDK stream and publishes its author
             providerMetadata: { example: { request: 'metadata' } },
           };
         })(),
-      };
+      } as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>;
     },
-  } as any);
+  } as unknown as LanguageModelV3);
 
   const events = await collect(
     model.stream({
@@ -161,20 +162,22 @@ it('preserves exact string tool arguments, streams live deltas, and propagates c
     specificationVersion: 'v3',
     supportedUrls: {},
     async doGenerate() {
-      return {} as any;
+      return {} as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
     },
-    async doStream(options: any) {
+    async doStream(options: LanguageModelV3CallOptions) {
       seenSignal = options.abortSignal;
       return {
         stream: (async function* () {
           yield { type: 'response-metadata', id: 'response-2' };
           yield { type: 'text-delta', id: 'text-1', delta: 'live' };
-          await new Promise<void>((resolve) => options.abortSignal.addEventListener('abort', resolve, { once: true }));
+          await new Promise<void>((resolve) =>
+            options.abortSignal?.addEventListener('abort', () => resolve(), { once: true }),
+          );
           throw cancelled;
         })(),
-      };
+      } as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>;
     },
-  } as any);
+  } as unknown as LanguageModelV3);
 
   const iterator = model.stream({ input: [], tools: [], signal: controller.signal })[Symbol.asyncIterator]();
   await expect(iterator.next()).resolves.toMatchObject({ value: { type: 'text_delta', text: 'live' }, done: false });
@@ -193,16 +196,16 @@ it('rejects provider errors and streams that cannot authoritatively complete', a
       specificationVersion: 'v3',
       supportedUrls: {},
       async doGenerate() {
-        return {} as any;
+        return {} as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
       },
       async doStream() {
         return {
           stream: (async function* () {
             yield* parts;
           })(),
-        };
+        } as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>;
       },
-    } as any);
+    } as unknown as LanguageModelV3);
 
   await expect(
     collect(modelFor([{ type: 'error', error: providerError }]).stream({ input: [], tools: [] })),
@@ -230,7 +233,7 @@ it('preserves missing token totals without turning them into zero', async () => 
     specificationVersion: 'v3',
     supportedUrls: {},
     async doGenerate() {
-      return {} as any;
+      return {} as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
     },
     async doStream() {
       return {
@@ -242,9 +245,9 @@ it('preserves missing token totals without turning them into zero', async () => 
             usage: { inputTokens: {}, outputTokens: {} },
           };
         })(),
-      };
+      } as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>;
     },
-  } as any);
+  } as unknown as LanguageModelV3);
 
   const events = await collect(model.stream({ input: [], tools: [] }));
 

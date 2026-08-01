@@ -146,10 +146,6 @@ export function tool(config: ToolFactoryConfig): Tool {
   return definition;
 }
 
-export function applyPatchTool(config: any): Tool {
-  return tool({ ...config, name: 'apply_patch' });
-}
-
 export async function run(_agent: Agent, _input: unknown, _options: any = {}): Promise<any> {
   throw new Error('A runner is required for an application-owned model invocation');
 }

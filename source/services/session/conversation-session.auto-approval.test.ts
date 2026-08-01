@@ -44,6 +44,10 @@ class MockStream {
     this.finalOutput = '';
   }
 
+  get runUsage(): unknown {
+    return (this.state as { usage?: unknown } | undefined)?.usage;
+  }
+
   async *[Symbol.asyncIterator](): AsyncIterable<unknown> {
     for (const event of this.events) {
       yield event;

@@ -21,6 +21,10 @@ export class MockStream<TEvent = unknown> implements AsyncIterable<TEvent> {
     this.output = [];
   }
 
+  get runUsage(): unknown {
+    return this.state.usage;
+  }
+
   async *[Symbol.asyncIterator](): AsyncGenerator<TEvent, void, unknown> {
     for (const event of this.events) {
       yield event;

@@ -59,6 +59,10 @@ class MockStream {
     this.events = events;
   }
 
+  get runUsage(): unknown {
+    return (this.state as { usage?: unknown }).usage;
+  }
+
   async *[Symbol.asyncIterator](): AsyncIterable<unknown> {
     for (const event of this.events) {
       yield event;
@@ -1125,6 +1129,16 @@ it.sequential(
             status: 'completed',
             content: [{ type: 'output_text', text: 'Done continuation.' }],
           },
+        ];
+        // Runtime history is cumulative and may include prior turns. Current-run
+        // newItems must win so this old assistant message is not persisted again.
+        stream2.history = [
+          {
+            role: 'assistant',
+            type: 'message',
+            content: [{ type: 'output_text', text: 'Prior turn.' }],
+          },
+          ...stream2.newItems,
         ];
         return stream2;
       },

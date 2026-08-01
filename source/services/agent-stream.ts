@@ -32,12 +32,15 @@ export function selectAgentStreamItems(stream: Pick<AgentStream, 'output' | 'new
   const output = Array.isArray(stream.output) ? stream.output : [];
   const newItems = Array.isArray(stream.newItems) ? stream.newItems : [];
   const history = Array.isArray(stream.history) ? stream.history : [];
-  return output.length > 0 ? output : newItems.length > 0 ? newItems : history;
+  return newItems.length > 0 ? newItems : output.length > 0 ? output : history;
 }
 
 /** Adapt a provider/runtime stream to the app-owned stream contract. */
 export function adaptAgentStream(source: unknown): AgentStream {
   const stream = source as Record<string | symbol, any>;
+  // Read legacy raw state only at the runtime boundary. Once wrapped, callers
+  // consume the explicit app-owned usage field and never reopen opaque state.
+  const legacyRunUsage = stream.state?.usage;
   const state = stream.state === undefined ? undefined : createContinuationHandle(stream.state);
   return {
     [Symbol.asyncIterator]: () => stream[Symbol.asyncIterator](),
@@ -69,7 +72,7 @@ export function adaptAgentStream(source: unknown): AgentStream {
       return stream.rawResponses;
     },
     get runUsage() {
-      return stream.state?.usage;
+      return stream.runUsage ?? legacyRunUsage;
     },
     state,
   };

@@ -357,8 +357,9 @@ it('emits usage_update when stream event includes usage', async () => {
   expect(acc.latestUsage).toBeTruthy();
 });
 
-it('uses authoritative run usage exposed by an adapted stream without inspecting continuation state', async () => {
+it('uses explicit adapted run usage before legacy runtime state usage', async () => {
   const source = makeStream([], {
+    runUsage: { requests: 2, inputTokens: 31, outputTokens: 9, totalTokens: 40 },
     state: { usage: { requests: 2, inputTokens: 11, outputTokens: 7, totalTokens: 18 } },
     completed: Promise.resolve({ usage: { input_tokens: 3, output_tokens: 2 } }),
   });
@@ -369,7 +370,7 @@ it('uses authoritative run usage exposed by an adapted stream without inspecting
     void _;
   }
 
-  expect(acc.latestUsage).toMatchObject({ prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 });
+  expect(acc.latestUsage).toMatchObject({ prompt_tokens: 31, completion_tokens: 9, total_tokens: 40 });
 });
 
 it('end-of-stream usage harvest from completed promise', async () => {

@@ -10,6 +10,7 @@ import '../../source/providers/index.js';
 import { createOpenAICompatibleProviderDefinition } from '../../source/providers/openai-compatible.provider.js';
 import type { ILoggingService, ISettingsService } from '../../source/services/service-interfaces.js';
 import { startFakeProviderHttpServer, type FakeProviderHttpServer } from './fake-provider-http-server.js';
+import { readFixtureEnvelope } from './fixture-envelope.js';
 import { fixtureRequest, fixtureTool, multiTurnFixture } from './provider-wire-fixtures.js';
 
 type Protocol = 'chat-completions' | 'responses' | 'anthropic' | 'google';
@@ -90,6 +91,23 @@ describe('provider boundary contracts through the registry', () => {
       expect(getProvider(id)?.createStreamedModel, id).toBeTypeOf('function');
     }
     expect(getAllProviders().length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('pilot Chat Completions provider replays a recorded wire fixture through the registry', async () => {
+    const fixture = await readFixtureEnvelope(new URL('./fixtures/fixture/chat-pilot.json', import.meta.url).pathname);
+    server = await startFakeProviderHttpServer({ fixture });
+    const providerCase = providerCases[1]!;
+    const settings = createSettings(providerCase);
+    registerRuntimeProvider(providerCase, settings);
+    const provider = getProvider(providerCase.registryId)!;
+    const model = await provider.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+    });
+    const events = await collect(model.stream(requestFor(providerCase)));
+    expect(events.filter((event) => event.type === 'text_delta')).toEqual([{ type: 'text_delta', text: 'hello' }]);
+    expect(events.at(-1)).toMatchObject({ type: 'completion' });
+    server.assertReplayValid();
   });
 
   it.each(providerCases)('$name succeeds with one authoritative completion', async (providerCase) => {

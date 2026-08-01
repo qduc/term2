@@ -52,10 +52,17 @@ export class LockConflictError extends Error {
   }
 }
 
+type WriterFileSystem = Pick<
+  typeof fs,
+  'existsSync' | 'mkdirSync' | 'openSync' | 'readFileSync' | 'writeSync' | 'fsyncSync' | 'closeSync' | 'unlinkSync'
+>;
+
 interface WriterOptions {
   sessionId: string;
   dir: string;
   logger: ILoggingService;
+  fileSystem?: WriterFileSystem;
+  saveLast?: typeof saveLastConversation;
 }
 
 function logPath(dir: string, sessionId: string): string {
@@ -66,9 +73,9 @@ function lockPath(dir: string, sessionId: string): string {
   return path.join(dir, `${sessionId}.lock`);
 }
 
-function ensureDir(dir: string): void {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+function ensureDir(fileSystem: WriterFileSystem, dir: string): void {
+  if (!fileSystem.existsSync(dir)) {
+    fileSystem.mkdirSync(dir, { recursive: true });
   }
 }
 
@@ -142,18 +149,18 @@ function truncateForLog(event: LogEvent): LogEvent | TruncatedLogEvent {
   };
 }
 
-function acquireLock(dir: string, sessionId: string): void {
+function acquireLock(dir: string, sessionId: string, fileSystem: WriterFileSystem = fs): void {
   const lp = lockPath(dir, sessionId);
   const payload = JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString(), host: os.hostname() });
   let fd: number;
   try {
-    fd = fs.openSync(lp, 'wx');
+    fd = fileSystem.openSync(lp, 'wx');
   } catch (err: unknown) {
     const errorObj = err as { code?: string };
     if (errorObj?.code === 'EEXIST') {
       let info: { pid: number; startedAt: string; host: string } | null = null;
       try {
-        info = JSON.parse(fs.readFileSync(lp, 'utf-8'));
+        info = JSON.parse(fileSystem.readFileSync(lp, 'utf-8'));
       } catch {
         info = null;
       }
@@ -162,16 +169,16 @@ function acquireLock(dir: string, sessionId: string): void {
     throw err;
   }
   try {
-    fs.writeSync(fd, payload);
-    fs.fsyncSync(fd);
+    fileSystem.writeSync(fd, payload);
+    fileSystem.fsyncSync(fd);
   } finally {
-    fs.closeSync(fd);
+    fileSystem.closeSync(fd);
   }
 }
 
-function releaseLock(dir: string, sessionId: string): void {
+function releaseLock(dir: string, sessionId: string, fileSystem: WriterFileSystem = fs): void {
   try {
-    fs.unlinkSync(lockPath(dir, sessionId));
+    fileSystem.unlinkSync(lockPath(dir, sessionId));
   } catch (err: unknown) {
     const errorObj = err as { code?: string };
     if (errorObj?.code !== 'ENOENT') {
@@ -184,9 +191,12 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
   #sessionId: string;
   #dir: string;
   #logger: ILoggingService;
+  #fileSystem: WriterFileSystem;
+  #saveLast: typeof saveLastConversation;
   #fd: number | null = null;
   #seq = 0;
   #closed = false;
+  #failure: unknown = null;
   #writeErrorLogged = false;
   #projectPath: string | undefined;
   #sshHost: string | undefined;
@@ -195,6 +205,8 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
     this.#sessionId = opts.sessionId;
     this.#dir = opts.dir;
     this.#logger = opts.logger;
+    this.#fileSystem = opts.fileSystem ?? fs;
+    this.#saveLast = opts.saveLast ?? saveLastConversation;
   }
 
   get sessionId(): string {
@@ -204,13 +216,14 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
   init(meta: Omit<SessionInitEvent, 'type'>): void {
     this.#projectPath = meta.projectPath;
     this.#sshHost = meta.sshHost;
-    ensureDir(this.#dir);
-    acquireLock(this.#dir, this.#sessionId);
-    this.#fd = fs.openSync(logPath(this.#dir, this.#sessionId), 'a');
+    ensureDir(this.#fileSystem, this.#dir);
+    acquireLock(this.#dir, this.#sessionId, this.#fileSystem);
+    this.#fd = this.#fileSystem.openSync(logPath(this.#dir, this.#sessionId), 'a');
     this.append({ type: 'session_init', ...meta });
   }
 
   append(event: LogEvent): void {
+    this.#throwIfFailed();
     if (this.#closed || this.#fd === null) {
       return;
     }
@@ -223,43 +236,41 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
     };
     const line = JSON.stringify(envelope) + '\n';
     try {
-      fs.writeSync(this.#fd, line);
+      this.#fileSystem.writeSync(this.#fd, line);
       if (FSYNC_EVENTS.has(sanitizedEvent.type)) {
-        try {
-          fs.fsyncSync(this.#fd);
-        } catch {
-          // ignore fsync errors; data is in kernel buffer
-        }
-        saveLastConversation(this.#sessionId, this.#projectPath, this.#sshHost);
+        this.#fileSystem.fsyncSync(this.#fd);
+        this.#saveLast(this.#sessionId, this.#projectPath, this.#sshHost);
       }
     } catch (err: unknown) {
-      if (!this.#writeErrorLogged) {
-        this.#writeErrorLogged = true;
-        this.#logger.error('Conversation log write failed', {
-          eventType: 'conversation_log.write_failed',
-          category: 'persistence',
-          sessionId: this.#sessionId,
-          errorMessage: err instanceof Error ? err.message : String(err),
-        });
+      if (FSYNC_EVENTS.has(sanitizedEvent.type)) {
+        this.#recordFailure(err);
+        throw err;
       }
+      this.#logWriteFailure(err);
     }
   }
 
   rotate(newSessionId: string, meta: Omit<SessionInitEvent, 'type'>): void {
+    this.#throwIfFailed();
+    let rotateFailure: unknown = null;
     if (this.#fd !== null) {
       try {
-        fs.fsyncSync(this.#fd);
-      } catch {
-        // ignore
+        this.#fileSystem.fsyncSync(this.#fd);
+      } catch (err: unknown) {
+        rotateFailure = err;
       }
       try {
-        fs.closeSync(this.#fd);
-      } catch {
-        // ignore
+        this.#fileSystem.closeSync(this.#fd);
+      } catch (err: unknown) {
+        rotateFailure ??= err;
       }
       this.#fd = null;
     }
-    releaseLock(this.#dir, this.#sessionId);
+    releaseLock(this.#dir, this.#sessionId, this.#fileSystem);
+    if (rotateFailure !== null) {
+      this.#recordFailure(rotateFailure);
+      throw rotateFailure;
+    }
     this.#sessionId = newSessionId;
     this.#seq = 0;
     this.#writeErrorLogged = false;
@@ -267,33 +278,67 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
   }
 
   async flush(): Promise<void> {
+    this.#throwIfFailed();
     if (this.#fd !== null) {
       try {
-        fs.fsyncSync(this.#fd);
-      } catch {
-        // ignore
+        this.#fileSystem.fsyncSync(this.#fd);
+      } catch (err: unknown) {
+        this.#recordFailure(err);
+        throw err;
       }
     }
   }
 
   async close(): Promise<void> {
-    if (this.#closed) return;
+    if (this.#closed) {
+      this.#throwIfFailed();
+      return;
+    }
     this.#closed = true;
+    const primaryFailure = this.#failure;
+    let cleanupFailure: unknown = null;
     if (this.#fd !== null) {
       try {
-        fs.fsyncSync(this.#fd);
-      } catch {
-        // ignore
+        this.#fileSystem.fsyncSync(this.#fd);
+      } catch (err: unknown) {
+        cleanupFailure = err;
       }
       try {
-        fs.closeSync(this.#fd);
-      } catch {
-        // ignore
+        this.#fileSystem.closeSync(this.#fd);
+      } catch (err: unknown) {
+        cleanupFailure ??= err;
       }
       this.#fd = null;
     }
-    saveLastConversation(this.#sessionId, this.#projectPath, this.#sshHost);
-    releaseLock(this.#dir, this.#sessionId);
+    if (primaryFailure === null && cleanupFailure === null) {
+      this.#saveLast(this.#sessionId, this.#projectPath, this.#sshHost);
+    }
+    releaseLock(this.#dir, this.#sessionId, this.#fileSystem);
+    if (primaryFailure !== null) throw primaryFailure;
+    if (cleanupFailure !== null) {
+      this.#recordFailure(cleanupFailure);
+      throw cleanupFailure;
+    }
+  }
+
+  #throwIfFailed(): void {
+    if (this.#failure !== null) throw this.#failure;
+  }
+
+  #recordFailure(err: unknown): void {
+    this.#failure ??= err;
+    this.#logWriteFailure(err);
+  }
+
+  #logWriteFailure(err: unknown): void {
+    if (this.#writeErrorLogged) return;
+    this.#writeErrorLogged = true;
+    this.#logger.error('Conversation log write failed', {
+      eventType: 'conversation_log.write_failed',
+      category: 'persistence',
+      sessionId: this.#sessionId,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 

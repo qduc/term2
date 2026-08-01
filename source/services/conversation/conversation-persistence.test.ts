@@ -139,6 +139,40 @@ it.sequential('writer + loadConversation: round-trips a basic conversation', () 
   expect(restored!.messages[1].sender).toBe('bot');
 });
 
+it.sequential('loadConversation: skips malformed known event lines and continues replay', () => {
+  const id = persistenceModule.generateId();
+  const filePath = path.join(testDir, `${id}.jsonl`);
+  const events = [
+    { type: 'session_init', id, createdAt: '2026-05-26T00:00:00.000Z' },
+    { type: 'session_init', id: 12, createdAt: 'bad' },
+    { type: 'user_message', message: null },
+    { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hello' } },
+    { type: 'assistant_turn', turn: { items: 'bad' } },
+    { type: 'future_checkpoint', opaque: true },
+    {
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'answer' }] },
+      state: { previousResponseId: null },
+    },
+    { type: 'undo', removedUserTurns: 1, snapshot: { history: null } },
+  ];
+  fs.writeFileSync(
+    filePath,
+    events
+      .map((event, index) => JSON.stringify({ v: 3, seq: index + 1, ts: '2026-05-26T00:00:00.000Z', event }))
+      .join('\n') + '\n',
+    'utf-8',
+  );
+
+  const restored = persistenceModule.loadConversation(id);
+
+  expect(restored).not.toBe(null);
+  expect(restored?.messages.map((message) => ('text' in message ? message.text : undefined))).toEqual([
+    'hello',
+    'answer',
+  ]);
+});
+
 it.sequential('loadConversation: returns null for missing id', () => {
   expect(persistenceModule.loadConversation('nope')).toBe(null);
 });

@@ -48,10 +48,11 @@ describe('ApplicationRunLoop', () => {
 
   it('executes a tool and feeds its result into the next model turn', async () => {
     let calls = 0;
-    const tool: ToolDefinition<{ value: string }> = {
+    const parameters = z.object({ value: z.string() });
+    const tool: ToolDefinition<typeof parameters> = {
       name: 'echo',
       description: 'Echo a value',
-      parameters: z.object({ value: z.string() }),
+      parameters,
       needsApproval: () => false,
       execute: ({ value }) => value,
       formatCommandMessage: () => [],
@@ -80,6 +81,40 @@ describe('ApplicationRunLoop', () => {
       ]),
     );
     expect(stream.finalOutput).toBe('done');
+  });
+
+  it('preserves omitted schema-default parameters for executor fallbacks', async () => {
+    const parameters = z.object({ heading: z.string().default('main') });
+    let received: unknown;
+    const tool: ToolDefinition<typeof parameters> = {
+      name: 'defaulted',
+      description: 'Uses an executor fallback for omitted arguments.',
+      parameters,
+      needsApproval: () => false,
+      execute: (params) => {
+        received = params;
+        return 'fallback result';
+      },
+      formatCommandMessage: () => [],
+    };
+    let calls = 0;
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => {
+        calls++;
+        return calls === 1
+          ? {
+              async *stream() {
+                yield { type: 'tool_call', id: 'call-default', name: 'defaulted', arguments: '{}' };
+                yield { type: 'completion', responseId: 'resp-default', output: [] };
+              },
+            }
+          : textModel('done', 'resp-default-done');
+      },
+    });
+
+    await collect(loop.startStream({ ...agent, tools: [tool] }, 'use the tool'));
+
+    expect(received).toEqual({});
   });
 
   it('exposes approval as an opaque continuation and resumes after approval', async () => {

@@ -5,7 +5,7 @@ import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import { getAgentDefinition } from '../agent.js';
 import { getProvider } from '../providers/index.js';
 import { createEditorImpl } from './editor-impl.js';
-import { normalizeObjectParams, wrapNeedsApproval } from './tool-invoke.js';
+import { normalizeToolParameters, wrapNeedsApproval } from './tool-invoke.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { trimToolOutput } from '../utils/output/trim-tool-output.js';
@@ -19,7 +19,8 @@ import {
 import { getModelDefaultReasoningLevel } from '../services/model-service.js';
 import { toolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
-import type { AnyToolDefinition, PostExecutePauseCapability, ToolRegistry } from '../tools/types.js';
+import { isZodToolParameterSchema } from '../tools/types.js';
+import type { AnyToolDefinition, JsonSchemaObject, PostExecutePauseCapability, ToolRegistry } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
 
 export interface AgentFactoryDeps {
@@ -77,6 +78,14 @@ interface ToolInvokeShim {
   invoke: (context: unknown, input: unknown, details?: unknown) => Promise<unknown>;
 }
 
+function getToolCallId(details: unknown): string | undefined {
+  if (!details || typeof details !== 'object') return undefined;
+  const toolCall = (details as { toolCall?: unknown }).toolCall;
+  if (!toolCall || typeof toolCall !== 'object') return undefined;
+  const callId = (toolCall as { callId?: unknown }).callId;
+  return typeof callId === 'string' ? callId : undefined;
+}
+
 export function buildAgentTools({
   toolDefinitions,
   resolvedModel,
@@ -105,28 +114,28 @@ export function buildAgentTools({
     .map((definition) => {
       const wrappedDefinition: AnyToolDefinition = {
         ...definition,
-        parameters: useStrictToolSchema
-          ? // Strict-schema path: `parameters` is replaced at runtime by its JSON
-            // schema form (the run loop's `isJsonSchema` guard handles that). The
-            // declared member stays `ZodTypeAny`; this cast is the deliberate,
-            // documented erasure point and must not be widened back to bare `any`.
-            (z.toJSONSchema(toOpenAIStrictToolSchema(definition.parameters)) as any)
-          : definition.parameters,
+        parameters:
+          useStrictToolSchema && isZodToolParameterSchema(definition.parameters)
+            ? // Strict-schema path: `parameters` is replaced at runtime by its JSON
+              // schema form (the run loop's schema guard handles that). This is
+              // an honest JSON-schema substitution, not an erased Zod schema.
+              (z.toJSONSchema(toOpenAIStrictToolSchema(definition.parameters)) as JsonSchemaObject)
+            : definition.parameters,
         needsApproval: wrapNeedsApproval(definition, {
           checkInterceptors: (params) => deps.checkToolInterceptors(definition.name, params),
           toolName: definition.name,
           registry: toolApprovalPolicyRegistry,
         }),
-        execute: async (params, _context: unknown, details: any) => {
+        execute: async (params, _context: unknown, details: unknown) => {
+          const normalizedParams = normalizeToolParameters(params, definition.parameters);
           const maxOutputLengthValue = deps.settings.get('shell.maxOutputChars');
-          // Extract tool call ID from details if available
-          const toolCallId = details?.toolCall?.callId;
+          const toolCallId = getToolCallId(details);
           // Check if this execution should be intercepted
-          const rejectionMessage = await deps.checkToolInterceptors(definition.name, params, toolCallId);
+          const rejectionMessage = await deps.checkToolInterceptors(definition.name, normalizedParams, toolCallId);
           if (rejectionMessage) {
             deps.logger.debug('Tool execution intercepted', {
               tool: definition.name,
-              params: JSON.stringify(params).substring(0, 100),
+              params: JSON.stringify(normalizedParams).substring(0, 100),
             });
             // Return a failure response that all tools should understand
             const rejected = JSON.stringify({
@@ -140,12 +149,12 @@ export function buildAgentTools({
             return trimToolOutput(rejected, undefined, maxOutputLengthValue ?? undefined);
           }
 
-          const executeOriginal = () => Promise.resolve(definition.execute(params, _context, details));
+          const executeOriginal = () => Promise.resolve(definition.execute(normalizedParams, _context, details));
           const result = await executeOriginal();
           const postExecute = definition.postExecute ?? deps.postExecutePauseCapability?.forTool(definition);
           const finalResult = postExecute
             ? await postExecute({
-                params: normalizeObjectParams(params, definition.parameters),
+                params: normalizedParams,
                 result,
                 details,
                 executeAgain: executeOriginal,
@@ -155,13 +164,14 @@ export function buildAgentTools({
           return injectTurnLimitWarning(trimmedResult, resolveTurnLimitContext(_context));
         },
       };
-      const shim = wrappedDefinition as AnyToolDefinition & ToolInvokeShim;
-      shim.type = 'function';
-      shim.invoke = async (context: unknown, input: unknown, details?: unknown) => {
-        const parsed = typeof input === 'string' ? JSON.parse(input) : input;
-        return wrappedDefinition.execute(parsed, context, details);
+      const shim: ToolInvokeShim = {
+        type: 'function',
+        invoke: async (context: unknown, input: unknown, details?: unknown) => {
+          const parsed = typeof input === 'string' ? JSON.parse(input) : input;
+          return wrappedDefinition.execute(parsed, context, details);
+        },
       };
-      return wrappedDefinition;
+      return { ...wrappedDefinition, ...shim };
     });
 
   // The application-owned apply_patch definition remains in the tool list.
@@ -171,8 +181,10 @@ export function buildAgentTools({
     if (applyPatch) {
       applyPatch.needsApproval = async (params, context) => {
         const operation = context ?? params;
+        const operationPath =
+          operation && typeof operation === 'object' ? (operation as { path?: unknown }).path : undefined;
         const workspaceRoot = path.resolve(deps.executionContext?.getCwd() || process.cwd());
-        const resolved = path.resolve(workspaceRoot, String(operation?.path ?? ''));
+        const resolved = path.resolve(workspaceRoot, String(operationPath ?? ''));
         const prefix = workspaceRoot.endsWith(path.sep) ? workspaceRoot : `${workspaceRoot}${path.sep}`;
         return resolved !== workspaceRoot && !resolved.startsWith(prefix);
       };

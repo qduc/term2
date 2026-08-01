@@ -6,6 +6,7 @@ import type { ILoggingService, ISettingsService, ISessionContextService } from '
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentDefinition, SupportedSubagentRole, ValidationEvidence } from './types.js';
 import type { AnyToolDefinition, CommandMessage, SchemaToolDefinition, ToolRegistry } from '../../tools/types.js';
+import { isZodToolParameterSchema } from '../../tools/types.js';
 import type { z, ZodTypeAny } from 'zod';
 import { isPathInScopeSafe, isHostInScope } from '../agent-runtime/scope-resolver.js';
 import { getProvider } from '../../providers/index.js';
@@ -1004,7 +1005,10 @@ export class SubagentToolFactory {
     return toolDefinitions.map((definition) => {
       const wrapped: AnyToolDefinition = {
         ...definition,
-        parameters: useStrictSchema ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
+        parameters:
+          useStrictSchema && isZodToolParameterSchema(definition.parameters)
+            ? toOpenAIStrictToolSchema(definition.parameters)
+            : definition.parameters,
         needsApproval: wrapNeedsApproval(definition),
         execute: async (params, context, details) => {
           options.onToolStart?.(
@@ -1027,7 +1031,11 @@ export class SubagentToolFactory {
           return injectTurnLimitWarning(trimmedResult, resolveTurnLimitContext(context));
         },
       };
-      return wrapToolInvoke(wrapped, definition.parameters, { argumentParsing: definition.argumentParsing });
+      return wrapToolInvoke(
+        wrapped,
+        isZodToolParameterSchema(definition.parameters) ? definition.parameters : undefined,
+        { argumentParsing: definition.argumentParsing },
+      );
     });
   }
 }

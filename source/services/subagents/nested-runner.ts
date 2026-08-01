@@ -7,7 +7,7 @@ import {
 } from '../agent-runtime/application-run-loop.js';
 import { ApprovalLedger, type ToolInvocationContext } from '../agent-runtime/tool-invocation-context.js';
 import { getProvider } from '../../providers/index.js';
-import type { ToolDefinition } from '../../tools/types.js';
+import type { AnyToolDefinition } from '../../tools/types.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type {
@@ -35,10 +35,11 @@ import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { getCallIdFromObject } from '../interruption-info.js';
+import { normalizeToolParameters } from '../../lib/tool-invoke.js';
 
 export type CachedRoleTool = {
   agent: ApplicationAgent;
-  tool: ToolDefinition;
+  tool: AnyToolDefinition;
 };
 
 const AGENT_TOOL_ERROR_PREFIX = 'An error occurred while running the tool. Please try again. Error:';
@@ -133,7 +134,7 @@ export class NestedSubagentRunner {
     this.#roleToolCache.clear();
   }
 
-  getRoleAgentTool(role: SupportedSubagentRole): ToolDefinition {
+  getRoleAgentTool(role: SupportedSubagentRole): AnyToolDefinition {
     return this.#getOrCreateRoleTool(role).tool;
   }
 
@@ -274,7 +275,7 @@ export class NestedSubagentRunner {
     role: SupportedSubagentRole,
     definition: SubagentDefinition,
     agent: ApplicationAgent,
-  ): ToolDefinition {
+  ): AnyToolDefinition {
     const parameters = z.object({
       role: z.literal(role),
       task: z.string(),
@@ -436,7 +437,13 @@ export class NestedSubagentRunner {
         : null;
 
       const promises: Array<Promise<unknown>> = [
-        Promise.resolve(tool.execute({ role, task: request.task }, nestedToolContext, effectiveDetails)),
+        Promise.resolve(
+          tool.execute(
+            normalizeToolParameters({ role, task: request.task }, tool.parameters),
+            nestedToolContext,
+            effectiveDetails,
+          ),
+        ),
       ];
       if (abortPromise) {
         promises.push(abortPromise);

@@ -29,8 +29,8 @@ const stores: Record<MemoryScope, MemoryStore> = {
 it('selects project memory explicitly and defaults omitted scope to global', async () => {
   const tools = createMemoryToolDefinitions(stores);
 
-  expect(JSON.parse(await tools[0].execute({}))).toEqual({ scope: 'global', memories: [memory] });
-  expect(JSON.parse(await tools[0].execute({ scope: 'project' }))).toEqual({
+  expect(JSON.parse((await tools[0].execute({})) as string)).toEqual({ scope: 'global', memories: [memory] });
+  expect(JSON.parse((await tools[0].execute({ scope: 'project' })) as string)).toEqual({
     scope: 'project',
     memories: [{ ...memory, id: 'project-only' }],
   });
@@ -49,23 +49,23 @@ it('exposes memory operations with structured responses', async () => {
     'memory_update',
     'memory_delete',
   ]);
-  expect(JSON.parse(await tools[0].execute({}))).toEqual({ scope: 'global', memories: [memory] });
-  expect(JSON.parse(await tools[1].execute({ id: memory.id }))).toEqual({ scope: 'global', memory });
-  expect(JSON.parse(await tools[2].execute({ query: 'rules' }))).toMatchObject({
+  expect(JSON.parse((await tools[0].execute({})) as string)).toEqual({ scope: 'global', memories: [memory] });
+  expect(JSON.parse((await tools[1].execute({ id: memory.id })) as string)).toEqual({ scope: 'global', memory });
+  expect(JSON.parse((await tools[2].execute({ query: 'rules' })) as string)).toMatchObject({
     scope: 'global',
     results: [{ memory }],
   });
-  expect(JSON.parse(await tools[3].execute({ query: 'rules' }))).toEqual({
+  expect(JSON.parse((await tools[3].execute({ query: 'rules' })) as string)).toEqual({
     scope: 'global',
     memories: [memory],
     unavailableIds: [],
   });
-  expect(JSON.parse(await tools[4].execute(memory))).toEqual({ scope: 'global', memory });
-  expect(JSON.parse(await tools[5].execute({ id: memory.id, title: 'New rules' }))).toEqual({
+  expect(JSON.parse((await tools[4].execute(memory)) as string)).toEqual({ scope: 'global', memory });
+  expect(JSON.parse((await tools[5].execute({ id: memory.id, title: 'New rules' })) as string)).toEqual({
     scope: 'global',
     memory,
   });
-  expect(JSON.parse(await tools[6].execute({ id: memory.id }))).toEqual({ scope: 'global', deleted: true });
+  expect(JSON.parse((await tools[6].execute({ id: memory.id })) as string)).toEqual({ scope: 'global', deleted: true });
   expect(
     tools[4].parameters.safeParse({ id: '../escape', title: 'Title', summary: 'Summary', content: 'Content' }).success,
   ).toBe(false);
@@ -89,7 +89,7 @@ it('retrieves other memories when one result becomes unavailable', async () => {
     },
   });
 
-  expect(JSON.parse(await tools[3].execute({ query: 'rules' }))).toEqual({
+  expect(JSON.parse((await tools[3].execute({ query: 'rules' })) as string)).toEqual({
     scope: 'global',
     memories: [memory],
     unavailableIds: [unavailable.id],
@@ -119,7 +119,7 @@ it('converts domain failures to safe tool errors without paths or stacks', async
       throw new MemoryNotFoundError('/private/path');
     },
   });
-  const result = JSON.parse(await tools[1].execute({ id: 'project-rules' }));
+  const result = JSON.parse((await tools[1].execute({ id: 'project-rules' })) as string);
   expect(result).toEqual({ error: { code: 'not_found', message: 'Memory was not found.' } });
   expect(JSON.stringify(result)).not.toContain('/private');
 });

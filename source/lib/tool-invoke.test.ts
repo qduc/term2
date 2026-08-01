@@ -4,6 +4,7 @@ import type { ToolDefinition } from '../tools/types.js';
 import {
   repairJson,
   normalizeObjectParams,
+  normalizeToolParameters,
   normalizeToolInput,
   toolErrorFunction,
   wrapNeedsApproval,
@@ -175,6 +176,12 @@ it('normalizeToolInput returns repaired JSON for string input', () => {
 it('normalizeToolInput stringifies object input', () => {
   const result = normalizeToolInput({ a: 1 });
   expect(result).toBe('{"a":1}');
+});
+
+it('normalizeToolParameters does not apply Zod defaults before execution', () => {
+  const parameters = z.object({ heading: z.string().default('main') });
+
+  expect(normalizeToolParameters({}, parameters)).toEqual({});
 });
 
 it('normalizeToolInput returns {} for un-serializable input', () => {

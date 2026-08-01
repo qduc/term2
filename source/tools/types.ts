@@ -54,6 +54,8 @@ export interface PostExecutePauseCapability {
   forTool<TSchema extends ZodTypeAny>(
     definition: SchemaToolDefinition<TSchema>,
   ): PostExecutePolicy<z.infer<TSchema>> | undefined;
+  /** Explicit erased-registry boundary used while assembling heterogeneous tools. */
+  forTool(definition: AnyToolDefinition): PostExecutePolicy<unknown> | undefined;
 }
 
 /**
@@ -73,11 +75,7 @@ export interface SchemaToolDefinition<TSchema extends ZodTypeAny> {
   argumentParsing?: 'repair' | 'strict';
   approvalPresentation?: ApprovalPresentationCapability;
   needsApproval: (params: z.infer<TSchema>, context?: unknown) => Promise<boolean> | boolean;
-  execute: (
-    params: z.infer<TSchema>,
-    context?: unknown,
-    details?: unknown,
-  ) => Promise<unknown> | unknown;
+  execute: (params: z.infer<TSchema>, context?: unknown, details?: unknown) => Promise<unknown> | unknown;
   postExecute?: PostExecutePolicy<z.infer<TSchema>>;
   /** Selectively opt this root definition into session-owned post-execute approval. */
   postExecutePause?: PostExecutePauseDescriptor<z.infer<TSchema>>;
@@ -91,64 +89,40 @@ export interface SchemaToolDefinition<TSchema extends ZodTypeAny> {
   formatCommandMessage: FormatCommandMessage;
 }
 
-/**
- * Pre-migration form of the tool contract, kept byte-for-byte compatible with
- * the historical `ToolDefinition<Params>`: the type argument is the executor
- * parameter type (unrelated to the schema), `parameters` stays a `ZodObject`,
- * and results keep the historical `any`. Migrating a factory means switching
- * its type argument from `ToolDefinition<SomeParams>` to
- * `ToolDefinition<typeof someSchema>`, which moves it onto
- * {@link SchemaToolDefinition} and tightens results to `unknown`.
- */
-interface LegacyToolDefinition<Params = any> {
-  name: string;
-  description: string;
-  parameters: ZodObjectLegacy;
-  argumentParsing?: 'repair' | 'strict';
-  approvalPresentation?: ApprovalPresentationCapability;
-  needsApproval: (params: Params, context?: unknown) => Promise<boolean> | boolean;
-  execute: (params: Params, context?: unknown, details?: unknown) => Promise<any> | any;
-  postExecute?: PostExecutePolicy<Params>;
-  /** Selectively opt this root definition into session-owned post-execute approval. */
-  postExecutePause?: PostExecutePauseDescriptor<Params>;
-  formatCommandMessage: FormatCommandMessage;
+/** The JSON-schema form substituted for Zod schemas on providers' strict-tool path. */
+export type JsonSchemaObject = Record<string, unknown>;
+
+/** A tool schema before or after strict JSON-schema substitution. */
+export type ToolParameterSchema = ZodTypeAny | JsonSchemaObject;
+
+/** Runtime discriminator for the executable Zod side of {@link ToolParameterSchema}. */
+export function isZodToolParameterSchema(schema: unknown): schema is ZodTypeAny {
+  return typeof (schema as { safeParse?: unknown } | null)?.safeParse === 'function';
 }
 
-/** The historical `ZodObject<any, any>` parameter-schema shape. */
-type ZodObjectLegacy = z.ZodObject<any, any>;
-
 /**
- * The application-owned tool contract.
- *
- * `TParams` is either the tool's Zod parameter schema (the migration target —
- * executor and approval parameters derive from it via `z.infer`) or a plain
- * parameter-object type (the pre-migration form). A bare `ToolDefinition` keeps
- * the historical permissive `any`/`any` erasure for factories that have not
- * been migrated yet. Migrated (schema-typed) definitions erase executor results
- * to `unknown`; the erased registry {@link AnyToolDefinition} erases both
- * deliberately.
+ * The application-owned tool contract. A schema is always the source of truth:
+ * executor and approval parameters derive from it and results are `unknown`.
  */
-export type ToolDefinition<TParams = any> = TParams extends ZodTypeAny
-  ? SchemaToolDefinition<TParams>
-  : LegacyToolDefinition<TParams>;
+export type ToolDefinition<TSchema extends ZodTypeAny = ZodTypeAny> = SchemaToolDefinition<TSchema>;
 
 /**
- * Explicitly erased entry for heterogeneous tool collections. Executor *params*
- * are deliberately erased to `any` — the documented escape that lets
- * definitions with differing schemas coexist in one list without variance
- * casts — while executor *results* stay `unknown`. Prefer this over a bare
- * `ToolDefinition` wherever tools with differing schemas are collected.
+ * Explicitly erased entry for heterogeneous registries. The union honestly
+ * represents strict-provider JSON-schema substitution. Its method signatures
+ * are intentionally bivariant so definitions with different schema-derived
+ * parameter types can coexist; callers must normalize against `parameters`
+ * before invoking either callback.
  */
 export interface AnyToolDefinition {
   name: string;
   description: string;
-  parameters: ZodTypeAny;
+  parameters: ToolParameterSchema;
   argumentParsing?: 'repair' | 'strict';
   approvalPresentation?: ApprovalPresentationCapability;
-  needsApproval: (params: any, context?: unknown) => Promise<boolean> | boolean;
-  execute: (params: any, context?: unknown, details?: unknown) => Promise<unknown> | unknown;
-  postExecute?: PostExecutePolicy<any>;
-  postExecutePause?: PostExecutePauseDescriptor<any>;
+  needsApproval(params: unknown, context?: unknown): Promise<boolean> | boolean;
+  execute(params: unknown, context?: unknown, details?: unknown): Promise<unknown> | unknown;
+  postExecute?(context: PostExecutePolicyContext<unknown>): Promise<unknown> | unknown;
+  postExecutePause?: PostExecutePauseDescriptor<unknown>;
   formatCommandMessage: FormatCommandMessage;
 }
 

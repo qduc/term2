@@ -133,8 +133,8 @@ describe('MemoryCapabilityBuilder', () => {
       content: 'Project-specific content.',
     });
 
-    expect(JSON.parse(await firstList.execute({ scope: 'project' })).memories).toHaveLength(1);
-    expect(JSON.parse(await secondList.execute({ scope: 'project' })).memories).toHaveLength(0);
+    expect(JSON.parse((await firstList.execute({ scope: 'project' })) as string).memories).toHaveLength(1);
+    expect(JSON.parse((await secondList.execute({ scope: 'project' })) as string).memories).toHaveLength(0);
 
     const rebuilt = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory })).build(
       { kind: 'main' },

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { isAbortLike } from '../services/subagents/utils.js';
 import { unwrapSchema } from '../services/settings/setting-schema-utils.js';
-import type { AnyToolDefinition } from '../tools/types.js';
+import type { AnyToolDefinition, ToolParameterSchema } from '../tools/types.js';
+import { isZodToolParameterSchema } from '../tools/types.js';
 
 /**
  * Maximum payload size (in characters) for which JSON repair is attempted.
@@ -171,6 +172,14 @@ function getObjectShape(schema: any): Record<string, any> | null {
 }
 
 // Re-exported from setting-schema-utils for tool parameter normalization.
+
+/**
+ * Normalize heterogeneous tool arguments before invoking an erased registry
+ * entry. Strict-provider JSON schemas are already transport-normalized; Zod
+ * schemas retain the established object coercions without parsing defaults.
+ */
+export const normalizeToolParameters = (params: unknown, schema: ToolParameterSchema): unknown =>
+  isZodToolParameterSchema(schema) ? normalizeObjectParams(params, schema) : params;
 
 /**
  * Normalize a plain-object params bag in-place according to the Zod schema.
@@ -450,11 +459,7 @@ export const wrapToolInvoke = <T extends AnyToolDefinition>(
  * arrive as null, as well as models that stringify structured parameters.
  */
 export function wrapNeedsApproval(
-  definition: {
-    name?: string;
-    parameters: { safeParse: (v: unknown) => { success: boolean } };
-    needsApproval: (params: unknown, context?: unknown) => Promise<boolean> | boolean;
-  },
+  definition: Pick<AnyToolDefinition, 'parameters' | 'needsApproval'> & { name?: string },
   options?: {
     // When an interceptor (e.g. plan mode) would reject this call, the approval
     // prompt must be suppressed — execute() returns the rejection to the model.
@@ -501,7 +506,7 @@ export function wrapNeedsApproval(
     // or normalisation itself throws.
     let normalized: unknown;
     try {
-      normalized = normalizeObjectParams(params, definition.parameters as z.ZodTypeAny);
+      normalized = normalizeToolParameters(params, definition.parameters);
     } catch {
       normalized =
         params !== null && typeof params === 'object' && !Array.isArray(params)
@@ -511,7 +516,7 @@ export function wrapNeedsApproval(
           : params;
     }
 
-    if (!definition.parameters.safeParse(normalized).success) {
+    if (isZodToolParameterSchema(definition.parameters) && !definition.parameters.safeParse(normalized).success) {
       return false;
     }
     try {

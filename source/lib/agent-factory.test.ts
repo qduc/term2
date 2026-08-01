@@ -1,6 +1,10 @@
 import { ApplicationRunLoop, type ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
 import type { Model, ModelRequest, ModelResponse, StreamEvent } from '../contracts/model.js';
-import type { StreamedModelTurn, StreamedModelTurnEvent, StreamedModelTurnRequest } from '../contracts/streamed-model-turn.js';
+import type {
+  StreamedModelTurn,
+  StreamedModelTurnEvent,
+  StreamedModelTurnRequest,
+} from '../contracts/streamed-model-turn.js';
 import { it, expect } from 'vitest';
 import { z } from 'zod';
 import { buildAgent, buildAgentTools } from './agent-factory.js';
@@ -142,19 +146,21 @@ const createDeps = (
   };
 };
 
+const postExecuteTestParameters = z.object({ value: z.string() });
+
 const createToolDefinition = (
-  overrides: Partial<ToolDefinition<{ value: string }>> = {},
-): ToolDefinition<{ value: string }> => ({
+  overrides: Partial<ToolDefinition<typeof postExecuteTestParameters>> = {},
+): ToolDefinition<typeof postExecuteTestParameters> => ({
   name: 'post_execute_test',
   description: 'Exercises the application-owned post-execute seam.',
-  parameters: z.object({ value: z.string() }),
+  parameters: postExecuteTestParameters,
   needsApproval: () => false,
   execute: async ({ value }) => `original:${value}`,
   formatCommandMessage: () => [],
   ...overrides,
 });
 
-const buildTestTool = (definition: ToolDefinition<{ value: string }>, deps: AgentFactoryDeps) =>
+const buildTestTool = (definition: ToolDefinition<typeof postExecuteTestParameters>, deps: AgentFactoryDeps) =>
   buildAgentTools({
     toolDefinitions: [definition],
     resolvedModel: 'gpt-4o',

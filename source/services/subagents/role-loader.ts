@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import type { ISettingsService } from '../service-interfaces.js';
 import type { SubagentRole, SubagentDefinition } from './types.js';
-import type { ToolDefinition } from '../../tools/types.js';
+import type { AnyToolDefinition } from '../../tools/types.js';
 import { shouldPreferPatchEditingModel } from '../../lib/tool-selection-policy.js';
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import type { ExecutionContext } from '../execution-context.js';
@@ -161,7 +161,10 @@ export function resolveSubagentSearchViaShell(
   return shouldPreferPatchEditingModel(model) && canRunShell;
 }
 
-export function buildAvailableToolGuidance(toolDefinitions: ToolDefinition[], searchViaShell: boolean): string {
+export function buildAvailableToolGuidance(
+  toolDefinitions: readonly Pick<AnyToolDefinition, 'name'>[],
+  searchViaShell: boolean,
+): string {
   const toolNames = toolDefinitions.map((tool) => tool.name);
   const hasTool = (name: string) => toolNames.includes(name);
   const lines = [
@@ -207,7 +210,7 @@ export function buildAvailableToolGuidance(toolDefinitions: ToolDefinition[], se
 
 export function buildInstructions(
   definition: SubagentDefinition,
-  toolDefinitions: ToolDefinition[],
+  toolDefinitions: readonly Pick<AnyToolDefinition, 'name'>[],
   searchViaShell: boolean,
   settings: ISettingsService,
   executionContext?: ExecutionContext,

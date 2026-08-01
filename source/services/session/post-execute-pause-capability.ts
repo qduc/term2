@@ -1,5 +1,6 @@
 import type { z, ZodTypeAny } from 'zod';
 import type {
+  AnyToolDefinition,
   PostExecutePauseCapability as PostExecutePauseCapabilityPort,
   PostExecutePolicy,
   SchemaToolDefinition,
@@ -23,7 +24,9 @@ export class PostExecutePauseCapability implements PostExecutePauseCapabilityPor
 
   forTool<TSchema extends ZodTypeAny>(
     definition: SchemaToolDefinition<TSchema>,
-  ): PostExecutePolicy<z.infer<TSchema>> | undefined {
+  ): PostExecutePolicy<z.infer<TSchema>> | undefined;
+  forTool(definition: AnyToolDefinition): PostExecutePolicy<unknown> | undefined;
+  forTool(definition: AnyToolDefinition): PostExecutePolicy<unknown> | undefined {
     if (!definition.postExecutePause) return undefined;
     return createPostExecutePausePolicy({
       pending: this.pending,

@@ -12,7 +12,9 @@ import type {
   StreamedModelTurnInput,
   StreamedModelTool,
 } from '../../contracts/streamed-model-turn.js';
-import type { ToolDefinition } from '../../tools/types.js';
+import type { AnyToolDefinition, ToolRegistry } from '../../tools/types.js';
+import { isZodToolParameterSchema } from '../../tools/types.js';
+import { normalizeToolParameters } from '../../lib/tool-invoke.js';
 import { ApprovalLedger, type ToolInvocationContext } from './tool-invocation-context.js';
 
 /**
@@ -38,7 +40,7 @@ export interface ApplicationAgent {
   modelSettings?: AgentModelSettings;
   defaultRunOptions?: any;
   outputType?: any;
-  readonly tools: readonly ToolDefinition[];
+  readonly tools: ToolRegistry;
 }
 
 export interface ApplicationRunLoopOptions {
@@ -84,7 +86,7 @@ type PendingApproval = {
   toolName: string;
   argumentsText: string;
   interruption: Record<string, unknown>;
-  definition: ToolDefinition;
+  definition: AnyToolDefinition;
   params: unknown;
 };
 
@@ -378,10 +380,11 @@ export class ApplicationRunLoop {
       return;
     }
 
-    const parsed = isJsonSchema(definition.parameters)
-      ? { success: true as const, data: args }
-      : definition.parameters.safeParse(args);
-    const params = parsed.success ? parsed.data : args;
+    // Keep the raw-model invocation contract: normalization repairs the
+    // accepted object shape but intentionally does not Zod-parse it, which
+    // would apply schema defaults before execute. web_fetch relies on its
+    // executor fallbacks on the strict JSON-schema path.
+    const params = normalizeToolParameters(args, definition.parameters);
 
     // Consult this run's ledger before prompting: a decision already taken
     // (in the parent run and replayed in, or earlier in this run) must not
@@ -450,15 +453,12 @@ export class ApplicationRunLoop {
   }
 
   async #invokeTool(
-    definition: ToolDefinition,
+    definition: AnyToolDefinition,
     params: unknown,
     toolContext: ToolInvocationContext,
     callId: string,
   ): Promise<unknown> {
-    const invoke = (definition as any).invoke;
-    return typeof invoke === 'function'
-      ? invoke(toolContext, params, { toolCall: { callId } })
-      : definition.execute(params, toolContext, { toolCall: { callId } });
+    return definition.execute(params, toolContext, { toolCall: { callId } });
   }
 }
 
@@ -483,21 +483,16 @@ function parseArguments(value: string): unknown {
   }
 }
 
-function toModelTools(tools: readonly ToolDefinition[]): StreamedModelTool[] {
+function toModelTools(tools: ToolRegistry): StreamedModelTool[] {
   return tools.map((tool) => ({
     name: tool.name,
     description: tool.description,
-    parameters: (isJsonSchema(tool.parameters) ? tool.parameters : z.toJSONSchema(tool.parameters)) as Record<
-      string,
-      unknown
-    >,
+    parameters: isJsonSchema(tool.parameters) ? tool.parameters : z.toJSONSchema(tool.parameters),
   }));
 }
 
 function isJsonSchema(value: unknown): value is Record<string, unknown> {
-  return Boolean(
-    value && typeof value === 'object' && (value as any).type === 'object' && !('safeParse' in (value as any)),
-  );
+  return typeof value === 'object' && value !== null && !isZodToolParameterSchema(value);
 }
 
 function normalizeInput(input: ProviderInput): StreamedModelTurnInput[] {

@@ -30,6 +30,7 @@ export function bridgeBackToTurn(model: { getStreamedResponse(request: any): Asy
         modelSettings: {
           ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
           ...(request.reasoning ? { reasoning: request.reasoning } : {}),
+          ...(request.providerOptions ? { providerData: request.providerOptions } : {}),
         },
         systemInstructions: request.instructions,
         handoffs: [],
@@ -43,6 +44,11 @@ export function bridgeBackToTurn(model: { getStreamedResponse(request: any): Asy
         else if (event?.type === 'response_done') completion = event.response;
         else if (event?.type === 'response.completed') completion = event.response;
       }
+      // Without this guard, a stream that ends without ever producing a
+      // response_done/response.completed (e.g. the websocket transport
+      // discarding an `error`/`close` frame upstream) silently turns into a
+      // fake empty completion instead of a visible failure.
+      if (!completion) throw new Error('OpenAI streamed response ended without a completion.');
       const output = completion?.output ?? [];
       yield {
         type: 'completion',

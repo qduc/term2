@@ -213,15 +213,21 @@ function normalizeCodexRequestData(
     Array.isArray(normalizedInput)
       ? normalizedInput.map((item: any) => {
           if (item?.type === 'function_call_result' || item?.type === 'function_call_output') {
+            // The Responses API rejects unknown parameters, so the camelCase
+            // spellings must be dropped, not just shadowed by the snake_case one
+            // added below — spreading `...item` alone leaves `callId` on the
+            // object alongside the new `call_id`.
+            const { callId: _callId, call_id: _call_id, tool_call_id: _toolCallId, ...rest } = item;
             return {
-              ...item,
+              ...rest,
               type: 'function_call_output',
               call_id: item.call_id ?? item.callId ?? item.tool_call_id,
               output: typeof item.output === 'string' ? item.output : JSON.stringify(item.output ?? ''),
             };
           }
           if (item?.type === 'function_call' && item.callId && !item.call_id) {
-            return { ...item, call_id: item.callId };
+            const { callId: _callId, ...rest } = item;
+            return { ...rest, call_id: item.callId };
           }
           return item;
         })

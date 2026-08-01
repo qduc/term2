@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { ApplicationRunLoop, type ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
 import type { ModelRequest } from '../contracts/model.js';
-import { adaptStreamedModelTurnForAgents } from './agents-model-bridge.js';
+import { adaptStreamedModelTurnForAgents, bridgeBackToTurn as realBridgeBackToTurn } from './agents-model-bridge.js';
 import type {
   StreamedModelTurn,
   StreamedModelTurnEvent,
@@ -439,4 +439,57 @@ it('propagates application failures and rejects unsupported SDK shapes', async (
   await expect(
     collect(model.getStreamedResponse(request({ tools: [{ type: 'computer' }] } as unknown as ModelRequest))),
   ).rejects.toThrow('tool type');
+});
+
+// bridgeBackToTurn (the opposite direction: wrapping an SDK-shaped
+// `getStreamedResponse` model, e.g. openai/codex's raw model classes, so
+// application-run-loop.ts can call `.stream()` on it) used to silently yield a
+// fake empty completion whenever the underlying stream ended without ever
+// emitting response_done/response.completed — e.g. a websocket transport
+// discarding an error/close frame. That turned real provider failures into an
+// invisible empty "Done." response instead of a visible error.
+it('bridgeBackToTurn throws instead of yielding a fake empty completion when the stream ends without one', async () => {
+  const turn = realBridgeBackToTurn({
+    async *getStreamedResponse() {
+      // ends without response_done/response.completed
+    },
+  });
+  await expect(collect(turn.stream({ input: [], tools: [] } as any))).rejects.toThrow('ended without a completion');
+});
+
+it('bridgeBackToTurn yields a normal completion when response_done arrives', async () => {
+  const turn = realBridgeBackToTurn({
+    async *getStreamedResponse() {
+      yield { type: 'output_text_delta', delta: 'hi' };
+      yield { type: 'response_done', response: { id: 'resp_1', output: [], usage: {} } };
+    },
+  });
+  const events = await collect(turn.stream({ input: [], tools: [] } as any));
+  expect(events).toEqual([
+    { type: 'text_delta', text: 'hi' },
+    { type: 'completion', responseId: 'resp_1', output: [], usage: {} },
+  ]);
+});
+
+it('bridgeBackToTurn forwards provider options as legacy provider data and omits absent options', async () => {
+  const capturedRequests: any[] = [];
+  const turn = realBridgeBackToTurn({
+    async *getStreamedResponse(request) {
+      capturedRequests.push(request);
+      yield { type: 'response_done', response: { id: 'resp_provider-data', output: [] } };
+    },
+  });
+  const providerOptions = {
+    openai: {
+      extraBody: { reasoning_effort: 'high' },
+      extraHeaders: { 'x-test-header': 'present' },
+    },
+    customProvider: { nested: { enabled: true } },
+  };
+
+  await collect(turn.stream({ input: [], tools: [], providerOptions } as any));
+  await collect(turn.stream({ input: [], tools: [] } as any));
+
+  expect(capturedRequests[0].modelSettings.providerData).toEqual(providerOptions);
+  expect(capturedRequests[1].modelSettings).not.toHaveProperty('providerData');
 });

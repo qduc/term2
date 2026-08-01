@@ -587,6 +587,51 @@ it.sequential('CodexResponsesModel._buildResponsesCreateRequest strips replay it
 });
 
 it.sequential(
+  'CodexResponsesModel._buildResponsesCreateRequest drops the camelCase callId key after adding call_id',
+  () => {
+    // codex.provider.ts's codexStream() builds tool_call/tool_result items as
+    // `{ type: 'function_call', callId: ... }` / `{ type: 'function_call_output', callId: ... }`
+    // (camelCase, no call_id) — the real shape a tool-call continuation sends.
+    // The Responses API rejects unknown parameters, so leaving `callId` on the
+    // object alongside the added `call_id` breaks every tool-call continuation.
+    const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+      return {
+        requestData: {
+          input: [
+            { type: 'function_call', callId: 'call_1', name: 'shell', arguments: '{}' },
+            { type: 'function_call_output', callId: 'call_1', output: 'ok' },
+          ],
+        },
+        sdkRequestHeaders: {},
+        signal: undefined,
+      };
+    };
+
+    try {
+      const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+      const built = (model as any)._buildResponsesCreateRequest({ modelSettings: {} }, true);
+
+      expect(built.requestData.input[0]).toEqual({
+        type: 'function_call',
+        call_id: 'call_1',
+        name: 'shell',
+        arguments: '{}',
+      });
+      expect(built.requestData.input[1]).toEqual({
+        type: 'function_call_output',
+        call_id: 'call_1',
+        output: 'ok',
+      });
+      expect('callId' in built.requestData.input[0]).toBe(false);
+      expect('callId' in built.requestData.input[1]).toBe(false);
+    } finally {
+      (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+    }
+  },
+);
+
+it.sequential(
   'CodexResponsesModel._buildResponsesCreateRequest drops unpaired function calls for stateless fallback',
   () => {
     const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
@@ -806,7 +851,7 @@ it.sequential('CodexResponsesWSModel sends only new input after a Responses-Lite
     );
 
     expect(trafficBodies).toHaveLength(3);
-    expect(trafficBodies[0].input[0]).toMatchObject({ type: 'additional_tools', role: 'developer' });
+    expect(trafficBodies[0].input[0]).toMatchObject({ type: 'additional_tools', role: 'developer', tools: [tool] });
     expect(trafficBodies[1].previous_response_id).toBe('resp_lite_1');
     expect(trafficBodies[1].input).toEqual([expect.objectContaining({ role: 'user', content: 'hello' })]);
     expect(trafficBodies[2].previous_response_id).toBe('resp_lite_2');

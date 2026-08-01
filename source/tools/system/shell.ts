@@ -364,7 +364,9 @@ export function createShellToolDefinition(deps: {
         logValidationError(`Validation failed: ${errorMessage}`);
         loggingService.error('Shell tool validation error', {
           error: errorMessage,
-          commands: [params.command.substring(0, 100)],
+          // params.command may itself be why we're in this catch (e.g. undefined
+          // after a malformed tool call), so don't re-dereference it unguarded.
+          commands: [typeof params.command === 'string' ? params.command.substring(0, 100) : String(params.command)],
         });
         return true; // fail-safe: require approval on validation errors
       }

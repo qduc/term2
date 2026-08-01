@@ -31,6 +31,34 @@ function textModel(text: string, responseId: string): StreamedModelTurn {
 }
 
 describe('ApplicationRunLoop', () => {
+  it('forwards providerData as providerOptions and omits it when absent', async () => {
+    const requests: unknown[] = [];
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        yield { type: 'completion', responseId: 'resp-settings', output: [] };
+      },
+    };
+
+    await collect(
+      new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+        {
+          ...agent,
+          modelSettings: { providerData: { nested: { option: 'value' }, scalar: true } },
+        },
+        'with provider data',
+      ),
+    );
+    await collect(new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'without provider data'));
+
+    expect(requests[0]).toEqual(
+      expect.objectContaining({
+        providerOptions: { nested: { option: 'value' }, scalar: true },
+      }),
+    );
+    expect(requests[1]).not.toHaveProperty('providerOptions');
+  });
+
   it('owns a text turn without an SDK runner', async () => {
     const loop = new ApplicationRunLoop({ resolveModel: () => textModel('hello', 'resp-1') });
     const stream = loop.startStream(agent, 'say hello');

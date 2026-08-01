@@ -27,11 +27,17 @@ type UnaryGenerateResult = Awaited<ReturnType<LanguageModelV3['doGenerate']>> & 
 };
 
 /** Adapts one AI SDK LanguageModelV3 stream to the application-owned turn protocol. */
-export function createAiSdkStreamedModel(model: LanguageModelV3): StreamedModelTurn {
+export function createAiSdkStreamedModel(
+  model: LanguageModelV3,
+  providerFamily: 'anthropic' | 'google' | undefined = undefined,
+): StreamedModelTurn {
   const normalizedModel = withMergedAssistantMessages(model);
+  const reasoningProvider = providerFamily ?? model.provider;
   return {
     async getResponse(request: StreamedModelTurnRequest) {
-      const result = (await normalizedModel.doGenerate(toCallOptions(request))) as UnaryGenerateResult;
+      const result = (await normalizedModel.doGenerate(
+        toCallOptions(request, reasoningProvider),
+      )) as UnaryGenerateResult;
       const output: StreamedModelTurnOutput[] = [];
       if (typeof result.reasoning === 'string' && result.reasoning) {
         output.push({ type: 'reasoning', text: result.reasoning });
@@ -55,7 +61,7 @@ export function createAiSdkStreamedModel(model: LanguageModelV3): StreamedModelT
       };
     },
     async *stream(request) {
-      const result = await normalizedModel.doStream(toCallOptions(request));
+      const result = await normalizedModel.doStream(toCallOptions(request, reasoningProvider));
       let responseId: string | undefined;
       let completionMetadata: Record<string, unknown> | undefined;
       const output: StreamedModelTurnOutput[] = [];
@@ -163,12 +169,45 @@ export function createAiSdkStreamedModel(model: LanguageModelV3): StreamedModelT
   };
 }
 
-type CallOptionsWithReasoning = LanguageModelV3CallOptions & {
-  /** Characterized provider behavior; V3 does not yet expose a reasoning call option. */
-  reasoning?: StreamedModelTurnRequest['reasoning'];
-};
+type CallOptionsWithReasoning = LanguageModelV3CallOptions;
 
-function toCallOptions(request: StreamedModelTurnRequest): CallOptionsWithReasoning {
+const reasoningBudgets = {
+  minimal: 1024,
+  low: 2048,
+  medium: 4096,
+  high: 8192,
+  xhigh: 16384,
+} as const;
+
+function reasoningProviderOptions(
+  request: StreamedModelTurnRequest,
+  provider: string,
+): SharedV3ProviderOptions | undefined {
+  const effort = request.reasoning?.effort;
+  const budget =
+    effort && effort !== 'none' && effort !== 'default'
+      ? reasoningBudgets[effort as keyof typeof reasoningBudgets]
+      : undefined;
+  if (budget === undefined) return request.providerOptions as SharedV3ProviderOptions | undefined;
+
+  const providerOptions: SharedV3ProviderOptions = {
+    ...(request.providerOptions as SharedV3ProviderOptions | undefined),
+  };
+  if (provider.startsWith('anthropic')) {
+    providerOptions.anthropic = {
+      ...(providerOptions.anthropic ?? {}),
+      thinking: providerOptions.anthropic?.thinking ?? { type: 'enabled', budgetTokens: budget },
+    };
+  } else if (provider.startsWith('google')) {
+    providerOptions.google = {
+      ...(providerOptions.google ?? {}),
+      thinkingConfig: providerOptions.google?.thinkingConfig ?? { thinkingBudget: budget, includeThoughts: true },
+    };
+  }
+  return providerOptions;
+}
+
+function toCallOptions(request: StreamedModelTurnRequest, provider: string): CallOptionsWithReasoning {
   const toolNames = new Map(
     request.input.filter((item) => item.type === 'tool_call').map((item) => [item.id, item.name]),
   );
@@ -184,8 +223,9 @@ function toCallOptions(request: StreamedModelTurnRequest): CallOptionsWithReason
     ...(request.frequencyPenalty !== undefined ? { frequencyPenalty: request.frequencyPenalty } : {}),
     ...(request.presencePenalty !== undefined ? { presencePenalty: request.presencePenalty } : {}),
     ...(request.maxTokens !== undefined ? { maxOutputTokens: request.maxTokens } : {}),
-    ...(request.reasoning ? { reasoning: request.reasoning } : {}),
-    ...(request.providerOptions ? { providerOptions: request.providerOptions as SharedV3ProviderOptions } : {}),
+    ...(reasoningProviderOptions(request, provider)
+      ? { providerOptions: reasoningProviderOptions(request, provider) }
+      : {}),
     ...(request.signal ? { abortSignal: request.signal } : {}),
   };
 }

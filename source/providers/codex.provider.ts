@@ -462,7 +462,7 @@ async function fetchCodexModels(
     .filter(Boolean) as Array<{ id: string; name?: string; default_reasoning_level?: string }>;
 }
 
-class CodexProvider implements LegacyModelProvider {
+export class CodexProvider implements LegacyModelProvider {
   private readonly models = new Map<string, RetryingModel>();
 
   constructor(
@@ -507,21 +507,30 @@ class CodexProvider implements LegacyModelProvider {
 
   getStreamedModel(modelName?: string): StreamedModelTurn {
     const resolvedModel = modelName || DEFAULT_CODEX_MODEL;
-    const selectedModel: any =
-      this.transport === 'http'
-        ? new CodexResponsesModel(this.openAIClient as any, resolvedModel, this.loggingService)
-        : new CodexResponsesWSModel(
-            this.openAIClient as any,
-            resolvedModel,
-            this.tokenManager,
-            this.loggingService,
-            this.loggingService?.providerTraffic,
-            this.sessionContextService,
-            this.websocketReceiveTimeouts,
-          );
+    let retryingModel = this.models.get(resolvedModel);
+    if (!retryingModel) {
+      const selectedModel =
+        this.transport === 'http'
+          ? new CodexResponsesModel(this.openAIClient as any, resolvedModel, this.loggingService)
+          : new CodexResponsesWSModel(
+              this.openAIClient as any,
+              resolvedModel,
+              this.tokenManager,
+              this.loggingService,
+              this.loggingService?.providerTraffic,
+              this.sessionContextService,
+              this.websocketReceiveTimeouts,
+            );
+      retryingModel = new RetryingModel(selectedModel, {
+        retryAttempts: this.retryAttempts,
+        loggingService: this.loggingService,
+        onRetry: this.onRetry,
+      });
+      this.models.set(resolvedModel, retryingModel);
+    }
     return {
-      stream: (request: StreamedModelTurnRequest) => codexStream(selectedModel, resolvedModel, request),
-      getStreamedResponse: (request: any) => selectedModel.getStreamedResponse(request),
+      stream: (request: StreamedModelTurnRequest) => codexStream(retryingModel!, resolvedModel, request),
+      getStreamedResponse: (request: any) => retryingModel!.getStreamedResponse(request),
       // Compatibility metadata for callers that still inspect the local
       // provider model; this is application-owned, not an SDK reach-in.
       wrappedModel: { _client: this.openAIClient },
@@ -546,6 +555,24 @@ function toCodexTool(tool: StreamedModelTurnRequest['tools'][number]) {
   };
 }
 
+// `OpenAIResponsesModel.getStreamedResponse` (codex-responses-model.ts) shapes
+// events differently per transport: websocket models wrap every event as
+// `{ event: rawEvent }` and swallow the completed/incomplete/failed
+// distinction, while collapsing a terminal event into `{ type: 'response_done',
+// response }`. Undo both so the checks below can read `.type`/`.item`/`.delta`
+// directly regardless of transport.
+function normalizeCodexStreamEvent(raw: any): any {
+  if (raw && typeof raw === 'object') {
+    if (raw.type === 'response_done') {
+      return { type: 'response.completed', response: raw.response };
+    }
+    if (raw.type === undefined && raw.event && typeof raw.event === 'object') {
+      return raw.event;
+    }
+  }
+  return raw;
+}
+
 async function* codexStream(
   model: any,
   modelName: string,
@@ -556,7 +583,10 @@ async function* codexStream(
       ? {
           type: 'message',
           role: item.role,
-          content: item.content.map((part: any) => ({ type: 'input_text', text: part.text ?? String(part) })),
+          content: item.content.map((part: any) => ({
+            type: item.role === 'assistant' ? 'output_text' : 'input_text',
+            text: part.text ?? String(part),
+          })),
         }
       : item.type === 'tool_call'
       ? { type: 'function_call', callId: item.id, name: item.name, arguments: item.arguments }
@@ -569,13 +599,14 @@ async function* codexStream(
   const output: any[] = [];
   let responseId = '';
   const tools = request.tools?.map(toCodexTool);
-  for await (const event of model.getStreamedResponse({
+  for await (const rawEvent of model.getStreamedResponse({
     model: modelName,
     input,
     tools,
     modelSettings: { reasoning: request.reasoning, providerData: request.providerOptions },
     signal: request.signal,
   })) {
+    const event = normalizeCodexStreamEvent(rawEvent);
     if (event?.type === 'response.output_text.delta') {
       yield { type: 'text_delta', text: event.delta ?? '' };
     } else if (event?.type === 'response.reasoning_summary_text.delta') {
@@ -673,12 +704,41 @@ function codexHeadersMiddleware(sessionContextService?: ISessionContextService):
   };
 }
 
+// The application run loop resolves its model once per internal turn. Keep the
+// provider instance session-scoped so Codex's server-history maps survive the
+// tool execution and continuation turns.
+const streamedProviders = new WeakMap<object, { fingerprint: string; provider: CodexProvider }>();
+
+function codexProviderFingerprint(settingsService: { get(key: string): unknown }): string {
+  return JSON.stringify([
+    settingsService.get('agent.transport') ?? 'websocket',
+    settingsService.get('agent.retryAttempts') ?? 2,
+    settingsService.get('agent.codex.websocketFirstFrameTimeoutMs') ?? 90_000,
+    settingsService.get('agent.codex.websocketInterFrameTimeoutMs') ?? 600_000,
+  ]);
+}
+
 // Register Codex provider
 registerProvider({
   id: 'codex',
   label: 'Codex',
   createStreamedModel: (model, { settingsService, loggingService, sessionContextService }) => {
     const defaultModel = settingsService.get('agent.model') || 'gpt-5.3-codex';
+    // A session context is the ownership boundary for continuation state. Do
+    // not fall back to the settings service: it can be shared by independent
+    // sessions, which would leak server-managed response history.
+    const cacheKey = sessionContextService as object | undefined;
+    const fingerprint = codexProviderFingerprint(settingsService);
+    const cached = cacheKey ? streamedProviders.get(cacheKey) : undefined;
+    if (cached) {
+      if (cached.fingerprint !== fingerprint) {
+        throw new Error(
+          'Codex transport or retry settings changed while this session was active. Start a new session before continuing so server-managed tool-call state is not lost.',
+        );
+      }
+      return cached.provider.getStreamedModel(model || defaultModel);
+    }
+
     const tokenManager = new CodexTokenManager();
 
     const openAIClient = new OpenAI({
@@ -713,6 +773,7 @@ registerProvider({
       },
       undefined,
     );
+    if (cacheKey) streamedProviders.set(cacheKey, { fingerprint, provider });
     return provider.getStreamedModel(model || defaultModel);
   },
   fetchModels: fetchCodexModels,

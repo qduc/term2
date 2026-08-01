@@ -1,5 +1,5 @@
 import { it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { OpenAIResponsesWSModel } from './codex-responses-model.js';
+import { CodexResponsesWSModel, OpenAIResponsesModel, OpenAIResponsesWSModel } from './codex-responses-model.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,6 +13,7 @@ import {
   resolveCodexClientVersion,
   sanitizeCodexRequestInit,
   addCodexResponsesLiteHeader,
+  CodexProvider,
 } from './codex.provider.js';
 
 // Helper to create a fake JWT with a specific expiry time in seconds from now
@@ -815,6 +816,107 @@ it.sequential('Codex provider uses CODEX_BASE_URL for local server simulation', 
   }
 });
 
+it.sequential('Codex provider reuses its streamed model so continuation state survives turns', async () => {
+  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).getStreamedResponse;
+  const instances: unknown[] = [];
+  (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = async function* () {
+    instances.push(this);
+    yield { type: 'response.completed', response: { id: 'resp-1', output: [], usage: {} } };
+  };
+
+  try {
+    const provider = new CodexProvider({} as any, {} as any, {}, undefined, 'websocket', 0, {
+      firstFrameMs: 1000,
+      interFrameMs: 1000,
+    });
+    const first = provider.getStreamedModel('gpt-5.3-codex');
+    const second = provider.getStreamedModel('gpt-5.3-codex');
+    for await (const _event of (first as any).getStreamedResponse({ input: [] })) {
+    }
+    for await (const _event of (second as any).getStreamedResponse({ input: [] })) {
+    }
+    expect(instances).toHaveLength(2);
+    expect(instances[0]).toBe(instances[1]);
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = originalGetStreamedResponse;
+  }
+});
+
+it.sequential('Codex provider rejects transport changes while cached continuation state exists', async () => {
+  const provider = getProvider('codex');
+  expect(provider?.createStreamedModel).toBeTruthy();
+  if (!provider?.createStreamedModel) return;
+
+  const originalWsGetStreamedResponse = (CodexResponsesWSModel.prototype as any).getStreamedResponse;
+  const originalHttpGetStreamedResponse = (OpenAIResponsesModel.prototype as any).getStreamedResponse;
+  const instances: unknown[] = [];
+  const fakeStream = async function* (this: unknown) {
+    instances.push(this);
+    yield { type: 'response.completed', response: { id: 'resp-1', output: [], usage: {} } };
+  };
+  (CodexResponsesWSModel.prototype as any).getStreamedResponse = fakeStream;
+  (OpenAIResponsesModel.prototype as any).getStreamedResponse = fakeStream;
+  try {
+    const settings = new Map<string, unknown>([
+      ['agent.model', 'gpt-5.3-codex'],
+      ['agent.transport', 'websocket'],
+      ['agent.retryAttempts', 2],
+      ['agent.codex.websocketFirstFrameTimeoutMs', 90_000],
+      ['agent.codex.websocketInterFrameTimeoutMs', 600_000],
+    ]);
+    const settingsService = { get: (key: string) => settings.get(key) };
+    const deps = {
+      settingsService,
+      loggingService: {} as any,
+      sessionContextService: { getContext: () => ({ sessionId: 'factory-test' }) },
+    } as any;
+    const first = (await provider.createStreamedModel('gpt-5.3-codex', deps)) as any;
+    const same = (await provider.createStreamedModel('gpt-5.3-codex', deps)) as any;
+    settings.set('agent.transport', 'http');
+    expect(() => provider.createStreamedModel!('gpt-5.3-codex', deps)).toThrow('Start a new session before continuing');
+    for (const model of [first, same]) {
+      for await (const _event of model.getStreamedResponse({ input: [] })) {
+        // drain
+      }
+    }
+    expect(instances).toHaveLength(2);
+    expect(instances[0]).toBe(instances[1]);
+  } finally {
+    (CodexResponsesWSModel.prototype as any).getStreamedResponse = originalWsGetStreamedResponse;
+    (OpenAIResponsesModel.prototype as any).getStreamedResponse = originalHttpGetStreamedResponse;
+  }
+});
+
+it.sequential('Codex provider does not share continuation state when no session context is supplied', async () => {
+  const provider = getProvider('codex');
+  expect(provider?.createStreamedModel).toBeTruthy();
+  if (!provider?.createStreamedModel) return;
+
+  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).getStreamedResponse;
+  const instances: unknown[] = [];
+  (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = async function* () {
+    instances.push(this);
+    yield { type: 'response.completed', response: { id: 'resp-no-context', output: [], usage: {} } };
+  };
+  try {
+    const deps = {
+      settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
+      loggingService: {} as any,
+    } as any;
+    const first = (await provider.createStreamedModel('gpt-5.3-codex', deps)) as any;
+    const second = (await provider.createStreamedModel('gpt-5.3-codex', deps)) as any;
+    for (const model of [first, second]) {
+      for await (const _event of model.getStreamedResponse({ input: [] })) {
+        // drain
+      }
+    }
+    expect(instances).toHaveLength(2);
+    expect(instances[0]).not.toBe(instances[1]);
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = originalGetStreamedResponse;
+  }
+});
+
 it.sequential('Codex provider stream() wraps tool definitions with type: function for the wire request', async () => {
   const provider = getProvider('codex');
   expect(provider?.createRunner).toBeTruthy();
@@ -851,6 +953,106 @@ it.sequential('Codex provider stream() wraps tool definitions with type: functio
     (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = originalGetStreamedResponse;
   }
 });
+
+it.sequential('Codex provider stream() serializes assistant history as output_text, not input_text', async () => {
+  const provider = getProvider('codex');
+  expect(provider?.createRunner).toBeTruthy();
+  if (!provider?.createRunner) return;
+
+  let capturedRequest: any;
+  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).getStreamedResponse;
+  (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = async function* (request: any) {
+    capturedRequest = request;
+    yield { type: 'response.completed', response: { id: 'resp_1', output: [], usage: {} } };
+  };
+
+  try {
+    const runner = provider.createRunner({
+      settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
+      loggingService: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+    } as any);
+    expect(runner).toBeTruthy();
+    if (!runner) return;
+
+    const model = await runner.config.modelProvider.getModel('gpt-5.3-codex');
+    const stream = (model as any).stream({
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] },
+        { type: 'message', role: 'assistant', content: [{ type: 'text', text: 'hello there' }] },
+      ],
+    } as any);
+    for await (const _event of stream) {
+      // drain
+    }
+
+    expect(capturedRequest.input).toEqual([
+      { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] },
+      { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'hello there' }] },
+    ]);
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = originalGetStreamedResponse;
+  }
+});
+
+it.sequential(
+  'Codex provider stream() unwraps websocket-shaped events into text_delta and a completed message',
+  async () => {
+    const provider = getProvider('codex');
+    expect(provider?.createRunner).toBeTruthy();
+    if (!provider?.createRunner) return;
+
+    // Mocking `_fetchResponse` (rather than `getStreamedResponse`) forces the
+    // request through `OpenAIResponsesModel.getStreamedResponse`'s own event
+    // shaping, which wraps every event as `{ event: rawEvent }` for
+    // `OpenAIResponsesWSModel` instances. `codexStream()` must unwrap that
+    // shape or it silently drops all text and treats the turn as empty.
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function* () {
+      yield { type: 'response.output_text.delta', delta: 'Hi! How can I help you today?' };
+      yield {
+        type: 'response.completed',
+        response: {
+          id: 'resp_1',
+          output: [
+            {
+              type: 'message',
+              content: [{ text: 'Hi! How can I help you today?' }],
+            },
+          ],
+          usage: {},
+        },
+      };
+    };
+
+    try {
+      const runner = provider.createRunner({
+        settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
+        loggingService: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+      } as any);
+      expect(runner).toBeTruthy();
+      if (!runner) return;
+
+      const model = await runner.config.modelProvider.getModel('gpt-5.3-codex');
+      const events: any[] = [];
+      for await (const event of (model as any).stream({
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      } as any)) {
+        events.push(event);
+      }
+
+      expect(events).toEqual([
+        { type: 'text_delta', text: 'Hi! How can I help you today?' },
+        {
+          type: 'completion',
+          responseId: 'resp_1',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'Hi! How can I help you today?' }] }],
+        },
+      ]);
+    } finally {
+      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    }
+  },
+);
 
 it.sequential('Codex provider passes configured receive timeouts to websocket models', async () => {
   const provider = getProvider('codex');

@@ -93,14 +93,28 @@ export async function runWithSession(session: ConversationSessionLike, config: N
   const stderr = config.stderr ?? process.stderr;
   const sessionContextService = config.sessionContextService ?? new SessionContextService();
 
+  let streamedTextLength = 0;
+
   const onEvent = (event: ConversationEvent) => {
     if (event.type === 'text_delta') {
+      streamedTextLength += event.delta.length;
       stdout.write(event.delta);
       return;
     }
 
     if (event.type === 'reasoning_delta') {
       stderr.write(event.delta);
+      return;
+    }
+
+    if (event.type === 'final') {
+      // Some completion paths (e.g. tool-only turns, or providers that don't
+      // stream token deltas) deliver the response text solely via `finalText`
+      // rather than `text_delta`. Write whatever wasn't already streamed so
+      // the response isn't silently dropped.
+      if (event.finalText && event.finalText.length > streamedTextLength) {
+        stdout.write(event.finalText.slice(streamedTextLength));
+      }
       return;
     }
 

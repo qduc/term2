@@ -125,7 +125,6 @@ it('translates one application turn to an AI SDK stream and publishes its author
     frequencyPenalty: 0,
     presencePenalty: 0,
     maxOutputTokens: 0,
-    reasoning: { effort: 'high' },
     providerOptions: { openrouter: { transforms: ['middle-out'] } },
     abortSignal: signal,
   });
@@ -224,6 +223,64 @@ it('rejects provider errors and streams that cannot authoritatively complete', a
   await expect(
     collect(modelFor([{ type: 'response-metadata', id: 'response-1' }]).stream({ input: [], tools: [] })),
   ).rejects.toThrow('without a finish event');
+});
+
+it('maps reasoning effort to Anthropic thinking provider options', async () => {
+  let seenOptions: LanguageModelV3CallOptions | undefined;
+  const model = createAiSdkStreamedModel({
+    provider: 'anthropic.messages',
+    modelId: 'claude-haiku',
+    specificationVersion: 'v3',
+    supportedUrls: {},
+    async doGenerate() {
+      return {} as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
+    },
+    async doStream(options: LanguageModelV3CallOptions) {
+      seenOptions = options;
+      return {
+        stream: (async function* () {
+          yield { type: 'response-metadata', id: 'anthropic-response' };
+          yield { type: 'finish', finishReason: { unified: 'stop' }, usage: { inputTokens: {}, outputTokens: {} } };
+        })(),
+      } as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>;
+    },
+  } as unknown as LanguageModelV3);
+
+  await collect(model.stream({ input: [], tools: [], reasoning: { effort: 'medium' } }));
+  expect(seenOptions).toMatchObject({
+    providerOptions: { anthropic: { thinking: { type: 'enabled', budgetTokens: 4096 } } },
+  });
+  expect(seenOptions).not.toHaveProperty('reasoning');
+});
+
+it('maps reasoning effort to Google thinkingConfig and omits it when reasoning is disabled', async () => {
+  let seenOptions: LanguageModelV3CallOptions | undefined;
+  const model = createAiSdkStreamedModel({
+    provider: 'google.generative-ai',
+    modelId: 'gemini-2.5-flash',
+    specificationVersion: 'v3',
+    supportedUrls: {},
+    async doGenerate() {
+      return {} as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
+    },
+    async doStream(options: LanguageModelV3CallOptions) {
+      seenOptions = options;
+      return {
+        stream: (async function* () {
+          yield { type: 'response-metadata', id: 'google-response' };
+          yield { type: 'finish', finishReason: { unified: 'stop' }, usage: { inputTokens: {}, outputTokens: {} } };
+        })(),
+      } as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>;
+    },
+  } as unknown as LanguageModelV3);
+
+  await collect(model.stream({ input: [], tools: [], reasoning: { effort: 'high' } }));
+  expect(seenOptions).toMatchObject({
+    providerOptions: { google: { thinkingConfig: { thinkingBudget: 8192, includeThoughts: true } } },
+  });
+
+  await collect(model.stream({ input: [], tools: [], reasoning: { effort: 'none' } }));
+  expect(seenOptions).not.toHaveProperty('providerOptions.google.thinkingConfig');
 });
 
 it('preserves missing token totals without turning them into zero', async () => {

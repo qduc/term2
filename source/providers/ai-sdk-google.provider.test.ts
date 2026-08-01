@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
 import { AiSdkGoogleProvider } from './ai-sdk-google.provider.js';
 
 async function collect(stream: AsyncIterable<unknown>) {
@@ -66,7 +67,7 @@ it('AiSdkGoogleProvider routes public Agent streams through the application turn
         frequencyPenalty: 0,
         presencePenalty: 0,
         maxTokens: 0,
-        reasoning: { effort: 'none', summary: 'auto' },
+        reasoning: { effort: 'medium', summary: 'auto' },
         providerData: {
           safetySettings: [{ category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' }],
           providerOptions: { google: { responseModalities: ['TEXT'], safetySettings: ['nested wins'] } },
@@ -90,12 +91,12 @@ it('AiSdkGoogleProvider routes public Agent streams through the application turn
     frequencyPenalty: 0,
     presencePenalty: 0,
     maxOutputTokens: 0,
-    reasoning: { effort: 'none', summary: 'auto' },
     safetySettings: [{ category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' }],
     providerOptions: {
       google: {
         safetySettings: ['nested wins'],
         responseModalities: ['TEXT'],
+        thinkingConfig: { thinkingBudget: 4096, includeThoughts: true },
       },
     },
     abortSignal: controller.signal,
@@ -134,6 +135,65 @@ it('AiSdkGoogleProvider routes public Agent streams through the application turn
   expect(response.usage.outputTokens).toBe(5);
   expect(response.usage.totalTokens).toBe(8);
   expect(response.usage.inputTokensDetails).toEqual([{ cached_tokens: 1 }]);
+});
+
+it('applies thinkingConfig to a custom-named Google model through the application run loop', async () => {
+  let seenOptions: any;
+  const provider = new AiSdkGoogleProvider({
+    defaultModel: 'gemini-2.5-flash',
+    resolveConfig: () => ({ name: 'gemini' }),
+    createProvider: () => (modelId: string) =>
+      ({
+        specificationVersion: 'v3',
+        // createGoogleGenerativeAI uses the configured provider name as this
+        // prefix; this is the production shape for the custom `gemini` provider.
+        provider: 'gemini.generative-ai',
+        modelId,
+        supportedUrls: {},
+        async doGenerate() {
+          return {};
+        },
+        async doStream(options: any) {
+          seenOptions = options;
+          return {
+            stream: (async function* () {
+              yield { type: 'text-delta', delta: 'gemini-ok' };
+              yield {
+                type: 'finish',
+                finishReason: { unified: 'stop' },
+                usage: { inputTokens: {}, outputTokens: {} },
+              };
+            })(),
+          };
+        },
+      } as any),
+  });
+  const stream = new ApplicationRunLoop({ resolveModel: () => provider.getStreamedModel() }).startStream(
+    {
+      name: 'test-agent',
+      instructions: 'Be concise.',
+      model: 'gemini-2.5-flash',
+      modelSettings: {
+        reasoning: { effort: 'medium' },
+        providerData: { google: { responseModalities: ['TEXT'] } },
+      },
+      tools: [],
+    },
+    'Reply with exactly: gemini-ok',
+  );
+
+  await collect(stream);
+  await stream.completed;
+
+  expect(stream.finalOutput).toBe('gemini-ok');
+  expect(seenOptions).toMatchObject({
+    providerOptions: {
+      google: {
+        responseModalities: ['TEXT'],
+        thinkingConfig: { thinkingBudget: 4096, includeThoughts: true },
+      },
+    },
+  });
 });
 
 it('AiSdkGoogleProvider uses its default model and propagates provider errors', async () => {

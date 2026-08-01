@@ -202,7 +202,7 @@ it('AiSdkAnthropicProvider routes its cached model through the application strea
         reasoning: { effort: 'high' },
         providerData: {
           topK: 5,
-          providerOptions: { anthropic: { topK: 9, thinking: { type: 'enabled' } } },
+          providerOptions: { anthropic: { topK: 9 } },
         },
       },
       signal: controller.signal,
@@ -214,8 +214,7 @@ it('AiSdkAnthropicProvider routes its cached model through the application strea
   expect(seenOptions).toMatchObject({
     maxOutputTokens: 131072,
     topK: 5,
-    reasoning: { effort: 'high' },
-    providerOptions: { anthropic: { topK: 9, thinking: { type: 'enabled' } } },
+    providerOptions: { anthropic: { topK: 9, thinking: { type: 'enabled', budgetTokens: 8192 } } },
     abortSignal: controller.signal,
   });
   expect(seenOptions.prompt).toMatchObject([

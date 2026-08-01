@@ -48,6 +48,33 @@ it('streams text_delta events to stdout and appends newline', async () => {
   expect(stderr.getOutput()).toBe('');
 });
 
+it('writes finalText to stdout when no text_delta events were streamed', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+
+  const session: any = {
+    async sendMessage(_prompt: string, { onEvent }: any) {
+      onEvent?.({ type: 'final', finalText: 'Done.' });
+      return { type: 'response', finalText: 'Done.', commandMessages: [] };
+    },
+    async handleApprovalDecision() {
+      expect(true).toBe(false);
+      return null;
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'hi',
+    autoApprove: false,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+  });
+
+  expect(exitCode).toBe(0);
+  expect(stdout.getOutput()).toBe('Done.\n');
+  expect(stderr.getOutput()).toBe('');
+});
+
 it('uses a persistent event sink when the session supports one', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();

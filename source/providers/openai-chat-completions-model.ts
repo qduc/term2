@@ -12,6 +12,14 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
     return this;
   }
 
+  // createCustomProviderModelProvider() (openai-compatible.provider.ts) returns
+  // this class for the 'openai'/'openai-compatible'/'llama.cpp' provider types,
+  // and every caller requires a `getStreamedModel()` method — the class already
+  // implements StreamedModelTurn directly via `stream()`, so it just returns itself.
+  getStreamedModel(): this {
+    return this;
+  }
+
   async getResponse(request: any): Promise<any> {
     if (request.modelSettings) return this.#legacyResponse(request);
     const events: any[] = [];
@@ -38,7 +46,12 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
     const response = await this.client.chat.completions.create(this.#legacyBody(request, true));
     let text = '';
     let reasoning = '';
-    const calls = new Map<string, { name: string; arguments: string }>();
+    // Keyed by the tool call's stream `index`, which every provider sends on
+    // every chunk. `id` (and often `name`) only arrives on the first chunk for
+    // that index; later chunks carry just `{ index, function: { arguments } }`
+    // with no `id`. Keying by `id ?? index` used to split one tool call into
+    // two accumulator entries once the id-less chunks fell back to the index key.
+    const calls = new Map<number, { id?: string; name: string; arguments: string }>();
     for await (const chunk of response) {
       const delta = chunk?.choices?.[0]?.delta;
       if (delta?.reasoning_content) reasoning += delta.reasoning_content;
@@ -47,11 +60,12 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
         yield { type: 'output_text_delta', delta: delta.content };
       }
       for (const call of delta?.tool_calls ?? []) {
-        const id = call.id ?? String(call.index);
-        const current = calls.get(id) ?? { name: '', arguments: '' };
+        const index = call.index ?? 0;
+        const current = calls.get(index) ?? { name: '', arguments: '' };
+        if (call.id) current.id = call.id;
         current.name += call.function?.name ?? '';
         current.arguments += call.function?.arguments ?? '';
-        calls.set(id, current);
+        calls.set(index, current);
       }
     }
     const output = reasoning
@@ -60,9 +74,9 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
           ...(text ? [{ type: 'message', content: [{ type: 'output_text', text }] }] : []),
         ]
       : calls.size
-      ? [...calls].map(([callId, call]) => ({
+      ? [...calls].map(([index, call]) => ({
           type: 'function_call',
-          callId,
+          callId: call.id ?? `call_${index}`,
           name: call.name,
           arguments: call.arguments,
         }))
@@ -127,37 +141,53 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       ...(request.providerOptions ?? {}),
       signal: request.signal,
     });
-    const calls = new Map<string, { name: string; arguments: string }>();
+    // Keyed by the tool call's stream `index`, which every provider sends on
+    // every chunk. `id` (and often `name`) only arrives on the first chunk for
+    // that index; later chunks carry just `{ index, function: { arguments } }`
+    // with no `id`. Keying by `id ?? index` used to split one tool call into
+    // two accumulator entries once the id-less chunks fell back to the index key.
+    const calls = new Map<number, { id?: string; name: string; arguments: string }>();
     let text = '';
+    let reasoning = '';
     for await (const chunk of response) {
       const choice = chunk.choices?.[0];
       const delta = choice?.delta;
+      if (delta?.reasoning_content) {
+        reasoning += delta.reasoning_content;
+        yield { type: 'reasoning_delta', text: delta.reasoning_content };
+      }
       if (delta?.content) {
         text += delta.content;
         yield { type: 'text_delta', text: delta.content };
       }
       for (const call of delta?.tool_calls ?? []) {
-        const current = calls.get(call.id ?? String(call.index)) ?? { name: '', arguments: '' };
+        const index = call.index ?? 0;
+        const current = calls.get(index) ?? { name: '', arguments: '' };
+        if (call.id) current.id = call.id;
         current.name += call.function?.name ?? '';
         current.arguments += call.function?.arguments ?? '';
-        calls.set(call.id ?? String(call.index), current);
+        calls.set(index, current);
       }
       if (chunk.usage) {
         // Usage is emitted on completion below; providers may omit it in-stream.
       }
     }
-    for (const [id, call] of calls) yield { type: 'tool_call', id, name: call.name, arguments: call.arguments };
+    for (const [index, call] of calls)
+      yield { type: 'tool_call', id: call.id ?? `call_${index}`, name: call.name, arguments: call.arguments };
     yield {
       type: 'completion',
       responseId: `chatcmpl-${Date.now()}`,
-      output: calls.size
-        ? [...calls].map(([id, call]) => ({
-            type: 'tool_call' as const,
-            id,
-            name: call.name,
-            arguments: call.arguments,
-          }))
-        : [{ type: 'message' as const, content: [{ type: 'text' as const, text }] }],
+      output: [
+        ...(reasoning ? [{ type: 'reasoning' as const, text: reasoning }] : []),
+        ...(calls.size
+          ? [...calls].map(([index, call]) => ({
+              type: 'tool_call' as const,
+              id: call.id ?? `call_${index}`,
+              name: call.name,
+              arguments: call.arguments,
+            }))
+          : [{ type: 'message' as const, content: [{ type: 'text' as const, text }] }]),
+      ],
     };
   }
 }

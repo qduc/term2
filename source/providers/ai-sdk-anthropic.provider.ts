@@ -180,6 +180,7 @@ export class AiSdkAnthropicProvider implements LegacyModelProvider {
 
     return createAiSdkStreamedModel(
       withForwardedProviderSettings(model, (options) => forwardExplicitProviderSettings(options, 'anthropic')),
+      'anthropic',
     );
   }
 }

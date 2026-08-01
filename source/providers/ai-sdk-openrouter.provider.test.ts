@@ -183,13 +183,11 @@ it('AiSdkOpenRouterProvider routes public Agent streams through the application 
     frequencyPenalty: 0,
     presencePenalty: 0,
     maxOutputTokens: 0,
-    reasoning: { effort: 'none', summary: 'auto' },
     service_tier: 'flex',
     providerOptions: {
       openrouter: {
         service_tier: 'flex',
         transforms: ['middle-out'],
-        reasoning: { effort: 'none', summary: 'auto' },
       },
     },
   });

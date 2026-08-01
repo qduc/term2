@@ -27,8 +27,8 @@ export function forwardExplicitProviderSettings(
   const providerData = options.providerOptions as ExplicitProviderData | undefined;
   if (!providerData || typeof providerData !== 'object') return options;
 
-  const { providerOptions, ...extraProviderData } = providerData;
-  if (!Object.keys(extraProviderData).length) return providerOptions ? { ...options, providerOptions } : options;
+  const { providerOptions, [providerName]: nestedProviderData, ...extraProviderData } = providerData;
+  if (!Object.keys(extraProviderData).length) return options;
 
   return {
     ...options,
@@ -36,6 +36,7 @@ export function forwardExplicitProviderSettings(
     providerOptions: {
       ...(providerOptions ?? {}),
       [providerName]: {
+        ...(nestedProviderData ?? {}),
         ...extraProviderData,
         ...(providerOptions?.[providerName] ?? {}),
       },

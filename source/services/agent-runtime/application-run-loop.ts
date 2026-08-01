@@ -300,6 +300,7 @@ export class ApplicationRunLoop {
           ? { temperature: state.agent.modelSettings.temperature as number }
           : {}),
         ...(state.agent.modelSettings?.reasoning ? { reasoning: state.agent.modelSettings.reasoning as any } : {}),
+        ...(state.agent.modelSettings?.providerData ? { providerOptions: state.agent.modelSettings.providerData } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
       })) {
         if (event.type === 'completion') {

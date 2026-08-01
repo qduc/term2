@@ -43,6 +43,7 @@ export class AiSdkGoogleProvider implements LegacyModelProvider {
           forwardExplicitProviderSettings(options, 'google'),
         ),
       ),
+      'google',
     );
   }
 }

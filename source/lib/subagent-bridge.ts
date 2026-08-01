@@ -3,6 +3,7 @@ import type { ConversationEvent } from '../services/conversation/conversation-ev
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import type { ExecutionContext } from '../services/execution-context.js';
 import type {
+  NestedSubagentResult,
   SubagentCancelAcknowledgement,
   SubagentResult,
   SubagentRunStatus,
@@ -276,7 +277,7 @@ export class SubagentBridge {
     params: { role: string; task: string },
     _context?: unknown,
     details?: unknown,
-  ): Promise<SubagentResult> => {
+  ): Promise<NestedSubagentResult> => {
     if (!this.#subagentManager) {
       throw new Error('Transient agent clients cannot spawn subagents.');
     }

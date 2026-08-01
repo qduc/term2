@@ -7,6 +7,7 @@ import { ApprovalLedger, type ToolInvocationContext } from '../agent-runtime/too
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import type { SubagentToolFactory } from './tool-policy.js';
 import type { SubagentDefinition } from './types.js';
+import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ToolDefinition } from '../../tools/types.js';
 import {
   createMockLogger,
@@ -37,13 +38,28 @@ function workerDefinition(providerId: string): SubagentDefinition {
  * records its run through the SubagentRunContext — the bookkeeping that was
  * inert before the ToolInvocationContext slot (F2).
  */
-function buildNestedRunner() {
+function buildNestedRunner(
+  options: {
+    /** Make the nested tool pause for approval, so the nested run interrupts. */
+    needsApproval?: boolean;
+    /** Override the role's turn budget. */
+    maxTurns?: number;
+    /** Script a model that never stops calling tools, so only a budget ends it. */
+    alwaysCallsTool?: boolean;
+    onEvent?: (event: ConversationEvent) => void;
+  } = {},
+) {
   let first = true;
+  let call = 0;
   const providerId = registerTestProvider({
     label: 'Nested scripted provider',
     createStreamedModel: () => ({
       async *stream(request: any) {
-        if (first) {
+        if (options.alwaysCallsTool) {
+          call++;
+          yield { type: 'tool_call', id: `nested-call-${call}`, name: 'fake_tool', arguments: '{"path":"notes.md"}' };
+          yield { type: 'completion', responseId: `resp-${call}`, output: [] };
+        } else if (first) {
           first = false;
           yield { type: 'tool_call', id: 'nested-call-1', name: 'fake_tool', arguments: '{"path":"notes.md"}' };
           yield { type: 'completion', responseId: 'resp-1', output: [] };
@@ -63,7 +79,7 @@ function buildNestedRunner() {
     name: 'fake_tool',
     description: 'Fake tool that records its run through the subagent context',
     parameters: z.object({ path: z.string() }),
-    needsApproval: () => false,
+    needsApproval: () => options.needsApproval ?? false,
     formatCommandMessage: () => [],
     execute: async (_params: any, context: unknown) => {
       const runContext = getSubagentRunContext(context);
@@ -84,8 +100,12 @@ function buildNestedRunner() {
     sessionContextService: createSessionContextService(),
     toolFactory: stubToolFactory,
     roleToolCache: new Map(),
-    resolveRole: () => workerDefinition(providerId),
+    resolveRole: () => ({
+      ...workerDefinition(providerId),
+      ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
+    }),
     toolOwnership: new ToolOwnershipRegistry(),
+    ...(options.onEvent ? { onEvent: options.onEvent } : {}),
   });
 
   return { runner, providerId };
@@ -218,5 +238,31 @@ describe('NestedSubagentRunner end to end', () => {
 
     expect(result.status).toBe('completed');
     expect(result.finalText).toBe('Summary: updated notes.');
+  });
+
+  it('reports an interrupted nested run as interrupted rather than completed', async () => {
+    const events: ConversationEvent[] = [];
+    const { runner } = buildNestedRunner({ needsApproval: true, onEvent: (event) => events.push(event) });
+
+    const result = await runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'parent-call-1' },
+    });
+
+    // The run paused at an approval with work outstanding. Calling that
+    // 'completed' told the parent model the opposite of what the event stream
+    // said — the completion event is deliberately withheld here.
+    expect(result.status).toBe('interrupted');
+    expect(result.interrupted).toBe(true);
+    expect(events.some((event) => event.type === 'subagent_completed')).toBe(false);
+  });
+
+  it("enforces the role's turn budget instead of running as long as the model keeps calling tools", async () => {
+    const { runner } = buildNestedRunner({ alwaysCallsTool: true, maxTurns: 3 });
+
+    await expect(
+      runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+        toolCall: { callId: 'parent-call-1' },
+      }),
+    ).rejects.toThrow(/Max turns \(3\) exceeded/);
   });
 });

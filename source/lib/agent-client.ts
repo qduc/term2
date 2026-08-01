@@ -344,6 +344,9 @@ export class AgentClient {
     if (this.#useApplicationRunLoop) {
       return this.#applicationRunLoop.startStream(this.#agentConfig.getApplicationAgent(), userInput, {
         sessionId: options.sessionId,
+        // The turn budget the SDK runner used to enforce. Without it the loop
+        // runs unbounded, and subagents silently ignore their maxTurns.
+        maxTurns: this.#runnerManager.maxTurns,
       });
     }
     return adaptAgentStream(await this.#runOrchestrator.startStream(userInput as any, options));
@@ -352,7 +355,10 @@ export class AgentClient {
   async continueRunStream(state: ContinuationHandle, options: ChainedRunOptions = {}): Promise<AgentStream> {
     this.#subagentBridge?.resetAbortController();
     if (this.#useApplicationRunLoop) {
-      return this.#applicationRunLoop.continueRunStream(state, { sessionId: options.sessionId });
+      return this.#applicationRunLoop.continueRunStream(state, {
+        sessionId: options.sessionId,
+        maxTurns: this.#runnerManager.maxTurns,
+      });
     }
     const rawState = state?.kind === 'continuation' ? unwrapContinuationHandle(state) : state;
     return adaptAgentStream(await this.#runOrchestrator.continueRunStream(rawState as any, options));

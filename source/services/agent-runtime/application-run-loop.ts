@@ -52,6 +52,27 @@ export interface ApplicationRunLoopOptions {
    * replayed into a nested run — the F5 mechanism).
    */
   readonly approvals?: ApprovalLedger;
+  /**
+   * Maximum model turns for this run. One turn is one model call, matching the
+   * removed SDK's accounting. Exceeding it throws {@link MaxTurnsExceededError}.
+   * Omitted means unbounded — callers that had a limit under the SDK (the chat
+   * client, subagents, the mentor) must pass theirs.
+   */
+  readonly maxTurns?: number;
+}
+
+/**
+ * Raised when a run exceeds its `maxTurns` budget. The loop owns turn counting
+ * — the SDK-era `callModelInputFilter` hook is deliberately not reintroduced.
+ */
+export class MaxTurnsExceededError extends Error {
+  readonly maxTurns: number;
+
+  constructor(maxTurns: number) {
+    super(`Max turns (${maxTurns}) exceeded`);
+    this.name = 'MaxTurnsExceededError';
+    this.maxTurns = maxTurns;
+  }
 }
 
 export interface ApplicationRunLoopDeps {
@@ -80,6 +101,10 @@ type RunState = {
   context?: unknown;
   /** This run's approval ledger, preserved across continuation. */
   approvals: ApprovalLedger;
+  /** Model turns taken so far, preserved across continuation. */
+  turnCount: number;
+  /** Turn budget for the run; undefined means unbounded. */
+  maxTurns?: number;
   approve?: () => void;
   reject?: (_interruption: unknown, options?: { message?: string }) => void;
 };
@@ -143,6 +168,8 @@ export class ApplicationRunLoop {
       history: normalizeHistory(input),
       context: options.context,
       approvals: options.approvals ?? new ApprovalLedger(),
+      turnCount: 0,
+      maxTurns: options.maxTurns,
     };
     state.approve = () => {
       state.approvalDecision = 'approved';
@@ -162,6 +189,10 @@ export class ApplicationRunLoop {
     // Handles created before the ledger existed cannot resume meaningfully;
     // give them a fresh ledger rather than crashing on `approvals` access.
     if (!state.approvals) state.approvals = new ApprovalLedger();
+    // The turn budget belongs to the run, so a resumed run keeps spending the
+    // same one rather than starting over after every approval pause.
+    if (typeof state.turnCount !== 'number') state.turnCount = 0;
+    if (state.maxTurns === undefined) state.maxTurns = options.maxTurns;
     return this.#run(state, options);
   }
 
@@ -179,6 +210,11 @@ export class ApplicationRunLoop {
       context: state.context,
       approvals: state.approvals,
       signal: effectiveOptions.signal,
+      // A getter, not a snapshot: the context object outlives every turn, and
+      // tools read it while deciding whether to warn about the turn budget.
+      get turn() {
+        return { count: state.turnCount, max: state.maxTurns };
+      },
     };
     const output: unknown[] = [];
     const stream: AgentStream & { finalOutput?: string } = {
@@ -243,6 +279,11 @@ export class ApplicationRunLoop {
         state.pendingApproval = undefined;
         state.approvalDecision = undefined;
         stream.interruptions = [];
+      }
+
+      state.turnCount += 1;
+      if (state.maxTurns !== undefined && state.turnCount > state.maxTurns) {
+        throw new MaxTurnsExceededError(state.maxTurns);
       }
 
       const model = await this.#deps.resolveModel(state.agent.model);

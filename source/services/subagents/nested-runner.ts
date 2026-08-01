@@ -1,12 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { ApplicationRunLoop, type ApplicationAgent } from '../agent-runtime/application-run-loop.js';
+import {
+  ApplicationRunLoop,
+  type AgentModelSettings,
+  type ApplicationAgent,
+} from '../agent-runtime/application-run-loop.js';
 import { ApprovalLedger, type ToolInvocationContext } from '../agent-runtime/tool-invocation-context.js';
 import { getProvider } from '../../providers/index.js';
 import type { ToolDefinition } from '../../tools/types.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
-import type { SubagentRequest, SubagentResult, SupportedSubagentRole, SubagentDefinition } from './types.js';
+import type {
+  NestedSubagentResult,
+  SubagentRequest,
+  SubagentResult,
+  SupportedSubagentRole,
+  SubagentDefinition,
+} from './types.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import { SUBAGENT_ROLES } from './types.js';
 import { SubagentToolFactory, getSubagentRunContext, type SubagentRunContext } from './tool-policy.js';
@@ -33,24 +43,10 @@ export type CachedRoleTool = {
 
 const AGENT_TOOL_ERROR_PREFIX = 'An error occurred while running the tool. Please try again. Error:';
 
-/**
- * Increments the subagent's turn counter on every model call.
- *
- * The OpenAI Agents SDK invokes `callModelInputFilter` with `args.context` set
- * to the **unwrapped** user context (see `applyCallModelInputFilter` in
- * The run loop passes
- * `context: context.context`). Earlier versions of this code read
- * `args.context.context.turnCount`, which is always `undefined` and caused the
- * counter to never advance, preventing the turn-limit warning from ever
- * being injected into nested subagent tool output.
- */
-export function incrementSubagentTurnCount(args: { context?: unknown; modelData: any }): any {
-  const context = args.context as { turnCount?: number } | undefined;
-  if (context && typeof context === 'object') {
-    context.turnCount = (context.turnCount ?? 0) + 1;
-  }
-  return args.modelData;
-}
+// Turn counting used to live here as a `callModelInputFilter` hook, which the
+// SDK-shaped tool wrapper dropped on the floor. `ApplicationRunLoop` owns it
+// now: the nested run is given `maxTurns` and reports its budget to tools as
+// `ToolInvocationContext.turn`.
 
 function collectApprovalCallIds(interruptions: unknown): string[] {
   if (!Array.isArray(interruptions)) {
@@ -79,13 +75,13 @@ function readParentApprovals(context: unknown): Readonly<Record<string, Approval
   return parent?.approvals?.snapshot();
 }
 
-function parseNestedSubagentResult(raw: unknown): SubagentResult & { interrupted?: boolean } {
+function parseNestedSubagentResult(raw: unknown): NestedSubagentResult {
   const output = String(raw);
   if (output.startsWith(AGENT_TOOL_ERROR_PREFIX)) {
     const message = output.slice(AGENT_TOOL_ERROR_PREFIX.length).trim();
     throw new Error(message || 'Nested subagent tool failed');
   }
-  return JSON.parse(output) as SubagentResult & { interrupted?: boolean };
+  return JSON.parse(output) as NestedSubagentResult;
 }
 
 export class NestedSubagentRunner {
@@ -228,7 +224,9 @@ export class NestedSubagentRunner {
       },
     });
 
-    const modelSettings: any = { retry: { maxRetries: this.#settings.get<number>('agent.retryAttempts') ?? 2 } };
+    const modelSettings: AgentModelSettings = {
+      retry: { maxRetries: this.#settings.get<number>('agent.retryAttempts') ?? 2 },
+    };
     if (definition.reasoningEffort && definition.reasoningEffort !== 'default') {
       modelSettings.reasoning = { effort: definition.reasoningEffort, summary: 'auto' };
     }
@@ -326,6 +324,9 @@ export class NestedSubagentRunner {
           // The nested run's ledger was seeded with the parent's decisions by
           // runAsTool; use it so F5 holds and nested decisions land on it.
           approvals: toolContext?.approvals,
+          // Without this the role's configured budget is advisory only and the
+          // nested run is bounded solely by the model choosing to stop.
+          maxTurns: definition.maxTurns,
         });
         const settled = await stream.completed;
 
@@ -338,22 +339,26 @@ export class NestedSubagentRunner {
           role,
         });
 
-        const result: SubagentResult & { interrupted?: boolean } = {
+        const interrupted = Boolean(stream.interruptions?.length);
+        const result: NestedSubagentResult = {
           agentId: runContext.agentId,
           role,
-          status: 'completed',
+          // An interrupted run stopped at an approval pause with work still
+          // pending; reporting it as completed told the parent model the
+          // opposite of what the event stream said.
+          status: interrupted ? 'interrupted' : 'completed',
           finalText: extractFinalText(stream),
           filesChanged: [...new Set(runContext.filesChanged)],
           toolsUsed: aggregateContextToolUsage(runContext.toolCounts),
           usage: normalizeAgentRunUsage((settled as { usage?: unknown } | undefined)?.usage) ?? extractUsage(stream),
-          ...(stream.interruptions?.length ? { interrupted: true } : {}),
+          ...(interrupted ? { interrupted: true } : {}),
         };
         return JSON.stringify(result);
       },
     };
   }
 
-  async runAsTool(request: SubagentRequest, context?: unknown, details?: unknown): Promise<SubagentResult> {
+  async runAsTool(request: SubagentRequest, context?: unknown, details?: unknown): Promise<NestedSubagentResult> {
     if (!SUBAGENT_ROLES.includes(request.role as SupportedSubagentRole)) {
       throw new Error(`Unsupported subagent role: "${request.role}"`);
     }
@@ -414,8 +419,7 @@ export class NestedSubagentRunner {
     // parent have to be carried across or the same tool call prompts twice.
     let abortListener: (() => void) | undefined;
     try {
-      const { tool: roleTool, agent: roleAgent } = this.#getOrCreateRoleTool(role);
-      const tool = roleTool as any;
+      const { tool, agent: roleAgent } = this.#getOrCreateRoleTool(role);
       replayApprovals(nestedLedger, readParentApprovals(context), roleAgent);
       const nestedToolContext: ToolInvocationContext<SubagentRunContext> = {
         context: runContext,
@@ -431,8 +435,8 @@ export class NestedSubagentRunner {
           })
         : null;
 
-      const promises: Array<Promise<any>> = [
-        tool.execute({ role, task: request.task }, nestedToolContext, effectiveDetails),
+      const promises: Array<Promise<unknown>> = [
+        Promise.resolve(tool.execute({ role, task: request.task }, nestedToolContext, effectiveDetails)),
       ];
       if (abortPromise) {
         promises.push(abortPromise);
@@ -443,8 +447,12 @@ export class NestedSubagentRunner {
       if (childSlot && parsed.usage) {
         request.executionBudget!.recordUsage(parsed.usage);
       }
-      if (!parsed.interrupted) {
-        safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result: parsed });
+      // An interrupted run has not finished, so it must not be announced as a
+      // completion. `subagent_completed` carries a SubagentResult, which cannot
+      // be `interrupted` — narrowing here keeps the event payload honest.
+      if (parsed.status !== 'interrupted') {
+        const completed: SubagentResult = { ...parsed, status: parsed.status };
+        safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result: completed });
       }
       return parsed;
     } catch (error: any) {

@@ -3,6 +3,7 @@ import {
   injectWarningIntoToolOutput,
   injectTurnLimitWarning,
   buildTurnLimitWarning,
+  resolveTurnLimitContext,
 } from './inject-warning-into-tool-output.js';
 
 it('injectWarningIntoToolOutput appends to plain text', () => {
@@ -165,5 +166,31 @@ it('injectTurnLimitWarning injects warning for plain text output', () => {
   const output = 'tool result';
   const result = injectTurnLimitWarning(output, { turnCount: 98, maxTurns: 100 });
   expect(result.includes('tool result')).toBe(true);
+  expect(result.includes('2 turns left')).toBe(true);
+});
+
+it('resolveTurnLimitContext reads the run loop turn budget', () => {
+  const toolContext = { context: undefined, turn: { count: 18, max: 20 } };
+
+  expect(resolveTurnLimitContext(toolContext)).toEqual({ turnCount: 18, maxTurns: 20 });
+});
+
+it('resolveTurnLimitContext falls back to the user context on the legacy path', () => {
+  const toolContext = { context: { turnCount: 18, maxTurns: 20 } };
+
+  expect(resolveTurnLimitContext(toolContext)).toEqual({ turnCount: 18, maxTurns: 20 });
+});
+
+it('resolveTurnLimitContext ignores an unbounded run', () => {
+  const toolContext = { context: undefined, turn: { count: 3, max: undefined } };
+
+  expect(resolveTurnLimitContext(toolContext)).toBeUndefined();
+});
+
+it('warns through the loop turn budget, which was unreachable while nothing counted turns', () => {
+  const toolContext = { context: undefined, turn: { count: 18, max: 20 } };
+
+  const result = injectTurnLimitWarning('tool result', resolveTurnLimitContext(toolContext));
+
   expect(result.includes('2 turns left')).toBe(true);
 });

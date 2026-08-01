@@ -167,6 +167,20 @@ export interface SubagentResult {
   validation?: ValidationEvidence;
 }
 
+/**
+ * What a nested (synchronous) subagent tool returns to its parent.
+ *
+ * Only this path can stop at an approval pause, so only this type carries the
+ * `interrupted` status: the run is settled but unfinished, which is neither
+ * `completed` nor `failed`. The asynchronous and public-API paths cannot
+ * produce it, which is why it is not part of {@link SubagentResult}.
+ */
+export type NestedSubagentResult = Omit<SubagentResult, 'status'> & {
+  status: SubagentResult['status'] | 'interrupted';
+  /** True when the run paused for an approval the parent must surface. */
+  interrupted?: boolean;
+};
+
 /** The only state exposed while an asynchronous run is live. */
 export interface SubagentRunHandle {
   runId: string;

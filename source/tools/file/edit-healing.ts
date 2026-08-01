@@ -1,6 +1,6 @@
 import type { ApplicationAgent } from '../../services/agent-runtime/application-run-loop.js';
 import type { LegacyRunner } from '../../contracts/model.js';
-import type { ApplicationCompatibilityRunner } from '../../providers/registry.js';
+import { settleProviderRun } from '../../providers/registry.js';
 import type { SearchReplaceFullOperation } from './search-replace.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import { getProvider } from '../../providers/index.js';
@@ -204,9 +204,9 @@ async function runHealingPrompt(
 
   let timeoutHandle: NodeJS.Timeout | null = null;
   try {
-    // runToCompletion settles the stream so extractModelText reads finalOutput
-    // from a finished run instead of an un-run stream.
-    const runPromise = (runner as ApplicationCompatibilityRunner).runToCompletion(agent, prompt, options);
+    // settleProviderRun returns a finished run, so extractModelText reads
+    // finalOutput from a completed run instead of an un-run stream.
+    const runPromise = settleProviderRun(runner, agent, prompt, options);
 
     const result = await Promise.race([
       runPromise,

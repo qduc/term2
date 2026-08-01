@@ -1,5 +1,5 @@
 import { getProvider } from '../../providers/index.js';
-import type { ApplicationCompatibilityRunner } from '../../providers/registry.js';
+import { settleProviderRun } from '../../providers/registry.js';
 import type { SubagentResult } from './types.js';
 
 export function isAbortLike(message: string | undefined, obj?: unknown): boolean {
@@ -57,7 +57,13 @@ export function extractFinalText(result: any): string {
   return '';
 }
 
-export async function runWithProvider(providerId: string, runner: any, agent: any, input: any, options: any): Promise<any> {
+export async function runWithProvider(
+  providerId: string,
+  runner: any,
+  agent: any,
+  input: any,
+  options: any,
+): Promise<any> {
   const providerDef = getProvider(providerId);
   const supportsTracingControl = providerDef?.capabilities?.supportsTracingControl ?? false;
   const effectiveOptions = { ...options };
@@ -75,18 +81,9 @@ export async function runWithProvider(providerId: string, runner: any, agent: an
 
   // Every registered provider now has an application-owned runner synthesized
   // from createStreamedModel; a missing runner is a configuration error, not a
-  // silent fallback. runToCompletion settles the stream so result-shaped
-  // callers (the mentor) read finalOutput/usage from a completed run. Runners
-  // that only expose the live-stream run() (test fakes) are settled here.
-  const compatRunner = runner as ApplicationCompatibilityRunner;
-  if (typeof compatRunner.runToCompletion === 'function') {
-    return compatRunner.runToCompletion(agent, input, effectiveOptions);
-  }
-  const liveStream = await runner.run(agent, input, effectiveOptions);
-  if (liveStream?.completed) {
-    return Object.assign(liveStream, await liveStream.completed);
-  }
-  return liveStream;
+  // silent fallback. settleProviderRun returns a finished run so result-shaped
+  // callers (the mentor) read finalOutput/usage rather than an un-run stream.
+  return settleProviderRun(runner, agent, input, effectiveOptions);
 }
 
 export function aggregateToolUsage(toolCounts: Map<string, number>): Array<{ toolName: string; count: number }> {

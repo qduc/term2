@@ -83,7 +83,12 @@ export function createApplicationCompatibilityRunner(
     async run(agent: any, input: unknown, options: any = {}) {
       const { ApplicationRunLoop } = await import('../services/agent-runtime/application-run-loop.js');
       const loop = new ApplicationRunLoop({ resolveModel: (model: string) => modelProvider.getModel(model) as any });
-      return loop.startStream(agent, input as any, { signal: options.signal });
+      return loop.startStream(agent, input as any, {
+        signal: options.signal,
+        // Callers that had a turn budget under the SDK runner (the mentor, edit
+        // healing) still pass it in run options; the loop enforces it now.
+        ...(typeof options.maxTurns === 'number' ? { maxTurns: options.maxTurns } : {}),
+      });
     },
     async runToCompletion(agent: any, input: unknown, options: any = {}) {
       // Settle the stream so result-shaped callers (edit healing, the mentor)
@@ -105,6 +110,32 @@ export interface ApplicationCompatibilityRunner extends LegacyRunner {
    * returns a live stream and is reserved for the streaming main path.
    */
   runToCompletion(agent: unknown, input: unknown, options?: any): Promise<any>;
+}
+
+/**
+ * Runs a provider runner and returns a settled, result-shaped run.
+ *
+ * Every registered provider's runner comes from
+ * {@link createApplicationCompatibilityRunner} and therefore has
+ * `runToCompletion`; runners that only expose the live-stream `run` (test
+ * fakes, hand-built runners) are settled here instead. Result-shaped callers
+ * share this so they cannot drift apart on which shape they tolerate.
+ */
+export async function settleProviderRun(
+  runner: LegacyRunner,
+  agent: unknown,
+  input: unknown,
+  options?: any,
+): Promise<any> {
+  const compatRunner = runner as ApplicationCompatibilityRunner;
+  if (typeof compatRunner.runToCompletion === 'function') {
+    return compatRunner.runToCompletion(agent, input, options);
+  }
+  const liveStream = await runner.run(agent as any, input as any, options);
+  if (liveStream?.completed) {
+    return Object.assign(liveStream, await liveStream.completed);
+  }
+  return liveStream;
 }
 
 /**

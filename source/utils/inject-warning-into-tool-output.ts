@@ -11,6 +11,24 @@ export interface TurnLimitContext {
   maxTurns?: number;
 }
 
+/**
+ * Reads the turn budget out of whatever context a tool was invoked with.
+ *
+ * Under `ApplicationRunLoop` the loop owns the count and exposes it as
+ * `toolContext.turn`; under the legacy orchestrator path the count is kept on
+ * the run's user context by a model-input filter. Tools serve both paths, so
+ * this resolves either shape and prefers the loop's, which is authoritative
+ * when present.
+ */
+export function resolveTurnLimitContext(toolContext: unknown): TurnLimitContext | undefined {
+  const candidate = toolContext as { turn?: { count?: number; max?: number }; context?: TurnLimitContext } | undefined;
+  const turn = candidate?.turn;
+  if (turn && typeof turn.count === 'number' && typeof turn.max === 'number') {
+    return { turnCount: turn.count, maxTurns: turn.max };
+  }
+  return candidate?.context;
+}
+
 export function injectTurnLimitWarning(output: string, context: unknown): string {
   const limitContext = context as TurnLimitContext | undefined;
   if (limitContext && typeof limitContext.turnCount === 'number' && typeof limitContext.maxTurns === 'number') {

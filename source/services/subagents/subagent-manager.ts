@@ -3,13 +3,18 @@ import type { ApplicationAgent } from '../agent-runtime/application-run-loop.js'
 import type { ToolDefinition } from '../../tools/types.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
-import type { SubagentRequest, SubagentResult, SupportedSubagentRole, SubagentDefinition } from './types.js';
+import type {
+  NestedSubagentResult,
+  SubagentRequest,
+  SubagentResult,
+  SupportedSubagentRole,
+  SubagentDefinition,
+} from './types.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ISubagentClient, ISubagentClientFactory } from './subagent-client-types.js';
 import { createSubagentRuntime, type SubagentRuntime } from './runtime.js';
 import { isAbortLike, safeEmit } from './utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
-import type { SubagentRunContext } from './tool-policy.js';
 import { adaptLegacyRole, adaptLegacyDefinition } from '../agent-runtime/legacy-adapter.js';
 import { createAgentRuntimeFromSubagentRuntime } from '../agent-runtime/compose-agent-runtime.js';
 import type { AgentRuntime } from '../agent-runtime/agent-runtime.js';
@@ -64,7 +69,7 @@ export class SubagentManager {
     return this.#runtime.nestedRunner.getRoleAgent(role);
   }
 
-  async runAsTool(request: SubagentRequest, context?: unknown, details?: unknown): Promise<SubagentResult> {
+  async runAsTool(request: SubagentRequest, context?: unknown, details?: unknown): Promise<NestedSubagentResult> {
     return this.#runtime.nestedRunner.runAsTool(request, context, details);
   }
 

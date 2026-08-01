@@ -86,4 +86,15 @@ export interface ToolInvocationContext<T = unknown> {
   /** This run's approval ledger; decisions made in this run accumulate here. */
   readonly approvals: ApprovalLedger;
   readonly signal?: AbortSignal;
+  /**
+   * The run's turn budget, owned and counted by the loop. `count` is the turn
+   * currently executing (1-based); `max` is undefined for an unbounded run.
+   * Tools read this to warn the model as the budget runs out.
+   */
+  readonly turn?: TurnBudget;
+}
+
+export interface TurnBudget {
+  readonly count: number;
+  readonly max?: number;
 }

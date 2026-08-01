@@ -1,5 +1,82 @@
 import { it, expect } from 'vitest';
+import { z } from 'zod';
 import { getProvider, getAllProviders, getProviderIds, sortProvidersByOrder } from './index.js';
+import { createApplicationCompatibilityRunner, settleProviderRun } from './registry.js';
+import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
+
+const AGENT = { name: 'probe', instructions: 'Answer.', model: 'test-model', tools: [] };
+
+function textModel(text: string): StreamedModelTurn {
+  return {
+    async *stream() {
+      yield { type: 'text_delta', text };
+      yield {
+        type: 'completion',
+        responseId: 'resp-1',
+        usage: { inputTokens: 3, outputTokens: 4 },
+        output: [{ type: 'message', content: [{ type: 'text', text }] }],
+      };
+    },
+  };
+}
+
+/**
+ * Pins the contract the result-shaped callers (edit healing, the mentor) rely
+ * on: `run` hands back a live stream, so only `runToCompletion` can be read
+ * synchronously for final text and usage.
+ */
+it('runToCompletion returns a settled run carrying finalOutput and usage', async () => {
+  const runner = createApplicationCompatibilityRunner(() => textModel('healed'));
+
+  const result = await runner.runToCompletion(AGENT, 'heal this');
+
+  expect(result.finalOutput).toBe('healed');
+  expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 4 });
+});
+
+it('run returns an unsettled stream, so finalOutput is not readable yet', async () => {
+  const runner = createApplicationCompatibilityRunner(() => textModel('healed'));
+
+  const stream = await runner.run(AGENT as any, 'heal this');
+
+  expect(stream.finalOutput).toBeUndefined();
+  await stream.completed;
+  expect(stream.finalOutput).toBe('healed');
+});
+
+it('runToCompletion enforces the run options turn budget', async () => {
+  const toolCallingModel: StreamedModelTurn = {
+    async *stream() {
+      yield { type: 'tool_call', id: 'call-1', name: 'again', arguments: '{}' };
+      yield { type: 'completion', responseId: 'resp-1', output: [] };
+    },
+  };
+  const agent = {
+    ...AGENT,
+    tools: [
+      {
+        name: 'again',
+        description: 'Always callable',
+        parameters: z.object({}),
+        needsApproval: () => false,
+        execute: () => 'ok',
+        formatCommandMessage: () => [],
+      },
+    ],
+  };
+  const runner = createApplicationCompatibilityRunner(() => toolCallingModel);
+
+  await expect(runner.runToCompletion(agent, 'go', { maxTurns: 2 })).rejects.toThrow(/Max turns \(2\) exceeded/);
+});
+
+it('settleProviderRun settles a runner that only exposes the live-stream run', async () => {
+  const compat = createApplicationCompatibilityRunner(() => textModel('healed'));
+  const liveOnlyRunner = { config: compat.config, run: compat.run.bind(compat) };
+
+  const result = await settleProviderRun(liveOnlyRunner as any, AGENT, 'heal this');
+
+  expect(result.finalOutput).toBe('healed');
+});
 
 it('openai provider is registered', () => {
   const provider = getProvider('openai');

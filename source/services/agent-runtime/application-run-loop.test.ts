@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { ApplicationRunLoop, type ApplicationAgent } from './application-run-loop.js';
+import { ApplicationRunLoop, MaxTurnsExceededError, type ApplicationAgent } from './application-run-loop.js';
 import type { StreamedModelTurn } from '../../contracts/streamed-model-turn.js';
 import type { ToolDefinition } from '../../tools/types.js';
 
@@ -117,5 +117,109 @@ describe('ApplicationRunLoop', () => {
 
     expect(calls).toBe(2);
     expect(resumed.finalOutput).toBe('resumed');
+  });
+});
+
+describe('ApplicationRunLoop turn budget', () => {
+  /** A tool the model can call forever, so only the budget can stop the run. */
+  const loopingTool: ToolDefinition = {
+    name: 'again',
+    description: 'Always callable',
+    parameters: z.object({}),
+    needsApproval: () => false,
+    execute: () => 'ok',
+    formatCommandMessage: () => [],
+  };
+
+  function toolCallingModel(callId: string): StreamedModelTurn {
+    return {
+      async *stream() {
+        yield { type: 'tool_call', id: callId, name: 'again', arguments: '{}' };
+        yield { type: 'completion', responseId: `resp-${callId}`, output: [] };
+      },
+    };
+  }
+
+  it('stops a runaway tool loop at maxTurns instead of running forever', async () => {
+    let calls = 0;
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => {
+        calls++;
+        return toolCallingModel(`call-${calls}`);
+      },
+    });
+
+    const stream = loop.startStream({ ...agent, tools: [loopingTool] }, 'go', { maxTurns: 3 });
+
+    await expect(stream.completed).rejects.toThrow(MaxTurnsExceededError);
+    expect(calls).toBe(3);
+  });
+
+  it('runs unbounded when no maxTurns is given', async () => {
+    let calls = 0;
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => {
+        calls++;
+        return calls <= 4 ? toolCallingModel(`call-${calls}`) : textModel('done', 'resp-final');
+      },
+    });
+
+    const stream = loop.startStream({ ...agent, tools: [loopingTool] }, 'go');
+    await stream.completed;
+
+    expect(calls).toBe(5);
+    expect(stream.finalOutput).toBe('done');
+  });
+
+  it('keeps spending one budget across an approval pause rather than restarting it', async () => {
+    // Only the first call pauses, so the resumed run is free to spend turns.
+    let approvalChecks = 0;
+    const approvedTool: ToolDefinition = { ...loopingTool, needsApproval: () => approvalChecks++ === 0 };
+    let calls = 0;
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => {
+        calls++;
+        return toolCallingModel(`call-${calls}`);
+      },
+    });
+
+    // Turn 1 pauses for approval; the resumed run gets turn 2, and turn 3 is
+    // over budget. A budget that reset on resume would never trip.
+    const stream = loop.startStream({ ...agent, tools: [approvedTool] }, 'go', { maxTurns: 2 });
+    await stream.completed;
+    expect(stream.interruptions).toHaveLength(1);
+
+    const handle = stream.state! as any;
+    handle.approve?.({});
+    const resumed = loop.continueRunStream(stream.state!);
+
+    await expect(resumed.completed).rejects.toThrow(MaxTurnsExceededError);
+    expect(calls).toBe(2);
+  });
+
+  it('reports the run turn budget to tools so they can warn the model', async () => {
+    const seen: Array<{ count: number; max?: number }> = [];
+    const reportingTool: ToolDefinition = {
+      ...loopingTool,
+      execute: (_params, context) => {
+        seen.push((context as { turn: { count: number; max?: number } }).turn);
+        return 'ok';
+      },
+    };
+    let calls = 0;
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => {
+        calls++;
+        return calls <= 2 ? toolCallingModel(`call-${calls}`) : textModel('done', 'resp-final');
+      },
+    });
+
+    const stream = loop.startStream({ ...agent, tools: [reportingTool] }, 'go', { maxTurns: 10 });
+    await stream.completed;
+
+    expect(seen).toEqual([
+      { count: 1, max: 10 },
+      { count: 2, max: 10 },
+    ]);
   });
 });

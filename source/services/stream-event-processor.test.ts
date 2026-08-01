@@ -6,7 +6,7 @@ import {
   type StreamProcessorOptions,
   type StreamProcessorDeps,
 } from './stream-event-processor.js';
-import type { AgentStream } from './agent-stream.js';
+import { adaptAgentStream, type AgentStream } from './agent-stream.js';
 
 const logger = new LoggingService({ disableLogging: true });
 
@@ -355,6 +355,21 @@ it('emits usage_update when stream event includes usage', async () => {
   const usageEvents = events.filter((e) => e.type === 'usage_update');
   expect(usageEvents.length).toBe(1);
   expect(acc.latestUsage).toBeTruthy();
+});
+
+it('uses authoritative run usage exposed by an adapted stream without inspecting continuation state', async () => {
+  const source = makeStream([], {
+    state: { usage: { requests: 2, inputTokens: 11, outputTokens: 7, totalTokens: 18 } },
+    completed: Promise.resolve({ usage: { input_tokens: 3, output_tokens: 2 } }),
+  });
+  const stream = adaptAgentStream(source);
+  const acc = createStreamAccumulator();
+
+  for await (const _ of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    void _;
+  }
+
+  expect(acc.latestUsage).toMatchObject({ prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 });
 });
 
 it('end-of-stream usage harvest from completed promise', async () => {

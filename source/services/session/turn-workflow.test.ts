@@ -351,6 +351,18 @@ it('executes continuation turn successfully', async () => {
       receivedPreviousResponseId = options.previousResponseId;
       const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'continuation response' }]);
       stream.finalOutput = 'continuation response';
+      const prior = {
+        type: 'function_call_output',
+        call_id: 'prior',
+        output: '{"text":"old","metadata":{"messageId":"m-prior"}}',
+      };
+      const current = {
+        type: 'function_call_output',
+        call_id: 'current',
+        output: '{"text":"new","metadata":{"messageId":"m-current"}}',
+      };
+      stream.history = [prior, current];
+      stream.output = [current];
       return stream;
     },
   };
@@ -403,6 +415,9 @@ it('executes continuation turn successfully', async () => {
   const outcome = await runPromise;
   if (outcome.kind === 'response' && outcome.terminal.type === 'response') {
     expect(outcome.terminal.finalText).toBe('continuation response');
+    expect(outcome.terminal.commandMessages?.map((message) => message.callId)).toEqual(['current']);
+    expect(outcome.terminal.turnItems?.map((item) => item.type)).toEqual(['tool_result']);
+    expect(outcome.terminal.turnItems?.[0]).toMatchObject({ callId: 'current' });
   } else {
     expect(true).toBe(false);
   }

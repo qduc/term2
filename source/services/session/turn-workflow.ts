@@ -53,7 +53,7 @@ import {
 } from '../conversation/conversation-result-builder.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { SessionStreamProcessor } from './session-stream-processor.js';
-import type { AgentStream } from '../agent-stream.js';
+import { selectAgentStreamItems, type AgentStream } from '../agent-stream.js';
 import {
   extractCommandMessages,
   markToolCallAsLlmAutoApproved,
@@ -960,7 +960,7 @@ export class TurnWorkflow {
 
     const mergedEmittedIds = new Set([...allEmittedIds, ...acc.emittedCommandIds]);
 
-    const streamMessages = extractCommandMessages(stream.newItems || stream.history || []);
+    const streamMessages = extractCommandMessages(selectAgentStreamItems(stream));
     const filteredMessages = streamMessages.filter((msg) => !state.previouslyEmittedIds.has(msg.id));
     const nextCumulativeMessages = [...state.cumulativeCommandMessages, ...filteredMessages];
     const nextCumulativeUsage = acc.latestUsage ?? state.cumulativeUsage;

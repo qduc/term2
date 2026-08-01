@@ -717,6 +717,51 @@ it('explicit Docker host control is not auto-approved by LLM advisory mode', asy
   }
 });
 
+it('prefers current-run output over cumulative history when newItems is empty', async () => {
+  const prior = {
+    type: 'function_call_output',
+    call_id: 'prior',
+    output: '{"text":"old","metadata":{"messageId":"m-prior"}}',
+  };
+  const current = {
+    type: 'function_call_output',
+    call_id: 'current',
+    output: '{"text":"new","metadata":{"messageId":"m-current"}}',
+  };
+  const stream = makeStream({ newItems: [], output: [current], history: [prior, current] });
+
+  const outcome = await buildConversationResult(
+    { result: stream, toolCallArgumentsById: new Map() },
+    makeDeps(),
+  );
+
+  expect(outcome.kind).toBe('response');
+  if (outcome.kind === 'response') {
+    expect(outcome.result.commandMessages?.map((message) => message.callId)).toEqual(['current']);
+    expect(outcome.result.turnItems?.map((item) => item.type)).toEqual(['tool_result']);
+    expect(outcome.result.turnItems?.[0]).toMatchObject({ callId: 'current' });
+  }
+});
+
+it('uses populated history when newItems is empty and current-run output is unavailable', async () => {
+  const stream = makeStream({
+    newItems: [],
+    history: [
+      { type: 'function_call_output', call_id: 'a', output: '{"text":"x","metadata":{"messageId":"m-a"}}' },
+    ],
+  });
+
+  const outcome = await buildConversationResult(
+    { result: stream, toolCallArgumentsById: new Map() },
+    makeDeps(),
+  );
+
+  expect(outcome.kind).toBe('response');
+  if (outcome.kind === 'response') {
+    expect(outcome.result.commandMessages?.map((message) => message.callId)).toContain('a');
+  }
+});
+
 it('command messages dedup against emittedCommandIds', async () => {
   const stream = makeStream({
     history: [

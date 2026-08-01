@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { mkdir, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
@@ -201,7 +202,17 @@ function installedVersion(packageName: string): string {
   try {
     return String((require(`${packageName}/package.json`) as { version?: string }).version ?? 'unknown');
   } catch {
-    return 'unknown';
+    try {
+      return String(
+        (
+          JSON.parse(readFileSync(join(process.cwd(), 'node_modules', packageName, 'package.json'), 'utf8')) as {
+            version?: string;
+          }
+        ).version ?? 'unknown',
+      );
+    } catch {
+      return 'unknown';
+    }
   }
 }
 function credentialFor(id: string): string {

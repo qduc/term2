@@ -182,6 +182,77 @@ it('does not continue when a typed post-execute token revision is stale', async 
   expect(decisionCalls).toBe(1);
 });
 
+it('does not apply a delayed approval decision to a replacement pending approval', async () => {
+  let pending: any = null;
+  let releaseApprovalCommand!: () => void;
+  const approvalCommandCanFinish = new Promise<void>((resolve) => {
+    releaseApprovalCommand = resolve;
+  });
+  let approvalCommandStarted!: () => void;
+  const approvalCommandIsDelayed = new Promise<void>((resolve) => {
+    approvalCommandStarted = resolve;
+  });
+  let delayNextRunningPersist = false;
+  const continuedTokens: number[] = [];
+  const approval = {
+    getPending: () => pending,
+    getPendingInterruption: () => pending?.interruption ?? null,
+  } as unknown as SessionApprovalQuery;
+  const turnFlow = {
+    async *start(input: string | UserTurn) {
+      const token = input === 'A' ? 1 : 2;
+      pending = { token, interruption: { callId: `call-${token}` } };
+      yield {
+        type: 'approval_required' as const,
+        approval: { agentName: 'Agent', toolName: 'shell', argumentsText: '{}', callId: `call-${token}` },
+      };
+    },
+    async *continueAfterApproval() {
+      continuedTokens.push(pending.token);
+      yield { type: 'final' as const, finalText: 'continued' };
+    },
+    abort() {
+      pending = null;
+    },
+  };
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: 'now',
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval,
+    turnFlow,
+    queueForeground: true,
+    queuePersistence: {
+      load: () => null,
+      async replace(record: any) {
+        if (delayNextRunningPersist && record.active?.phase === 'running') {
+          delayNextRunningPersist = false;
+          approvalCommandStarted();
+          await approvalCommandCanFinish;
+        }
+      },
+    },
+  });
+
+  expect((await adapter.sendMessage('A')).type).toBe('approval_required');
+  delayNextRunningPersist = true;
+  const delayedDecision = adapter.handleApprovalDecision('y');
+  await approvalCommandIsDelayed;
+
+  adapter.abort();
+  const replacement = adapter.sendMessage('B');
+  await new Promise((resolve) => setImmediate(resolve));
+  releaseApprovalCommand();
+  expect((await replacement).type).toBe('approval_required');
+
+  await expect(delayedDecision).resolves.toBeNull();
+  expect(continuedTokens).toEqual([]);
+  expect(pending.token).toBe(2);
+});
+
 it('ConversationAdapter delegates turn execution through an explicit turnFlow dependency', async () => {
   const calls: Array<{ method: string; input?: any; options?: any }> = [];
   const turnFlow = {

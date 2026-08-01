@@ -186,7 +186,10 @@ export class SettingsService {
         }
       }
     } else if (
-      (shouldUpdateFile || shouldMigrateLegacyProviderFormat || migratedLegacyAncillarySettings || shouldScrubSensitiveSettings) &&
+      (shouldUpdateFile ||
+        shouldMigrateLegacyProviderFormat ||
+        migratedLegacyAncillarySettings ||
+        shouldScrubSensitiveSettings) &&
       (!fileHadErrors || shouldScrubSensitiveSettings)
     ) {
       if (!this.disableFilePersistence) {

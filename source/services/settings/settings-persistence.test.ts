@@ -25,7 +25,13 @@ it('stripSensitiveSettings: removes all credential fields and other sensitive se
   settings.webSearch.tavily = { apiKey: 'tavily-secret' };
   settings.webSearch.exa = { apiKey: 'exa-secret' };
   settings.providers = [
-    { id: 'custom', name: 'Custom', type: 'openai-compatible', baseUrl: 'https://example.com', apiKey: 'provider-secret' },
+    {
+      id: 'custom',
+      name: 'Custom',
+      type: 'openai-compatible',
+      baseUrl: 'https://example.com',
+      apiKey: 'provider-secret',
+    },
   ];
 
   const cleaned = stripSensitiveSettings(settings);

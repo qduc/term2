@@ -138,17 +138,27 @@ export function hasSensitiveSettings(settings: unknown): boolean {
 
   const root = settings as Record<string, unknown>;
   const hasOwn = (value: unknown, key: string): boolean =>
-    Boolean(value && typeof value === 'object' && !Array.isArray(value) && Object.prototype.hasOwnProperty.call(value, key));
+    Boolean(
+      value && typeof value === 'object' && !Array.isArray(value) && Object.prototype.hasOwnProperty.call(value, key),
+    );
 
   const agent = root.agent;
-  const openrouter = agent && typeof agent === 'object' && !Array.isArray(agent) ? (agent as Record<string, unknown>).openrouter : undefined;
+  const openrouter =
+    agent && typeof agent === 'object' && !Array.isArray(agent)
+      ? (agent as Record<string, unknown>).openrouter
+      : undefined;
   if (
     hasOwn(root.app, 'shellPath') ||
     hasOwn(openrouter, 'apiKey') ||
     hasOwn(openrouter, 'baseUrl') ||
     hasOwn(openrouter, 'referrer') ||
     hasOwn(openrouter, 'title') ||
-    hasOwn(agent && typeof agent === 'object' && !Array.isArray(agent) ? (agent as Record<string, unknown>).openai : undefined, 'apiKey')
+    hasOwn(
+      agent && typeof agent === 'object' && !Array.isArray(agent)
+        ? (agent as Record<string, unknown>).openai
+        : undefined,
+      'apiKey',
+    )
   ) {
     return true;
   }
@@ -156,17 +166,12 @@ export function hasSensitiveSettings(settings: unknown): boolean {
   const webSearch = root.webSearch;
   if (webSearch && typeof webSearch === 'object' && !Array.isArray(webSearch)) {
     const webSearchRecord = webSearch as Record<string, unknown>;
-    if (
-      hasOwn(webSearchRecord.tavily, 'apiKey') ||
-      hasOwn(webSearchRecord.exa, 'apiKey')
-    ) {
+    if (hasOwn(webSearchRecord.tavily, 'apiKey') || hasOwn(webSearchRecord.exa, 'apiKey')) {
       return true;
     }
   }
 
-  return Array.isArray(root.providers)
-    ? root.providers.some((provider) => hasOwn(provider, 'apiKey'))
-    : false;
+  return Array.isArray(root.providers) ? root.providers.some((provider) => hasOwn(provider, 'apiKey')) : false;
 }
 
 /**

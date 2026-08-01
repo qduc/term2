@@ -208,7 +208,7 @@ it('pauses queued foreground messages after a failed execution until resumeQueue
   expect(inputs).toHaveLength(2);
 });
 
-it('retains queued foreground messages across abort and blocks them until resumeQueue', async () => {
+it('rejects an aborted terminal-less active stream and retains queued work paused until resumeQueue', async () => {
   let releaseFirst!: () => void;
   const firstGate = new Promise<void>((resolve) => {
     releaseFirst = resolve;
@@ -220,7 +220,7 @@ it('retains queued foreground messages across abort and blocks them until resume
     },
     async startStream(input: unknown) {
       inputs.push(input);
-      if (inputs.length === 1) return new GatedStream('aborted terminal', firstGate) as unknown as AgentStream;
+      if (inputs.length === 1) return new GatedStream('', firstGate) as unknown as AgentStream;
       const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'second terminal' }]);
       stream.finalOutput = 'second terminal';
       return stream;
@@ -235,9 +235,16 @@ it('retains queued foreground messages across abort and blocks them until resume
   const second = service.sendMessage('second');
   await flushQueue();
   service.abort();
-  await first;
+  await expect(first).rejects.toMatchObject({ name: 'AbortError' });
   await flushQueue();
   expect(inputs).toHaveLength(1);
+
+  let secondSettled = false;
+  void second.finally(() => {
+    secondSettled = true;
+  });
+  await flushQueue();
+  expect(secondSettled).toBe(false);
 
   await service.resumeQueue();
   expect(asFinal(await second).finalText).toBe('second terminal');

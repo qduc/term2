@@ -409,7 +409,7 @@ export function forkConversation(sourceId: string, newId: string): boolean {
   const lines = fs.readFileSync(srcPath, 'utf-8').split('\n');
   let rewroteIdentity = false;
   const forkedLines = lines.map((line) => {
-    if (rewroteIdentity || !line.trim()) return line;
+    if (!line.trim()) return line;
     try {
       const parsed = JSON.parse(line) as unknown;
       const envelope = decodeLogEnvelope(parsed);
@@ -428,8 +428,12 @@ export function forkConversation(sourceId: string, newId: string): boolean {
   }
 
   const tempPath = path.join(dir, `.${newId}.${crypto.randomUUID()}.tmp`);
+  const forkedContent = forkedLines.join('\n');
   try {
-    fs.writeFileSync(tempPath, forkedLines.join('\n'), { encoding: 'utf-8', flag: 'wx' });
+    fs.writeFileSync(tempPath, forkedContent.endsWith('\n') ? forkedContent : `${forkedContent}\n`, {
+      encoding: 'utf-8',
+      flag: 'wx',
+    });
     fs.renameSync(tempPath, dstPath);
   } finally {
     try {

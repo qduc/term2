@@ -2,7 +2,14 @@ import { createServer, type IncomingMessage } from 'node:http';
 import type { FixtureEnvelopeV1, HttpRequestFrame } from './fixture-envelope.js';
 import { compareRecordedRequest } from './fixture-comparator.js';
 
-export type FakeProviderScenario = 'success' | 'error' | 'early-close' | 'incomplete' | 'tool-fragments' | 'reasoning';
+export type FakeProviderScenario =
+  | 'success'
+  | 'final-only'
+  | 'error'
+  | 'early-close'
+  | 'incomplete'
+  | 'tool-fragments'
+  | 'reasoning';
 export type FakeProviderProtocol = 'chat-completions' | 'responses' | 'anthropic' | 'google';
 export type CapturedHttpRequest = {
   method: string;
@@ -159,7 +166,7 @@ export function framesFor(protocol: FakeProviderProtocol, scenario: FakeProvider
   if (protocol === 'responses')
     return [
       { type: 'response.created', response: { id: 'resp_fake', status: 'in_progress' } },
-      { type: 'response.output_text.delta', delta: 'hello' },
+      ...(scenario === 'final-only' ? [] : [{ type: 'response.output_text.delta', delta: 'hello' }]),
       ...(scenario === 'incomplete'
         ? []
         : [

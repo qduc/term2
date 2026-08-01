@@ -201,11 +201,9 @@ describe('assembled stateless provider lifecycle black-box', () => {
 });
 
 async function sendUserTurn(child: PtyChildDriver, prompt: string, response: string): Promise<void> {
-  await child.write(`${prompt}\n`);
-  await child.waitForVisibleOutput(response, 15_000);
-  // The response is streamed before Ink redraws the idle input. Give the
-  // application one event-loop turn before the next submission.
-  await delay(75);
+  const outputMarker = captureOutputMarker(child);
+  await writeAndSubmitText(child, prompt);
+  await waitForCompletedTurn(child, response, outputMarker);
 }
 
 async function sendApprovalTurn(
@@ -214,15 +212,87 @@ async function sendApprovalTurn(
   response: string,
   decision: 'y' | 'n',
 ): Promise<void> {
-  await child.write(`${prompt}\n`);
-  await child.waitForVisibleOutput('Allow this action?', 15_000);
-  await child.write(decision);
+  const outputMarker = captureOutputMarker(child);
+  await writeAndSubmitText(child, prompt);
+  await waitForNewVisibleOutput(child, 'Allow this action?', outputMarker, 15_000);
+  // ApprovalPrompt handles y/n as single-key shortcuts; unlike text input,
+  // this control does not consume a trailing carriage return.
+  const decisionMarker = captureOutputMarker(child);
+  await writeApprovalShortcut(child, decision);
   if (decision === 'n') {
-    await child.waitForVisibleOutput('Why? ', 5_000);
-    await child.write('black-box rejection\n');
+    await waitForNewVisibleOutput(child, 'Why? ', decisionMarker, 5_000);
+    await writeAndSubmitText(child, 'black-box rejection');
   }
+  await waitForCompletedTurn(child, response, outputMarker);
+}
+
+const TERMINAL_KEY_EVENT_GAP_MS = 50;
+
+async function writeAndSubmitText(child: PtyChildDriver, text: string): Promise<void> {
+  await child.write(text);
+  // Keep ordinary text and Enter as separate terminal key events. This short
+  // bounded gap lets Ink consume the text update before the submit event; it
+  // does not wait for provider or application state.
+  await waitForMilliseconds(TERMINAL_KEY_EVENT_GAP_MS);
+  await child.write('\r');
+}
+
+async function writeApprovalShortcut(child: PtyChildDriver, decision: 'y' | 'n'): Promise<void> {
+  await waitForMilliseconds(TERMINAL_KEY_EVENT_GAP_MS);
+  await child.write(decision);
+}
+
+type ChildOutputMarker = {
+  outputLength: number;
+  visibleLength: number;
+  idlePromptFrames: number;
+};
+
+async function waitForCompletedTurn(
+  child: PtyChildDriver,
+  response: string,
+  outputMarker: ChildOutputMarker,
+): Promise<void> {
   await child.waitForVisibleOutput(response, 15_000);
-  await delay(75);
+  await child.waitForState(
+    (snapshot) =>
+      snapshot.output.length > outputMarker.outputLength &&
+      snapshot.visibleOutput.length > outputMarker.visibleLength &&
+      countIdlePromptFrames(snapshot.visibleOutput) > outputMarker.idlePromptFrames,
+    15_000,
+  );
+}
+
+function captureOutputMarker(child: PtyChildDriver): ChildOutputMarker {
+  const visibleOutput = child.getVisibleOutput();
+  return {
+    outputLength: child.getOutput().length,
+    visibleLength: visibleOutput.length,
+    idlePromptFrames: countIdlePromptFrames(visibleOutput),
+  };
+}
+
+async function waitForNewVisibleOutput(
+  child: PtyChildDriver,
+  text: string,
+  outputMarker: ChildOutputMarker,
+  timeoutMs: number,
+): Promise<void> {
+  await child.waitForState(
+    (snapshot) =>
+      snapshot.output.length > outputMarker.outputLength &&
+      snapshot.visibleOutput.length > outputMarker.visibleLength &&
+      snapshot.visibleOutput.includes(text),
+    timeoutMs,
+  );
+}
+
+function countIdlePromptFrames(visibleOutput: string): number {
+  return visibleOutput.split(/\r?\n/).filter((line) => line.trim() === '❯').length;
+}
+
+async function waitForMilliseconds(milliseconds: number): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function writeStatelessSettings(root: string, row: StatelessProviderRow, baseUrl: string): Promise<void> {
@@ -315,10 +385,22 @@ function assertHistoryAndNativeShape(row: StatelessProviderRow, requests: readon
     expect(
       nonSystemMessages(rejectedResume).map((message) => message.role),
       row.id,
-    ).toEqual(['user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'tool', 'user', 'assistant', 'tool']);
+    ).toEqual([
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+      'tool',
+      'assistant',
+      'user',
+      'assistant',
+      'tool',
+    ]);
     assertChatToolHistory(approvedResume, [APPROVAL_CALL_ID]);
     assertChatToolHistory(rejectedResume, [APPROVAL_CALL_ID, REJECTION_CALL_ID], 'black-box rejection');
-    expect(first.messages, row.id).toHaveLength(1);
+    expect(nonSystemMessages(first), row.id).toHaveLength(1);
     return;
   }
 
@@ -335,10 +417,22 @@ function assertHistoryAndNativeShape(row: StatelessProviderRow, requests: readon
     expect(
       nonSystemMessages(rejectedResume, 'messages').map((message) => message.role),
       row.id,
-    ).toEqual(['user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'user', 'user', 'assistant', 'user']);
+    ).toEqual([
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+      'user',
+    ]);
     assertAnthropicToolHistory(approvedResume, [APPROVAL_CALL_ID]);
     assertAnthropicToolHistory(rejectedResume, [APPROVAL_CALL_ID, REJECTION_CALL_ID], 'black-box rejection');
-    expect(first.messages, row.id).toHaveLength(1);
+    expect(nonSystemMessages(first, 'messages'), row.id).toHaveLength(1);
     return;
   }
 
@@ -354,7 +448,7 @@ function assertHistoryAndNativeShape(row: StatelessProviderRow, requests: readon
   expect(
     contents(rejectedResume).map((message) => message.role),
     row.id,
-  ).toEqual(['user', 'model', 'user', 'model', 'user', 'model', 'user', 'user', 'model', 'user']);
+  ).toEqual(['user', 'model', 'user', 'model', 'user', 'model', 'user', 'model', 'user', 'model', 'user']);
   assertGoogleToolHistory(approvedResume, 1);
   assertGoogleToolHistory(rejectedResume, 2, 'black-box rejection');
   expect(contents(first), row.id).toHaveLength(1);
@@ -715,8 +809,4 @@ function normalizeHeaders(request: IncomingMessage): Record<string, string> {
       .filter(([, value]) => value !== undefined)
       .map(([key, value]) => [key.toLowerCase(), Array.isArray(value) ? value.join(', ') : String(value)]),
   );
-}
-
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

@@ -63,9 +63,9 @@ export default tseslint.config(
       'react/no-unescaped-entities': 'off', // Allowed for CLI terminal literal text rendering
 
       // Downgrade rules to 'warn' or disable them to avoid failing linting on pre-existing code.
-      // `no-unused-vars` and `no-explicit-any` are refined per file kind below:
-      // production source is strict, tests stay permissive. `no-explicit-any` is
-      // kept as 'warn' everywhere until the existing usage is cleaned up.
+      // `no-unused-vars` and `no-explicit-any` are refined per file kind below.
+      // Explicit `any` remains disabled by default; the late module-scoped ratchet
+      // below enables it only for production modules that have been cleaned up.
       '@typescript-eslint/no-unused-vars': ['warn', noUnusedVarsOptions],
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/ban-ts-comment': 'warn',
@@ -125,6 +125,23 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-unused-vars': ['off', noUnusedVarsOptions],
       'no-empty': 'off',
+    },
+  },
+  // WS11 ratchet: only cleaned production modules are currently protected.
+  // Keep this list file-scoped so untouched production code and tests remain
+  // permissive until their explicit-any cleanup is complete.
+  {
+    files: [
+      'source/services/session/post-execute-pause-capability.ts',
+      'source/tools/agent/ask-orchestrator.ts',
+      'source/tools/file/glob.ts',
+      'source/tools/file/grep.ts',
+      'source/tools/run-agent-workflow.ts',
+      'source/tools/system/shell.ts',
+      'source/tools/types.ts',
+    ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
     },
   },
   eslintConfigPrettier,

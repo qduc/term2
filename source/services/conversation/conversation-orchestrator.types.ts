@@ -7,6 +7,9 @@ import type { NormalizedUsage, UsageAccumulator } from '../../utils/ai/token-usa
 import type { CodexRateLimitInfo } from './conversation-events.js';
 import type { QueueStateSnapshot } from './conversation-adapter.js';
 
+import type { ConversationLogWriter } from '../logging/conversation-log-writer.js';
+import type { ConversationEvent } from './conversation-events.js';
+
 export type AskUserAnswer = string | string[];
 
 export interface ConversationNotifier {
@@ -74,5 +77,5 @@ export interface ConversationOrchestratorConfig {
   onClear?: () => void | Promise<void>;
   now?: () => number;
   createMessageId?: () => string;
-  logWriter?: { append: (event: any) => void };
+  logWriter?: Pick<ConversationLogWriter, 'append'>;
 }

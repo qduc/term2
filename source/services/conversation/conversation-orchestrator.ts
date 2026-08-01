@@ -2,6 +2,7 @@ import { describeError, isAbortLikeError } from '../../utils/error-helpers.js';
 import { ASK_USER_DECLINE_RESULT } from '../../tools/agent/ask-user-constants.js';
 import { createMessageIdFactory } from '../../utils/message-id-factory.js';
 import type { ConversationOrchestratorConfig, AskUserAnswer } from './conversation-orchestrator.types.js';
+import type { ConversationEvent } from './conversation-events.js';
 import type { BotMessage, CommandMessage, UserMessage } from '../../types/message.js';
 import { isUserMessage } from '../../types/message.js';
 import type { ConversationTerminal, PendingApproval } from '../../contracts/conversation.js';
@@ -350,7 +351,7 @@ export class ConversationOrchestrator {
         return false;
       }
 
-      applyConversationEvent({ type: 'final', finalText: '' } as any);
+      applyConversationEvent({ type: 'final', finalText: '' });
       botResponseUpdater.flush();
       this.applyServiceResult(result, streamingState, streamingState.latestUsage);
       return true;
@@ -410,7 +411,7 @@ export class ConversationOrchestrator {
       this.config.messages.appendMessages([userMessage]);
       this.#directlyAppendedMessageIds.add(userMessage.id);
     }
-    this.config.logWriter?.append({ type: 'user_message', message: userMessage });
+    this.config.logWriter?.append({ type: 'user_message', message: { ...userMessage } });
 
     // Streaming callbacks are bound at submit time, but deferred submissions
     // must not count as active turns until the queue starts them. Otherwise
@@ -437,7 +438,7 @@ export class ConversationOrchestrator {
         preferredMessageId: userMessage.id,
       });
 
-      applyConversationEvent({ type: 'final', finalText: '' } as any);
+      applyConversationEvent({ type: 'final', finalText: '' });
       botResponseUpdater.flush();
       this.applyServiceResult(result, streamingState, streamingState.latestUsage);
     } catch (error) {
@@ -569,7 +570,7 @@ export class ConversationOrchestrator {
           onEvent: this.createOnEventHandler(applyConversationEvent),
         });
 
-        applyConversationEvent({ type: 'final', finalText: '' } as any);
+        applyConversationEvent({ type: 'final', finalText: '' });
         this.applyServiceResult(result, streamingState, streamingState.latestUsage);
       } catch (error) {
         this.logError('Error in continuation after max turns', error);
@@ -599,7 +600,7 @@ export class ConversationOrchestrator {
         onEvent: this.createOnEventHandler(applyConversationEvent),
         approvalAnswer,
       });
-      applyConversationEvent({ type: 'final', finalText: '' } as any);
+      applyConversationEvent({ type: 'final', finalText: '' });
       botResponseUpdater.flush();
       this.applyServiceResult(result, streamingState, streamingState.latestUsage);
     } catch (error) {
@@ -695,7 +696,7 @@ export class ConversationOrchestrator {
       // A turn the queue refused to admit resolves without a terminal, so the
       // notifications were never seen and must go back on the queue.
       delivered = Boolean(result);
-      applyConversationEvent({ type: 'final', finalText: '' } as any);
+      applyConversationEvent({ type: 'final', finalText: '' });
       botResponseUpdater.flush();
       this.applyServiceResult(result, streamingState, streamingState.latestUsage);
     } catch (error) {
@@ -737,12 +738,12 @@ export class ConversationOrchestrator {
     );
   }
 
-  private createOnEventHandler(baseOnEvent: (event: any) => void) {
-    return (event: any) => {
-      const eventType = typeof event?.type === 'string' ? event.type : undefined;
+  private createOnEventHandler(baseOnEvent: (event: ConversationEvent) => void): (event: ConversationEvent) => void {
+    return (event: ConversationEvent) => {
+      const eventType = event.type;
       if (eventType === 'reasoning_delta') {
         this.config.ui.onStreamingThinkingStarted((this.config.now ?? Date.now)());
-      } else if (eventType && this.clearsThinkingIndicator(eventType)) {
+      } else if (this.clearsThinkingIndicator(eventType)) {
         this.config.ui.onStreamingThinkingCleared();
       }
 
@@ -752,7 +753,7 @@ export class ConversationOrchestrator {
         this.config.ui.onStreamingToolInfo(null);
       }
 
-      if (event?.type === 'user_message_consumed_for_abort') {
+      if (eventType === 'user_message_consumed_for_abort') {
         this.config.messages.setMessages((prev) => {
           for (let i = prev.length - 1; i >= 0; i--) {
             const msg = prev[i];
@@ -769,7 +770,7 @@ export class ConversationOrchestrator {
       }
 
       baseOnEvent(event);
-      if (event?.type === 'subagent_completed' && event?.result?.usage) {
+      if (eventType === 'subagent_completed' && event.result.usage) {
         this.config.subagentUsageAccumulator?.add(event.result.usage);
       }
     };
@@ -793,7 +794,7 @@ export class ConversationOrchestrator {
       this.config.messages.setMessages((prev) =>
         this.config.messages.trimMessages(filterPendingCommandMessagesForApproval(prev, result.approval)),
       );
-      this.config.ui.onApprovalRequested({ ...result.approval, llmAdvisory: (result.approval as any).llmAdvisory });
+      this.config.ui.onApprovalRequested({ ...result.approval, llmAdvisory: result.approval.llmAdvisory });
       this.config.notifier?.approvalNeeded();
       return;
     }

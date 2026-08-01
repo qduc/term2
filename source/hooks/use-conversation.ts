@@ -17,6 +17,8 @@ import type { UserTurn } from '../types/user-turn.js';
 import { conversationUIReducer, createInitialUIState, getConversationUIFlags } from './conversation-ui-reducer.js';
 import type { BackgroundSubagentTask } from '../services/subagents/subagent-notification-store.js';
 
+import type { ConversationLogWriter } from '../services/logging/conversation-log-writer.js';
+
 export type {
   BotMessage,
   CommandMessage,
@@ -83,7 +85,7 @@ export const useConversation = ({
    * the original text here so the caller can repopulate the input box.
    */
   onRestoreInput?: (text: string) => void;
-  logWriter?: { append: (event: any) => void };
+  logWriter?: Pick<ConversationLogWriter, 'append'>;
   /** Optional notifier to fire desktop notifications on approval/completion events. */
   notifier?: ConversationNotifier;
 }) => {

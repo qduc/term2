@@ -85,6 +85,7 @@ export function createApplicationCompatibilityRunner(
       const loop = new ApplicationRunLoop({ resolveModel: (model: string) => modelProvider.getModel(model) as any });
       return loop.startStream(agent, input as any, {
         signal: options.signal,
+        ...(options.previousResponseId ? { previousResponseId: options.previousResponseId } : {}),
         // Callers that had a turn budget under the SDK runner (the mentor, edit
         // healing) still pass it in run options; the loop enforces it now.
         ...(typeof options.maxTurns === 'number' ? { maxTurns: options.maxTurns } : {}),

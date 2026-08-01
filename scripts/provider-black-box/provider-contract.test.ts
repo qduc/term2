@@ -14,7 +14,7 @@ import { readFixtureEnvelope } from './fixture-envelope.js';
 import { fixtureRequest, fixtureTool, multiTurnFixture } from './provider-wire-fixtures.js';
 
 type Protocol = 'chat-completions' | 'responses' | 'anthropic' | 'google';
-type RuntimeProviderType = 'openai-compatible' | 'anthropic' | 'google';
+type RuntimeProviderType = 'openai-compatible' | 'anthropic' | 'google' | 'opencode';
 
 interface ProviderCase {
   name: string;
@@ -23,6 +23,7 @@ interface ProviderCase {
   protocol: Protocol;
   expectedRoles: readonly string[];
   runtimeType?: RuntimeProviderType;
+  basePath?: string;
   providerOptions: Record<string, unknown>;
 }
 
@@ -96,8 +97,8 @@ describe('provider boundary contracts through the registry', () => {
   it('pilot Chat Completions provider replays a synthetic chat-completions fixture through the registry', async () => {
     // Machinery pilot: chat-pilot.json is hand-authored (not a real-traffic
     // recording), so this proves the record → sanitize → replay pipeline
-    // end-to-end only. The Phase 4 acceptance of validating the real wire shape
-    // awaits a live capture; see fixtures/PROVENANCE.md.
+    // end-to-end only. The generic fixture path remains synthetic; the real
+    // OpenCode Chat Completions path below exercises the live wire shape.
     const fixture = await readFixtureEnvelope(new URL('./fixtures/fixture/chat-pilot.json', import.meta.url).pathname);
     server = await startFakeProviderHttpServer({ fixture });
     const providerCase = providerCases[1]!;
@@ -111,6 +112,330 @@ describe('provider boundary contracts through the registry', () => {
     const events = await collect(model.stream(requestFor(providerCase)));
     expect(events.filter((event) => event.type === 'text_delta')).toEqual([{ type: 'text_delta', text: 'hello' }]);
     expect(events.at(-1)).toMatchObject({ type: 'completion' });
+    server.assertReplayValid();
+  });
+
+  it('real OpenAI Responses capture replays tool continuation through the built-in registry', async () => {
+    const fixture = await readFixtureEnvelope(
+      new URL('./fixtures/openai/tool-continuation-v1.json', import.meta.url).pathname,
+    );
+    server = await startFakeProviderHttpServer({ fixture });
+    const providerCase = { ...providerCases[0]!, model: 'o3-mini' };
+    const settings = createSettings(providerCase);
+    installOpenAiHttpRedirect(providerCase);
+    const provider = getProvider('openai')!;
+    const model = await provider.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+    });
+    const initial = {
+      ...fixtureRequest,
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'text', text: 'Use the fixture tool and then summarize its result.' }],
+        },
+      ],
+    } as any;
+    const firstEvents = await collect(model.stream(initial));
+    const call =
+      (firstEvents.find((event: any) => event.type === 'tool_call') as any) ??
+      firstEvents.flatMap((event: any) => event.output ?? []).find((item: any) => item.type === 'tool_call');
+    expect(call).toMatchObject({ id: expect.any(String), name: fixtureTool.name });
+
+    const continuation = {
+      ...initial,
+      input: [
+        ...initial.input,
+        { type: 'tool_call', id: call.id, name: call.name, arguments: call.arguments },
+        { type: 'tool_result', id: call.id, output: { ok: true, value: 1 } },
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'text', text: 'The fixture tool returned its deterministic result. Give the final summary.' },
+          ],
+        },
+      ],
+    } as any;
+    const secondEvents = await collect(model.stream(continuation));
+    const allEvents = [...firstEvents, ...secondEvents];
+    expect(
+      allEvents
+        .flatMap((event: any) => (event.type === 'tool_call' ? [event] : event.output ?? []))
+        .filter((event: any) => event.type === 'tool_call'),
+    ).toHaveLength(1);
+    expect(secondEvents.filter((event) => event.type === 'text_delta').length).toBeGreaterThan(0);
+    expect(secondEvents.at(-1)).toMatchObject({ type: 'completion' });
+    expect(
+      fixture.turns.flatMap((turn) =>
+        turn.frames.filter((frame) => frame.kind === 'sse-event').map((frame) => frame.event),
+      ),
+    ).toContain('response.function_call_arguments.delta');
+    expect(
+      fixture.turns.flatMap((turn) =>
+        turn.frames.filter((frame) => frame.kind === 'sse-event').map((frame) => frame.event),
+      ),
+    ).toContain('response.completed');
+    server.assertReplayValid();
+  });
+
+  it('real OpenRouter capture replays tool continuation through the built-in registry', async () => {
+    const fixture = await readFixtureEnvelope(
+      new URL('./fixtures/openrouter/tool-continuation-v1.json', import.meta.url).pathname,
+    );
+    server = await startFakeProviderHttpServer({ fixture });
+    const providerCase = { ...providerCases[4]!, model: 'openai/gpt-oss-20b', providerOptions: {} };
+    const baseSettings = createSettings(providerCase);
+    const settings = {
+      ...baseSettings,
+      get: (key: string) =>
+        ({
+          'agent.openrouter.baseUrl': `${server!.baseUrl}/api/v1`,
+          'agent.openrouter.referrer': 'https://github.com/qduc/term2',
+          'agent.openrouter.title': 'term2',
+        }[key] ?? baseSettings.get(key)),
+    } as ISettingsService;
+    const provider = getProvider('openrouter')!;
+    const model = await provider.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+    });
+    const initial = {
+      ...fixtureRequest,
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'text', text: 'Use the fixture tool and then summarize its result.' }],
+        },
+      ],
+    } as any;
+    const firstEvents = await collect(model.stream(initial));
+    const call =
+      (firstEvents.find((event: any) => event.type === 'tool_call') as any) ??
+      firstEvents.flatMap((event: any) => event.output ?? []).find((item: any) => item.type === 'tool_call');
+    expect(call).toMatchObject({ id: expect.any(String), name: fixtureTool.name });
+
+    const continuation = {
+      ...initial,
+      input: [
+        ...initial.input,
+        { type: 'tool_call', id: call.id, name: call.name, arguments: call.arguments },
+        { type: 'tool_result', id: call.id, output: JSON.stringify({ ok: true, value: 1 }) },
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'text', text: 'The fixture tool returned its deterministic result. Give the final summary.' },
+          ],
+        },
+      ],
+    } as any;
+    const secondEvents = await collect(model.stream(continuation));
+    const allEvents = [...firstEvents, ...secondEvents];
+    const toolCalls = allEvents
+      .flatMap((event: any) => (event.type === 'tool_call' ? [event] : event.output ?? []))
+      .filter((event: any) => event.type === 'tool_call');
+    expect(new Set(toolCalls.map((event: any) => event.id))).toHaveLength(1);
+    expect(secondEvents.filter((event) => event.type === 'text_delta').length).toBeGreaterThan(0);
+    expect(secondEvents.at(-1)).toMatchObject({ type: 'completion' });
+    expect(fixture.turns.flatMap((turn) => turn.frames).some((frame) => frame.kind === 'sse-event')).toBe(true);
+    server.assertReplayValid();
+  });
+
+  it('real OpenCode Chat Completions capture replays tool continuation through the registry', async () => {
+    const fixture = await readFixtureEnvelope(
+      new URL('./fixtures/opencode/tool-continuation-v1.json', import.meta.url).pathname,
+    );
+    server = await startFakeProviderHttpServer({ fixture });
+    const providerCase: ProviderCase = {
+      ...providerCases[1]!,
+      name: 'OpenCode Chat Completions',
+      registryId: 'fixture-opencode-chat',
+      model: 'deepseek-v4-flash',
+      runtimeType: 'opencode',
+      basePath: '/zen/go/v1',
+      providerOptions: {},
+    };
+    const settings = createSettings(providerCase);
+    registerRuntimeProvider(providerCase, settings);
+    const provider = getProvider(providerCase.registryId)!;
+    const model = await provider.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+    });
+    const initial = {
+      ...fixtureRequest,
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'text', text: 'Use the fixture tool and then summarize its result.' }],
+        },
+      ],
+    } as any;
+    const firstEvents = await collect(model.stream(initial));
+    const call =
+      (firstEvents.find((event: any) => event.type === 'tool_call') as any) ??
+      firstEvents.flatMap((event: any) => event.output ?? []).find((item: any) => item.type === 'tool_call');
+    expect(call).toMatchObject({ id: expect.any(String), name: fixtureTool.name });
+
+    const continuation = {
+      ...initial,
+      input: [
+        ...initial.input,
+        { type: 'tool_call', id: call.id, name: call.name, arguments: call.arguments },
+        { type: 'tool_result', id: call.id, output: JSON.stringify({ ok: true, value: 1 }) },
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'text', text: 'The fixture tool returned its deterministic result. Give the final summary.' },
+          ],
+        },
+      ],
+    } as any;
+    const secondEvents = await collect(model.stream(continuation));
+    const allEvents = [...firstEvents, ...secondEvents];
+    const toolCalls = allEvents
+      .flatMap((event: any) => (event.type === 'tool_call' ? [event] : event.output ?? []))
+      .filter((event: any) => event.type === 'tool_call');
+    expect(new Set(toolCalls.map((event: any) => event.id))).toHaveLength(1);
+    expect(secondEvents.filter((event) => event.type === 'text_delta').length).toBeGreaterThan(0);
+    expect(secondEvents.at(-1)).toMatchObject({ type: 'completion' });
+    expect(fixture.turns.flatMap((turn) => turn.frames).some((frame) => frame.kind === 'sse-event')).toBe(true);
+    server.assertReplayValid();
+  });
+
+  it('real OpenCode Anthropic capture replays tool continuation through the registry', async () => {
+    const fixture = await readFixtureEnvelope(
+      new URL('./fixtures/opencode/tool-continuation-v1-anthropic.json', import.meta.url).pathname,
+    );
+    server = await startFakeProviderHttpServer({ fixture });
+    const providerCase: ProviderCase = {
+      ...providerCases[2]!,
+      name: 'OpenCode Anthropic',
+      registryId: 'fixture-opencode-anthropic',
+      model: 'minimax-m3',
+      runtimeType: 'opencode',
+      basePath: '/zen/go/v1',
+      providerOptions: {},
+    };
+    const settings = createSettings(providerCase);
+    registerRuntimeProvider(providerCase, settings);
+    const provider = getProvider(providerCase.registryId)!;
+    const model = await provider.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+    });
+    const initial = {
+      ...fixtureRequest,
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'text', text: 'Use the fixture tool and then summarize its result.' }],
+        },
+      ],
+    } as any;
+    const firstEvents = await collect(model.stream(initial));
+    const call =
+      (firstEvents.find((event: any) => event.type === 'tool_call') as any) ??
+      firstEvents.flatMap((event: any) => event.output ?? []).find((item: any) => item.type === 'tool_call');
+    expect(call).toMatchObject({ id: expect.any(String), name: fixtureTool.name });
+
+    const continuation = {
+      ...initial,
+      input: [
+        ...initial.input,
+        { type: 'tool_call', id: call.id, name: call.name, arguments: call.arguments },
+        { type: 'tool_result', id: call.id, output: JSON.stringify({ ok: true, value: 1 }) },
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'text', text: 'The fixture tool returned its deterministic result. Give the final summary.' },
+          ],
+        },
+      ],
+    } as any;
+    const secondEvents = await collect(model.stream(continuation));
+    const allEvents = [...firstEvents, ...secondEvents];
+    const toolCalls = allEvents
+      .flatMap((event: any) => (event.type === 'tool_call' ? [event] : event.output ?? []))
+      .filter((event: any) => event.type === 'tool_call');
+    expect(new Set(toolCalls.map((event: any) => event.id))).toHaveLength(1);
+    expect(secondEvents.filter((event) => event.type === 'text_delta').length).toBeGreaterThan(0);
+    expect(secondEvents.at(-1)).toMatchObject({ type: 'completion' });
+    expect(
+      fixture.turns.flatMap((turn) =>
+        turn.frames.filter((frame) => frame.kind === 'sse-event').map((frame) => frame.data),
+      ),
+    ).toEqual(
+      expect.arrayContaining([expect.stringContaining('message_start'), expect.stringContaining('message_stop')]),
+    );
+    server.assertReplayValid();
+  });
+
+  it('real Google capture replays tool continuation through the registry', async () => {
+    const fixture = await readFixtureEnvelope(
+      new URL('./fixtures/google/tool-continuation-v1.json', import.meta.url).pathname,
+    );
+    server = await startFakeProviderHttpServer({ fixture });
+    const providerCase = { ...providerCases[3]!, model: 'gemini-2.5-flash' };
+    const settings = createSettings(providerCase);
+    registerRuntimeProvider(providerCase, settings);
+    const provider = getProvider(providerCase.registryId)!;
+    const model = await provider.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+    });
+    const initial = {
+      ...fixtureRequest,
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'text', text: 'Use the fixture tool and then summarize its result.' }],
+        },
+      ],
+    } as any;
+    const firstEvents = await collect(model.stream(initial));
+    const call =
+      (firstEvents.find((event: any) => event.type === 'tool_call') as any) ??
+      firstEvents.flatMap((event: any) => event.output ?? []).find((item: any) => item.type === 'tool_call');
+    expect(call).toMatchObject({ id: expect.any(String), name: fixtureTool.name });
+
+    const continuation = {
+      ...initial,
+      input: [
+        ...initial.input,
+        { type: 'tool_call', id: call.id, name: call.name, arguments: call.arguments },
+        { type: 'tool_result', id: call.id, output: JSON.stringify({ ok: true, value: 1 }) },
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'text', text: 'The fixture tool returned its deterministic result. Give the final summary.' },
+          ],
+        },
+      ],
+    } as any;
+    const secondEvents = await collect(model.stream(continuation));
+    const allEvents = [...firstEvents, ...secondEvents];
+    const toolCalls = allEvents
+      .flatMap((event: any) => (event.type === 'tool_call' ? [event] : event.output ?? []))
+      .filter((event: any) => event.type === 'tool_call');
+    expect(new Set(toolCalls.map((event: any) => event.id))).toHaveLength(1);
+    expect(secondEvents.filter((event) => event.type === 'text_delta').length).toBeGreaterThan(0);
+    expect(secondEvents.at(-1)).toMatchObject({ type: 'completion' });
+    expect(
+      fixture.turns.flatMap((turn) =>
+        turn.frames.filter((frame) => frame.kind === 'sse-event').map((frame) => frame.data),
+      ),
+    ).toEqual(expect.arrayContaining([expect.stringContaining('functionCall'), expect.stringContaining('STOP')]));
     server.assertReplayValid();
   });
 
@@ -262,7 +587,7 @@ function registerRuntimeProvider(providerCase: ProviderCase, settings: ISettings
     name: providerCase.registryId,
     label: providerCase.name,
     type: providerCase.runtimeType,
-    baseUrl: server!.baseUrl,
+    baseUrl: fixtureBaseUrl(providerCase),
     apiKey: 'fixture-key',
   });
   upsertProvider(definition);
@@ -270,6 +595,13 @@ function registerRuntimeProvider(providerCase: ProviderCase, settings: ISettings
   expect(settings.getDynamic('providers')).toEqual(
     expect.arrayContaining([expect.objectContaining({ id: providerCase.registryId })]),
   );
+}
+
+function fixtureBaseUrl(providerCase: ProviderCase): string {
+  const suffix =
+    providerCase.basePath ??
+    (providerCase.protocol === 'google' ? '/v1beta' : providerCase.runtimeType === 'opencode' ? '/zen/v1' : '');
+  return `${server!.baseUrl}${suffix}`;
 }
 
 function createSettings(providerCase: ProviderCase): ISettingsService {
@@ -289,7 +621,7 @@ function createSettings(providerCase: ProviderCase): ISettingsService {
           id: providerCase.registryId,
           name: providerCase.name,
           type: providerCase.runtimeType,
-          baseUrl: server?.baseUrl,
+          baseUrl: fixtureBaseUrl(providerCase),
           apiKey: 'fixture-key',
         },
       ]

@@ -31,6 +31,32 @@ function textModel(text: string, responseId: string): StreamedModelTurn {
 }
 
 describe('ApplicationRunLoop', () => {
+  it('forwards the previous response id to the first turn and chains internal follow-up turns', async () => {
+    const requests: Array<{ previousResponseId?: string | null; input: unknown }> = [];
+    let calls = 0;
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push({ previousResponseId: request.previousResponseId, input: request.input });
+        calls++;
+        if (calls === 1) {
+          yield { type: 'tool_call', id: 'call-1', name: 'missing-tool', arguments: '{}' };
+          yield { type: 'completion', responseId: 'resp-1', output: [] };
+          return;
+        }
+        yield { type: 'completion', responseId: 'resp-2', output: [] };
+      },
+    };
+
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const stream = loop.startStream(agent, 'follow up', { previousResponseId: 'resp-before' });
+    await stream.completed;
+
+    expect(requests).toEqual([
+      expect.objectContaining({ previousResponseId: 'resp-before' }),
+      expect.objectContaining({ previousResponseId: 'resp-1' }),
+    ]);
+  });
+
   it('forwards providerData as providerOptions and omits it when absent', async () => {
     const requests: unknown[] = [];
     const model: StreamedModelTurn = {

@@ -601,6 +601,7 @@ async function* codexStream(
   const tools = request.tools?.map(toCodexTool);
   for await (const rawEvent of model.getStreamedResponse({
     model: modelName,
+    ...(request.previousResponseId ? { previousResponseId: request.previousResponseId } : {}),
     input,
     tools,
     modelSettings: { reasoning: request.reasoning, providerData: request.providerOptions },

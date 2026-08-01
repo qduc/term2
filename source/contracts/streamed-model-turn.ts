@@ -40,6 +40,8 @@ export interface StreamedModelTurn {
 
 export interface StreamedModelTurnRequest {
   readonly instructions?: string;
+  /** Provider response to continue from when the provider supports server-side history. */
+  readonly previousResponseId?: string | null;
   readonly input: readonly StreamedModelTurnInput[];
   readonly tools: readonly StreamedModelTool[];
   readonly toolChoice?: 'auto' | 'required' | 'none' | { readonly name: string };

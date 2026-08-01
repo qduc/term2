@@ -976,6 +976,7 @@ it.sequential('Codex provider stream() serializes assistant history as output_te
 
     const model = await runner.config.modelProvider.getModel('gpt-5.3-codex');
     const stream = (model as any).stream({
+      previousResponseId: 'resp-before',
       input: [
         { type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] },
         { type: 'message', role: 'assistant', content: [{ type: 'text', text: 'hello there' }] },
@@ -985,6 +986,7 @@ it.sequential('Codex provider stream() serializes assistant history as output_te
       // drain
     }
 
+    expect(capturedRequest.previousResponseId).toBe('resp-before');
     expect(capturedRequest.input).toEqual([
       { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] },
       { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'hello there' }] },

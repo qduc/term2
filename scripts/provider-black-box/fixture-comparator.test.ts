@@ -22,6 +22,18 @@ it('compares requests semantically and ignores transport/SDK churn fields', () =
     ).equal,
   ).toBe(true);
 });
+it('compares JSON tool arguments independent of whitespace', () => {
+  const recorded = {
+    ...expected,
+    body: { tool_calls: [{ function: { arguments: '{"a":42}' } }] },
+  };
+  const actual = {
+    ...expected,
+    body: { tool_calls: [{ function: { arguments: '{"a": 42}' } }] },
+  };
+  expect(compareRecordedRequest(recorded, actual).equal).toBe(true);
+});
+
 it('reports a canonicalized request mutation', () => {
   const result = compareRecordedRequest(expected, { ...expected, body: { ...expected.body, model: 'wrong' } });
   expect(result.equal).toBe(false);
@@ -35,7 +47,7 @@ it('treats a redacted expected header value as matching any actual value', () =>
     ).equal,
   ).toBe(true);
   // ...but a header the expected frame declares and the app omits still fails.
-  expect(
-    compareRecordedRequest({ ...expected, headers: { 'x-goog-api-key': '[REDACTED]' } }, expected).equal,
-  ).toBe(false);
+  expect(compareRecordedRequest({ ...expected, headers: { 'x-goog-api-key': '[REDACTED]' } }, expected).equal).toBe(
+    false,
+  );
 });

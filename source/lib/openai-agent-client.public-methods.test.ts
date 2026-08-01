@@ -102,6 +102,25 @@ let codexRunnerCalls: any[] = [];
 let openaiProviderRegistered = false;
 let openaiRunnerCalls: any[] = [];
 let failingProviderRegistered = false;
+let applicationContinuityProviderRegistered = false;
+let applicationContinuityRequests: any[] = [];
+function ensureApplicationContinuityProviderRegistered() {
+  if (applicationContinuityProviderRegistered) return;
+  registerProvider({
+    id: 'mock-application-continuity',
+    label: 'Mock Application Continuity',
+    createStreamedModel: () => ({
+      async *stream(request: any) {
+        applicationContinuityRequests.push(request);
+        yield { type: 'completion', responseId: 'resp-application', output: [] };
+      },
+    }),
+    fetchModels: async () => [{ id: 'mock-model' }],
+    capabilities: { supportsConversationChaining: true, supportsTracingControl: false },
+  });
+  applicationContinuityProviderRegistered = true;
+}
+
 function ensureMentorProvidersRegistered() {
   if (!mentorProviderRegistered) {
     registerProvider({
@@ -365,6 +384,22 @@ it.sequential('setProvider does not initialize provider credentials eagerly', as
   expect(settings.get('agent.provider')).toBe('mock-missing-creds');
 
   await expect(async () => client.chat('test')).rejects.toThrow('Missing credentials');
+});
+
+it.sequential('application-owned startStream forwards previousResponseId to the model', async () => {
+  ensureApplicationContinuityProviderRegistered();
+  applicationContinuityRequests = [];
+  const settings = createMockSettings({
+    'agent.provider': 'mock-application-continuity',
+  });
+  const client = new AgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  const stream = await client.startStream('Hello', { previousResponseId: 'resp-before' });
+  await stream.completed;
+
+  expect(applicationContinuityRequests[0].previousResponseId).toBe('resp-before');
 });
 
 it.sequential('startStream only passes previousResponseId when provider supports chaining', async () => {

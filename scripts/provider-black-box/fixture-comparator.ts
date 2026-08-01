@@ -16,6 +16,13 @@ export function canonicalizeFixtureValue(
 ): unknown {
   if (typeof value === 'string') {
     if (placeholders[value]) return placeholders[value];
+    if (/(?:^|\.)arguments$/i.test(path) && /^[\[{]/.test(value.trim())) {
+      try {
+        return canonicalizeFixtureValue(JSON.parse(value), placeholders, path);
+      } catch {
+        /* preserve malformed argument text */
+      }
+    }
     if (/^(?:https?:\/\/)[^/]+/.test(value)) return value.replace(/^(https?:\/\/)[^/]+/, '$1<host>');
     if (/(?:^|\.)(?:id|response_id|call_id|request_id)$/i.test(path) && value.length > 8) return '<dynamic-id>';
     return value;

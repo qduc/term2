@@ -21,7 +21,7 @@ if (!accepted) {
 const destinationRoot = resolve('scripts/provider-black-box/fixtures');
 const destinationDir = join(destinationRoot, safeName(envelope.provider));
 await mkdir(destinationDir, { recursive: true });
-const destination = join(destinationDir, `${safeName(envelope.capture.probeScenario)}.json`);
+const destination = await destinationFor(destinationDir, envelope);
 await writeFile(destination, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
 const provenance = join(destinationRoot, 'PROVENANCE.md');
 const line = `- **${destination.slice(destinationRoot.length + 1)}** — captured ${envelope.capture.capturedAt}; SDK ${
@@ -33,6 +33,26 @@ const line = `- **${destination.slice(destinationRoot.length + 1)}** — capture
 }. Recapture when the wire family or transport-relevant SDK major/minor changes.\n`;
 await appendFile(provenance, line);
 console.log(destination);
+
+async function destinationFor(
+  destinationDir: string,
+  envelope: Awaited<ReturnType<typeof parseFixtureEnvelope>>,
+): Promise<string> {
+  const probeName = safeName(envelope.capture.probeScenario);
+  const preferred = join(destinationDir, `${probeName}.json`);
+  try {
+    const existing = parseFixtureEnvelope(await readFile(preferred, 'utf8'));
+    if (
+      existing.provider === envelope.provider &&
+      existing.wireFamily === envelope.wireFamily &&
+      existing.transport === envelope.transport
+    )
+      return preferred;
+  } catch {
+    /* no compatible existing fixture */
+  }
+  return join(destinationDir, `${probeName}-${safeName(envelope.wireFamily)}.json`);
+}
 
 function safeName(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, '_');

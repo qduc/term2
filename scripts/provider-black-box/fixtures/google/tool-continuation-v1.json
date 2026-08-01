@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-traffic-recording",
+  "provider": "google",
+  "wireFamily": "google",
+  "transport": "http-sse",
+  "capture": {
+    "sdkPackage": "@ai-sdk/google",
+    "apiSdkVersion": "3.0.72",
+    "model": "gemini-2.5-flash",
+    "modelFamily": "google",
+    "capturedAt": "2026-08-01T11:59:04.413Z",
+    "recorderVersion": "1",
+    "probeScenario": "tool-continuation-v1"
+  },
+  "turns": [
+    {
+      "frames": [
+        {
+          "kind": "http-request",
+          "method": "POST",
+          "urlPath": "/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
+          "headers": {
+            "content-type": "application/json",
+            "user-agent": "ai-sdk/google/3.0.72 ai-sdk/provider-utils/4.0.27 runtime/node.js/24",
+            "x-goog-api-key": "[REDACTED]"
+          },
+          "body": {
+            "generationConfig": {
+              "thinkingConfig": {
+                "thinkingBudget": 4096,
+                "includeThoughts": true
+              }
+            },
+            "contents": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "text": "Use the fixture tool and then summarize its result."
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "functionDeclarations": [
+                  {
+                    "name": "fixture",
+                    "description": "Returns deterministic fixture data.",
+                    "parameters": {
+                      "required": ["a"],
+                      "type": "object",
+                      "properties": {
+                        "a": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "seq": 0
+        },
+        {
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+            "content-disposition": "attachment",
+            "content-type": "text/event-stream",
+            "date": "Sat, 01 Aug 2026 11:59:06 GMT",
+            "server": "scaffolding on HTTPServer2",
+            "server-timing": "gfet4t7; dur=1950",
+            "transfer-encoding": "chunked",
+            "vary": "Origin, X-Origin, Referer",
+            "x-content-type-options": "nosniff",
+            "x-frame-options": "SAMEORIGIN",
+            "x-xss-protection": "0"
+          },
+          "seq": 1
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"[REDACTED]\",\"thought\":true}],\"role\":\"model\"},\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":46,\"totalTokenCount\":111,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":46}],\"thoughtsTokenCount\":65,\"serviceTier\":\"standard\"},\"modelVersion\":\"gemini-2.5-flash\",\"responseId\":\"id9taqqDC5WwjuMP8r3D6Ak\"}",
+          "seq": 2
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"[REDACTED]\",\"thought\":true}],\"role\":\"model\"},\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":46,\"totalTokenCount\":116,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":46}],\"thoughtsTokenCount\":70,\"serviceTier\":\"standard\"},\"modelVersion\":\"gemini-2.5-flash\",\"responseId\":\"id9taqqDC5WwjuMP8r3D6Ak\"}",
+          "seq": 3
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"name\":\"fixture\",\"args\":{\"a\":1}},\"thoughtSignature\":\"[REDACTED]\"}],\"role\":\"model\"},\"finishReason\":\"STOP\",\"index\":0,\"finishMessage\":\"Model generated function call(s).\"}],\"usageMetadata\":{\"promptTokenCount\":46,\"candidatesTokenCount\":11,\"totalTokenCount\":127,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":46}],\"thoughtsTokenCount\":70,\"serviceTier\":\"standard\"},\"modelVersion\":\"gemini-2.5-flash\",\"responseId\":\"id9taqqDC5WwjuMP8r3D6Ak\"}",
+          "seq": 4
+        }
+      ]
+    },
+    {
+      "frames": [
+        {
+          "kind": "http-request",
+          "method": "POST",
+          "urlPath": "/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
+          "headers": {
+            "content-type": "application/json",
+            "user-agent": "ai-sdk/google/3.0.72 ai-sdk/provider-utils/4.0.27 runtime/node.js/24",
+            "x-goog-api-key": "[REDACTED]"
+          },
+          "body": {
+            "generationConfig": {
+              "thinkingConfig": {
+                "thinkingBudget": 4096,
+                "includeThoughts": true
+              }
+            },
+            "contents": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "text": "Use the fixture tool and then summarize its result."
+                  }
+                ]
+              },
+              {
+                "role": "model",
+                "parts": [
+                  {
+                    "functionCall": {
+                      "name": "fixture",
+                      "args": {
+                        "a": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "functionResponse": {
+                      "name": "fixture",
+                      "response": {
+                        "name": "fixture",
+                        "content": "{\"ok\":true,\"value\":1}"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "text": "The fixture tool returned its deterministic result. Give the final summary."
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "functionDeclarations": [
+                  {
+                    "name": "fixture",
+                    "description": "Returns deterministic fixture data.",
+                    "parameters": {
+                      "required": ["a"],
+                      "type": "object",
+                      "properties": {
+                        "a": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "seq": 0
+        },
+        {
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+            "content-disposition": "attachment",
+            "content-type": "text/event-stream",
+            "date": "Sat, 01 Aug 2026 11:59:08 GMT",
+            "server": "scaffolding on HTTPServer2",
+            "server-timing": "gfet4t7; dur=839",
+            "transfer-encoding": "chunked",
+            "vary": "Origin, X-Origin, Referer",
+            "x-content-type-options": "nosniff",
+            "x-frame-options": "SAMEORIGIN",
+            "x-xss-protection": "0"
+          },
+          "seq": 1
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"The fixture tool returned\"}],\"role\":\"model\"},\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":99,\"candidatesTokenCount\":4,\"totalTokenCount\":103,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":99}],\"serviceTier\":\"standard\"},\"modelVersion\":\"gemini-2.5-flash\",\"responseId\":\"i99tapHLI5TFjuMPhNrtgAs\"}",
+          "seq": 2
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\" a successful deterministic result with a value of 1.\"}],\"role\":\"model\"},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":99,\"candidatesTokenCount\":15,\"totalTokenCount\":114,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":99}],\"serviceTier\":\"standard\"},\"modelVersion\":\"gemini-2.5-flash\",\"responseId\":\"i99tapHLI5TFjuMPhNrtgAs\"}",
+          "seq": 3
+        }
+      ]
+    }
+  ],
+  "placeholders": {}
+}

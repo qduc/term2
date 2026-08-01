@@ -103,6 +103,7 @@ it('translates message parts, settings, provider options, and signal without col
     model.getStreamedResponse(
       request({
         systemInstructions: 'Be concise.',
+        previousResponseId: 'resp-prev',
         signal,
         input: [
           {
@@ -163,6 +164,7 @@ it('translates message parts, settings, provider options, and signal without col
 
   expect(seen).toEqual({
     instructions: 'Be concise.',
+    previousResponseId: 'resp-prev',
     signal,
     input: [
       {
@@ -415,9 +417,6 @@ it('propagates application failures and rejects unsupported SDK shapes', async (
     },
   });
   await expect(collect(model.getStreamedResponse(request()))).rejects.toBe(failure);
-  await expect(collect(model.getStreamedResponse(request({ previousResponseId: 'not-supported' })))).rejects.toThrow(
-    'previousResponseId',
-  );
   await expect(
     collect(
       model.getStreamedResponse(
@@ -487,9 +486,10 @@ it('bridgeBackToTurn forwards provider options as legacy provider data and omits
     customProvider: { nested: { enabled: true } },
   };
 
-  await collect(turn.stream({ input: [], tools: [], providerOptions } as any));
+  await collect(turn.stream({ input: [], tools: [], providerOptions, previousResponseId: 'resp-previous' } as any));
   await collect(turn.stream({ input: [], tools: [] } as any));
 
+  expect(capturedRequests[0].previousResponseId).toBe('resp-previous');
   expect(capturedRequests[0].modelSettings.providerData).toEqual(providerOptions);
   expect(capturedRequests[1].modelSettings).not.toHaveProperty('providerData');
 });

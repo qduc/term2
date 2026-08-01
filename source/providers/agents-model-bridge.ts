@@ -21,6 +21,7 @@ export function bridgeBackToTurn(model: { getStreamedResponse(request: any): Asy
   return {
     async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
       const legacyRequest = {
+        ...(request.previousResponseId ? { previousResponseId: request.previousResponseId } : {}),
         input: request.input.map((item: any) =>
           item.type === 'tool_result'
             ? { type: 'function_call_result', callId: item.id, output: { text: item.output } }
@@ -129,6 +130,7 @@ function toStreamedModelTurnRequest(request: ModelRequest): StreamedModelTurnReq
   const { modelSettings } = request;
   return {
     ...(request.systemInstructions ? { instructions: request.systemInstructions } : {}),
+    ...(request.previousResponseId ? { previousResponseId: request.previousResponseId } : {}),
     input:
       typeof request.input === 'string'
         ? [{ type: 'message', role: 'user', content: [{ type: 'text', text: request.input }] }]
@@ -147,7 +149,6 @@ function toStreamedModelTurnRequest(request: ModelRequest): StreamedModelTurnReq
 }
 
 function rejectUnsupportedRequestFields(request: ModelRequest) {
-  if (request.previousResponseId !== undefined) throw new Error('Unsupported ModelRequest field: previousResponseId');
   if (request.conversationId !== undefined) throw new Error('Unsupported ModelRequest field: conversationId');
   if (request.prompt !== undefined) throw new Error('Unsupported ModelRequest field: prompt');
   if (request.handoffs.length) throw new Error('Unsupported ModelRequest handoffs');

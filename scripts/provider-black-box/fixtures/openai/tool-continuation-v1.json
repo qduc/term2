@@ -1,0 +1,564 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-traffic-recording",
+  "provider": "openai",
+  "wireFamily": "openai-responses",
+  "transport": "http-sse",
+  "capture": {
+    "sdkPackage": "openai",
+    "apiSdkVersion": "6.37.0",
+    "model": "o3-mini",
+    "modelFamily": "openai",
+    "capturedAt": "2026-08-01T11:17:37.169Z",
+    "recorderVersion": "1",
+    "probeScenario": "tool-continuation-v1"
+  },
+  "turns": [
+    {
+      "frames": [
+        {
+          "kind": "http-request",
+          "method": "POST",
+          "urlPath": "/v1/responses",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "OpenAI/JS 6.37.0",
+            "x-stainless-arch": "arm64",
+            "x-stainless-lang": "js",
+            "x-stainless-os": "MacOS",
+            "x-stainless-package-version": "6.37.0",
+            "x-stainless-retry-count": "0",
+            "x-stainless-runtime": "node",
+            "x-stainless-runtime-version": "v24.16.0"
+          },
+          "body": {
+            "model": "o3-mini",
+            "input": [
+              {
+                "type": "message",
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "Use the fixture tool and then summarize its result."
+                  }
+                ]
+              }
+            ],
+            "stream": true,
+            "tools": [
+              {
+                "type": "function",
+                "name": "fixture",
+                "description": "Returns deterministic fixture data.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "a": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["a"],
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "reasoning": {
+              "effort": "medium"
+            }
+          },
+          "seq": 0
+        },
+        {
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+            "alt-svc": "h3=\":443\"; ma=86400",
+            "cf-cache-status": "DYNAMIC",
+            "cf-ray": "[REDACTED]",
+            "connection": "keep-alive",
+            "content-type": "text/event-stream; charset=utf-8",
+            "date": "Sat, 01 Aug 2026 11:17:37 GMT",
+            "openai-organization": "[REDACTED]",
+            "openai-processing-ms": "183",
+            "openai-project": "[REDACTED]",
+            "openai-version": "2020-10-01",
+            "server": "cloudflare",
+            "set-cookie": "[REDACTED]",
+            "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+            "transfer-encoding": "chunked",
+            "x-content-type-options": "nosniff",
+            "x-request-id": "req_<1>"
+          },
+          "seq": 1
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.created",
+          "data": "{\"type\":\"response.created\",\"response\":{\"id\":\"resp_<2>\",\"object\":\"response\",\"created_at\":1785583057,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"o3-mini-2025-01-31\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Returns deterministic fixture data.\",\"name\":\"fixture\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"number\"}},\"required\":[\"a\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}",
+          "seq": 2
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.in_progress",
+          "data": "{\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_<2>\",\"object\":\"response\",\"created_at\":1785583057,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"o3-mini-2025-01-31\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Returns deterministic fixture data.\",\"name\":\"fixture\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"number\"}},\"required\":[\"a\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}",
+          "seq": 3
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_item.added",
+          "data": "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_<3>\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"[REDACTED]\",\"summary\":[]},\"output_index\":0,\"sequence_number\":2}",
+          "seq": 4
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_item.done",
+          "data": "{\"type\":\"response.output_item.done\",\"item\":{\"id\":\"rs_<3>\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"[REDACTED]\",\"summary\":[]},\"output_index\":0,\"sequence_number\":3}",
+          "seq": 5
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_item.added",
+          "data": "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_<4>\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_<5>\",\"name\":\"fixture\"},\"output_index\":1,\"sequence_number\":4}",
+          "seq": 6
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.function_call_arguments.delta",
+          "data": "{\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_<4>\",\"obfuscation\":\"0axgut9R6f6NlY\",\"output_index\":1,\"sequence_number\":5}",
+          "seq": 7
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.function_call_arguments.delta",
+          "data": "{\"type\":\"response.function_call_arguments.delta\",\"delta\":\"a\",\"item_id\":\"fc_<4>\",\"obfuscation\":\"z67K1TZlKP2Ol2g\",\"output_index\":1,\"sequence_number\":6}",
+          "seq": 8
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.function_call_arguments.delta",
+          "data": "{\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_<4>\",\"obfuscation\":\"e5Ec6FGAvOKfyf\",\"output_index\":1,\"sequence_number\":7}",
+          "seq": 9
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.function_call_arguments.delta",
+          "data": "{\"type\":\"response.function_call_arguments.delta\",\"delta\":\" \",\"item_id\":\"fc_<4>\",\"obfuscation\":\"iINglvJ07UYqtc9\",\"output_index\":1,\"sequence_number\":8}",
+          "seq": 10
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.function_call_arguments.delta",
+          "data": "{\"type\":\"response.function_call_arguments.delta\",\"delta\":\"42\",\"item_id\":\"fc_<4>\",\"obfuscation\":\"em3kGhnLgm4GzT\",\"output_index\":1,\"sequence_number\":9}",
+          "seq": 11
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.function_call_arguments.delta",
+          "data": "{\"type\":\"response.function_call_arguments.delta\",\"delta\":\"}\",\"item_id\":\"fc_<4>\",\"obfuscation\":\"OpJKTWRavRjC91R\",\"output_index\":1,\"sequence_number\":10}",
+          "seq": 12
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.function_call_arguments.done",
+          "data": "{\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"a\\\":42}\",\"item_id\":\"fc_<4>\",\"output_index\":1,\"sequence_number\":11}",
+          "seq": 13
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_item.done",
+          "data": "{\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_<4>\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"a\\\":42}\",\"call_id\":\"call_<5>\",\"name\":\"fixture\"},\"output_index\":1,\"sequence_number\":12}",
+          "seq": 14
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.completed",
+          "data": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_<2>\",\"object\":\"response\",\"created_at\":1785583057,\"status\":\"completed\",\"background\":false,\"completed_at\":1785583059,\"error\":null,\"frequency_penalty\":0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"o3-mini-2025-01-31\",\"moderation\":null,\"output\":[{\"id\":\"rs_<3>\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"[REDACTED]\",\"summary\":[]},{\"id\":\"fc_<4>\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"a\\\":42}\",\"call_id\":\"call_<5>\",\"name\":\"fixture\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Returns deterministic fixture data.\",\"name\":\"fixture\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"number\"}},\"required\":[\"a\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":47,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":279,\"output_tokens_details\":{\"reasoning_tokens\":256},\"total_tokens\":326},\"user\":null,\"metadata\":{}},\"sequence_number\":13}",
+          "seq": 15
+        }
+      ]
+    },
+    {
+      "frames": [
+        {
+          "kind": "http-request",
+          "method": "POST",
+          "urlPath": "/v1/responses",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "OpenAI/JS 6.37.0",
+            "x-stainless-arch": "arm64",
+            "x-stainless-lang": "js",
+            "x-stainless-os": "MacOS",
+            "x-stainless-package-version": "6.37.0",
+            "x-stainless-retry-count": "0",
+            "x-stainless-runtime": "node",
+            "x-stainless-runtime-version": "v24.16.0"
+          },
+          "body": {
+            "model": "o3-mini",
+            "input": [
+              {
+                "type": "message",
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "Use the fixture tool and then summarize its result."
+                  }
+                ]
+              },
+              {
+                "type": "function_call",
+                "call_id": "call_<5>",
+                "name": "fixture",
+                "arguments": "{\"a\":42}"
+              },
+              {
+                "type": "function_call_output",
+                "call_id": "call_<5>",
+                "output": "{\"text\":{\"ok\":true,\"value\":1}}"
+              },
+              {
+                "type": "message",
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "The fixture tool returned its deterministic result. Give the final summary."
+                  }
+                ]
+              }
+            ],
+            "stream": true,
+            "tools": [
+              {
+                "type": "function",
+                "name": "fixture",
+                "description": "Returns deterministic fixture data.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "a": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["a"],
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "reasoning": {
+              "effort": "medium"
+            }
+          },
+          "seq": 0
+        },
+        {
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+            "alt-svc": "h3=\":443\"; ma=86400",
+            "cf-cache-status": "DYNAMIC",
+            "cf-ray": "[REDACTED]",
+            "connection": "keep-alive",
+            "content-type": "text/event-stream; charset=utf-8",
+            "date": "Sat, 01 Aug 2026 11:17:40 GMT",
+            "openai-organization": "[REDACTED]",
+            "openai-processing-ms": "204",
+            "openai-project": "[REDACTED]",
+            "openai-version": "2020-10-01",
+            "server": "cloudflare",
+            "set-cookie": "[REDACTED]",
+            "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+            "transfer-encoding": "chunked",
+            "x-content-type-options": "nosniff",
+            "x-request-id": "req_<6>"
+          },
+          "seq": 1
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.created",
+          "data": "{\"type\":\"response.created\",\"response\":{\"id\":\"resp_<7>\",\"object\":\"response\",\"created_at\":1785583060,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"o3-mini-2025-01-31\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Returns deterministic fixture data.\",\"name\":\"fixture\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"number\"}},\"required\":[\"a\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}",
+          "seq": 2
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.in_progress",
+          "data": "{\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_<7>\",\"object\":\"response\",\"created_at\":1785583060,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"o3-mini-2025-01-31\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Returns deterministic fixture data.\",\"name\":\"fixture\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"number\"}},\"required\":[\"a\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}",
+          "seq": 3
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_item.added",
+          "data": "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_<8>\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"[REDACTED]\",\"summary\":[]},\"output_index\":0,\"sequence_number\":2}",
+          "seq": 4
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_item.done",
+          "data": "{\"type\":\"response.output_item.done\",\"item\":{\"id\":\"rs_<8>\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"[REDACTED]\",\"summary\":[]},\"output_index\":0,\"sequence_number\":3}",
+          "seq": 5
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_item.added",
+          "data": "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_<9>\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":1,\"sequence_number\":4}",
+          "seq": 6
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.content_part.added",
+          "data": "{\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_<9>\",\"output_index\":1,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":5}",
+          "seq": 7
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"The\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"I0FOZ3pHpC2g3\",\"output_index\":1,\"sequence_number\":6}",
+          "seq": 8
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" fixture\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"HNqoouMh\",\"output_index\":1,\"sequence_number\":7}",
+          "seq": 9
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" tool\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"LjXAPFmU4zz\",\"output_index\":1,\"sequence_number\":8}",
+          "seq": 10
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" returned\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"UqOtvY0\",\"output_index\":1,\"sequence_number\":9}",
+          "seq": 11
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"fC8KyJcoRUdWC2\",\"output_index\":1,\"sequence_number\":10}",
+          "seq": 12
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" deterministic\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"M9\",\"output_index\":1,\"sequence_number\":11}",
+          "seq": 13
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" value\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"9nz8EHIYNm\",\"output_index\":1,\"sequence_number\":12}",
+          "seq": 14
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" indicating\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"rtP2D\",\"output_index\":1,\"sequence_number\":13}",
+          "seq": 15
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" success\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"bJvkFB3P\",\"output_index\":1,\"sequence_number\":14}",
+          "seq": 16
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"KPd3UsxbW8rHgr8\",\"output_index\":1,\"sequence_number\":15}",
+          "seq": 17
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Specifically\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"5zj\",\"output_index\":1,\"sequence_number\":16}",
+          "seq": 18
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"xGQsMMzjqIjv5le\",\"output_index\":1,\"sequence_number\":17}",
+          "seq": 19
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" it\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"rnV7AxwQNh22Z\",\"output_index\":1,\"sequence_number\":18}",
+          "seq": 20
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" returned\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"UX4M0SV\",\"output_index\":1,\"sequence_number\":19}",
+          "seq": 21
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" an\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"UVjMG8QF4LcJL\",\"output_index\":1,\"sequence_number\":20}",
+          "seq": 22
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" object\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"BmX0OsJ0i\",\"output_index\":1,\"sequence_number\":21}",
+          "seq": 23
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" with\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"jaElNrdvFfi\",\"output_index\":1,\"sequence_number\":22}",
+          "seq": 24
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"Eyd8PUIdnP6CGn\",\"output_index\":1,\"sequence_number\":23}",
+          "seq": 25
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" key\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"gdh8iPREJTCt\",\"output_index\":1,\"sequence_number\":24}",
+          "seq": 26
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \\\"\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"2Vh31XN6BpcB2L\",\"output_index\":1,\"sequence_number\":25}",
+          "seq": 27
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"text\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"b2Yb2AUtV2tw\",\"output_index\":1,\"sequence_number\":26}",
+          "seq": 28
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\\"\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"R1p3YVGdzJFHrl1\",\"output_index\":1,\"sequence_number\":27}",
+          "seq": 29
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" containing\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"HlWFO\",\"output_index\":1,\"sequence_number\":28}",
+          "seq": 30
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" {\\\"\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"FHV4eKx4g19pA\",\"output_index\":1,\"sequence_number\":29}",
+          "seq": 31
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"ok\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"1hAO34lYm5bkQD\",\"output_index\":1,\"sequence_number\":30}",
+          "seq": 32
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\\":\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"BARSJaQCPkLF7Z\",\"output_index\":1,\"sequence_number\":31}",
+          "seq": 33
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" true\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"J9dCj25zkRi\",\"output_index\":1,\"sequence_number\":32}",
+          "seq": 34
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"l82wz067yiIbGDl\",\"output_index\":1,\"sequence_number\":33}",
+          "seq": 35
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \\\"\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"j639LnZw6b6FUJ\",\"output_index\":1,\"sequence_number\":34}",
+          "seq": 36
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"value\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"ksCARve57Ee\",\"output_index\":1,\"sequence_number\":35}",
+          "seq": 37
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\\":\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"6D11XfP1NKNfuW\",\"output_index\":1,\"sequence_number\":36}",
+          "seq": 38
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"XKeJ2ZhYMQuxXyQ\",\"output_index\":1,\"sequence_number\":37}",
+          "seq": 39
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"1\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"GI3OLOvjsSbJR2g\",\"output_index\":1,\"sequence_number\":38}",
+          "seq": 40
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"}.\",\"item_id\":\"msg_<9>\",\"logprobs\":[],\"obfuscation\":\"GfCcEoKcqpx75c\",\"output_index\":1,\"sequence_number\":39}",
+          "seq": 41
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_text.done",
+          "data": "{\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_<9>\",\"logprobs\":[],\"output_index\":1,\"sequence_number\":40,\"text\":\"The fixture tool returned a deterministic value indicating success. Specifically, it returned an object with a key \\\"text\\\" containing {\\\"ok\\\": true, \\\"value\\\": 1}.\"}",
+          "seq": 42
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.content_part.done",
+          "data": "{\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_<9>\",\"output_index\":1,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The fixture tool returned a deterministic value indicating success. Specifically, it returned an object with a key \\\"text\\\" containing {\\\"ok\\\": true, \\\"value\\\": 1}.\"},\"sequence_number\":41}",
+          "seq": 43
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.output_item.done",
+          "data": "{\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_<9>\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The fixture tool returned a deterministic value indicating success. Specifically, it returned an object with a key \\\"text\\\" containing {\\\"ok\\\": true, \\\"value\\\": 1}.\"}],\"role\":\"assistant\"},\"output_index\":1,\"sequence_number\":42}",
+          "seq": 44
+        },
+        {
+          "kind": "sse-event",
+          "event": "response.completed",
+          "data": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_<7>\",\"object\":\"response\",\"created_at\":1785583060,\"status\":\"completed\",\"background\":false,\"completed_at\":1785583062,\"error\":null,\"frequency_penalty\":0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"o3-mini-2025-01-31\",\"moderation\":null,\"output\":[{\"id\":\"rs_<8>\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"[REDACTED]\",\"summary\":[]},{\"id\":\"msg_<9>\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The fixture tool returned a deterministic value indicating success. Specifically, it returned an object with a key \\\"text\\\" containing {\\\"ok\\\": true, \\\"value\\\": 1}.\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Returns deterministic fixture data.\",\"name\":\"fixture\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"number\"}},\"required\":[\"a\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":94,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":172,\"output_tokens_details\":{\"reasoning_tokens\":128},\"total_tokens\":266},\"user\":null,\"metadata\":{}},\"sequence_number\":43}",
+          "seq": 45
+        }
+      ]
+    }
+  ],
+  "placeholders": {
+    "req_72b897aab9424f34b8f33df516d8f458": "req_<1>",
+    "resp_0b7c3ed6c611773b006a6dd5d16fe0819886f86ea255806f00": "resp_<2>",
+    "rs_0b7c3ed6c611773b006a6dd5d2409c81988f1f603e9a536cd0": "rs_<3>",
+    "fc_0b7c3ed6c611773b006a6dd5d3713081989ed72c53bbf63e45": "fc_<4>",
+    "call_L9flKc3rLrA5NyqgBbeJgnhe": "call_<5>",
+    "req_ba72feb88afe47129b66e7a6ad8aae55": "req_<6>",
+    "resp_0b98d0e1febde15d006a6dd5d470a8819a93899c628b21bbc0": "resp_<7>",
+    "rs_0b98d0e1febde15d006a6dd5d545e4819ab04878d0926b27be": "rs_<8>",
+    "msg_0b98d0e1febde15d006a6dd5d5e0f4819a923767797d5ed124": "msg_<9>"
+  }
+}

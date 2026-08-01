@@ -45,6 +45,8 @@ export interface ApplicationAgent {
 
 export interface ApplicationRunLoopOptions {
   readonly signal?: AbortSignal;
+  /** Existing provider response to continue from on the first model turn. */
+  readonly previousResponseId?: string | null;
   readonly sessionId?: string;
   /** Per-run user context delivered to tools as `ToolInvocationContext.context`. */
   readonly context?: unknown;
@@ -168,6 +170,7 @@ export class ApplicationRunLoop {
       agent,
       input: normalizeInput(input),
       history: normalizeHistory(input),
+      responseId: options.previousResponseId ?? undefined,
       context: options.context,
       approvals: options.approvals ?? new ApprovalLedger(),
       turnCount: 0,
@@ -191,6 +194,12 @@ export class ApplicationRunLoop {
     // Handles created before the ledger existed cannot resume meaningfully;
     // give them a fresh ledger rather than crashing on `approvals` access.
     if (!state.approvals) state.approvals = new ApprovalLedger();
+    // A continuation handle normally already carries the response that owns
+    // the pending turn. Older handles may not; use the caller-provided
+    // continuity anchor as a compatibility fallback in that case.
+    if (state.responseId === undefined && options.previousResponseId) {
+      state.responseId = options.previousResponseId;
+    }
     // The turn budget belongs to the run, so a resumed run keeps spending the
     // same one rather than starting over after every approval pause.
     if (typeof state.turnCount !== 'number') state.turnCount = 0;
@@ -294,6 +303,7 @@ export class ApplicationRunLoop {
 
       for await (const event of model.stream({
         instructions: state.agent.instructions,
+        ...(state.responseId ? { previousResponseId: state.responseId } : {}),
         input: state.input,
         tools: toModelTools(state.agent.tools),
         ...(state.agent.modelSettings?.temperature !== undefined

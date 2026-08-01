@@ -71,9 +71,33 @@ Shared invariants:
 - errors survive adapters, bridges, and decorators;
 - tool-call IDs remain stable;
 - provider options reach their native request fields;
-- `[user, assistant, user]` history retains role, ordering, and content.
+- `[user, assistant, user]` history retains role, ordering, and content;
+- application-level follow-up continuity is preserved through the production
+  session path, not only when a provider model is invoked directly.
 
-Run the complete scenario set once per distinct wire family. Give OpenRouter only success, error, and request-shape coverage instead of duplicating the entire AI SDK matrix.
+A provider-boundary continuation test is not sufficient for this invariant. The
+regression scenario must exercise `turn-workflow`/`AgentClient`/the application
+run loop, complete one user turn, start a second user turn, and inspect the
+second provider request. For providers with server-managed conversation
+chaining, the request must carry the first response's ID in the provider-native
+field (`previous_response_id` for Responses/Codex). For stateless providers,
+the same scenario must assert that the second request contains the complete
+required history with correct roles and ordering instead of silently sending
+only the latest user message.
+
+Approval pause/resume is a separate required path, not covered by the two-user-turn
+scenario. Drive a tool call that requires approval, pause the run, approve it,
+resume through the real continuation handle, and inspect the next provider
+request. For chaining providers, assert that it uses the response ID that
+produced the tool call and carries the paired tool output; for stateless
+providers, assert the reconstructed history contains the tool call/output pair
+with correct ordering. Include the rejection path where the rejected tool
+result is sent back to the model. Run this approval scenario for every provider
+family that supports tools, not only Codex.
+
+Before implementation, define an explicit provider-family capability matrix covering every supported registry/runtime family: transport (HTTP/SSE/WS), chaining mode, tool/approval support, reasoning support, and native continuation fields. The matrix is the completeness checklist; “one case per wire family” is not sufficient when provider routing or lifecycle behavior differs.
+
+Run the complete scenario set once per distinct wire family, then apply the matrix-specific additions. Give OpenRouter only success, error, and request-shape coverage instead of duplicating the entire AI SDK matrix.
 
 ### Phase 3 — Add assembled CLI black-box coverage
 
@@ -98,16 +122,31 @@ Required scenarios:
 | Codex streamed text | Exact stdout and exit 0 | #1 |
 | Final-only completion | Text printed exactly once | #2 |
 | Fragmented Chat tool call | One call with complete arguments | #3 |
-| Codex continuation | `call_id`, no `callId`, correct `previous_response_id` | #4, #8 |
+| Registry-backed Codex continuation | Obtain Codex through `registry.ts`; assert `call_id`, no `callId`, correct `previous_response_id`, tool output, and final response | #4, #8 |
 | Registry success per family | Usable streamed model | #5 |
 | Chat reasoning | Reasoning and answer both preserved | #6 |
 | Responses history/tool input | Native Responses item types on the wire | #7A |
 | Error, early close, incomplete stream | Non-zero exit and no fake empty success | #7B |
 | Anthropic/Google reasoning | `thinking` / `thinkingConfig` captured | #9 |
-| OpenAI WS success | Correct output and exit before deadline | #10 |
+| OpenAI Responses WS and Codex WS registry/assembled coverage | Correct output and exit before deadline, plus continuation, native terminal error, incomplete stream, and abnormal close | WS framing, cleanup, and continuation regressions |
+| Application-level multi-turn continuity for every supported provider family | Drive two real user turns through the assembled session path; assert `previous_response_id`/provider-native continuation for chaining providers, or complete history and roles for stateless providers | Dropped `previousResponseId`, provider-specific follow-up regressions, and history truncation |
+| Application-level approval pause/resume for every tool-capable provider family | Require approval for a tool, approve and resume through the real continuation handle; also cover rejection; assert the response ID/history and paired tool result on the next provider request | Lost continuity across approval, missing tool results, replayed or orphaned tool calls |
+| Native failure and incomplete transport paths | Exercise early close, incomplete terminal, and native `response.failed`/equivalent events through contract and assembled paths; assert non-zero failure and no fabricated completion | Silent empty success and swallowed provider failures |
+| Reasoning response preservation | Assert streamed reasoning events/output, not only native request options, across each reasoning-capable family | Dropped reasoning deltas, summaries, or signed metadata |
+| Restart/resume continuity | Complete or interrupt a conversation, restart with the same isolated state, and assert persisted history, tool ledger, and response-ID/full-history recovery | Persistence and crash-recovery regressions |
 | Multi-turn history | Native roles and ordering | Serialization regressions |
 
 Use harmless deterministic tool data stored in fixture files, following the repository’s shell-safety rules.
+
+The existing provider-contract continuation cases do not satisfy the
+application-level continuity requirement: those cases call a provider model
+directly and manually assemble the continuation input. Keep them as provider
+wire tests, but add a separate assembled-session scenario whose outbound
+request capture proves the production orchestration propagated continuity.
+The current one-shot CLI harness cannot drive these scenarios: it must first
+support a stateful two-send driver and real approval decisions. Do not mark
+these rows complete until the driver exercises the shipped session path rather
+than only direct `model.stream()` calls.
 
 ### Phase 4 — Prove the suite is capable of failing
 
@@ -119,7 +158,7 @@ Do not accept green-only evidence.
 4. Record which scenarios fail against the pre-fix implementation.
 5. Return to the feature worktree and confirm all scenarios pass.
 
-Acceptance requires at least one failing black-box scenario for every escaped bug class—not necessarily ten entirely separate tests.
+Acceptance requires at least one failing black-box scenario for every escaped bug class—not necessarily ten entirely separate tests. The application-level continuity scenario must run for every supported provider family (including Codex, OpenAI Responses, OpenAI-compatible/Chat Completions, Anthropic, Google, OpenRouter, and OpenCode where configured), with assertions selected by each provider's chaining capability; Codex-only coverage does not satisfy this requirement. The capability matrix must have a corresponding executed scenario or an explicit documented exclusion for every row, and the stateful driver must demonstrate red-proof failures against the pre-fix implementation for continuity and approval.
 
 ### Phase 5 — Integrate and gate changes
 

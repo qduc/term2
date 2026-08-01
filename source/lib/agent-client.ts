@@ -343,6 +343,7 @@ export class AgentClient {
     this.#subagentBridge?.resetAbortController();
     if (this.#useApplicationRunLoop) {
       return this.#applicationRunLoop.startStream(this.#agentConfig.getApplicationAgent(), userInput, {
+        ...(options.previousResponseId ? { previousResponseId: options.previousResponseId } : {}),
         sessionId: options.sessionId,
         // The turn budget the SDK runner used to enforce. Without it the loop
         // runs unbounded, and subagents silently ignore their maxTurns.
@@ -356,6 +357,7 @@ export class AgentClient {
     this.#subagentBridge?.resetAbortController();
     if (this.#useApplicationRunLoop) {
       return this.#applicationRunLoop.continueRunStream(state, {
+        ...(options.previousResponseId ? { previousResponseId: options.previousResponseId } : {}),
         sessionId: options.sessionId,
         maxTurns: this.#runnerManager.maxTurns,
       });

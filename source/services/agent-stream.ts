@@ -27,11 +27,12 @@ export interface AgentStream {
   runUsage?: unknown;
 }
 
-/** Select the newest non-empty terminal item collection, falling back to full history. */
-export function selectAgentStreamItems(stream: Pick<AgentStream, 'newItems' | 'history'>): unknown[] {
+/** Select current-run terminal items when available, falling back to full history. */
+export function selectAgentStreamItems(stream: Pick<AgentStream, 'output' | 'newItems' | 'history'>): unknown[] {
+  const output = Array.isArray(stream.output) ? stream.output : [];
   const newItems = Array.isArray(stream.newItems) ? stream.newItems : [];
   const history = Array.isArray(stream.history) ? stream.history : [];
-  return newItems.length > 0 ? newItems : history;
+  return output.length > 0 ? output : newItems.length > 0 ? newItems : history;
 }
 
 /** Adapt a provider/runtime stream to the app-owned stream contract. */

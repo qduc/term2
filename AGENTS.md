@@ -21,7 +21,7 @@ Active multi-session work is tracked in `docs/plans/`. Each such plan opens with
 
 Currently active:
 
-- `docs/plans/decouple-from-openai-agents-sdk.md` — removing `@openai/agents*`. Touches the approval layer, the run loop, and `source/providers/`. Progress is measured by the plan's risk register (private-API reach-ins retired), not by lines deleted.
+- `docs/plans/provider-bug-sweep.md` — sweeping every provider for regressions from the decoupling work above. Seven real bugs found and fixed so far (silent empty output, dropped tool calls, wrong role serialization); two open (codex loses tool-continuation state across turns, reasoning effort no-ops for Anthropic/Google) plus a newly-found, uninvestigated hang in the openai provider. Read it before touching `source/providers/`.
 
 # Delegation
 

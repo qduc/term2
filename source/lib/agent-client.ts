@@ -277,6 +277,9 @@ export class AgentClient {
   }
 
   supportsConversationChaining(): boolean {
+    if (this.#useApplicationRunLoop) {
+      return getProvider(this.#agentConfig.getProvider())?.capabilities?.supportsConversationChaining ?? false;
+    }
     return this.#runOrchestrator.supportsConversationChaining();
   }
 

@@ -953,29 +953,40 @@ it('shell needsApproval prompts for default commands when sandbox is unavailable
   expect(await tool.needsApproval({ command: 'pwd', sandbox: 'default' })).toBe(true);
 });
 
-it.sequential('shell execute runs unsandboxed when sandbox is unavailable after approval', async () => {
+it.sequential('shell execute fails closed when sandbox availability degrades after approval', async () => {
+  let availabilityChecks = 0;
   let sandboxWrapped = false;
-  let executedCommand: string | undefined;
+  let executeCalled = false;
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
     shellSandboxRunner: createFakeSandboxRunner({
-      availability: async () => ({ type: 'unsupported_platform', reason: 'not supported' }),
+      availability: async () => {
+        availabilityChecks += 1;
+        return availabilityChecks === 1
+          ? { type: 'available' }
+          : { type: 'unsupported_platform', reason: 'not supported' };
+      },
       wrap: async () => {
         sandboxWrapped = true;
         return { command: 'sandboxed' };
       },
     }),
-    executeShellCommandImpl: async (command) => {
-      executedCommand = command;
+    executeShellCommandImpl: async () => {
+      executeCalled = true;
       return { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
     },
   });
 
-  await tool.execute({ command: 'pwd', sandbox: 'default' });
+  // The command is auto-approved while the sandbox is available.
+  expect(await tool.needsApproval({ command: 'pwd', sandbox: 'default' })).toBe(false);
+
+  const output = await tool.execute({ command: 'pwd', sandbox: 'default' });
 
   expect(sandboxWrapped).toBe(false);
-  expect(executedCommand).toBe('pwd');
+  expect(executeCalled).toBe(false);
+  expect(output).toContain('Sandbox blocked this command');
+  expect(output).toContain('sandbox="unsandboxed"');
 });
 
 it.sequential('shell execute fails closed when sandbox wrapping fails', async () => {

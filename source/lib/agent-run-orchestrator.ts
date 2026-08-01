@@ -94,7 +94,7 @@ export class AgentRunOrchestrator {
   }
 
   #getMaxParallelToolCalls(): number {
-    const rawValue = this.#settings.get<number | undefined>('agent.maxParallelToolCalls');
+    const rawValue = this.#settings.get('agent.maxParallelToolCalls');
     const numericValue = Number(rawValue);
     if (!Number.isFinite(numericValue)) {
       return 3;
@@ -327,7 +327,7 @@ export class AgentRunOrchestrator {
     // Ensure Codex models are fetched/cached if reasoningEffort is default, so we can apply default_reasoning_level
     if (
       this.#agentConfig.getProvider() === 'codex' &&
-      this.#settings.get<string>('agent.reasoningEffort') === 'default'
+      this.#settings.get('agent.reasoningEffort') === 'default'
     ) {
       try {
         await fetchModels({ settingsService: this.#settings, loggingService: this.#logger }, 'codex');

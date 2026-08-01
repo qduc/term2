@@ -56,7 +56,7 @@ export type CustomProviderRuntimeDeps = {
 };
 
 function findConfigFromSettings(settingsService: ISettingsService, providerId: string): CustomProviderConfig | null {
-  const list = settingsService?.get?.('providers');
+  const list = settingsService?.getDynamic?.('providers');
   if (!Array.isArray(list)) return null;
   const entry = list.find((p: any) => p && (p.id === providerId || p.name === providerId));
   if (!entry) return null;
@@ -175,7 +175,7 @@ export class OpencodeAnthropicFormatProvider implements LegacyModelProvider {
     const openAIClient = new OpenAI({
       baseURL: normalizeBaseUrl(runtimeConfig.baseUrl),
       apiKey: runtimeConfig.apiKey || 'no-key',
-      maxRetries: this.deps.settingsService?.get<number>('agent.retryAttempts') ?? 2,
+      maxRetries: this.deps.settingsService?.get('agent.retryAttempts') ?? 2,
       fetch: buildProviderFetch(this.config, this.deps, [
         createOpenAICompatibleMiddleware(this.config.type || 'opencode', runtimeConfig.baseUrl, {
           sessionContextService: this.deps.sessionContextService,
@@ -226,7 +226,7 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
       const openAIClient = new OpenAI({
         apiKey: config.apiKey,
         baseURL: config.baseUrl ? normalizeBaseUrl(config.baseUrl) : undefined,
-        maxRetries: deps.settingsService?.get<number>('agent.retryAttempts') ?? 2,
+        maxRetries: deps.settingsService?.get('agent.retryAttempts') ?? 2,
         fetch: buildProviderFetch(config, deps, [createOpenAIResponsesMiddleware()]) as any,
       });
       return new OpenAIChatCompletionsModel(openAIClient, deps.defaultModel);
@@ -267,7 +267,7 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
       const openAIClient = new OpenAI({
         baseURL: normalizeBaseUrl(runtimeConfig.baseUrl),
         apiKey: runtimeConfig.apiKey || 'no-key',
-        maxRetries: deps.settingsService?.get<number>('agent.retryAttempts') ?? 2,
+        maxRetries: deps.settingsService?.get('agent.retryAttempts') ?? 2,
         fetch: buildProviderFetch(config, deps, [
           createOpenAICompatibleMiddleware(providerType, runtimeConfig.baseUrl, {
             sessionContextService: deps.sessionContextService,

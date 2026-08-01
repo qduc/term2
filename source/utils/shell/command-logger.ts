@@ -10,10 +10,10 @@ export function logCommandExecution(
   isDangerous: boolean,
   approved: boolean,
 ): void {
-  if (!settingsService.get<boolean>('debug.debugBashTool')) {
+  if (!settingsService.get('debug.debugBashTool')) {
     return;
   }
-  if (settingsService.get<boolean>('logging.suppressConsoleOutput')) {
+  if (settingsService.get('logging.suppressConsoleOutput')) {
     return;
   }
 
@@ -23,7 +23,7 @@ export function logCommandExecution(
     command: command.substring(0, 100), // Truncate for safety
     isDangerous,
     approved,
-    env: settingsService.get<string>('environment.nodeEnv') || 'production',
+    env: settingsService.get('environment.nodeEnv') || 'production',
   };
   console.error(`[BASH_TOOL_LOG] ${JSON.stringify(context)}`);
 }
@@ -32,10 +32,10 @@ export function logCommandExecution(
  * Log validation errors for debugging
  */
 export function logValidationError(settingsService: ISettingsService, message: string): void {
-  if (!settingsService.get<boolean>('debug.debugBashTool')) {
+  if (!settingsService.get('debug.debugBashTool')) {
     return;
   }
-  if (settingsService.get<boolean>('logging.suppressConsoleOutput')) {
+  if (settingsService.get('logging.suppressConsoleOutput')) {
     return;
   }
 

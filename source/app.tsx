@@ -101,8 +101,8 @@ const App: FC<AppProps> = ({
   const providersMenuRef = useRef<{ open: () => void } | null>(null);
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
-  const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
-  const displayMode = useSetting<string>(settingsService, 'ui.displayMode') ?? 'standard';
+  const liteMode = useSetting(settingsService, 'app.liteMode') ?? false;
+  const displayMode = useSetting(settingsService, 'ui.displayMode') ?? 'standard';
   const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
   const subagentUsage = useMemo(() => subagentUsageAccumulator ?? createUsageAccumulator(), [subagentUsageAccumulator]);
   const [sessionId, setSessionId] = useState(initialSessionId);

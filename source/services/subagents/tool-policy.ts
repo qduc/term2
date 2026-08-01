@@ -998,7 +998,7 @@ export class SubagentToolFactory {
             _context,
             details,
           );
-          const maxOutputLength = this.#settings.get<number | undefined>('shell.maxOutputChars');
+          const maxOutputLength = this.#settings.get('shell.maxOutputChars');
           let result: any;
           try {
             result = await definition.execute(params, _context, details);

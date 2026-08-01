@@ -63,7 +63,7 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
   const sendCapturedHandoff = useCallback(
     async (state: HandoffState): Promise<boolean> => {
       if (state.stage !== 'selecting_model' && state.stage !== 'selecting_effort') return false;
-      const isPlanMode = settingsService.get<boolean>('app.planMode') || false;
+      const isPlanMode = settingsService.get('app.planMode') || false;
       if (isPlanMode) {
         dispatch({ type: 'handoff/standard_mode_requested' });
         replaceInput('');
@@ -81,7 +81,7 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
     async (effort: string) => {
       const state = handoffState;
       if (!state) return;
-      settingsService.set('agent.reasoningEffort', effort);
+      settingsService.set('agent.reasoningEffort', effort as any);
       applyRuntimeSetting('agent.reasoningEffort', effort);
       await sendCapturedHandoff(state);
     },
@@ -114,7 +114,7 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
     const state = handoffState;
     if (!state) return;
 
-    const isPlanMode = settingsService.get<boolean>('app.planMode') || false;
+    const isPlanMode = settingsService.get('app.planMode') || false;
     if (isPlanMode) {
       await clearConversationAndRefreshBanner();
       dispatch({ type: 'handoff/standard_mode_requested' });

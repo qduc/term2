@@ -65,8 +65,18 @@ export function createMockLogger(): ILoggingService {
 export function createMockSettings(values: Record<string, unknown> = {}): ISettingsService {
   const store: Record<string, unknown> = { ...values };
   return {
-    get: <T>(key: string) => store[key] as T,
-    set: (key: string, value: unknown) => {
+    get: (key: any) => store[key] as any,
+    getDynamic: (key: string) => store[key],
+    set: (key: any, value: unknown) => {
+      store[key] = value;
+    },
+    setDynamic: (key: string, value: unknown) => {
+      store[key] = value;
+    },
+    setPersistent: (key: any, value: unknown) => {
+      store[key] = value;
+    },
+    setPersistentDynamic: (key: string, value: unknown) => {
       store[key] = value;
     },
   };

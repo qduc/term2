@@ -99,7 +99,7 @@ it('runtime openai-compatible createRunner returns a runner', () => {
 
   const deps: ProviderDeps = {
     settingsService: {
-      get: <T = any>(key: string) => {
+      get: (key: any) => {
         const values: Record<string, any> = {
           'agent.model': 'test-model',
           providers: [
@@ -110,9 +110,15 @@ it('runtime openai-compatible createRunner returns a runner', () => {
             },
           ],
         };
-        return values[key] as T;
+        return values[key];
       },
-      set: () => {},
+      getDynamic(key: string) {
+        return this.get(key as any);
+      },
+      set() {},
+      setDynamic() {},
+      setPersistent() {},
+      setPersistentDynamic() {},
     },
     loggingService: {
       info: () => {},

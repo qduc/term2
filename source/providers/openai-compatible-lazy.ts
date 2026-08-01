@@ -16,7 +16,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     isRuntimeDefined: true,
     createStreamedModel: async (model, { settingsService, loggingService, sessionContextService }) => {
       const { createCustomProviderModelProvider } = await import('./openai-compatible.provider.js');
-      const list = settingsService.get('providers');
+      const list = settingsService.getDynamic('providers');
       const entry = Array.isArray(list)
         ? list.find((p: any) => p && (p.id === providerId || p.name === providerId))
         : null;
@@ -73,7 +73,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     createRunner: (deps) =>
       createApplicationCompatibilityRunner((model) =>
         (async () => {
-          const list = deps.settingsService.get('providers');
+          const list = deps.settingsService.getDynamic('providers');
           const entry = Array.isArray(list)
             ? list.find((p: any) => p && (p.id === providerId || p.name === providerId))
             : null;

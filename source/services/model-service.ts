@@ -22,7 +22,7 @@ export async function fetchModels(
   fetchImpl: FetchFn = fetch as any,
 ): Promise<ModelInfo[]> {
   const { settingsService, loggingService } = deps;
-  const provider = providerOverride || settingsService.get<string>('agent.provider');
+  const provider = providerOverride || settingsService.get('agent.provider');
   const cacheKey = provider;
 
   if (cache.has(cacheKey)) {

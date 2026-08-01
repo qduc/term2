@@ -31,7 +31,7 @@ export function createAutoApproveSlashCommand({
           return false;
         }
       } else {
-        const currentValue = settingsService.get<'off' | 'advisory' | 'auto'>('shell.autoApproveMode');
+        const currentValue = settingsService.get('shell.autoApproveMode');
         if (currentValue === 'off') {
           newValue = 'advisory';
         } else if (currentValue === 'advisory') {

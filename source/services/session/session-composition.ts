@@ -326,8 +326,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     logger,
     getAssistantTurnState: () => {
       const fn = getMethod<[], string>(agentClient, 'getProvider');
-      const provider = fn ? fn.call(agentClient) : settingsService?.get<string>('agent.provider');
-      const model = settingsService?.get<string>('agent.model');
+      const provider = fn ? fn.call(agentClient) : settingsService?.get('agent.provider');
+      const model = settingsService?.get('agent.model');
       return {
         previousResponseId: providerContinuity.previousResponseId,
         ...(model ? { model } : {}),
@@ -449,7 +449,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const retryClassifier = new DefaultRetryClassifier(agentClient);
   const retryEventPresenter = new RetryEventPresenter();
   const resolveRetryLimit = (): number => {
-    const configured = settingsService?.get<number>('agent.retryAttempts');
+    const configured = settingsService?.get('agent.retryAttempts');
     if (typeof configured === 'number' && Number.isInteger(configured) && configured >= 0) {
       return configured;
     }

@@ -34,7 +34,7 @@ export class ShellAutoApprovalResolver {
   constructor(private readonly deps: ShellAutoApprovalResolverDeps) {}
 
   getAutoApproveMode(): AutoApproveMode | undefined {
-    return this.deps.settingsService?.get<AutoApproveMode>('shell.autoApproveMode');
+    return this.deps.settingsService?.get('shell.autoApproveMode');
   }
 
   /**
@@ -46,7 +46,7 @@ export class ShellAutoApprovalResolver {
    */
   isUnsandboxedApprovalEligible(): boolean {
     const mode = this.getAutoApproveMode();
-    const sandboxEnabled = this.deps.settingsService?.get<boolean>('sandbox.enabled') !== false;
+    const sandboxEnabled = this.deps.settingsService?.get('sandbox.enabled') !== false;
     return sandboxEnabled && (mode === 'advisory' || mode === 'auto');
   }
 

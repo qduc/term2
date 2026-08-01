@@ -14,7 +14,13 @@ const buildSettingsService = (overrides: Record<string, unknown> = {}) => ({
         return overrides[key] as T;
     }
   },
-  set: () => {},
+  getDynamic(key: string) {
+    return this.get(key as any);
+  },
+  set() {},
+  setDynamic() {},
+  setPersistent() {},
+  setPersistentDynamic() {},
 });
 
 it('logCommandExecution does not write to console when suppressed', () => {

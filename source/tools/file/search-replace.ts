@@ -367,7 +367,7 @@ export function createSearchReplaceToolDefinition(deps: {
       }
     },
     execute: async (params) => {
-      const enableFileLogging = settingsService.get<boolean>('tools.logFileOperations');
+      const enableFileLogging = settingsService.get('tools.logFileOperations');
       const cwd = executionContext?.getCwd() || process.cwd();
       const sshService = executionContext?.getSSHService();
       const isRemote = executionContext?.isRemote() && !!sshService;
@@ -421,13 +421,13 @@ export function createSearchReplaceToolDefinition(deps: {
                 ' Gap (<...>) edits are not auto-healed — fix the anchors and retry.',
             );
           }
-          const enableEditHealing = settingsService.get<boolean>('tools.enableEditHealing') ?? true;
+          const enableEditHealing = settingsService.get('tools.enableEditHealing') ?? true;
           if (enableEditHealing) {
             healingAttempted = true;
             const choreModel = resolveAncillaryModelTier('chore', settingsService);
             const healingModel =
-              settingsService.get<string>('agent.choreModel') ??
-              settingsService.get<string>('tools.editHealingModel') ??
+              settingsService.get('agent.choreModel') ??
+              settingsService.get('tools.editHealingModel') ??
               choreModel.model;
             const healingResult = await editHealing(
               operation,
@@ -438,8 +438,8 @@ export function createSearchReplaceToolDefinition(deps: {
                 settingsService,
                 loggingService,
                 providerId:
-                  settingsService.get<string>('agent.choreProvider') ??
-                  settingsService.get<string>('tools.editHealingProvider') ??
+                  settingsService.get('agent.choreProvider') ??
+                  settingsService.get('tools.editHealingProvider') ??
                   choreModel.provider,
               },
             );

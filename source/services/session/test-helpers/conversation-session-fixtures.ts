@@ -22,7 +22,14 @@ export type ClientCall = { input: unknown; opts?: unknown; provider?: string };
 
 export const createMockSettingsService = (entries: [string, unknown][] = []): ISettingsService => {
   const settings = new Map(entries);
-  return { get: <T>(key: string): T => settings.get(key) as T, set: () => {} };
+  return {
+    get: (key: any): any => settings.get(key),
+    getDynamic: (key: string): unknown => settings.get(key),
+    set: () => {},
+    setDynamic: () => {},
+    setPersistent: () => {},
+    setPersistentDynamic: () => {},
+  };
 };
 
 export const createMockAgentClient = (overrides: Record<string, unknown> = {}): ConversationAgentClient =>

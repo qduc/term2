@@ -94,8 +94,8 @@ export class AgentConfiguration implements AgentSource {
 
     // Initialize config
     this.#reasoningEffort = config.reasoningEffort;
-    this.#temperature = config.temperature ?? this.#settings.get<number | undefined>('agent.temperature');
-    this.#provider = config.providerOverride ?? this.#settings.get<string>('agent.provider') ?? 'openai';
+    this.#temperature = config.temperature ?? this.#settings.get('agent.temperature');
+    this.#provider = config.providerOverride ?? this.#settings.get('agent.provider') ?? 'openai';
 
     if (config.agentOverride) {
       this.#isTransientClient = true;
@@ -360,6 +360,6 @@ export class AgentConfiguration implements AgentSource {
   }
 
   get maxTurns(): number {
-    return this.#settings.get<number | undefined>('agent.maxTurns') ?? 20;
+    return this.#settings.get('agent.maxTurns') ?? 20;
   }
 }

@@ -117,7 +117,7 @@ export function createCreateFileToolDefinition(deps: {
       }
     },
     execute: async (params) => {
-      const enableFileLogging = settingsService.get<boolean>('tools.logFileOperations');
+      const enableFileLogging = settingsService.get('tools.logFileOperations');
       try {
         const { path: filePath, content, overwrite = false } = params;
         const cwd = executionContext?.getCwd() || process.cwd();

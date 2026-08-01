@@ -349,10 +349,10 @@ const InputBox: FC<Props> = ({
         if (parsedValue !== undefined) {
           try {
             if (settingsService.isRuntimeModifiable(key)) {
-              settingsService.set(key, parsedValue);
+              settingsService.setDynamic(key, parsedValue);
               onSettingChange?.(key, parsedValue);
             } else {
-              settingsService.setPersistent(key, parsedValue);
+              settingsService.setPersistentDynamic(key, parsedValue);
               onSystemMessage?.(`Saved ${key} = ${parsedValue}. This setting applies after restart.`);
             }
           } catch {
@@ -423,9 +423,9 @@ const InputBox: FC<Props> = ({
 
         const provider = models.provider;
 
-        settingsService.set(models.modelSettingConfig.modelKey, modelId);
+        settingsService.setDynamic(models.modelSettingConfig.modelKey, modelId);
         if (provider) {
-          settingsService.set(models.modelSettingConfig.providerKey, provider);
+          settingsService.setDynamic(models.modelSettingConfig.providerKey, provider);
         }
 
         onSettingChange?.(models.modelSettingConfig.modelKey, modelId);
@@ -875,7 +875,7 @@ const InputBox: FC<Props> = ({
           images={images}
           onImagesChange={handleImagesChange}
           onPasteError={handlePasteError}
-          pasteThreshold={settingsService.get<number | undefined>('ui.pasteThreshold')}
+          pasteThreshold={settingsService.get('ui.pasteThreshold')}
           ignoreInput={isFocusReportingSequence}
         />
       </Box>

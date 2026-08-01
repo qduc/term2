@@ -324,9 +324,10 @@ it('custom providers default missing type for old settings.json files', async ()
     disableFilePersistence: true,
   });
 
-  expect(service.get('providers')[0].type).toBe('openai-compatible');
-  expect(service.get('providers')[0].id).toBe(providerName);
-  expect(service.get('providers')[0].name).toBe(providerName);
+  const providers1 = service.getDynamic('providers') as any[];
+  expect(providers1[0].type).toBe('openai-compatible');
+  expect(providers1[0].id).toBe(providerName);
+  expect(providers1[0].name).toBe(providerName);
 });
 
 it('migrates name-only custom provider to id with underscores', async () => {
@@ -360,7 +361,7 @@ it('migrates name-only custom provider to id with underscores', async () => {
     disableFilePersistence: true,
   });
 
-  const providers = service.get<any[]>('providers');
+  const providers = service.getDynamic('providers') as any[];
   expect(providers[0].id).toBe('My_Local_Provider');
   expect(providers[0].name).toBe('My Local Provider');
   expect(service.get('agent.provider')).toBe('My_Local_Provider');
@@ -607,11 +608,11 @@ it('reset() clones object defaults instead of reusing shared references', async 
   });
 
   service.reset('agent.openrouter');
-  const firstResetValue = service.get('agent.openrouter');
+  const firstResetValue = service.getDynamic('agent.openrouter') as any;
   firstResetValue.apiKey = 'mutated-secret';
 
   service.reset('agent.openrouter');
-  const secondResetValue = service.get('agent.openrouter');
+  const secondResetValue = service.getDynamic('agent.openrouter') as any;
 
   expect(secondResetValue).toEqual({});
   expect(secondResetValue).not.toBe(firstResetValue);

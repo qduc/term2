@@ -30,7 +30,7 @@ it('OpenAI Flex Service Tier setting can be enabled', () => {
   settings.set(SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER, true);
 
   // Verify the setting is stored correctly
-  const value = settings.get<boolean>(SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER);
+  const value = settings.get(SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER);
   expect(value).toBe(true);
 });
 
@@ -42,7 +42,7 @@ it('OpenAI Flex Service Tier setting is disabled by default', () => {
   });
 
   // Verify the default value is false
-  const value = settings.get<boolean>(SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER);
+  const value = settings.get(SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER);
   expect(value).toBe(false);
 });
 
@@ -58,7 +58,7 @@ it('OpenAI Flex Service Tier setting can be disabled', () => {
   settings.set(SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER, false);
 
   // Verify the setting is false
-  const value = settings.get<boolean>(SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER);
+  const value = settings.get(SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER);
   expect(value).toBe(false);
 });
 

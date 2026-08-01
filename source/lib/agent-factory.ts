@@ -108,7 +108,7 @@ export function buildAgentTools({
           registry: toolApprovalPolicyRegistry,
         }),
         execute: async (params, _context: any, details: any) => {
-          const maxOutputLengthValue = deps.settings.get<number | undefined>('shell.maxOutputChars');
+          const maxOutputLengthValue = deps.settings.get('shell.maxOutputChars');
           // Extract tool call ID from details if available
           const toolCallId = details?.toolCall?.callId;
           // Check if this execution should be intercepted
@@ -193,7 +193,7 @@ function buildModelSettings({
   // 'default') was provided. 'default' means we should not pass the
   // effort param and allow the underlying API to choose the default.
   const modelSettings: Record<string, any> = {
-    retry: { maxRetries: deps.settings.get<number>('agent.retryAttempts') ?? 2 },
+    retry: { maxRetries: deps.settings.get('agent.retryAttempts') ?? 2 },
   };
   if (reasoningEffort && reasoningEffort !== 'default') {
     modelSettings.reasoning = {
@@ -211,7 +211,7 @@ function buildModelSettings({
   // OpenAI Flex Service Tier: only pass when enabled and using OpenAI provider
   // This reduces costs by using the flex service tier for lower priority requests
   // See: https://platform.openai.com/docs/guides/service-tier
-  const useFlexServiceTier = deps.settings.get<boolean>('agent.useFlexServiceTier');
+  const useFlexServiceTier = deps.settings.get('agent.useFlexServiceTier');
   if (
     useFlexServiceTier &&
     deps.serviceTierOverrideForNextRequest !== 'standard' &&
@@ -243,8 +243,8 @@ export function buildAgent(
   },
   deps: AgentFactoryDeps,
 ): AgentBuildResult {
-  const resolvedModel = model?.trim() || deps.settings.get<string>('agent.model');
-  const resolvedTemperature = temperature ?? deps.settings.get<number | undefined>('agent.temperature');
+  const resolvedModel = model?.trim() || deps.settings.get('agent.model');
+  const resolvedTemperature = temperature ?? deps.settings.get('agent.temperature');
   const {
     name,
     instructions,
@@ -284,7 +284,7 @@ export function buildAgent(
   });
 
   let effectiveReasoningEffort = reasoningEffort;
-  const isDefaultSetting = deps.settings.get<string>('agent.reasoningEffort') === 'default';
+  const isDefaultSetting = deps.settings.get('agent.reasoningEffort') === 'default';
   if (
     deps.providerId === 'codex' &&
     isDefaultSetting &&

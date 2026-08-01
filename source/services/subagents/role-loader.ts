@@ -83,7 +83,7 @@ export function parseFrontmatter(content: string): { frontmatter: Record<string,
 }
 
 export function loadRoleDefinition(role: SubagentRole, settings: ISettingsService): SubagentDefinition {
-  if (role === 'librarian' && settings.get<boolean>('memory.enabled') === false) {
+  if (role === 'librarian' && settings.get('memory.enabled') === false) {
     throw new Error('The librarian subagent is unavailable because persistent memory is disabled.');
   }
 
@@ -103,16 +103,16 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
 
   const tier = roleModelTiers[role] ?? 'balanced';
   const tierModel = resolveAncillaryModelTier(tier, settings);
-  const legacyModel = settings.get<string>(`${subagentPrefix}Model`);
-  const legacyProvider = settings.get<string>(`${subagentPrefix}Provider`);
-  const configuredLegacyReasoningEffort = settings.get<string>(`${subagentPrefix}ReasoningEffort`);
+  const legacyModel = settings.getDynamic(`${subagentPrefix}Model`) as string | undefined;
+  const legacyProvider = settings.getDynamic(`${subagentPrefix}Provider`) as string | undefined;
+  const configuredLegacyReasoningEffort = settings.getDynamic(`${subagentPrefix}ReasoningEffort`) as string | undefined;
   const legacyReasoningEffort =
     role === 'mentor' && configuredLegacyReasoningEffort === 'default' ? undefined : configuredLegacyReasoningEffort;
   const model = isInherited(frontmatter.model)
-    ? settings.get<string>(`agent.${tier}Model`) ?? legacyModel ?? tierModel.model
+    ? (settings.getDynamic(`agent.${tier}Model`) as string | undefined) ?? legacyModel ?? tierModel.model
     : frontmatter.model;
   const provider = isInherited(frontmatter.provider)
-    ? settings.get<string>(`agent.${tier}Provider`) ?? legacyProvider ?? tierModel.provider
+    ? (settings.getDynamic(`agent.${tier}Provider`) as string | undefined) ?? legacyProvider ?? tierModel.provider
     : frontmatter.provider;
 
   return {
@@ -127,9 +127,9 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
     model,
     provider,
     reasoningEffort: isInherited(frontmatter.reasoningEffort)
-      ? settings.get<string>(`agent.${tier}ReasoningEffort`) ??
+      ? (settings.getDynamic(`agent.${tier}ReasoningEffort`) as string | undefined) ??
         legacyReasoningEffort ??
-        settings.get<string>('agent.reasoningEffort') ??
+        settings.get('agent.reasoningEffort') ??
         'default'
       : frontmatter.reasoningEffort,
     description: frontmatter.description ?? '',
@@ -155,7 +155,7 @@ export function resolveSubagentSearchViaShell(
   model: string,
   canRunShell: boolean,
 ): boolean {
-  const searchViaShellSetting = settings.get<'auto' | 'on' | 'off'>('app.searchViaShell') ?? 'auto';
+  const searchViaShellSetting = settings.get('app.searchViaShell') ?? 'auto';
   if (searchViaShellSetting === 'on') return canRunShell;
   if (searchViaShellSetting === 'off') return false;
   return shouldPreferPatchEditingModel(model) && canRunShell;
@@ -225,7 +225,7 @@ export function buildInstructions(
     { projectPath: cwd },
   );
 
-  const sandboxEnabled = settings.get<boolean>('sandbox.enabled') ?? true;
+  const sandboxEnabled = settings.get('sandbox.enabled') ?? true;
   const inlineSections: string[] = [];
 
   if (sandboxEnabled) {

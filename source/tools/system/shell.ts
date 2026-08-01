@@ -280,12 +280,12 @@ export function createShellToolDefinition(deps: {
   // Create command logger function with dependencies
   const logValidationError = (message: string) => logValidationErrorUtil(settingsService, message);
 
-  const searchViaShellSetting = settingsService.get<'auto' | 'on' | 'off'>('app.searchViaShell') ?? 'auto';
+  const searchViaShellSetting = settingsService.get('app.searchViaShell') ?? 'auto';
   const resolvedSearchViaShell =
     searchViaShellExplicit ??
     (searchViaShellSetting === 'auto'
       ? (() => {
-          const model = settingsService.get<string>('agent.model');
+          const model = settingsService.get('agent.model');
           return model ? shouldPreferPatchEditingModel(model) : false;
         })()
       : searchViaShellSetting === 'on');
@@ -295,7 +295,7 @@ export function createShellToolDefinition(deps: {
     : getShellDescription(resolvedSearchViaShell);
   // Read per call: the sandbox can be toggled while a session is running, and a
   // stale value would let needsApproval and execute disagree about Docker.
-  const isSandboxEnabled = () => settingsService.get<boolean>('sandbox.enabled') !== false;
+  const isSandboxEnabled = () => settingsService.get('sandbox.enabled') !== false;
 
   return {
     name: 'shell',
@@ -378,7 +378,7 @@ export function createShellToolDefinition(deps: {
       if (dockerHostControlRequested && !hasDockerGrant) {
         return 'Error: Docker host control requires explicit approval.';
       }
-      if (settingsService.get<boolean>('app.planMode') && isMutatingCommand(command, cwd, loggingService)) {
+      if (settingsService.get('app.planMode') && isMutatingCommand(command, cwd, loggingService)) {
         return `Error: plan mode is read-only. Command not executed: ${command}`;
       }
       const sshService = executionContext?.getSSHService();
@@ -420,7 +420,7 @@ export function createShellToolDefinition(deps: {
         let sandboxAvailability: SandboxAvailability | undefined;
         if (
           !sshService &&
-          settingsService.get<boolean>('shell.useRtkCompression') &&
+          settingsService.get('shell.useRtkCompression') &&
           isRtkSupportedCommand(optimizedCommand)
         ) {
           const rtkPath = await rtkInstaller({ loggingService });
@@ -475,11 +475,11 @@ export function createShellToolDefinition(deps: {
               const projectAllowRead = getProjectAllowReadStore(cwd).load();
               const sandboxConfig = createSandboxRuntimeConfig({
                 cwd,
-                readPolicy: settingsService.get<SandboxReadPolicy>('sandbox.readPolicy'),
-                allowNetworking: settingsService.get<boolean>('sandbox.allowNetworking') === true,
+                readPolicy: settingsService.get('sandbox.readPolicy'),
+                allowNetworking: settingsService.get('sandbox.allowNetworking') === true,
                 dockerSocketPath: dockerHostControl?.socketPath,
                 allowReadExtra: [
-                  ...(settingsService.get<string[]>('sandbox.allowReadExtra') ?? []),
+                  ...(settingsService.get('sandbox.allowReadExtra') ?? []),
                   ...projectAllowRead,
                   ...extraAllowReadFromOverride,
                 ],
@@ -521,7 +521,7 @@ export function createShellToolDefinition(deps: {
           env: sandboxed
             ? createSandboxEnvironment(undefined, {
                 cwd,
-                readPolicy: settingsService.get<SandboxReadPolicy>('sandbox.readPolicy'),
+                readPolicy: settingsService.get('sandbox.readPolicy'),
                 dockerHostControl,
               })
             : undefined,
@@ -534,7 +534,7 @@ export function createShellToolDefinition(deps: {
         const rawStderr = stripRtkWarning(result.stderr ?? '');
         const annotatedStderr = sandboxed ? shellSandboxRunner.annotateFailure(optimizedCommand, rawStderr) : rawStderr;
 
-        const readPolicy = settingsService.get<SandboxReadPolicy>('sandbox.readPolicy');
+        const readPolicy = settingsService.get('sandbox.readPolicy');
         const sandboxFailure = classifySandboxFailure({
           command: optimizedCommand,
           rawStderr,

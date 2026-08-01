@@ -472,9 +472,9 @@ const ModelSelectionSubmitHarness = ({
 
     if (models.modelSettingConfig) {
       const { modelKey, providerKey } = models.modelSettingConfig;
-      settingsService.set(modelKey, selected.id);
+      settingsService.setDynamic(modelKey, selected.id);
       if (models.provider) {
-        settingsService.set(providerKey, models.provider);
+        settingsService.setDynamic(providerKey, models.provider);
       }
       setInput(SETTINGS_TRIGGER);
       setCursorOffset(SETTINGS_TRIGGER.length);

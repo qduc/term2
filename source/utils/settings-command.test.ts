@@ -60,11 +60,15 @@ const createDeps = (
 
   const settingsService = {
     getAll: () => baseSettings,
-    get: <T = unknown>(key: string): T => (overrides.values?.[key] ?? 'value-for-' + key) as T,
+    get: (key: any): any => overrides.values?.[key] ?? 'value-for-' + key,
+    getDynamic: (key: string): unknown => overrides.values?.[key] ?? 'value-for-' + key,
     getSource: (key: string) => overrides.sources?.[key] ?? 'default',
     reset: (key: string) => resetCalls.push(key),
     isRuntimeModifiable: overrides.isRuntimeModifiable || (() => true),
-    set: (key: string, value: unknown) => setCalls.push({ key, value }),
+    set: (key: any, value: unknown) => setCalls.push({ key, value }),
+    setDynamic: (key: string, value: unknown) => setCalls.push({ key, value }),
+    setPersistent: (key: any, value: unknown) => setCalls.push({ key, value }),
+    setPersistentDynamic: (key: string, value: unknown) => setCalls.push({ key, value }),
     ...overrides.settingsService,
   };
 

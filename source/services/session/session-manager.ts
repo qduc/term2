@@ -110,8 +110,8 @@ export class SessionManager {
     const providerFn = getMethod<[], string>(this.#agentClient, 'getProvider');
     const provider = providerFn
       ? providerFn.call(this.#agentClient)
-      : this.#settingsService?.get<string>('agent.provider');
-    const model = this.#settingsService?.get<string>('agent.model');
+      : this.#settingsService?.get('agent.provider');
+    const model = this.#settingsService?.get('agent.model');
     return projectSnapshot({
       history: this.#conversationStore.getHistory(),
       previousResponseId: this.#state.exportPersistedState().previousResponseId,

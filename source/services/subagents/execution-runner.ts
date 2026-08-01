@@ -165,7 +165,7 @@ export class ExecutionSubagentRunner {
     });
 
     const modelSettings: any = {
-      retry: { maxRetries: this.#settings.get<number>('agent.retryAttempts') ?? 2 },
+      retry: { maxRetries: this.#settings.get('agent.retryAttempts') ?? 2 },
     };
     if (definition.reasoningEffort && definition.reasoningEffort !== 'default') {
       modelSettings.reasoning = { effort: definition.reasoningEffort, summary: 'auto' };
@@ -196,7 +196,7 @@ export class ExecutionSubagentRunner {
       agent,
       provider: providerId,
       maxTurns: definition.maxTurns,
-      retryAttempts: this.#settings.get<number>('agent.retryAttempts') ?? 2,
+      retryAttempts: this.#settings.get('agent.retryAttempts') ?? 2,
     });
 
     const runtime = createSessionRuntime({
@@ -320,7 +320,7 @@ export class ExecutionSubagentRunner {
       try {
         const exported = runtime.state.exportState();
         session.importState(exported as any);
-        const messageCap = this.#settings.get<number>('subagent.asyncMessageCap') ?? 50;
+        const messageCap = this.#settings.get('subagent.asyncMessageCap') ?? 50;
         session.trimHistory(messageCap);
       } catch (exportErr: any) {
         this.#logger.debug('Failed to export async subagent session state', {

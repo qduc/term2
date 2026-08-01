@@ -60,23 +60,23 @@ export const useTerminalFocusNotifier = ({
       approvalNeeded() {
         loggingService.debug('notifier.approvalNeeded check', {
           focused: focusedRef.current,
-          appNotifications: settingsService.get<boolean>('app.notifications'),
-          appNotificationsOnApproval: settingsService.get<boolean>('app.notificationsOnApproval'),
+          appNotifications: settingsService.get('app.notifications'),
+          appNotificationsOnApproval: settingsService.get('app.notificationsOnApproval'),
         });
         if (focusedRef.current) return;
-        if (!settingsService.get<boolean>('app.notifications')) return;
-        if (!settingsService.get<boolean>('app.notificationsOnApproval')) return;
+        if (!settingsService.get('app.notifications')) return;
+        if (!settingsService.get('app.notificationsOnApproval')) return;
         sendNotification('Approval needed', 'Agent is waiting for your approval', { logger: loggingService });
       },
       turnComplete() {
         loggingService.debug('notifier.turnComplete check', {
           focused: focusedRef.current,
-          appNotifications: settingsService.get<boolean>('app.notifications'),
-          appNotificationsOnComplete: settingsService.get<boolean>('app.notificationsOnComplete'),
+          appNotifications: settingsService.get('app.notifications'),
+          appNotificationsOnComplete: settingsService.get('app.notificationsOnComplete'),
         });
         if (focusedRef.current) return;
-        if (!settingsService.get<boolean>('app.notifications')) return;
-        if (!settingsService.get<boolean>('app.notificationsOnComplete')) return;
+        if (!settingsService.get('app.notifications')) return;
+        if (!settingsService.get('app.notificationsOnComplete')) return;
         sendNotification('Response ready', 'Agent has finished responding', { logger: loggingService });
       },
     }),

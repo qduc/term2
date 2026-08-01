@@ -1,3 +1,5 @@
+import type { SettingKey, SettingValue } from './settings/settings-schema.js';
+
 export type SessionTrafficContext = {
   sessionId: string;
   sessionStartedAt: string;
@@ -63,8 +65,12 @@ export interface ISessionContextService {
 }
 
 export interface ISettingsService {
-  get<T = any>(key: string): T;
-  set(key: string, value: any, options?: { persist?: boolean }): void;
+  get<K extends SettingKey>(key: K): SettingValue<K>;
+  getDynamic(key: string): unknown;
+  set<K extends SettingKey>(key: K, value: SettingValue<K>, options?: { persist?: boolean }): void;
+  setDynamic(key: string, value: unknown, options?: { persist?: boolean }): void;
+  setPersistent<K extends SettingKey>(key: K, value: SettingValue<K>): void;
+  setPersistentDynamic(key: string, value: unknown): void;
   onChange?: (listener: (key?: string) => void) => () => void;
 }
 

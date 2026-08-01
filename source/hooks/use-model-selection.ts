@@ -35,10 +35,11 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
   }, [isOpen, triggerIndex, input, cursorOffset]);
 
   const getInitialProvider = useCallback(() => {
-    return modelSettingConfig
-      ? settingsService.get<string>(modelSettingConfig.providerKey) ??
-          settingsService.get<string>(modelSettingConfig.fallbackProviderKey ?? modelSettingConfig.providerKey)
-      : settingsService.get<string>('agent.provider');
+    const raw = modelSettingConfig
+      ? settingsService.getDynamic(modelSettingConfig.providerKey) ??
+        settingsService.getDynamic(modelSettingConfig.fallbackProviderKey ?? modelSettingConfig.providerKey)
+      : settingsService.get('agent.provider');
+    return (typeof raw === 'string' ? raw : null);
   }, [modelSettingConfig, settingsService]);
 
   const setCurrentProvider = useCallback((nextProvider: string | null) => {
@@ -128,8 +129,8 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
 
     if (shouldPreselectRef.current) {
       const modelKey = modelSettingConfig ? modelSettingConfig.modelKey : 'agent.model';
-      const currentModelValue = settingsService.get<string>(modelKey);
-      if (currentModelValue) {
+      const currentModelValue = settingsService.getDynamic(modelKey);
+      if (typeof currentModelValue === 'string' && currentModelValue) {
         const index = filteredModels.findIndex((m) => m.id === currentModelValue);
         if (index >= 0) {
           setSelectedIndex(index);
@@ -229,7 +230,7 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
   const toggleProvider = useCallback(
     (direction: 'next' | 'prev' = 'next') => {
       const allProviderIds = getProviderIds();
-      const providerOrder = settingsService.get<string[]>('providerOrder') ?? [];
+      const providerOrder = (settingsService.getDynamic('providerOrder') as string[] | undefined) ?? [];
       const orderedProviderIds =
         providerOrder.length > 0 ? sortProvidersByOrder(allProviderIds, providerOrder) : allProviderIds;
 

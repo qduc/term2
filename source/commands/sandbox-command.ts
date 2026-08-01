@@ -16,7 +16,7 @@ export function createSandboxSlashCommand({
     name: 'sandbox',
     description: 'Toggle shell sandbox mode (restricts shell operations to a secure environment)',
     action: () => {
-      const currentValue = settingsService.get<boolean>('sandbox.enabled');
+      const currentValue = settingsService.get('sandbox.enabled');
       const newValue = !currentValue;
 
       settingsService.set('sandbox.enabled', newValue);

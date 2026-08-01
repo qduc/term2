@@ -49,7 +49,7 @@ export function getEnvInfo(
   executionContext?: ExecutionContext,
   lite = false,
 ): string {
-  const shellPath = settingsService.get<string>('app.shellPath') || 'unknown';
+  const shellPath = settingsService.get('app.shellPath') || 'unknown';
   const cwd = executionContext?.getCwd() || process.cwd();
   const osType = os.type();
   const osRelease = os.release();
@@ -170,23 +170,23 @@ export const getAgentDefinition = (
     postExecuteDeniedRead = false,
     sessionAccess,
   } = deps;
-  const defaultModel = settingsService.get<string>('agent.model');
+  const defaultModel = settingsService.get('agent.model');
   const resolvedModel = model?.trim() || defaultModel;
 
   if (!resolvedModel) throw new Error('Model cannot be undefined or empty');
 
-  const planMode = settingsService.get<boolean>('app.planMode');
-  const mentorMode = settingsService.get<boolean>('app.mentorMode');
-  const liteMode = settingsService.get<boolean>('app.liteMode');
-  const orchestratorMode = settingsService.get<boolean>('app.orchestratorMode');
-  const searchViaShellSetting = settingsService.get<'auto' | 'on' | 'off'>('app.searchViaShell') ?? 'auto';
+  const planMode = settingsService.get('app.planMode');
+  const mentorMode = settingsService.get('app.mentorMode');
+  const liteMode = settingsService.get('app.liteMode');
+  const orchestratorMode = settingsService.get('app.orchestratorMode');
+  const searchViaShellSetting = settingsService.get('app.searchViaShell') ?? 'auto';
   const searchViaShell =
     searchViaShellSetting === 'auto' ? shouldPreferPatchEditingModel(resolvedModel) : searchViaShellSetting === 'on';
   // Code-context tools operate on the local filesystem only; disable them for
   // remote (SSH) execution where the workspace lives on another host.
   const codeContextEnabled = !(executionContext?.isRemote() ?? false);
   const isGpt5 = shouldPreferPatchEditingModel(resolvedModel);
-  const sandboxEnabled = settingsService.get<boolean>('sandbox.enabled');
+  const sandboxEnabled = settingsService.get('sandbox.enabled');
   // Async delegation is an all-or-nothing parent capability: launch, result
   // retrieval, and the two non-blocking control tools share one registry path.
   const asyncSubagentEnabled =
@@ -398,7 +398,7 @@ export const getAgentDefinition = (
 
     // Add mentor tool if the smart tier or its legacy mentor override is configured.
     const mentorModel =
-      settingsService.get<string>('agent.smartModel') ?? settingsService.get<string>('agent.mentorModel');
+      settingsService.get('agent.smartModel') ?? settingsService.get('agent.mentorModel');
     if (mentorModel && askMentor) {
       tools.push(createAskMentorToolDefinition(askMentor));
     }
@@ -426,12 +426,12 @@ export const getAgentDefinition = (
     }
   }
 
-  if (settingsService.get<boolean>('enable_agent_workflow') && agentRuntime) {
+  if (settingsService.get('enable_agent_workflow') && agentRuntime) {
     tools.push(
       createRunAgentWorkflowToolDefinition({
         runtime: agentRuntime,
         parentTools: tools.map((tool) => tool.name),
-        limits: settingsService.get<WorkflowLimits>('agentWorkflow'),
+        limits: settingsService.getDynamic('agentWorkflow') as WorkflowLimits,
       }),
     );
   }

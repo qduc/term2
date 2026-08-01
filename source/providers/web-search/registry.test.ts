@@ -20,8 +20,12 @@ const createMockProvider = (id: string, label: string): WebSearchProvider => ({
 
 // Helper to create a mock settings service
 const createMockSettingsService = (settings: Record<string, any> = {}) => ({
-  get: <T>(key: string): T => settings[key] as T,
+  get: (key: any): any => settings[key],
+  getDynamic: (key: string): unknown => settings[key],
   set: () => {},
+  setDynamic: () => {},
+  setPersistent: () => {},
+  setPersistentDynamic: () => {},
 });
 
 // Clear providers before each test to ensure isolation

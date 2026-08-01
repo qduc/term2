@@ -48,7 +48,7 @@ export function createEditorImpl(deps: {
 
   return {
     async createFile(operation: Extract<ApplyPatchOperation, { type: 'create_file' }>): Promise<ApplyPatchResult> {
-      const enableFileLogging = settingsService.get<boolean>('tools.logFileOperations');
+      const enableFileLogging = settingsService.get('tools.logFileOperations');
       const { path: filePath, diff } = operation;
       const cwd = executionContext?.getCwd() || process.cwd();
       const sshService = executionContext?.getSSHService();
@@ -126,7 +126,7 @@ export function createEditorImpl(deps: {
     },
 
     async updateFile(operation: Extract<ApplyPatchOperation, { type: 'update_file' }>): Promise<ApplyPatchResult> {
-      const enableFileLogging = settingsService.get<boolean>('tools.logFileOperations');
+      const enableFileLogging = settingsService.get('tools.logFileOperations');
       const { path: filePath, diff } = operation;
       const cwd = executionContext?.getCwd() || process.cwd();
       const sshService = executionContext?.getSSHService();
@@ -221,7 +221,7 @@ export function createEditorImpl(deps: {
     },
 
     async deleteFile(operation: Extract<ApplyPatchOperation, { type: 'delete_file' }>): Promise<ApplyPatchResult> {
-      const enableFileLogging = settingsService.get<boolean>('tools.logFileOperations');
+      const enableFileLogging = settingsService.get('tools.logFileOperations');
       const { path: filePath } = operation;
       const cwd = executionContext?.getCwd() || process.cwd();
       const sshService = executionContext?.getSSHService();

@@ -183,7 +183,7 @@ async function runHealingPrompt(
     modelSettings: {
       reasoning: { effort: 'none' },
       temperature: 0,
-      retry: { maxRetries: settingsService.get<number>('agent.retryAttempts') ?? 2 },
+      retry: { maxRetries: settingsService.get('agent.retryAttempts') ?? 2 },
     },
     tools: [],
   };
@@ -237,8 +237,8 @@ export async function healSearchReplaceParams(
 ): Promise<HealingResult> {
   const providerId =
     deps.providerId ??
-    deps.settingsService?.get<string>('tools.editHealingProvider') ??
-    deps.settingsService?.get<string>('agent.provider') ??
+    deps.settingsService?.get('tools.editHealingProvider') ??
+    deps.settingsService?.get('agent.provider') ??
     'openai';
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const confidenceThreshold = deps.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD;

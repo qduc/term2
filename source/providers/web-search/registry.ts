@@ -50,7 +50,7 @@ export function getAllWebSearchProviders(): WebSearchProvider[] {
 export function getConfiguredWebSearchProvider(deps: {
   settingsService: ISettingsService;
 }): WebSearchProvider | undefined {
-  const providerId = deps.settingsService.get<string>('webSearch.provider');
+  const providerId = deps.settingsService.get('webSearch.provider');
   if (providerId) {
     const provider = getWebSearchProvider(providerId);
     if (provider) return provider;

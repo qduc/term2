@@ -675,8 +675,12 @@ it('explicit Docker host control is not auto-approved by LLM advisory mode', asy
     agentClient,
     logger,
     settingsService: {
-      get: <T>(): T => 'auto' as unknown as T,
+      get: (key: any): any => 'auto',
+      getDynamic: (key: string): unknown => 'auto',
       set: () => {},
+      setDynamic: () => {},
+      setPersistent: () => {},
+      setPersistentDynamic: () => {},
     },
     sessionContextService: {
       runWithContext: <T>(_context: any, fn: () => T) => fn(),

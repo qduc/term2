@@ -50,7 +50,7 @@ export const getConfiguredProviderNames = (settingsService: SettingsService): Se
     names.add(provider.id);
   }
 
-  const configured = settingsService.get<any[]>('providers') || [];
+  const configured = (settingsService.getDynamic('providers') as any[]) || [];
   for (const provider of configured) {
     const id = resolveProviderId(provider);
     if (id) {
@@ -82,8 +82,8 @@ export const hasProviderNameConflict = (
 
 export const loadProviderItems = (settingsService: SettingsService): ProviderSelectionItem[] => {
   const all = getAllProviders();
-  const customList = settingsService.get<any[]>('providers') || [];
-  const activeProvider = settingsService.get<string>('agent.provider') || 'openai';
+  const customList = (settingsService.getDynamic('providers') as any[]) || [];
+  const activeProvider = settingsService.get('agent.provider') || 'openai';
 
   const providerItems: ProviderSelectionItem[] = all
     .filter((p) => !p.isRuntimeDefined)
@@ -139,7 +139,7 @@ export const saveProvider = (
 
   if (isEditingBuiltIn && editingOriginalName) {
     try {
-      settingsService.setPersistent(`agent.${editingOriginalName}.apiKey`, draft.apiKey || undefined);
+      settingsService.setPersistentDynamic(`agent.${editingOriginalName}.apiKey`, draft.apiKey || undefined);
       return { success: true };
     } catch (err: any) {
       return { success: false, errorMessage: err.message || 'Failed to save provider API key.' };
@@ -172,7 +172,7 @@ export const saveProvider = (
   }
 
   try {
-    const list = settingsService.get<any[]>('providers') || [];
+    const list = (settingsService.getDynamic('providers') as any[]) || [];
     const isEdit = originalName !== null;
     let updatedList;
 
@@ -194,7 +194,7 @@ export const saveProvider = (
     if (draft.apiKey) newEntry.apiKey = draft.apiKey;
 
     updatedList.push(newEntry);
-    settingsService.setPersistent('providers', updatedList);
+    settingsService.setPersistentDynamic('providers', updatedList);
 
     const def = createOpenAICompatibleProviderDefinition({
       name: providerIdentifier,
@@ -216,12 +216,12 @@ export const saveProvider = (
 };
 
 export const deleteCustomProvider = (settingsService: SettingsService, name: string): void => {
-  const list = settingsService.get<any[]>('providers') || [];
+  const list = (settingsService.getDynamic('providers') as any[]) || [];
   const updated = list.filter((p: any) => resolveProviderId(p) !== name);
-  settingsService.setPersistent('providers', updated);
+  settingsService.setPersistentDynamic('providers', updated);
   unregisterProvider(name);
 
-  const activeProvider = settingsService.get<string>('agent.provider');
+  const activeProvider = settingsService.get('agent.provider');
   if (activeProvider === name) {
     settingsService.set('agent.provider', 'openai');
   }

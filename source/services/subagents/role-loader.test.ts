@@ -4,8 +4,12 @@ import { loadRoleDefinition } from './role-loader.js';
 
 function settings(values: Record<string, unknown>): ISettingsService {
   return {
-    get: <T>(key: string) => values[key] as T,
+    get: (key: any) => values[key] as any,
+    getDynamic: (key: string) => values[key],
     set: () => {},
+    setDynamic: () => {},
+    setPersistent: () => {},
+    setPersistentDynamic: () => {},
   };
 }
 

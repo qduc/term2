@@ -293,17 +293,17 @@ export async function evaluateShellAutoApprovalAdvisories({
   const out = new Map<string, ShellAutoApprovalAdvisory>();
   if (!settingsService) return out;
 
-  const mode = settingsService.get<'off' | 'advisory' | 'auto'>('shell.autoApproveMode');
+  const mode = settingsService.get('shell.autoApproveMode');
   if (mode === 'off') return out;
 
   const choreModel = resolveAncillaryModelTier('chore', settingsService);
   const autoApproveModel =
-    settingsService.get<string>('agent.choreModel') ??
-    settingsService.get<string>('agent.autoApproveModel') ??
+    settingsService.get('agent.choreModel') ??
+    settingsService.get('agent.autoApproveModel') ??
     choreModel.model;
   const autoApproveProvider =
-    settingsService.get<string>('agent.choreProvider') ??
-    settingsService.get<string>('agent.autoApproveProvider') ??
+    settingsService.get('agent.choreProvider') ??
+    settingsService.get('agent.autoApproveProvider') ??
     choreModel.provider;
 
   const toEvaluateByLLM: ShellAutoApprovalCommand[] = [];

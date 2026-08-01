@@ -168,7 +168,7 @@ export function createSettingsCommand({
       const parts = trimmedArgs.split(/\s+/).filter(Boolean);
       if (parts.length === 1) {
         const key = parts[0];
-        const value = settingsService.get(key);
+        const value = settingsService.getDynamic(key);
         const source = settingsService.getSource(key);
         addSystemMessage(`${key}: ${value} (${source})`);
         return true;
@@ -180,7 +180,7 @@ export function createSettingsCommand({
         addSystemMessage(`Reset ${keyToReset} to default`);
 
         // Apply runtime effects if applicable after reset
-        const resetValue = settingsService.get(keyToReset);
+        const resetValue = settingsService.getDynamic(keyToReset);
         if (applyRuntimeSetting && settingsService.isRuntimeModifiable(keyToReset)) {
           applyRuntimeSetting(keyToReset, resetValue);
         }
@@ -207,7 +207,7 @@ export function createSettingsCommand({
           }
           // Update provider setting
           const providerKey = modelSettingConfig.providerKey;
-          settingsService.set(providerKey, provider);
+          settingsService.setDynamic(providerKey, provider);
           // Apply runtime provider change
           if (applyRuntimeSetting) {
             applyRuntimeSetting(providerKey, provider);
@@ -251,7 +251,7 @@ export function createSettingsCommand({
         return true;
       }
 
-      settingsService.set(key, parsedValue);
+      settingsService.setDynamic(key, parsedValue);
       if (applyRuntimeSetting) {
         applyRuntimeSetting(key, parsedValue);
       }

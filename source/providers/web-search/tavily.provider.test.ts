@@ -3,8 +3,12 @@ import { tavilyProvider, isTavilyConfigured } from './tavily.provider.js';
 
 // Helper to create a mock settings service
 const createMockSettingsService = (settings: Record<string, any> = {}) => ({
-  get: <T>(key: string): T => settings[key] as T,
+  get: (key: any): any => settings[key],
+  getDynamic: (key: string): unknown => settings[key],
   set: () => {},
+  setDynamic: () => {},
+  setPersistent: () => {},
+  setPersistentDynamic: () => {},
 });
 
 // Helper to create a mock logging service

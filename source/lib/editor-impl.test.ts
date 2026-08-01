@@ -51,8 +51,12 @@ function createMockLogger(): ILoggingService {
 // Helper to create a mock settings service
 function createMockSettings(values: Record<string, any> = {}): ISettingsService {
   return {
-    get: <T>(key: string) => values[key] as T,
+    get: (key: any) => values[key] as any,
+    getDynamic: (key: string) => values[key],
     set: () => {},
+    setDynamic: () => {},
+    setPersistent: () => {},
+    setPersistentDynamic: () => {},
   };
 }
 

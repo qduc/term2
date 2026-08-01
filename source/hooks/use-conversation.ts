@@ -120,7 +120,7 @@ export const useConversation = ({
     import('../services/approval/approval-presentation-policy.js').ApprovedToolContext | null
   >(null);
 
-  const provider = useSetting<string>(settingsService || dummySettingsService, 'agent.provider') ?? 'openai';
+  const provider = useSetting(settingsService || dummySettingsService, 'agent.provider') ?? 'openai';
   const readBackgroundSubagentTasks = useCallback(
     (): { tasks: readonly BackgroundSubagentTask[]; now: number } => ({
       tasks: conversationService.backgroundSubagentTasks?.getSnapshot?.() ?? [],

@@ -222,26 +222,26 @@ export class SessionInputPlanner {
 
   #getTrafficMode(): string {
     if (!this.#settingsService) return 'standard';
-    if (this.#settingsService.get<boolean>('app.orchestratorMode')) return 'orchestrator';
-    if (this.#settingsService.get<boolean>('app.liteMode')) return 'lite';
-    if (this.#settingsService.get<boolean>('app.planMode')) return 'plan';
-    if (this.#settingsService.get<boolean>('app.mentorMode')) return 'mentor';
+    if (this.#settingsService.get('app.orchestratorMode')) return 'orchestrator';
+    if (this.#settingsService.get('app.liteMode')) return 'lite';
+    if (this.#settingsService.get('app.planMode')) return 'plan';
+    if (this.#settingsService.get('app.mentorMode')) return 'mentor';
     return 'standard';
   }
 
   #getModelForGuard(): string | null {
-    return this.#settingsService?.get<string>('agent.model') ?? null;
+    return this.#settingsService?.get('agent.model') ?? null;
   }
 
   #getReasoningEffortForGuard(): string | null {
-    return this.#settingsService?.get<string>('agent.reasoningEffort') ?? null;
+    return this.#settingsService?.get('agent.reasoningEffort') ?? null;
   }
 
   #getCurrentProvider(nullable: true): string | null;
   #getCurrentProvider(nullable?: false): string;
   #getCurrentProvider(nullable?: boolean): string | null {
     const fn = getMethod<[], string>(this.#agentClient, 'getProvider');
-    const result = fn ? fn.call(this.#agentClient) : this.#settingsService?.get<string>('agent.provider');
+    const result = fn ? fn.call(this.#agentClient) : this.#settingsService?.get('agent.provider');
     return nullable ? result ?? null : result!;
   }
 

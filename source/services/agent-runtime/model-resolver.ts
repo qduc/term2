@@ -37,9 +37,9 @@ function resolveTierPolicy(tier: string, settings: ISettingsService): ExactModel
 }
 
 export function resolveAncillaryModelTier(tier: AncillaryModelTier, settings: ISettingsService): ExactModelPolicy {
-  const model = settings.get<string>(`agent.${tier}Model`) ?? resolveLegacyTierModel(tier, settings);
-  const provider = settings.get<string>(`agent.${tier}Provider`) ?? settings.get<string>('agent.provider') ?? 'openai';
-  return { provider, model: model ?? settings.get<string>('agent.model') ?? 'gpt-4o' };
+  const model = (settings.getDynamic(`agent.${tier}Model`) as string | undefined) ?? resolveLegacyTierModel(tier, settings);
+  const provider = (settings.getDynamic(`agent.${tier}Provider`) as string | undefined) ?? settings.get('agent.provider') ?? 'openai';
+  return { provider, model: model ?? settings.get('agent.model') ?? 'gpt-4o' };
 }
 
 function resolveRelativePolicy(
@@ -58,7 +58,7 @@ function resolveRelativePolicy(
     // MVP: all reasoning effort levels resolve to the same configured
     // reasoning model. Granular per-effort settings can be added later.
     const reasoningModel =
-      settings.get<string>(`agent.reasoning.${policy.reasoning}`) ?? settings.get<string>('agent.reasoningModel');
+      (settings.getDynamic(`agent.reasoning.${policy.reasoning}`) as string | undefined) ?? (settings.getDynamic('agent.reasoningModel') as string | undefined);
     if (reasoningModel) {
       return { provider: parentExact.provider, model: reasoningModel };
     }
@@ -66,17 +66,17 @@ function resolveRelativePolicy(
 
   const tier = policy.tier === 'lower' ? 'cheap' : 'smart';
   const model =
-    settings.get<string>(`agent.${tier}Model`) ??
+    (settings.getDynamic(`agent.${tier}Model`) as string | undefined) ??
     resolveLegacyTierModel(tier, settings) ??
-    settings.get<string>('agent.model') ??
+    settings.get('agent.model') ??
     parentExact.model;
-  const provider = settings.get<string>(`agent.${tier}Provider`) ?? parentExact.provider;
+  const provider = (settings.getDynamic(`agent.${tier}Provider`) as string | undefined) ?? parentExact.provider;
   return { provider, model };
 }
 
 function resolveLegacyTierModel(tier: AncillaryModelTier, settings: ISettingsService): string | undefined {
   for (const settingKey of legacyTierModelSettingKeys(tier)) {
-    const model = settings.get<string>(settingKey);
+    const model = settings.getDynamic(settingKey) as string | undefined;
     if (model !== undefined && model !== null) return model;
   }
   return undefined;

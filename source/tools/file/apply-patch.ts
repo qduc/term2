@@ -319,7 +319,7 @@ export function createApplyPatchToolDefinition(deps: {
       }
     },
     execute: async (params) => {
-      const enableFileLogging = settingsService.get<boolean>('tools.logFileOperations');
+      const enableFileLogging = settingsService.get('tools.logFileOperations');
       const cwd = executionContext?.getCwd() || process.cwd();
       const sshService = executionContext?.getSSHService();
       const isRemote = executionContext?.isRemote() && !!sshService;

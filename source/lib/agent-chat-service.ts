@@ -101,7 +101,7 @@ export class AgentChatService {
       provider: tempProvider,
     });
 
-    const isDefaultSetting = settings.get<string>('agent.reasoningEffort') === 'default';
+    const isDefaultSetting = settings.get('agent.reasoningEffort') === 'default';
     if (tempProvider === 'codex' && isDefaultSetting) {
       try {
         await fetchModels({ settingsService: settings, loggingService: logger }, 'codex');
@@ -119,7 +119,7 @@ export class AgentChatService {
 
       if (options.model || options.reasoningEffort || options.instructions || options.provider) {
         const modelSettings: any = {
-          retry: { maxRetries: settings.get<number>('agent.retryAttempts') ?? 2 },
+          retry: { maxRetries: settings.get('agent.retryAttempts') ?? 2 },
         };
 
         let effectiveEffort = tempEffort;
@@ -185,7 +185,7 @@ export class AgentChatService {
       provider: tempProvider,
     });
 
-    const isDefaultSetting = settings.get<string>('agent.reasoningEffort') === 'default';
+    const isDefaultSetting = settings.get('agent.reasoningEffort') === 'default';
     if (tempProvider === 'codex' && isDefaultSetting) {
       try {
         await fetchModels({ settingsService: settings, loggingService: logger }, 'codex');
@@ -199,7 +199,7 @@ export class AgentChatService {
       const tempModel = options.model || agentConfig.getModel();
       const tempEffort = options.reasoningEffort || agentConfig.reasoningEffort;
       const modelSettings: any = {
-        retry: { maxRetries: settings.get<number>('agent.retryAttempts') ?? 2 },
+        retry: { maxRetries: settings.get('agent.retryAttempts') ?? 2 },
       };
 
       let effectiveEffort = tempEffort;

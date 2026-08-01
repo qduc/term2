@@ -947,3 +947,15 @@ export const SENSITIVE_SETTINGS = {
   AGENT_OPENROUTER_TITLE: 'agent.openrouter.title',
   APP_SHELL_PATH: 'app.shellPath',
 } as const;
+
+type ValueAtPath<T, P extends string> = P extends `${infer K}.${infer R}`
+  ? K extends keyof T
+    ? ValueAtPath<Exclude<T[K], undefined>, R>
+    : undefined
+  : P extends keyof T
+    ? T[P]
+    : undefined;
+
+export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
+export type SettingValue<K extends SettingKey> = ValueAtPath<SettingsData, K>;
+

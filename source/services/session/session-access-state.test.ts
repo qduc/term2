@@ -15,7 +15,7 @@ it('disposes read and transient Docker grants while retaining the settings-backe
   expect(access.allowsRead('/outside/docs/guide.md')).toBe(false);
   expect(access.hasDockerGrant('docker ps', process.cwd())).toBe(true);
   expect(access.requiresDockerApproval('indirect-command')).toBe(false);
-  expect(settings.get<string[]>('sandbox.dockerHostControlProjects')).toContain(process.cwd());
+  expect(settings.get('sandbox.dockerHostControlProjects')).toContain(process.cwd());
 });
 
 it('clears transient read and Docker state without removing the settings-backed project grant', () => {

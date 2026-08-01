@@ -242,7 +242,7 @@ export class AgentClient {
       this.#agentConfig.subscribeToSettings();
 
       this.#logger.debug('OpenAI Agent Client initialized', {
-        model: model || this.#settings.get<string>('agent.model'),
+        model: model || this.#settings.get('agent.model'),
         reasoningEffort: reasoningEffort ?? 'default',
         temperature: this.#agentConfig.temperature,
         maxTurns: this.#runnerManager.maxTurns,

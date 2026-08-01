@@ -44,7 +44,7 @@ export function applyRuntimeSettingChange(key: string, value: unknown, deps: Run
   }
 
   if (key === 'agent.transport') {
-    deps.setModel(deps.settingsService.get<string>('agent.model'));
+    deps.setModel(deps.settingsService.get('agent.model'));
     return;
   }
 
@@ -61,12 +61,12 @@ export function applyRuntimeSettingChange(key: string, value: unknown, deps: Run
     key === 'agent.mentorProvider' ||
     key === 'agent.mentorReasoningEffort'
   ) {
-    deps.setModel(deps.settingsService.get<string>('agent.model'));
+    deps.setModel(deps.settingsService.get('agent.model'));
     return;
   }
 
   if (key === 'app.mentorMode' || key === 'app.liteMode' || key === 'app.orchestratorMode') {
-    deps.setModel(deps.settingsService.get<string>('agent.model'));
+    deps.setModel(deps.settingsService.get('agent.model'));
     return;
   }
 

@@ -127,8 +127,8 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
       );
     },
     onEvent: deps.onEvent,
-    ttlMs: deps.settings.get<number>('subagent.asyncSessionTtlMs') ?? 30 * 60 * 1000,
-    messageCap: deps.settings.get<number>('subagent.asyncMessageCap') ?? 50,
+    ttlMs: deps.settings.get('subagent.asyncSessionTtlMs') ?? 30 * 60 * 1000,
+    messageCap: deps.settings.get('subagent.asyncMessageCap') ?? 50,
     sessionForRole: (role) => (role === 'mentor' ? mentorSession : undefined),
   });
 

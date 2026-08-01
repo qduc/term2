@@ -109,7 +109,7 @@ export class MentorRunner {
     const definition = loadRoleDefinition('mentor', this.#settings);
     const mentorModel = definition.model;
     const mentorProvider = definition.provider;
-    const mentorMode = this.#settings.get<boolean>('app.mentorMode');
+    const mentorMode = this.#settings.get('app.mentorMode');
 
     const baseInstructions = mentorMode
       ? resolvePrompt(path.join(PROMPTS_DIR, 'mentor-mode.md'))
@@ -134,9 +134,9 @@ export class MentorRunner {
     });
 
     const mentorAgent = this.#mentorSession.ensureAgent(() => {
-      const reasoningEffort = this.#settings.get<string>('agent.mentorReasoningEffort');
+      const reasoningEffort = this.#settings.get('agent.mentorReasoningEffort');
       const modelSettings: any = {
-        retry: { maxRetries: this.#settings.get<number>('agent.retryAttempts') ?? 2 },
+        retry: { maxRetries: this.#settings.get('agent.retryAttempts') ?? 2 },
       };
       if (reasoningEffort && reasoningEffort !== 'default') {
         modelSettings.reasoning = { effort: reasoningEffort, summary: 'auto' };

@@ -257,7 +257,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         setInput('');
       } else if (index === items.length + 1) {
         // "Reorder Providers" selected
-        const providerOrder = settingsService.get<string[]>('providerOrder') ?? [];
+        const providerOrder = settingsService.get('providerOrder') ?? [];
         const allIds = items.map((i) => i.id);
         const orderedIds =
           providerOrder.length > 0
@@ -285,7 +285,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setDiscardFromPhase(null);
           setDraftModified(false);
           // Edit custom provider directly
-          const list = settingsService.get<any[]>('providers') || [];
+          const list = (settingsService.getDynamic('providers') as any[]) || [];
           const found = list.find((p: any) => resolveProviderId(p) === provider.id);
           if (found) {
             const id = resolveProviderId(found) ?? provider.id;
@@ -313,7 +313,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setFieldErrors({});
           setDiscardFromPhase(null);
           setDraftModified(false);
-          const storedKey = settingsService.get<string>(`agent.${provider.id}.apiKey`) || '';
+          const storedKey = (settingsService.getDynamic(`agent.${provider.id}.apiKey`) as string) || '';
           setDraft({
             name: provider.label,
             type: provider.id as any,

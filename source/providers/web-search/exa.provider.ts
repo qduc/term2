@@ -29,7 +29,7 @@ const EXA_API_URL = 'https://api.exa.ai/search';
 async function searchExa(query: string, deps: WebSearchDeps): Promise<WebSearchResponse> {
   const { settingsService, loggingService } = deps;
 
-  const apiKey = settingsService.get<string>('webSearch.exa.apiKey');
+  const apiKey = settingsService.get('webSearch.exa.apiKey');
   if (!apiKey) {
     throw new Error(
       'Exa API key is not configured. ' + 'Set EXA_API_KEY environment variable or configure webSearch.exa.apiKey.',
@@ -93,7 +93,7 @@ async function searchExa(query: string, deps: WebSearchDeps): Promise<WebSearchR
 }
 
 function isConfigured(deps: { settingsService: ISettingsService }): boolean {
-  const apiKey = deps.settingsService.get<string>('webSearch.exa.apiKey');
+  const apiKey = deps.settingsService.get('webSearch.exa.apiKey');
   return !!apiKey;
 }
 

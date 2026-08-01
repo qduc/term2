@@ -34,22 +34,22 @@ const StatusBar: FC<StatusBarProps> = ({
   staticCommitBlocker = null,
   queueLength,
 }) => {
-  const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
-  const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
-  const planMode = useSetting<boolean>(settingsService, 'app.planMode') ?? false;
-  const orchestratorMode = useSetting<boolean>(settingsService, 'app.orchestratorMode') ?? false;
-  const model = useSetting<string>(settingsService, 'agent.model');
-  const smartModel = useSetting<string>(settingsService, 'agent.smartModel');
-  const legacyMentorModel = useSetting<string>(settingsService, 'agent.mentorModel');
+  const mentorMode = useSetting(settingsService, 'app.mentorMode') ?? false;
+  const liteMode = useSetting(settingsService, 'app.liteMode') ?? false;
+  const planMode = useSetting(settingsService, 'app.planMode') ?? false;
+  const orchestratorMode = useSetting(settingsService, 'app.orchestratorMode') ?? false;
+  const model = useSetting(settingsService, 'agent.model');
+  const smartModel = useSetting(settingsService, 'agent.smartModel');
+  const legacyMentorModel = useSetting(settingsService, 'agent.mentorModel');
   const mentorModel = smartModel ?? legacyMentorModel;
-  const providerKey = useSetting<string>(settingsService, 'agent.provider') ?? 'openai';
-  const reasoningEffort = useSetting<string>(settingsService, 'agent.reasoningEffort') ?? 'default';
-  const autoApproveMode = useSetting<string>(settingsService, 'shell.autoApproveMode') ?? 'off';
-  const choreModel = useSetting<string>(settingsService, 'agent.choreModel');
-  const legacyAutoApproveModel = useSetting<string>(settingsService, 'agent.autoApproveModel');
+  const providerKey = useSetting(settingsService, 'agent.provider') ?? 'openai';
+  const reasoningEffort = useSetting(settingsService, 'agent.reasoningEffort') ?? 'default';
+  const autoApproveMode = useSetting(settingsService, 'shell.autoApproveMode') ?? 'off';
+  const choreModel = useSetting(settingsService, 'agent.choreModel');
+  const legacyAutoApproveModel = useSetting(settingsService, 'agent.autoApproveModel');
   const autoApproveModel = choreModel ?? legacyAutoApproveModel;
-  const sandboxEnabled = useSetting<boolean>(settingsService, 'sandbox.enabled') ?? false;
-  const sandboxReadPolicy = useSetting<string>(settingsService, 'sandbox.readPolicy') ?? 'standard';
+  const sandboxEnabled = useSetting(settingsService, 'sandbox.enabled') ?? false;
+  const sandboxReadPolicy = useSetting(settingsService, 'sandbox.readPolicy') ?? 'standard';
   // Session-scoped grants are intentionally not process-global, so only the
   // persistent project grant is discoverable from this app-wide status bar.
   const dockerHostAccess = hasDockerHostControlProject(process.cwd()) ? 'project' : undefined;

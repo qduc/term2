@@ -12,7 +12,9 @@ import {
   SENSITIVE_SETTING_KEYS,
   SettingsSchema,
   normalizeAppModes,
+  type SettingKey,
   type SettingSource,
+  type SettingValue,
   type SettingsData,
   type SettingsWithSources,
 } from './settings-schema.js';
@@ -299,9 +301,16 @@ export class SettingsService {
   }
 
   /**
-   * Get a setting value by dot-notation key (e.g., 'agent.model')
+   * Get a setting value by typed dot-notation key (e.g., 'agent.model')
    */
-  get<T = any>(key: string): T {
+  get<K extends SettingKey>(key: K): SettingValue<K> {
+    return this.getDynamic(key) as SettingValue<K>;
+  }
+
+  /**
+   * Get a setting value by arbitrary dynamic key path, returning unknown.
+   */
+  getDynamic(key: string): unknown {
     const keys = key.split('.');
     let value: any = this.settings;
 
@@ -309,11 +318,11 @@ export class SettingsService {
       if (value && typeof value === 'object') {
         value = value[k];
       } else {
-        return undefined as any;
+        return undefined;
       }
     }
 
-    return value as T;
+    return value;
   }
 
   /**
@@ -391,7 +400,11 @@ export class SettingsService {
    * Only runtime-modifiable settings can be changed.
    * Sensitive settings cannot be modified (must come from environment).
    */
-  set(key: string, value: any, options?: { persist?: boolean }): void {
+  set<K extends SettingKey>(key: K, value: SettingValue<K>, options?: { persist?: boolean }): void {
+    this.setDynamic(key, value, options);
+  }
+
+  setDynamic(key: string, value: unknown, options?: { persist?: boolean }): void {
     if (this.isSensitive(key)) {
       throw new Error(
         `Cannot modify '${key}' - it is a sensitive setting that can only be configured via environment variables.`,
@@ -428,7 +441,7 @@ export class SettingsService {
     // If we're changing the logging level, update the logging service runtime
     if (key === 'logging.logLevel') {
       try {
-        this.loggingService.setLogLevel(value);
+        this.loggingService.setLogLevel(value as any);
       } catch (err: any) {
         if (!this.disableLogging) {
           this.loggingService.warn('Failed to update logging level at runtime', {
@@ -466,7 +479,11 @@ export class SettingsService {
    * This still validates against the full schema and updates in-memory state
    * so the settings UI reflects the saved value immediately.
    */
-  setPersistent(key: string, value: any): void {
+  setPersistent<K extends SettingKey>(key: K, value: SettingValue<K>): void {
+    this.setPersistentDynamic(key, value);
+  }
+
+  setPersistentDynamic(key: string, value: unknown): void {
     if (this.isSensitive(key)) {
       throw new Error(
         `Cannot modify '${key}' - it is a sensitive setting that can only be configured via environment variables.`,

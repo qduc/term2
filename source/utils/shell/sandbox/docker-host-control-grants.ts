@@ -90,13 +90,13 @@ export class DockerHostControlGrants {
   }
 
   hasProject(cwd: string): boolean {
-    return (this.#settings?.get<string[]>('sandbox.dockerHostControlProjects') ?? []).includes(realRoot(cwd));
+    return (this.#settings?.get('sandbox.dockerHostControlProjects') ?? []).includes(realRoot(cwd));
   }
 
   grantProject(cwd: string): void {
     const root = realRoot(cwd);
     if (!this.#settings) throw new Error('Docker host-control grants are not configured.');
-    const projects = this.#settings.get<string[]>('sandbox.dockerHostControlProjects') ?? [];
+    const projects = this.#settings.get('sandbox.dockerHostControlProjects') ?? [];
     if (!projects.includes(root)) this.#settings.set('sandbox.dockerHostControlProjects', [...projects, root]);
   }
 

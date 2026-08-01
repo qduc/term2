@@ -238,10 +238,10 @@ export class ConversationAdapter {
 
   #getTrafficMode(): string {
     if (!this.#settingsService) return 'standard';
-    if (this.#settingsService.get<boolean>('app.orchestratorMode')) return 'orchestrator';
-    if (this.#settingsService.get<boolean>('app.liteMode')) return 'lite';
-    if (this.#settingsService.get<boolean>('app.planMode')) return 'plan';
-    if (this.#settingsService.get<boolean>('app.mentorMode')) return 'mentor';
+    if (this.#settingsService.get('app.orchestratorMode')) return 'orchestrator';
+    if (this.#settingsService.get('app.liteMode')) return 'lite';
+    if (this.#settingsService.get('app.planMode')) return 'plan';
+    if (this.#settingsService.get('app.mentorMode')) return 'mentor';
     return 'standard';
   }
 

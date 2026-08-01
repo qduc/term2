@@ -34,7 +34,7 @@ const ModelSelectionMenu: FC<Props> = ({
 }) => {
   const tabItems = useMemo(() => {
     const all = getAllProviders();
-    const providerOrder = settingsService.get<string[]>('providerOrder') ?? [];
+    const providerOrder = settingsService.get('providerOrder') ?? [];
     const sorted =
       providerOrder.length > 0
         ? sortProvidersByOrder(

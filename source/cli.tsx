@@ -406,8 +406,8 @@ if (providerFlag && !getProviderIds().includes(providerFlag)) {
     resolvedLiteMode = true;
   } else {
     const implicitLite = Boolean(hasPositionalPrompt && !cli.flags.autoApprove);
-    const persistedOrchestrator = settings.get<boolean>('app.orchestratorMode');
-    const persistedMentor = settings.get<boolean>('app.mentorMode');
+    const persistedOrchestrator = settings.get('app.orchestratorMode');
+    const persistedMentor = settings.get('app.mentorMode');
     // Implicit lite must not override a higher-precedence mode already persisted.
     resolvedLiteMode = implicitLite && !persistedOrchestrator && !persistedMentor;
   }
@@ -417,10 +417,10 @@ if (providerFlag && !getProviderIds().includes(providerFlag)) {
 // Normalize all mode flags to enforce mutual exclusion with a consistent
 // precedence: orchestratorMode > liteMode > planMode > mentorMode.
 const normalized = normalizeAppModes({
-  orchestratorMode: settings.get<boolean>('app.orchestratorMode'),
-  liteMode: settings.get<boolean>('app.liteMode'),
-  planMode: settings.get<boolean>('app.planMode'),
-  mentorMode: settings.get<boolean>('app.mentorMode'),
+  orchestratorMode: settings.get('app.orchestratorMode'),
+  liteMode: settings.get('app.liteMode'),
+  planMode: settings.get('app.planMode'),
+  mentorMode: settings.get('app.mentorMode'),
 });
 settings.set('app.orchestratorMode', normalized.orchestratorMode, { persist: false });
 settings.set('app.liteMode', normalized.liteMode, { persist: false });
@@ -674,15 +674,15 @@ function buildInitMeta(id: string, createdAt: string) {
     ...(cwd ? { projectPath: cwd } : {}),
     ...(sshInfo?.host ? { sshHost: sshInfo.host } : {}),
     appMode: {
-      mentorMode: settings.get<boolean>('app.mentorMode') ?? false,
-      liteMode: settings.get<boolean>('app.liteMode') ?? false,
-      planMode: settings.get<boolean>('app.planMode') ?? false,
-      orchestratorMode: settings.get<boolean>('app.orchestratorMode') ?? false,
+      mentorMode: settings.get('app.mentorMode') ?? false,
+      liteMode: settings.get('app.liteMode') ?? false,
+      planMode: settings.get('app.planMode') ?? false,
+      orchestratorMode: settings.get('app.orchestratorMode') ?? false,
     },
-    ...(settings.get<string>('agent.model') ? { model: settings.get<string>('agent.model') } : {}),
-    ...(settings.get<string>('agent.provider') ? { provider: settings.get<string>('agent.provider') } : {}),
-    ...(settings.get<string>('agent.reasoningEffort')
-      ? { reasoningEffort: settings.get<string>('agent.reasoningEffort') }
+    ...(settings.get('agent.model') ? { model: settings.get('agent.model') } : {}),
+    ...(settings.get('agent.provider') ? { provider: settings.get('agent.provider') } : {}),
+    ...(settings.get('agent.reasoningEffort')
+      ? { reasoningEffort: settings.get('agent.reasoningEffort') }
       : {}),
     ...(resumedConversation?.forkedFrom ? { forkedFrom: resumedConversation.forkedFrom } : {}),
   };
@@ -709,7 +709,7 @@ conversationService.setLogSink((event) => logWriter.append(event));
 // Persist agent-affecting settings changes as they happen.
 settings.onChange((key) => {
   if (!key || !AGENT_AFFECTING_SETTINGS.has(key)) return;
-  logWriter.append({ type: 'settings_changed', key, value: settings.get(key) });
+  logWriter.append({ type: 'settings_changed', key, value: settings.getDynamic(key) });
 });
 
 import { InputProvider } from './context/InputContext.js';

@@ -10,17 +10,17 @@ interface BannerProps {
 }
 
 const Banner: FC<BannerProps> = ({ settingsService, isShellMode = false }) => {
-  const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
-  const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
-  const planMode = useSetting<boolean>(settingsService, 'app.planMode') ?? false;
-  const orchestratorMode = useSetting<boolean>(settingsService, 'app.orchestratorMode') ?? false;
-  const model = useSetting<string>(settingsService, 'agent.model');
-  const smartModel = useSetting<string>(settingsService, 'agent.smartModel');
-  const legacyMentorModel = useSetting<string>(settingsService, 'agent.mentorModel');
+  const mentorMode = useSetting(settingsService, 'app.mentorMode') ?? false;
+  const liteMode = useSetting(settingsService, 'app.liteMode') ?? false;
+  const planMode = useSetting(settingsService, 'app.planMode') ?? false;
+  const orchestratorMode = useSetting(settingsService, 'app.orchestratorMode') ?? false;
+  const model = useSetting(settingsService, 'agent.model');
+  const smartModel = useSetting(settingsService, 'agent.smartModel');
+  const legacyMentorModel = useSetting(settingsService, 'agent.mentorModel');
   const mentorModel = smartModel ?? legacyMentorModel;
-  const providerKey = useSetting<string>(settingsService, 'agent.provider') ?? 'openai';
-  const reasoningEffort = useSetting<string>(settingsService, 'agent.reasoningEffort') ?? 'default';
-  const mentorReasoningEffort = useSetting<string>(settingsService, 'agent.mentorReasoningEffort') ?? 'default';
+  const providerKey = useSetting(settingsService, 'agent.provider') ?? 'openai';
+  const reasoningEffort = useSetting(settingsService, 'agent.reasoningEffort') ?? 'default';
+  const mentorReasoningEffort = useSetting(settingsService, 'agent.mentorReasoningEffort') ?? 'default';
 
   const providerDef = getProvider(providerKey);
   const providerLabel = providerDef?.label || providerKey;

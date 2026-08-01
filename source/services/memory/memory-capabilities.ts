@@ -82,10 +82,18 @@ export class MemoryCapabilityBuilder {
 
   build(subject: MemoryCapabilitySubject, options: { projectPath?: string } = {}): MemoryCapability {
     const access = this.#accessFor(subject);
-    const settings = this.#settings.get<MemorySettings>('memory');
-    if (access === 'none' || !settings?.enabled) {
+    const enabled = this.#settings.get('memory.enabled');
+    if (access === 'none' || !enabled) {
       return { access: 'none', tools: [], guidance: '', context: '' };
     }
+
+    const settings = {
+      enabled,
+      directory: this.#settings.get('memory.directory'),
+      contextBudgetChars: this.#settings.get('memory.contextBudgetChars'),
+      searchDefaultLimit: this.#settings.get('memory.searchDefaultLimit'),
+      searchMaxLimit: this.#settings.get('memory.searchMaxLimit'),
+    };
 
     const stores = this.#createStores(settings, options.projectPath ?? process.cwd());
     const tools = createMemoryToolDefinitions(stores);

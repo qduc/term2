@@ -45,7 +45,7 @@ export class SessionAccessState {
   }
 
   hasDockerProject(cwd: string): boolean {
-    return (this.settings.get<string[]>('sandbox.dockerHostControlProjects') ?? []).includes(realRoot(cwd));
+    return (this.settings.get('sandbox.dockerHostControlProjects') ?? []).includes(realRoot(cwd));
   }
 
   recordDockerDenial(command: string): void {
@@ -70,7 +70,7 @@ export class SessionAccessState {
 
   #grantDockerProject(cwd: string): void {
     const root = realRoot(cwd);
-    const projects = this.settings.get<string[]>('sandbox.dockerHostControlProjects') ?? [];
+    const projects = this.settings.get('sandbox.dockerHostControlProjects') ?? [];
     if (!projects.includes(root)) this.settings.set('sandbox.dockerHostControlProjects', [...projects, root]);
   }
 }

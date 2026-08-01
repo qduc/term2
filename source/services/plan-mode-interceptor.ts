@@ -28,7 +28,7 @@ export const installPlanModeInterceptor = (
   };
 
   const interceptor: ToolInterceptor = async (name: string, params: unknown) => {
-    const isPlanMode = deps.settingsService.get<boolean>('app.planMode');
+    const isPlanMode = deps.settingsService.get('app.planMode');
     if (!isPlanMode) {
       return null;
     }

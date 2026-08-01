@@ -29,7 +29,7 @@ const TAVILY_API_URL = 'https://api.tavily.com/search';
 async function searchTavily(query: string, deps: WebSearchDeps): Promise<WebSearchResponse> {
   const { settingsService, loggingService } = deps;
 
-  const apiKey = settingsService.get<string>('webSearch.tavily.apiKey');
+  const apiKey = settingsService.get('webSearch.tavily.apiKey');
   if (!apiKey) {
     throw new Error(
       'Tavily API key is not configured. ' +
@@ -81,7 +81,7 @@ async function searchTavily(query: string, deps: WebSearchDeps): Promise<WebSear
 }
 
 function isConfigured(deps: { settingsService: ISettingsService }): boolean {
-  const apiKey = deps.settingsService.get<string>('webSearch.tavily.apiKey');
+  const apiKey = deps.settingsService.get('webSearch.tavily.apiKey');
   return !!apiKey;
 }
 

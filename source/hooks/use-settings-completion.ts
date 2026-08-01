@@ -23,7 +23,7 @@ const MAX_RESULTS = 10;
  */
 function getCurrentSettingValue(settingsService: SettingsService, key: string): string | number | boolean | undefined {
   try {
-    const value = settingsService.get(key);
+    const value = settingsService.getDynamic(key) as any;
     // Format the value for display
     if (typeof value === 'object') {
       return JSON.stringify(value);

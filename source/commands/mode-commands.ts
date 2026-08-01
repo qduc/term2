@@ -16,7 +16,7 @@ export function useModeHelpers({ settingsService, applyRuntimeSetting, addSystem
   const disableOtherModes = useCallback(
     (except: ExclusiveModeKey) => {
       for (const key of EXCLUSIVE_MODE_KEYS) {
-        if (key !== except && settingsService.get<boolean>(key)) {
+        if (key !== except && settingsService.get(key)) {
           settingsService.set(key, false);
           applyRuntimeSetting(key, false);
         }
@@ -26,7 +26,7 @@ export function useModeHelpers({ settingsService, applyRuntimeSetting, addSystem
   );
 
   const togglePlanMode = useCallback(() => {
-    const currentValue = settingsService.get<boolean>('app.planMode');
+    const currentValue = settingsService.get('app.planMode');
     const newValue = !currentValue;
 
     if (newValue) {
@@ -42,7 +42,7 @@ export function useModeHelpers({ settingsService, applyRuntimeSetting, addSystem
   }, [settingsService, applyRuntimeSetting, addSystemMessage, disableOtherModes]);
 
   const cycleAppModes = useCallback(() => {
-    const planMode = settingsService.get<boolean>('app.planMode');
+    const planMode = settingsService.get('app.planMode');
     const nextPlanMode = !planMode;
     const modeName = nextPlanMode ? 'Plan' : 'Standard';
     const detail = nextPlanMode ? ' - read-only research/planning mode' : '';
@@ -94,7 +94,7 @@ export function createModeToggleCommand(
       }
 
       const modeLabel = label.charAt(0).toUpperCase() + label.slice(1);
-      const newValue = !deps.settingsService.get<boolean>(modeKey);
+      const newValue = !deps.settingsService.get(modeKey);
       if (newValue) {
         deps.disableOtherModes(modeKey);
       }

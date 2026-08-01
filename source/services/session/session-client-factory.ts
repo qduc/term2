@@ -63,7 +63,7 @@ export function createOwnedSessionClientFactory(
   return {
     create(sessionId) {
       const continuationProjectionMode: ContinuationProjectionMode =
-        settings.get<string>('agent.provider') === 'openai' ? 'openai-provider' : 'legacy';
+        settings.get('agent.provider') === 'openai' ? 'openai-provider' : 'legacy';
       const toolOwnership = new ToolOwnershipRegistry();
       const access = new SessionAccessState(settings);
       const postExecutePending = new PostExecutePendingRegistry({ sessionId, epoch: crypto.randomUUID() });
@@ -83,7 +83,7 @@ export function createOwnedSessionClientFactory(
         continuationProjectionMode === 'openai-provider'
           ? new ProviderContinuityOpenAIRootSelectorParityObserver(
               providerContinuity,
-              () => settings.get<string>('agent.model'),
+              () => settings.get('agent.model'),
               undefined,
               () => openAIRootProviderIdentity.current,
             )

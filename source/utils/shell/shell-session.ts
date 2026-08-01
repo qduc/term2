@@ -36,9 +36,9 @@ export async function executeFormattedShellCommand(params: {
   sshInfo?: { remoteDir: string };
   sshService?: ISSHService;
 }): Promise<{ text: string; exitCode: number | null; timedOut: boolean }> {
-  const timeoutValue = params.settingsService.get<number>('shell.timeout');
+  const timeoutValue = params.settingsService.get('shell.timeout');
   const timeout = timeoutValue != null ? timeoutValue : undefined;
-  const maxOutputLengthValue = params.settingsService.get<number>('shell.maxOutputChars');
+  const maxOutputLengthValue = params.settingsService.get('shell.maxOutputChars');
   const maxOutputLength = maxOutputLengthValue != null ? maxOutputLengthValue : undefined;
   const startedAt = Date.now();
 

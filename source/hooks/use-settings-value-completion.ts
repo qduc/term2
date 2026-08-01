@@ -55,7 +55,7 @@ export const useSettingsValueCompletion = (
     void settingsVersion;
     const suggestions = [...buildSettingValueSuggestions(settingKey)];
     try {
-      const currentValue = settingsService.get(settingKey);
+      const currentValue = settingsService.getDynamic(settingKey);
       if (currentValue !== undefined) {
         const currentValueStr = String(currentValue);
         if (!suggestions.some((s) => s.value === currentValueStr)) {
@@ -89,7 +89,7 @@ export const useSettingsValueCompletion = (
 
       // Get current value from settingsService and find it in suggestions
       try {
-        const currentValue = settingsService.get(key);
+        const currentValue = settingsService.getDynamic(key);
         if (currentValue !== undefined) {
           const currentValueStr = String(currentValue);
           const suggestions = buildSettingValueSuggestions(key);

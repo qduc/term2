@@ -29,7 +29,7 @@ The implementation was delivered in layers: reusable fake-wire infrastructure,
 provider-boundary contracts, then a small assembled CLI suite. The original
 phase and gate instructions below are retained as implementation history.
 
-### Gate 0 — Establish a clean baseline — complete (`1f97f424`)
+### Gate 0 — Establish a clean baseline — complete (`4640429a`)
 
 The original uncommitted-provider premise is historical. The ten provider-sweep
 fixes were committed in `4640429a`, verified, and integrated before the

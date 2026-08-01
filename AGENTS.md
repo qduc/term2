@@ -51,10 +51,10 @@ Suite ownership:
 - `scripts/provider-black-box/provider-capability-matrix.ts` and
   `provider-session-capability-manifest.ts` own the test-side capability rows,
   typed lifecycle ledgers, and aggregate accounting.
-- `provider-session-responses.blackbox.ts`,
-  `provider-session-stateless.blackbox.ts`, and
-  `provider-session-resilience.blackbox.ts` own the stateful provider lifecycle
-  scenarios and their exported ledger declarations.
+- `scripts/provider-black-box/provider-session-responses.blackbox.ts`,
+  `scripts/provider-black-box/provider-session-stateless.blackbox.ts`, and
+  `scripts/provider-black-box/provider-session-resilience.blackbox.ts` own the
+  stateful provider lifecycle scenarios and their exported ledger declarations.
 
 When adding or changing a provider scenario:
 

@@ -200,6 +200,10 @@ export function framesFor(protocol: FakeProviderProtocol, scenario: FakeProvider
         id: 'chatcmpl_fake',
         choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: ':1}' } }] } }],
       },
+      {
+        id: 'chatcmpl_fake',
+        choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+      },
     ];
   return [
     {

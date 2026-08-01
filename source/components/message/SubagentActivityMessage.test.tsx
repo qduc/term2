@@ -47,6 +47,7 @@ it.sequential('SubagentActivityMessage renders write tool CommandMessage concise
     sender: 'command' as const,
     status: 'completed' as const,
     command: 'create_file "src/test.txt"',
+    output: '',
     toolName: TOOL_NAME_CREATE_FILE,
     toolArgs: { path: 'src/test.txt', content: 'hello' },
     success: true,

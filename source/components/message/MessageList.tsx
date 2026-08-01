@@ -5,9 +5,10 @@ import ChatMessage from './ChatMessage.js';
 import Banner from '../layout/Banner.js';
 import SubagentActivityMessage from './SubagentActivityMessage.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
+import type { Message } from '../../types/message.js';
 
-type Props = {
-  messages: any[];
+type Props<T extends MessageLike = Message> = {
+  messages: T[];
   bannerItems?: string[];
   settingsService?: SettingsService;
   isShellMode?: boolean;
@@ -19,7 +20,22 @@ type MessageLike = {
   sender?: string;
   status?: string;
   callId?: string;
+  agentId?: string;
   text?: string;
+  command?: string;
+  output?: string;
+  success?: boolean;
+  failureReason?: string;
+  toolName?: string;
+  toolArgs?: unknown;
+  isApprovalRejection?: boolean;
+  autoApprovedByLlm?: boolean;
+  hadApproval?: boolean;
+  role?: string;
+  task?: string;
+  async?: boolean;
+  tools?: (string | import('../../types/message.js').CommandMessage)[];
+  finalText?: string;
 };
 
 export type StaticCommitBlocker = {
@@ -209,13 +225,13 @@ export const shouldCommitMessageToStatic = ({
   return hasPendingCandidateSignature;
 };
 
-const MessageList: FC<Props> = ({
+const MessageList = <T extends MessageLike = Message>({
   messages,
   bannerItems = [],
   settingsService,
   isShellMode = false,
   restoredStaticMessageIds = EMPTY_RESTORED_STATIC_MESSAGE_IDS,
-}) => {
+}: Props<T>) => {
   const { stdout } = useStdout();
   const terminalColumns = stdout.columns || 80;
   const contentWidth = Math.max(1, terminalColumns - MESSAGE_HORIZONTAL_PADDING * 2);
@@ -355,7 +371,12 @@ const MessageList: FC<Props> = ({
     return [...deferredHistory, ...filteredActive];
   }, [deferredHistory, active]);
 
-  const renderMessage = (msg: any, idx: number, collection: any[], maxWidth?: number) => {
+  const renderMessage = (
+    msg: MessageLike,
+    idx: number,
+    collection: readonly (StaticItem | MessageLike)[],
+    maxWidth?: number,
+  ) => {
     // Helper to get previous message safely from either StaticItem[] or MessageLike[]
     const getPreviousMessage = () => {
       if (idx <= 0) return null;
@@ -398,9 +419,9 @@ const MessageList: FC<Props> = ({
       <Box key={msg.id} marginTop={marginTop} width={maxWidth}>
         {msg.sender === 'command' ? (
           <CommandMessage
-            command={msg.command}
+            command={msg.command ?? ''}
             output={msg.output}
-            status={msg.status}
+            status={msg.status as 'pending' | 'running' | 'completed' | 'failed' | 'aborted' | undefined}
             success={msg.success}
             failureReason={msg.failureReason}
             toolName={msg.toolName}
@@ -413,7 +434,7 @@ const MessageList: FC<Props> = ({
         ) : msg.sender === 'subagent' ? (
           <SubagentActivityMessage msg={msg} />
         ) : (
-          <ChatMessage msg={msg} maxWidth={maxWidth} />
+          <ChatMessage msg={msg as Message} maxWidth={maxWidth} />
         )}
       </Box>
     );

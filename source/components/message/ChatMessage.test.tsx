@@ -15,6 +15,7 @@ it('ChatMessage renders reasoning messages with Markdown formatting', async () =
     const result = render(
       <ChatMessage
         msg={{
+          id: 'reasoning-1',
           sender: 'reasoning',
           text: 'Checking **constraints** before `editing`.',
         }}

@@ -20,8 +20,8 @@ const renderedLines = (text: string) => stripAnsi(text).trim().split('\n');
 
 it.sequential('MessageList renders user and bot messages', async () => {
   const messages = [
-    { id: 1, sender: 'user', text: 'hello' },
-    { id: 2, sender: 'bot', text: 'hi there' },
+    { id: '1', sender: 'user', text: 'hello' },
+    { id: '2', sender: 'bot', text: 'hi there' },
   ];
   const { lastFrame } = await renderInAct(<MessageList messages={messages} />);
   const output = lastFrame() ?? '';
@@ -32,7 +32,7 @@ it.sequential('MessageList renders user and bot messages', async () => {
 it.sequential('MessageList renders image attachment summaries without leaked sentinel ids', async () => {
   const messages = [
     {
-      id: 1,
+      id: '1',
       sender: 'user',
       text: 'Tell me what you see\n[1 image attached]',
     },
@@ -737,13 +737,7 @@ it.sequential('MessageList outputs a blank line after the final message in Stati
 });
 
 it.sequential('MessageList hides reasoning messages when displayMode is concise', async () => {
-  const mockSettingsService = {
-    get: (key: string) => {
-      if (key === 'ui.displayMode') return 'concise';
-      return undefined;
-    },
-    onChange: () => () => {},
-  } as any;
+  const mockSettingsService = createMockSettingsService({ 'ui.displayMode': 'concise' });
 
   const messages = [
     { id: '1', sender: 'user', text: 'Hello' },
@@ -810,12 +804,10 @@ it.sequential(
     await rerenderInAct(
       renderer,
       <MessageList
-        messages={
-          [
-            { id: 'heading', sender: 'bot', status: 'finalized', text: '### Intro' },
-            { id: 'cmd', sender: 'command', status: 'running', command: 'ls', output: '', toolName: 'shell' },
-          ] as any
-        }
+        messages={[
+          { id: 'heading', sender: 'bot', status: 'finalized', text: '### Intro' },
+          { id: 'cmd', sender: 'command', status: 'running', command: 'ls', output: '', toolName: 'shell' },
+        ]}
       />,
     );
 
@@ -844,19 +836,17 @@ it.sequential(
     await rerenderInAct(
       renderer,
       <MessageList
-        messages={
-          [
-            { id: 'heading', sender: 'bot', status: 'finalized', text: '### Setup' },
-            {
-              id: 'cmd',
-              sender: 'command',
-              status: 'completed',
-              command: 'npm install',
-              output: 'added 10 packages',
-              toolName: 'shell',
-            },
-          ] as any
-        }
+        messages={[
+          { id: 'heading', sender: 'bot', status: 'finalized', text: '### Setup' },
+          {
+            id: 'cmd',
+            sender: 'command',
+            status: 'completed',
+            command: 'npm install',
+            output: 'added 10 packages',
+            toolName: 'shell',
+          },
+        ]}
       />,
     );
 
@@ -890,13 +880,11 @@ it.sequential('MessageList preserves order when earlier content is static and he
   await rerenderInAct(
     renderer,
     <MessageList
-      messages={
-        [
-          { id: 'content', sender: 'bot', status: 'finalized', text: 'Body text' },
-          { id: 'heading', sender: 'bot', status: 'finalized', text: '### Next Section' },
-          { id: 'cmd', sender: 'command', status: 'running', command: 'ls', output: '', toolName: 'shell' },
-        ] as any
-      }
+      messages={[
+        { id: 'content', sender: 'bot', status: 'finalized', text: 'Body text' },
+        { id: 'heading', sender: 'bot', status: 'finalized', text: '### Next Section' },
+        { id: 'cmd', sender: 'command', status: 'running', command: 'ls', output: '', toolName: 'shell' },
+      ]}
     />,
   );
 

@@ -2,9 +2,10 @@ import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import MarkdownRenderer from '../MarkdownRenderer.js';
 import { COLOR_REASONING } from '../theme.js';
+import type { Message } from '../../types/message.js';
 
 type Props = {
-  msg: any;
+  msg: Message;
   maxWidth?: number;
 };
 
@@ -19,9 +20,9 @@ const ChatMessage: FC<Props> = ({ msg, maxWidth }) => {
         <MarkdownRenderer defaultColor={COLOR_REASONING} maxWidth={maxWidth}>
           {msg.text}
         </MarkdownRenderer>
-      ) : (
+      ) : msg.sender === 'bot' ? (
         <MarkdownRenderer maxWidth={maxWidth}>{msg.text}</MarkdownRenderer>
-      )}
+      ) : null}
     </Box>
   );
 };

@@ -13,7 +13,7 @@ import {
   type OutputTrimConfig,
 } from '../../utils/output/output-trim.js';
 import { formatShellExecutionOutput } from '../../utils/shell/shell-output.js';
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import type { PostExecutePauseDescriptor, SchemaToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import {
   coerceToText,
@@ -30,15 +30,12 @@ import {
   SANDBOX_ESCAPE_INSTRUCTION,
   createSandboxRuntimeConfig,
   type SandboxAvailability,
-  type SandboxReadPolicy,
   type ShellSandboxRunner,
 } from '../../utils/shell/sandbox/sandbox-policy.js';
 import { getDefaultShellSandboxRunner } from '../../utils/shell/sandbox/shell-sandbox-runner.js';
 import { DETAILED_DENIED_READ_INSTRUCTION } from '../../utils/shell/sandbox/denied-read-detector.js';
 import type { DeniedReadInfo } from '../../utils/shell/sandbox/denied-read-detector.js';
-import {
-  getProjectAllowReadStore,
-} from '../../utils/shell/sandbox/denied-read-stores.js';
+import { getProjectAllowReadStore } from '../../utils/shell/sandbox/denied-read-stores.js';
 import { classifySandboxFailure } from '../../utils/shell/sandbox/sandbox-failure-classifier.js';
 import {
   createDockerHostControl,
@@ -69,8 +66,18 @@ const shellParametersSchema = z.object({
   ),
 });
 
+// Tool invocation normalizes shape but does not apply Zod defaults before
+// execute. Keep the executor input honest: `sandbox` may be absent at runtime.
 export type ShellToolParams = Omit<z.infer<typeof shellParametersSchema>, 'sandbox'> & {
   sandbox?: 'default' | 'unsandboxed';
+};
+export type ShellToolDefinition = Omit<
+  SchemaToolDefinition<typeof shellParametersSchema>,
+  'execute' | 'needsApproval' | 'postExecutePause'
+> & {
+  needsApproval: (params: ShellToolParams, context?: unknown) => Promise<boolean> | boolean;
+  execute: (params: ShellToolParams, context?: unknown, details?: unknown) => Promise<string>;
+  postExecutePause?: PostExecutePauseDescriptor<ShellToolParams>;
 };
 
 // Re-export trim utilities for backwards compatibility
@@ -154,12 +161,14 @@ export const formatShellCommandMessage: FormatCommandMessage = (item, index, too
       return args;
     }
 
-    const directCommand = coerceCommandText((args as any)?.command);
+    const argsRecord =
+      args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
+    const directCommand = coerceCommandText(argsRecord.command);
     if (directCommand) {
       return directCommand;
     }
 
-    const commandsValue = (args as any)?.commands;
+    const commandsValue = argsRecord.commands;
     if (typeof commandsValue === 'string') {
       return commandsValue;
     }
@@ -170,7 +179,7 @@ export const formatShellCommandMessage: FormatCommandMessage = (item, index, too
           typeof entry === 'string'
             ? entry
             : entry && typeof entry === 'object' && 'command' in entry
-            ? coerceCommandText((entry as any).command)
+            ? coerceCommandText((entry as Record<string, unknown>).command)
             : coerceCommandText(entry),
         )
         .filter(Boolean)
@@ -260,7 +269,7 @@ export function createShellToolDefinition(deps: {
   sessionAccess?: SessionAccessState;
   /** Isolated legacy protocol for nested tools only. */
   nestedCompatibility?: NestedToolCompatibilityState;
-}): ToolDefinition<ShellToolParams> {
+}): ShellToolDefinition {
   const {
     loggingService,
     settingsService,
@@ -318,9 +327,11 @@ export function createShellToolDefinition(deps: {
         if (
           dockerHostControlRequested &&
           !(sessionAccess?.hasDockerProject(cwd) ?? nestedCompatibility?.docker.hasProject(cwd) ?? false) &&
-          !(sessionAccess?.hasDockerSessionGrant(cwd) ??
+          !(
+            sessionAccess?.hasDockerSessionGrant(cwd) ??
             (sessionId ? nestedCompatibility?.docker.hasSession(sessionId, cwd) : false) ??
-            false)
+            false
+          )
         ) {
           return true;
         }
@@ -365,7 +376,9 @@ export function createShellToolDefinition(deps: {
       const sandboxEnabled = isSandboxEnabled();
       const dockerHostControlRequested =
         sandboxEnabled &&
-        (sessionAccess?.requiresDockerApproval(command) ?? nestedCompatibility?.docker.requiresApproval(sessionId, command) ?? false);
+        (sessionAccess?.requiresDockerApproval(command) ??
+          nestedCompatibility?.docker.requiresApproval(sessionId, command) ??
+          false);
       const hasDockerGrant =
         dockerHostControlRequested &&
         (sessionAccess?.hasDockerGrant(command, cwd) ??
@@ -418,11 +431,7 @@ export function createShellToolDefinition(deps: {
 
         let commandToRun = optimizedCommand;
         let sandboxAvailability: SandboxAvailability | undefined;
-        if (
-          !sshService &&
-          settingsService.get('shell.useRtkCompression') &&
-          isRtkSupportedCommand(optimizedCommand)
-        ) {
+        if (!sshService && settingsService.get('shell.useRtkCompression') && isRtkSupportedCommand(optimizedCommand)) {
           const rtkPath = await rtkInstaller({ loggingService });
           if (rtkPath) {
             commandToRun = wrapWithRtk(optimizedCommand, rtkPath);

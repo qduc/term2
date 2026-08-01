@@ -1,6 +1,7 @@
 import { it, expect, vi } from 'vitest';
 import { getAgentDefinition, getAgentsInstructions } from './agent.js';
 import { createMockSettingsService } from './services/settings/settings-service.mock.js';
+import type { SubagentResult, SubagentRunHandle } from './services/subagents/types.js';
 import os from 'os';
 
 const mockLogger = {
@@ -14,9 +15,26 @@ const mockLogger = {
 } as any;
 
 const WORKTREE_HYGIENE_FRAGMENT_MARKER = 'Before making any code changes, inspect the repo worktree.';
+
+const makeSubagentResult = (finalText = 'done'): SubagentResult => ({
+  agentId: 'agent-1',
+  role: 'worker',
+  status: 'completed',
+  finalText,
+  filesChanged: [],
+  toolsUsed: [],
+});
+
+const makeSubagentRunHandle = (): SubagentRunHandle => ({
+  runId: 'run-1',
+  role: 'worker',
+  status: 'running',
+  task: 'test task',
+});
+
 const orchestratorSubagentDeps = {
-  runSubagentAsync: async () => ({ runId: 'run-1' }),
-  getSubagentResult: async () => ({ finalText: 'done' }),
+  runSubagentAsync: async () => makeSubagentRunHandle(),
+  getSubagentResult: async () => makeSubagentResult(),
   sendSubagentMessage: () => ({
     ok: true as const,
     runId: 'run-1',
@@ -129,7 +147,7 @@ it('leaves run_subagent and ask_mentor available when workflow feature is disabl
     }),
     loggingService: mockLogger,
     askMentor: async () => 'mentor',
-    runSubagent: async () => ({ finalText: 'subagent' }),
+    runSubagent: async () => makeSubagentResult('subagent'),
     agentRuntime: { agent: () => ({}) } as any,
   });
   const names = definition.tools.map((tool) => tool.name);
@@ -146,11 +164,11 @@ it('uses configured workflow limits without exposing them in tool arguments', as
   });
   const workflow = definition.tools.find((tool) => tool.name === 'run_agent_workflow')!;
   expect(Object.keys((workflow.parameters as any).shape)).toEqual(['code']);
-  const result = JSON.parse(
-    await workflow.execute({
-      code: "const agentHandle = agent({ instructions: 'x' }); await agentHandle.run({ task: 'one' }); return agentHandle.run({ task: 'two' });",
-    }),
-  );
+  const output = await workflow.execute({
+    code: "const agentHandle = agent({ instructions: 'x' }); await agentHandle.run({ task: 'one' }); return agentHandle.run({ task: 'two' });",
+  });
+  if (typeof output !== 'string') throw new Error('run_agent_workflow must return text');
+  const result = JSON.parse(output);
   expect(result).toMatchObject({ ok: false, error: { code: 'limit_exceeded' } });
 });
 
@@ -250,7 +268,7 @@ it('getAgentDefinition exposes only async delegation tools in orchestrator mode'
   const definition = getAgentDefinition({
     settingsService,
     loggingService: mockLogger,
-    runSubagent: async () => ({} as any),
+    runSubagent: async () => makeSubagentResult(),
     ...orchestratorSubagentDeps,
   });
 
@@ -263,8 +281,8 @@ it('getAgentDefinition exposes only async delegation tools in orchestrator mode'
 
 it('getAgentDefinition registers parent async controls in orchestrator and ordinary non-lite async modes', () => {
   const asyncControls = {
-    runSubagentAsync: async () => ({ runId: 'run-1' }),
-    getSubagentResult: async () => ({ finalText: 'done' }),
+    runSubagentAsync: async () => makeSubagentRunHandle(),
+    getSubagentResult: async () => makeSubagentResult(),
     sendSubagentMessage: () => ({
       ok: true as const,
       runId: 'run-1',
@@ -293,8 +311,8 @@ it('getAgentDefinition registers no async delegation tools when the parent contr
   const definition = getAgentDefinition({
     settingsService: createMockSettingsService({ 'app.liteMode': false }),
     loggingService: mockLogger,
-    runSubagentAsync: async () => ({ runId: 'run-1' }),
-    getSubagentResult: async () => ({ finalText: 'done' }),
+    runSubagentAsync: async () => makeSubagentRunHandle(),
+    getSubagentResult: async () => makeSubagentResult(),
   });
 
   // Async delegation is all-or-nothing: a partial callback set must not leave
@@ -311,8 +329,8 @@ it('getAgentDefinition requires parent controls when orchestrator mode enables a
     getAgentDefinition({
       settingsService: createMockSettingsService({ 'app.orchestratorMode': true }),
       loggingService: mockLogger,
-      runSubagentAsync: async () => ({ runId: 'run-1' }),
-      getSubagentResult: async () => ({ finalText: 'done' }),
+      runSubagentAsync: async () => makeSubagentRunHandle(),
+      getSubagentResult: async () => makeSubagentResult(),
     }),
   ).toThrow(/sendSubagentMessage.*cancelSubagentRun/);
 });
@@ -325,7 +343,7 @@ it('getAgentDefinition omits delegation guidance in standard mode even if runSub
   const definition = getAgentDefinition({
     settingsService,
     loggingService: mockLogger,
-    runSubagent: async () => ({} as any),
+    runSubagent: async () => makeSubagentResult(),
   });
 
   expect(definition.tools.map((tool) => tool.name).includes('run_subagent')).toBe(true);

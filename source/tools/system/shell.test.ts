@@ -101,6 +101,16 @@ it('shell description mentions saved long output and avoiding reruns', () => {
   expect(tool.description.includes('full output is saved to a file')).toBe(true);
 });
 
+it('retains the schema sandbox default while accepting raw invocations that omit it', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService(),
+  });
+
+  expect(tool.parameters.parse({ command: 'pwd' }).sandbox).toBe('default');
+  await expect(tool.needsApproval({ command: 'pwd' })).resolves.toBeTypeOf('boolean');
+});
+
 it('orchestrator shell description permits proportionate direct command use', () => {
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),

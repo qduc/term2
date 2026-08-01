@@ -5,7 +5,8 @@ import type { ToolInvocationContext } from '../agent-runtime/tool-invocation-con
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentDefinition, SupportedSubagentRole, ValidationEvidence } from './types.js';
-import type { CommandMessage, ToolDefinition } from '../../tools/types.js';
+import type { AnyToolDefinition, CommandMessage, SchemaToolDefinition, ToolRegistry } from '../../tools/types.js';
+import type { z, ZodTypeAny } from 'zod';
 import { isPathInScopeSafe, isHostInScope } from '../agent-runtime/scope-resolver.js';
 import { getProvider } from '../../providers/index.js';
 import { wrapToolInvoke, wrapNeedsApproval } from '../../lib/tool-invoke.js';
@@ -72,7 +73,10 @@ export function getSubagentRunContext(context: unknown): SubagentRunContext | un
   return undefined;
 }
 
-export function formatRunningCommandMessages(definition: ToolDefinition, params: unknown): CommandMessage[] {
+export function formatRunningCommandMessages(
+  definition: Pick<AnyToolDefinition, 'name' | 'formatCommandMessage'>,
+  params: unknown,
+): CommandMessage[] {
   const callId = `subagent-tool-${randomUUID()}`;
   const item = {
     id: callId,
@@ -120,6 +124,12 @@ function rejectUnsandboxedSubagentShell(params: unknown): string | undefined {
     return 'Error: unsandboxed shell execution is not available to subagents. Report the need to the main agent.';
   }
   return undefined;
+}
+
+function getShellCommand(params: unknown): string {
+  if (!params || typeof params !== 'object') return '';
+  const command = (params as Record<string, unknown>).command;
+  return typeof command === 'string' ? command : '';
 }
 
 /** Heuristic for validation-shaped shell commands (test/lint/typecheck/build/tsc). */
@@ -302,14 +312,22 @@ export class SubagentToolPolicy {
 
     // Legacy JSON outputs (kept for backward compatibility with old sessions/tests).
     try {
-      const parsed = JSON.parse(result);
-      if (Array.isArray(parsed?.output)) {
-        return parsed.output
-          .filter((item: any) => item?.success === true && typeof item?.path === 'string')
-          .map((item: any) => item.path);
+      const parsed: unknown = JSON.parse(result);
+      const parsedRecord = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : undefined;
+      const output = parsedRecord?.output;
+      if (Array.isArray(output)) {
+        return output
+          .filter(
+            (item: unknown): item is { success: true; path: string } =>
+              typeof item === 'object' &&
+              item !== null &&
+              (item as { success?: unknown }).success === true &&
+              typeof (item as { path?: unknown }).path === 'string',
+          )
+          .map((item) => item.path);
       }
-      if (parsed?.success === true && typeof parsed?.path === 'string') {
-        return [parsed.path];
+      if (parsedRecord?.success === true && typeof parsedRecord.path === 'string') {
+        return [parsedRecord.path];
       }
     } catch {
       // Ignore JSON parse errors.
@@ -339,25 +357,25 @@ export class SubagentToolPolicy {
     }
   }
 
-  wrapShellTool(
-    definition: ToolDefinition,
+  wrapShellTool<S extends ZodTypeAny>(
+    definition: SchemaToolDefinition<S>,
     cwd: string,
     filesChanged: string[],
     taskContext: string,
     validationCapture?: ValidationCapture,
-  ): ToolDefinition {
+  ): SchemaToolDefinition<S> {
     const originalExecute = definition.execute.bind(definition);
     const originalNeedsApproval = definition.needsApproval.bind(definition);
     return {
       ...definition,
       needsApproval: () => false,
-      execute: async (params: any, context?: unknown, details?: unknown) => {
+      execute: async (params: z.infer<S>, context?: unknown, details?: unknown) => {
         const unsandboxedError = rejectUnsandboxedSubagentShell(params);
         if (unsandboxedError) {
           return unsandboxedError;
         }
 
-        const command: string = typeof params?.command === 'string' ? params.command : '';
+        const command = getShellCommand(params);
         if (!command) {
           return originalExecute(params, context, details);
         }
@@ -410,17 +428,17 @@ export class SubagentToolPolicy {
     };
   }
 
-  wrapNestedShellTool(definition: ToolDefinition, cwd: string): ToolDefinition {
+  wrapNestedShellTool<S extends ZodTypeAny>(definition: SchemaToolDefinition<S>, cwd: string): SchemaToolDefinition<S> {
     const originalExecute = definition.execute.bind(definition);
     return {
       ...definition,
-      execute: async (params: any, context?: unknown, details?: unknown) => {
+      execute: async (params: z.infer<S>, context?: unknown, details?: unknown) => {
         const unsandboxedError = rejectUnsandboxedSubagentShell(params);
         if (unsandboxedError) {
           return unsandboxedError;
         }
 
-        const command: string = typeof params?.command === 'string' ? params.command : '';
+        const command = getShellCommand(params);
         const extractedPaths = command ? this.extractPathsFromCommand(command, cwd) : [];
         for (const filePath of extractedPaths) {
           if (!this.isWithinWriteBoundary(filePath, cwd)) {
@@ -449,19 +467,19 @@ export class SubagentToolPolicy {
     };
   }
 
-  wrapReadOnlyShellTool(definition: ToolDefinition): ToolDefinition {
+  wrapReadOnlyShellTool<S extends ZodTypeAny>(definition: SchemaToolDefinition<S>): SchemaToolDefinition<S> {
     const originalExecute = definition.execute.bind(definition);
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
     return {
       ...definition,
       needsApproval: () => false,
-      execute: async (params: any, context?: unknown, details?: unknown) => {
+      execute: async (params: z.infer<S>, context?: unknown, details?: unknown) => {
         const unsandboxedError = rejectUnsandboxedSubagentShell(params);
         if (unsandboxedError) {
           return unsandboxedError;
         }
 
-        const command: string = typeof params?.command === 'string' ? params.command : '';
+        const command = getShellCommand(params);
         if (!command) {
           return originalExecute(params, context, details);
         }
@@ -481,21 +499,21 @@ export class SubagentToolPolicy {
     };
   }
 
-  wrapWriteTool(
-    definition: ToolDefinition,
+  wrapWriteTool<S extends ZodTypeAny>(
+    definition: SchemaToolDefinition<S>,
     cwd: string,
     filesChanged: string[],
-    extractPaths: (params: any) => string[],
+    extractPaths: (params: z.infer<S>) => string[],
     nestedApprovals = false,
     diffDeltas?: Map<string, { added: number; deleted: number }>,
-  ): ToolDefinition {
+  ): SchemaToolDefinition<S> {
     const originalExecute = definition.execute.bind(definition);
     const originalNeedsApproval = definition.needsApproval.bind(definition);
 
     return {
       ...definition,
       needsApproval: nestedApprovals
-        ? async (params: any, context?: unknown) => {
+        ? async (params: z.infer<S>, context?: unknown) => {
             const paths = extractPaths(params);
             if (paths.some((filePath) => !this.isWithinWriteBoundary(filePath, cwd))) {
               return false;
@@ -503,7 +521,7 @@ export class SubagentToolPolicy {
             return originalNeedsApproval(params, context);
           }
         : () => false,
-      execute: async (params: any, context?: unknown, details?: unknown) => {
+      execute: async (params: z.infer<S>, context?: unknown, details?: unknown) => {
         const paths = extractPaths(params);
 
         for (const filePath of paths) {
@@ -557,18 +575,18 @@ export class SubagentToolPolicy {
    * match at least one pattern. Undefined scope = no restriction.
    * Uses symlink-safe realpath resolution.
    */
-  wrapReadToolWithScope(
-    definition: ToolDefinition,
+  wrapReadToolWithScope<S extends ZodTypeAny>(
+    definition: SchemaToolDefinition<S>,
     scopePatterns: string[] | undefined,
-    extractPath: (params: any) => string | undefined,
-  ): ToolDefinition {
+    extractPath: (params: z.infer<S>) => string | undefined,
+  ): SchemaToolDefinition<S> {
     // No scope defined — no fine-grained restriction
     if (scopePatterns === undefined) return definition;
 
     const originalExecute = definition.execute.bind(definition);
     return {
       ...definition,
-      execute: async (params: any, context?: unknown, details?: unknown) => {
+      execute: async (params: z.infer<S>, context?: unknown, details?: unknown) => {
         const filePath = extractPath(params);
         if (filePath) {
           const safe = await isPathInScopeSafe(filePath, scopePatterns);
@@ -589,17 +607,17 @@ export class SubagentToolPolicy {
    * realpath, and for nonexistent targets resolves the nearest existing
    * ancestor to detect symlink escapes.
    */
-  wrapWriteToolWithScope(
-    definition: ToolDefinition,
+  wrapWriteToolWithScope<S extends ZodTypeAny>(
+    definition: SchemaToolDefinition<S>,
     scopePatterns: string[] | undefined,
-    extractPaths: (params: any) => string[],
-  ): ToolDefinition {
+    extractPaths: (params: z.infer<S>) => string[],
+  ): SchemaToolDefinition<S> {
     if (scopePatterns === undefined) return definition;
 
     const originalExecute = definition.execute.bind(definition);
     return {
       ...definition,
-      execute: async (params: any, context?: unknown, details?: unknown) => {
+      execute: async (params: z.infer<S>, context?: unknown, details?: unknown) => {
         const paths = extractPaths(params);
         for (const filePath of paths) {
           const safe = await isPathInScopeSafe(filePath, scopePatterns);
@@ -621,7 +639,10 @@ export class SubagentToolPolicy {
    * finite filesystem scope is defined, the shell tool is rejected with
    * a typed permission error.
    */
-  wrapShellToolWithScope(definition: ToolDefinition, scopePatterns: string[] | undefined): ToolDefinition {
+  wrapShellToolWithScope<S extends ZodTypeAny>(
+    definition: SchemaToolDefinition<S>,
+    scopePatterns: string[] | undefined,
+  ): SchemaToolDefinition<S> {
     if (scopePatterns !== undefined) {
       return {
         ...definition,
@@ -653,11 +674,11 @@ export class SubagentToolPolicy {
    * definition time when host scopes are set to anything other than
    * `['*']` (all hosts). The caller receives a typed permission error.
    */
-  wrapNetworkToolWithScope(
-    definition: ToolDefinition,
+  wrapNetworkToolWithScope<S extends ZodTypeAny>(
+    definition: SchemaToolDefinition<S>,
     hostPatterns: string[] | undefined,
-    extractUrl: (params: any) => string | undefined,
-  ): ToolDefinition {
+    extractUrl: (params: z.infer<S>) => string | undefined,
+  ): SchemaToolDefinition<S> {
     if (hostPatterns === undefined) return definition;
 
     // Empty host patterns = explicitly no network authority
@@ -686,7 +707,7 @@ export class SubagentToolPolicy {
     const originalExecute = definition.execute.bind(definition);
     return {
       ...definition,
-      execute: async (params: any, context?: unknown, details?: unknown) => {
+      execute: async (params: z.infer<S>, context?: unknown, details?: unknown) => {
         const url = extractUrl(params);
         if (url) {
           // Host-specific validation: check the exact URL host
@@ -744,8 +765,8 @@ export class SubagentToolFactory {
     diffDeltas?: Map<string, { added: number; deleted: number }>,
     validationCapture?: ValidationCapture,
     askOrchestrator?: (question: string) => Promise<string>,
-  ): ToolDefinition[] {
-    const tools: ToolDefinition[] = [];
+  ): AnyToolDefinition[] {
+    const tools: AnyToolDefinition[] = [];
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
     const isRemote = this.#executionContext?.isRemote() ?? false;
 
@@ -784,7 +805,7 @@ export class SubagentToolFactory {
             nestedCompatibility: this.#nestedCompatibility,
           }),
           fsReadScope,
-          (params: any) => params?.path ?? params?.filePath,
+          (params) => params.path,
         ),
       );
 
@@ -793,16 +814,16 @@ export class SubagentToolFactory {
           this.#toolPolicy.wrapReadToolWithScope(
             createGrepToolDefinition({ executionContext: this.#executionContext, globAvailable }),
             fsReadScope,
-            (params: any) => params?.path,
+            (params) => params.path,
           ),
           this.#toolPolicy.wrapReadToolWithScope(
             createFindFilesToolDefinition({ executionContext: this.#executionContext }),
             fsReadScope,
-            (params: any) =>
+            (params) =>
               // When path is omitted, the tool defaults to searching from the
               // workspace root (CWD). Use the workspace root as the base path
               // for scope validation. Never treat the glob pattern as a path.
-              params?.path ?? '.',
+              params.path ?? '.',
           ),
         );
       }
@@ -812,12 +833,12 @@ export class SubagentToolFactory {
           this.#toolPolicy.wrapReadToolWithScope(
             createReadCodeOutlineToolDefinition({ executionContext: this.#executionContext }),
             fsReadScope,
-            (params: any) => params?.path,
+            (params) => params.path,
           ),
           this.#toolPolicy.wrapReadToolWithScope(
             createCodeContextSearchToolDefinition({ executionContext: this.#executionContext, globAvailable }),
             fsReadScope,
-            (params: any) => params?.path,
+            (params) => params.path,
           ),
         );
       }
@@ -828,12 +849,12 @@ export class SubagentToolFactory {
         this.#toolPolicy.wrapNetworkToolWithScope(
           createWebSearchToolDefinition({ settingsService: this.#settings, loggingService: this.#logger }),
           netScope,
-          (params: any) => (params?.query ? undefined : params?.url),
+          () => undefined,
         ),
         this.#toolPolicy.wrapNetworkToolWithScope(
           createWebFetchToolDefinition({ settingsService: this.#settings, loggingService: this.#logger }),
           netScope,
-          (params: any) => params?.url,
+          (params) => params.url,
         ),
       );
     }
@@ -874,21 +895,21 @@ export class SubagentToolFactory {
               }),
               cwd,
               filesChanged,
-              (params: any) => {
-                if (Array.isArray(params?.operations)) {
-                  return params.operations.map((op: any) => op?.path).filter(Boolean);
+              (params) => {
+                if (params.operations) {
+                  return params.operations.map((operation) => operation.path);
                 }
-                return params?.path ? [params.path] : [];
+                return params.path ? [params.path] : [];
               },
               nestedApprovals,
               diffDeltas,
             ),
             fsWriteScope,
-            (params: any) => {
-              if (Array.isArray(params?.operations)) {
-                return params.operations.map((op: any) => op?.path).filter(Boolean);
+            (params) => {
+              if (params.operations) {
+                return params.operations.map((operation) => operation.path);
               }
-              return params?.path ? [params.path] : [];
+              return params.path ? [params.path] : [];
             },
           ),
         );
@@ -903,12 +924,12 @@ export class SubagentToolFactory {
               }),
               cwd,
               filesChanged,
-              (params: any) => (params?.path ? [params.path] : []),
+              (params) => (params.path ? [params.path] : []),
               nestedApprovals,
               diffDeltas,
             ),
             fsWriteScope,
-            (params: any) => (params?.path ? [params.path] : []),
+            (params) => (params.path ? [params.path] : []),
           ),
           this.#toolPolicy.wrapWriteToolWithScope(
             this.#toolPolicy.wrapWriteTool(
@@ -919,12 +940,12 @@ export class SubagentToolFactory {
               }),
               cwd,
               filesChanged,
-              (params: any) => (params?.path ? [params.path] : []),
+              (params) => (params.path ? [params.path] : []),
               nestedApprovals,
               diffDeltas,
             ),
             fsWriteScope,
-            (params: any) => (params?.path ? [params.path] : []),
+            (params) => (params.path ? [params.path] : []),
           ),
         );
       }
@@ -956,24 +977,19 @@ export class SubagentToolFactory {
   }
 
   buildAgentTools(
-    toolDefinitions: ToolDefinition[],
+    toolDefinitions: ToolRegistry,
     options: {
       providerId: string;
       onToolStart?: (
         toolName: string,
         params: unknown,
         commandMessages: CommandMessage[],
-        context?: ToolInvocationContext<unknown>,
+        context?: unknown,
         details?: unknown,
       ) => void;
-      onToolComplete?: (
-        toolName: string,
-        result: unknown,
-        context?: ToolInvocationContext<unknown>,
-        details?: unknown,
-      ) => void;
+      onToolComplete?: (toolName: string, result: unknown, context?: unknown, details?: unknown) => void;
     },
-  ): ToolDefinition[] {
+  ): ToolRegistry {
     const providerDef = getProvider(options.providerId);
     const capabilities = {
       supportsConversationChaining: providerDef?.capabilities?.supportsConversationChaining ?? false,
@@ -986,29 +1002,29 @@ export class SubagentToolFactory {
     });
 
     return toolDefinitions.map((definition) => {
-      const wrapped: ToolDefinition = {
+      const wrapped: AnyToolDefinition = {
         ...definition,
         parameters: useStrictSchema ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
         needsApproval: wrapNeedsApproval(definition),
-        execute: async (params: any, _context: any, details: any) => {
+        execute: async (params, context, details) => {
           options.onToolStart?.(
             definition.name,
             params,
             formatRunningCommandMessages(definition, params),
-            _context,
+            context,
             details,
           );
           const maxOutputLength = this.#settings.get('shell.maxOutputChars');
-          let result: any;
+          let result: unknown;
           try {
-            result = await definition.execute(params, _context, details);
+            result = await definition.execute(params, context, details);
           } finally {
             // Must pair with every onToolStart, including the throwing path: this
             // callback closes the active-tool gate that defers steering interrupts.
-            options.onToolComplete?.(definition.name, result, _context, details);
+            options.onToolComplete?.(definition.name, result, context, details);
           }
           const trimmedResult = trimToolOutput(result, undefined, maxOutputLength ?? undefined);
-          return injectTurnLimitWarning(trimmedResult, resolveTurnLimitContext(_context));
+          return injectTurnLimitWarning(trimmedResult, resolveTurnLimitContext(context));
         },
       };
       return wrapToolInvoke(wrapped, definition.parameters, { argumentParsing: definition.argumentParsing });

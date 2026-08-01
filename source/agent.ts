@@ -24,7 +24,18 @@ import {
 } from './tools/file/code-context.js';
 import { registerToolFormatters } from './tools/command-message-formatters.js';
 import { TOOL_NAME_ASK_USER } from './tools/tool-names.js';
-import type { ToolDefinition } from './tools/types.js';
+import type { AnyToolDefinition, ToolRegistry } from './tools/types.js';
+import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from './services/subagents/types.js';
+import type { RunSubagentParams } from './tools/agent/run-subagent.js';
+import type {
+  CancelRunParams,
+  GetSubagentResultParams,
+  GetSubagentStatusParams,
+  RunSubagentAsyncParams,
+  SendMessageParams,
+  SendMessageAcknowledgement,
+  CancelRunAcknowledgement,
+} from './tools/agent/run-subagent-async.js';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
@@ -109,8 +120,28 @@ export function getAgentsInstructions(cwd: string): string {
 export interface AgentDefinition {
   name: string;
   instructions: string;
-  tools: ToolDefinition[];
+  tools: ToolRegistry;
   model: string;
+}
+
+type SubagentResultLike = Pick<SubagentResult, 'finalText'> & Partial<SubagentResult>;
+
+function toSubagentResult(result: SubagentResultLike, role: RunSubagentParams['role']): SubagentResult {
+  return {
+    agentId: result.agentId ?? 'unknown',
+    role: result.role ?? role,
+    status: result.status ?? 'completed',
+    finalText: result.finalText,
+    filesChanged: result.filesChanged ?? [],
+    toolsUsed: result.toolsUsed ?? [],
+    finalTextTruncated: result.finalTextTruncated,
+    finalTextArtifactPath: result.finalTextArtifactPath,
+    usage: result.usage,
+    error: result.error,
+    nestedRunResult: result.nestedRunResult,
+    diffStat: result.diffStat,
+    validation: result.validation,
+  };
 }
 
 function resolvePrompt(promptPath: string): string {
@@ -139,12 +170,24 @@ export const getAgentDefinition = (
     loggingService: ILoggingService;
     executionContext?: ExecutionContext;
     askMentor?: (question: string) => Promise<string>;
-    runSubagent?: (params: { role: string; task: string }, context?: unknown, details?: unknown) => Promise<any>;
-    runSubagentAsync?: (params: { role: string; task: string }, context?: unknown, details?: unknown) => Promise<any>;
-    getSubagentResult?: (params: { runId: string }, context?: unknown, details?: unknown) => Promise<any>;
-    getSubagentStatus?: (params: { runId?: string }, context?: unknown, details?: unknown) => any;
-    sendSubagentMessage?: (params: { target: string; message: string; reply_to?: string }) => any;
-    cancelSubagentRun?: (params: { target: string }) => any;
+    runSubagent?: (params: RunSubagentParams, context?: unknown, details?: unknown) => Promise<SubagentResultLike>;
+    runSubagentAsync?: (
+      params: RunSubagentAsyncParams,
+      context?: unknown,
+      details?: unknown,
+    ) => Promise<SubagentRunHandle>;
+    getSubagentResult?: (
+      params: GetSubagentResultParams,
+      context?: unknown,
+      details?: unknown,
+    ) => Promise<SubagentResult>;
+    getSubagentStatus?: (
+      params: GetSubagentStatusParams,
+      context?: unknown,
+      details?: unknown,
+    ) => SubagentRunStatus | SubagentRunStatus[];
+    sendSubagentMessage?: (params: SendMessageParams) => SendMessageAcknowledgement;
+    cancelSubagentRun?: (params: CancelRunParams) => CancelRunAcknowledgement;
     getAskUserAnswer?: (callId?: string) => string | undefined;
     skillsService?: SkillsService;
     agentRuntime?: Pick<AgentRuntime, 'agent'> | null;
@@ -255,7 +298,7 @@ export const getAgentDefinition = (
         'orchestratorMode requires runSubagentAsync, getSubagentResult, sendSubagentMessage, and cancelSubagentRun: cannot build orchestrator agent without asynchronous delegation.',
       );
     }
-    const tools: ToolDefinition[] = [
+    const tools: AnyToolDefinition[] = [
       createRunSubagentAsyncToolDefinition(runSubagentAsync),
       createGetSubagentResultToolDefinition(getSubagentResult),
       ...(getSubagentStatus ? [createGetSubagentStatusToolDefinition(getSubagentStatus)] : []),
@@ -305,7 +348,7 @@ export const getAgentDefinition = (
     };
   }
 
-  const tools: ToolDefinition[] = [
+  const tools: AnyToolDefinition[] = [
     createShellToolDefinition({
       settingsService,
       loggingService,
@@ -397,15 +440,18 @@ export const getAgentDefinition = (
     }
 
     // Add mentor tool if the smart tier or its legacy mentor override is configured.
-    const mentorModel =
-      settingsService.get('agent.smartModel') ?? settingsService.get('agent.mentorModel');
+    const mentorModel = settingsService.get('agent.smartModel') ?? settingsService.get('agent.mentorModel');
     if (mentorModel && askMentor) {
       tools.push(createAskMentorToolDefinition(askMentor));
     }
 
     // Add run_subagent tool (not in lite mode)
     if (runSubagent) {
-      tools.push(createRunSubagentToolDefinition(runSubagent));
+      tools.push(
+        createRunSubagentToolDefinition(async (params, context, details) =>
+          toSubagentResult(await runSubagent(params, context, details), params.role),
+        ),
+      );
     }
 
     // Add async subagent tools (not in lite mode). The conjunction is

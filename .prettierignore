@@ -7,4 +7,6 @@ log_viewer
 *.md
 eval/*
 .junie
+.pi/**
+.pnpm-store/**
 pnpm-lock.yaml

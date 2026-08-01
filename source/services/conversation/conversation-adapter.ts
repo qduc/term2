@@ -554,7 +554,8 @@ export class ConversationAdapter {
     { onTextChunk, onReasoningChunk, onCommandMessage, onEvent, approvalAnswer }: HandleApprovalDecisionOptions = {},
   ): Promise<ConversationTerminal | null> {
     const postExecuteApproval = this.#postExecuteApproval;
-    if (!this.#approval.getPending() && !postExecuteApproval) {
+    const pendingApproval = this.#approval.getPending();
+    if (!pendingApproval && !postExecuteApproval) {
       return null;
     }
 
@@ -578,8 +579,7 @@ export class ConversationAdapter {
     }
 
     if (answer === 'y' && approvalAnswer) {
-      const pending = this.#approval.getPending();
-      const callId = pending ? getCallIdFromObject(pending.interruption) : undefined;
+      const callId = pendingApproval ? getCallIdFromObject(pendingApproval.interruption) : undefined;
       if (callId) {
         this.#askUserAnswerSink?.setAskUserAnswer(callId, approvalAnswer);
       }
@@ -606,6 +606,18 @@ export class ConversationAdapter {
           this.#approvalExecutionId = null;
           this.#approvalActionId = null;
         }
+      }
+
+      // Queue resolution may await persistence while abort/new-turn work replaces
+      // the pending approval. A decision captured for the old approval must not
+      // adopt whichever approval happens to be current when continuation starts.
+      if (!postExecuteApproval) {
+        const currentApproval = this.#approval.getPending();
+        const sameApproval =
+          pendingApproval?.token !== undefined
+            ? currentApproval?.token === pendingApproval.token
+            : currentApproval === pendingApproval;
+        if (!sameApproval) return null;
       }
 
       const result = await this.#withTrafficContext(undefined, async () => {

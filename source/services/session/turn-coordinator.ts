@@ -1,7 +1,12 @@
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { toTerminalEvent } from '../conversation/conversation-result-builder.js';
 import { type UserTurn } from '../../types/user-turn.js';
-import { TurnStatusMachine, type TurnCommand } from './turn-status-machine.js';
+import {
+  TurnStatusMachine,
+  type TurnCommand,
+  type TurnLease,
+  type TurnOutcome,
+} from './turn-status-machine.js';
 import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import type { TurnWorkflow } from './turn-workflow.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
@@ -38,17 +43,17 @@ export class TurnCoordinator {
     // as a rejection reason used to continue the abandoned SDK run.
     this.deps.approvalFlow.getAbortedStatus();
 
-    this.deps.statusMachine.beginTurn();
+    const lease = this.deps.statusMachine.beginTurn();
     let processed = false;
     try {
-      const turnOutcome = yield* this.deps.turnWorkflow.executeInitial(input, options);
+      const turnOutcome = yield* this.#forwardOwned(this.deps.turnWorkflow.executeInitial(input, options), lease);
       processed = true;
 
-      yield* this.#executeTerminalCommand(this.deps.statusMachine.completeOutcome(turnOutcome));
+      yield* this.#executeTerminalCommand(this.deps.statusMachine.completeOutcome(turnOutcome, lease));
     } finally {
       if (!processed) {
         // Error during initial run — reset status to idle
-        this.deps.statusMachine.complete();
+        this.deps.statusMachine.complete(lease);
       }
     }
   }
@@ -63,18 +68,21 @@ export class TurnCoordinator {
     if (!this.deps.statusMachine.is('awaiting_approval')) {
       throw new Error('No pending approval to continue.');
     }
-    this.deps.statusMachine.beginContinuation();
+    const lease = this.deps.statusMachine.beginContinuation();
     let processed = false;
     try {
-      const turnOutcome = yield* this.deps.turnWorkflow.executeContinuation(
-        this.deps.approvalFlow.buildApprovalDecision(answer, rejectionReason),
+      const turnOutcome = yield* this.#forwardOwned(
+        this.deps.turnWorkflow.executeContinuation(
+          this.deps.approvalFlow.buildApprovalDecision(answer, rejectionReason),
+        ),
+        lease,
       );
       processed = true;
-      yield* this.#executeTerminalCommand(this.deps.statusMachine.completeContinuationOutcome(turnOutcome));
+      yield* this.#executeTerminalCommand(this.deps.statusMachine.completeContinuationOutcome(turnOutcome, lease));
     } finally {
       if (!processed) {
         // Error during continuation drive — reset status to idle
-        this.deps.statusMachine.complete();
+        this.deps.statusMachine.complete(lease);
       }
     }
   }
@@ -83,14 +91,14 @@ export class TurnCoordinator {
     if (!this.deps.statusMachine.is('awaiting_approval')) {
       throw new Error('No pending approval to continue.');
     }
-    this.deps.statusMachine.beginContinuation();
+    const lease = this.deps.statusMachine.beginContinuation();
     let processed = false;
     try {
-      const turnOutcome = yield* this.deps.turnWorkflow.continuePostExecute();
+      const turnOutcome = yield* this.#forwardOwned(this.deps.turnWorkflow.continuePostExecute(), lease);
       processed = true;
-      yield* this.#executeTerminalCommand(this.deps.statusMachine.completeContinuationOutcome(turnOutcome));
+      yield* this.#executeTerminalCommand(this.deps.statusMachine.completeContinuationOutcome(turnOutcome, lease));
     } finally {
-      if (!processed) this.deps.statusMachine.complete();
+      if (!processed) this.deps.statusMachine.complete(lease);
     }
   }
 
@@ -102,6 +110,21 @@ export class TurnCoordinator {
   }
 
   // ── Private helpers ──────────────────────────────────────────
+
+  async *#forwardOwned(
+    events: AsyncGenerator<ConversationEvent, TurnOutcome, void>,
+    lease: TurnLease,
+  ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
+    while (true) {
+      const next = await events.next();
+      if (!this.deps.statusMachine.owns(lease)) {
+        await events.return({ kind: 'stale' });
+        return { kind: 'stale' };
+      }
+      if (next.done) return next.value;
+      yield next.value;
+    }
+  }
 
   async *#executeTerminalCommand(command: TurnCommand): AsyncGenerator<ConversationEvent, void, void> {
     if (command.kind === 'emit_terminal') {

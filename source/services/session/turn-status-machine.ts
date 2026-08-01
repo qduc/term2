@@ -10,6 +10,9 @@ export type TurnOutcome =
 
 export type TurnCommand = { kind: 'emit_terminal'; terminal: ConversationTerminal } | { kind: 'none' };
 
+/** Opaque admission lease for the currently active foreground turn. */
+export type TurnLease = { readonly generation: number; readonly __turnLease: unique symbol };
+
 /**
  * Transition validator for turn status.
  *
@@ -18,6 +21,8 @@ export type TurnCommand = { kind: 'emit_terminal'; terminal: ConversationTermina
  */
 export class TurnStatusMachine {
   private status: SessionStatus = 'idle';
+  private nextGeneration = 0;
+  private activeLease: TurnLease | undefined;
 
   get current(): SessionStatus {
     return this.status;
@@ -27,21 +32,25 @@ export class TurnStatusMachine {
     return this.status === status;
   }
 
-  beginTurn(): void {
+  beginTurn(): TurnLease {
     this.#assertTransition('idle', 'streaming');
     this.status = 'streaming';
+    this.activeLease = { generation: ++this.nextGeneration } as TurnLease;
+    return this.activeLease;
   }
 
-  requestApproval(): void {
+  requestApproval(lease: TurnLease): void {
+    if (!this.owns(lease)) return;
     if (this.status !== 'streaming' && this.status !== 'continuing') {
       throw new Error(`Cannot request approval from ${this.status}`);
     }
     this.status = 'awaiting_approval';
   }
 
-  beginContinuation(): void {
+  beginContinuation(): TurnLease {
     this.#assertTransition('awaiting_approval', 'continuing');
     this.status = 'continuing';
+    return this.activeLease!;
   }
 
   /**
@@ -50,35 +59,40 @@ export class TurnStatusMachine {
    * safely call complete() in a finally block without losing the pending
    * approval state.
    */
-  complete(): void {
+  complete(lease: TurnLease): void {
+    if (!this.owns(lease)) return;
     if (this.status === 'streaming' || this.status === 'continuing') {
       this.status = 'idle';
+      this.activeLease = undefined;
     }
   }
 
   abort(): void {
     this.status = 'idle';
+    this.activeLease = undefined;
   }
 
-  completeOutcome(outcome: TurnOutcome): TurnCommand {
+  completeOutcome(outcome: TurnOutcome, lease: TurnLease): TurnCommand {
+    if (!this.owns(lease)) return { kind: 'none' };
     switch (outcome.kind) {
       case 'response':
-        this.complete();
+        this.complete(lease);
         return { kind: 'emit_terminal', terminal: outcome.terminal };
       case 'approval_required':
-        this.requestApproval();
+        this.requestApproval(lease);
         return { kind: 'emit_terminal', terminal: outcome.terminal };
       case 'stale':
         return { kind: 'none' };
       case 'failed':
-        this.complete();
+        this.complete(lease);
         return { kind: 'none' };
     }
   }
 
-  completeContinuationOutcome(outcome: TurnOutcome): TurnCommand {
+  completeContinuationOutcome(outcome: TurnOutcome, lease: TurnLease): TurnCommand {
+    if (!this.owns(lease)) return { kind: 'none' };
     if (this.status === 'continuing' || this.status === 'streaming') {
-      return this.completeOutcome(outcome);
+      return this.completeOutcome(outcome, lease);
     }
 
     switch (outcome.kind) {
@@ -89,6 +103,10 @@ export class TurnStatusMachine {
       case 'failed':
         return { kind: 'none' };
     }
+  }
+
+  owns(lease: TurnLease): boolean {
+    return lease === this.activeLease;
   }
 
   #assertTransition(from: SessionStatus, to: SessionStatus): void {

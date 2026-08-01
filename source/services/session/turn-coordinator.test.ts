@@ -139,8 +139,8 @@ it('streaming -> awaiting_approval', async () => {
 
 it('awaiting_approval -> continuing -> awaiting_approval', async () => {
   const { coordinator, statusMachine, turnWorkflow } = makeHarness();
-  statusMachine.beginTurn();
-  statusMachine.requestApproval(); // status becomes 'awaiting_approval'
+  const lease = statusMachine.beginTurn();
+  statusMachine.requestApproval(lease); // status becomes 'awaiting_approval'
 
   turnWorkflow.setNextContinuationResult({
     kind: 'approval_required',
@@ -178,8 +178,8 @@ it('Auto-approved initial continuations leave status streaming', async () => {
 
 it('Auto-approved manual continuations leave status continuing', async () => {
   const { coordinator, statusMachine, turnWorkflow } = makeHarness();
-  statusMachine.beginTurn();
-  statusMachine.requestApproval(); // status becomes 'awaiting_approval'
+  const lease = statusMachine.beginTurn();
+  statusMachine.requestApproval(lease); // status becomes 'awaiting_approval'
 
   let checkedStatusInLoop: any = null;
 
@@ -226,7 +226,7 @@ it('stale leaves status untouched because lifecycle operation resolved it', asyn
 
   turnWorkflow.executeInitial = async function* () {
     // during the run, concurrent operation invalidates and starts new turn
-    statusMachine.complete(); // back to idle
+    statusMachine.abort(); // back to idle and revoke the old turn
     statusMachine.beginTurn(); // new turn streaming
     yield* [];
     return { kind: 'stale' };
@@ -255,8 +255,8 @@ it('stale initial outcome does not emit a terminal event', async () => {
 
 it('stale continuation leaves a newer turn status untouched', async () => {
   const { coordinator, statusMachine, turnWorkflow } = makeHarness();
-  statusMachine.beginTurn();
-  statusMachine.requestApproval();
+  const lease = statusMachine.beginTurn();
+  statusMachine.requestApproval(lease);
 
   turnWorkflow.executeContinuation = async function* () {
     statusMachine.abort();
@@ -273,8 +273,8 @@ it('stale continuation leaves a newer turn status untouched', async () => {
 
 it('continueAfterApproval passes the pending generation to the executor', async () => {
   const { coordinator, statusMachine, turnWorkflow, continuationCalls, approvalFlow } = makeHarness();
-  statusMachine.beginTurn();
-  statusMachine.requestApproval();
+  const lease = statusMachine.beginTurn();
+  statusMachine.requestApproval(lease);
   approvalFlow.setPending({ token: 7 });
   turnWorkflow.setNextContinuationResult({
     kind: 'response',
@@ -297,8 +297,8 @@ it('continueAfterApproval passes the pending generation to the executor', async 
 
 it('continuation completion releases the turn for the next user message', async () => {
   const { coordinator, statusMachine, turnWorkflow, approvalFlow } = makeHarness();
-  statusMachine.beginTurn();
-  statusMachine.requestApproval();
+  const lease = statusMachine.beginTurn();
+  statusMachine.requestApproval(lease);
   approvalFlow.setPending({ token: 7 });
   turnWorkflow.setNextContinuationResult({
     kind: 'response',
@@ -319,10 +319,88 @@ it('continuation completion releases the turn for the next user message', async 
   }
 });
 
+it('late completion from an aborted turn cannot complete or emit for a newer turn', async () => {
+  const { coordinator, statusMachine, turnWorkflow } = makeHarness();
+  let releaseFirst!: () => void;
+  const firstCanComplete = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let firstReachedBuffer!: () => void;
+  const firstBuffered = new Promise<void>((resolve) => {
+    firstReachedBuffer = resolve;
+  });
+  let invocation = 0;
+
+  turnWorkflow.executeInitial = async function* () {
+    invocation += 1;
+    if (invocation === 1) {
+      firstReachedBuffer();
+      await firstCanComplete;
+      return { kind: 'response', terminal: { type: 'response', finalText: 'turn A' } };
+    }
+    await new Promise<void>(() => {});
+    return { kind: 'response', terminal: { type: 'response', finalText: 'turn B' } };
+  };
+
+  const turnA = coordinator.start('A')[Symbol.asyncIterator]();
+  const turnACompletion = turnA.next();
+  await firstBuffered;
+  coordinator.abort();
+
+  const turnB = coordinator.start('B')[Symbol.asyncIterator]();
+  const turnBPending = turnB.next();
+  expect(statusMachine.current).toBe('streaming');
+
+  releaseFirst();
+  const lateA = await turnACompletion;
+
+  expect(lateA).toEqual({ done: true, value: undefined });
+  expect(statusMachine.current).toBe('streaming');
+  void turnBPending;
+});
+
+it('late intermediate events from an aborted turn are not forwarded into a newer turn', async () => {
+  const { coordinator, statusMachine, turnWorkflow } = makeHarness();
+  let releaseFirst!: () => void;
+  const firstCanEmit = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let firstStarted!: () => void;
+  const firstIsRunning = new Promise<void>((resolve) => {
+    firstStarted = resolve;
+  });
+  let invocation = 0;
+
+  turnWorkflow.executeInitial = async function* () {
+    invocation += 1;
+    if (invocation === 1) {
+      firstStarted();
+      await firstCanEmit;
+      yield { type: 'text_delta', delta: 'late A text' };
+      return { kind: 'response', terminal: { type: 'response', finalText: 'turn A' } };
+    }
+    await new Promise<void>(() => {});
+    return { kind: 'response', terminal: { type: 'response', finalText: 'turn B' } };
+  };
+
+  const turnA = coordinator.start('A')[Symbol.asyncIterator]();
+  const turnAEvent = turnA.next();
+  await firstIsRunning;
+  coordinator.abort();
+
+  const turnB = coordinator.start('B')[Symbol.asyncIterator]();
+  const turnBPending = turnB.next();
+  releaseFirst();
+
+  expect(await turnAEvent).toEqual({ done: true, value: undefined });
+  expect(statusMachine.current).toBe('streaming');
+  void turnBPending;
+});
+
 it('Abort to idle with pending approval reconciliation', async () => {
   const { coordinator, statusMachine, getAbortCalled, getLiveRunAborted, getProviderContinuityCleared } = makeHarness();
-  statusMachine.beginTurn();
-  statusMachine.requestApproval(); // awaiting_approval
+  const lease = statusMachine.beginTurn();
+  statusMachine.requestApproval(lease); // awaiting_approval
 
   coordinator.abort();
 

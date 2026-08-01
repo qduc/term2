@@ -17,6 +17,8 @@ export type CapabilityRoute = {
 export type CapabilityExclusion = {
   reason: string;
   evidence: string;
+  /** Omit to document an exclusion for the whole row; otherwise scope it to these required scenarios. */
+  scenarioIds?: readonly string[];
 };
 
 export type ProviderCapability = {
@@ -44,6 +46,7 @@ export type CapabilityExecution = {
 export type CapabilityAccounting = {
   accounted: readonly string[];
   unaccounted: readonly string[];
+  missingScenarios: readonly string[];
   invalidExecutions: readonly string[];
 };
 
@@ -56,8 +59,22 @@ const REQUIRED_SCENARIO_SUFFIXES = [
   'abnormal-close',
 ] as const;
 
-function requiredScenarios(rowId: string): readonly string[] {
-  return REQUIRED_SCENARIO_SUFFIXES.map((suffix) => `${rowId}.${suffix}`);
+function requiredScenarios(rowId: string, transport: CapabilityTransport): readonly string[] {
+  return REQUIRED_SCENARIO_SUFFIXES.filter((suffix) => transport === 'websocket' || suffix !== 'abnormal-close').map(
+    (suffix) => `${rowId}.${suffix}`,
+  );
+}
+
+function sharedTerminalExclusion(
+  rowId: string,
+  representativeRowId: string,
+  protocolLabel: string,
+): CapabilityExclusion {
+  return {
+    reason: `The ${protocolLabel} native-error and incomplete-stream lifecycle is covered by the representative ${representativeRowId} route; ${rowId} routing and two-turn/tool lifecycle remain distinct.`,
+    evidence: `provider-session-resilience.blackbox.ts executes ${representativeRowId}.native-error and ${representativeRowId}.incomplete-stream; provider-session-stateless.blackbox.ts executes ${rowId}.two-user-turn, ${rowId}.approval-approve, and ${rowId}.approval-reject.`,
+    scenarioIds: [`${rowId}.native-error`, `${rowId}.incomplete-stream`],
+  };
 }
 
 /**
@@ -76,7 +93,7 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     toolSupport: { supportsTools: true, supportsApproval: true },
     reasoningSupport: 'native',
     nativeContinuationField: 'previous_response_id',
-    requiredScenarios: requiredScenarios('openai-http'),
+    requiredScenarios: requiredScenarios('openai-http', 'http-sse'),
   },
   {
     id: 'openai-websocket',
@@ -88,7 +105,7 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     toolSupport: { supportsTools: true, supportsApproval: true },
     reasoningSupport: 'native',
     nativeContinuationField: 'previous_response_id',
-    requiredScenarios: requiredScenarios('openai-websocket'),
+    requiredScenarios: requiredScenarios('openai-websocket', 'websocket'),
   },
   {
     id: 'codex-http',
@@ -100,7 +117,7 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     toolSupport: { supportsTools: true, supportsApproval: true },
     reasoningSupport: 'native',
     nativeContinuationField: 'previous_response_id',
-    requiredScenarios: requiredScenarios('codex-http'),
+    requiredScenarios: requiredScenarios('codex-http', 'http-sse'),
   },
   {
     id: 'codex-websocket',
@@ -112,7 +129,7 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     toolSupport: { supportsTools: true, supportsApproval: true },
     reasoningSupport: 'native',
     nativeContinuationField: 'previous_response_id',
-    requiredScenarios: requiredScenarios('codex-websocket'),
+    requiredScenarios: requiredScenarios('codex-websocket', 'websocket'),
   },
   {
     id: 'openrouter-http',
@@ -124,7 +141,7 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     toolSupport: { supportsTools: true, supportsApproval: true },
     reasoningSupport: 'provider-dependent',
     nativeContinuationField: null,
-    requiredScenarios: requiredScenarios('openrouter-http'),
+    requiredScenarios: requiredScenarios('openrouter-http', 'http-sse'),
   },
   {
     id: 'runtime-openai-chat',
@@ -136,7 +153,12 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     toolSupport: { supportsTools: true, supportsApproval: true },
     reasoningSupport: 'provider-dependent',
     nativeContinuationField: null,
-    requiredScenarios: requiredScenarios('runtime-openai-chat'),
+    requiredScenarios: requiredScenarios('runtime-openai-chat', 'http-sse'),
+    exclusion: sharedTerminalExclusion(
+      'runtime-openai-chat',
+      'runtime-openai-compatible-chat',
+      'Chat Completions HTTP/SSE',
+    ),
   },
   {
     id: 'runtime-openai-compatible-chat',
@@ -148,7 +170,7 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     toolSupport: { supportsTools: true, supportsApproval: true },
     reasoningSupport: 'provider-dependent',
     nativeContinuationField: null,
-    requiredScenarios: requiredScenarios('runtime-openai-compatible-chat'),
+    requiredScenarios: requiredScenarios('runtime-openai-compatible-chat', 'http-sse'),
   },
   {
     id: 'runtime-llama-cpp-chat',
@@ -160,7 +182,12 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     toolSupport: { supportsTools: true, supportsApproval: true },
     reasoningSupport: 'provider-dependent',
     nativeContinuationField: null,
-    requiredScenarios: requiredScenarios('runtime-llama-cpp-chat'),
+    requiredScenarios: requiredScenarios('runtime-llama-cpp-chat', 'http-sse'),
+    exclusion: sharedTerminalExclusion(
+      'runtime-llama-cpp-chat',
+      'runtime-openai-compatible-chat',
+      'Chat Completions HTTP/SSE',
+    ),
   },
   {
     id: 'runtime-anthropic-messages',
@@ -172,7 +199,7 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     toolSupport: { supportsTools: true, supportsApproval: true },
     reasoningSupport: 'native',
     nativeContinuationField: null,
-    requiredScenarios: requiredScenarios('runtime-anthropic-messages'),
+    requiredScenarios: requiredScenarios('runtime-anthropic-messages', 'http-sse'),
   },
   {
     id: 'runtime-google-generate-content',
@@ -184,7 +211,7 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     toolSupport: { supportsTools: true, supportsApproval: true },
     reasoningSupport: 'native',
     nativeContinuationField: null,
-    requiredScenarios: requiredScenarios('runtime-google-generate-content'),
+    requiredScenarios: requiredScenarios('runtime-google-generate-content', 'http-sse'),
   },
   {
     id: 'opencode-chat-completions',
@@ -196,7 +223,12 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     toolSupport: { supportsTools: true, supportsApproval: true },
     reasoningSupport: 'provider-dependent',
     nativeContinuationField: 'x-opencode-session',
-    requiredScenarios: requiredScenarios('opencode-chat-completions'),
+    requiredScenarios: requiredScenarios('opencode-chat-completions', 'http-sse'),
+    exclusion: sharedTerminalExclusion(
+      'opencode-chat-completions',
+      'runtime-openai-compatible-chat',
+      'Chat Completions HTTP/SSE',
+    ),
   },
   {
     id: 'opencode-anthropic-messages',
@@ -208,7 +240,12 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     toolSupport: { supportsTools: true, supportsApproval: true },
     reasoningSupport: 'native',
     nativeContinuationField: 'x-opencode-session',
-    requiredScenarios: requiredScenarios('opencode-anthropic-messages'),
+    requiredScenarios: requiredScenarios('opencode-anthropic-messages', 'http-sse'),
+    exclusion: sharedTerminalExclusion(
+      'opencode-anthropic-messages',
+      'runtime-anthropic-messages',
+      'Anthropic Messages HTTP/SSE',
+    ),
   },
 ] as const;
 
@@ -221,8 +258,20 @@ export function validateProviderCapabilityMatrix(matrix: readonly ProviderCapabi
     if (row.requiredScenarios.length === 0) throw new Error(`Capability row '${row.id}' has no required scenarios.`);
     if (new Set(row.requiredScenarios).size !== row.requiredScenarios.length)
       throw new Error(`Capability row '${row.id}' contains duplicate required scenarios.`);
-    if (row.exclusion && (!row.exclusion.reason.trim() || !row.exclusion.evidence.trim()))
-      throw new Error(`Capability row '${row.id}' has an incomplete exclusion.`);
+    if (row.exclusion) {
+      if (!row.exclusion.reason.trim() || !row.exclusion.evidence.trim())
+        throw new Error(`Capability row '${row.id}' has an incomplete exclusion.`);
+      if (row.exclusion.scenarioIds) {
+        if (row.exclusion.scenarioIds.length === 0)
+          throw new Error(`Capability row '${row.id}' has an empty exclusion scenario set.`);
+        if (new Set(row.exclusion.scenarioIds).size !== row.exclusion.scenarioIds.length)
+          throw new Error(`Capability row '${row.id}' contains duplicate exclusion scenarios.`);
+        for (const scenarioId of row.exclusion.scenarioIds) {
+          if (!row.requiredScenarios.includes(scenarioId))
+            throw new Error(`Capability row '${row.id}' excludes unknown scenario '${scenarioId}'.`);
+        }
+      }
+    }
   }
 }
 
@@ -240,14 +289,20 @@ export function accountProviderCapabilityMatrix(
     .map((execution) => `${execution.rowId}:${execution.scenarioId}`);
   const accounted: string[] = [];
   const unaccounted: string[] = [];
+  const missingScenarios: string[] = [];
   for (const row of matrix) {
-    const executed = executions.some(
-      (execution) => execution.rowId === row.id && row.requiredScenarios.includes(execution.scenarioId),
+    const excluded = new Set(row.exclusion?.scenarioIds ?? (row.exclusion ? row.requiredScenarios : []));
+    const covered = row.requiredScenarios.filter(
+      (scenarioId) =>
+        excluded.has(scenarioId) ||
+        executions.some((execution) => execution.rowId === row.id && execution.scenarioId === scenarioId),
     );
-    if (executed || row.exclusion) accounted.push(row.id);
+    const missing = row.requiredScenarios.filter((scenarioId) => !covered.includes(scenarioId));
+    missingScenarios.push(...missing);
+    if (covered.length > 0) accounted.push(row.id);
     else unaccounted.push(row.id);
   }
-  return { accounted, unaccounted, invalidExecutions };
+  return { accounted, unaccounted, missingScenarios, invalidExecutions };
 }
 
 /** Fail the gate rather than allowing a missing row to disappear from reports. */
@@ -259,6 +314,9 @@ export function assertProviderCapabilityAccounting(
   const failures = [
     ...(accounting.unaccounted.length
       ? [`unexecuted and unexcluded capability rows: ${accounting.unaccounted.join(', ')}`]
+      : []),
+    ...(accounting.missingScenarios.length
+      ? [`required lifecycle scenarios are missing: ${accounting.missingScenarios.join(', ')}`]
       : []),
     ...(accounting.invalidExecutions.length
       ? [`execution ledger contains unknown scenarios: ${accounting.invalidExecutions.join(', ')}`]

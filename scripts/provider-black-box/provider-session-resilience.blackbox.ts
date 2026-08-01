@@ -3,7 +3,6 @@ import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket, WebSocketServer } from 'ws';
-import type { CapabilityExecution } from './provider-capability-matrix.js';
 import {
   createIsolatedWorkspaceLease,
   type IsolatedWorkspaceLease,
@@ -15,26 +14,7 @@ import {
  * Executed capabilities owned by this file. Gate C should combine this typed
  * ledger with the ledgers exported by the other provider-session workers.
  */
-export const PROVIDER_SESSION_RESILIENCE_EXECUTED_SCENARIO_IDS = [
-  { rowId: 'openai-http', scenarioId: 'openai-http.native-error' },
-  { rowId: 'openai-http', scenarioId: 'openai-http.incomplete-stream' },
-  { rowId: 'openai-websocket', scenarioId: 'openai-websocket.native-error' },
-  { rowId: 'openai-websocket', scenarioId: 'openai-websocket.incomplete-stream' },
-  { rowId: 'openai-websocket', scenarioId: 'openai-websocket.abnormal-close' },
-  { rowId: 'codex-http', scenarioId: 'codex-http.native-error' },
-  { rowId: 'codex-http', scenarioId: 'codex-http.incomplete-stream' },
-  { rowId: 'openrouter-http', scenarioId: 'openrouter-http.native-error' },
-  { rowId: 'openrouter-http', scenarioId: 'openrouter-http.incomplete-stream' },
-  { rowId: 'codex-websocket', scenarioId: 'codex-websocket.native-error' },
-  { rowId: 'codex-websocket', scenarioId: 'codex-websocket.incomplete-stream' },
-  { rowId: 'codex-websocket', scenarioId: 'codex-websocket.abnormal-close' },
-  { rowId: 'runtime-openai-compatible-chat', scenarioId: 'runtime-openai-compatible-chat.native-error' },
-  { rowId: 'runtime-openai-compatible-chat', scenarioId: 'runtime-openai-compatible-chat.incomplete-stream' },
-  { rowId: 'runtime-anthropic-messages', scenarioId: 'runtime-anthropic-messages.native-error' },
-  { rowId: 'runtime-anthropic-messages', scenarioId: 'runtime-anthropic-messages.incomplete-stream' },
-  { rowId: 'runtime-google-generate-content', scenarioId: 'runtime-google-generate-content.native-error' },
-  { rowId: 'runtime-google-generate-content', scenarioId: 'runtime-google-generate-content.incomplete-stream' },
-] as const satisfies readonly CapabilityExecution[];
+export { RESILIENCE_CAPABILITY_EXECUTIONS as PROVIDER_SESSION_RESILIENCE_EXECUTED_SCENARIO_IDS } from './provider-session-capability-manifest.js';
 
 type HttpWireFamily =
   | 'openai-responses'

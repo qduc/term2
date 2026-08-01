@@ -24,55 +24,8 @@ type ProviderId = 'openai' | 'codex';
 type Transport = 'http' | 'websocket';
 type FixtureMode = 'multi-turn' | 'approval' | 'native-error' | 'incomplete' | 'abnormal-close';
 
-type ChainingCapabilityScenarioId =
-  | 'openai-responses-http.application-multi-turn'
-  | 'openai-responses-websocket.application-multi-turn'
-  | 'codex-responses-http.application-multi-turn'
-  | 'codex-responses-websocket.application-multi-turn'
-  | 'openai-responses-http.approval-approve'
-  | 'openai-responses-websocket.approval-approve'
-  | 'codex-responses-http.approval-approve'
-  | 'codex-responses-websocket.approval-approve'
-  | 'openai-responses-http.approval-reject'
-  | 'openai-responses-websocket.approval-reject'
-  | 'codex-responses-http.approval-reject'
-  | 'codex-responses-websocket.approval-reject'
-  | 'openai-responses-http.native-terminal-error'
-  | 'openai-responses-websocket.native-terminal-error'
-  | 'codex-responses-http.native-terminal-error'
-  | 'codex-responses-websocket.native-terminal-error'
-  | 'openai-responses-http.incomplete-stream'
-  | 'openai-responses-websocket.incomplete-stream'
-  | 'codex-responses-http.incomplete-stream'
-  | 'codex-responses-websocket.incomplete-stream'
-  | 'openai-responses-websocket.abnormal-close'
-  | 'codex-responses-websocket.abnormal-close';
-
-/** Executed capability IDs consumed by the Gate C matrix-accounting worker. */
-export const executedCapabilityScenarioIds = [
-  'openai-responses-http.application-multi-turn',
-  'openai-responses-websocket.application-multi-turn',
-  'codex-responses-http.application-multi-turn',
-  'codex-responses-websocket.application-multi-turn',
-  'openai-responses-http.approval-approve',
-  'openai-responses-websocket.approval-approve',
-  'codex-responses-http.approval-approve',
-  'codex-responses-websocket.approval-approve',
-  'openai-responses-http.approval-reject',
-  'openai-responses-websocket.approval-reject',
-  'codex-responses-http.approval-reject',
-  'codex-responses-websocket.approval-reject',
-  'openai-responses-http.native-terminal-error',
-  'openai-responses-websocket.native-terminal-error',
-  'codex-responses-http.native-terminal-error',
-  'codex-responses-websocket.native-terminal-error',
-  'openai-responses-http.incomplete-stream',
-  'openai-responses-websocket.incomplete-stream',
-  'codex-responses-http.incomplete-stream',
-  'codex-responses-websocket.incomplete-stream',
-  'openai-responses-websocket.abnormal-close',
-  'codex-responses-websocket.abnormal-close',
-] as const satisfies readonly ChainingCapabilityScenarioId[];
+/** Typed lifecycle ledger consumed by the Gate C matrix-accounting test. */
+export { RESPONSES_CAPABILITY_EXECUTIONS as executedCapabilityScenarioIds } from './provider-session-capability-manifest.js';
 
 interface ProviderTransportCase {
   readonly provider: ProviderId;

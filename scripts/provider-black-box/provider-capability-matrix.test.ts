@@ -5,6 +5,7 @@ import {
   PROVIDER_CAPABILITY_MATRIX,
   type CapabilityExecution,
 } from './provider-capability-matrix.js';
+import { ALL_PROVIDER_SESSION_CAPABILITY_EXECUTIONS } from './provider-session-capability-manifest.js';
 
 describe('provider capability matrix', () => {
   it('declares every target route with transport, lifecycle, and required scenarios', () => {
@@ -16,6 +17,11 @@ describe('provider capability matrix', () => {
       expect(['http-sse', 'websocket']).toContain(row.transport);
       expect(['server-managed', 'stateless']).toContain(row.chainingMode);
       expect(row.requiredScenarios.length, row.id).toBeGreaterThan(0);
+      expect(row.requiredScenarios, row.id).toContain(`${row.id}.two-user-turn`);
+      expect(row.requiredScenarios, row.id).toContain(`${row.id}.approval-approve`);
+      expect(row.requiredScenarios, row.id).toContain(`${row.id}.approval-reject`);
+      if (row.transport === 'http-sse') expect(row.requiredScenarios, row.id).not.toContain(`${row.id}.abnormal-close`);
+      if (row.transport === 'websocket') expect(row.requiredScenarios, row.id).toContain(`${row.id}.abnormal-close`);
       expect(typeof row.toolSupport.supportsTools, row.id).toBe('boolean');
       expect(typeof row.toolSupport.supportsApproval, row.id).toBe('boolean');
       expect(row.nativeContinuationField === null || typeof row.nativeContinuationField === 'string', row.id).toBe(
@@ -29,12 +35,27 @@ describe('provider capability matrix', () => {
       rowId: row.id,
       scenarioId: row.requiredScenarios[0]!,
     }));
-    expect(accountProviderCapabilityMatrix(PROVIDER_CAPABILITY_MATRIX, executions)).toEqual({
-      accounted: PROVIDER_CAPABILITY_MATRIX.map((row) => row.id),
-      unaccounted: [],
-      invalidExecutions: [],
-    });
-    expect(() => assertProviderCapabilityAccounting(PROVIDER_CAPABILITY_MATRIX, executions)).not.toThrow();
+    const accounting = accountProviderCapabilityMatrix(PROVIDER_CAPABILITY_MATRIX, executions);
+    expect(accounting.accounted).toEqual(PROVIDER_CAPABILITY_MATRIX.map((row) => row.id));
+    expect(accounting.unaccounted).toEqual([]);
+    expect(accounting.invalidExecutions).toEqual([]);
+    expect(accounting.missingScenarios).toContain('openai-http.approval-approve');
+    expect(() => assertProviderCapabilityAccounting(PROVIDER_CAPABILITY_MATRIX, executions)).toThrow(
+      /required lifecycle scenarios are missing/i,
+    );
+  });
+
+  it('accounts the real lifecycle ledgers without importing their test modules', () => {
+    const accounting = accountProviderCapabilityMatrix(
+      PROVIDER_CAPABILITY_MATRIX,
+      ALL_PROVIDER_SESSION_CAPABILITY_EXECUTIONS,
+    );
+    expect(accounting.unaccounted).toEqual([]);
+    expect(accounting.missingScenarios).toEqual([]);
+    expect(accounting.invalidExecutions).toEqual([]);
+    expect(() =>
+      assertProviderCapabilityAccounting(PROVIDER_CAPABILITY_MATRIX, ALL_PROVIDER_SESSION_CAPABILITY_EXECUTIONS),
+    ).not.toThrow();
   });
 
   it('fails when a row has neither an executed scenario nor a documented exclusion', () => {
@@ -57,6 +78,13 @@ describe('provider capability matrix', () => {
     expect(() => assertProviderCapabilityAccounting(matrix, [])).not.toThrow();
     const bad = [{ ...matrix[0]!, exclusion: { reason: '', evidence: '' } }];
     expect(() => accountProviderCapabilityMatrix(bad, [])).toThrow(/incomplete exclusion/i);
+    const badScenario = [
+      {
+        ...PROVIDER_CAPABILITY_MATRIX[0]!,
+        exclusion: { reason: 'reason', evidence: 'evidence', scenarioIds: ['unknown'] },
+      },
+    ];
+    expect(() => accountProviderCapabilityMatrix(badScenario, [])).toThrow(/excludes unknown scenario/i);
   });
 
   it('rejects an execution that does not belong to the row required-scenario set', () => {

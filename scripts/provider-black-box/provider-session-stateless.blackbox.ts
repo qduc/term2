@@ -103,41 +103,7 @@ const STATELESS_PROVIDER_ROWS = [
   },
 ] as const satisfies readonly StatelessProviderRow[];
 
-type StatelessProviderRowId = (typeof STATELESS_PROVIDER_ROWS)[number]['id'];
-type StatelessScenarioSuffix = 'two-user-turn' | 'approval-approve' | 'approval-reject';
-export type StatelessProviderScenarioId = `${StatelessProviderRowId}.${StatelessScenarioSuffix}`;
-
-/**
- * Gate C consumes these IDs alongside the other black-box workers' ledgers.
- * Keep the aliases explicit: sharing a wire family does not collapse their
- * runtime registration or session lifecycle claims.
- */
-export const EXECUTED_CAPABILITY_SCENARIO_IDS = [
-  'openrouter-http.two-user-turn',
-  'openrouter-http.approval-approve',
-  'openrouter-http.approval-reject',
-  'runtime-openai-chat.two-user-turn',
-  'runtime-openai-chat.approval-approve',
-  'runtime-openai-chat.approval-reject',
-  'runtime-openai-compatible-chat.two-user-turn',
-  'runtime-openai-compatible-chat.approval-approve',
-  'runtime-openai-compatible-chat.approval-reject',
-  'runtime-llama-cpp-chat.two-user-turn',
-  'runtime-llama-cpp-chat.approval-approve',
-  'runtime-llama-cpp-chat.approval-reject',
-  'runtime-anthropic-messages.two-user-turn',
-  'runtime-anthropic-messages.approval-approve',
-  'runtime-anthropic-messages.approval-reject',
-  'runtime-google-generate-content.two-user-turn',
-  'runtime-google-generate-content.approval-approve',
-  'runtime-google-generate-content.approval-reject',
-  'opencode-chat-completions.two-user-turn',
-  'opencode-chat-completions.approval-approve',
-  'opencode-chat-completions.approval-reject',
-  'opencode-anthropic-messages.two-user-turn',
-  'opencode-anthropic-messages.approval-approve',
-  'opencode-anthropic-messages.approval-reject',
-] as const satisfies readonly StatelessProviderScenarioId[];
+export { STATELESS_CAPABILITY_EXECUTIONS as EXECUTED_CAPABILITY_SCENARIO_IDS } from './provider-session-capability-manifest.js';
 
 type CapturedStatelessRequest = {
   method: string;

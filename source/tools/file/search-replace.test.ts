@@ -2,20 +2,37 @@ import { it, expect } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { createSearchReplaceToolDefinition, formatSearchReplaceCommandMessage } from './search-replace.js';
+import {
+  createSearchReplaceToolDefinition,
+  formatSearchReplaceCommandMessage,
+  type SearchReplaceOperation,
+  type SearchReplaceToolParams,
+} from './search-replace.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
 
-function parsePlainResult(result: string): any {
+type PlainResultItem = {
+  success: boolean;
+  message: string;
+  error: string;
+};
+
+type PlainResult = PlainResultItem & { output: PlainResultItem[] };
+
+function parsePlainResult(result: unknown): PlainResult {
+  if (typeof result !== 'string') {
+    throw new Error(`Expected plain-text tool result, received ${typeof result}`);
+  }
   const lines = result.split('\n').filter(Boolean);
   if (lines.length === 0) {
-    return { success: false, error: 'No output', output: [{ success: false, error: 'No output' }] };
+    const item = { success: false, message: '', error: 'No output' };
+    return { ...item, output: [item] };
   }
-  const output = lines.map((line) => {
+  const output = lines.map((line): PlainResultItem => {
     if (line.startsWith('Error: ')) {
-      return { success: false, error: line.slice(7) };
+      return { success: false, message: '', error: line.slice(7) };
     }
-    return { success: true, message: line };
+    return { success: true, message: line, error: '' };
   });
   return { ...output[0], output };
 }
@@ -47,15 +64,32 @@ const mockLoggingService: ILoggingService = {
   clearCorrelationId: () => {},
 };
 
+type RawSearchReplaceParams = Omit<SearchReplaceToolParams, 'replacements'> & {
+  replacements: Array<Omit<SearchReplaceOperation, 'match_all'> & { match_all?: boolean }>;
+};
+
 function createTool(
   settingsService = createMockSettingsService(),
   editHealing?: typeof import('./edit-healing.js').healSearchReplaceParams,
 ) {
-  return createSearchReplaceToolDefinition({
+  const tool = createSearchReplaceToolDefinition({
     loggingService: mockLoggingService,
     settingsService,
     ...(editHealing ? { editHealing } : {}),
   });
+  const withDefaultMatchAll = (params: RawSearchReplaceParams): SearchReplaceToolParams => ({
+    ...params,
+    replacements: params.replacements.map((replacement) => ({
+      ...replacement,
+      match_all: replacement.match_all ?? false,
+    })),
+  });
+
+  return {
+    ...tool,
+    needsApproval: (params: RawSearchReplaceParams) => tool.needsApproval(withDefaultMatchAll(params)),
+    execute: (params: RawSearchReplaceParams) => tool.execute(withDefaultMatchAll(params)),
+  };
 }
 
 it.sequential('needsApproval auto-approves creation when search_content is empty and file is missing', async () => {

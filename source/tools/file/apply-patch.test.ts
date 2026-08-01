@@ -6,16 +6,28 @@ import { createApplyPatchToolDefinition } from './apply-patch.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
 
-function parsePlainResult(result: string): any {
+type PlainResultItem = {
+  success: boolean;
+  message: string;
+  error: string;
+};
+
+type PlainResult = PlainResultItem & { output: PlainResultItem[] };
+
+function parsePlainResult(result: unknown): PlainResult {
+  if (typeof result !== 'string') {
+    throw new Error(`Expected plain-text tool result, received ${typeof result}`);
+  }
   const lines = result.split('\n').filter(Boolean);
   if (lines.length === 0) {
-    return { success: false, error: 'No output', output: [{ success: false, error: 'No output' }] };
+    const item = { success: false, message: '', error: 'No output' };
+    return { ...item, output: [item] };
   }
-  const output = lines.map((line) => {
+  const output = lines.map((line): PlainResultItem => {
     if (line.startsWith('Error: ')) {
-      return { success: false, error: line.slice(7) };
+      return { success: false, message: '', error: line.slice(7) };
     }
-    return { success: true, message: line };
+    return { success: true, message: line, error: '' };
   });
   return { ...output[0], output };
 }

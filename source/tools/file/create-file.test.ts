@@ -2,21 +2,33 @@ import { it, expect } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { createCreateFileToolDefinition } from './create-file.js';
+import { createCreateFileToolDefinition, type CreateFileToolParams } from './create-file.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import type { ISSHService, ILoggingService } from '../../services/service-interfaces.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 
-function parsePlainResult(result: string): any {
+type PlainResultItem = {
+  success: boolean;
+  message: string;
+  error: string;
+};
+
+type PlainResult = PlainResultItem & { output: PlainResultItem[] };
+
+function parsePlainResult(result: unknown): PlainResult {
+  if (typeof result !== 'string') {
+    throw new Error(`Expected plain-text tool result, received ${typeof result}`);
+  }
   const lines = result.split('\n').filter(Boolean);
   if (lines.length === 0) {
-    return { success: false, error: 'No output', output: [{ success: false, error: 'No output' }] };
+    const item = { success: false, message: '', error: 'No output' };
+    return { ...item, output: [item] };
   }
-  const output = lines.map((line) => {
+  const output = lines.map((line): PlainResultItem => {
     if (line.startsWith('Error: ')) {
-      return { success: false, error: line.slice(7) };
+      return { success: false, message: '', error: line.slice(7) };
     }
-    return { success: true, message: line };
+    return { success: true, message: line, error: '' };
   });
   return { ...output[0], output };
 }
@@ -48,11 +60,23 @@ const mockLoggingService: ILoggingService = {
   clearCorrelationId: () => {},
 };
 
+type RawCreateFileParams = Omit<CreateFileToolParams, 'overwrite'> & { overwrite?: boolean };
+
 function createTool(settingsService = createMockSettingsService()) {
-  return createCreateFileToolDefinition({
+  const tool = createCreateFileToolDefinition({
     loggingService: mockLoggingService,
     settingsService,
   });
+  const withDefaultOverwrite = (params: RawCreateFileParams): CreateFileToolParams => ({
+    ...params,
+    overwrite: params.overwrite ?? false,
+  });
+
+  return {
+    ...tool,
+    needsApproval: (params: RawCreateFileParams) => tool.needsApproval(withDefaultOverwrite(params)),
+    execute: (params: RawCreateFileParams) => tool.execute(withDefaultOverwrite(params)),
+  };
 }
 
 function createRemoteTool(remoteDir: string, files: Map<string, string>) {
@@ -73,11 +97,17 @@ function createRemoteTool(remoteDir: string, files: Map<string, string>) {
     mkdir: async () => {},
   };
 
-  return createCreateFileToolDefinition({
+  const tool = createCreateFileToolDefinition({
     loggingService: mockLoggingService,
     settingsService: createMockSettingsService(),
     executionContext: new ExecutionContext(sshService, remoteDir),
   });
+  return {
+    ...tool,
+    needsApproval: (params: RawCreateFileParams) =>
+      tool.needsApproval({ ...params, overwrite: params.overwrite ?? false }),
+    execute: (params: RawCreateFileParams) => tool.execute({ ...params, overwrite: params.overwrite ?? false }),
+  };
 }
 
 function extractOverwriteCode(error: string): string {

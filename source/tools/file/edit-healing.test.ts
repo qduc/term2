@@ -1,12 +1,68 @@
-import { it, expect } from 'vitest';
+import { afterEach, beforeEach, it, expect } from 'vitest';
 import type { SearchReplaceFullOperation } from './search-replace.js';
 import { healSearchReplaceParams } from './edit-healing.js';
+import { getProvider, registerProvider, unregisterProvider, type ProviderDefinition } from '../../providers/registry.js';
+import { createMockLogger, createMockSettings } from '../../services/subagents/test-helpers/subagent-manager-fixtures.js';
 
 const baseParams: SearchReplaceFullOperation = {
   path: 'file.txt',
   search_content: 'const foo = 2;\n',
   replace_content: 'const foo = 3;\n',
 };
+
+const HEALING_EXCERPT = 'const foo = 1;\n\tconst bar = 2;';
+
+function settledHealingRunner(): any {
+  return {
+    config: {},
+    run: async () => {
+      throw new Error('unexpected run(): healing must settle through runToCompletion');
+    },
+    runToCompletion: async () => ({
+      finalOutput: HEALING_EXCERPT,
+      output: [],
+      history: [],
+      interruptions: [],
+      rawResponses: [],
+      usage: { input_tokens: 10, output_tokens: 4, total_tokens: 14 },
+    }),
+  };
+}
+
+/**
+ * Registers a fake provider whose runner settles immediately with a canned
+ * finalOutput — the shape `runToCompletion` must return. Restores the previous
+ * registration (or removes the fake) when the returned function runs.
+ */
+function registerHealingProvider(id: string, runner: any | undefined = undefined): () => void {
+  const previous = getProvider(id);
+  const providerDef: ProviderDefinition = {
+    id,
+    label: `Fake healing ${id}`,
+    createRunner: () => (runner === undefined ? settledHealingRunner() : runner),
+    fetchModels: async () => [],
+  };
+  registerProvider(providerDef, { allowOverride: true });
+  return () => {
+    if (previous) registerProvider(previous, { allowOverride: true });
+    else unregisterProvider(id);
+  };
+}
+
+const restoreFns: Array<() => void> = [];
+beforeEach(() => {
+  restoreFns.length = 0;
+  // Fake overrides for the OpenAI leg (the real openai provider stays
+  // registered for other suites; it is restored per test) and a distinct
+  // non-OpenAI provider for the other leg.
+  restoreFns.push(registerHealingProvider('openai'));
+  restoreFns.push(registerHealingProvider('fake-healing-provider'));
+});
+afterEach(() => {
+  for (const restore of restoreFns.splice(0)) {
+    restore();
+  }
+});
 
 it('healSearchReplaceParams returns modified params when model finds a match', async () => {
   const fileContent = 'const foo = 1;\n\tconst bar = 2;\n';
@@ -141,4 +197,48 @@ it('healSearchReplaceParams uses tools.editHealingProvider before agent.provider
   });
 
   expect(providerId).toBe('openrouter');
+});
+
+it('edit healing returns model text on the OpenAI provider (F3 regression)', async () => {
+  const fileContent = 'const foo = 1;\n\tconst bar = 2;\n';
+  const result = await healSearchReplaceParams(baseParams, fileContent, 'gpt-4o-mini', 'fake-key', {
+    settingsService: createMockSettings({ 'agent.retryAttempts': 2 }),
+    loggingService: createMockLogger(),
+  });
+
+  expect(result.failureReason).toBeUndefined();
+  expect(result.wasModified).toBe(true);
+  expect(result.params.search_content).toBe(HEALING_EXCERPT);
+});
+
+it('edit healing returns model text on a non-OpenAI provider (F3 regression)', async () => {
+  const fileContent = 'const foo = 1;\n\tconst bar = 2;\n';
+  const result = await healSearchReplaceParams(baseParams, fileContent, 'fast-healer', 'fake-key', {
+    providerId: 'fake-healing-provider',
+    settingsService: createMockSettings({ 'agent.retryAttempts': 2 }),
+    loggingService: createMockLogger(),
+  });
+
+  expect(result.failureReason).toBeUndefined();
+  expect(result.wasModified).toBe(true);
+  expect(result.params.search_content).toBe(HEALING_EXCERPT);
+});
+
+it('edit healing fails as a configuration error when the provider has no runner', async () => {
+  registerHealingProvider('runnerless-provider', null);
+  try {
+    const fileContent = 'const foo = 1;\n';
+    const result = await healSearchReplaceParams(baseParams, fileContent, 'fast-healer', 'fake-key', {
+      providerId: 'runnerless-provider',
+      settingsService: createMockSettings({ 'agent.retryAttempts': 2 }),
+      loggingService: createMockLogger(),
+    });
+
+    expect(result.wasModified).toBe(false);
+    expect(result.confidence).toBe(0);
+    expect(result.failureReason).toContain('healing request failed');
+    expect(result.failureReason).toContain('could not be initialized');
+  } finally {
+    unregisterProvider('runnerless-provider');
+  }
 });

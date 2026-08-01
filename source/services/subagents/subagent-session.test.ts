@@ -56,17 +56,18 @@ it('SubagentSession ensureAgent is idempotent', () => {
   expect(session.agent).toBe(fakeAgent);
 });
 
-it('SubagentSession ensureRunner skips runner for openai', () => {
+it('SubagentSession ensureRunner creates runner for openai now that every provider has an application-owned runner', () => {
   const session = new SubagentSession('id', 'mentor');
   let factoryCalled = false;
+  const fakeRunner: any = { run: () => {} };
 
   const runner = session.ensureRunner('openai', () => {
     factoryCalled = true;
-    return {} as any;
+    return fakeRunner;
   });
 
-  expect(factoryCalled).toBe(false);
-  expect(runner).toBe(null);
+  expect(factoryCalled).toBe(true);
+  expect(runner).toBe(fakeRunner);
 });
 
 it('SubagentSession ensureRunner creates runner for non-openai provider', () => {

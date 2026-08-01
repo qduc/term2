@@ -1,5 +1,7 @@
-import { Agent, Runner } from '../services/agent-runtime/legacy-compat.js';
+import { Agent } from '../services/agent-runtime/legacy-compat.js';
+import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
 import type { Model, ModelRequest, ModelResponse, StreamEvent } from '../contracts/model.js';
+import type { StreamedModelTurn, StreamedModelTurnEvent, StreamedModelTurnRequest } from '../contracts/streamed-model-turn.js';
 import { it, expect } from 'vitest';
 import { z } from 'zod';
 import { buildAgent, buildAgentTools } from './agent-factory.js';
@@ -13,6 +15,59 @@ import { PostExecutePendingRegistry } from '../services/session/post-execute-pen
 import { PostExecutePauseCapability } from '../services/session/post-execute-pause-capability.js';
 
 type MockLogger = ILoggingService & { debugCalls: any[][] };
+
+/**
+ * Reverse bridge: adapt an SDK-shaped model (getStreamedResponse) back into an
+ * application StreamedModelTurn so the ApplicationRunLoop can consume it.
+ * Previously this round-trip lived inside the deleted `Runner.run` via
+ * `adaptLegacyModel`; it now only exists for tests that exercise the loop
+ * against an SDK-shaped model fixture.
+ */
+function bridgeBackToTurn(model: { getStreamedResponse(request: any): AsyncIterable<any> }): StreamedModelTurn {
+  return {
+    async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
+      const legacyRequest = {
+        input: request.input.map((item: any) =>
+          item.type === 'tool_result'
+            ? { type: 'function_call_result', callId: item.id, output: { text: item.output } }
+            : item,
+        ),
+        tools: request.tools.map((tool) => ({ type: 'function', ...tool })),
+        modelSettings: {
+          ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+          ...(request.reasoning ? { reasoning: request.reasoning } : {}),
+        },
+        systemInstructions: request.instructions,
+        handoffs: [],
+        outputType: 'text',
+        tracing: false,
+        signal: request.signal,
+      };
+      let completion: any;
+      for await (const event of model.getStreamedResponse(legacyRequest)) {
+        if (event?.type === 'output_text_delta') yield { type: 'text_delta', text: event.delta ?? '' };
+        else if (event?.type === 'response_done') completion = event.response;
+        else if (event?.type === 'response.completed') completion = event.response;
+      }
+      const output = completion?.output ?? [];
+      yield {
+        type: 'completion',
+        responseId: completion?.id ?? `response-${Date.now()}`,
+        output: output.map((item: any) =>
+          item?.type === 'function_call'
+            ? {
+                type: 'tool_call' as const,
+                id: item.callId ?? item.call_id,
+                name: item.name,
+                arguments: item.arguments ?? '{}',
+              }
+            : item,
+        ),
+        usage: completion?.usage,
+      };
+    },
+  };
+}
 
 const createMockLogger = (): MockLogger => {
   const debugCalls: any[][] = [];
@@ -243,8 +298,8 @@ it.sequential('streaming Runner pauses an opted-in root tool until the session c
     model: 'scripted-model',
     tools: [appOwnedTool],
   });
-  const runner = new Runner({ modelProvider: { getModel: () => model } });
-  const stream = await runner.run(agent, 'run the tool', { stream: true });
+  const loop = new ApplicationRunLoop({ resolveModel: async () => bridgeBackToTurn(model) });
+  const stream = loop.startStream(agent, 'run the tool');
   const iteration = (async () => {
     for await (const _event of stream) {
       // Consume the SDK stream so the Runner reaches the tool execution.

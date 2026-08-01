@@ -67,7 +67,7 @@ export interface ProviderDefinition {
 
 export function createApplicationCompatibilityRunner(
   createModel: (model: string) => unknown | Promise<unknown>,
-): LegacyRunner {
+): ApplicationCompatibilityRunner {
   const models = new Map<string, unknown>();
   const modelProvider = {
     getModel: async (model: string) => {
@@ -85,7 +85,26 @@ export function createApplicationCompatibilityRunner(
       const loop = new ApplicationRunLoop({ resolveModel: (model: string) => modelProvider.getModel(model) as any });
       return loop.startStream(agent, input as any, { signal: options.signal });
     },
+    async runToCompletion(agent: any, input: unknown, options: any = {}) {
+      // Settle the stream so result-shaped callers (edit healing, the mentor)
+      // can read `finalOutput` / `usage` synchronously instead of reading a
+      // stream that has not run yet. The resolved completion value carries the
+      // run's `{ usage, output }`; attach it to the returned stream.
+      const stream = await this.run(agent, input, options);
+      const resolved = await stream.completed;
+      return Object.assign(stream, resolved);
+    },
   } as any;
+}
+
+export interface ApplicationCompatibilityRunner extends LegacyRunner {
+  /**
+   * Runs the same application loop as {@link LegacyRunner.run} but awaits the
+   * stream to completion and returns the settled stream (with the resolved
+   * `{ usage, output }` attached). Result-shaped callers must use this; `run`
+   * returns a live stream and is reserved for the streaming main path.
+   */
+  runToCompletion(agent: unknown, input: unknown, options?: any): Promise<any>;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { Agent, RunContext, Runner, type Tool } from '../agent-runtime/legacy-compat.js';
+import { Agent, RunContext, type Tool } from '../agent-runtime/legacy-compat.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentRequest, SubagentResult, SupportedSubagentRole, SubagentDefinition } from './types.js';
@@ -8,7 +8,6 @@ import type { SkillsService } from '../skills/skills-service.js';
 import { SUBAGENT_ROLES } from './types.js';
 import { SubagentToolFactory, getSubagentRunContext, type SubagentRunContext } from './tool-policy.js';
 import { loadRoleDefinition, resolveSubagentSearchViaShell, buildInstructions } from './role-loader.js';
-import { getProvider } from '../../providers/index.js';
 import {
   extractFinalText,
   aggregateContextToolUsage,
@@ -254,16 +253,6 @@ export class NestedSubagentRunner {
       tools,
     });
 
-    const providerDef = getProvider(providerId);
-    const configuredRunner =
-      providerId === 'openai'
-        ? new Runner()
-        : providerDef?.createRunner?.({
-            settingsService: this.#settings,
-            loggingService: this.#logger,
-            sessionContextService: this.#sessionContextService,
-          });
-    const runConfig = (configuredRunner as Runner | undefined)?.config;
     const parameters = z.object({
       role: z.literal(role),
       task: z.string(),
@@ -273,7 +262,6 @@ export class NestedSubagentRunner {
       toolDescription: `Run the ${role} subagent.`,
       parameters,
       inputBuilder: ({ params }: { params: { task: string } }) => params.task,
-      ...(runConfig ? { runConfig } : {}),
       runOptions: {
         maxTurns: definition.maxTurns,
         callModelInputFilter: incrementSubagentTurnCount,

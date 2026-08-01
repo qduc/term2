@@ -1,5 +1,6 @@
-import { Agent, run } from '../../services/agent-runtime/legacy-compat.js';
+import { Agent } from '../../services/agent-runtime/legacy-compat.js';
 import type { LegacyRunner } from '../../contracts/model.js';
+import type { ApplicationCompatibilityRunner } from '../../providers/registry.js';
 import type { SearchReplaceFullOperation } from './search-replace.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import { getProvider } from '../../providers/index.js';
@@ -159,21 +160,20 @@ async function runHealingPrompt(
   deps: Required<Pick<HealingDeps, 'settingsService' | 'loggingService' | 'providerId' | 'timeoutMs'>>,
 ): Promise<string> {
   const { settingsService, loggingService, providerId, timeoutMs } = deps;
-  let runner: LegacyRunner | null = null;
+  // Every registered provider now exposes an application-owned runner
+  // synthesized from createStreamedModel; a missing runner is a configuration
+  // error, not a silent fallback to a run() that only throws.
+  const providerDef = getProvider(providerId);
+  const runner: LegacyRunner | null = providerDef?.createRunner
+    ? providerDef.createRunner({
+        settingsService,
+        loggingService,
+      })
+    : null;
 
-  if (providerId !== 'openai') {
-    const providerDef = getProvider(providerId);
-    runner = providerDef?.createRunner
-      ? providerDef.createRunner({
-          settingsService,
-          loggingService,
-        })
-      : null;
-
-    if (!runner) {
-      const label = providerDef?.label || providerId;
-      throw new Error(`${label} is configured but could not be initialized. Check credentials.`);
-    }
+  if (!runner) {
+    const label = providerDef?.label || providerId;
+    throw new Error(`${label} is configured but could not be initialized. Check credentials.`);
   }
 
   const agent = new Agent({
@@ -203,7 +203,9 @@ async function runHealingPrompt(
 
   let timeoutHandle: NodeJS.Timeout | null = null;
   try {
-    const runPromise = runner ? runner.run(agent, prompt, options) : run(agent, prompt, options);
+    // runToCompletion settles the stream so extractModelText reads finalOutput
+    // from a finished run instead of an un-run stream.
+    const runPromise = (runner as ApplicationCompatibilityRunner).runToCompletion(agent, prompt, options);
 
     const result = await Promise.race([
       runPromise,

@@ -97,7 +97,10 @@ export class SubagentSession {
   }
 
   ensureRunner(provider: string, createRunner: (providerId: string) => LegacyRunner | null): LegacyRunner | null {
-    if (!this.#runner && provider !== 'openai') {
+    // Every registered provider exposes an application-owned runner now,
+    // including OpenAI; a null runner is a configuration error reported by
+    // the caller, not a silent fallback to a throwing run().
+    if (!this.#runner) {
       this.#runner = createRunner(provider);
     }
     return this.#runner;

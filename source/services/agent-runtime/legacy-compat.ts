@@ -1,11 +1,4 @@
 import type { ApplicationAgent } from './application-run-loop.js';
-import { ApplicationRunLoop } from './application-run-loop.js';
-import type {
-  StreamedModelTurn,
-  StreamedModelTurnEvent,
-  StreamedModelTurnRequest,
-} from '../../contracts/streamed-model-turn.js';
-import type { ProviderInput } from '../../contracts/provider-input.js';
 import type { ToolDefinition } from '../../tools/types.js';
 import { normalizeToolInput } from '../../lib/tool-invoke.js';
 
@@ -107,21 +100,6 @@ export class Agent<T = unknown> implements ApplicationAgent {
   }
 }
 
-export class Runner {
-  readonly config: any;
-  constructor(config: any = {}) {
-    this.config = config;
-  }
-  async run(agent: Agent, input: unknown, options: any = {}): Promise<any> {
-    if (this.config.run) return this.config.run(agent, input, options);
-    const provider = this.config.modelProvider;
-    if (!provider?.getModel) throw new Error('Runner requires an application-owned model provider');
-    const model = await provider.getModel(agent.model);
-    const loop = new ApplicationRunLoop({ resolveModel: async () => adaptLegacyModel(model) });
-    return loop.startStream(agent, input as ProviderInput, { signal: options.signal });
-  }
-}
-
 export function tool(config: ToolFactoryConfig): Tool {
   const definition: any = {
     ...config,
@@ -144,80 +122,4 @@ export function tool(config: ToolFactoryConfig): Tool {
     return definition.execute(parsed, context, details);
   };
   return definition;
-}
-
-export async function run(_agent: Agent, _input: unknown, _options: any = {}): Promise<any> {
-  throw new Error('A runner is required for an application-owned model invocation');
-}
-
-export function adaptLegacyModel(model: any): StreamedModelTurn {
-  if (model && typeof model.stream === 'function') return model;
-  return {
-    stream: async function* (request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
-      const legacyRequest = {
-        input: request.input.map((item: any) =>
-          item.type === 'tool_result'
-            ? { type: 'function_call_result', callId: item.id, output: { text: item.output } }
-            : item,
-        ),
-        tools: request.tools.map((tool) => ({ type: 'function', ...tool })),
-        modelSettings: {
-          ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
-          ...(request.reasoning ? { reasoning: request.reasoning } : {}),
-          ...(request.providerOptions ? { providerData: request.providerOptions } : {}),
-        },
-        systemInstructions: request.instructions,
-        handoffs: [],
-        outputType: 'text',
-        tracing: false,
-        signal: request.signal,
-      };
-      if (typeof model.getStreamedResponse === 'function') {
-        let completion: any;
-        for await (const event of model.getStreamedResponse(legacyRequest)) {
-          if (event?.type === 'output_text_delta') yield { type: 'text_delta', text: event.delta ?? '' };
-          else if (event?.type === 'text_delta') yield { type: 'text_delta', text: event.text ?? '' };
-          else if (event?.type === 'response_done') completion = event.response;
-          else if (event?.type === 'response.completed') completion = event.response;
-          else if (event?.type === 'model' && event.event?.type === 'tool-call') {
-            yield {
-              type: 'tool_call',
-              id: event.event.toolCallId,
-              name: event.event.toolName,
-              arguments: event.event.input ?? '{}',
-            };
-          }
-        }
-        yield completionToTurn(completion);
-        return;
-      }
-      const response = await model.getResponse(legacyRequest);
-      yield completionToTurn(response);
-    },
-  };
-}
-
-function completionToTurn(response: any): Extract<StreamedModelTurnEvent, { type: 'completion' }> {
-  const output = response?.output ?? [];
-  const normalized = output.map((item: any) => {
-    if (item?.type === 'function_call')
-      return {
-        type: 'tool_call' as const,
-        id: item.callId ?? item.call_id,
-        name: item.name,
-        arguments: item.arguments ?? '{}',
-      };
-    if (item?.type === 'message')
-      return {
-        type: 'message' as const,
-        content: (item.content ?? []).map((part: any) => ({ type: 'text' as const, text: part.text ?? '' })),
-      };
-    return item;
-  });
-  return {
-    type: 'completion',
-    responseId: response?.id ?? response?.responseId ?? `response-${Date.now()}`,
-    output: normalized,
-    usage: response?.usage,
-  };
 }

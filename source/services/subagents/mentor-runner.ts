@@ -181,7 +181,9 @@ export class MentorRunner {
       finalText: extractFinalText(result),
       filesChanged: [],
       toolsUsed: [],
-      usage: normalizeAgentRunUsage(result?.state?.usage) ?? extractUsage(result),
+      // runWithProvider settles the stream, so usage arrives on the result
+      // (attached by runToCompletion) rather than on an un-run stream state.
+      usage: normalizeAgentRunUsage(result?.usage) ?? extractUsage(result),
     };
   }
 }

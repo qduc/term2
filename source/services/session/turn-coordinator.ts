@@ -38,17 +38,17 @@ export class TurnCoordinator {
     // as a rejection reason used to continue the abandoned SDK run.
     this.deps.approvalFlow.getAbortedStatus();
 
-    this.deps.statusMachine.beginTurn();
+    const lease = this.deps.statusMachine.beginTurn();
     let processed = false;
     try {
       const turnOutcome = yield* this.deps.turnWorkflow.executeInitial(input, options);
       processed = true;
 
-      yield* this.#executeTerminalCommand(this.deps.statusMachine.completeOutcome(turnOutcome));
+      yield* this.#executeTerminalCommand(this.deps.statusMachine.completeOutcome(turnOutcome, lease));
     } finally {
       if (!processed) {
         // Error during initial run — reset status to idle
-        this.deps.statusMachine.complete();
+        this.deps.statusMachine.complete(lease);
       }
     }
   }
@@ -63,18 +63,18 @@ export class TurnCoordinator {
     if (!this.deps.statusMachine.is('awaiting_approval')) {
       throw new Error('No pending approval to continue.');
     }
-    this.deps.statusMachine.beginContinuation();
+    const lease = this.deps.statusMachine.beginContinuation();
     let processed = false;
     try {
       const turnOutcome = yield* this.deps.turnWorkflow.executeContinuation(
         this.deps.approvalFlow.buildApprovalDecision(answer, rejectionReason),
       );
       processed = true;
-      yield* this.#executeTerminalCommand(this.deps.statusMachine.completeContinuationOutcome(turnOutcome));
+      yield* this.#executeTerminalCommand(this.deps.statusMachine.completeContinuationOutcome(turnOutcome, lease));
     } finally {
       if (!processed) {
         // Error during continuation drive — reset status to idle
-        this.deps.statusMachine.complete();
+        this.deps.statusMachine.complete(lease);
       }
     }
   }
@@ -83,14 +83,14 @@ export class TurnCoordinator {
     if (!this.deps.statusMachine.is('awaiting_approval')) {
       throw new Error('No pending approval to continue.');
     }
-    this.deps.statusMachine.beginContinuation();
+    const lease = this.deps.statusMachine.beginContinuation();
     let processed = false;
     try {
       const turnOutcome = yield* this.deps.turnWorkflow.continuePostExecute();
       processed = true;
-      yield* this.#executeTerminalCommand(this.deps.statusMachine.completeContinuationOutcome(turnOutcome));
+      yield* this.#executeTerminalCommand(this.deps.statusMachine.completeContinuationOutcome(turnOutcome, lease));
     } finally {
-      if (!processed) this.deps.statusMachine.complete();
+      if (!processed) this.deps.statusMachine.complete(lease);
     }
   }
 

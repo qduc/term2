@@ -319,6 +319,46 @@ it('continuation completion releases the turn for the next user message', async 
   }
 });
 
+it('late completion from an aborted turn cannot complete or emit for a newer turn', async () => {
+  const { coordinator, statusMachine, turnWorkflow } = makeHarness();
+  let releaseFirst!: () => void;
+  const firstCanComplete = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let firstReachedBuffer!: () => void;
+  const firstBuffered = new Promise<void>((resolve) => {
+    firstReachedBuffer = resolve;
+  });
+  let invocation = 0;
+
+  turnWorkflow.executeInitial = async function* () {
+    invocation += 1;
+    if (invocation === 1) {
+      firstReachedBuffer();
+      await firstCanComplete;
+      return { kind: 'response', terminal: { type: 'response', finalText: 'turn A' } };
+    }
+    await new Promise<void>(() => {});
+    return { kind: 'response', terminal: { type: 'response', finalText: 'turn B' } };
+  };
+
+  const turnA = coordinator.start('A')[Symbol.asyncIterator]();
+  const turnACompletion = turnA.next();
+  await firstBuffered;
+  coordinator.abort();
+
+  const turnB = coordinator.start('B')[Symbol.asyncIterator]();
+  const turnBPending = turnB.next();
+  expect(statusMachine.current).toBe('streaming');
+
+  releaseFirst();
+  const lateA = await turnACompletion;
+
+  expect(lateA).toEqual({ done: true, value: undefined });
+  expect(statusMachine.current).toBe('streaming');
+  void turnBPending;
+});
+
 it('Abort to idle with pending approval reconciliation', async () => {
   const { coordinator, statusMachine, getAbortCalled, getLiveRunAborted, getProviderContinuityCleared } = makeHarness();
   statusMachine.beginTurn();

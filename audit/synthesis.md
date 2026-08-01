@@ -181,7 +181,8 @@ Items excluded from the root-cause groups (not refuted, just out of scope for a 
 
 Scope of the prior round: everything **except** the security findings, which were then
 explicitly deferred. Work was delegated to seven parallel subagents with disjoint file
-ownership, then re-verified centrally. Changes are in the working tree, **not committed**.
+ownership, then re-verified centrally. That batch is now committed; the security tranche and
+queue cleanup are recorded in the commits following it.
 
 Central verification (all run after integration, on the combined change set):
 

@@ -1,7 +1,12 @@
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { toTerminalEvent } from '../conversation/conversation-result-builder.js';
 import { type UserTurn } from '../../types/user-turn.js';
-import { TurnStatusMachine, type TurnCommand } from './turn-status-machine.js';
+import {
+  TurnStatusMachine,
+  type TurnCommand,
+  type TurnLease,
+  type TurnOutcome,
+} from './turn-status-machine.js';
 import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import type { TurnWorkflow } from './turn-workflow.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
@@ -41,7 +46,7 @@ export class TurnCoordinator {
     const lease = this.deps.statusMachine.beginTurn();
     let processed = false;
     try {
-      const turnOutcome = yield* this.deps.turnWorkflow.executeInitial(input, options);
+      const turnOutcome = yield* this.#forwardOwned(this.deps.turnWorkflow.executeInitial(input, options), lease);
       processed = true;
 
       yield* this.#executeTerminalCommand(this.deps.statusMachine.completeOutcome(turnOutcome, lease));
@@ -66,8 +71,11 @@ export class TurnCoordinator {
     const lease = this.deps.statusMachine.beginContinuation();
     let processed = false;
     try {
-      const turnOutcome = yield* this.deps.turnWorkflow.executeContinuation(
-        this.deps.approvalFlow.buildApprovalDecision(answer, rejectionReason),
+      const turnOutcome = yield* this.#forwardOwned(
+        this.deps.turnWorkflow.executeContinuation(
+          this.deps.approvalFlow.buildApprovalDecision(answer, rejectionReason),
+        ),
+        lease,
       );
       processed = true;
       yield* this.#executeTerminalCommand(this.deps.statusMachine.completeContinuationOutcome(turnOutcome, lease));
@@ -86,7 +94,7 @@ export class TurnCoordinator {
     const lease = this.deps.statusMachine.beginContinuation();
     let processed = false;
     try {
-      const turnOutcome = yield* this.deps.turnWorkflow.continuePostExecute();
+      const turnOutcome = yield* this.#forwardOwned(this.deps.turnWorkflow.continuePostExecute(), lease);
       processed = true;
       yield* this.#executeTerminalCommand(this.deps.statusMachine.completeContinuationOutcome(turnOutcome, lease));
     } finally {
@@ -102,6 +110,21 @@ export class TurnCoordinator {
   }
 
   // ── Private helpers ──────────────────────────────────────────
+
+  async *#forwardOwned(
+    events: AsyncGenerator<ConversationEvent, TurnOutcome, void>,
+    lease: TurnLease,
+  ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
+    while (true) {
+      const next = await events.next();
+      if (!this.deps.statusMachine.owns(lease)) {
+        await events.return({ kind: 'stale' });
+        return { kind: 'stale' };
+      }
+      if (next.done) return next.value;
+      yield next.value;
+    }
+  }
 
   async *#executeTerminalCommand(command: TurnCommand): AsyncGenerator<ConversationEvent, void, void> {
     if (command.kind === 'emit_terminal') {

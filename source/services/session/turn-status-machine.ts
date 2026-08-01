@@ -39,8 +39,8 @@ export class TurnStatusMachine {
     return this.activeLease;
   }
 
-  requestApproval(lease?: TurnLease): void {
-    if (!this.#owns(lease)) return;
+  requestApproval(lease: TurnLease): void {
+    if (!this.owns(lease)) return;
     if (this.status !== 'streaming' && this.status !== 'continuing') {
       throw new Error(`Cannot request approval from ${this.status}`);
     }
@@ -59,8 +59,8 @@ export class TurnStatusMachine {
    * safely call complete() in a finally block without losing the pending
    * approval state.
    */
-  complete(lease?: TurnLease): void {
-    if (!this.#owns(lease)) return;
+  complete(lease: TurnLease): void {
+    if (!this.owns(lease)) return;
     if (this.status === 'streaming' || this.status === 'continuing') {
       this.status = 'idle';
       this.activeLease = undefined;
@@ -72,8 +72,8 @@ export class TurnStatusMachine {
     this.activeLease = undefined;
   }
 
-  completeOutcome(outcome: TurnOutcome, lease?: TurnLease): TurnCommand {
-    if (!this.#owns(lease)) return { kind: 'none' };
+  completeOutcome(outcome: TurnOutcome, lease: TurnLease): TurnCommand {
+    if (!this.owns(lease)) return { kind: 'none' };
     switch (outcome.kind) {
       case 'response':
         this.complete(lease);
@@ -89,8 +89,8 @@ export class TurnStatusMachine {
     }
   }
 
-  completeContinuationOutcome(outcome: TurnOutcome, lease?: TurnLease): TurnCommand {
-    if (!this.#owns(lease)) return { kind: 'none' };
+  completeContinuationOutcome(outcome: TurnOutcome, lease: TurnLease): TurnCommand {
+    if (!this.owns(lease)) return { kind: 'none' };
     if (this.status === 'continuing' || this.status === 'streaming') {
       return this.completeOutcome(outcome, lease);
     }
@@ -105,8 +105,8 @@ export class TurnStatusMachine {
     }
   }
 
-  #owns(lease?: TurnLease): boolean {
-    return lease === undefined || lease === this.activeLease;
+  owns(lease: TurnLease): boolean {
+    return lease === this.activeLease;
   }
 
   #assertTransition(from: SessionStatus, to: SessionStatus): void {

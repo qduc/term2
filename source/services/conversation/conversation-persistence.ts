@@ -395,8 +395,8 @@ export function getResumeCommand(id: string, sshHost?: string, remoteDir?: strin
 }
 
 /**
- * Fork a conversation: copy <sourceId>.jsonl to <newId>.jsonl and return the new id.
- * The source is untouched. The new file is ready to be opened by a fresh writer.
+ * Fork a conversation, retaining its event history while giving the persisted copy
+ * its own identity and direct source provenance.
  */
 export function forkConversation(sourceId: string, newId: string): boolean {
   const dir = ensureConversationsDir();
@@ -405,7 +405,39 @@ export function forkConversation(sourceId: string, newId: string): boolean {
   if (!fs.existsSync(srcPath)) {
     return false;
   }
-  fs.copyFileSync(srcPath, dstPath);
+
+  const lines = fs.readFileSync(srcPath, 'utf-8').split('\n');
+  let rewroteIdentity = false;
+  const forkedLines = lines.map((line) => {
+    if (rewroteIdentity || !line.trim()) return line;
+    try {
+      const parsed = JSON.parse(line) as unknown;
+      const envelope = decodeLogEnvelope(parsed);
+      if (!envelope || isTruncatedLogEvent(envelope.event) || envelope.event.type !== 'session_init') return line;
+      rewroteIdentity = true;
+      return JSON.stringify({
+        ...envelope,
+        event: { ...envelope.event, id: newId, forkedFrom: sourceId },
+      });
+    } catch {
+      return line;
+    }
+  });
+  if (!rewroteIdentity) {
+    return false;
+  }
+
+  const tempPath = path.join(dir, `.${newId}.${crypto.randomUUID()}.tmp`);
+  try {
+    fs.writeFileSync(tempPath, forkedLines.join('\n'), { encoding: 'utf-8', flag: 'wx' });
+    fs.renameSync(tempPath, dstPath);
+  } finally {
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {
+      // The rename succeeded or there is no temporary file to clean up.
+    }
+  }
   return true;
 }
 

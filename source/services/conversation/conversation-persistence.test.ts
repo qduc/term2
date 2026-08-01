@@ -254,17 +254,25 @@ it.sequential('lock: released on writer close, second writer succeeds', async ()
   await w2.close();
 });
 
-it.sequential('forkConversation: copies the source jsonl to a new id', () => {
+it.sequential('forkConversation: immediately persists the fork identity, provenance, and source history', () => {
   const srcId = persistenceModule.generateId();
   const dstId = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: srcId, dir: testDir, logger: stubLogger });
-  writer.init({ id: srcId, createdAt: '2026-05-26T00:00:00.000Z' });
+  writer.init({ id: srcId, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/workspace/source' });
+  writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hello' } });
   writer.append(assistantTurn('A'));
   void writer.close();
 
   expect(persistenceModule.forkConversation(srcId, dstId)).toBe(true);
   const restored = persistenceModule.loadConversation(dstId);
-  expect(restored!.previousResponseId).toBe('r1');
+  expect(restored).toMatchObject({
+    id: dstId,
+    forkedFrom: srcId,
+    projectPath: '/workspace/source',
+    previousResponseId: 'r1',
+  });
+  expect(restored!.history).toHaveLength(2);
+  expect(restored!.messages).toMatchObject([{ text: 'hello' }, { text: 'A' }]);
 });
 
 it.sequential('listConversations: lists sessions sorted by mtime desc', () => {

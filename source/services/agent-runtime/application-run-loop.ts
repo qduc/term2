@@ -253,6 +253,9 @@ export class ApplicationRunLoop {
       interruptions: [],
       state: createContinuationHandle(state),
       rawResponses: [],
+      get runUsage() {
+        return state.usage;
+      },
     };
 
     stream.completed = this.#execute(state, stream, queue, effectiveOptions, toolContext)

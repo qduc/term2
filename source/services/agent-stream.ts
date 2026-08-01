@@ -32,7 +32,7 @@ export function selectAgentStreamItems(stream: Pick<AgentStream, 'output' | 'new
   const output = Array.isArray(stream.output) ? stream.output : [];
   const newItems = Array.isArray(stream.newItems) ? stream.newItems : [];
   const history = Array.isArray(stream.history) ? stream.history : [];
-  return output.length > 0 ? output : newItems.length > 0 ? newItems : history;
+  return newItems.length > 0 ? newItems : output.length > 0 ? output : history;
 }
 
 /** Adapt a provider/runtime stream to the app-owned stream contract. */

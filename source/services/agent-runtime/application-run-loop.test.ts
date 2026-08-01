@@ -167,6 +167,24 @@ describe('ApplicationRunLoop', () => {
     ).toThrow('Unsupported restored input message content: unsupported_part');
   });
 
+  it('exposes authoritative completion usage on its stream contract', async () => {
+    const model: StreamedModelTurn = {
+      async *stream() {
+        yield {
+          type: 'completion',
+          responseId: 'resp-usage',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+          usage: { inputTokens: 21, outputTokens: 4, cachedInputTokens: 3 },
+        };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'measure this');
+
+    await stream.completed;
+
+    expect(stream.runUsage).toEqual({ inputTokens: 21, outputTokens: 4, cachedInputTokens: 3 });
+  });
+
   it('owns a text turn without an SDK runner', async () => {
     const loop = new ApplicationRunLoop({ resolveModel: () => textModel('hello', 'resp-1') });
     const stream = loop.startStream(agent, 'say hello');

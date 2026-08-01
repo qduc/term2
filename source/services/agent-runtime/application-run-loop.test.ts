@@ -85,6 +85,88 @@ describe('ApplicationRunLoop', () => {
     expect(requests[1]).not.toHaveProperty('providerOptions');
   });
 
+  it('normalizes restored provider content arrays into typed turn inputs', async () => {
+    const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        yield { type: 'completion', responseId: 'resp-restored', output: [] };
+      },
+    };
+    const restoredHistory = [
+      {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: 'first persisted prompt' }],
+      },
+      {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'persisted answer' }],
+      },
+      {
+        type: 'reasoning',
+        id: 'reasoning-restored',
+        content: [{ type: 'reasoning_text', text: 'persisted reasoning' }],
+        providerData: { signature: 'fixture-signature' },
+      },
+      {
+        type: 'function_call',
+        callId: 'call-restored',
+        name: 'shell',
+        arguments: '{"command":"printf fixture"}',
+      },
+      {
+        type: 'function_call_output',
+        callId: 'call-restored',
+        output: [{ type: 'text', text: 'persisted tool result' }],
+      },
+    ];
+
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, restoredHistory);
+    await stream.completed;
+
+    expect(requests[0]?.input).toEqual([
+      {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'text', text: 'first persisted prompt' }],
+      },
+      {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: 'persisted answer' }],
+      },
+      {
+        type: 'reasoning',
+        id: 'reasoning-restored',
+        text: 'persisted reasoning',
+        providerMetadata: { signature: 'fixture-signature' },
+      },
+      {
+        type: 'tool_call',
+        id: 'call-restored',
+        name: 'shell',
+        arguments: '{"command":"printf fixture"}',
+      },
+      {
+        type: 'tool_result',
+        id: 'call-restored',
+        output: [{ type: 'text', text: 'persisted tool result' }],
+      },
+    ]);
+  });
+
+  it('rejects unsupported restored content parts instead of stringifying them', () => {
+    expect(() =>
+      new ApplicationRunLoop({ resolveModel: () => textModel('unused', 'resp-unused') }).startStream(agent, {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'unsupported_part', value: 'fixture' }],
+      }),
+    ).toThrow('Unsupported restored input message content: unsupported_part');
+  });
+
   it('owns a text turn without an SDK runner', async () => {
     const loop = new ApplicationRunLoop({ resolveModel: () => textModel('hello', 'resp-1') });
     const stream = loop.startStream(agent, 'say hello');

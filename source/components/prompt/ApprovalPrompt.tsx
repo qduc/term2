@@ -45,16 +45,69 @@ type ApplyPatchArgs = {
 };
 
 type ShellArgs = {
-  commands: string;
+  commands?: string;
+  command?: string;
   cwd?: string;
   timeout_ms?: number;
   max_output_length?: number;
 };
 
 type ShellApprovalArgs = ShellArgs & {
-  command?: string;
   sandbox?: 'default' | 'unsandboxed';
 };
+
+function parseShellApprovalArgs(input: unknown): ShellApprovalArgs | null {
+  if (input === null || input === undefined) {
+    return null;
+  }
+
+  let value: unknown = input;
+  if (typeof input === 'string') {
+    try {
+      value = JSON.parse(input);
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  const command = typeof record.command === 'string' ? record.command : undefined;
+  const commands = typeof record.commands === 'string' ? record.commands : undefined;
+
+  if (!command && !commands) {
+    return null;
+  }
+
+  if (record.sandbox !== undefined && record.sandbox !== 'default' && record.sandbox !== 'unsandboxed') {
+    return null;
+  }
+
+  if (record.cwd !== undefined && typeof record.cwd !== 'string') {
+    return null;
+  }
+
+  if (record.timeout_ms !== undefined && typeof record.timeout_ms !== 'number') {
+    return null;
+  }
+
+  if (record.max_output_length !== undefined && typeof record.max_output_length !== 'number') {
+    return null;
+  }
+
+  return {
+    ...(command !== undefined ? { command } : {}),
+    ...(commands !== undefined ? { commands } : {}),
+    ...(record.sandbox !== undefined ? { sandbox: record.sandbox as 'default' | 'unsandboxed' } : {}),
+    ...(record.cwd !== undefined ? { cwd: record.cwd as string } : {}),
+    ...(record.timeout_ms !== undefined ? { timeout_ms: record.timeout_ms as number } : {}),
+    ...(record.max_output_length !== undefined ? { max_output_length: record.max_output_length as number } : {}),
+  };
+}
 
 type SearchReplaceArgs = {
   path: string;
@@ -92,7 +145,7 @@ const ApplyPatchPrompt: FC<{ args: ApplyPatchArgs }> = ({ args }) => {
 };
 
 const ShellPrompt: FC<{ args: ShellArgs }> = ({ args }) => {
-  const cmd = (args as any).command ?? args.commands ?? '';
+  const cmd = args.command ?? args.commands ?? '';
   return (
     <Box flexDirection="column" marginLeft={2} marginTop={1}>
       <Box>
@@ -225,32 +278,18 @@ const ApprovalPrompt: FC<Props> = ({
       return false;
     }
 
-    try {
-      const parsed = JSON.parse(approval.argumentsText) as ShellApprovalArgs;
-      if (parsed?.sandbox === 'unsandboxed') {
-        return true;
-      }
-    } catch {
-      // Fallback if argumentsText is not valid JSON
+    const parsedArgsText = parseShellApprovalArgs(approval.argumentsText);
+    if (parsedArgsText?.sandbox === 'unsandboxed') {
+      return true;
     }
 
-    try {
-      const rawInterruption = approval.rawInterruption as Record<string, any> | undefined;
-      const rawArguments = rawInterruption?.arguments;
-      if (rawArguments) {
-        if (typeof rawArguments === 'string') {
-          const parsed = JSON.parse(rawArguments);
-          if (parsed?.sandbox === 'unsandboxed') {
-            return true;
-          }
-        } else if (typeof rawArguments === 'object') {
-          if (rawArguments.sandbox === 'unsandboxed') {
-            return true;
-          }
-        }
-      }
-    } catch {
-      // Ignore errors parsing rawInterruption
+    const rawInterruption =
+      typeof approval.rawInterruption === 'object' && approval.rawInterruption !== null
+        ? (approval.rawInterruption as Record<string, unknown>)
+        : undefined;
+    const parsedRaw = parseShellApprovalArgs(rawInterruption?.arguments);
+    if (parsedRaw?.sandbox === 'unsandboxed') {
+      return true;
     }
 
     return false;
@@ -262,19 +301,24 @@ const ApprovalPrompt: FC<Props> = ({
     // Docker blocks; the prompt has no session identity, so it cannot re-derive
     // that half. Only the session-independent check is safe to evaluate here.
     if (approval.dockerHostControl) return true;
-    try {
-      const parsed = JSON.parse(approval.argumentsText) as ShellApprovalArgs;
-      if (typeof parsed?.command === 'string') return requestsDockerHostControl(parsed.command);
-    } catch {
-      // Try the raw interruption below.
+
+    const parsedArgsText = parseShellApprovalArgs(approval.argumentsText);
+    const textCmd = parsedArgsText?.command ?? parsedArgsText?.commands;
+    if (textCmd && requestsDockerHostControl(textCmd)) {
+      return true;
     }
-    try {
-      const args = (approval.rawInterruption as Record<string, any> | undefined)?.arguments;
-      const parsed = (typeof args === 'string' ? JSON.parse(args) : args) as ShellApprovalArgs | undefined;
-      return typeof parsed?.command === 'string' && requestsDockerHostControl(parsed.command);
-    } catch {
-      return false;
+
+    const rawInterruption =
+      typeof approval.rawInterruption === 'object' && approval.rawInterruption !== null
+        ? (approval.rawInterruption as Record<string, unknown>)
+        : undefined;
+    const parsedRaw = parseShellApprovalArgs(rawInterruption?.arguments);
+    const rawCmd = parsedRaw?.command ?? parsedRaw?.commands;
+    if (rawCmd && requestsDockerHostControl(rawCmd)) {
+      return true;
     }
+
+    return false;
   }, [approval.argumentsText, approval.dockerHostControl, approval.rawInterruption, approval.toolName]);
 
   const isSandboxNetworkApproval = approval.toolName === 'sandbox_network_access';
@@ -501,12 +545,7 @@ const ApprovalPrompt: FC<Props> = ({
       content = <ApplyPatchPrompt args={parsedApplyPatch} />;
     }
   } else if (approval.toolName === 'shell') {
-    let parsedShell: ShellArgs | null = null;
-    try {
-      parsedShell = JSON.parse(approval.argumentsText);
-    } catch {
-      // Fall back to ShellPrompt with raw command string if parsing fails
-    }
+    const parsedShell = parseShellApprovalArgs(approval.argumentsText);
     content = parsedShell ? (
       <ShellPrompt args={parsedShell} />
     ) : (

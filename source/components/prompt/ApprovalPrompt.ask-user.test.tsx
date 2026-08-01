@@ -722,3 +722,41 @@ it.sequential('ApprovalPrompt handles y and n shortcut keys for network access a
   await writeInput(stdinN, 'n');
   expect(rejected).toBe(true);
 });
+
+it.sequential('ApprovalPrompt handles malformed shell approval arguments gracefully', async () => {
+  const malformedApprovals: ApprovalDescriptor[] = [
+    {
+      agentName: 'Agent',
+      toolName: 'shell',
+      argumentsText: '{"invalid": json',
+      rawInterruption: { type: 'shell', arguments: '{"invalid": json' },
+    },
+    {
+      agentName: 'Agent',
+      toolName: 'shell',
+      argumentsText: JSON.stringify([1, 2, 3]),
+      rawInterruption: { type: 'shell', arguments: [1, 2, 3] },
+    },
+    {
+      agentName: 'Agent',
+      toolName: 'shell',
+      argumentsText: JSON.stringify({ sandbox: 'unsandboxed' }), // missing command and commands
+      rawInterruption: { type: 'shell', arguments: { sandbox: 'unsandboxed' } },
+    },
+    {
+      agentName: 'Agent',
+      toolName: 'shell',
+      argumentsText: JSON.stringify({ command: 123, sandbox: 'unsandboxed' }), // invalid type
+      rawInterruption: { type: 'shell', arguments: { command: 123 } },
+    },
+  ];
+
+  for (const approval of malformedApprovals) {
+    const { lastFrame } = await renderInAct(
+      <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} />,
+    );
+    const output = lastFrame() ?? '';
+    expect(output).not.toContain('Agent wants to run in unsandboxed mode:');
+    expect(output).not.toContain('Docker Host Control');
+  }
+});

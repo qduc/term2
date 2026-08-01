@@ -1,5 +1,5 @@
-import { Agent, Runner } from '@openai/agents';
-import type { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents-core';
+import { Agent, Runner } from '../services/agent-runtime/legacy-compat.js';
+import type { Model, ModelRequest, ModelResponse, StreamEvent } from '../contracts/model.js';
 import { it, expect } from 'vitest';
 import { z } from 'zod';
 import { buildAgent, buildAgentTools } from './agent-factory.js';

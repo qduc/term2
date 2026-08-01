@@ -1,4 +1,4 @@
-import type { RunState } from '@openai/agents';
+import type { ContinuationHandle } from '../../contracts/continuation-handle.js';
 import type { AgentStream } from '../agent-stream.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { CommandMessage } from '../../tools/types.js';
@@ -11,7 +11,7 @@ import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-e
 import type { AbortedApprovalContext } from '../approval/approval-state.js';
 
 export interface PreparedContinuation {
-  state: RunState<any, any>;
+  state: ContinuationHandle;
   interruption: unknown;
   toolCallArgumentsById: Map<string, unknown>;
   previouslyEmittedCommandIds: Set<string>;
@@ -40,7 +40,7 @@ export type ContinuationInit =
 
 export class ContinuationState {
   token: number;
-  currentState: RunState<any, any>;
+  currentState: ContinuationHandle;
   currentCallIds: string[];
   source: StreamHistorySource;
   previouslyEmittedIds: Set<string>;
@@ -55,7 +55,7 @@ export class ContinuationState {
 
   constructor(token: number) {
     this.token = token;
-    this.currentState = {} as RunState<any, any>;
+    this.currentState = { kind: 'continuation' };
     this.currentCallIds = [];
     this.source = 'continueRunStream';
     this.previouslyEmittedIds = new Set();
@@ -85,7 +85,7 @@ export class ContinuationState {
   }
 
   advanceFromPlan(
-    nextState: RunState<any, any>,
+    nextState: ContinuationHandle,
     _nextInterruption: unknown,
     nextInputMode: 'delta' | 'full_history' | undefined,
     mergedEmittedIds: Set<string>,

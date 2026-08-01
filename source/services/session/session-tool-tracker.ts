@@ -1,4 +1,4 @@
-import type { AgentInputItem } from '@openai/agents';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { ToolExecutionLedger, type SavedToolExecution, callIdOf } from '../tool-execution-ledger.js';
 import type { ConversationStore } from '../conversation/conversation-store.js';
@@ -213,7 +213,7 @@ export class SessionToolTracker {
   /**
    * Reconcile history with the tool ledger and return the reconciled history.
    */
-  getReconciledHistory(): AgentInputItem[] {
+  getReconciledHistory(): ProviderInputItem[] {
     return projectProviderHistory({
       history: this.conversationStore.getHistory(),
       toolLedger: this.toolLedger.export(),

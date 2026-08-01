@@ -60,7 +60,7 @@ it('normalizeUsage handles multiple formats', () => {
 });
 
 it('normalizeAgentRunUsage reads the SDK run-state accumulator and sums per-request detail arrays', () => {
-  // Shape mirrors @openai/agents-core Usage: cumulative scalar totals plus
+  // Shape mirrors the provider usage contract: cumulative scalar totals plus
   // per-request detail arrays for cache/reasoning.
   expect(
     normalizeAgentRunUsage({

@@ -27,16 +27,11 @@ function sanitizeOpenAICompatibleMessages(messages: any[]): any[] {
 
     let newContent = message.content;
     if (Array.isArray(message.content)) {
-      const isAllText = message.content.every((part: any) => part && part.type === 'text');
-      if (isAllText) {
-        newContent = message.content.map((part: any) => part.text || '').join('');
-      } else {
-        newContent = message.content.map((part: any) => {
-          if (!part || typeof part !== 'object') return part;
-          const { annotations: _, ...rest } = part;
-          return rest;
-        });
-      }
+      newContent = message.content.map((part: any) => {
+        if (!part || typeof part !== 'object') return part;
+        const { annotations: _, ...rest } = part;
+        return rest;
+      });
     }
 
     return {

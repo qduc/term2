@@ -1,6 +1,6 @@
 import { it, expect, vi } from 'vitest';
-import { withTrace } from '@openai/agents-core';
-import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
+const withTrace = async <T>(_name: string, fn: () => Promise<T>): Promise<T> => fn();
+import { OpenAIResponsesModel, OpenAIResponsesWSModel } from './codex-responses-model.js';
 import type { IProviderTraffic } from '../services/service-interfaces.js';
 import { SessionContextService } from '../services/session/session-context-service.js';
 import { CodexResponsesModel, CodexResponsesWSModel, wrapCodexStream } from './codex-responses-model.js';

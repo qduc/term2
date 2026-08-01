@@ -1,5 +1,5 @@
 import { it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { OpenAIResponsesWSModel } from '@openai/agents-openai';
+import { OpenAIResponsesWSModel } from './codex-responses-model.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -812,6 +812,43 @@ it.sequential('Codex provider uses CODEX_BASE_URL for local server simulation', 
     } else {
       process.env.CODEX_BASE_URL = originalBaseUrl;
     }
+  }
+});
+
+it.sequential('Codex provider stream() wraps tool definitions with type: function for the wire request', async () => {
+  const provider = getProvider('codex');
+  expect(provider?.createRunner).toBeTruthy();
+  if (!provider?.createRunner) return;
+
+  let capturedRequest: any;
+  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).getStreamedResponse;
+  (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = async function* (request: any) {
+    capturedRequest = request;
+    yield { type: 'response.completed', response: { id: 'resp_1', output: [], usage: {} } };
+  };
+
+  try {
+    const runner = provider.createRunner({
+      settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
+      loggingService: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+    } as any);
+    expect(runner).toBeTruthy();
+    if (!runner) return;
+
+    const model = await runner.config.modelProvider.getModel('gpt-5.3-codex');
+    const stream = (model as any).stream({
+      input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }],
+      tools: [{ name: 'shell', description: 'Run shell.', parameters: { type: 'object' }, strict: true }],
+    } as any);
+    for await (const _event of stream) {
+      // drain
+    }
+
+    expect(capturedRequest.tools).toEqual([
+      { type: 'function', name: 'shell', description: 'Run shell.', parameters: { type: 'object' }, strict: true },
+    ]);
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = originalGetStreamedResponse;
   }
 });
 

@@ -1,4 +1,10 @@
-import type { Tool, FunctionTool } from '@openai/agents';
+type Tool = { type: string };
+type FunctionTool = Tool & {
+  type: 'function';
+  name?: string;
+  parameters: any;
+  invoke: (context: unknown, input: unknown, details: unknown) => Promise<unknown>;
+};
 import { z } from 'zod';
 import { isAbortLike } from '../services/subagents/utils.js';
 import { unwrapSchema } from '../services/settings/setting-schema-utils.js';
@@ -354,7 +360,7 @@ export const wrapToolInvoke = <T extends Tool>(
     return tool;
   }
 
-  const functionTool = tool as FunctionTool;
+  const functionTool = tool as unknown as FunctionTool;
   const originalInvoke = functionTool.invoke.bind(functionTool);
   functionTool.invoke = async (context: any, input: unknown, details: any) => {
     const targetSchema = originalSchema || functionTool.parameters;
@@ -403,7 +409,7 @@ export const wrapToolInvoke = <T extends Tool>(
       if (isInvalidToolInputError(error)) {
         // Surface schema diagnostics as a non-fatal tool result so the model
         // can self-correct within the same turn, rather than aborting the run.
-        return runDiagnostics(functionTool.name, targetSchema as any, normalizedInput);
+        return runDiagnostics(functionTool.name ?? 'unknown', targetSchema as any, normalizedInput);
       }
       throw error;
     }

@@ -1,4 +1,4 @@
-import type { AgentInputItem } from '@openai/agents';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type {
   PersistedAssistantTurn,
   PersistedAssistantTurnItem,
@@ -41,7 +41,7 @@ const cloneRecord = (value: unknown): Record<string, unknown> | undefined => {
  * history shape. This is deliberately the sole place that reconciles canonical
  * fields with provider-native spellings retained for replay and journal recovery.
  */
-export function projectPersistedAssistantItemToProviderHistory(item: PersistedAssistantTurnItem): AgentInputItem {
+export function projectPersistedAssistantItemToProviderHistory(item: PersistedAssistantTurnItem): ProviderInputItem {
   if (item.type === 'tool_call') {
     const raw = cloneRecord(item.providerItem) ?? {};
     const providerData = stripReasoningFields(cloneRecord(raw.providerData));
@@ -52,20 +52,20 @@ export function projectPersistedAssistantItemToProviderHistory(item: PersistedAs
       getString(raw.toolCallId) ??
       item.callId;
     return {
-      ...(raw as AgentInputItem),
+      ...raw,
       type: getString(raw.type) ?? 'function_call',
       callId,
       name: getString(raw.name) ?? item.toolName,
       arguments: serializeToolCallArgumentsForReplay(raw.arguments ?? raw.args ?? raw.operation ?? item.arguments),
       ...(providerData ? { providerData } : {}),
-    } as AgentInputItem;
+    };
   }
 
   if (item.type === 'tool_result') {
     const raw = cloneRecord(item.providerItem) ?? {};
     const providerData = stripReasoningFields(cloneRecord(raw.providerData));
     return {
-      ...(raw as AgentInputItem),
+      ...raw,
       type: getString(raw.type) ?? 'function_call_result',
       callId:
         getString(raw.callId) ??
@@ -76,7 +76,7 @@ export function projectPersistedAssistantItemToProviderHistory(item: PersistedAs
       name: getString(raw.name) ?? item.toolName,
       output: raw.output ?? raw.result ?? raw.content ?? item.output,
       ...(providerData ? { providerData } : {}),
-    } as AgentInputItem;
+    };
   }
 
   if (item.type === 'assistant_text') {
@@ -88,7 +88,7 @@ export function projectPersistedAssistantItemToProviderHistory(item: PersistedAs
       status: 'completed',
       content: [{ type: 'output_text', text: item.text }],
       ...(providerData ? { providerData } : {}),
-    } as AgentInputItem;
+    };
   }
 
   const providerData = cloneRecord(item.providerMetadata);
@@ -101,7 +101,7 @@ export function projectPersistedAssistantItemToProviderHistory(item: PersistedAs
     content: item.text ? [{ type: 'reasoning_text', text: item.text }] : [],
     rawContent: item.text ? [{ type: 'reasoning_text', text: item.text }] : [],
     ...(providerData && Object.keys(providerData).length > 0 ? { providerData } : {}),
-  } as unknown as AgentInputItem;
+  };
 }
 
 // Reasoning is reconstructed as standalone history items, so any reasoning fields
@@ -184,9 +184,9 @@ export function buildPersistedAssistantTurnItems(items: readonly unknown[] | und
 }
 
 export function synthesizeHistoryFromAssistantTurn(
-  baseHistory: readonly AgentInputItem[],
+  baseHistory: readonly ProviderInputItem[],
   turn: PersistedAssistantTurn,
-): AgentInputItem[] {
+): ProviderInputItem[] {
   const history = clone([...baseHistory]);
   const pendingReasoning: PersistedReasoningItem[] = [];
 
@@ -218,7 +218,7 @@ export function synthesizeHistoryFromAssistantTurn(
       content: text ? [{ type: 'reasoning_text', text }] : [],
       rawContent: text ? [{ type: 'reasoning_text', text }] : [],
       ...(providerData ? { providerData } : {}),
-    } as unknown as AgentInputItem);
+    });
   };
 
   for (const item of turn.items) {

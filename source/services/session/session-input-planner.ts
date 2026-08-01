@@ -1,4 +1,4 @@
-import type { AgentInputItem } from '@openai/agents';
+import type { ProviderInput, ProviderInputItem } from '../../contracts/provider-input.js';
 import type { ISettingsService } from '../service-interfaces.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
@@ -21,7 +21,7 @@ const supportsConversationChaining = (providerId: string): boolean => {
 };
 
 export type SessionInputPlan = {
-  streamInput: string | AgentInputItem | AgentInputItem[];
+  streamInput: ProviderInput;
   inputSurgeKind: 'delta' | 'full_history';
   effectiveTurn: UserTurn;
   /** Stage 0 observation only; never used to select or alter wire input. */
@@ -152,7 +152,7 @@ export class SessionInputPlanner {
     if (options.replayFromHistory) {
       const statelessHistory = sanitizeMalformedToolCallArguments(dropUnpairedFunctionCalls(history));
       return {
-        streamInput: statelessHistory as AgentInputItem[],
+        streamInput: statelessHistory as ProviderInputItem[],
         inputSurgeKind: 'full_history',
         effectiveTurn: turn,
         providerHistorySnapshot: this.#getProviderHistorySnapshot?.(),
@@ -186,7 +186,7 @@ export class SessionInputPlanner {
         ? typeof chainedInput === 'string'
           ? chainedInput
           : [chainedInput]
-        : (statelessHistory as AgentInputItem[]),
+        : (statelessHistory as ProviderInputItem[]),
       inputSurgeKind: useChaining ? 'delta' : 'full_history',
       effectiveTurn,
       providerHistorySnapshot: this.#getProviderHistorySnapshot?.(),
@@ -249,7 +249,7 @@ export class SessionInputPlanner {
     return this.#getCurrentProvider(true);
   }
 
-  #makeUserInputItem(turn: UserTurn): AgentInputItem {
+  #makeUserInputItem(turn: UserTurn): ProviderInputItem {
     const images = turn.images ?? [];
     if (images.length === 0) {
       return { role: 'user', type: 'message', content: turn.text ?? '' };
@@ -267,7 +267,7 @@ export class SessionInputPlanner {
       });
     }
 
-    return { role: 'user', type: 'message', content } as AgentInputItem;
+    return { role: 'user', type: 'message', content };
   }
 
   #turnWithModeNotice(turn: UserTurn, notice: string | null): UserTurn {

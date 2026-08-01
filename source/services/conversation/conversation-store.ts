@@ -1,4 +1,4 @@
-import type { AgentInputItem } from '@openai/agents';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
 import { projectConversationMessage } from './conversation-message-projection.js';
@@ -11,7 +11,7 @@ export type ProviderHistorySnapshot = {
   identity: string;
   /** Stable transcript provenance across revisions of this store. */
   origin?: string;
-  history: readonly AgentInputItem[];
+  history: readonly ProviderInputItem[];
 };
 
 type RemovedUserTurn = { text: string; imageCount: number; images?: UserTurn['images'] };
@@ -56,7 +56,7 @@ const FILE_MUTATING_TOOLS = new Set([TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REP
  * rules belong to conversation-state-projector.
  */
 export class ConversationStore {
-  #history: AgentInputItem[] = [];
+  #history: ProviderInputItem[] = [];
   #historyRevision = 0;
   #historyIdentity = crypto.randomUUID();
 
@@ -82,18 +82,18 @@ export class ConversationStore {
       });
     }
 
-    const item: AgentInputItem = {
+    const item: ProviderInputItem = {
       role: 'user',
       type: 'message',
       content,
-    } as AgentInputItem;
+    };
     this.#history.push(item);
     this.#historyRevision++;
   }
 
   addUserMessage(text: string): void {
     const trimmed = text ?? '';
-    const item: AgentInputItem = {
+    const item: ProviderInputItem = {
       role: 'user',
       type: 'message',
       content: trimmed,
@@ -108,7 +108,7 @@ export class ConversationStore {
    * (role, type, content, callId, etc.) so that tool calls, function results,
    * and other non-user items are restored faithfully.
    */
-  addImportedItem(item: AgentInputItem): void {
+  addImportedItem(item: ProviderInputItem): void {
     this.#history.push(item);
     this.#historyRevision++;
   }
@@ -118,7 +118,7 @@ export class ConversationStore {
     if (!trimmed.trim()) {
       return;
     }
-    const item: AgentInputItem = {
+    const item: ProviderInputItem = {
       role: 'user',
       type: 'message',
       content: trimmed,
@@ -131,7 +131,7 @@ export class ConversationStore {
    * Append newly-generated items to the store. Use when the input was a delta
    * (conversation-chaining) — the store already contains the user turn(s).
    */
-  appendOutput(items: AgentInputItem[]): void {
+  appendOutput(items: ProviderInputItem[]): void {
     if (!Array.isArray(items) || items.length === 0) return;
     this.#history.push(...this.#cloneHistory(items));
     this.#historyRevision++;
@@ -141,13 +141,13 @@ export class ConversationStore {
    * Overwrite the store with a full transcript. Use when the input was
    * full-history — the SDK returns the authoritative conversation.
    */
-  replaceHistory(items: AgentInputItem[]): void {
+  replaceHistory(items: ProviderInputItem[]): void {
     if (!Array.isArray(items) || items.length === 0) return;
     this.#history = this.#cloneHistory(items);
     this.#historyRevision++;
   }
 
-  getHistory(): AgentInputItem[] {
+  getHistory(): ProviderInputItem[] {
     return this.#cloneHistory(this.#history);
   }
 
@@ -449,7 +449,7 @@ export class ConversationStore {
    * Uses the 'developer' role which acts as a system-level hint.
    */
   addErrorContext(errorMessage: string): void {
-    const item: AgentInputItem = {
+    const item: ProviderInputItem = {
       role: 'system',
       type: 'message',
       content: errorMessage,
@@ -458,7 +458,7 @@ export class ConversationStore {
     this.#historyRevision++;
   }
 
-  #cloneHistory(items: AgentInputItem[]): AgentInputItem[] {
+  #cloneHistory(items: ProviderInputItem[]): ProviderInputItem[] {
     // Avoid leaking references to external callers.
     // structuredClone is available in modern Node; fall back to a deep copy fallback.
     try {
@@ -472,7 +472,7 @@ export class ConversationStore {
     }
   }
 
-  #freezeHistory(items: AgentInputItem[]): readonly AgentInputItem[] {
+  #freezeHistory(items: ProviderInputItem[]): readonly ProviderInputItem[] {
     const seen = new WeakSet<object>();
     const freeze = (value: any): any => {
       if (!value || typeof value !== 'object' || Object.isFrozen(value) || seen.has(value)) return value;
@@ -483,7 +483,7 @@ export class ConversationStore {
     return freeze(items);
   }
 
-  #cloneSnapshotHistory(items: AgentInputItem[]): AgentInputItem[] {
+  #cloneSnapshotHistory(items: ProviderInputItem[]): ProviderInputItem[] {
     try {
       return structuredClone(items);
     } catch {

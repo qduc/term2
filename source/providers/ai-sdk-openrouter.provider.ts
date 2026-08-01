@@ -1,9 +1,10 @@
 import { createOpenRouter, type OpenRouterProviderSettings } from '@openrouter/ai-sdk-provider';
 import type { JSONValue, LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider';
-import { type ModelProvider, type Model } from '@openai/agents-core';
+import type { LegacyModel, LegacyModelProvider } from '../contracts/model.js';
 import { adaptStreamedModelTurnForAgents } from './agents-model-bridge.js';
 import { withForwardedProviderSettings } from './ai-sdk-provider-settings.js';
 import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
+import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 
 export type AiSdkOpenRouterConfig = Pick<
   OpenRouterProviderSettings,
@@ -14,7 +15,7 @@ export type AiSdkOpenRouterProviderFactory = (
   options: AiSdkOpenRouterConfig & { compatibility?: 'strict' | 'compatible' },
 ) => (modelId: string) => LanguageModelV3;
 
-export class AiSdkOpenRouterProvider implements ModelProvider {
+export class AiSdkOpenRouterProvider implements LegacyModelProvider {
   #defaultModel: string;
   #resolveConfig: () => AiSdkOpenRouterConfig;
   #createProvider: AiSdkOpenRouterProviderFactory;
@@ -29,17 +30,20 @@ export class AiSdkOpenRouterProvider implements ModelProvider {
     this.#createProvider = deps.createProvider ?? (createOpenRouter as AiSdkOpenRouterProviderFactory);
   }
 
-  getModel(modelName?: string): Promise<Model> | Model {
+  getModel(modelName?: string): LegacyModel {
+    return adaptStreamedModelTurnForAgents(this.getStreamedModel(modelName));
+  }
+
+  /** Application-owned model path; the Agents bridge remains compatibility-only. */
+  getStreamedModel(modelName?: string): StreamedModelTurn {
     const config = this.#resolveConfig();
     const provider = this.#createProvider({
       ...config,
       compatibility: 'strict',
     });
 
-    return adaptStreamedModelTurnForAgents(
-      createAiSdkStreamedModel(
-        withForwardedProviderSettings(provider(modelName || this.#defaultModel), forwardOpenRouterSettings),
-      ),
+    return createAiSdkStreamedModel(
+      withForwardedProviderSettings(provider(modelName || this.#defaultModel), forwardOpenRouterSettings),
     );
   }
 }

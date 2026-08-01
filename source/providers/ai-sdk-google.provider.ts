@@ -1,9 +1,10 @@
 import { createGoogleGenerativeAI, type GoogleGenerativeAIProviderSettings } from '@ai-sdk/google';
 import type { LanguageModelV3, LanguageModelV3CallOptions } from '@ai-sdk/provider';
-import { type ModelProvider, type Model } from '@openai/agents-core';
+import type { LegacyModel, LegacyModelProvider } from '../contracts/model.js';
 import { adaptStreamedModelTurnForAgents } from './agents-model-bridge.js';
 import { forwardExplicitProviderSettings, withForwardedProviderSettings } from './ai-sdk-provider-settings.js';
 import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
+import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 
 export type AiSdkGoogleConfig = Pick<
   GoogleGenerativeAIProviderSettings,
@@ -12,7 +13,7 @@ export type AiSdkGoogleConfig = Pick<
 
 export type AiSdkGoogleProviderFactory = (options: AiSdkGoogleConfig) => (modelId: string) => LanguageModelV3;
 
-export class AiSdkGoogleProvider implements ModelProvider {
+export class AiSdkGoogleProvider implements LegacyModelProvider {
   #defaultModel: string;
   #resolveConfig: () => AiSdkGoogleConfig;
   #createProvider: AiSdkGoogleProviderFactory;
@@ -27,16 +28,19 @@ export class AiSdkGoogleProvider implements ModelProvider {
     this.#createProvider = deps.createProvider ?? (createGoogleGenerativeAI as AiSdkGoogleProviderFactory);
   }
 
-  getModel(modelName?: string): Promise<Model> | Model {
+  getModel(modelName?: string): LegacyModel {
+    return adaptStreamedModelTurnForAgents(this.getStreamedModel(modelName));
+  }
+
+  /** Application-owned model path; the Agents bridge remains compatibility-only. */
+  getStreamedModel(modelName?: string): StreamedModelTurn {
     const config = this.#resolveConfig();
     const provider = this.#createProvider(config);
 
-    return adaptStreamedModelTurnForAgents(
-      createAiSdkStreamedModel(
-        withFallbackResponseId(
-          withForwardedProviderSettings(provider(modelName || this.#defaultModel), (options) =>
-            forwardExplicitProviderSettings(options, 'google'),
-          ),
+    return createAiSdkStreamedModel(
+      withFallbackResponseId(
+        withForwardedProviderSettings(provider(modelName || this.#defaultModel), (options) =>
+          forwardExplicitProviderSettings(options, 'google'),
         ),
       ),
     );

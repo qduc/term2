@@ -13,7 +13,7 @@ import { collectDuplicateToolCallResultPairs } from '../input-surge-guard.js';
 import { callIdOf, toolNameOf, outputOf } from '../tool-execution-ledger.js';
 import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
 import { normalizeRunItem } from '../conversation/run-item-normalizer.js';
-import type { AgentInputItem } from '@openai/agents';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { GenerationGuard, type GenerationToken } from '../generation-guard.js';
 import { RepetitionDetector, RepetitiveModelOutputError } from './repetition-detector.js';
 
@@ -311,7 +311,7 @@ export class SessionStreamProcessor {
             droppedSignatures,
           });
         }
-        this.deps.conversationStore.appendOutput(kept as AgentInputItem[]);
+        this.deps.conversationStore.appendOutput(kept as ProviderInputItem[]);
       };
 
       const terminal = !stream.interruptions || stream.interruptions.length === 0;
@@ -332,7 +332,7 @@ export class SessionStreamProcessor {
           } else if (hasConversationMessageItems(snapshot.newItems)) {
             appendWithoutReplayedTools(snapshot.newItems);
           } else if (hasConversationMessageItems(snapshot.history)) {
-            this.deps.conversationStore.replaceHistory(snapshot.history as AgentInputItem[]);
+            this.deps.conversationStore.replaceHistory(snapshot.history as ProviderInputItem[]);
           } else if (hasToolResultItems(snapshot.output)) {
             appendWithoutReplayedTools(snapshot.output);
           }

@@ -1,5 +1,5 @@
 import type { CommandMessage } from '../tools/types.js';
-import type { Item, ToolCall, ToolResult } from '../contracts/conversation-items.js';
+import type { Item, ToolResult } from '../contracts/conversation-items.js';
 import type { ConversationEvent } from './conversation/conversation-events.js';
 import { normalizeRunItem } from './conversation/run-item-normalizer.js';
 import { extractCommandMessages } from '../utils/streaming/extract-command-messages.js';

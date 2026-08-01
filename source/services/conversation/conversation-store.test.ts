@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import type { AgentInputItem } from '@openai/agents';
+import type { ProviderInputItem as AgentInputItem } from '../../contracts/provider-input.js';
 import { ConversationStore, SHELL_CONTEXT_PREFIX } from './conversation-store.js';
 
 const addLegacyModeNotice = (store: ConversationStore, text: string) => {

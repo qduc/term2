@@ -1,3 +1,4 @@
+/* eslint-disable require-yield */
 import { it, expect } from 'vitest';
 import { ConversationAdapter } from './conversation-adapter.js';
 import type { SessionLogs, SessionApprovalQuery } from '../session/session-composition.js';
@@ -392,7 +393,6 @@ it('removeLastQueuedItem returns null when there is no queue', async () => {
 
 it('removeLastQueuedItem returns the text of the most recently queued item', async () => {
   const turnFlow = {
-    // eslint-disable-next-line require-yield
     async *start() {
       // Never resolves so the queued items stay in the queue and don't fire.
       await new Promise(() => {});
@@ -490,7 +490,6 @@ it('settles discarded paused requests without settling retained work on cancella
     logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
     approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
     turnFlow: {
-      // eslint-disable-next-line require-yield
       async *start() {
         await activeAbort;
         const error = new Error('cancelled');
@@ -538,7 +537,6 @@ it('force-settles the active request when cancel completes even if the turn igno
     logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
     approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
     turnFlow: {
-      // eslint-disable-next-line require-yield
       async *start() {
         // Never settles and ignores abort — cancel must still free the queue.
         await new Promise(() => {});

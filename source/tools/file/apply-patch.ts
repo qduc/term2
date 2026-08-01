@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import path from 'path';
-import { applyDiff } from '@openai/agents';
+import { applyDiff } from '../../utils/apply-diff.js';
 import { resolveWorkspacePath } from '../utils.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';

@@ -1,15 +1,19 @@
-import { Runner } from '@openai/agents';
-import { OpenAIProvider } from '@openai/agents-openai';
 import OpenAI from 'openai';
 import type { ISettingsService, ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
-import type { ProviderDefinition, ProviderDeps, ProviderFetch } from './registry.js';
+import {
+  type ProviderDefinition,
+  type ProviderDeps,
+  type ProviderFetch,
+  createApplicationCompatibilityRunner,
+} from './registry.js';
 import { AiSdkAnthropicProvider } from './ai-sdk-anthropic.provider.js';
 import { AiSdkGoogleProvider } from './ai-sdk-google.provider.js';
 import { createProviderFetch } from './fetch/composer.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './common/openai-compatible-utils.js';
-import { type ModelProvider, type Model } from '@openai/agents-core';
+import type { LegacyModel, LegacyModelProvider } from '../contracts/model.js';
+import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 import { isOpencodeProvider, resolveOpencodeRuntimeConfig } from './opencode.provider.js';
 import { generateOpencodeSessionId } from './opencode-session.js';
 import { selectOpencodeModelTransport, shouldApplyOpencodeAnthropicPromptCaching } from './opencode-routing.js';
@@ -21,6 +25,7 @@ import {
 } from './openai-compatible-middleware.js';
 import { applyClientResponseNormalization } from './openai-compatible-response-normalizer.js';
 import { getModelListItems, mapModelListItem } from './openai-compatible-models.js';
+import { OpenAIChatCompletionsModel } from './openai-chat-completions-model.js';
 
 export type CustomProviderConfig = {
   name: string;
@@ -103,9 +108,9 @@ function buildProviderFetch(
   });
 }
 
-export class OpencodeAnthropicFormatProvider implements ModelProvider {
+export class OpencodeAnthropicFormatProvider implements LegacyModelProvider {
   private readonly fallbackSessionId: string | undefined;
-  private readonly models = new Map<string, Model | Promise<Model>>();
+  private readonly models = new Map<string, LegacyModel | Promise<LegacyModel>>();
 
   constructor(private readonly config: CustomProviderConfig, private readonly deps: CustomProviderRuntimeDeps) {
     const isOpencode = isOpencodeProvider(this.config);
@@ -140,6 +145,29 @@ export class OpencodeAnthropicFormatProvider implements ModelProvider {
     return anthropicProvider.getModel(resolvedModel);
   }
 
+  private buildAnthropicStreamedModel(
+    resolvedModel: string,
+    runtimeConfig: { baseUrl: string; apiKey: string | undefined },
+  ): StreamedModelTurn {
+    const anthropicProvider = new AiSdkAnthropicProvider({
+      defaultModel: resolvedModel,
+      shouldApplyPromptCaching: shouldApplyOpencodeAnthropicPromptCaching,
+      resolveConfig: () => ({
+        baseURL: runtimeConfig.baseUrl ? normalizeBaseUrl(runtimeConfig.baseUrl) : undefined,
+        apiKey: runtimeConfig.apiKey,
+        fetch: buildProviderFetch(this.config, this.deps, [
+          createAnthropicMiddleware(this.config.type || 'opencode', runtimeConfig.baseUrl, {
+            sessionContextService: this.deps.sessionContextService,
+            fallbackSessionIdOverride: this.fallbackSessionId,
+          }),
+        ]),
+        name: this.config.name,
+        headers: { 'anthropic-version': '2023-06-01' },
+      }),
+    });
+    return anthropicProvider.getStreamedModel(resolvedModel);
+  }
+
   private buildOpenAICompatibleModel(
     resolvedModel: string,
     runtimeConfig: { baseUrl: string; apiKey: string | undefined },
@@ -156,14 +184,10 @@ export class OpencodeAnthropicFormatProvider implements ModelProvider {
       ]) as any,
     });
     applyClientResponseNormalization(openAIClient, this.deps.loggingService);
-    const openaiProvider = new OpenAIProvider({
-      openAIClient: openAIClient as any,
-      useResponses: false,
-    });
-    return openaiProvider.getModel(resolvedModel);
+    return new OpenAIChatCompletionsModel(openAIClient, resolvedModel);
   }
 
-  getModel(modelName?: string): Promise<Model> | Model {
+  getModel(modelName?: string): LegacyModel | Promise<LegacyModel> {
     const resolvedModel = modelName || this.deps.defaultModel || '';
     const cached = this.models.get(resolvedModel);
     if (cached) {
@@ -171,19 +195,24 @@ export class OpencodeAnthropicFormatProvider implements ModelProvider {
     }
 
     const runtimeConfig = this.resolveRuntimeConfig();
-    const model =
+    const model: LegacyModel =
       selectOpencodeModelTransport(resolvedModel) === 'anthropic-messages'
         ? this.buildAnthropicModel(resolvedModel, runtimeConfig)
-        : this.buildOpenAICompatibleModel(resolvedModel, runtimeConfig);
+        : (this.buildOpenAICompatibleModel(resolvedModel, runtimeConfig) as LegacyModel);
     this.models.set(resolvedModel, model);
     return model;
   }
+
+  getStreamedModel(modelName?: string): StreamedModelTurn {
+    const resolvedModel = modelName || this.deps.defaultModel || '';
+    const runtimeConfig = this.resolveRuntimeConfig();
+    return selectOpencodeModelTransport(resolvedModel) === 'anthropic-messages'
+      ? this.buildAnthropicStreamedModel(resolvedModel, runtimeConfig)
+      : this.buildOpenAICompatibleModel(resolvedModel, runtimeConfig);
+  }
 }
 
-export function createCustomProviderModelProvider(
-  config: CustomProviderConfig,
-  deps: CustomProviderRuntimeDeps,
-): OpenAIProvider | AiSdkAnthropicProvider | AiSdkGoogleProvider | OpencodeAnthropicFormatProvider {
+export function createCustomProviderModelProvider(config: CustomProviderConfig, deps: CustomProviderRuntimeDeps): any {
   const providerType = config.type || 'openai-compatible';
   const resolveConfig = () => ({
     baseURL: config.baseUrl ? normalizeBaseUrl(config.baseUrl) : undefined,
@@ -200,10 +229,7 @@ export function createCustomProviderModelProvider(
         maxRetries: deps.settingsService?.get<number>('agent.retryAttempts') ?? 2,
         fetch: buildProviderFetch(config, deps, [createOpenAIResponsesMiddleware()]) as any,
       });
-      return new OpenAIProvider({
-        openAIClient: openAIClient as any,
-        useResponses: true,
-      });
+      return new OpenAIChatCompletionsModel(openAIClient, deps.defaultModel);
     }
     case 'anthropic':
       return new AiSdkAnthropicProvider({
@@ -249,10 +275,7 @@ export function createCustomProviderModelProvider(
         ]) as any,
       });
       applyClientResponseNormalization(openAIClient, deps.loggingService);
-      return new OpenAIProvider({
-        openAIClient: openAIClient as any,
-        useResponses: false,
-      });
+      return new OpenAIChatCompletionsModel(openAIClient, deps.defaultModel);
     }
   }
 }
@@ -265,29 +288,34 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     id: providerId,
     label,
     isRuntimeDefined: true,
-    createRunner: ({ settingsService, loggingService, sessionContextService }) => {
-      // baseUrl/apiKey can change only with restart, but we re-resolve from
-      // settings at runner creation time to respect precedence.
-      return new Runner({
-        tracingDisabled: true,
-        modelProvider: (() => {
-          const resolved = findConfigFromSettings(settingsService, providerId);
-          if (!resolved) {
-            throw new Error(
-              `Custom provider '${providerId}' is not configured. ` +
-                `Please add it to settings.json under "providers".`,
-            );
-          }
-
-          return createCustomProviderModelProvider(resolved, {
-            defaultModel: settingsService.get('agent.model') || '',
-            loggingService,
-            sessionContextService,
-            settingsService,
-          });
-        })(),
+    createStreamedModel: (model, deps) => {
+      const resolved = findConfigFromSettings(deps.settingsService, providerId);
+      if (!resolved) {
+        throw new Error(`Custom provider '${providerId}' is not configured in settings.json`);
+      }
+      const provider = createCustomProviderModelProvider(resolved, {
+        defaultModel: model,
+        loggingService: deps.loggingService,
+        sessionContextService: deps.sessionContextService,
+        settingsService: deps.settingsService,
       });
+      if (!('getStreamedModel' in provider) || typeof provider.getStreamedModel !== 'function') {
+        throw new Error(`Custom provider '${providerId}' has no application-owned streamed model`);
+      }
+      return provider.getStreamedModel(model);
     },
+    createRunner: (deps) =>
+      createApplicationCompatibilityRunner((model) => {
+        const resolved = findConfigFromSettings(deps.settingsService, providerId);
+        if (!resolved) throw new Error(`Custom provider '${providerId}' is not configured in settings.json`);
+        const provider = createCustomProviderModelProvider(resolved, {
+          defaultModel: model,
+          loggingService: deps.loggingService,
+          sessionContextService: deps.sessionContextService,
+          settingsService: deps.settingsService,
+        });
+        return 'getStreamedModel' in provider ? (provider as any).getStreamedModel(model) : provider;
+      }),
     fetchModels: async (deps: ProviderDeps, fetchImpl: ProviderFetch = fetch as any) => {
       const resolved = findConfigFromSettings(deps.settingsService, providerId);
       if (!resolved) {

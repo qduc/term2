@@ -23,6 +23,30 @@ import type {
 export function createAiSdkStreamedModel(model: LanguageModelV3): StreamedModelTurn {
   const normalizedModel = withMergedAssistantMessages(model);
   return {
+    async getResponse(request: StreamedModelTurnRequest) {
+      const result: any = await normalizedModel.doGenerate(toCallOptions(request));
+      const output: any[] = [];
+      if (typeof result.reasoning === 'string' && result.reasoning) {
+        output.push({ type: 'reasoning', text: result.reasoning });
+      }
+      if (typeof result.text === 'string' && result.text) {
+        output.push({ type: 'message', content: [{ type: 'text', text: result.text }] });
+      }
+      for (const call of result.toolCalls ?? []) {
+        output.push({ type: 'tool_call', id: call.toolCallId, name: call.toolName, arguments: call.input ?? '{}' });
+      }
+      const usage = result.usage ?? {};
+      return {
+        responseId: result.response?.id ?? `response-${Date.now()}`,
+        output,
+        usage: {
+          ...(usage.inputTokens?.total !== undefined ? { inputTokens: usage.inputTokens.total } : {}),
+          ...(usage.outputTokens?.total !== undefined ? { outputTokens: usage.outputTokens.total } : {}),
+          ...(usage.inputTokens?.cacheRead !== undefined ? { cachedInputTokens: usage.inputTokens.cacheRead } : {}),
+          ...(usage.inputTokens?.cacheWrite !== undefined ? { cacheWriteTokens: usage.inputTokens.cacheWrite } : {}),
+        },
+      };
+    },
     async *stream(request) {
       const result = await normalizedModel.doStream(toCallOptions(request));
       let responseId: string | undefined;

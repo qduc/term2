@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Tool, Agent } from '@openai/agents';
+import type { Tool, Agent } from '../agent-runtime/legacy-compat.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentRequest, SubagentResult, SupportedSubagentRole, SubagentDefinition } from './types.js';

@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import type { Model, ModelRequest, StreamEvent } from '@openai/agents-core';
+import type { Model, ModelRequest, StreamEvent } from '../contracts/model.js';
 import { AmbiguousModelOutcomeError } from '../services/retry/retry-errors.js';
 import { RetryingModel } from './retrying-model.js';
 

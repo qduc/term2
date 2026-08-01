@@ -1,4 +1,4 @@
-import type { AgentInputItem } from '@openai/agents';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { StateSnapshot } from '../logging/conversation-log-events.js';
 import { reconcileHistoryWithToolLedger, type SavedToolExecution } from '../tool-execution-ledger.js';
 
@@ -13,12 +13,12 @@ export type ProjectionWarning = {
 };
 
 export type ProviderHistoryProjection = {
-  history: AgentInputItem[];
+  history: ProviderInputItem[];
   warnings: ProjectionWarning[];
 };
 
 export type ImportedStateProjection = {
-  history: AgentInputItem[];
+  history: ProviderInputItem[];
   previousResponseId: string | null;
   toolLedger: SavedToolExecution[];
   warnings: ProjectionWarning[];
@@ -72,7 +72,7 @@ export function projectProviderHistory(input: {
 }): ProviderHistoryProjection {
   const reconciled = reconcileHistoryWithToolLedger(input.history, input.toolLedger);
   return {
-    history: reconciled.history as AgentInputItem[],
+    history: reconciled.history as ProviderInputItem[],
     warnings: warningsFromReconciliation(reconciled),
   };
 }

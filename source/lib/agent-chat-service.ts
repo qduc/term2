@@ -1,10 +1,12 @@
-import { Agent, Runner, type JsonSchemaDefinition, run } from '@openai/agents';
+import type { ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
 import { getProvider } from '../providers/index.js';
-import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
+import type { ReasoningEffortSetting } from '../contracts/conversation.js';
+import type { JsonSchemaDefinition } from '../contracts/model-types.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { AgentConfiguration } from './agent-configuration.js';
 import { RunnerManager } from './runner-manager.js';
 import { fetchModels, getModelDefaultReasoningLevel } from '../services/model-service.js';
+import type { LegacyRunner } from '../contracts/model.js';
 
 export interface AgentChatServiceDeps {
   agentConfig: AgentConfiguration;
@@ -29,8 +31,8 @@ export class AgentChatService {
 
   #runAgentWithProvider(
     providerId: string,
-    runner: Runner | null,
-    agent: Agent<any, any>,
+    runner: LegacyRunner | null,
+    agent: ApplicationAgent,
     input: any,
     options: any,
   ): Promise<any> {
@@ -57,7 +59,7 @@ export class AgentChatService {
     if (runner) {
       return runner.run(agent, input, effectiveOptions);
     }
-    return run(agent, input, effectiveOptions);
+    throw new Error('Legacy agent execution is unavailable; use the application run loop');
   }
 
   #extractResponse(result: any): string {
@@ -86,7 +88,7 @@ export class AgentChatService {
     options: {
       model?: string;
       provider?: string;
-      reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+      reasoningEffort?: ReasoningEffortSetting | null;
       instructions?: string;
     } = {},
   ): Promise<string> {
@@ -124,7 +126,7 @@ export class AgentChatService {
         if (tempProvider === 'codex' && isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {
           const defaultReasoningLevel = getModelDefaultReasoningLevel('codex', tempModel);
           if (defaultReasoningLevel) {
-            effectiveEffort = defaultReasoningLevel as ModelSettingsReasoningEffort;
+            effectiveEffort = defaultReasoningLevel as ReasoningEffortSetting;
           }
         }
 
@@ -136,12 +138,13 @@ export class AgentChatService {
         }
 
         // For simple chat, we generally don't need tools, but we keep the system instructions
-        agentForChat = new Agent({
+        agentForChat = {
           name: 'Chat',
           model: tempModel,
           ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
           instructions: options.instructions || 'You are a helpful assistant.',
-        });
+          tools: [],
+        };
       }
 
       // If provider is different from main provider, we need a separate runner
@@ -168,7 +171,7 @@ export class AgentChatService {
     options: {
       model?: string;
       provider?: string;
-      reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+      reasoningEffort?: ReasoningEffortSetting | null;
       instructions?: string;
       outputType: JsonSchemaDefinition;
     },
@@ -203,7 +206,7 @@ export class AgentChatService {
       if (tempProvider === 'codex' && isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {
         const defaultReasoningLevel = getModelDefaultReasoningLevel('codex', tempModel);
         if (defaultReasoningLevel) {
-          effectiveEffort = defaultReasoningLevel as ModelSettingsReasoningEffort;
+          effectiveEffort = defaultReasoningLevel as ReasoningEffortSetting;
         }
       }
 
@@ -214,13 +217,14 @@ export class AgentChatService {
         };
       }
 
-      const agentForChat = new Agent({
+      const agentForChat: ApplicationAgent = {
         name: 'Chat',
         model: tempModel,
         ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
         instructions: options.instructions || 'You are a helpful assistant.',
+        tools: [],
         outputType: options.outputType,
-      });
+      };
 
       const runnerForChat = runnerManager.getOrCreateRunner(tempProvider);
 

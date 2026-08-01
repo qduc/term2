@@ -19,6 +19,8 @@ export default tseslint.config(
   {
     // Global ignores must be in their own object without other keys
     ignores: [
+      'dist.bak',
+      'dist.bak/**',
       'dist/**',
       'coverage/**',
       'generated/**',

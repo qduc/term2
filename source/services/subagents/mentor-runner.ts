@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { Agent } from '@openai/agents';
+import { Agent } from '../agent-runtime/legacy-compat.js';
 import { randomUUID } from 'node:crypto';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
@@ -13,6 +13,7 @@ import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
+// LegacyRunner type removed — not used in this module
 
 export class MentorRunner {
   #logger: ILoggingService;

@@ -1,4 +1,4 @@
-import { type RunState } from '@openai/agents';
+import type { ContinuationHandle } from '../../contracts/continuation-handle.js';
 import { type GenerationToken } from '../generation-guard.js';
 import { type NormalizedUsage } from '../../utils/ai/token-usage.js';
 import { type CommandMessage } from '../../tools/types.js';
@@ -8,7 +8,7 @@ import { PARENT_TOOL_OWNER, type ToolOwner } from './tool-owner.js';
 export type ApprovalBatchDecision = 'approved' | 'rejected';
 
 export type PendingApprovalContext = {
-  state: RunState<any, any>;
+  state: ContinuationHandle;
   interruption: unknown;
   interruptions?: unknown[];
   decisionsByCallId?: Map<string, ApprovalBatchDecision>;
@@ -24,7 +24,7 @@ export type PendingApprovalContext = {
 };
 
 export type AbortedApprovalContext = {
-  state: RunState<any, any>;
+  state: ContinuationHandle;
   interruption: unknown;
   interruptions?: unknown[];
   decisionsByCallId?: Map<string, ApprovalBatchDecision>;

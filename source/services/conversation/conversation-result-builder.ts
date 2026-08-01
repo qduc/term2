@@ -1,5 +1,5 @@
 import type { ConversationEvent } from './conversation-events.js';
-import { ModelBehaviorError } from '@openai/agents';
+import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import type { ApprovalRequiredTerminal, ConversationTerminal, LLMAdvisory } from '../../contracts/conversation.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
@@ -9,6 +9,7 @@ import { attachCachedArguments } from '../command-message-streaming.js';
 import { createInvalidToolCallDiagnostic } from '../logging/logging-contract.js';
 import { asRecord, getCallIdFromObject, getString, getToolInfoFromInterruption } from '../interruption-info.js';
 import type { AgentStream } from '../agent-stream.js';
+import { createContinuationHandle } from '../../contracts/continuation-handle.js';
 import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
@@ -167,7 +168,7 @@ export async function buildConversationResult(
     );
 
     approvalFlow.recordPending({
-      state: result.state,
+      state: result.state ?? createContinuationHandle(undefined),
       interruption,
       interruptions: result.interruptions,
       decisionsByCallId: new Map(),

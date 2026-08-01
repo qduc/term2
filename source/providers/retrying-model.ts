@@ -1,4 +1,4 @@
-import type { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents-core';
+import type { Model, ModelRequest, ModelResponse, StreamEvent } from '../contracts/model.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 import { isNetworkProtocolError } from '../services/retry/retry-error-classification.js';
 import {

@@ -1,13 +1,4 @@
-import {
-  Usage,
-  type AgentInputItem,
-  type AgentOutputItem,
-  type FunctionCallResultItem,
-  type Model,
-  type ModelRequest,
-  type ModelResponse,
-  type ResponseStreamEvent,
-} from '@openai/agents-core';
+import type { Model, ModelRequest, ModelResponse } from '../contracts/model.js';
 import type {
   StreamedModelTurn,
   StreamedModelTurnEvent,
@@ -19,12 +10,19 @@ import type {
   StreamedModelTurnRequest,
 } from '../contracts/streamed-model-turn.js';
 
-type ResponseDoneEvent = Extract<ResponseStreamEvent, { type: 'response_done' }>;
+type AgentInputItem = any;
+type AgentOutputItem = any;
+type FunctionCallResultItem = any;
+type ResponseStreamEvent = any;
+type ResponseDoneEvent = any;
 
 /** Temporary compatibility boundary from the SDK Model protocol to one application turn. */
 export function adaptStreamedModelTurnForAgents(applicationModel: StreamedModelTurn): Model {
   return {
     async getResponse(request: ModelRequest): Promise<ModelResponse> {
+      if (typeof (applicationModel as any).getResponse === 'function') {
+        return toModelResponse(await (applicationModel as any).getResponse(toStreamedModelTurnRequest(request)));
+      }
       return toModelResponse(
         (await consumeCompletion(applicationModel, toStreamedModelTurnRequest(request))).completion,
       );
@@ -81,7 +79,7 @@ function toStreamedModelTurnRequest(request: ModelRequest): StreamedModelTurnReq
     input:
       typeof request.input === 'string'
         ? [{ type: 'message', role: 'user', content: [{ type: 'text', text: request.input }] }]
-        : request.input.flatMap(toInput),
+        : (request.input as any[]).flatMap(toInput),
     tools: request.tools.map(toTool),
     ...(toToolChoice(modelSettings.toolChoice) ? { toolChoice: toToolChoice(modelSettings.toolChoice) } : {}),
     ...(modelSettings.temperature !== undefined ? { temperature: modelSettings.temperature } : {}),
@@ -104,6 +102,15 @@ function rejectUnsupportedRequestFields(request: ModelRequest) {
 }
 
 function toInput(item: AgentInputItem): StreamedModelTurnInput[] {
+  if (item && typeof item.role === 'string' && item.content !== undefined && !item.type) {
+    const content =
+      typeof item.content === 'string'
+        ? [{ type: 'text' as const, text: item.content }]
+        : Array.isArray(item.content)
+        ? item.content.map(toMessagePart)
+        : [{ type: 'text' as const, text: String(item.content) }];
+    return [{ type: 'message', role: item.role, content } as any];
+  }
   if (item.type === 'message') {
     if (!['user', 'assistant', 'system'].includes(item.role)) throw new Error(`Unsupported message role: ${item.role}`);
     const content =
@@ -123,7 +130,7 @@ function toInput(item: AgentInputItem): StreamedModelTurnInput[] {
       {
         type: 'reasoning',
         ...(item.id ? { id: item.id } : {}),
-        text: item.content.map((content) => content.text).join(''),
+        text: item.content.map((content: any) => content.text).join(''),
         ...(item.providerData ? { providerMetadata: item.providerData } : {}),
       },
     ];
@@ -136,7 +143,9 @@ function toInput(item: AgentInputItem): StreamedModelTurnInput[] {
 }
 
 function toMessagePart(content: unknown): StreamedModelMessagePart {
+  if (typeof content === 'string') return { type: 'text', text: content };
   if (!isRecord(content) || typeof content.type !== 'string') throw new Error('Unsupported message content');
+  if (content.type === 'text' && typeof content.text === 'string') return { type: 'text', text: content.text };
   if ((content.type === 'input_text' || content.type === 'output_text') && typeof content.text === 'string')
     return { type: 'text', text: content.text };
   if (
@@ -159,7 +168,7 @@ function isTextPart(part: StreamedModelMessagePart): part is StreamedModelTextPa
 function toToolResultOutput(item: FunctionCallResultItem): string | readonly StreamedModelToolResultPart[] {
   if (typeof item.output === 'string') return item.output;
   const output = Array.isArray(item.output) ? item.output : [item.output];
-  return output.map((part): StreamedModelToolResultPart => {
+  return output.map((part: any): StreamedModelToolResultPart => {
     if (part.type === 'text' || part.type === 'input_text') return { type: 'text', text: part.text };
     if (part.type === 'image' || part.type === 'input_image')
       return {
@@ -199,23 +208,24 @@ function toModelResponse(completion: Extract<StreamedModelTurnEvent, { type: 'co
   const inputTokens = completion.usage?.inputTokens ?? 0;
   const outputTokens = completion.usage?.outputTokens ?? 0;
   return {
-    usage: new Usage({
+    usage: {
       inputTokens,
       outputTokens,
       totalTokens: inputTokens + outputTokens,
-      ...(completion.usage?.cachedInputTokens !== undefined || completion.usage?.cacheWriteTokens !== undefined
-        ? {
-            inputTokensDetails: {
-              ...(completion.usage.cachedInputTokens !== undefined
-                ? { cached_tokens: completion.usage.cachedInputTokens }
-                : {}),
-              ...(completion.usage.cacheWriteTokens !== undefined
-                ? { cache_write_tokens: completion.usage.cacheWriteTokens }
-                : {}),
-            },
-          }
-        : {}),
-    }),
+      inputTokensDetails:
+        completion.usage?.cachedInputTokens !== undefined || completion.usage?.cacheWriteTokens !== undefined
+          ? [
+              {
+                ...(completion.usage.cachedInputTokens !== undefined
+                  ? { cached_tokens: completion.usage.cachedInputTokens }
+                  : {}),
+                ...(completion.usage.cacheWriteTokens !== undefined
+                  ? { cache_write_tokens: completion.usage.cacheWriteTokens }
+                  : {}),
+              },
+            ]
+          : [],
+    },
     output: completion.output.map(toOutput),
     responseId: completion.responseId,
     ...(completion.providerMetadata ? { providerData: completion.providerMetadata } : {}),

@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import type { RunState } from '@openai/agents';
+import { createContinuationHandle } from '../../contracts/continuation-handle.js';
 import { createConversationSession } from '../../test-helpers/conversation-session-with-adapter.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
 import {
@@ -427,7 +427,7 @@ it('run() keeps follow-up input as a user turn after abandoning an aborted appro
   const { turnCoordinator, stateFacade, approvalState } = bundle;
 
   approvalState.setPending({
-    state: {} as RunState<any, any>,
+    state: createContinuationHandle({}),
     interruption: { type: 'tool_approval_item', rawItem: { name: 'noop', callId: 'c1' } },
     emittedCommandIds: new Set(),
     toolCallArgumentsById: new Map(),
@@ -482,7 +482,7 @@ it('switchProvider() clears provider continuity but preserves transcript history
   }
 
   approvalState.setPending({
-    state: {} as RunState<any, any>,
+    state: createContinuationHandle({}),
     interruption: { type: 'tool_approval_item', rawItem: { name: 'noop', callId: 'c1' } },
     emittedCommandIds: new Set(),
     toolCallArgumentsById: new Map(),

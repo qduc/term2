@@ -1,4 +1,3 @@
-import { Runner } from '@openai/agents';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { AiSdkOpenRouterProvider } from './ai-sdk-openrouter.provider.js';
@@ -6,6 +5,36 @@ import { createProviderFetch } from './fetch/composer.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { addCacheControlToLastTwoMessages } from './common/openai-compatible-messages.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
+import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
+
+function createOpenRouterModel(deps: ProviderDeps, model: string) {
+  const { settingsService, loggingService, sessionContextService } = deps;
+  const apiKey = settingsService.get('agent.openrouter.apiKey') || process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return null;
+
+  return new AiSdkOpenRouterProvider({
+    defaultModel: model,
+    resolveConfig: () => ({
+      baseURL: settingsService.get('agent.openrouter.baseUrl') || 'https://openrouter.ai/api/v1',
+      apiKey,
+      headers: {
+        'HTTP-Referer': settingsService.get('agent.openrouter.referrer') || 'https://github.com/qduc/term2',
+        'X-Title': settingsService.get('agent.openrouter.title') || 'term2',
+      },
+      appUrl: settingsService.get('agent.openrouter.referrer') || 'https://github.com/qduc/term2',
+      appName: settingsService.get('agent.openrouter.title') || 'term2',
+      fetch: createProviderFetch({
+        providerId: 'openrouter',
+        defaultModel: settingsService.get('agent.model') || model,
+        deps: {
+          loggingService,
+          sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE,
+        },
+        middlewares: [openRouterPreprocessingMiddleware],
+      }),
+    }),
+  });
+}
 
 function sanitizeOpenRouterReasoningDetails(messages: any[]): void {
   const requiresSignature = new Set(['google-gemini-v1', 'anthropic-claude-v1']);
@@ -81,39 +110,10 @@ async function fetchOpenRouterModels(
 registerProvider({
   id: 'openrouter',
   label: 'OpenRouter',
-  createRunner: ({ settingsService, loggingService, sessionContextService }) => {
-    const apiKey = settingsService.get('agent.openrouter.apiKey') || process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      return null;
-    }
-
-    const defaultModel = settingsService.get('agent.model') || 'openrouter/auto';
-
-    return new Runner({
-      tracingDisabled: true,
-      modelProvider: new AiSdkOpenRouterProvider({
-        defaultModel,
-        resolveConfig: () => ({
-          baseURL: settingsService.get('agent.openrouter.baseUrl') || 'https://openrouter.ai/api/v1',
-          apiKey,
-          headers: {
-            'HTTP-Referer': settingsService.get('agent.openrouter.referrer') || 'https://github.com/qduc/term2',
-            'X-Title': settingsService.get('agent.openrouter.title') || 'term2',
-          },
-          appUrl: settingsService.get('agent.openrouter.referrer') || 'https://github.com/qduc/term2',
-          appName: settingsService.get('agent.openrouter.title') || 'term2',
-          fetch: createProviderFetch({
-            providerId: 'openrouter',
-            defaultModel: settingsService.get('agent.model') || defaultModel,
-            deps: {
-              loggingService,
-              sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE,
-            },
-            middlewares: [openRouterPreprocessingMiddleware],
-          }),
-        }),
-      }),
-    });
+  createStreamedModel: (model, deps): StreamedModelTurn => {
+    const provider = createOpenRouterModel(deps, model);
+    if (!provider) throw new Error('OpenRouter API key is not configured');
+    return provider.getStreamedModel(model);
   },
   fetchModels: fetchOpenRouterModels,
   sensitiveSettingKeys: [

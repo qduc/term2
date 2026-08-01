@@ -1,4 +1,5 @@
-import { Agent, run, type Runner } from '@openai/agents';
+import { Agent, run } from '../../services/agent-runtime/legacy-compat.js';
+import type { LegacyRunner } from '../../contracts/model.js';
 import type { SearchReplaceFullOperation } from './search-replace.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import { getProvider } from '../../providers/index.js';
@@ -158,7 +159,7 @@ async function runHealingPrompt(
   deps: Required<Pick<HealingDeps, 'settingsService' | 'loggingService' | 'providerId' | 'timeoutMs'>>,
 ): Promise<string> {
   const { settingsService, loggingService, providerId, timeoutMs } = deps;
-  let runner: Runner | null = null;
+  let runner: LegacyRunner | null = null;
 
   if (providerId !== 'openai') {
     const providerDef = getProvider(providerId);

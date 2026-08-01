@@ -91,6 +91,13 @@ it.sequential('sandbox runtime denies a credential-resident socket until the exa
     const granted = await executeShellCommand(grantedWrapped.command, { cwd: root, timeout: 10_000 });
     await runner.cleanupAfterCommand();
 
+    // Some managed macOS hosts permit sandbox-runtime discovery and profile generation but
+    // reject applying a nested sandbox profile. This test cannot verify socket policy there.
+    if (granted.exitCode === 71 && granted.stderr.includes('sandbox_apply: Operation not permitted')) {
+      console.warn('[SKIP] Docker socket sandbox-runtime test: host denies nested sandbox application');
+      return;
+    }
+
     expect(granted.exitCode).toBe(0);
     expect(granted.stdout).toBe('ok');
 

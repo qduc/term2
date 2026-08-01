@@ -1,4 +1,5 @@
-import type { AgentInputItem, JsonSchemaDefinition } from '@openai/agents';
+import type { JsonSchemaDefinition } from '../../contracts/model-types.js';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { LLMAdvisory } from '../../contracts/conversation.js';
 import { classifyCommandDetailed, SafetyStatus } from '../../utils/shell/command-safety/index.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
@@ -63,7 +64,7 @@ const truncate = (text: string, maxChars: number): string => {
 const asRecord = (value: unknown): Record<string, any> | undefined =>
   value && typeof value === 'object' ? (value as Record<string, any>) : undefined;
 
-const getCompactHistoryLine = (item: AgentInputItem): string | undefined => {
+const getCompactHistoryLine = (item: ProviderInputItem): string | undefined => {
   const message = projectConversationMessage(item);
   if (!message || (message.role !== 'user' && message.role !== 'assistant')) return undefined;
 
@@ -71,7 +72,7 @@ const getCompactHistoryLine = (item: AgentInputItem): string | undefined => {
   return `[${message.role}] ${truncate(message.allText.replace(/\s+/g, ' ').trim(), MAX_MESSAGE_CHARS)}`;
 };
 
-const buildCompactHistoryContext = (history: AgentInputItem[]): string => {
+const buildCompactHistoryContext = (history: ProviderInputItem[]): string => {
   const lines = history
     .slice(-MAX_HISTORY_ITEMS)
     .map(getCompactHistoryLine)
@@ -86,7 +87,7 @@ const buildRedSystemReasoning = (detail: string, llmReasoning?: string): string 
   return llmReasoning ? `${base}\n\nModel advisory: ${llmReasoning}` : base;
 };
 
-const buildPrompt = (commands: ShellAutoApprovalCommand[], history: AgentInputItem[]): string => {
+const buildPrompt = (commands: ShellAutoApprovalCommand[], history: ProviderInputItem[]): string => {
   const historyText = buildCompactHistoryContext(history);
 
   const commandsToEvaluateText = commands
@@ -277,7 +278,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   retryOptions,
 }: {
   commands: ShellAutoApprovalCommand[];
-  history: AgentInputItem[];
+  history: ProviderInputItem[];
   settingsService?: ISettingsService;
   agentClient: ShellAutoApprovalAgentClient;
   logger: ILoggingService;

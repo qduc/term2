@@ -1,4 +1,4 @@
-import type { RunState } from '@openai/agents';
+import type { ContinuationHandle } from '../../contracts/continuation-handle.js';
 import type { AgentStream } from '../agent-stream.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-events.js';
@@ -19,7 +19,7 @@ export type ClassifiedFailure =
 // ── Recovery Plan ──────────────────────────────────────────────
 
 export type RecoveryPlan =
-  | { kind: 'resume_stream'; state: RunState<any, any>; previousResponseId: string | null }
+  | { kind: 'resume_stream'; state: ContinuationHandle; previousResponseId: string | null }
   | { kind: 'replay_turn'; inputMode: 'full_history'; rollbackUserMessage: boolean; errorContext?: string }
   | { kind: 'retry_fresh'; inputMode: 'delta' | 'full_history'; useStandardServiceTier?: boolean }
   | { kind: 'terminate'; events: ConversationEvent[] };
@@ -69,7 +69,7 @@ export type NextRunInstruction = {
   skipUserMessage: boolean;
   retryCounts: RetryCounts;
   maxModelRetries?: number;
-  resumeState?: RunState<any, any>;
+  resumeState?: ContinuationHandle;
   resumePreviousResponseId?: string | null;
 };
 

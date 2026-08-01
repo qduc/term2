@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import type { AgentInputItem } from '@openai/agents';
+import type { ProviderInputItem as AgentInputItem } from '../../contracts/provider-input.js';
 import { LoggingService } from '../logging/logging-service.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
 import { ConversationStore } from '../conversation/conversation-store.js';

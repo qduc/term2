@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import { ModelBehaviorError } from '@openai/agents';
+import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import { OpenAICompatibleError } from '../../providers/common/provider-errors.js';
 import { MissingChainedToolOutputError, OrphanedChainedToolOutputError } from '../../lib/chained-input-filter.js';
 import type { ClassificationContext } from './retry-contracts.js';

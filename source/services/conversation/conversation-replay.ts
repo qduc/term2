@@ -1,4 +1,4 @@
-import type { AgentInputItem } from '@openai/agents';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import { createUsageAccumulator } from '../../utils/ai/token-usage.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
@@ -30,7 +30,7 @@ export interface RestoredState {
   reasoningEffort?: string;
   previousResponseId: string | null;
   messages: SavedMessage[];
-  history: AgentInputItem[];
+  history: ProviderInputItem[];
   toolLedger: SavedToolExecution[];
   usage?: NormalizedUsage;
   subagentUsage?: NormalizedUsage;
@@ -130,7 +130,7 @@ interface ReplayState {
   reasoningEffort?: string;
   forkedFrom?: string;
   previousResponseId: string | null;
-  history: AgentInputItem[];
+  history: ProviderInputItem[];
   toolLedger: SavedToolExecution[];
   messages: SavedMessage[];
   snapshotModel?: string;
@@ -819,7 +819,7 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
     for (const item of journal.items) {
       if (item.type === 'reasoning') {
         const historyItem = makeHistoryItemForReasoning(item);
-        state.history.push(historyItem as AgentInputItem);
+        state.history.push(historyItem as ProviderInputItem);
         pendingReasoningHistoryItems.push(historyItem);
         continue;
       }
@@ -827,7 +827,7 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
       if (item.type === 'tool_call') {
         const historyItem = makeHistoryItemForToolCall(item);
         if (historyItem != null) {
-          state.history.push(historyItem as AgentInputItem);
+          state.history.push(historyItem as ProviderInputItem);
         }
         const existing = state.toolLedger.find((entry) => entry.callId === item.callId);
         if (!existing) {
@@ -850,7 +850,7 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
         pendingReasoningHistoryItems = [];
         const historyItem = makeHistoryItemForToolResult(item);
         if (historyItem != null) {
-          state.history.push(historyItem as AgentInputItem);
+          state.history.push(historyItem as ProviderInputItem);
         }
         let existing = state.toolLedger.find((entry) => entry.callId === item.callId);
         if (!existing) {
@@ -884,7 +884,7 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
         type: 'reasoning',
         content: [{ type: 'reasoning_text', text: journal.reasoningFragment }],
         rawContent: [{ type: 'reasoning_text', text: journal.reasoningFragment }],
-      } as unknown as AgentInputItem);
+      } as ProviderInputItem);
     }
     if (journal.textFragment) {
       state.history.push({
@@ -892,7 +892,7 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
         type: 'message',
         status: 'completed',
         content: [{ type: 'output_text', text: journal.textFragment }],
-      } as AgentInputItem);
+      } as ProviderInputItem);
     }
   }
 }
@@ -1109,7 +1109,7 @@ export function replayEvents(envelopes: LogEnvelope[]): RestoredState {
   // Defensive idempotent final repair pass
   const repair = repairConversationHistory(state.history);
   if (repair.repaired && repair.removedItems > 0) {
-    state.history = repair.history as AgentInputItem[];
+    state.history = repair.history as ProviderInputItem[];
     state.warnings.push(
       `Repaired conversation history: removed ${repair.removedItems} duplicated tool replay item(s).`,
     );

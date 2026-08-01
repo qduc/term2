@@ -1,11 +1,8 @@
-import {
-  Agent,
-  type AgentInputItem,
-  type JsonSchemaDefinition,
-  type RunState,
-  type StreamedRunResult,
-} from '@openai/agents';
-import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
+import type { ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
+import type { ContinuationHandle } from '../contracts/continuation-handle.js';
+import { unwrapContinuationHandle } from '../contracts/continuation-handle.js';
+import type { ReasoningEffortSetting } from '../contracts/conversation.js';
+import type { JsonSchemaDefinition } from '../contracts/model-types.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import type { ExecutionContext } from '../services/execution-context.js';
 import { AskUserAnswerStore } from './ask-user-answer-store.js';
@@ -23,19 +20,24 @@ import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-
 import type { PostExecutePauseCapability } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
 import type { AgentClientRunOptions } from '../services/conversation-agent-client.js';
+import { adaptAgentStream, type AgentStream } from '../services/agent-stream.js';
+import type { ProviderInput } from '../contracts/provider-input.js';
 import type { ProviderRequestCapture } from '../providers/provider-request-capture.js';
+import { getProvider } from '../providers/index.js';
+import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
 
 type ChainedRunOptions = AgentClientRunOptions;
 
 /**
- * Minimal adapter that isolates usage of @openai/agents.
- * Swap this module to change the underlying agent provider without touching the UI.
+ * Conversation client over the application-owned provider/run-loop boundary.
  */
 export class AgentClient {
   #agentConfig: AgentConfiguration;
   #runnerManager: RunnerManager;
   #toolInterceptorRegistry: ToolInterceptorRegistry;
   #runOrchestrator: AgentRunOrchestrator;
+  #applicationRunLoop: ApplicationRunLoop;
+  #useApplicationRunLoop: boolean;
   #chatService: AgentChatService;
   #logger: ILoggingService;
   #settings: ISettingsService;
@@ -86,10 +88,10 @@ export class AgentClient {
     continuationProjectionMode = 'legacy',
   }: {
     model?: string;
-    reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+    reasoningEffort?: ReasoningEffortSetting | null;
     maxTurns?: number;
     retryAttempts?: number;
-    agentOverride?: Agent;
+    agentOverride?: ApplicationAgent;
     providerOverride?: string;
     deps: {
       logger: ILoggingService;
@@ -144,6 +146,22 @@ export class AgentClient {
         },
       },
     );
+    this.#useApplicationRunLoop =
+      !agentOverride && Boolean(getProvider(this.#agentConfig.getProvider())?.createStreamedModel);
+    this.#applicationRunLoop = new ApplicationRunLoop({
+      resolveModel: (selectedModel) => {
+        const provider = getProvider(this.#agentConfig.getProvider());
+        if (!provider?.createStreamedModel) {
+          throw new Error(`Provider '${this.#agentConfig.getProvider()}' has no application model`);
+        }
+        return provider.createStreamedModel(selectedModel, {
+          settingsService: deps.settings,
+          loggingService: deps.logger,
+          sessionContextService: deps.sessionContextService,
+          requestCapture: deps.requestCapture,
+        });
+      },
+    });
 
     this.#runnerManager = new RunnerManager(
       {
@@ -238,7 +256,7 @@ export class AgentClient {
     this.#agentConfig.refreshAgent();
   }
 
-  setReasoningEffort(effort?: ModelSettingsReasoningEffort | 'default'): void {
+  setReasoningEffort(effort?: ReasoningEffortSetting): void {
     this.#agentConfig.setReasoningEffort(effort);
     this.#agentConfig.refreshAgent();
   }
@@ -292,6 +310,7 @@ export class AgentClient {
    * subagent runs are unaffected — see {@link cancelBackgroundRuns}.
    */
   abort(): void {
+    this.#applicationRunLoop.abort();
     this.#runOrchestrator.abort();
     this.#subagentBridge?.abort();
   }
@@ -309,30 +328,34 @@ export class AgentClient {
     if (this.#isDisposed) return;
     this.#isDisposed = true;
 
-    this.#runOrchestrator.abort();
+    this.abort();
     this.#runnerManager.invalidateRunner();
     this.#subagentBridge?.dispose();
     this.#agentConfig.dispose();
   }
 
   clearConversations(): void {
+    this.#applicationRunLoop.abort();
     this.#runOrchestrator.clearConversations();
   }
 
-  async startStream(
-    userInput: string | AgentInputItem | AgentInputItem[],
-    options: ChainedRunOptions = {},
-  ): Promise<StreamedRunResult<any, any>> {
+  async startStream(userInput: ProviderInput, options: ChainedRunOptions = {}): Promise<AgentStream> {
     this.#subagentBridge?.resetAbortController();
-    return this.#runOrchestrator.startStream(userInput, options);
+    if (this.#useApplicationRunLoop) {
+      return this.#applicationRunLoop.startStream(this.#agentConfig.getApplicationAgent(), userInput, {
+        sessionId: options.sessionId,
+      });
+    }
+    return adaptAgentStream(await this.#runOrchestrator.startStream(userInput as any, options));
   }
 
-  async continueRunStream(
-    state: RunState<any, any>,
-    options: ChainedRunOptions = {},
-  ): Promise<StreamedRunResult<any, any>> {
+  async continueRunStream(state: ContinuationHandle, options: ChainedRunOptions = {}): Promise<AgentStream> {
     this.#subagentBridge?.resetAbortController();
-    return this.#runOrchestrator.continueRunStream(state, options);
+    if (this.#useApplicationRunLoop) {
+      return this.#applicationRunLoop.continueRunStream(state, { sessionId: options.sessionId });
+    }
+    const rawState = state?.kind === 'continuation' ? unwrapContinuationHandle(state) : state;
+    return adaptAgentStream(await this.#runOrchestrator.continueRunStream(rawState as any, options));
   }
 
   async chat(
@@ -340,7 +363,7 @@ export class AgentClient {
     options: {
       model?: string;
       provider?: string;
-      reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+      reasoningEffort?: ReasoningEffortSetting | null;
       instructions?: string;
     } = {},
   ): Promise<string> {
@@ -352,7 +375,7 @@ export class AgentClient {
     options: {
       model?: string;
       provider?: string;
-      reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+      reasoningEffort?: ReasoningEffortSetting | null;
       instructions?: string;
       outputType: JsonSchemaDefinition;
     },

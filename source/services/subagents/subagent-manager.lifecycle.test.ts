@@ -19,7 +19,7 @@ import {
   ROLE_RESEARCHER,
 } from './test-helpers/subagent-manager-fixtures.js';
 import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
-import { ModelBehaviorError } from '@openai/agents';
+import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 

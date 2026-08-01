@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import { tool as createTool, RunContext } from '@openai/agents';
+import { tool as createTool, RunContext } from '../services/agent-runtime/legacy-compat.js';
 import { z } from 'zod';
 import {
   repairJson,

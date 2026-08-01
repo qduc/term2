@@ -1,4 +1,4 @@
-import type { RunState } from '@openai/agents';
+import type { ContinuationHandle } from '../../contracts/continuation-handle.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
@@ -403,7 +403,7 @@ export class TurnWorkflow {
   async *#executeInitialStreamCycle(
     attempt: TurnAttempt,
     options: {
-      resumeState?: RunState<any, any>;
+      resumeState?: ContinuationHandle;
       resumePreviousResponseId?: string | null;
       observeOpenAIRootSelectorParity: boolean;
     },
@@ -580,18 +580,22 @@ export class TurnWorkflow {
   async #startInitialStream(
     attempt: TurnAttempt,
     options: {
-      resumeState?: RunState<any, any>;
+      resumeState?: ContinuationHandle;
       resumePreviousResponseId?: string | null;
       observeOpenAIRootSelectorParity: boolean;
     },
   ): Promise<AgentStream> {
     if (options.resumeState && typeof this.deps.agentClient.continueRunStream === 'function') {
-      return (await this.deps.agentClient.continueRunStream(options.resumeState, {
+      const resumeOptions: any = {
         previousResponseId: options.resumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
         sessionId: this.deps.sessionId,
         providerHistorySnapshot: this.deps.conversationStore.getProviderHistorySnapshot(),
-        providerContinuityLineage: this.deps.providerContinuity.lineage,
-      })) as AgentStream;
+      };
+      Object.defineProperty(resumeOptions, 'providerContinuityLineage', {
+        value: this.deps.providerContinuity.lineage,
+        enumerable: this.deps.providerContinuity.lineage !== 0,
+      });
+      return (await this.deps.agentClient.continueRunStream(options.resumeState, resumeOptions)) as AgentStream;
     }
 
     const legacyPreviousResponseId =
@@ -624,12 +628,16 @@ export class TurnWorkflow {
         // Parity must never change the established request path on failure.
       }
     }
-    return (await this.deps.agentClient.startStream(attempt.streamInput!, {
+    const startOptions: any = {
       previousResponseId: selectedPreviousResponseId,
       sessionId: this.deps.sessionId,
       providerHistorySnapshot: attempt.providerHistorySnapshot,
-      providerContinuityLineage: this.deps.providerContinuity.lineage,
-    })) as AgentStream;
+    };
+    Object.defineProperty(startOptions, 'providerContinuityLineage', {
+      value: this.deps.providerContinuity.lineage,
+      enumerable: this.deps.providerContinuity.lineage !== 0,
+    });
+    return (await this.deps.agentClient.startStream(attempt.streamInput!, startOptions)) as AgentStream;
   }
 
   #isFirstAttempt(retryCounts: RetryCounts): boolean {
@@ -916,7 +924,7 @@ export class TurnWorkflow {
       },
     void
   > {
-    const stream = (await this.deps.agentClient.continueRunStream(state.currentState, {
+    const continuationOptions: any = {
       previousResponseId: state.currentResumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
       sessionId: this.deps.sessionId,
       toolResultCallIds: state.currentCallIds,
@@ -925,8 +933,15 @@ export class TurnWorkflow {
         this.deps.toolTracker.activeCallIdsForCurrentTurn(),
       ),
       providerHistorySnapshot: this.deps.conversationStore.getProviderHistorySnapshot(),
-      providerContinuityLineage: this.deps.providerContinuity.lineage,
-    })) as AgentStream;
+    };
+    Object.defineProperty(continuationOptions, 'providerContinuityLineage', {
+      value: this.deps.providerContinuity.lineage,
+      enumerable: this.deps.providerContinuity.lineage !== 0,
+    });
+    const stream = (await this.deps.agentClient.continueRunStream(
+      state.currentState,
+      continuationOptions,
+    )) as AgentStream;
     state.setLastStream(stream);
 
     const allEmittedIds = new Set([...state.previouslyEmittedIds]);

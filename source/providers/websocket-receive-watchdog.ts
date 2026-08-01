@@ -23,6 +23,7 @@ export function createWebSocketReceiveWatchdog(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let firstFramePending = true;
   let expiredError: Error | undefined;
+  let pendingReject: ((error: Error) => void) | undefined;
 
   const clearTimer = () => {
     if (timer) {
@@ -33,12 +34,15 @@ export function createWebSocketReceiveWatchdog(
   const removeExternalAbortListener = () => externalSignal?.removeEventListener('abort', abortForExternalSignal);
   const close = () => {
     clearTimer();
+    pendingReject = undefined;
     removeExternalAbortListener();
   };
   const expire = () => {
     expiredError = new Error(firstFramePending ? 'WebSocket first frame timeout' : 'WebSocket idle timeout');
+    const rejectPending = pendingReject;
     close();
     controller.abort(expiredError);
+    rejectPending?.(expiredError);
   };
   const resetTimer = () => {
     clearTimer();
@@ -66,7 +70,11 @@ export function createWebSocketReceiveWatchdog(
         try {
           while (true) {
             resetTimer();
-            const result = await iterator.next();
+            const result = await new Promise<IteratorResult<T>>((resolve, reject) => {
+              pendingReject = reject;
+              void iterator.next().then(resolve, reject);
+            });
+            pendingReject = undefined;
             if (result.done) return;
             firstFramePending = false;
             resetTimer();

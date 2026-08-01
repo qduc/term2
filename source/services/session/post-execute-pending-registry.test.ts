@@ -5,7 +5,7 @@ const entry = (callId: string, runId = 'run-1') => ({
   runId,
   toolCallId: callId,
   toolName: 'shell',
-  argumentsText: `{\"command\":\"${callId}\"}`,
+  argumentsText: `{"command":"${callId}"}`,
 });
 
 describe('PostExecutePendingRegistry', () => {

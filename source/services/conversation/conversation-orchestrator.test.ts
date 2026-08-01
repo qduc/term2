@@ -455,7 +455,10 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.ui.onTurnStart).not.toHaveBeenCalled();
     expect(cfg.ui.onTurnEnd).not.toHaveBeenCalled();
 
-    const pendingId = vi.mocked(cfg.ui.onQueuedMessagePending).mock.calls[0]?.[0] as string;
+    const pendingCalls = vi.mocked(cfg.ui.onQueuedMessagePending!).mock.calls;
+    const pendingCall = pendingCalls[0];
+    if (!pendingCall) throw new Error('queued-message callback did not receive an id');
+    const pendingId = pendingCall[0] as string;
     observer({ requestId: pendingId, input: 'deferred' });
     expect(cfg.ui.onTurnStart).toHaveBeenCalledOnce();
     expect(cfg.messages.appendMessages).toHaveBeenCalledTimes(1);

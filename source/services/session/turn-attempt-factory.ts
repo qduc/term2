@@ -1,4 +1,4 @@
-import type { RunState } from '@openai/agents';
+import type { ContinuationHandle } from '../../contracts/continuation-handle.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { AbortedApprovalContext } from '../approval/approval-state.js';
 import type { GenerationGuard } from '../generation-guard.js';
@@ -14,7 +14,7 @@ import { TurnAttempt } from './turn-attempt.js';
 export type InitialTurnRunOptions = {
   skipUserMessage?: boolean;
   replayFromHistory?: boolean;
-  resumeState?: RunState<any, any>;
+  resumeState?: ContinuationHandle;
   resumePreviousResponseId?: string | null;
   abortedContext?: AbortedApprovalContext | null;
   token?: number;

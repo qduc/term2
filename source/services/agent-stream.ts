@@ -1,3 +1,63 @@
-import { type StreamedRunResult } from '@openai/agents';
+/**
+ * Application-owned stream handle consumed by the conversation/session layer.
+ *
+ * Provider adapters may back this with any runtime implementation, but the
+ * session layer only relies on this small surface: events can be iterated,
+ * terminal state can be observed, and the accumulated turn snapshots remain
+ * available for replay/finalization.  Keeping continuation state opaque here
+ * prevents the session layer from depending on a provider runner's type.
+ */
+import { createContinuationHandle, type ContinuationHandle } from '../contracts/continuation-handle.js';
 
-export type AgentStream = StreamedRunResult<any, any>;
+export interface AgentStream {
+  [Symbol.asyncIterator](): AsyncIterator<unknown>;
+
+  completed: Promise<unknown>;
+  history: unknown[];
+  newItems: unknown[];
+  output: unknown[];
+  finalOutput?: string;
+  lastResponseId?: string | null;
+  interruptions?: unknown[];
+  /** Opaque for new callers; legacy approval persistence still carries it through. */
+  state?: ContinuationHandle;
+  cancelled?: boolean;
+  rawResponses?: unknown[];
+}
+
+/** Adapt a provider/runtime stream to the app-owned stream contract. */
+export function adaptAgentStream(source: unknown): AgentStream {
+  const stream = source as Record<string | symbol, any>;
+  const state = stream.state === undefined ? undefined : createContinuationHandle(stream.state);
+  return {
+    [Symbol.asyncIterator]: () => stream[Symbol.asyncIterator](),
+    get completed() {
+      return stream.completed;
+    },
+    get history() {
+      return stream.history;
+    },
+    get newItems() {
+      return stream.newItems;
+    },
+    get output() {
+      return stream.output;
+    },
+    get finalOutput() {
+      return stream.finalOutput;
+    },
+    get lastResponseId() {
+      return stream.lastResponseId;
+    },
+    get interruptions() {
+      return stream.interruptions;
+    },
+    get cancelled() {
+      return stream.cancelled;
+    },
+    get rawResponses() {
+      return stream.rawResponses;
+    },
+    state,
+  };
+}

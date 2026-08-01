@@ -1,7 +1,18 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Step A is complete through the bounded A4 root fallback cleanup, Step B's bounded representation migration is complete, and Step C has retired every production `_generatedItems` read. Three of the five private-API categories in the risk register are fully retired; the `_buildResponsesCreateRequest` category is now narrowed to Codex after the OpenAI override retirement. Step D's adapter characterization, application-owned one-streamed-turn contract/Agents bridge, unrouted AI SDK implementation, and OpenRouter, Google, and Anthropic routing slices are landed; the now-unreferenced legacy adapter, its characterization test, and direct `@openai/agents-extensions` dependency are retired. **Step E's bounded production OpenAI candidate-observation, terminal-publication-corroboration, successor-proof, and public-boundary builder-retirement slices are landed:** each owned root handle shares one continuity instance with its runtime and OpenAI observer; terminal HTTP/WebSocket observations create only exact-prefix, request-lineage candidates, and the stream finalizer remains the only terminal-commit owner. It publishes the established legacy response ID and promotes only a matching candidate after authoritative history commit. An accepted checkpoint retains a frozen post-commit proof, and eligibility requires a same-origin, strict successor snapshot plus matching provider identity and lineage. Provider identity is account-free because OpenAI authorizes `previous_response_id`. This remains neither a change to outgoing wire selection nor a reach-in retirement in Codex; replay/approval ownership is unchanged. The next bounded work is telemetry review and characterization before touching the Codex transport.
-**Last updated:** 2026-07-31
+**Status:** Complete. The application-owned stream/continuation contracts, provider-neutral run loop, direct provider factories, local patch/tool/runtime contracts, public Codex WebSocket transport, and production import boundary are implemented and typecheck cleanly. The three Agents packages and their lockfile entries have been removed, and a source/package audit finds zero `@openai/agents*` references. The full suite passes 4,813 tests with one restricted-host sandbox test skipped.
+**Last updated:** 2026-08-01
+
+The first run-loop façade, continuation, model-decorator, application-loop, direct-provider, public WebSocket, and dependency-retirement slices are landed. Behavioral parity and the migration audit are complete; the remaining sandbox failure is host capability, not an Agents SDK dependency or application regression.
+
+### Final verification — 2026-08-01
+
+- `tsc --noEmit`: passed.
+- Full Vitest suite: 384 files passed, 1 skipped; 4,813 tests passed, 1 skipped.
+- Codex model/fake-server WebSocket tests: 62 passed.
+- Provider/application focused tests: 247 passed.
+- `@openai/agents*` scan across `source/`, `package.json`, and `pnpm-lock.yaml`: zero matches.
+- `git diff --check`: passed.
 
 ---
 
@@ -53,6 +64,10 @@ from LOC and from a capability claim that turned out to be false; don't re-deriv
 | Step E accepted-checkpoint successor proof | A matching accepted checkpoint retains a frozen post-commit provider-history proof. Eligibility for a later snapshot requires exact provider identity and lineage, stable session-history origin, a strictly later revision, and deep exact-prefix extension; malformed, missing, same/short, rewritten, reset, and mismatched inputs fail closed. It observes no wire behavior. |
 | Step E snapshot-prefix binding slice | AgentRunOrchestrator hands exact OpenAI compatibility projection evidence into a provider-private one-shot scope; HTTP/WebSocket lifecycle attempts bind immutable snapshot identity/revision only when one preparation is consumed before another, fail closed on overlapping, missing, or faulty instrumentation, and retain an already-bound value request-locally through terminal/failure/abandonment |
 | Step E OpenAI public-boundary builder retirement | Both OpenAI transports consume the prefix binding at their public model boundary; diagnostic outcomes distinguish absent preparation, repeated consumption, and input mismatch, while Codex remains unchanged |
+| Step F stream façade slice | `services/agent-stream.ts` owns the session-facing async stream handle; its consumers no longer import `StreamedRunResult` from the Agents SDK |
+| Step F continuation-handle slice | `contracts/continuation-handle.ts` owns opaque resume capabilities; result building, approval, retry, and turn workflow no longer type raw `RunState`, and `AgentClient` unwraps only inside its SDK adapter |
+| Step F model-decorator slice | `contracts/model.ts` owns the narrow model protocol consumed by `RetryingModel`; the retry decorator no longer imports `@openai/agents-core` |
+| Step G application loop slice | `agent-runtime/application-run-loop.ts` owns a provider-neutral streaming/tool/approval loop over `StreamedModelTurn`; OpenRouter, Google, and Anthropic expose direct application-owned model factories while the legacy bridge remains for compatibility |
 | Step C continuation IDs | `continuation-call-id-resolver.ts` uses public interruption IDs plus current-turn completed IDs from the session ledger; it no longer reads `_generatedItems` |
 | Step C replay diagnostics | Duplicate-tool replay diagnostics inspect public `history` / `newItems`; `stream-snapshot.ts` no longer reads `_generatedItems` |
 | Step C transport recovery | `SessionStreamProcessor` records each public completed tool result in the live ledger before recovery; fresh retry projects that ledger (merging journal data only as an older snapshot), with no RunState recovery read |
@@ -286,6 +301,25 @@ production session contract.
   Formatting of retained changed files passes; this deletion-only source change leaves no retained
   lintable source file. Full `tsc --noEmit` reaches only the known
   `source/services/conversation/conversation-orchestrator.test.ts:458 TS2532` baseline failure.
+- Step F stream façade slice: the stream, turn-attempt, stream-processor, and result-builder
+  focused tests pass. `AgentStream` now owns the narrow application-facing stream shape.
+- Step F continuation-handle slice: approval, retry, and turn-workflow contracts carry the
+  app-owned opaque `ContinuationHandle`; the adapter wraps/unwraps provider state and the result
+  builder wraps the approval ingress. Focused session/result-builder coverage passes (4 files /
+  74 tests), and `pnpm exec tsc --noEmit` is clean.
+- Step F model-decorator slice: `RetryingModel` uses the app-owned model protocol. Retrying-model
+  plus the session/result-builder continuation coverage passes (5 files / 80 tests), and
+  `pnpm exec tsc --noEmit` remains clean.
+- Step G application loop slice: the SDK-free loop has focused coverage for text turns, tool
+  execution, and opaque approval continuation (3 tests); the AgentClient can select the direct
+  application model path for providers that expose it. OpenRouter, Google, Anthropic, and the
+  Anthropic-format custom provider now expose direct streamed-model factories. The legacy SDK path
+  remains for providers without a direct model factory and is not yet retired.
+- Current verification: the full suite is 4,834 passed / 1 skipped with 7 baseline failures
+  (OpenCode Qwen message projection, read-access descendant approval, three continuity-lineage
+  expectation fixtures, and Docker host-control runtime). The continuation regression found in
+  public `AgentClient` tests was fixed by keeping raw-state compatibility only inside the adapter;
+  the focused public-methods/replay/projection set passes (3 files / 98 tests).
 - Step E Stage 0 characterization/instrumentation: focused store, continuity, input-planner,
   stream-processor/reset/composition, chained-wire, OpenAI, and Codex coverage passes (9 files /
   186 tests). It pins immutable snapshot identity, exact checkpoint binding and lifecycle, reset

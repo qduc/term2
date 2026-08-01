@@ -2,7 +2,7 @@ import { it, expect } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { tool as createTool, RunContext } from '@openai/agents';
+import { tool as createTool, RunContext } from '../../services/agent-runtime/legacy-compat.js';
 import { createFindFilesToolDefinition } from './glob.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import { toolErrorFunction, wrapToolInvoke } from '../../lib/tool-invoke.js';

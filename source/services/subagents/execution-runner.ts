@@ -1,4 +1,4 @@
-import { Agent } from '@openai/agents';
+import { Agent } from '../agent-runtime/legacy-compat.js';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import os from 'node:os';

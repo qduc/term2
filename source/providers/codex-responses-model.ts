@@ -1,6 +1,7 @@
-import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
-import { getCurrentTrace, withTrace } from '@openai/agents-core';
 import { randomUUID } from 'node:crypto';
+import { ResponsesWS } from 'openai/resources/responses/ws';
+import OpenAI from 'openai';
+// StreamedModelTurnRequest import removed — not used here
 import { sanitizeHeaders } from '../utils/header-sanitizer.js';
 import type { ISessionContextService, IProviderTraffic } from '../services/service-interfaces.js';
 import { dropUnpairedFunctionCalls } from '../services/tool-execution-ledger.js';
@@ -20,6 +21,113 @@ const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
   async recordResponseReceived() {},
   recordRequestFailed() {},
 };
+
+/** Minimal public OpenAI Responses transport boundary used by Codex. */
+export class OpenAIResponsesModel {
+  protected readonly _client: any;
+  protected readonly _model: string;
+  constructor(client: any, model: string) {
+    this._client = client;
+    this._model = model;
+  }
+  protected _buildResponsesCreateRequest(request: any, stream: boolean): any {
+    const settings = request?.modelSettings ?? {};
+    return {
+      requestData: {
+        model: this._model,
+        input: typeof request?.input === 'string' ? [{ role: 'user', content: request.input }] : request?.input ?? [],
+        stream,
+        ...(request?.systemInstructions ? { instructions: request.systemInstructions } : {}),
+        ...(request?.tools ? { tools: request.tools } : {}),
+        ...(settings.reasoning ? { reasoning: settings.reasoning } : {}),
+        ...(settings.providerData?.generate !== undefined ? { generate: settings.providerData.generate } : {}),
+        ...(settings.providerData?.extraBody ?? {}),
+        ...(request?.previousResponseId ? { previous_response_id: request.previousResponseId } : {}),
+      },
+    };
+  }
+  protected async _fetchResponse(request: any, stream: boolean): Promise<any> {
+    const built = this._buildResponsesCreateRequest(request, stream);
+    if (stream && this instanceof OpenAIResponsesWSModel) {
+      // Keep lightweight model-unit fakes usable without coupling production
+      // transport back to the removed Agents SDK. Real OpenAI clients always
+      // use the public ResponsesWS transport below.
+      if (!(this._client instanceof OpenAI) && typeof this._client?.responses?.create === 'function') {
+        return this._client.responses.create(built.requestData);
+      }
+      const headers = request?.modelSettings?.providerData?.extraHeaders;
+      const socket = new ResponsesWS(this._client, headers ? { headers } : undefined);
+      const messages = socket.stream();
+      const requestEvent = { type: 'response.create', ...built.requestData } as any;
+      if ((socket as any).socket?.readyState === 0) {
+        (socket as any).socket.once('open', () => socket.send(requestEvent));
+      } else {
+        socket.send(requestEvent);
+      }
+      return (async function* () {
+        try {
+          for await (const message of messages) {
+            if (message.type === 'message') yield message.message;
+            else if ((message as any).event) yield (message as any).event;
+            else if (message.type === 'error') throw (message as any).error;
+            else if (message.type === 'close')
+              throw new Error(
+                'Codex WebSocket closed before a terminal response event; before any response events were received.',
+              );
+          }
+        } finally {
+          try {
+            socket.close();
+          } catch {
+            /* best effort */
+          }
+        }
+      })();
+    }
+    return this._client.responses.create(built.requestData);
+  }
+  async getResponse(request: any): Promise<any> {
+    const response = await this._fetchResponse(request, false);
+    const rawUsage = response?.usage;
+    const usage =
+      rawUsage && rawUsage.totalTokens === undefined
+        ? {
+            ...rawUsage,
+            totalTokens: rawUsage.total_tokens ?? (rawUsage.input_tokens ?? 0) + (rawUsage.output_tokens ?? 0),
+          }
+        : rawUsage;
+    return {
+      responseId: response?.id ?? response?.responseId,
+      output: response?.output ?? [],
+      usage,
+      providerData: response,
+    };
+  }
+  async *getStreamedResponse(request: any): AsyncIterable<any> {
+    const source = await this._fetchResponse(request, true);
+    for await (const event of source) {
+      if (event?.type === 'error') {
+        throw new Error(event.error?.message ?? 'Codex WebSocket provider error');
+      }
+      if (event?.type === 'close') {
+        throw new Error('Codex WebSocket closed before a terminal response event.');
+      }
+      const terminal =
+        event?.type === 'response.completed' ||
+        event?.type === 'response.incomplete' ||
+        event?.type === 'response.failed';
+      if (this instanceof OpenAIResponsesWSModel) {
+        yield { event };
+        if (terminal) return;
+        continue;
+      }
+      if (terminal) yield { type: 'response_done', response: event.response ?? event };
+      else yield event;
+    }
+  }
+}
+
+export class OpenAIResponsesWSModel extends OpenAIResponsesModel {}
 import {
   isPreviousResponseNotFoundError,
   isRetryableTransportError,
@@ -101,7 +209,24 @@ function normalizeCodexRequestData(
     !hasPreviousResponseId && Array.isArray(normalizedRequestData.input)
       ? dropUnpairedFunctionCalls(normalizedRequestData.input)
       : normalizedRequestData.input;
-  normalizedRequestData.input = stripCodexReplayIds(normalizedInput);
+  normalizedRequestData.input = stripCodexReplayIds(
+    Array.isArray(normalizedInput)
+      ? normalizedInput.map((item: any) => {
+          if (item?.type === 'function_call_result' || item?.type === 'function_call_output') {
+            return {
+              ...item,
+              type: 'function_call_output',
+              call_id: item.call_id ?? item.callId ?? item.tool_call_id,
+              output: typeof item.output === 'string' ? item.output : JSON.stringify(item.output ?? ''),
+            };
+          }
+          if (item?.type === 'function_call' && item.callId && !item.call_id) {
+            return { ...item, call_id: item.callId };
+          }
+          return item;
+        })
+      : normalizedInput,
+  );
 
   const modelInclude = request?.modelSettings?.include;
   if (Array.isArray(modelInclude) && modelInclude.length > 0) {
@@ -374,20 +499,28 @@ const getResponseIdFromResponse = (response: unknown): string | undefined => {
 
 const getResponseIdFromStreamEvent = (event: unknown): string | undefined => {
   const record = asRecord(event);
-  if (record?.type !== 'response_done') {
+  const candidate = record?.type === 'response_done' ? record : asRecord(record?.event);
+  if (
+    !candidate ||
+    !['response.completed', 'response.incomplete', 'response.failed', 'response_done'].includes(String(candidate.type))
+  ) {
     return undefined;
   }
 
-  return getResponseIdFromResponse(record.response) ?? getResponseIdFromResponse(record);
+  return getResponseIdFromResponse(candidate.response) ?? getResponseIdFromResponse(candidate);
 };
 
 const getResponseOutputFromStreamEvent = (event: unknown): unknown[] | undefined => {
   const record = asRecord(event);
-  if (record?.type !== 'response_done') {
+  const candidate = record?.type === 'response_done' ? record : asRecord(record?.event);
+  if (
+    !candidate ||
+    !['response.completed', 'response.incomplete', 'response.failed', 'response_done'].includes(String(candidate.type))
+  ) {
     return undefined;
   }
 
-  const response = asRecord(record.response);
+  const response = asRecord(candidate.response);
   return Array.isArray(response?.output) ? response.output : undefined;
 };
 
@@ -948,11 +1081,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       }
     };
 
-    const currentTrace = getCurrentTrace();
-    if (currentTrace) {
-      return run();
-    }
-    return withTrace('codex-responses-ws-model-trace', run);
+    return run();
   }
 
   override async *getStreamedResponse(request: any): AsyncIterable<any> {

@@ -1,5 +1,5 @@
 /**
- * Sets up global environment variables before any other modules (especially @openai/agents)
+ * Sets up global environment variables before any other modules.
  * are evaluated. This ensures background tracing/telemetry loops are disabled by default.
  */
 process.env.NODE_ENV ||= 'production';

@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
-import { Agent, Runner } from '@openai/agents';
-import type { ModelRequest } from '@openai/agents-core';
+import { Agent, Runner } from '../services/agent-runtime/legacy-compat.js';
+import type { ModelRequest } from '../contracts/model.js';
 import { adaptStreamedModelTurnForAgents } from './agents-model-bridge.js';
 import type {
   StreamedModelTurn,

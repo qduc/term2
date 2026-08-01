@@ -1,165 +1,21 @@
-import { Runner, Model, ModelProvider, getCurrentTrace, withTrace } from '@openai/agents';
-import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
 import OpenAI from 'openai';
+import type { LegacyModel, LegacyModelProvider } from '../contracts/model.js';
+import {
+  OpenAIResponsesModelWithPromptCacheKey,
+  OpenAIResponsesWSModelWithPromptCacheKey,
+} from './openai-responses-model.js';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
 import { RetryingModel } from './retrying-model.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
-import {
-  observeOpenAIRequestLifecycle,
-  type OpenAIRequestLifecycleObservation,
-  type ProviderRequestCapture,
-} from './provider-request-capture.js';
-import { consumeOpenAIRequestPrefixBindingWithOutcome } from './openai-request-prefix-binding.js';
-import { randomUUID } from 'node:crypto';
+import type { ProviderRequestCapture } from './provider-request-capture.js';
+import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 
-const DEFAULT_OPENAI_ENDPOINT = 'https://api.openai.com/v1';
-
-type OpenAIRequestAttempt = Omit<OpenAIRequestLifecycleObservation, 'phase' | 'responseId'>;
-
-const clientEndpoint = (client: any): string => {
-  const endpoint = client?.baseURL ?? client?._options?.baseURL;
-  if (endpoint instanceof URL) return endpoint.toString().replace(/\/$/, '');
-  return typeof endpoint === 'string' && endpoint.length > 0 ? endpoint.replace(/\/$/, '') : DEFAULT_OPENAI_ENDPOINT;
-};
-
-/**
- * The SDK invokes its private builder below each public model call. State is
- * keyed by the request object, so separate concurrent requests cannot pair a
- * builder invocation with another request's response. SDK retries that reuse
- * one request object intentionally retain its one public-call token.
- */
-abstract class OpenAIRequestLifecycleModel {
-  private readonly attempts = new WeakMap<object, OpenAIRequestAttempt>();
-
-  beginAttempt(request: any, transport: 'http' | 'websocket', model: string, client: any): void {
-    if (request && typeof request === 'object') {
-      this.attempts.set(request, {
-        token: randomUUID(),
-        provider: 'openai',
-        transport,
-        model,
-        endpoint: clientEndpoint(client),
-        requestData: {},
-      });
-    }
-  }
-
-  bindPrefix(request: any, capture?: ProviderRequestCapture): void {
-    const attempt = request && typeof request === 'object' ? this.attempts.get(request) : undefined;
-    if (!attempt) return;
-    try {
-      attempt.requestData = { input: structuredClone(request.input) };
-      if (!attempt.prefixBinding && !attempt.prefixBindingOutcome) {
-        const consumption = consumeOpenAIRequestPrefixBindingWithOutcome(request.input);
-        attempt.prefixBinding = consumption.binding;
-        attempt.prefixBindingOutcome = consumption.outcome;
-      }
-      observeOpenAIRequestLifecycle(capture, { ...attempt, phase: 'request-built' });
-    } catch {
-      // Binding must not affect the SDK request.
-    }
-  }
-
-  finishAttempt(
-    request: any,
-    phase: Extract<OpenAIRequestLifecycleObservation['phase'], 'terminal' | 'failed' | 'abandoned'>,
-    capture?: ProviderRequestCapture,
-    responseId?: string,
-  ): void {
-    if (!request || typeof request !== 'object') return;
-    const attempt = this.attempts.get(request);
-    if (!attempt) return;
-    this.attempts.delete(request);
-    observeOpenAIRequestLifecycle(capture, { ...attempt, phase, ...(responseId ? { responseId } : {}) });
-  }
-}
-
-export class OpenAIResponsesModelWithPromptCacheKey extends OpenAIResponsesModel {
-  private readonly lifecycle = new (class extends OpenAIRequestLifecycleModel {})();
-
-  constructor(client: any, model: string, private readonly requestCapture?: ProviderRequestCapture) {
-    super(client, model);
-  }
-
-  override async getResponse(request: any): Promise<any> {
-    this.lifecycle.beginAttempt(request, 'http', (this as any)._model, (this as any)._client);
-    this.lifecycle.bindPrefix(request, this.requestCapture);
-    try {
-      const response = await super.getResponse(request);
-      this.lifecycle.finishAttempt(request, 'terminal', this.requestCapture, response?.responseId);
-      return response;
-    } catch (error) {
-      this.lifecycle.finishAttempt(request, 'failed', this.requestCapture);
-      throw error;
-    }
-  }
-
-  override async *getStreamedResponse(request: any): AsyncIterable<any> {
-    this.lifecycle.beginAttempt(request, 'http', (this as any)._model, (this as any)._client);
-    this.lifecycle.bindPrefix(request, this.requestCapture);
-    let terminal = false;
-    try {
-      for await (const event of super.getStreamedResponse(request)) {
-        if (event?.type === 'response_done') {
-          terminal = true;
-          this.lifecycle.finishAttempt(request, 'terminal', this.requestCapture, event.response?.id);
-        }
-        yield event;
-      }
-    } catch (error) {
-      this.lifecycle.finishAttempt(request, 'failed', this.requestCapture);
-      throw error;
-    } finally {
-      if (!terminal) this.lifecycle.finishAttempt(request, 'abandoned', this.requestCapture);
-    }
-  }
-}
-
-export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesWSModel {
-  private readonly lifecycle = new (class extends OpenAIRequestLifecycleModel {})();
-
-  constructor(client: any, model: string, private readonly requestCapture?: ProviderRequestCapture) {
-    super(client, model);
-  }
-
-  override async getResponse(request: any): Promise<any> {
-    this.lifecycle.beginAttempt(request, 'websocket', (this as any)._model, (this as any)._client);
-    this.lifecycle.bindPrefix(request, this.requestCapture);
-    const currentTrace = getCurrentTrace();
-    try {
-      const response = currentTrace
-        ? await super.getResponse(request)
-        : await withTrace('openai-responses-ws-model-trace', () => super.getResponse(request));
-      this.lifecycle.finishAttempt(request, 'terminal', this.requestCapture, response?.responseId);
-      return response;
-    } catch (error) {
-      this.lifecycle.finishAttempt(request, 'failed', this.requestCapture);
-      throw error;
-    }
-  }
-
-  override async *getStreamedResponse(request: any): AsyncIterable<any> {
-    this.lifecycle.beginAttempt(request, 'websocket', (this as any)._model, (this as any)._client);
-    this.lifecycle.bindPrefix(request, this.requestCapture);
-    let terminal = false;
-    try {
-      for await (const event of super.getStreamedResponse(request)) {
-        if (event?.type === 'response_done') {
-          terminal = true;
-          this.lifecycle.finishAttempt(request, 'terminal', this.requestCapture, event.response?.id);
-        }
-        yield event;
-      }
-    } catch (error) {
-      this.lifecycle.finishAttempt(request, 'failed', this.requestCapture);
-      throw error;
-    } finally {
-      if (!terminal) this.lifecycle.finishAttempt(request, 'abandoned', this.requestCapture);
-    }
-  }
-}
+export {
+  OpenAIResponsesModelWithPromptCacheKey,
+  OpenAIResponsesWSModelWithPromptCacheKey,
+} from './openai-responses-model.js';
 
 const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
 
@@ -195,7 +51,7 @@ async function fetchOpenAIModels(
     .reverse() as Array<{ id: string; name?: string }>;
 }
 
-class OpenAIProvider implements ModelProvider {
+class _OpenAIProvider implements LegacyModelProvider {
   private readonly models = new Map<string, RetryingModel>();
 
   constructor(
@@ -207,7 +63,7 @@ class OpenAIProvider implements ModelProvider {
     private readonly requestCapture?: ProviderRequestCapture,
   ) {}
 
-  getModel(modelName?: string): Model {
+  getModel(modelName?: string): LegacyModel {
     const model = modelName || 'gpt-4o';
     const cached = this.models.get(model);
     if (cached) {
@@ -240,7 +96,7 @@ class OpenAIProvider implements ModelProvider {
 registerProvider({
   id: 'openai',
   label: 'OpenAI',
-  createRunner: ({ settingsService, loggingService, sessionContextService, onRetry, requestCapture }) => {
+  createStreamedModel: (model, { settingsService, loggingService, sessionContextService }) => {
     const defaultModel = settingsService.get('agent.model') || 'gpt-4o';
     const apiKey = settingsService.get('agent.openai.apiKey') || process.env.OPENAI_API_KEY;
     const openAIClient = new OpenAI({
@@ -253,16 +109,11 @@ registerProvider({
       }) as any,
     });
 
-    return new Runner({
-      modelProvider: new OpenAIProvider(
-        openAIClient,
-        loggingService,
-        settingsService.get('agent.transport') ?? 'websocket',
-        settingsService.get('agent.retryAttempts') ?? 2,
-        onRetry,
-        requestCapture,
-      ),
-    });
+    const selectedModel =
+      settingsService.get('agent.transport') === 'http'
+        ? new OpenAIResponsesModelWithPromptCacheKey(openAIClient, model || defaultModel)
+        : new OpenAIResponsesWSModelWithPromptCacheKey(openAIClient, model || defaultModel);
+    return selectedModel as unknown as StreamedModelTurn;
   },
   fetchModels: fetchOpenAIModels,
   clearConversations: undefined, // No conversation state to clear

@@ -34,6 +34,8 @@ export type StreamedModelToolResultPart =
 /** One application-owned streamed model invocation. */
 export interface StreamedModelTurn {
   stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent>;
+  /** Optional unary fast path for providers whose native API is non-streaming. */
+  getResponse?(request: StreamedModelTurnRequest): Promise<any>;
 }
 
 export interface StreamedModelTurnRequest {

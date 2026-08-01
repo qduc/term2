@@ -1,5 +1,4 @@
-import type { Agent } from '@openai/agents';
-import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
+import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import type { ExecutionContext } from '../services/execution-context.js';
 import type { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
@@ -7,15 +6,17 @@ import type { AskUserAnswerStore } from './ask-user-answer-store.js';
 import type { SubagentBridge } from './subagent-bridge.js';
 import type { AgentFactoryDeps } from './agent-factory.js';
 import { buildAgent } from './agent-factory.js';
+import { getAgentDefinition } from '../agent.js';
 import { createEditorImpl } from './editor-impl.js';
 import { getProvider } from '../providers/index.js';
 import { SkillsService } from '../services/skills/skills-service.js';
 import type { PostExecutePauseCapability } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
+import type { ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
 
 /** Narrow capability interface consumed by AgentRunOrchestrator and AgentChatService. */
 export interface AgentSource {
-  getAgent(sessionId?: string): Agent;
+  getAgent(sessionId?: string): ApplicationAgent;
   getProvider(): string;
   getModel(): string;
 }
@@ -37,9 +38,9 @@ export interface AgentConfigurationDeps {
 }
 
 export class AgentConfiguration implements AgentSource {
-  #agent: Agent;
+  #agent: ApplicationAgent;
   #model: string;
-  #reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+  #reasoningEffort?: ReasoningEffortSetting | null;
   #temperature?: number;
   #provider: string;
   #isTransientClient: boolean;
@@ -65,10 +66,10 @@ export class AgentConfiguration implements AgentSource {
   constructor(
     config: {
       model?: string;
-      reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+      reasoningEffort?: ReasoningEffortSetting | null;
       temperature?: number;
       providerOverride?: string;
-      agentOverride?: Agent;
+      agentOverride?: ApplicationAgent;
     },
     deps: AgentConfigurationDeps,
   ) {
@@ -112,36 +113,28 @@ export class AgentConfiguration implements AgentSource {
   }
 
   // AgentSource implementation
-  getAgent(sessionId?: string): Agent {
+  getAgent(sessionId?: string): ApplicationAgent {
     if (sessionId && !this.#isTransientClient) {
       const supportsPromptCacheKey = getProvider(this.#provider)?.capabilities?.supportsPromptCacheKey;
       if (!supportsPromptCacheKey || !sessionId) {
         return this.#agent;
       }
       if (this.#provider !== 'openai') {
-        return this.#agent.clone({
-          modelSettings: {
-            ...(this.#agent.modelSettings || {}),
-            prompt_cache_key: sessionId,
-          } as any,
-        });
+        return { ...this.#agent, modelSettings: { ...(this.#agent.modelSettings ?? {}), prompt_cache_key: sessionId } };
       }
-      return this.#agent.clone({
+      return {
+        ...this.#agent,
         modelSettings: {
-          ...(this.#agent.modelSettings || {}),
+          ...(this.#agent.modelSettings ?? {}),
           providerData: {
-            ...(this.#agent.modelSettings?.providerData || {}),
-            // `extraBody` is the public Agents SDK transport override. The
-            // Responses model copies it into the request body for both HTTP
-            // and WebSocket transports, so OpenAI does not need a private
-            // request-builder hook just to forward this setting.
+            ...((this.#agent.modelSettings?.providerData as any) ?? {}),
             extraBody: {
-              ...((this.#agent.modelSettings?.providerData as any)?.extraBody || {}),
+              ...((this.#agent.modelSettings?.providerData as any)?.extraBody ?? {}),
               prompt_cache_key: sessionId,
             },
           },
-        } as any,
-      });
+        },
+      };
     }
     return this.#agent;
   }
@@ -152,6 +145,41 @@ export class AgentConfiguration implements AgentSource {
 
   getModel(): string {
     return this.#model;
+  }
+
+  /**
+   * Build the SDK-free agent definition consumed by the application run loop.
+   * The legacy SDK Agent remains available to the compatibility path until
+   * every provider has moved to the application-owned model boundary.
+   */
+  getApplicationAgent(): ApplicationAgent {
+    const deps = this.#buildFactoryDeps();
+    const definition = getAgentDefinition(
+      {
+        settingsService: deps.settings,
+        loggingService: deps.logger,
+        executionContext: deps.executionContext,
+        askMentor: deps.createMentor,
+        runSubagent: deps.runSubagent,
+        runSubagentAsync: deps.runSubagentAsync,
+        getSubagentResult: deps.getSubagentResult,
+        getSubagentStatus: deps.getSubagentStatus,
+        sendSubagentMessage: deps.sendSubagentMessage,
+        cancelSubagentRun: deps.cancelSubagentRun,
+        getAskUserAnswer: deps.getAskUserAnswer,
+        skillsService: deps.skillsService,
+        postExecuteDeniedRead: Boolean(deps.postExecutePauseCapability),
+        sessionAccess: deps.sessionAccess,
+      },
+      this.#model,
+    );
+    return {
+      name: definition.name,
+      instructions: definition.instructions,
+      model: definition.model,
+      modelSettings: (this.#agent as any).modelSettings,
+      tools: definition.tools,
+    };
   }
 
   // Build the factory deps (used by buildAgent and for agent rebuilds)
@@ -292,7 +320,7 @@ export class AgentConfiguration implements AgentSource {
     this.#model = model;
   }
 
-  setReasoningEffort(effort?: ModelSettingsReasoningEffort | 'default'): void {
+  setReasoningEffort(effort?: ReasoningEffortSetting): void {
     this.#reasoningEffort = effort;
   }
 

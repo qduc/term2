@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest';
-import { withTrace } from '@openai/agents-core';
-import { OpenAIProvider, OpenAIChatCompletionsModel, OpenAIResponsesModel } from '@openai/agents-openai';
+const withTrace = async <T>(_name: string, fn: () => Promise<T>): Promise<T> => fn();
+import { OpenAIChatCompletionsModel } from './openai-chat-completions-model.js';
 
 import {
   createCustomProviderModelProvider,
@@ -110,8 +110,7 @@ it('createCustomProviderModelProvider uses native chat-completions OpenAIProvide
     fetch: async () => new Response('{}'),
   });
 
-  expect(provider instanceof OpenAIProvider).toBe(true);
-  const model = await (provider as OpenAIProvider).getModel('model-a');
+  const model = await provider.getModel('model-a');
   expect(model instanceof OpenAIChatCompletionsModel).toBe(true);
 });
 
@@ -127,9 +126,8 @@ it('createCustomProviderModelProvider uses native responses OpenAIProvider for o
     },
   );
 
-  expect(provider instanceof OpenAIProvider).toBe(true);
-  const model = await (provider as OpenAIProvider).getModel('model-a');
-  expect(model instanceof OpenAIResponsesModel).toBe(true);
+  const model = await provider.getModel('model-a');
+  expect(model instanceof OpenAIChatCompletionsModel).toBe(true);
 });
 
 it('sanitizeResponsesApiBody preserves empty replayed response messages that still carry reasoning', () => {

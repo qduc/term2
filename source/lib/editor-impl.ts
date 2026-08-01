@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir, rm } from 'fs/promises';
 import path from 'path';
-import { applyDiff } from '@openai/agents';
-import type { ApplyPatchOperation, ApplyPatchResult } from '@openai/agents';
+import { applyDiff } from '../utils/apply-diff.js';
+import type { ApplyPatchOperation, ApplyPatchResult } from '../contracts/patch.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 

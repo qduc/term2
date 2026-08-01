@@ -1,5 +1,5 @@
-import type { AgentInputItem } from '@openai/agents';
 import type { AgentStream } from '../agent-stream.js';
+import type { ProviderInput } from '../../contracts/provider-input.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
 import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-events.js';
@@ -17,7 +17,7 @@ export class TurnAttempt {
 
   #retryCounts: RetryCounts;
   #stream: AgentStream | null = null;
-  #streamInput: string | AgentInputItem | AgentInputItem[] | undefined = undefined;
+  #streamInput: ProviderInput | undefined = undefined;
   #inputMode: 'delta' | 'full_history' | undefined = undefined;
   #providerHistorySnapshot: ProviderHistorySnapshot | undefined = undefined;
   #addedUserMessage = false;
@@ -93,7 +93,7 @@ export class TurnAttempt {
     return this.#stream;
   }
 
-  get streamInput(): string | AgentInputItem | AgentInputItem[] | undefined {
+  get streamInput(): ProviderInput | undefined {
     return this.#streamInput;
   }
 

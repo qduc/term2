@@ -1539,7 +1539,7 @@ it('emits live reasoning chunks', async () => {
 
 it('retries on tool hallucination error (ModelBehaviorError)', async () => {
   // Import ModelBehaviorError dynamically
-  const { ModelBehaviorError } = await import('@openai/agents');
+  const { ModelBehaviorError } = await import('../../contracts/model-errors.js');
 
   let callCount = 0;
   const mockClient = partialClient({
@@ -1574,7 +1574,7 @@ it('retries on tool hallucination error (ModelBehaviorError)', async () => {
 });
 
 it('stops retrying after max hallucination retries', async () => {
-  const { ModelBehaviorError } = await import('@openai/agents');
+  const { ModelBehaviorError } = await import('../../contracts/model-errors.js');
 
   let callCount = 0;
   const mockClient = partialClient({
@@ -1603,7 +1603,7 @@ it('stops retrying after max hallucination retries', async () => {
 });
 
 it('does not retry on non-hallucination ModelBehaviorError', async () => {
-  const { ModelBehaviorError } = await import('@openai/agents');
+  const { ModelBehaviorError } = await import('../../contracts/model-errors.js');
 
   let callCount = 0;
   const mockClient = partialClient({

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import type { AgentInputItem } from '@openai/agents';
+import type { ProviderInputItem as AgentInputItem } from '../../contracts/provider-input.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
 import {
   projectImportedState,

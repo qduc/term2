@@ -44,6 +44,10 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
   // after the runners below (its `run` callback references them), so the
   // optional chaining keeps this safe until then. Events fire only during
   // execution, which always happens after the registry is assigned.
+  // `asyncRegistry` is assigned once below but referenced earlier by the
+  // `onEventWithPeek` closure; prefer-const lint would complain here so
+  // disable it for this declaration.
+  // eslint-disable-next-line prefer-const
   let asyncRegistry: SubagentAsyncRegistry | undefined;
   const onEventWithPeek = (event: ConversationEvent): void => {
     deps.onEvent?.(event);

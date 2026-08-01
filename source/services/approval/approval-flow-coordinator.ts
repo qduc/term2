@@ -10,9 +10,7 @@ import { SessionToolTracker } from '../session/session-tool-tracker.js';
 import { GenerationGuard } from '../generation-guard.js';
 import type { ToolOwner } from './tool-owner.js';
 import { ToolOwnershipRegistry } from './tool-ownership-registry.js';
-import {
-  getProjectAllowReadStore,
-} from '../../utils/shell/sandbox/denied-read-stores.js';
+import { getProjectAllowReadStore } from '../../utils/shell/sandbox/denied-read-stores.js';
 import {
   isDeniedReadApproveAnswer,
   isDockerHostControlApproveAnswer,
@@ -124,7 +122,7 @@ export class ApprovalFlowCoordinator {
 
     markToolCallAsApprovalRejection(expectedCallId);
 
-    abortedContext.state.reject(abortedContext.interruption as any, { message: rejectionMessage });
+    abortedContext.state.reject?.(abortedContext.interruption as any, { message: rejectionMessage });
     abortedContext.decisionsByCallId ??= new Map();
     if (expectedCallId) {
       abortedContext.decisionsByCallId.set(expectedCallId, 'rejected');
@@ -227,7 +225,13 @@ export class ApprovalFlowCoordinator {
         const scope =
           answer === 'docker-allow-once' ? 'once' : answer === 'docker-allow-session' ? 'session' : 'project';
         if (this.deps.sessionAccess) this.deps.sessionAccess.grantDocker(parsedDecisionArgs.command, cwd, scope);
-        else this.deps.nestedCompatibility?.docker.grant({ command: parsedDecisionArgs.command, cwd, scope, sessionId: this.deps.sessionId });
+        else
+          this.deps.nestedCompatibility?.docker.grant({
+            command: parsedDecisionArgs.command,
+            cwd,
+            scope,
+            sessionId: this.deps.sessionId,
+          });
         // The pending block is left in place deliberately: for an indirect
         // invocation it is the only thing that tells `execute` this command
         // needs host control. `execute` consumes it when it creates the control.
@@ -279,7 +283,7 @@ export class ApprovalFlowCoordinator {
               arguments: parseResult.arguments,
             };
 
-      state.approve(interruption as any);
+      state.approve?.(interruption as any);
       if (callId) {
         pendingApprovalContext.decisionsByCallId.set(callId, 'approved');
       }

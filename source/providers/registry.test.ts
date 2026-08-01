@@ -68,9 +68,9 @@ it('provider definitions have required properties', () => {
   }
 });
 
-it('openai provider has createRunner function', () => {
+it('openai provider exposes the application-owned streamed model factory', () => {
   const provider = getProvider('openai');
-  expect(typeof provider?.createRunner).toBe('function');
+  expect(typeof provider?.createStreamedModel).toBe('function');
 });
 
 it('openai provider exposes capabilities without requiring credentials', () => {
@@ -84,9 +84,9 @@ it('openai provider exposes capabilities without requiring credentials', () => {
   });
 });
 
-it('openrouter provider has createRunner function', () => {
+it('openrouter provider exposes the application-owned streamed model factory', () => {
   const provider = getProvider('openrouter');
-  expect(typeof provider?.createRunner).toBe('function');
+  expect(typeof provider?.createStreamedModel).toBe('function');
 });
 
 it('openai provider has sensitiveSettingKeys defined', () => {

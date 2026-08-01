@@ -1,9 +1,12 @@
-import { Agent, RunContext, RunToolApprovalItem } from '@openai/agents';
+type ApprovalContext = {
+  approveTool(item: unknown, options?: { alwaysApprove?: boolean }): void;
+  rejectTool(item: unknown, options?: { alwaysReject?: boolean; message?: string }): void;
+};
 
 /**
  * One entry of `RunContext.toJSON().approvals`.
  *
- * The SDK declares this shape (`@openai/agents-core/dist/runContext.d.ts`) but does not
+ * The upstream runtime does not export this shape, so we restate it here.
  * export the type, so we restate it. The semantics, verified against
  * `runContext.js#isToolApproved`, are:
  *
@@ -31,12 +34,12 @@ export type ApprovalRecord = {
  */
 const BLANKET_DECISION_CALL_ID = '__approval_replay_blanket_decision__';
 
-function buildApprovalItem(toolName: string, callId: string, agent: Agent<any, any>): RunToolApprovalItem {
-  return new RunToolApprovalItem(
-    { type: 'function_call', callId, name: toolName, arguments: '{}', status: 'completed' },
+function buildApprovalItem(toolName: string, callId: string, agent: unknown): unknown {
+  return {
+    rawItem: { type: 'function_call', callId, name: toolName, arguments: '{}', status: 'completed' },
     agent,
     toolName,
-  );
+  };
 }
 
 /**
@@ -57,10 +60,10 @@ function buildApprovalItem(toolName: string, callId: string, agent: Agent<any, a
  * messages keeps only `stickyRejectMessage`. The public API cannot express both, and the
  * difference is confined to message text — every such call is rejected either way.
  */
-export function replayApprovals<T>(
-  target: RunContext<T>,
+export function replayApprovals(
+  target: ApprovalContext,
   approvals: Readonly<Record<string, ApprovalRecord>> | undefined,
-  agent: Agent<any, any>,
+  agent: unknown,
 ): void {
   if (!approvals) return;
 

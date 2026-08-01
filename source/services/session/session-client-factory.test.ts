@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import type { AgentInputItem } from '@openai/agents';
+import type { ProviderInputItem as AgentInputItem } from '../../contracts/provider-input.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { createCallerOwnedSessionClientFactory, createOwnedSessionClientFactory } from './session-client-factory.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';

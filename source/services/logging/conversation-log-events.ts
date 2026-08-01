@@ -1,4 +1,4 @@
-import type { AgentInputItem } from '@openai/agents';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { CommandMessage } from '../../tools/types.js';
 import type { SubagentResult } from '../subagents/types.js';
@@ -13,7 +13,7 @@ import type {
 export const LOG_ENVELOPE_VERSION = 3;
 
 export interface StateSnapshot {
-  history: AgentInputItem[];
+  history: ProviderInputItem[];
   previousResponseId: string | null;
   toolLedger: SavedToolExecution[];
   model?: string;

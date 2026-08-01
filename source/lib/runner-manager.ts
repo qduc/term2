@@ -1,4 +1,4 @@
-import type { Runner } from '@openai/agents';
+import type { LegacyRunner } from '../contracts/model.js';
 import type { ISettingsService, ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
 import { getProvider } from '../providers/index.js';
 import type { ProviderRequestCapture } from '../providers/provider-request-capture.js';
@@ -13,7 +13,7 @@ export interface RunnerManagerDeps {
 }
 
 export class RunnerManager {
-  #runner: Runner | null = null;
+  #runner: LegacyRunner | null = null;
   #maxTurns: number;
   #retryAttempts: number;
   #retryCallback: (() => void) | null = null;
@@ -50,7 +50,7 @@ export class RunnerManager {
     this.#runner = null;
   }
 
-  getOrCreateRunner(providerId: string): Runner | null {
+  getOrCreateRunner(providerId: string): LegacyRunner | null {
     // For non-primary providers, always create fresh (no caching)
     if (providerId !== this.#getProvider()) {
       return this.#createRunner(providerId);
@@ -65,7 +65,7 @@ export class RunnerManager {
     return this.#runner;
   }
 
-  #createRunner(providerId: string): Runner | null {
+  #createRunner(providerId: string): LegacyRunner | null {
     const providerDef = getProvider(providerId);
     if (!providerDef?.createRunner) {
       return null;

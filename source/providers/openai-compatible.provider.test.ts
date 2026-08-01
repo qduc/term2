@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest';
-import { setTracingDisabled, withTrace } from '@openai/agents-core';
+const setTracingDisabled = (_disabled: boolean): void => {};
+const withTrace = async <T>(_name: string, fn: () => Promise<T>): Promise<T> => fn();
 import {
   createCustomProviderModelProvider,
   createOpenAICompatibleProviderDefinition,
@@ -246,7 +247,7 @@ it('assistant reasoning_content from provider response is preserved as reasoning
   });
   const model = await provider.getModel('provider-model');
 
-  const result = await runUnderTrace(() =>
+  const result = await runUnderTrace<any>(() =>
     model.getResponse({
       ...baseRequest,
       input: [{ role: 'user', content: 'hello' }] as any,

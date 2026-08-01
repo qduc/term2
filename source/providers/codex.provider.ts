@@ -1,5 +1,9 @@
-import { Runner } from '@openai/agents';
-import { getDefaultModel, ModelProvider, Model } from '@openai/agents-core';
+import type { LegacyModel, LegacyModelProvider } from '../contracts/model.js';
+import type {
+  StreamedModelTurn,
+  StreamedModelTurnEvent,
+  StreamedModelTurnRequest,
+} from '../contracts/streamed-model-turn.js';
 import OpenAI from 'openai';
 import { CodexResponsesModel, CodexResponsesWSModel } from './codex-responses-model.js';
 import { RetryingModel } from './retrying-model.js';
@@ -16,6 +20,8 @@ import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-contex
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import envPaths from 'env-paths';
+
+const DEFAULT_CODEX_MODEL = 'gpt-5.3-codex';
 
 // Decodes the JWT and extracts expiration timestamp in milliseconds
 export function getJwtExpiry(token: string): number | null {
@@ -456,7 +462,7 @@ async function fetchCodexModels(
     .filter(Boolean) as Array<{ id: string; name?: string; default_reasoning_level?: string }>;
 }
 
-class CodexProvider implements ModelProvider {
+class CodexProvider implements LegacyModelProvider {
   private readonly models = new Map<string, RetryingModel>();
 
   constructor(
@@ -470,8 +476,8 @@ class CodexProvider implements ModelProvider {
     private readonly onRetry?: () => void,
   ) {}
 
-  async getModel(modelName?: string): Promise<Model> {
-    const resolvedModel = modelName || getDefaultModel();
+  async getModel(modelName?: string): Promise<LegacyModel> {
+    const resolvedModel = modelName || DEFAULT_CODEX_MODEL;
     const cached = this.models.get(resolvedModel);
     if (cached) {
       return cached;
@@ -499,12 +505,106 @@ class CodexProvider implements ModelProvider {
     return retryingModel;
   }
 
+  getStreamedModel(modelName?: string): StreamedModelTurn {
+    const resolvedModel = modelName || DEFAULT_CODEX_MODEL;
+    const selectedModel: any =
+      this.transport === 'http'
+        ? new CodexResponsesModel(this.openAIClient as any, resolvedModel, this.loggingService)
+        : new CodexResponsesWSModel(
+            this.openAIClient as any,
+            resolvedModel,
+            this.tokenManager,
+            this.loggingService,
+            this.loggingService?.providerTraffic,
+            this.sessionContextService,
+            this.websocketReceiveTimeouts,
+          );
+    return {
+      stream: (request: StreamedModelTurnRequest) => codexStream(selectedModel, resolvedModel, request),
+      getStreamedResponse: (request: any) => selectedModel.getStreamedResponse(request),
+      // Compatibility metadata for callers that still inspect the local
+      // provider model; this is application-owned, not an SDK reach-in.
+      wrappedModel: { _client: this.openAIClient },
+    } as any;
+  }
+
   async close(): Promise<void> {
     for (const model of this.models.values()) {
       await model.close();
     }
     this.models.clear();
   }
+}
+
+function toCodexTool(tool: StreamedModelTurnRequest['tools'][number]) {
+  return {
+    type: 'function' as const,
+    name: tool.name,
+    ...(tool.description ? { description: tool.description } : {}),
+    parameters: tool.parameters,
+    ...(tool.strict !== undefined ? { strict: tool.strict } : {}),
+  };
+}
+
+async function* codexStream(
+  model: any,
+  modelName: string,
+  request: StreamedModelTurnRequest,
+): AsyncIterable<StreamedModelTurnEvent> {
+  const input = request.input.map((item: any) =>
+    item.type === 'message'
+      ? {
+          type: 'message',
+          role: item.role,
+          content: item.content.map((part: any) => ({ type: 'input_text', text: part.text ?? String(part) })),
+        }
+      : item.type === 'tool_call'
+      ? { type: 'function_call', callId: item.id, name: item.name, arguments: item.arguments }
+      : {
+          type: 'function_call_output',
+          callId: item.id,
+          output: typeof item.output === 'string' ? item.output : JSON.stringify(item.output),
+        },
+  );
+  const output: any[] = [];
+  let responseId = '';
+  const tools = request.tools?.map(toCodexTool);
+  for await (const event of model.getStreamedResponse({
+    model: modelName,
+    input,
+    tools,
+    modelSettings: { reasoning: request.reasoning, providerData: request.providerOptions },
+    signal: request.signal,
+  })) {
+    if (event?.type === 'response.output_text.delta') {
+      yield { type: 'text_delta', text: event.delta ?? '' };
+    } else if (event?.type === 'response.reasoning_summary_text.delta') {
+      yield { type: 'reasoning_delta', text: event.delta ?? '' };
+    } else if (event?.type === 'response.output_item.done' && event.item?.type === 'function_call') {
+      const call = {
+        type: 'tool_call' as const,
+        id: event.item.call_id ?? event.item.id,
+        name: event.item.name,
+        arguments: event.item.arguments ?? '{}',
+      };
+      output.push(call);
+      yield call;
+    } else if (
+      event?.type === 'response.completed' ||
+      event?.type === 'response.incomplete' ||
+      event?.type === 'response.failed'
+    ) {
+      responseId = event.response?.id ?? responseId;
+      for (const item of event.response?.output ?? []) {
+        if (item.type === 'message')
+          output.push({
+            type: 'message',
+            content: [{ type: 'text', text: item.content?.map((part: any) => part.text ?? '').join('') ?? '' }],
+          });
+      }
+    }
+  }
+  yield { type: 'completion', responseId, output };
 }
 
 // ── Middlewares ──────────────────────────────────────────────────────────
@@ -577,7 +677,7 @@ function codexHeadersMiddleware(sessionContextService?: ISessionContextService):
 registerProvider({
   id: 'codex',
   label: 'Codex',
-  createRunner: ({ settingsService, loggingService, sessionContextService, onRetry }) => {
+  createStreamedModel: (model, { settingsService, loggingService, sessionContextService }) => {
     const defaultModel = settingsService.get('agent.model') || 'gpt-5.3-codex';
     const tokenManager = new CodexTokenManager();
 
@@ -600,21 +700,20 @@ registerProvider({
       }) as any,
     });
 
-    return new Runner({
-      modelProvider: new CodexProvider(
-        openAIClient,
-        tokenManager,
-        loggingService,
-        sessionContextService,
-        settingsService.get('agent.transport') ?? 'websocket',
-        settingsService.get('agent.retryAttempts') ?? 2,
-        {
-          firstFrameMs: settingsService.get('agent.codex.websocketFirstFrameTimeoutMs') ?? 90_000,
-          interFrameMs: settingsService.get('agent.codex.websocketInterFrameTimeoutMs') ?? 600_000,
-        },
-        onRetry,
-      ),
-    });
+    const provider = new CodexProvider(
+      openAIClient,
+      tokenManager,
+      loggingService,
+      sessionContextService,
+      settingsService.get('agent.transport') ?? 'websocket',
+      settingsService.get('agent.retryAttempts') ?? 2,
+      {
+        firstFrameMs: settingsService.get('agent.codex.websocketFirstFrameTimeoutMs') ?? 90_000,
+        interFrameMs: settingsService.get('agent.codex.websocketInterFrameTimeoutMs') ?? 600_000,
+      },
+      undefined,
+    );
+    return provider.getStreamedModel(model || defaultModel);
   },
   fetchModels: fetchCodexModels,
   clearConversations: undefined,

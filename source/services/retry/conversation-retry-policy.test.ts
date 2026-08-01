@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import { ModelBehaviorError } from '@openai/agents';
+import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
 import { OpenRouterError, OpenAICompatibleError } from '../../providers/common/provider-errors.js';
 import {

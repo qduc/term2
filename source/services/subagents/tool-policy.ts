@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
-import { tool as createTool, type Tool, type RunContext } from '@openai/agents';
+import { tool as createTool, type Tool, type RunContext } from '../agent-runtime/legacy-compat.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentDefinition, SupportedSubagentRole, ValidationEvidence } from './types.js';
@@ -987,7 +987,7 @@ export class SubagentToolFactory {
           description: definition.description,
           parameters: useStrictSchema ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
           needsApproval: wrapNeedsApproval(definition),
-          execute: async (params, _context, details) => {
+          execute: async (params: any, _context: any, details: any) => {
             options.onToolStart?.(
               definition.name,
               params,

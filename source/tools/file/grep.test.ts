@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { tool as createTool, RunContext } from '@openai/agents';
+import { tool as createTool, RunContext } from '../../services/agent-runtime/legacy-compat.js';
 import { createGrepToolDefinition, formatGrepCommandMessage } from './grep.js';
 import { toolErrorFunction, wrapToolInvoke } from '../../lib/tool-invoke.js';
 import { ExecutionContext } from '../../services/execution-context.js';

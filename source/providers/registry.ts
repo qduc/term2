@@ -1,7 +1,8 @@
-import type { Runner } from '@openai/agents';
+import type { LegacyRunner } from '../contracts/model.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import type { ISessionContextService } from '../services/service-interfaces.js';
 import type { ProviderRequestCapture } from './provider-request-capture.js';
+import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 
 export interface ProviderDeps {
   settingsService: ISettingsService;
@@ -31,7 +32,10 @@ export interface ProviderDefinition {
    * NOTE: This accepts dependencies from the caller to avoid providers importing
    * services directly (which can create ESM circular dependency issues).
    */
-  createRunner?: (deps: ProviderDeps) => Runner | null;
+  createRunner?: (deps: ProviderDeps) => LegacyRunner | null;
+
+  /** Application-owned one-turn model path used by the replacement run loop. */
+  createStreamedModel?: (model: string, deps: ProviderDeps) => StreamedModelTurn | Promise<StreamedModelTurn>;
 
   /** Function to fetch available models for this provider */
   fetchModels: (
@@ -61,6 +65,29 @@ export interface ProviderDefinition {
   isRuntimeDefined?: boolean;
 }
 
+export function createApplicationCompatibilityRunner(
+  createModel: (model: string) => unknown | Promise<unknown>,
+): LegacyRunner {
+  const models = new Map<string, unknown>();
+  const modelProvider = {
+    getModel: async (model: string) => {
+      const cached = models.get(model);
+      if (cached) return cached;
+      const created = await createModel(model);
+      models.set(model, created);
+      return created;
+    },
+  };
+  return {
+    config: { modelProvider },
+    async run(agent: any, input: unknown, options: any = {}) {
+      const { ApplicationRunLoop } = await import('../services/agent-runtime/application-run-loop.js');
+      const loop = new ApplicationRunLoop({ resolveModel: (model: string) => modelProvider.getModel(model) as any });
+      return loop.startStream(agent, input as any, { signal: options.signal });
+    },
+  } as any;
+}
+
 /**
  * Global registry of providers.
  * Providers register themselves by calling registerProvider() on module load.
@@ -72,6 +99,10 @@ const providers = new Map<string, ProviderDefinition>();
  * Called by provider modules during initialization.
  */
 export function registerProvider(definition: ProviderDefinition, options?: { allowOverride?: boolean }): void {
+  if (!definition.createRunner && definition.createStreamedModel) {
+    definition.createRunner = (deps) =>
+      createApplicationCompatibilityRunner((model) => definition.createStreamedModel!(model, deps));
+  }
   const allowOverride = options?.allowOverride === true;
 
   if (providers.has(definition.id) && !allowOverride) {

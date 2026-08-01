@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Agent, RunContext, RunToolApprovalItem } from '@openai/agents';
+import { Agent, RunContext } from '../agent-runtime/legacy-compat.js';
 import { replayApprovals, type ApprovalRecord } from './approval-replay.js';
 
 const TOOL = 'shell_command';
@@ -8,12 +8,8 @@ function createAgent(): Agent<any, any> {
   return new Agent({ name: 'approval-replay-test-agent', instructions: '' });
 }
 
-function createApprovalItem(toolName: string, callId: string): RunToolApprovalItem {
-  return new RunToolApprovalItem(
-    { type: 'function_call', callId, name: toolName, arguments: '{}', status: 'completed' },
-    createAgent(),
-    toolName,
-  );
+function createApprovalItem(toolName: string, callId: string): any {
+  return { rawItem: { type: 'function_call', callId, name: toolName, arguments: '{}', status: 'completed' }, toolName };
 }
 
 function replayInto(approvals: Record<string, ApprovalRecord>): RunContext<unknown> {
@@ -24,7 +20,7 @@ function replayInto(approvals: Record<string, ApprovalRecord>): RunContext<unkno
 
 /**
  * These first tests are characterization tests: they pin down the SDK contract that
- * `replayApprovals` is built on, so a `@openai/agents` upgrade that changes the meaning of
+ * `replayApprovals` is built on, so a change to the application approval contract that changes the meaning of
  * `approvals` fails here rather than silently mis-granting approvals across the
  * parent/subagent boundary.
  */

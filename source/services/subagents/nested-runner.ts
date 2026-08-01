@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { Agent, RunContext, Runner, type Tool } from '@openai/agents';
+import { Agent, RunContext, Runner, type Tool } from '../agent-runtime/legacy-compat.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentRequest, SubagentResult, SupportedSubagentRole, SubagentDefinition } from './types.js';
@@ -36,7 +36,7 @@ const AGENT_TOOL_ERROR_PREFIX = 'An error occurred while running the tool. Pleas
  *
  * The OpenAI Agents SDK invokes `callModelInputFilter` with `args.context` set
  * to the **unwrapped** user context (see `applyCallModelInputFilter` in
- * `@openai/agents-core/dist/runner/conversation.js`, which passes
+ * The run loop passes
  * `context: context.context`). Earlier versions of this code read
  * `args.context.context.turnCount`, which is always `undefined` and caused the
  * counter to never advance, preventing the turn-limit warning from ever
@@ -141,7 +141,7 @@ export class NestedSubagentRunner {
     return this.#getOrCreateRoleTool(role).tool;
   }
 
-  getRoleAgent(role: SupportedSubagentRole): Agent<SubagentRunContext> {
+  getRoleAgent(role: SupportedSubagentRole): any {
     return this.#getOrCreateRoleTool(role).agent;
   }
 
@@ -272,7 +272,7 @@ export class NestedSubagentRunner {
       toolName: `run_subagent_${role}`,
       toolDescription: `Run the ${role} subagent.`,
       parameters,
-      inputBuilder: ({ params }) => params.task,
+      inputBuilder: ({ params }: { params: { task: string } }) => params.task,
       ...(runConfig ? { runConfig } : {}),
       runOptions: {
         maxTurns: definition.maxTurns,

@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import { ModelBehaviorError } from '@openai/agents';
+import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import { ConversationService as ProductionConversationService } from './conversation-service.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 

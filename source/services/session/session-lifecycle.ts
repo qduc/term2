@@ -1,4 +1,4 @@
-import type { AgentInputItem } from '@openai/agents';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
@@ -170,7 +170,7 @@ export class SessionLifecycle {
         droppedIncompleteCalls,
       });
     }
-    for (const item of projected.history as AgentInputItem[]) {
+    for (const item of projected.history as ProviderInputItem[]) {
       this.#conversationStore.addImportedItem(item);
     }
     // Provider-side response chains can expire while the local transcript remains valid.

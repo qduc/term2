@@ -2,7 +2,7 @@ import { it, expect, beforeAll, vi } from 'vitest';
 import { AgentRunOrchestrator, type AgentRunOrchestratorDeps } from './agent-run-orchestrator.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { registerProvider } from '../providers/registry.js';
-import type { Runner } from '@openai/agents';
+import type { LegacyRunner as Runner } from '../contracts/model.js';
 import { consumeOpenAIRequestPrefixBinding } from '../providers/openai-request-prefix-binding.js';
 
 // ========== Mock types ==========

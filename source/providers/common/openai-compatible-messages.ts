@@ -1,4 +1,4 @@
-import { type ModelRequest } from '@openai/agents-core';
+import type { ModelRequest } from '../../contracts/model.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
 import { isAnthropicModel } from './openai-compatible-utils.js';
 

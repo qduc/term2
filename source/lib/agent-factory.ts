@@ -1,16 +1,11 @@
 import path from 'path';
-import { Agent, tool as createTool, applyPatchTool, type Tool } from '@openai/agents';
-import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
+import { z } from 'zod';
+import type { ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
+import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import { getAgentDefinition } from '../agent.js';
 import { getProvider } from '../providers/index.js';
 import { createEditorImpl } from './editor-impl.js';
-import {
-  normalizeObjectParams,
-  normalizeToolInput,
-  toolErrorFunction,
-  wrapNeedsApproval,
-  wrapToolInvoke,
-} from './tool-invoke.js';
+import { normalizeObjectParams, wrapNeedsApproval } from './tool-invoke.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { trimToolOutput } from '../utils/output/trim-tool-output.js';
@@ -53,7 +48,7 @@ export interface AgentFactoryDeps {
 }
 
 export interface AgentBuildResult {
-  agent: Agent;
+  agent: ApplicationAgent;
   resolvedModel: string;
 }
 
@@ -86,7 +81,7 @@ export function buildAgentTools({
   resolvedModel: string;
   shouldUseNativePatchTool: boolean;
   deps: AgentFactoryDeps;
-}): Tool[] {
+}): ToolDefinition[] {
   for (const definition of toolDefinitions) {
     if (definition.postExecute && definition.postExecutePause) {
       throw new Error(
@@ -99,130 +94,78 @@ export function buildAgentTools({
     providerId: deps.providerId,
     capabilities: providerCapabilities,
   });
-  const tools: Tool[] = toolDefinitions
-    .filter((definition) => {
-      // Exclude custom apply_patch if we're using native one
-      if (shouldUseNativePatchTool && definition.name === 'apply_patch') {
-        return false;
-      }
-      return true;
-    })
-    .map((definition) =>
-      wrapToolInvoke(
-        createTool({
-          name: definition.name,
-          description: definition.description,
-          parameters: useStrictToolSchema ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
-          // Let schema-validation errors propagate to wrapToolInvoke for Zod
-          // diagnostics; keep other runtime errors as non-fatal strings.
-          errorFunction: toolErrorFunction,
-          needsApproval: wrapNeedsApproval(definition, {
-            checkInterceptors: (params) => deps.checkToolInterceptors(definition.name, params),
-            toolName: definition.name,
-            registry: toolApprovalPolicyRegistry,
-          }),
-          execute: async (params, _context, details) => {
-            const maxOutputLengthValue = deps.settings.get<number | undefined>('shell.maxOutputChars');
-            // Extract tool call ID from details if available
-            const toolCallId = details?.toolCall?.callId;
-            // Check if this execution should be intercepted
-            const rejectionMessage = await deps.checkToolInterceptors(definition.name, params, toolCallId);
-            if (rejectionMessage) {
-              deps.logger.debug('Tool execution intercepted', {
-                tool: definition.name,
-                params: JSON.stringify(params).substring(0, 100),
-              });
-              // Return a failure response that all tools should understand
-              const rejected = JSON.stringify({
-                output: [
-                  {
-                    success: false,
-                    error: rejectionMessage,
-                  },
-                ],
-              });
-              return trimToolOutput(rejected, undefined, maxOutputLengthValue ?? undefined);
-            }
-
-            const executeOriginal = () => Promise.resolve(definition.execute(params, _context, details));
-            const result = await executeOriginal();
-            const postExecute = definition.postExecute ?? deps.postExecutePauseCapability?.forTool(definition);
-            const finalResult = postExecute
-              ? await postExecute({
-                  params: normalizeObjectParams(params, definition.parameters) as typeof params,
-                  result,
-                  details,
-                  executeAgain: executeOriginal,
-                })
-              : result;
-            const trimmedResult = trimToolOutput(finalResult, undefined, maxOutputLengthValue ?? undefined);
-            return injectTurnLimitWarning(trimmedResult, _context?.context);
-          },
+  const tools: ToolDefinition[] = toolDefinitions
+    .filter(() => true)
+    .map((definition) => {
+      const wrappedDefinition: ToolDefinition = {
+        ...definition,
+        parameters: useStrictToolSchema
+          ? (z.toJSONSchema(toOpenAIStrictToolSchema(definition.parameters)) as any)
+          : definition.parameters,
+        needsApproval: wrapNeedsApproval(definition, {
+          checkInterceptors: (params) => deps.checkToolInterceptors(definition.name, params),
+          toolName: definition.name,
+          registry: toolApprovalPolicyRegistry,
         }),
-        definition.parameters,
-        { argumentParsing: definition.argumentParsing },
-      ),
-    );
-
-  // Add native applyPatchTool for gpt-5.1 on OpenAI provider
-  if (shouldUseNativePatchTool) {
-    const nativePatchTool = applyPatchTool({
-      editor: deps.editor,
-      // Require approval for any path that escapes the workspace. Mirrors the
-      // boundary check in `editor-impl.resolveWorkspacePath` so the SDK pauses
-      // for user input before the editor's `createFile` / `updateFile` /
-      // `deleteFile` is invoked. The user-approved path is later permitted
-      // by the editor's `allowOutsideWorkspace` plumbing if/when added.
-      needsApproval: async (_runContext, operation) => {
-        const cwd = deps.executionContext?.getCwd() || process.cwd();
-        const workspaceRoot = path.resolve(cwd);
-        const resolved = path.resolve(workspaceRoot, operation.path);
-        const rootPrefix = workspaceRoot.endsWith(path.sep) ? workspaceRoot : workspaceRoot + path.sep;
-        const isInside = resolved === workspaceRoot || resolved.startsWith(rootPrefix);
-        return !isInside;
-      },
-    }) as any; // Type assertion needed as invoke is not in public API
-
-    // Wrap the native tool's invoke function to apply interceptor check
-    const originalInvoke = nativePatchTool.invoke;
-    if (originalInvoke) {
-      nativePatchTool.invoke = async (runContext: any, input: any, details: any) => {
-        // Extract tool call ID from details if available
-        const toolCallId = details?.toolCall?.callId;
-        // Parse input to get params for logging
-        const normalizedInput = normalizeToolInput(input);
-        let params: any;
-        try {
-          params = typeof input === 'string' ? JSON.parse(input) : input;
-        } catch {
-          params = input;
-        }
-        const rejectionMessage = await deps.checkToolInterceptors('apply_patch', params, toolCallId);
-        if (rejectionMessage) {
-          deps.logger.debug('Native tool execution intercepted', {
-            tool: 'apply_patch',
-            toolCallId,
-            params: JSON.stringify(params).substring(0, 100),
-          });
-          const rejected = JSON.stringify({
-            output: [
-              {
-                success: false,
-                error: rejectionMessage,
-              },
-            ],
-          });
+        execute: async (params, _context: any, details: any) => {
           const maxOutputLengthValue = deps.settings.get<number | undefined>('shell.maxOutputChars');
-          return trimToolOutput(rejected, undefined, maxOutputLengthValue ?? undefined);
-        }
-        const maxOutputLengthValue = deps.settings.get<number | undefined>('shell.maxOutputChars');
-        const result = await originalInvoke.call(nativePatchTool, runContext, normalizedInput, details);
-        const trimmedResult = trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
-        return injectTurnLimitWarning(trimmedResult, runContext?.context);
+          // Extract tool call ID from details if available
+          const toolCallId = details?.toolCall?.callId;
+          // Check if this execution should be intercepted
+          const rejectionMessage = await deps.checkToolInterceptors(definition.name, params, toolCallId);
+          if (rejectionMessage) {
+            deps.logger.debug('Tool execution intercepted', {
+              tool: definition.name,
+              params: JSON.stringify(params).substring(0, 100),
+            });
+            // Return a failure response that all tools should understand
+            const rejected = JSON.stringify({
+              output: [
+                {
+                  success: false,
+                  error: rejectionMessage,
+                },
+              ],
+            });
+            return trimToolOutput(rejected, undefined, maxOutputLengthValue ?? undefined);
+          }
+
+          const executeOriginal = () => Promise.resolve(definition.execute(params, _context, details));
+          const result = await executeOriginal();
+          const postExecute = definition.postExecute ?? deps.postExecutePauseCapability?.forTool(definition);
+          const finalResult = postExecute
+            ? await postExecute({
+                params: normalizeObjectParams(params, definition.parameters) as typeof params,
+                result,
+                details,
+                executeAgain: executeOriginal,
+              })
+            : result;
+          const trimmedResult = trimToolOutput(finalResult, undefined, maxOutputLengthValue ?? undefined);
+          return injectTurnLimitWarning(trimmedResult, _context?.context);
+        },
+      };
+      (wrappedDefinition as any).type = 'function';
+      (wrappedDefinition as any).invoke = async (context: any, input: unknown, details?: unknown) => {
+        const parsed = typeof input === 'string' ? JSON.parse(input) : input;
+        return wrappedDefinition.execute(parsed, context, details);
+      };
+      return wrappedDefinition;
+    });
+
+  // The application-owned apply_patch definition remains in the tool list.
+  // Native SDK patch tools are intentionally no longer constructed here.
+  if (shouldUseNativePatchTool) {
+    const applyPatch = tools.find((tool) => tool.name === 'apply_patch');
+    if (applyPatch) {
+      applyPatch.needsApproval = async (params: any, context: any) => {
+        const operation = context ?? params;
+        const workspaceRoot = path.resolve(deps.executionContext?.getCwd() || process.cwd());
+        const resolved = path.resolve(workspaceRoot, String(operation?.path ?? ''));
+        const prefix = workspaceRoot.endsWith(path.sep) ? workspaceRoot : `${workspaceRoot}${path.sep}`;
+        return resolved !== workspaceRoot && !resolved.startsWith(prefix);
       };
     }
-
-    tools.push(nativePatchTool);
     deps.logger.debug('Using native applyPatchTool from SDK', {
       model: resolvedModel,
       provider: deps.providerId,
@@ -242,7 +185,7 @@ function buildModelSettings({
   resolvedTemperature,
   deps,
 }: {
-  reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+  reasoningEffort?: ReasoningEffortSetting | null;
   resolvedTemperature?: number;
   deps: AgentFactoryDeps;
 }): Record<string, any> {
@@ -295,7 +238,7 @@ export function buildAgent(
     temperature,
   }: {
     model?: string;
-    reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+    reasoningEffort?: ReasoningEffortSetting | null;
     temperature?: number;
   },
   deps: AgentFactoryDeps,
@@ -349,7 +292,7 @@ export function buildAgent(
   ) {
     const defaultReasoningLevel = getModelDefaultReasoningLevel('codex', resolvedModel);
     if (defaultReasoningLevel) {
-      effectiveReasoningEffort = defaultReasoningLevel as ModelSettingsReasoningEffort;
+      effectiveReasoningEffort = defaultReasoningLevel as ReasoningEffortSetting;
     }
   }
 
@@ -359,21 +302,21 @@ export function buildAgent(
     deps,
   });
 
-  const agent = new Agent({
+  const agent: ApplicationAgent = {
     name,
     model: resolvedModel,
     ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
     instructions,
     tools,
-  });
+  };
 
   // Only add defaultRunOptions if an explicit effort is set (not
   // 'default'). This ensures the API receives the param only when
   // intended.
   if (effectiveReasoningEffort && effectiveReasoningEffort !== 'default') {
-    (agent as any).defaultRunOptions = {
-      ...((agent as any).defaultRunOptions || {}),
-      // Pass through to underlying client for models that support it
+    agent.defaultRunOptions = { reasoning: { effort: effectiveReasoningEffort } };
+    agent.modelSettings = {
+      ...(agent.modelSettings ?? {}),
       reasoning: { effort: effectiveReasoningEffort },
     };
   }

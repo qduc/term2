@@ -1,4 +1,4 @@
-import { ModelBehaviorError } from '@openai/agents';
+import { isModelBehaviorError } from '../../contracts/model-errors.js';
 export { isTransientRetryableError } from './retry-error-classification.js';
 
 export const MAX_HALLUCINATION_RETRIES = 2;
@@ -9,11 +9,11 @@ export const getMaxTransientRetries = (providerConfig?: { streamMaxRetries?: num
 export const MAX_TRANSIENT_RETRIES = DEFAULT_TRANSIENT_RETRIES;
 
 export const isRecoverableModelError = (error: unknown): boolean => {
-  if (!(error instanceof ModelBehaviorError)) {
+  if (!isModelBehaviorError(error)) {
     return false;
   }
 
-  const message = error.message.toLowerCase();
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
   return (
     (message.includes('tool') && message.includes('not found')) ||
     message.includes('model did not produce a final response') ||

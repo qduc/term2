@@ -1,4 +1,4 @@
-import { run } from '@openai/agents';
+import { run } from '../agent-runtime/legacy-compat.js';
 import { getProvider } from '../../providers/index.js';
 import type { SubagentResult } from './types.js';
 

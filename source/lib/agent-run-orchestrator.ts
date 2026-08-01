@@ -1,4 +1,4 @@
-import { Agent, run, type AgentInputItem, Runner, type RunState, type StreamedRunResult } from '@openai/agents';
+import type { ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
@@ -17,6 +17,8 @@ import {
   runWithOpenAIRequestPrefixBindingScope,
 } from '../providers/openai-request-prefix-binding.js';
 import type { ContinuationProjectionMode } from './continuation-projection-mode.js';
+import type { LegacyRunner } from '../contracts/model.js';
+import type { ProviderInput } from '../contracts/provider-input.js';
 
 type ChainedRunOptions = {
   previousResponseId?: string | null;
@@ -308,7 +310,7 @@ export class AgentRunOrchestrator {
   }
 
   async startStream(
-    userInput: string | AgentInputItem | AgentInputItem[],
+    userInput: ProviderInput,
     {
       previousResponseId,
       sessionId,
@@ -317,7 +319,7 @@ export class AgentRunOrchestrator {
       providerHistorySnapshot,
       providerContinuityLineage,
     }: ChainedRunOptions = {},
-  ): Promise<StreamedRunResult<any, any>> {
+  ): Promise<any> {
     // Abort any previous operation
     this.abort();
 
@@ -428,7 +430,7 @@ export class AgentRunOrchestrator {
   }
 
   async continueRunStream(
-    state: RunState<any, any>,
+    state: any,
     {
       previousResponseId,
       sessionId,
@@ -437,7 +439,7 @@ export class AgentRunOrchestrator {
       providerHistorySnapshot,
       providerContinuityLineage,
     }: ChainedRunOptions = {},
-  ): Promise<StreamedRunResult<any, any>> {
+  ): Promise<any> {
     this.abort();
     this.#currentAbortController = new AbortController();
     const signal = this.#currentAbortController.signal;
@@ -502,8 +504,8 @@ export class AgentRunOrchestrator {
 
   #runAgentWithProvider(
     providerId: string,
-    runner: Runner | null,
-    agent: Agent<any, any>,
+    runner: LegacyRunner | null,
+    agent: ApplicationAgent,
     input: any,
     options: any,
   ): Promise<any> {
@@ -530,10 +532,10 @@ export class AgentRunOrchestrator {
     if (runner) {
       return runner.run(agent, input, effectiveOptions);
     }
-    return run(agent, input, effectiveOptions);
+    throw new Error('Legacy agent execution is unavailable; use the application run loop');
   }
 
-  async #runAgent(agent: Agent, input: any, options: any): Promise<any> {
+  async #runAgent(agent: ApplicationAgent, input: any, options: any): Promise<any> {
     const shouldResetServiceTierOverride = this.#agentConfig.serviceTierOverrideForNextRequest === 'standard';
     try {
       const providerId = this.#agentConfig.getProvider();

@@ -67,30 +67,6 @@ function stubCreateClient(): ISubagentClientFactory['createClient'] {
   })) as unknown as ISubagentClientFactory['createClient'];
 }
 
-// We keep provider internals mocked but run the real composition.
-// The real ExecutionSubagentRunner requires a real Agent from @openai/agents,
-// which in turn needs real tool definitions. Since those have side effects
-// (file system, web), we mock at the module level.
-vi.mock('@openai/agents', () => {
-  const actual = vi.importActual('@openai/agents');
-  return {
-    ...actual,
-    Agent: vi.fn().mockImplementation(function (this: any, config: any) {
-      this.name = config.name;
-      this.model = config.model;
-      this.instructions = config.instructions;
-      this.tools = config.tools ?? [];
-      this.modelSettings = config.modelSettings;
-    }),
-    Runner: {
-      run: vi.fn(),
-      runConversation: vi.fn(),
-    },
-    tool: vi.fn((def: any) => def),
-    RunContext: class {},
-  };
-});
-
 describe('createAgentRuntime composition', () => {
   it('returns runtime, executionRunner, mentorRunner, and resolveRoleDefinition', () => {
     const comp = createAgentRuntime({

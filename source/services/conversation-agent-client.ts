@@ -1,6 +1,6 @@
-import type { AgentInputItem, RunState } from '@openai/agents';
-import type { JsonSchemaDefinition } from '@openai/agents';
-import type { ModelSettingsReasoningEffort } from '@openai/agents-core/model';
+import type { ProviderInput } from '../contracts/provider-input.js';
+import type { JsonSchemaDefinition } from '../contracts/model-types.js';
+import type { ContinuationHandle } from '../contracts/continuation-handle.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { ConversationEvent } from './conversation/conversation-events.js';
 import type { AgentStream } from './agent-stream.js';
@@ -20,7 +20,7 @@ export type AgentClientRunOptions = {
 export type AgentClientChatOptions = {
   model?: string;
   provider?: string;
-  reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+  reasoningEffort?: ReasoningEffortSetting | null;
   instructions?: string;
 };
 
@@ -51,11 +51,8 @@ export interface SubagentEventSinkHost {
 }
 
 export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
-  startStream(
-    userInput: string | AgentInputItem | AgentInputItem[],
-    options?: AgentClientRunOptions,
-  ): Promise<AgentStream>;
-  continueRunStream(state: RunState<any, any>, options?: AgentClientRunOptions): Promise<AgentStream>;
+  startStream(userInput: ProviderInput, options?: AgentClientRunOptions): Promise<AgentStream>;
+  continueRunStream(state: ContinuationHandle, options?: AgentClientRunOptions): Promise<AgentStream>;
   abort(): void;
   setModel(model: string): void;
   addToolInterceptor(interceptor: ToolInterceptor): () => void;

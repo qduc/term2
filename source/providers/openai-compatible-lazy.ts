@@ -1,5 +1,9 @@
-import { Runner } from '@openai/agents';
-import type { ProviderDefinition, ProviderDeps, ProviderFetch } from './registry.js';
+import {
+  type ProviderDefinition,
+  type ProviderDeps,
+  type ProviderFetch,
+  createApplicationCompatibilityRunner,
+} from './registry.js';
 import type { CustomProviderConfig } from './openai-compatible.provider.js';
 
 export function createOpenAICompatibleProviderDefinition(config: CustomProviderConfig): ProviderDefinition {
@@ -10,12 +14,31 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     id: providerId,
     label,
     isRuntimeDefined: true,
-    createRunner: ({ settingsService, loggingService, sessionContextService }) => {
-      let cachedProvider: { getModel: (modelName?: string) => any } | null = null;
-
-      return new Runner({
-        tracingDisabled: true,
-        modelProvider: {
+    createStreamedModel: async (model, { settingsService, loggingService, sessionContextService }) => {
+      const { createCustomProviderModelProvider } = await import('./openai-compatible.provider.js');
+      const list = settingsService.get('providers');
+      const entry = Array.isArray(list)
+        ? list.find((p: any) => p && (p.id === providerId || p.name === providerId))
+        : null;
+      if (!entry) throw new Error(`Custom provider '${providerId}' is not configured.`);
+      const resolvedConfig: CustomProviderConfig = {
+        name: entry.id ? String(entry.id) : String(entry.name),
+        label: entry.name ? String(entry.name) : providerId,
+        type: entry.type ? String(entry.type) : 'openai-compatible',
+        baseUrl: entry.baseUrl ? String(entry.baseUrl) : undefined,
+        apiKey: entry.apiKey ? String(entry.apiKey) : undefined,
+      };
+      const provider = createCustomProviderModelProvider(resolvedConfig, {
+        defaultModel: model || settingsService.get('agent.model') || '',
+        loggingService,
+        sessionContextService,
+        settingsService,
+      });
+      if (!('getStreamedModel' in provider) || typeof provider.getStreamedModel !== 'function') {
+        throw new Error(`Custom provider '${providerId}' has no application-owned streamed model`);
+      }
+      return provider.getStreamedModel(model);
+      /* legacy factory removed
           getModel: async (modelName?: string) => {
             if (!cachedProvider) {
               const { createCustomProviderModelProvider } = await import('./openai-compatible.provider.js');
@@ -45,10 +68,34 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
               });
             }
             return cachedProvider.getModel(modelName);
-          },
-        },
-      });
+          },*/
     },
+    createRunner: (deps) =>
+      createApplicationCompatibilityRunner((model) =>
+        (async () => {
+          const list = deps.settingsService.get('providers');
+          const entry = Array.isArray(list)
+            ? list.find((p: any) => p && (p.id === providerId || p.name === providerId))
+            : null;
+          if (!entry) throw new Error(`Custom provider '${providerId}' is not configured.`);
+          const { createCustomProviderModelProvider } = await import('./openai-compatible.provider.js');
+          const provider = createCustomProviderModelProvider(
+            {
+              name: entry.id ? String(entry.id) : String(entry.name),
+              type: entry.type ? String(entry.type) : 'openai-compatible',
+              baseUrl: entry.baseUrl ? String(entry.baseUrl) : undefined,
+              apiKey: entry.apiKey ? String(entry.apiKey) : undefined,
+            },
+            {
+              defaultModel: model,
+              loggingService: deps.loggingService,
+              sessionContextService: deps.sessionContextService,
+              settingsService: deps.settingsService,
+            },
+          );
+          return 'getModel' in provider ? (provider as any).getModel(model) : provider;
+        })(),
+      ),
     fetchModels: async (deps: ProviderDeps, fetchImpl: ProviderFetch = fetch as any) => {
       const { createOpenAICompatibleProviderDefinition: getRealDefinition } = await import(
         './openai-compatible.provider.js'

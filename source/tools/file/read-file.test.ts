@@ -3,7 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { createReadFileToolDefinition } from './read-file.js';
-import { sessionReadAccess } from '../../services/approval/session-read-access.js';
+import { SessionAccessState } from '../../services/session/session-access-state.js';
 
 it('orchestrator read_file description permits direct inspection', () => {
   const tool = createReadFileToolDefinition({ orchestratorMode: true });
@@ -129,17 +129,19 @@ it.sequential('needsApproval: does not prompt for descendants of a folder allowe
   await withTempDir(async (workspaceDir) => {
     const sessionId = 'read-folder-session';
     const allowedFolder = path.join(workspaceDir, '..', 'docs');
-    sessionReadAccess.allowFolder(sessionId, allowedFolder);
+    const sessionAccess = new SessionAccessState({ get: () => undefined, set: () => {} } as any);
+    sessionAccess.allowReadFolder(allowedFolder);
+    const tool = createReadFileToolDefinition({ sessionAccess });
 
     try {
-      const result = await readFileToolDefinition.needsApproval(
+      const result = await tool.needsApproval(
         { path: path.join(allowedFolder, 'nested', 'guide.md') },
         { context: { sessionId } },
       );
 
       expect(result).toBe(false);
     } finally {
-      sessionReadAccess.clear(sessionId);
+      sessionAccess.dispose();
     }
   });
 });

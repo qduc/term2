@@ -1,6 +1,7 @@
-import type { Agent, Runner, AgentInputItem } from '@openai/agents';
+import type { LegacyRunner } from '../../contracts/model.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 
 /**
  * General-purpose subagent session. Replaces the private MentorSession shape.
@@ -9,7 +10,7 @@ import type { SavedToolExecution } from '../tool-execution-ledger.js';
  * For one-shot runs (e.g. run_subagent): create a new session per call, discard after.
  */
 export type SubagentSessionState = {
-  history: AgentInputItem[];
+  history: ProviderInputItem[];
   previousResponseId: string | null;
   toolLedger: SavedToolExecution[];
 };
@@ -18,8 +19,8 @@ export class SubagentSession {
   readonly id: string;
   readonly role: string;
   #provider: string | null = null;
-  #runner: Runner | null = null;
-  #agent: Agent | null = null;
+  #runner: LegacyRunner | null = null;
+  #agent: unknown = null;
   #store: ConversationStore | null = null;
   #previousResponseId: string | null = null;
   #toolLedger: SavedToolExecution[] = [];
@@ -33,11 +34,11 @@ export class SubagentSession {
     return this.#provider;
   }
 
-  get runner(): Runner | null {
+  get runner(): LegacyRunner | null {
     return this.#runner;
   }
 
-  get agent(): Agent | null {
+  get agent(): unknown {
     return this.#agent;
   }
 
@@ -95,14 +96,14 @@ export class SubagentSession {
     }
   }
 
-  ensureRunner(provider: string, createRunner: (providerId: string) => Runner | null): Runner | null {
+  ensureRunner(provider: string, createRunner: (providerId: string) => LegacyRunner | null): LegacyRunner | null {
     if (!this.#runner && provider !== 'openai') {
       this.#runner = createRunner(provider);
     }
     return this.#runner;
   }
 
-  ensureAgent(createAgent: () => Agent): Agent {
+  ensureAgent(createAgent: () => unknown): unknown {
     if (!this.#agent) {
       this.#agent = createAgent();
       this.#store = new ConversationStore();

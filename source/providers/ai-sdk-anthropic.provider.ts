@@ -1,10 +1,11 @@
 import { createAnthropic, type AnthropicProviderSettings } from '@ai-sdk/anthropic';
 import { wrapLanguageModel, type LanguageModelMiddleware } from 'ai';
 import type { LanguageModelV3 } from '@ai-sdk/provider';
-import { type ModelProvider, type Model } from '@openai/agents-core';
+import type { LegacyModel, LegacyModelProvider } from '../contracts/model.js';
 import { adaptStreamedModelTurnForAgents } from './agents-model-bridge.js';
 import { forwardExplicitProviderSettings, withForwardedProviderSettings } from './ai-sdk-provider-settings.js';
 import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
+import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 
 type AiSdkAnthropicModelLike = LanguageModelV3;
 
@@ -144,7 +145,7 @@ export type AiSdkAnthropicConfig = Pick<
 
 export type AiSdkAnthropicProviderFactory = (options: AiSdkAnthropicConfig) => (modelId: string) => any;
 
-export class AiSdkAnthropicProvider implements ModelProvider {
+export class AiSdkAnthropicProvider implements LegacyModelProvider {
   #defaultModel: string;
   #resolveConfig: () => AiSdkAnthropicConfig;
   #createProvider: AiSdkAnthropicProviderFactory;
@@ -162,7 +163,12 @@ export class AiSdkAnthropicProvider implements ModelProvider {
     this.#shouldApplyPromptCaching = deps.shouldApplyPromptCaching ?? defaultAnthropicPromptCachingPredicate;
   }
 
-  getModel(modelName?: string): Promise<Model> | Model {
+  getModel(modelName?: string): LegacyModel {
+    return adaptStreamedModelTurnForAgents(this.getStreamedModel(modelName));
+  }
+
+  /** Application-owned model path; the Agents bridge remains compatibility-only. */
+  getStreamedModel(modelName?: string): StreamedModelTurn {
     const config = this.#resolveConfig();
     const provider = this.#createProvider(config);
     const resolvedModelName = modelName || this.#defaultModel;
@@ -172,10 +178,8 @@ export class AiSdkAnthropicProvider implements ModelProvider {
       resolvedModelName,
     );
 
-    return adaptStreamedModelTurnForAgents(
-      createAiSdkStreamedModel(
-        withForwardedProviderSettings(model, (options) => forwardExplicitProviderSettings(options, 'anthropic')),
-      ),
+    return createAiSdkStreamedModel(
+      withForwardedProviderSettings(model, (options) => forwardExplicitProviderSettings(options, 'anthropic')),
     );
   }
 }

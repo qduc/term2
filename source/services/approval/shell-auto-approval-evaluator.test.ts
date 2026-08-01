@@ -21,16 +21,29 @@ const createMockSettings = (
   mode: 'off' | 'advisory' | 'auto' = 'advisory',
   provider = 'test-auto-provider',
   model = 'test-auto-model',
-) => ({
-  get: (key: string) => {
-    const map: Record<string, unknown> = {
-      'shell.autoApproveMode': mode,
-      'agent.autoApproveModel': model,
-      'agent.autoApproveProvider': provider,
-    };
-    return map[key];
-  },
-});
+) => {
+  const map: Record<string, unknown> = {
+    'shell.autoApproveMode': mode,
+    'agent.autoApproveModel': model,
+    'agent.autoApproveProvider': provider,
+  };
+  return {
+    get: (key: string) => map[key],
+    getDynamic: (key: string) => map[key],
+    set: (key: string, value: unknown) => {
+      map[key] = value;
+    },
+    setDynamic: (key: string, value: unknown) => {
+      map[key] = value;
+    },
+    setPersistent: (key: string, value: unknown) => {
+      map[key] = value;
+    },
+    setPersistentDynamic: (key: string, value: unknown) => {
+      map[key] = value;
+    },
+  };
+};
 
 it('returns empty advisories and skips chat when auto-approval mode is off', async () => {
   let chatCalls = 0;
@@ -156,6 +169,14 @@ it('uses the chore tier model and provider ahead of legacy auto-approval setting
         'agent.autoApproveModel': 'legacy-auto-model',
         'agent.autoApproveProvider': 'legacy-auto-provider',
       }[key]),
+    getDynamic: (key: string) =>
+      ({
+        'shell.autoApproveMode': 'advisory',
+        'agent.choreModel': 'chore-model',
+        'agent.choreProvider': 'chore-provider',
+        'agent.autoApproveModel': 'legacy-auto-model',
+        'agent.autoApproveProvider': 'legacy-auto-provider',
+      })[key],
   };
 
   await evaluateShellAutoApprovalAdvisories({

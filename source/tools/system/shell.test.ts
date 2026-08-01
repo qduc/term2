@@ -827,7 +827,19 @@ it.sequential('shell execute grants Docker host control only to the approved san
     scope: 'once',
     sessionId: 'session-a',
   });
-  const output = await tool.execute({ command: 'docker ps' }, { context: { sessionId: 'session-a' } });
+  // The sandbox policy intentionally allows the caller's tmux socket (from the
+  // TMUX env var) alongside the docker socket (see sandbox-policy.ts). Keep this
+  // test hermetic regardless of the host terminal so the assertion sees exactly
+  // the approved docker socket.
+  const originalTmux = process.env.TMUX;
+  delete process.env.TMUX;
+  let output: Awaited<ReturnType<typeof tool.execute>>;
+  try {
+    output = await tool.execute({ command: 'docker ps' }, { context: { sessionId: 'session-a' } });
+  } finally {
+    if (originalTmux === undefined) delete process.env.TMUX;
+    else process.env.TMUX = originalTmux;
+  }
 
   expect(receivedSocketPaths).toEqual([socketPath]);
   expect(receivedEnv?.DOCKER_HOST).toBe(`unix://${socketPath}`);

@@ -13,12 +13,18 @@ const logger = new LoggingService({ disableLogging: true });
 
 const makeMockSettings = (mode: 'off' | 'advisory' | 'auto') => ({
   get: <T>(key: string): T | undefined => (key === 'shell.autoApproveMode' ? (mode as unknown as T) : undefined),
+  getDynamic: (key: string) => (key === 'shell.autoApproveMode' ? mode : undefined),
 });
 
 const makeSandboxAwareSettings = (mode: 'off' | 'advisory' | 'auto', sandboxEnabled: boolean) => ({
   get: <T>(key: string): T | undefined => {
     if (key === 'shell.autoApproveMode') return mode as unknown as T;
     if (key === 'sandbox.enabled') return sandboxEnabled as unknown as T;
+    return undefined;
+  },
+  getDynamic: (key: string) => {
+    if (key === 'shell.autoApproveMode') return mode;
+    if (key === 'sandbox.enabled') return sandboxEnabled;
     return undefined;
   },
 });

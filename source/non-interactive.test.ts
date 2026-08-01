@@ -423,6 +423,9 @@ it('with autoApprove=true: rejects YELLOW command if no auto-approve model confi
       if (key === 'agent.autoApproveModel') return undefined;
       return undefined;
     },
+    getDynamic() {
+      return undefined;
+    },
   };
 
   const exitCode = await runWithSession(session, {
@@ -470,6 +473,10 @@ it('with autoApprove=true: uses LLM to evaluate YELLOW commands', async () => {
       if (key === 'agent.autoApproveModel') return 'gpt-4o-mini';
       return undefined;
     },
+    getDynamic(key: string) {
+      if (key === 'agent.autoApproveModel') return 'gpt-4o-mini';
+      return undefined;
+    },
   };
 
   let chatCalled = false;
@@ -512,6 +519,9 @@ it('runNonInteractive() disposes its factory-owned client after the runtime', as
   };
   const settingsService: any = {
     get() {
+      return undefined;
+    },
+    getDynamic() {
       return undefined;
     },
   };

@@ -78,6 +78,11 @@ const makeDeps = (
       if (key === 'sandbox.enabled') return sandboxEnabled as unknown as T;
       return undefined;
     },
+    getDynamic: (key: string) => {
+      if (key === 'shell.autoApproveMode') return mode;
+      if (key === 'sandbox.enabled') return sandboxEnabled;
+      return undefined;
+    },
   };
   const sessionContextService = {
     runWithContext: <T>(_context: any, fn: () => T) => fn(),
@@ -453,6 +458,7 @@ it('auto_approve outcome when LLM advises approval and mode=auto', async () => {
   };
   const settingsService: any = {
     get: <T>(key: string): T | undefined => (key === 'shell.autoApproveMode' ? ('auto' as unknown as T) : undefined),
+    getDynamic: (key: string) => (key === 'shell.autoApproveMode' ? 'auto' : undefined),
   };
   const shellAutoApproval = new ShellAutoApprovalResolver({
     conversationStore,

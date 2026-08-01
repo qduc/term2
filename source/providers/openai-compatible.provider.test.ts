@@ -903,6 +903,10 @@ it('lazy opencode provider reuses the same model provider instance across getMod
         if (key === 'agent.model') return 'provider-model';
         return undefined;
       },
+      getDynamic: (key: string) => {
+        if (key === 'providers') return [{ name: 'opencode-lazy-test', type: 'opencode' }];
+        return undefined;
+      },
     } as any,
     loggingService: {
       debug: () => {},

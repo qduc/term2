@@ -49,8 +49,11 @@ function createMockSettingsService(initialProviders: any[] = [], initialActive =
 
   return {
     get: (key: string) => settings.get(key),
+    getDynamic: (key: string) => settings.get(key),
     set: (key: string, value: any) => settings.set(key, value),
+    setDynamic: (key: string, value: any) => settings.set(key, value),
     setPersistent: (key: string, value: any) => settings.set(key, value),
+    setPersistentDynamic: (key: string, value: any) => settings.set(key, value),
   } as any;
 }
 

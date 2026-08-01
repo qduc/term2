@@ -64,20 +64,59 @@ export function createMockLogger(): ILoggingService {
 
 export function createMockSettings(values: Record<string, unknown> = {}): ISettingsService {
   const store: Record<string, unknown> = { ...values };
+
+  const getNested = (key: string): unknown => {
+    const keys = key.split('.');
+    let value: unknown = store;
+    for (const k of keys) {
+      if (value && typeof value === 'object') {
+        value = (value as Record<string, unknown>)[k];
+      } else {
+        return undefined;
+      }
+    }
+    return value;
+  };
+
+  // Mirrors SettingsService.getDynamic (dotted-key traversal) while keeping the
+  // flat-store fallback so callers that configure flat dotted keys keep working.
+  const get = (key: string): unknown => {
+    const nested = getNested(key);
+    return nested === undefined ? store[key] : nested;
+  };
+
+  // Mirrors SettingsService set-family behavior: dotted keys create nested
+  // objects as needed instead of writing a flat key.
+  const setNested = (key: string, value: unknown): void => {
+    const keys = key.split('.');
+    let obj: Record<string, unknown> = store;
+    for (let i = 0; i < keys.length - 1; i++) {
+      const next = obj[keys[i]];
+      if (next && typeof next === 'object') {
+        obj = next as Record<string, unknown>;
+      } else {
+        const created: Record<string, unknown> = {};
+        obj[keys[i]] = created;
+        obj = created;
+      }
+    }
+    obj[keys[keys.length - 1]] = value;
+  };
+
   return {
-    get: (key: any) => store[key] as any,
-    getDynamic: (key: string) => store[key],
+    get: (key: any) => get(key as string) as any,
+    getDynamic: (key: string) => get(key),
     set: (key: any, value: unknown) => {
-      store[key] = value;
+      setNested(key as string, value);
     },
     setDynamic: (key: string, value: unknown) => {
-      store[key] = value;
+      setNested(key, value);
     },
     setPersistent: (key: any, value: unknown) => {
-      store[key] = value;
+      setNested(key as string, value);
     },
     setPersistentDynamic: (key: string, value: unknown) => {
-      store[key] = value;
+      setNested(key, value);
     },
   };
 }

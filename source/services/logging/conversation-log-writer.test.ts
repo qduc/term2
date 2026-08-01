@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { decodeLogEnvelope } from '../conversation/conversation-decoder.js';
+import { replayEvents } from '../conversation/conversation-replay.js';
 import { createConversationLogWriter } from './conversation-log-writer.js';
 
 const dirs: string[] = [];
@@ -16,6 +18,101 @@ function tempDir(): string {
 afterEach(() => {
   vi.clearAllMocks();
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+});
+
+describe('ConversationLogWriter sequence continuity', () => {
+  it('continues sequence numbers when reopening a log with legacy and malformed trailing records', async () => {
+    const dir = tempDir();
+    const sessionId = 'resumed-session';
+    const filePath = path.join(dir, `${sessionId}.jsonl`);
+    const firstWriter = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+
+    firstWriter.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' });
+    firstWriter.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'before resume' } });
+    await firstWriter.close();
+    fs.appendFileSync(
+      filePath,
+      `${JSON.stringify({ event: { type: 'settings_changed', key: 'legacy', value: true } })}\n{"v":3,"seq":999`,
+    );
+
+    const resumedWriter = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+    resumedWriter.init({ id: sessionId, createdAt: '2026-06-01T00:01:00.000Z' });
+    resumedWriter.append({ type: 'settings_changed', key: 'agent.model', value: 'gpt-5' });
+    await resumedWriter.close();
+
+    const envelopes = fs
+      .readFileSync(filePath, 'utf8')
+      .split('\n')
+      .map((line) => {
+        try {
+          return decodeLogEnvelope(JSON.parse(line));
+        } catch {
+          return null;
+        }
+      })
+      .filter((envelope) => envelope !== null);
+    const sequenced = envelopes.map((envelope) => envelope.seq).filter((seq) => seq > 0);
+
+    expect(sequenced).toEqual([1, 2, 3, 4]);
+    expect(sequenced.every((seq, index) => index === 0 || seq > sequenced[index - 1]!)).toBe(true);
+    expect(replayEvents(envelopes).messages[0]).toMatchObject({ id: 'u1', text: 'before resume' });
+  });
+
+  it('bounds recovery reads for a large log whose final sequenced envelope is near the tail', async () => {
+    const dir = tempDir();
+    const sessionId = 'large-session';
+    const filePath = path.join(dir, `${sessionId}.jsonl`);
+    const padding = `${JSON.stringify({ event: { type: 'settings_changed', key: 'legacy', value: 'x'.repeat(1024) } })}\n`;
+    const finalEnvelope = JSON.stringify({
+      v: 3,
+      seq: 7000,
+      ts: '2026-06-01T00:00:00.000Z',
+      event: { type: 'settings_changed', key: 'agent.model', value: 'gpt-4o' },
+    });
+    fs.writeFileSync(filePath, padding.repeat(3000) + finalEnvelope + '\n');
+    let recoveryBytesRead = 0;
+    let largestRead = 0;
+    const fileSystem = {
+      ...fs,
+      readSync: ((fd: number, buffer: Buffer, offset: number, length: number, position: number) => {
+        recoveryBytesRead += length;
+        largestRead = Math.max(largestRead, length);
+        return fs.readSync(fd, buffer, offset, length, position);
+      }) as unknown as typeof fs.readSync,
+    };
+
+    const writer = createConversationLogWriter({ sessionId, dir, logger, fileSystem, saveLast: vi.fn() });
+    writer.init({ id: sessionId, createdAt: '2026-06-01T00:01:00.000Z' });
+    await writer.close();
+
+    expect(largestRead).toBeGreaterThan(0);
+    expect(largestRead).toBeLessThanOrEqual(64 * 1024);
+    expect(recoveryBytesRead).toBeLessThan(128 * 1024);
+    const lastEnvelope = decodeLogEnvelope(JSON.parse(fs.readFileSync(filePath, 'utf8').trim().split('\n').at(-1)!));
+    expect(lastEnvelope?.seq).toBe(7001);
+  });
+
+  it('releases the lock and recovery descriptor when reading the existing log fails', async () => {
+    const dir = tempDir();
+    const sessionId = 'read-failure-session';
+    const filePath = path.join(dir, `${sessionId}.jsonl`);
+    fs.writeFileSync(filePath, '{"existing":true}\n');
+    const readError = new Error('recovery read failed');
+    const fileSystem = {
+      ...fs,
+      readSync: (() => {
+        throw readError;
+      }) as typeof fs.readSync,
+    };
+    const failedWriter = createConversationLogWriter({ sessionId, dir, logger, fileSystem, saveLast: vi.fn() });
+
+    expect(() => failedWriter.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' })).toThrow(readError);
+    expect(fs.existsSync(path.join(dir, `${sessionId}.lock`))).toBe(false);
+
+    const secondWriter = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+    expect(() => secondWriter.init({ id: sessionId, createdAt: '2026-06-01T00:01:00.000Z' })).not.toThrow();
+    await secondWriter.close();
+  });
 });
 
 describe('ConversationLogWriter durability failures', () => {

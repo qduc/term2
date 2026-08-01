@@ -3,7 +3,10 @@ import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import { createUsageAccumulator } from '../../utils/ai/token-usage.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
 import { repairConversationHistory } from './conversation-history-repair.js';
-import type { AssistantTurnState, LogEnvelope, LogEvent, StateSnapshot } from '../logging/conversation-log-events.js';
+import type { AssistantTurnState, LogEvent, PersistedLogEvent, StateSnapshot } from '../logging/conversation-log-events.js';
+import { isTruncatedLogEvent } from '../logging/conversation-log-events.js';
+import type { PersistedLogEnvelope } from './conversation-decoder.js';
+import type { BotMessage, CommandMessage, SubagentActivityMessage } from '../../types/message.js';
 import type {
   SavedAppMode,
   SavedMessage,
@@ -350,7 +353,7 @@ function replayAssistantTurn(
 ): SavedMessage[] {
   const messages: SavedMessage[] = [];
   let index = 0;
-  let lastAssistantMessage: SavedMessage | null = null;
+  let lastAssistantMessage: BotMessage | null = null;
   for (const item of turn.items) {
     if (item.type === 'reasoning') {
       messages.push({
@@ -360,12 +363,12 @@ function replayAssistantTurn(
         text: item.text,
       });
     } else if (item.type === 'assistant_text') {
-      const assistantMessage = {
+      const assistantMessage: BotMessage = {
         id: `bot-${turnId}-${index++}`,
         sender: 'bot',
         status: 'finalized',
         text: item.text,
-      } as SavedMessage;
+      };
       messages.push(assistantMessage);
       lastAssistantMessage = assistantMessage;
     } else if (item.type === 'tool_call') {
@@ -386,12 +389,12 @@ function replayAssistantTurn(
 
       const command =
         typeof parsedArgs === 'object' && parsedArgs !== null
-          ? (parsedArgs as Record<string, unknown>).command ??
-            (parsedArgs as Record<string, unknown>).question ??
-            (parsedArgs as Record<string, unknown>).pattern ??
-            (parsedArgs as Record<string, unknown>).query ??
-            (parsedArgs as Record<string, unknown>).path ??
-            (parsedArgs as Record<string, unknown>).task ??
+          ? (parsedArgs as Record<string, string>).command ??
+            (parsedArgs as Record<string, string>).question ??
+            (parsedArgs as Record<string, string>).pattern ??
+            (parsedArgs as Record<string, string>).query ??
+            (parsedArgs as Record<string, string>).path ??
+            (parsedArgs as Record<string, string>).task ??
             ''
           : typeof parsedArgs === 'string'
           ? parsedArgs
@@ -406,7 +409,7 @@ function replayAssistantTurn(
         toolName: item.toolName,
         toolArgs: parsedArgs,
         callId: item.callId,
-      } as SavedMessage);
+      });
     } else if (item.type === 'tool_result') {
       // Persisted outputs can be JSON strings (e.g. apply_patch returns
       // JSON.stringify({ output: [...] }), create_file returns
@@ -430,7 +433,7 @@ function replayAssistantTurn(
           ? parsedOutput
           : JSON.stringify(parsedOutput);
 
-      const existing = messages.find((m) => m.sender === 'command' && m.callId === item.callId);
+      const existing = messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === item.callId);
       if (existing) {
         existing.status = item.status === 'failed' || item.status === 'aborted' ? item.status : 'completed';
         existing.output = outputText;
@@ -449,7 +452,7 @@ function replayAssistantTurn(
           success: item.status === 'completed',
           toolName: item.toolName,
           callId: item.callId,
-        } as SavedMessage);
+        });
       }
     }
   }
@@ -466,11 +469,10 @@ function replayAssistantTurn(
   return messages;
 }
 
-function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
-  const rawEvent = event as any;
-  if (rawEvent.truncated) {
+function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): void {
+  if (isTruncatedLogEvent(event)) {
     state.warnings.push(
-      `Log event of type "${event.type}" was truncated (original size: ${rawEvent.originalSize} bytes) due to size limits.`,
+      `Log event of type "${event.type}" was truncated (original size: ${event.originalSize} bytes) due to size limits.`,
     );
     return;
   }
@@ -584,7 +586,7 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
     case 'command_message': {
       // Record for dedup: a `command_message` may be a poorer rendering of a
       // `tool_result` event the journal will later also reconstruct.
-      const msg = event.message as unknown as SavedMessage;
+      const msg = event.message;
       state.pendingCommandMessages.push(cloneMessage(msg));
       state.messages.push(cloneMessage(msg));
       return;
@@ -619,16 +621,16 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
         task: event.task,
         async: event.async,
         tools: [],
-      } as unknown as SavedMessage);
+      } as SubagentActivityMessage);
       return;
     }
     case 'subagent_tool_started': {
       const existing = state.messages.find(
-        (message) => message.sender === 'subagent' && (message as any).agentId === event.agentId,
+        (message): message is SubagentActivityMessage => message.sender === 'subagent' && message.agentId === event.agentId,
       );
       if (existing) {
         existing.status = 'running';
-        (existing as any).role = (existing as any).role ?? event.role;
+        existing.role = existing.role || event.role;
       } else {
         state.messages.push({
           id: `subagent-${event.agentId}`,
@@ -638,14 +640,14 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
           role: event.role,
           task: '',
           tools: [],
-        } as unknown as SavedMessage);
+        });
       }
       return;
     }
     case 'subagent_completed': {
       const agentId = event.result.agentId;
       state.messages = state.messages.map((msg) => {
-        if (msg.sender === 'subagent' && (msg as any).agentId === agentId) {
+        if (msg.sender === 'subagent' && msg.agentId === agentId) {
           return {
             ...msg,
             status: event.result.status,
@@ -715,7 +717,7 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       const target = Math.max(event.removedUserTurns, 1);
       for (let i = state.messages.length - 1; i >= 0 && removed < target; i--) {
         const msg = state.messages[i];
-        if (msg.sender === 'user' && !(msg as any).consumedForAbort) {
+        if (msg.sender === 'user' && !msg.consumedForAbort) {
           state.messages = state.messages.slice(0, i);
           removed++;
         }
@@ -805,8 +807,8 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
         if (index < dropBefore) {
           return true;
         }
-        if (message.sender === 'command' && typeof (message as any).callId === 'string') {
-          return !richerCallIds.has((message as any).callId);
+        if (message.sender === 'command' && typeof message.callId === 'string') {
+          return !richerCallIds.has(message.callId);
         }
         return true;
       });
@@ -980,12 +982,12 @@ function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMe
           : item.arguments;
       const command =
         typeof parsedArgs === 'object' && parsedArgs !== null
-          ? (parsedArgs as Record<string, unknown>).command ??
-            (parsedArgs as Record<string, unknown>).question ??
-            (parsedArgs as Record<string, unknown>).pattern ??
-            (parsedArgs as Record<string, unknown>).query ??
-            (parsedArgs as Record<string, unknown>).path ??
-            (parsedArgs as Record<string, unknown>).task ??
+          ? (parsedArgs as Record<string, string>).command ??
+            (parsedArgs as Record<string, string>).question ??
+            (parsedArgs as Record<string, string>).pattern ??
+            (parsedArgs as Record<string, string>).query ??
+            (parsedArgs as Record<string, string>).path ??
+            (parsedArgs as Record<string, string>).task ??
             ''
           : typeof parsedArgs === 'string'
           ? parsedArgs
@@ -999,11 +1001,11 @@ function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMe
         toolName: item.toolName,
         toolArgs: parsedArgs,
         callId: item.callId,
-      } as SavedMessage);
+      });
       continue;
     }
     if (item.type === 'tool_result') {
-      const existing = messages.find((m) => m.sender === 'command' && m.callId === item.callId);
+      const existing = messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === item.callId);
       if (existing) {
         existing.status = item.status === 'failed' || item.status === 'aborted' ? item.status : 'completed';
         existing.output = typeof item.output === 'string' ? item.output : JSON.stringify(item.output);
@@ -1022,7 +1024,7 @@ function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMe
           success: item.status === 'completed',
           toolName: item.toolName,
           callId: item.callId,
-        } as SavedMessage);
+        });
       }
     }
   }
@@ -1047,7 +1049,7 @@ function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMe
   return messages;
 }
 
-export function replayEvents(envelopes: LogEnvelope[]): RestoredState {
+export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
   const usage = createUsageAccumulator();
   const subagentUsage = createUsageAccumulator();
   const state: ReplayState = {
@@ -1066,6 +1068,12 @@ export function replayEvents(envelopes: LogEnvelope[]): RestoredState {
 
   for (const envelope of envelopes) {
     if (!envelope || envelope.event == null) continue;
+    if (isTruncatedLogEvent(envelope.event)) {
+      // Truncated events carry no usage to accumulate; applyEvent records the
+      // truncation warning and returns.
+      applyEvent(state, envelope.event, envelope.ts);
+      continue;
+    }
     if (envelope.event.type === 'assistant_turn' && envelope.event.usage) {
       usage.add(envelope.event.usage);
     }

@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { LOG_ENVELOPE_VERSION, type LogEnvelope, type LogEvent } from '../logging/conversation-log-events.js';
 import { replayEvents } from './conversation-replay.js';
+import { decodeLogEnvelope, decodeSavedMessage } from './conversation-decoder.js';
+import type { BotMessage, CommandMessage, ReasoningMessage } from '../../types/message.js';
 
 let seq = 0;
 function env(event: LogEvent): LogEnvelope {
@@ -139,9 +141,9 @@ it('replayEvents: v3 assistant_turn restores state without cumulative snapshot',
   });
   expect(restored.messages.length).toBe(3);
   expect(restored.messages[1].sender).toBe('command');
-  expect(restored.messages[1].status).toBe('completed');
-  expect(restored.messages[2].text).toBe('The current directory is /repo.');
-  expect(restored.messages[2].usage).toBe(undefined);
+  expect((restored.messages[1] as CommandMessage).status).toBe('completed');
+  expect((restored.messages[2] as BotMessage).text).toBe('The current directory is /repo.');
+  expect((restored.messages[2] as BotMessage).usage).toBe(undefined);
 });
 
 it('replayEvents: golden legacy v2 conversation restores from snapshot format', () => {
@@ -469,16 +471,16 @@ it('replayEvents: assistant_turn maps items to SavedMessage[] in correct order w
   expect(restored.messages.length).toBe(4); // 1 user + 3 assistant_turn items (tool_result updates tool_call in-place)
   expect(restored.messages[0].sender).toBe('user');
   expect(restored.messages[1].sender).toBe('reasoning');
-  expect(restored.messages[1].text).toBe('thinking');
-  expect(restored.messages[1].status).toBe('finalized');
+  expect((restored.messages[1] as ReasoningMessage).text).toBe('thinking');
+  expect((restored.messages[1] as ReasoningMessage).status).toBe('finalized');
   expect(restored.messages[2].sender).toBe('command');
-  expect(restored.messages[2].callId).toBe('call-1');
-  expect(restored.messages[2].status).toBe('completed');
-  expect(restored.messages[2].success).toBe(true);
-  expect(restored.messages[2].output).toBe('files');
+  expect((restored.messages[2] as CommandMessage).callId).toBe('call-1');
+  expect((restored.messages[2] as CommandMessage).status).toBe('completed');
+  expect((restored.messages[2] as CommandMessage).success).toBe(true);
+  expect((restored.messages[2] as CommandMessage).output).toBe('files');
   expect(restored.messages[3].sender).toBe('bot');
-  expect(restored.messages[3].text).toBe('here is files');
-  expect(restored.messages[3].usage).toBe(undefined);
+  expect((restored.messages[3] as BotMessage).text).toBe('here is files');
+  expect((restored.messages[3] as BotMessage).usage).toBe(undefined);
   expect(restored.usage).toEqual({ prompt_tokens: 5, completion_tokens: 10, total_tokens: 15 });
 });
 
@@ -507,7 +509,7 @@ it('replayEvents: assistant_turn renders apply_patch success output from parsed 
   ];
 
   const restored = replayEvents(envelopes);
-  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  const command = restored.messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1');
   expect(command).toBeTruthy();
   expect(command?.output).toBe('Updated src/foo.ts');
 });
@@ -537,7 +539,7 @@ it('replayEvents: assistant_turn renders apply_patch failure output from parsed 
   ];
 
   const restored = replayEvents(envelopes);
-  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  const command = restored.messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1');
   expect(command).toBeTruthy();
   expect(command?.output).toBe('Invalid patch: context mismatch');
   expect(command?.status).toBe('failed');
@@ -572,7 +574,7 @@ it('replayEvents: assistant_turn joins multi-item apply_patch results with newli
   ];
 
   const restored = replayEvents(envelopes);
-  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  const command = restored.messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1');
   expect(command?.output).toBe('Updated a.ts\nInvalid patch: bad context');
 });
 
@@ -599,7 +601,7 @@ it('replayEvents: assistant_turn falls back to path when apply_patch item has no
   ];
 
   const restored = replayEvents(envelopes);
-  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  const command = restored.messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1');
   expect(command?.output).toBe('legacy.ts');
 });
 
@@ -626,7 +628,7 @@ it('replayEvents: assistant_turn renders create_file success output from parsed 
   ];
 
   const restored = replayEvents(envelopes);
-  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  const command = restored.messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1');
   expect(command?.output).toBe('Created new.ts');
 });
 
@@ -653,7 +655,7 @@ it('replayEvents: assistant_turn renders create_file failure output from parsed 
   ];
 
   const restored = replayEvents(envelopes);
-  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  const command = restored.messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1');
   expect(command?.output).toBe('Error: File already exists at new.ts');
   expect(command?.status).toBe('failed');
 });
@@ -681,7 +683,7 @@ it('replayEvents: assistant_turn falls through to JSON pretty-print for unknown 
   ];
 
   const restored = replayEvents(envelopes);
-  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  const command = restored.messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1');
   // No error/message/path/summary keys; pretty-printed JSON is the contract.
   expect(command?.output as string).toMatch(/^\{\n {2}"unexpected": \{/);
 });
@@ -709,7 +711,7 @@ it('replayEvents: assistant_turn unwraps AI-SDK style { type: text, text } wrapp
   ];
 
   const restored = replayEvents(envelopes);
-  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  const command = restored.messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1');
   expect(command?.output).toBe('hello world');
 });
 
@@ -736,7 +738,7 @@ it('replayEvents: assistant_turn unwraps OpenAI Responses { type: output_text, t
   ];
 
   const restored = replayEvents(envelopes);
-  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  const command = restored.messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1');
   expect(command?.output).toBe('Tue May 12 18:40:41 +07 2026');
 });
 
@@ -768,7 +770,7 @@ it('replayEvents: assistant_turn unwraps { content: [...] } content-parts array 
   ];
 
   const restored = replayEvents(envelopes);
-  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  const command = restored.messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1');
   expect(command?.output).toBe('first\nsecond');
 });
 
@@ -796,7 +798,7 @@ it('replayEvents: assistant_turn unwraps { type: text, text } wrapper when tool_
   ];
 
   const restored = replayEvents(envelopes);
-  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  const command = restored.messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1');
   expect(command?.output).toBe('plain output');
 });
 
@@ -826,7 +828,7 @@ it('replayEvents: assistant_turn prefers persisted displayUsage for resumed foot
   const restored = replayEvents(envelopes);
 
   expect(restored.messages[2].sender).toBe('bot');
-  expect(restored.messages[2].usage).toEqual({ prompt_tokens: 3000, completion_tokens: 120, total_tokens: 3120 });
+  expect((restored.messages[2] as BotMessage).usage).toEqual({ prompt_tokens: 3000, completion_tokens: 120, total_tokens: 3120 });
   expect(restored.usage).toEqual({ prompt_tokens: 6000, completion_tokens: 280, total_tokens: 6280 });
 });
 
@@ -855,7 +857,7 @@ it('replayEvents: assistant_turn does not infer resumed footer usage from cumula
   const restored = replayEvents(envelopes);
 
   expect(restored.messages[2].sender).toBe('bot');
-  expect(restored.messages[2].usage).toBe(undefined);
+  expect((restored.messages[2] as BotMessage).usage).toBe(undefined);
   expect(restored.usage).toEqual({ prompt_tokens: 6000, completion_tokens: 280, total_tokens: 6280 });
 });
 
@@ -890,10 +892,10 @@ it('replayEvents: assistant_turn deduplicates earlier coarse command_message eve
   expect(restored.messages.length).toBe(3); // 1 user + 1 command + 1 bot
   expect(restored.messages[0].sender).toBe('user');
   expect(restored.messages[1].sender).toBe('command');
-  expect(restored.messages[1].callId).toBe('call-1');
-  expect(restored.messages[1].status).toBe('completed');
+  expect((restored.messages[1] as CommandMessage).callId).toBe('call-1');
+  expect((restored.messages[1] as CommandMessage).status).toBe('completed');
   expect(restored.messages[2].sender).toBe('bot');
-  expect(restored.messages[2].text).toBe('done');
+  expect((restored.messages[2] as BotMessage).text).toBe('done');
 });
 
 it('replayEvents: assistant_turn rebuilds structured assistant history for resume', () => {
@@ -1147,7 +1149,7 @@ it('replayEvents: assistant_journal_item restores history and ledger on interrup
   expect((restored.toolLedger[0].historyItems?.[1] as any).type).toBe('function_call');
   expect((restored.toolLedger[0].historyItems?.[2] as any).type).toBe('function_call_result');
   // The corresponding command message in the UI shows the completed output.
-  const commandMsg = restored.messages.find((m: any) => m.sender === 'command' && m.callId === 'call-1');
+  const commandMsg = restored.messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1');
   expect(commandMsg).toBeTruthy();
   expect(commandMsg?.status).toBe('completed');
   expect(commandMsg?.output).toBe('/repo');
@@ -1494,7 +1496,7 @@ it('replayEvents: command_message tool output is deduped when a richer tool resu
   const restored = replayEvents(envelopes);
 
   // The journal's richer tool result wins; the running placeholder is gone.
-  const commandMsgs = restored.messages.filter((m: any) => m.sender === 'command' && m.callId === 'call-1');
+  const commandMsgs = restored.messages.filter((m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1');
   expect(commandMsgs.length).toBe(1);
   expect(commandMsgs[0].status).toBe('completed');
   expect(commandMsgs[0].output).toBe('/repo');
@@ -1553,4 +1555,42 @@ it.each([
   ]);
 
   expect(restored.toolLedger[0].historyItems).toEqual(historyItems);
+});
+
+it('decodeLogEnvelope and decodeSavedMessage: validate structure while retaining forward-compatible fields', () => {
+  expect(decodeLogEnvelope(null)).toBe(null);
+  expect(decodeLogEnvelope('invalid')).toBe(null);
+  expect(decodeLogEnvelope({ event: 'not-an-object' })).toBe(null);
+
+  const envelope = decodeLogEnvelope({
+    v: 3,
+    seq: 42,
+    ts: '2026-08-01T00:00:00Z',
+    event: { type: 'user_message', message: { id: 'm1', sender: 'user', text: 'hello' } },
+    futureMeta: 'opaque',
+  });
+  expect(envelope).not.toBe(null);
+  expect(envelope?.v).toBe(3);
+  expect(envelope?.seq).toBe(42);
+  expect(envelope?.event.type).toBe('user_message');
+
+  const truncated = decodeLogEnvelope({
+    v: 3,
+    seq: 43,
+    ts: '2026-08-01T00:00:00Z',
+    event: { type: 'assistant_turn', truncated: true, originalSize: 500000 },
+  });
+  expect(truncated !== null && 'truncated' in truncated.event && truncated.event.truncated).toBe(true);
+
+  expect(decodeSavedMessage(null)).toBe(null);
+  expect(decodeSavedMessage({ id: 123 })).toBe(null);
+
+  const savedMsg = decodeSavedMessage({
+    id: 'msg-1',
+    sender: 'user',
+    text: 'hello',
+    unknownFutureField: 123,
+  });
+  expect(savedMsg).not.toBe(null);
+  expect(savedMsg?.id).toBe('msg-1');
 });

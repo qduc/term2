@@ -599,7 +599,7 @@ let effectiveHasConversationContent = false;
 if (resumedConversation) {
   effectiveSessionId = resumedConversation.id;
   effectiveCreatedAt = resumedConversation.createdAt;
-  initialMessages = resumedConversation.messages as Message[];
+  initialMessages = resumedConversation.messages;
   restoredStaticMessageIds = initialMessages.map((message) => message.id);
   if (resumedConversation.usage) {
     sessionUsageAccumulator.add(resumedConversation.usage, { alreadyBillable: true });

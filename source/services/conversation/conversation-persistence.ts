@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import envPaths from 'env-paths';
-import type { LogEnvelope } from '../logging/conversation-log-events.js';
+import { isTruncatedLogEvent } from '../logging/conversation-log-events.js';
+import { decodeLogEnvelope, type PersistedLogEnvelope } from './conversation-decoder.js';
 import { replayEvents, type RestoredState } from './conversation-replay.js';
 
 import type { SavedAppMode } from './conversation-persistence-types.js';
@@ -133,16 +134,19 @@ export function generateId(): string {
   return crypto.randomUUID();
 }
 
-function readEnvelopes(filePath: string): LogEnvelope[] {
+function readEnvelopes(filePath: string): PersistedLogEnvelope[] {
   const content = fs.readFileSync(filePath, 'utf-8');
   const lines = content.split('\n');
-  const envelopes: LogEnvelope[] = [];
+  const envelopes: PersistedLogEnvelope[] = [];
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
-      const envelope = JSON.parse(trimmed) as LogEnvelope;
-      envelopes.push(envelope);
+      const parsed = JSON.parse(trimmed) as unknown;
+      const envelope = decodeLogEnvelope(parsed);
+      if (envelope) {
+        envelopes.push(envelope);
+      }
     } catch {
       // skip corrupt line
     }
@@ -150,7 +154,7 @@ function readEnvelopes(filePath: string): LogEnvelope[] {
   return envelopes;
 }
 
-function restoredUpdatedAt(filePath: string, envelopes: LogEnvelope[]): string | undefined {
+function restoredUpdatedAt(filePath: string, envelopes: PersistedLogEnvelope[]): string | undefined {
   const latestEnvelopeTs = [...envelopes]
     .reverse()
     .map((envelope) => envelope.ts)
@@ -309,7 +313,7 @@ export function listConversations(expectedProjectPath?: string, expectedSshHost?
         const content = fs.readFileSync(fp, 'utf-8');
         const lines = content.split('\n');
 
-        let initEnvelope: LogEnvelope | null = null;
+        let initEnvelope: PersistedLogEnvelope | null = null;
         let firstUserMessage: string | undefined;
         let messageCount = 0;
 
@@ -317,19 +321,24 @@ export function listConversations(expectedProjectPath?: string, expectedSshHost?
           const trimmed = line.trim();
           if (!trimmed) continue;
           try {
-            const envelope = JSON.parse(trimmed) as LogEnvelope;
-            if (!initEnvelope && envelope?.event?.type === 'session_init') {
+            const parsed = JSON.parse(trimmed) as unknown;
+            const envelope = decodeLogEnvelope(parsed);
+            if (!envelope) continue;
+            // Truncated events carry no lifecycle fields; skip them entirely.
+            if (isTruncatedLogEvent(envelope.event)) continue;
+
+            if (!initEnvelope && envelope.event.type === 'session_init') {
               initEnvelope = envelope;
             }
-            if (envelope?.event?.type === 'user_message') {
+            if (envelope.event.type === 'user_message') {
               messageCount++;
-              if (!firstUserMessage) {
+              if (!firstUserMessage && envelope.event.message?.text) {
                 firstUserMessage = envelope.event.message.text;
               }
-            } else if (envelope?.event?.type === 'assistant_turn') {
+            } else if (envelope.event.type === 'assistant_turn') {
               messageCount++;
-            } else if (envelope?.event?.type === 'undo') {
-              const undone = (envelope.event as any).removedUserTurns || 0;
+            } else if (envelope.event.type === 'undo') {
+              const undone = envelope.event.removedUserTurns || 0;
               messageCount = Math.max(0, messageCount - undone * 2);
             }
           } catch {
@@ -337,7 +346,7 @@ export function listConversations(expectedProjectPath?: string, expectedSshHost?
           }
         }
 
-        if (!initEnvelope || initEnvelope.event.type !== 'session_init') {
+        if (!initEnvelope || isTruncatedLogEvent(initEnvelope.event) || initEnvelope.event.type !== 'session_init') {
           continue;
         }
 
@@ -413,8 +422,9 @@ export function hasConversationContent(id: string): boolean {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
-      const envelope = JSON.parse(trimmed) as LogEnvelope;
-      if (envelope.event && CONTENT_EVENT_TYPES.has(envelope.event.type)) {
+      const parsed = JSON.parse(trimmed) as unknown;
+      const envelope = decodeLogEnvelope(parsed);
+      if (envelope?.event && CONTENT_EVENT_TYPES.has(envelope.event.type)) {
         return true;
       }
     } catch {

@@ -6,6 +6,7 @@ import {
   LOG_ENVELOPE_VERSION,
   type LogEnvelope,
   type LogEvent,
+  type TruncatedLogEvent,
   type SessionInitEvent,
 } from './conversation-log-events.js';
 import { saveLastConversation } from '../conversation/conversation-persistence.js';
@@ -97,10 +98,8 @@ export function sanitizeSubagentResult(value: unknown): unknown {
   }
 
   if (typeof value === 'object') {
-    const obj = { ...value } as Record<string, any>;
-    if ('nestedRunResult' in obj) {
-      delete obj.nestedRunResult;
-    }
+    const obj = { ...value } as Record<string, unknown>;
+    delete obj['nestedRunResult'];
     for (const key of Object.keys(obj)) {
       obj[key] = sanitizeSubagentResult(obj[key]);
     }
@@ -110,7 +109,7 @@ export function sanitizeSubagentResult(value: unknown): unknown {
   return value;
 }
 
-function truncateForLog(event: LogEvent): LogEvent {
+function truncateForLog(event: LogEvent): LogEvent | TruncatedLogEvent {
   const serialized = JSON.stringify(event);
   if (serialized.length <= MAX_EVENT_BYTES) {
     return event;
@@ -140,7 +139,7 @@ function truncateForLog(event: LogEvent): LogEvent {
     type: event.type,
     truncated: true,
     originalSize: serialized.length,
-  } as unknown as LogEvent;
+  };
 }
 
 function acquireLock(dir: string, sessionId: string): void {
@@ -149,8 +148,9 @@ function acquireLock(dir: string, sessionId: string): void {
   let fd: number;
   try {
     fd = fs.openSync(lp, 'wx');
-  } catch (err: any) {
-    if (err?.code === 'EEXIST') {
+  } catch (err: unknown) {
+    const errorObj = err as { code?: string };
+    if (errorObj?.code === 'EEXIST') {
       let info: { pid: number; startedAt: string; host: string } | null = null;
       try {
         info = JSON.parse(fs.readFileSync(lp, 'utf-8'));
@@ -172,8 +172,9 @@ function acquireLock(dir: string, sessionId: string): void {
 function releaseLock(dir: string, sessionId: string): void {
   try {
     fs.unlinkSync(lockPath(dir, sessionId));
-  } catch (err: any) {
-    if (err?.code !== 'ENOENT') {
+  } catch (err: unknown) {
+    const errorObj = err as { code?: string };
+    if (errorObj?.code !== 'ENOENT') {
       // best-effort
     }
   }
@@ -231,7 +232,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
         }
         saveLastConversation(this.#sessionId, this.#projectPath, this.#sshHost);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (!this.#writeErrorLogged) {
         this.#writeErrorLogged = true;
         this.#logger.error('Conversation log write failed', {

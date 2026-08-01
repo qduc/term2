@@ -3,9 +3,9 @@ import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { CommandMessage } from '../../tools/types.js';
 import type { SubagentResult } from '../subagents/types.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
+import type { UserMessage } from '../../types/message.js';
 import type {
   SavedAppMode,
-  SavedMessage,
   PersistedAssistantTurn,
   PersistedAssistantTurnItem,
 } from '../conversation/conversation-persistence-types.js';
@@ -47,7 +47,7 @@ export interface SettingsChangedEvent {
 
 export interface UserMessageEvent {
   type: 'user_message';
-  message: SavedMessage;
+  message: UserMessage;
 }
 
 export interface ToolStartedLogEvent {
@@ -247,11 +247,29 @@ export type LogEvent =
   | UndoEvent
   | SessionClearedEvent;
 
-export interface LogEnvelope {
+export interface TruncatedLogEvent {
+  type: string;
+  truncated: true;
+  originalSize: number;
+}
+
+export type PersistedLogEvent = LogEvent | TruncatedLogEvent;
+
+/**
+ * Narrowing predicate for the storage-only truncation marker. Uses an `in`
+ * check (plus an explicit `=== true`) rather than the `type` discriminant
+ * because `TruncatedLogEvent.type` is a plain `string` that overlaps with
+ * every log-event type.
+ */
+export function isTruncatedLogEvent(event: PersistedLogEvent): event is TruncatedLogEvent {
+  return 'truncated' in event && event.truncated === true;
+}
+
+export interface LogEnvelope<TEvent = LogEvent> {
   v: number;
   seq: number;
   ts: string;
-  event: LogEvent;
+  event: TEvent;
 }
 
 export const AGENT_AFFECTING_SETTINGS = new Set<string>([

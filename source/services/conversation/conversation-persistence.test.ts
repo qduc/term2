@@ -8,6 +8,7 @@ import { createConversationLogWriter, LockConflictError } from '../logging/conve
 import type { LogEvent, StateSnapshot } from '../logging/conversation-log-events.js';
 import { createConversationSession } from '../../test-helpers/conversation-session-with-adapter.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
+import type { BotMessage, CommandMessage, ReasoningMessage } from '../../types/message.js';
 
 const createSessionContextService = () => ({
   runWithContext: <T>(_context: any, fn: () => T) => fn(),
@@ -752,11 +753,11 @@ it.sequential('writer + loadConversation: round-trips a v2 conversation with ass
   expect(restored!.messages.length).toBe(4);
   expect(restored!.messages[0].sender).toBe('user');
   expect(restored!.messages[1].sender).toBe('reasoning');
-  expect(restored!.messages[1].text).toBe('thinking about ls');
+  expect((restored!.messages[1] as ReasoningMessage).text).toBe('thinking about ls');
   expect(restored!.messages[2].sender).toBe('command');
-  expect(restored!.messages[2].status).toBe('completed');
+  expect((restored!.messages[2] as CommandMessage).status).toBe('completed');
   expect(restored!.messages[3].sender).toBe('bot');
-  expect(restored!.messages[3].text).toBe('here is the file');
+  expect((restored!.messages[3] as BotMessage).text).toBe('here is the file');
 });
 
 it.sequential('session logging writes compact v3 assistant_turn state without cumulative snapshot', async () => {
@@ -966,7 +967,7 @@ it.sequential('replay: interrupted v2 logs without assistant_turn still recover 
   expect(restored!.messages.length).toBe(3); // user, command, system interrupted warning
   expect(restored!.messages[0].sender).toBe('user');
   expect(restored!.messages[1].sender).toBe('command');
-  expect(restored!.messages[1].status).toBe('completed');
+  expect((restored!.messages[1] as CommandMessage).status).toBe('completed');
   expect(restored!.messages[2].sender).toBe('system');
 });
 

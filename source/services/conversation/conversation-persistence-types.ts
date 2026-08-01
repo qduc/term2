@@ -1,3 +1,4 @@
+import type { Message } from '../../types/message.js';
 import type {
   AssistantTextItem,
   Item,
@@ -7,12 +8,7 @@ import type {
   Turn,
 } from '../../contracts/conversation-items.js';
 
-export interface SavedMessage {
-  id: string;
-  sender: string;
-  text?: string;
-  [key: string]: unknown;
-}
+export type SavedMessage = Message;
 
 export interface SavedAppMode {
   mentorMode: boolean;

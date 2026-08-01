@@ -1565,6 +1565,87 @@ it.each([
   expect(restored.toolLedger[0].historyItems).toEqual(historyItems);
 });
 
+it('decodeLogEnvelope: rejects malformed known events without losing surrounding valid events', () => {
+  const rawEvents: unknown[] = [
+    { event: { type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' } },
+    { event: { type: 'user_message', message: null } },
+    { event: { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hello' } } },
+    { event: { type: 'assistant_turn', turn: { items: null } } },
+    { event: { type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'answer' }] } } },
+    { event: { type: 'undo', removedUserTurns: 1, snapshot: null } },
+    { event: { type: 'user_message', message: { id: 'u2', sender: 'user', text: 'still here' } } },
+    { event: { type: 'session_init', id: 7, createdAt: 'invalid' } },
+  ];
+
+  const decoded = rawEvents
+    .map((value) => decodeLogEnvelope(value))
+    .filter((value): value is NonNullable<typeof value> => value !== null);
+  const restored = replayEvents(decoded);
+
+  expect(decoded.map(({ event }) => event.type)).toEqual([
+    'session_init',
+    'user_message',
+    'assistant_turn',
+    'user_message',
+  ]);
+  expect(restored.id).toBe('sess');
+  expect(restored.messages.slice(0, 3).map((message) => ('text' in message ? message.text : undefined))).toEqual([
+    'hello',
+    'answer',
+    'still here',
+  ]);
+});
+
+it('decodeLogEnvelope: skips invalid closed discriminants while retaining surrounding events', () => {
+  const decoded = [
+    { event: { type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' } },
+    { event: { type: 'assistant_journal_delta', turnId: 't1', seq: 1, kind: 'image', delta: 'bad' } },
+    { event: { type: 'tool_result', callId: 'c1', toolName: 'shell', status: 'pending' } },
+    { event: { type: 'approval_resolved', answer: 'maybe' } },
+    { event: { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'survived' } } },
+  ]
+    .map((value) => decodeLogEnvelope(value))
+    .filter((value): value is NonNullable<typeof value> => value !== null);
+
+  expect(decoded.map(({ event }) => event.type)).toEqual(['session_init', 'user_message']);
+  expect(replayEvents(decoded).messages[0]).toMatchObject({ sender: 'user', text: 'survived' });
+});
+
+it('decodeLogEnvelope: validates known assistant items but preserves unknown item types', () => {
+  const decodeItems = (items: unknown[]) =>
+    decodeLogEnvelope({ event: { type: 'assistant_turn', turn: { items }, state: { previousResponseId: null } } });
+
+  expect(decodeItems([{ type: 'reasoning' }])).toBe(null);
+  expect(decodeItems([{ type: 'assistant_text', text: 42 }])).toBe(null);
+  expect(decodeItems([{ type: 'tool_call', callId: null, toolName: 'shell' }])).toBe(null);
+  expect(decodeItems([{ type: 'tool_result', callId: 'c1', toolName: 'shell', status: 'pending' }])).toBe(null);
+  expect(
+    decodeLogEnvelope({
+      event: { type: 'assistant_journal_item', turnId: 't1', seq: 1, item: { type: 'tool_call', toolName: 'shell' } },
+    }),
+  ).toBe(null);
+
+  expect(decodeItems([{ type: 'future_assistant_item', opaque: true }])).not.toBe(null);
+  expect(
+    decodeLogEnvelope({
+      event: { type: 'assistant_journal_item', turnId: 't1', seq: 1, item: { type: 'future_item', opaque: true } },
+    }),
+  ).not.toBe(null);
+  expect(decodeItems([{ type: 'assistant_text', text: 'valid after malformed items' }])).not.toBe(null);
+});
+
+it('decodeLogEnvelope: preserves unknown future event objects for no-op replay', () => {
+  const future = decodeLogEnvelope({
+    v: 99,
+    seq: 2,
+    ts: '2030-01-01T00:00:00Z',
+    event: { type: 'future_checkpoint', payload: { opaque: true } },
+  });
+
+  expect(future?.event).toEqual({ type: 'future_checkpoint', payload: { opaque: true } });
+  expect(replayEvents(future ? [future] : []).messages).toEqual([]);
+});
+
 it('decodeLogEnvelope and decodeSavedMessage: validate structure while retaining forward-compatible fields', () => {
   expect(decodeLogEnvelope(null)).toBe(null);
   expect(decodeLogEnvelope('invalid')).toBe(null);

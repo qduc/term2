@@ -223,6 +223,29 @@ it.sequential('needsApproval: auto-approves for create/update inside cwd', async
   });
 });
 
+it.sequential('needsApproval: requires approval for a symlink target outside the workspace', async () => {
+  await withTempDir(async (workspaceDir) => {
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-apply-patch-outside-'));
+    try {
+      const outsidePath = path.join(outsideDir, 'target.txt');
+      await fs.writeFile(outsidePath, 'outside content\n');
+      await fs.symlink(outsidePath, path.join(workspaceDir, 'link.txt'));
+
+      const tool = createTool();
+      const result = await tool.needsApproval({
+        type: 'update_file',
+        path: 'link.txt',
+        diff: '@@\n-outside content\n+should require approval',
+      });
+
+      expect(result).toBe(true);
+      await expect(fs.readFile(outsidePath, 'utf8')).resolves.toBe('outside content\n');
+    } finally {
+      await fs.rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+});
+
 it.sequential('needsApproval: auto-approves invalid diffs (will fail in execute)', async () => {
   await withTempDir(async () => {
     const tool = createTool();

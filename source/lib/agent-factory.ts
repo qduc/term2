@@ -20,6 +20,7 @@ import { getModelDefaultReasoningLevel } from '../services/model-service.js';
 import { toolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
 import { isZodToolParameterSchema } from '../tools/types.js';
+import { isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../tools/utils.js';
 import type { AnyToolDefinition, JsonSchemaObject, PostExecutePauseCapability, ToolRegistry } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
 
@@ -184,9 +185,23 @@ export function buildAgentTools({
         const operationPath =
           operation && typeof operation === 'object' ? (operation as { path?: unknown }).path : undefined;
         const workspaceRoot = path.resolve(deps.executionContext?.getCwd() || process.cwd());
-        const resolved = path.resolve(workspaceRoot, String(operationPath ?? ''));
+        let resolved: string;
+        try {
+          resolved = resolveWorkspacePath(String(operationPath ?? ''), workspaceRoot);
+        } catch {
+          // Preserve explicit approval for lexically outside paths.
+          return true;
+        }
+
         const prefix = workspaceRoot.endsWith(path.sep) ? workspaceRoot : `${workspaceRoot}${path.sep}`;
-        return resolved !== workspaceRoot && !resolved.startsWith(prefix);
+        const insideWorkspace = resolved !== workspaceRoot && resolved.startsWith(prefix);
+        if (!insideWorkspace) {
+          return true;
+        }
+
+        // Native patch calls use the same physical boundary as application
+        // tools; never auto-approve a path that follows an escaping symlink.
+        return !(await isWorkspacePathPhysicallyInside(resolved, workspaceRoot));
       };
     }
     deps.logger.debug('Using native applyPatchTool from SDK', {

@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { access, mkdir, writeFile } from 'fs/promises';
 import path from 'path';
-import { resolveWorkspacePath } from '../utils.js';
+import { isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { TOOL_NAME_CREATE_FILE } from '../tool-names.js';
 import type { ILoggingService, ISettingsService, ISSHService } from '../../services/service-interfaces.js';
@@ -105,12 +105,11 @@ export function createCreateFileToolDefinition(deps: {
         const cwd = executionContext?.getCwd() || process.cwd();
         const targetPath = resolveWorkspacePath(filePath, cwd);
         const insideCwd = targetPath.startsWith(cwd + path.sep);
+        const physicallyInsideWorkspace = insideCwd && (await isWorkspacePathPhysicallyInside(targetPath, cwd));
 
-        // We auto-approve file creation within the workspace by default
-        if (insideCwd) {
-          return false;
-        }
-        return true;
+        // Auto-approve only when both lexical and physical containment hold.
+        // This prevents an in-workspace symlink from redirecting the write.
+        return !physicallyInsideWorkspace;
       } catch (_error) {
         // Outside workspace or other error => require approval
         return true;

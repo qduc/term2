@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
-import { resolveWorkspacePath } from '../utils.js';
+import { isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import {
@@ -283,23 +283,36 @@ export function createSearchReplaceToolDefinition(deps: {
       try {
         const operations = getSearchReplaceOperations(params);
         const cwd = executionContext?.getCwd() || process.cwd();
-        if (operations.length > 1) {
-          const allInsideCwd = operations.every((operation) => {
-            try {
-              const targetPath = resolveWorkspacePath(operation.path, cwd);
-              return targetPath.startsWith(cwd + path.sep);
-            } catch {
-              return false;
-            }
-          });
-          return !allInsideCwd;
+        const resolvedOperations: Array<SearchReplaceFullOperation & { targetPath: string; insideCwd: boolean }> = [];
+
+        // Check every batch target physically before reading any file. This
+        // prevents validation from following an in-workspace symlink outside
+        // the workspace before approval is requested.
+        for (const operation of operations) {
+          let targetPath: string;
+          try {
+            targetPath = resolveWorkspacePath(operation.path, cwd);
+          } catch {
+            return true;
+          }
+
+          const insideCwd = targetPath.startsWith(cwd + path.sep);
+          const physicallyInsideWorkspace = insideCwd && (await isWorkspacePathPhysicallyInside(targetPath, cwd));
+          if (!physicallyInsideWorkspace) {
+            return true;
+          }
+
+          resolvedOperations.push({ ...operation, targetPath, insideCwd });
         }
 
-        const operation = operations[0];
-        const { path: filePath, search_content, replace_content } = operation;
-        const targetPath = resolveWorkspacePath(filePath, cwd);
-        const workspaceRoot = cwd;
-        const insideCwd = targetPath.startsWith(workspaceRoot + path.sep);
+        // Preserve the existing batch behavior: boundary checks are applied to
+        // all operations, while content validation remains single-operation.
+        if (operations.length > 1) {
+          return false;
+        }
+
+        const operation = resolvedOperations[0];
+        const { path: filePath, search_content, replace_content, targetPath, insideCwd } = operation;
 
         const sshService = executionContext?.getSSHService();
         const isRemote = executionContext?.isRemote() && !!sshService;

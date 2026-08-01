@@ -154,7 +154,7 @@ export async function run(_agent: Agent, _input: unknown, _options: any = {}): P
   throw new Error('A runner is required for an application-owned model invocation');
 }
 
-function adaptLegacyModel(model: any): StreamedModelTurn {
+export function adaptLegacyModel(model: any): StreamedModelTurn {
   if (model && typeof model.stream === 'function') return model;
   return {
     stream: async function* (request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {

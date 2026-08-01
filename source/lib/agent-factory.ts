@@ -201,6 +201,11 @@ export function buildAgentTools({
 
         // Native patch calls use the same physical boundary as application
         // tools; never auto-approve a path that follows an escaping symlink.
+        // Remote symlink state is not visible through the local filesystem, so
+        // remote writes require explicit approval.
+        if (deps.executionContext?.isRemote() && deps.executionContext.getSSHService()) {
+          return true;
+        }
         return !(await isWorkspacePathPhysicallyInside(resolved, workspaceRoot));
       };
     }

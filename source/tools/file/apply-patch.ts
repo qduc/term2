@@ -236,7 +236,7 @@ export function createApplyPatchToolDefinition(deps: {
 
           const insideCwd = targetPath.startsWith(workspaceRoot + path.sep);
           const physicallyInsideWorkspace =
-            insideCwd && (await isWorkspacePathPhysicallyInside(targetPath, workspaceRoot));
+            !isRemote && insideCwd && (await isWorkspacePathPhysicallyInside(targetPath, workspaceRoot));
           if (!physicallyInsideWorkspace) {
             loggingService.security('apply_patch needsApproval: physical boundary requires approval', {
               type,

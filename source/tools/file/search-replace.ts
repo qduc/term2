@@ -283,6 +283,8 @@ export function createSearchReplaceToolDefinition(deps: {
       try {
         const operations = getSearchReplaceOperations(params);
         const cwd = executionContext?.getCwd() || process.cwd();
+        const sshService = executionContext?.getSSHService();
+        const isRemote = executionContext?.isRemote() && !!sshService;
         const resolvedOperations: Array<SearchReplaceFullOperation & { targetPath: string; insideCwd: boolean }> = [];
 
         // Check every batch target physically before reading any file. This
@@ -297,7 +299,8 @@ export function createSearchReplaceToolDefinition(deps: {
           }
 
           const insideCwd = targetPath.startsWith(cwd + path.sep);
-          const physicallyInsideWorkspace = insideCwd && (await isWorkspacePathPhysicallyInside(targetPath, cwd));
+          const physicallyInsideWorkspace =
+            !isRemote && insideCwd && (await isWorkspacePathPhysicallyInside(targetPath, cwd));
           if (!physicallyInsideWorkspace) {
             return true;
           }
@@ -313,9 +316,6 @@ export function createSearchReplaceToolDefinition(deps: {
 
         const operation = resolvedOperations[0];
         const { path: filePath, search_content, replace_content, targetPath, insideCwd } = operation;
-
-        const sshService = executionContext?.getSSHService();
-        const isRemote = executionContext?.isRemote() && !!sshService;
 
         // Read file content
         let content: string;

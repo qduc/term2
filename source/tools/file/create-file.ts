@@ -105,7 +105,12 @@ export function createCreateFileToolDefinition(deps: {
         const cwd = executionContext?.getCwd() || process.cwd();
         const targetPath = resolveWorkspacePath(filePath, cwd);
         const insideCwd = targetPath.startsWith(cwd + path.sep);
-        const physicallyInsideWorkspace = insideCwd && (await isWorkspacePathPhysicallyInside(targetPath, cwd));
+        // The shared physical check is local-only; remote symlink state is not
+        // visible through the local filesystem, so remote writes fail closed to
+        // explicit approval instead of being auto-approved lexically.
+        const isRemote = executionContext?.isRemote() && !!executionContext?.getSSHService();
+        const physicallyInsideWorkspace =
+          !isRemote && insideCwd && (await isWorkspacePathPhysicallyInside(targetPath, cwd));
 
         // Auto-approve only when both lexical and physical containment hold.
         // This prevents an in-workspace symlink from redirecting the write.

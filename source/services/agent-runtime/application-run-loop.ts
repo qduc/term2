@@ -281,6 +281,9 @@ export class ApplicationRunLoop {
               (pending) => getInterruptionCallId(pending.interruption) === state.approvalDecisionCallId,
             )
           : -1;
+        if (state.approvalDecisionCallId && selectedIndex < 0) {
+          throw new Error(`Approval decision references unknown pending tool call: ${state.approvalDecisionCallId}`);
+        }
         const pendingIndex = selectedIndex >= 0 ? selectedIndex : 0;
         const pending = state.pendingApprovals[pendingIndex];
         const approved = state.approvalDecision === 'approved';

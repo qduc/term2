@@ -378,6 +378,50 @@ describe('ApplicationRunLoop', () => {
     expect(executions).toEqual(['call-first', 'call-second']);
     expect(resumed.finalOutput).toBe('done');
   });
+
+  it('fails closed for an approval interruption with an unknown call id', async () => {
+    let modelCalls = 0;
+    let executions = 0;
+    const tool: ToolDefinition = {
+      name: 'danger',
+      description: 'Requires approval',
+      parameters: z.object({}),
+      needsApproval: () => true,
+      execute: () => {
+        executions++;
+        return 'must not execute';
+      },
+      formatCommandMessage: () => [],
+    };
+    const model: StreamedModelTurn = {
+      async *stream() {
+        modelCalls++;
+        if (modelCalls === 1) {
+          yield { type: 'tool_call', id: 'call-pending', name: 'danger', arguments: '{}' };
+          yield { type: 'completion', responseId: 'response-pending', output: [] };
+          return;
+        }
+        yield {
+          type: 'completion',
+          responseId: 'response-should-not-run',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'unsafe continuation' }] }],
+        };
+      },
+    };
+
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do it');
+    await stream.completed;
+
+    const staleInterruption = { ...(stream.interruptions![0] as Record<string, unknown>), callId: 'call-stale' };
+    const handle = stream.state!;
+    handle.approve?.(staleInterruption);
+    const resumed = loop.continueRunStream(handle);
+
+    await expect(resumed.completed).rejects.toThrow('call-stale');
+    expect(modelCalls).toBe(1);
+    expect(executions).toBe(0);
+  });
 });
 
 describe('ApplicationRunLoop turn budget', () => {

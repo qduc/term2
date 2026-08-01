@@ -116,6 +116,22 @@ subagent**. The user re-approves tools they already approved.
 `approval-replay.ts` itself is fine: it depends only on a two-method `ApprovalContext`
 interface and its semantics are documented and tested. It does not need `RunContext`.
 
+### F6. `wrapNeedsApproval` silently suppresses every loop-level approval (found during slice 3)
+
+`wrapNeedsApproval` (`lib/tool-invoke.ts`) returns `(context, params)` — the SDK's argument
+order — but it is assigned into `ToolDefinition.needsApproval`, whose contract (and the loop's
+call, and every raw definition, and the policy registry's evaluation) is `(params, context)`.
+The `ApplicationRunLoop` therefore called the wrapper with the two arguments swapped: the
+wrapper schema-validated the loop's *options bag* against the tool schema, always failed, and
+returned `false` — so **no approval interruption ever fired for any wrapped tool** (every
+production tool via `agent-factory` / `tool-policy` `buildAgentTools`).
+
+Confirmed empirically in slice 3 with a probe test before the fix: a wrapped tool whose
+original `needsApproval` returns `true` produced zero interruptions. Fixed in slice 3 by
+switching the wrapper to `(params, context)`; the F6 regression lives in
+`tool-invocation-context.test.ts` and the direct-call tests in `openai-agent-client.test.ts` /
+`tool-invoke.test.ts` / `subagent-manager.roles.test.ts` were flipped to the domain order.
+
 ---
 
 ## Target design
@@ -221,7 +237,13 @@ Focused: `edit-healing`, `mentor-runner`, `subagents/utils`, `registry`.
 ### Slice 3 — `ToolInvocationContext` in `ApplicationRunLoop`
 
 Add the context slot and `ApprovalLedger`, thread through `#handleToolCall`,
-`#invokeTool`, `needsApproval`, and continuation state.
+`#invokeTool`, `needsApproval`, and continuation state. The loop now consults the
+run's ledger before raising an interruption (`isToolApproved`), records decisions
+when an approval pause resolves, and passes the rejection message for
+previously-rejected calls — the F5 mechanism at the loop.
+
+Also lands the F6 fix (wrapNeedsApproval argument order) — it is a prerequisite,
+not an optional cleanup: without it the F2/F5 pins exercise a dead approval path.
 
 *Verify:* loop-level tests that a tool's `context.context` is the object passed in
 `startStream` options, and that it survives `continueRunStream` across an approval pause.

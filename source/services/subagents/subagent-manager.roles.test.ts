@@ -674,9 +674,9 @@ describe('worker role agent tool caching', () => {
       const shell = getAgentTool(worker, 'shell');
       const createFile = getAgentTool(worker, 'create_file');
 
-      expect(await shell.needsApproval({}, { command: 'touch nested-approval.txt' })).toBe(true);
-      expect(await createFile.needsApproval({}, { path: 'inside.txt', content: 'ok' })).toBe(false);
-      expect(await createFile.needsApproval({}, { path: '../outside.txt', content: 'blocked' })).toBe(false);
+      expect(await shell.needsApproval({ command: 'touch nested-approval.txt' }, {})).toBe(true);
+      expect(await createFile.needsApproval({ path: 'inside.txt', content: 'ok' }, {})).toBe(false);
+      expect(await createFile.needsApproval({ path: '../outside.txt', content: 'blocked' }, {})).toBe(false);
     });
   });
 });

@@ -13,6 +13,7 @@ import type {
   StreamedModelTool,
 } from '../../contracts/streamed-model-turn.js';
 import type { ToolDefinition } from '../../tools/types.js';
+import { ApprovalLedger, type ToolInvocationContext } from './tool-invocation-context.js';
 
 /** The application-owned agent shape consumed by the replacement run loop. */
 export interface ApplicationAgent {
@@ -28,6 +29,8 @@ export interface ApplicationAgent {
 export interface ApplicationRunLoopOptions {
   readonly signal?: AbortSignal;
   readonly sessionId?: string;
+  /** Per-run user context delivered to tools as `ToolInvocationContext.context`. */
+  readonly context?: unknown;
 }
 
 export interface ApplicationRunLoopDeps {
@@ -52,6 +55,10 @@ type RunState = {
   approvalMessage?: string;
   responseId?: string;
   usage?: unknown;
+  /** The run's user context (from options), preserved across continuation. */
+  context?: unknown;
+  /** This run's approval ledger, preserved across continuation. */
+  approvals: ApprovalLedger;
   approve?: () => void;
   reject?: (_interruption: unknown, options?: { message?: string }) => void;
 };
@@ -113,6 +120,8 @@ export class ApplicationRunLoop {
       agent,
       input: normalizeInput(input),
       history: normalizeHistory(input),
+      context: options.context,
+      approvals: new ApprovalLedger(),
     };
     state.approve = () => {
       state.approvalDecision = 'approved';
@@ -129,6 +138,9 @@ export class ApplicationRunLoop {
     if (!state || typeof state !== 'object' || !('agent' in state) || !('input' in state)) {
       throw new Error('Invalid application continuation state');
     }
+    // Handles created before the ledger existed cannot resume meaningfully;
+    // give them a fresh ledger rather than crashing on `approvals` access.
+    if (!state.approvals) state.approvals = new ApprovalLedger();
     return this.#run(state, options);
   }
 
@@ -142,6 +154,11 @@ export class ApplicationRunLoop {
       else options.signal.addEventListener('abort', () => controller.abort(), { once: true });
     }
     const effectiveOptions = { ...options, signal: controller.signal };
+    const toolContext: ToolInvocationContext = {
+      context: state.context,
+      approvals: state.approvals,
+      signal: effectiveOptions.signal,
+    };
     const output: unknown[] = [];
     const stream: AgentStream & { finalOutput?: string } = {
       [Symbol.asyncIterator]: () => ({ next: () => queue.next() }),
@@ -156,7 +173,7 @@ export class ApplicationRunLoop {
       rawResponses: [],
     };
 
-    stream.completed = this.#execute(state, stream, queue, effectiveOptions)
+    stream.completed = this.#execute(state, stream, queue, effectiveOptions, toolContext)
       .catch((error) => {
         stream.cancelled = error instanceof Error && error.name === 'AbortError';
         queue.close(error);
@@ -173,6 +190,7 @@ export class ApplicationRunLoop {
     stream: AgentStream & { finalOutput?: string },
     queue: EventQueue,
     options: ApplicationRunLoopOptions,
+    toolContext: ToolInvocationContext,
   ): Promise<unknown> {
     while (true) {
       if (options.signal?.aborted) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
@@ -180,8 +198,16 @@ export class ApplicationRunLoop {
       if (state.pendingApproval && state.approvalDecision) {
         const pending = state.pendingApproval;
         const approved = state.approvalDecision === 'approved';
+        if (approved) {
+          state.approvals.approveTool({ toolName: pending.toolName, callId: pending.callId });
+        } else {
+          state.approvals.rejectTool(
+            { toolName: pending.toolName, callId: pending.callId },
+            { message: state.approvalMessage },
+          );
+        }
         const rawResult = approved
-          ? await this.#invokeTool(pending.definition, pending.params, options, pending.callId)
+          ? await this.#invokeTool(pending.definition, pending.params, toolContext, pending.callId)
           : state.approvalMessage ?? 'rejected';
         const result = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult);
         const resultItem: ProviderInputItem = {
@@ -226,7 +252,7 @@ export class ApplicationRunLoop {
         }
         if (event.type === 'tool_call') {
           sawToolCall = true;
-          await this.#handleToolCall(state, stream, queue, event, options);
+          await this.#handleToolCall(state, stream, queue, event, toolContext);
           if (state.pendingApproval) return finish(stream, state, queue);
         }
       }
@@ -238,7 +264,7 @@ export class ApplicationRunLoop {
         for (const item of completion.output) {
           if (item.type !== 'tool_call') continue;
           sawToolCall = true;
-          await this.#handleToolCall(state, stream, queue, item, options);
+          await this.#handleToolCall(state, stream, queue, item, toolContext);
           if (state.pendingApproval) return finish(stream, state, queue);
         }
       }
@@ -272,7 +298,7 @@ export class ApplicationRunLoop {
     stream: AgentStream,
     queue: EventQueue,
     event: Extract<StreamedModelTurnEvent, { type: 'tool_call' }>,
-    options: ApplicationRunLoopOptions,
+    toolContext: ToolInvocationContext,
   ): Promise<void> {
     const definition = state.agent.tools.find((tool) => tool.name === event.name);
     const args = parseArguments(event.arguments);
@@ -294,7 +320,41 @@ export class ApplicationRunLoop {
       ? { success: true as const, data: args }
       : definition.parameters.safeParse(args);
     const params = parsed.success ? parsed.data : args;
-    if (await definition.needsApproval(params, options)) {
+
+    // Consult this run's ledger before prompting: a decision already taken
+    // (in the parent run and replayed in, or earlier in this run) must not
+    // prompt again. This is what makes approval replay observable.
+    const alreadyDecided = state.approvals.isToolApproved({ toolName: event.name, callId: event.id });
+    if (alreadyDecided === false) {
+      const message = state.approvals.getRejectionMessage(event.name, event.id) ?? 'Tool execution was not approved.';
+      const resultItem: ProviderInputItem = {
+        type: 'function_call_result',
+        callId: event.id,
+        name: event.name,
+        output: message,
+      };
+      state.history.push(resultItem);
+      state.input.push({ type: 'tool_result', id: event.id, output: message });
+      outputPush(stream, queue, { type: 'run_item_stream_event', item: resultItem });
+      return;
+    }
+
+    if (alreadyDecided === true) {
+      const result = await this.#invokeTool(definition, params, toolContext, event.id);
+      const output = typeof result === 'string' ? result : JSON.stringify(result);
+      const resultItem: ProviderInputItem = {
+        type: 'function_call_result',
+        callId: event.id,
+        name: event.name,
+        output,
+      };
+      state.history.push(resultItem);
+      state.input.push({ type: 'tool_result', id: event.id, output });
+      outputPush(stream, queue, { type: 'run_item_stream_event', item: resultItem });
+      return;
+    }
+
+    if (await definition.needsApproval(params, toolContext)) {
       const pending: PendingApproval = {
         callId: event.id,
         toolName: event.name,
@@ -314,7 +374,7 @@ export class ApplicationRunLoop {
       return;
     }
 
-    const result = await this.#invokeTool(definition, params, options, event.id);
+    const result = await this.#invokeTool(definition, params, toolContext, event.id);
     const output = typeof result === 'string' ? result : JSON.stringify(result);
     const resultItem: ProviderInputItem = {
       type: 'function_call_result',
@@ -327,11 +387,16 @@ export class ApplicationRunLoop {
     outputPush(stream, queue, { type: 'run_item_stream_event', item: resultItem });
   }
 
-  async #invokeTool(definition: ToolDefinition, params: unknown, context: unknown, callId: string): Promise<unknown> {
+  async #invokeTool(
+    definition: ToolDefinition,
+    params: unknown,
+    toolContext: ToolInvocationContext,
+    callId: string,
+  ): Promise<unknown> {
     const invoke = (definition as any).invoke;
     return typeof invoke === 'function'
-      ? invoke(context, params, { toolCall: { callId } })
-      : definition.execute(params, context, { toolCall: { callId } });
+      ? invoke(toolContext, params, { toolCall: { callId } })
+      : definition.execute(params, toolContext, { toolCall: { callId } });
   }
 }
 

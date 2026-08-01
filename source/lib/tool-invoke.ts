@@ -450,7 +450,7 @@ export function wrapNeedsApproval(
       }) => void;
     };
   },
-): (context: unknown, params: unknown) => Promise<boolean> {
+): (params: unknown, context?: unknown) => Promise<boolean> {
   const registeredToolName = options?.toolName ?? definition.name;
   if (registeredToolName && options?.registry) {
     options.registry.register({
@@ -460,7 +460,12 @@ export function wrapNeedsApproval(
     });
   }
 
-  return async (context, params) => {
+  // (params, context) order matches ToolDefinition.needsApproval and the
+  // ApplicationRunLoop's `needsApproval(params, toolContext)` call. The SDK
+  // convention was (context, args); shipping that here silently swapped the
+  // loop's arguments, so the wrapper schema-validated the loop's options bag
+  // and every wrapped tool reported "no approval needed".
+  return async (params, context) => {
     if (options?.checkInterceptors) {
       try {
         const rejectionMessage = await options.checkInterceptors(params);

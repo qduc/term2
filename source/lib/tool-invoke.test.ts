@@ -202,7 +202,7 @@ it('wrapNeedsApproval interrupts valid calls while registry preserves the origin
     registry: toolApprovalPolicyRegistry,
   });
 
-  await expect(wrapped({}, { path: 'README.md' })).resolves.toBe(true);
+  await expect(wrapped({ path: 'README.md' }, {})).resolves.toBe(true);
   await expect(
     toolApprovalPolicyRegistry.evaluate({
       toolName: 'read_file',
@@ -219,7 +219,7 @@ it('wrapNeedsApproval still bypasses approval for invalid tool args', async () =
     needsApproval: async () => false,
   });
 
-  await expect(wrapped({}, { path: 123 })).resolves.toBe(false);
+  await expect(wrapped({ path: 123 }, {})).resolves.toBe(false);
 });
 
 it('wrapNeedsApproval still bypasses approval when an interceptor rejects execution', async () => {
@@ -238,7 +238,7 @@ it('wrapNeedsApproval still bypasses approval when an interceptor rejects execut
     },
   );
 
-  await expect(wrapped({}, { command: 'touch blocked.txt' })).resolves.toBe(false);
+  await expect(wrapped({ command: 'touch blocked.txt' }, {})).resolves.toBe(false);
   expect(originalPolicyCalled).toBe(false);
 });
 

@@ -244,8 +244,8 @@ it('wrapNeedsApproval returns false for params that fail schema validation', asy
   const definition = makeDefinition(async () => true);
   const wrapped = wrapNeedsApproval(definition);
 
-  expect(await wrapped(null, {})).toBe(false); // missing required 'command'
-  expect(await wrapped(null, { command: 123 })).toBe(false); // wrong type
+  expect(await wrapped({}, null)).toBe(false); // missing required 'command'
+  expect(await wrapped({ command: 123 }, null)).toBe(false); // wrong type
   expect(await wrapped(null, null)).toBe(false); // not an object
 });
 
@@ -253,7 +253,7 @@ it('wrapNeedsApproval delegates to the tool when params are valid', async () => 
   const definition = makeDefinition(async () => true);
   const wrapped = wrapNeedsApproval(definition);
 
-  expect(await wrapped(null, { command: 'ls' })).toBe(true);
+  expect(await wrapped({ command: 'ls' }, null)).toBe(true);
 });
 
 it('wrapNeedsApproval passes context through to the tool', async () => {
@@ -265,7 +265,7 @@ it('wrapNeedsApproval passes context through to the tool', async () => {
   const wrapped = wrapNeedsApproval(definition);
   const ctx = { some: 'context' };
 
-  await wrapped(ctx, { command: 'ls' });
+  await wrapped({ command: 'ls' }, ctx);
 
   expect(receivedContext).toBe(ctx);
 });
@@ -278,7 +278,7 @@ it('wrapNeedsApproval short-circuits before calling the tool on invalid params',
   });
   const wrapped = wrapNeedsApproval(definition);
 
-  await wrapped(null, { command: 123 }); // invalid
+  await wrapped({ command: 123 }, null); // invalid
 
   expect(called).toBe(false);
 });
@@ -303,7 +303,7 @@ it('wrapNeedsApproval delegates when optional fields arrive as null (OpenAI stri
 
   // Simulates what OpenAI sends for { command: "rm file" } under strict schema:
   // optional timeout_ms arrives as null rather than being omitted
-  const result = await wrapped(null, { command: 'rm file', timeout_ms: null });
+  const result = await wrapped({ command: 'rm file', timeout_ms: null }, null);
 
   expect(called).toBe(true); // must reach the tool's needsApproval (not short-circuited)
   expect(result).toBe(true); // must respect its decision (true = needs approval)
@@ -315,7 +315,7 @@ it('wrapNeedsApproval catches unhandled errors and fails safe to true', async ()
   });
   const wrapped = wrapNeedsApproval(definition);
 
-  expect(await wrapped(null, { command: 'ls' })).toBe(true);
+  expect(await wrapped({ command: 'ls' }, null)).toBe(true);
 });
 
 it('wrapNeedsApproval skips approval when an interceptor rejects the call', async () => {
@@ -332,7 +332,7 @@ it('wrapNeedsApproval skips approval when an interceptor rejects the call', asyn
     checkInterceptors: async () => 'Plan mode is active (read-only).',
   });
 
-  expect(await wrapped(null, { command: 'ls' })).toBe(false);
+  expect(await wrapped({ command: 'ls' }, null)).toBe(false);
   expect(toolNeedsApprovalCalled).toBe(false); // short-circuited before the tool decides
 });
 
@@ -342,7 +342,7 @@ it('wrapNeedsApproval delegates to the tool when no interceptor rejects', async 
     checkInterceptors: async () => null,
   });
 
-  expect(await wrapped(null, { command: 'ls' })).toBe(true);
+  expect(await wrapped({ command: 'ls' }, null)).toBe(true);
 });
 
 it('wrapNeedsApproval normalizes stringified array before validation', async () => {
@@ -354,7 +354,7 @@ it('wrapNeedsApproval normalizes stringified array before validation', async () 
 
   // Models sometimes stringify array parameters; normalisation must parse
   // them so the value passes schema validation and reaches needsApproval.
-  expect(await wrapped(null, { tags: '["a", "b"]' })).toBe(true);
+  expect(await wrapped({ tags: '["a", "b"]' }, null)).toBe(true);
 });
 
 it('wrapNeedsApproval normalizes stringified object before validation', async () => {
@@ -364,7 +364,7 @@ it('wrapNeedsApproval normalizes stringified object before validation', async ()
   };
   const wrapped = wrapNeedsApproval(definition);
 
-  expect(await wrapped(null, { config: '{"key": "val"}' })).toBe(true);
+  expect(await wrapped({ config: '{"key": "val"}' }, null)).toBe(true);
 });
 
 it('wrapNeedsApproval normalizes boolean strings before validation', async () => {
@@ -374,7 +374,7 @@ it('wrapNeedsApproval normalizes boolean strings before validation', async () =>
   };
   const wrapped = wrapNeedsApproval(definition);
 
-  expect(await wrapped(null, { verbose: 'true' })).toBe(true);
+  expect(await wrapped({ verbose: 'true' }, null)).toBe(true);
 });
 
 it('wrapNeedsApproval normalizes null sentinels on optional fields before validation', async () => {
@@ -388,7 +388,7 @@ it('wrapNeedsApproval normalizes null sentinels on optional fields before valida
   };
   const wrapped = wrapNeedsApproval(definition);
 
-  expect(await wrapped(null, { command: 'ls', timeout_ms: null })).toBe(true);
+  expect(await wrapped({ command: 'ls', timeout_ms: null }, null)).toBe(true);
   // null sentinel is removed, so timeout_ms should be absent
   expect('timeout_ms' in (received as any)).toBe(false);
 });
@@ -401,7 +401,7 @@ it('wrapNeedsApproval still bypasses approval for params that remain invalid aft
   const wrapped = wrapNeedsApproval(definition);
 
   // A string that isn't a valid number stays invalid → bypass approval
-  expect(await wrapped(null, { count: 'not a number' })).toBe(false);
+  expect(await wrapped({ count: 'not a number' }, null)).toBe(false);
 });
 
 it('wrapNeedsApproval passes through already-valid params unchanged', async () => {
@@ -415,6 +415,6 @@ it('wrapNeedsApproval passes through already-valid params unchanged', async () =
   };
   const wrapped = wrapNeedsApproval(definition);
 
-  expect(await wrapped(null, { name: 'test', items: ['a', 'b'] })).toBe(true);
+  expect(await wrapped({ name: 'test', items: ['a', 'b'] }, null)).toBe(true);
   expect((received as any).items).toEqual(['a', 'b']);
 });

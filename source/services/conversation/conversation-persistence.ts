@@ -22,7 +22,7 @@ export type LoadConversationForProjectResult =
   | { status: 'project_mismatch'; conversation: RestoredState }
   | { status: 'locked'; lockPath: string; lockInfo: { pid: number; startedAt: string; host: string } | null };
 
-function getConversationsDir(): string {
+export function getConversationsDir(): string {
   return conversationsDirOverride ?? process.env['TERM2_CONVERSATIONS_DIR'] ?? CONVERSATIONS_DIR;
 }
 

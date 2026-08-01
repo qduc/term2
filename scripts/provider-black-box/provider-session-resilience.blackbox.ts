@@ -346,8 +346,11 @@ describe('application-owned provider restart continuity', () => {
     expect(persisted).toContain(TOOL_CALL_ID);
     expect(persisted).not.toContain('resp_stale_interrupted');
 
-    const resumed = await startInteractive(workspace, route, ['--resume']);
-    await resumed.waitForVisibleOutput(`Resumed conversation: ${conversationId}`);
+    // SIGKILL intentionally leaves the application-owned lock behind; use the
+    // documented fork escape hatch to resume the recovered state safely.
+    const resumed = await startInteractive(workspace, route, ['--resume', conversationId, '--fork']);
+    await resumed.waitForVisibleOutput(`Forked conversation ${conversationId} → `);
+    await resumed.waitForVisibleOutput('Resumed conversation: ');
     await resumed.waitForVisibleOutput('❯ ');
     const resumedIdlePrompt = captureIdlePrompt(resumed);
     await submitPrompt(resumed, 'repair interrupted tool history');

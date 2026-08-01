@@ -11,6 +11,7 @@ import { RetryingModel } from './retrying-model.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
 import type { ProviderRequestCapture } from './provider-request-capture.js';
 import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
+import { bridgeBackToTurn } from './agents-model-bridge.js';
 
 export {
   OpenAIResponsesModelWithPromptCacheKey,
@@ -113,7 +114,7 @@ registerProvider({
       settingsService.get('agent.transport') === 'http'
         ? new OpenAIResponsesModelWithPromptCacheKey(openAIClient, model || defaultModel)
         : new OpenAIResponsesWSModelWithPromptCacheKey(openAIClient, model || defaultModel);
-    return selectedModel as unknown as StreamedModelTurn;
+    return bridgeBackToTurn(selectedModel);
   },
   fetchModels: fetchOpenAIModels,
   clearConversations: undefined, // No conversation state to clear

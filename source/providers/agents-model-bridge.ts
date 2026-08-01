@@ -16,6 +16,53 @@ type FunctionCallResultItem = any;
 type ResponseStreamEvent = any;
 type ResponseDoneEvent = any;
 
+/** Bridge an SDK Model back into an application StreamedModelTurn. */
+export function bridgeBackToTurn(model: { getStreamedResponse(request: any): AsyncIterable<any> }): StreamedModelTurn {
+  return {
+    async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
+      const legacyRequest = {
+        input: request.input.map((item: any) =>
+          item.type === 'tool_result'
+            ? { type: 'function_call_result', callId: item.id, output: { text: item.output } }
+            : item,
+        ),
+        tools: request.tools.map((tool) => ({ type: 'function', ...tool })),
+        modelSettings: {
+          ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+          ...(request.reasoning ? { reasoning: request.reasoning } : {}),
+        },
+        systemInstructions: request.instructions,
+        handoffs: [],
+        outputType: 'text',
+        tracing: false,
+        signal: request.signal,
+      };
+      let completion: any;
+      for await (const event of model.getStreamedResponse(legacyRequest)) {
+        if (event?.type === 'output_text_delta') yield { type: 'text_delta', text: event.delta ?? '' };
+        else if (event?.type === 'response_done') completion = event.response;
+        else if (event?.type === 'response.completed') completion = event.response;
+      }
+      const output = completion?.output ?? [];
+      yield {
+        type: 'completion',
+        responseId: completion?.id ?? `response-${Date.now()}`,
+        output: output.map((item: any) =>
+          item?.type === 'function_call'
+            ? {
+                type: 'tool_call' as const,
+                id: item.callId ?? item.call_id,
+                name: item.name,
+                arguments: item.arguments ?? '{}',
+              }
+            : item,
+        ),
+        usage: completion?.usage,
+      };
+    },
+  };
+}
+
 /** Temporary compatibility boundary from the SDK Model protocol to one application turn. */
 export function adaptStreamedModelTurnForAgents(applicationModel: StreamedModelTurn): Model {
   return {

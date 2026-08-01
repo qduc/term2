@@ -4,7 +4,7 @@ import { ApplicationRunLoop } from '../services/agent-runtime/application-run-lo
 it('application run loop aborts an active stream on disposal-equivalent abort', () => {
   const loop = new ApplicationRunLoop({
     resolveModel: async () => ({
-      async stream() {
+      async *stream() {
         await new Promise(() => {});
       },
     }),

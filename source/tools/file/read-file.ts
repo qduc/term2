@@ -84,7 +84,7 @@ export const createReadFileToolDefinition = (
     /** Isolated legacy protocol for nested tools only. */
     nestedCompatibility?: NestedToolCompatibilityState;
   } = {},
-): ToolDefinition<ReadFileToolParams> => {
+): ToolDefinition<typeof readFileParametersSchema> => {
   const { executionContext, allowOutsideWorkspace = false, orchestratorMode = false, sessionAccess, nestedCompatibility } = deps;
   return {
     name: 'read_file',

@@ -19,7 +19,7 @@ import {
 import { getModelDefaultReasoningLevel } from '../services/model-service.js';
 import { toolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
-import type { PostExecutePauseCapability, ToolDefinition } from '../tools/types.js';
+import type { AnyToolDefinition, PostExecutePauseCapability, ToolRegistry } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
 
 export interface AgentFactoryDeps {
@@ -71,17 +71,23 @@ function getProviderCapabilities(providerId: string): ProviderCapabilities {
   };
 }
 
+/** SDK-facing shim props attached to wrapped definitions by the factory; not part of the application contract. */
+interface ToolInvokeShim {
+  type: 'function';
+  invoke: (context: unknown, input: unknown, details?: unknown) => Promise<unknown>;
+}
+
 export function buildAgentTools({
   toolDefinitions,
   resolvedModel,
   shouldUseNativePatchTool,
   deps,
 }: {
-  toolDefinitions: ToolDefinition[];
+  toolDefinitions: ToolRegistry;
   resolvedModel: string;
   shouldUseNativePatchTool: boolean;
   deps: AgentFactoryDeps;
-}): ToolDefinition[] {
+}): ToolRegistry {
   for (const definition of toolDefinitions) {
     if (definition.postExecute && definition.postExecutePause) {
       throw new Error(
@@ -94,20 +100,24 @@ export function buildAgentTools({
     providerId: deps.providerId,
     capabilities: providerCapabilities,
   });
-  const tools: ToolDefinition[] = toolDefinitions
+  const tools: ToolRegistry = toolDefinitions
     .filter(() => true)
     .map((definition) => {
-      const wrappedDefinition: ToolDefinition = {
+      const wrappedDefinition: AnyToolDefinition = {
         ...definition,
         parameters: useStrictToolSchema
-          ? (z.toJSONSchema(toOpenAIStrictToolSchema(definition.parameters)) as any)
+          ? // Strict-schema path: `parameters` is replaced at runtime by its JSON
+            // schema form (the run loop's `isJsonSchema` guard handles that). The
+            // declared member stays `ZodTypeAny`; this cast is the deliberate,
+            // documented erasure point and must not be widened back to bare `any`.
+            (z.toJSONSchema(toOpenAIStrictToolSchema(definition.parameters)) as any)
           : definition.parameters,
         needsApproval: wrapNeedsApproval(definition, {
           checkInterceptors: (params) => deps.checkToolInterceptors(definition.name, params),
           toolName: definition.name,
           registry: toolApprovalPolicyRegistry,
         }),
-        execute: async (params, _context: any, details: any) => {
+        execute: async (params, _context: unknown, details: any) => {
           const maxOutputLengthValue = deps.settings.get('shell.maxOutputChars');
           // Extract tool call ID from details if available
           const toolCallId = details?.toolCall?.callId;
@@ -135,7 +145,7 @@ export function buildAgentTools({
           const postExecute = definition.postExecute ?? deps.postExecutePauseCapability?.forTool(definition);
           const finalResult = postExecute
             ? await postExecute({
-                params: normalizeObjectParams(params, definition.parameters) as typeof params,
+                params: normalizeObjectParams(params, definition.parameters),
                 result,
                 details,
                 executeAgain: executeOriginal,
@@ -145,8 +155,9 @@ export function buildAgentTools({
           return injectTurnLimitWarning(trimmedResult, resolveTurnLimitContext(_context));
         },
       };
-      (wrappedDefinition as any).type = 'function';
-      (wrappedDefinition as any).invoke = async (context: any, input: unknown, details?: unknown) => {
+      const shim = wrappedDefinition as AnyToolDefinition & ToolInvokeShim;
+      shim.type = 'function';
+      shim.invoke = async (context: unknown, input: unknown, details?: unknown) => {
         const parsed = typeof input === 'string' ? JSON.parse(input) : input;
         return wrappedDefinition.execute(parsed, context, details);
       };
@@ -158,7 +169,7 @@ export function buildAgentTools({
   if (shouldUseNativePatchTool) {
     const applyPatch = tools.find((tool) => tool.name === 'apply_patch');
     if (applyPatch) {
-      applyPatch.needsApproval = async (params: any, context: any) => {
+      applyPatch.needsApproval = async (params, context) => {
         const operation = context ?? params;
         const workspaceRoot = path.resolve(deps.executionContext?.getCwd() || process.cwd());
         const resolved = path.resolve(workspaceRoot, String(operation?.path ?? ''));

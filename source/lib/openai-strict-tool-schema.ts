@@ -1,6 +1,4 @@
-import { z } from 'zod';
-
-type AnyZodObject = z.ZodObject<any, any>;
+import { z, type ZodTypeAny } from 'zod';
 
 const isZodOptional = (schema: z.ZodTypeAny): schema is z.ZodOptional<any> => schema instanceof z.ZodOptional;
 
@@ -8,8 +6,16 @@ const isZodOptional = (schema: z.ZodTypeAny): schema is z.ZodOptional<any> => sc
  * OpenAI strict tool schemas require every property to be listed in `required`.
  * To keep tool definitions ergonomic (optional params), we convert optional fields
  * into nullable fields with a null default only for OpenAI tool registration.
+ *
+ * The parameter type is the full `ZodTypeAny` family (not just `ZodObject`)
+ * because the tool contract erases `parameters` to `ZodTypeAny` in its
+ * heterogeneous registry; non-object schemas cannot be converted and are passed
+ * through unchanged (all current tool parameter schemas are objects).
  */
-export const toOpenAIStrictToolSchema = <T extends AnyZodObject>(schema: T): AnyZodObject => {
+export const toOpenAIStrictToolSchema = <T extends ZodTypeAny>(schema: T): ZodTypeAny => {
+  if (!(schema instanceof z.ZodObject)) {
+    return schema;
+  }
   const shape = schema.shape;
   const nextShape: Record<string, z.ZodTypeAny> = {};
   let changed = false;
@@ -35,7 +41,7 @@ export const toOpenAIStrictToolSchema = <T extends AnyZodObject>(schema: T): Any
   }
 
   const result = z.object(nextShape);
-  const def: any = (schema as any)._def;
+  const def = (schema as { _def?: { unknownKeys?: 'passthrough' | 'strict' } })._def;
 
   if (def?.unknownKeys === 'passthrough') {
     return result.passthrough();

@@ -12,6 +12,7 @@ import { createEditorImpl } from './editor-impl.js';
 import type { ToolDefinition } from '../tools/types.js';
 import { PostExecutePendingRegistry } from '../services/session/post-execute-pending-registry.js';
 import { PostExecutePauseCapability } from '../services/session/post-execute-pause-capability.js';
+import { createReadFileToolDefinition } from '../tools/file/read-file.js';
 
 type MockLogger = ILoggingService & { debugCalls: any[][] };
 
@@ -322,6 +323,15 @@ it.sequential('streaming Runner pauses an opted-in root tool until the session c
   expect(nextRequestResults).toHaveLength(1);
   expect(nextRequestResults[0]).toHaveLength(1);
   expect((nextRequestResults[0][0] as any).output.text).toBe('approved result');
+});
+
+it.sequential('post-execute capability accepts a schema-typed definition through forTool', () => {
+  const pending = new PostExecutePendingRegistry({ sessionId: 'session-a', epoch: 'epoch-a' });
+  const capability = new PostExecutePauseCapability(pending);
+  // read_file is the migrated proof tool: ToolDefinition<typeof schema>. The
+  // seam must accept a schema-typed definition without an erasure cast.
+  const policy = capability.forTool(createReadFileToolDefinition({}));
+  expect(policy).toBeUndefined(); // read_file does not opt into post-execute pause
 });
 
 it.sequential('rejects a tool that ambiguously defines both post-execute mechanisms', () => {

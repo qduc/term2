@@ -37,6 +37,19 @@ it('read_file schema uses optional line params instead of nullable', () => {
   expect(tool.parameters.safeParse({ path: 'README.md', end_line: null }).success).toBe(false);
 });
 
+it('read_file (migrated) derives typed executor and approval params from its schema', () => {
+  const tool = createReadFileToolDefinition();
+
+  const executeParams: Parameters<typeof tool.execute>[0] = { path: 'a.ts', start_line: 1 };
+  const approvalParams: Parameters<typeof tool.needsApproval>[0] = { path: 'a.ts' };
+  // @ts-expect-error — schema-derived params reject unknown fields
+  const rejected: Parameters<typeof tool.execute>[0] = { path: 'a.ts', bogus: true };
+  void rejected;
+
+  expect(tool.parameters.safeParse(executeParams).success).toBe(true);
+  expect(tool.parameters.safeParse(approvalParams).success).toBe(true);
+});
+
 it('shell schema uses optional params instead of nullable', () => {
   const tool = createShellToolDefinition({
     loggingService,

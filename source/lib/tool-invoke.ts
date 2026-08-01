@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { isAbortLike } from '../services/subagents/utils.js';
 import { unwrapSchema } from '../services/settings/setting-schema-utils.js';
-import type { ToolDefinition } from '../tools/types.js';
+import type { AnyToolDefinition } from '../tools/types.js';
 
 /**
  * Maximum payload size (in characters) for which JSON repair is attempted.
@@ -352,7 +352,7 @@ export const toolErrorFunction = (_context: unknown, error: unknown): string => 
  * structurally invalid params become a non-fatal diagnostic result string so
  * the model can self-correct within the same turn.
  */
-export const wrapToolInvoke = <T extends ToolDefinition>(
+export const wrapToolInvoke = <T extends AnyToolDefinition>(
   tool: T,
   originalSchema?: z.ZodTypeAny,
   options: { argumentParsing?: ToolInputNormalizationMode } = {},

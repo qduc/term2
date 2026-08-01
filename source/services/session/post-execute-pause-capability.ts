@@ -1,6 +1,8 @@
+import type { z, ZodTypeAny } from 'zod';
 import type {
   PostExecutePauseCapability as PostExecutePauseCapabilityPort,
-  ToolDefinition,
+  PostExecutePolicy,
+  SchemaToolDefinition,
 } from '../../tools/types.js';
 import { createPostExecutePausePolicy } from './post-execute-pause-policy.js';
 import { PostExecutePendingRegistry } from './post-execute-pending-registry.js';
@@ -19,7 +21,9 @@ export class PostExecutePauseCapability implements PostExecutePauseCapabilityPor
     this.#activeRunId = runId;
   }
 
-  forTool<Params>(definition: ToolDefinition<Params>) {
+  forTool<TSchema extends ZodTypeAny>(
+    definition: SchemaToolDefinition<TSchema>,
+  ): PostExecutePolicy<z.infer<TSchema>> | undefined {
     if (!definition.postExecutePause) return undefined;
     return createPostExecutePausePolicy({
       pending: this.pending,

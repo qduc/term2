@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FormatCommandMessage, ToolDefinition } from '../types.js';
+import type { FormatCommandMessage, SchemaToolDefinition, ToolDefinition } from '../types.js';
 import { createBaseMessage, getCallIdFromItem, getOutputText, normalizeToolArguments } from '../format-helpers.js';
 import {
   InvalidMemoryError,
@@ -66,19 +66,19 @@ function safe(operation: () => Promise<unknown>) {
       }),
     );
 }
-function definition<P>(
+function definition<S extends z.ZodObject<any>>(
   name: string,
   description: string,
-  parameters: z.ZodObject<any>,
-  execute: (params: P) => Promise<unknown>,
+  parameters: S,
+  execute: (params: z.infer<S>) => Promise<unknown>,
   needsApproval = false,
-): ToolDefinition<P> {
+): SchemaToolDefinition<S> {
   return {
     name,
     description,
     parameters,
     needsApproval: () => needsApproval,
-    execute: (params) => safe(() => execute(params)),
+    execute: (params: z.infer<S>) => safe(() => execute(params)),
     formatCommandMessage: makeFormat(name),
   };
 }

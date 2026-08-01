@@ -58,9 +58,9 @@ it.sequential('execute: successfully reads a file', async () => {
     const content = 'Hello\nWorld\nFrom\nFile';
     await fs.writeFile(path.join(dir, filePath), content);
 
-    const result = await readFileToolDefinition.execute({
+    const result = (await readFileToolDefinition.execute({
       path: filePath,
-    });
+    })) as string;
 
     // Result should include header and content
     expect(result.includes('File: test.txt')).toBe(true);
@@ -78,11 +78,11 @@ it.sequential('execute: reads file with line range', async () => {
     const content = 'Line 1\nLine 2\nLine 3\nLine 4\nLine 5';
     await fs.writeFile(path.join(dir, filePath), content);
 
-    const result = await readFileToolDefinition.execute({
+    const result = (await readFileToolDefinition.execute({
       path: filePath,
       start_line: 2,
       end_line: 4,
-    });
+    })) as string;
 
     // Should only include lines 2-4
     expect(result.includes('[lines 2-4]')).toBe(true);
@@ -100,10 +100,10 @@ it.sequential('execute: reads file from start_line to end', async () => {
     const content = 'Line 1\nLine 2\nLine 3\nLine 4\nLine 5';
     await fs.writeFile(path.join(dir, filePath), content);
 
-    const result = await readFileToolDefinition.execute({
+    const result = (await readFileToolDefinition.execute({
       path: filePath,
       start_line: 3,
-    });
+    })) as string;
 
     // Should include lines 3-5
     expect(result.includes('[lines 3-5]')).toBe(true);
@@ -161,9 +161,9 @@ it.sequential('execute: reads path outside workspace after approval path resolut
     const outsidePath = path.join(dir, '..', 'outside.txt');
     await fs.writeFile(outsidePath, 'outside\ncontent');
 
-    const result = await readFileToolDefinition.execute({
+    const result = (await readFileToolDefinition.execute({
       path: '../outside.txt',
-    });
+    })) as string;
 
     expect(result.includes('outside')).toBe(true);
     expect(result.includes('content')).toBe(true);
@@ -176,9 +176,9 @@ it.sequential('execute: in allowOutsideWorkspace mode, can read outside workspac
     const outsidePath = path.join(dir, '..', 'outside.txt');
     await fs.writeFile(outsidePath, 'outside\ncontent');
 
-    const result = await readFileToolDefinitionAllowOutside.execute({
+    const result = (await readFileToolDefinitionAllowOutside.execute({
       path: '../outside.txt',
-    });
+    })) as string;
 
     expect(result.includes('outside')).toBe(true);
     expect(result.includes('content')).toBe(true);
@@ -193,9 +193,9 @@ it.sequential('execute: expands ~ to home directory in allowOutsideWorkspace mod
     // but better to just mock homedir if we could.
     // Given the constraints, we can at least verify it doesn't throw a malformed path error
     // even if the file doesn't exist.
-    const result = await readFileToolDefinitionAllowOutside.execute({
+    const result = (await readFileToolDefinitionAllowOutside.execute({
       path: '~/nonexistent_file_for_test_' + Date.now(),
-    });
+    })) as string;
 
     // Should not fail with "Operation outside workspace" if expansion worked
     expect(result.includes('Operation outside workspace')).toBe(false);
@@ -205,9 +205,9 @@ it.sequential('execute: expands ~ to home directory in allowOutsideWorkspace mod
 
 it.sequential('execute: handles file not found', async () => {
   await withTempDir(async () => {
-    const result = await readFileToolDefinition.execute({
+    const result = (await readFileToolDefinition.execute({
       path: 'nonexistent.txt',
-    });
+    })) as string;
 
     expect(result.includes('Error')).toBe(true);
     expect(result.includes('ENOENT') || result.includes('not found')).toBe(true);
@@ -219,9 +219,9 @@ it.sequential('execute: handles empty file', async () => {
     const filePath = 'empty.txt';
     await fs.writeFile(path.join(dir, filePath), '');
 
-    const result = await readFileToolDefinition.execute({
+    const result = (await readFileToolDefinition.execute({
       path: filePath,
-    });
+    })) as string;
 
     expect(result.trim()).toBe('');
   });
@@ -233,11 +233,11 @@ it.sequential('execute: handles line range beyond file length', async () => {
     const content = 'Line 1\nLine 2';
     await fs.writeFile(path.join(dir, filePath), content);
 
-    const result = await readFileToolDefinition.execute({
+    const result = (await readFileToolDefinition.execute({
       path: filePath,
       start_line: 1,
       end_line: 10,
-    });
+    })) as string;
 
     // Should only include available lines
     expect(result.includes('Line 1')).toBe(true);

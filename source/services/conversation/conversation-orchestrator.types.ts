@@ -8,7 +8,6 @@ import type { CodexRateLimitInfo } from './conversation-events.js';
 import type { QueueStateSnapshot } from './conversation-adapter.js';
 
 import type { ConversationLogWriter } from '../logging/conversation-log-writer.js';
-import type { ConversationEvent } from './conversation-events.js';
 
 export type AskUserAnswer = string | string[];
 

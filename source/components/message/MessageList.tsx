@@ -1,4 +1,4 @@
-import React, { FC, useMemo, useRef } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { Box, Static, useStdout } from 'ink';
 import CommandMessage from './CommandMessage.js';
 import ChatMessage from './ChatMessage.js';

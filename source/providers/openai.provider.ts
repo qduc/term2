@@ -10,7 +10,6 @@ import { createProviderFetch } from './fetch/composer.js';
 import { RetryingModel } from './retrying-model.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
 import type { ProviderRequestCapture } from './provider-request-capture.js';
-import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 import { bridgeBackToTurn } from './agents-model-bridge.js';
 
 export {

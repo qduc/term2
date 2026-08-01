@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import CommandMessage from './CommandMessage.js';
 import { getFirstParagraph } from './command-message-helpers.js';
 import { COLOR_MUTED } from '../theme.js';
-import type { SubagentActivityMessage as SubagentActivityMessageType, CommandMessage as CommandMessageType } from '../../types/message.js';
+import type { CommandMessage as CommandMessageType } from '../../types/message.js';
 
 type SubagentToolEntry = string | CommandMessageType;
 

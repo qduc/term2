@@ -1,6 +1,6 @@
 import type { SettingsData } from './settings-schema.js';
 
-export type DeepPartial<T> = T extends Function
+export type DeepPartial<T> = T extends (...args: never[]) => unknown
   ? T
   : T extends Array<infer U>
     ? Array<U>

@@ -264,9 +264,23 @@ Replace `new RunContext(runContext)` at `nested-runner.ts:384`, and `readParentA
 structural probe with `ledger.snapshot()`. Change `tool-policy.ts`'s `RunContext<unknown>`
 parameter types to `ToolInvocationContext<unknown>`.
 
+Two decisions taken while landing (recorded so they are not re-derived):
+
+- The nested loop must start with the replayed parent approvals already in its ledger,
+  because the loop consults `state.approvals` before raising an interruption and there is no
+  other seam into the run's state. So `ApplicationRunLoopOptions` also accepts
+  `approvals?: ApprovalLedger` (a pre-seeded ledger; a fresh one is created when omitted).
+  This is one field beyond the slice-3 `context` slot and is the F5 mechanism itself, not a
+  run feature — handoffs/tracing/filter hooks remain out of scope.
+- `replayApprovals` builds items as `{ rawItem, agent, toolName }` with no top-level
+  `callId`; the typed `ApprovalLedger` reads `item.callId`. `buildApprovalItem` now also
+  emits top-level `callId` (additive; `RunContext` reads `rawItem.callId` first and sees the
+  same value). `approval-replay.test.ts` passes unchanged.
+
 *Verify:* the F5 pin — a tool approved in the parent does not prompt again inside a nested
-subagent. `approval-replay.test.ts` must keep passing unchanged; if it needs editing, the
-ledger's semantics drifted.
+subagent (loop-level: a seeded nested run whose `shell` callId matches a replayed parent
+approval raises no interruption and executes). `approval-replay.test.ts` must keep passing
+unchanged; if it needs editing, the ledger's semantics drifted.
 
 ### Slice 6 — `tool()` / `Tool` → `ToolDefinition`, and `createSubagentTool()`
 

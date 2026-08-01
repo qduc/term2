@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
-import { tool as createTool, type Tool, type RunContext } from '../agent-runtime/legacy-compat.js';
+import { tool as createTool, type Tool } from '../agent-runtime/legacy-compat.js';
+import type { ToolInvocationContext } from '../agent-runtime/tool-invocation-context.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentDefinition, SupportedSubagentRole, ValidationEvidence } from './types.js';
@@ -60,7 +61,7 @@ export type SubagentRunContext = {
 };
 
 export function getSubagentRunContext(context: unknown): SubagentRunContext | undefined {
-  const candidate = (context as RunContext<SubagentRunContext> | undefined)?.context;
+  const candidate = (context as ToolInvocationContext<SubagentRunContext> | undefined)?.context;
   if (
     candidate &&
     typeof candidate === 'object' &&
@@ -963,10 +964,15 @@ export class SubagentToolFactory {
         toolName: string,
         params: unknown,
         commandMessages: CommandMessage[],
-        context?: RunContext<unknown>,
+        context?: ToolInvocationContext<unknown>,
         details?: unknown,
       ) => void;
-      onToolComplete?: (toolName: string, result: unknown, context?: RunContext<unknown>, details?: unknown) => void;
+      onToolComplete?: (
+        toolName: string,
+        result: unknown,
+        context?: ToolInvocationContext<unknown>,
+        details?: unknown,
+      ) => void;
     },
   ): Tool[] {
     const providerDef = getProvider(options.providerId);

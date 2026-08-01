@@ -46,6 +46,12 @@ export interface ApplicationRunLoopOptions {
   readonly sessionId?: string;
   /** Per-run user context delivered to tools as `ToolInvocationContext.context`. */
   readonly context?: unknown;
+  /**
+   * The run's approval ledger; a fresh one is created when omitted. Pass a
+   * pre-seeded ledger to honor decisions already taken (e.g. parent approvals
+   * replayed into a nested run — the F5 mechanism).
+   */
+  readonly approvals?: ApprovalLedger;
 }
 
 export interface ApplicationRunLoopDeps {
@@ -136,7 +142,7 @@ export class ApplicationRunLoop {
       input: normalizeInput(input),
       history: normalizeHistory(input),
       context: options.context,
-      approvals: new ApprovalLedger(),
+      approvals: options.approvals ?? new ApprovalLedger(),
     };
     state.approve = () => {
       state.approvalDecision = 'approved';

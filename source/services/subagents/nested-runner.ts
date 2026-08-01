@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { RunContext, tool as createTool, type Tool } from '../agent-runtime/legacy-compat.js';
+import { tool as createTool, type Tool } from '../agent-runtime/legacy-compat.js';
 import type { ApplicationAgent } from '../agent-runtime/application-run-loop.js';
+import { ApprovalLedger, type ToolInvocationContext } from '../agent-runtime/tool-invocation-context.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentRequest, SubagentResult, SupportedSubagentRole, SubagentDefinition } from './types.js';
@@ -67,16 +68,14 @@ function collectApprovalCallIds(interruptions: unknown): string[] {
 /**
  * Reads the approvals of the run context the subagent tool was invoked from.
  *
- * The parent is whatever the SDK handed to the tool, so it is validated structurally rather
- * than assumed to be a `RunContext`: a caller without one simply contributes no approvals.
+ * The parent is the `ToolInvocationContext` the run loop hands to tools; its
+ * ledger snapshot replaces the old structural `toJSON()` probe on whatever the
+ * loop handed over (which was never a RunContext, so replay was always a no-op
+ * — F5). A caller without a ledger simply contributes no approvals.
  */
-function readParentApprovals(context: unknown): Record<string, ApprovalRecord> | undefined {
-  const parent = context as { toJSON?: () => { approvals?: Record<string, ApprovalRecord> } } | undefined;
-  if (!parent || typeof parent.toJSON !== 'function') {
-    return undefined;
-  }
-  const approvals = parent.toJSON()?.approvals;
-  return approvals && typeof approvals === 'object' ? approvals : undefined;
+function readParentApprovals(context: unknown): Readonly<Record<string, ApprovalRecord>> | undefined {
+  const parent = context as { approvals?: { snapshot: () => Readonly<Record<string, ApprovalRecord>> } } | undefined;
+  return parent?.approvals?.snapshot();
 }
 
 function parseNestedSubagentResult(raw: unknown): SubagentResult & { interrupted?: boolean } {
@@ -374,15 +373,19 @@ export class NestedSubagentRunner {
       });
     }
 
-    const nestedContext = new RunContext(runContext);
-
+    const nestedLedger = new ApprovalLedger();
+    // The subagent runs in its own ledger, but decisions the user already made in the
+    // parent have to be carried across or the same tool call prompts twice.
     let abortListener: (() => void) | undefined;
     try {
       const { tool: roleTool, agent: roleAgent } = this.#getOrCreateRoleTool(role);
       const tool = roleTool as any;
-      // The subagent runs in its own context, so decisions the user already made in the
-      // parent have to be carried across or the same tool call prompts twice.
-      replayApprovals(nestedContext, readParentApprovals(context), roleAgent);
+      replayApprovals(nestedLedger, readParentApprovals(context), roleAgent);
+      const nestedToolContext: ToolInvocationContext<SubagentRunContext> = {
+        context: runContext,
+        approvals: nestedLedger,
+        signal,
+      };
       const effectiveDetails = signal ? { ...detailsRecord, signal } : detailsRecord;
 
       const abortPromise = signal
@@ -393,7 +396,7 @@ export class NestedSubagentRunner {
         : null;
 
       const promises: Array<Promise<any>> = [
-        tool.invoke(nestedContext, JSON.stringify({ role, task: request.task }), effectiveDetails),
+        tool.invoke(nestedToolContext, JSON.stringify({ role, task: request.task }), effectiveDetails),
       ];
       if (abortPromise) {
         promises.push(abortPromise);

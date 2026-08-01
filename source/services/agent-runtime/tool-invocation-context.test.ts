@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ApprovalLedger } from './tool-invocation-context.js';
 import { ApplicationRunLoop } from './application-run-loop.js';
 import { wrapNeedsApproval } from '../../lib/tool-invoke.js';
+import { replayApprovals } from '../approval/approval-replay.js';
 import type { ToolDefinition } from '../../tools/types.js';
 
 describe('ApprovalLedger', () => {
@@ -169,6 +170,63 @@ describe('ApplicationRunLoop tool invocation context', () => {
 
     expect(calls).toHaveLength(1);
     expect((calls[0].context as any).context).toBe(userContext);
+  });
+
+  it('honors parent approvals replayed into a seeded nested run (F5 pin)', async () => {
+    const executed: string[] = [];
+    const parentLedger = new ApprovalLedger();
+    parentLedger.approveTool({ toolName: 'shell', callId: 'call-1' });
+
+    // runAsTool replays the parent's snapshot into the nested run's ledger,
+    // which it passes to the nested loop via the options seed.
+    const nestedLedger = new ApprovalLedger();
+    replayApprovals(nestedLedger, parentLedger.snapshot(), { name: 'parent-agent' });
+
+    let first = true;
+    const loop = new ApplicationRunLoop({
+      resolveModel: async () => ({
+        async *stream() {
+          if (first) {
+            first = false;
+            yield { type: 'tool_call', id: 'call-1', name: 'shell', arguments: '{"command":"ls"}' };
+            yield { type: 'completion', responseId: 'resp-1', output: [] };
+          } else {
+            yield {
+              type: 'completion',
+              responseId: 'resp-2',
+              output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+            };
+          }
+        },
+      }),
+    });
+    const stream = loop.startStream(
+      {
+        name: 'nested-agent',
+        instructions: 'Run the tool.',
+        model: 'm',
+        tools: [
+          {
+            name: 'shell',
+            description: 'Shell',
+            parameters: z.object({ command: z.string() }),
+            needsApproval: () => true,
+            execute: (_p, _c, details) => {
+              executed.push((details as any)?.toolCall?.callId ?? '?');
+              return 'ran';
+            },
+            formatCommandMessage: () => [],
+          },
+        ],
+      },
+      'go',
+      { approvals: nestedLedger },
+    );
+    await stream.completed;
+
+    // The parent already approved this exact call: no interruption, no re-prompt.
+    expect(stream.interruptions).toHaveLength(0);
+    expect(executed).toEqual(['call-1']);
   });
 
   it('records an approved decision and executes the same call without re-prompting (F5 mechanism at the loop)', async () => {

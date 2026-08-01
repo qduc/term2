@@ -39,6 +39,10 @@ function buildApprovalItem(toolName: string, callId: string, agent: unknown): un
     rawItem: { type: 'function_call', callId, name: toolName, arguments: '{}', status: 'completed' },
     agent,
     toolName,
+    // Top-level callId so typed ledgers (ApprovalLedger) can consume the item
+    // without probing rawItem; RunContext reads rawItem.callId first and sees
+    // the same value.
+    callId,
   };
 }
 

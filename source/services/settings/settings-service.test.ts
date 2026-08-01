@@ -1204,10 +1204,10 @@ it('isSensitive() identifies sensitive settings', async () => {
   expect(service.isSensitive('agent.openrouter.model')).toBe(false);
   expect(service.isSensitive('shell.timeout')).toBe(false);
   expect(service.isSensitive('logging.logLevel')).toBe(false);
-  expect(service.isSensitive('agent.openrouter.apiKey')).toBe(false);
-  expect(service.isSensitive('agent.openai.apiKey')).toBe(false);
-  expect(service.isSensitive('webSearch.tavily.apiKey')).toBe(false);
-  expect(service.isSensitive('webSearch.exa.apiKey')).toBe(false);
+  expect(service.isSensitive('agent.openrouter.apiKey')).toBe(true);
+  expect(service.isSensitive('agent.openai.apiKey')).toBe(true);
+  expect(service.isSensitive('webSearch.tavily.apiKey')).toBe(true);
+  expect(service.isSensitive('webSearch.exa.apiKey')).toBe(true);
 });
 
 it('set() throws for sensitive settings', async () => {
@@ -1273,9 +1273,53 @@ it.sequential('sensitive settings are never saved to config file', async () => {
     expect(config.agent?.openrouter?.title).toBeFalsy();
     expect(config.app?.shellPath).toBeFalsy();
 
-    // Verify non-sensitive openrouter values ARE saved
+    // Verify non-sensitive openrouter values ARE saved while credentials are scrubbed
     expect(config.agent?.openrouter?.model, 'model should be saved').toBe('gpt-4');
-    expect(config.agent?.openrouter?.apiKey, 'apiKey should be saved').toBe('sk-secret-key');
+    expect(config.agent?.openrouter?.apiKey).toBe(undefined);
+  });
+});
+
+it.sequential('existing settings credentials are scrubbed during startup migration', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    fs.mkdirSync(settingsDir, { recursive: true });
+    const settingsFile = getSettingsFilePath(settingsDir);
+    fs.writeFileSync(
+      settingsFile,
+      JSON.stringify({
+        agent: {
+          openrouter: { apiKey: 'openrouter-file-secret' },
+          openai: { apiKey: 'openai-file-secret' },
+        },
+        webSearch: {
+          tavily: { apiKey: 'tavily-file-secret' },
+          exa: { apiKey: 'exa-file-secret' },
+        },
+        providers: [
+          {
+            id: 'migration-custom-provider',
+            name: 'Migration Custom Provider',
+            type: 'openai-compatible',
+            baseUrl: 'https://example.com/v1',
+            apiKey: 'provider-file-secret',
+          },
+        ],
+      }),
+      'utf-8',
+    );
+
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+    const inMemory = JSON.parse(JSON.stringify(service.getDynamic('agent')));
+    const persisted = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
+
+    expect(inMemory.openrouter.apiKey).toBe('openrouter-file-secret');
+    expect(inMemory.openai.apiKey).toBe('openai-file-secret');
+    expect(persisted.agent?.openrouter?.apiKey).toBe(undefined);
+    expect(persisted.agent?.openai?.apiKey).toBe(undefined);
+    expect(persisted.webSearch?.tavily?.apiKey).toBe(undefined);
+    expect(persisted.webSearch?.exa?.apiKey).toBe(undefined);
+    expect(persisted.providers?.[0]?.apiKey).toBe(undefined);
+    expect(persisted.providers?.[0]?.baseUrl).toBe('https://example.com/v1');
   });
 });
 
@@ -1311,7 +1355,7 @@ it.sequential('sensitive settings loaded from env are accessible at runtime', as
 
     expect(config.agent?.openrouter?.baseUrl).toBeFalsy();
     expect(config.app?.shellPath).toBeFalsy();
-    expect(config.agent?.openrouter?.apiKey).toBe('sk-secret-key');
+    expect(config.agent?.openrouter?.apiKey).toBe(undefined);
   });
 });
 

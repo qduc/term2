@@ -1,10 +1,40 @@
 ## Implementation plan
 
-The implementation should be one isolated feature branch, delivered in layers: reusable fake-wire infrastructure, provider-boundary contracts, then a small assembled CLI suite. Live canaries remain a separate follow-up because the repository currently has no tracked CI configuration.
+**Status: complete for the deterministic suite — 2026-08-01**
 
-### Gate 0 — Establish a clean baseline
+## Resume / completion
 
-The provider-sweep fixes are still uncommitted. A new worktree from `HEAD` would not contain them.
+The deterministic integration-test improvement is complete. The shipped suite
+now has stateful PTY and restart support, capability manifest/accounting,
+OpenAI/Codex HTTP and WebSocket coverage, every stateless matrix row,
+approval approve/reject paths, fail-closed incomplete streams, reasoning
+output, restart recovery, and durable red-proof evidence in
+[integration-test-improvement-red-proof.md](./integration-test-improvement-red-proof.md).
+
+The fixed Gate E record is:
+
+- provider black-box: 18 files / 150 tests;
+- fake-Codex: 1 file / 11 tests;
+- focused provider/application cluster: 29 files / 429 tests;
+- typecheck, build, and `git diff --check`: green;
+- full test: 403 passed + 1 skipped files; 4,981 passed + 1 skipped tests;
+- `pnpm lint`: exits 0 with one existing `require-yield` warning in
+  `source/lib/agent-client.dispose.test.ts`; Prettier is all green.
+
+Scheduled live canaries remain explicitly deferred. They require a confirmed
+CI platform, secret and billing ownership, and an approved Codex OAuth storage
+decision; deterministic completion does not claim them.
+
+The implementation was delivered in layers: reusable fake-wire infrastructure,
+provider-boundary contracts, then a small assembled CLI suite. The original
+phase and gate instructions below are retained as implementation history.
+
+### Gate 0 — Establish a clean baseline — complete (`4640429a`)
+
+The original uncommitted-provider premise is historical. The ten provider-sweep
+fixes were committed in `4640429a`, verified, and integrated before the
+deterministic suite was completed. The numbered steps below retain the original
+gate procedure and evidence requirements.
 
 1. Review and commit the ten fixes separately from this coverage work.
 2. Record the baseline:
@@ -19,7 +49,7 @@ The provider-sweep fixes are still uncommitted. A new worktree from `HEAD` would
 
 Do not copy or stash the primary checkout’s whole dirty state into the worktree.
 
-### Phase 1 — Build the reusable local harness
+### Phase 1 — Build the reusable local harness — complete (`1f97f424`)
 
 Create:
 
@@ -59,7 +89,7 @@ Endpoint gate:
 - Use runtime custom-provider `baseUrl` settings for Chat Completions, Anthropic, and Google.
 - If built-in OpenAI cannot be redirected, introduce a narrow client-construction dependency seam; do not add a user-facing test setting.
 
-### Phase 2 — Add provider-boundary conformance tests
+### Phase 2 — Add provider-boundary conformance tests — complete (`1f97f424`)
 
 Create a table-driven provider contract suite that obtains models through [registry.ts](/Users/qduc/src/term2/source/providers/registry.ts), not by constructing transport classes directly.
 
@@ -99,7 +129,7 @@ Before implementation, define an explicit provider-family capability matrix cove
 
 Run the complete scenario set once per distinct wire family, then apply the matrix-specific additions. Give OpenRouter only success, error, and request-shape coverage instead of duplicating the entire AI SDK matrix.
 
-### Phase 3 — Add assembled CLI black-box coverage
+### Phase 3 — Add assembled CLI black-box coverage — complete (`af655cc5`, `0647cfae`, `69952feb`)
 
 Create:
 
@@ -148,7 +178,7 @@ support a stateful two-send driver and real approval decisions. Do not mark
 these rows complete until the driver exercises the shipped session path rather
 than only direct `model.stream()` calls.
 
-### Phase 4 — Prove the suite is capable of failing
+### Phase 4 — Prove the suite is capable of failing — complete (`3c48e8f8`)
 
 Do not accept green-only evidence.
 
@@ -160,7 +190,7 @@ Do not accept green-only evidence.
 
 Acceptance requires at least one failing black-box scenario for every escaped bug class—not necessarily ten entirely separate tests. The application-level continuity scenario must run for every supported provider family (including Codex, OpenAI Responses, OpenAI-compatible/Chat Completions, Anthropic, Google, OpenRouter, and OpenCode where configured), with assertions selected by each provider's chaining capability; Codex-only coverage does not satisfy this requirement. The capability matrix must have a corresponding executed scenario or an explicit documented exclusion for every row, and the stateful driver must demonstrate red-proof failures against the pre-fix implementation for continuity and approval.
 
-### Phase 5 — Integrate and gate changes
+### Phase 5 — Integrate and gate changes — complete (`3c48e8f8`)
 
 Focused verification order:
 
@@ -175,11 +205,13 @@ Focused verification order:
 
 Provider, bridge, run-loop, registry, or non-interactive changes should require the provider black-box command before merge.
 
-### Phase 6 — Scheduled live canaries
+### Phase 6 — Scheduled live canaries — deferred follow-up
 
 Treat this as a follow-up after the deterministic suite lands.
 
-The repository has no tracked CI workflows, so first confirm the CI platform. Then add a scheduled/manual workflow—not a PR workflow—with:
+The repository has no tracked CI workflows, so first confirm the CI platform,
+secret/billing owner, and Codex OAuth storage decision. Then add a
+scheduled/manual workflow—not a PR workflow—with:
 
 - one cheap model per provider family;
 - basic output, tool continuation, multi-turn serialization, reasoning, and invalid-model checks;
@@ -193,4 +225,6 @@ Keep failures informational initially. Codex OAuth should remain manual or self-
 
 Use one feature worktree and serialize shared edits to `package.json` and the fake-Codex server. Independent review can remain read-only; parallel implementation offers little benefit because the harness establishes the interface used by every later phase.
 
-Minimum first merge: Phases 0–5. Phase 6 should not delay deterministic protection against the ten known regression classes.
+The deterministic minimum merge is Phases 0–5. Phase 6 must not delay or be
+counted as part of the deterministic protection against the ten known
+regression classes.

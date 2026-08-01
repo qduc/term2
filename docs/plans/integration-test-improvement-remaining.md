@@ -1,53 +1,53 @@
 # Provider black-box suite: remaining implementation plan
 
-**Status:** ready to execute after the inherited-work gate below
+**Status:** complete for the deterministic suite
 **Source plan:** `docs/plans/integration-test-improvement.md`
 **Last audited:** 2026-08-01
 
-## Resume here
+## Resume / completion
 
-Do not rebuild the provider black-box suite from the source plan. Its reusable
-HTTP/WS fixture infrastructure, registry contract foundation, dedicated Vitest
-configuration, build-first command, and basic shipped-CLI success/error cases are
-already merged.
+The deterministic remaining work is complete. Do not rebuild the provider
+black-box suite from the source plan: its reusable HTTP/WS fixture
+infrastructure, registry contract foundation, dedicated Vitest configuration,
+build-first command, stateful PTY/restart behavior, capability accounting, and
+shipped-CLI lifecycle cases are merged.
 
-The remaining work is the expanded acceptance added after that foundation:
+The expanded acceptance is now covered:
 
-- a provider-family capability matrix with executable coverage accounting;
-- a stateful driver through the shipped conversation path;
-- application-level multi-turn and approval continuity;
-- Codex and OpenAI Responses HTTP/WS coverage;
-- native failure, incomplete-stream, reasoning-output, and restart/resume cases;
-- durable black-box red-proof evidence;
-- one recorded full verification gate.
+- [x] provider-family capability matrix with executable coverage accounting;
+- [x] stateful driver through the shipped conversation path;
+- [x] application-level multi-turn and approval continuity;
+- [x] Codex and OpenAI Responses HTTP/WS coverage;
+- [x] native failure, incomplete-stream, reasoning-output, and restart/resume cases;
+- [x] durable black-box red-proof evidence;
+- [x] one recorded full verification gate.
 
-The primary checkout currently contains inherited uncommitted fixture and
-continuity work in files this plan needs. Determine its owner and finish or commit
-it before creating implementation worktrees. Do not copy, stash, or overwrite the
-whole dirty checkout.
+The inherited fixture and continuity work was reconciled and committed under
+Gate A. That earlier dirty-checkout warning is retained below as historical
+implementation context, not as a current blocker.
 
 ## What is already complete
 
 | Area | Current evidence | Disposition |
 | --- | --- | --- |
-| Provider regression fixes | `4640429a` plus the verification record in `provider-bug-sweep.md` | Historical Gate 0 is complete; remove the stale “uncommitted” premise when the source plan is next reconciled. |
-| Reusable HTTP harness | `provider-test-harness.ts`, `fake-provider-http-server.ts`, `provider-wire-fixtures.ts` | Keep and harden; do not replace. |
-| WS replay machinery | `fake-provider-websocket-server.ts` and its unit test | Extend with provider terminal/failure scenarios. A live WS recording is not required for deterministic error mutations. |
-| Registry contract foundation | `provider-contract.test.ts` covers OpenAI Responses HTTP, Chat Completions, Anthropic, Google, and OpenRouter | Retain as provider-boundary coverage; it does not prove session continuity. |
-| Real HTTP replay pilots | OpenAI, OpenRouter, Google, OpenCode Chat, and OpenCode Anthropic fixtures | Finish the inherited fixture work first. Direct Anthropic remains an explicit credit-gated exclusion. |
-| Shipped CLI foundation | `provider-cli.blackbox.ts` runs `dist/cli.js` for generic Chat success and HTTP error | Expand exact-output cases; use a PTY driver for stateful behavior. |
-| Dedicated gate | `pnpm test:provider-black-box` builds, then runs `vitest.provider-black-box.config.ts` | Keep as the focused first gate. |
+| Provider regression fixes | `4640429a` plus the verification record in `provider-bug-sweep.md` | Complete; all ten bugs are fixed and verified. |
+| Reusable HTTP harness | `1f97f424`; `provider-test-harness.ts`, `fake-provider-http-server.ts`, `provider-wire-fixtures.ts` | Complete and retained. |
+| WS replay machinery | `1f97f424`; `fake-provider-websocket-server.ts` and its unit test | Complete, including deterministic terminal/failure scenarios. |
+| Registry contract foundation | `1f97f424`; `provider-contract.test.ts` | Complete as provider-boundary coverage; application continuity remains in the lifecycle cases. |
+| Real HTTP replay pilots | Integrated deterministic fixtures for OpenAI, OpenRouter, Google, and OpenCode routes | Complete for deterministic coverage; direct real-provider Anthropic capture remains credit-gated and deferred. |
+| Shipped CLI foundation | `af655cc5`, `0647cfae`, `69952feb`; `provider-cli.blackbox.ts` and stateful lifecycle files | Complete, including PTY state, approval, resilience, and restart behavior. |
+| Capability accounting | `6496a336`; `provider-capability-matrix.ts` and `provider-session-capability-manifest.ts` | Complete; aggregate accounting fails on missing/invalid coverage. |
+| Durable red proof | `3c48e8f8`; [integration-test-improvement-red-proof.md](./integration-test-improvement-red-proof.md) | Complete and linked. |
+| Dedicated gate | `pnpm test:provider-black-box` builds, then runs `vitest.provider-black-box.config.ts` | Shipped command and ownership are current. |
 
-No durable artifact yet demonstrates the black-box suite failing against the
-pre-fix implementation. The unit-level red/green record in
-`provider-bug-sweep.md` is useful historical evidence, but does not satisfy this
-plan's black-box red-proof requirement.
+The durable black-box red-proof artifact is
+[`integration-test-improvement-red-proof.md`](./integration-test-improvement-red-proof.md).
 
 ## Target capability matrix
 
-Create `scripts/provider-black-box/provider-capability-matrix.ts` as test-owned
-data. Do not expand the production registry capability interface unless a runtime
-consumer actually needs the additional fields.
+`scripts/provider-black-box/provider-capability-matrix.ts` and
+`provider-session-capability-manifest.ts` are shipped test-owned data. The
+production registry capability interface was not expanded.
 
 Each row must declare: registry/runtime route, wire family, transport, chaining
 mode, tool/approval support, reasoning support, native continuation field,
@@ -76,7 +76,10 @@ only when routing and lifecycle behavior are genuinely identical.
 
 ## Execution plan
 
-### Gate A — Reconcile the inherited checkout
+### Gate A — Reconcile the inherited checkout — complete (`1f97f424`)
+
+The inherited dirty fixture, provider-fix, and continuity work was reconciled
+and integrated. The clean integrated foundation is recorded by `1f97f424`.
 
 1. Resolve ownership of the dirty fixture, plan, bridge, Codex, `AgentClient`,
    registry, and application-loop files.
@@ -99,7 +102,10 @@ If `pnpm-lock.yaml` matches the primary checkout, symlink that worktree's
 `node_modules` to `../../node_modules`; do not run `pnpm install` through the
 symlink.
 
-### Gate B — Add red approval-continuity regressions
+### Gate B — Add red approval-continuity regressions — complete (`b704d105`)
+
+Approval approve/reject continuity is fixed and integrated, with the stateful
+black-box proof carried by the shipped lifecycle suite.
 
 Before building more black-box cases, add application-loop regressions for the
 approval boundary.
@@ -124,7 +130,7 @@ to preserve the authoritative terminal state without executing the pending tool
 before approval. Keep the behavioral fix in its own worktree and commit, separate
 from the later coverage-only changes.
 
-### Work package 1 — Harden and state-enable the harness
+### Work package 1 — Harden and state-enable the harness — complete (`1f97f424`, `6496a336`)
 
 Owned shared files:
 
@@ -158,7 +164,7 @@ Harness acceptance:
 - timeouts terminate and await the child;
 - cleanup runs after success, assertion failure, prepare failure, and timeout.
 
-### Work package 2 — Chaining-provider lifecycle coverage
+### Work package 2 — Chaining-provider lifecycle coverage — complete (`af655cc5`)
 
 New test ownership:
 
@@ -180,7 +186,7 @@ For OpenAI Responses and Codex, over both supported transports:
 Codex must be obtained from `registry.ts` with a session context and redirected by
 `CODEX_BASE_URL`; do not instantiate its transport model directly.
 
-### Work package 3 — Stateless-provider lifecycle coverage
+### Work package 3 — Stateless-provider lifecycle coverage — complete (`0647cfae`)
 
 New test ownership:
 
@@ -199,7 +205,7 @@ application continuity plus its intentionally smaller provider-boundary set of
 success, error, and request shape; do not duplicate unrelated AI SDK cases merely
 to increase test count.
 
-### Work package 4 — Output, resilience, reasoning, and restart
+### Work package 4 — Output, resilience, reasoning, and restart — complete (`69952feb`, `37c5aeaa`)
 
 Owned files:
 
@@ -228,20 +234,21 @@ Restart acceptance intentionally does not reuse a persisted server response ID o
 the first resumed turn. The application must resynchronize with full history, then
 establish fresh chaining state.
 
-### Gate C — Capability accounting and proportionality review
+### Gate C — Capability accounting and proportionality review — complete (`6496a336`)
 
 After the scenario files are green:
 
 1. Fail the matrix-accounting test for any unexercised row.
-2. Permit only evidence-backed exclusions, including the credit-gated direct
-   Anthropic real capture and shared-wire aliases with identical routing.
+2. Permit only evidence-backed exclusions. Direct real-provider Anthropic
+   capture remains credit-gated, while the deterministic runtime Anthropic row
+   is executed; shared-wire evidence does not collapse distinct routing rows.
 3. Confirm that provider-boundary tests remain provider-boundary tests; do not
    label manually assembled `model.stream()` continuation as application-level
    coverage.
 4. Remove duplicate scenarios that do not protect a distinct transport, routing,
    lifecycle, or escaped bug class.
 
-### Gate D — Produce durable red-proof evidence
+### Gate D — Produce durable red-proof evidence — complete (`3c48e8f8`)
 
 Commit tests/harness separately from behavioral fixes. Then create:
 
@@ -269,7 +276,19 @@ not be red if that route never contained the historical bug.
 
 Remove the disposable worktree after the evidence is captured.
 
-### Gate E — Verify and merge
+### Gate E — Verify and merge — complete (`3c48e8f8`)
+
+Fixed integrated results:
+
+- provider black-box: 18 files / 150 tests;
+- fake-Codex: 1 file / 11 tests;
+- focused provider/application cluster: 29 files / 429 tests;
+- typecheck: green;
+- build: green;
+- full test: 403 passed + 1 skipped files; 4,981 passed + 1 skipped tests;
+- `git diff --check`: green;
+- `pnpm lint`: exits 0 with one existing `require-yield` warning in
+  `source/lib/agent-client.dispose.test.ts`; Prettier is all green.
 
 Run in this order, with no active build watcher:
 
@@ -315,15 +334,15 @@ results initially, and sanitized summaries without raw traffic or credentials.
 Revalidate cheap model choices at implementation time; the historical list in
 `provider-bug-sweep.md` may be stale.
 
-## Deterministic definition of done
+## Deterministic definition of done — complete
 
-- Every matrix row has an executed scenario or explicit exclusion.
-- Two-user-turn continuity is proven at the actual provider wire boundary.
-- Approve and reject are proven through the real continuation handle for every
+- [x] Every matrix row has an executed scenario or explicit exclusion.
+- [x] Two-user-turn continuity is proven at the actual provider wire boundary.
+- [x] Approve and reject are proven through the real continuation handle for every
   tool-capable row.
-- OpenAI and Codex HTTP/WS terminal and continuation paths are covered.
-- Failure and incomplete streams cannot become empty success.
-- Reasoning survives both request configuration and response processing.
-- Restart resynchronizes full history and tool state before fresh chaining.
-- The red-proof matrix maps escaped bugs to pre-fix failure and fixed-tree success.
-- The complete Gate E sequence is recorded green, with baseline failures separated.
+- [x] OpenAI and Codex HTTP/WS terminal and continuation paths are covered.
+- [x] Failure and incomplete streams cannot become empty success.
+- [x] Reasoning survives both request configuration and response processing.
+- [x] Restart resynchronizes full history and tool state before fresh chaining.
+- [x] The red-proof matrix maps escaped bugs to pre-fix failure and fixed-tree success.
+- [x] The complete Gate E sequence is recorded green, with baseline failures separated.

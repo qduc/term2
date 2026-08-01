@@ -622,6 +622,63 @@ it('settles discarded paused requests without settling retained work on cancella
   await expect(retained).rejects.toMatchObject({ name: 'AbortError' });
 });
 
+it('classifies terminal-less exhaustion as cancellation only for the execution being intentionally cancelled', async () => {
+  let endActive!: () => void;
+  const activeEnded = new Promise<void>((resolve) => {
+    endActive = resolve;
+  });
+  const started: string[] = [];
+  let queueState: string | undefined;
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start(input) {
+        started.push(String(input));
+        if (started.length === 1) {
+          await activeEnded;
+          return;
+        }
+        yield { type: 'final' as const, finalText: 'retained terminal' };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      abort: () => endActive(),
+    },
+    queueForeground: true,
+  });
+  adapter.setQueueStateObserver((state) => {
+    queueState = state.stateKind;
+  });
+
+  const active = adapter.sendMessage('active');
+  const retained = adapter.sendMessage('retained');
+  await new Promise((resolve) => setImmediate(resolve));
+  adapter.abort();
+
+  await expect(active).rejects.toMatchObject({ name: 'AbortError' });
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(queueState).toBe('paused');
+  expect(started).toEqual(['active']);
+
+  let retainedSettled = false;
+  void retained.finally(() => {
+    retainedSettled = true;
+  });
+  await Promise.resolve();
+  expect(retainedSettled).toBe(false);
+
+  await adapter.resumeQueue();
+  await expect(retained).resolves.toMatchObject({ type: 'response', finalText: 'retained terminal' });
+  expect(started).toEqual(['active', 'retained']);
+});
+
 it('force-settles the active request when cancel completes even if the turn ignores abort', async () => {
   let queueState: string | undefined;
   const adapter = new ConversationAdapter({

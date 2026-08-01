@@ -123,6 +123,7 @@ export class ConversationAdapter {
   #nextActionId = 1;
   #activeTurn: Promise<void> = Promise.resolve();
   #activeRequestId: string | null = null;
+  #cancellingRequestId: string | null = null;
   #cancellation: Promise<void> = Promise.resolve();
   #approvalExecutionId: ExecutionId | null = null;
   #approvalActionId: ActionId | null = null;
@@ -391,14 +392,18 @@ export class ConversationAdapter {
     // own (a hung generator, missing abort hook, etc.), force-settle the active
     // request so orchestrator awaits cannot stick forever. Retained queued
     // requests stay pending — pause is not a terminal fate.
-    this.#turnFlow.abort?.();
     const activeRequestId = this.#activeRequestId;
+    this.#cancellingRequestId = activeRequestId;
+    this.#turnFlow.abort?.();
     this.#cancellation = this.#queue.command({ kind: 'cancel' }).then(() => {
       if (activeRequestId && this.#messagesById.has(activeRequestId)) {
         this.#settleFailure(activeRequestId, queueCancellationError('Active turn was cancelled'));
       }
       if (this.#activeRequestId === activeRequestId) {
         this.#activeRequestId = null;
+      }
+      if (this.#cancellingRequestId === activeRequestId) {
+        this.#cancellingRequestId = null;
       }
       this.#notifyQueueState();
     });
@@ -465,10 +470,14 @@ export class ConversationAdapter {
       this.#notifyQueueState();
       this.#settleSuccess(execution.snapshot.requestId, result);
     } catch (error) {
+      const failure =
+        this.#cancellingRequestId === execution.snapshot.requestId
+          ? queueCancellationError('Active turn was cancelled')
+          : error;
       // Controller pauses with retained queue on failure when work remains.
-      await this.#queue!.event({ kind: 'failed', executionId: execution.executionId, failure: error });
+      await this.#queue!.event({ kind: 'failed', executionId: execution.executionId, failure });
       this.#notifyQueueState();
-      this.#settleFailure(execution.snapshot.requestId, error);
+      this.#settleFailure(execution.snapshot.requestId, failure);
     }
   }
 

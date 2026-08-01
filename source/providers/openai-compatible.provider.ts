@@ -118,7 +118,11 @@ export class OpencodeAnthropicFormatProvider implements LegacyModelProvider {
 
   constructor(private readonly config: CustomProviderConfig, private readonly deps: CustomProviderRuntimeDeps) {
     const isOpencode = isOpencodeProvider(this.config);
-    this.fallbackSessionId = isOpencode ? generateOpencodeSessionId() : undefined;
+    // The streamed provider factory may recreate this wrapper for each turn.
+    // Derive its fallback from the active conversation so recreation preserves
+    // the OpenCode session without sharing identity across conversations.
+    const conversationSessionId = this.deps.sessionContextService?.getContext()?.sessionId;
+    this.fallbackSessionId = isOpencode ? generateOpencodeSessionId(conversationSessionId) : undefined;
   }
 
   private resolveRuntimeConfig(): { baseUrl: string; apiKey: string | undefined } {

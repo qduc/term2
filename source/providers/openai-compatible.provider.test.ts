@@ -895,6 +895,45 @@ it('opencode provider type keeps the fallback session ID stable across turns', a
   }
 });
 
+it('recreated opencode provider instances reuse the active conversation session and isolate other sessions', async () => {
+  const captured: CapturedRequest[] = [];
+  let activeSessionId = 'conversation-a';
+  const sessionContextService = {
+    getContext: () => ({
+      sessionId: activeSessionId,
+      sessionStartedAt: '2026-05-25T12:00:00.000Z',
+    }),
+    runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  };
+
+  const runTurn = async () => {
+    const provider = buildProvider(
+      captured,
+      successResponse,
+      'opencode',
+      'https://opencode.ai/v1',
+      undefined,
+      sessionContextService,
+    );
+    const model = await provider.getModel('provider-model');
+    await runUnderTrace(() =>
+      model.getResponse({
+        ...baseRequest,
+        input: [{ role: 'user', content: 'hello' }] as any,
+        modelSettings: {},
+      } as any),
+    );
+  };
+
+  await runTurn();
+  await runTurn();
+  expect(captured[1]?.headers['x-opencode-session']).toBe(captured[0]?.headers['x-opencode-session']);
+
+  activeSessionId = 'conversation-b';
+  await runTurn();
+  expect(captured[2]?.headers['x-opencode-session']).not.toBe(captured[0]?.headers['x-opencode-session']);
+});
+
 it('lazy opencode provider reuses the same model provider instance across getModel calls (regression: was recreated per turn, resetting session ID)', async () => {
   const deps: ProviderDeps = {
     settingsService: {

@@ -826,15 +826,10 @@ it.sequential('Codex HTTP stream rejects EOF before a completed response event',
         })(),
     },
   };
-  const provider = new CodexProvider(
-    client as any,
-    {} as any,
-    {},
-    undefined,
-    'http',
-    0,
-    { firstFrameMs: 1_000, interFrameMs: 1_000 },
-  );
+  const provider = new CodexProvider(client as any, {} as any, {}, undefined, 'http', 0, {
+    firstFrameMs: 1_000,
+    interFrameMs: 1_000,
+  });
   const model = provider.getStreamedModel('fixture-codex');
 
   await expect(

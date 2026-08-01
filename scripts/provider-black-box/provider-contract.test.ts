@@ -93,7 +93,11 @@ describe('provider boundary contracts through the registry', () => {
     expect(getAllProviders().length).toBeGreaterThanOrEqual(3);
   });
 
-  it('pilot Chat Completions provider replays a recorded wire fixture through the registry', async () => {
+  it('pilot Chat Completions provider replays a synthetic chat-completions fixture through the registry', async () => {
+    // Machinery pilot: chat-pilot.json is hand-authored (not a real-traffic
+    // recording), so this proves the record → sanitize → replay pipeline
+    // end-to-end only. The Phase 4 acceptance of validating the real wire shape
+    // awaits a live capture; see fixtures/PROVENANCE.md.
     const fixture = await readFixtureEnvelope(new URL('./fixtures/fixture/chat-pilot.json', import.meta.url).pathname);
     server = await startFakeProviderHttpServer({ fixture });
     const providerCase = providerCases[1]!;

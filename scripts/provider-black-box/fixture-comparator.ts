@@ -75,9 +75,18 @@ export function compareRecordedRequest(
   // The fetch seam sees caller headers while an HTTP server also sees transport
   // headers (host, content-length, connection, ...). Compare the recorded
   // projection as a subset and let the SDK-churn allow-list cover known extras.
+  // A recorded header the sanitizer redacted to '[REDACTED]' (e.g. any header
+  // whose name contains key/token/secret) matches whatever the app actually
+  // sends, since the recorded value was deliberately destroyed.
   const actualComparableHeaders = Object.fromEntries(
     Object.keys(expectedHeaders)
-      .map((key) => [key, actualHeaders[key]])
+      .map((key) => {
+        const actualValue = actualHeaders[key];
+        // A redacted expected value matches any value the app actually sends,
+        // but a header the app omits entirely still fails the comparison.
+        if (actualValue === undefined) return [key, undefined];
+        return [key, expectedHeaders[key] === '[REDACTED]' ? '[REDACTED]' : actualValue];
+      })
       .filter(([, value]) => value !== undefined),
   );
   const expectedValue = {

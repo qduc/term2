@@ -5,13 +5,13 @@
   "wireFamily": "openai-chat",
   "transport": "http-sse",
   "capture": {
-    "sdkPackage": "openai",
-    "apiSdkVersion": "6.37.0",
+    "sdkPackage": "fixture-fake-provider",
+    "apiSdkVersion": "1.0.0",
     "model": "chat-fixture",
     "modelFamily": "fixture",
-    "capturedAt": "2026-08-01T10:10:16.614Z",
+    "capturedAt": "2026-08-01T11:03:38.192Z",
     "recorderVersion": "1",
-    "probeScenario": "tool-continuation-v1"
+    "probeScenario": "fake:chat-completions:success"
   },
   "turns": [
     {
@@ -48,7 +48,9 @@
                       "type": "number"
                     }
                   },
-                  "required": ["a"],
+                  "required": [
+                    "a"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -67,7 +69,7 @@
             "cache-control": "no-cache",
             "connection": "close",
             "content-type": "text/event-stream",
-            "date": "Sat, 01 Aug 2026 10:10:16 GMT",
+            "date": "Sat, 01 Aug 2026 11:03:38 GMT",
             "transfer-encoding": "chunked"
           },
           "seq": 1
@@ -85,5 +87,7 @@
       ]
     }
   ],
-  "placeholders": { "chatcmpl_fake": "chatcmpl_<1>" }
+  "placeholders": {
+    "chatcmpl_fake": "chatcmpl_<1>"
+  }
 }

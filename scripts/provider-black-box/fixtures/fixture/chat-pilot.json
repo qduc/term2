@@ -5,13 +5,13 @@
   "wireFamily": "openai-chat",
   "transport": "http-sse",
   "capture": {
-    "sdkPackage": "openai",
-    "apiSdkVersion": "6.37.0",
+    "sdkPackage": "fixture-synthetic",
+    "apiSdkVersion": "0.0.0",
     "model": "chat-fixture",
     "modelFamily": "fixture",
-    "capturedAt": "2026-08-01T00:00:00.000Z",
+    "capturedAt": "2026-08-01T11:03:38.192Z",
     "recorderVersion": "1",
-    "probeScenario": "tool-continuation-v1"
+    "probeScenario": "chat-pilot"
   },
   "turns": [
     {
@@ -21,13 +21,39 @@
           "kind": "http-request",
           "method": "POST",
           "urlPath": "/chat/completions",
-          "headers": { "content-type": "application/json" },
+          "headers": {
+            "content-type": "application/json"
+          },
           "body": {
             "model": "chat-fixture",
             "messages": [
-              { "role": "user", "content": [{ "type": "text", "text": "first" }] },
-              { "role": "assistant", "content": [{ "type": "text", "text": "second" }] },
-              { "role": "user", "content": [{ "type": "text", "text": "third" }] }
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "first"
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "second"
+                  }
+                ]
+              },
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "third"
+                  }
+                ]
+              }
             ],
             "stream": true,
             "tools": [
@@ -38,26 +64,47 @@
                   "description": "Returns deterministic fixture data.",
                   "parameters": {
                     "type": "object",
-                    "properties": { "a": { "type": "number" } },
-                    "required": ["a"],
+                    "properties": {
+                      "a": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "a"
+                    ],
                     "additionalProperties": false
                   }
                 }
               }
             ],
             "reasoning_effort": "medium",
-            "response_format": { "type": "text" }
+            "response_format": {
+              "type": "text"
+            }
           }
         },
-        { "seq": 1, "kind": "http-response-head", "status": 200, "headers": { "content-type": "text/event-stream" } },
+        {
+          "seq": 1,
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream"
+          }
+        },
         {
           "seq": 2,
           "kind": "sse-event",
           "data": "{\"id\":\"chatcmpl_<1>\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hello\"},\"finish_reason\":\"stop\"}]}"
         },
-        { "seq": 3, "kind": "sse-event", "data": "[DONE]" }
+        {
+          "seq": 3,
+          "kind": "sse-event",
+          "data": "[DONE]"
+        }
       ]
     }
   ],
-  "placeholders": { "chatcmpl_fake": "chatcmpl_<1>" }
+  "placeholders": {
+    "chatcmpl_fake": "chatcmpl_<1>"
+  }
 }

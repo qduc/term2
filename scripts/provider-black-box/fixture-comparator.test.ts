@@ -27,3 +27,15 @@ it('reports a canonicalized request mutation', () => {
   expect(result.equal).toBe(false);
   expect(result.diff).toContain('wrong');
 });
+it('treats a redacted expected header value as matching any actual value', () => {
+  expect(
+    compareRecordedRequest(
+      { ...expected, headers: { 'x-goog-api-key': '[REDACTED]' } },
+      { ...expected, headers: { 'x-goog-api-key': 'AIzaSy-real-key-1234567890abcdef' } },
+    ).equal,
+  ).toBe(true);
+  // ...but a header the expected frame declares and the app omits still fails.
+  expect(
+    compareRecordedRequest({ ...expected, headers: { 'x-goog-api-key': '[REDACTED]' } }, expected).equal,
+  ).toBe(false);
+});

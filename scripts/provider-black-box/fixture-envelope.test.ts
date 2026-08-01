@@ -41,9 +41,17 @@ describe('fixture envelope', () => {
     expect(() =>
       validateFixtureEnvelope({
         ...base,
-        turns: [{ frames: [{ ...base.turns[0]!.frames[0]!, body: { id: '<missing>' } }] }],
+        turns: [{ frames: [{ ...base.turns[0]!.frames[0]!, body: { id: '<9>' } }] }],
       }),
     ).toThrow(/unmapped/i);
+  });
+  it('accepts ordinary angle-bracketed text in frames', () => {
+    expect(() =>
+      validateFixtureEnvelope({
+        ...base,
+        turns: [{ frames: [{ ...base.turns[0]!.frames[0]!, body: { text: 'Use Array<string> here' } }] }],
+      }),
+    ).not.toThrow();
   });
   it('rejects non-monotonic frame order', () => {
     expect(() =>

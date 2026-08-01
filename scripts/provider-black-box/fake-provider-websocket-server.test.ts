@@ -71,4 +71,9 @@ describe('fixture WebSocket replay', () => {
     });
     expect(() => server!.assertValid()).toThrow(/differs|unexpected/i);
   });
+  it('does not pass vacuously when no session ever connects', async () => {
+    server = await startFakeProviderWebSocketServer({ fixture });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(() => server!.assertValid()).toThrow(/session/i);
+  });
 });

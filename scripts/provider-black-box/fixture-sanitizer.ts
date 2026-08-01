@@ -111,7 +111,13 @@ export function scanFixtureSecrets(value: unknown): { safe: boolean; findings: S
         /[A-Za-z]/.test(item) &&
         /\d/.test(item) &&
         /[^A-Za-z0-9\s]/.test(item) &&
-        !/<\d+>/.test(item)
+        !/<\d+>/.test(item) &&
+        // Real credentials are token-shaped (no spaces). Requiring no whitespace
+        // keeps ordinary prose with numbers and punctuation from false-positiving.
+        !/\s/.test(item) &&
+        // URLs are not credentials; the dedicated sk-/Bearer patterns still catch
+        // keys embedded in them.
+        !/^https?:\/\//.test(item)
       )
         findings.push({ path, kind: 'high-entropy' });
       return;

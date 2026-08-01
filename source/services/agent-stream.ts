@@ -23,6 +23,15 @@ export interface AgentStream {
   state?: ContinuationHandle;
   cancelled?: boolean;
   rawResponses?: unknown[];
+  /** Authoritative cumulative usage for the run, exposed separately from opaque continuation state. */
+  runUsage?: unknown;
+}
+
+/** Select the newest non-empty terminal item collection, falling back to full history. */
+export function selectAgentStreamItems(stream: Pick<AgentStream, 'newItems' | 'history'>): unknown[] {
+  const newItems = Array.isArray(stream.newItems) ? stream.newItems : [];
+  const history = Array.isArray(stream.history) ? stream.history : [];
+  return newItems.length > 0 ? newItems : history;
 }
 
 /** Adapt a provider/runtime stream to the app-owned stream contract. */
@@ -57,6 +66,9 @@ export function adaptAgentStream(source: unknown): AgentStream {
     },
     get rawResponses() {
       return stream.rawResponses;
+    },
+    get runUsage() {
+      return stream.state?.usage;
     },
     state,
   };

@@ -8,7 +8,7 @@ import { extractCommandMessages } from '../../utils/streaming/extract-command-me
 import { attachCachedArguments } from '../command-message-streaming.js';
 import { createInvalidToolCallDiagnostic } from '../logging/logging-contract.js';
 import { asRecord, getCallIdFromObject, getString, getToolInfoFromInterruption } from '../interruption-info.js';
-import type { AgentStream } from '../agent-stream.js';
+import { selectAgentStreamItems, type AgentStream } from '../agent-stream.js';
 import { createContinuationHandle } from '../../contracts/continuation-handle.js';
 import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
@@ -269,7 +269,7 @@ export async function buildConversationResult(
   approvalFlow.clearPending();
   shellAutoApproval.clearCache();
 
-  const items = result.newItems || result.history || [];
+  const items = selectAgentStreamItems(result);
   const commandMessageItems = attachCachedArguments(items, toolCallArgumentsById);
   const allCommandMessages = extractCommandMessages(commandMessageItems);
   const derivedTurnItems = buildPersistedAssistantTurnItems(items);

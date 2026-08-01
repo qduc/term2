@@ -717,6 +717,25 @@ it('explicit Docker host control is not auto-approved by LLM advisory mode', asy
   }
 });
 
+it('uses populated history when newItems is empty', async () => {
+  const stream = makeStream({
+    newItems: [],
+    history: [
+      { type: 'function_call_output', call_id: 'a', output: '{"text":"x","metadata":{"messageId":"m-a"}}' },
+    ],
+  });
+
+  const outcome = await buildConversationResult(
+    { result: stream, toolCallArgumentsById: new Map() },
+    makeDeps(),
+  );
+
+  expect(outcome.kind).toBe('response');
+  if (outcome.kind === 'response') {
+    expect(outcome.result.commandMessages?.map((message) => message.callId)).toContain('a');
+  }
+});
+
 it('command messages dedup against emittedCommandIds', async () => {
   const stream = makeStream({
     history: [

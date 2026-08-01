@@ -441,7 +441,7 @@ export async function* processStreamEvents(
   // live RunState. Trust it as the run total instead of re-summing per-turn
   // streamed snapshots (which double-counts on long, multi-turn tasks). Fall back
   // to per-response extraction for providers/runners that don't populate it.
-  const runStateUsage = normalizeAgentRunUsage((stream as { state?: { usage?: unknown } })?.state?.usage);
+  const runStateUsage = normalizeAgentRunUsage(stream.runUsage);
 
   const finalUsage = runStateUsage || extractUsage(completedResult) || extractUsage(stream) || usageFromRawResponses;
   if (finalUsage) {

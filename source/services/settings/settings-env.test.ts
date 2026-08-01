@@ -16,8 +16,8 @@ it('buildEnvOverrides: maps TAVILY_API_KEY and WEB_SEARCH_PROVIDER', () => {
 
   try {
     const env = buildEnvOverrides();
-    expect((env as any).webSearch?.provider).toBe('tavily');
-    expect((env as any).webSearch?.tavily?.apiKey).toBe('k');
+    expect(env.webSearch?.provider).toBe('tavily');
+    expect(env.webSearch?.tavily?.apiKey).toBe('k');
   } finally {
     process.env = prev;
   }

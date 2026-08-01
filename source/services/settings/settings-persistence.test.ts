@@ -22,8 +22,8 @@ it('stripSensitiveSettings: removes shellPath and openrouter secrets, preserving
   };
 
   const cleaned = stripSensitiveSettings(settings);
-  expect((cleaned as any).app?.shellPath).toBe(undefined);
-  expect((cleaned as any).agent?.openrouter).toEqual({ apiKey: 'secret' });
+  expect(cleaned.app?.shellPath).toBe(undefined);
+  expect(cleaned.agent?.openrouter).toEqual({ apiKey: 'secret' });
 });
 
 it('hasMissingKeys: true when defaults introduce new key', () => {
@@ -48,8 +48,8 @@ it('loadSettingsFromFile: preserves valid sections when another section has an i
   });
 
   // Valid app section is preserved; invalid agent section is omitted (falls back to defaults)
-  expect((out.validated as any)?.app?.liteMode).toBe(true);
-  expect((out.validated as any)?.agent).toBe(undefined);
+  expect(out.validated.app?.liteMode).toBe(true);
+  expect(out.validated.agent).toBe(undefined);
   expect(out.hadErrors).toBe(true);
   expect(out.raw).toEqual(raw);
 });
@@ -76,8 +76,8 @@ it('loadSettingsFromFile: falls back to default for a section containing invalid
   });
 
   // Entire providers section falls back to default; valid app section is preserved
-  expect((out.validated as any)?.providers).toBe(undefined);
-  expect((out.validated as any)?.app?.liteMode).toBe(true);
+  expect(out.validated.providers).toBe(undefined);
+  expect(out.validated.app?.liteMode).toBe(true);
   expect(out.hadErrors).toBe(true);
   expect(out.raw).toEqual(raw);
 });

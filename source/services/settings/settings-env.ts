@@ -1,38 +1,45 @@
 import type { SettingsData } from './settings-schema.js';
 
+export type DeepPartial<T> = T extends Function
+  ? T
+  : T extends Array<infer U>
+    ? Array<U>
+    : T extends object
+      ? { [P in keyof T]?: DeepPartial<T[P]> }
+      : T;
+
 /**
  * Build environment-derived overrides from process.env
  * Used during CLI initialization.
  */
 export function buildEnvOverrides(): Partial<SettingsData> {
-  const env = (typeof process !== 'undefined' ? process.env : {}) as any;
-  const openrouter: any = {};
+  const env = typeof process !== 'undefined' ? process.env : {};
+  const openrouter: DeepPartial<NonNullable<SettingsData['agent']['openrouter']>> = {};
   if (env.OPENROUTER_API_KEY) openrouter.apiKey = env.OPENROUTER_API_KEY;
-  if (env.OPENROUTER_MODEL) openrouter.model = env.OPENROUTER_MODEL;
   if (env.OPENROUTER_BASE_URL) openrouter.baseUrl = env.OPENROUTER_BASE_URL;
   if (env.OPENROUTER_REFERRER) openrouter.referrer = env.OPENROUTER_REFERRER;
   if (env.OPENROUTER_TITLE) openrouter.title = env.OPENROUTER_TITLE;
 
-  const logging: any = {};
-  if (env.LOG_LEVEL) logging.logLevel = env.LOG_LEVEL;
+  const logging: DeepPartial<SettingsData['logging']> = {};
+  if (env.LOG_LEVEL) logging.logLevel = env.LOG_LEVEL as SettingsData['logging']['logLevel'];
   if (env.DISABLE_LOGGING !== undefined) logging.disableLogging = String(env.DISABLE_LOGGING) === 'true';
   if (env.DEBUG_LOGGING !== undefined) logging.debugLogging = true;
 
-  const environment: any = {
+  const environment: DeepPartial<SettingsData['environment']> = {
     nodeEnv: env.NODE_ENV,
   };
 
-  const app: any = {
+  const app: DeepPartial<SettingsData['app']> = {
     shellPath: env.SHELL || env.COMSPEC,
   };
 
-  const tools: any = {};
+  const tools: DeepPartial<SettingsData['tools']> = {};
   if (env.LOG_FILE_OPERATIONS !== undefined) tools.logFileOperations = String(env.LOG_FILE_OPERATIONS) !== 'false';
 
-  const debug: any = {};
+  const debug: DeepPartial<SettingsData['debug']> = {};
   if (env.DEBUG_BASH_TOOL !== undefined) debug.debugBashTool = true;
 
-  const webSearch: any = {};
+  const webSearch: DeepPartial<SettingsData['webSearch']> = {};
   if (env.TAVILY_API_KEY) {
     webSearch.tavily = { apiKey: env.TAVILY_API_KEY };
   }
@@ -43,10 +50,11 @@ export function buildEnvOverrides(): Partial<SettingsData> {
     webSearch.provider = env.WEB_SEARCH_PROVIDER;
   }
 
-  const openai: any = {};
+  const openai: DeepPartial<NonNullable<SettingsData['agent']['openai']>> = {};
   if (env.OPENAI_API_KEY) openai.apiKey = env.OPENAI_API_KEY;
 
-  const agent: any = { openrouter, openai };
+  const agent: DeepPartial<SettingsData['agent']> = { openrouter, openai };
+  if (env.OPENROUTER_MODEL) agent.model = env.OPENROUTER_MODEL;
 
   return {
     agent,

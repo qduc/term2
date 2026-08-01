@@ -1,19 +1,23 @@
 import { SettingsSchema, type SettingSource, type SettingsData } from './settings-schema.js';
+import type { DeepPartial } from './settings-env.js';
 
 type LoggerLike = {
-  warn: (message: string, meta?: any) => void;
+  warn: (message: string, meta?: Record<string, unknown>) => void;
 };
 
 /**
  * Flatten nested object to dot notation.
  */
-export function flattenSettings(obj: any, prefix = ''): Record<string, any> {
-  const result: Record<string, any> = {};
+export function flattenSettings(obj: unknown, prefix = ''): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return result;
 
-  for (const key in obj) {
-    if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
+  const record = obj as Record<string, unknown>;
 
-    const value = obj[key];
+  for (const key in record) {
+    if (!Object.prototype.hasOwnProperty.call(record, key)) continue;
+
+    const value = record[key];
     const newKey = prefix ? `${prefix}.${key}` : key;
 
     if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -29,18 +33,18 @@ export function flattenSettings(obj: any, prefix = ''): Record<string, any> {
 /**
  * Deep merge source into target (mutates target).
  */
-export function deepMerge(target: any, source: any): void {
+export function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): void {
   for (const key in source) {
     if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
 
     const sourceValue = source[key];
 
     if (sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue)) {
-      if (!target[key] || typeof target[key] !== 'object') {
+      if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) {
         target[key] = {};
       }
 
-      deepMerge(target[key], sourceValue);
+      deepMerge(target[key] as Record<string, unknown>, sourceValue as Record<string, unknown>);
     } else {
       target[key] = sourceValue;
     }
@@ -53,45 +57,47 @@ export function deepMerge(target: any, source: any): void {
  */
 export function mergeSettings(
   defaults: SettingsData,
-  fileConfig: Partial<SettingsData>,
-  env: Partial<SettingsData>,
-  cli: Partial<SettingsData>,
+  fileConfig: DeepPartial<SettingsData>,
+  env: DeepPartial<SettingsData>,
+  cli: DeepPartial<SettingsData>,
   opts?: {
     disableLogging?: boolean;
     loggingService?: LoggerLike;
   },
 ): SettingsData {
   // Deep merge starting with defaults
-  const result = JSON.parse(JSON.stringify(defaults));
+  const result = JSON.parse(JSON.stringify(defaults)) as Record<string, unknown>;
 
   // Merge file config
-  deepMerge(result, fileConfig);
+  deepMerge(result, fileConfig as Record<string, unknown>);
 
   // Merge env
-  deepMerge(result, env);
+  deepMerge(result, env as Record<string, unknown>);
 
   // Merge cli (highest priority)
-  deepMerge(result, cli);
+  deepMerge(result, cli as Record<string, unknown>);
 
   // Ensure all required fields are present
   const merged: SettingsData = {
-    providers: result.providers || JSON.parse(JSON.stringify(defaults.providers)),
-    enable_agent_workflow: result.enable_agent_workflow ?? defaults.enable_agent_workflow,
-    providerOrder: result.providerOrder ?? JSON.parse(JSON.stringify(defaults.providerOrder)),
-    agent: result.agent || JSON.parse(JSON.stringify(defaults.agent)),
-    shell: result.shell || JSON.parse(JSON.stringify(defaults.shell)),
-    sandbox: result.sandbox || JSON.parse(JSON.stringify(defaults.sandbox)),
-    agentWorkflow: result.agentWorkflow || JSON.parse(JSON.stringify(defaults.agentWorkflow)),
-    subagent: result.subagent || JSON.parse(JSON.stringify(defaults.subagent)),
-    ui: result.ui || JSON.parse(JSON.stringify(defaults.ui)),
-    logging: result.logging || JSON.parse(JSON.stringify(defaults.logging)),
-    environment: result.environment || JSON.parse(JSON.stringify(defaults.environment)),
-    app: result.app || JSON.parse(JSON.stringify(defaults.app)),
-    tools: result.tools || JSON.parse(JSON.stringify(defaults.tools)),
-    debug: result.debug || JSON.parse(JSON.stringify(defaults.debug)),
-    ssh: result.ssh || JSON.parse(JSON.stringify(defaults.ssh)),
-    webSearch: result.webSearch || JSON.parse(JSON.stringify(defaults.webSearch)),
-    memory: result.memory || JSON.parse(JSON.stringify(defaults.memory)),
+    providers: (result.providers as SettingsData['providers']) || JSON.parse(JSON.stringify(defaults.providers)),
+    enable_agent_workflow: (result.enable_agent_workflow as boolean) ?? defaults.enable_agent_workflow,
+    providerOrder: (result.providerOrder as string[]) ?? JSON.parse(JSON.stringify(defaults.providerOrder)),
+    agent: (result.agent as SettingsData['agent']) || JSON.parse(JSON.stringify(defaults.agent)),
+    shell: (result.shell as SettingsData['shell']) || JSON.parse(JSON.stringify(defaults.shell)),
+    sandbox: (result.sandbox as SettingsData['sandbox']) || JSON.parse(JSON.stringify(defaults.sandbox)),
+    agentWorkflow:
+      (result.agentWorkflow as SettingsData['agentWorkflow']) || JSON.parse(JSON.stringify(defaults.agentWorkflow)),
+    subagent: (result.subagent as SettingsData['subagent']) || JSON.parse(JSON.stringify(defaults.subagent)),
+    ui: (result.ui as SettingsData['ui']) || JSON.parse(JSON.stringify(defaults.ui)),
+    logging: (result.logging as SettingsData['logging']) || JSON.parse(JSON.stringify(defaults.logging)),
+    environment:
+      (result.environment as SettingsData['environment']) || JSON.parse(JSON.stringify(defaults.environment)),
+    app: (result.app as SettingsData['app']) || JSON.parse(JSON.stringify(defaults.app)),
+    tools: (result.tools as SettingsData['tools']) || JSON.parse(JSON.stringify(defaults.tools)),
+    debug: (result.debug as SettingsData['debug']) || JSON.parse(JSON.stringify(defaults.debug)),
+    ssh: (result.ssh as SettingsData['ssh']) || JSON.parse(JSON.stringify(defaults.ssh)),
+    webSearch: (result.webSearch as SettingsData['webSearch']) || JSON.parse(JSON.stringify(defaults.webSearch)),
+    memory: (result.memory as SettingsData['memory']) || JSON.parse(JSON.stringify(defaults.memory)),
   };
 
   // Validate final result
@@ -138,9 +144,9 @@ export function mergeSettings(
  */
 export function trackSettingSources(
   defaults: SettingsData,
-  fileConfig: Partial<SettingsData>,
-  env: Partial<SettingsData>,
-  cli: Partial<SettingsData>,
+  fileConfig: DeepPartial<SettingsData>,
+  env: DeepPartial<SettingsData>,
+  cli: DeepPartial<SettingsData>,
 ): Map<string, SettingSource> {
   const sources = new Map<string, SettingSource>();
 

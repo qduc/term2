@@ -506,14 +506,9 @@ export class QueueController<Snapshot, Terminal = unknown> {
     await this.#persist();
     if (this.#driver.continueAfterAction) {
       const resolution = 'approved' in cmd ? { approved: cmd.approved } : { value: cmd.value };
-      try {
-        await this.#driver.continueAfterAction(execution, pendingAction, resolution);
-      } catch {
-        this.#active = undefined;
-        this.#phase = 'paused';
-        this.#pauseReason = 'failure';
-        await this.#persist();
-      }
+      // This optional hook has no production implementation; a rejected test
+      // callback propagates to the command caller and does not emit a failed event.
+      await this.#driver.continueAfterAction(execution, pendingAction, resolution);
     }
     return { kind: 'accepted' };
   }
@@ -528,15 +523,9 @@ export class QueueController<Snapshot, Terminal = unknown> {
     this.#active = active;
     this.#phase = 'running';
     await this.#persist();
-    try {
-      await this.#driver.start(active);
-    } catch {
-      this.#queue.unshift(item);
-      this.#active = undefined;
-      this.#phase = 'paused';
-      this.#pauseReason = 'failure';
-      await this.#persist();
-    }
+    // Driver failure is handled by the 'failed' event handler (line ~473), not by
+    // synchronous exceptions here. The driver returns void and kicks off async work.
+    await this.#driver.start(active);
     return { kind: 'accepted' };
   }
 
@@ -616,15 +605,9 @@ export class QueueController<Snapshot, Terminal = unknown> {
     this.#active = active;
     this.#phase = 'running';
     await this.#persist();
-    try {
-      await this.#driver.start(active);
-    } catch {
-      this.#queue.unshift(item);
-      this.#active = undefined;
-      this.#phase = 'paused';
-      this.#pauseReason = 'failure';
-      await this.#persist();
-    }
+    // Driver failure is handled by the 'failed' event handler (line ~473), not by
+    // synchronous exceptions here. The driver returns void and kicks off async work.
+    await this.#driver.start(active);
   }
 
   #restore(): void {

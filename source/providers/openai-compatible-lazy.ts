@@ -38,37 +38,6 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
         throw new Error(`Custom provider '${providerId}' has no application-owned streamed model`);
       }
       return provider.getStreamedModel(model);
-      /* legacy factory removed
-          getModel: async (modelName?: string) => {
-            if (!cachedProvider) {
-              const { createCustomProviderModelProvider } = await import('./openai-compatible.provider.js');
-              const list = settingsService.get('providers');
-              const entry = Array.isArray(list)
-                ? list.find((p: any) => p && (p.id === providerId || p.name === providerId))
-                : null;
-              if (!entry) {
-                throw new Error(
-                  `Custom provider '${providerId}' is not configured. ` +
-                    `Please add it to settings.json under "providers".`,
-                );
-              }
-              const id = entry.id ? String(entry.id) : String(entry.name);
-              const resolvedConfig: CustomProviderConfig = {
-                name: id,
-                label: entry.name ? String(entry.name) : id,
-                type: entry.type ? String(entry.type) : 'openai-compatible',
-                baseUrl: entry.baseUrl ? String(entry.baseUrl) : undefined,
-                apiKey: entry.apiKey ? String(entry.apiKey) : undefined,
-              };
-              cachedProvider = createCustomProviderModelProvider(resolvedConfig, {
-                defaultModel: settingsService.get('agent.model') || '',
-                loggingService,
-                sessionContextService,
-                settingsService,
-              });
-            }
-            return cachedProvider.getModel(modelName);
-          },*/
     },
     createRunner: (deps) =>
       createApplicationCompatibilityRunner((model) =>

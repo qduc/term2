@@ -23,7 +23,6 @@ export type ConversationEvent =
   | SubagentCommandMessageEvent
   | SubagentCompletedEvent
   | SubagentQuestionEvent
-  | SubagentAsyncProgressEvent
   | CodexRateLimitEvent
   | UserMessageConsumedForAbortEvent;
 
@@ -202,14 +201,6 @@ export interface SubagentQuestionEvent {
   name?: string;
   role: string;
   question: string;
-}
-
-export interface SubagentAsyncProgressEvent {
-  type: 'subagent_async_progress';
-  runId: string;
-  role: string;
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
-  message?: string;
 }
 
 /**

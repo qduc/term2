@@ -50,13 +50,25 @@ it('schema accepts delegatable roles but hides mentor behind ask_mentor', () => 
 });
 
 it('execute returns plain-text SubagentResult', async () => {
-  const expected = makeResult({ finalText: 'Answer here.' });
+  const expected = makeResult({
+    finalText: 'Answer here.',
+    validation: {
+      command: 'pnpm typecheck',
+      exitStatus: 0,
+      outputExcerpt: 'No errors found',
+    },
+    diffStat: [{ path: 'source/example.ts', added: 3, deleted: 1 }],
+  });
   const tool = createRunSubagentToolDefinition(async () => expected);
 
   const raw = (await tool.execute({ role: 'explorer', task: 'find files' })) as string;
 
   expect(raw.includes('Status: completed')).toBe(true);
   expect(raw.includes('Answer here.')).toBe(true);
+  expect(raw).toContain('Validation: pnpm typecheck → exit 0');
+  expect(raw).toContain('Output excerpt: No errors found');
+  expect(raw).toContain('Diff stat:');
+  expect(raw).toContain('  source/example.ts +3/-1');
   expect(raw.startsWith('{')).toBe(false);
 });
 

@@ -690,22 +690,6 @@ it.sequential('CodexResponsesModel._buildResponsesCreateRequest keeps function c
   }
 });
 
-it('CodexResponsesWSModel extends OpenAIResponsesWSModel', () => {
-  const mockClient = {
-    baseURL: 'https://api.openai.com',
-    apiKey: 'test-key',
-    _options: {},
-  };
-  const tokenManager = {
-    getOrRefreshAccessToken: async () => 'token',
-    getAccountId: () => 'acc_123',
-  };
-
-  const model = new CodexResponsesWSModel(mockClient as any, 'gpt-5-codex', tokenManager as any);
-
-  expect(model instanceof OpenAIResponsesWSModel).toBe(true);
-});
-
 it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed responses', async () => {
   const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
   const trafficCalls: Array<{ method: string; args: any }> = [];

@@ -1425,45 +1425,6 @@ it('rejects preflight answer while active action is pending', async () => {
   expect(controller.state().kind).toBe('awaiting_active_action');
 });
 
-// ── driver.continueAfterAction success/failure ─────────────────────
-
-it('pauses on driver.continueAfterAction failure', async () => {
-  const controller = new QueueController({
-    driver: {
-      start: () => undefined,
-      cancel: async () => undefined,
-      continueAfterAction: () => {
-        throw new Error('continuation failed');
-      },
-    },
-    snapshotFactory: () => ({}),
-    ids: {
-      item: (() => {
-        let n = 0;
-        return () => `item-${++n}`;
-      })(),
-      execution: () => 'execution-1',
-    },
-  });
-
-  await controller.command({ kind: 'submit', text: 'task' });
-  await controller.event({
-    kind: 'ask_user_requested',
-    executionId: 'execution-1' as ExecutionId,
-    actionId: 'au-1' as ActionId,
-    question: {},
-  });
-
-  const result = await controller.command({
-    kind: 'answer_ask_user',
-    executionId: 'execution-1' as ExecutionId,
-    actionId: 'au-1' as ActionId,
-    value: 'x',
-  });
-  expect(result).toEqual({ kind: 'accepted' });
-  expect(controller.state()).toMatchObject({ kind: 'paused', reason: 'failure' });
-});
-
 // ── Multiple submits in awaiting_preflight ─────────────────────────
 
 it('enqueues subsequent submits in awaiting_preflight state', async () => {

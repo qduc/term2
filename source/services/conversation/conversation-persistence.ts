@@ -19,8 +19,7 @@ let conversationsDirOverride: string | null = null;
 export type LoadConversationForProjectResult =
   | { status: 'loaded'; conversation: RestoredState }
   | { status: 'not_found' }
-  | { status: 'project_mismatch'; conversation: RestoredState }
-  | { status: 'locked'; lockPath: string; lockInfo: { pid: number; startedAt: string; host: string } | null };
+  | { status: 'project_mismatch'; conversation: RestoredState };
 
 export function getConversationsDir(): string {
   return conversationsDirOverride ?? process.env['TERM2_CONVERSATIONS_DIR'] ?? CONVERSATIONS_DIR;

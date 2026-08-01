@@ -75,7 +75,7 @@ it.sequential('respects DISABLE_LOGGING flag', async () => {
   await new Promise((resolve) => setTimeout(resolve, 100));
 
   // No error should occur, and no files should be created
-  expect(true).toBe(true);
+  expect(fs.existsSync(logDir)).toBe(false);
 });
 
 it.sequential('uses DISABLE_LOGGING env when disableLogging is omitted', async () => {
@@ -328,20 +328,6 @@ it.sequential('tracks correlation IDs', async () => {
 
   const log2 = JSON.parse(lines2[lines2.length - 1]);
   expect(log2.correlationId).toBe(undefined);
-});
-
-it.sequential('gracefully degrades on write errors', async () => {
-  const logDir = getTestLogDir();
-  const logger = new LoggingService({
-    logDir,
-    disableLogging: false,
-  });
-
-  // This should not throw even if writes fail
-  logger.info('test', {});
-  logger.error('error', {});
-
-  expect(true).toBe(true);
 });
 
 it.sequential('uses a stable audit file path for rotated app logs', async () => {

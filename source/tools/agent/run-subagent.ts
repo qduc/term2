@@ -10,7 +10,7 @@ import {
   safeJsonParse,
 } from '../format-helpers.js';
 import type { SubagentResult } from '../../services/subagents/types.js';
-import { isAbortLike } from '../../services/subagents/utils.js';
+import { isAbortLike, formatSubagentResult } from '../../services/subagents/utils.js';
 
 const RUN_SUBAGENT_DESCRIPTION =
   'Delegate a bounded task to a specialized subagent. The subagent runs synchronously and returns a structured result. ' +
@@ -52,32 +52,6 @@ function truncatePreview(text: unknown): string {
   }
 
   return `${firstParagraph.slice(0, MAX_PREVIEW_LENGTH - 3)}...`;
-}
-
-function formatSubagentResult(result: SubagentResult): string {
-  const lines: string[] = [];
-  lines.push(`Status: ${result.status}`);
-
-  if (result.error) {
-    lines.push(`Error: ${result.error}`);
-  }
-
-  if (result.finalText) {
-    lines.push('');
-    lines.push(result.finalText);
-  }
-
-  if (result.toolsUsed && result.toolsUsed.length > 0) {
-    lines.push('');
-    lines.push(`Tools used: ${result.toolsUsed.map((t) => `${t.toolName}(${t.count})`).join(', ')}`);
-  }
-
-  if (result.filesChanged && result.filesChanged.length > 0) {
-    lines.push('');
-    lines.push(`Files changed: ${result.filesChanged.join(', ')}`);
-  }
-
-  return lines.join('\n') || `Status: ${result.status}`;
 }
 
 export const formatRunSubagentCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {

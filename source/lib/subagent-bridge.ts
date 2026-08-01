@@ -43,7 +43,6 @@ export class SubagentBridge {
   #backgroundEventSink: ((event: ConversationEvent) => void) | null = null;
   #backgroundRunIds = new Set<string>();
   #activeSubagentsCount = 0;
-  #pendingClearSink = false;
   #bufferedEvents: Array<{ event: ConversationEvent; scope: SubagentEventScope }> = [];
   #logger: ILoggingService;
   /** Per-turn scope: foreground subagent work belonging to the running turn. */
@@ -77,7 +76,6 @@ export class SubagentBridge {
 
   setEventSink(sink: ((event: ConversationEvent) => void) | null): void {
     this.#subagentEventSink = sink;
-    this.#pendingClearSink = false;
     if (sink) this.#flushBufferedEvents('foreground', sink);
   }
 
@@ -214,15 +212,11 @@ export class SubagentBridge {
     this.#backgroundAbortController = new AbortController();
   }
 
-  /** Increment active count and return a disposer that decrements + handles pending sink clear */
+  /** Increment active count and return a disposer that decrements it */
   #beginSubagentRun(): () => void {
     this.#activeSubagentsCount++;
     return () => {
       this.#activeSubagentsCount--;
-      if (this.#pendingClearSink && this.#activeSubagentsCount === 0) {
-        this.#subagentEventSink = null;
-        this.#pendingClearSink = false;
-      }
     };
   }
 

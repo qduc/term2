@@ -992,19 +992,6 @@ it('validates enum values', async () => {
   expect(service.get('agent.reasoningEffort')).toBe('default');
 });
 
-it('respects disableLogging flag', async () => {
-  const settingsDir = getTestSettingsDir();
-  const service = new SettingsService({
-    settingsDir,
-    disableLogging: true,
-  });
-
-  service.set('agent.model', 'gpt-4o');
-
-  // Should not throw
-  expect(true).toBe(true);
-});
-
 it.sequential('updates config file when new settings are added', async () => {
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();

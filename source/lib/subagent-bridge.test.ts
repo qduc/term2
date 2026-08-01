@@ -143,35 +143,9 @@ function makeBridge(subagentManager: Record<string, any> | null) {
 // Tests
 // ---------------------------------------------------------------------------
 
-it('setEventSink stores the sink', () => {
-  const { manager } = createMockManager();
-  const bridge = makeBridge(manager);
-
-  const sink = (_event: ConversationEvent) => {};
-  bridge.setEventSink(sink);
-
-  // Clearing when count is 0 works immediately (no deferral).
-  bridge.setEventSink(null);
-  expect(true).toBe(true);
-});
-
-it('setEventSink defers clear when subagents are active', async () => {
-  const { manager } = createMockManager();
-  const bridge = makeBridge(manager);
-
-  bridge.setEventSink((_event: ConversationEvent) => {});
-  const mentorPromise = bridge.createMentor('test');
-
-  // While subagent is running, try to clear the sink — should be deferred
-  bridge.setEventSink(null);
-
-  await mentorPromise;
-
-  // After completion, setting a new sink should work cleanly
-  bridge.setEventSink((_event: ConversationEvent) => {});
-  bridge.setEventSink(null);
-  expect(true).toBe(true);
-});
+// Sink attach/clear and buffered-event flushing are covered behaviourally in
+// subagent-bridge.background-sink.test.ts, which drives the real `onEvent`
+// callback rather than an injected manager.
 
 it('clearSubagentCache delegates to SubagentManager.resetMentorSession', () => {
   const { manager, trackReset } = createMockManager();
@@ -439,28 +413,6 @@ it('getAgentRuntime returns the AgentRuntime from SubagentManager', () => {
   expect(runtime).toBeDefined();
   expect(runtime).toBe(mockRuntime);
   expect(typeof (runtime as any).agent).toBe('function');
-});
-
-it('deferred sink clear is applied after active subagents complete', async () => {
-  const { manager } = createMockManager();
-  const bridge = makeBridge(manager);
-
-  // Set initial sink
-  bridge.setEventSink((_event: ConversationEvent) => {});
-
-  // Start a subagent run
-  const mentorPromise = bridge.createMentor('test');
-
-  // While running, try to clear the sink — should be deferred
-  bridge.setEventSink(null);
-
-  // Complete the run
-  await mentorPromise;
-
-  // Sink should now be cleared (deferred clear applied after count hits 0)
-  // Setting a new sink should work without crashing
-  bridge.setEventSink((_event: ConversationEvent) => {});
-  bridge.setEventSink(null);
 });
 
 it('runSubagentAsync delegates to SubagentManager.startRunAsync', async () => {

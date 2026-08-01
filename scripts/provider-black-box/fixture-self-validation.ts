@@ -1,6 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { startFakeProviderHttpServer, type FakeProviderProtocol, type FakeProviderScenario } from './fake-provider-http-server.js';
+import {
+  startFakeProviderHttpServer,
+  type FakeProviderProtocol,
+  type FakeProviderScenario,
+} from './fake-provider-http-server.js';
 import { fixtureRequest } from './provider-wire-fixtures.js';
 import { createFixtureRecorder, createRecordingMiddleware } from './fixture-recorder.js';
 import { sanitizeFixtureEnvelope } from './fixture-sanitizer.js';

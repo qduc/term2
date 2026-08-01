@@ -69,9 +69,7 @@
                         "type": "number"
                       }
                     },
-                    "required": [
-                      "a"
-                    ],
+                    "required": ["a"],
                     "additionalProperties": false
                   }
                 }

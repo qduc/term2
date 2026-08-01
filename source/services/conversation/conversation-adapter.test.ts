@@ -679,6 +679,40 @@ it('classifies terminal-less exhaustion as cancellation only for the execution b
   expect(started).toEqual(['active', 'retained']);
 });
 
+it('preserves a genuine stream error that races with intentional cancellation', async () => {
+  let releaseActive!: () => void;
+  const activeReleased = new Promise<void>((resolve) => {
+    releaseActive = resolve;
+  });
+  const providerError = new Error('provider stream failed during abort');
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start() {
+        await activeReleased;
+        throw providerError;
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      abort: () => releaseActive(),
+    },
+    queueForeground: true,
+  });
+
+  const active = adapter.sendMessage('active');
+  await new Promise((resolve) => setImmediate(resolve));
+  adapter.abort();
+
+  await expect(active).rejects.toBe(providerError);
+});
+
 it('force-settles the active request when cancel completes even if the turn ignores abort', async () => {
   let queueState: string | undefined;
   const adapter = new ConversationAdapter({

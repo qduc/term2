@@ -3,6 +3,7 @@ import type { ConversationEvent } from './conversation-events.js';
 import type { CommandMessage } from '../../tools/types.js';
 import type { ConversationTerminal, PostExecuteApprovalToken } from '../../contracts/conversation.js';
 import { collectTerminalResult } from '../session/terminal-result-collector.js';
+import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
 import type { SessionRuntime, SessionLogs, SessionApprovalQuery } from '../session/session-composition.js';
@@ -471,7 +472,7 @@ export class ConversationAdapter {
       this.#settleSuccess(execution.snapshot.requestId, result);
     } catch (error) {
       const failure =
-        this.#cancellingRequestId === execution.snapshot.requestId
+        this.#cancellingRequestId === execution.snapshot.requestId && error instanceof AmbiguousModelOutcomeError
           ? queueCancellationError('Active turn was cancelled')
           : error;
       // Controller pauses with retained queue on failure when work remains.

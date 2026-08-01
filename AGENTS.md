@@ -43,9 +43,18 @@ Suite ownership:
   deadlines, and cleanup.
 - `scripts/provider-black-box/fake-provider-http-server.ts` and
   `provider-wire-fixtures.ts` contain deterministic loopback HTTP/SSE fixtures.
-- `scripts/provider-black-box/provider-test-harness.ts` owns child-process and
-  temporary-environment lifecycle. Keep it asynchronous; synchronous child
-  execution can deadlock the fake server.
+- `scripts/provider-black-box/fake-provider-websocket-server.ts` owns the
+  deterministic WebSocket replay fixture and its terminal/error assertions.
+- `scripts/provider-black-box/provider-test-harness.ts` owns child-process,
+  stateful PTY, isolated-workspace, restart, and temporary-environment lifecycle.
+  Keep it asynchronous; synchronous child execution can deadlock the fake server.
+- `scripts/provider-black-box/provider-capability-matrix.ts` and
+  `provider-session-capability-manifest.ts` own the test-side capability rows,
+  typed lifecycle ledgers, and aggregate accounting.
+- `provider-session-responses.blackbox.ts`,
+  `provider-session-stateless.blackbox.ts`, and
+  `provider-session-resilience.blackbox.ts` own the stateful provider lifecycle
+  scenarios and their exported ledger declarations.
 
 When adding or changing a provider scenario:
 
@@ -74,7 +83,11 @@ Active multi-session work is tracked in `docs/plans/`. Each such plan opens with
 
 Currently active:
 
-- `docs/plans/provider-bug-sweep.md` — sweeping every provider for regressions from the decoupling work above. Seven real bugs found and fixed so far (silent empty output, dropped tool calls, wrong role serialization); two open (codex loses tool-continuation state across turns, reasoning effort no-ops for Anthropic/Google) plus a newly-found, uninvestigated hang in the openai provider. Read it before touching `source/providers/`.
+- No provider-related plan is active. `docs/plans/provider-bug-sweep.md` is
+  complete: ten real bugs were found, fixed, and verified. The deterministic
+  integration-test plans are also complete; scheduled live canaries remain a
+  separate deferred follow-up requiring CI, secret/billing, and OAuth-storage
+  decisions.
 
 # Delegation
 

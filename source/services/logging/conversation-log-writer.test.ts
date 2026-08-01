@@ -53,6 +53,79 @@ describe('ConversationLogWriter durability failures', () => {
     expect(saveLast).toHaveBeenCalledTimes(1);
   });
 
+  it('rotate cleans up and latches an fsync failure without starting the new session', async () => {
+    const rotateError = new Error('rotate fsync failed');
+    const dir = tempDir();
+    let fsyncCalls = 0;
+    let closeCalls = 0;
+    const fileSystem = {
+      ...fs,
+      fsyncSync(fd: number) {
+        fsyncCalls += 1;
+        if (fsyncCalls === 3) throw rotateError;
+        fs.fsyncSync(fd);
+      },
+      closeSync(fd: number) {
+        closeCalls += 1;
+        fs.closeSync(fd);
+      },
+    };
+    const writer = createConversationLogWriter({
+      sessionId: 'old-session',
+      dir,
+      logger,
+      fileSystem,
+      saveLast: vi.fn(),
+    });
+    writer.init({ id: 'old-session', createdAt: '2026-06-01T00:00:00.000Z' });
+    const closesBeforeRotate = closeCalls;
+
+    expect(() => writer.rotate('new-session', { id: 'new-session', createdAt: '2026-06-02T00:00:00.000Z' })).toThrow(
+      rotateError,
+    );
+
+    expect(closeCalls).toBe(closesBeforeRotate + 1);
+    expect(fs.existsSync(path.join(dir, 'old-session.lock'))).toBe(false);
+    expect(fs.existsSync(path.join(dir, 'new-session.jsonl'))).toBe(false);
+    expect(writer.sessionId).toBe('old-session');
+    expect(() => writer.append({ type: 'settings_changed', key: 'agent.model', value: 'gpt-5' })).toThrow(rotateError);
+    await expect(writer.flush()).rejects.toBe(rotateError);
+    await expect(writer.close()).rejects.toBe(rotateError);
+  });
+
+  it('rotate latches a close failure after releasing the old lock without starting the new session', async () => {
+    const rotateError = new Error('rotate close failed');
+    const dir = tempDir();
+    let closeCalls = 0;
+    const fileSystem = {
+      ...fs,
+      closeSync(fd: number) {
+        closeCalls += 1;
+        if (closeCalls === 2) throw rotateError;
+        fs.closeSync(fd);
+      },
+    };
+    const writer = createConversationLogWriter({
+      sessionId: 'old-session',
+      dir,
+      logger,
+      fileSystem,
+      saveLast: vi.fn(),
+    });
+    writer.init({ id: 'old-session', createdAt: '2026-06-01T00:00:00.000Z' });
+
+    expect(() => writer.rotate('new-session', { id: 'new-session', createdAt: '2026-06-02T00:00:00.000Z' })).toThrow(
+      rotateError,
+    );
+
+    expect(fs.existsSync(path.join(dir, 'old-session.lock'))).toBe(false);
+    expect(fs.existsSync(path.join(dir, 'new-session.jsonl'))).toBe(false);
+    expect(writer.sessionId).toBe('old-session');
+    expect(() => writer.append({ type: 'settings_changed', key: 'agent.model', value: 'gpt-5' })).toThrow(rotateError);
+    await expect(writer.flush()).rejects.toBe(rotateError);
+    await expect(writer.close()).rejects.toBe(rotateError);
+  });
+
   it('preserves a critical write failure when close cleanup also fails', async () => {
     const writeError = new Error('disk write failed');
     const cleanupError = new Error('close failed');

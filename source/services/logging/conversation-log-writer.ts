@@ -252,12 +252,25 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
 
   rotate(newSessionId: string, meta: Omit<SessionInitEvent, 'type'>): void {
     this.#throwIfFailed();
+    let rotateFailure: unknown = null;
     if (this.#fd !== null) {
-      this.#fileSystem.fsyncSync(this.#fd);
-      this.#fileSystem.closeSync(this.#fd);
+      try {
+        this.#fileSystem.fsyncSync(this.#fd);
+      } catch (err: unknown) {
+        rotateFailure = err;
+      }
+      try {
+        this.#fileSystem.closeSync(this.#fd);
+      } catch (err: unknown) {
+        rotateFailure ??= err;
+      }
       this.#fd = null;
     }
     releaseLock(this.#dir, this.#sessionId, this.#fileSystem);
+    if (rotateFailure !== null) {
+      this.#recordFailure(rotateFailure);
+      throw rotateFailure;
+    }
     this.#sessionId = newSessionId;
     this.#seq = 0;
     this.#writeErrorLogged = false;

@@ -3,14 +3,18 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
-import { startFakeProviderHttpServer } from './provider-black-box/fake-provider-http-server.js';
+import { isAbsolute, join, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { recordAndSelfValidate } from './provider-black-box/fixture-self-validation.js';
 import { fixtureRequest } from './provider-black-box/provider-wire-fixtures.js';
 import { createFixtureRecorder, createRecordingMiddleware } from './provider-black-box/fixture-recorder.js';
-import { sanitizeFixtureEnvelope } from './provider-black-box/fixture-sanitizer.js';
-import { validateFixtureEnvelope, type FixtureTransport } from './provider-black-box/fixture-envelope.js';
+import type { FixtureTransport } from './provider-black-box/fixture-envelope.js';
 
 const require = createRequire(import.meta.url);
+
+// Resolves to the repository root (this file lives at <root>/scripts/provider-record.ts).
+const repoRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)));
+
 const args = process.argv.slice(2);
 const get = (name: string): string | undefined => {
   const index = args.indexOf(name);
@@ -22,75 +26,43 @@ const modelArg = get('--model');
 const probe = get('--probe');
 const outArg = get('--out');
 const fromFake = has('--from-fake');
-const protocolArg = args[args.indexOf('--from-fake') + 1];
-const scenario = args[args.indexOf('--from-fake') + 2] ?? 'success';
+
+const fakeProtocols = ['chat-completions', 'responses', 'anthropic', 'google'] as const;
+const fakeScenarios = ['success', 'error', 'early-close', 'incomplete', 'tool-fragments', 'reasoning'] as const;
+
 if (!fromFake) {
   if (!has('--yes')) fail('Live recording is disabled by default. Re-run with --yes and an explicit probe.');
   if (!probe) fail('An explicit --probe scenario is required.');
   if (!providerArg || !modelArg) fail('Both --provider and --model are required.');
   if (!process.env[credentialFor(providerArg)])
     fail(`Missing credentials for ${providerArg} (${credentialFor(providerArg)}).`);
-}
-if (!fromFake) {
   await runLiveRecording(providerArg!, modelArg!, probe!, outArg);
   process.exit(0);
 }
-if (!protocolArg || !['chat-completions', 'responses', 'anthropic', 'google'].includes(protocolArg))
-  fail('Usage: --from-fake <protocol> <scenario>');
+
+// --from-fake drives the deterministic fake scenario only. The --probe flag is
+// for live tool-call probes; accepting it here would stamp a label on frames
+// that never came from the probe.
+if (probe) fail('--probe drives the live tool-call probe only; --from-fake records the deterministic fake scenario.');
+const protocolArg = args[args.indexOf('--from-fake') + 1];
+const scenarioArg = args[args.indexOf('--from-fake') + 2] ?? 'success';
+if (!(fakeProtocols as readonly string[]).includes(protocolArg ?? ''))
+  fail(`Usage: --from-fake <protocol> <scenario>; protocols: ${fakeProtocols.join(', ')}`);
+if (!(fakeScenarios as readonly string[]).includes(scenarioArg))
+  fail(`Unknown scenario '${scenarioArg}'. Available: ${fakeScenarios.join(', ')}`);
 const provider = providerArg ?? 'fixture';
 const model = modelArg ?? 'fixture-model';
-const protocol = protocolArg as 'chat-completions' | 'responses' | 'anthropic' | 'google';
-const transport: FixtureTransport = 'http-sse';
-const server = await startFakeProviderHttpServer({ protocol, scenario: scenario as any });
-const recorder = createFixtureRecorder({
-  provider,
-  wireFamily: protocol === 'chat-completions' ? 'openai-chat' : protocol,
-  transport,
-  capture: {
-    sdkPackage: 'fixture-fake-provider',
-    apiSdkVersion: '1.0.0',
-    model,
-    modelFamily: 'fixture',
-    capturedAt: new Date().toISOString(),
-    recorderVersion: '1',
-    probeScenario: probe ?? `fake:${scenario}`,
-  },
-});
 try {
-  const fetchWithCapture = createRecordingMiddleware({ recorder })(
-    {
-      url: `${server.baseUrl}/v1/chat/completions`,
-      init: {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ model, ...fixtureRequest, stream: true }),
-      },
-    },
-    (ctx) => fetch(ctx.url, ctx.init),
-  );
-  await fetchWithCapture;
-  const { envelope } = sanitizeFixtureEnvelope(await recorder.flush());
-  validateFixtureEnvelope(envelope);
-  const replay = await startFakeProviderHttpServer({ fixture: envelope });
-  try {
-    const requestFrame = envelope.turns[0]?.frames.find((frame) => frame.kind === 'http-request');
-    if (!requestFrame || requestFrame.kind !== 'http-request') fail('Recorded probe did not contain an HTTP request');
-    await fetch(`${replay.baseUrl}${requestFrame.urlPath}`, {
-      method: requestFrame.method,
-      headers: requestFrame.headers,
-      body: JSON.stringify(requestFrame.body),
-    });
-    replay.assertReplayValid();
-  } finally {
-    await replay.close();
-  }
-  const destination = recordingPath(outArg, provider, protocol, scenario);
-  await mkdir(destination.dir, { recursive: true });
-  await writeFile(destination.file, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
-  server.assertReplayValid();
-  console.log(destination.file);
-} finally {
-  await server.close();
+  const file = await recordAndSelfValidate({
+    provider,
+    model,
+    protocol: protocolArg as (typeof fakeProtocols)[number],
+    scenario: scenarioArg as (typeof fakeScenarios)[number],
+    file: recordingPath(outArg, provider, protocolArg!, scenarioArg).file,
+  });
+  console.log(file);
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error));
 }
 
 function recordingPath(out: string | undefined, providerId: string, protocolId: string, scenarioId: string) {
@@ -99,8 +71,18 @@ function recordingPath(out: string | undefined, providerId: string, protocolId: 
       ? out
       : fail('Recording output must be an absolute path')
     : join(process.env.TERM2_RECORDING_DIR ?? join(homedir(), '.term2', 'provider-recordings'));
-  if (resolve(dir) === resolve(process.cwd())) fail('Recorder never writes to the current working directory');
-  return { dir, file: join(dir, `${providerId}-${protocolId}-${scenarioId}.json`) };
+  const resolved = resolve(dir);
+  if (resolved === resolve(process.cwd())) fail('Recorder never writes to the current working directory');
+  if (resolved === repoRoot || resolved.startsWith(repoRoot + sep))
+    fail('Recorder never writes inside the repository; raw recordings stay out of the repo permanently (use ~/.term2 or --out elsewhere)');
+  return {
+    dir: resolved,
+    file: join(resolved, `${safeName(providerId)}-${safeName(protocolId)}-${safeName(scenarioId)}.json`),
+  };
+}
+
+function safeName(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]+/g, '_');
 }
 async function runLiveRecording(
   providerId: string,
@@ -220,6 +202,8 @@ function credentialFor(id: string): string {
     ? 'ANTHROPIC_API_KEY'
     : id === 'google' || id === 'gemini'
     ? 'GOOGLE_API_KEY'
+    : id === 'openrouter'
+    ? 'OPENROUTER_API_KEY'
     : 'OPENAI_API_KEY';
 }
 function fail(message: string): never {

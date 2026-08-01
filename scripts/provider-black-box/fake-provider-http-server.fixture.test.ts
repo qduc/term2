@@ -11,7 +11,7 @@ afterEach(async () => {
 describe('fixture HTTP replay', () => {
   it('replays a recorded response and validates the outbound request', async () => {
     const fixture = await readFixtureEnvelope(
-      new URL('./fixtures/fixture/tool-continuation-v1.json', import.meta.url).pathname,
+      new URL('./fixtures/fixture/fake_chat-completions_success.json', import.meta.url).pathname,
     );
     server = await startFakeProviderHttpServer({ fixture });
     const response = await fetch(`${server.baseUrl}/v1/chat/completions`, {
@@ -25,7 +25,7 @@ describe('fixture HTTP replay', () => {
   });
   it('exposes a canonical diff for a request mutation', async () => {
     const fixture = await readFixtureEnvelope(
-      new URL('./fixtures/fixture/tool-continuation-v1.json', import.meta.url).pathname,
+      new URL('./fixtures/fixture/fake_chat-completions_success.json', import.meta.url).pathname,
     );
     server = await startFakeProviderHttpServer({ fixture });
     await fetch(`${server.baseUrl}/v1/chat/completions`, {

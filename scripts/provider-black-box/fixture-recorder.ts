@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { FetchMiddleware } from '../../source/providers/fetch/compose.js';
 import { sanitizeHeaders } from '../../source/utils/header-sanitizer.js';
 import {
@@ -25,7 +24,6 @@ export type FixtureRecorder = {
   recordWsMessage(frame: Omit<WsMessageFrame, 'seq'>): void;
   /** Starts a new HTTP turn or WebSocket session in the same recording. */
   startTurn(): void;
-  finish(): FixtureEnvelopeV1;
   flush(): Promise<FixtureEnvelopeV1>;
 };
 
@@ -50,8 +48,8 @@ export function createFixtureRecorder(options: FixtureRecorderOptions): FixtureR
       current = { frames: [] };
       turns.push(current);
     },
-    finish: () => {
-      const envelope: FixtureEnvelopeV1 = {
+    flush: async () =>
+      validateFixtureEnvelope({
         schemaVersion: 1,
         kind: 'real-traffic-recording',
         provider: options.provider,
@@ -60,22 +58,7 @@ export function createFixtureRecorder(options: FixtureRecorderOptions): FixtureR
         capture: options.capture,
         turns: structuredClone(turns),
         placeholders,
-      };
-      return validateFixtureEnvelope(envelope);
-    },
-    flush: async () => {
-      await Promise.resolve();
-      return validateFixtureEnvelope({
-        schemaVersion: 1,
-        kind: 'real-traffic-recording',
-        provider: options.provider,
-        wireFamily: options.wireFamily,
-        transport: options.transport,
-        capture: options.capture,
-        turns: structuredClone(turns),
-        placeholders,
-      });
-    },
+      }),
   };
 }
 
@@ -157,8 +140,4 @@ async function requestBody(input: RequestInfo | URL, init?: RequestInit): Promis
       return null;
     }
   return null;
-}
-
-export function createRecorderCaptureId(): string {
-  return randomUUID();
 }

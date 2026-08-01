@@ -75,6 +75,13 @@ export async function startFakeProviderWebSocketServer(options: {
     sessions,
     close: () => new Promise((resolve, reject) => wsServer.close((error) => (error ? reject(error) : resolve()))),
     assertValid: () => {
+      // Mirror the HTTP fake's request-count guard: a replay with zero (or too
+      // few) sessions would otherwise pass vacuously, hiding a WS path that
+      // never connects (e.g. a silent WS→HTTP transport fallback).
+      if (sessions.length !== options.fixture.turns.length)
+        throw new Error(
+          `WebSocket replay expected ${options.fixture.turns.length} session(s), got ${sessions.length}`,
+        );
       const failures = sessions.flatMap((session) => session.failures);
       if (failures.length) throw new Error(failures.join('\n'));
     },

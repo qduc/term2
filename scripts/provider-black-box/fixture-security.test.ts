@@ -14,6 +14,17 @@ describe('committed fixture security', () => {
       expect(scanFixtureSecrets(value).safe).toBe(false);
   });
 
+  it('does not flag benign prose or URLs as high-entropy secrets', () => {
+    expect(
+      scanFixtureSecrets(
+        'The fixture tool returned {ok: true, value: 1} which confirms the expected result of 1 exactly.',
+      ).safe,
+    ).toBe(true);
+    expect(scanFixtureSecrets('https://api.example.com/v1/chat/completions?org=1234567890&k=abcdefghij').safe).toBe(
+      true,
+    );
+  });
+
   it('contains no likely secrets in committed fixture JSON', async () => {
     const root = join(process.cwd(), 'scripts/provider-black-box/fixtures');
     for (const file of await jsonFiles(root)) {

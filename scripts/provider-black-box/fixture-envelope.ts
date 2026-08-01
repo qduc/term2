@@ -89,13 +89,16 @@ export function validateFixtureEnvelope(value: unknown): FixtureEnvelopeV1 {
     }
   }
 
+  // Only placeholder-shaped tokens (<digits>) are cross-referenced by the
+  // placeholder map. Angle-bracketed text in payloads (<b>, Array<string>, XML)
+  // is ordinary content and must not be rejected as an unmapped reference.
   const allowedTokens = new Set<string>();
   for (const stable of placeholderValues) {
     allowedTokens.add(stable);
-    for (const token of stable.matchAll(/<[^<>\n]{1,80}>/g)) allowedTokens.add(token[0]);
+    for (const token of stable.matchAll(/<\d+>/g)) allowedTokens.add(token[0]);
   }
   const serialized = JSON.stringify(value.turns);
-  for (const token of serialized.matchAll(/<[^<>\n]{1,80}>/g)) {
+  for (const token of serialized.matchAll(/<\d+>/g)) {
     if (!allowedTokens.has(token[0])) throw new Error(`Unmapped placeholder reference: ${token[0]}`);
   }
   return value as FixtureEnvelopeV1;
@@ -107,10 +110,6 @@ export async function readFixtureEnvelope(path: string): Promise<FixtureEnvelope
 
 export function parseFixtureEnvelope(text: string): FixtureEnvelopeV1 {
   return validateFixtureEnvelope(JSON.parse(text));
-}
-
-export function nextFrameSequence(frames: readonly FixtureFrame[]): number {
-  return frames.length ? Math.max(...frames.map((frame) => frame.seq)) + 1 : 0;
 }
 
 function validateFrame(value: unknown): asserts value is FixtureFrame {

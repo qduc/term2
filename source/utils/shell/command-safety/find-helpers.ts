@@ -1,14 +1,21 @@
+import type { Word, Redirect } from 'unbash';
 import { extractWordText } from './utils.js';
+
+function isRedirect(arg: Word | Redirect): arg is Redirect {
+  return typeof arg === 'object' && arg !== null && 'operator' in arg;
+}
 
 /**
  * Check if a find command has dangerous execution flags (-exec, -execdir, -ok, -okdir, -delete)
  */
-export function hasFindDangerousExecution(args: any[]): {
+export function hasFindDangerousExecution(args: (Word | Redirect)[]): {
   dangerous: boolean;
   reason?: string;
 } {
   for (let i = 0; i < args.length; i++) {
-    const argText = extractWordText(args[i]);
+    const arg = args[i];
+    if (!arg || isRedirect(arg)) continue;
+    const argText = extractWordText(arg);
     if (!argText) continue;
 
     // Check for -delete flag
@@ -24,7 +31,9 @@ export function hasFindDangerousExecution(args: any[]): {
     // Find the terminator (; or +)
     let terminatorIndex = -1;
     for (let j = i + 1; j < args.length; j++) {
-      const term = extractWordText(args[j]);
+      const termArg = args[j];
+      if (!termArg || isRedirect(termArg)) continue;
+      const term = extractWordText(termArg);
       if (term === ';' || term === '+' || term === '\\;' || term === '\\+') {
         terminatorIndex = j;
         break;
@@ -38,10 +47,12 @@ export function hasFindDangerousExecution(args: any[]): {
 
     // Check for redirects (which indicate shell operations). These are suspicious,
     // but not necessarily destructive without knowing the surrounding task.
-    const hasRedirect = execArgs.some((a: any) => a?.type === 'Redirect');
+    const hasRedirect = execArgs.some((a) => isRedirect(a));
     if (hasRedirect) continue;
 
-    const execCommand = execArgs.map((a) => extractWordText(a)).filter(Boolean);
+    const execCommand = execArgs
+      .map((a) => (isRedirect(a) ? undefined : extractWordText(a)))
+      .filter((s): s is string => Boolean(s));
 
     if (execCommand.length === 0) continue;
 
@@ -82,11 +93,13 @@ export function hasFindDangerousExecution(args: any[]): {
 /**
  * Check for suspicious find flags that warrant YELLOW classification
  */
-export function hasFindSuspiciousFlags(args: any[]): {
+export function hasFindSuspiciousFlags(args: (Word | Redirect)[]): {
   suspicious: boolean;
   reason?: string;
 } {
-  for (const arg of args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (!arg || isRedirect(arg)) continue;
     const argText = extractWordText(arg);
     if (!argText) continue;
 
@@ -109,20 +122,23 @@ export function hasFindSuspiciousFlags(args: any[]): {
     // SUID/SGID permission searches
     if (argText === '-perm') {
       // Check the next argument for dangerous permission patterns
-      const nextIdx = args.indexOf(arg) + 1;
+      const nextIdx = i + 1;
       if (nextIdx < args.length) {
-        const permValue = extractWordText(args[nextIdx]);
-        if (permValue) {
-          // Numeric SUID/SGID patterns (e.g., -4000, /6000)
-          const hasNumericSuid = /[-/]?[2467]000/.test(permValue);
-          // Symbolic SUID/SGID patterns (e.g., -u+s, /g+s, +s)
-          const hasSymbolicSuid = /[ug]?\+s/.test(permValue);
+        const nextArg = args[nextIdx];
+        if (nextArg && !isRedirect(nextArg)) {
+          const permValue = extractWordText(nextArg);
+          if (permValue) {
+            // Numeric SUID/SGID patterns (e.g., -4000, /6000)
+            const hasNumericSuid = /[-/]?[2467]000/.test(permValue);
+            // Symbolic SUID/SGID patterns (e.g., -u+s, /g+s, +s)
+            const hasSymbolicSuid = /[ug]?\+s/.test(permValue);
 
-          if (hasNumericSuid || hasSymbolicSuid) {
-            return {
-              suspicious: true,
-              reason: `find -perm ${permValue} (SUID/SGID search)`,
-            };
+            if (hasNumericSuid || hasSymbolicSuid) {
+              return {
+                suspicious: true,
+                reason: `find -perm ${permValue} (SUID/SGID search)`,
+              };
+            }
           }
         }
       }

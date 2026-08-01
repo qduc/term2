@@ -67,17 +67,19 @@ const RTK_COMMANDS = new Set([
 // next segment's stdin, so altering any of them corrupts the consumer's
 // input. A command is eligible only if its name is allowlisted, it is not
 // backgrounded, and it has no redirection (rtk yields no benefit there).
-function hasUnparsedTrailingInput(command: string, ast: { commands?: unknown[] }): boolean {
+import type { Script, Statement, Command, Node, ParseError } from 'unbash';
+
+function hasUnparsedTrailingInput(command: string, ast: Script): boolean {
   if (!Array.isArray(ast.commands) || ast.commands.length === 0) return false;
-  const lastCommandEnd = ast.commands.reduce<number>((end, node: any) => Math.max(end, node?.end ?? 0), 0);
+  const lastCommandEnd = ast.commands.reduce<number>((end, node) => Math.max(end, node.end ?? 0), 0);
   const tail = command.slice(lastCommandEnd);
   return !/^\s*;?\s*(#.*)?$/.test(tail);
 }
 
 function collectRtkWrapOffsets(command: string): number[] | null {
-  let ast: { commands?: unknown[]; errors?: { message: string }[] };
+  let ast: Script & { errors?: ParseError[] };
   try {
-    ast = parse(command) as { commands?: unknown[]; errors?: { message: string }[] };
+    ast = parse(command);
   } catch {
     return null;
   }
@@ -90,11 +92,11 @@ function collectRtkWrapOffsets(command: string): number[] | null {
   const offsets: number[] = [];
   let bail = false;
 
-  function hasRedirect(node: any): boolean {
-    return node.redirects?.length > 0;
+  function hasRedirect(node: Command): boolean {
+    return Array.isArray(node.redirects) && node.redirects.length > 0;
   }
 
-  function isEligible(node: any): boolean {
+  function isEligible(node: Command): boolean {
     if (!node || node.type !== 'Command') return false;
     const name: string | undefined = node.name?.text;
     if (!name || !RTK_COMMANDS.has(name)) return false;
@@ -102,8 +104,8 @@ function collectRtkWrapOffsets(command: string): number[] | null {
     return true;
   }
 
-  function visit(node: any): void {
-    if (bail || !node || typeof node !== 'object') return;
+  function visit(node: Node | Statement | null | undefined): void {
+    if (bail || !node) return;
     switch (node.type) {
       case 'Statement': {
         if (node.background === true) return;
@@ -142,6 +144,7 @@ function collectRtkWrapOffsets(command: string): number[] | null {
   if (bail || offsets.length === 0) return null;
   return offsets.sort((a, b) => b - a);
 }
+
 
 export interface RtkServiceDeps {
   loggingService: ILoggingService;

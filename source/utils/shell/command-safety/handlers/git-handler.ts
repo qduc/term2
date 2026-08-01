@@ -1,3 +1,4 @@
+import type { Command } from 'unbash';
 import { SafetyStatus, SAFE_GIT_COMMANDS, DANGEROUS_GIT_COMMANDS } from '../constants.js';
 import type { CommandHandler, CommandHandlerHelpers, CommandHandlerResult } from './types.js';
 
@@ -18,7 +19,7 @@ const VALUE_TAKING_GIT_GLOBALS = new Set([
  * Handler for git command safety analysis
  */
 export const gitHandler: CommandHandler = {
-  handle(node: any, helpers: CommandHandlerHelpers): CommandHandlerResult {
+  handle(node: Command, helpers: CommandHandlerHelpers): CommandHandlerResult {
     const { extractWordText } = helpers;
     const reasons: string[] = [];
     const status: SafetyStatus = SafetyStatus.GREEN;
@@ -68,7 +69,7 @@ export const gitHandler: CommandHandler = {
     // Check if it's a known safe command
     if (SAFE_GIT_COMMANDS.has(gitSubcommand)) {
       // Check for dangerous flags that might make it unsafe
-      const hasDangerousFlags = node.suffix.some((arg: any) => {
+      const hasDangerousFlags = node.suffix.some((arg) => {
         const argText = extractWordText(arg);
         if (!argText) return false;
 

@@ -1,3 +1,4 @@
+import type { Command } from 'unbash';
 import { SafetyStatus } from '../constants.js';
 import type { CommandHandler, CommandHandlerHelpers, CommandHandlerResult } from './types.js';
 
@@ -5,7 +6,7 @@ import type { CommandHandler, CommandHandlerHelpers, CommandHandlerResult } from
  * Handler for find command safety analysis
  */
 export const findHandler: CommandHandler = {
-  handle(node: any, helpers: CommandHandlerHelpers): CommandHandlerResult {
+  handle(node: Command, helpers: CommandHandlerHelpers): CommandHandlerResult {
     const { extractWordText, analyzePathRisk, hasFindDangerousExecution, hasFindSuspiciousFlags } = helpers;
     const reasons: string[] = [];
     let status: SafetyStatus = SafetyStatus.GREEN;
@@ -35,7 +36,6 @@ export const findHandler: CommandHandler = {
     let previousArgWasPatternFlag = false;
 
     for (const arg of node.suffix) {
-      if (arg?.type === 'Redirect') continue;
       const argText = extractWordText(arg);
       if (!argText) continue;
 

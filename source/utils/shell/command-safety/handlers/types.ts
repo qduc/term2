@@ -1,3 +1,4 @@
+import type { Command, Word, Redirect, WordPart } from 'unbash';
 import { SafetyStatus } from '../constants.js';
 
 /**
@@ -12,13 +13,13 @@ export interface CommandHandlerResult {
  * Helper functions passed to command handlers
  */
 export interface CommandHandlerHelpers {
-  extractWordText: (arg: any) => string | undefined;
+  extractWordText: (arg: Word | WordPart | undefined | null) => string | undefined;
   analyzePathRisk: (path: string | undefined) => SafetyStatus;
-  hasFindDangerousExecution: (suffix: any[]) => {
+  hasFindDangerousExecution: (suffix: (Word | Redirect)[]) => {
     dangerous: boolean;
     reason?: string;
   };
-  hasFindSuspiciousFlags: (suffix: any[]) => {
+  hasFindSuspiciousFlags: (suffix: (Word | Redirect)[]) => {
     suspicious: boolean;
     reason?: string;
   };
@@ -34,5 +35,5 @@ export interface CommandHandler {
    * @param helpers Helper functions for analysis
    * @returns Safety status and reasons
    */
-  handle(node: any, helpers: CommandHandlerHelpers): CommandHandlerResult;
+  handle(node: Command, helpers: CommandHandlerHelpers): CommandHandlerResult;
 }

@@ -1,11 +1,16 @@
+import type { Command, Redirect, Word } from 'unbash';
 import { SafetyStatus } from '../constants.js';
 import type { CommandHandler, CommandHandlerHelpers, CommandHandlerResult } from './types.js';
+
+function isRedirectNode(arg: Word | Redirect): arg is Redirect {
+  return typeof arg === 'object' && arg !== null && 'operator' in arg;
+}
 
 /**
  * Handler for sed command safety analysis
  */
 export const sedHandler: CommandHandler = {
-  handle(node: any, helpers: CommandHandlerHelpers): CommandHandlerResult {
+  handle(node: Command, helpers: CommandHandlerHelpers): CommandHandlerResult {
     const { extractWordText, analyzePathRisk } = helpers;
     const reasons: string[] = [];
     let status: SafetyStatus = SafetyStatus.GREEN;
@@ -18,22 +23,22 @@ export const sedHandler: CommandHandler = {
     let hasInPlaceEdit = false;
     const suffix = node.suffix ?? [];
     const redirects = node.redirects ?? [];
-    const args = [...suffix, ...redirects];
+    const args: (Word | Redirect)[] = [...suffix, ...redirects];
 
     // First pass: detect dangerous sed patterns
     for (const arg of args) {
-      if (arg?.type === 'Redirect' || arg?.operator) {
+      if (isRedirectNode(arg)) {
         // Check if it's an output redirect (>, >>)
-        const op = arg.operator || arg.op?.text || arg.op;
+        const op = arg.operator;
         if (op === '>' || op === '>>') {
           hasOutputRedirect = true;
         }
-      }
-
-      const argText = extractWordText(arg);
-      if (argText && argText.startsWith('-')) {
-        if (argText.startsWith('-i')) {
-          hasInPlaceEdit = true;
+      } else {
+        const argText = extractWordText(arg);
+        if (argText && argText.startsWith('-')) {
+          if (argText.startsWith('-i')) {
+            hasInPlaceEdit = true;
+          }
         }
       }
     }
@@ -41,9 +46,9 @@ export const sedHandler: CommandHandler = {
     // Second pass: classify arguments
     for (const arg of args) {
       // Redirects: analyze path risk. For `sed`, only mark output redirects as YELLOW
-      if (arg?.type === 'Redirect' || arg?.operator) {
-        const fileText = extractWordText(arg.target ?? arg.file ?? arg);
-        const op = arg.operator || arg.op?.text || arg.op;
+      if (isRedirectNode(arg)) {
+        const fileText = extractWordText(arg.target);
+        const op = arg.operator;
 
         if (op === '>' || op === '>>') {
           status = SafetyStatus.YELLOW;

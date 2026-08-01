@@ -1335,6 +1335,9 @@ it.sequential('sensitive settings loaded from env are accessible at runtime', as
     expect(service.get('agent.openrouter.baseUrl')).toBe('https://internal.api.com');
     expect(service.get('app.shellPath')).toBe('/bin/bash');
 
+    // An unrelated persisted setting must not reintroduce environment secrets.
+    service.set('agent.model', 'gpt-4o');
+
     // But they should not be in the saved file
     const configFile = path.join(settingsDir, 'settings.json');
     const content = fs.readFileSync(configFile, 'utf-8');

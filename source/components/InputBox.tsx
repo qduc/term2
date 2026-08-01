@@ -152,6 +152,8 @@ const InputBox: FC<Props> = ({
 
   const dismissedCompletionRef = useRef<CompletionDismissal>(null);
   const inputRevisionRef = useRef(0);
+  const inputValueRef = useRef(value);
+  inputValueRef.current = value;
   const cursorOffsetRef = useRef(cursorOffset);
   const lockedCursorRef = useRef<number | null>(null);
   const settingsFilterRef = useRef('');
@@ -605,7 +607,6 @@ const InputBox: FC<Props> = ({
     const {
       mode: currentMode,
       modeHandlers: currentHandlers,
-      value: currentValue,
       onChange: changeInput,
       setCursorOffset: updateCursorOffset,
       setCursorOverride: overrideCursor,
@@ -613,6 +614,7 @@ const InputBox: FC<Props> = ({
       remountInput: remountCurrentInput,
       providersPhase,
     } = stateRef.current;
+    const currentValue = inputValueRef.current;
     const currentCursor = cursorOffsetRef.current;
     if (currentMode === 'text') return;
 
@@ -702,6 +704,7 @@ const InputBox: FC<Props> = ({
       if (currentCursor <= 0) return;
       const nextValue = currentValue.slice(0, currentCursor - 1) + currentValue.slice(currentCursor);
       const nextCursor = currentCursor - 1;
+      inputValueRef.current = nextValue;
       changeInput(nextValue);
       cursorOffsetRef.current = nextCursor;
       updateCursorOffset(nextCursor);
@@ -719,6 +722,7 @@ const InputBox: FC<Props> = ({
       }
       if (currentCursor >= currentValue.length) return;
       const nextValue = currentValue.slice(0, currentCursor) + currentValue.slice(currentCursor + 1);
+      inputValueRef.current = nextValue;
       changeInput(nextValue);
       overrideCursor(currentCursor);
       return;
@@ -747,6 +751,7 @@ const InputBox: FC<Props> = ({
       if (currentMode === 'rewind_selection') return;
       const nextValue = currentValue.slice(0, currentCursor) + _input + currentValue.slice(currentCursor);
       const nextCursor = currentCursor + _input.length;
+      inputValueRef.current = nextValue;
       changeInput(nextValue);
       cursorOffsetRef.current = nextCursor;
       updateCursorOffset(nextCursor);

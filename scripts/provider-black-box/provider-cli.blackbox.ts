@@ -40,10 +40,43 @@ describe('assembled provider CLI black-box', () => {
     });
     expect(result.timedOut).toBe(false);
     expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
-    expect(result.stdout).toContain('hello');
+    expect(result.stdout).toBe('hello\n');
     expect(server.requests).toHaveLength(1);
     expect(server.requests[0]?.url).toContain('chat/completions');
     expect(server.requests[0]?.body).toMatchObject({ model: 'fixture' });
+  });
+
+  it('prints terminal-only response text exactly once', async () => {
+    server = await startFakeProviderHttpServer({ scenario: 'final-only', protocol: 'responses' });
+    const result = await runIsolatedCli({
+      cwd: process.cwd(),
+      args: ['fixture prompt', '--provider', 'openai', '--model', 'fixture'],
+      env: { OPENAI_BASE_URL: `${server.baseUrl}/v1` },
+      deadlineMs: 15_000,
+      prepare: async (root) => {
+        const settingsDir = join(root, 'Library', 'Logs', 'term2-nodejs');
+        await mkdir(settingsDir, { recursive: true });
+        await writeFile(
+          join(settingsDir, 'settings.json'),
+          JSON.stringify({
+            agent: {
+              model: 'fixture',
+              provider: 'openai',
+              transport: 'http',
+              openai: { apiKey: 'fixture-key' },
+            },
+            app: { liteMode: true },
+          }),
+        );
+      },
+    });
+
+    expect(result.timedOut).toBe(false);
+    expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toBe('hello\n');
+    expect(result.stdout.match(/hello/g)).toHaveLength(1);
+    expect(server.requests).toHaveLength(1);
+    expect(server.requests[0]?.url).toBe('/v1/responses');
   });
 
   it('reports provider errors without fabricating successful output', async () => {

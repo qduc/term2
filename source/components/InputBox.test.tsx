@@ -243,6 +243,33 @@ it.sequential('InputBox onSubmit is called on empty input when allowEmptySubmit 
   expect(submittedTurn).toEqual({ text: '' });
 });
 
+it.sequential('preserves a burst of characters while the slash-command popup owns input', async () => {
+  let submitted = false;
+  const { lastFrame, stdin } = await renderAndFlush(
+    <InputProvider>
+      <StateDisplay />
+      <InputBox
+        {...defaultProps}
+        slashCommands={[{ name: 'usage', description: 'Show usage', action: () => (submitted = true) }]}
+      />
+    </InputProvider>,
+  );
+
+  await writeInput(stdin, '/');
+  await waitFor(lastFrame, (value) => value.includes('Input:/|Mode:slash_commands'));
+
+  await act(async () => {
+    for (const character of 'usage') {
+      stdin.write(character);
+    }
+  });
+
+  expect(lastFrame()).toContain('Input:/usage|Mode:slash_commands');
+
+  await writeInput(stdin, '\r');
+  expect(submitted).toBe(true);
+});
+
 it.sequential('InputBox keeps cursor fixed when left arrow switches model provider', async () => {
   const initialValue = '/model gpt-5';
   const { lastFrame, stdin } = await renderAndFlush(

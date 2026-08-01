@@ -46,6 +46,7 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
     const response = await this.client.chat.completions.create(this.#legacyBody(request, true));
     let text = '';
     let reasoning = '';
+    let sawFinishReason = false;
     // Keyed by the tool call's stream `index`, which every provider sends on
     // every chunk. `id` (and often `name`) only arrives on the first chunk for
     // that index; later chunks carry just `{ index, function: { arguments } }`
@@ -54,6 +55,7 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
     const calls = new Map<number, { id?: string; name: string; arguments: string }>();
     for await (const chunk of response) {
       const delta = chunk?.choices?.[0]?.delta;
+      if (chunk?.choices?.[0]?.finish_reason != null) sawFinishReason = true;
       if (delta?.reasoning_content) reasoning += delta.reasoning_content;
       if (delta?.content) {
         text += delta.content;
@@ -68,6 +70,7 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
         calls.set(index, current);
       }
     }
+    if (!sawFinishReason) throw new Error('OpenAI-compatible streamed response ended without a finish reason');
     const output = reasoning
       ? [
           { type: 'reasoning', content: [], rawContent: [{ type: 'reasoning_text', text: reasoning }] },
@@ -149,9 +152,11 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
     const calls = new Map<number, { id?: string; name: string; arguments: string }>();
     let text = '';
     let reasoning = '';
+    let sawFinishReason = false;
     for await (const chunk of response) {
       const choice = chunk.choices?.[0];
       const delta = choice?.delta;
+      if (choice?.finish_reason != null) sawFinishReason = true;
       if (delta?.reasoning_content) {
         reasoning += delta.reasoning_content;
         yield { type: 'reasoning_delta', text: delta.reasoning_content };
@@ -172,6 +177,7 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
         // Usage is emitted on completion below; providers may omit it in-stream.
       }
     }
+    if (!sawFinishReason) throw new Error('OpenAI-compatible streamed response ended without a finish reason');
     for (const [index, call] of calls)
       yield { type: 'tool_call', id: call.id ?? `call_${index}`, name: call.name, arguments: call.arguments };
     yield {

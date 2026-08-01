@@ -139,6 +139,9 @@ export function createAiSdkStreamedModel(
           continue;
         }
         if (part.type === 'finish') {
+          if (part.finishReason.unified === 'other' && part.finishReason.raw == null) {
+            throw new Error('AI SDK streamed response ended without an authoritative native finish reason');
+          }
           completionMetadata = part.providerMetadata;
           const id = responseId;
           if (!id) throw new Error('AI SDK streamed response did not include a response id');

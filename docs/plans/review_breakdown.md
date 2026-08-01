@@ -120,6 +120,45 @@ This is a coverage inventory, not a mandatory serial sequence. Instantiate a bac
 | Ink UI | `source/components/`, hooks, context, and reducers. Are rendering, input, menu, focus, and application state behavior correct? | Split by behavior rather than component folders. Apply the Ink coupling gate. |
 | Entrypoints and integration | `source/cli.tsx`, `source/non-interactive.ts`, `source/app.tsx`, and build scripts. Do entrypoints compose the reviewed behavior consistently? | Review one entrypoint at a time when useful. Perform a final integration audit only after enough related packets have been completed to justify it. |
 
+## Pilot completion record
+
+**Pinned review base:** `8a95be5a0e27dbb1bd7a10a6061eb34e6e02d808`
+
+The three pilots completed successfully. Their scopes expanded where concrete cross-boundary failures required it, but no preliminary architectural reorganization was needed.
+
+### P1 outcome — runtime contracts
+
+The review found that terminal stream state was not consumed consistently:
+
+- opaque continuation state hid authoritative usage from one consumer;
+- competing `newItems`, `output`, and `history` snapshots had inconsistent precedence;
+- the application run loop did not preserve cumulative multi-completion usage.
+
+The fixes introduced an explicit run-usage boundary, cumulative usage accounting, and consistent `newItems` → `output` → `history` precedence while retaining legacy fallbacks. Provider-boundary verification passed.
+
+### P2 outcome — admission and attempts
+
+The review found that phase state did not identify which admitted turn owned completion, allowing aborted work to interfere with a newer turn. It also found that terminal-less iteration was synthesized as success.
+
+The fixes added turn ownership leases, suppressed late events, revalidated delayed approval decisions, rejected incomplete outcomes, and classified only application-owned cancellation as cancellation.
+
+### P3 outcome — durable writer and schema
+
+The review found malformed known events could poison replay, durability failures could be hidden, reopened journals reused sequence numbers, and forked conversations could retain their source identity.
+
+The fixes added replay-significant structural validation with forward-compatible unknown events, latched durability failures, bounded sequence recovery with JSONL boundary repair, and durable fork identity/provenance.
+
+### Pilot decision
+
+The packet method produced actionable findings with manageable context. Keep the remaining areas as a backlog and instantiate them only for a current architectural question or realistic risk; do not schedule a repository-wide serial review merely to exhaust the list. No ownership problem found by the pilots requires packages, directory moves, service boundaries, or new dependency-injection architecture.
+
+Final integration verification:
+
+- `pnpm typecheck`
+- `pnpm test` — 5,008 passed, 1 skipped
+- `pnpm test:provider-black-box` — 150 passed
+- `pnpm test:codex-network` — 11 passed
+
 ## Deferred work
 
 Do not introduce new packages, service boundaries, directory moves, dependency-injection abstractions, or persistent formats solely for reviewability. Preserve paths for future change, but build those changes only when review evidence establishes a present need.

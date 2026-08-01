@@ -18,7 +18,7 @@ const webFetchTool = createWebFetchToolDefinition({
 });
 
 it('needsApproval: returns false', async () => {
-  const result = await webFetchTool.needsApproval({ url: 'https://example.com' });
+  const result = await webFetchTool.needsApproval({ url: 'https://example.com', max_chars: 10000, heading: [] });
   expect(result).toBe(false);
 });
 
@@ -50,7 +50,11 @@ it.sequential('execute: fetches and converts to markdown', async () => {
   };
 
   try {
-    const result = await webFetchTool.execute({ url: 'https://example.com' });
+    const result = (await webFetchTool.execute({
+      url: 'https://example.com',
+      max_chars: 10000,
+      heading: [],
+    })) as string;
     expect(result.includes('# Hello World')).toBe(true);
     expect(result.includes('This is a test.')).toBe(true);
     expect(result.includes('Table of Contents')).toBe(true);
@@ -70,7 +74,11 @@ it.sequential('execute: handles fetch errors', async () => {
   };
 
   try {
-    const result = await webFetchTool.execute({ url: 'https://example.com/404' });
+    const result = (await webFetchTool.execute({
+      url: 'https://example.com/404',
+      max_chars: 10000,
+      heading: [],
+    })) as string;
     expect(result.includes('Error')).toBe(true);
     expect(result.includes('404')).toBe(true);
   } finally {
@@ -93,7 +101,7 @@ it.sequential('execute: converts github blob links to raw links', async () => {
 
   try {
     const githubUrl = 'https://github.com/qduc/term2/blob/main/package.json';
-    await webFetchTool.execute({ url: githubUrl });
+    await webFetchTool.execute({ url: githubUrl, max_chars: 10000, heading: [] });
     expect(fetchedUrl).toBe('https://raw.githubusercontent.com/qduc/term2/main/package.json');
   } finally {
     global.fetch = originalFetch;
@@ -121,7 +129,11 @@ it.sequential('execute: saves full content to temp file when content exceeds max
 
   let tempFile: string | null = null;
   try {
-    const result = await webFetchTool.execute({ url: 'https://example.com/long', max_chars: 200 });
+    const result = (await webFetchTool.execute({
+      url: 'https://example.com/long',
+      max_chars: 200,
+      heading: [],
+    })) as string;
 
     expect(result.includes('Content truncated at 200 characters')).toBe(true);
     expect(result.includes('Full content saved to temp file:')).toBe(true);
@@ -153,7 +165,11 @@ it.sequential('execute: does not save temp file when content fits within max_cha
   };
 
   try {
-    const result = await webFetchTool.execute({ url: 'https://example.com/short' });
+    const result = (await webFetchTool.execute({
+      url: 'https://example.com/short',
+      max_chars: 10000,
+      heading: [],
+    })) as string;
     expect(result.includes('Full content saved to temp file:')).toBe(false);
   } finally {
     global.fetch = originalFetch;
@@ -163,11 +179,12 @@ it.sequential('execute: does not save temp file when content fits within max_cha
 it.sequential('execute: does not save temp file on continuation request', async () => {
   // Continuation requests should skip the temp file logic entirely,
   // even if a valid result were returned.
-  const result = await webFetchTool.execute({
+  const result = (await webFetchTool.execute({
     url: 'https://example.com/page',
     max_chars: 200,
+    heading: [],
     continuation_token: 'nonexistent-token',
-  });
+  })) as string;
   // The call will error because the token doesn't exist in the cache,
   // but it should never try to save a temp file.
   expect(result.startsWith('Error:')).toBe(true);

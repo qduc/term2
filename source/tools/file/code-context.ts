@@ -5,7 +5,13 @@ import { execFile } from 'child_process';
 import util from 'util';
 import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
-import { createBaseMessage, getCallIdFromItem, getOutputText, normalizeToolArguments } from '../format-helpers.js';
+import {
+  createBaseMessage,
+  getCallIdFromItem,
+  getOutputText,
+  normalizeToolArguments,
+  type ToolResultItem,
+} from '../format-helpers.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import {
   DeclEntry,
@@ -113,7 +119,7 @@ const RELATION_DISPLAY_ORDER: RelationToken[] = [
 
 export const createReadCodeOutlineToolDefinition = (
   deps: { executionContext?: ExecutionContext } = {},
-): ToolDefinition<ReadCodeOutlineToolParams> => {
+): ToolDefinition<typeof readCodeOutlineParametersSchema> => {
   const { executionContext } = deps;
   return {
     name: 'read_code_outline',
@@ -155,7 +161,7 @@ export const createReadCodeOutlineToolDefinition = (
 
 export const createCodeContextSearchToolDefinition = (
   deps: { executionContext?: ExecutionContext; globAvailable?: boolean } = {},
-): ToolDefinition<CodeContextSearchToolParams> => {
+): ToolDefinition<typeof codeContextSearchParametersSchema> => {
   const { executionContext, globAvailable = true } = deps;
   return {
     name: 'code_context_search',
@@ -260,7 +266,7 @@ export const formatCodeContextSearchCommandMessage: FormatCommandMessage = (item
   ];
 };
 
-function getFormatterArgs(item: any, toolCallArgumentsById: Map<string, unknown>): any {
+function getFormatterArgs(item: ToolResultItem, toolCallArgumentsById: Map<string, unknown>): any {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;

@@ -13,7 +13,9 @@ const ACTIVATE_SKILL_DESCRIPTION =
 
 const ALWAYS_IGNORE = ['.git', 'node_modules', 'dist', 'build', '.next', '.turbo', 'coverage', '.cache', '.DS_Store'];
 
-export const createActivateSkillToolDefinition = (skillsService: SkillsService): ToolDefinition => {
+export const createActivateSkillToolDefinition = (
+  skillsService: SkillsService,
+): ToolDefinition<typeof activateSkillSchema> => {
   const availableSkills = skillsService.getAvailableSkillsForModel();
   const skillNames = availableSkills.map((s) => s.name);
 

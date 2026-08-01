@@ -78,9 +78,9 @@ it.sequential('execute: finds files by exact name', async () => {
     await fs.writeFile(path.join(dir, 'test.ts'), '');
     await fs.writeFile(path.join(dir, 'other.js'), '');
 
-    const result = await findFilesToolDefinition.execute({
+    const result = (await findFilesToolDefinition.execute({
       pattern: 'test.ts',
-    });
+    })) as string;
 
     expect(result.includes('test.ts')).toBe(true);
     expect(result.includes('other.js')).toBe(false);
@@ -94,9 +94,9 @@ it.sequential('execute: finds files by glob pattern', async () => {
     await fs.writeFile(path.join(dir, 'file2.ts'), '');
     await fs.writeFile(path.join(dir, 'file3.js'), '');
 
-    const result = await findFilesToolDefinition.execute({
+    const result = (await findFilesToolDefinition.execute({
       pattern: '*.ts',
-    });
+    })) as string;
 
     expect(result.includes('file1.ts')).toBe(true);
     expect(result.includes('file2.ts')).toBe(true);
@@ -113,9 +113,9 @@ it.sequential('execute: finds files in nested directories with glob pattern', as
     await fs.writeFile(path.join(dir, 'src/utils/helper.ts'), '');
     await fs.writeFile(path.join(dir, 'readme.md'), '');
 
-    const result = await findFilesToolDefinition.execute({
+    const result = (await findFilesToolDefinition.execute({
       pattern: '*.ts',
-    });
+    })) as string;
 
     expect(result.includes('src/index.ts') || result.includes('index.ts')).toBe(true);
     expect(result.includes('src/utils/helper.ts') || result.includes('utils/helper.ts')).toBe(true);
@@ -128,9 +128,9 @@ it.sequential('execute: supports patterns with path segments', async () => {
     await fs.mkdir(path.join(dir, 'src'));
     await fs.writeFile(path.join(dir, 'src/index.ts'), '');
 
-    const result = await findFilesToolDefinitionFindFallback.execute({
+    const result = (await findFilesToolDefinitionFindFallback.execute({
       pattern: 'src/**/*.ts',
-    });
+    })) as string;
 
     expect(result.includes('src/index.ts')).toBe(true);
   });
@@ -141,9 +141,9 @@ it.sequential('execute: fd supports patterns with path segments', async () => {
     await fs.mkdir(path.join(dir, 'src'));
     await fs.writeFile(path.join(dir, 'src/index.ts'), '');
 
-    const result = await findFilesToolDefinition.execute({
+    const result = (await findFilesToolDefinition.execute({
       pattern: 'src/**/*.ts',
-    });
+    })) as string;
 
     expect(result.includes('src/index.ts')).toBe(true);
   });
@@ -173,9 +173,9 @@ it.sequential('execute: on SSH without fd, supports patterns with path segments'
     const executionContext = new ExecutionContext(sshService);
     const tool = createFindFilesToolDefinition({ executionContext });
 
-    const result = await tool.execute({
+    const result = (await tool.execute({
       pattern: 'src/**/*.ts',
-    });
+    })) as string;
 
     expect(result.includes('src/index.ts')).toBe(true);
   });
@@ -189,10 +189,10 @@ it.sequential('execute: restricts search to specified path', async () => {
     await fs.writeFile(path.join(dir, 'src/app.ts'), '');
     await fs.writeFile(path.join(dir, 'tests/app.test.ts'), '');
 
-    const result = await findFilesToolDefinition.execute({
+    const result = (await findFilesToolDefinition.execute({
       pattern: '*.ts',
       path: 'src',
-    });
+    })) as string;
 
     expect(result.includes('app.ts')).toBe(true);
     expect(result.includes('app.test.ts')).toBe(false);
@@ -206,10 +206,10 @@ it.sequential('execute: respects max_results limit', async () => {
       await fs.writeFile(path.join(dir, `file${i}.ts`), '');
     }
 
-    const result = await findFilesToolDefinition.execute({
+    const result = (await findFilesToolDefinition.execute({
       pattern: '*.ts',
       max_results: 5,
-    });
+    })) as string;
 
     const lines = result.trim().split('\n');
     // Should have 5 file results + empty line + 1 note line = 7 lines max
@@ -222,9 +222,9 @@ it.sequential('execute: handles no matches found', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'file.js'), '');
 
-    const result = await findFilesToolDefinition.execute({
+    const result = (await findFilesToolDefinition.execute({
       pattern: '*.ts',
-    });
+    })) as string;
 
     expect(result.includes('No files found')).toBe(true);
   });
@@ -248,10 +248,10 @@ it.sequential('execute: searches path outside workspace after approval path reso
     await fs.writeFile(path.join(outsideDir, 'outside.ts'), '');
     await fs.writeFile(path.join(outsideDir, 'outside.js'), '');
 
-    const result = await findFilesToolDefinition.execute({
+    const result = (await findFilesToolDefinition.execute({
       pattern: '*.ts',
       path: '../outside',
-    });
+    })) as string;
 
     expect(result.includes('outside.ts')).toBe(true);
     expect(result.includes('outside.js')).toBe(false);
@@ -266,10 +266,10 @@ it.sequential('execute: in allowOutsideWorkspace mode, can search outside worksp
     await fs.writeFile(path.join(outsideDir, 'outside.ts'), '');
     await fs.writeFile(path.join(outsideDir, 'outside.js'), '');
 
-    const result = await findFilesToolDefinitionAllowOutside.execute({
+    const result = (await findFilesToolDefinitionAllowOutside.execute({
       pattern: '*.ts',
       path: '../outside',
-    });
+    })) as string;
 
     expect(result.includes('outside.ts')).toBe(true);
     expect(result.includes('outside.js')).toBe(false);
@@ -297,9 +297,9 @@ it.sequential('execute: uses pattern directory as search root when pattern is ab
       await fs.writeFile(path.join(externalDir, 'run_test2.sh'), '');
       await fs.writeFile(path.join(externalDir, 'other.txt'), '');
 
-      const result = await findFilesToolDefinitionAllowOutside.execute({
+      const result = (await findFilesToolDefinitionAllowOutside.execute({
         pattern: path.join(externalDir, 'run_*.sh'),
-      });
+      })) as string;
 
       expect(result).not.toContain('No files found');
       expect(result).toContain('run_test1.sh');
@@ -320,10 +320,10 @@ it.sequential('execute: explicit path param takes precedence over absolute patte
       await fs.writeFile(path.join(dirA, 'run_alpha.sh'), '');
       await fs.writeFile(path.join(dirB, 'run_beta.sh'), '');
 
-      const result = await findFilesToolDefinitionAllowOutside.execute({
+      const result = (await findFilesToolDefinitionAllowOutside.execute({
         pattern: path.join(dirA, 'run_*.sh'),
         path: dirB,
-      });
+      })) as string;
 
       expect(result).toContain('run_beta.sh');
       expect(result).not.toContain('run_alpha.sh');
@@ -345,9 +345,9 @@ it.sequential(
         await fs.writeFile(path.join(externalDir, 'run_test2.sh'), '');
         await fs.writeFile(path.join(externalDir, 'other.txt'), '');
 
-        const result = await findFilesToolDefinitionAllowOutsideFindFallback.execute({
+        const result = (await findFilesToolDefinitionAllowOutsideFindFallback.execute({
           pattern: path.join(externalDir, 'run_*.sh'),
-        });
+        })) as string;
 
         expect(result).not.toContain('No files found');
         expect(result).toContain('run_test1.sh');

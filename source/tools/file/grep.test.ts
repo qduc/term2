@@ -63,11 +63,11 @@ it.sequential('execute: include uses rg-style globs that can re-include gitignor
     await fs.writeFile(path.join(dir, 'source', 'app.ts'), 'const value = "undo";\n');
     await fs.writeFile(path.join(dir, 'tsconfig.tsbuildinfo'), '{"fileNames":["undo"]}\n');
 
-    const result = await createGrepToolDefinition().execute({
+    const result = (await createGrepToolDefinition().execute({
       pattern: 'undo',
       path: '.',
       include: '*.ts*',
-    });
+    })) as string;
 
     expect(result.includes('source/app.ts')).toBe(true);
     expect(result.includes('tsconfig.tsbuildinfo')).toBe(true);
@@ -78,10 +78,10 @@ it.sequential('execute: regex mode is the default', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'hello.world\nhello-world\n');
 
-    const result = await createGrepToolDefinition().execute({
+    const result = (await createGrepToolDefinition().execute({
       pattern: 'hello.world',
       path: '.',
-    });
+    })) as string;
 
     expect(result.includes('hello.world')).toBe(true);
     expect(result.includes('hello-world')).toBe(true);
@@ -92,10 +92,10 @@ it.sequential('execute: searches are case-sensitive by default', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'axc\naXc\n');
 
-    const result = await createGrepToolDefinition().execute({
+    const result = (await createGrepToolDefinition().execute({
       pattern: 'aXc',
       path: '.',
-    });
+    })) as string;
 
     expect(result.includes('axc')).toBe(false);
     expect(result.includes('aXc')).toBe(true);
@@ -106,11 +106,11 @@ it.sequential('execute: ignore_case true enables case-insensitive search', async
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'axc\naXc\n');
 
-    const result = await createGrepToolDefinition().execute({
+    const result = (await createGrepToolDefinition().execute({
       pattern: 'aXc',
       path: '.',
       ignore_case: true,
-    });
+    })) as string;
 
     expect(result.includes('axc')).toBe(true);
     expect(result.includes('aXc')).toBe(true);
@@ -121,10 +121,10 @@ it.sequential('execute: regex mode supports parsed digit class patterns', async 
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'testabc\ntest123\ntest456\n');
 
-    const result = await createGrepToolDefinition().execute({
+    const result = (await createGrepToolDefinition().execute({
       pattern: 'test\\d+',
       path: '.',
-    });
+    })) as string;
 
     expect(result.includes('testabc')).toBe(false);
     expect(result.includes('test123')).toBe(true);
@@ -136,10 +136,10 @@ it.sequential('execute: regex mode supports parsed escaped dot patterns', async 
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'hello.hello\nhelloXhello\n');
 
-    const result = await createGrepToolDefinition().execute({
+    const result = (await createGrepToolDefinition().execute({
       pattern: 'hello\\.hello',
       path: '.',
-    });
+    })) as string;
 
     expect(result.includes('hello.hello')).toBe(true);
     expect(result.includes('helloXhello')).toBe(false);
@@ -165,11 +165,11 @@ it.sequential('execute: fixed_strings true uses fixed-string matching', async ()
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'hello.world\nhello-world\n');
 
-    const result = await createGrepToolDefinition().execute({
+    const result = (await createGrepToolDefinition().execute({
       pattern: 'hello.world',
       path: '.',
       fixed_strings: true,
-    });
+    })) as string;
 
     expect(result.includes('hello.world')).toBe(true);
     expect(result.includes('hello-world')).toBe(false);
@@ -182,10 +182,10 @@ it.sequential('execute: searches paths containing spaces', async () => {
     await fs.mkdir(spacedDir, { recursive: true });
     await fs.writeFile(path.join(spacedDir, 'notes.txt'), 'ship it\n');
 
-    const result = await createGrepToolDefinition().execute({
+    const result = (await createGrepToolDefinition().execute({
       pattern: 'ship',
       path: 'docs plans',
-    });
+    })) as string;
 
     expect(result.includes('docs plans/notes.txt')).toBe(true);
   });
@@ -196,11 +196,11 @@ it.sequential('execute: include patterns containing single quotes are treated as
     await fs.writeFile(path.join(dir, "owner's-notes.txt"), 'target\n');
     await fs.writeFile(path.join(dir, 'other-notes.txt'), 'target\n');
 
-    const result = await createGrepToolDefinition().execute({
+    const result = (await createGrepToolDefinition().execute({
       pattern: 'target',
       path: '.',
       include: "owner's-*.txt",
-    });
+    })) as string;
 
     expect(result.includes("owner's-notes.txt")).toBe(true);
     expect(result.includes('other-notes.txt')).toBe(false);
@@ -257,11 +257,11 @@ it.sequential('execute: exclude pattern skips matching files', async () => {
     await fs.writeFile(path.join(dir, 'source', 'app.ts'), 'const value = "undo";\n');
     await fs.writeFile(path.join(dir, 'source', 'config.json'), '{"value": "undo"}\n');
 
-    const result = await createGrepToolDefinition().execute({
+    const result = (await createGrepToolDefinition().execute({
       pattern: 'undo',
       path: '.',
       exclude: '*.json',
-    });
+    })) as string;
 
     expect(result.includes('source/app.ts')).toBe(true);
     expect(result.includes('source/config.json')).toBe(false);
@@ -275,11 +275,11 @@ it.sequential('execute: include with brace expansion filters files correctly', a
     await fs.writeFile(path.join(dir, 'source', 'style.css'), 'const value = "undo";\n');
     await fs.writeFile(path.join(dir, 'source', 'notes.txt'), 'const value = "undo";\n');
 
-    const result = await createGrepToolDefinition().execute({
+    const result = (await createGrepToolDefinition().execute({
       pattern: 'undo',
       path: '.',
       include: '*.{ts,css}',
-    });
+    })) as string;
 
     expect(result.includes('source/app.ts')).toBe(true);
     expect(result.includes('source/style.css')).toBe(true);

@@ -111,7 +111,7 @@ it.sequential('execute: read_code_outline summarizes a TS file without bodies', 
       ].join('\n'),
     );
 
-    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+    const result = (await readCodeOutlineToolDefinition.execute({ path: filePath })) as string;
 
     expect(result.includes('FILE src/example.ts')).toBe(true);
     expect(result.includes('LANG typescript')).toBe(true);
@@ -138,10 +138,10 @@ it.sequential('execute: code_context_search related warns for unsupported target
     await fs.mkdir(path.dirname(absPath), { recursive: true });
     await fs.writeFile(absPath, 'plain text only');
 
-    const result = await codeContextSearchToolDefinition.execute({
+    const result = (await codeContextSearchToolDefinition.execute({
       query_type: 'related',
       path: filePath,
-    });
+    })) as string;
 
     expect(result.startsWith('WARNING unsupported_language')).toBe(true);
     expect(result.includes('QUERY related')).toBe(true);
@@ -156,7 +156,7 @@ it.sequential('execute: read_code_outline returns unknown language with empty se
     await fs.mkdir(path.dirname(absPath), { recursive: true });
     await fs.writeFile(absPath, 'plain text only');
 
-    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+    const result = (await readCodeOutlineToolDefinition.execute({ path: filePath })) as string;
 
     expect(result.includes('FILE notes/outline.txt')).toBe(true);
     expect(result.includes('LANG unknown')).toBe(true);
@@ -179,11 +179,11 @@ it.sequential('execute: code_context_search related finds tests, importers, and 
       await fs.writeFile(absPath, content);
     }
 
-    const result = await codeContextSearchToolDefinition.execute({
+    const result = (await codeContextSearchToolDefinition.execute({
       query_type: 'related',
       path: 'src/foo.ts',
       max_results: 10,
-    });
+    })) as string;
 
     expect(result.includes('QUERY related')).toBe(true);
     expect(result.includes('TARGET src/foo.ts')).toBe(true);
@@ -213,11 +213,11 @@ it.sequential('execute: code_context_search related honors max_results', async (
       await fs.writeFile(absPath, "import { foo } from './foo.js';\nvoid foo;\n");
     }
 
-    const result = await codeContextSearchToolDefinition.execute({
+    const result = (await codeContextSearchToolDefinition.execute({
       query_type: 'related',
       path: 'src/foo.ts',
       max_results: 1,
-    });
+    })) as string;
 
     const resultBlocks = result.split('\n\n').filter((part: string) => part.startsWith('src/'));
     expect(resultBlocks.length <= 1).toBe(true);
@@ -238,10 +238,10 @@ it.sequential('execute: code_context_search related detects multi-line named imp
       await fs.writeFile(absPath, content);
     }
 
-    const result = await codeContextSearchToolDefinition.execute({
+    const result = (await codeContextSearchToolDefinition.execute({
       query_type: 'related',
       path: 'src/foo.ts',
-    });
+    })) as string;
 
     expect(result.includes('src/consumer.ts')).toBe(true);
     expect(result.includes('REL imported_by_target')).toBe(true);
@@ -264,10 +264,10 @@ it.sequential('execute: code_context_search related does not flag same-named sib
       await fs.writeFile(absPath, content);
     }
 
-    const result = await codeContextSearchToolDefinition.execute({
+    const result = (await codeContextSearchToolDefinition.execute({
       query_type: 'related',
       path: 'src/a/util.ts',
-    });
+    })) as string;
 
     expect(result.includes('src/a/consumer.ts')).toBe(true);
     expect(result.includes('src/b/other.ts')).toBe(false);
@@ -331,10 +331,10 @@ for (const symbolCase of symbolCases) {
       await fs.mkdir(path.dirname(absPath), { recursive: true });
       await fs.writeFile(absPath, symbolCase.content);
 
-      const result = await codeContextSearchToolDefinition.execute({
+      const result = (await codeContextSearchToolDefinition.execute({
         query_type: 'symbol',
         symbol: symbolCase.symbol,
-      });
+      })) as string;
 
       expect(result.includes(`QUERY symbol`)).toBe(true);
       expect(result.includes(`SYMBOL ${symbolCase.symbol}`)).toBe(true);
@@ -369,11 +369,11 @@ it.sequential(
       const outsideFile = path.join(dir, '..', 'outside.ts');
       await fs.writeFile(outsideFile, 'export const outside = true;');
 
-      const outlineResult = await readCodeOutlineToolDefinition.execute({ path: '../outside.ts' });
-      const relatedResult = await codeContextSearchToolDefinition.execute({
+      const outlineResult = (await readCodeOutlineToolDefinition.execute({ path: '../outside.ts' })) as string;
+      const relatedResult = (await codeContextSearchToolDefinition.execute({
         query_type: 'related',
         path: '../outside.ts',
-      });
+      })) as string;
 
       expect(outlineResult.includes('outside workspace')).toBe(false);
       expect(relatedResult.includes('outside workspace')).toBe(false);
@@ -383,10 +383,10 @@ it.sequential(
 
 it.sequential('execute: code_context_search rejects unsafe symbol names', async () => {
   await withTempWorkspace(async () => {
-    const result = await codeContextSearchToolDefinition.execute({
+    const result = (await codeContextSearchToolDefinition.execute({
       query_type: 'symbol',
       symbol: 'build.*',
-    });
+    })) as string;
 
     expect(result.startsWith('Error')).toBe(true);
     expect(result.toLowerCase().includes('identifier')).toBe(true);
@@ -407,7 +407,7 @@ it.sequential('outline: inline type imports do not leak the type keyword into na
       ].join('\n'),
     );
 
-    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+    const result = (await readCodeOutlineToolDefinition.execute({ path: filePath })) as string;
 
     // 'type Foo' should not appear — only 'Foo'
     expect(result.includes('type Foo')).toBe(false);
@@ -441,7 +441,7 @@ it.sequential('outline: async functions retain async in declarations', async () 
       ].join('\n'),
     );
 
-    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+    const result = (await readCodeOutlineToolDefinition.execute({ path: filePath })) as string;
 
     // Async functions should show 'async function', not just 'function'
     expect(result.includes('async function fetchData')).toBe(true);
@@ -457,7 +457,7 @@ it.sequential('outline: JSON files extract top-level keys as declarations', asyn
     const absPath = path.join(dir, filePath);
     await fs.writeFile(absPath, JSON.stringify({ name: 'test', version: '1.0.0', scripts: { build: 'tsc' } }));
 
-    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+    const result = (await readCodeOutlineToolDefinition.execute({ path: filePath })) as string;
 
     expect(result.includes('LANG json')).toBe(true);
     expect(result.includes('name')).toBe(true);
@@ -491,7 +491,7 @@ it.sequential('outline: Python files extract imports and declarations', async ()
       ].join('\n'),
     );
 
-    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+    const result = (await readCodeOutlineToolDefinition.execute({ path: filePath })) as string;
 
     expect(result.includes('FILE src/example.py')).toBe(true);
     expect(result.includes('LANG python')).toBe(true);
@@ -540,7 +540,7 @@ it.sequential('outline: Go files extract imports and declarations with visibilit
       ].join('\n'),
     );
 
-    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+    const result = (await readCodeOutlineToolDefinition.execute({ path: filePath })) as string;
 
     expect(result.includes('FILE src/example.go')).toBe(true);
     expect(result.includes('LANG go')).toBe(true);
@@ -600,7 +600,7 @@ it.sequential('outline: Rust files extract imports and declarations with visibil
       ].join('\n'),
     );
 
-    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+    const result = (await readCodeOutlineToolDefinition.execute({ path: filePath })) as string;
 
     expect(result.includes('FILE src/example.rs')).toBe(true);
     expect(result.includes('LANG rust')).toBe(true);
@@ -650,7 +650,7 @@ it.sequential('outline: Java files extract imports and declarations', async () =
       ].join('\n'),
     );
 
-    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+    const result = (await readCodeOutlineToolDefinition.execute({ path: filePath })) as string;
 
     expect(result.includes('FILE src/Example.java')).toBe(true);
     expect(result.includes('LANG java')).toBe(true);
@@ -685,7 +685,7 @@ it.sequential('outline: C# files extract imports and declarations', async () => 
       ].join('\n'),
     );
 
-    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+    const result = (await readCodeOutlineToolDefinition.execute({ path: filePath })) as string;
 
     expect(result.includes('FILE src/Example.cs')).toBe(true);
     expect(result.includes('LANG csharp')).toBe(true);
@@ -722,7 +722,7 @@ it.sequential('outline: C/C++ files extract imports and declarations', async () 
       ].join('\n'),
     );
 
-    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+    const result = (await readCodeOutlineToolDefinition.execute({ path: filePath })) as string;
 
     expect(result.includes('FILE src/example.cpp')).toBe(true);
     expect(result.includes('LANG cpp')).toBe(true);
@@ -754,7 +754,7 @@ it.sequential('outline: Ruby files extract imports and declarations', async () =
       ].join('\n'),
     );
 
-    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+    const result = (await readCodeOutlineToolDefinition.execute({ path: filePath })) as string;
 
     expect(result.includes('FILE src/example.rb')).toBe(true);
     expect(result.includes('LANG ruby')).toBe(true);
@@ -785,7 +785,7 @@ it.sequential('outline: PHP files extract imports and declarations', async () =>
       ].join('\n'),
     );
 
-    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+    const result = (await readCodeOutlineToolDefinition.execute({ path: filePath })) as string;
 
     expect(result.includes('FILE src/example.php')).toBe(true);
     expect(result.includes('LANG php')).toBe(true);

@@ -37,7 +37,7 @@ export const formatAskOrchestratorCommandMessage: FormatCommandMessage = (item, 
 /** A subagent-only bridge to its owning async orchestrator. */
 export function createAskOrchestratorToolDefinition(
   askOrchestrator: (question: string) => Promise<string>,
-): ToolDefinition<AskOrchestratorParams> {
+): ToolDefinition<typeof askOrchestratorSchema> {
   return {
     name: 'ask_orchestrator',
     description: ASK_ORCHESTRATOR_DESCRIPTION,

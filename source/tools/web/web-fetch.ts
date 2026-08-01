@@ -66,7 +66,7 @@ export const formatWebFetchCommandMessage: FormatCommandMessage = (item, index, 
 export const createWebFetchToolDefinition = (deps: {
   settingsService: ISettingsService;
   loggingService: ILoggingService;
-}): ToolDefinition<Partial<WebFetchParams>> => {
+}): ToolDefinition<typeof webFetchSchema> => {
   const { loggingService } = deps;
 
   return {

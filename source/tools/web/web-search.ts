@@ -85,7 +85,7 @@ export const formatWebSearchCommandMessage: FormatCommandMessage = (item, index,
 export const createWebSearchToolDefinition = (deps: {
   settingsService: ISettingsService;
   loggingService: ILoggingService;
-}): ToolDefinition<WebSearchParams> => {
+}): ToolDefinition<typeof webSearchSchema> => {
   const { settingsService, loggingService } = deps;
 
   return {

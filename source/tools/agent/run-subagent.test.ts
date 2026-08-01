@@ -53,7 +53,7 @@ it('execute returns plain-text SubagentResult', async () => {
   const expected = makeResult({ finalText: 'Answer here.' });
   const tool = createRunSubagentToolDefinition(async () => expected);
 
-  const raw = await tool.execute({ role: 'explorer', task: 'find files' });
+  const raw = (await tool.execute({ role: 'explorer', task: 'find files' })) as string;
 
   expect(raw.includes('Status: completed')).toBe(true);
   expect(raw.includes('Answer here.')).toBe(true);
@@ -65,7 +65,7 @@ it('execute returns failed result as plain text on error', async () => {
     throw new Error('Connection failed');
   });
 
-  const raw = await tool.execute({ role: 'explorer', task: 'find files' });
+  const raw = (await tool.execute({ role: 'explorer', task: 'find files' })) as string;
 
   expect(raw.includes('Status: failed')).toBe(true);
   expect(raw.includes('Error: Connection failed')).toBe(true);

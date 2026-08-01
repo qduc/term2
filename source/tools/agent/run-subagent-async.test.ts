@@ -93,7 +93,7 @@ it('run_subagent_async accepts only constrained optional active-run names', () =
 it('run_subagent_async returns a run handle string', async () => {
   const tool = createRunSubagentAsyncToolDefinition(async () => makeHandle({ runId: 'run-abc' }));
 
-  const raw = await tool.execute({ role: 'explorer', task: 'find files' });
+  const raw = (await tool.execute({ role: 'explorer', task: 'find files' })) as string;
 
   expect(raw).toContain('run-abc');
 });
@@ -101,9 +101,9 @@ it('run_subagent_async returns a run handle string', async () => {
 it('run_subagent_async exposes an optional active-run name in its acknowledgement', async () => {
   const tool = createRunSubagentAsyncToolDefinition(async () => makeHandle({ name: 'code_scan' }));
 
-  await expect(tool.execute({ role: 'explorer', task: 'find files', name: 'code_scan' })).resolves.toContain(
-    'code_scan',
-  );
+  const raw = (await tool.execute({ role: 'explorer', task: 'find files', name: 'code_scan' })) as string;
+
+  expect(raw).toContain('code_scan');
 });
 
 it('get_subagent_result tool is registered with the correct name', () => {
@@ -121,7 +121,7 @@ it('get_subagent_result schema requires a runId', () => {
 it('get_subagent_result returns a formatted SubagentResult', async () => {
   const tool = createGetSubagentResultToolDefinition(async () => makeResult({ finalText: 'Answer here.' }));
 
-  const raw = await tool.execute({ runId: 'run-abc' });
+  const raw = (await tool.execute({ runId: 'run-abc' })) as string;
 
   expect(raw).toContain('Status: completed');
   expect(raw).toContain('Answer here.');
@@ -144,7 +144,7 @@ it('get_subagent_result renders structured validation and diffStat evidence', as
     }),
   );
 
-  const raw = await tool.execute({ runId: 'run-abc' });
+  const raw = (await tool.execute({ runId: 'run-abc' })) as string;
   // Structured evidence appears.
   expect(raw).toContain('Validation: pnpm vitest run');
   expect(raw).toContain('exit 0');
@@ -173,7 +173,7 @@ it('get_subagent_result returns failed result text on error', async () => {
     throw new Error('Run not found');
   });
 
-  const raw = await tool.execute({ runId: 'run-abc' });
+  const raw = (await tool.execute({ runId: 'run-abc' })) as string;
 
   expect(raw).toContain('Status: failed');
   expect(raw).toContain('Run not found');
@@ -239,7 +239,7 @@ describe('get_subagent_status tool', () => {
 
   it('formats a single running run and references the completion notification', () => {
     const tool = createGetSubagentStatusToolDefinition(() => makeStatus());
-    const raw = tool.execute({ runId: 'run-123' });
+    const raw = tool.execute({ runId: 'run-123' }) as string;
     expect(raw).toContain('running');
     expect(raw).toContain('grep');
     expect(raw).toContain('completion notification');
@@ -268,7 +268,7 @@ describe('get_subagent_status tool', () => {
       }),
     );
 
-    const raw = tool.execute({ runId: 'run-123' });
+    const raw = tool.execute({ runId: 'run-123' }) as string;
 
     expect(raw).toContain('turn 1: Looking at config loading... → grep(5), read_file(3)');
     expect(raw).toContain('turn 2: Found env overrides bypass validation → grep(3), read_file(2)');
@@ -279,7 +279,7 @@ describe('get_subagent_status tool', () => {
   it('treats a cancelling run as active until its runner settles', () => {
     const tool = createGetSubagentStatusToolDefinition(() => makeStatus({ status: 'cancelling' }));
 
-    const raw = tool.execute({ runId: 'run-123' });
+    const raw = tool.execute({ runId: 'run-123' }) as string;
 
     expect(raw).toContain('cancelling');
     expect(raw).toContain('still in progress');
@@ -288,7 +288,7 @@ describe('get_subagent_status tool', () => {
   it('treats a run waiting for an orchestrator answer as active', () => {
     const tool = createGetSubagentStatusToolDefinition(() => makeStatus({ status: 'waiting_for_answer' }));
 
-    const raw = tool.execute({ runId: 'run-123' });
+    const raw = tool.execute({ runId: 'run-123' }) as string;
 
     expect(raw).toContain('waiting_for_answer');
     expect(raw).toContain('still in progress');
@@ -307,7 +307,7 @@ describe('get_subagent_status tool', () => {
         toolCounts: { search_replace: 3 },
       }),
     ]);
-    const raw = tool.execute({});
+    const raw = tool.execute({}) as string;
     expect(raw).toContain('run-a');
     expect(raw).toContain('run-b');
     expect(raw).toContain('explorer');
@@ -317,7 +317,7 @@ describe('get_subagent_status tool', () => {
   it('displays an optional active-run name alongside the canonical runId', () => {
     const tool = createGetSubagentStatusToolDefinition(() => makeStatus({ name: 'code_scan' }));
 
-    const raw = tool.execute({ runId: 'run-123' });
+    const raw = tool.execute({ runId: 'run-123' }) as string;
 
     expect(raw).toContain('code_scan (run-123)');
   });
@@ -336,7 +336,7 @@ describe('get_subagent_status tool', () => {
         startedAt: 0,
       }),
     );
-    const raw = tool.execute({ runId: 'ghost' });
+    const raw = tool.execute({ runId: 'ghost' }) as string;
     expect(raw).toContain('not found');
   });
 

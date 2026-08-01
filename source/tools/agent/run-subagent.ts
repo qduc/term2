@@ -216,7 +216,7 @@ export function getSubagentsRolesSection({ includeLibrarian = true }: { includeL
 
 export const createRunSubagentToolDefinition = (
   runSubagent: (params: RunSubagentParams, context?: unknown, details?: unknown) => Promise<SubagentResult>,
-): ToolDefinition<RunSubagentParams> => ({
+): ToolDefinition<typeof runSubagentSchema> => ({
   name: 'run_subagent',
   description: RUN_SUBAGENT_DESCRIPTION,
   parameters: runSubagentSchema,

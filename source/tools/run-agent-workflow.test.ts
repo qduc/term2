@@ -21,7 +21,7 @@ it('runs two concurrent child agents and returns both results in one tool respon
   const response = await tool.execute({
     code: "return await Promise.all(['security', 'tests'].map((task) => agent({ instructions: 'review', tools: ['read_file'] }).run({ task })));",
   });
-  const result = JSON.parse(response);
+  const result = JSON.parse(response as string);
 
   expect(maximum).toBe(2);
   expect(run).toHaveBeenCalledTimes(2);

@@ -130,7 +130,7 @@ export const createGrepToolDefinition = (
     globAvailable?: boolean;
     allowOutsideWorkspace?: boolean;
   } = {},
-): ToolDefinition<SearchToolParams> => {
+): ToolDefinition<typeof searchParametersSchema> => {
   const { executionContext, orchestratorMode = false, globAvailable = true, allowOutsideWorkspace = false } = deps;
   return {
     name: 'grep',

@@ -160,7 +160,7 @@ export function createRunSubagentAsyncToolDefinition(
     context?: unknown,
     details?: unknown,
   ) => Promise<SubagentRunHandle>,
-): ToolDefinition<RunSubagentAsyncParams> {
+): ToolDefinition<typeof runSubagentAsyncSchema> {
   return {
     name: 'run_subagent_async',
     description:
@@ -202,7 +202,7 @@ export function createRunSubagentAsyncToolDefinition(
 
 export function createGetSubagentResultToolDefinition(
   getSubagentResult: (params: GetSubagentResultParams, context?: unknown, details?: unknown) => Promise<SubagentResult>,
-): ToolDefinition<GetSubagentResultParams> {
+): ToolDefinition<typeof getSubagentResultSchema> {
   return {
     name: 'get_subagent_result',
     description:
@@ -315,7 +315,7 @@ export function createGetSubagentStatusToolDefinition(
     context?: unknown,
     details?: unknown,
   ) => SubagentRunStatus | SubagentRunStatus[],
-): ToolDefinition<GetSubagentStatusParams> {
+): ToolDefinition<typeof getSubagentStatusSchema> {
   return {
     name: 'get_subagent_status',
     description:
@@ -400,7 +400,7 @@ export const formatCancelRunCommandMessage: FormatCommandMessage = (item, index,
 /** Parent-only, non-blocking control channel for an active async execution run. */
 export function createSendMessageToolDefinition(
   sendMessage: (params: SendMessageParams) => SendMessageAcknowledgement,
-): ToolDefinition<SendMessageParams> {
+): ToolDefinition<typeof sendMessageSchema> {
   return {
     name: 'send_message',
     description:
@@ -420,7 +420,7 @@ export function createSendMessageToolDefinition(
 /** Parent-only, non-blocking request for two-phase async run cancellation. */
 export function createCancelRunToolDefinition(
   cancelRun: (params: CancelRunParams) => CancelRunAcknowledgement,
-): ToolDefinition<CancelRunParams> {
+): ToolDefinition<typeof cancelRunSchema> {
   return {
     name: 'cancel_run',
     description:

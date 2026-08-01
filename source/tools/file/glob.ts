@@ -111,7 +111,7 @@ export const createFindFilesToolDefinition = (
     allowOutsideWorkspace?: boolean;
     forceFindFallback?: boolean;
   } = {},
-): ToolDefinition<FindFilesToolParams> => {
+): ToolDefinition<typeof findFilesParametersSchema> => {
   const { executionContext, allowOutsideWorkspace = false, forceFindFallback = false } = deps;
   return {
     name: 'glob',

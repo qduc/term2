@@ -23,6 +23,7 @@ import { createUsageAccumulator, formatSessionUsageBreakdown } from './utils/ai/
 import { buildProjectFolderTitle, setTerminalTitle } from './utils/output/terminal-title.js';
 import {
   generateId,
+  getConversationsDir,
   getResumeCommand,
   loadConversationForProject,
   loadLastConversation,
@@ -662,9 +663,9 @@ if (resumedConversation) {
   console.log(`Resumed conversation: ${resumedConversation.id}`);
 }
 
-// Open the append-only log writer for the active session.
-import envPaths from 'env-paths';
-const logWriterDir = path.join(envPaths('term2').data, 'conversations');
+// Open the append-only log writer for the active session using the same
+// directory resolver as conversation loading and resume operations.
+const logWriterDir = getConversationsDir();
 const logWriter = createConversationLogWriter({ sessionId: effectiveSessionId, dir: logWriterDir, logger });
 function buildInitMeta(id: string, createdAt: string) {
   const cwd = executionContext?.getCwd();

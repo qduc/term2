@@ -97,6 +97,20 @@ it.sequential('getResumeCommand: returns correct format', () => {
   );
 });
 
+it.sequential('getConversationsDir: resolves the CLI writer directory from TERM2_CONVERSATIONS_DIR', () => {
+  const expected = path.join(testDir, 'env-resolved');
+  const previous = process.env['TERM2_CONVERSATIONS_DIR'];
+  persistenceModule.setConversationsDirForTest(null);
+  process.env['TERM2_CONVERSATIONS_DIR'] = expected;
+  try {
+    expect(persistenceModule.getConversationsDir()).toBe(expected);
+  } finally {
+    if (previous === undefined) delete process.env['TERM2_CONVERSATIONS_DIR'];
+    else process.env['TERM2_CONVERSATIONS_DIR'] = previous;
+    persistenceModule.setConversationsDirForTest(testDir);
+  }
+});
+
 it.sequential('writer + loadConversation: round-trips a basic conversation', () => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });

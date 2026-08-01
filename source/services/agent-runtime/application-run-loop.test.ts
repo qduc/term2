@@ -185,6 +185,52 @@ describe('ApplicationRunLoop', () => {
     expect(stream.runUsage).toEqual({ inputTokens: 21, outputTokens: 4, cachedInputTokens: 3 });
   });
 
+  it('accumulates usage across internal tool model completions including cache counters', async () => {
+    let turns = 0;
+    const model: StreamedModelTurn = {
+      async *stream() {
+        turns++;
+        if (turns === 1) {
+          yield { type: 'tool_call', id: 'call-usage', name: 'usage_tool', arguments: '{}' };
+          yield {
+            type: 'completion',
+            responseId: 'resp-tool',
+            output: [{ type: 'tool_call', id: 'call-usage', name: 'usage_tool', arguments: '{}' }],
+            usage: { inputTokens: 10, outputTokens: 2, cachedInputTokens: 4, cacheWriteTokens: 1 },
+          };
+          return;
+        }
+        yield {
+          type: 'completion',
+          responseId: 'resp-final',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+          usage: { inputTokens: 20, outputTokens: 3, cachedInputTokens: 5, cacheWriteTokens: 2 },
+        };
+      },
+    };
+    const tool: ToolDefinition = {
+      name: 'usage_tool',
+      description: 'Reports usage',
+      parameters: z.object({}),
+      needsApproval: () => false,
+      execute: () => 'ok',
+      formatCommandMessage: () => [],
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+      { ...agent, tools: [tool] },
+      'use the tool',
+    );
+
+    await stream.completed;
+
+    expect(stream.runUsage).toEqual({
+      inputTokens: 30,
+      outputTokens: 5,
+      cachedInputTokens: 9,
+      cacheWriteTokens: 3,
+    });
+  });
+
   it('owns a text turn without an SDK runner', async () => {
     const loop = new ApplicationRunLoop({ resolveModel: () => textModel('hello', 'resp-1') });
     const stream = loop.startStream(agent, 'say hello');

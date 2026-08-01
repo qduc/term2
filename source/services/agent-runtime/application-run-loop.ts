@@ -19,6 +19,7 @@ import type { AnyToolDefinition, ToolRegistry } from '../../tools/types.js';
 import { isZodToolParameterSchema } from '../../tools/types.js';
 import { normalizeToolParameters } from '../../lib/tool-invoke.js';
 import { ApprovalLedger, type ToolInvocationContext } from './tool-invocation-context.js';
+import { addTokenUsage, normalizeUsage } from '../../utils/ai/token-usage.js';
 
 /**
  * Fields of `modelSettings` the run loop and provider adapters actually read
@@ -367,7 +368,26 @@ export class ApplicationRunLoop {
       // tool calls. Approval may pause immediately after this point, and the
       // continuation must still carry the response that produced the calls.
       state.responseId = completion.responseId;
-      state.usage = completion.usage;
+      if (completion.usage !== undefined) {
+        const normalizedCompletionUsage = normalizeModelUsage(completion.usage);
+        if (normalizedCompletionUsage) {
+          const accumulated = addTokenUsage(normalizeModelUsage(state.usage), normalizedCompletionUsage);
+          state.usage = {
+            ...(accumulated.prompt_tokens !== undefined ? { inputTokens: accumulated.prompt_tokens } : {}),
+            ...(accumulated.completion_tokens !== undefined ? { outputTokens: accumulated.completion_tokens } : {}),
+            ...(accumulated.cache_read_tokens !== undefined
+              ? { cachedInputTokens: accumulated.cache_read_tokens }
+              : {}),
+            ...(accumulated.cache_creation_tokens !== undefined
+              ? { cacheWriteTokens: accumulated.cache_creation_tokens }
+              : {}),
+          };
+        } else {
+          // Providers may carry a future/opaque usage shape. Preserve the old
+          // pass-through behavior when normalization cannot recognize it.
+          state.usage = completion.usage;
+        }
+      }
       stream.lastResponseId = completion.responseId;
       stream.rawResponses?.push(completion);
       // Some provider adapters report function calls only in the terminal
@@ -522,6 +542,16 @@ function finish(stream: AgentStream, state: RunState, queue: EventQueue): unknow
   stream.lastResponseId = state.responseId ?? null;
   queue.close();
   return { usage: state.usage, output: stream.output };
+}
+
+function normalizeModelUsage(usage: unknown) {
+  if (!usage || typeof usage !== 'object') return undefined;
+  const rawUsage = usage as Record<string, unknown>;
+  return normalizeUsage({
+    ...rawUsage,
+    cacheReadTokens: rawUsage.cachedInputTokens ?? rawUsage.cacheReadTokens,
+    cacheCreationTokens: rawUsage.cacheWriteTokens ?? rawUsage.cacheCreationTokens,
+  });
 }
 
 function parseArguments(value: string): unknown {

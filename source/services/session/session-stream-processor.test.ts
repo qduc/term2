@@ -762,6 +762,50 @@ it('SessionStreamProcessor.finalize() prefers full replay history when full-hist
   expect(conversationStore.getHistory()).toEqual(fullHistory);
 });
 
+it('SessionStreamProcessor.finalize() prefers canonical newItems over conflicting output and cumulative history', () => {
+  const conversationStore = new ConversationStore();
+  const toolTracker = new SessionToolTracker(conversationStore);
+  const generationGuard = new GenerationGuard();
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger: {} as ConversationLogger,
+    providerContinuity: new ProviderContinuity(),
+    generationGuard,
+    journal: makeJournal(),
+  });
+  const canonicalItems = [
+    { type: 'function_call', callId: 'call-new', name: 'read_file', arguments: '{}' },
+    { type: 'function_call_output', callId: 'call-new', output: 'new result' },
+    {
+      role: 'assistant',
+      type: 'message',
+      content: [{ type: 'output_text', text: 'Canonical answer' }],
+    },
+  ];
+  const conflictingOutput = [
+    {
+      role: 'assistant',
+      type: 'message',
+      content: [{ type: 'output_text', text: 'Output-only answer' }],
+    },
+  ];
+  const stream = makeStream([], { interruptions: [] });
+  (stream as any).newItems = canonicalItems;
+  (stream as any).output = conflictingOutput;
+  (stream as any).history = [
+    { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Prior answer' }] },
+    ...canonicalItems,
+  ];
+
+  expect(processor.finalize(stream, generationGuard.capture(), 'full_history', 'continueRunStream')).toEqual({
+    kind: 'committed',
+  });
+  expect(conversationStore.getHistory()).toEqual(canonicalItems);
+});
+
 it('SessionStreamProcessor.finalize() detects wrapped messages and retains the offered provider objects', () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);

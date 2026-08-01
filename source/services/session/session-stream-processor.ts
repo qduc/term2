@@ -320,19 +320,20 @@ export class SessionStreamProcessor {
         if (inputMode === 'delta') {
           appendWithoutReplayedTools(snapshot.output);
         } else {
-          // In full-history mode, prefer message-bearing incremental items so we
-          // preserve assistant text that SDK history reconstruction may strip.
-          // If the incremental payload is only tool outputs, fall back to the
+          // In full-history mode, prefer canonical current-run newItems, then
+          // output, so SDK history reconstruction cannot strip assistant text.
+          // If incremental payloads are only tool outputs, fall back to the
           // authoritative replay history instead of poisoning the canonical store.
-          // When even the replay history has no messages but the incremental
-          // output contains tool results, append those so retry and subsequent
-          // turns can see the new tool output.
-          if (hasConversationMessageItems(snapshot.output)) {
-            appendWithoutReplayedTools(snapshot.output);
-          } else if (hasConversationMessageItems(snapshot.newItems)) {
+          // When even replay history has no messages, append current-run tool
+          // results so retry and subsequent turns can see the new tool output.
+          if (hasConversationMessageItems(snapshot.newItems)) {
             appendWithoutReplayedTools(snapshot.newItems);
+          } else if (hasConversationMessageItems(snapshot.output)) {
+            appendWithoutReplayedTools(snapshot.output);
           } else if (hasConversationMessageItems(snapshot.history)) {
             this.deps.conversationStore.replaceHistory(snapshot.history as ProviderInputItem[]);
+          } else if (hasToolResultItems(snapshot.newItems)) {
+            appendWithoutReplayedTools(snapshot.newItems);
           } else if (hasToolResultItems(snapshot.output)) {
             appendWithoutReplayedTools(snapshot.output);
           }

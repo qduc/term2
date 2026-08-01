@@ -23,6 +23,8 @@ export type FixtureRecorder = {
   recordSseEvent(frame: Omit<SseEventFrame, 'seq'>): void;
   recordJsonBody(frame: Omit<JsonBodyFrame, 'seq'>): void;
   recordWsMessage(frame: Omit<WsMessageFrame, 'seq'>): void;
+  /** Starts a new HTTP turn or WebSocket session in the same recording. */
+  startTurn(): void;
   finish(): FixtureEnvelopeV1;
   flush(): Promise<FixtureEnvelopeV1>;
 };
@@ -44,6 +46,10 @@ export function createFixtureRecorder(options: FixtureRecorderOptions): FixtureR
     recordSseEvent: add,
     recordJsonBody: add,
     recordWsMessage: add,
+    startTurn: () => {
+      current = { frames: [] };
+      turns.push(current);
+    },
     finish: () => {
       const envelope: FixtureEnvelopeV1 = {
         schemaVersion: 1,

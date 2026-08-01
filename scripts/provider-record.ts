@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { mkdir, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { startFakeProviderHttpServer } from './provider-black-box/fake-provider-http-server.js';
@@ -8,6 +9,7 @@ import { createFixtureRecorder, createRecordingMiddleware } from './provider-bla
 import { sanitizeFixtureEnvelope } from './provider-black-box/fixture-sanitizer.js';
 import { validateFixtureEnvelope, type FixtureTransport } from './provider-black-box/fixture-envelope.js';
 
+const require = createRequire(import.meta.url);
 const args = process.argv.slice(2);
 const get = (name: string): string | undefined => {
   const index = args.indexOf(name);
@@ -114,11 +116,11 @@ async function runLiveRecording(
   const nativeFetch = globalThis.fetch;
   const recorder = createFixtureRecorder({
     provider: providerId,
-    wireFamily: providerId === 'openai' ? 'openai-responses' : providerId,
+    wireFamily: providerId === 'openai' ? 'openai-responses' : providerId === 'openrouter' ? 'ai-sdk' : providerId,
     transport: 'http-sse',
     capture: {
-      sdkPackage: providerId === 'openai' ? 'openai' : '@ai-sdk/provider',
-      apiSdkVersion: 'unknown',
+      sdkPackage: sdkPackageFor(providerId),
+      apiSdkVersion: installedVersion(sdkPackageFor(providerId)),
       model: modelId,
       modelFamily: providerId,
       capturedAt: new Date().toISOString(),
@@ -186,6 +188,22 @@ async function runLiveRecording(
   }
 }
 
+function sdkPackageFor(id: string): string {
+  return id === 'anthropic'
+    ? '@ai-sdk/anthropic'
+    : id === 'google' || id === 'gemini'
+    ? '@ai-sdk/google'
+    : id === 'openrouter'
+    ? '@openrouter/ai-sdk-provider'
+    : 'openai';
+}
+function installedVersion(packageName: string): string {
+  try {
+    return String((require(`${packageName}/package.json`) as { version?: string }).version ?? 'unknown');
+  } catch {
+    return 'unknown';
+  }
+}
 function credentialFor(id: string): string {
   return id === 'anthropic'
     ? 'ANTHROPIC_API_KEY'

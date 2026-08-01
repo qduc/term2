@@ -30,6 +30,7 @@ export default tseslint.config(
       '*.config.ts',
       '*.config.js',
       'scripts/**',
+      '.worktrees/**',
     ],
   },
   eslint.configs.recommended,

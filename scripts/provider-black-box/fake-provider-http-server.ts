@@ -66,13 +66,21 @@ function framesFor(
     return [
       {
         type: 'message_start',
-        message: { id: 'msg_fake', type: 'message', role: 'assistant', content: [], model: 'fake' },
+        message: {
+          id: 'msg_fake',
+          type: 'message',
+          role: 'assistant',
+          content: [],
+          model: 'fake',
+          usage: { input_tokens: 1, output_tokens: 0 },
+        },
       },
       ...(scenario === 'reasoning'
         ? [{ type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: 'reason' } }]
         : []),
       { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'hello' } },
-      { type: 'message_delta', delta: { stop_reason: 'end_turn' } },
+      { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 1 } },
+      { type: 'message_stop' },
     ];
   if (protocol === 'google')
     return [{ candidates: [{ content: { role: 'model', parts: [{ text: 'hello' }] }, finishReason: 'STOP' }] }];
@@ -82,7 +90,16 @@ function framesFor(
       { type: 'response.output_text.delta', delta: 'hello' },
       ...(scenario === 'incomplete'
         ? []
-        : [{ type: 'response.completed', response: { id: 'resp_fake', status: 'completed', output: [] } }]),
+        : [
+            {
+              type: 'response.completed',
+              response: {
+                id: 'resp_fake',
+                status: 'completed',
+                output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'hello' }] }],
+              },
+            },
+          ]),
     ];
   if (scenario === 'tool-fragments')
     return [

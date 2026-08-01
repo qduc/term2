@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
-import type { ChildProcess } from 'node:child_process';
+import { finished } from 'node:stream/promises';
 
 export interface BlackBoxRun {
   exitCode: number | null;
@@ -16,6 +16,7 @@ export async function runIsolatedCli(options: {
   cwd: string;
   args: string[];
   env?: Record<string, string | undefined>;
+  prepare?: (root: string) => Promise<void> | void;
   deadlineMs?: number;
 }): Promise<BlackBoxRun> {
   const root = await mkdtemp(join(tmpdir(), 'term2-provider-blackbox-'));
@@ -26,11 +27,15 @@ export async function runIsolatedCli(options: {
   );
   Object.assign(env, options.env, {
     HOME: root,
+    XDG_CONFIG_HOME: join(root, 'config'),
+    XDG_STATE_HOME: join(root, 'state'),
+    XDG_CACHE_HOME: join(root, 'cache'),
     CODEX_HOME: join(root, 'codex'),
     TERM2_CONVERSATIONS_DIR: join(root, 'conversations'),
     TERM2_LOG_DIR: join(root, 'logs'),
     TERM2_CACHE_DIR: join(root, 'cache'),
   });
+  await options.prepare?.(root);
   const child = spawn(process.execPath, [join(options.cwd, 'dist/cli.js'), ...options.args], {
     cwd: options.cwd,
     env,
@@ -50,10 +55,7 @@ export async function runIsolatedCli(options: {
     child.once('close', (exitCode, signal) => resolve({ exitCode, signal })),
   );
   clearTimeout(timer);
-  await Promise.all([
-    new Promise<void>((resolve) => out.once('close', resolve)),
-    new Promise<void>((resolve) => err.once('close', resolve)),
-  ]);
+  await Promise.all([finished(out), finished(err)]);
   const output = {
     ...result,
     timedOut,

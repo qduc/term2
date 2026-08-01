@@ -1,6 +1,5 @@
 import { expect, it } from 'vitest';
-import { Agent } from '../services/agent-runtime/legacy-compat.js';
-import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
+import { ApplicationRunLoop, type ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
 import type { ModelRequest } from '../contracts/model.js';
 import { adaptStreamedModelTurnForAgents } from './agents-model-bridge.js';
 import type {
@@ -281,7 +280,7 @@ it('drives a real streaming Runner through the temporary bridge', async () => {
     },
   });
   const loop = new ApplicationRunLoop({ resolveModel: async () => bridgeBackToTurn(model) });
-  const agent = new Agent({ name: 'streamed-turn-bridge-test', instructions: 'Reply.', model: 'bridge-model' });
+  const agent: ApplicationAgent = { name: 'streamed-turn-bridge-test', instructions: 'Reply.', model: 'bridge-model', tools: [] };
 
   const stream = loop.startStream(agent, 'hello');
   for await (const _event of stream) {

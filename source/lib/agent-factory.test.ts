@@ -1,5 +1,4 @@
-import { Agent } from '../services/agent-runtime/legacy-compat.js';
-import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
+import { ApplicationRunLoop, type ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
 import type { Model, ModelRequest, ModelResponse, StreamEvent } from '../contracts/model.js';
 import type { StreamedModelTurn, StreamedModelTurnEvent, StreamedModelTurnRequest } from '../contracts/streamed-model-turn.js';
 import { it, expect } from 'vitest';
@@ -292,12 +291,12 @@ it.sequential('streaming Runner pauses an opted-in root tool until the session c
       } as StreamEvent;
     },
   };
-  const agent = new Agent({
+  const agent: ApplicationAgent = {
     name: 'post-execute-pause-test',
     instructions: 'Use the tool.',
     model: 'scripted-model',
     tools: [appOwnedTool],
-  });
+  };
   const loop = new ApplicationRunLoop({ resolveModel: async () => bridgeBackToTurn(model) });
   const stream = loop.startStream(agent, 'run the tool');
   const iteration = (async () => {

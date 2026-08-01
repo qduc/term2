@@ -15,12 +15,27 @@ import type {
 import type { ToolDefinition } from '../../tools/types.js';
 import { ApprovalLedger, type ToolInvocationContext } from './tool-invocation-context.js';
 
+/**
+ * Fields of `modelSettings` the run loop and provider adapters actually read
+ * (temperature/reasoning at the loop; maxTokens/retry/providerData at the
+ * provider boundary). Extra keys (e.g. codex `include`) pass through the index
+ * signature without being modeled.
+ */
+export interface AgentModelSettings {
+  temperature?: number;
+  reasoning?: { effort?: string; summary?: string };
+  maxTokens?: number;
+  retry?: { maxRetries?: number };
+  providerData?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 /** The application-owned agent shape consumed by the replacement run loop. */
 export interface ApplicationAgent {
   readonly name: string;
   readonly instructions: string;
   readonly model: string;
-  modelSettings?: any;
+  modelSettings?: AgentModelSettings;
   defaultRunOptions?: any;
   outputType?: any;
   readonly tools: readonly ToolDefinition[];

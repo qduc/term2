@@ -1,8 +1,8 @@
-import { Agent } from '../agent-runtime/legacy-compat.js';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import type { ApplicationAgent } from '../agent-runtime/application-run-loop.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type {
@@ -184,13 +184,13 @@ export class ExecutionSubagentRunner {
       this.#skillsService,
     );
 
-    const agent = new Agent({
+    const agent: ApplicationAgent = {
       name: definition.name,
       model: definition.model,
       ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
       instructions: fullInstructions,
       tools,
-    });
+    };
 
     const subClient = this.#createClient({
       agent,

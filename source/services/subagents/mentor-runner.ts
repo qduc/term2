@@ -1,6 +1,6 @@
 import path from 'node:path';
-import { Agent } from '../agent-runtime/legacy-compat.js';
 import { randomUUID } from 'node:crypto';
+import type { ApplicationAgent } from '../agent-runtime/application-run-loop.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentResult } from './types.js';
@@ -142,12 +142,13 @@ export class MentorRunner {
         modelSettings.reasoning = { effort: reasoningEffort, summary: 'auto' };
       }
 
-      return new Agent({
+      return {
         name: definition.name,
         model: mentorModel,
         ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
         instructions,
-      });
+        tools: [],
+      } satisfies ApplicationAgent;
     });
 
     this.#mentorSession.addUserMessage(task);

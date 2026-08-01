@@ -1,4 +1,4 @@
-import { Agent } from '../../services/agent-runtime/legacy-compat.js';
+import type { ApplicationAgent } from '../../services/agent-runtime/application-run-loop.js';
 import type { LegacyRunner } from '../../contracts/model.js';
 import type { ApplicationCompatibilityRunner } from '../../providers/registry.js';
 import type { SearchReplaceFullOperation } from './search-replace.js';
@@ -176,7 +176,7 @@ async function runHealingPrompt(
     throw new Error(`${label} is configured but could not be initialized. Check credentials.`);
   }
 
-  const agent = new Agent({
+  const agent: ApplicationAgent = {
     name: 'EditHealer',
     model,
     instructions,
@@ -185,7 +185,8 @@ async function runHealingPrompt(
       temperature: 0,
       retry: { maxRetries: settingsService.get<number>('agent.retryAttempts') ?? 2 },
     },
-  });
+    tools: [],
+  };
 
   const options: any = {
     stream: false,

@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { Agent, RunContext } from '../agent-runtime/legacy-compat.js';
+import { RunContext } from '../agent-runtime/legacy-compat.js';
+import type { ApplicationAgent } from '../agent-runtime/application-run-loop.js';
 import { replayApprovals, type ApprovalRecord } from './approval-replay.js';
 
 const TOOL = 'shell_command';
 
-function createAgent(): Agent<any, any> {
-  return new Agent({ name: 'approval-replay-test-agent', instructions: '' });
+function createAgent(): ApplicationAgent {
+  return { name: 'approval-replay-test-agent', instructions: '', model: 'mock-model', tools: [] };
 }
 
 function createApprovalItem(toolName: string, callId: string): any {

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { Agent, RunContext, type Tool } from '../agent-runtime/legacy-compat.js';
+import { RunContext, tool as createTool, type Tool } from '../agent-runtime/legacy-compat.js';
+import type { ApplicationAgent } from '../agent-runtime/application-run-loop.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentRequest, SubagentResult, SupportedSubagentRole, SubagentDefinition } from './types.js';
@@ -24,7 +25,7 @@ import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 
 export type CachedRoleTool = {
-  agent: Agent<SubagentRunContext>;
+  agent: ApplicationAgent;
   tool: Tool<SubagentRunContext>;
 };
 
@@ -245,23 +246,27 @@ export class NestedSubagentRunner {
       this.#skillsService,
     );
 
-    const agent = new Agent<SubagentRunContext>({
+    const agent: ApplicationAgent = {
       name: definition.name,
       model: definition.model,
       modelSettings,
       instructions,
       tools,
-    });
+    };
 
     const parameters = z.object({
       role: z.literal(role),
       task: z.string(),
     });
-    const tool = agent.asTool({
-      toolName: `run_subagent_${role}`,
-      toolDescription: `Run the ${role} subagent.`,
+    // Slice 4: the legacy Agent.asTool wrapper is replaced by a direct tool()
+    // call that preserves its current (broken, F1) behavior: execute returns
+    // the raw task string and everything else in the config is dropped.
+    // Slice 6 replaces this whole block with createSubagentTool().
+    const tool: Tool<SubagentRunContext> = createTool({
+      name: `run_subagent_${role}`,
+      description: `Run the ${role} subagent.`,
       parameters,
-      inputBuilder: ({ params }: { params: { task: string } }) => params.task,
+      execute: (params: any) => (params as { task: string }).task,
       runOptions: {
         maxTurns: definition.maxTurns,
         callModelInputFilter: incrementSubagentTurnCount,

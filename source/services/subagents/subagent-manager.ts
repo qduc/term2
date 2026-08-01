@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { Tool, Agent } from '../agent-runtime/legacy-compat.js';
+import type { Tool } from '../agent-runtime/legacy-compat.js';
+import type { ApplicationAgent } from '../agent-runtime/application-run-loop.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentRequest, SubagentResult, SupportedSubagentRole, SubagentDefinition } from './types.js';
@@ -59,7 +60,7 @@ export class SubagentManager {
     return this.#runtime.nestedRunner.getRoleAgentTool(role);
   }
 
-  getRoleAgent(role: SupportedSubagentRole): Agent<SubagentRunContext> {
+  getRoleAgent(role: SupportedSubagentRole): ApplicationAgent {
     return this.#runtime.nestedRunner.getRoleAgent(role);
   }
 

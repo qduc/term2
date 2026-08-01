@@ -9,6 +9,7 @@ import {
   type TruncatedLogEvent,
   type SessionInitEvent,
 } from './conversation-log-events.js';
+import { decodeLogEnvelope } from '../conversation/conversation-decoder.js';
 import { saveLastConversation } from '../conversation/conversation-persistence.js';
 
 const FSYNC_EVENTS = new Set<LogEvent['type']>([
@@ -77,6 +78,24 @@ function ensureDir(fileSystem: WriterFileSystem, dir: string): void {
   if (!fileSystem.existsSync(dir)) {
     fileSystem.mkdirSync(dir, { recursive: true });
   }
+}
+
+function readLogTailState(fileSystem: WriterFileSystem, filePath: string): { seq: number; needsLineBreak: boolean } {
+  if (!fileSystem.existsSync(filePath)) return { seq: 0, needsLineBreak: false };
+
+  const content = fileSystem.readFileSync(filePath, 'utf8');
+  let seq = 0;
+  for (const line of content.split('\n')) {
+    try {
+      const envelope = decodeLogEnvelope(JSON.parse(line));
+      if (envelope && Number.isSafeInteger(envelope.seq) && envelope.seq >= 0) {
+        seq = Math.max(seq, envelope.seq);
+      }
+    } catch {
+      // Ignore malformed, legacy, or truncated records when recovering continuity.
+    }
+  }
+  return { seq, needsLineBreak: content.length > 0 && !content.endsWith('\n') };
 }
 
 export function sanitizeSubagentResult(value: unknown): unknown {
@@ -214,11 +233,26 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
   }
 
   init(meta: Omit<SessionInitEvent, 'type'>): void {
+    this.#initialize(meta, true);
+  }
+
+  #initialize(meta: Omit<SessionInitEvent, 'type'>, recoverSequence: boolean): void {
     this.#projectPath = meta.projectPath;
     this.#sshHost = meta.sshHost;
     ensureDir(this.#fileSystem, this.#dir);
     acquireLock(this.#dir, this.#sessionId, this.#fileSystem);
-    this.#fd = this.#fileSystem.openSync(logPath(this.#dir, this.#sessionId), 'a');
+    const filePath = logPath(this.#dir, this.#sessionId);
+    const tailState = readLogTailState(this.#fileSystem, filePath);
+    this.#seq = recoverSequence ? tailState.seq : 0;
+    this.#fd = this.#fileSystem.openSync(filePath, 'a');
+    if (tailState.needsLineBreak) {
+      try {
+        this.#fileSystem.writeSync(this.#fd, '\n');
+      } catch (err: unknown) {
+        this.#recordFailure(err);
+        throw err;
+      }
+    }
     this.append({ type: 'session_init', ...meta });
   }
 
@@ -274,7 +308,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
     this.#sessionId = newSessionId;
     this.#seq = 0;
     this.#writeErrorLogged = false;
-    this.init(meta);
+    this.#initialize(meta, false);
   }
 
   async flush(): Promise<void> {

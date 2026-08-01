@@ -207,6 +207,221 @@ describe('ApplicationRunLoop', () => {
     expect(calls).toBe(2);
     expect(resumed.finalOutput).toBe('resumed');
   });
+
+  it('anchors an approved terminal tool call to its producing response', async () => {
+    const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    let modelCalls = 0;
+    let executions = 0;
+    const tool: ToolDefinition = {
+      name: 'danger',
+      description: 'Requires approval',
+      parameters: z.object({}),
+      needsApproval: () => true,
+      execute: () => {
+        executions++;
+        return 'approved result';
+      },
+      formatCommandMessage: () => [],
+    };
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        modelCalls++;
+        if (modelCalls === 1) {
+          yield {
+            type: 'completion',
+            responseId: 'response-producing-tool',
+            output: [{ type: 'tool_call', id: 'call-terminal', name: 'danger', arguments: '{}' }],
+          };
+          return;
+        }
+        yield {
+          type: 'completion',
+          responseId: 'response-resumed',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'resumed' }] }],
+        };
+      },
+    };
+
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do it');
+    await stream.completed;
+
+    expect(stream.interruptions).toHaveLength(1);
+    const handle = stream.state!;
+    handle.approve?.(stream.interruptions![0]);
+    const resumed = loop.continueRunStream(handle);
+    await resumed.completed;
+
+    expect(requests[0].previousResponseId).toBeUndefined();
+    expect(requests[1].previousResponseId).toBe('response-producing-tool');
+    expect(requests[1].input.filter((item) => item.type === 'tool_result' && item.id === 'call-terminal')).toHaveLength(
+      1,
+    );
+    expect(executions).toBe(1);
+    expect(resumed.finalOutput).toBe('resumed');
+  });
+
+  it('anchors a rejected streamed tool call to its producing response without executing it', async () => {
+    const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    let modelCalls = 0;
+    let executions = 0;
+    const tool: ToolDefinition = {
+      name: 'danger',
+      description: 'Requires approval',
+      parameters: z.object({}),
+      needsApproval: () => true,
+      execute: () => {
+        executions++;
+        return 'must not execute';
+      },
+      formatCommandMessage: () => [],
+    };
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        modelCalls++;
+        if (modelCalls === 1) {
+          yield { type: 'tool_call', id: 'call-streamed', name: 'danger', arguments: '{}' };
+          yield { type: 'completion', responseId: 'response-producing-rejection', output: [] };
+          return;
+        }
+        yield {
+          type: 'completion',
+          responseId: 'response-after-rejection',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'resumed' }] }],
+        };
+      },
+    };
+
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do it');
+    await stream.completed;
+
+    expect(stream.interruptions).toHaveLength(1);
+    const handle = stream.state!;
+    handle.reject?.(stream.interruptions![0], { message: 'declined by user' });
+    const resumed = loop.continueRunStream(handle);
+    await resumed.completed;
+
+    expect(requests[0].previousResponseId).toBeUndefined();
+    expect(requests[1].previousResponseId).toBe('response-producing-rejection');
+    const results = requests[1].input.filter((item) => item.type === 'tool_result' && item.id === 'call-streamed');
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ output: 'declined by user' });
+    expect(executions).toBe(0);
+    expect(resumed.finalOutput).toBe('resumed');
+  });
+
+  it('preserves later streamed tool calls while the first approval is pending', async () => {
+    const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    let modelCalls = 0;
+    const executions: string[] = [];
+    const tool: ToolDefinition = {
+      name: 'danger',
+      description: 'Requires approval',
+      parameters: z.object({}),
+      needsApproval: () => true,
+      execute: (_params, _context, details) => {
+        const callId = (details as { toolCall?: { callId?: string } } | undefined)?.toolCall?.callId;
+        executions.push(callId ?? 'unknown');
+        return 'approved result';
+      },
+      formatCommandMessage: () => [],
+    };
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        modelCalls++;
+        if (modelCalls === 1) {
+          yield { type: 'tool_call', id: 'call-first', name: 'danger', arguments: '{}' };
+          yield { type: 'tool_call', id: 'call-second', name: 'danger', arguments: '{}' };
+          yield { type: 'completion', responseId: 'response-producing-two-tools', output: [] };
+          return;
+        }
+        yield {
+          type: 'completion',
+          responseId: 'response-after-two-tools',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+        };
+      },
+    };
+
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do both');
+    await stream.completed;
+
+    expect(stream.interruptions?.map((item) => (item as { callId?: string }).callId)).toEqual([
+      'call-first',
+      'call-second',
+    ]);
+
+    const firstHandle = stream.state!;
+    firstHandle.approve?.(stream.interruptions![0]);
+    const afterFirst = loop.continueRunStream(firstHandle);
+    await afterFirst.completed;
+
+    expect(modelCalls).toBe(1);
+    expect(afterFirst.interruptions?.map((item) => (item as { callId?: string }).callId)).toEqual(['call-second']);
+
+    const secondHandle = afterFirst.state!;
+    secondHandle.approve?.(afterFirst.interruptions![0]);
+    const resumed = loop.continueRunStream(secondHandle);
+    await resumed.completed;
+
+    expect(modelCalls).toBe(2);
+    expect(requests[1].previousResponseId).toBe('response-producing-two-tools');
+    expect(requests[1].input.filter((item) => item.type === 'tool_result').map((item) => item.id)).toEqual([
+      'call-first',
+      'call-second',
+    ]);
+    expect(executions).toEqual(['call-first', 'call-second']);
+    expect(resumed.finalOutput).toBe('done');
+  });
+
+  it('fails closed for an approval interruption with an unknown call id', async () => {
+    let modelCalls = 0;
+    let executions = 0;
+    const tool: ToolDefinition = {
+      name: 'danger',
+      description: 'Requires approval',
+      parameters: z.object({}),
+      needsApproval: () => true,
+      execute: () => {
+        executions++;
+        return 'must not execute';
+      },
+      formatCommandMessage: () => [],
+    };
+    const model: StreamedModelTurn = {
+      async *stream() {
+        modelCalls++;
+        if (modelCalls === 1) {
+          yield { type: 'tool_call', id: 'call-pending', name: 'danger', arguments: '{}' };
+          yield { type: 'completion', responseId: 'response-pending', output: [] };
+          return;
+        }
+        yield {
+          type: 'completion',
+          responseId: 'response-should-not-run',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'unsafe continuation' }] }],
+        };
+      },
+    };
+
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do it');
+    await stream.completed;
+
+    const staleInterruption = { ...(stream.interruptions![0] as Record<string, unknown>), callId: 'call-stale' };
+    const handle = stream.state!;
+    handle.approve?.(staleInterruption);
+    const resumed = loop.continueRunStream(handle);
+
+    await expect(resumed.completed).rejects.toThrow('call-stale');
+    expect(modelCalls).toBe(1);
+    expect(executions).toBe(0);
+  });
 });
 
 describe('ApplicationRunLoop turn budget', () => {

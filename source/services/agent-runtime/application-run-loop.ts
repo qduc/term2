@@ -97,7 +97,9 @@ type RunState = {
   input: StreamedModelTurnInput[];
   history: ProviderInputItem[];
   pendingApproval?: PendingApproval;
+  pendingApprovals?: PendingApproval[];
   approvalDecision?: 'approved' | 'rejected';
+  approvalDecisionCallId?: string;
   approvalMessage?: string;
   responseId?: string;
   usage?: unknown;
@@ -109,8 +111,8 @@ type RunState = {
   turnCount: number;
   /** Turn budget for the run; undefined means unbounded. */
   maxTurns?: number;
-  approve?: () => void;
-  reject?: (_interruption: unknown, options?: { message?: string }) => void;
+  approve?: (_interruption?: unknown) => void;
+  reject?: (_interruption?: unknown, options?: { message?: string }) => void;
 };
 
 class EventQueue {
@@ -171,16 +173,19 @@ export class ApplicationRunLoop {
       input: normalizeInput(input),
       history: normalizeHistory(input),
       responseId: options.previousResponseId ?? undefined,
+      pendingApprovals: [],
       context: options.context,
       approvals: options.approvals ?? new ApprovalLedger(),
       turnCount: 0,
       maxTurns: options.maxTurns,
     };
-    state.approve = () => {
+    state.approve = (interruption) => {
       state.approvalDecision = 'approved';
+      state.approvalDecisionCallId = getInterruptionCallId(interruption);
     };
-    state.reject = (_interruption, approvalOptions) => {
+    state.reject = (interruption, approvalOptions) => {
       state.approvalDecision = 'rejected';
+      state.approvalDecisionCallId = getInterruptionCallId(interruption);
       state.approvalMessage = approvalOptions?.message;
     };
     return this.#run(state, options);
@@ -194,6 +199,12 @@ export class ApplicationRunLoop {
     // Handles created before the ledger existed cannot resume meaningfully;
     // give them a fresh ledger rather than crashing on `approvals` access.
     if (!state.approvals) state.approvals = new ApprovalLedger();
+    // A continuation handle from before approval batching carried only the
+    // current pending item. Normalize it into the queue used by current runs.
+    if (!state.pendingApprovals) state.pendingApprovals = state.pendingApproval ? [state.pendingApproval] : [];
+    if (!state.pendingApproval && state.pendingApprovals.length > 0) {
+      state.pendingApproval = state.pendingApprovals[0];
+    }
     // A continuation handle normally already carries the response that owns
     // the pending turn. Older handles may not; use the caller-provided
     // continuity anchor as a compatibility fallback in that case.
@@ -263,8 +274,18 @@ export class ApplicationRunLoop {
     while (true) {
       if (options.signal?.aborted) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
 
-      if (state.pendingApproval && state.approvalDecision) {
-        const pending = state.pendingApproval;
+      state.pendingApprovals ??= state.pendingApproval ? [state.pendingApproval] : [];
+      if (state.pendingApprovals.length > 0 && state.approvalDecision) {
+        const selectedIndex = state.approvalDecisionCallId
+          ? state.pendingApprovals.findIndex(
+              (pending) => getInterruptionCallId(pending.interruption) === state.approvalDecisionCallId,
+            )
+          : -1;
+        if (state.approvalDecisionCallId && selectedIndex < 0) {
+          throw new Error(`Approval decision references unknown pending tool call: ${state.approvalDecisionCallId}`);
+        }
+        const pendingIndex = selectedIndex >= 0 ? selectedIndex : 0;
+        const pending = state.pendingApprovals[pendingIndex];
         const approved = state.approvalDecision === 'approved';
         if (approved) {
           state.approvals.approveTool({ toolName: pending.toolName, callId: pending.callId });
@@ -287,9 +308,13 @@ export class ApplicationRunLoop {
         state.history.push(resultItem);
         state.input.push({ type: 'tool_result', id: pending.callId, output: result });
         outputPush(stream, queue, { type: 'run_item_stream_event', item: resultItem });
-        state.pendingApproval = undefined;
+        state.pendingApprovals.splice(pendingIndex, 1);
+        state.pendingApproval = state.pendingApprovals[0];
         state.approvalDecision = undefined;
-        stream.interruptions = [];
+        state.approvalDecisionCallId = undefined;
+        state.approvalMessage = undefined;
+        stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
+        if (state.pendingApprovals.length > 0) return finish(stream, state, queue);
       }
 
       state.turnCount += 1;
@@ -328,11 +353,17 @@ export class ApplicationRunLoop {
         if (event.type === 'tool_call') {
           sawToolCall = true;
           await this.#handleToolCall(state, stream, queue, event, toolContext);
-          if (state.pendingApproval) return finish(stream, state, queue);
         }
       }
 
       if (!completion) throw new Error('Application model turn ended without completion');
+      // Commit the authoritative terminal state before handling terminal-only
+      // tool calls. Approval may pause immediately after this point, and the
+      // continuation must still carry the response that produced the calls.
+      state.responseId = completion.responseId;
+      state.usage = completion.usage;
+      stream.lastResponseId = completion.responseId;
+      stream.rawResponses?.push(completion);
       // Some provider adapters report function calls only in the terminal
       // completion rather than as separate stream events.
       if (!sawToolCall) {
@@ -340,13 +371,8 @@ export class ApplicationRunLoop {
           if (item.type !== 'tool_call') continue;
           sawToolCall = true;
           await this.#handleToolCall(state, stream, queue, item, toolContext);
-          if (state.pendingApproval) return finish(stream, state, queue);
         }
       }
-      state.responseId = completion.responseId;
-      state.usage = completion.usage;
-      stream.lastResponseId = completion.responseId;
-      stream.rawResponses?.push(completion);
       const assistantText = completion.output
         .filter((item) => item.type === 'message')
         .flatMap((item) => item.content)
@@ -364,6 +390,10 @@ export class ApplicationRunLoop {
         state.input.push({ type: 'message', role: 'assistant', content: [{ type: 'text', text: assistantText }] });
       }
 
+      if (state.pendingApprovals.length > 0) {
+        stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
+        return finish(stream, state, queue);
+      }
       if (!sawToolCall) return finish(stream, state, queue);
     }
   }
@@ -445,8 +475,10 @@ export class ApplicationRunLoop {
         definition,
         params,
       };
-      state.pendingApproval = pending;
-      stream.interruptions = [pending.interruption];
+      state.pendingApprovals ??= [];
+      if (!state.pendingApproval) state.pendingApproval = pending;
+      state.pendingApprovals.push(pending);
+      stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
       return;
     }
 
@@ -492,6 +524,12 @@ function parseArguments(value: string): unknown {
   } catch {
     return {};
   }
+}
+
+function getInterruptionCallId(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const callId = (value as { callId?: unknown }).callId;
+  return typeof callId === 'string' ? callId : undefined;
 }
 
 function toModelTools(tools: ToolRegistry): StreamedModelTool[] {

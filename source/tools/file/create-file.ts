@@ -21,7 +21,7 @@ const createFileParametersSchema = z.object({
   confirmOverwriteCode: z.string().optional().describe('Confirmation code from a previous failed attempt.'),
 });
 
-export type CreateFileToolParams = z.input<typeof createFileParametersSchema>;
+export type CreateFileToolParams = z.infer<typeof createFileParametersSchema>;
 
 type PendingOverwrite = {
   path: string;
@@ -64,7 +64,7 @@ export function createCreateFileToolDefinition(deps: {
   loggingService: ILoggingService;
   settingsService: ISettingsService;
   executionContext?: ExecutionContext;
-}): ToolDefinition<CreateFileToolParams> {
+}): ToolDefinition<typeof createFileParametersSchema> {
   const { loggingService, settingsService, executionContext } = deps;
   const pendingOverwrites = new Map<string, PendingOverwrite>();
   const pendingOverwriteTtlMs = 10 * 60 * 1000;

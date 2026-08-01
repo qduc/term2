@@ -62,8 +62,8 @@ const searchReplaceParametersSchema = z.object({
   replacements: z.array(searchReplaceOperationSchema).min(1).describe('The list of replacements to apply to the file'),
 });
 
-export type SearchReplaceOperation = z.input<typeof searchReplaceOperationSchema>;
-export type SearchReplaceToolParams = z.input<typeof searchReplaceParametersSchema>;
+export type SearchReplaceOperation = z.infer<typeof searchReplaceOperationSchema>;
+export type SearchReplaceToolParams = z.infer<typeof searchReplaceParametersSchema>;
 
 export interface SearchReplaceFullOperation {
   path: string;
@@ -270,7 +270,7 @@ export function createSearchReplaceToolDefinition(deps: {
   settingsService: ISettingsService;
   executionContext?: ExecutionContext;
   editHealing?: typeof healSearchReplaceParams;
-}): ToolDefinition<SearchReplaceToolParams> {
+}): ToolDefinition<typeof searchReplaceParametersSchema> {
   const { loggingService, settingsService, executionContext, editHealing = healSearchReplaceParams } = deps;
   const editCache = new SearchReplaceEditCache();
 

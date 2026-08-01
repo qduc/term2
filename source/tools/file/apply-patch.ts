@@ -202,7 +202,7 @@ export function createApplyPatchToolDefinition(deps: {
   loggingService: ILoggingService;
   settingsService: ISettingsService;
   executionContext?: ExecutionContext;
-}): ToolDefinition<ApplyPatchToolParams> {
+}): ToolDefinition<typeof applyPatchParametersSchema> {
   const { loggingService, settingsService, executionContext } = deps;
 
   return {

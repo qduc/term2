@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { RunContext } from '../agent-runtime/legacy-compat.js';
 import type { ApplicationAgent } from '../agent-runtime/application-run-loop.js';
+import { ApprovalLedger } from '../agent-runtime/tool-invocation-context.js';
 import { replayApprovals, type ApprovalRecord } from './approval-replay.js';
 
 const TOOL = 'shell_command';
@@ -10,11 +10,15 @@ function createAgent(): ApplicationAgent {
 }
 
 function createApprovalItem(toolName: string, callId: string): any {
-  return { rawItem: { type: 'function_call', callId, name: toolName, arguments: '{}', status: 'completed' }, toolName };
+  return {
+    rawItem: { type: 'function_call', callId, name: toolName, arguments: '{}', status: 'completed' },
+    toolName,
+    callId,
+  };
 }
 
-function replayInto(approvals: Record<string, ApprovalRecord>): RunContext<unknown> {
-  const nested = new RunContext<unknown>({});
+function replayInto(approvals: Record<string, ApprovalRecord>): ApprovalLedger {
+  const nested = new ApprovalLedger();
   replayApprovals(nested, approvals, createAgent());
   return nested;
 }
@@ -27,31 +31,31 @@ function replayInto(approvals: Record<string, ApprovalRecord>): RunContext<unkno
  */
 describe('SDK approval-record contract', () => {
   it('keys the approvals record by tool name, not by call id', () => {
-    const context = new RunContext<unknown>({});
+    const context = new ApprovalLedger();
 
     context.approveTool(createApprovalItem(TOOL, 'call_abc'));
 
-    expect(Object.keys(context.toJSON().approvals)).toEqual([TOOL]);
+    expect(Object.keys(context.snapshot())).toEqual([TOOL]);
   });
 
   it('records a per-call approval as an array of call ids', () => {
-    const context = new RunContext<unknown>({});
+    const context = new ApprovalLedger();
 
     context.approveTool(createApprovalItem(TOOL, 'call_abc'));
 
-    expect(context.toJSON().approvals[TOOL].approved).toEqual(['call_abc']);
+    expect(context.snapshot()[TOOL].approved).toEqual(['call_abc']);
   });
 
   it('records a blanket approval as the boolean true', () => {
-    const context = new RunContext<unknown>({});
+    const context = new ApprovalLedger();
 
     context.approveTool(createApprovalItem(TOOL, 'call_abc'), { alwaysApprove: true });
 
-    expect(context.toJSON().approvals[TOOL].approved).toBe(true);
+    expect(context.snapshot()[TOOL].approved).toBe(true);
   });
 
   it('grants only the listed call ids when approved is an array', () => {
-    const context = new RunContext<unknown>({});
+    const context = new ApprovalLedger();
 
     context.approveTool(createApprovalItem(TOOL, 'call_abc'));
 
@@ -60,7 +64,7 @@ describe('SDK approval-record contract', () => {
   });
 
   it('grants every call id when approved is true', () => {
-    const context = new RunContext<unknown>({});
+    const context = new ApprovalLedger();
 
     context.approveTool(createApprovalItem(TOOL, 'call_abc'), { alwaysApprove: true });
 
@@ -72,7 +76,7 @@ describe('replayApprovals', () => {
   it('leaves the nested context untouched when there is nothing to replay', () => {
     const nested = replayInto({});
 
-    expect(nested.toJSON().approvals).toEqual({});
+    expect(nested.snapshot()).toEqual({});
   });
 
   it('carries a per-call parent approval into the nested context so it does not re-prompt', () => {
@@ -170,29 +174,29 @@ describe('replayApprovals', () => {
   });
 
   it('does not mutate the parent approvals it reads from', () => {
-    const parent = new RunContext<unknown>({});
+    const parent = new ApprovalLedger();
     parent.approveTool(createApprovalItem(TOOL, 'call_abc'));
-    const before = structuredClone(parent.toJSON().approvals);
+    const before = structuredClone(parent.snapshot());
 
-    replayApprovals(new RunContext<unknown>({}), parent.toJSON().approvals, createAgent());
+    replayApprovals(new ApprovalLedger(), parent.snapshot(), createAgent());
 
-    expect(parent.toJSON().approvals).toEqual(before);
+    expect(parent.snapshot()).toEqual(before);
   });
 
   it('replays an approval decision made on a real parent context', () => {
-    const parent = new RunContext<unknown>({});
+    const parent = new ApprovalLedger();
     parent.approveTool(createApprovalItem(TOOL, 'call_from_parent'));
 
-    const nested = replayInto(parent.toJSON().approvals);
+    const nested = replayInto(parent.snapshot());
 
     expect(nested.isToolApproved({ toolName: TOOL, callId: 'call_from_parent' })).toBe(true);
   });
 
   it('replays a rejection decision made on a real parent context', () => {
-    const parent = new RunContext<unknown>({});
+    const parent = new ApprovalLedger();
     parent.rejectTool(createApprovalItem(TOOL, 'call_from_parent'), { message: 'denied by user' });
 
-    const nested = replayInto(parent.toJSON().approvals);
+    const nested = replayInto(parent.snapshot());
 
     expect(nested.isToolApproved({ toolName: TOOL, callId: 'call_from_parent' })).toBe(false);
     expect(nested.getRejectionMessage(TOOL, 'call_from_parent')).toBe('denied by user');

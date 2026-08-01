@@ -293,7 +293,7 @@ it('registers custom OpenAI-compatible providers from settings.json', async () =
 it('custom providers default missing type for old settings.json files', async () => {
   const settingsDir = getTestSettingsDir();
 
-  const providerName = 'legacy-compatible-settings-service-test';
+  const providerName = 'app-owned-settings-service-test';
 
   // TODO: // TODO: t.teardown(() => unregisterProvider(providerName)) needs manual try/finally conversion;
 

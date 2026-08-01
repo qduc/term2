@@ -1,6 +1,6 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Import removal complete; one interface-shape gap remains open (see *`legacy-compat.ts` is a shim, not a finished slice* below). The application-owned stream/continuation contracts, provider-neutral run loop, direct provider factories, local patch/tool/runtime contracts, public Codex WebSocket transport, and production import boundary are implemented and typecheck cleanly. The three Agents packages and their lockfile entries have been removed, and a source/package audit finds zero `@openai/agents*` references. The full suite passes 4,813 tests with one restricted-host sandbox test skipped.
+**Status:** Complete. The application-owned stream/continuation contracts, provider-neutral run loop, direct provider factories, local patch/tool/runtime contracts, public Codex WebSocket transport, and production import boundary are implemented and typecheck cleanly. The three Agents packages and their lockfile entries have been removed, and a source/package audit finds zero `@openai/agents*` references. The full suite passes 4,830 tests with one restricted-host sandbox test skipped.
 **Last updated:** 2026-08-01
 
 The first run-loop façade, continuation, model-decorator, application-loop, direct-provider, public WebSocket, and dependency-retirement slices are landed. Behavioral parity and the migration audit are complete; the remaining sandbox failure is host capability, not an Agents SDK dependency or application regression.
@@ -601,33 +601,20 @@ Migration order:
 6. Delete singleton fallbacks and compatibility wiring after all production roots inject the
    session-owned capabilities.
 
-### `legacy-compat.ts` is a shim, not a finished slice
+### `legacy-compat.ts` retired (2026-08-02, `docs/plans/retire-legacy-compat.md`)
 
-`source/services/agent-runtime/legacy-compat.ts` reimplements the *shape* of the removed SDK
-— `Agent`, `Runner`, `RunContext`, `tool()`, `applyPatchTool` — as local classes with the same
-names, loosely-typed `any` config bags, and the same string/callId-keyed approval bookkeeping
-`RunContext` had. It is imported by `source/tools/file/edit-healing.ts` and all of
-`source/services/subagents/` (`tool-policy.ts`, `execution-runner.ts`, `utils.ts`,
-`subagent-manager.ts`, `nested-runner.ts`, `mentor-runner.ts`). This is why the risk register
-can read "zero imports" while none of those seven consumers actually changed.
-
-**Why this counts as unfinished:** the plan's stated endpoint is retiring the SDK's private-API
-fragility (see *Goal*), not merely removing the package from `node_modules`. Re-implementing the
-SDK's own class shapes in-house keeps the same `any`-typed surface and the same approval
-side-channel design that motivated Step A in the first place — it relocates the fragility rather
-than retiring it.
-
-**Scoped in `docs/plans/retire-legacy-compat.md` (2026-08-01).** That plan records five
-already-broken behaviors behind the shim — nested subagents cannot return a result, subagent
-tool bookkeeping is inert, parent approvals never replay into subagents, and edit healing /
-mentor read an unsettled stream — so treat this as a bug-fixing slice, not a refactor.
-
-**What's next, not yet scoped:** design a purpose-built interface for the subagents call sites
-instead of a same-shaped local reimplementation — most likely a plain data shape
-(`SubagentDefinition { name, instructions, model, tools }`) plus a typed approval-decision
-object, sized to what `services/subagents/*` and `edit-healing.ts` actually do with it, not to
-what the old SDK offered. Do not start this design until it's deliberately picked up; this entry
-exists so the gap survives a session boundary instead of being read as "Complete" and dropped.
+The shim is gone: `source/services/agent-runtime/legacy-compat.ts` was deleted in seven
+worktree slices. Its exports were replaced by application-owned pieces — `Agent` by
+`ApplicationAgent` object literals, `Runner`/`run`/`adaptLegacyModel` by a settled
+`runToCompletion` on the compatibility runner, `RunContext` by `ApprovalLedger` (same
+SDK-record semantics, plus `snapshot()` for typed parent→child replay), and `tool()`/`Tool`
+by `ToolDefinition` (with `wrapToolInvoke` now wrapping `execute`). `ApplicationRunLoop`
+carries a per-run user context (`ToolInvocationContext`) and a run-owned approval ledger, so
+subagent tool bookkeeping, parent-approval replay, and nested-subagent results are live
+again. The retiring also fixed two broken paths found while scoping (see F6 in that plan and
+the wrapNeedsApproval argument-order fix) and one found while landing slice 5 (typed
+ledgers need a top-level `callId` on replayed approval items). The full suite passes 4,830
+tests with the restricted-host sandbox test skipped.
 
 ### Deliberately left open
 

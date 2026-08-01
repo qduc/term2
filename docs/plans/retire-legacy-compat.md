@@ -1,8 +1,10 @@
 # Retiring `source/services/agent-runtime/legacy-compat.ts`
 
-**Status:** Not started. Scoping complete.
-**Last updated:** 2026-08-01
-**Parent plan:** `docs/plans/decouple-from-openai-agents-sdk.md` (§ *`legacy-compat.ts` is a shim, not a finished slice*)
+**Status:** Complete — all seven slices landed 2026-08-02 (one worktree per slice, merged
+`--no-ff`). `legacy-compat.ts` is deleted; `grep -rn "legacy-compat" source/` returns nothing.
+**Last updated:** 2026-08-02
+**Parent plan:** `docs/plans/decouple-from-openai-agents-sdk.md` — its § *`legacy-compat.ts` is
+a shim, not a finished slice* has been replaced by the retirement record.
 
 ---
 
@@ -25,7 +27,28 @@ should not be re-derived:
 
 ### Landed
 
-Nothing yet.
+All seven slices merged to main:
+
+- **Slice 1** — deleted the dead `applyPatchTool` export.
+- **Slice 2** — deleted `run()` / `Runner` / `adaptLegacyModel`; every provider now gets an
+  application-owned runner (including OpenAI); `runToCompletion` settles the stream so edit
+  healing and the mentor read finished runs. F3/F4 regressions pinned; `legacy-compat.test.ts`
+  deleted; the two tests that round-tripped SDK-shaped models through `Runner` now drive
+  `ApplicationRunLoop` directly via a local reverse-bridge adapter.
+- **Slice 3** — `ToolInvocationContext` + `ApprovalLedger` in `ApplicationRunLoop`: per-run
+  context slot, ledger threading through `#handleToolCall` / `#invokeTool` / `needsApproval`,
+  ledger consulted before raising an interruption, decisions recorded on pause resolution.
+  Also landed the F6 fix (wrapNeedsApproval argument order).
+- **Slice 4** — `Agent` → `ApplicationAgent` literals at all four production sites and the
+  test importers; `modelSettings` tightened to `AgentModelSettings`.
+- **Slice 5** — `RunContext` → `ApprovalLedger` + typed parent replay (`ledger.snapshot()`);
+  the loop accepts an `approvals` seed so replayed parent decisions reach a nested run's
+  ledger. F5 pin added. `approval-replay.test.ts` untouched.
+- **Slice 6** — `tool()`/`Tool` → `ToolDefinition`; `wrapToolInvoke` wraps `execute`;
+  `createSubagentTool` runs the role agent through `ApplicationRunLoop` and extracts a
+  `SubagentResult` (F1 pin). Test importers migrated; nested-runner end-to-end tests added.
+- **Slice 7** — deleted `legacy-compat.ts`, migrated `approval-replay.test.ts` to the ledger
+  (semantics unchanged), updated both plan docs. Full suite: 4,830 passed / 1 skipped.
 
 ---
 
@@ -320,9 +343,12 @@ the result.
 - **Do not preserve `runConfig` / `resumeState` / `runOptions` as untyped bags.** They are
   currently dropped on the floor. Each is either an explicit parameter or a deletion.
 
-## Open question
+## Open question (resolved 2026-08-02)
 
-Slice 2 fixes F3/F4 by settling the stream. Whether `runToCompletion` should also surface
-interruptions (an approval raised inside edit healing or the mentor) is undecided — today both
-paths run tool-less agents, so it cannot arise. Decide when a tool-bearing caller appears; do
-not speculatively build it.
+Slice 2's open question — whether `runToCompletion` should also surface interruptions — is
+now decided for the tool-bearing caller that appeared (slice 6's nested subagent): the nested
+run returns `interrupted: true` and claims its pending call ids into `ToolOwnershipRegistry`,
+but the nested approval prompt itself is **not** surfaced to the user in this plan. The nested
+loop pauses, `createSubagentTool` settles the partial run, and the parent sees an interrupted
+subagent result. Surfacing nested approvals and their resume flow is a deliberate follow-up;
+the claim call ids are the hook for it.

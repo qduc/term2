@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-traffic-recording",
+  "provider": "fixture",
+  "wireFamily": "openai-chat",
+  "transport": "http-sse",
+  "capture": {
+    "sdkPackage": "openai",
+    "apiSdkVersion": "6.37.0",
+    "model": "chat-fixture",
+    "modelFamily": "fixture",
+    "capturedAt": "2026-08-01T10:10:16.614Z",
+    "recorderVersion": "1",
+    "probeScenario": "tool-continuation-v1"
+  },
+  "turns": [
+    {
+      "frames": [
+        {
+          "kind": "http-request",
+          "method": "POST",
+          "urlPath": "/v1/chat/completions",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": {
+            "model": "chat-fixture",
+            "input": [
+              {
+                "type": "message",
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "fixture prompt"
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "name": "fixture",
+                "description": "Returns deterministic fixture data.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "a": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["a"],
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "reasoning": {
+              "effort": "medium"
+            },
+            "stream": true
+          },
+          "seq": 0
+        },
+        {
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "cache-control": "no-cache",
+            "connection": "close",
+            "content-type": "text/event-stream",
+            "date": "Sat, 01 Aug 2026 10:10:16 GMT",
+            "transfer-encoding": "chunked"
+          },
+          "seq": 1
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"chatcmpl_<1>\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hello\"},\"finish_reason\":\"stop\"}]}",
+          "seq": 2
+        },
+        {
+          "kind": "sse-event",
+          "data": "[DONE]",
+          "seq": 3
+        }
+      ]
+    }
+  ],
+  "placeholders": { "chatcmpl_fake": "chatcmpl_<1>" }
+}

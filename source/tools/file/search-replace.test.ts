@@ -132,6 +132,33 @@ it.sequential('needsApproval auto-approves a unique exact match', async () => {
   });
 });
 
+it.sequential('needsApproval requires approval for a symlink target outside the workspace', async () => {
+  await withTempDir(async (workspaceDir) => {
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-search-replace-outside-'));
+    try {
+      const outsidePath = path.join(outsideDir, 'target.txt');
+      await fs.writeFile(outsidePath, 'hello outside');
+      await fs.symlink(outsidePath, path.join(workspaceDir, 'link.txt'));
+
+      const tool = createTool();
+      const result = await tool.needsApproval({
+        path: 'link.txt',
+        replacements: [
+          {
+            search_content: 'hello',
+            replace_content: 'should require approval',
+          },
+        ],
+      });
+
+      expect(result).toBe(true);
+      await expect(fs.readFile(outsidePath, 'utf8')).resolves.toBe('hello outside');
+    } finally {
+      await fs.rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+});
+
 it.sequential('needsApproval auto-approves when multiple exact matches are found', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService());

@@ -155,6 +155,29 @@ it.sequential('needsApproval auto-approves creation when inside workspace', asyn
   });
 });
 
+it.sequential('needsApproval requires approval for a symlink that targets outside the workspace', async () => {
+  await withTempDir(async (workspaceDir) => {
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-create-file-outside-'));
+    try {
+      const outsidePath = path.join(outsideDir, 'target.txt');
+      await fs.writeFile(outsidePath, 'outside content');
+      await fs.symlink(outsidePath, path.join(workspaceDir, 'link.txt'));
+
+      const tool = createTool();
+      const result = await tool.needsApproval({
+        path: 'link.txt',
+        content: 'should require approval',
+        overwrite: true,
+      });
+
+      expect(result).toBe(true);
+      await expect(fs.readFile(outsidePath, 'utf8')).resolves.toBe('outside content');
+    } finally {
+      await fs.rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+});
+
 it.sequential('execute creates a new file and returns success', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();

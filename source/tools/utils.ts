@@ -1,5 +1,6 @@
 import path from 'path';
 import { homedir } from 'os';
+import { lstat, realpath } from 'fs/promises';
 import { z } from 'zod';
 import { getDiscoveredSkillRoots } from '../utils/skill-discovery-paths.js';
 import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
@@ -71,6 +72,73 @@ export function resolveWorkspacePath(
   }
 
   return normalizedResolved;
+}
+
+/**
+ * Resolve a path through the filesystem without requiring the final target to
+ * exist. Existing targets are fully realpathed; for a missing target, the
+ * nearest existing ancestor is realpathed and the missing suffix is appended.
+ * A dangling symlink (or any other filesystem resolution error) is rejected.
+ */
+async function resolvePhysicalPath(targetPath: string): Promise<string | undefined> {
+  let candidate = path.resolve(targetPath);
+  const missingSuffix: string[] = [];
+
+  while (true) {
+    try {
+      const resolvedAncestor = await realpath(candidate);
+      return path.join(resolvedAncestor, ...missingSuffix.reverse());
+    } catch (error: any) {
+      if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') {
+        return undefined;
+      }
+
+      const parent = path.dirname(candidate);
+      if (parent === candidate) {
+        return undefined;
+      }
+
+      // lstat distinguishes a dangling symlink from a merely missing target.
+      // If the candidate itself is a symlink, realpath above would have failed
+      // and we must fail closed rather than treat its parent as the target.
+      try {
+        const stats = await lstat(candidate);
+        if (stats.isSymbolicLink()) {
+          return undefined;
+        }
+      } catch (lstatError: any) {
+        if (lstatError?.code !== 'ENOENT' && lstatError?.code !== 'ENOTDIR') {
+          return undefined;
+        }
+      }
+
+      missingSuffix.push(path.basename(candidate));
+      candidate = parent;
+    }
+  }
+}
+
+/**
+ * Whether a filesystem write resolves physically within the workspace.
+ *
+ * This is intentionally separate from resolveWorkspacePath: lexical
+ * containment is still used to preserve explicit approval for outside paths,
+ * while this check prevents an apparently-inside path from auto-approving a
+ * write through a symlink. Missing create-file paths are safe when their
+ * nearest existing ancestor resolves inside the workspace.
+ */
+export async function isWorkspacePathPhysicallyInside(targetPath: string, workspaceRoot: string): Promise<boolean> {
+  const [physicalTarget, physicalWorkspace] = await Promise.all([
+    resolvePhysicalPath(targetPath),
+    resolvePhysicalPath(workspaceRoot),
+  ]);
+
+  if (!physicalTarget || !physicalWorkspace) {
+    return false;
+  }
+
+  const workspacePrefix = physicalWorkspace.endsWith(path.sep) ? physicalWorkspace : `${physicalWorkspace}${path.sep}`;
+  return physicalTarget === physicalWorkspace || physicalTarget.startsWith(workspacePrefix);
 }
 
 /**

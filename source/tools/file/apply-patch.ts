@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { applyDiff } from '../../utils/apply-diff.js';
-import { resolveWorkspacePath } from '../utils.js';
+import { isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import {
@@ -215,15 +215,17 @@ export function createApplyPatchToolDefinition(deps: {
         const sshService = executionContext?.getSSHService();
         const isRemote = executionContext?.isRemote() && !!sshService;
         const operations = getApplyPatchOperations(params);
+        const resolvedOperations: Array<ApplyPatchOperation & { targetPath: string; insideCwd: boolean }> = [];
 
-        for (const { type, path: filePath, diff } of operations) {
-          // Resolve and ensure target within workspace before any validation.
-          // This prevents validation from running against a mismatched cwd.
+        // Resolve and check every target before validation. In particular, do
+        // not read an update target until all batch paths have passed the
+        // physical boundary check; an in-workspace symlink may point outside.
+        for (const operation of operations) {
+          const { type, path: filePath } = operation;
           let targetPath: string;
           try {
             targetPath = resolveWorkspacePath(filePath, workspaceRoot);
           } catch (e: any) {
-            // Outside workspace => require approval
             loggingService.security('apply_patch needsApproval: outside workspace', {
               type,
               path: filePath,
@@ -232,6 +234,23 @@ export function createApplyPatchToolDefinition(deps: {
             return true;
           }
 
+          const insideCwd = targetPath.startsWith(workspaceRoot + path.sep);
+          const physicallyInsideWorkspace =
+            insideCwd && (await isWorkspacePathPhysicallyInside(targetPath, workspaceRoot));
+          if (!physicallyInsideWorkspace) {
+            loggingService.security('apply_patch needsApproval: physical boundary requires approval', {
+              type,
+              path: filePath,
+              targetPath,
+              insideCwd,
+            });
+            return true;
+          }
+
+          resolvedOperations.push({ ...operation, targetPath, insideCwd });
+        }
+
+        for (const { type, path: filePath, diff, targetPath, insideCwd } of resolvedOperations) {
           // Validate diff syntax by attempting a dry-run (before approval)
           if (type === 'create_file' || type === 'update_file') {
             try {
@@ -292,8 +311,6 @@ export function createApplyPatchToolDefinition(deps: {
           //     });
           //     return true;
           // }
-
-          const insideCwd = targetPath.startsWith(workspaceRoot + path.sep);
 
           if (!insideCwd || (type !== 'create_file' && type !== 'update_file')) {
             loggingService.security('apply_patch needsApproval: approval required', {

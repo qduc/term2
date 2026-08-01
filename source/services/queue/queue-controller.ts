@@ -145,22 +145,9 @@ export type QueueCommandResult =
   | { readonly kind: 'rejected'; readonly reason: 'capacity' | 'invalid' | 'not_queued' | 'stale' | 'inapplicable' }
   | { readonly kind: 'no_op' };
 
-export interface ToolApprovalResolution {
-  readonly approved: boolean;
-}
-
-export interface AskUserResolution {
-  readonly value: string;
-}
-
 export interface QueueTurnDriver<Snapshot> {
   start(execution: ActiveExecution<Snapshot>): void | Promise<void>;
   cancel(execution: ActiveExecution<Snapshot>): void | Promise<void>;
-  continueAfterAction?(
-    execution: ActiveExecution<Snapshot>,
-    pendingAction: { actionId: string; kind: ActiveActionKind },
-    resolution: ToolApprovalResolution | AskUserResolution,
-  ): void | Promise<void>;
 }
 
 export interface QueueControllerOptions<Snapshot, Terminal = unknown> {
@@ -398,7 +385,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
         ) {
           return { kind: 'rejected', reason: 'stale' };
         }
-        return this.#resolveAction(cmd);
+        return this.#resolveAction();
       }
       case 'answer_ask_user': {
         if (this.#phase !== 'awaiting_active_action') return { kind: 'rejected', reason: 'stale' };
@@ -409,7 +396,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
         ) {
           return { kind: 'rejected', reason: 'stale' };
         }
-        return this.#resolveAction(cmd);
+        return this.#resolveAction();
       }
       case 'resume_queue':
         if (this.#phase !== 'paused') return { kind: 'no_op' };
@@ -498,18 +485,10 @@ export class QueueController<Snapshot, Terminal = unknown> {
     await this.#dispatch();
   }
 
-  async #resolveAction(cmd: { approved: boolean } | { value: string }): Promise<QueueCommandResult> {
-    const execution = this.#active!;
-    const pendingAction = this.#pendingAction!;
+  async #resolveAction(): Promise<QueueCommandResult> {
     this.#phase = 'running';
     this.#pendingAction = undefined;
     await this.#persist();
-    if (this.#driver.continueAfterAction) {
-      const resolution = 'approved' in cmd ? { approved: cmd.approved } : { value: cmd.value };
-      // This optional hook has no production implementation; a rejected test
-      // callback propagates to the command caller and does not emit a failed event.
-      await this.#driver.continueAfterAction(execution, pendingAction, resolution);
-    }
     return { kind: 'accepted' };
   }
 

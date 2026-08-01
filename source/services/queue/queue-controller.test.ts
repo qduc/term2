@@ -652,16 +652,9 @@ it('ignores tool_approval_requested with mismatched executionId', async () => {
   expect(controller.state().kind).toBe('running');
 });
 
-it('resolves tool approval and calls driver.continueAfterAction', async () => {
-  const continuations: Array<{ actionId: string; kind: string; resolution: unknown }> = [];
+it('resolves tool approval and returns to running state', async () => {
   const controller = new QueueController({
-    driver: {
-      start: () => undefined,
-      cancel: async () => undefined,
-      continueAfterAction: (_, pendingAction, resolution) => {
-        continuations.push({ actionId: pendingAction.actionId, kind: pendingAction.kind, resolution });
-      },
-    },
+    driver: { start: () => undefined, cancel: async () => undefined },
     snapshotFactory: () => ({}),
     ids: {
       item: (() => {
@@ -688,18 +681,13 @@ it('resolves tool approval and calls driver.continueAfterAction', async () => {
   });
   expect(result).toEqual({ kind: 'accepted' });
   expect(controller.state().kind).toBe('running');
-  expect(continuations).toEqual([{ actionId: 'ta-1', kind: 'tool_approval', resolution: { approved: true } }]);
 });
 
 it('rejects resolve_tool_approval with mismatched IDs or wrong kind', async () => {
-  const continuations: unknown[] = [];
   const controller = new QueueController({
     driver: {
       start: () => undefined,
       cancel: async () => undefined,
-      continueAfterAction: () => {
-        continuations.push('called');
-      },
     },
     snapshotFactory: () => ({}),
     ids: {
@@ -737,19 +725,14 @@ it('rejects resolve_tool_approval with mismatched IDs or wrong kind', async () =
       approved: true,
     }),
   ).toEqual({ kind: 'rejected', reason: 'stale' });
-  expect(continuations).toEqual([]);
   expect(controller.state().kind).toBe('awaiting_active_action');
 });
 
 it('rejects tool_approval resolution when active action is ask_user', async () => {
-  const continuations: unknown[] = [];
   const controller = new QueueController({
     driver: {
       start: () => undefined,
       cancel: async () => undefined,
-      continueAfterAction: () => {
-        continuations.push('called');
-      },
     },
     snapshotFactory: () => ({}),
     ids: {
@@ -777,18 +760,13 @@ it('rejects tool_approval resolution when active action is ask_user', async () =
       approved: true,
     }),
   ).toEqual({ kind: 'rejected', reason: 'stale' });
-  expect(continuations).toEqual([]);
 });
 
 it('handles ask_user_requested event and resolves with answer_ask_user', async () => {
-  const continuations: Array<{ actionId: string; kind: string; resolution: unknown }> = [];
   const controller = new QueueController({
     driver: {
       start: () => undefined,
       cancel: async () => undefined,
-      continueAfterAction: (_, pendingAction, resolution) => {
-        continuations.push({ actionId: pendingAction.actionId, kind: pendingAction.kind, resolution });
-      },
     },
     snapshotFactory: () => ({}),
     ids: {
@@ -818,7 +796,6 @@ it('handles ask_user_requested event and resolves with answer_ask_user', async (
   });
   expect(result).toEqual({ kind: 'accepted' });
   expect(controller.state().kind).toBe('running');
-  expect(continuations).toEqual([{ actionId: 'au-1', kind: 'ask_user', resolution: { value: 'file.txt' } }]);
 });
 
 it('rejects answer_ask_user with mismatched IDs or wrong kind', async () => {
@@ -826,7 +803,6 @@ it('rejects answer_ask_user with mismatched IDs or wrong kind', async () => {
     driver: {
       start: () => undefined,
       cancel: async () => undefined,
-      continueAfterAction: () => undefined,
     },
     snapshotFactory: () => ({}),
     ids: {
@@ -987,47 +963,6 @@ it('captures snapshot after preflight acceptance, not at enqueue time', async ()
   });
 
   expect(snapshots).toEqual([{ model: 'model-b' }]);
-});
-
-it('preserves active snapshot through active action continuation', async () => {
-  const snapshots: unknown[] = [];
-  let model = 'model-a';
-  const controller = new QueueController({
-    driver: {
-      start: (execution) => {
-        snapshots.push(execution.snapshot);
-      },
-      cancel: async () => undefined,
-      continueAfterAction: (execution) => {
-        snapshots.push(execution.snapshot);
-      },
-    },
-    snapshotFactory: () => ({ model }),
-    ids: {
-      item: (() => {
-        let n = 0;
-        return () => `item-${++n}`;
-      })(),
-      execution: () => 'execution-1',
-    },
-  });
-
-  await controller.command({ kind: 'submit', text: 'task' });
-  model = 'model-b';
-  await controller.event({
-    kind: 'tool_approval_requested',
-    executionId: 'execution-1' as ExecutionId,
-    actionId: 'ta-1' as ActionId,
-    request: {},
-  });
-  await controller.command({
-    kind: 'resolve_tool_approval',
-    executionId: 'execution-1' as ExecutionId,
-    actionId: 'ta-1' as ActionId,
-    approved: true,
-  });
-
-  expect(snapshots).toEqual([{ model: 'model-a' }, { model: 'model-a' }]);
 });
 
 // ── Queued item management alongside preflight ─────────────────────

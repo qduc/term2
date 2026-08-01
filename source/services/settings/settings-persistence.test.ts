@@ -6,24 +6,42 @@ import path from 'node:path';
 import { SettingsSchema, DEFAULT_SETTINGS } from './settings-schema.js';
 import {
   hasMissingKeys,
+  hasSensitiveSettings,
   loadSettingsFromFile,
   saveSettingsToFile,
   stripSensitiveSettings,
 } from './settings-persistence.js';
 
-it('stripSensitiveSettings: removes shellPath and openrouter secrets, preserving apiKey', () => {
+it('stripSensitiveSettings: removes all credential fields and other sensitive settings', () => {
   const settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
   settings.app.shellPath = '/bin/zsh';
   settings.agent.openrouter = {
-    apiKey: 'secret',
+    apiKey: 'openrouter-secret',
     baseUrl: 'https://example.com',
     referrer: 'x',
     title: 'y',
   };
+  settings.agent.openai = { apiKey: 'openai-secret' };
+  settings.webSearch.tavily = { apiKey: 'tavily-secret' };
+  settings.webSearch.exa = { apiKey: 'exa-secret' };
+  settings.providers = [
+    { id: 'custom', name: 'Custom', type: 'openai-compatible', baseUrl: 'https://example.com', apiKey: 'provider-secret' },
+  ];
 
   const cleaned = stripSensitiveSettings(settings);
   expect(cleaned.app?.shellPath).toBe(undefined);
-  expect(cleaned.agent?.openrouter).toEqual({ apiKey: 'secret' });
+  expect(cleaned.agent?.openrouter).toBe(undefined);
+  expect(cleaned.agent?.openai).toBe(undefined);
+  expect(cleaned.webSearch?.tavily).toBe(undefined);
+  expect(cleaned.webSearch?.exa).toBe(undefined);
+  expect(cleaned.providers?.[0]?.apiKey).toBe(undefined);
+  expect(cleaned.providers?.[0]?.baseUrl).toBe('https://example.com');
+});
+
+it('hasSensitiveSettings: detects credential fields in existing settings', () => {
+  expect(hasSensitiveSettings({ agent: { openai: { apiKey: 'secret' } } })).toBe(true);
+  expect(hasSensitiveSettings({ providers: [{ id: 'custom', apiKey: 'secret' }] })).toBe(true);
+  expect(hasSensitiveSettings({ agent: { model: 'gpt-4o' } })).toBe(false);
 });
 
 it('hasMissingKeys: true when defaults introduce new key', () => {

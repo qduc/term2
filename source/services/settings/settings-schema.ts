@@ -409,9 +409,13 @@ export const CustomProviderSchema = z
 export function getSensitiveSettingKeys(): Set<string> {
   return new Set<string>([
     'app.shellPath',
+    'agent.openrouter.apiKey',
     'agent.openrouter.baseUrl',
     'agent.openrouter.referrer',
     'agent.openrouter.title',
+    'agent.openai.apiKey',
+    'webSearch.tavily.apiKey',
+    'webSearch.exa.apiKey',
   ]);
 }
 
@@ -942,6 +946,8 @@ export const DEFAULT_SETTINGS: SettingsData = {
 export const SENSITIVE_SETTINGS = {
   AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
   AGENT_OPENAI_API_KEY: 'agent.openai.apiKey',
+  WEB_SEARCH_TAVILY_API_KEY: 'webSearch.tavily.apiKey',
+  WEB_SEARCH_EXA_API_KEY: 'webSearch.exa.apiKey',
   AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl',
   AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer',
   AGENT_OPENROUTER_TITLE: 'agent.openrouter.title',

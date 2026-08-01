@@ -25,6 +25,31 @@ const sessionContextService = {
   getContext: () => null,
 };
 
+it('sendMessage rejects when the turn event stream exhausts without a terminal event', async () => {
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: 'now',
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => null } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start() {
+        yield { type: 'text_delta' as const, delta: 'stale partial text' };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'unused' };
+      },
+    },
+  });
+
+  await expect(adapter.sendMessage('run')).rejects.toMatchObject({
+    name: 'AmbiguousModelOutcomeError',
+    unsafeToReplay: true,
+  });
+});
+
 const postExecuteApprovalEvent = (revision: number, id: string) => ({
   type: 'approval_required' as const,
   approval: {

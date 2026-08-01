@@ -3,6 +3,7 @@ import type { ConversationTerminal } from '../../contracts/conversation.js';
 import type { CommandMessage } from '../../tools/types.js';
 import { type NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { PersistedAssistantTurnItem } from '../conversation/conversation-persistence-types.js';
+import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
 
 const isEmptyUsage = (usage: NormalizedUsage | undefined): boolean => !usage || Object.keys(usage).length === 0;
 
@@ -25,6 +26,7 @@ export async function collectTerminalResult(
   } = {},
 ): Promise<ConversationTerminal> {
   let finalText = '';
+  let hasFinalEvent = false;
   let reasoningText = '';
   const commandMessages: CommandMessage[] = [];
   const turnItems: PersistedAssistantTurnItem[] = [];
@@ -107,6 +109,7 @@ export async function collectTerminalResult(
       }
       case 'final': {
         onFinalEvent?.(event);
+        hasFinalEvent = true;
         finalText = event.finalText;
         reasoningText = event.reasoningText ?? '';
         if (event.usage) {
@@ -154,12 +157,16 @@ export async function collectTerminalResult(
     }
   }
 
+  if (!hasFinalEvent) {
+    throw new AmbiguousModelOutcomeError('Conversation event stream ended without an authoritative terminal event');
+  }
+
   const usage = resolvedUsage();
   flushBuffers();
   return {
     type: 'response',
     commandMessages,
-    finalText: finalText || 'Done.',
+    finalText,
     ...(reasoningText ? { reasoningText } : {}),
     ...(usage ? { usage } : {}),
     turnItems,

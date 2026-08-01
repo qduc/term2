@@ -1,4 +1,5 @@
 import { it, expect } from 'vitest';
+import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
 import { collectTerminalResult } from './terminal-result-collector.js';
 
 const asAsyncIterable = async function* (events: any[]) {
@@ -6,6 +7,23 @@ const asAsyncIterable = async function* (events: any[]) {
     yield event;
   }
 };
+
+it('collectTerminalResult rejects an empty iterable without an authoritative terminal event', async () => {
+  await expect(collectTerminalResult(asAsyncIterable([]))).rejects.toBeInstanceOf(AmbiguousModelOutcomeError);
+});
+
+it('collectTerminalResult rejects delta-only exhaustion instead of treating streamed text as completion', async () => {
+  await expect(
+    collectTerminalResult(asAsyncIterable([{ type: 'text_delta', delta: 'partial', fullText: 'partial' }])),
+  ).rejects.toBeInstanceOf(AmbiguousModelOutcomeError);
+});
+
+it('collectTerminalResult preserves an explicit final event with empty text', async () => {
+  await expect(collectTerminalResult(asAsyncIterable([{ type: 'final', finalText: '' }]))).resolves.toMatchObject({
+    type: 'response',
+    finalText: '',
+  });
+});
 
 it('collectTerminalResult returns approval_required with raw interruption from callback', async () => {
   const seenEvents: string[] = [];

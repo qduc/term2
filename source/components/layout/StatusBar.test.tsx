@@ -52,7 +52,7 @@ it.sequential('StatusBar renders cache usage in the footer', async () => {
 
   const output = lastFrame() ?? '';
 
-  expect(output.includes('Tok: 1,200 in (900 cached, 120 cache write) / 350 out')).toBe(true);
+  expect(output.includes('Tok: 1,200 in (900 cached) / 350 out')).toBe(true);
 });
 
 it.sequential('StatusBar renders Plan mode badge', async () => {

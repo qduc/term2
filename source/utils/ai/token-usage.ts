@@ -304,9 +304,6 @@ export function formatFooterUsage(
       const cachePrefix = options.cacheWarning ? '⚠️ ' : '';
       promptDetails.push(`${cachePrefix}${usage.cache_read_tokens.toLocaleString()} ${cacheLabel}`);
     }
-    if (usage.cache_creation_tokens != null) {
-      promptDetails.push(`${usage.cache_creation_tokens.toLocaleString()} cache write`);
-    }
     if (promptDetails.length > 0) {
       promptPart += ` (${promptDetails.join(', ')})`;
     }

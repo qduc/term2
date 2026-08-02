@@ -26,6 +26,31 @@ export type StreamFinalizationResult =
 
 const hasConversationMessageItems = (items: unknown[]): boolean => items.some(projectConversationMessage);
 
+/**
+ * ApplicationRunLoop terminal arrays serve both the UI and persistence. UI
+ * events are deliberately retained there so a completed stream can still be
+ * rendered, while provider history must contain only provider items. Unwrap
+ * run-item events at this boundary and drop the display-only events emitted by
+ * the loop; leave provider objects otherwise untouched to preserve native
+ * continuation metadata.
+ */
+const canonicalProviderHistoryItems = (items: readonly unknown[]): unknown[] =>
+  items.flatMap((item) => {
+    const event = item && typeof item === 'object' && !Array.isArray(item) ? (item as Record<string, unknown>) : null;
+    const candidate = event?.type === 'run_item_stream_event' ? event.item : item;
+    const record =
+      candidate && typeof candidate === 'object' && !Array.isArray(candidate)
+        ? (candidate as Record<string, unknown>)
+        : null;
+
+    if (!record) return [];
+    const isDisplayOnly =
+      (record.type === 'text_delta' && typeof record.text === 'string') ||
+      (record.type === 'model' && record.event !== undefined);
+    if (isDisplayOnly) return [];
+    return [candidate];
+  });
+
 const hasToolResultItems = (items: unknown[]): boolean =>
   items.some((item) => normalizeRunItem(item).some((normalized) => normalized.type === 'tool_result'));
 
@@ -293,8 +318,9 @@ export class SessionStreamProcessor {
         snapshot: extractReplaySnapshot(stream),
       });
       const appendWithoutReplayedTools = (items: unknown[]): void => {
+        const providerItems = canonicalProviderHistoryItems(items);
         const { kept, droppedSignatures } = dropAlreadyCommittedToolItems(
-          items,
+          providerItems,
           this.deps.conversationStore.getHistory(),
         );
         if (droppedSignatures.length > 0) {
@@ -306,7 +332,7 @@ export class SessionStreamProcessor {
             traceId: this.deps.logger.getCorrelationId(),
             source,
             inputMode,
-            offeredCount: items.length,
+            offeredCount: providerItems.length,
             droppedCount: droppedSignatures.length,
             droppedSignatures,
           });
@@ -331,7 +357,9 @@ export class SessionStreamProcessor {
           } else if (hasConversationMessageItems(snapshot.output)) {
             appendWithoutReplayedTools(snapshot.output);
           } else if (hasConversationMessageItems(snapshot.history)) {
-            this.deps.conversationStore.replaceHistory(snapshot.history as ProviderInputItem[]);
+            this.deps.conversationStore.replaceHistory(
+              canonicalProviderHistoryItems(snapshot.history) as ProviderInputItem[],
+            );
           } else if (hasToolResultItems(snapshot.newItems)) {
             appendWithoutReplayedTools(snapshot.newItems);
           } else if (hasToolResultItems(snapshot.output)) {

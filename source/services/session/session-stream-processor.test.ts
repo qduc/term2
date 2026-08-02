@@ -1,5 +1,8 @@
 import { it, expect } from 'vitest';
+import { z } from 'zod';
 import type { ProviderInputItem as AgentInputItem } from '../../contracts/provider-input.js';
+import type { StreamedModelTurn } from '../../contracts/streamed-model-turn.js';
+import { ApplicationRunLoop, type ApplicationAgent } from '../agent-runtime/application-run-loop.js';
 import { LoggingService } from '../logging/logging-service.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
@@ -45,6 +48,137 @@ const createDeferred = <T>() => {
   });
   return { promise, resolve };
 };
+
+it.each(['delta', 'full_history'] as const)(
+  'SessionStreamProcessor.finalize() persists only canonical ApplicationRunLoop items in %s mode',
+  async (inputMode) => {
+    const conversationStore = new ConversationStore();
+    conversationStore.addUserMessage('Use the lookup tool');
+    const generationGuard = new GenerationGuard();
+    const processor = new SessionStreamProcessor({
+      logger,
+      sessionId: 'test-session',
+      toolTracker: new SessionToolTracker(conversationStore),
+      conversationStore,
+      conversationLogger: { hasSink: () => false } as ConversationLogger,
+      providerContinuity: new ProviderContinuity(),
+      generationGuard,
+      journal: makeJournal(),
+    });
+    const agent: ApplicationAgent = {
+      name: 'test-agent',
+      instructions: 'Be concise.',
+      model: 'test-model',
+      tools: [
+        {
+          name: 'lookup',
+          description: 'Looks up a fixture.',
+          parameters: z.object({}),
+          needsApproval: async () => false,
+          execute: async () => 'fixture result',
+          formatCommandMessage: () => [],
+        },
+      ] as any,
+    };
+    const replayInputs: unknown[] = [];
+    let modelCalls = 0;
+    const loop = new ApplicationRunLoop({
+      resolveModel: (): StreamedModelTurn => {
+        modelCalls++;
+        if (modelCalls === 1) {
+          return {
+            async *stream() {
+              yield {
+                type: 'reasoning_delta',
+                id: 'rs_fixture',
+                text: 'Use the lookup tool.',
+                providerMetadata: { codex: { encrypted_content: 'fixture-ciphertext' } },
+              };
+              yield { type: 'tool_call', id: 'call_fixture', name: 'lookup', arguments: '{}' };
+              yield {
+                type: 'completion',
+                responseId: 'resp-tool',
+                output: [{ type: 'tool_call', id: 'call_fixture', name: 'lookup', arguments: '{}' }],
+              };
+            },
+          };
+        }
+        if (modelCalls === 2) {
+          return {
+            async *stream() {
+              yield { type: 'text_delta', text: 'Lookup complete.' };
+              yield {
+                type: 'completion',
+                responseId: 'resp-answer',
+                output: [{ type: 'message', content: [{ type: 'text', text: 'Lookup complete.' }] }],
+              };
+            },
+          };
+        }
+        return {
+          async *stream(request) {
+            replayInputs.push(request.input);
+            yield { type: 'completion', responseId: 'resp-replay', output: [] };
+          },
+        };
+      },
+    });
+
+    const stream = loop.startStream(
+      agent,
+      inputMode === 'delta' ? 'Use the lookup tool' : conversationStore.getHistory(),
+    );
+    for await (const _ of processor.process(stream, {
+      gen: generationGuard.capture(),
+      source: 'startStream',
+      preserveExistingToolArgs: false,
+    })) {
+      // Production workflow drains processing before finalization.
+    }
+
+    expect(processor.finalize(stream, generationGuard.capture(), inputMode, 'startStream')).toEqual({
+      kind: 'committed',
+    });
+    const persisted = conversationStore.getHistory();
+    expect(persisted).toEqual(stream.history);
+    expect(persisted).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'text_delta' }),
+        expect.objectContaining({ type: 'model' }),
+        expect.objectContaining({ type: 'run_item_stream_event' }),
+      ]),
+    );
+    expect(persisted).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'reasoning',
+          id: 'rs_fixture',
+          content: [{ type: 'reasoning_text', text: 'Use the lookup tool.' }],
+          providerData: { codex: { encrypted_content: 'fixture-ciphertext' } },
+        },
+        expect.objectContaining({ type: 'function_call', callId: 'call_fixture' }),
+        expect.objectContaining({ type: 'function_call_result', callId: 'call_fixture', output: 'fixture result' }),
+        expect.objectContaining({ type: 'message', role: 'assistant' }),
+      ]),
+    );
+    expect(persisted.filter((item) => item.callId === 'call_fixture')).toHaveLength(2);
+
+    const replay = loop.startStream(agent, persisted);
+    await expect(replay.completed).resolves.toBeDefined();
+    expect(replayInputs).toEqual([
+      expect.arrayContaining([
+        {
+          type: 'reasoning',
+          id: 'rs_fixture',
+          text: 'Use the lookup tool.',
+          providerMetadata: { codex: { encrypted_content: 'fixture-ciphertext' } },
+        },
+        expect.objectContaining({ type: 'tool_call', id: 'call_fixture' }),
+        expect.objectContaining({ type: 'tool_result', id: 'call_fixture', output: 'fixture result' }),
+      ]),
+    ]);
+  },
+);
 
 it('SessionStreamProcessor.process() streams events and updates toolTracker', async () => {
   const conversationStore = new ConversationStore();

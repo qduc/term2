@@ -126,6 +126,26 @@ it('normalizes compatibility cache_write_tokens detail spelling', () => {
   ).toMatchObject({ cache_creation_tokens: 4 });
 });
 
+it('normalizeUsage reads direct camelCase cached input alias from StreamedModelUsage', () => {
+  expect(
+    normalizeUsage({
+      inputTokens: 20,
+      outputTokens: 3,
+      totalTokens: 23,
+      cachedInputTokens: 5,
+    }),
+  ).toEqual({
+    prompt_tokens: 20,
+    completion_tokens: 3,
+    total_tokens: 23,
+    cache_read_tokens: 5,
+  });
+  // The snake_case spelling used by some providers is read too.
+  expect(normalizeUsage({ inputTokens: 20, outputTokens: 3, cached_input_tokens: 5 })).toMatchObject({
+    cache_read_tokens: 5,
+  });
+});
+
 it('normalizeAgentRunUsage treats an all-zero accumulator as absent', () => {
   expect(
     normalizeAgentRunUsage({
@@ -205,7 +225,7 @@ it('formatFooterUsage returns formatted string', () => {
       cache_read_tokens: 900,
       cache_creation_tokens: 120,
     }),
-  ).toBe('Tok: 1,200 in (900 cached, 120 cache write) / 350 out');
+  ).toBe('Tok: 1,200 in (900 cached) / 350 out');
   expect(formatFooterUsage({ prompt_tokens: 2054, completion_tokens: 74, cache_read_tokens: 1920 })).toBe(
     'Tok: 2,054 in (1,920 cached) / 74 out',
   );

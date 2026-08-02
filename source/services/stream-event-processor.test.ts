@@ -544,6 +544,59 @@ it('end-of-stream usage harvest from completed promise', async () => {
   expect(acc.latestUsage).toBeTruthy();
 });
 
+it('emits a final per-request usage_update from raw responses while keeping the run-cumulative terminal usage', async () => {
+  // A multi-request run: each raw response carries its own per-request usage,
+  // while the application run state accumulates the run total.
+  const stream = makeStream([], {
+    rawResponses: [
+      { usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 } },
+      { usage: { inputTokens: 20, outputTokens: 3, totalTokens: 23, cachedInputTokens: 5 } },
+    ],
+    runUsage: { inputTokens: 30, outputTokens: 5, totalTokens: 35, cachedInputTokens: 5 },
+    completed: Promise.resolve(null),
+  });
+  const acc = createStreamAccumulator();
+  const events: any[] = [];
+  for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    events.push(ev);
+  }
+
+  // The terminal (accumulator) usage stays the run-cumulative total.
+  expect(acc.latestUsage).toMatchObject({
+    prompt_tokens: 30,
+    completion_tokens: 5,
+    total_tokens: 35,
+    cache_read_tokens: 5,
+  });
+
+  // A final usage_update surfaces the latest per-request usage for the footer,
+  // so it shows the last model turn instead of the accumulated run total.
+  const usageEvents = events.filter((e) => e.type === 'usage_update');
+  expect(usageEvents).toHaveLength(1);
+  expect(usageEvents[0].usage).toMatchObject({
+    prompt_tokens: 20,
+    completion_tokens: 3,
+    total_tokens: 23,
+    cache_read_tokens: 5,
+  });
+});
+
+it('emits no synthetic usage_update when raw responses carry no usage', async () => {
+  const stream = makeStream([], {
+    rawResponses: [{ responseId: 'r1' }, { responseId: 'r2' }],
+    runUsage: { inputTokens: 30, outputTokens: 5, totalTokens: 35 },
+    completed: Promise.resolve(null),
+  });
+  const acc = createStreamAccumulator();
+  const events: any[] = [];
+  for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    events.push(ev);
+  }
+
+  expect(acc.latestUsage).toMatchObject({ prompt_tokens: 30, completion_tokens: 5 });
+  expect(events.filter((e) => e.type === 'usage_update')).toHaveLength(0);
+});
+
 it('end-of-stream usage preserves cache counters from streaming events when completion omits them', async () => {
   const stream = makeStream(
     [

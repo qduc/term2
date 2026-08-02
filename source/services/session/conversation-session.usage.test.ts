@@ -86,6 +86,56 @@ it('handleApprovalDecision() returns usage from final event', async () => {
   });
 });
 
+it('sendMessage() keeps run-cumulative terminal usage while emitting per-request usage_update for the footer', async () => {
+  // A multi-request turn: the application run state accumulates the run total,
+  // while each raw response carries its own per-request usage.
+  const stream = new MockStream([{ type: 'text_delta', text: 'Response' }]);
+  stream.finalOutput = 'Response';
+  stream.completed = Promise.resolve({
+    usage: { inputTokens: 30, outputTokens: 5, totalTokens: 35 },
+  });
+  (stream as unknown as { rawResponses: unknown[] }).rawResponses = [
+    { usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 } },
+    { usage: { inputTokens: 20, outputTokens: 3, totalTokens: 23, cachedInputTokens: 5 } },
+  ];
+  stream.state = { usage: { inputTokens: 30, outputTokens: 5, totalTokens: 35, cachedInputTokens: 5 } };
+
+  const mockClient = createMockAgentClient({
+    async startStream() {
+      return stream;
+    },
+  });
+
+  const bundle = createConversationSession({
+    sessionId: 's1',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  const { terminalAdapter } = bundle;
+
+  const events: ConversationEvent[] = [];
+  const result = await terminalAdapter.sendMessage('Hello', { onEvent: (ev) => events.push(ev) });
+
+  // The terminal usage stays the authoritative run-cumulative total.
+  expect((result as unknown as Record<string, unknown>).usage).toEqual({
+    prompt_tokens: 30,
+    completion_tokens: 5,
+    total_tokens: 35,
+    cache_read_tokens: 5,
+  });
+
+  // A usage_update carries the latest per-request usage so the footer can show
+  // the last model turn rather than the accumulated run total.
+  const usageEvents = events.filter((e: ConversationEvent) => e.type === 'usage_update');
+  expect(usageEvents.length).toBe(1);
+  expect((usageEvents[0] as UsageUpdateEvent).usage).toEqual({
+    prompt_tokens: 20,
+    completion_tokens: 3,
+    total_tokens: 23,
+    cache_read_tokens: 5,
+  });
+});
+
 it('sendMessage() logs usage handoff at DEBUG level', async () => {
   const stream = new MockStream([{ type: 'text_delta', text: 'Response' }]);
   stream.finalOutput = 'Response';

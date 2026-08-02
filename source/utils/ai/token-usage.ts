@@ -96,6 +96,8 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
     usage.cache_read_tokens,
     usage.cached_tokens,
     usage.cachedTokens,
+    usage.cachedInputTokens,
+    usage.cached_input_tokens,
     usage.inputTokensDetails?.cached_tokens,
     usage.prompt_tokens_details?.cached_tokens,
     usage.promptTokensDetails?.cachedTokens,

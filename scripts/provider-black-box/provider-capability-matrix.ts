@@ -35,6 +35,8 @@ export type ProviderCapability = {
   reasoningSupport: 'native' | 'provider-dependent' | 'none';
   nativeContinuationField: string | null;
   requiredScenarios: readonly string[];
+  /** Additional semantic-wire evidence owned by a scenario in the shared suite. */
+  auditScenarios?: readonly string[];
   exclusion?: CapabilityExclusion;
 };
 
@@ -118,6 +120,7 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     reasoningSupport: 'native',
     nativeContinuationField: 'previous_response_id',
     requiredScenarios: requiredScenarios('codex-http', 'http-sse'),
+    auditScenarios: ['codex-http.two-user-turn: prompt_cache_key/include projection'],
   },
   {
     id: 'codex-websocket',
@@ -130,6 +133,7 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     reasoningSupport: 'native',
     nativeContinuationField: 'previous_response_id',
     requiredScenarios: requiredScenarios('codex-websocket', 'websocket'),
+    auditScenarios: ['codex-websocket.two-user-turn: prompt_cache_key/include projection'],
   },
   {
     id: 'openrouter-http',

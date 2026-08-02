@@ -1042,6 +1042,7 @@ it.sequential('Codex HTTP and WebSocket adapters expose equivalent application-t
     topP: 0.5,
     maxTokens: 10,
     reasoning: { effort: 'low' },
+    codex: { promptCacheKey: 'session-parity', include: ['reasoning.encrypted_content'] },
     providerOptions: { generate: false },
   };
   try {
@@ -1061,6 +1062,10 @@ it.sequential('Codex HTTP and WebSocket adapters expose equivalent application-t
     expect(await collect(http)).toEqual(await collect(websocket));
     expect(captured).toHaveLength(2);
     expect(captured[0]).toEqual(captured[1]);
+    expect(captured[0].modelSettings).toMatchObject({
+      prompt_cache_key: 'session-parity',
+      include: ['reasoning.encrypted_content'],
+    });
   } finally {
     (CodexResponsesModel.prototype as any).getStreamedResponse = originalHttp;
     (CodexResponsesWSModel.prototype as any).getStreamedResponse = originalWs;

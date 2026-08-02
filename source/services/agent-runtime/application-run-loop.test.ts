@@ -143,6 +143,103 @@ describe('ApplicationRunLoop', () => {
     ]);
   });
 
+  it.each([
+    ['Codex', { codex: { encrypted_content: 'cipher' } }],
+    ['Chat', { reasoning_content: 'native chat reasoning' }],
+  ])('commits no-tool native %s reasoning for stateless replay exactly once', async (_provider, providerMetadata) => {
+    const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    let calls = 0;
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        calls++;
+        if (calls === 1) {
+          yield {
+            type: 'completion',
+            responseId: 'resp-native-reasoning',
+            output: [
+              {
+                type: 'reasoning',
+                id: 'rs-no-tool',
+                text: 'Native reasoning before the answer.',
+                providerMetadata,
+              },
+              { type: 'message', content: [{ type: 'text', text: 'Answer.' }] },
+            ],
+          };
+          return;
+        }
+        yield { type: 'completion', responseId: 'resp-replayed', output: [] };
+      },
+    };
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const first = loop.startStream(agent, 'first prompt');
+    await first.completed;
+
+    const nativeReasoningText =
+      (providerMetadata as { reasoning_content?: string }).reasoning_content ?? 'Native reasoning before the answer.';
+    expect(first.history.filter((item: any) => item.role === 'assistant' || item.type === 'reasoning')).toEqual([
+      {
+        type: 'reasoning',
+        id: 'rs-no-tool',
+        content: [{ type: 'reasoning_text', text: nativeReasoningText }],
+        providerData: providerMetadata,
+      },
+      {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'Answer.' }],
+      },
+    ]);
+    expect(first.output.filter((item: any) => item?.type === 'reasoning')).toHaveLength(1);
+
+    const replay = loop.startStream(agent, first.history as any);
+    await replay.completed;
+    expect(requests[1]?.input).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'reasoning',
+          id: 'rs-no-tool',
+          text: nativeReasoningText,
+          providerMetadata,
+        },
+        { type: 'message', role: 'assistant', content: [{ type: 'text', text: 'Answer.' }] },
+      ]),
+    );
+  });
+
+  it('keeps generic display reasoning out of canonical native replay history', async () => {
+    const model: StreamedModelTurn = {
+      async *stream() {
+        yield {
+          type: 'completion',
+          responseId: 'resp-generic-reasoning',
+          output: [
+            {
+              type: 'reasoning',
+              text: 'Provider display reasoning.',
+              providerMetadata: { anthropic: { thinking: 'opaque' } },
+            },
+            { type: 'message', content: [{ type: 'text', text: 'Answer.' }] },
+          ],
+        };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt');
+    await stream.completed;
+
+    expect(stream.history.filter((item: any) => item.type === 'reasoning')).toEqual([]);
+    expect(stream.history).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Answer.' }],
+        },
+      ]),
+    );
+  });
+
   it('forwards providerData as providerOptions and omits it when absent', async () => {
     const requests: unknown[] = [];
     const model: StreamedModelTurn = {
@@ -169,6 +266,45 @@ describe('ApplicationRunLoop', () => {
       }),
     );
     expect(requests[1]).not.toHaveProperty('providerOptions');
+  });
+
+  it('projects application maxTokens and typed Codex options on initial and internal turns', async () => {
+    const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    let calls = 0;
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        calls++;
+        if (calls === 1) {
+          yield { type: 'tool_call', id: 'call-1', name: 'missing-tool', arguments: '{}' };
+          yield { type: 'completion', responseId: 'resp-1', output: [] };
+          return;
+        }
+        yield { type: 'completion', responseId: 'resp-2', output: [] };
+      },
+    };
+
+    await collect(
+      new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+        {
+          ...agent,
+          modelSettings: {
+            maxTokens: 321,
+            codex: { promptCacheKey: 'session-a', include: ['reasoning.encrypted_content'] },
+          },
+        },
+        'continue',
+      ),
+    );
+
+    expect(requests).toHaveLength(2);
+    for (const request of requests) {
+      expect(request).toMatchObject({
+        maxTokens: 321,
+        codex: { promptCacheKey: 'session-a', include: ['reasoning.encrypted_content'] },
+      });
+      expect(request).not.toHaveProperty('temperature');
+    }
   });
 
   it('normalizes restored provider content arrays into typed turn inputs', async () => {
@@ -268,7 +404,7 @@ describe('ApplicationRunLoop', () => {
 
     await stream.completed;
 
-    expect(stream.runUsage).toEqual({ inputTokens: 21, outputTokens: 4, cachedInputTokens: 3 });
+    expect(stream.runUsage).toEqual({ inputTokens: 21, outputTokens: 4, totalTokens: 25, cachedInputTokens: 3 });
   });
 
   it('accumulates usage across internal tool model completions including cache counters', async () => {
@@ -312,6 +448,7 @@ describe('ApplicationRunLoop', () => {
     expect(stream.runUsage).toEqual({
       inputTokens: 30,
       outputTokens: 5,
+      totalTokens: 38,
       cachedInputTokens: 9,
       cacheWriteTokens: 3,
     });
@@ -367,6 +504,51 @@ describe('ApplicationRunLoop', () => {
       ]),
     );
     expect(stream.finalOutput).toBe('done');
+  });
+
+  it('records an unknown-tool rejection once in canonical history, output, and continuation input', async () => {
+    const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    let calls = 0;
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        calls++;
+        if (calls === 1) {
+          yield { type: 'tool_call', id: 'call-unknown', name: 'unknown_tool', arguments: '{}' };
+          yield { type: 'completion', responseId: 'resp-unknown', output: [] };
+          return;
+        }
+        yield { type: 'completion', responseId: 'resp-after-unknown', output: [] };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'try an unknown tool');
+    await stream.completed;
+
+    const historyForCall = stream.history.filter((item: any) => item.callId === 'call-unknown');
+    expect(historyForCall).toEqual([
+      { type: 'function_call', callId: 'call-unknown', name: 'unknown_tool', arguments: '{}' },
+      {
+        type: 'function_call_result',
+        callId: 'call-unknown',
+        name: 'unknown_tool',
+        output: 'Unknown tool: unknown_tool',
+      },
+    ]);
+    const outputResults = stream.output.filter(
+      (item: any) => item?.type === 'run_item_stream_event' && item.item?.type === 'function_call_result',
+    );
+    expect(outputResults).toEqual([
+      {
+        type: 'run_item_stream_event',
+        item: historyForCall[1],
+      },
+    ]);
+    expect(requests[1]?.input).toEqual(
+      expect.arrayContaining([
+        { type: 'tool_call', id: 'call-unknown', name: 'unknown_tool', arguments: '{}' },
+        { type: 'tool_result', id: 'call-unknown', output: 'Unknown tool: unknown_tool' },
+      ]),
+    );
   });
 
   it('preserves omitted schema-default parameters for executor fallbacks', async () => {

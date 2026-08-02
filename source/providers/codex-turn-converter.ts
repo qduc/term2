@@ -101,6 +101,8 @@ export function toCodexModelSettings(request: StreamedModelTurnRequest): Record<
     ...(request.maxTokens !== undefined ? { maxTokens: request.maxTokens } : {}),
     ...(request.toolChoice !== undefined ? { toolChoice: request.toolChoice } : {}),
     ...(request.reasoning !== undefined ? { reasoning: request.reasoning } : {}),
+    ...(request.codex?.promptCacheKey !== undefined ? { prompt_cache_key: request.codex.promptCacheKey } : {}),
+    ...(request.codex?.include !== undefined ? { include: request.codex.include } : {}),
     ...(request.providerOptions !== undefined ? { providerData: request.providerOptions } : {}),
   };
 }

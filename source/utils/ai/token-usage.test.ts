@@ -80,6 +80,52 @@ it('normalizeAgentRunUsage reads the SDK run-state accumulator and sums per-requ
   });
 });
 
+it('normalizeAgentRunUsage preserves direct cumulative cache counters', () => {
+  expect(
+    normalizeAgentRunUsage({
+      inputTokens: 100,
+      outputTokens: 20,
+      cachedInputTokens: 40,
+      cacheWriteTokens: 6,
+    }),
+  ).toEqual({
+    prompt_tokens: 100,
+    completion_tokens: 20,
+    total_tokens: 126,
+    cache_read_tokens: 40,
+    cache_creation_tokens: 6,
+  });
+});
+
+it('normalizeAgentRunUsage prefers cumulative counters over legacy detail arrays', () => {
+  expect(
+    normalizeAgentRunUsage({
+      inputTokens: 100,
+      outputTokens: 20,
+      cachedInputTokens: 40,
+      cacheWriteTokens: 6,
+      inputTokensDetails: [
+        { cached_tokens: 40, cache_write_tokens: 6 },
+        { cached_tokens: 10, cache_write_tokens: 2 },
+      ],
+    }),
+  ).toMatchObject({ cache_read_tokens: 40, cache_creation_tokens: 6 });
+});
+
+it('normalizes compatibility cache_write_tokens detail spelling', () => {
+  expect(normalizeUsage({ inputTokens: 10, outputTokens: 5, inputTokensDetails: [{ cache_write_tokens: 4 }] })).toEqual(
+    {
+      prompt_tokens: 10,
+      completion_tokens: 5,
+      total_tokens: 19,
+      cache_creation_tokens: 4,
+    },
+  );
+  expect(
+    normalizeAgentRunUsage({ inputTokens: 10, outputTokens: 5, inputTokensDetails: [{ cache_write_tokens: 4 }] }),
+  ).toMatchObject({ cache_creation_tokens: 4 });
+});
+
 it('normalizeAgentRunUsage treats an all-zero accumulator as absent', () => {
   expect(
     normalizeAgentRunUsage({

@@ -33,6 +33,7 @@ it('stream() sends message content as OpenAI-compatible content parts, not raw s
       },
     ],
     tools: [],
+    codex: { promptCacheKey: 'must-not-leak', include: ['reasoning.encrypted_content'] },
   } as any;
 
   for await (const _event of model.stream(request)) {
@@ -45,6 +46,112 @@ it('stream() sends message content as OpenAI-compatible content parts, not raw s
       content: [{ type: 'text', text: 'docs/plans/decouple-from-openai-agents-sdk.md check progress' }],
     },
   ]);
+  expect(capturedBody).not.toHaveProperty('prompt_cache_key');
+  expect(capturedBody).not.toHaveProperty('include');
+});
+
+it('stream() carries terminal Chat usage into the completion and application run state', async () => {
+  async function* usageStream(): AsyncIterable<any> {
+    yield { choices: [{ delta: { content: 'done' } }] };
+    yield {
+      choices: [{ delta: {}, finish_reason: 'stop' }],
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 20,
+        prompt_tokens_details: { cached_tokens: 40 },
+      },
+    };
+  }
+  const client = { chat: { completions: { create: async () => usageStream() } } };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat');
+  const events: any[] = [];
+  for await (const event of model.stream({ input: [], tools: [] } as any)) events.push(event);
+
+  expect(events.find((event) => event.type === 'completion')).toMatchObject({
+    usage: { inputTokens: 100, outputTokens: 20, cachedInputTokens: 40 },
+  });
+
+  const loop = new ApplicationRunLoop({ resolveModel: () => model });
+  const stream = loop.startStream(
+    { name: 'usage-chat', instructions: '', model: 'fixture-chat', tools: [] } as any,
+    'hello',
+  );
+  await stream.completed;
+  expect(stream.runUsage).toEqual({ inputTokens: 100, outputTokens: 20, totalTokens: 120, cachedInputTokens: 40 });
+});
+
+it('stream() serializes Chat generation settings including zero values and named tool choice', async () => {
+  let capturedBody: any;
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          capturedBody = body;
+          return emptyStream();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat');
+
+  for await (const _event of model.stream({
+    input: [],
+    tools: [],
+    temperature: 0,
+    topP: 0,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+    maxTokens: 0,
+    toolChoice: { name: 'shell' },
+  })) {
+    // drain
+  }
+
+  expect(capturedBody).toMatchObject({
+    temperature: 0,
+    top_p: 0,
+    frequency_penalty: 0,
+    presence_penalty: 0,
+    max_tokens: 0,
+    tool_choice: { type: 'function', function: { name: 'shell' } },
+  });
+});
+
+async function collectCompletionForFinishReason(finishReason: string, withToolCall = false): Promise<any> {
+  async function* response(): AsyncIterable<any> {
+    if (withToolCall) {
+      yield {
+        choices: [
+          { delta: { tool_calls: [{ index: 0, id: 'call_finish', function: { name: 'shell', arguments: '{}' } }] } },
+        ],
+      };
+    } else {
+      yield { choices: [{ delta: { content: 'partial or complete' } }] };
+    }
+    yield { choices: [{ delta: {}, finish_reason: finishReason }] };
+  }
+  const model = new OpenAIChatCompletionsModel(
+    { chat: { completions: { create: async () => response() } } },
+    'fixture-chat',
+  );
+  const events: any[] = [];
+  for await (const event of model.stream({ input: [], tools: [] })) events.push(event);
+  return events.find((event) => event.type === 'completion');
+}
+
+it('stream() preserves stop and tool_calls finish reasons on application completion', async () => {
+  await expect(collectCompletionForFinishReason('stop')).resolves.toMatchObject({ finishReason: 'stop' });
+  await expect(collectCompletionForFinishReason('tool_calls', true)).resolves.toMatchObject({
+    finishReason: 'tool_calls',
+    output: [{ type: 'tool_call', id: 'call_finish' }],
+  });
+});
+
+it('stream() preserves length and content_filter without imposing a UI error policy', async () => {
+  await expect(collectCompletionForFinishReason('length')).resolves.toMatchObject({ finishReason: 'length' });
+  await expect(collectCompletionForFinishReason('content_filter')).resolves.toMatchObject({
+    finishReason: 'content_filter',
+  });
 });
 
 it('stream() rejects EOF before a finish_reason instead of synthesizing completion', async () => {

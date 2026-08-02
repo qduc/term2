@@ -22,10 +22,10 @@ import { ApprovalLedger, type ToolInvocationContext } from './tool-invocation-co
 import { addTokenUsage, normalizeUsage } from '../../utils/ai/token-usage.js';
 
 /**
- * Fields of `modelSettings` the run loop and provider adapters actually read
- * (temperature/reasoning at the loop; maxTokens/retry/providerData at the
- * provider boundary). Extra keys (e.g. codex `include`) pass through the index
- * signature without being modeled.
+ * Fields of `modelSettings` the run loop and provider adapters actually read.
+ * Codex-only request fields are modeled separately so they cannot escape into
+ * another provider's opaque option bag. The index signature remains for legacy
+ * provider settings before they are projected by the application configuration.
  */
 export interface AgentModelSettings {
   temperature?: number;
@@ -33,6 +33,7 @@ export interface AgentModelSettings {
   maxTokens?: number;
   retry?: { maxRetries?: number };
   providerData?: Record<string, unknown>;
+  codex?: { promptCacheKey?: string; include?: readonly string[] };
   [key: string]: unknown;
 }
 
@@ -343,6 +344,10 @@ export class ApplicationRunLoop {
           ? { temperature: state.agent.modelSettings.temperature as number }
           : {}),
         ...(state.agent.modelSettings?.reasoning ? { reasoning: state.agent.modelSettings.reasoning as any } : {}),
+        ...(state.agent.modelSettings?.maxTokens !== undefined
+          ? { maxTokens: state.agent.modelSettings.maxTokens }
+          : {}),
+        ...(state.agent.modelSettings?.codex ? { codex: state.agent.modelSettings.codex } : {}),
         ...(state.agent.modelSettings?.providerData ? { providerOptions: state.agent.modelSettings.providerData } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
       })) {
@@ -378,6 +383,10 @@ export class ApplicationRunLoop {
           state.usage = {
             ...(accumulated.prompt_tokens !== undefined ? { inputTokens: accumulated.prompt_tokens } : {}),
             ...(accumulated.completion_tokens !== undefined ? { outputTokens: accumulated.completion_tokens } : {}),
+            // `total_tokens` is the billable normalized total, including cache
+            // creation tokens. Keep it alongside the application aliases so the
+            // authoritative run accumulator never reconstructs a smaller total.
+            ...(accumulated.total_tokens !== undefined ? { totalTokens: accumulated.total_tokens } : {}),
             ...(accumulated.cache_read_tokens !== undefined
               ? { cachedInputTokens: accumulated.cache_read_tokens }
               : {}),
@@ -407,6 +416,12 @@ export class ApplicationRunLoop {
           await this.#handleToolCall(state, stream, queue, item, toolContext);
         }
       }
+      // A native reasoning item belongs to the completed assistant turn even
+      // when no tool call follows it. Commit it before assistant text so both
+      // stateless continuation and persisted canonical history retain the
+      // provider-specific metadata exactly once.
+      pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
+
       const assistantText = completion.output
         .filter((item) => item.type === 'message')
         .flatMap((item) => item.content)
@@ -451,7 +466,16 @@ export class ApplicationRunLoop {
     state.input.push({ type: 'tool_call', id: event.id, name: event.name, arguments: event.arguments });
     outputPush(stream, queue, { type: 'run_item_stream_event', item: callItem });
     if (!definition) {
-      state.input.push({ type: 'tool_result', id: event.id, output: `Unknown tool: ${event.name}` });
+      const output = `Unknown tool: ${event.name}`;
+      const resultItem: ProviderInputItem = {
+        type: 'function_call_result',
+        callId: event.id,
+        name: event.name,
+        output,
+      };
+      state.history.push(resultItem);
+      state.input.push({ type: 'tool_result', id: event.id, output });
+      outputPush(stream, queue, { type: 'run_item_stream_event', item: resultItem });
       return;
     }
 

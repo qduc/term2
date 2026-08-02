@@ -128,9 +128,13 @@ function withAnthropicPromptCaching<T extends AiSdkAnthropicModelLike>(
     middleware: [
       {
         specificationVersion: 'v3',
+        // The catalog value is a safety ceiling, not an instruction to expand
+        // an explicit caller limit. Preserve a lower requested limit and cap an
+        // excessive request to the model's known maximum.
         transformParams: async ({ params }) => ({
           ...params,
-          maxOutputTokens,
+          maxOutputTokens:
+            params.maxOutputTokens === undefined ? maxOutputTokens : Math.min(params.maxOutputTokens, maxOutputTokens),
         }),
       },
       createAnthropicPromptCachingMiddleware(shouldApplyPromptCaching),

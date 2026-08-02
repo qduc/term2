@@ -75,6 +75,7 @@ describe('Codex streamed-turn conversion', () => {
         presencePenalty: 0.4,
         maxTokens: 123,
         reasoning: { effort: 'high', summary: 'concise' },
+        codex: { promptCacheKey: 'session-123', include: ['reasoning.encrypted_content'] },
         providerOptions: { generate: false, custom_codex_option: true },
         signal,
       }),
@@ -86,6 +87,8 @@ describe('Codex streamed-turn conversion', () => {
       presencePenalty: 0.4,
       maxTokens: 123,
       reasoning: { effort: 'high', summary: 'concise' },
+      prompt_cache_key: 'session-123',
+      include: ['reasoning.encrypted_content'],
       providerData: { generate: false, custom_codex_option: true },
     });
   });

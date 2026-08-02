@@ -251,6 +251,45 @@ it.sequential('getAgent with sessionId clones agent for providers with prompt ca
   expect(agentWithSession).toBeTruthy();
 });
 
+it.sequential('getApplicationAgent projects Codex session settings into typed Codex options', () => {
+  const { deps } = createDeps({
+    settingsValues: {
+      'agent.provider': 'codex',
+      'agent.model': 'gpt-5.3-codex',
+    },
+  });
+  const config = new AgentConfiguration({}, deps);
+
+  const first = config.getApplicationAgent('session-one');
+  const sameSession = config.getApplicationAgent('session-one');
+  const second = config.getApplicationAgent('session-two');
+
+  expect(first.modelSettings?.codex).toEqual({
+    promptCacheKey: 'session-one',
+    include: ['reasoning.encrypted_content'],
+  });
+  expect(sameSession.modelSettings?.codex?.promptCacheKey).toBe('session-one');
+  expect(second.modelSettings?.codex?.promptCacheKey).toBe('session-two');
+  expect(first.modelSettings).not.toHaveProperty('prompt_cache_key');
+  expect(first.modelSettings).not.toHaveProperty('include');
+});
+
+it.sequential('transient application agents do not inherit a Codex session cache key', () => {
+  const { deps } = createDeps({ settingsValues: { 'agent.provider': 'codex' } });
+  const overrideAgent = {
+    name: 'Transient Codex',
+    model: 'gpt-5.3-codex',
+    instructions: 'test',
+    tools: [],
+    modelSettings: { include: ['reasoning.encrypted_content'] },
+  } as any;
+  const config = new AgentConfiguration({ agentOverride: overrideAgent, model: 'gpt-5.3-codex' }, deps);
+
+  expect(config.getApplicationAgent('session-one').modelSettings?.codex).toEqual({
+    include: ['reasoning.encrypted_content'],
+  });
+});
+
 it.sequential('maxTurns reads from settings', () => {
   ensureProviderRegistered();
 

@@ -470,6 +470,36 @@ it('bridgeBackToTurn yields a normal completion when response_done arrives', asy
   ]);
 });
 
+it('bridgeBackToTurn forwards typed Responses settings including zero values', async () => {
+  let capturedRequest: any;
+  const turn = realBridgeBackToTurn({
+    async *getStreamedResponse(request) {
+      capturedRequest = request;
+      yield { type: 'response_done', response: { id: 'resp_settings', output: [] } };
+    },
+  });
+
+  await collect(
+    turn.stream({
+      input: [],
+      tools: [],
+      toolChoice: { name: 'shell' },
+      topP: 0,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+      maxTokens: 0,
+    } as any),
+  );
+
+  expect(capturedRequest.modelSettings).toMatchObject({
+    toolChoice: { type: 'function', name: 'shell' },
+    topP: 0,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+    maxTokens: 0,
+  });
+});
+
 it('bridgeBackToTurn forwards provider options as legacy provider data and omits absent options', async () => {
   const capturedRequests: any[] = [];
   const turn = realBridgeBackToTurn({

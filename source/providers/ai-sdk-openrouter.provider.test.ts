@@ -274,3 +274,52 @@ it('AiSdkOpenRouterProvider preserves the stream signal and provider errors', as
   ).rejects.toBe(providerError);
   expect(seenSignal).toBe(controller.signal);
 });
+
+it('AiSdkOpenRouterProvider forwards explicit settings to unary getResponse and streaming calls', async () => {
+  const calls: any[] = [];
+  const provider = new AiSdkOpenRouterProvider({
+    defaultModel: 'openrouter/auto',
+    resolveConfig: () => ({}),
+    createProvider: () => () =>
+      ({
+        specificationVersion: 'v3',
+        provider: 'openrouter.chat',
+        modelId: 'openrouter/auto',
+        supportedUrls: {},
+        async doGenerate(options: any) {
+          calls.push({ operation: 'generate', options });
+          return { response: { id: 'unary-response' }, text: 'unary', usage: { inputTokens: {}, outputTokens: {} } };
+        },
+        async doStream(options: any) {
+          calls.push({ operation: 'stream', options });
+          return {
+            stream: (async function* () {
+              yield { type: 'response-metadata', id: 'stream-response' };
+              yield { type: 'finish', finishReason: { unified: 'stop' }, usage: { inputTokens: {}, outputTokens: {} } };
+            })(),
+          };
+        },
+      } as any),
+  });
+  const model = provider.getStreamedModel();
+  const request = {
+    input: [{ type: 'message' as const, role: 'user' as const, content: [{ type: 'text' as const, text: 'hello' }] }],
+    tools: [],
+    providerOptions: { service_tier: 'flex', providerOptions: { openrouter: { transforms: ['middle-out'] } } },
+  };
+
+  await model.getResponse!(request);
+  await collect(model.stream!(request));
+
+  expect(calls.map((call) => call.operation)).toEqual(['generate', 'stream']);
+  expect(calls.map((call) => call.options)).toEqual([
+    expect.objectContaining({
+      service_tier: 'flex',
+      providerOptions: { openrouter: { service_tier: 'flex', transforms: ['middle-out'] } },
+    }),
+    expect.objectContaining({
+      service_tier: 'flex',
+      providerOptions: { openrouter: { service_tier: 'flex', transforms: ['middle-out'] } },
+    }),
+  ]);
+});

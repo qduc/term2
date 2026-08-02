@@ -29,7 +29,12 @@ export function bridgeBackToTurn(model: { getStreamedResponse(request: any): Asy
         ),
         tools: request.tools.map((tool) => ({ type: 'function', ...tool })),
         modelSettings: {
+          ...(request.toolChoice !== undefined ? { toolChoice: toLegacyToolChoice(request.toolChoice) } : {}),
           ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+          ...(request.topP !== undefined ? { topP: request.topP } : {}),
+          ...(request.frequencyPenalty !== undefined ? { frequencyPenalty: request.frequencyPenalty } : {}),
+          ...(request.presencePenalty !== undefined ? { presencePenalty: request.presencePenalty } : {}),
+          ...(request.maxTokens !== undefined ? { maxTokens: request.maxTokens } : {}),
           ...(request.reasoning ? { reasoning: request.reasoning } : {}),
           ...(request.providerOptions ? { providerData: request.providerOptions } : {}),
         },
@@ -123,6 +128,11 @@ export function adaptStreamedModelTurnForAgents(applicationModel: StreamedModelT
       };
     },
   };
+}
+
+function toLegacyToolChoice(choice: NonNullable<StreamedModelTurnRequest['toolChoice']>): unknown {
+  if (choice === 'auto' || choice === 'required' || choice === 'none') return choice;
+  return { type: 'function', name: choice.name };
 }
 
 function toStreamedModelTurnRequest(request: ModelRequest): StreamedModelTurnRequest {

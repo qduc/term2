@@ -139,7 +139,8 @@ export class ConversationStore {
 
   /**
    * Overwrite the store with a full transcript. Use when the input was
-   * full-history — the SDK returns the authoritative conversation.
+   * full-history — the inherited transport returns the authoritative
+   * conversation.
    */
   replaceHistory(items: ProviderInputItem[]): void {
     if (!Array.isArray(items) || items.length === 0) return;

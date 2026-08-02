@@ -1403,8 +1403,9 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     const builtRequest = this.buildResponsesCreateRequest(updatedRequest, true);
     const requestData = (asRecord(builtRequest?.requestData) ?? {}) as Record<string, unknown>;
     const wireStateToken = this.requestTokens.get(updatedRequest);
-    // This is the last application-owned point before the SDK's private fetch
-    // path. Capture it without changing the prepared request or wire state.
+    // This is the last application-owned point before the inherited
+    // transport's private fetch path. Capture it without changing the
+    // prepared request or wire state.
     captureProviderRequest(this.requestCapture, { provider: 'codex', transport: 'websocket', requestData });
     this.#logTrafficStarted(requestId, requestData, extraHeaders);
 
@@ -1540,8 +1541,9 @@ export async function* wrapCodexStream(source: AsyncIterable<any>, logger?: Diag
       const item = event.item;
       const itemRecord = asRecord(item);
       // If the accumulated function_call item is missing call_id, backfill it
-      // from the itemCallIds map so the SDK's convertToOutputItem picks up the
-      // correct identifier and the continuation request sends the right call_id.
+      // from the itemCallIds map so the inherited transport's
+      // convertToOutputItem picks up the correct identifier and the continuation
+      // request sends the right call_id.
       if (
         itemRecord?.type === 'function_call' &&
         !stringValue(itemRecord?.call_id) &&

@@ -9,8 +9,9 @@ import { isDeepStrictEqual } from 'node:util';
  * else is left exact.
  */
 /**
- * Provider-private, observational handoff between the Agents input filter and
- * the OpenAI model's final request builder. Nothing here is sent on the wire.
+ * Provider-private, observational handoff between application input
+ * preparation and the inherited transport's final request builder. Nothing
+ * here is sent on the wire.
  */
 export type OpenAIRequestPrefixBinding = Readonly<{
   snapshotIdentity: string;

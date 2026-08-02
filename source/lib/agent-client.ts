@@ -33,7 +33,6 @@ import {
   runWithOpenAIRequestPrefixBindingScope,
 } from '../providers/openai-request-prefix-binding.js';
 import { isDeepStrictEqual } from 'node:util';
-import { toOpenAILegacyInput } from '../providers/openai-streamed-model-adapter.js';
 
 type ChainedRunOptions = AgentClientRunOptions;
 
@@ -436,10 +435,10 @@ export class AgentClient {
     return {
       prepare: (request) => {
         // Bind only the actual request selected by the application run loop,
-        // not a guessed continuation-state prefix. The lifecycle consumes the
-        // adapter's legacy input, so compare and capture that same projection.
+        // not a guessed continuation-state prefix. The OpenAI transport
+        // consumes the application-owned input directly.
         if (!isDeepStrictEqual(canonicalSnapshot, request.input)) return;
-        prepareOpenAIRequestPrefixBinding(binding, toOpenAILegacyInput(request.input));
+        prepareOpenAIRequestPrefixBinding(binding, request.input);
       },
       // Keep the handoff alive through the complete async model invocation.
       run: (operation) => runWithOpenAIRequestPrefixBindingScope(operation),

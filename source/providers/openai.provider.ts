@@ -1,5 +1,4 @@
 import OpenAI from 'openai';
-import type { LegacyModel, LegacyModelProvider } from '../contracts/model.js';
 import {
   OpenAIResponsesModelWithPromptCacheKey,
   OpenAIResponsesWSModelWithPromptCacheKey,
@@ -7,10 +6,7 @@ import {
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
-import { RetryingModel } from './retrying-model.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
-import type { ProviderRequestCapture } from './provider-request-capture.js';
-import { adaptOpenAIStreamedModel } from './openai-streamed-model-adapter.js';
 
 export {
   OpenAIResponsesModelWithPromptCacheKey,
@@ -78,47 +74,6 @@ async function fetchOpenAIModels(
     .reverse() as Array<{ id: string; name?: string }>;
 }
 
-class _OpenAIProvider implements LegacyModelProvider {
-  private readonly models = new Map<string, RetryingModel>();
-
-  constructor(
-    private readonly openAIClient: OpenAI,
-    private readonly loggingService: any,
-    private readonly transport: 'websocket' | 'http',
-    private readonly retryAttempts: number,
-    private readonly onRetry?: () => void,
-    private readonly requestCapture?: ProviderRequestCapture,
-  ) {}
-
-  getModel(modelName?: string): LegacyModel {
-    const model = modelName || 'gpt-4o';
-    const cached = this.models.get(model);
-    if (cached) {
-      return cached;
-    }
-
-    const selectedModel =
-      this.transport === 'http'
-        ? new OpenAIResponsesModelWithPromptCacheKey(this.openAIClient as any, model, this.requestCapture)
-        : new OpenAIResponsesWSModelWithPromptCacheKey(this.openAIClient as any, model, this.requestCapture);
-    const retryingModel = new RetryingModel(selectedModel, {
-      retryAttempts: this.retryAttempts,
-      loggingService: this.loggingService,
-      onRetry: this.onRetry,
-    });
-
-    this.models.set(model, retryingModel);
-    return retryingModel;
-  }
-
-  async close(): Promise<void> {
-    for (const model of this.models.values()) {
-      await model.close();
-    }
-    this.models.clear();
-  }
-}
-
 // Register OpenAI provider
 registerProvider({
   id: 'openai',
@@ -148,7 +103,7 @@ registerProvider({
       settingsService.get('agent.transport') === 'http'
         ? new OpenAIResponsesModelWithPromptCacheKey(openAIClient, model || defaultModel, requestCapture)
         : new OpenAIResponsesWSModelWithPromptCacheKey(openAIClient, model || defaultModel, requestCapture);
-    return adaptOpenAIStreamedModel(selectedModel);
+    return selectedModel;
   },
   fetchModels: fetchOpenAIModels,
   clearConversations: undefined, // No conversation state to clear

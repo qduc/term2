@@ -1,5 +1,4 @@
 import { ApplicationRunLoop, type ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
-import type { Model, ModelRequest, ModelResponse, StreamEvent } from '../contracts/model.js';
 import type {
   StreamedModelTurn,
   StreamedModelTurnEvent,
@@ -19,59 +18,6 @@ import { PostExecutePauseCapability } from '../services/session/post-execute-pau
 import { createReadFileToolDefinition } from '../tools/file/read-file.js';
 
 type MockLogger = ILoggingService & { debugCalls: any[][] };
-
-/**
- * Reverse bridge: adapt an SDK-shaped model (getStreamedResponse) back into an
- * application StreamedModelTurn so the ApplicationRunLoop can consume it.
- * Previously this round-trip lived inside the deleted `Runner.run` via
- * `adaptLegacyModel`; it now only exists for tests that exercise the loop
- * against an SDK-shaped model fixture.
- */
-function bridgeBackToTurn(model: { getStreamedResponse(request: any): AsyncIterable<any> }): StreamedModelTurn {
-  return {
-    async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
-      const legacyRequest = {
-        input: request.input.map((item: any) =>
-          item.type === 'tool_result'
-            ? { type: 'function_call_result', callId: item.id, output: { text: item.output } }
-            : item,
-        ),
-        tools: request.tools.map((tool) => ({ type: 'function', ...tool })),
-        modelSettings: {
-          ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
-          ...(request.reasoning ? { reasoning: request.reasoning } : {}),
-        },
-        systemInstructions: request.instructions,
-        handoffs: [],
-        outputType: 'text',
-        tracing: false,
-        signal: request.signal,
-      };
-      let completion: any;
-      for await (const event of model.getStreamedResponse(legacyRequest)) {
-        if (event?.type === 'output_text_delta') yield { type: 'text_delta', text: event.delta ?? '' };
-        else if (event?.type === 'response_done') completion = event.response;
-        else if (event?.type === 'response.completed') completion = event.response;
-      }
-      const output = completion?.output ?? [];
-      yield {
-        type: 'completion',
-        responseId: completion?.id ?? `response-${Date.now()}`,
-        output: output.map((item: any) =>
-          item?.type === 'function_call'
-            ? {
-                type: 'tool_call' as const,
-                id: item.callId ?? item.call_id,
-                name: item.name,
-                arguments: item.arguments ?? '{}',
-              }
-            : item,
-        ),
-        usage: completion?.usage,
-      };
-    },
-  };
-}
 
 const createMockLogger = (): MockLogger => {
   const debugCalls: any[][] = [];
@@ -231,7 +177,7 @@ it.sequential('tools without a post-execute policy return their ordinary result'
   expect(pending.snapshot().entries).toEqual([]);
 });
 
-it.sequential('streaming Runner pauses an opted-in root tool until the session capability approves it', async () => {
+it.sequential('application run loop pauses an opted-in root tool pending approval', async () => {
   const callId = 'call-post-execute-pause';
   let requestCount = 0;
   let firstExecutionComplete!: () => void;
@@ -258,44 +204,33 @@ it.sequential('streaming Runner pauses an opted-in root tool until the session c
   // Production routes approval through the application coordinator. This test
   // isolates the post-execute seam after that gate has allowed the tool call.
   appOwnedTool.needsApproval = async () => false;
-  const model: Model = {
-    async getResponse(): Promise<ModelResponse> {
-      throw new Error('This regression must use the streaming model path.');
-    },
-    async *getStreamedResponse(request: ModelRequest): AsyncIterable<StreamEvent> {
+  const model: StreamedModelTurn = {
+    async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
       requestCount++;
       if (requestCount === 2) {
-        nextRequestResults.push(
-          (request.input as any[]).filter(
-            (item) => item.type === 'function_call_result' || item.type === 'function_call_output',
-          ),
-        );
+        nextRequestResults.push(request.input.filter((item) => item.type === 'tool_result'));
+      }
+      if (requestCount === 1) {
+        yield {
+          type: 'tool_call',
+          id: callId,
+          name: definition.name,
+          arguments: JSON.stringify({ value: 'approved' }),
+        };
+        yield {
+          type: 'completion',
+          responseId: `response-${requestCount}`,
+          output: [],
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+        return;
       }
       yield {
-        type: 'response_done',
-        response: {
-          id: `response-${requestCount}`,
-          usage: { requests: 1, inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-          output:
-            requestCount === 1
-              ? [
-                  {
-                    type: 'function_call',
-                    callId,
-                    name: definition.name,
-                    arguments: JSON.stringify({ value: 'approved' }),
-                  },
-                ]
-              : [
-                  {
-                    type: 'message',
-                    role: 'assistant',
-                    status: 'completed',
-                    content: [{ type: 'output_text', text: 'done' }],
-                  },
-                ],
-        },
-      } as StreamEvent;
+        type: 'completion',
+        responseId: `response-${requestCount}`,
+        output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
     },
   };
   const agent: ApplicationAgent = {
@@ -304,11 +239,11 @@ it.sequential('streaming Runner pauses an opted-in root tool until the session c
     model: 'scripted-model',
     tools: [appOwnedTool],
   };
-  const loop = new ApplicationRunLoop({ resolveModel: async () => bridgeBackToTurn(model) });
+  const loop = new ApplicationRunLoop({ resolveModel: async () => model });
   const stream = loop.startStream(agent, 'run the tool');
   const iteration = (async () => {
     for await (const _event of stream) {
-      // Consume the SDK stream so the Runner reaches the tool execution.
+      // Consume the native stream so the application run loop reaches the tool execution.
     }
   })();
 
@@ -328,7 +263,7 @@ it.sequential('streaming Runner pauses an opted-in root tool until the session c
   expect(executionCallIds).toEqual([callId, callId]);
   expect(nextRequestResults).toHaveLength(1);
   expect(nextRequestResults[0]).toHaveLength(1);
-  expect((nextRequestResults[0][0] as any).output.text).toBe('approved result');
+  expect((nextRequestResults[0][0] as any).output).toBe('approved result');
 });
 
 it.sequential('post-execute capability accepts a schema-typed definition through forTool', () => {

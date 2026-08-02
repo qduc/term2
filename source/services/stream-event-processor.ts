@@ -5,7 +5,7 @@ import { captureToolCallArguments, emitCommandMessagesFromItems } from './comman
 import { normalizeRunItem } from './conversation/run-item-normalizer.js';
 import { createInvalidToolCallDiagnostic } from './logging/logging-contract.js';
 import { parseToolCallArguments } from './tool-call-arguments.js';
-import type { AgentStream } from './agent-stream.js';
+import { assertAgentStream, type AgentStream } from './agent-stream.js';
 import type { ToolCallStreamingDeltaEvent } from './conversation/conversation-events.js';
 
 export interface StreamAccumulator {
@@ -47,6 +47,7 @@ export async function* processStreamEvents(
   opts: StreamProcessorOptions,
   deps: StreamProcessorDeps,
 ): AsyncGenerator<ConversationEvent, void, void> {
+  assertAgentStream(stream);
   if (!opts.preserveExistingToolArgs) opts.toolCallArgumentsById.clear();
   acc.textDeltaCount = 0;
   acc.reasoningDeltaCount = 0;

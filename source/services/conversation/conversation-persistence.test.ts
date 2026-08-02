@@ -9,6 +9,7 @@ import type { LogEvent, StateSnapshot } from '../logging/conversation-log-events
 import { createConversationSession } from '../../test-helpers/conversation-session-with-adapter.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 import type { BotMessage, CommandMessage, ReasoningMessage } from '../../types/message.js';
+import { createAgentStream } from '../agent-stream.js';
 
 const createSessionContextService = () => ({
   runWithContext: <T>(_context: any, fn: () => T) => fn(),
@@ -57,6 +58,7 @@ class MockStream {
 
   constructor(events: unknown[] = []) {
     this.events = events;
+    createAgentStream(this as never);
   }
 
   get runUsage(): unknown {

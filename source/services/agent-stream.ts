@@ -12,8 +12,10 @@ import type { ApplicationRunEvent } from '../contracts/application-stream.js';
 
 const APPLICATION_STREAM = Symbol('application-stream');
 
+type UnbrandedAgentStream = Omit<AgentStream, typeof APPLICATION_STREAM>;
+
 export interface AgentStream {
-  readonly [APPLICATION_STREAM]?: true;
+  readonly [APPLICATION_STREAM]: true;
   [Symbol.asyncIterator](): AsyncIterator<ApplicationRunEvent>;
 
   completed: Promise<unknown>;
@@ -57,8 +59,22 @@ function projectProviderItems(items: readonly unknown[]): unknown[] {
   });
 }
 
+/** Return whether a value is the application-owned stream representation. */
+export function isAgentStream(value: unknown): value is AgentStream {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as Partial<Record<typeof APPLICATION_STREAM, unknown>>)[APPLICATION_STREAM] === true
+  );
+}
+
+/** Assert that a value is the application-owned stream representation. */
+export function assertAgentStream(value: unknown): asserts value is AgentStream {
+  if (!isAgentStream(value)) throw new TypeError('Expected a branded AgentStream');
+}
+
 /** Construct the only branded application stream representation. */
-export function createAgentStream(stream: Omit<AgentStream, typeof APPLICATION_STREAM>): AgentStream {
+export function createAgentStream(stream: UnbrandedAgentStream): AgentStream {
   return Object.defineProperty(stream, APPLICATION_STREAM, {
     value: true,
     enumerable: false,

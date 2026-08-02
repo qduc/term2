@@ -1,9 +1,9 @@
 import { it, expect, beforeAll, beforeEach } from 'vitest';
 import { ConversationService as ProductionConversationService } from './conversation-service.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
-import type { AgentStream } from '../agent-stream.js';
+import { createAgentStream } from '../agent-stream.js';
 import type { ConversationTerminal, FinalTerminal, ApprovalRequiredTerminal } from '../../contracts/conversation.js';
-import { MockStream } from '../test-helpers/mock-stream.js';
+import { MockStream, createMockStream } from '../test-helpers/mock-stream.js';
 import {
   clearApprovalRejectionMarkers,
   markToolCallAsApprovalRejection,
@@ -48,8 +48,8 @@ function partialClient(methods: Record<string, unknown> = {}): ConversationAgent
     abort: () => {},
     setModel: () => {},
     addToolInterceptor: () => () => {},
-    startStream: async () => new MockStream([]) as unknown as AgentStream,
-    continueRunStream: async () => new MockStream([]) as unknown as AgentStream,
+    startStream: async () => createMockStream([]),
+    continueRunStream: async () => createMockStream([]),
     ...methods,
   } as ConversationAgentClient;
 }
@@ -85,10 +85,12 @@ class GatedStream {
   history: unknown[] = [];
   finalOutput: string;
   readonly #gate: Promise<void>;
+  completed = Promise.resolve();
 
   constructor(finalOutput: string, gate: Promise<void>) {
     this.finalOutput = finalOutput;
     this.#gate = gate;
+    createAgentStream(this as never);
   }
 
   async *[Symbol.asyncIterator](): AsyncGenerator<unknown> {
@@ -106,7 +108,7 @@ it('queues foreground messages FIFO, returns each item terminal, and executes ea
   const mockClient = partialClient({
     async startStream(input: unknown) {
       inputs.push(input);
-      if (inputs.length === 1) return new GatedStream('first terminal', firstGate) as unknown as AgentStream;
+      if (inputs.length === 1) return new GatedStream('first terminal', firstGate);
       const stream = new MockStream([{ type: 'text_delta', text: 'second terminal' }]);
       stream.finalOutput = 'second terminal';
       return stream;
@@ -220,7 +222,7 @@ it('rejects an aborted terminal-less active stream and retains queued work pause
     },
     async startStream(input: unknown) {
       inputs.push(input);
-      if (inputs.length === 1) return new GatedStream('', firstGate) as unknown as AgentStream;
+      if (inputs.length === 1) return new GatedStream('', firstGate);
       const stream = new MockStream([{ type: 'text_delta', text: 'second terminal' }]);
       stream.finalOutput = 'second terminal';
       return stream;

@@ -6,21 +6,20 @@ import {
   type StreamProcessorOptions,
   type StreamProcessorDeps,
 } from './stream-event-processor.js';
-import type { AgentStream } from './agent-stream.js';
+import { createAgentStream, isAgentStream, type AgentStream } from './agent-stream.js';
 import { ApplicationRunLoop } from './agent-runtime/application-run-loop.js';
 import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 
 const logger = new LoggingService({ disableLogging: true });
 
-const makeStream = (events: unknown[], extras: any = {}): AgentStream => {
-  return {
+const makeStream = (events: unknown[], extras: any = {}): AgentStream =>
+  createAgentStream({
     [Symbol.asyncIterator]: async function* () {
       for (const e of events) yield e;
     },
     completed: Promise.resolve(extras.completed ?? null),
     ...extras,
-  } as any;
-};
+  });
 
 const baseOpts = (): StreamProcessorOptions => ({
   toolCallArgumentsById: new Map(),
@@ -29,6 +28,19 @@ const baseOpts = (): StreamProcessorOptions => ({
 });
 
 const baseDeps = (): StreamProcessorDeps => ({ logger, sessionId: 'test-session' });
+
+it('rejects an unbranded compatible stream at the application boundary', async () => {
+  const stream = {
+    [Symbol.asyncIterator]: async function* () {
+      yield { type: 'text_delta', text: 'untrusted' };
+    },
+    completed: Promise.resolve(null),
+  } as unknown as AgentStream;
+
+  await expect(processStreamEvents(stream, createStreamAccumulator(), baseOpts(), baseDeps()).next()).rejects.toThrow(
+    'Expected a branded AgentStream',
+  );
+});
 
 it('emits text_delta events with accumulated fullText', async () => {
   const stream = makeStream([
@@ -499,6 +511,7 @@ it('keeps authoritative application-loop totals, including cache writes, through
     } as any,
     'measure',
   );
+  expect(isAgentStream(stream)).toBe(true);
   const acc = createStreamAccumulator();
   for await (const _ of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
     void _;

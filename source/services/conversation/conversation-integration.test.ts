@@ -2,6 +2,7 @@ import { it, expect } from 'vitest';
 import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import { ConversationService as ProductionConversationService } from './conversation-service.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { createAgentStream } from '../agent-stream.js';
 
 class ConversationService extends ProductionConversationService {
   constructor(options: Omit<ConstructorParameters<typeof ProductionConversationService>[0], 'toolOwnership'>) {
@@ -46,6 +47,7 @@ class MockStream {
     this.history = [];
     this.finalOutput = '';
     this.output = [];
+    createAgentStream(this as never);
   }
 
   async *[Symbol.asyncIterator](): AsyncGenerator<any, void, unknown> {

@@ -14,7 +14,9 @@ async function productionSources(directory: string): Promise<string[]> {
   for (const entry of entries) {
     const fullPath = path.join(directory, entry.name);
     if (entry.isDirectory()) files.push(...(await productionSources(fullPath)));
-    else if (entry.isFile() && fullPath.endsWith('.ts') && !fullPath.endsWith('.test.ts')) files.push(fullPath);
+    else if (entry.isFile() && /\.(ts|tsx)$/.test(fullPath) && !/\.(test|spec)\.(ts|tsx)$/.test(fullPath)) {
+      files.push(fullPath);
+    }
   }
   return files;
 }

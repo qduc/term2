@@ -11,7 +11,7 @@ import { ConversationLogger } from '../logging/conversation-logger.js';
 import { ProviderContinuity } from '../provider-continuity.js';
 import { OpenAICandidateObserver } from '../openai-candidate-observer.js';
 import { DefaultOpenAIRootCheckpointLifecycleObserver } from '../openai-root-checkpoint-lifecycle-observer.js';
-import type { AgentStream } from '../agent-stream.js';
+import { createAgentStream, type AgentStream } from '../agent-stream.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { GenerationGuard } from '../generation-guard.js';
 import { DefaultRecoveryExecutor } from '../retry/recovery-executor.js';
@@ -31,15 +31,17 @@ const makeJournal = () =>
     setSink: () => {},
   } as any);
 
-const makeStream = (events: unknown[], extras: Partial<AgentStream> = {}): AgentStream => {
-  return {
-    [Symbol.asyncIterator]: async function* () {
+const makeStream = (events: unknown[], extras: Partial<AgentStream> = {}): AgentStream =>
+  createAgentStream({
+    [Symbol.asyncIterator]: async function* (): AsyncGenerator<any> {
       for (const e of events) yield e;
     },
     completed: Promise.resolve(extras.completed ?? null),
+    history: [],
+    newItems: [],
+    output: [],
     ...extras,
-  } as unknown as AgentStream;
-};
+  });
 
 const createDeferred = <T>() => {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -601,7 +603,7 @@ it('SessionStreamProcessor.process() ignores a stale tool result that arrives wh
   const releaseSecond = createDeferred<void>();
   let secondPullStarted = false;
 
-  const stream = {
+  const stream = createAgentStream({
     [Symbol.asyncIterator]: async function* () {
       yield {
         type: 'item',
@@ -630,7 +632,10 @@ it('SessionStreamProcessor.process() ignores a stale tool result that arrives wh
       };
     },
     completed: Promise.resolve(null),
-  } as unknown as AgentStream;
+    history: [],
+    newItems: [],
+    output: [],
+  });
 
   const generator = processor.process(stream, {
     gen: token,
@@ -1488,7 +1493,13 @@ it('SessionStreamProcessor.process() records completed outputs in the live ledge
     state: {
       journalSnapshot: [],
       addedUserMessage: false,
-      stream: { completed: Promise.resolve(null) } as unknown as AgentStream,
+      stream: createAgentStream({
+        [Symbol.asyncIterator]: async function* () {},
+        completed: Promise.resolve(null),
+        history: [],
+        newItems: [],
+        output: [],
+      }),
     },
     retryCounts: {
       transientRetryCount: 0,

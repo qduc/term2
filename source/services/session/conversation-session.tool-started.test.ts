@@ -2,6 +2,7 @@ import { it, expect } from 'vitest';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { LogEvent } from '../logging/conversation-log-events.js';
 import { createConversationSession } from '../../test-helpers/conversation-session-with-adapter.js';
+import { createAgentStream } from '../agent-stream.js';
 
 const createMockLogger = () => {
   const events: Array<{
@@ -55,6 +56,7 @@ class MockStream {
     this.newItems = [];
     this.history = [];
     this.finalOutput = '';
+    createAgentStream(this as never);
   }
 
   async *[Symbol.asyncIterator]() {

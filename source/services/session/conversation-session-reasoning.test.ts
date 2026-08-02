@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import { createConversationSession } from './session-composition.js';
 import { LoggingService } from '../logging/logging-service.js';
+import { createAgentStream } from '../agent-stream.js';
 
 const logger = new LoggingService({ disableLogging: true });
 
@@ -11,14 +12,19 @@ const createSessionContextService = () => ({
 
 it('ConversationSession extracts reasoning_content from stream', async () => {
   const mockAgentClient: any = {
-    startStream: async () => ({
-      [Symbol.asyncIterator]: async function* () {
-        yield { type: 'reasoning_delta', text: 'think' };
-        yield { type: 'reasoning_delta', text: 'ing' };
-        yield { type: 'text_delta', text: 'Hi' };
-      },
-      lastResponseId: 'resp-1',
-    }),
+    startStream: async () =>
+      createAgentStream({
+        [Symbol.asyncIterator]: async function* () {
+          yield { type: 'reasoning_delta', text: 'think' };
+          yield { type: 'reasoning_delta', text: 'ing' };
+          yield { type: 'text_delta', text: 'Hi' };
+        },
+        lastResponseId: 'resp-1',
+        completed: Promise.resolve(undefined),
+        history: [],
+        newItems: [],
+        output: [],
+      }),
   };
 
   const turnCoordinator = createConversationSession({

@@ -7,6 +7,7 @@ import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { createConversationRuntime } from '../conversation/conversation-runtime-factory.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { createAgentStream } from '../agent-stream.js';
 
 const managerInstances = vi.hoisted(
   () => [] as Array<{ onEvent?: (event: ConversationEvent) => void; startRunAsync: (request: any) => any }>,
@@ -79,13 +80,15 @@ it('projects background lifecycle without making the foreground message history 
   const client = {
     async startStream() {
       await bridge.runSubagentAsync({ role: 'explorer', task: 'inspect the project' });
-      return {
+      return createAgentStream({
         interruptions: [],
-        state: null,
+        state: undefined,
         history: [],
         newItems: [],
+        output: [],
         finalOutput: 'Background explorer created.',
         lastResponseId: null,
+        completed: Promise.resolve(undefined),
         async *[Symbol.asyncIterator]() {
           yield {
             type: 'item',
@@ -116,7 +119,7 @@ it('projects background lifecycle without making the foreground message history 
           };
           yield { type: 'text_delta', text: 'Background explorer created.' };
         },
-      };
+      });
     },
     abort: noop,
     continueRunStream: noop,

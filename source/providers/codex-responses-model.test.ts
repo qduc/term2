@@ -1,9 +1,14 @@
 import { it, expect, vi } from 'vitest';
 const withTrace = async <T>(_name: string, fn: () => Promise<T>): Promise<T> => fn();
-import { OpenAIResponsesModel, OpenAIResponsesWSModel } from './codex-responses-model.js';
+import {
+  CodexResponsesTransport,
+  OpenAIResponsesModel,
+  CodexResponsesModel,
+  CodexResponsesWSModel,
+} from './codex-responses-model.js';
 import type { IProviderTraffic } from '../services/service-interfaces.js';
 import { SessionContextService } from '../services/session/session-context-service.js';
-import { CodexResponsesModel, CodexResponsesWSModel, wrapCodexStream } from './codex-responses-model.js';
+import { wrapCodexStream } from './codex-responses-model.js';
 import { RetryingModel } from './retrying-model.js';
 import { AmbiguousModelOutcomeError } from '../services/retry/retry-errors.js';
 // Fixture mirrors the SSE shape that codex's responses endpoint emits: deltas
@@ -24,6 +29,29 @@ async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   for await (const ev of iter) out.push(ev);
   return out;
 }
+
+it('uses isolated injected Codex transports without changing model prototypes', async () => {
+  const baseFetch = Object.getOwnPropertyDescriptor(OpenAIResponsesModel.prototype, 'fetchResponse')?.value;
+  const firstTransport = new CodexResponsesTransport();
+  const secondTransport = new CodexResponsesTransport();
+  firstTransport.fetchResponse = async () =>
+    makeStream([{ type: 'response.completed', response: { id: 'response-first', output: [], usage: {} } }]);
+  secondTransport.fetchResponse = async () =>
+    makeStream([{ type: 'response.completed', response: { id: 'response-second', output: [], usage: {} } }]);
+
+  const first = new CodexResponsesModel({} as any, 'gpt-test', undefined, undefined, firstTransport);
+  const second = new CodexResponsesModel({} as any, 'gpt-test', undefined, undefined, secondTransport);
+  const request = { input: [], tools: [] };
+
+  const firstEvents = await collect(first.stream(request));
+  const secondEvents = await collect(second.stream(request));
+
+  expect(firstEvents.find((event: any) => event.type === 'completion')).toMatchObject({ responseId: 'response-first' });
+  expect(secondEvents.find((event: any) => event.type === 'completion')).toMatchObject({
+    responseId: 'response-second',
+  });
+  expect(Object.getOwnPropertyDescriptor(OpenAIResponsesModel.prototype, 'fetchResponse')?.value).toBe(baseFetch);
+});
 
 it('wrapCodexStream reconstructs response.completed.output from streamed output_item.done items', async () => {
   const item = {
@@ -271,13 +299,11 @@ it('wrapCodexStream warns with metadata when reconstructed output is suspiciousl
 
 // Integration check: confirm CodexResponsesModel.stream threads
 // the stream through wrapCodexStream so a Codex-style terminal frame with
-// empty output gets rebuilt into a populated response_done event. We stub the
-// parent's `fetchResponse` on the prototype so our subclass override (which
-// delegates to super) sees a controlled stream without needing a real OpenAI
-// client.
-it.sequential('CodexResponsesModel.stream yields completion with reconstructed output', async () => {
-  const original = (OpenAIResponsesModel.prototype as any).fetchResponse;
-  (OpenAIResponsesModel.prototype as any).fetchResponse = async function () {
+// empty output gets rebuilt into a populated completion event. The owned
+// transport dependency supplies a controlled stream without a real client.
+it('CodexResponsesModel.stream yields completion with reconstructed output', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  transport.fetchResponse = async function () {
     return makeStream([
       { type: 'response.created', response: { id: 'resp_1' } },
       {
@@ -303,7 +329,7 @@ it.sequential('CodexResponsesModel.stream yields completion with reconstructed o
   };
 
   try {
-    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex', transport);
     const request: any = { input: [], tools: [] };
     const events = await collect(model.stream(request));
 
@@ -312,13 +338,12 @@ it.sequential('CodexResponsesModel.stream yields completion with reconstructed o
     expect(done.output.length).toBe(1);
     expect(done.output[0].type).toBe('message');
   } finally {
-    (OpenAIResponsesModel.prototype as any).fetchResponse = original;
   }
 });
 
-it.sequential('CodexResponsesModel.stream tolerates missing terminal response.output', async () => {
-  const original = (OpenAIResponsesModel.prototype as any).fetchResponse;
-  (OpenAIResponsesModel.prototype as any).fetchResponse = async function () {
+it('CodexResponsesModel.stream tolerates missing terminal response.output', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  transport.fetchResponse = async function () {
     return makeStream([
       { type: 'response.created', response: { id: 'resp_missing_output' } },
       {
@@ -343,7 +368,7 @@ it.sequential('CodexResponsesModel.stream tolerates missing terminal response.ou
   };
 
   try {
-    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex', transport);
     const request: any = { input: [], tools: [] };
     const events = await collect(model.stream(request));
 
@@ -351,13 +376,12 @@ it.sequential('CodexResponsesModel.stream tolerates missing terminal response.ou
     expect(done).toBeTruthy();
     expect(done.output.length).toBe(1);
   } finally {
-    (OpenAIResponsesModel.prototype as any).fetchResponse = original;
   }
 });
 
-it.sequential('CodexResponsesModel.buildResponsesCreateRequest merges Codex include into requestData.include', () => {
-  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
+it('CodexResponsesModel.buildResponsesCreateRequest merges Codex include into requestData.include', () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  transport.buildResponsesCreateRequest = function () {
     return {
       requestData: {
         include: ['file_search_call.results'],
@@ -368,7 +392,7 @@ it.sequential('CodexResponsesModel.buildResponsesCreateRequest merges Codex incl
   };
 
   try {
-    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex', transport);
     const built = (model as any).buildResponsesCreateRequest(
       {
         input: [],
@@ -380,7 +404,6 @@ it.sequential('CodexResponsesModel.buildResponsesCreateRequest merges Codex incl
 
     expect(built.requestData.include).toEqual(['file_search_call.results', 'reasoning.encrypted_content']);
   } finally {
-    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
   }
 });
 
@@ -435,9 +458,9 @@ it('Codex HTTP writes every supported request setting and the abort signal to th
   expect(capturedOptions).toEqual({ signal: controller.signal, headers: { 'x-test': 'yes' } });
 });
 
-it.sequential('CodexResponsesModel.buildResponsesCreateRequest strips temperature from requestData', () => {
-  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
+it('CodexResponsesModel.buildResponsesCreateRequest strips temperature from requestData', () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  transport.buildResponsesCreateRequest = function () {
     return {
       requestData: {
         temperature: 0.2,
@@ -448,18 +471,17 @@ it.sequential('CodexResponsesModel.buildResponsesCreateRequest strips temperatur
   };
 
   try {
-    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex', transport);
     const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [], temperature: 0.2 }, true);
 
     expect('temperature' in built.requestData).toBe(false);
   } finally {
-    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
   }
 });
 
-it.sequential('CodexResponsesModel.buildResponsesCreateRequest forwards the Codex prompt cache key', () => {
-  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
+it('CodexResponsesModel.buildResponsesCreateRequest forwards the Codex prompt cache key', () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  transport.buildResponsesCreateRequest = function () {
     return {
       requestData: {
         include: [],
@@ -471,7 +493,7 @@ it.sequential('CodexResponsesModel.buildResponsesCreateRequest forwards the Code
   };
 
   try {
-    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex', transport);
     const built = (model as any).buildResponsesCreateRequest(
       { input: [], tools: [], codex: { promptCacheKey: 'conv_123' } },
       true,
@@ -480,14 +502,13 @@ it.sequential('CodexResponsesModel.buildResponsesCreateRequest forwards the Code
     expect(built.requestData.prompt_cache_key).toBe('conv_123');
     expect('temperature' in built.requestData).toBe(false);
   } finally {
-    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
   }
 });
 
-it.sequential('Codex request capture records the exact normalized suffix projection without changing it', () => {
+it('Codex request capture records the exact normalized suffix projection without changing it', () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const captures: any[] = [];
-  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
+  transport.buildResponsesCreateRequest = function () {
     return {
       requestData: {
         model: 'gpt-5-codex',
@@ -498,9 +519,15 @@ it.sequential('Codex request capture records the exact normalized suffix project
     };
   };
   try {
-    const model = new CodexResponsesModel({} as any, 'gpt-5-codex', undefined, {
-      record: (projection) => captures.push(projection),
-    });
+    const model = new CodexResponsesModel(
+      {} as any,
+      'gpt-5-codex',
+      undefined,
+      {
+        record: (projection) => captures.push(projection),
+      },
+      transport,
+    );
     const built = (model as any).buildResponsesCreateRequest(
       { input: [], tools: [], codex: { promptCacheKey: 'cache-key' } },
       true,
@@ -520,13 +547,12 @@ it.sequential('Codex request capture records the exact normalized suffix project
     ]);
     expect(built.requestData).toEqual(captures[0].requestData);
   } finally {
-    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
   }
 });
 
-it.sequential('CodexResponsesModel sends gpt-5.6-luna through the Responses Lite protocol', () => {
-  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
+it('CodexResponsesModel sends gpt-5.6-luna through the Responses Lite protocol', () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  transport.buildResponsesCreateRequest = function () {
     return {
       requestData: {
         instructions: 'Follow the repository instructions.',
@@ -540,7 +566,7 @@ it.sequential('CodexResponsesModel sends gpt-5.6-luna through the Responses Lite
   };
 
   try {
-    const model = new CodexResponsesModel({} as any, 'gpt-5.6-luna');
+    const model = new CodexResponsesModel({} as any, 'gpt-5.6-luna', transport);
     const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
     expect(built.requestData.instructions).toBe('');
@@ -562,13 +588,12 @@ it.sequential('CodexResponsesModel sends gpt-5.6-luna through the Responses Lite
       { role: 'user', type: 'message', content: [{ type: 'text', text: 'Review this change.' }] },
     ]);
   } finally {
-    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
   }
 });
 
-it.sequential('CodexResponsesModel does not resend Luna developer instructions on chained requests', () => {
-  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
+it('CodexResponsesModel does not resend Luna developer instructions on chained requests', () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  transport.buildResponsesCreateRequest = function () {
     return {
       requestData: {
         previous_response_id: 'resp_previous',
@@ -582,7 +607,7 @@ it.sequential('CodexResponsesModel does not resend Luna developer instructions o
   };
 
   try {
-    const model = new CodexResponsesModel({} as any, 'gpt-5.6-luna');
+    const model = new CodexResponsesModel({} as any, 'gpt-5.6-luna', transport);
     const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
     expect(built.requestData.input).toEqual([
@@ -591,13 +616,12 @@ it.sequential('CodexResponsesModel does not resend Luna developer instructions o
     ]);
     expect(built.requestData.instructions).toBe('');
   } finally {
-    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
   }
 });
 
-it.sequential('CodexResponsesModel.buildResponsesCreateRequest strips replay item ids from input', () => {
-  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
+it('CodexResponsesModel.buildResponsesCreateRequest strips replay item ids from input', () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  transport.buildResponsesCreateRequest = function () {
     return {
       requestData: {
         input: [
@@ -614,7 +638,7 @@ it.sequential('CodexResponsesModel.buildResponsesCreateRequest strips replay ite
   };
 
   try {
-    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex', transport);
     const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
     expect('id' in built.requestData.input[0]).toBe(false);
@@ -624,92 +648,83 @@ it.sequential('CodexResponsesModel.buildResponsesCreateRequest strips replay ite
     expect('id' in built.requestData.input[3]).toBe(false);
     expect(built.requestData.input[4].id).toBe('ig_1');
   } finally {
-    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
   }
 });
 
-it.sequential(
-  'CodexResponsesModel.buildResponsesCreateRequest drops the camelCase callId key after adding call_id',
-  () => {
-    // codex.provider.ts's codexStream() builds tool_call/tool_result items as
-    // `{ type: 'function_call', id: ... }` / `{ type: 'function_call_output', id: ... }`
-    // (camelCase, no call_id) — the real shape a tool-call continuation sends.
-    // The Responses API rejects unknown parameters, so leaving `callId` on the
-    // object alongside the added `call_id` breaks every tool-call continuation.
-    const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
-    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
-      return {
-        requestData: {
-          input: [
-            { type: 'function_call', callId: 'call_1', name: 'shell', arguments: '{}' },
-            { type: 'function_call_output', callId: 'call_1', output: 'ok' },
-          ],
-        },
-        sdkRequestHeaders: {},
-        signal: undefined,
-      };
+it('CodexResponsesModel.buildResponsesCreateRequest drops the camelCase callId key after adding call_id', () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  // codex.provider.ts's codexStream() builds tool_call/tool_result items as
+  // `{ type: 'function_call', id: ... }` / `{ type: 'function_call_output', id: ... }`
+  // (camelCase, no call_id) — the real shape a tool-call continuation sends.
+  // The Responses API rejects unknown parameters, so leaving `callId` on the
+  // object alongside the added `call_id` breaks every tool-call continuation.
+  transport.buildResponsesCreateRequest = function () {
+    return {
+      requestData: {
+        input: [
+          { type: 'function_call', callId: 'call_1', name: 'shell', arguments: '{}' },
+          { type: 'function_call_output', callId: 'call_1', output: 'ok' },
+        ],
+      },
+      sdkRequestHeaders: {},
+      signal: undefined,
     };
+  };
 
-    try {
-      const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-      const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
+  try {
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex', transport);
+    const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
-      expect(built.requestData.input[0]).toEqual({
-        type: 'function_call',
-        call_id: 'call_1',
-        name: 'shell',
-        arguments: '{}',
-      });
-      expect(built.requestData.input[1]).toEqual({
-        type: 'function_call_output',
-        call_id: 'call_1',
-        output: 'ok',
-      });
-      expect('callId' in built.requestData.input[0]).toBe(false);
-      expect('callId' in built.requestData.input[1]).toBe(false);
-    } finally {
-      (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
-    }
-  },
-);
+    expect(built.requestData.input[0]).toEqual({
+      type: 'function_call',
+      call_id: 'call_1',
+      name: 'shell',
+      arguments: '{}',
+    });
+    expect(built.requestData.input[1]).toEqual({
+      type: 'function_call_output',
+      call_id: 'call_1',
+      output: 'ok',
+    });
+    expect('callId' in built.requestData.input[0]).toBe(false);
+    expect('callId' in built.requestData.input[1]).toBe(false);
+  } finally {
+  }
+});
 
-it.sequential(
-  'CodexResponsesModel.buildResponsesCreateRequest drops unpaired function calls for stateless fallback',
-  () => {
-    const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
-    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
-      return {
-        requestData: {
-          input: [
-            { role: 'user', type: 'message', content: [{ type: 'text', text: 'continue' }] },
-            { id: 'fc_1', type: 'function_call', call_id: 'call-paired', name: 'shell', arguments: '{}' },
-            { type: 'function_call_output', call_id: 'call-paired', output: 'ok' },
-            { id: 'fc_2', type: 'function_call', call_id: 'call-orphan', name: 'shell', arguments: '{}' },
-          ],
-        },
-        sdkRequestHeaders: {},
-        signal: undefined,
-      };
+it('CodexResponsesModel.buildResponsesCreateRequest drops unpaired function calls for stateless fallback', () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  transport.buildResponsesCreateRequest = function () {
+    return {
+      requestData: {
+        input: [
+          { role: 'user', type: 'message', content: [{ type: 'text', text: 'continue' }] },
+          { id: 'fc_1', type: 'function_call', call_id: 'call-paired', name: 'shell', arguments: '{}' },
+          { type: 'function_call_output', call_id: 'call-paired', output: 'ok' },
+          { id: 'fc_2', type: 'function_call', call_id: 'call-orphan', name: 'shell', arguments: '{}' },
+        ],
+      },
+      sdkRequestHeaders: {},
+      signal: undefined,
     };
+  };
 
-    try {
-      const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-      const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
+  try {
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex', transport);
+    const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
-      expect(built.requestData.previous_response_id).toBeUndefined();
-      expect(built.requestData.input.map((item: any) => item.call_id).filter(Boolean)).toEqual([
-        'call-paired',
-        'call-paired',
-      ]);
-    } finally {
-      (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
-    }
-  },
-);
+    expect(built.requestData.previous_response_id).toBeUndefined();
+    expect(built.requestData.input.map((item: any) => item.call_id).filter(Boolean)).toEqual([
+      'call-paired',
+      'call-paired',
+    ]);
+  } finally {
+  }
+});
 
-it.sequential('CodexResponsesModel.buildResponsesCreateRequest keeps function calls for chained requests', () => {
-  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
+it('CodexResponsesModel.buildResponsesCreateRequest keeps function calls for chained requests', () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  transport.buildResponsesCreateRequest = function () {
     return {
       requestData: {
         previous_response_id: 'resp_123',
@@ -721,19 +736,18 @@ it.sequential('CodexResponsesModel.buildResponsesCreateRequest keeps function ca
   };
 
   try {
-    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex', transport);
     const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
     expect(built.requestData.input).toEqual([
       { type: 'function_call', call_id: 'call-server-held', name: 'shell', arguments: '{}' },
     ]);
   } finally {
-    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
   }
 });
 
-it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed responses', async () => {
-  const original = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+it('CodexResponsesWSModel emits traffic logs for websocket streamed responses', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficCalls: Array<{ method: string; args: any }> = [];
 
   const mockProviderTraffic: IProviderTraffic = {
@@ -748,7 +762,7 @@ it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed r
     },
   };
 
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function () {
+  transport.fetchResponse = async function () {
     return makeStream([
       { type: 'response.created', response: { id: 'resp_ws_traffic' } },
       {
@@ -795,6 +809,7 @@ it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed r
       undefined,
       mockProviderTraffic as any,
       sessionContextService as any,
+      transport,
     );
     const request: any = { input: [], tools: [] };
 
@@ -809,12 +824,11 @@ it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed r
     expect(trafficCalls[0].args.headers.authorization).toBe('[REDACTED]');
     expect(trafficCalls[1].args.transport).toBe('websocket');
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = original;
   }
 });
 
-it.sequential('CodexResponsesWSModel sends only new input after a Responses-Lite prefix is established', async () => {
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+it('CodexResponsesWSModel sends only new input after a Responses-Lite prefix is established', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficBodies: any[] = [];
   const captures: any[] = [];
   let responseCount = 0;
@@ -827,7 +841,7 @@ it.sequential('CodexResponsesWSModel sends only new input after a Responses-Lite
     recordRequestFailed() {},
   };
 
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function () {
+  transport.fetchResponse = async function () {
     responseCount += 1;
     return makeStream([
       {
@@ -850,6 +864,7 @@ it.sequential('CodexResponsesWSModel sends only new input after a Responses-Lite
       } as any,
       undefined,
       { record: (projection) => captures.push(projection) },
+      transport,
     );
 
     const tool = { type: 'function', name: 'shell', parameters: { type: 'object' } };
@@ -889,12 +904,11 @@ it.sequential('CodexResponsesWSModel sends only new input after a Responses-Lite
     expect(captures.map((capture) => capture.requestData)).toEqual(trafficBodies);
     expect(captures.map((capture) => capture.transport)).toEqual(['websocket', 'websocket', 'websocket']);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
-it.sequential('CodexResponsesWSModel correlates Responses-Lite state across sequential streamed requests', async () => {
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+it('CodexResponsesWSModel correlates Responses-Lite state across sequential streamed requests', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficBodies: any[] = [];
   let responseCount = 0;
 
@@ -906,7 +920,7 @@ it.sequential('CodexResponsesWSModel correlates Responses-Lite state across sequ
     recordRequestFailed() {},
   };
 
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function () {
+  transport.fetchResponse = async function () {
     responseCount += 1;
     return makeStream([
       {
@@ -927,6 +941,7 @@ it.sequential('CodexResponsesWSModel correlates Responses-Lite state across sequ
         getContext: () => ({ sessionId: 'session-token', traceId: 'trace-token' } as any),
         runWithContext: <T>(_context: any, fn: () => T) => fn(),
       } as any,
+      transport,
     );
 
     const tool = { type: 'function', name: 'shell', parameters: { type: 'object' } };
@@ -961,13 +976,12 @@ it.sequential('CodexResponsesWSModel correlates Responses-Lite state across sequ
       expect.objectContaining({ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'second' }] }),
     ]);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
-it.sequential('CodexResponsesWSModel does not use wire state for non-Luna models', async () => {
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function () {
+it('CodexResponsesWSModel does not use wire state for non-Luna models', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  transport.fetchResponse = async function () {
     return makeStream([{ type: 'response.completed', response: { id: 'resp_nonluna', output: [], usage: {} } }]);
   };
 
@@ -982,6 +996,7 @@ it.sequential('CodexResponsesWSModel does not use wire state for non-Luna models
         getContext: () => ({ sessionId: 'session-nonluna', traceId: 'trace-nonluna' } as any),
         runWithContext: <T>(_context: any, fn: () => T) => fn(),
       } as any,
+      transport,
     );
 
     // Verify no tokens are stored for non-Luna requests.
@@ -999,14 +1014,13 @@ it.sequential('CodexResponsesWSModel does not use wire state for non-Luna models
       { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
     ]);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
-it.sequential('CodexResponsesWSModel marks Luna websocket requests as Responses Lite', async () => {
-  const original = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+it('CodexResponsesWSModel marks Luna websocket requests as Responses Lite', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   let seenRequest: any;
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
+  transport.fetchResponse = async function (request: any) {
     seenRequest = request;
     return makeStream([{ type: 'response.completed', response: { id: 'resp_luna', output: [], usage: {} } }]);
   };
@@ -1016,6 +1030,7 @@ it.sequential('CodexResponsesWSModel marks Luna websocket requests as Responses 
       { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
       'gpt-5.6-luna',
       { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+      transport,
     );
 
     await collect(model.stream({ input: [], tools: [] }));
@@ -1025,14 +1040,13 @@ it.sequential('CodexResponsesWSModel marks Luna websocket requests as Responses 
       ws_request_header_x_openai_internal_codex_responses_lite: 'true',
     });
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = original;
   }
 });
 
-it.sequential('CodexResponsesWSModel sends Codex turn identity metadata for Luna', async () => {
-  const original = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+it('CodexResponsesWSModel sends Codex turn identity metadata for Luna', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   let seenRequest: any;
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
+  transport.fetchResponse = async function (request: any) {
     seenRequest = request;
     return makeStream([{ type: 'response.completed', response: { id: 'resp_luna_identity', output: [], usage: {} } }]);
   };
@@ -1055,6 +1069,7 @@ it.sequential('CodexResponsesWSModel sends Codex turn identity metadata for Luna
         }),
         runWithContext: <T>(_context: any, fn: () => T) => fn(),
       } as any,
+      transport,
     );
 
     await collect(model.stream({ input: [], tools: [] }));
@@ -1085,14 +1100,13 @@ it.sequential('CodexResponsesWSModel sends Codex turn identity metadata for Luna
     });
     expect(typeof turnMetadata.turn_id).toBe('string');
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = original;
   }
 });
 
-it.sequential('CodexResponsesWSModel keeps turn identity stable across response continuations', async () => {
-  const original = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+it('CodexResponsesWSModel keeps turn identity stable across response continuations', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const seenRequests: any[] = [];
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
+  transport.fetchResponse = async function (request: any) {
     seenRequests.push(request);
     return makeStream([
       { type: 'response.completed', response: { id: 'resp_stable_identity', output: [], usage: {} } },
@@ -1118,6 +1132,7 @@ it.sequential('CodexResponsesWSModel keeps turn identity stable across response 
         }),
         runWithContext: <T>(_context: any, fn: () => T) => fn(),
       } as any,
+      transport,
     );
 
     await collect(model.stream({ input: [], tools: [] }));
@@ -1139,111 +1154,107 @@ it.sequential('CodexResponsesWSModel keeps turn identity stable across response 
       seenRequests[1].providerOptions.extraHeaders['x-codex-turn-metadata'],
     );
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = original;
   }
 });
 
-it.sequential(
-  'CodexResponsesWSModel logs reasoning and tool calls in choice payload matching HTTP/SSE logs',
-  async () => {
-    const trafficCalls: Array<{ method: string; args: any }> = [];
-    const original = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+it('CodexResponsesWSModel logs reasoning and tool calls in choice payload matching HTTP/SSE logs', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const trafficCalls: Array<{ method: string; args: any }> = [];
 
-    const mockProviderTraffic: IProviderTraffic = {
-      recordRequestStart(input) {
-        trafficCalls.push({ method: 'recordRequestStart', args: input });
-      },
-      async recordResponseReceived(input) {
-        trafficCalls.push({ method: 'recordResponseReceived', args: input });
-      },
-      recordRequestFailed(input) {
-        trafficCalls.push({ method: 'recordRequestFailed', args: input });
-      },
-    };
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficCalls.push({ method: 'recordRequestStart', args: input });
+    },
+    async recordResponseReceived(input) {
+      trafficCalls.push({ method: 'recordResponseReceived', args: input });
+    },
+    recordRequestFailed(input) {
+      trafficCalls.push({ method: 'recordRequestFailed', args: input });
+    },
+  };
 
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function () {
-      return makeStream([
-        { type: 'response.created', response: { id: 'resp_ws_reasoning_tool' } },
-        {
-          type: 'response.output_item.done',
-          output_index: 0,
-          item: {
-            type: 'reasoning',
-            id: 'rs_123',
-            text: 'Let me think about this request.',
-            summary: [],
-          },
+  transport.fetchResponse = async function () {
+    return makeStream([
+      { type: 'response.created', response: { id: 'resp_ws_reasoning_tool' } },
+      {
+        type: 'response.output_item.done',
+        output_index: 0,
+        item: {
+          type: 'reasoning',
+          id: 'rs_123',
+          text: 'Let me think about this request.',
+          summary: [],
         },
-        {
-          type: 'response.output_item.done',
-          output_index: 1,
-          item: {
-            type: 'function_call',
-            id: 'fc_123',
-            call_id: 'call_123',
-            name: 'shell',
-            arguments: '{"command":"ls"}',
-          },
+      },
+      {
+        type: 'response.output_item.done',
+        output_index: 1,
+        item: {
+          type: 'function_call',
+          id: 'fc_123',
+          call_id: 'call_123',
+          name: 'shell',
+          arguments: '{"command":"ls"}',
         },
-        {
-          type: 'response.completed',
-          response: {
-            id: 'resp_ws_reasoning_tool',
-            output: [],
-            usage: { input_tokens: 5, output_tokens: 6, total_tokens: 11 },
-          },
+      },
+      {
+        type: 'response.completed',
+        response: {
+          id: 'resp_ws_reasoning_tool',
+          output: [],
+          usage: { input_tokens: 5, output_tokens: 6, total_tokens: 11 },
         },
-      ]);
-    };
+      },
+    ]);
+  };
 
-    const sessionContextService = {
-      getContext: () => ({
-        sessionId: 'sess_ws_2',
-        sessionStartedAt: '2025-01-01T00:00:00.000Z',
-        mode: 'websocket',
-        traceId: 'trace-session-2',
-      }),
-      runWithContext: <T>(_context: any, fn: () => T) => fn(),
-    };
-    const tokenManager = {
-      getOrRefreshAccessToken: async () => 'token',
-      getAccountId: () => 'acc_123',
-    };
+  const sessionContextService = {
+    getContext: () => ({
+      sessionId: 'sess_ws_2',
+      sessionStartedAt: '2025-01-01T00:00:00.000Z',
+      mode: 'websocket',
+      traceId: 'trace-session-2',
+    }),
+    runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
 
-    try {
-      const model = new CodexResponsesWSModel(
-        { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
-        'gpt-5-codex',
-        tokenManager as any,
-        undefined,
-        mockProviderTraffic as any,
-        sessionContextService as any,
-      );
-      const request: any = { input: [], tools: [] };
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5-codex',
+      tokenManager as any,
+      undefined,
+      mockProviderTraffic as any,
+      sessionContextService as any,
+      transport,
+    );
+    const request: any = { input: [], tools: [] };
 
-      await collect(model.stream(request));
+    await collect(model.stream(request));
 
-      expect(trafficCalls.length).toBe(2);
-      expect(trafficCalls[0].method).toBe('recordRequestStart');
-      expect(trafficCalls[1].method).toBe('recordResponseReceived');
+    expect(trafficCalls.length).toBe(2);
+    expect(trafficCalls[0].method).toBe('recordRequestStart');
+    expect(trafficCalls[1].method).toBe('recordResponseReceived');
 
-      const receivedInput = trafficCalls[1].args;
-      expect(receivedInput.transport).toBe('websocket');
-      expect(receivedInput.response).toBeTruthy();
-      expect(receivedInput.response.id).toBe('resp_ws_reasoning_tool');
-      expect(receivedInput.response.usage).toEqual({ input_tokens: 5, output_tokens: 6, total_tokens: 11 });
-      expect(Array.isArray(receivedInput.response.output)).toBe(true);
-    } finally {
-      (OpenAIResponsesWSModel.prototype as any).fetchResponse = original;
-    }
-  },
-);
+    const receivedInput = trafficCalls[1].args;
+    expect(receivedInput.transport).toBe('websocket');
+    expect(receivedInput.response).toBeTruthy();
+    expect(receivedInput.response.id).toBe('resp_ws_reasoning_tool');
+    expect(receivedInput.response.usage).toEqual({ input_tokens: 5, output_tokens: 6, total_tokens: 11 });
+    expect(Array.isArray(receivedInput.response.output)).toBe(true);
+  } finally {
+  }
+});
 
-it.sequential('CodexResponsesModel unary path runs as stream under the hood', async () => {
-  const original = (OpenAIResponsesModel.prototype as any).fetchResponse;
+it('CodexResponsesModel unary path runs as stream under the hood', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   let receivedStreamArg = false;
 
-  (OpenAIResponsesModel.prototype as any).fetchResponse = async function (_request: any, stream: boolean) {
+  transport.fetchResponse = async function (_request: any, stream: boolean) {
     receivedStreamArg = stream;
     return makeStream([
       { type: 'response.created', response: { id: 'resp_unary' } },
@@ -1270,7 +1281,7 @@ it.sequential('CodexResponsesModel unary path runs as stream under the hood', as
   };
 
   try {
-    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex', transport);
     const request: any = { input: [], tools: [] };
 
     // Call getResponse which defaults to stream: false
@@ -1282,15 +1293,14 @@ it.sequential('CodexResponsesModel unary path runs as stream under the hood', as
     expect(response.output[0].id).toBe('msg_unary');
     expect(response.usage.total_tokens).toBe(5);
   } finally {
-    (OpenAIResponsesModel.prototype as any).fetchResponse = original;
   }
 });
 
-it.sequential('CodexResponsesWSModel unary path runs as stream under the hood', async () => {
-  const original = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+it('CodexResponsesWSModel unary path runs as stream under the hood', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   let receivedStreamArg = false;
 
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (_request: any, stream: boolean) {
+  transport.fetchResponse = async function (_request: any, stream: boolean) {
     receivedStreamArg = stream;
     return makeStream([
       { type: 'response.created', response: { id: 'resp_ws_unary' } },
@@ -1327,7 +1337,7 @@ it.sequential('CodexResponsesWSModel unary path runs as stream under the hood', 
   };
 
   try {
-    const model = new CodexResponsesWSModel(mockClient as any, 'gpt-5-codex', tokenManager as any);
+    const model = new CodexResponsesWSModel(mockClient as any, 'gpt-5-codex', tokenManager as any, transport);
     const request: any = { input: [], tools: [] };
 
     // Call getResponse which defaults to stream: false
@@ -1339,7 +1349,6 @@ it.sequential('CodexResponsesWSModel unary path runs as stream under the hood', 
     expect(response.output[0].id).toBe('msg_ws_unary');
     expect(response.usage.total_tokens).toBe(7);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = original;
   }
 });
 
@@ -1384,272 +1393,255 @@ it('wrapCodexStream throws a detailed provider error when receiving a failed res
   }).rejects.toThrow('Codex provider error: Model context length exceeded');
 });
 
-it.sequential(
-  'CodexResponsesWSModel injects Codex previous response id and trims replayed tool-continuation input',
-  async () => {
-    const seenRequests: any[] = [];
+it('CodexResponsesWSModel injects Codex previous response id and trims replayed tool-continuation input', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  const toolOutput = {
+    type: 'tool_result',
+    id: 'call-read',
+    output: 'done',
+  };
+  transport.fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: seenRequests.length === 1 ? 'resp-1' : 'resp-2',
+          output: [],
+          usage: {},
+        },
+      } as any,
+    ]);
+  };
+
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5-codex',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+      transport,
+    );
+
+    for await (const _event of model.stream({
+      input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] }],
+      tools: [],
+    } as any)) {
+    }
+
+    expect(seenRequests.length).toBe(2);
+    expect(seenRequests[0].providerOptions?.generate).toBe(false);
+    expect(seenRequests[0].input).toEqual([]);
+    expect(seenRequests[1].previousResponseId).toBe('resp-1');
+    expect(seenRequests[1].input).toEqual([
+      { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] },
+    ]);
+
+    for await (const _event of model.stream({
+      input: [
+        { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] },
+        { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'I will inspect it.' }] },
+        { type: 'function_call', call_id: 'call-read', name: 'read_file', arguments: '{}' },
+        toolOutput,
+      ],
+      tools: [],
+    } as any)) {
+    }
+
+    expect(seenRequests.length).toBe(3);
+    expect(seenRequests[2].previousResponseId).toBe('resp-2');
+    expect(seenRequests[2].input).toEqual([toolOutput]);
+
+    const latestUser = { type: 'message', role: 'user', content: [{ type: 'text', text: 'summarize' }] };
+    for await (const _event of model.stream({
+      previousResponseId: 'resp-explicit',
+      input: [
+        { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] },
+        { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'Done.' }] },
+        latestUser,
+      ],
+      tools: [],
+    } as any)) {
+    }
+
+    expect(seenRequests.length).toBe(4);
+    expect(seenRequests[3].previousResponseId).toBe('resp-explicit');
+    expect(seenRequests[3].input).toEqual([latestUser]);
+  } finally {
+  }
+});
+
+it('CodexResponsesWSModel isolates implicit response history for logical runs sharing a foreground session', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  const sessionContextService = new SessionContextService();
+  transport.fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    const userMessage = request.input?.find((item: any) => item?.role === 'user');
+    const userText = Array.isArray(userMessage?.content) ? userMessage.content[0]?.text : userMessage?.content;
+    const responseId =
+      userText === 'chain-a' ? 'resp-chain-a' : userText === 'chain-b' ? 'resp-chain-b' : `resp-${seenRequests.length}`;
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: { id: responseId, output: [], usage: {} },
+      } as any,
+    ]);
+  };
+
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5-codex',
+    {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'acc_123',
+    } as any,
+    undefined,
+    undefined,
+    sessionContextService,
+    transport,
+  );
+  const contextFor = (providerHistoryKey: string) => ({
+    sessionId: 'shared-parent-session',
+    sessionStartedAt: '2026-07-13T00:00:00.000Z',
+    providerHistoryKey,
+  });
+  const openChain = async (chain: string) => {
+    await collect(
+      model.stream({
+        input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: chain }] }],
+        tools: [],
+      } as any),
+    );
+  };
+
+  try {
+    await sessionContextService.runWithContext(contextFor('nested-run-a'), () => openChain('chain-a'));
+    await sessionContextService.runWithContext(contextFor('nested-run-b'), () => openChain('chain-b'));
+
     const toolOutput = {
       type: 'tool_result',
-      id: 'call-read',
-      output: 'done',
+      id: 'call-a',
+      output: 'result-a',
     };
-
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
-      seenRequests.push(request);
-      return makeStream([
-        {
-          type: 'response.completed',
-          response: {
-            id: seenRequests.length === 1 ? 'resp-1' : 'resp-2',
-            output: [],
-            usage: {},
-          },
-        } as any,
-      ]);
-    };
-
-    const mockClient = {
-      baseURL: 'https://api.openai.com',
-      apiKey: 'test-key',
-      _options: {},
-    };
-    const tokenManager = {
-      getOrRefreshAccessToken: async () => 'token',
-      getAccountId: () => 'acc_123',
-    };
-
-    try {
-      const model = new CodexResponsesWSModel(
-        mockClient as any,
-        'gpt-5-codex',
-        tokenManager as any,
-        undefined,
-        undefined,
-        {
-          getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
-          runWithContext: <T>(_context: any, fn: () => T) => fn(),
-        },
-      );
-
-      for await (const _event of model.stream({
-        input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] }],
-        tools: [],
-      } as any)) {
-      }
-
-      expect(seenRequests.length).toBe(2);
-      expect(seenRequests[0].providerOptions?.generate).toBe(false);
-      expect(seenRequests[0].input).toEqual([]);
-      expect(seenRequests[1].previousResponseId).toBe('resp-1');
-      expect(seenRequests[1].input).toEqual([
-        { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] },
-      ]);
-
-      for await (const _event of model.stream({
-        input: [
-          { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] },
-          { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'I will inspect it.' }] },
-          { type: 'function_call', call_id: 'call-read', name: 'read_file', arguments: '{}' },
-          toolOutput,
-        ],
-        tools: [],
-      } as any)) {
-      }
-
-      expect(seenRequests.length).toBe(3);
-      expect(seenRequests[2].previousResponseId).toBe('resp-2');
-      expect(seenRequests[2].input).toEqual([toolOutput]);
-
-      const latestUser = { type: 'message', role: 'user', content: [{ type: 'text', text: 'summarize' }] };
-      for await (const _event of model.stream({
-        previousResponseId: 'resp-explicit',
-        input: [
-          { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] },
-          { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'Done.' }] },
-          latestUser,
-        ],
-        tools: [],
-      } as any)) {
-      }
-
-      expect(seenRequests.length).toBe(4);
-      expect(seenRequests[3].previousResponseId).toBe('resp-explicit');
-      expect(seenRequests[3].input).toEqual([latestUser]);
-    } finally {
-      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
-    }
-  },
-);
-
-it.sequential(
-  'CodexResponsesWSModel isolates implicit response history for logical runs sharing a foreground session',
-  async () => {
-    const seenRequests: any[] = [];
-    const sessionContextService = new SessionContextService();
-
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
-      seenRequests.push(request);
-      const userMessage = request.input?.find((item: any) => item?.role === 'user');
-      const userText = Array.isArray(userMessage?.content) ? userMessage.content[0]?.text : userMessage?.content;
-      const responseId =
-        userText === 'chain-a'
-          ? 'resp-chain-a'
-          : userText === 'chain-b'
-          ? 'resp-chain-b'
-          : `resp-${seenRequests.length}`;
-      return makeStream([
-        {
-          type: 'response.completed',
-          response: { id: responseId, output: [], usage: {} },
-        } as any,
-      ]);
-    };
-
-    const model = new CodexResponsesWSModel(
-      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
-      'gpt-5-codex',
-      {
-        getOrRefreshAccessToken: async () => 'token',
-        getAccountId: () => 'acc_123',
-      } as any,
-      undefined,
-      undefined,
-      sessionContextService,
-    );
-    const contextFor = (providerHistoryKey: string) => ({
-      sessionId: 'shared-parent-session',
-      sessionStartedAt: '2026-07-13T00:00:00.000Z',
-      providerHistoryKey,
-    });
-    const openChain = async (chain: string) => {
-      await collect(
+    await sessionContextService.runWithContext(contextFor('nested-run-a'), () =>
+      collect(
         model.stream({
-          input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: chain }] }],
+          input: [
+            { role: 'user', type: 'message', content: [{ type: 'text', text: 'chain-a' }] },
+            { type: 'function_call', call_id: 'call-a', name: 'read_file', arguments: '{}' },
+            toolOutput,
+          ],
           tools: [],
         } as any),
-      );
-    };
+      ),
+    );
 
-    try {
-      await sessionContextService.runWithContext(contextFor('nested-run-a'), () => openChain('chain-a'));
-      await sessionContextService.runWithContext(contextFor('nested-run-b'), () => openChain('chain-b'));
+    const continuation = seenRequests.at(-1);
+    expect(continuation.previousResponseId).toBe('resp-chain-a');
+    expect(continuation.input).toEqual([toolOutput]);
+  } finally {
+  }
+});
 
-      const toolOutput = {
-        type: 'tool_result',
-        id: 'call-a',
-        output: 'result-a',
-      };
-      await sessionContextService.runWithContext(contextFor('nested-run-a'), () =>
-        collect(
-          model.stream({
-            input: [
-              { role: 'user', type: 'message', content: [{ type: 'text', text: 'chain-a' }] },
-              { type: 'function_call', call_id: 'call-a', name: 'read_file', arguments: '{}' },
-              toolOutput,
-            ],
-            tools: [],
-          } as any),
-        ),
-      );
-
-      const continuation = seenRequests.at(-1);
-      expect(continuation.previousResponseId).toBe('resp-chain-a');
-      expect(continuation.input).toEqual([toolOutput]);
-    } finally {
-      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
-    }
-  },
-);
-
-it.sequential(
-  'CodexResponsesWSModel keeps every interleaved parallel tool output when trimming a tool-continuation delta',
-  async () => {
-    const seenRequests: any[] = [];
-
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
-      seenRequests.push(request);
-      return makeStream([
-        {
-          type: 'response.completed',
-          response: {
-            id: 'resp-paired',
-            output: [],
-            usage: {},
-          },
-        } as any,
-      ]);
-    };
-
-    const mockClient = {
-      baseURL: 'https://api.openai.com',
-      apiKey: 'test-key',
-      _options: {},
-    };
-    const tokenManager = {
-      getOrRefreshAccessToken: async () => 'token',
-      getAccountId: () => 'acc_123',
-    };
-
-    // A prior Codex response issued five parallel function calls — four
-    // read_code_outline calls plus a shell. The reconstructed continuation
-    // history pairs each call with its result, and the shell pair lands last
-    // (it ran after the reads). Only that final result forms a contiguous
-    // trailing run, so the legacy delta trim kept just the shell output and
-    // dropped the four read outputs, which the server rejected with a 400
-    // ("No tool output found for function call …"). The fix must keep every
-    // output whose call was produced by the previous response.
-    const parallelReads = [1, 2, 3, 4].map((n) => ({
-      call: { type: 'function_call', call_id: `call-read-${n}`, name: 'read_code_outline', arguments: '{}' },
-      output: { type: 'tool_result', id: `call-read-${n}`, output: `outline-${n}` },
-    }));
-    const shellPair = {
-      call: { type: 'tool_call', id: 'call-shell', name: 'shell', arguments: '{}' },
-      output: { type: 'tool_result', id: 'call-shell', output: 'grep result' },
-    };
-
-    try {
-      const model = new CodexResponsesWSModel(
-        mockClient as any,
-        'gpt-5-codex',
-        tokenManager as any,
-        undefined,
-        undefined,
-        {
-          getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
-          runWithContext: <T>(_context: any, fn: () => T) => fn(),
-        },
-      );
-
-      for await (const _event of model.stream({
-        previousResponseId: 'resp-prev',
-        input: [
-          { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect the repo' }] },
-          { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'I will inspect it.' }] },
-          ...parallelReads.flatMap((pair) => [pair.call, pair.output]),
-          shellPair.call,
-          shellPair.output,
-        ],
-        tools: [],
-      } as any)) {
-      }
-
-      expect(seenRequests.length).toBe(1);
-      expect(seenRequests[0].previousResponseId).toBe('resp-prev');
-      expect(seenRequests[0].input).toEqual([...parallelReads.map((pair) => pair.output), shellPair.output]);
-    } finally {
-      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
-    }
-  },
-);
-
-it.sequential('CodexResponsesWSModel drops tool outputs already consumed by the previous response', async () => {
+it('CodexResponsesWSModel keeps every interleaved parallel tool output when trimming a tool-continuation delta', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const seenRequests: any[] = [];
+  transport.fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: 'resp-paired',
+          output: [],
+          usage: {},
+        },
+      } as any,
+    ]);
+  };
 
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+
+  // A prior Codex response issued five parallel function calls — four
+  // read_code_outline calls plus a shell. The reconstructed continuation
+  // history pairs each call with its result, and the shell pair lands last
+  // (it ran after the reads). Only that final result forms a contiguous
+  // trailing run, so the legacy delta trim kept just the shell output and
+  // dropped the four read outputs, which the server rejected with a 400
+  // ("No tool output found for function call …"). The fix must keep every
+  // output whose call was produced by the previous response.
+  const parallelReads = [1, 2, 3, 4].map((n) => ({
+    call: { type: 'function_call', call_id: `call-read-${n}`, name: 'read_code_outline', arguments: '{}' },
+    output: { type: 'tool_result', id: `call-read-${n}`, output: `outline-${n}` },
+  }));
+  const shellPair = {
+    call: { type: 'tool_call', id: 'call-shell', name: 'shell', arguments: '{}' },
+    output: { type: 'tool_result', id: 'call-shell', output: 'grep result' },
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5-codex',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+      transport,
+    );
+
+    for await (const _event of model.stream({
+      previousResponseId: 'resp-prev',
+      input: [
+        { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect the repo' }] },
+        { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'I will inspect it.' }] },
+        ...parallelReads.flatMap((pair) => [pair.call, pair.output]),
+        shellPair.call,
+        shellPair.output,
+      ],
+      tools: [],
+    } as any)) {
+    }
+
+    expect(seenRequests.length).toBe(1);
+    expect(seenRequests[0].previousResponseId).toBe('resp-prev');
+    expect(seenRequests[0].input).toEqual([...parallelReads.map((pair) => pair.output), shellPair.output]);
+  } finally {
+  }
+});
+
+it('CodexResponsesWSModel drops tool outputs already consumed by the previous response', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  transport.fetchResponse = async function (request: any) {
     seenRequests.push(request);
     const responseIds = ['resp-after-first-batch', 'resp-after-second-batch', 'resp-after-third-batch'];
     return makeStream([
@@ -1696,6 +1688,7 @@ it.sequential('CodexResponsesWSModel drops tool outputs already consumed by the 
         getContext: () => ({ sessionId: 'session-consumed-tool-outputs', traceId: 'trace-1' } as any),
         runWithContext: <T>(_context: any, fn: () => T) => fn(),
       },
+      transport,
     );
 
     for await (const _event of model.stream({
@@ -1727,15 +1720,14 @@ it.sequential('CodexResponsesWSModel drops tool outputs already consumed by the 
     expect(seenRequests[2].previousResponseId).toBe('resp-after-second-batch');
     expect(seenRequests[2].input).toEqual([]);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
-it.sequential('CodexResponsesWSModel marks transport failure after buffered raw frames as ambiguous', async () => {
+it('CodexResponsesWSModel marks transport failure after buffered raw frames as ambiguous', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   let attempts = 0;
   const networkError = new Error('Responses websocket connection closed before response completed (code=1006)');
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function () {
+  transport.fetchResponse = async function () {
     attempts += 1;
     return (async function* () {
       yield { type: 'response.reasoning_summary_text.delta', delta: 'buffered reasoning' };
@@ -1748,6 +1740,7 @@ it.sequential('CodexResponsesWSModel marks transport failure after buffered raw 
       { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
       'gpt-5-codex',
       { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+      transport,
     );
     const retrying = new RetryingModel(model, { retryAttempts: 2, sleep: async () => {} });
 
@@ -1761,78 +1754,72 @@ it.sequential('CodexResponsesWSModel marks transport failure after buffered raw 
     ).rejects.toBeInstanceOf(AmbiguousModelOutcomeError);
     expect(attempts).toBe(1);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
-it.sequential(
-  'CodexResponsesWSModel drops interleaved tool calls from an already-trimmed tool-continuation delta',
-  async () => {
-    const seenRequests: any[] = [];
-
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
-      seenRequests.push(request);
-      return makeStream([
-        {
-          type: 'response.completed',
-          response: {
-            id: 'resp-trimmed-paired',
-            output: [],
-            usage: {},
-          },
-        } as any,
-      ]);
-    };
-
-    const mockClient = {
-      baseURL: 'https://api.openai.com',
-      apiKey: 'test-key',
-      _options: {},
-    };
-    const tokenManager = {
-      getOrRefreshAccessToken: async () => 'token',
-      getAccountId: () => 'acc_123',
-    };
-    const pairs = [1, 2].map((n) => ({
-      call: { type: 'function_call', call_id: `call-${n}`, name: 'read_code_outline', arguments: '{}' },
-      output: { type: 'tool_result', id: `call-${n}`, output: `outline-${n}` },
-    }));
-
-    try {
-      const model = new CodexResponsesWSModel(
-        mockClient as any,
-        'gpt-5-codex',
-        tokenManager as any,
-        undefined,
-        undefined,
-        {
-          getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
-          runWithContext: <T>(_context: any, fn: () => T) => fn(),
-        },
-      );
-
-      for await (const _event of model.stream({
-        previousResponseId: 'resp-prev',
-        input: pairs.flatMap((pair) => [pair.call, pair.output]),
-        tools: [],
-      } as any)) {
-      }
-
-      expect(seenRequests.length).toBe(1);
-      expect(seenRequests[0].previousResponseId).toBe('resp-prev');
-      expect(seenRequests[0].input).toEqual(pairs.map((pair) => pair.output));
-    } finally {
-      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
-    }
-  },
-);
-
-it.sequential('CodexResponsesWSModel keeps interleaved outputs when function calls only carry item ids', async () => {
+it('CodexResponsesWSModel drops interleaved tool calls from an already-trimmed tool-continuation delta', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const seenRequests: any[] = [];
+  transport.fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: 'resp-trimmed-paired',
+          output: [],
+          usage: {},
+        },
+      } as any,
+    ]);
+  };
 
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+  const pairs = [1, 2].map((n) => ({
+    call: { type: 'function_call', call_id: `call-${n}`, name: 'read_code_outline', arguments: '{}' },
+    output: { type: 'tool_result', id: `call-${n}`, output: `outline-${n}` },
+  }));
+
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5-codex',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+      transport,
+    );
+
+    for await (const _event of model.stream({
+      previousResponseId: 'resp-prev',
+      input: pairs.flatMap((pair) => [pair.call, pair.output]),
+      tools: [],
+    } as any)) {
+    }
+
+    expect(seenRequests.length).toBe(1);
+    expect(seenRequests[0].previousResponseId).toBe('resp-prev');
+    expect(seenRequests[0].input).toEqual(pairs.map((pair) => pair.output));
+  } finally {
+  }
+});
+
+it('CodexResponsesWSModel keeps interleaved outputs when function calls only carry item ids', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  transport.fetchResponse = async function (request: any) {
     seenRequests.push(request);
     return makeStream([
       {
@@ -1871,6 +1858,7 @@ it.sequential('CodexResponsesWSModel keeps interleaved outputs when function cal
         getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
         runWithContext: <T>(_context: any, fn: () => T) => fn(),
       },
+      transport,
     );
 
     for await (const _event of model.stream({
@@ -1884,105 +1872,99 @@ it.sequential('CodexResponsesWSModel keeps interleaved outputs when function cal
     expect(seenRequests[0].previousResponseId).toBe('resp-prev');
     expect(seenRequests[0].input).toEqual(pairs.map((pair) => pair.output));
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
-it.sequential(
-  'CodexResponsesWSModel warms interleaved tool continuations into history before sending the delta',
-  async () => {
-    const seenRequests: any[] = [];
-
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
-      seenRequests.push(request);
-      return makeStream([
-        {
-          type: 'response.completed',
-          response: {
-            id: seenRequests.length === 1 ? 'resp-warmup' : 'resp-main',
-            output: [],
-            usage: {},
-          },
-        } as any,
-      ]);
-    };
-
-    const mockClient = {
-      baseURL: 'https://api.openai.com',
-      apiKey: 'test-key',
-      _options: {},
-    };
-    const tokenManager = {
-      getOrRefreshAccessToken: async () => 'token',
-      getAccountId: () => 'acc_123',
-    };
-
-    const openingUser = { type: 'message', role: 'user', content: [{ type: 'text', text: 'inspect the repo' }] };
-    const openingAssistant = {
-      type: 'message',
-      role: 'assistant',
-      content: [{ type: 'text', text: 'I will inspect it.' }],
-    };
-    const parallelReads = [1, 2].map((n) => ({
-      call: { type: 'tool_call', id: `call-read-${n}`, name: 'read_code_outline', arguments: '{}' },
-      output: { type: 'tool_result', id: `call-read-${n}`, output: `outline-${n}` },
-    }));
-    const shellPair = {
-      call: { type: 'tool_call', id: 'call-shell', name: 'shell', arguments: '{}' },
-      output: { type: 'tool_result', id: 'call-shell', output: 'grep result' },
-    };
-
-    try {
-      const model = new CodexResponsesWSModel(
-        mockClient as any,
-        'gpt-5-codex',
-        tokenManager as any,
-        undefined,
-        undefined,
-        {
-          getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
-          runWithContext: <T>(_context: any, fn: () => T) => fn(),
+it('CodexResponsesWSModel warms interleaved tool continuations into history before sending the delta', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  transport.fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: seenRequests.length === 1 ? 'resp-warmup' : 'resp-main',
+          output: [],
+          usage: {},
         },
-      );
+      } as any,
+    ]);
+  };
 
-      for await (const _event of model.stream({
-        input: [
-          openingUser,
-          openingAssistant,
-          ...parallelReads.flatMap((pair) => [pair.call, pair.output]),
-          shellPair.call,
-          shellPair.output,
-        ],
-        tools: [],
-      } as any)) {
-      }
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
 
-      expect(seenRequests.length).toBe(2);
-      expect(seenRequests[0].providerOptions?.generate).toBe(false);
-      expect(seenRequests[0].previousResponseId).toBe(undefined);
-      expect(seenRequests[0].input).toEqual([
+  const openingUser = { type: 'message', role: 'user', content: [{ type: 'text', text: 'inspect the repo' }] };
+  const openingAssistant = {
+    type: 'message',
+    role: 'assistant',
+    content: [{ type: 'text', text: 'I will inspect it.' }],
+  };
+  const parallelReads = [1, 2].map((n) => ({
+    call: { type: 'tool_call', id: `call-read-${n}`, name: 'read_code_outline', arguments: '{}' },
+    output: { type: 'tool_result', id: `call-read-${n}`, output: `outline-${n}` },
+  }));
+  const shellPair = {
+    call: { type: 'tool_call', id: 'call-shell', name: 'shell', arguments: '{}' },
+    output: { type: 'tool_result', id: 'call-shell', output: 'grep result' },
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5-codex',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+      transport,
+    );
+
+    for await (const _event of model.stream({
+      input: [
         openingUser,
         openingAssistant,
-        ...parallelReads.map((pair) => pair.call),
+        ...parallelReads.flatMap((pair) => [pair.call, pair.output]),
         shellPair.call,
-      ]);
-      expect(seenRequests[1].previousResponseId).toBe('resp-warmup');
-      expect(seenRequests[1].input).toEqual([...parallelReads.map((pair) => pair.output), shellPair.output]);
-    } finally {
-      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
+        shellPair.output,
+      ],
+      tools: [],
+    } as any)) {
     }
-  },
-);
 
-it.sequential('CodexResponsesWSModel leaves warmup connection failures to the outer retry policy', async () => {
+    expect(seenRequests.length).toBe(2);
+    expect(seenRequests[0].providerOptions?.generate).toBe(false);
+    expect(seenRequests[0].previousResponseId).toBe(undefined);
+    expect(seenRequests[0].input).toEqual([
+      openingUser,
+      openingAssistant,
+      ...parallelReads.map((pair) => pair.call),
+      shellPair.call,
+    ]);
+    expect(seenRequests[1].previousResponseId).toBe('resp-warmup');
+    expect(seenRequests[1].input).toEqual([...parallelReads.map((pair) => pair.output), shellPair.output]);
+  } finally {
+  }
+});
+
+it('CodexResponsesWSModel leaves warmup connection failures to the outer retry policy', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const seenRequests: any[] = [];
   const networkError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
     code: 'connection_closed_before_opening',
   });
-
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
+  transport.fetchResponse = async function (request: any) {
     seenRequests.push(request);
     if (seenRequests.length === 1) {
       throw networkError;
@@ -2026,6 +2008,7 @@ it.sequential('CodexResponsesWSModel leaves warmup connection failures to the ou
         getContext: () => ({ sessionId: 'session-warmup-repro', traceId: 'trace-warmup-repro' } as any),
         runWithContext: <T>(_context: any, fn: () => T) => fn(),
       },
+      transport,
     );
 
     await expect(async () => {
@@ -2039,147 +2022,141 @@ it.sequential('CodexResponsesWSModel leaves warmup connection failures to the ou
     expect(seenRequests.length).toBe(1);
     expect(seenRequests[0].providerOptions?.generate).toBe(false);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
-it.sequential(
-  'CodexResponsesWSModel preserves a tool-call chain when the websocket connection lifetime expires',
-  async () => {
-    const seenRequests: any[] = [];
-    const trafficBodies: any[] = [];
-    const networkError = Object.assign(
-      new Error(
-        'Responses websocket error: {"error":{"code":"websocket_connection_limit_reached","message":"Responses websocket connection limit reached (60 minutes). Create a new websocket connection to continue."},"status":400}',
-      ),
-      { status: 400 },
-    );
-    const functionCall = {
-      id: 'fc_1',
-      type: 'function_call',
-      call_id: 'call_tool_1',
-      name: 'run_subagent_async',
-      arguments: '{}',
-    };
-
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
-      seenRequests.push(request);
-      if (seenRequests.length === 1) {
-        return makeStream([
-          {
-            type: 'response.completed',
-            response: {
-              id: 'resp-tool-call',
-              output: [functionCall],
-              usage: {},
-            },
-          } as any,
-        ]);
-      }
-
-      if (seenRequests.length === 2) {
-        throw networkError;
-      }
-
+it('CodexResponsesWSModel preserves a tool-call chain when the websocket connection lifetime expires', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  const trafficBodies: any[] = [];
+  const networkError = Object.assign(
+    new Error(
+      'Responses websocket error: {"error":{"code":"websocket_connection_limit_reached","message":"Responses websocket connection limit reached (60 minutes). Create a new websocket connection to continue."},"status":400}',
+    ),
+    { status: 400 },
+  );
+  const functionCall = {
+    id: 'fc_1',
+    type: 'function_call',
+    call_id: 'call_tool_1',
+    name: 'run_subagent_async',
+    arguments: '{}',
+  };
+  transport.fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    if (seenRequests.length === 1) {
       return makeStream([
         {
           type: 'response.completed',
           response: {
-            id: 'resp-recovered',
-            output: [],
+            id: 'resp-tool-call',
+            output: [functionCall],
             usage: {},
           },
         } as any,
       ]);
-    };
+    }
 
-    const mockProviderTraffic: IProviderTraffic = {
-      recordRequestStart(input) {
-        trafficBodies.push(input.sentBody);
-      },
-      async recordResponseReceived() {},
-      recordRequestFailed() {},
-    };
-    const continuationInput = [
-      { role: 'user', type: 'message', content: [{ type: 'text', text: 'start the worker' }] },
+    if (seenRequests.length === 2) {
+      throw networkError;
+    }
+
+    return makeStream([
       {
-        type: 'tool_result',
-        id: 'call_tool_1',
-        output: 'worker is running',
-      },
-    ];
-
-    try {
-      const model = new CodexResponsesWSModel(
-        { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
-        'gpt-5.6-luna',
-        { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
-        undefined,
-        mockProviderTraffic,
-        {
-          getContext: () => ({ sessionId: 'session-network-repro', traceId: 'trace-network-repro' } as any),
-          runWithContext: <T>(_context: any, fn: () => T) => fn(),
+        type: 'response.completed',
+        response: {
+          id: 'resp-recovered',
+          output: [],
+          usage: {},
         },
-      );
+      } as any,
+    ]);
+  };
 
-      await collect(
-        model.stream({
-          previousResponseId: 'resp-root',
-          input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: 'start the worker' }] }],
-          tools: [],
-        } as any),
-      );
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficBodies.push(input.sentBody);
+    },
+    async recordResponseReceived() {},
+    recordRequestFailed() {},
+  };
+  const continuationInput = [
+    { role: 'user', type: 'message', content: [{ type: 'text', text: 'start the worker' }] },
+    {
+      type: 'tool_result',
+      id: 'call_tool_1',
+      output: 'worker is running',
+    },
+  ];
 
-      await expect(
-        collect(
-          model.stream({
-            input: continuationInput,
-            tools: [],
-          } as any),
-        ),
-      ).rejects.toBe(networkError);
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5.6-luna',
+      { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+      undefined,
+      mockProviderTraffic,
+      {
+        getContext: () => ({ sessionId: 'session-network-repro', traceId: 'trace-network-repro' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+      transport,
+    );
 
-      expect(trafficBodies).toHaveLength(2);
-      expect(trafficBodies[1].previous_response_id).toBe('resp-tool-call');
-      expect(trafficBodies[1].input).toEqual([
-        expect.objectContaining({ type: 'function_call_output', call_id: 'call_tool_1' }),
-      ]);
+    await collect(
+      model.stream({
+        previousResponseId: 'resp-root',
+        input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: 'start the worker' }] }],
+        tools: [],
+      } as any),
+    );
 
-      await collect(
+    await expect(
+      collect(
         model.stream({
           input: continuationInput,
           tools: [],
         } as any),
-      );
+      ),
+    ).rejects.toBe(networkError);
 
-      expect(seenRequests).toHaveLength(3);
-      expect(trafficBodies).toHaveLength(3);
-      expect(trafficBodies[2].previous_response_id).toBe('resp-tool-call');
-      expect(trafficBodies[2].input).toEqual([
-        expect.objectContaining({
-          type: 'function_call_output',
-          call_id: 'call_tool_1',
-          output: 'worker is running',
-        }),
-      ]);
-      expect(trafficBodies[2].input).not.toContainEqual(expect.objectContaining({ type: 'function_call' }));
-      expect(trafficBodies[2].generate).not.toBe(false);
-    } finally {
-      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
-    }
-  },
-);
+    expect(trafficBodies).toHaveLength(2);
+    expect(trafficBodies[1].previous_response_id).toBe('resp-tool-call');
+    expect(trafficBodies[1].input).toEqual([
+      expect.objectContaining({ type: 'function_call_output', call_id: 'call_tool_1' }),
+    ]);
 
-it.sequential('CodexResponsesWSModel invalidates Luna wire state on previous_response_not_found error', async () => {
+    await collect(
+      model.stream({
+        input: continuationInput,
+        tools: [],
+      } as any),
+    );
+
+    expect(seenRequests).toHaveLength(3);
+    expect(trafficBodies).toHaveLength(3);
+    expect(trafficBodies[2].previous_response_id).toBe('resp-tool-call');
+    expect(trafficBodies[2].input).toEqual([
+      expect.objectContaining({
+        type: 'function_call_output',
+        call_id: 'call_tool_1',
+        output: 'worker is running',
+      }),
+    ]);
+    expect(trafficBodies[2].input).not.toContainEqual(expect.objectContaining({ type: 'function_call' }));
+    expect(trafficBodies[2].generate).not.toBe(false);
+  } finally {
+  }
+});
+
+it('CodexResponsesWSModel invalidates Luna wire state on previous_response_not_found error', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const seenRequests: any[] = [];
   let rejectedChainedContinuation = false;
   const prevNotFoundError = Object.assign(new Error('Previous response not found for id resp_stale'), {
     code: 'previous_response_not_found',
   });
-
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
+  transport.fetchResponse = async function (request: any) {
     seenRequests.push(request);
 
     const isChainedContinuation =
@@ -2219,6 +2196,7 @@ it.sequential('CodexResponsesWSModel invalidates Luna wire state on previous_res
         getContext: () => ({ sessionId: 'session-luna-err', traceId: 'trace-luna-err' } as any),
         runWithContext: <T>(_context: any, fn: () => T) => fn(),
       },
+      transport,
     );
 
     const userMsg = { type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] };
@@ -2259,78 +2237,72 @@ it.sequential('CodexResponsesWSModel invalidates Luna wire state on previous_res
       expect.arrayContaining([userMsg, userMsg2]),
     );
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
-it.sequential(
-  'CodexResponsesWSModel propagates stale tool continuations instead of replaying orphaned outputs',
-  async () => {
-    const seenRequests: any[] = [];
-    const previousResponseNotFound = Object.assign(new Error('Previous response not found for id resp-stale'), {
-      code: 'previous_response_not_found',
-    });
+it('CodexResponsesWSModel propagates stale tool continuations instead of replaying orphaned outputs', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  const previousResponseNotFound = Object.assign(new Error('Previous response not found for id resp-stale'), {
+    code: 'previous_response_not_found',
+  });
+  transport.fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    throw previousResponseNotFound;
+  };
 
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
-      seenRequests.push(request);
-      throw previousResponseNotFound;
-    };
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
 
-    const mockClient = {
-      baseURL: 'https://api.openai.com',
-      apiKey: 'test-key',
-      _options: {},
-    };
-    const tokenManager = {
-      getOrRefreshAccessToken: async () => 'token',
-      getAccountId: () => 'acc_123',
-    };
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5-codex',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({ sessionId: 'session-stale-tool', traceId: 'trace-stale-tool' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+      transport,
+    );
 
-    try {
-      const model = new CodexResponsesWSModel(
-        mockClient as any,
-        'gpt-5-codex',
-        tokenManager as any,
-        undefined,
-        undefined,
-        {
-          getContext: () => ({ sessionId: 'session-stale-tool', traceId: 'trace-stale-tool' } as any),
-          runWithContext: <T>(_context: any, fn: () => T) => fn(),
-        },
-      );
+    await expect(
+      collect(
+        model.stream({
+          previousResponseId: 'resp-stale',
+          input: [
+            { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect the repo' }] },
+            {
+              type: 'tool_result',
+              id: 'call-orphaned-output',
+              output: 'tool output from the missing response',
+            },
+          ],
+          tools: [],
+        } as any),
+      ),
+    ).rejects.toMatchObject({ code: 'previous_response_not_found' });
 
-      await expect(
-        collect(
-          model.stream({
-            previousResponseId: 'resp-stale',
-            input: [
-              { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect the repo' }] },
-              {
-                type: 'tool_result',
-                id: 'call-orphaned-output',
-                output: 'tool output from the missing response',
-              },
-            ],
-            tools: [],
-          } as any),
-        ),
-      ).rejects.toMatchObject({ code: 'previous_response_not_found' });
+    expect(seenRequests).toHaveLength(1);
+    expect(seenRequests[0].previousResponseId).toBe('resp-stale');
+  } finally {
+  }
+});
 
-      expect(seenRequests).toHaveLength(1);
-      expect(seenRequests[0].previousResponseId).toBe('resp-stale');
-    } finally {
-      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
-    }
-  },
-);
-
-it.sequential('CodexResponsesWSModel drops orphaned tool outputs before creating a warmup chain', async () => {
+it('CodexResponsesWSModel drops orphaned tool outputs before creating a warmup chain', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const seenRequests: any[] = [];
   const serverCallIds = new Set<string>();
-
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
+  transport.fetchResponse = async function (request: any) {
     seenRequests.push(request);
     for (const item of request.input ?? []) {
       if (item?.type === 'function_call' && typeof item.callId === 'string') {
@@ -2374,6 +2346,7 @@ it.sequential('CodexResponsesWSModel drops orphaned tool outputs before creating
         getContext: () => ({ sessionId: 'session-orphan-warmup', traceId: 'trace-orphan-warmup' } as any),
         runWithContext: <T>(_context: any, fn: () => T) => fn(),
       },
+      transport,
     );
 
     await collect(
@@ -2395,115 +2368,106 @@ it.sequential('CodexResponsesWSModel drops orphaned tool outputs before creating
       expect.objectContaining({ id: 'call-orphaned-output' }),
     );
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
-it.sequential(
-  'CodexResponsesWSModel does not chain a tool output whose call is absent from a rebuilt response chain',
-  async () => {
-    const seenRequests: any[] = [];
-    const orphanedCallId = 'call-rebuilt-chain-orphan';
-    const functionCall = {
-      type: 'tool_call',
-      id: orphanedCallId,
-      name: 'apply_patch',
-      arguments: '{}',
-    };
-    const functionCallOutput = {
-      type: 'tool_result',
-      id: orphanedCallId,
-      output: 'Updated source/providers/openai.provider.ts',
-      status: 'completed',
-    };
-    const noToolCallForOutput = new Error(
-      `No tool call found for function call output with call_id ${orphanedCallId}.`,
+it('CodexResponsesWSModel does not chain a tool output whose call is absent from a rebuilt response chain', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  const orphanedCallId = 'call-rebuilt-chain-orphan';
+  const functionCall = {
+    type: 'tool_call',
+    id: orphanedCallId,
+    name: 'apply_patch',
+    arguments: '{}',
+  };
+  const functionCallOutput = {
+    type: 'tool_result',
+    id: orphanedCallId,
+    output: 'Updated source/providers/openai.provider.ts',
+    status: 'completed',
+  };
+  const noToolCallForOutput = new Error(`No tool call found for function call output with call_id ${orphanedCallId}.`);
+  transport.fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    if (request.input?.some((item: any) => (item?.call_id ?? item?.callId) === orphanedCallId)) {
+      throw noToolCallForOutput;
+    }
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: 'resp-rebuilt-chain',
+          output: [],
+          usage: {},
+        },
+      } as any,
+    ]);
+  };
+
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+  const openingUser = { type: 'message', role: 'user', content: [{ type: 'text', text: 'inspect the repo' }] };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5-codex',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({ sessionId: 'session-rebuilt-chain-orphan', traceId: 'trace-rebuilt-chain-orphan' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+      transport,
     );
 
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
-      seenRequests.push(request);
-      if (request.input?.some((item: any) => (item?.call_id ?? item?.callId) === orphanedCallId)) {
-        throw noToolCallForOutput;
-      }
-      return makeStream([
-        {
-          type: 'response.completed',
-          response: {
-            id: 'resp-rebuilt-chain',
-            output: [],
-            usage: {},
-          },
-        } as any,
-      ]);
-    };
+    // The rebuilt chain is established without the in-flight function call.
+    await collect(
+      model.stream({
+        input: [openingUser],
+        tools: [],
+      } as any),
+    );
 
-    const mockClient = {
-      baseURL: 'https://api.openai.com',
-      apiKey: 'test-key',
-      _options: {},
-    };
-    const tokenManager = {
-      getOrRefreshAccessToken: async () => 'token',
-      getAccountId: () => 'acc_123',
-    };
-    const openingUser = { type: 'message', role: 'user', content: [{ type: 'text', text: 'inspect the repo' }] };
-
-    try {
-      const model = new CodexResponsesWSModel(
-        mockClient as any,
-        'gpt-5-codex',
-        tokenManager as any,
-        undefined,
-        undefined,
-        {
-          getContext: () =>
-            ({ sessionId: 'session-rebuilt-chain-orphan', traceId: 'trace-rebuilt-chain-orphan' } as any),
-          runWithContext: <T>(_context: any, fn: () => T) => fn(),
-        },
-      );
-
-      // The rebuilt chain is established without the in-flight function call.
-      await collect(
+    await expect(
+      collect(
         model.stream({
-          input: [openingUser],
+          previousResponseId: 'resp-rebuilt-chain',
+          input: [openingUser, functionCall, functionCallOutput],
           tools: [],
         } as any),
-      );
+      ),
+    ).rejects.toMatchObject({
+      name: 'OrphanedChainedToolOutputError',
+      callIds: [orphanedCallId],
+    });
 
-      await expect(
-        collect(
-          model.stream({
-            previousResponseId: 'resp-rebuilt-chain',
-            input: [openingUser, functionCall, functionCallOutput],
-            tools: [],
-          } as any),
-        ),
-      ).rejects.toMatchObject({
-        name: 'OrphanedChainedToolOutputError',
-        callIds: [orphanedCallId],
-      });
+    expect(seenRequests).toHaveLength(2);
+    expect(seenRequests).not.toContainEqual(
+      expect.objectContaining({
+        input: expect.arrayContaining([expect.objectContaining({ id: orphanedCallId })]),
+      }),
+    );
+  } finally {
+  }
+});
 
-      expect(seenRequests).toHaveLength(2);
-      expect(seenRequests).not.toContainEqual(
-        expect.objectContaining({
-          input: expect.arrayContaining([expect.objectContaining({ id: orphanedCallId })]),
-        }),
-      );
-    } finally {
-      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
-    }
-  },
-);
-
-it.sequential('CodexResponsesWSModel unary path propagates stale tool continuations without fallback', async () => {
+it('CodexResponsesWSModel unary path propagates stale tool continuations without fallback', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const seenRequests: any[] = [];
   const previousResponseNotFound = Object.assign(new Error('Previous response not found for id resp-stale-unary'), {
     code: 'previous_response_not_found',
   });
-
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
+  transport.fetchResponse = async function (request: any) {
     seenRequests.push(request);
     throw previousResponseNotFound;
   };
@@ -2529,6 +2493,7 @@ it.sequential('CodexResponsesWSModel unary path propagates stale tool continuati
         getContext: () => ({ sessionId: 'session-stale-tool-unary', traceId: 'trace-stale-tool-unary' } as any),
         runWithContext: <T>(_context: any, fn: () => T) => fn(),
       },
+      transport,
     );
 
     await expect(
@@ -2549,12 +2514,11 @@ it.sequential('CodexResponsesWSModel unary path propagates stale tool continuati
     expect(seenRequests).toHaveLength(1);
     expect(seenRequests[0].previousResponseId).toBe('resp-stale-unary');
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
-it.sequential('CodexResponsesWSModel unary path records Luna wire state response with correct token', async () => {
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+it('CodexResponsesWSModel unary path records Luna wire state response with correct token', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficBodies: any[] = [];
   let responseCount = 0;
 
@@ -2566,7 +2530,7 @@ it.sequential('CodexResponsesWSModel unary path records Luna wire state response
     recordRequestFailed() {},
   };
 
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function () {
+  transport.fetchResponse = async function () {
     responseCount += 1;
     return makeStream([
       {
@@ -2587,6 +2551,7 @@ it.sequential('CodexResponsesWSModel unary path records Luna wire state response
         getContext: () => ({ sessionId: 'session-unary-token', traceId: 'trace-unary-token' } as any),
         runWithContext: <T>(_context: any, fn: () => T) => fn(),
       } as any,
+      transport,
     );
 
     const msg1 = { role: 'user', type: 'message', content: [{ type: 'text', text: 'unary first' }] };
@@ -2619,51 +2584,47 @@ it.sequential('CodexResponsesWSModel unary path records Luna wire state response
       }),
     ]);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
-it.sequential(
-  'CodexResponsesWSModel gives the SDK a composed request signal before receiving websocket events',
-  async () => {
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-    const external = new AbortController();
-    let sdkSignal: AbortSignal | undefined;
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
-      sdkSignal = request.signal;
-      return makeStream([{ type: 'response.completed', response: { id: 'resp_1', output: [], usage: {} } }]);
-    };
-
-    try {
-      const model = new CodexResponsesWSModel(
-        { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
-        'gpt-5-codex',
-        { getOrRefreshAccessToken: async () => 'token', getAccountId: () => undefined } as any,
-      );
-
-      await collect(
-        model.stream({
-          input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
-          tools: [],
-          signal: external.signal,
-        } as any),
-      );
-
-      expect(sdkSignal).toBeDefined();
-      expect(sdkSignal).not.toBe(external.signal);
-      expect(sdkSignal?.aborted).toBe(false);
-    } finally {
-      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
-    }
-  },
-);
-
-it.sequential('CodexResponsesWSModel applies configured websocket receive timeouts', async () => {
-  vi.useFakeTimers();
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+it('CodexResponsesWSModel gives the SDK a composed request signal before receiving websocket events', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const external = new AbortController();
   let sdkSignal: AbortSignal | undefined;
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
+  transport.fetchResponse = async function (request: any) {
+    sdkSignal = request.signal;
+    return makeStream([{ type: 'response.completed', response: { id: 'resp_1', output: [], usage: {} } }]);
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5-codex',
+      { getOrRefreshAccessToken: async () => 'token', getAccountId: () => undefined } as any,
+      transport,
+    );
+
+    await collect(
+      model.stream({
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        tools: [],
+        signal: external.signal,
+      } as any),
+    );
+
+    expect(sdkSignal).toBeDefined();
+    expect(sdkSignal).not.toBe(external.signal);
+    expect(sdkSignal?.aborted).toBe(false);
+  } finally {
+  }
+});
+
+it('CodexResponsesWSModel applies configured websocket receive timeouts', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  vi.useFakeTimers();
+  const external = new AbortController();
+  let sdkSignal: AbortSignal | undefined;
+  transport.fetchResponse = async function (request: any) {
     sdkSignal = request.signal;
     return {
       [Symbol.asyncIterator]: () => ({
@@ -2682,6 +2643,7 @@ it.sequential('CodexResponsesWSModel applies configured websocket receive timeou
       undefined,
       undefined,
       { firstFrameMs: 25, interFrameMs: 50 },
+      transport,
     );
     const pending = collect(
       model.stream({
@@ -2698,7 +2660,6 @@ it.sequential('CodexResponsesWSModel applies configured websocket receive timeou
     expect((sdkSignal?.reason as Error).message).toBe('WebSocket first frame timeout');
   } finally {
     external.abort();
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
     vi.useRealTimers();
   }
 });

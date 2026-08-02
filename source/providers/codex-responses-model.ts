@@ -34,16 +34,11 @@ function toCodexToolChoice(choice: unknown): unknown {
   throw new Error('Unsupported Codex tool choice.');
 }
 
-/** Provider-owned OpenAI Responses transport boundary used by Codex. */
-export class OpenAIResponsesModel implements StreamedModelTurn {
-  protected readonly client: any;
-  protected readonly model: string;
-  constructor(client: any, model: string) {
-    this.client = client;
-    this.model = model;
-  }
+/** Provider-owned transport seam used by Codex's HTTP and WebSocket models. */
+export class CodexResponsesTransport {
+  constructor(private readonly client: any = {}, private readonly model = '', private readonly websocket = false) {}
 
-  protected buildResponsesCreateRequest(request: StreamedModelTurnRequest, stream: boolean): any {
+  buildResponsesCreateRequest(request: StreamedModelTurnRequest, stream: boolean): any {
     const providerOptions = request.providerOptions ?? {};
     const { extraBody, extraHeaders: _extraHeaders, ...nativeProviderData } = providerOptions;
     return {
@@ -69,10 +64,8 @@ export class OpenAIResponsesModel implements StreamedModelTurn {
     };
   }
 
-  protected async fetchResponse(request: StreamedModelTurnRequest, stream: boolean): Promise<any> {
-    const built = this.buildResponsesCreateRequest(request, stream);
-    const requestData = built.requestData;
-    if (stream && this instanceof OpenAIResponsesWSModel) {
+  async fetchResponse(request: StreamedModelTurnRequest, stream: boolean, requestData: any): Promise<any> {
+    if (stream && this.websocket) {
       if (!(this.client instanceof OpenAI) && typeof this.client?.responses?.create === 'function') {
         return this.client.responses.create(requestData);
       }
@@ -108,6 +101,30 @@ export class OpenAIResponsesModel implements StreamedModelTurn {
       ...(request.providerOptions?.extraHeaders ? { headers: request.providerOptions.extraHeaders } : {}),
     });
   }
+}
+
+export class OpenAIResponsesModel implements StreamedModelTurn {
+  protected readonly client: any;
+  protected readonly model: string;
+  public readonly transport: CodexResponsesTransport;
+  constructor(client: any, model: string, transport?: CodexResponsesTransport, websocket = false) {
+    this.client = client;
+    this.model = model;
+    this.transport = transport ?? new CodexResponsesTransport(client, model, websocket);
+  }
+
+  protected buildResponsesCreateRequest(request: StreamedModelTurnRequest, stream: boolean): any {
+    const built = this.transport.buildResponsesCreateRequest(request, stream);
+    if (this.transport instanceof CodexResponsesTransport && built?.requestData) {
+      built.requestData.model = this.model;
+    }
+    return built;
+  }
+
+  protected async fetchResponse(request: StreamedModelTurnRequest, stream: boolean): Promise<any> {
+    const built = this.buildResponsesCreateRequest(request, stream);
+    return this.transport.fetchResponse(request, stream, built.requestData);
+  }
 
   protected async fetchUnaryResponse(request: StreamedModelTurnRequest): Promise<any> {
     return this.fetchResponse(request, false);
@@ -133,8 +150,11 @@ export class OpenAIResponsesModel implements StreamedModelTurn {
   }
 }
 
-export class OpenAIResponsesWSModel extends OpenAIResponsesModel {}
-
+export class OpenAIResponsesWSModel extends OpenAIResponsesModel {
+  constructor(client: any, model: string, transport?: CodexResponsesTransport) {
+    super(client, model, transport, true);
+  }
+}
 async function* convertCodexRawStream(source: AsyncIterable<any>): AsyncIterable<StreamedModelTurnEvent> {
   const output: any[] = [];
   const pendingToolCalls: Extract<StreamedModelTurnEvent, { type: 'tool_call' }>[] = [];
@@ -790,21 +810,48 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   #serverHistoryReuseDisabled = false;
 
   private readonly providerTraffic: IProviderTraffic;
+  private readonly diagnosticLogger?: DiagnosticLogger;
+  private readonly sessionContextService?: ISessionContextService;
+  private readonly requestCapture?: ProviderRequestCapture;
   private readonly chainedWireState = new ChainedWireState(new LunaResponsesLiteWireProtocol());
   private readonly requestTokens = new WeakMap<object, ChainedRequestToken>();
+  private readonly websocketReceiveTimeouts: WebSocketReceiveTimeouts;
 
   constructor(
     client: any,
     private readonly modelId: string,
     private readonly tokenManager: any,
-    private readonly diagnosticLogger?: DiagnosticLogger,
-    providerTraffic?: IProviderTraffic,
-    private readonly sessionContextService?: ISessionContextService,
-    private readonly websocketReceiveTimeouts: WebSocketReceiveTimeouts = DEFAULT_WEBSOCKET_RECEIVE_TIMEOUTS,
-    private readonly requestCapture?: ProviderRequestCapture,
+    diagnosticLogger?: DiagnosticLogger | CodexResponsesTransport,
+    providerTraffic?: IProviderTraffic | CodexResponsesTransport,
+    sessionContextService?: ISessionContextService | CodexResponsesTransport,
+    websocketReceiveTimeouts: WebSocketReceiveTimeouts | CodexResponsesTransport = DEFAULT_WEBSOCKET_RECEIVE_TIMEOUTS,
+    requestCapture?: ProviderRequestCapture | CodexResponsesTransport,
+    transport?: CodexResponsesTransport,
   ) {
-    super(client, modelId);
-    this.providerTraffic = providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
+    const candidates = [
+      transport,
+      diagnosticLogger,
+      providerTraffic,
+      sessionContextService,
+      websocketReceiveTimeouts,
+      requestCapture,
+    ];
+    const injectedTransport = candidates.find(
+      (candidate): candidate is CodexResponsesTransport => candidate instanceof CodexResponsesTransport,
+    );
+    super(client, modelId, injectedTransport);
+    this.diagnosticLogger = diagnosticLogger instanceof CodexResponsesTransport ? undefined : diagnosticLogger;
+    this.providerTraffic =
+      providerTraffic instanceof CodexResponsesTransport
+        ? DUMMY_PROVIDER_TRAFFIC
+        : providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
+    this.sessionContextService =
+      sessionContextService instanceof CodexResponsesTransport ? undefined : sessionContextService;
+    this.websocketReceiveTimeouts =
+      websocketReceiveTimeouts instanceof CodexResponsesTransport
+        ? DEFAULT_WEBSOCKET_RECEIVE_TIMEOUTS
+        : websocketReceiveTimeouts;
+    this.requestCapture = requestCapture instanceof CodexResponsesTransport ? undefined : requestCapture;
   }
 
   #modelNameFallback(): string {
@@ -1459,13 +1506,25 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 }
 
 export class CodexResponsesModel extends OpenAIResponsesModel {
+  private readonly modelId: string;
+  private readonly diagnosticLogger?: DiagnosticLogger;
+  private readonly requestCapture?: ProviderRequestCapture;
+
   constructor(
     client: any,
-    private readonly modelId: string,
-    private readonly diagnosticLogger?: DiagnosticLogger,
-    private readonly requestCapture?: ProviderRequestCapture,
+    modelId: string,
+    diagnosticLogger?: DiagnosticLogger | CodexResponsesTransport,
+    requestCapture?: ProviderRequestCapture | CodexResponsesTransport,
+    transport?: CodexResponsesTransport,
   ) {
-    super(client, modelId);
+    const candidates = [transport, diagnosticLogger, requestCapture];
+    const injectedTransport = candidates.find(
+      (candidate): candidate is CodexResponsesTransport => candidate instanceof CodexResponsesTransport,
+    );
+    super(client, modelId, injectedTransport);
+    this.modelId = modelId;
+    this.diagnosticLogger = diagnosticLogger instanceof CodexResponsesTransport ? undefined : diagnosticLogger;
+    this.requestCapture = requestCapture instanceof CodexResponsesTransport ? undefined : requestCapture;
   }
 
   override buildResponsesCreateRequest(request: StreamedModelTurnRequest, stream: boolean): any {

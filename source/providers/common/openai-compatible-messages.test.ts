@@ -138,7 +138,7 @@ it('addCacheControlToLastTwoMessages() skips messages with no text content block
   expect(messages[1].content).toEqual([{ type: 'text', text: 'hi', cache_control: { type: 'ephemeral' } }]);
 });
 
-it('buildMessagesFromRequest() preserves assistant messages that only carry reasoning metadata', () => {
+it('buildMessagesFromRequest() omits provider-invalid assistant messages that only carry reasoning metadata', () => {
   const messages = buildMessagesFromRequest({
     input: [
       { role: 'user', type: 'message', content: 'read package json' },
@@ -154,10 +154,6 @@ it('buildMessagesFromRequest() preserves assistant messages that only carry reas
 
   expect(messages).toEqual([
     { role: 'user', content: 'read package json' },
-    {
-      role: 'assistant',
-      reasoning_content: 'I should inspect the file.',
-    },
     { role: 'user', content: 'retry after failed hallucinated tool call' },
   ]);
 });

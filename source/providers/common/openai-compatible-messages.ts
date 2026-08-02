@@ -1,5 +1,9 @@
 import type { ModelRequest } from '../../contracts/model.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
+import {
+  assertValidOpenAICompatibleMessages,
+  hasOpenAICompatibleAssistantPayload,
+} from './openai-compatible-message-contract.js';
 import { isAnthropicModel } from './openai-compatible-utils.js';
 
 const noOpLogger: ILoggingService = {
@@ -133,29 +137,6 @@ function convertAgentItemToOpenAICompatibleMessage(item: any, loggingService: IL
   }
 
   return null;
-}
-
-function hasAssistantPayload(message: any): boolean {
-  if (message?.role !== 'assistant') {
-    return true;
-  }
-
-  if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
-    return true;
-  }
-
-  const candidates = [message, message?.providerData, message?.provider_data].filter(Boolean);
-  const hasReasoningPayload = candidates.some(
-    (candidate: any) =>
-      typeof candidate.reasoning === 'string' ||
-      typeof candidate.reasoning_content === 'string' ||
-      (Array.isArray(candidate.reasoning_details) && candidate.reasoning_details.length > 0),
-  );
-  if (hasReasoningPayload) {
-    return true;
-  }
-
-  return message.content !== null && message.content !== undefined && message.content !== '';
 }
 
 function applyCacheControlToMessage(msg: any): void {
@@ -360,7 +341,9 @@ export function buildMessagesFromRequest(req: ModelRequest, modelId?: string, lo
     addCacheControlToLastTwoMessages(messages, modelId);
   }
 
-  return messages.filter(hasAssistantPayload);
+  const validMessages = messages.filter(hasOpenAICompatibleAssistantPayload);
+  assertValidOpenAICompatibleMessages(validMessages);
+  return validMessages;
 }
 
 export function extractFunctionToolsFromRequest(req: ModelRequest): any[] {

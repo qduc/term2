@@ -1,3 +1,4 @@
+import { assertValidOpenAICompatibleMessages } from './common/openai-compatible-message-contract.js';
 import type {
   StreamedModelTurn,
   StreamedModelTurnEvent,
@@ -106,6 +107,7 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
 
   async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
     const messages = openAICompatibleMessages(request.input);
+    assertValidOpenAICompatibleMessages(messages);
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages,

@@ -602,11 +602,13 @@ async function* codexStream(
   );
   const output: any[] = [];
   let responseId = '';
+  let usage: Extract<StreamedModelTurnEvent, { type: 'completion' }>['usage'];
   let sawCompletedResponse = false;
   const tools = request.tools?.map(toCodexTool);
   for await (const rawEvent of model.getStreamedResponse({
     model: modelName,
     ...(request.previousResponseId ? { previousResponseId: request.previousResponseId } : {}),
+    systemInstructions: request.instructions,
     input,
     tools,
     modelSettings: { reasoning: request.reasoning, providerData: request.providerOptions },
@@ -629,6 +631,22 @@ async function* codexStream(
     } else if (event?.type === 'response.completed') {
       sawCompletedResponse = true;
       responseId = event.response?.id ?? responseId;
+      const rawUsage = event.response?.usage;
+      if (
+        rawUsage &&
+        (rawUsage.input_tokens !== undefined ||
+          rawUsage.inputTokens !== undefined ||
+          rawUsage.output_tokens !== undefined ||
+          rawUsage.outputTokens !== undefined)
+      ) {
+        usage = {
+          inputTokens: rawUsage.input_tokens ?? rawUsage.inputTokens ?? 0,
+          outputTokens: rawUsage.output_tokens ?? rawUsage.outputTokens ?? 0,
+          ...(rawUsage.input_tokens_details?.cached_tokens !== undefined
+            ? { cachedInputTokens: rawUsage.input_tokens_details.cached_tokens }
+            : {}),
+        };
+      }
       for (const item of event.response?.output ?? []) {
         if (item.type === 'message')
           output.push({
@@ -643,7 +661,7 @@ async function* codexStream(
     }
   }
   if (!sawCompletedResponse) throw new Error('Codex streamed response ended without a completed response event.');
-  yield { type: 'completion', responseId, output };
+  yield { type: 'completion', responseId, output, ...(usage ? { usage } : {}) };
 }
 
 // ── Middlewares ──────────────────────────────────────────────────────────

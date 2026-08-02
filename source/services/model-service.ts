@@ -17,6 +17,7 @@ export async function fetchModels(
   deps: {
     settingsService: ISettingsService;
     loggingService: ILoggingService;
+    signal?: AbortSignal;
   },
   providerOverride?: string,
   fetchImpl: FetchFn = fetch as any,
@@ -35,7 +36,10 @@ export async function fetchModels(
       throw new Error(`Provider '${provider}' is not registered`);
     }
 
-    const rawModels = await providerDef.fetchModels({ settingsService, loggingService }, fetchImpl);
+    const rawModels = await providerDef.fetchModels(
+      { settingsService, loggingService, signal: deps.signal },
+      fetchImpl,
+    );
     const models: ModelInfo[] = rawModels.map((m) => ({
       ...m,
       provider,

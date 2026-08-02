@@ -1,11 +1,17 @@
 import { expect, it } from 'vitest';
-import { adaptOpenAIStreamedModel } from './openai-streamed-model-adapter.js';
+import { adaptOpenAIStreamedModel, toOpenAILegacyInput } from './openai-streamed-model-adapter.js';
 
 async function collect(stream: AsyncIterable<unknown>) {
   const events: unknown[] = [];
   for await (const event of stream) events.push(event);
   return events;
 }
+
+it('shares the legacy tool-result projection used by the adapter boundary', () => {
+  expect(toOpenAILegacyInput([{ type: 'tool_result', id: 'call-1', output: 'done' } as any])).toEqual([
+    { type: 'function_call_result', callId: 'call-1', output: { text: 'done' } },
+  ]);
+});
 
 it('throws when an OpenAI stream ends without a completion', async () => {
   const turn = adaptOpenAIStreamedModel({

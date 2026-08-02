@@ -32,6 +32,11 @@ export class RetryingModel implements Model {
     return this.model;
   }
 
+  /** Rebind the request-scoped retry observer when a cached provider is reused. */
+  setRetryCallback(callback?: () => void): void {
+    this.options.onRetry = callback;
+  }
+
   async getResponse(request: ModelRequest): Promise<ModelResponse> {
     return this.#retry(() => this.model.getResponse(request));
   }

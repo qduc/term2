@@ -957,12 +957,16 @@ describe('outbound steering', () => {
     expect(firstSignal?.aborted).toBe(true);
     await vi.waitFor(() => expect(inputs).toHaveLength(2));
 
-    expect(inputs[1]).toEqual([
-      expect.objectContaining({
-        role: 'user',
-        content: expect.stringContaining('Now inspect scripts.'),
-      }),
-    ]);
+    expect(inputs[1]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          content: expect.arrayContaining([
+            expect.objectContaining({ text: expect.stringContaining('Now inspect scripts.') }),
+          ]),
+        }),
+      ]),
+    );
     expect(JSON.stringify(inputs[1])).toContain('prior segment was interrupted');
     await expect(runtime.asyncRegistry.getResult(run.runId)).resolves.toMatchObject({ status: 'completed' });
     runtime.asyncRegistry.dispose();

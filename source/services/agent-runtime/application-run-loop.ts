@@ -15,6 +15,7 @@ import type {
   StreamedModelTurn,
   StreamedModelTurnEvent,
   StreamedModelTurnInput,
+  StreamedModelTurnRequest,
   StreamedModelTool,
 } from '../../contracts/streamed-model-turn.js';
 import type { AnyToolDefinition, ToolRegistry } from '../../tools/types.js';
@@ -50,10 +51,21 @@ export interface ApplicationAgent {
   readonly tools: ToolRegistry;
 }
 
+export interface ApplicationRequestPreparation {
+  /** Observe the exact application request immediately before model dispatch. */
+  readonly prepare: (request: StreamedModelTurnRequest) => void;
+  /** Keep request preparation context alive for the complete async model request. */
+  readonly run: <T>(operation: () => Promise<T>) => Promise<T>;
+}
+
 export interface ApplicationRunLoopOptions {
   readonly signal?: AbortSignal;
   /** Existing provider response to continue from on the first model turn. */
   readonly previousResponseId?: string | null;
+  /** Identity of the provider making this run. Required to establish response provenance. */
+  readonly providerId?: string;
+  /** Whether this provider accepts response IDs for continuation requests. */
+  readonly supportsConversationChaining?: boolean;
   readonly sessionId?: string;
   /** Per-run user context delivered to tools as `ToolInvocationContext.context`. */
   readonly context?: unknown;
@@ -70,6 +82,8 @@ export interface ApplicationRunLoopOptions {
    * client, subagents, the mentor) must pass theirs.
    */
   readonly maxTurns?: number;
+  /** Root-only provider request preparation, retained by continuations. */
+  readonly requestPreparation?: ApplicationRequestPreparation;
 }
 
 /**
@@ -118,6 +132,14 @@ type RunState = {
   turnCount: number;
   /** Turn budget for the run; undefined means unbounded. */
   maxTurns?: number;
+  /** Keep provider response IDs out of requests for providers that do not support them. */
+  supportsConversationChaining: boolean;
+  /** Provider currently executing this continuation. */
+  currentProviderId?: string;
+  /** Provider that originated responseId; absent on legacy handles. */
+  responseProviderId?: string;
+  /** Root-only provider request preparation, retained by continuations. */
+  requestPreparation?: ApplicationRequestPreparation;
   approve?: (_interruption?: unknown) => void;
   reject?: (_interruption?: unknown, options?: { message?: string }) => void;
 };
@@ -179,8 +201,20 @@ export class ApplicationRunLoop {
       agent,
       input: normalizeInput(input),
       history: normalizeHistory(input),
-      responseId: options.previousResponseId ?? undefined,
+      // A response ID is usable only after its provider origin is recorded.
+      // This also makes old callers that omit providerId fail closed.
+      responseId:
+        options.providerId && options.supportsConversationChaining === true
+          ? options.previousResponseId ?? undefined
+          : undefined,
       pendingApprovals: [],
+      supportsConversationChaining: options.supportsConversationChaining === true,
+      currentProviderId: options.providerId,
+      responseProviderId:
+        options.providerId && options.supportsConversationChaining === true && options.previousResponseId
+          ? options.providerId
+          : undefined,
+      requestPreparation: options.requestPreparation,
       context: options.context,
       approvals: options.approvals ?? new ApprovalLedger(),
       turnCount: 0,
@@ -212,16 +246,40 @@ export class ApplicationRunLoop {
     if (!state.pendingApproval && state.pendingApprovals.length > 0) {
       state.pendingApproval = state.pendingApprovals[0];
     }
-    // A continuation handle normally already carries the response that owns
-    // the pending turn. Older handles may not; use the caller-provided
-    // continuity anchor as a compatibility fallback in that case.
-    if (state.responseId === undefined && options.previousResponseId) {
+    // Response IDs are provider-owned. A handle from before provenance was
+    // recorded, a missing providerId, or a provider switch must never forward
+    // its opaque ID. In particular, do not use previousResponseId as a
+    // compatibility fallback here: its origin cannot be proven.
+    const previousProviderId = state.currentProviderId;
+    const sameProvider =
+      typeof previousProviderId === 'string' &&
+      typeof options.providerId === 'string' &&
+      previousProviderId === options.providerId;
+    if (!sameProvider || options.supportsConversationChaining !== true) {
+      state.responseId = undefined;
+      state.responseProviderId = undefined;
+    } else if (options.previousResponseId) {
+      // A same-provider caller may supply a refreshed continuity anchor (for
+      // example after persisted-session recovery). Its origin is now proven
+      // by the provider identity carried in this continuation state.
       state.responseId = options.previousResponseId;
+      state.responseProviderId = options.providerId;
     }
+    state.currentProviderId = options.providerId;
     // The turn budget belongs to the run, so a resumed run keeps spending the
     // same one rather than starting over after every approval pause.
     if (typeof state.turnCount !== 'number') state.turnCount = 0;
     if (state.maxTurns === undefined) state.maxTurns = options.maxTurns;
+    if (typeof state.supportsConversationChaining !== 'boolean') {
+      state.supportsConversationChaining = options.supportsConversationChaining === true;
+    } else {
+      // AgentClient supplies the current provider capability on every resume.
+      state.supportsConversationChaining = options.supportsConversationChaining === true;
+    }
+    // A continuation receives a fresh immutable snapshot from the session;
+    // refresh the preparation closure when supplied, while preserving the
+    // root closure for callers that do not provide one again.
+    if (options.requestPreparation) state.requestPreparation = options.requestPreparation;
     return this.#run(state, options);
   }
 
@@ -337,11 +395,17 @@ export class ApplicationRunLoop {
       let completion: Extract<StreamedModelTurnEvent, { type: 'completion' }> | undefined;
       let pendingNativeReasoning: PendingNativeReasoning | undefined;
 
-      for await (const event of model.stream({
+      const request: StreamedModelTurnRequest = {
         instructions: state.agent.instructions,
-        ...(state.responseId ? { previousResponseId: state.responseId } : {}),
+        ...(state.supportsConversationChaining &&
+        state.responseId &&
+        state.responseProviderId !== undefined &&
+        state.responseProviderId === state.currentProviderId
+          ? { previousResponseId: state.responseId }
+          : {}),
         input: state.input,
         tools: toModelTools(state.agent.tools),
+        applicationTools: state.agent.tools,
         ...(state.agent.modelSettings?.temperature !== undefined
           ? { temperature: state.agent.modelSettings.temperature as number }
           : {}),
@@ -353,36 +417,55 @@ export class ApplicationRunLoop {
         ...(state.agent.modelSettings?.codex ? { codex: state.agent.modelSettings.codex } : {}),
         ...(state.agent.modelSettings?.providerData ? { providerOptions: state.agent.modelSettings.providerData } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
-      })) {
-        if (event.type === 'completion') {
-          completion = event;
-          continue;
+      };
+      const consume = async (): Promise<void> => {
+        for await (const event of model.stream(request)) {
+          if (event.type === 'completion') {
+            completion = event;
+            continue;
+          }
+          if (event.type === 'text_delta') {
+            outputPush(stream, queue, { type: 'text_delta', text: event.text });
+            continue;
+          }
+          if (event.type === 'codex_rate_limits') {
+            outputPush(stream, queue, { type: 'codex_rate_limits', rateLimits: event.rateLimits });
+            continue;
+          }
+          if (event.type === 'reasoning_delta') {
+            pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, event);
+            outputPush(stream, queue, { type: 'reasoning_delta', text: event.text });
+            continue;
+          }
+          if (event.type === 'tool_call') {
+            pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
+            sawToolCall = true;
+            await this.#handleToolCall(state, stream, queue, event, toolContext);
+          }
         }
-        if (event.type === 'text_delta') {
-          outputPush(stream, queue, { type: 'text_delta', text: event.text });
-          continue;
-        }
-        if (event.type === 'codex_rate_limits') {
-          outputPush(stream, queue, { type: 'codex_rate_limits', rateLimits: event.rateLimits });
-          continue;
-        }
-        if (event.type === 'reasoning_delta') {
-          pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, event);
-          outputPush(stream, queue, { type: 'reasoning_delta', text: event.text });
-          continue;
-        }
-        if (event.type === 'tool_call') {
-          pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
-          sawToolCall = true;
-          await this.#handleToolCall(state, stream, queue, event, toolContext);
-        }
-      }
+      };
+      const dispatch = async (): Promise<void> => {
+        state.requestPreparation?.prepare(request);
+        await consume();
+      };
+      if (state.requestPreparation) await state.requestPreparation.run(dispatch);
+      else await dispatch();
 
       if (!completion) throw new Error('Application model turn ended without completion');
       // Commit the authoritative terminal state before handling terminal-only
       // tool calls. Approval may pause immediately after this point, and the
       // continuation must still carry the response that produced the calls.
-      state.responseId = completion.responseId;
+      // Response IDs are provider-chain state, not generic run metadata. Keep
+      // them out of continuation handles for providers that do not support
+      // chaining, while still exposing the completed provider response on the
+      // current stream for diagnostics.
+      if (state.supportsConversationChaining && state.currentProviderId !== undefined) {
+        state.responseId = completion.responseId;
+        state.responseProviderId = state.currentProviderId;
+      } else {
+        state.responseId = undefined;
+        state.responseProviderId = undefined;
+      }
       if (completion.usage !== undefined) {
         const normalizedCompletionUsage = normalizeModelUsage(completion.usage);
         if (normalizedCompletionUsage) {
@@ -578,7 +661,16 @@ function outputPush(stream: AgentStream, queue: EventQueue, item: ApplicationRun
 
 function finish(stream: AgentStream, state: RunState, queue: EventQueue): unknown {
   stream.history = state.history;
-  stream.lastResponseId = state.responseId ?? null;
+  if (
+    state.supportsConversationChaining &&
+    state.responseId &&
+    state.responseProviderId !== undefined &&
+    state.responseProviderId === state.currentProviderId
+  ) {
+    stream.lastResponseId = state.responseId;
+  } else {
+    stream.lastResponseId = null;
+  }
   queue.close();
   return { usage: state.usage, output: stream.output };
 }
@@ -690,9 +782,21 @@ function isJsonSchema(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !isZodToolParameterSchema(value);
 }
 
-function normalizeInput(input: ProviderInput): StreamedModelTurnInput[] {
+/**
+ * The canonical application projection used for both model requests and
+ * continuation-prefix comparisons. Keep this at the application boundary so
+ * callers never need to inspect opaque continuation state.
+ */
+export function normalizeApplicationInput(
+  input: ProviderInput | readonly ProviderInputItem[],
+): StreamedModelTurnInput[] {
   if (typeof input === 'string') return [{ type: 'message', role: 'user', content: [{ type: 'text', text: input }] }];
-  return (Array.isArray(input) ? input : [input]).flatMap((item) => normalizeInputItem(item));
+  const items = (Array.isArray(input) ? input : [input]) as readonly ProviderInputItem[];
+  return items.flatMap((item) => normalizeInputItem(item));
+}
+
+function normalizeInput(input: ProviderInput): StreamedModelTurnInput[] {
+  return normalizeApplicationInput(input);
 }
 
 function normalizeHistory(input: ProviderInput): ProviderInputItem[] {

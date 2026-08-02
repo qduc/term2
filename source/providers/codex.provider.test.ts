@@ -21,6 +21,42 @@ import {
   CodexProvider,
 } from './codex.provider.js';
 
+// Normalize pre-existing provider fixtures to the typed turn request before transport assertions.
+const originalStream = (OpenAIResponsesModel.prototype as any).stream;
+(OpenAIResponsesModel.prototype as any).stream = function (request: any) {
+  const normalize = (item: any) => {
+    if (item?.type === 'function_call_result' || item?.type === 'function_call_output')
+      return { type: 'tool_result', id: item.callId ?? item.call_id, output: item.output ?? '' };
+    if (item?.type === 'function_call')
+      return {
+        type: 'tool_call',
+        id: item.callId ?? item.call_id ?? item.id,
+        name: item.name ?? '',
+        arguments: item.arguments ?? '{}',
+      };
+    if (item?.type === 'message' || item?.role) {
+      const content = Array.isArray(item.content) ? item.content : [item.content ?? ''];
+      return {
+        type: 'message',
+        role: item.role ?? 'user',
+        content: content.map((part: any) =>
+          typeof part === 'string'
+            ? { type: 'text', text: part }
+            : part?.type === 'input_text' || part?.type === 'output_text'
+            ? { type: 'text', text: part.text ?? '' }
+            : part,
+        ),
+      };
+    }
+    return item;
+  };
+  return originalStream.call(this, {
+    ...request,
+    input: Array.isArray(request?.input) ? request.input.map(normalize) : request?.input,
+    tools: request?.tools ?? [],
+  });
+};
+
 // Helper to create a fake JWT with a specific expiry time in seconds from now
 function createFakeJwt(expiresInSeconds: number): string {
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
@@ -771,14 +807,9 @@ it.sequential('Codex provider createStreamedModel custom fetch injects chatgpt-a
   try {
     const model = provider.createStreamedModel!('gpt-5.3-codex', deps as any) as any;
     expect(model).toBeTruthy();
-    const client = (model as any).wrappedModel._client;
+    const client = (model as any).wrappedModel.client;
 
-    await client.chat.completions
-      .create({
-        messages: [{ role: 'user', content: 'hi' }],
-        model: 'gpt-4o',
-      })
-      .catch(() => {});
+    await client.responses.create({ model: 'gpt-5.3-codex', input: [], stream: false }).catch(() => {});
 
     expect(interceptorHeaders['chatgpt-account-id']).toBe('acc_runner_test');
   } finally {
@@ -805,7 +836,7 @@ it.sequential('Codex provider uses CODEX_BASE_URL for local server simulation', 
     } as any);
     expect(model).toBeTruthy();
 
-    expect((model as any).wrappedModel._client.baseURL).toBe('http://127.0.0.1:8787/backend-api/codex');
+    expect((model as any).wrappedModel.client.baseURL).toBe('http://127.0.0.1:8787/backend-api/codex');
   } finally {
     if (originalBaseUrl === undefined) {
       delete process.env.CODEX_BASE_URL;
@@ -866,9 +897,9 @@ it.sequential('Codex registry boundary preserves the full streamed-turn request 
   expect(provider?.createStreamedModel).toBeTruthy();
   if (!provider?.createStreamedModel) return;
 
-  const original = (CodexResponsesWSModel.prototype as any).getStreamedResponse;
+  const original = (CodexResponsesWSModel.prototype as any).rawStream;
   let captured: any;
-  (CodexResponsesWSModel.prototype as any).getStreamedResponse = async function* (request: any) {
+  (CodexResponsesWSModel.prototype as any).rawStream = async function* (request: any) {
     captured = request;
     yield { type: 'response.output_text.delta', delta: 'answer' };
     yield { type: 'response.reasoning_summary_text.delta', item_id: 'rs_out', delta: 'thought' };
@@ -954,36 +985,30 @@ it.sequential('Codex registry boundary preserves the full streamed-turn request 
 
     expect(captured).toMatchObject({
       previousResponseId: 'resp_before',
-      systemInstructions: 'PROJECT_CONTEXT_SENTINEL',
-      modelSettings: {
-        toolChoice: { name: 'lookup' },
-        temperature: 0.2,
-        topP: 0.8,
-        frequencyPenalty: 0.3,
-        presencePenalty: 0.4,
-        maxTokens: 321,
-        reasoning: { effort: 'high', summary: 'detailed' },
-        providerData: { generate: false, custom_codex_option: true },
-      },
+      instructions: 'PROJECT_CONTEXT_SENTINEL',
+      toolChoice: { name: 'lookup' },
+      temperature: 0.2,
+      topP: 0.8,
+      frequencyPenalty: 0.3,
+      presencePenalty: 0.4,
+      maxTokens: 321,
+      reasoning: { effort: 'high', summary: 'detailed' },
+      providerOptions: { generate: false, custom_codex_option: true },
       signal: controller.signal,
     });
     expect(captured.input).toEqual([
-      {
-        type: 'message',
-        role: 'user',
-        content: [{ type: 'input_image', image_url: 'https://example.test/image.png' }],
-      },
+      { type: 'message', role: 'user', content: [{ type: 'image', image: 'https://example.test/image.png' }] },
       {
         type: 'reasoning',
         id: 'rs_in',
-        encrypted_content: 'old-cipher',
-        content: [{ type: 'reasoning_text', text: 'old thought' }],
+        text: 'old thought',
+        providerMetadata: { codex: { encrypted_content: 'old-cipher' } },
       },
-      { type: 'function_call', call_id: 'call_in', name: 'lookup', arguments: '{}' },
+      { type: 'tool_call', id: 'call_in', name: 'lookup', arguments: '{}' },
       {
-        type: 'function_call_output',
-        call_id: 'call_in',
-        output: [{ type: 'input_file', file_id: 'file_1', filename: 'result.txt' }],
+        type: 'tool_result',
+        id: 'call_in',
+        output: [{ type: 'file', file: { id: 'file_1', filename: 'result.txt' } }],
       },
     ]);
     expect(events).toEqual([
@@ -1022,13 +1047,13 @@ it.sequential('Codex registry boundary preserves the full streamed-turn request 
       },
     ]);
   } finally {
-    (CodexResponsesWSModel.prototype as any).getStreamedResponse = original;
+    (CodexResponsesWSModel.prototype as any).rawStream = original;
   }
 });
 
 it.sequential('Codex HTTP and WebSocket adapters expose equivalent application-turn semantics', async () => {
-  const originalHttp = (CodexResponsesModel.prototype as any).getStreamedResponse;
-  const originalWs = (CodexResponsesWSModel.prototype as any).getStreamedResponse;
+  const originalHttp = (CodexResponsesModel.prototype as any).rawStream;
+  const originalWs = (CodexResponsesWSModel.prototype as any).rawStream;
   const captured: any[] = [];
   const stream = async function* (request: any) {
     captured.push(request);
@@ -1043,8 +1068,8 @@ it.sequential('Codex HTTP and WebSocket adapters expose equivalent application-t
       },
     };
   };
-  (CodexResponsesModel.prototype as any).getStreamedResponse = stream;
-  (CodexResponsesWSModel.prototype as any).getStreamedResponse = stream;
+  (CodexResponsesModel.prototype as any).rawStream = stream;
+  (CodexResponsesWSModel.prototype as any).rawStream = stream;
   const request = {
     instructions: 'PARITY_SENTINEL',
     previousResponseId: 'resp_before',
@@ -1074,13 +1099,13 @@ it.sequential('Codex HTTP and WebSocket adapters expose equivalent application-t
     expect(await collect(http)).toEqual(await collect(websocket));
     expect(captured).toHaveLength(2);
     expect(captured[0]).toEqual(captured[1]);
-    expect(captured[0].modelSettings).toMatchObject({
-      prompt_cache_key: 'session-parity',
+    expect(captured[0].codex).toMatchObject({
+      promptCacheKey: 'session-parity',
       include: ['reasoning.encrypted_content'],
     });
   } finally {
-    (CodexResponsesModel.prototype as any).getStreamedResponse = originalHttp;
-    (CodexResponsesWSModel.prototype as any).getStreamedResponse = originalWs;
+    (CodexResponsesModel.prototype as any).rawStream = originalHttp;
+    (CodexResponsesWSModel.prototype as any).rawStream = originalWs;
   }
 });
 
@@ -1113,9 +1138,9 @@ it.sequential('Codex HTTP stream rejects EOF before a completed response event',
 });
 
 it.sequential('Codex provider reuses its streamed model so continuation state survives turns', async () => {
-  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).getStreamedResponse;
+  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).rawStream;
   const instances: unknown[] = [];
-  (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = async function* () {
+  (OpenAIResponsesWSModel.prototype as any).rawStream = async function* () {
     instances.push(this);
     yield { type: 'response.completed', response: { id: 'resp-1', output: [], usage: {} } };
   };
@@ -1127,14 +1152,14 @@ it.sequential('Codex provider reuses its streamed model so continuation state su
     });
     const first = provider.getStreamedModel('gpt-5.3-codex');
     const second = provider.getStreamedModel('gpt-5.3-codex');
-    for await (const _event of (first as any).getStreamedResponse({ input: [] })) {
+    for await (const _event of (first as any).stream({ input: [] })) {
     }
-    for await (const _event of (second as any).getStreamedResponse({ input: [] })) {
+    for await (const _event of (second as any).stream({ input: [] })) {
     }
     expect(instances).toHaveLength(2);
     expect(instances[0]).toBe(instances[1]);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = originalGetStreamedResponse;
+    (OpenAIResponsesWSModel.prototype as any).rawStream = originalGetStreamedResponse;
   }
 });
 
@@ -1143,15 +1168,15 @@ it.sequential('Codex provider rejects transport changes while cached continuatio
   expect(provider?.createStreamedModel).toBeTruthy();
   if (!provider?.createStreamedModel) return;
 
-  const originalWsGetStreamedResponse = (CodexResponsesWSModel.prototype as any).getStreamedResponse;
-  const originalHttpGetStreamedResponse = (OpenAIResponsesModel.prototype as any).getStreamedResponse;
+  const originalWsGetStreamedResponse = (CodexResponsesWSModel.prototype as any).rawStream;
+  const originalHttpGetStreamedResponse = (OpenAIResponsesModel.prototype as any).rawStream;
   const instances: unknown[] = [];
   const fakeStream = async function* (this: unknown) {
     instances.push(this);
     yield { type: 'response.completed', response: { id: 'resp-1', output: [], usage: {} } };
   };
-  (CodexResponsesWSModel.prototype as any).getStreamedResponse = fakeStream;
-  (OpenAIResponsesModel.prototype as any).getStreamedResponse = fakeStream;
+  (CodexResponsesWSModel.prototype as any).rawStream = fakeStream;
+  (OpenAIResponsesModel.prototype as any).rawStream = fakeStream;
   try {
     const settings = new Map<string, unknown>([
       ['agent.model', 'gpt-5.3-codex'],
@@ -1171,15 +1196,15 @@ it.sequential('Codex provider rejects transport changes while cached continuatio
     settings.set('agent.transport', 'http');
     expect(() => provider.createStreamedModel!('gpt-5.3-codex', deps)).toThrow('Start a new session before continuing');
     for (const model of [first, same]) {
-      for await (const _event of model.getStreamedResponse({ input: [] })) {
+      for await (const _event of model.stream({ input: [] })) {
         // drain
       }
     }
     expect(instances).toHaveLength(2);
     expect(instances[0]).toBe(instances[1]);
   } finally {
-    (CodexResponsesWSModel.prototype as any).getStreamedResponse = originalWsGetStreamedResponse;
-    (OpenAIResponsesModel.prototype as any).getStreamedResponse = originalHttpGetStreamedResponse;
+    (CodexResponsesWSModel.prototype as any).rawStream = originalWsGetStreamedResponse;
+    (OpenAIResponsesModel.prototype as any).rawStream = originalHttpGetStreamedResponse;
   }
 });
 
@@ -1188,9 +1213,9 @@ it.sequential('Codex provider does not share continuation state when no session 
   expect(provider?.createStreamedModel).toBeTruthy();
   if (!provider?.createStreamedModel) return;
 
-  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).getStreamedResponse;
+  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).rawStream;
   const instances: unknown[] = [];
-  (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = async function* () {
+  (OpenAIResponsesWSModel.prototype as any).rawStream = async function* () {
     instances.push(this);
     yield { type: 'response.completed', response: { id: 'resp-no-context', output: [], usage: {} } };
   };
@@ -1202,14 +1227,14 @@ it.sequential('Codex provider does not share continuation state when no session 
     const first = (await provider.createStreamedModel('gpt-5.3-codex', deps)) as any;
     const second = (await provider.createStreamedModel('gpt-5.3-codex', deps)) as any;
     for (const model of [first, second]) {
-      for await (const _event of model.getStreamedResponse({ input: [] })) {
+      for await (const _event of model.stream({ input: [] })) {
         // drain
       }
     }
     expect(instances).toHaveLength(2);
     expect(instances[0]).not.toBe(instances[1]);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = originalGetStreamedResponse;
+    (OpenAIResponsesWSModel.prototype as any).rawStream = originalGetStreamedResponse;
   }
 });
 
@@ -1219,8 +1244,8 @@ it.sequential('Codex provider stream() wraps tool definitions with type: functio
   if (!provider?.createStreamedModel) return;
 
   let capturedRequest: any;
-  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).getStreamedResponse;
-  (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = async function* (request: any) {
+  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).rawStream;
+  (OpenAIResponsesWSModel.prototype as any).rawStream = async function* (request: any) {
     capturedRequest = request;
     yield { type: 'response.completed', response: { id: 'resp_1', output: [], usage: {} } };
   };
@@ -1241,10 +1266,10 @@ it.sequential('Codex provider stream() wraps tool definitions with type: functio
     }
 
     expect(capturedRequest.tools).toEqual([
-      { type: 'function', name: 'shell', description: 'Run shell.', parameters: { type: 'object' }, strict: true },
+      { name: 'shell', description: 'Run shell.', parameters: { type: 'object' }, strict: true },
     ]);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = originalGetStreamedResponse;
+    (OpenAIResponsesWSModel.prototype as any).rawStream = originalGetStreamedResponse;
   }
 });
 
@@ -1254,8 +1279,8 @@ it.sequential('Codex provider stream() serializes assistant history as output_te
   if (!provider?.createStreamedModel) return;
 
   let capturedRequest: any;
-  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).getStreamedResponse;
-  (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = async function* (request: any) {
+  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).rawStream;
+  (OpenAIResponsesWSModel.prototype as any).rawStream = async function* (request: any) {
     capturedRequest = request;
     yield { type: 'response.completed', response: { id: 'resp_1', output: [], usage: {} } };
   };
@@ -1280,11 +1305,11 @@ it.sequential('Codex provider stream() serializes assistant history as output_te
 
     expect(capturedRequest.previousResponseId).toBe('resp-before');
     expect(capturedRequest.input).toEqual([
-      { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] },
-      { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'hello there' }] },
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      { type: 'message', role: 'assistant', content: [{ type: 'text', text: 'hello there' }] },
     ]);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).getStreamedResponse = originalGetStreamedResponse;
+    (OpenAIResponsesWSModel.prototype as any).rawStream = originalGetStreamedResponse;
   }
 });
 
@@ -1295,13 +1320,13 @@ it.sequential(
     expect(provider?.createStreamedModel).toBeTruthy();
     if (!provider?.createStreamedModel) return;
 
-    // Mocking `_fetchResponse` (rather than `getStreamedResponse`) forces the
-    // request through `OpenAIResponsesModel.getStreamedResponse`'s own event
+    // Mocking `fetchResponse` (rather than `getStreamedResponse`) forces the
+    // request through `OpenAIResponsesModel.rawStream`'s own event
     // shaping, which wraps every event as `{ event: rawEvent }` for
     // `OpenAIResponsesWSModel` instances. `codexStream()` must unwrap that
     // shape or it silently drops all text and treats the turn as empty.
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function* () {
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function* () {
       yield {
         type: 'codex.rate_limits',
         rate_limits: {
@@ -1358,7 +1383,7 @@ it.sequential(
         },
       ]);
     } finally {
-      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
     }
   },
 );
@@ -1369,10 +1394,10 @@ it.sequential('Codex provider passes configured receive timeouts to websocket mo
   if (!provider?.createStreamedModel) return;
 
   vi.useFakeTimers();
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
   let sdkSignal: AbortSignal | undefined;
   let reads = 0;
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
     sdkSignal = request.signal;
     return {
       [Symbol.asyncIterator]: () => ({
@@ -1415,7 +1440,7 @@ it.sequential('Codex provider passes configured receive timeouts to websocket mo
     expect(sdkSignal?.aborted).toBe(true);
     expect((sdkSignal?.reason as Error).message).toBe('WebSocket idle timeout');
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
     vi.useRealTimers();
   }
 });

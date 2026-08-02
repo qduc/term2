@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { ResponsesWS } from 'openai/resources/responses/ws';
 import OpenAI from 'openai';
-// StreamedModelTurnRequest import removed — not used here
+import type {
+  StreamedModelTurn,
+  StreamedModelTurnEvent,
+  StreamedModelTurnRequest,
+} from '../contracts/streamed-model-turn.js';
+import { toCodexResponsesInput } from './codex-turn-converter.js';
 import { sanitizeHeaders } from '../utils/header-sanitizer.js';
 import type { ISessionContextService, IProviderTraffic } from '../services/service-interfaces.js';
 import { dropUnpairedFunctionCalls } from '../services/tool-execution-ledger.js';
@@ -30,53 +35,52 @@ function toCodexToolChoice(choice: unknown): unknown {
   throw new Error('Unsupported Codex tool choice.');
 }
 
-/** Minimal public OpenAI Responses transport boundary used by Codex. */
-export class OpenAIResponsesModel {
-  protected readonly _client: any;
-  protected readonly _model: string;
+/** Provider-owned OpenAI Responses transport boundary used by Codex. */
+export class OpenAIResponsesModel implements StreamedModelTurn {
+  protected readonly client: any;
+  protected readonly model: string;
   constructor(client: any, model: string) {
-    this._client = client;
-    this._model = model;
+    this.client = client;
+    this.model = model;
   }
-  protected _buildResponsesCreateRequest(request: any, stream: boolean): any {
-    const settings = request?.modelSettings ?? {};
-    // Provider data is the application-owned escape hatch for documented
-    // Codex Responses fields. `extraHeaders` configures the transport rather
-    // than the JSON body; all other provider data remains semantic wire data.
-    const { extraBody, extraHeaders: _extraHeaders, ...nativeProviderData } = settings.providerData ?? {};
+
+  protected buildResponsesCreateRequest(request: StreamedModelTurnRequest, stream: boolean): any {
+    const providerOptions = request.providerOptions ?? {};
+    const { extraBody, extraHeaders: _extraHeaders, ...nativeProviderData } = providerOptions;
     return {
       requestData: {
-        model: this._model,
-        input: typeof request?.input === 'string' ? [{ role: 'user', content: request.input }] : request?.input ?? [],
+        model: this.model,
+        input: toCodexResponsesInput(request.input),
         stream,
-        ...(request?.systemInstructions !== undefined ? { instructions: request.systemInstructions } : {}),
-        ...(request?.tools ? { tools: request.tools } : {}),
-        ...(settings.toolChoice !== undefined ? { tool_choice: toCodexToolChoice(settings.toolChoice) } : {}),
-        ...(settings.temperature !== undefined ? { temperature: settings.temperature } : {}),
-        ...(settings.topP !== undefined ? { top_p: settings.topP } : {}),
-        ...(settings.frequencyPenalty !== undefined ? { frequency_penalty: settings.frequencyPenalty } : {}),
-        ...(settings.presencePenalty !== undefined ? { presence_penalty: settings.presencePenalty } : {}),
-        ...(settings.maxTokens !== undefined ? { max_output_tokens: settings.maxTokens } : {}),
-        ...(settings.reasoning !== undefined ? { reasoning: settings.reasoning } : {}),
+        ...(request.instructions !== undefined ? { instructions: request.instructions } : {}),
+        ...(request.tools.length > 0 ? { tools: request.tools.map((tool) => ({ type: 'function', ...tool })) } : {}),
+        ...(request.toolChoice !== undefined ? { tool_choice: toCodexToolChoice(request.toolChoice) } : {}),
+        ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+        ...(request.topP !== undefined ? { top_p: request.topP } : {}),
+        ...(request.frequencyPenalty !== undefined ? { frequency_penalty: request.frequencyPenalty } : {}),
+        ...(request.presencePenalty !== undefined ? { presence_penalty: request.presencePenalty } : {}),
+        ...(request.maxTokens !== undefined ? { max_output_tokens: request.maxTokens } : {}),
+        ...(request.reasoning !== undefined ? { reasoning: request.reasoning } : {}),
         ...nativeProviderData,
         ...(extraBody ?? {}),
-        ...(request?.previousResponseId ? { previous_response_id: request.previousResponseId } : {}),
+        ...(request.previousResponseId ? { previous_response_id: request.previousResponseId } : {}),
+        ...(request.codex?.promptCacheKey ? { prompt_cache_key: request.codex.promptCacheKey } : {}),
+        ...(request.codex?.include ? { include: request.codex.include } : {}),
       },
     };
   }
-  protected async _fetchResponse(request: any, stream: boolean): Promise<any> {
-    const built = this._buildResponsesCreateRequest(request, stream);
+
+  protected async fetchResponse(request: StreamedModelTurnRequest, stream: boolean): Promise<any> {
+    const built = this.buildResponsesCreateRequest(request, stream);
+    const requestData = built.requestData;
     if (stream && this instanceof OpenAIResponsesWSModel) {
-      // Keep lightweight model-unit fakes usable without coupling production
-      // transport back to the removed Agents SDK. Real OpenAI clients always
-      // use the public ResponsesWS transport below.
-      if (!(this._client instanceof OpenAI) && typeof this._client?.responses?.create === 'function') {
-        return this._client.responses.create(built.requestData);
+      if (!(this.client instanceof OpenAI) && typeof this.client?.responses?.create === 'function') {
+        return this.client.responses.create(requestData);
       }
-      const headers = request?.modelSettings?.providerData?.extraHeaders;
-      const socket = new ResponsesWS(this._client, headers ? { headers } : undefined);
+      const headers = request.providerOptions?.extraHeaders;
+      const socket = new ResponsesWS(this.client, headers ? { headers: headers as Record<string, string> } : undefined);
       const messages = socket.stream();
-      const requestEvent = { type: 'response.create', ...built.requestData } as any;
+      const requestEvent = { type: 'response.create', ...requestData } as any;
       if ((socket as any).socket?.readyState === 0) {
         (socket as any).socket.once('open', () => socket.send(requestEvent));
       } else {
@@ -89,9 +93,7 @@ export class OpenAIResponsesModel {
             else if ((message as any).event) yield (message as any).event;
             else if (message.type === 'error') throw (message as any).error;
             else if (message.type === 'close')
-              throw new Error(
-                'Codex WebSocket closed before a terminal response event; before any response events were received.',
-              );
+              throw new Error('Codex WebSocket closed before a terminal response event.');
           }
         } finally {
           try {
@@ -102,56 +104,177 @@ export class OpenAIResponsesModel {
         }
       })();
     }
-    const requestOptions = {
-      ...(request?.signal ? { signal: request.signal } : {}),
-      ...(request?.modelSettings?.providerData?.extraHeaders
-        ? { headers: request.modelSettings.providerData.extraHeaders }
-        : {}),
-    };
-    return this._client.responses.create(built.requestData, requestOptions);
+    return this.client.responses.create(requestData, {
+      ...(request.signal ? { signal: request.signal } : {}),
+      ...(request.providerOptions?.extraHeaders ? { headers: request.providerOptions.extraHeaders } : {}),
+    });
   }
-  async getResponse(request: any): Promise<any> {
-    const response = await this._fetchResponse(request, false);
-    const rawUsage = response?.usage;
-    const usage =
-      rawUsage && rawUsage.totalTokens === undefined
-        ? {
-            ...rawUsage,
-            totalTokens: rawUsage.total_tokens ?? (rawUsage.input_tokens ?? 0) + (rawUsage.output_tokens ?? 0),
-          }
-        : rawUsage;
-    return {
-      responseId: response?.id ?? response?.responseId,
-      output: response?.output ?? [],
-      usage,
-      providerData: response,
-    };
+
+  protected async fetchUnaryResponse(request: StreamedModelTurnRequest): Promise<any> {
+    return this.fetchResponse(request, false);
   }
-  async *getStreamedResponse(request: any): AsyncIterable<any> {
-    const source = await this._fetchResponse(request, true);
+
+  protected async *rawStream(request: StreamedModelTurnRequest): AsyncIterable<any> {
+    const source = await this.fetchResponse(request, true);
     for await (const event of source) {
-      if (event?.type === 'error') {
-        throw new Error(event.error?.message ?? 'Codex WebSocket provider error');
-      }
-      if (event?.type === 'close') {
-        throw new Error('Codex WebSocket closed before a terminal response event.');
-      }
-      const terminal =
+      if (event?.type === 'error') throw new Error(event.error?.message ?? 'Codex WebSocket provider error');
+      if (event?.type === 'close') throw new Error('Codex WebSocket closed before a terminal response event.');
+      yield event;
+      if (
         event?.type === 'response.completed' ||
         event?.type === 'response.incomplete' ||
-        event?.type === 'response.failed';
-      if (this instanceof OpenAIResponsesWSModel) {
-        yield { event };
-        if (terminal) return;
-        continue;
-      }
-      if (terminal) yield { type: 'response_done', response: event.response ?? event };
-      else yield event;
+        event?.type === 'response.failed'
+      )
+        return;
     }
+  }
+
+  async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
+    yield* convertCodexRawStream(this.rawStream(request));
   }
 }
 
 export class OpenAIResponsesWSModel extends OpenAIResponsesModel {}
+
+async function* convertCodexRawStream(source: AsyncIterable<any>): AsyncIterable<StreamedModelTurnEvent> {
+  const output: any[] = [];
+  const pendingToolCalls: Extract<StreamedModelTurnEvent, { type: 'tool_call' }>[] = [];
+  const terminalReasoning: any[] = [];
+  const pendingReasoningDeltas: Extract<StreamedModelTurnEvent, { type: 'reasoning_delta' }>[] = [];
+  let responseId = '';
+  let finishReason: string | undefined;
+  let usage: Extract<StreamedModelTurnEvent, { type: 'completion' }>['usage'];
+  let sawCompletedResponse = false;
+  for await (const event of source) {
+    if (event?.type === 'codex.rate_limits') {
+      const rateLimits = event.rate_limits ?? event;
+      if (rateLimits && typeof rateLimits === 'object') yield { type: 'codex_rate_limits', rateLimits };
+    } else if (event?.type === 'response.output_text.delta') {
+      yield { type: 'text_delta', text: String(event.delta ?? '') };
+    } else if (event?.type === 'response.reasoning_summary_text.delta') {
+      pendingReasoningDeltas.push({
+        type: 'reasoning_delta',
+        ...(typeof event.item_id === 'string' ? { id: event.item_id } : {}),
+        text: String(event.delta ?? ''),
+      });
+    } else if (event?.type === 'response.output_item.done' && event.item?.type === 'function_call') {
+      const call = toCodexToolCallOutput(event.item);
+      output.push(call);
+      pendingToolCalls.push(call);
+    } else if (event?.type === 'response.completed') {
+      sawCompletedResponse = true;
+      responseId = codexString(event.response?.id) ?? responseId;
+      finishReason = codexString(event.response?.status) ?? codexString(event.response?.incomplete_details?.reason);
+      usage = toCodexUsage(event.response?.usage);
+      for (const item of event.response?.output ?? []) {
+        const converted = toCodexOutputItem(item);
+        if (converted.type !== 'tool_call') {
+          output.push(converted);
+          if (converted.type === 'reasoning') terminalReasoning.push(converted);
+        }
+      }
+      const authoritativeReasoning = terminalReasoning.length > 0 ? terminalReasoning : pendingReasoningDeltas;
+      for (const reasoning of authoritativeReasoning) {
+        yield {
+          type: 'reasoning_delta',
+          ...(reasoning.id ? { id: reasoning.id } : {}),
+          text: reasoning.text,
+          ...(reasoning.providerMetadata ? { providerMetadata: reasoning.providerMetadata } : {}),
+        };
+      }
+      for (const call of pendingToolCalls) yield call;
+      break;
+    } else if (
+      event?.type === 'response.incomplete' ||
+      event?.type === 'response.failed' ||
+      event?.type === 'response.error'
+    ) {
+      const status = String(event.type).slice('response.'.length);
+      const message = event.response?.error?.message ?? event.error?.message ?? `Codex response ${status}`;
+      throw new Error(`Codex provider response ${status}: ${message}`);
+    }
+  }
+  if (!sawCompletedResponse) throw new Error('Codex streamed response ended without a completed response event.');
+  if (!responseId) throw new Error('Codex completed response did not include an id.');
+  yield {
+    type: 'completion',
+    responseId,
+    output,
+    ...(finishReason ? { finishReason } : {}),
+    ...(usage ? { usage } : {}),
+  };
+}
+
+function toCodexToolCallOutput(item: any): Extract<StreamedModelTurnEvent, { type: 'tool_call' }> {
+  const id = codexString(item?.call_id) ?? codexString(item?.id);
+  const name = codexString(item?.name);
+  if (!id || !name) throw new Error('Codex function call output is missing its call id or name.');
+  return { type: 'tool_call', id, name, arguments: typeof item.arguments === 'string' ? item.arguments : '{}' };
+}
+
+function toCodexOutputItem(item: any): any {
+  if (!item || typeof item !== 'object') throw new Error('Unsupported Codex response output item.');
+  if (item.type === 'function_call') return toCodexToolCallOutput(item);
+  if (item.type === 'message') {
+    const content = Array.isArray(item.content) ? item.content : [];
+    return {
+      type: 'message',
+      content: content.map((part: any) => {
+        if (part?.type && !['output_text', 'input_text', 'text'].includes(part.type))
+          throw new Error(`Unsupported Codex response message content: ${String(part.type)}.`);
+        if (typeof part?.text !== 'string') throw new Error('Unsupported Codex response message content without text.');
+        return { type: 'text', text: part.text };
+      }),
+    };
+  }
+  if (item.type === 'reasoning') {
+    return {
+      type: 'reasoning',
+      ...(codexString(item.id) ? { id: item.id } : {}),
+      text: codexReasoningText(item.summary ?? item.content ?? ''),
+      providerMetadata: { codex: codexReasoningMetadata(item) },
+    };
+  }
+  throw new Error(`Unsupported Codex response output item type: ${String(item.type)}.`);
+}
+
+function codexReasoningText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return '';
+  return value
+    .map((part: any) => {
+      if (!part || typeof part !== 'object' || typeof part.text !== 'string')
+        throw new Error('Unsupported Codex reasoning content without text.');
+      return part.text;
+    })
+    .join('');
+}
+
+function codexReasoningMetadata(item: Record<string, unknown>): Record<string, unknown> {
+  const { type: _type, id: _id, summary: _summary, content: _content, ...metadata } = item;
+  return metadata;
+}
+
+function toCodexUsage(rawUsage: any): Extract<StreamedModelTurnEvent, { type: 'completion' }>['usage'] {
+  if (!rawUsage || typeof rawUsage !== 'object') return undefined;
+  const inputTokens = rawUsage.input_tokens ?? rawUsage.inputTokens;
+  const outputTokens = rawUsage.output_tokens ?? rawUsage.outputTokens;
+  if (inputTokens === undefined && outputTokens === undefined) return undefined;
+  const cachedInputTokens = rawUsage.input_tokens_details?.cached_tokens ?? rawUsage.inputTokensDetails?.cachedTokens;
+  const cacheWriteTokens =
+    rawUsage.input_tokens_details?.cache_write_tokens ?? rawUsage.inputTokensDetails?.cacheWriteTokens;
+  return {
+    ...(inputTokens !== undefined ? { inputTokens } : {}),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
+    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
+    ...(cacheWriteTokens !== undefined ? { cacheWriteTokens } : {}),
+  };
+}
+
+function codexString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
 import {
   isPreviousResponseNotFoundError,
   isRetryableTransportError,
@@ -264,7 +387,7 @@ function normalizeCodexRequestData(
       : normalizedInput,
   );
 
-  const modelInclude = request?.modelSettings?.include;
+  const modelInclude = request?.codex?.include;
   if (Array.isArray(modelInclude) && modelInclude.length > 0) {
     const existingInclude = Array.isArray(normalizedRequestData.include) ? normalizedRequestData.include : [];
     normalizedRequestData.include = Array.from(
@@ -272,7 +395,7 @@ function normalizeCodexRequestData(
     );
   }
 
-  const promptCacheKey = request?.modelSettings?.prompt_cache_key;
+  const promptCacheKey = request?.codex?.promptCacheKey;
   if (typeof promptCacheKey === 'string' && promptCacheKey.length > 0) {
     normalizedRequestData.prompt_cache_key = promptCacheKey;
   }
@@ -354,7 +477,6 @@ const summarizeReconstructedItems = (items: unknown[]): Record<string, unknown> 
 // items from `response.output_item.done` and, only when terminal
 // `response.output` is empty or missing, swaps in the accumulated items so the
 // parent's existing conversion logic (`convertToOutputItem`) produces a normal
-// `response_done` event.
 const CODEX_SERVER_HISTORY_TOOL_RESULT_TYPES = new Set([
   'function_call_output',
   'function_call_result',
@@ -381,14 +503,19 @@ const normalizeCodexServerHistoryItem = (item: unknown): CodexServerHistoryItem 
   const record = asRecord(item);
   const type = stringValue(record?.type);
   const itemId = stringValue(record?.id);
-  const callId = stringValue(record?.call_id) ?? stringValue(record?.callId) ?? stringValue(record?.tool_call_id);
+  const callId =
+    stringValue(record?.call_id) ??
+    stringValue(record?.callId) ??
+    stringValue(record?.tool_call_id) ??
+    (type === 'tool_call' || type === 'tool_result' ? stringValue(record?.id) : undefined);
 
   return {
     type,
     itemId,
     callId,
-    isFunctionCall: type === 'function_call',
-    isToolResult: typeof type === 'string' && CODEX_SERVER_HISTORY_TOOL_RESULT_TYPES.has(type),
+    isFunctionCall: type === 'function_call' || type === 'tool_call',
+    isToolResult:
+      type === 'tool_result' || (typeof type === 'string' && CODEX_SERVER_HISTORY_TOOL_RESULT_TYPES.has(type)),
   };
 };
 
@@ -534,28 +661,24 @@ const getResponseIdFromResponse = (response: unknown): string | undefined => {
 };
 
 const getResponseIdFromStreamEvent = (event: unknown): string | undefined => {
-  const record = asRecord(event);
-  const candidate = record?.type === 'response_done' ? record : asRecord(record?.event);
+  const candidate = asRecord(event);
   if (
     !candidate ||
-    !['response.completed', 'response.incomplete', 'response.failed', 'response_done'].includes(String(candidate.type))
+    !['response.completed', 'response.incomplete', 'response.failed'].includes(String(candidate.type))
   ) {
     return undefined;
   }
-
   return getResponseIdFromResponse(candidate.response) ?? getResponseIdFromResponse(candidate);
 };
 
 const getResponseOutputFromStreamEvent = (event: unknown): unknown[] | undefined => {
-  const record = asRecord(event);
-  const candidate = record?.type === 'response_done' ? record : asRecord(record?.event);
+  const candidate = asRecord(event);
   if (
     !candidate ||
-    !['response.completed', 'response.incomplete', 'response.failed', 'response_done'].includes(String(candidate.type))
+    !['response.completed', 'response.incomplete', 'response.failed'].includes(String(candidate.type))
   ) {
     return undefined;
   }
-
   const response = asRecord(candidate.response);
   return Array.isArray(response?.output) ? response.output : undefined;
 };
@@ -615,17 +738,16 @@ const asAmbiguousModelOutcome = (error: unknown): AmbiguousModelOutcomeError | u
   });
 };
 
-const hasGenerateFalse = (request: any): boolean =>
-  (request.modelSettings?.providerData as Record<string, unknown> | undefined)?.generate === false;
+const hasGenerateFalse = (request: StreamedModelTurnRequest): boolean => request.providerOptions?.generate === false;
 
-const withProviderData = (request: any, providerData: Record<string, unknown>): any => ({
+const withProviderOptions = (
+  request: StreamedModelTurnRequest,
+  providerOptions: Record<string, unknown>,
+): StreamedModelTurnRequest => ({
   ...request,
-  modelSettings: {
-    ...request.modelSettings,
-    providerData: {
-      ...request.modelSettings?.providerData,
-      ...providerData,
-    },
+  providerOptions: {
+    ...request.providerOptions,
+    ...providerOptions,
   },
 });
 
@@ -767,7 +889,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     if (!request) {
       return undefined;
     }
-    const response = await super.getResponse(request);
+    const response = await super.fetchUnaryResponse(request);
     const responseId = getResponseIdFromResponse(response);
     this.#rememberCodexResponseId(responseId, asRecord(response)?.output, request.input, true);
     return responseId;
@@ -778,7 +900,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       return undefined;
     }
     let responseId: string | undefined;
-    for await (const event of super.getStreamedResponse(request)) {
+    for await (const event of super.rawStream(request)) {
       const eventResponseId = getResponseIdFromStreamEvent(event);
       if (eventResponseId) {
         responseId = eventResponseId;
@@ -879,7 +1001,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     }
 
     return {
-      warmupRequest: withProviderData(
+      warmupRequest: withProviderOptions(
         {
           ...replayRequest,
           input: warmupItems,
@@ -975,6 +1097,9 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       consumed.add(callId);
     }
     this.codexConsumedToolResultCallIdsByResponseId.set(responseId, consumed);
+    // A continuation may explicitly reuse the prior response ID; retain the
+    // consumed-output checkpoint under that anchor as well as the new response.
+    if (previousResponseId) this.codexConsumedToolResultCallIdsByResponseId.set(previousResponseId, consumed);
   }
 
   #forgetCodexResponseId(): void {
@@ -1077,7 +1202,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     return rest;
   }
 
-  override async getResponse(request: any): Promise<any> {
+  protected override async fetchUnaryResponse(request: StreamedModelTurnRequest): Promise<any> {
     const run = async () => {
       let attemptedWithServerHistory = false;
       try {
@@ -1088,7 +1213,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         const warmupResponseId = await this.#warmupCodexUnary(preparedRequest.warmupRequest);
         const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
 
-        const response = await super.getResponse(effectiveRequest);
+        const response = await super.fetchUnaryResponse(effectiveRequest);
         const responseId = getResponseIdFromResponse(response);
         this.#rememberCodexResponseId(responseId, asRecord(response)?.output, effectiveRequest.input);
         this.#rememberConsumedToolResultCallIds(
@@ -1104,7 +1229,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
             throw error;
           }
           const fallbackRequest = this.#withoutCodexServerHistory(request);
-          const response = await super.getResponse(fallbackRequest);
+          const response = await super.fetchUnaryResponse(fallbackRequest);
           const responseId = getResponseIdFromResponse(response);
           this.#rememberCodexResponseId(responseId, asRecord(response)?.output, fallbackRequest.input);
           this.#rememberConsumedToolResultCallIds(responseId, undefined, fallbackRequest.input);
@@ -1120,7 +1245,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     return run();
   }
 
-  override async *getStreamedResponse(request: any): AsyncIterable<any> {
+  protected override async *rawStream(request: StreamedModelTurnRequest): AsyncIterable<any> {
     let yieldedAnyEvent = false;
     let attemptedWithServerHistory = false;
     try {
@@ -1132,7 +1257,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
 
       let responseId: string | undefined;
-      for await (const event of super.getStreamedResponse(effectiveRequest)) {
+      for await (const event of super.rawStream(effectiveRequest)) {
         const eventResponseId = getResponseIdFromStreamEvent(event);
         if (eventResponseId) {
           responseId = eventResponseId;
@@ -1150,7 +1275,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         }
         const fallbackRequest = this.#withoutCodexServerHistory(request);
         let responseId: string | undefined;
-        for await (const event of super.getStreamedResponse(fallbackRequest)) {
+        for await (const event of super.rawStream(fallbackRequest)) {
           const eventResponseId = getResponseIdFromStreamEvent(event);
           if (eventResponseId) {
             responseId = eventResponseId;
@@ -1168,8 +1293,8 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     }
   }
 
-  override _buildResponsesCreateRequest(request: any, stream: boolean): any {
-    const built = super._buildResponsesCreateRequest(request, stream);
+  override buildResponsesCreateRequest(request: StreamedModelTurnRequest, stream: boolean): any {
+    const built = super.buildResponsesCreateRequest(request, stream);
     const requestData = normalizeCodexRequestData(built.requestData, request, this.modelId, {
       includeDeveloperInstructionsOnChainedRequest: true,
     });
@@ -1189,7 +1314,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     };
   }
 
-  protected override async _fetchResponse(request: any, stream: boolean): Promise<any> {
+  protected override async fetchResponse(request: StreamedModelTurnRequest, stream: boolean): Promise<any> {
     const requestId = randomUUID();
     const wireStateKey = RESPONSES_LITE_MODELS.has(this.modelId)
       ? this.#getCodexServerHistoryKey() ?? undefined
@@ -1215,41 +1340,36 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       extraHeaders['chatgpt-account-id'] = accountId;
     }
 
-    const updatedRequest = {
+    const watchdog = createWebSocketReceiveWatchdog(request.signal, this.websocketReceiveTimeouts);
+    const updatedRequest: StreamedModelTurnRequest = {
       ...request,
-      signal: undefined as AbortSignal | undefined,
-      modelSettings: {
-        ...request.modelSettings,
-        providerData: {
-          ...request.modelSettings?.providerData,
-          ...(codexIdentity
-            ? {
-                client_metadata: {
-                  ...request.modelSettings?.providerData?.client_metadata,
-                  ...codexIdentity.clientMetadata,
-                },
-              }
-            : {}),
-          ...(isResponsesLite
-            ? {
-                client_metadata: {
-                  ...request.modelSettings?.providerData?.client_metadata,
-                  ...(codexIdentity?.clientMetadata ?? {}),
-                  ws_request_header_x_openai_internal_codex_responses_lite: 'true',
-                },
-              }
-            : {}),
-          extraHeaders: {
-            ...request.modelSettings?.providerData?.extraHeaders,
-            ...extraHeaders,
-          },
+      signal: watchdog.signal,
+      providerOptions: {
+        ...request.providerOptions,
+        ...(codexIdentity
+          ? {
+              client_metadata: {
+                ...asRecord(request.providerOptions?.client_metadata),
+                ...codexIdentity.clientMetadata,
+              },
+            }
+          : {}),
+        ...(isResponsesLite
+          ? {
+              client_metadata: {
+                ...asRecord(request.providerOptions?.client_metadata),
+                ...(codexIdentity?.clientMetadata ?? {}),
+                ws_request_header_x_openai_internal_codex_responses_lite: 'true',
+              },
+            }
+          : {}),
+        extraHeaders: {
+          ...asRecord(request.providerOptions?.extraHeaders),
+          ...extraHeaders,
         },
       },
     };
-    const watchdog = createWebSocketReceiveWatchdog(request.signal, this.websocketReceiveTimeouts);
-    updatedRequest.signal = watchdog.signal;
-
-    const builtRequest = (this as any)._buildResponsesCreateRequest(updatedRequest, true);
+    const builtRequest = this.buildResponsesCreateRequest(updatedRequest, true);
     const requestData = (asRecord(builtRequest?.requestData) ?? {}) as Record<string, unknown>;
     const wireStateToken = this.requestTokens.get(updatedRequest);
     // This is the last application-owned point before the SDK's private fetch
@@ -1261,9 +1381,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       try {
         const response = await fetchAndReconstructUnaryResponse(
           async () =>
-            watchdog.wrap(
-              await (super._fetchResponse(updatedRequest, true as false) as unknown as Promise<AsyncIterable<any>>),
-            ),
+            watchdog.wrap(await (super.fetchResponse(updatedRequest, true) as unknown as Promise<AsyncIterable<any>>)),
           this.diagnosticLogger,
         );
         if (wireStateKey && wireStateToken && typeof response?.id === 'string' && response.id.length > 0) {
@@ -1288,7 +1406,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     }
 
     try {
-      const response = (await super._fetchResponse(updatedRequest, stream as false)) as unknown as AsyncIterable<any>;
+      const response = (await super.fetchResponse(updatedRequest, stream)) as unknown as AsyncIterable<any>;
       const patched = wrapCodexStream(watchdog.wrap(response), this.diagnosticLogger);
       return this.#withTrafficLogging(patched, requestId, requestData, wireStateKey, wireStateToken);
     } catch (error) {
@@ -1318,8 +1436,8 @@ export class CodexResponsesModel extends OpenAIResponsesModel {
     super(client, modelId);
   }
 
-  override _buildResponsesCreateRequest(request: any, stream: boolean): any {
-    const built = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest.call(this, request, stream);
+  override buildResponsesCreateRequest(request: StreamedModelTurnRequest, stream: boolean): any {
+    const built = super.buildResponsesCreateRequest(request, stream);
 
     const result = {
       ...built,
@@ -1333,15 +1451,12 @@ export class CodexResponsesModel extends OpenAIResponsesModel {
     return result;
   }
 
-  protected override async _fetchResponse(request: any, stream: boolean): Promise<any> {
+  protected override async fetchResponse(request: StreamedModelTurnRequest, stream: boolean): Promise<any> {
     if (!stream) {
-      return fetchAndReconstructUnaryResponse(
-        () => (OpenAIResponsesModel.prototype as any)._fetchResponse.call(this, request, true),
-        this.diagnosticLogger,
-      );
+      return fetchAndReconstructUnaryResponse(() => super.fetchResponse(request, true), this.diagnosticLogger);
     }
 
-    const response = await (OpenAIResponsesModel.prototype as any)._fetchResponse.call(this, request, stream);
+    const response = await super.fetchResponse(request, stream);
     return wrapCodexStream(response, this.diagnosticLogger);
   }
 }

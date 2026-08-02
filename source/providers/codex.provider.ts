@@ -1,12 +1,6 @@
-import type { LegacyModel, LegacyModelProvider } from '../contracts/model.js';
-import type {
-  StreamedModelTurn,
-  StreamedModelTurnEvent,
-  StreamedModelTurnRequest,
-} from '../contracts/streamed-model-turn.js';
+import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 import OpenAI from 'openai';
 import { CodexResponsesModel, CodexResponsesWSModel } from './codex-responses-model.js';
-import { toCodexModelSettings, toCodexResponsesInput } from './codex-turn-converter.js';
 import { RetryingModel } from './retrying-model.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -464,7 +458,7 @@ async function fetchCodexModels(
     .filter(Boolean) as Array<{ id: string; name?: string; default_reasoning_level?: string }>;
 }
 
-export class CodexProvider implements LegacyModelProvider {
+export class CodexProvider {
   private readonly models = new Map<string, RetryingModel>();
 
   constructor(
@@ -481,35 +475,6 @@ export class CodexProvider implements LegacyModelProvider {
   setRetryCallback(callback?: () => void): void {
     this.onRetry = callback;
     for (const model of this.models.values()) model.setRetryCallback(callback);
-  }
-
-  async getModel(modelName?: string): Promise<LegacyModel> {
-    const resolvedModel = modelName || DEFAULT_CODEX_MODEL;
-    const cached = this.models.get(resolvedModel);
-    if (cached) {
-      return cached;
-    }
-
-    const selectedModel =
-      this.transport === 'http'
-        ? new CodexResponsesModel(this.openAIClient as any, resolvedModel, this.loggingService)
-        : new CodexResponsesWSModel(
-            this.openAIClient as any,
-            resolvedModel,
-            this.tokenManager,
-            this.loggingService,
-            this.loggingService?.providerTraffic,
-            this.sessionContextService,
-            this.websocketReceiveTimeouts,
-          );
-    const retryingModel = new RetryingModel(selectedModel, {
-      retryAttempts: this.retryAttempts,
-      loggingService: this.loggingService,
-      onRetry: this.onRetry,
-    });
-
-    this.models.set(resolvedModel, retryingModel);
-    return retryingModel;
   }
 
   getStreamedModel(modelName?: string): StreamedModelTurn {
@@ -535,13 +500,7 @@ export class CodexProvider implements LegacyModelProvider {
       });
       this.models.set(resolvedModel, retryingModel);
     }
-    return {
-      stream: (request: StreamedModelTurnRequest) => codexStream(retryingModel!, resolvedModel, request),
-      getStreamedResponse: (request: any) => retryingModel!.getStreamedResponse(request),
-      // Compatibility metadata for callers that still inspect the local
-      // provider model; this is application-owned, not an SDK reach-in.
-      wrappedModel: { _client: this.openAIClient },
-    } as any;
+    return retryingModel;
   }
 
   async close(): Promise<void> {
@@ -550,201 +509,6 @@ export class CodexProvider implements LegacyModelProvider {
     }
     this.models.clear();
   }
-}
-
-function toCodexTool(tool: StreamedModelTurnRequest['tools'][number]) {
-  return {
-    type: 'function' as const,
-    name: tool.name,
-    ...(tool.description ? { description: tool.description } : {}),
-    parameters: tool.parameters,
-    ...(tool.strict !== undefined ? { strict: tool.strict } : {}),
-  };
-}
-
-// `OpenAIResponsesModel.getStreamedResponse` (codex-responses-model.ts) shapes
-// events differently per transport: websocket models wrap every event as
-// `{ event: rawEvent }` and swallow the completed/incomplete/failed
-// distinction, while collapsing a terminal event into `{ type: 'response_done',
-// response }`. Undo both so the checks below can read `.type`/`.item`/`.delta`
-// directly regardless of transport.
-function normalizeCodexStreamEvent(raw: any): any {
-  if (raw && typeof raw === 'object') {
-    if (raw.type === 'response_done') {
-      const status = raw.response?.status;
-      if (status === 'incomplete' || status === 'failed') {
-        return { type: `response.${status}`, response: raw.response };
-      }
-      return { type: 'response.completed', response: raw.response };
-    }
-    if (raw.type === undefined && raw.event && typeof raw.event === 'object') {
-      return raw.event;
-    }
-  }
-  return raw;
-}
-
-async function* codexStream(
-  model: any,
-  modelName: string,
-  request: StreamedModelTurnRequest,
-): AsyncIterable<StreamedModelTurnEvent> {
-  const input = toCodexResponsesInput(request.input);
-  const output: any[] = [];
-  // Codex may reveal encrypted reasoning only in response.completed. Delay
-  // tool delivery until that authoritative frame so continuation history keeps
-  // the reasoning immediately before the calls it explains.
-  const pendingToolCalls: Extract<StreamedModelTurnEvent, { type: 'tool_call' }>[] = [];
-  const terminalReasoning: Array<Extract<StreamedModelTurnEvent, { type: 'completion' }>['output'][number]> = [];
-  const pendingReasoningDeltas: Array<Extract<StreamedModelTurnEvent, { type: 'reasoning_delta' }>> = [];
-  let responseId = '';
-  let finishReason: string | undefined;
-  let usage: Extract<StreamedModelTurnEvent, { type: 'completion' }>['usage'];
-  let sawCompletedResponse = false;
-  const tools = (request.tools ?? []).map(toCodexTool);
-  for await (const rawEvent of model.getStreamedResponse({
-    model: modelName,
-    ...(request.previousResponseId ? { previousResponseId: request.previousResponseId } : {}),
-    ...(request.instructions !== undefined ? { systemInstructions: request.instructions } : {}),
-    input,
-    tools,
-    modelSettings: toCodexModelSettings(request),
-    ...(request.signal ? { signal: request.signal } : {}),
-  })) {
-    const event = normalizeCodexStreamEvent(rawEvent);
-    if (event?.type === 'codex.rate_limits') {
-      const rateLimits = event.rate_limits ?? event;
-      if (rateLimits && typeof rateLimits === 'object') yield { type: 'codex_rate_limits', rateLimits };
-    } else if (event?.type === 'response.output_text.delta') {
-      yield { type: 'text_delta', text: String(event.delta ?? '') };
-    } else if (event?.type === 'response.reasoning_summary_text.delta') {
-      pendingReasoningDeltas.push({
-        type: 'reasoning_delta',
-        ...(typeof event.item_id === 'string' ? { id: event.item_id } : {}),
-        text: String(event.delta ?? ''),
-      });
-    } else if (event?.type === 'response.output_item.done' && event.item?.type === 'function_call') {
-      const call = toCodexToolCallOutput(event.item);
-      output.push(call);
-      pendingToolCalls.push(call);
-    } else if (event?.type === 'response.completed') {
-      sawCompletedResponse = true;
-      responseId = codexString(event.response?.id) ?? responseId;
-      finishReason = codexString(event.response?.status) ?? codexString(event.response?.incomplete_details?.reason);
-      usage = toCodexUsage(event.response?.usage);
-      for (const item of event.response?.output ?? []) {
-        const converted = toCodexOutputItem(item);
-        // Function calls are authoritatively emitted by output_item.done so
-        // their streamed arguments and call IDs reach the run loop once.
-        if (converted.type !== 'tool_call') {
-          output.push(converted);
-          if (converted.type === 'reasoning') terminalReasoning.push(converted);
-        }
-      }
-      const authoritativeReasoning = terminalReasoning.length > 0 ? terminalReasoning : pendingReasoningDeltas;
-      for (const reasoning of authoritativeReasoning) {
-        if (reasoning.type !== 'reasoning' && reasoning.type !== 'reasoning_delta') continue;
-        yield {
-          type: 'reasoning_delta',
-          ...(reasoning.id ? { id: reasoning.id } : {}),
-          text: reasoning.text,
-          ...(reasoning.providerMetadata ? { providerMetadata: reasoning.providerMetadata } : {}),
-        };
-      }
-      for (const call of pendingToolCalls) yield call;
-      // The Responses protocol has one authoritative terminal event. Do not
-      // allow a malformed source to emit application events after it.
-      break;
-    } else if (
-      event?.type === 'response.incomplete' ||
-      event?.type === 'response.failed' ||
-      event?.type === 'response.error'
-    ) {
-      const status = event.type.slice('response.'.length);
-      const message = event.response?.error?.message ?? event.error?.message ?? `Codex response ${status}`;
-      throw new Error(`Codex provider response ${status}: ${message}`);
-    }
-  }
-  if (!sawCompletedResponse) throw new Error('Codex streamed response ended without a completed response event.');
-  if (!responseId) throw new Error('Codex completed response did not include an id.');
-  yield {
-    type: 'completion',
-    responseId,
-    output,
-    ...(finishReason ? { finishReason } : {}),
-    ...(usage ? { usage } : {}),
-  };
-}
-
-function toCodexToolCallOutput(item: any): Extract<StreamedModelTurnEvent, { type: 'tool_call' }> {
-  const id = codexString(item?.call_id) ?? codexString(item?.id);
-  const name = codexString(item?.name);
-  if (!id || !name) throw new Error('Codex function call output is missing its call id or name.');
-  return { type: 'tool_call', id, name, arguments: typeof item.arguments === 'string' ? item.arguments : '{}' };
-}
-
-function toCodexOutputItem(item: any): any {
-  if (!item || typeof item !== 'object') throw new Error('Unsupported Codex response output item.');
-  if (item.type === 'function_call') return toCodexToolCallOutput(item);
-  if (item.type === 'message') {
-    const content = Array.isArray(item.content) ? item.content : [];
-    const text = content.map((part: any) => {
-      if (part?.type && !['output_text', 'input_text', 'text'].includes(part.type)) {
-        throw new Error(`Unsupported Codex response message content: ${String(part.type)}.`);
-      }
-      if (typeof part?.text !== 'string') throw new Error('Unsupported Codex response message content without text.');
-      return part.text;
-    });
-    return { type: 'message', content: text.map((value: string) => ({ type: 'text', text: value })) };
-  }
-  if (item.type === 'reasoning') {
-    const text = codexReasoningText(item.summary ?? item.content ?? '');
-    return {
-      type: 'reasoning',
-      ...(codexString(item.id) ? { id: item.id } : {}),
-      text,
-      providerMetadata: { codex: codexReasoningMetadata(item) },
-    };
-  }
-  throw new Error(`Unsupported Codex response output item type: ${String(item.type)}.`);
-}
-
-function codexReasoningText(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (!Array.isArray(value)) return '';
-  return value
-    .map((part: any) => {
-      if (!part || typeof part !== 'object' || typeof part.text !== 'string') {
-        throw new Error('Unsupported Codex reasoning content without text.');
-      }
-      return part.text;
-    })
-    .join('');
-}
-
-function codexReasoningMetadata(item: Record<string, unknown>): Record<string, unknown> {
-  const { type: _type, id: _id, summary: _summary, content: _content, ...metadata } = item;
-  return metadata;
-}
-
-function toCodexUsage(rawUsage: any): Extract<StreamedModelTurnEvent, { type: 'completion' }>['usage'] {
-  if (!rawUsage || typeof rawUsage !== 'object') return undefined;
-  const inputTokens = rawUsage.input_tokens ?? rawUsage.inputTokens;
-  const outputTokens = rawUsage.output_tokens ?? rawUsage.outputTokens;
-  if (inputTokens === undefined && outputTokens === undefined) return undefined;
-  const cachedInputTokens = rawUsage.input_tokens_details?.cached_tokens ?? rawUsage.inputTokensDetails?.cachedTokens;
-  const cacheWriteTokens =
-    rawUsage.input_tokens_details?.cache_write_tokens ?? rawUsage.inputTokensDetails?.cacheWriteTokens;
-  return {
-    ...(inputTokens !== undefined ? { inputTokens } : {}),
-    ...(outputTokens !== undefined ? { outputTokens } : {}),
-    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
-    ...(cacheWriteTokens !== undefined ? { cacheWriteTokens } : {}),
-  };
-}
-
-function codexString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 // ── Middlewares ──────────────────────────────────────────────────────────

@@ -3,7 +3,6 @@ import type {
   StreamedModelProviderOptions,
   StreamedModelToolResultPart,
   StreamedModelTurnInput,
-  StreamedModelTurnRequest,
 } from '../contracts/streamed-model-turn.js';
 
 /**
@@ -89,22 +88,6 @@ export function toCodexToolResultOutput(output: string | readonly StreamedModelT
         return assertNever(part, 'StreamedModelToolResultPart');
     }
   });
-}
-
-/** Maps every request setting to the legacy-model settings envelope. */
-export function toCodexModelSettings(request: StreamedModelTurnRequest): Record<string, unknown> {
-  return {
-    ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
-    ...(request.topP !== undefined ? { topP: request.topP } : {}),
-    ...(request.frequencyPenalty !== undefined ? { frequencyPenalty: request.frequencyPenalty } : {}),
-    ...(request.presencePenalty !== undefined ? { presencePenalty: request.presencePenalty } : {}),
-    ...(request.maxTokens !== undefined ? { maxTokens: request.maxTokens } : {}),
-    ...(request.toolChoice !== undefined ? { toolChoice: request.toolChoice } : {}),
-    ...(request.reasoning !== undefined ? { reasoning: request.reasoning } : {}),
-    ...(request.codex?.promptCacheKey !== undefined ? { prompt_cache_key: request.codex.promptCacheKey } : {}),
-    ...(request.codex?.include !== undefined ? { include: request.codex.include } : {}),
-    ...(request.providerOptions !== undefined ? { providerData: request.providerOptions } : {}),
-  };
 }
 
 function toCodexImageReference(image: unknown, context: string): Record<string, unknown> {

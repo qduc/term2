@@ -1,118 +1,108 @@
 import { it, expect } from 'vitest';
-import type { Model, ModelRequest, StreamEvent } from '../contracts/model.js';
+import type {
+  StreamedModelTurn,
+  StreamedModelTurnEvent,
+  StreamedModelTurnRequest,
+} from '../contracts/streamed-model-turn.js';
 import { AmbiguousModelOutcomeError } from '../services/retry/retry-errors.js';
 import { RetryingModel } from './retrying-model.js';
 
-const request = { input: 'hello' } as unknown as ModelRequest;
+const request = { input: [], tools: [] } as StreamedModelTurnRequest;
 
 function retryableError(): Error {
   return Object.assign(new Error('upstream unavailable'), { status: 503 });
 }
 
-it('getResponse retries the same request on the same model until exhausted', async () => {
-  const seen: ModelRequest[] = [];
-  const underlying = {
-    async getResponse(seenRequest: ModelRequest) {
+it('stream retries the same immutable request until exhausted', async () => {
+  const seen: StreamedModelTurnRequest[] = [];
+  const underlying: StreamedModelTurn = {
+    async *stream(seenRequest) {
       seen.push(seenRequest);
       throw retryableError();
     },
-    async *getStreamedResponse() {},
-  } as unknown as Model;
+  };
   const model = new RetryingModel(underlying, { retryAttempts: 2, sleep: async () => {} });
 
-  await expect(model.getResponse(request)).rejects.toThrow('upstream unavailable');
+  await expect(collect(model.stream(request))).rejects.toThrow('upstream unavailable');
   expect(seen.length).toBe(3);
   expect(seen.every((item) => item === request)).toBe(true);
 });
 
-it('getResponse does not replay a request with an ambiguous provider outcome', async () => {
+it('stream does not replay a request with an ambiguous provider outcome', async () => {
   let calls = 0;
-  const underlying = {
-    async getResponse() {
+  const underlying: StreamedModelTurn = {
+    async *stream() {
       calls++;
       throw new AmbiguousModelOutcomeError('request accepted but response was not acknowledged');
     },
-    async *getStreamedResponse() {},
-  } as unknown as Model;
+  };
   const model = new RetryingModel(underlying, { retryAttempts: 3, sleep: async () => {} });
 
-  await expect(model.getResponse(request)).rejects.toThrow('request accepted but response was not acknowledged');
+  await expect(collect(model.stream(request))).rejects.toThrow('request accepted but response was not acknowledged');
   expect(calls).toBe(1);
 });
 
-it('getResponse fails immediately for non-retryable errors', async () => {
+it('stream fails immediately for non-retryable errors', async () => {
   let calls = 0;
-  const underlying = {
-    async getResponse() {
+  const underlying: StreamedModelTurn = {
+    async *stream() {
       calls++;
       throw new Error('invalid request');
     },
-    async *getStreamedResponse() {},
-  } as unknown as Model;
+  };
   const model = new RetryingModel(underlying, { retryAttempts: 3, sleep: async () => {} });
 
-  await expect(model.getResponse(request)).rejects.toThrow('invalid request');
+  await expect(collect(model.stream(request))).rejects.toThrow('invalid request');
   expect(calls).toBe(1);
 });
 
-it('getStreamedResponse retries only before the first event', async () => {
+it('stream retries only before the first event', async () => {
   let calls = 0;
-  const event = { type: 'response_started' } as unknown as StreamEvent;
-  const underlying = {
-    async getResponse() {
-      throw new Error('unused');
-    },
-    async *getStreamedResponse(seenRequest: ModelRequest) {
+  const event = { type: 'text_delta', text: 'ok' } as const;
+  const underlying: StreamedModelTurn = {
+    async *stream(seenRequest) {
       expect(seenRequest).toBe(request);
       calls++;
       if (calls === 1) throw retryableError();
       yield event;
     },
-  } as unknown as Model;
+  };
   const model = new RetryingModel(underlying, { retryAttempts: 2, sleep: async () => {} });
 
-  const events: StreamEvent[] = [];
-  for await (const streamedEvent of model.getStreamedResponse(request)) {
-    events.push(streamedEvent);
-  }
-  expect(events).toEqual([event]);
+  expect(await collect(model.stream(request))).toEqual([event]);
   expect(calls).toBe(2);
 });
 
-it('getStreamedResponse does not retry after an event commits', async () => {
+it('stream does not retry after an event commits', async () => {
   let calls = 0;
-  const event = { type: 'response_started' } as unknown as StreamEvent;
-  const underlying = {
-    async getResponse() {
-      throw new Error('unused');
-    },
-    async *getStreamedResponse() {
+  const event = { type: 'text_delta', text: 'ok' } as const;
+  const underlying: StreamedModelTurn = {
+    async *stream() {
       calls++;
       yield event;
       throw retryableError();
     },
-  } as unknown as Model;
+  };
   const model = new RetryingModel(underlying, { retryAttempts: 2, sleep: async () => {} });
 
-  const iterator = model.getStreamedResponse(request)[Symbol.asyncIterator]();
+  const iterator = model.stream(request)[Symbol.asyncIterator]();
   expect(await iterator.next()).toEqual({ done: false, value: event });
 
   await expect(iterator.next()).rejects.toThrow('upstream unavailable');
   expect(calls).toBe(1);
 });
 
-it('getResponse uses the larger upstream backoff schedule for retries', async () => {
+it('stream uses the larger upstream backoff schedule for retries', async () => {
   const delays: number[] = [];
   let calls = 0;
   const randomValues = [0.4, 0.2, 0.5, 0.8];
   let randomIndex = 0;
-  const underlying = {
-    async getResponse() {
+  const underlying: StreamedModelTurn = {
+    async *stream() {
       calls++;
       throw retryableError();
     },
-    async *getStreamedResponse() {},
-  } as unknown as Model;
+  };
   const model = new RetryingModel(underlying, {
     retryAttempts: 2,
     sleep: async (delayMs: number) => {
@@ -125,7 +115,13 @@ it('getResponse uses the larger upstream backoff schedule for retries', async ()
     },
   });
 
-  await expect(model.getResponse(request)).rejects.toThrow('upstream unavailable');
+  await expect(collect(model.stream(request))).rejects.toThrow('upstream unavailable');
   expect(calls).toBe(3);
   expect(delays).toEqual([3000, 24000]);
 });
+
+async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
+  const events: T[] = [];
+  for await (const event of iterable) events.push(event);
+  return events;
+}

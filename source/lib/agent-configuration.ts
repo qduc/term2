@@ -13,7 +13,7 @@ import type { PostExecutePauseCapability } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
 import type { ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
 
-/** Narrow capability interface consumed by AgentRunOrchestrator and AgentChatService. */
+/** Narrow capability interface consumed by chat/session clients. */
 export interface AgentSource {
   getAgent(sessionId?: string): ApplicationAgent;
   getProvider(): string;

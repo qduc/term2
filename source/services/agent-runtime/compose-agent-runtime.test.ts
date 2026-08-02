@@ -66,7 +66,6 @@ function stubCreateClient(): ISubagentClientFactory['createClient'] {
     runConversation: vi.fn(),
     supportsConversationChaining: false,
     supportsReasoning: false,
-    supportsTracingControl: false,
     dispose: vi.fn(),
   })) as unknown as ISubagentClientFactory['createClient'];
 }

@@ -1,9 +1,4 @@
-import {
-  type ProviderDefinition,
-  type ProviderDeps,
-  type ProviderFetch,
-  createApplicationCompatibilityRunner,
-} from './registry.js';
+import { type ProviderDefinition, type ProviderDeps, type ProviderFetch } from './registry.js';
 import type { CustomProviderConfig } from './openai-compatible.provider.js';
 
 export function createOpenAICompatibleProviderDefinition(config: CustomProviderConfig): ProviderDefinition {
@@ -39,35 +34,6 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
       }
       return provider.getStreamedModel(model);
     },
-    createRunner: (deps) =>
-      createApplicationCompatibilityRunner((model) =>
-        (async () => {
-          const list = deps.settingsService.getDynamic('providers');
-          const entry = Array.isArray(list)
-            ? list.find((p: any) => p && (p.id === providerId || p.name === providerId))
-            : null;
-          if (!entry) throw new Error(`Custom provider '${providerId}' is not configured.`);
-          const { createCustomProviderModelProvider } = await import('./openai-compatible.provider.js');
-          const provider = createCustomProviderModelProvider(
-            {
-              name: entry.id ? String(entry.id) : String(entry.name),
-              type: entry.type ? String(entry.type) : 'openai-compatible',
-              baseUrl: entry.baseUrl ? String(entry.baseUrl) : undefined,
-              apiKey: entry.apiKey ? String(entry.apiKey) : undefined,
-            },
-            {
-              defaultModel: model,
-              loggingService: deps.loggingService,
-              sessionContextService: deps.sessionContextService,
-              settingsService: deps.settingsService,
-            },
-          );
-          if (!('getStreamedModel' in provider) || typeof provider.getStreamedModel !== 'function') {
-            throw new Error(`Custom provider '${providerId}' has no application-owned streamed model`);
-          }
-          return provider.getStreamedModel(model);
-        })(),
-      ),
     fetchModels: async (deps: ProviderDeps, fetchImpl: ProviderFetch = fetch as any) => {
       const { createOpenAICompatibleProviderDefinition: getRealDefinition } = await import(
         './openai-compatible.provider.js'
@@ -81,7 +47,6 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     sensitiveSettingKeys: [],
     capabilities: {
       supportsConversationChaining: false,
-      supportsTracingControl: false,
     },
   };
 }

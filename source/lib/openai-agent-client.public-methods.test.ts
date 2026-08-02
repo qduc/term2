@@ -83,7 +83,6 @@ function ensureProviderRegistered() {
     registerProvider({
       id: 'mock-provider-public-methods',
       label: 'Mock Provider',
-      createRunner: () => new MockRunner() as any,
       createStreamedModel: (model: string) => ({
         async *stream(request: any) {
           applicationModelCalls.push({ model, request });
@@ -127,7 +126,7 @@ function ensureApplicationContinuityProviderRegistered() {
       },
     }),
     fetchModels: async () => [{ id: 'mock-model' }],
-    capabilities: { supportsConversationChaining: true, supportsTracingControl: false },
+    capabilities: { supportsConversationChaining: true },
   });
   applicationContinuityProviderRegistered = true;
 }
@@ -147,17 +146,6 @@ function ensureMentorProvidersRegistered() {
           };
         },
       }),
-      createRunner: () =>
-        ({
-          run: async (agent: any) => {
-            capturedMainAgentForMentorTest = agent;
-            return {
-              status: 'completed',
-              finalOutput: 'ok',
-              messages: [],
-            };
-          },
-        } as any),
       fetchModels: async () => [{ id: 'mock-model' }],
     });
 
@@ -214,7 +202,6 @@ function ensureChainingProvidersRegistered() {
       fetchModels: async () => [{ id: 'mock-model' }],
       capabilities: {
         supportsConversationChaining: false,
-        supportsTracingControl: false,
       },
     });
 
@@ -230,7 +217,6 @@ function ensureChainingProvidersRegistered() {
       fetchModels: async () => [{ id: 'mock-model' }],
       capabilities: {
         supportsConversationChaining: true,
-        supportsTracingControl: true,
       },
     });
 
@@ -257,7 +243,6 @@ function ensureCodexProviderRegistered() {
         fetchModels: async () => [{ id: 'mock-model' }],
         capabilities: {
           supportsConversationChaining: true,
-          supportsTracingControl: true,
           supportsPromptCacheKey: true,
         },
       },
@@ -283,7 +268,6 @@ function ensureOpenAIProviderRegistered() {
         fetchModels: async () => [{ id: 'mock-model' }],
         capabilities: {
           supportsConversationChaining: true,
-          supportsTracingControl: true,
           supportsPromptCacheKey: true,
         },
       },
@@ -302,13 +286,9 @@ function ensureFailingProviderRegistered() {
       createStreamedModel: () => {
         throw new Error('Missing credentials');
       },
-      createRunner: () => {
-        throw new Error('Missing credentials');
-      },
       fetchModels: async () => [{ id: 'mock-model' }],
       capabilities: {
         supportsConversationChaining: false,
-        supportsTracingControl: true,
       },
     });
 
@@ -556,7 +536,6 @@ it.sequential('abort before Codex start preparation prevents model dispatch', as
       }),
       capabilities: {
         supportsConversationChaining: true,
-        supportsTracingControl: false,
         supportsPromptCacheKey: true,
       },
     },
@@ -1003,20 +982,18 @@ it.sequential('setSubagentEventSink defers cleanup to null when subagents are ac
   registerProvider({
     id: 'mock-deferred-sink-provider',
     label: 'Mock Deferred Sink Provider',
-    createRunner: () =>
-      ({
-        run: async () => {
-          await new Promise<void>((resolve) => {
-            subagentPromiseResolve = resolve;
-          });
-          return {
-            status: 'completed',
-            finalOutput: 'mentor response',
-            history: [],
-            messages: [],
-          };
-        },
-      } as any),
+    createStreamedModel: () => ({
+      async *stream() {
+        await new Promise<void>((resolve) => {
+          subagentPromiseResolve = resolve;
+        });
+        yield {
+          type: 'completion',
+          responseId: 'deferred-sink',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'mentor response' }] }],
+        };
+      },
+    }),
     fetchModels: async () => [{ id: 'mock-model' }],
   });
 
@@ -1063,7 +1040,6 @@ it.sequential('codex resolves default_reasoning_level if agent.reasoningEffort i
       fetchModels: async () => [{ id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', default_reasoning_level: 'medium' }],
       capabilities: {
         supportsConversationChaining: true,
-        supportsTracingControl: true,
       },
     },
     { allowOverride: true },
@@ -1102,21 +1078,9 @@ it.sequential('codex chat resolves default_reasoning_level if agent.reasoningEff
           };
         },
       }),
-      createRunner: () =>
-        ({
-          run: async (agent: any, _input: any, options: any) => {
-            codexRunnerCalls.push({ agent, options });
-            return {
-              status: 'completed',
-              finalOutput: 'ok',
-              messages: [],
-            };
-          },
-        } as any),
       fetchModels: async () => [{ id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', default_reasoning_level: 'medium' }],
       capabilities: {
         supportsConversationChaining: true,
-        supportsTracingControl: true,
       },
     },
     { allowOverride: true },

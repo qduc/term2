@@ -912,20 +912,21 @@ describe('outbound steering', () => {
     const toolCompleted = new Promise<void>((resolve) => (firstToolCompleted = resolve));
     const providerId = registerTestProvider({
       label: 'Steering execution runner provider',
-      createRunner: () =>
+      createStreamedModel: () =>
         ({
-          run: async (agent: any, input: unknown, options: { signal?: AbortSignal }) => {
-            inputs.push(input);
+          stream: async function* (request: any) {
+            inputs.push(request.input);
             if (inputs.length === 1) {
-              const readFile = agent.tools.find((tool: any) => tool.name === 'read_file');
-              await readFile.execute(JSON.stringify({ path: 'package.json' }), {}, {});
+              const readFile = request.applicationTools?.find((tool: any) => tool.name === 'read_file');
+              await readFile?.execute(JSON.stringify({ path: 'package.json' }), {}, {});
               firstToolCompleted();
-              firstSignal = options.signal;
-              return new Promise((_resolve, reject) => {
-                options.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+              firstSignal = request.signal;
+              await new Promise((_resolve, reject) => {
+                request.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
               });
+              return;
             }
-            return wrapResultAsAgentStream({ status: 'completed', finalOutput: 'done', history: [], messages: [] });
+            yield* wrapResultAsAgentStream({ status: 'completed', finalOutput: 'done', history: [], messages: [] });
           },
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],

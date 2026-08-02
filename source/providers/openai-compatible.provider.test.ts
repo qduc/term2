@@ -113,7 +113,7 @@ function streamedSuccessResponse(): Response {
   return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
 }
 
-it('runtime openai-compatible createRunner returns a runner', () => {
+it('runtime openai-compatible createStreamedModel returns a streamed model', () => {
   const provider = createOpenAICompatibleProviderDefinition({
     name: 'local-test',
     baseUrl: 'http://localhost:11434',
@@ -154,9 +154,10 @@ it('runtime openai-compatible createRunner returns a runner', () => {
     },
   };
 
-  const runner = provider.createRunner!(deps);
+  const model = provider.createStreamedModel!('test-model', deps);
 
-  expect(runner).toBeTruthy();
+  expect(model).toBeTruthy();
+  expect(model).toHaveProperty('stream');
 });
 
 it('resolves a stored provider config by legacy name alias when the stored id differs', async () => {
@@ -972,11 +973,7 @@ it('lazy opencode provider returns an application-owned streamed model', async (
   };
 
   const definition = createLazyProviderDefinition({ name: 'opencode-lazy-test', type: 'opencode' });
-  const runner = definition.createRunner!(deps)!;
-  const modelProvider = (runner as any).config?.modelProvider;
-  expect(modelProvider).toBeTruthy();
-
-  const model = await modelProvider.getModel('provider-model');
+  const model = await definition.createStreamedModel!('provider-model', deps);
   expect(model).toHaveProperty('stream');
 });
 

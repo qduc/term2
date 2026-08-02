@@ -108,18 +108,17 @@ describe('AgentClient application-run-loop execution', () => {
     defaultInstance.dispose();
   });
 
-  it('fails clearly instead of executing a runner-only provider', async () => {
+  it('fails clearly when a provider has no streamed-model factory', async () => {
     const provider = `runner-only-${Date.now()}`;
     providers.add(provider);
     registerProvider({
       id: provider,
-      label: 'Runner only test provider',
-      createRunner: () => ({ run: async () => ({ finalOutput: 'legacy' }) } as any),
+      label: 'Missing streamed model test provider',
       fetchModels: async () => [],
     });
     const instance = client(provider);
     const stream = await instance.startStream('run');
-    await expect(stream.completed).rejects.toThrow('legacy runner execution');
+    await expect(stream.completed).rejects.toThrow('does not expose an application streamed model');
     instance.dispose();
   });
 

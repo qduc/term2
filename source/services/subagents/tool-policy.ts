@@ -994,7 +994,6 @@ export class SubagentToolFactory {
     const providerDef = getProvider(options.providerId);
     const capabilities = {
       supportsConversationChaining: providerDef?.capabilities?.supportsConversationChaining ?? false,
-      supportsTracingControl: providerDef?.capabilities?.supportsTracingControl ?? false,
       usesStrictToolSchema: providerDef?.capabilities?.usesStrictToolSchema,
     };
     const useStrictSchema = shouldUseStrictToolSchema({

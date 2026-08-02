@@ -29,46 +29,7 @@ afterEach(() => {
   registeredProviderIds.clear();
 });
 
-export type MockRunner = (agent: any, input: any, options: any) => any;
-
-/**
- * Legacy-shaped fixtures are kept only as test data while providers are
- * exercised through the application-owned streamed-model factory. This
- * adapter is intentionally confined to the test helper; production providers
- * have no runner fallback.
- */
-function streamedModelFromFixtureRunner(
-  createRunner: NonNullable<ProviderDefinition['createRunner']>,
-  deps: any,
-  model: string,
-): any {
-  return {
-    async *stream(request: any) {
-      const runner = createRunner(deps);
-      const result = await runner?.run(
-        {
-          name: 'fixture-agent',
-          model,
-          instructions: request.instructions,
-          tools: request.applicationTools ?? request.tools,
-        },
-        request.input,
-        { signal: request.signal, previousResponseId: request.previousResponseId, stream: true },
-      );
-      const settled = result?.completed ? await result.completed : result;
-      const finalText = settled?.finalOutput ?? result?.finalOutput;
-      yield {
-        type: 'completion',
-        responseId: settled?.responseId ?? result?.responseId ?? 'fixture-response',
-        output:
-          typeof finalText === 'string' && finalText
-            ? [{ type: 'message', content: [{ type: 'text', text: finalText }] }]
-            : [],
-        usage: settled?.usage ?? result?.usage,
-      };
-    },
-  };
-}
+export type MockStreamedModelFactory = (model: string, deps: any) => any;
 
 export function registerTestProvider(
   partial: Partial<Omit<ProviderDefinition, 'id'>> & {
@@ -76,11 +37,7 @@ export function registerTestProvider(
   },
 ): string {
   const id = partial.id ?? `test-provider-${randomUUID()}`;
-  const createStreamedModel =
-    partial.createStreamedModel ??
-    (partial.createRunner
-      ? (model: string, deps: any) => streamedModelFromFixtureRunner(partial.createRunner!, deps, model)
-      : undefined);
+  const createStreamedModel = partial.createStreamedModel;
   registerProvider({
     id,
     label: partial.label ?? id,
@@ -183,71 +140,22 @@ export function getAgentTool(agent: any, name: string): any {
   return agent.tools.find((tool: any) => tool.name === name);
 }
 
-export function wrapResultAsAgentStream(result: any): any {
-  const events: any[] = [];
+export async function* wrapResultAsAgentStream(result: any): AsyncGenerator<any> {
   if (typeof result.finalOutput === 'string' && result.finalOutput) {
-    events.push({ type: 'response.output_text.delta', delta: result.finalOutput });
+    yield { type: 'text_delta', text: result.finalOutput };
   }
-
-  const findSynthesizedOutput = (): unknown[] => {
-    if (Array.isArray(result.output) && result.output.length > 0) return result.output;
-    if (Array.isArray(result.newItems) && result.newItems.length > 0) return result.newItems;
-    if (Array.isArray(result.history) && result.history.length > 0) return result.history;
-    if (typeof result.finalOutput === 'string' && result.finalOutput) {
-      return [{ role: 'assistant', type: 'message', content: result.finalOutput }];
-    }
-    return [];
-  };
-
-  const synthesizedOutput = findSynthesizedOutput();
-
-  return {
-    [Symbol.asyncIterator]() {
-      let index = 0;
-      return {
-        async next() {
-          if (index < events.length) {
-            return { value: events[index++], done: false };
-          }
-          return { value: undefined, done: true };
-        },
-      };
-    },
-    completed: Promise.resolve(result),
-    rawResponses: [result],
-    status: result.status ?? 'completed',
-    finalOutput: result.finalOutput,
-    state: result.state,
-    output: synthesizedOutput,
-    newItems: result.newItems ?? synthesizedOutput,
-    interruptions: result.interruptions ?? [],
-    history: result.history ?? synthesizedOutput,
-    messages: result.messages ?? synthesizedOutput,
-    responseId: result.responseId ?? null,
-    lastResponseId: result.responseId ?? null,
+  yield {
+    type: 'completion',
+    responseId: result.responseId ?? 'fixture-response',
+    output:
+      typeof result.finalOutput === 'string' && result.finalOutput
+        ? [{ type: 'message', content: [{ type: 'text', text: result.finalOutput }] }]
+        : [],
   };
 }
 
-export function wrapErrorAsAgentStream(error: any): any {
-  const completed = Promise.reject(error);
-  completed.catch(() => {});
-  return {
-    [Symbol.asyncIterator]() {
-      return {
-        async next() {
-          throw error;
-        },
-      };
-    },
-    completed,
-    rawResponses: [],
-    status: 'failed',
-    interruptions: [],
-    history: [],
-    messages: [],
-    responseId: null,
-    lastResponseId: null,
-  };
+export async function* wrapErrorAsAgentStream(error: any): AsyncGenerator<any> {
+  throw error;
 }
 
 export function createTempDir(prefix: string): string {

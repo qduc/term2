@@ -155,7 +155,6 @@ registerProvider({
   sensitiveSettingKeys: [],
   capabilities: {
     supportsConversationChaining: true,
-    supportsTracingControl: true,
     supportsPromptCacheKey: true,
     usesStrictToolSchema: true,
     nativePatchModelPrefixes: ['gpt-5.1'],

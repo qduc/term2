@@ -442,11 +442,10 @@ it.sequential('buildAgent resolves codex default_reasoning_level', async () => {
   const fakeCodexProvider: ProviderDefinition = {
     id: 'codex',
     label: 'Mock Codex',
-    createRunner: () => null as any,
+    createStreamedModel: () => null as any,
     fetchModels: async () => [{ id: 'gpt-5.3-codex', default_reasoning_level: 'medium' }],
     capabilities: {
       supportsConversationChaining: true,
-      supportsTracingControl: true,
     },
   };
 

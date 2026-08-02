@@ -892,7 +892,6 @@ registerProvider({
   sensitiveSettingKeys: [],
   capabilities: {
     supportsConversationChaining: true,
-    supportsTracingControl: false,
     supportsPromptCacheKey: true,
     usesStrictToolSchema: true,
   },

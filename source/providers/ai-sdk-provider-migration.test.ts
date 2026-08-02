@@ -9,7 +9,7 @@ const providerFiles = [
   'source/providers/ai-sdk-anthropic.provider.ts',
 ];
 
-it('lazy compatibility runners resolve application-owned streamed models for every configured provider family', async () => {
+it('lazy provider factories resolve application-owned streamed models for every configured provider family', async () => {
   const cases = [
     { id: 'lazy-anthropic', type: 'anthropic', model: 'claude-test' },
     { id: 'lazy-google', type: 'google', model: 'gemini-test' },
@@ -36,10 +36,9 @@ it('lazy compatibility runners resolve application-owned streamed models for eve
       loggingService: { debug: () => {}, error: () => {}, info: () => {}, warn: () => {} } as any,
     };
     const definition = createOpenAICompatibleProviderDefinition({ name: testCase.id, type: testCase.type });
-    const runner = definition.createRunner?.(deps);
-    const model = await (runner as any).config.modelProvider.getModel(testCase.model);
+    const model = await definition.createStreamedModel!(testCase.model, deps);
 
-    expect(model, `${testCase.type} runner must resolve a model, not its provider wrapper`).toHaveProperty('stream');
+    expect(model, `${testCase.type} factory must resolve a streamed model`).toHaveProperty('stream');
     expect(typeof model.stream).toBe('function');
   }
 });

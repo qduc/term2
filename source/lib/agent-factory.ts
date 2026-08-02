@@ -56,7 +56,6 @@ export interface AgentBuildResult {
 
 type ProviderCapabilities = {
   supportsConversationChaining: boolean;
-  supportsTracingControl: boolean;
   supportsPromptCacheKey?: boolean;
   usesStrictToolSchema?: boolean;
   nativePatchModelPrefixes?: string[];
@@ -66,7 +65,6 @@ function getProviderCapabilities(providerId: string): ProviderCapabilities {
   const providerDef = getProvider(providerId);
   return {
     supportsConversationChaining: providerDef?.capabilities?.supportsConversationChaining ?? false,
-    supportsTracingControl: providerDef?.capabilities?.supportsTracingControl ?? false,
     supportsPromptCacheKey: providerDef?.capabilities?.supportsPromptCacheKey,
     usesStrictToolSchema: providerDef?.capabilities?.usesStrictToolSchema,
     nativePatchModelPrefixes: providerDef?.capabilities?.nativePatchModelPrefixes,

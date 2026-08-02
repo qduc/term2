@@ -71,14 +71,11 @@ function ensureProviderRegistered() {
       {
         id: 'mock-provider-dispose',
         label: 'Mock Dispose Provider',
-        createRunner: () =>
-          ({
-            run: async () => ({
-              status: 'completed',
-              finalOutput: '',
-              messages: [],
-            }),
-          } as any),
+        createStreamedModel: () => ({
+          async *stream() {
+            yield { type: 'completion', responseId: 'dispose-test', output: [] };
+          },
+        }),
         fetchModels: async () => [{ id: 'mock-model' }],
         clearConversations: () => {},
       },

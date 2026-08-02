@@ -1,10 +1,6 @@
 import { it, expect, beforeAll, afterAll, vi } from 'vitest';
-import {
-  CodexResponsesModel,
-  CodexResponsesWSModel,
-  OpenAIResponsesModel,
-  OpenAIResponsesWSModel,
-} from './codex-responses-model.js';
+import { CodexResponsesModel, CodexResponsesTransport, CodexResponsesWSModel } from './codex-responses-model.js';
+import type { StreamedModelTurnRequest } from '../contracts/streamed-model-turn.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,41 +17,61 @@ import {
   CodexProvider,
 } from './codex.provider.js';
 
-// Normalize pre-existing provider fixtures to the typed turn request before transport assertions.
-const originalStream = (OpenAIResponsesModel.prototype as any).stream;
-(OpenAIResponsesModel.prototype as any).stream = function (request: any) {
-  const normalize = (item: any) => {
-    if (item?.type === 'function_call_result' || item?.type === 'function_call_output')
-      return { type: 'tool_result', id: item.callId ?? item.call_id, output: item.output ?? '' };
-    if (item?.type === 'function_call')
-      return {
-        type: 'tool_call',
-        id: item.callId ?? item.call_id ?? item.id,
-        name: item.name ?? '',
-        arguments: item.arguments ?? '{}',
-      };
-    if (item?.type === 'message' || item?.role) {
-      const content = Array.isArray(item.content) ? item.content : [item.content ?? ''];
-      return {
-        type: 'message',
-        role: item.role ?? 'user',
-        content: content.map((part: any) =>
-          typeof part === 'string'
-            ? { type: 'text', text: part }
-            : part?.type === 'input_text' || part?.type === 'output_text'
-            ? { type: 'text', text: part.text ?? '' }
-            : part,
-        ),
-      };
-    }
-    return item;
-  };
-  return originalStream.call(this, {
-    ...request,
-    input: Array.isArray(request?.input) ? request.input.map(normalize) : request?.input,
-    tools: request?.tools ?? [],
-  });
+class FakeCodexResponsesTransport extends CodexResponsesTransport {
+  readonly calls: Array<{ request: StreamedModelTurnRequest; stream: boolean; requestData: any }> = [];
+  private readonly events: readonly any[];
+
+  constructor(events: readonly any[] = []) {
+    super();
+    this.events = events;
+  }
+
+  override async fetchResponse(request: StreamedModelTurnRequest, stream: boolean, requestData: any): Promise<any> {
+    this.calls.push({ request, stream, requestData });
+    return (async function* (events: readonly any[]) {
+      yield* events;
+    })(this.events);
+  }
+}
+
+const fakeCodexTokenManager = {
+  getOrRefreshAccessToken: async () => 'test-token',
+  getAccountId: () => undefined,
 };
+
+class HangingCodexResponsesTransport extends CodexResponsesTransport {
+  signal?: AbortSignal;
+
+  override async fetchResponse(request: StreamedModelTurnRequest, _stream: boolean, _requestData: any): Promise<any> {
+    this.signal = request.signal;
+    let reads = 0;
+    return {
+      [Symbol.asyncIterator]: () => ({
+        next: () => {
+          reads += 1;
+          return reads === 1
+            ? Promise.resolve({ done: false, value: { type: 'response.created', response: { id: 'resp_1' } } })
+            : new Promise(() => {});
+        },
+        return: async () => ({ done: true, value: undefined }),
+      }),
+    };
+  }
+}
+
+function typedRequest(
+  request: Omit<StreamedModelTurnRequest, 'tools'> & { tools?: StreamedModelTurnRequest['tools'] },
+): StreamedModelTurnRequest {
+  return { tools: [], ...request };
+}
+
+it('guards Codex tests against prototype monkey patches', () => {
+  const source = fs.readFileSync(new URL(import.meta.url), 'utf8');
+  const modelPrototypePatch = new RegExp('(?:OpenAI|Codex)Responses(?:WS)?Model' + '\\.prototype');
+  const methodAssignment = new RegExp('(?:raw' + 'Stream|fetch' + 'Response)\\s*=');
+  expect(source).not.toMatch(modelPrototypePatch);
+  expect(source).not.toMatch(methodAssignment);
+});
 
 // Helper to create a fake JWT with a specific expiry time in seconds from now
 function createFakeJwt(expiresInSeconds: number): string {
@@ -872,11 +888,13 @@ it.sequential('Codex HTTP stream forwards application instructions to Luna as de
   const model = provider.getStreamedModel('gpt-5.6-luna');
 
   const events = [];
-  for await (const event of model.stream({
-    instructions: 'PROJECT_CONTEXT_SENTINEL',
-    input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
-    tools: [],
-  })) {
+  for await (const event of model.stream(
+    typedRequest({
+      instructions: 'PROJECT_CONTEXT_SENTINEL',
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [],
+    }),
+  )) {
     events.push(event);
   }
 
@@ -897,17 +915,14 @@ it.sequential('Codex registry boundary preserves the full streamed-turn request 
   expect(provider?.createStreamedModel).toBeTruthy();
   if (!provider?.createStreamedModel) return;
 
-  const original = (CodexResponsesWSModel.prototype as any).rawStream;
-  let captured: any;
-  (CodexResponsesWSModel.prototype as any).rawStream = async function* (request: any) {
-    captured = request;
-    yield { type: 'response.output_text.delta', delta: 'answer' };
-    yield { type: 'response.reasoning_summary_text.delta', item_id: 'rs_out', delta: 'thought' };
-    yield {
+  const transport = new FakeCodexResponsesTransport([
+    { type: 'response.output_text.delta', delta: 'answer' },
+    { type: 'response.reasoning_summary_text.delta', item_id: 'rs_out', delta: 'thought' },
+    {
       type: 'response.output_item.done',
       item: { type: 'function_call', call_id: 'call_out', name: 'lookup', arguments: '{"q":1}' },
-    };
-    yield {
+    },
+    {
       type: 'codex.rate_limits',
       rate_limits: {
         allowed: true,
@@ -915,8 +930,8 @@ it.sequential('Codex registry boundary preserves the full streamed-turn request 
         primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 9697, reset_at: 1779703037 },
         secondary: { used_percent: 14, window_minutes: 10080, reset_after_seconds: 503937, reset_at: 1780197277 },
       },
-    };
-    yield {
+    },
+    {
       type: 'response.completed',
       response: {
         id: 'resp_contract',
@@ -937,52 +952,55 @@ it.sequential('Codex registry boundary preserves the full streamed-turn request 
           { type: 'function_call', call_id: 'call_out', name: 'lookup', arguments: '{"q":1}' },
         ],
       },
-    };
-    yield { type: 'response.output_text.delta', delta: 'must not escape terminal' };
-  };
+    },
+    { type: 'response.output_text.delta', delta: 'must not escape terminal' },
+  ]);
 
-  try {
+  {
     const controller = new AbortController();
     const model = await provider.createStreamedModel('gpt-5.3-codex', {
       settingsService: {
         get: (key: string) =>
           key === 'agent.transport' ? 'websocket' : key === 'agent.retryAttempts' ? 0 : 'gpt-5.3-codex',
       },
-      loggingService: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+      loggingService: transport,
     } as any);
     const events: any[] = [];
-    for await (const event of model.stream({
-      instructions: 'PROJECT_CONTEXT_SENTINEL',
-      previousResponseId: 'resp_before',
-      input: [
-        { type: 'message', role: 'user', content: [{ type: 'image', image: 'https://example.test/image.png' }] },
-        {
-          type: 'reasoning',
-          id: 'rs_in',
-          text: 'old thought',
-          providerMetadata: { codex: { encrypted_content: 'old-cipher' } },
-        },
-        { type: 'tool_call', id: 'call_in', name: 'lookup', arguments: '{}' },
-        {
-          type: 'tool_result',
-          id: 'call_in',
-          output: [{ type: 'file', file: { id: 'file_1', filename: 'result.txt' } }],
-        },
-      ],
-      tools: [{ name: 'lookup', parameters: { type: 'object' }, strict: true }],
-      toolChoice: { name: 'lookup' },
-      temperature: 0.2,
-      topP: 0.8,
-      frequencyPenalty: 0.3,
-      presencePenalty: 0.4,
-      maxTokens: 321,
-      reasoning: { effort: 'high', summary: 'detailed' },
-      providerOptions: { generate: false, custom_codex_option: true },
-      signal: controller.signal,
-    })) {
+    for await (const event of model.stream(
+      typedRequest({
+        instructions: 'PROJECT_CONTEXT_SENTINEL',
+        previousResponseId: 'resp_before',
+        input: [
+          { type: 'message', role: 'user', content: [{ type: 'image', image: 'https://example.test/image.png' }] },
+          {
+            type: 'reasoning',
+            id: 'rs_in',
+            text: 'old thought',
+            providerMetadata: { codex: { encrypted_content: 'old-cipher' } },
+          },
+          { type: 'tool_call', id: 'call_in', name: 'lookup', arguments: '{}' },
+          {
+            type: 'tool_result',
+            id: 'call_in',
+            output: [{ type: 'file', file: { id: 'file_1', filename: 'result.txt' } }],
+          },
+        ],
+        tools: [{ name: 'lookup', parameters: { type: 'object' }, strict: true }],
+        toolChoice: { name: 'lookup' },
+        temperature: 0.2,
+        topP: 0.8,
+        frequencyPenalty: 0.3,
+        presencePenalty: 0.4,
+        maxTokens: 321,
+        reasoning: { effort: 'high', summary: 'detailed' },
+        providerOptions: { generate: false, custom_codex_option: true },
+        signal: controller.signal,
+      }),
+    )) {
       events.push(event);
     }
 
+    const captured = transport.calls[0].request;
     expect(captured).toMatchObject({
       previousResponseId: 'resp_before',
       instructions: 'PROJECT_CONTEXT_SENTINEL',
@@ -1046,19 +1064,13 @@ it.sequential('Codex registry boundary preserves the full streamed-turn request 
         ],
       },
     ]);
-  } finally {
-    (CodexResponsesWSModel.prototype as any).rawStream = original;
   }
 });
 
 it.sequential('Codex HTTP and WebSocket adapters expose equivalent application-turn semantics', async () => {
-  const originalHttp = (CodexResponsesModel.prototype as any).rawStream;
-  const originalWs = (CodexResponsesWSModel.prototype as any).rawStream;
-  const captured: any[] = [];
-  const stream = async function* (request: any) {
-    captured.push(request);
-    yield { type: 'response.output_text.delta', delta: 'parity' };
-    yield {
+  const events = [
+    { type: 'response.output_text.delta', delta: 'parity' },
+    {
       type: 'response.completed',
       response: {
         id: 'resp_parity',
@@ -1066,47 +1078,46 @@ it.sequential('Codex HTTP and WebSocket adapters expose equivalent application-t
         output: [{ type: 'message', content: [{ type: 'output_text', text: 'parity' }] }],
         usage: { input_tokens: 1, output_tokens: 1 },
       },
-    };
-  };
-  (CodexResponsesModel.prototype as any).rawStream = stream;
-  (CodexResponsesWSModel.prototype as any).rawStream = stream;
-  const request = {
+    },
+  ];
+  const httpTransport = new FakeCodexResponsesTransport(events);
+  const websocketTransport = new FakeCodexResponsesTransport(events);
+  const request = typedRequest({
     instructions: 'PARITY_SENTINEL',
     previousResponseId: 'resp_before',
-    input: [{ type: 'message' as const, role: 'user' as const, content: [{ type: 'text' as const, text: 'hello' }] }],
+    input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
     tools: [],
-    toolChoice: 'none' as const,
+    toolChoice: 'none',
     topP: 0.5,
     maxTokens: 10,
     reasoning: { effort: 'low' },
     codex: { promptCacheKey: 'session-parity', include: ['reasoning.encrypted_content'] },
     providerOptions: { generate: false },
+  });
+  const http = new CodexResponsesModel({} as any, 'gpt-5.3-codex', httpTransport);
+  const websocket = new CodexResponsesWSModel({} as any, 'gpt-5.3-codex', fakeCodexTokenManager, websocketTransport);
+  const collect = async (model: CodexResponsesModel | CodexResponsesWSModel) => {
+    const result: any[] = [];
+    for await (const event of model.stream(request)) result.push(event);
+    return result;
   };
-  try {
-    const http = new CodexProvider({} as any, {} as any, {}, undefined, 'http', 0, {
-      firstFrameMs: 1_000,
-      interFrameMs: 1_000,
-    }).getStreamedModel('gpt-5.3-codex');
-    const websocket = new CodexProvider({} as any, {} as any, {}, undefined, 'websocket', 0, {
-      firstFrameMs: 1_000,
-      interFrameMs: 1_000,
-    }).getStreamedModel('gpt-5.3-codex');
-    const collect = async (model: any) => {
-      const events: any[] = [];
-      for await (const event of model.stream(request)) events.push(event);
-      return events;
-    };
-    expect(await collect(http)).toEqual(await collect(websocket));
-    expect(captured).toHaveLength(2);
-    expect(captured[0]).toEqual(captured[1]);
-    expect(captured[0].codex).toMatchObject({
-      promptCacheKey: 'session-parity',
-      include: ['reasoning.encrypted_content'],
-    });
-  } finally {
-    (CodexResponsesModel.prototype as any).rawStream = originalHttp;
-    (CodexResponsesWSModel.prototype as any).rawStream = originalWs;
-  }
+  expect(await collect(http)).toEqual(await collect(websocket));
+  expect(websocketTransport.calls[0].request).toMatchObject({
+    instructions: request.instructions,
+    previousResponseId: request.previousResponseId,
+    input: request.input,
+    tools: request.tools,
+    toolChoice: request.toolChoice,
+    topP: request.topP,
+    maxTokens: request.maxTokens,
+    reasoning: request.reasoning,
+    codex: request.codex,
+    providerOptions: { generate: false },
+  });
+  expect(httpTransport.calls[0].request.codex).toMatchObject({
+    promptCacheKey: 'session-parity',
+    include: ['reasoning.encrypted_content'],
+  });
 });
 
 it.sequential('Codex HTTP stream rejects EOF before a completed response event', async () => {
@@ -1127,10 +1138,12 @@ it.sequential('Codex HTTP stream rejects EOF before a completed response event',
 
   await expect(
     (async () => {
-      for await (const _event of model.stream({
-        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
-        tools: [],
-      })) {
+      for await (const _event of model.stream(
+        typedRequest({
+          input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+          tools: [],
+        }),
+      )) {
         // drain
       }
     })(),
@@ -1138,29 +1151,31 @@ it.sequential('Codex HTTP stream rejects EOF before a completed response event',
 });
 
 it.sequential('Codex provider reuses its streamed model so continuation state survives turns', async () => {
-  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).rawStream;
-  const instances: unknown[] = [];
-  (OpenAIResponsesWSModel.prototype as any).rawStream = async function* () {
-    instances.push(this);
-    yield { type: 'response.completed', response: { id: 'resp-1', output: [], usage: {} } };
-  };
-
-  try {
-    const provider = new CodexProvider({} as any, {} as any, {}, undefined, 'websocket', 0, {
+  const transport = new FakeCodexResponsesTransport([
+    { type: 'response.completed', response: { id: 'resp-1', output: [], usage: {} } },
+  ]);
+  const provider = new CodexProvider(
+    {} as any,
+    fakeCodexTokenManager as any,
+    transport as any,
+    undefined,
+    'websocket',
+    0,
+    {
       firstFrameMs: 1000,
       interFrameMs: 1000,
-    });
-    const first = provider.getStreamedModel('gpt-5.3-codex');
-    const second = provider.getStreamedModel('gpt-5.3-codex');
-    for await (const _event of (first as any).stream({ input: [] })) {
-    }
-    for await (const _event of (second as any).stream({ input: [] })) {
-    }
-    expect(instances).toHaveLength(2);
-    expect(instances[0]).toBe(instances[1]);
-  } finally {
-    (OpenAIResponsesWSModel.prototype as any).rawStream = originalGetStreamedResponse;
+    },
+  );
+  const first = provider.getStreamedModel('gpt-5.3-codex');
+  const second = provider.getStreamedModel('gpt-5.3-codex');
+  expect(second).toBe(first);
+  for await (const _event of first.stream(typedRequest({ input: [] }))) {
+    // drain
   }
+  for await (const _event of second.stream(typedRequest({ input: [] }))) {
+    // drain
+  }
+  expect(transport.calls).toHaveLength(2);
 });
 
 it.sequential('Codex provider rejects transport changes while cached continuation state exists', async () => {
@@ -1168,16 +1183,7 @@ it.sequential('Codex provider rejects transport changes while cached continuatio
   expect(provider?.createStreamedModel).toBeTruthy();
   if (!provider?.createStreamedModel) return;
 
-  const originalWsGetStreamedResponse = (CodexResponsesWSModel.prototype as any).rawStream;
-  const originalHttpGetStreamedResponse = (OpenAIResponsesModel.prototype as any).rawStream;
-  const instances: unknown[] = [];
-  const fakeStream = async function* (this: unknown) {
-    instances.push(this);
-    yield { type: 'response.completed', response: { id: 'resp-1', output: [], usage: {} } };
-  };
-  (CodexResponsesWSModel.prototype as any).rawStream = fakeStream;
-  (OpenAIResponsesModel.prototype as any).rawStream = fakeStream;
-  try {
+  {
     const settings = new Map<string, unknown>([
       ['agent.model', 'gpt-5.3-codex'],
       ['agent.transport', 'websocket'],
@@ -1193,18 +1199,9 @@ it.sequential('Codex provider rejects transport changes while cached continuatio
     } as any;
     const first = (await provider.createStreamedModel('gpt-5.3-codex', deps)) as any;
     const same = (await provider.createStreamedModel('gpt-5.3-codex', deps)) as any;
+    expect(same).toBe(first);
     settings.set('agent.transport', 'http');
     expect(() => provider.createStreamedModel!('gpt-5.3-codex', deps)).toThrow('Start a new session before continuing');
-    for (const model of [first, same]) {
-      for await (const _event of model.stream({ input: [] })) {
-        // drain
-      }
-    }
-    expect(instances).toHaveLength(2);
-    expect(instances[0]).toBe(instances[1]);
-  } finally {
-    (CodexResponsesWSModel.prototype as any).rawStream = originalWsGetStreamedResponse;
-    (OpenAIResponsesModel.prototype as any).rawStream = originalHttpGetStreamedResponse;
   }
 });
 
@@ -1213,121 +1210,61 @@ it.sequential('Codex provider does not share continuation state when no session 
   expect(provider?.createStreamedModel).toBeTruthy();
   if (!provider?.createStreamedModel) return;
 
-  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).rawStream;
-  const instances: unknown[] = [];
-  (OpenAIResponsesWSModel.prototype as any).rawStream = async function* () {
-    instances.push(this);
-    yield { type: 'response.completed', response: { id: 'resp-no-context', output: [], usage: {} } };
-  };
-  try {
-    const deps = {
-      settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
-      loggingService: {} as any,
-    } as any;
-    const first = (await provider.createStreamedModel('gpt-5.3-codex', deps)) as any;
-    const second = (await provider.createStreamedModel('gpt-5.3-codex', deps)) as any;
-    for (const model of [first, second]) {
-      for await (const _event of model.stream({ input: [] })) {
-        // drain
-      }
-    }
-    expect(instances).toHaveLength(2);
-    expect(instances[0]).not.toBe(instances[1]);
-  } finally {
-    (OpenAIResponsesWSModel.prototype as any).rawStream = originalGetStreamedResponse;
-  }
+  const deps = {
+    settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
+    loggingService: {} as any,
+  } as any;
+  const first = (await provider.createStreamedModel('gpt-5.3-codex', deps)) as any;
+  const second = (await provider.createStreamedModel('gpt-5.3-codex', deps)) as any;
+  expect(first).not.toBe(second);
 });
 
 it.sequential('Codex provider stream() wraps tool definitions with type: function for the wire request', async () => {
-  const provider = getProvider('codex');
-  expect(provider?.createStreamedModel).toBeTruthy();
-  if (!provider?.createStreamedModel) return;
-
-  let capturedRequest: any;
-  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).rawStream;
-  (OpenAIResponsesWSModel.prototype as any).rawStream = async function* (request: any) {
-    capturedRequest = request;
-    yield { type: 'response.completed', response: { id: 'resp_1', output: [], usage: {} } };
-  };
-
-  try {
-    const model = provider.createStreamedModel!('gpt-5.3-codex', {
-      settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
-      loggingService: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
-    } as any);
-    expect(model).toBeTruthy();
-
-    const stream = (model as any).stream({
-      input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }],
+  const transport = new FakeCodexResponsesTransport([
+    { type: 'response.completed', response: { id: 'resp_1', output: [], usage: {} } },
+  ]);
+  const model = new CodexResponsesWSModel({} as any, 'gpt-5.3-codex', fakeCodexTokenManager, transport);
+  for await (const _event of model.stream(
+    typedRequest({
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
       tools: [{ name: 'shell', description: 'Run shell.', parameters: { type: 'object' }, strict: true }],
-    } as any);
-    for await (const _event of stream) {
-      // drain
-    }
-
-    expect(capturedRequest.tools).toEqual([
-      { name: 'shell', description: 'Run shell.', parameters: { type: 'object' }, strict: true },
-    ]);
-  } finally {
-    (OpenAIResponsesWSModel.prototype as any).rawStream = originalGetStreamedResponse;
+    }),
+  )) {
+    // drain
   }
+  expect(transport.calls[0].requestData.tools).toEqual([
+    { type: 'function', name: 'shell', description: 'Run shell.', parameters: { type: 'object' }, strict: true },
+  ]);
 });
 
 it.sequential('Codex provider stream() serializes assistant history as output_text, not input_text', async () => {
-  const provider = getProvider('codex');
-  expect(provider?.createStreamedModel).toBeTruthy();
-  if (!provider?.createStreamedModel) return;
-
-  let capturedRequest: any;
-  const originalGetStreamedResponse = (OpenAIResponsesWSModel.prototype as any).rawStream;
-  (OpenAIResponsesWSModel.prototype as any).rawStream = async function* (request: any) {
-    capturedRequest = request;
-    yield { type: 'response.completed', response: { id: 'resp_1', output: [], usage: {} } };
-  };
-
-  try {
-    const model = provider.createStreamedModel!('gpt-5.3-codex', {
-      settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
-      loggingService: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
-    } as any);
-    expect(model).toBeTruthy();
-
-    const stream = (model as any).stream({
+  const transport = new FakeCodexResponsesTransport([
+    { type: 'response.completed', response: { id: 'resp_1', output: [], usage: {} } },
+  ]);
+  const model = new CodexResponsesWSModel({} as any, 'gpt-5.3-codex', fakeCodexTokenManager, transport);
+  for await (const _event of model.stream(
+    typedRequest({
       previousResponseId: 'resp-before',
       input: [
         { type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] },
         { type: 'message', role: 'assistant', content: [{ type: 'text', text: 'hello there' }] },
       ],
-    } as any);
-    for await (const _event of stream) {
-      // drain
-    }
-
-    expect(capturedRequest.previousResponseId).toBe('resp-before');
-    expect(capturedRequest.input).toEqual([
-      { type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] },
-      { type: 'message', role: 'assistant', content: [{ type: 'text', text: 'hello there' }] },
-    ]);
-  } finally {
-    (OpenAIResponsesWSModel.prototype as any).rawStream = originalGetStreamedResponse;
+    }),
+  )) {
+    // drain
   }
+  expect(transport.calls[0].requestData.previous_response_id).toBe('resp-before');
+  expect(transport.calls[0].requestData.input).toEqual([
+    { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] },
+    { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'hello there' }] },
+  ]);
 });
 
 it.sequential(
   'Codex provider stream() unwraps websocket-shaped events into text_delta and a completed message',
   async () => {
-    const provider = getProvider('codex');
-    expect(provider?.createStreamedModel).toBeTruthy();
-    if (!provider?.createStreamedModel) return;
-
-    // Mocking `fetchResponse` (rather than `getStreamedResponse`) forces the
-    // request through `OpenAIResponsesModel.rawStream`'s own event
-    // shaping, which wraps every event as `{ event: rawEvent }` for
-    // `OpenAIResponsesWSModel` instances. `codexStream()` must unwrap that
-    // shape or it silently drops all text and treats the turn as empty.
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function* () {
-      yield {
+    const transport = new FakeCodexResponsesTransport([
+      {
         type: 'codex.rate_limits',
         rate_limits: {
           allowed: true,
@@ -1335,101 +1272,68 @@ it.sequential(
           primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 60, reset_at: 1_700_000_000 },
           secondary: { used_percent: 14, window_minutes: 10_080, reset_after_seconds: 120, reset_at: 1_700_000_100 },
         },
-      };
-      yield { type: 'response.output_text.delta', delta: 'Hi! How can I help you today?' };
-      yield {
+      },
+      { type: 'response.output_text.delta', delta: 'Hi! How can I help you today?' },
+      {
         type: 'response.completed',
         response: {
           id: 'resp_1',
-          output: [
-            {
-              type: 'message',
-              content: [{ text: 'Hi! How can I help you today?' }],
-            },
-          ],
+          output: [{ type: 'message', content: [{ text: 'Hi! How can I help you today?' }] }],
           usage: {},
         },
-      };
-    };
-
-    try {
-      const model = provider.createStreamedModel!('gpt-5.3-codex', {
-        settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
-        loggingService: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
-      } as any) as any;
-      expect(model).toBeTruthy();
-      const events: any[] = [];
-      for await (const event of (model as any).stream({
+      },
+    ]);
+    const model = new CodexResponsesWSModel({} as any, 'gpt-5.3-codex', fakeCodexTokenManager, transport);
+    const events: any[] = [];
+    for await (const event of model.stream(
+      typedRequest({
         input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }],
-      } as any)) {
-        events.push(event);
-      }
-
-      expect(events).toEqual([
-        {
-          type: 'codex_rate_limits',
-          rateLimits: {
-            allowed: true,
-            limit_reached: false,
-            primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 60, reset_at: 1_700_000_000 },
-            secondary: { used_percent: 14, window_minutes: 10_080, reset_after_seconds: 120, reset_at: 1_700_000_100 },
-          },
-        },
-        { type: 'text_delta', text: 'Hi! How can I help you today?' },
-        {
-          type: 'completion',
-          responseId: 'resp_1',
-          output: [{ type: 'message', content: [{ type: 'text', text: 'Hi! How can I help you today?' }] }],
-        },
-      ]);
-    } finally {
-      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
+      }),
+    )) {
+      events.push(event);
     }
+    expect(events).toEqual([
+      {
+        type: 'codex_rate_limits',
+        rateLimits: {
+          allowed: true,
+          limit_reached: false,
+          primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 60, reset_at: 1_700_000_000 },
+          secondary: { used_percent: 14, window_minutes: 10_080, reset_after_seconds: 120, reset_at: 1_700_000_100 },
+        },
+      },
+      { type: 'text_delta', text: 'Hi! How can I help you today?' },
+      {
+        type: 'completion',
+        responseId: 'resp_1',
+        output: [{ type: 'message', content: [{ type: 'text', text: 'Hi! How can I help you today?' }] }],
+      },
+    ]);
+    expect(transport.calls).toHaveLength(1);
   },
 );
 
 it.sequential('Codex provider passes configured receive timeouts to websocket models', async () => {
-  const provider = getProvider('codex');
-  expect(provider?.createStreamedModel).toBeTruthy();
-  if (!provider?.createStreamedModel) return;
-
   vi.useFakeTimers();
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
-  let sdkSignal: AbortSignal | undefined;
-  let reads = 0;
-  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
-    sdkSignal = request.signal;
-    return {
-      [Symbol.asyncIterator]: () => ({
-        next: () => {
-          reads += 1;
-          return reads === 1
-            ? Promise.resolve({ done: false, value: { type: 'response.created', response: { id: 'resp_1' } } })
-            : new Promise(() => {});
-        },
-        return: async () => ({ done: true, value: undefined }),
-      }),
-    };
-  };
-
   try {
-    const settings = new Map<string, unknown>([
-      ['agent.model', 'gpt-5.3-codex'],
-      ['agent.transport', 'websocket'],
-      ['agent.retryAttempts', 0],
-      ['agent.codex.websocketFirstFrameTimeoutMs', 50],
-      ['agent.codex.websocketInterFrameTimeoutMs', 25],
-    ]);
-    const model = provider.createStreamedModel!('gpt-5.3-codex', {
-      settingsService: { get: (key: string) => settings.get(key) },
-      loggingService: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
-    } as any);
-    expect(model).toBeTruthy();
+    const transport = new HangingCodexResponsesTransport();
+    const model = new CodexResponsesWSModel(
+      {} as any,
+      'gpt-5.3-codex',
+      fakeCodexTokenManager,
+      undefined,
+      undefined,
+      undefined,
+      { firstFrameMs: 50, interFrameMs: 25 },
+      undefined,
+      transport,
+    );
     const pending = (async () => {
-      for await (const _event of (model as any).stream({
-        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
-        tools: [],
-      } as any)) {
+      for await (const _event of model.stream(
+        typedRequest({
+          input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        }),
+      )) {
         // The test stream intentionally never yields.
       }
     })();
@@ -1437,10 +1341,9 @@ it.sequential('Codex provider passes configured receive timeouts to websocket mo
 
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(25);
-    expect(sdkSignal?.aborted).toBe(true);
-    expect((sdkSignal?.reason as Error).message).toBe('WebSocket idle timeout');
+    expect(transport.signal?.aborted).toBe(true);
+    expect((transport.signal?.reason as Error).message).toBe('WebSocket idle timeout');
   } finally {
-    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
     vi.useRealTimers();
   }
 });

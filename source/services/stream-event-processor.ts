@@ -184,6 +184,13 @@ export async function* processStreamEvents(
         if (e) yield e;
       }
     }
+    if (modelEvent && modelEvent !== eventData) {
+      const delta3 = extractTextDelta(modelEvent);
+      if (delta3) {
+        const e = emitText(delta3);
+        if (e) yield e;
+      }
+    }
 
     const reasoningDelta = extractReasoningDelta(rawEvent);
     if (reasoningDelta) {

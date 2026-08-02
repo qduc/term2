@@ -57,6 +57,24 @@ it('extractReasoningDelta: extracts model reasoning-delta events', () => {
   expect(extractReasoningDelta(event)).toBe('The');
 });
 
+it('extractReasoningDelta: extracts direct model reasoning-delta envelopes', () => {
+  expect(
+    extractReasoningDelta({
+      type: 'model',
+      event: { type: 'reasoning-delta', delta: 'direct thinking' },
+    }),
+  ).toBe('direct thinking');
+});
+
+it('extractReasoningDelta: extracts direct OpenRouter model envelopes', () => {
+  expect(
+    extractReasoningDelta({
+      type: 'model',
+      event: { choices: [{ delta: { reasoning_content: 'direct OpenRouter thinking' } }] },
+    }),
+  ).toBe('direct OpenRouter thinking');
+});
+
 it('extractReasoningDelta: extracts OpenRouter reasoning delta fields', () => {
   const reasoningEvent = {
     data: {

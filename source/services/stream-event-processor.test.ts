@@ -8,6 +8,7 @@ import {
 } from './stream-event-processor.js';
 import { adaptAgentStream, type AgentStream } from './agent-stream.js';
 import { ApplicationRunLoop } from './agent-runtime/application-run-loop.js';
+import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 
 const logger = new LoggingService({ disableLogging: true });
 
@@ -64,6 +65,90 @@ it('preserves newline between code fence language and first code line across tex
 
   expect(acc.finalOutput).toBe('```typescript\nif (enabled) {\n  run();\n}\n```');
   expect(events.some((e) => e.type === 'text_delta' && e.fullText === '```typescript\nif (enabled) {\n')).toBe(true);
+});
+
+it('extracts text once from nested and direct model envelopes', async () => {
+  const stream = makeStream([
+    { type: 'raw_model_stream_event', data: { type: 'model', event: { type: 'output_text_delta', delta: 'nested' } } },
+    { type: 'model', event: { type: 'output_text_delta', delta: ' direct' } },
+  ]);
+  const events: any[] = [];
+  for await (const event of processStreamEvents(stream, createStreamAccumulator(), baseOpts(), baseDeps())) {
+    events.push(event);
+  }
+
+  expect(events.filter((event) => event.type === 'text_delta')).toEqual([
+    { type: 'text_delta', delta: 'nested', fullText: 'nested' },
+    { type: 'text_delta', delta: ' direct', fullText: 'nested direct' },
+  ]);
+});
+
+it('preserves provider reasoning and completed tool-call progress through ApplicationRunLoop', async () => {
+  let calls = 0;
+  const model: StreamedModelTurn = {
+    async *stream() {
+      calls++;
+      if (calls === 1) {
+        yield { type: 'reasoning_delta', text: 'thinking about the command' };
+        yield { type: 'tool_call', id: 'call-1', name: 'probe', arguments: '{"value":"ok"}' };
+        yield {
+          type: 'completion',
+          responseId: 'response-tool',
+          output: [{ type: 'tool_call', id: 'call-1', name: 'probe', arguments: '{"value":"ok"}' }],
+        };
+        return;
+      }
+      yield {
+        type: 'completion',
+        responseId: 'response-done',
+        output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+      };
+    },
+  };
+  const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+    {
+      name: 'test-agent',
+      instructions: 'Be concise.',
+      model: 'test-model',
+      tools: [
+        {
+          name: 'probe',
+          description: 'fixture probe',
+          parameters: { type: 'object' },
+          needsApproval: async () => false,
+          formatCommandMessage: () => [],
+          execute: async () => 'fixture result',
+        },
+      ],
+    },
+    'prompt',
+  );
+  const events: any[] = [];
+  for await (const event of processStreamEvents(stream, createStreamAccumulator(), baseOpts(), baseDeps())) {
+    events.push(event);
+  }
+
+  expect(events.filter((event) => event.type === 'reasoning_delta')).toEqual([
+    { type: 'reasoning_delta', delta: 'thinking about the command', fullText: 'thinking about the command' },
+  ]);
+  expect(events.filter((event) => event.type === 'tool_started')).toEqual([
+    {
+      type: 'tool_started',
+      toolCallId: 'call-1',
+      toolName: 'probe',
+      arguments: { value: 'ok' },
+    },
+  ]);
+  expect(events.filter((event) => event.type === 'command_message')).toEqual([
+    expect.objectContaining({
+      type: 'command_message',
+      message: expect.objectContaining({
+        callId: 'call-1',
+        output: 'fixture result',
+        status: 'completed',
+      }),
+    }),
+  ]);
 });
 
 it('emits reasoning_delta events with accumulated fullText', async () => {

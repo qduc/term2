@@ -67,10 +67,16 @@ export function extractTextDelta(payload: any): string | null {
 }
 
 export function extractReasoningDelta(event: any): string {
-  // OpenAI style
+  // The application run loop emits `{ type: 'model', event }` directly, while
+  // the Agents SDK raw envelope uses `{ data: { type: 'model', event } }`.
+  // Normalize both at this parser boundary so downstream consumers do not
+  // need to understand provider/runtime envelope variants.
   const data = event?.data;
-  if (data && typeof data === 'object' && (data as any).type === 'model') {
-    const eventDetail = (data as any).event;
+  const modelEvents = [
+    data && typeof data === 'object' && data.type === 'model' ? data.event : undefined,
+    event?.type === 'model' ? event.event : undefined,
+  ];
+  for (const eventDetail of modelEvents) {
     if (
       eventDetail &&
       typeof eventDetail === 'object' &&
@@ -80,8 +86,8 @@ export function extractReasoningDelta(event: any): string {
     }
   }
 
-  // OpenRouter style
-  const choices = event?.data?.event?.choices;
+  // OpenRouter style, in either runtime envelope.
+  const choices = event?.data?.event?.choices ?? (event?.type === 'model' ? event.event?.choices : undefined);
   if (!choices) return '';
   if (Array.isArray(choices)) {
     return choices[0]?.delta?.reasoning ?? choices[0]?.delta?.reasoning_content ?? '';

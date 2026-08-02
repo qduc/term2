@@ -1,4 +1,3 @@
-import type { LegacyRunner } from '../contracts/model.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import type { ISessionContextService } from '../services/service-interfaces.js';
 import type { ProviderRequestCapture } from './provider-request-capture.js';
@@ -30,15 +29,7 @@ export interface ProviderDefinition {
   /** Human-readable label for display (e.g., 'OpenAI', 'OpenRouter') */
   label: string;
 
-  /**
-   * Factory function to create a Runner instance, or undefined to use SDK default.
-   *
-   * NOTE: This accepts dependencies from the caller to avoid providers importing
-   * services directly (which can create ESM circular dependency issues).
-   */
-  createRunner?: (deps: ProviderDeps) => LegacyRunner | null;
-
-  /** Application-owned one-turn model path used by the replacement run loop. */
+  /** Application-owned one-turn model factory. */
   createStreamedModel?: (model: string, deps: ProviderDeps) => StreamedModelTurn | Promise<StreamedModelTurn>;
 
   /** Function to fetch available models for this provider */
@@ -56,7 +47,6 @@ export interface ProviderDefinition {
   /** Optional provider capabilities */
   capabilities?: {
     supportsConversationChaining: boolean;
-    supportsTracingControl: boolean;
     supportsPromptCacheKey?: boolean;
     usesStrictToolSchema?: boolean;
     nativePatchModelPrefixes?: string[];
@@ -67,80 +57,6 @@ export interface ProviderDefinition {
    * Used to prevent accidental overrides of built-in providers.
    */
   isRuntimeDefined?: boolean;
-}
-
-export function createApplicationCompatibilityRunner(
-  createModel: (model: string) => unknown | Promise<unknown>,
-): ApplicationCompatibilityRunner {
-  const models = new Map<string, unknown>();
-  const modelProvider = {
-    getModel: async (model: string) => {
-      const cached = models.get(model);
-      if (cached) return cached;
-      const created = await createModel(model);
-      models.set(model, created);
-      return created;
-    },
-  };
-  return {
-    config: { modelProvider },
-    async run(agent: any, input: unknown, options: any = {}) {
-      const { ApplicationRunLoop } = await import('../services/agent-runtime/application-run-loop.js');
-      const loop = new ApplicationRunLoop({ resolveModel: (model: string) => modelProvider.getModel(model) as any });
-      return loop.startStream(agent, input as any, {
-        signal: options.signal,
-        ...(options.previousResponseId ? { previousResponseId: options.previousResponseId } : {}),
-        // Callers that had a turn budget under the SDK runner (the mentor, edit
-        // healing) still pass it in run options; the loop enforces it now.
-        ...(typeof options.maxTurns === 'number' ? { maxTurns: options.maxTurns } : {}),
-      });
-    },
-    async runToCompletion(agent: any, input: unknown, options: any = {}) {
-      // Settle the stream so result-shaped callers (edit healing, the mentor)
-      // can read `finalOutput` / `usage` synchronously instead of reading a
-      // stream that has not run yet. The resolved completion value carries the
-      // run's `{ usage, output }`; attach it to the returned stream.
-      const stream = await this.run(agent, input, options);
-      const resolved = await stream.completed;
-      return Object.assign(stream, resolved);
-    },
-  } as any;
-}
-
-export interface ApplicationCompatibilityRunner extends LegacyRunner {
-  /**
-   * Runs the same application loop as {@link LegacyRunner.run} but awaits the
-   * stream to completion and returns the settled stream (with the resolved
-   * `{ usage, output }` attached). Result-shaped callers must use this; `run`
-   * returns a live stream and is reserved for the streaming main path.
-   */
-  runToCompletion(agent: unknown, input: unknown, options?: any): Promise<any>;
-}
-
-/**
- * Runs a provider runner and returns a settled, result-shaped run.
- *
- * Every registered provider's runner comes from
- * {@link createApplicationCompatibilityRunner} and therefore has
- * `runToCompletion`; runners that only expose the live-stream `run` (test
- * fakes, hand-built runners) are settled here instead. Result-shaped callers
- * share this so they cannot drift apart on which shape they tolerate.
- */
-export async function settleProviderRun(
-  runner: LegacyRunner,
-  agent: unknown,
-  input: unknown,
-  options?: any,
-): Promise<any> {
-  const compatRunner = runner as ApplicationCompatibilityRunner;
-  if (typeof compatRunner.runToCompletion === 'function') {
-    return compatRunner.runToCompletion(agent, input, options);
-  }
-  const liveStream = await runner.run(agent as any, input as any, options);
-  if (liveStream?.completed) {
-    return Object.assign(liveStream, await liveStream.completed);
-  }
-  return liveStream;
 }
 
 /**
@@ -154,10 +70,6 @@ const providers = new Map<string, ProviderDefinition>();
  * Called by provider modules during initialization.
  */
 export function registerProvider(definition: ProviderDefinition, options?: { allowOverride?: boolean }): void {
-  if (!definition.createRunner && definition.createStreamedModel) {
-    definition.createRunner = (deps) =>
-      createApplicationCompatibilityRunner((model) => definition.createStreamedModel!(model, deps));
-  }
   const allowOverride = options?.allowOverride === true;
 
   if (providers.has(definition.id) && !allowOverride) {

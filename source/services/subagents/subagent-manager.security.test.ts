@@ -78,17 +78,17 @@ describe('write boundary enforcement', () => {
     boundaryWorkerCalls = [];
     providerId = registerTestProvider({
       label: 'Mock Boundary Worker',
-      createRunner: () =>
+      createStreamedModel: () =>
         ({
-          run: async (_agent: any, _input: any, _options: any) => {
-            boundaryWorkerCalls.push({ agent: _agent });
+          stream: async function* (request: any) {
+            boundaryWorkerCalls.push({ agent: { tools: request.applicationTools ?? [] } });
             const result = {
               status: 'completed',
               finalOutput: 'Done.',
               history: [],
               messages: [],
             };
-            return _options?.stream ? wrapResultAsAgentStream(result) : result;
+            yield* wrapResultAsAgentStream(result);
           },
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],
@@ -264,11 +264,11 @@ describe('write boundary enforcement', () => {
   it('worker filesChanged tracks only successful writes for batch operations', async () => {
     const filesChangedProviderId = registerTestProvider({
       label: 'Mock Worker Files Changed Provider',
-      createRunner: () =>
+      createStreamedModel: () =>
         ({
-          run: async (agent: any) => {
-            const applyPatch = agent.tools.find((tool: any) => tool.name === 'apply_patch');
-            const searchReplace = agent.tools.find((tool: any) => tool.name === 'search_replace');
+          stream: async function* (request: any) {
+            const applyPatch = request.applicationTools.find((tool: any) => tool.name === 'apply_patch');
+            const searchReplace = request.applicationTools.find((tool: any) => tool.name === 'search_replace');
 
             if (applyPatch) {
               await applyPatch.execute(
@@ -308,7 +308,7 @@ describe('write boundary enforcement', () => {
               history: [],
               messages: [],
             };
-            return wrapResultAsAgentStream(result);
+            yield* wrapResultAsAgentStream(result);
           },
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],
@@ -344,10 +344,10 @@ describe('write boundary enforcement', () => {
   it('worker write lock rejects concurrent create_file for same path without waiting', async () => {
     const lockProviderId = registerTestProvider({
       label: 'Mock Worker Lock Provider',
-      createRunner: () =>
+      createStreamedModel: () =>
         ({
-          run: async (agent: any) => {
-            const createFile = agent.tools.find((tool: any) => tool.name === 'create_file');
+          stream: async function* (request: any) {
+            const createFile = request.applicationTools.find((tool: any) => tool.name === 'create_file');
 
             const [first, second] = await Promise.all([
               createFile.execute(
@@ -374,7 +374,7 @@ describe('write boundary enforcement', () => {
               history: [],
               messages: [],
             };
-            return wrapResultAsAgentStream(result);
+            yield* wrapResultAsAgentStream(result);
           },
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],
@@ -419,10 +419,10 @@ describe('worker shell tool safety gating', () => {
 
     const providerId = registerTestProvider({
       label: 'Mock Worker Shell Safe Provider',
-      createRunner: () =>
+      createStreamedModel: () =>
         ({
-          run: async (agent: any, _input: any, _options: any) => {
-            const shellTool = agent.tools.find((tool: any) => tool.name === 'shell');
+          stream: async function* (request: any) {
+            const shellTool = request.applicationTools.find((tool: any) => tool.name === 'shell');
             // needsApproval must be false for safe commands — no approval UI in workers
             const needsApproval = await shellTool.needsApproval({}, { command: 'ls .' });
             expect(needsApproval, 'worker shell tool must never require approval').toBe(false);
@@ -434,7 +434,7 @@ describe('worker shell tool safety gating', () => {
               history: [],
               messages: [],
             };
-            return _options?.stream ? wrapResultAsAgentStream(result) : result;
+            yield* wrapResultAsAgentStream(result);
           },
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],
@@ -462,10 +462,10 @@ describe('worker shell tool safety gating', () => {
 
     const providerId = registerTestProvider({
       label: 'Mock Worker Shell Dangerous Provider',
-      createRunner: () =>
+      createStreamedModel: () =>
         ({
-          run: async (agent: any, _input: any, _options: any) => {
-            const shellTool = agent.tools.find((tool: any) => tool.name === 'shell');
+          stream: async function* (request: any) {
+            const shellTool = request.applicationTools.find((tool: any) => tool.name === 'shell');
             // needsApproval must always be false — dangerous commands are blocked by execute(), not approval
             const needsApproval = await shellTool.needsApproval({}, { command: 'rm -rf /tmp/something' });
             expect(needsApproval, 'worker shell must never trigger approval UI even for dangerous commands').toBe(
@@ -479,7 +479,7 @@ describe('worker shell tool safety gating', () => {
               history: [],
               messages: [],
             };
-            return _options?.stream ? wrapResultAsAgentStream(result) : result;
+            yield* wrapResultAsAgentStream(result);
           },
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],
@@ -511,10 +511,10 @@ describe('worker shell tool safety gating', () => {
 
     const providerId = registerTestProvider({
       label: 'Mock Worker Shell Yellow Approved Provider',
-      createRunner: () =>
+      createStreamedModel: () =>
         ({
-          run: async (agent: any, _input: any, _options: any) => {
-            const shellTool = agent.tools.find((tool: any) => tool.name === 'shell');
+          stream: async function* (request: any) {
+            const shellTool = request.applicationTools.find((tool: any) => tool.name === 'shell');
             shellResult = await shellTool.execute(
               JSON.stringify({ command: 'npm run test:verbose -- --help' }),
               {},
@@ -526,7 +526,7 @@ describe('worker shell tool safety gating', () => {
               history: [],
               messages: [],
             };
-            return _options?.stream ? wrapResultAsAgentStream(result) : result;
+            yield* wrapResultAsAgentStream(result);
           },
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],
@@ -567,10 +567,10 @@ describe('worker shell tool safety gating', () => {
 
     const providerId = registerTestProvider({
       label: 'Mock Worker Shell Yellow Rejected Provider',
-      createRunner: () =>
+      createStreamedModel: () =>
         ({
-          run: async (agent: any, _input: any, _options: any) => {
-            const shellTool = agent.tools.find((tool: any) => tool.name === 'shell');
+          stream: async function* (request: any) {
+            const shellTool = request.applicationTools.find((tool: any) => tool.name === 'shell');
             shellResult = await shellTool.execute(
               JSON.stringify({ command: 'npm run test:verbose -- --help' }),
               {},
@@ -582,7 +582,7 @@ describe('worker shell tool safety gating', () => {
               history: [],
               messages: [],
             };
-            return _options?.stream ? wrapResultAsAgentStream(result) : result;
+            yield* wrapResultAsAgentStream(result);
           },
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],
@@ -618,9 +618,9 @@ describe('worker shell tool safety gating', () => {
   it('run() extracts usage from error.state.usage when subagent run fails', async () => {
     const providerId = registerTestProvider({
       label: 'Mock Failed Usage Provider',
-      createRunner: () =>
+      createStreamedModel: () =>
         ({
-          run: async () => {
+          stream: async function* () {
             const err = new Error('Run failed due to some reason');
             (err as any).state = {
               usage: {

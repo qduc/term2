@@ -1,12 +1,7 @@
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { toTerminalEvent } from '../conversation/conversation-result-builder.js';
 import { type UserTurn } from '../../types/user-turn.js';
-import {
-  TurnStatusMachine,
-  type TurnCommand,
-  type TurnLease,
-  type TurnOutcome,
-} from './turn-status-machine.js';
+import { TurnStatusMachine, type TurnCommand, type TurnLease, type TurnOutcome } from './turn-status-machine.js';
 import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import type { TurnWorkflow } from './turn-workflow.js';
 import type { ProviderContinuity } from '../provider-continuity.js';

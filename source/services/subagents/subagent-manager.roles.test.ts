@@ -57,16 +57,16 @@ const TEMP_BLOCKED_CASES = [
 it('run() returns failed result for unknown role', async () => {
   const providerId = registerTestProvider({
     label: 'Mock Mentor Manager',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async (_agent: any, _input: any, _options: any) => {
+        stream: async function* (_agent: any, _input: any, _options: any) {
           const result = {
             status: 'completed',
             finalOutput: 'mentor-response',
             history: [],
             messages: [],
           };
-          return _options?.stream ? wrapResultAsAgentStream(result) : result;
+          yield* wrapResultAsAgentStream(result);
         },
       } as any),
     fetchModels: async () => [{ id: 'mock-model' }],
@@ -217,17 +217,21 @@ describe('explorer role', () => {
     explorerRunnerCalls = [];
     explorerProviderId = registerTestProvider({
       label: 'Mock Explorer Provider',
-      createRunner: () =>
+      createStreamedModel: () =>
         ({
-          run: async (_agent: any, input: any, options: any) => {
-            explorerRunnerCalls.push({ input, agent: _agent, options });
+          stream: async function* (request: any) {
+            explorerRunnerCalls.push({
+              input: request.input,
+              agent: { tools: request.applicationTools ?? [] },
+              options: { signal: request.signal },
+            });
             const result = {
               status: 'completed',
               finalOutput: 'Found the relevant files.',
               history: [],
               messages: [],
             };
-            return options?.stream ? wrapResultAsAgentStream(result) : result;
+            yield* wrapResultAsAgentStream(result);
           },
         } as any),
       fetchModels: async () => [{ id: MODEL_MOCK }],
@@ -283,18 +287,19 @@ describe('explorer role', () => {
     // via startStream(). The mock listens on options.signal (the internal AC).
     const abortProviderId = registerTestProvider({
       label: 'Mock Aborted Subagent Provider',
-      createRunner: () =>
+      createStreamedModel: () =>
         ({
-          run: async (_agent: any, _input: any, options: { signal?: AbortSignal }) =>
-            new Promise((_resolve, reject) => {
+          stream: async function* (request: { signal?: AbortSignal }) {
+            await new Promise<void>((_resolve, reject) => {
               const rejectAbort = () =>
                 reject(Object.assign(new Error('delegated run aborted'), { name: 'AbortError' }));
-              if (options.signal?.aborted) {
+              if (request.signal?.aborted) {
                 rejectAbort();
                 return;
               }
-              options.signal?.addEventListener('abort', rejectAbort, { once: true });
-            }),
+              request.signal?.addEventListener('abort', rejectAbort, { once: true });
+            });
+          },
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],
     });
@@ -448,17 +453,17 @@ describe('researcher role', () => {
     researcherRunnerCalls = [];
     researcherProviderId = registerTestProvider({
       label: 'Mock Researcher Provider',
-      createRunner: () =>
+      createStreamedModel: () =>
         ({
-          run: async (_agent: any, _input: any, _options: any) => {
-            researcherRunnerCalls.push({ agent: _agent });
+          stream: async function* (request: any) {
+            researcherRunnerCalls.push({ agent: { tools: request.applicationTools ?? [] } });
             const result = {
               status: 'completed',
               finalOutput: 'Research findings.',
               history: [],
               messages: [],
             };
-            return _options?.stream ? wrapResultAsAgentStream(result) : result;
+            yield* wrapResultAsAgentStream(result);
           },
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],
@@ -502,17 +507,17 @@ describe('worker role', () => {
     workerRunnerCalls = [];
     workerProviderId = registerTestProvider({
       label: 'Mock Worker Provider',
-      createRunner: () =>
+      createStreamedModel: () =>
         ({
-          run: async (_agent: any, _input: any, _options: any) => {
-            workerRunnerCalls.push({ agent: _agent });
+          stream: async function* (request: any) {
+            workerRunnerCalls.push({ agent: { tools: request.applicationTools ?? [] } });
             const result = {
               status: 'completed',
               finalOutput: 'Changes applied.',
               history: [],
               messages: [],
             };
-            return _options?.stream ? wrapResultAsAgentStream(result) : result;
+            yield* wrapResultAsAgentStream(result);
           },
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],
@@ -600,16 +605,16 @@ describe('worker role agent tool caching', () => {
   beforeEach(() => {
     boundaryProviderId = registerTestProvider({
       label: 'Mock Boundary Worker',
-      createRunner: () =>
+      createStreamedModel: () =>
         ({
-          run: async (_agent: any, _input: any, _options: any) => {
+          stream: async function* (_agent: any, _input: any, _options: any) {
             const result = {
               status: 'completed',
               finalOutput: 'Done.',
               history: [],
               messages: [],
             };
-            return _options?.stream ? wrapResultAsAgentStream(result) : result;
+            yield* wrapResultAsAgentStream(result);
           },
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],

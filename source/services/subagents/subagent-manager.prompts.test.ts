@@ -52,12 +52,12 @@ it('execution subagents select subagent-safe model-family prompts and append rol
 
   const providerIdCodex = registerTestProvider({
     label: 'Mock Prompt Test Provider GPT-5 Codex',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async (agent: any) => {
+        stream: async function* (agent: any) {
           constructedAgentExplorer = agent;
           const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
+          yield* wrapResultAsAgentStream(result);
         },
       } as any),
     fetchModels: async () => [{ id: 'gpt-5-codex' }],
@@ -65,12 +65,12 @@ it('execution subagents select subagent-safe model-family prompts and append rol
 
   const providerIdClaude = registerTestProvider({
     label: 'Mock Prompt Test Provider Claude 3 Sonnet',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async (agent: any) => {
+        stream: async function* (agent: any) {
           constructedAgentWorker = agent;
           const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
+          yield* wrapResultAsAgentStream(result);
         },
       } as any),
     fetchModels: async () => [{ id: 'claude-3-sonnet' }],
@@ -78,12 +78,12 @@ it('execution subagents select subagent-safe model-family prompts and append rol
 
   const providerIdGpt5 = registerTestProvider({
     label: 'Mock Prompt Test Provider GPT-5 Modern',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async (agent: any) => {
+        stream: async function* (agent: any) {
           constructedAgentResearcher = agent;
           const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
+          yield* wrapResultAsAgentStream(result);
         },
       } as any),
     fetchModels: async () => [{ id: 'gpt-5' }],
@@ -152,12 +152,12 @@ it('execution subagent prompts exclude top-level-only prompt content', async () 
 
   const providerId = registerTestProvider({
     label: 'Mock Top Level Exclusion Provider',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async (agent: any) => {
+        stream: async function* (agent: any) {
           constructedAgent = agent;
           const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
+          yield* wrapResultAsAgentStream(result);
         },
       } as any),
     fetchModels: async () => [{ id: 'gpt-5-codex' }],

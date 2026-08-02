@@ -28,16 +28,16 @@ import type { ConversationEvent } from '../conversation/conversation-events.js';
 it('run() creates isolated sessions for each subagent call', async () => {
   const providerId = registerTestProvider({
     label: 'Mock Explorer Provider',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async (_agent: any, _input: any, _options: any) => {
+        stream: async function* (_agent: any, _input: any, _options: any) {
           const result = {
             status: 'completed',
             finalOutput: 'Found the relevant files.',
             history: [],
             messages: [],
           };
-          return _options?.stream ? wrapResultAsAgentStream(result) : result;
+          yield* wrapResultAsAgentStream(result);
         },
       } as any),
     fetchModels: async () => [{ id: 'mock-model' }],
@@ -64,18 +64,24 @@ it('run() creates isolated sessions for each subagent call', async () => {
 it('run() emits started and completed events', async () => {
   const providerId = registerTestProvider({
     label: 'Mock Event Tool Provider',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async (agent: any) => {
-          const readFile = agent.tools.find((tool: any) => tool.name === 'read_file');
-          try {
-            await readFile.execute(JSON.stringify({ path: '/nonexistent-subagent-event-test' }), {}, {});
-          } catch {
-            // Tool execution may fail (missing file); we only care that the
-            // tool-started event fired before execution.
+        stream: async function* (request: any) {
+          const suppliedToolResult = request.input?.some((item: any) => item.type === 'tool_result');
+          if (!suppliedToolResult) {
+            yield {
+              type: 'tool_call',
+              id: 'subagent-event-call',
+              name: 'read_file',
+              arguments: JSON.stringify({ path: '/nonexistent-subagent-event-test' }),
+            };
+            return;
           }
-          const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
+          yield {
+            type: 'completion',
+            responseId: 'subagent-event-complete',
+            output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+          };
         },
       } as any),
     fetchModels: async () => [{ id: 'mock-model' }],
@@ -100,6 +106,13 @@ it('run() emits started and completed events', async () => {
   expect(started.role).toBe('explorer');
   expect(started.task).toBe('search the code');
   expect(started.agentId).toBe(result.agentId);
+
+  const toolStarted = events.find((e) => e.type === 'subagent_tool_started');
+  expect(toolStarted).toMatchObject({
+    agentId: result.agentId,
+    toolCallId: 'subagent-event-call',
+    toolName: 'read_file',
+  });
 
   const completed = events.find((e) => e.type === 'subagent_completed');
   expect(completed).toBeTruthy();
@@ -184,9 +197,9 @@ it('mentor base instructions come from the mentor role markdown', async () => {
 it('finalText is the assistant message after the last tool item', async () => {
   const providerId = registerTestProvider({
     label: 'Mock Post Tool Provider',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async (_agent: any, _input: any, _options: any) => {
+        stream: async function* (_agent: any, _input: any, _options: any) {
           const result = {
             status: 'completed',
             // finalOutput intentionally absent to exercise the history fallback.
@@ -200,7 +213,7 @@ it('finalText is the assistant message after the last tool item', async () => {
 
             messages: [],
           };
-          return _options?.stream ? wrapResultAsAgentStream(result) : result;
+          yield* wrapResultAsAgentStream(result);
         },
       } as any),
     fetchModels: async () => [{ id: 'mock-model' }],

@@ -62,7 +62,9 @@ describe('ConversationLogWriter sequence continuity', () => {
     const dir = tempDir();
     const sessionId = 'large-session';
     const filePath = path.join(dir, `${sessionId}.jsonl`);
-    const padding = `${JSON.stringify({ event: { type: 'settings_changed', key: 'legacy', value: 'x'.repeat(1024) } })}\n`;
+    const padding = `${JSON.stringify({
+      event: { type: 'settings_changed', key: 'legacy', value: 'x'.repeat(1024) },
+    })}\n`;
     const finalEnvelope = JSON.stringify({
       v: 3,
       seq: 7000,

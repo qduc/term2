@@ -72,7 +72,6 @@ function stubCreateClient() {
     setModel: vi.fn(),
     supportsConversationChaining: false,
     supportsReasoning: false,
-    supportsTracingControl: false,
     dispose: vi.fn(),
   })) as any;
 }

@@ -124,6 +124,5 @@ registerProvider({
   ],
   capabilities: {
     supportsConversationChaining: false,
-    supportsTracingControl: false,
   },
 });

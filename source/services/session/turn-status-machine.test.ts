@@ -140,7 +140,9 @@ it('stale lease outcomes emit nothing and cannot mutate a newer turn', () => {
   machine.abort();
   const currentLease = machine.beginTurn();
 
-  expect(machine.completeOutcome({ kind: 'response', terminal: terminalResponse }, staleLease)).toEqual({ kind: 'none' });
+  expect(machine.completeOutcome({ kind: 'response', terminal: terminalResponse }, staleLease)).toEqual({
+    kind: 'none',
+  });
   expect(
     machine.completeContinuationOutcome({ kind: 'approval_required', terminal: terminalApproval }, staleLease),
   ).toEqual({ kind: 'none' });

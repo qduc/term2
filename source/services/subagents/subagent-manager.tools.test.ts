@@ -27,12 +27,12 @@ it('subagent tool definitions conditional registration for search tools', async 
 
   const providerIdShellTrue = registerTestProvider({
     label: 'Mock Tool Test Provider Shell True',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async (agent: any) => {
+        stream: async function* (agent: any) {
           workerAgentShellTrue = agent;
           const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
+          yield* wrapResultAsAgentStream(result);
         },
       } as any),
     fetchModels: async () => [{ id: 'gpt-5' }],
@@ -40,12 +40,12 @@ it('subagent tool definitions conditional registration for search tools', async 
 
   const providerIdShellFalse = registerTestProvider({
     label: 'Mock Tool Test Provider Shell False',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async (agent: any) => {
+        stream: async function* (agent: any) {
           workerAgentShellFalse = agent;
           const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
+          yield* wrapResultAsAgentStream(result);
         },
       } as any),
     fetchModels: async () => [{ id: 'gpt-4o' }],
@@ -132,12 +132,12 @@ it('explorer uses shell search when available and researcher keeps dedicated sea
 
   const providerIdExplorer = registerTestProvider({
     label: 'Mock Tool Test Provider Explorer Shell',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async (agent: any) => {
+        stream: async function* (agent: any) {
           explorerAgent = agent;
           const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
+          yield* wrapResultAsAgentStream(result);
         },
       } as any),
     fetchModels: async () => [{ id: 'gpt-5' }],
@@ -145,12 +145,12 @@ it('explorer uses shell search when available and researcher keeps dedicated sea
 
   const providerIdResearcher = registerTestProvider({
     label: 'Mock Tool Test Provider Researcher Dedicated',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async (agent: any) => {
+        stream: async function* (agent: any) {
           researcherAgent = agent;
           const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
+          yield* wrapResultAsAgentStream(result);
         },
       } as any),
     fetchModels: async () => [{ id: 'gpt-5' }],
@@ -198,12 +198,12 @@ it('remote execution disables code-context tools and guidance', async () => {
 
   const providerId = registerTestProvider({
     label: 'Mock Tool Test Provider Remote',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async (agent: any) => {
+        stream: async function* (agent: any) {
           remoteAgent = agent;
           const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
+          yield* wrapResultAsAgentStream(result);
         },
       } as any),
     fetchModels: async () => [{ id: 'gpt-4o' }],
@@ -238,12 +238,12 @@ it('subagent runtime registers activate_skill tool and appends skills catalog to
 
   const providerId = registerTestProvider({
     label: 'Mock Skills Test Provider',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async (agent: any) => {
+        stream: async function* (agent: any) {
           subAgent = agent;
           const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
+          yield* wrapResultAsAgentStream(result);
         },
       } as any),
     fetchModels: async () => [{ id: 'gpt-4o' }],

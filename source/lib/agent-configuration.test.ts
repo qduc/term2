@@ -100,14 +100,15 @@ function ensureProviderRegistered() {
     registerProvider({
       id: 'mock-provider-for-config',
       label: 'Mock Config Provider',
-      createRunner: () =>
-        ({
-          run: async (_agent: any, _input: any, _options: any) => ({
-            status: 'completed',
-            finalOutput: 'mock response',
-            messages: [],
-          }),
-        } as any),
+      createStreamedModel: () => ({
+        async *stream() {
+          yield {
+            type: 'completion',
+            responseId: 'config-test',
+            output: [{ type: 'message', content: [{ type: 'text', text: 'mock response' }] }],
+          };
+        },
+      }),
       fetchModels: async () => [{ id: 'mock-model' }],
       clearConversations: () => {},
     });
@@ -224,16 +225,16 @@ it.sequential('getAgent with sessionId clones agent for providers with prompt ca
     capabilities: {
       supportsPromptCacheKey: true,
       supportsConversationChaining: false,
-      supportsTracingControl: false,
     },
-    createRunner: () =>
-      ({
-        run: async (_agent: any, _input: any, _options: any) => ({
-          status: 'completed',
-          finalOutput: 'mock response',
-          messages: [],
-        }),
-      } as any),
+    createStreamedModel: () => ({
+      async *stream() {
+        yield {
+          type: 'completion',
+          responseId: 'cache-test',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'mock response' }] }],
+        };
+      },
+    }),
     fetchModels: async () => [{ id: 'mock-model' }],
   });
 

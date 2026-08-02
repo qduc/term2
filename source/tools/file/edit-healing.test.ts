@@ -34,16 +34,16 @@ function settledHealingModel(): any {
 }
 
 /**
- * Registers a fake provider whose runner settles immediately with a canned
- * finalOutput — the shape `runToCompletion` must return. Restores the previous
- * registration (or removes the fake) when the returned function runs.
+ * Registers a fake provider with a canned application-owned streamed model.
+ * Restores the previous registration (or removes the fake) when the returned
+ * function runs.
  */
-function registerHealingProvider(id: string, runner: any | undefined = undefined): () => void {
+function registerHealingProvider(id: string, model: any | undefined = undefined): () => void {
   const previous = getProvider(id);
   const providerDef: ProviderDefinition = {
     id,
     label: `Fake healing ${id}`,
-    createStreamedModel: () => (runner === undefined ? settledHealingModel() : runner),
+    createStreamedModel: () => (model === undefined ? settledHealingModel() : model),
     fetchModels: async () => [],
   };
   registerProvider(providerDef, { allowOverride: true });
@@ -345,12 +345,12 @@ it('edit healing rejects at its deadline when a streamed model never settles aft
   }
 });
 
-it('edit healing fails as a configuration error when the provider has no runner', async () => {
-  registerHealingProvider('runnerless-provider', null);
+it('edit healing fails as a configuration error when the provider has no streamed model', async () => {
+  registerHealingProvider('missing-streamed-model-provider', null);
   try {
     const fileContent = 'const foo = 1;\n';
     const result = await healSearchReplaceParams(baseParams, fileContent, 'fast-healer', 'fake-key', {
-      providerId: 'runnerless-provider',
+      providerId: 'missing-streamed-model-provider',
       settingsService: createMockSettings({ 'agent.retryAttempts': 2 }),
       loggingService: createMockLogger(),
     });
@@ -360,6 +360,6 @@ it('edit healing fails as a configuration error when the provider has no runner'
     expect(result.failureReason).toContain('healing request failed');
     expect(result.failureReason).toContain('could not be initialized');
   } finally {
-    unregisterProvider('runnerless-provider');
+    unregisterProvider('missing-streamed-model-provider');
   }
 });

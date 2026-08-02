@@ -1,12 +1,7 @@
 import OpenAI from 'openai';
 import type { ISettingsService, ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
-import {
-  type ProviderDefinition,
-  type ProviderDeps,
-  type ProviderFetch,
-  createApplicationCompatibilityRunner,
-} from './registry.js';
+import { type ProviderDefinition, type ProviderDeps, type ProviderFetch } from './registry.js';
 import { AiSdkAnthropicProvider } from './ai-sdk-anthropic.provider.js';
 import { AiSdkGoogleProvider } from './ai-sdk-google.provider.js';
 import { createProviderFetch } from './fetch/composer.js';
@@ -272,21 +267,6 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
       }
       return provider.getStreamedModel(model);
     },
-    createRunner: (deps) =>
-      createApplicationCompatibilityRunner((model) => {
-        const resolved = findConfigFromSettings(deps.settingsService, providerId);
-        if (!resolved) throw new Error(`Custom provider '${providerId}' is not configured in settings.json`);
-        const provider = createCustomProviderModelProvider(resolved, {
-          defaultModel: model,
-          loggingService: deps.loggingService,
-          sessionContextService: deps.sessionContextService,
-          settingsService: deps.settingsService,
-        });
-        if (!('getStreamedModel' in provider) || typeof provider.getStreamedModel !== 'function') {
-          throw new Error(`Custom provider '${providerId}' has no application-owned streamed model`);
-        }
-        return provider.getStreamedModel(model);
-      }),
     fetchModels: async (deps: ProviderDeps, fetchImpl: ProviderFetch = fetch as any) => {
       const resolved = findConfigFromSettings(deps.settingsService, providerId);
       if (!resolved) {
@@ -344,7 +324,6 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     sensitiveSettingKeys: [],
     capabilities: {
       supportsConversationChaining: false,
-      supportsTracingControl: false,
     },
   };
 }

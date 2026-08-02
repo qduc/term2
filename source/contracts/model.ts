@@ -14,7 +14,6 @@ export type ModelRequest = {
   toolsExplicitlyProvided?: boolean;
   outputType: any;
   handoffs: any[];
-  tracing: any;
   signal?: AbortSignal;
   prompt?: any;
   overridePromptModel?: boolean;
@@ -46,10 +45,4 @@ export interface LegacyModel {
   getResponse(request: any): Promise<any>;
   getStreamedResponse(request: any): AsyncIterable<any>;
   close?(): Promise<void>;
-}
-
-/** Compatibility runner shape used only until the legacy loop is retired. */
-export interface LegacyRunner {
-  readonly config: any;
-  run(agent: unknown, input: unknown, options?: unknown): Promise<any>;
 }

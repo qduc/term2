@@ -66,7 +66,6 @@ it('shouldUseNativePatchTool honors provider model prefix capability', () => {
       model: 'custom-editor-v2',
       capabilities: {
         supportsConversationChaining: false,
-        supportsTracingControl: false,
         nativePatchModelPrefixes: ['custom-editor'],
       },
     }),
@@ -80,7 +79,6 @@ it('shouldUseNativePatchTool treats gpt model prefixes semantically', () => {
       model: 'gpt-5.1-mini',
       capabilities: {
         supportsConversationChaining: false,
-        supportsTracingControl: false,
         nativePatchModelPrefixes: ['gpt-5.1'],
       },
     }),
@@ -92,7 +90,6 @@ it('shouldUseNativePatchTool treats gpt model prefixes semantically', () => {
       model: 'gpt-6.0',
       capabilities: {
         supportsConversationChaining: false,
-        supportsTracingControl: false,
         nativePatchModelPrefixes: ['gpt-5.1'],
       },
     }),
@@ -104,7 +101,6 @@ it('shouldUseNativePatchTool treats gpt model prefixes semantically', () => {
       model: 'gpt-5.0',
       capabilities: {
         supportsConversationChaining: false,
-        supportsTracingControl: false,
         nativePatchModelPrefixes: ['gpt-5.1'],
       },
     }),
@@ -125,7 +121,6 @@ it('shouldUseStrictToolSchema honors explicit provider capability', () => {
       providerId: 'openai',
       capabilities: {
         supportsConversationChaining: true,
-        supportsTracingControl: true,
         usesStrictToolSchema: false,
       },
     }),
@@ -136,7 +131,6 @@ it('shouldUseStrictToolSchema honors explicit provider capability', () => {
       providerId: 'custom-provider',
       capabilities: {
         supportsConversationChaining: false,
-        supportsTracingControl: false,
         usesStrictToolSchema: true,
       },
     }),

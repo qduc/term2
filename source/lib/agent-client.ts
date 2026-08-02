@@ -162,9 +162,7 @@ export class AgentClient {
         const providerId = this.#agentConfig.getProvider();
         const provider = getProvider(providerId);
         if (!provider?.createStreamedModel) {
-          throw new Error(
-            `Provider '${providerId}' is configured for legacy runner execution and has no application streamed model.`,
-          );
+          throw new Error(`Provider '${providerId}' does not expose an application streamed model.`);
         }
         return provider.createStreamedModel(selectedModel, {
           settingsService: deps.settings,

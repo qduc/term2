@@ -28,12 +28,12 @@ it('run() retries on recoverable model error (hallucinated tool) and succeeds on
 
   const providerId = registerTestProvider({
     label: 'Mock Retry Recoverable Provider',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async () => {
+        stream: async function* () {
           runCount++;
           if (runCount === 1) {
-            return wrapErrorAsAgentStream(new ModelBehaviorError('Tool bash not found in agent Explorer.'));
+            yield* wrapErrorAsAgentStream(new ModelBehaviorError('Tool bash not found in agent Explorer.'));
           }
           const result = {
             status: 'completed',
@@ -41,7 +41,7 @@ it('run() retries on recoverable model error (hallucinated tool) and succeeds on
             history: [],
             messages: [],
           };
-          return wrapResultAsAgentStream(result);
+          yield* wrapResultAsAgentStream(result);
         },
       } as any),
     fetchModels: async () => [{ id: 'mock-model' }],
@@ -84,11 +84,11 @@ it('run() exhausts retries on repeated recoverable model errors and returns fail
 
   const providerId = registerTestProvider({
     label: 'Mock Retry Exhaust Provider',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async () => {
+        stream: async function* () {
           runCount++;
-          return wrapErrorAsAgentStream(new ModelBehaviorError('Tool bash not found in agent Explorer.'));
+          yield* wrapErrorAsAgentStream(new ModelBehaviorError('Tool bash not found in agent Explorer.'));
         },
       } as any),
     fetchModels: async () => [{ id: 'mock-model' }],
@@ -122,9 +122,9 @@ it('run() does not retry on non-recoverable ModelBehaviorError', async () => {
 
   const providerId = registerTestProvider({
     label: 'Mock No Retry Non-Recoverable Provider',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async () => {
+        stream: async function* () {
           runCount++;
           throw new ModelBehaviorError('something else unrelated to tools');
         },
@@ -156,9 +156,9 @@ it('run() aborted subagent returns cancelled status without model-error retry', 
 
   const providerId = registerTestProvider({
     label: 'Mock Abort No Retry Provider',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async () => {
+        stream: async function* () {
           const err = new Error('The operation was aborted');
           (err as any).name = 'AbortError';
           throw err;
@@ -233,11 +233,11 @@ describe('run() aborted subagent', () => {
   it('retains toolsUsed and filesChanged', async () => {
     const providerId = registerTestProvider({
       label: 'Mock Abort Retain Provider',
-      createRunner: () =>
+      createStreamedModel: () =>
         ({
-          run: async (agent: any) => {
+          stream: async function* (request: any) {
             // Simulate using a tool
-            const createFile = agent.tools.find((tool: any) => tool.name === 'create_file');
+            const createFile = request.applicationTools?.find((tool: any) => tool.name === 'create_file');
             if (createFile) {
               await createFile.execute(JSON.stringify({ path: 'test.ts', content: 'x' }), {}, {});
             }
@@ -280,14 +280,14 @@ it('run() retries a mid-stream transport drop instead of failing the subagent', 
 
   const providerId = registerTestProvider({
     label: 'Mock Mid-Stream Transport Drop Provider',
-    createRunner: () =>
+    createStreamedModel: () =>
       ({
-        run: async () => {
+        stream: async function* () {
           runCount++;
           if (runCount === 1) {
-            return wrapErrorAsAgentStream(socketCloseError);
+            yield* wrapErrorAsAgentStream(socketCloseError);
           }
-          return wrapResultAsAgentStream({
+          yield* wrapResultAsAgentStream({
             status: 'completed',
             finalOutput: 'Recovered after transport drop',
             history: [],

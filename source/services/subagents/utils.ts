@@ -1,5 +1,3 @@
-import { getProvider } from '../../providers/index.js';
-import { settleProviderRun } from '../../providers/registry.js';
 import type { SubagentResult } from './types.js';
 
 export function isAbortLike(message: string | undefined, obj?: unknown): boolean {
@@ -55,35 +53,6 @@ export function extractFinalText(result: any): string {
   }
 
   return '';
-}
-
-export async function runWithProvider(
-  providerId: string,
-  runner: any,
-  agent: any,
-  input: any,
-  options: any,
-): Promise<any> {
-  const providerDef = getProvider(providerId);
-  const supportsTracingControl = providerDef?.capabilities?.supportsTracingControl ?? false;
-  const effectiveOptions = { ...options };
-  if (!supportsTracingControl) {
-    effectiveOptions.tracingDisabled = true;
-  }
-
-  if (!runner) {
-    const label = providerDef?.label || providerId;
-    throw new Error(
-      `${label} is configured but could not be initialized. ` +
-        `Please check that all required credentials and provider settings are set.`,
-    );
-  }
-
-  // Every registered provider now has an application-owned runner synthesized
-  // from createStreamedModel; a missing runner is a configuration error, not a
-  // silent fallback. settleProviderRun returns a finished run so result-shaped
-  // callers (the mentor) read finalOutput/usage rather than an un-run stream.
-  return settleProviderRun(runner, agent, input, effectiveOptions);
 }
 
 export function aggregateToolUsage(toolCounts: Map<string, number>): Array<{ toolName: string; count: number }> {

@@ -48,6 +48,7 @@
               }
             ],
             "stream": true,
+            "include": ["reasoning.encrypted_content"],
             "tools": [
               {
                 "type": "function",
@@ -236,6 +237,7 @@
               }
             ],
             "stream": true,
+            "include": ["reasoning.encrypted_content"],
             "tools": [
               {
                 "type": "function",

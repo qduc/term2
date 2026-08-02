@@ -131,7 +131,12 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
         expect(request.body.include).toEqual(expect.arrayContaining(['reasoning.encrypted_content']));
       }
     } else {
-      expect(requests.every((request) => request.body.include === undefined)).toBe(true);
+      expect(
+        requests.every(
+          (request) =>
+            Array.isArray(request.body.include) && request.body.include.includes('reasoning.encrypted_content'),
+        ),
+      ).toBe(true);
     }
   });
 

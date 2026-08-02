@@ -262,7 +262,12 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input']): any
         }
         return { type: 'text', text: part.text };
       });
-      messages.push({ role: item.role, content });
+      messages.push({
+        role: item.role,
+        content,
+        ...(item.role === 'assistant' && pendingReasoningContent ? { reasoning_content: pendingReasoningContent } : {}),
+      });
+      if (item.role === 'assistant') pendingReasoningContent = '';
       continue;
     }
     if (item.type === 'tool_call') {
@@ -289,11 +294,10 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input']): any
     }
   }
 
-  // A completed reasoning-only response is not normally replayed into a
-  // subsequent Chat Completions request, but retain it rather than dropping
-  // its native continuation payload if a caller does provide one.
-  if (pendingReasoningContent)
-    messages.push({ role: 'assistant', content: null, reasoning_content: pendingReasoningContent });
+  // Chat Completions requires assistant messages to contain content or tool
+  // calls. Native reasoning is continuation metadata for the matching
+  // assistant message/tool call, not a valid standalone message; if no such
+  // item follows, omit it rather than creating a provider-invalid request.
   return coalesceReasoningToolCallBatches(messages);
 }
 

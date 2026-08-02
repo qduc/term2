@@ -1,3 +1,5 @@
+import type { JsonSchemaDefinition } from './model-types.js';
+
 /** Provider-owned options and metadata retained at characterized protocol boundaries. */
 export type StreamedModelProviderOptions = Readonly<Record<string, unknown>>;
 
@@ -72,6 +74,8 @@ export interface StreamedModelTurnRequest {
   readonly frequencyPenalty?: number;
   readonly presencePenalty?: number;
   readonly maxTokens?: number;
+  /** Structured output declaration retained for result-shaped callers. */
+  readonly outputType?: JsonSchemaDefinition | 'text';
   readonly reasoning?: { readonly effort?: string | null; readonly summary?: 'auto' | 'concise' | 'detailed' | null };
   /** Codex-only settings that must never be sent through another provider's escape hatch. */
   readonly codex?: StreamedModelCodexOptions;

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { ApplicationAgent } from '../agent-runtime/application-run-loop.js';
+import { ApplicationRunLoop, type ApplicationAgent } from '../agent-runtime/application-run-loop.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { SubagentResult } from './types.js';
@@ -8,12 +8,12 @@ import { SubagentSession } from './subagent-session.js';
 import { loadRoleDefinition, resolvePrompt, PROMPTS_DIR } from './role-loader.js';
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import { getProvider } from '../../providers/index.js';
-import { runWithProvider, extractFinalText, isAbortLike } from './utils.js';
+import { extractFinalText, isAbortLike } from './utils.js';
+import { selectAgentStreamItems } from '../agent-stream.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
-// LegacyRunner type removed — not used in this module
 
 export class MentorRunner {
   #logger: ILoggingService;
@@ -77,7 +77,7 @@ export class MentorRunner {
         return result;
       } catch (error: any) {
         if (!signal?.aborted && !isAbortLike(error?.message, error)) throw error;
-        const usage = normalizeAgentRunUsage(error?.state?.usage) ?? extractUsage(error);
+        const usage = normalizeAgentRunUsage(error?.usage) ?? extractUsage(error);
         if (slot && usage) childBudget!.recordUsage(usage);
         return {
           agentId,
@@ -107,7 +107,7 @@ export class MentorRunner {
 
   async #runWithSession(agentId: string, task: string, signal?: AbortSignal): Promise<SubagentResult> {
     const definition = loadRoleDefinition('mentor', this.#settings);
-    const mentorModel = definition.model;
+    const mentorModelName = definition.model;
     const mentorProvider = definition.provider;
     const mentorMode = this.#settings.get('app.mentorMode');
 
@@ -122,16 +122,25 @@ export class MentorRunner {
 
     this.#mentorSession.switchProvider(mentorProvider);
 
-    const mentorRunner = this.#mentorSession.ensureRunner(mentorProvider, (providerId) => {
-      const providerDef = getProvider(providerId);
-      return (
-        providerDef?.createRunner?.({
-          settingsService: this.#settings,
-          loggingService: this.#logger,
-          sessionContextService: this.#sessionContextService,
-        }) ?? null
+    const providerDef = getProvider(mentorProvider);
+    if (!providerDef?.createStreamedModel) {
+      const providerLabel = providerDef?.label || mentorProvider;
+      throw new Error(
+        `${providerLabel} is configured but could not be initialized. ` +
+          `Please check that all required credentials and provider settings are set.`,
       );
+    }
+    const streamedModel = await this.#mentorSession.ensureModel(mentorProvider, (providerId) => {
+      const definition = getProvider(providerId);
+      if (!definition?.createStreamedModel) throw new Error(`${providerId} has no streamed model`);
+      return definition.createStreamedModel(mentorModelName, {
+        settingsService: this.#settings,
+        loggingService: this.#logger,
+        sessionContextService: this.#sessionContextService,
+      });
     });
+    if (!streamedModel)
+      throw new Error(`${providerDef.label || mentorProvider} is configured but could not be initialized.`);
 
     const mentorAgent = this.#mentorSession.ensureAgent(() => {
       const reasoningEffort = this.#settings.get('agent.mentorReasoningEffort');
@@ -144,47 +153,41 @@ export class MentorRunner {
 
       return {
         name: definition.name,
-        model: mentorModel,
+        model: mentorModelName,
         ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
         instructions,
         tools: [],
       } satisfies ApplicationAgent;
-    });
+    }) as ApplicationAgent;
 
     this.#mentorSession.addUserMessage(task);
 
-    const providerDef = getProvider(mentorProvider);
-    const supportsChaining = providerDef?.capabilities?.supportsConversationChaining ?? false;
+    const supportsChaining = providerDef.capabilities?.supportsConversationChaining ?? false;
     const input = this.#mentorSession.getInput(task, supportsChaining);
-    const subagentContext = {
-      turnCount: 0,
-      maxTurns: definition.maxTurns,
-    };
-    const runOptions = {
-      ...this.#mentorSession.getRunOptions(supportsChaining, definition.maxTurns),
-      context: subagentContext,
-      callModelInputFilter: (args: any) => {
-        if (args.context) {
-          args.context.turnCount = (args.context.turnCount ?? 0) + 1;
-        }
-        return args.modelData;
-      },
+    const loop = new ApplicationRunLoop({ resolveModel: () => streamedModel });
+    const stream = loop.startStream(mentorAgent, input, {
       ...(signal ? { signal } : {}),
-    };
-
-    const result = await runWithProvider(mentorProvider, mentorRunner, mentorAgent, input, runOptions);
-    this.#mentorSession.appendOutput(result);
+      maxTurns: definition.maxTurns,
+      ...(supportsChaining && this.#mentorSession.previousResponseId
+        ? { previousResponseId: this.#mentorSession.previousResponseId }
+        : {}),
+    });
+    try {
+      await stream.completed;
+    } catch (error: any) {
+      if (stream.runUsage !== undefined) error.usage = stream.runUsage;
+      throw error;
+    }
+    this.#mentorSession.appendOutput({ output: selectAgentStreamItems(stream), lastResponseId: stream.lastResponseId });
 
     return {
       agentId,
       role: 'mentor',
       status: 'completed',
-      finalText: extractFinalText(result),
+      finalText: extractFinalText(stream),
       filesChanged: [],
       toolsUsed: [],
-      // runWithProvider settles the stream, so usage arrives on the result
-      // (attached by runToCompletion) rather than on an un-run stream state.
-      usage: normalizeAgentRunUsage(result?.usage) ?? extractUsage(result),
+      usage: normalizeAgentRunUsage(stream.runUsage) ?? extractUsage(stream),
     };
   }
 }

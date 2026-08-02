@@ -10,7 +10,7 @@ it('SubagentSession initializes with id and role', () => {
 it('SubagentSession provider starts null', () => {
   const session = new SubagentSession('id', 'explorer');
   expect(session.provider).toBe(null);
-  expect(session.runner).toBe(null);
+  expect(session.model).toBe(null);
   expect(session.agent).toBe(null);
   expect(session.previousResponseId).toBe(null);
 });
@@ -56,26 +56,23 @@ it('SubagentSession ensureAgent is idempotent', () => {
   expect(session.agent).toBe(fakeAgent);
 });
 
-it('SubagentSession ensureRunner creates runner for openai now that every provider has an application-owned runner', () => {
+it('SubagentSession caches an application-owned streamed model', async () => {
   const session = new SubagentSession('id', 'mentor');
-  let factoryCalled = false;
-  const fakeRunner: any = { run: () => {} };
+  let factoryCalled = 0;
+  const fakeModel: any = { stream: async function* () {} };
 
-  const runner = session.ensureRunner('openai', () => {
-    factoryCalled = true;
-    return fakeRunner;
+  const first = await session.ensureModel('openai', () => {
+    factoryCalled++;
+    return fakeModel;
+  });
+  const second = await session.ensureModel('openai', () => {
+    factoryCalled++;
+    return { stream: async function* () {} } as any;
   });
 
-  expect(factoryCalled).toBe(true);
-  expect(runner).toBe(fakeRunner);
-});
-
-it('SubagentSession ensureRunner creates runner for non-openai provider', () => {
-  const session = new SubagentSession('id', 'mentor');
-  const fakeRunner: any = { run: () => {} };
-
-  const runner = session.ensureRunner('openrouter', () => fakeRunner);
-  expect(runner).toBe(fakeRunner);
+  expect(factoryCalled).toBe(1);
+  expect(first).toBe(fakeModel);
+  expect(second).toBe(fakeModel);
 });
 
 it('SubagentSession reset clears all state', () => {
@@ -89,7 +86,7 @@ it('SubagentSession reset clears all state', () => {
   session.reset();
   expect(session.provider).toBe(null);
   expect(session.agent).toBe(null);
-  expect(session.runner).toBe(null);
+  expect(session.model).toBe(null);
   expect(session.previousResponseId).toBe(null);
 });
 
@@ -107,7 +104,7 @@ it('SubagentSession getRunOptions omits previousResponseId when chaining is unsu
   session.switchProvider('openai');
   session.ensureAgent(() => ({ name: 'Mentor' } as any));
   session.addUserMessage('hello');
-  session.appendOutput({ responseId: 'resp-1', output: [] });
+  session.appendOutput({ lastResponseId: 'resp-1', output: [] });
 
   const opts = session.getRunOptions(false, 1);
   expect('previousResponseId' in opts).toBe(false);
@@ -119,7 +116,7 @@ it('SubagentSession appendOutput tracks previousResponseId', () => {
   session.ensureAgent(() => ({ name: 'Mentor' } as any));
   session.addUserMessage('hello');
 
-  session.appendOutput({ responseId: 'resp-abc', output: [] });
+  session.appendOutput({ lastResponseId: 'resp-abc', output: [] });
   expect(session.previousResponseId).toBe('resp-abc');
 });
 

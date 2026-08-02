@@ -10,30 +10,15 @@ import {
 it('returns a cancelled result when its provider run aborts', async () => {
   const providerId = registerTestProvider({
     label: 'Aborting mentor provider',
-    createRunner: () =>
-      ({
-        config: {},
-        run: async (_agent: unknown, _input: unknown, options: { signal?: AbortSignal }) =>
-          new Promise((_resolve, reject) => {
-            const abort = () => reject(Object.assign(new Error('mentor provider aborted'), { name: 'AbortError' }));
-            if (options.signal?.aborted) {
-              abort();
-              return;
-            }
-            options.signal?.addEventListener('abort', abort, { once: true });
-          }),
-        // The mentor settles the stream through runToCompletion; the abort must
-        // propagate through it the same way it would through the live stream.
-        runToCompletion: async (_agent: unknown, _input: unknown, options: { signal?: AbortSignal }) =>
-          new Promise((_resolve, reject) => {
-            const abort = () => reject(Object.assign(new Error('mentor provider aborted'), { name: 'AbortError' }));
-            if (options.signal?.aborted) {
-              abort();
-              return;
-            }
-            options.signal?.addEventListener('abort', abort, { once: true });
-          }),
-      } as any),
+    createStreamedModel: () => ({
+      async *stream(request: { signal?: AbortSignal }) {
+        await new Promise((_resolve, reject) => {
+          const abort = () => reject(Object.assign(new Error('mentor provider aborted'), { name: 'AbortError' }));
+          if (request.signal?.aborted) return abort();
+          request.signal?.addEventListener('abort', abort, { once: true });
+        });
+      },
+    }),
     fetchModels: async () => [{ id: 'mentor-model' }],
   });
   const runner = new MentorRunner({
@@ -55,34 +40,23 @@ it('returns a cancelled result when its provider run aborts', async () => {
     status: 'cancelled',
     filesChanged: [],
     toolsUsed: [],
-    error: 'mentor provider aborted',
+    error: 'Operation aborted',
   });
 });
 
 it('returns final text and usage from a settled stream (F4 regression)', async () => {
   const providerId = registerTestProvider({
     label: 'Settling mentor provider',
-    createRunner: () =>
-      ({
-        config: {},
-        run: async () => {
-          throw new Error('unexpected run(): the mentor must settle through runToCompletion');
-        },
-        runToCompletion: async () => ({
-          finalOutput: 'Review summary: looks good.',
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [{ type: 'text', text: 'Review summary: looks good.' }],
-            },
-          ],
-          history: [],
-          interruptions: [],
-          rawResponses: [],
-          usage: { input_tokens: 21, output_tokens: 6, total_tokens: 27 },
-        }),
-      } as any),
+    createStreamedModel: () => ({
+      async *stream() {
+        yield {
+          type: 'completion',
+          responseId: 'mentor-response',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'Review summary: looks good.' }] }],
+          usage: { inputTokens: 21, outputTokens: 6 },
+        };
+      },
+    }),
     fetchModels: async () => [{ id: 'mentor-model' }],
   });
   const runner = new MentorRunner({

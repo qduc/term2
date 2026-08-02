@@ -487,6 +487,26 @@ it.sequential('settings change triggers onConfigChanged via subscribeToSettings'
   expect(calledWithKey, 'onConfigChanged called with changed key').toBe('agent.model');
 });
 
+it.sequential('provider factory settings changes trigger cache invalidation hook', () => {
+  ensureProviderRegistered();
+
+  const changedKeys: Array<string | undefined> = [];
+  const result = createDeps({
+    onConfigChanged: (changedKey?: string) => {
+      changedKeys.push(changedKey);
+    },
+  });
+  const settings = result.settings as ReturnType<typeof createMockSettings>;
+  const config = new AgentConfiguration({}, result.deps);
+  config.subscribeToSettings();
+
+  settings._triggerChange('agent.openai.apiKey');
+  settings._triggerChange('agent.openrouter.baseUrl');
+  settings._triggerChange('providers');
+
+  expect(changedKeys).toEqual(['agent.openai.apiKey', 'agent.openrouter.baseUrl', 'providers']);
+});
+
 it.sequential('refreshAgent is no-op for transient client', () => {
   ensureProviderRegistered();
 

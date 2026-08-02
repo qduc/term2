@@ -1,65 +1,92 @@
-import type { ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
-import { getProvider, settleProviderRun } from '../providers/index.js';
+import { ApplicationRunLoop, type ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
+import { getProvider } from '../providers/index.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { JsonSchemaDefinition } from '../contracts/model-types.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { AgentConfiguration } from './agent-configuration.js';
-import { RunnerManager } from './runner-manager.js';
 import { fetchModels, getModelDefaultReasoningLevel } from '../services/model-service.js';
-import type { LegacyRunner } from '../contracts/model.js';
+import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
+import type { ISessionContextService } from '../services/service-interfaces.js';
+import { selectAgentStreamItems } from '../services/agent-stream.js';
 
 export interface AgentChatServiceDeps {
   agentConfig: AgentConfiguration;
-  runnerManager: RunnerManager;
   settings: ISettingsService;
   logger: ILoggingService;
+  sessionContextService?: ISessionContextService;
 }
 
 /**
  * Owns the simple chat and structured chat (chatJson) methods extracted from
  * AgentClient. Uses the same `#runAgentWithProvider` and `#extractResponse`
  * helpers with identical logic — the only difference is that references to
- * `this.#agentConfig`, `this.#runnerManager`, `this.#settings`, and
- * `this.#logger` are routed through the injected deps object.
+ * the client-owned configuration and services are routed through the injected
+ * deps object.
  */
 export class AgentChatService {
   #deps: AgentChatServiceDeps;
+  #modelCache = new Map<string, Promise<StreamedModelTurn>>();
+  #activeRunLoops = new Set<ApplicationRunLoop>();
 
   constructor(deps: AgentChatServiceDeps) {
     this.#deps = deps;
   }
 
-  #runAgentWithProvider(
-    providerId: string,
-    runner: LegacyRunner | null,
-    agent: ApplicationAgent,
-    input: any,
-    options: any,
-  ): Promise<any> {
-    // The Agents SDK enables tracing by default and exports spans to OpenAI.
-    // When using non-OpenAI providers (e.g., OpenRouter), this export can fail noisily
-    // (e.g., 503 errors). Disable tracing per-run for any non-OpenAI provider.
-    const effectiveOptions: any = options ? { ...options } : {};
-    const supportsTracingControl = getProvider(providerId)?.capabilities?.supportsTracingControl ?? false;
-    if (!supportsTracingControl) {
-      effectiveOptions.tracingDisabled = true;
-    }
+  /** Clear models created with settings that may no longer be current. */
+  clearModelCache(): void {
+    this.#modelCache.clear();
+  }
 
-    // Check if provider is configured but runner failed to initialize
-    if (!runner && providerId !== 'openai') {
-      const providerDef = getProvider(providerId);
+  /** Abort every active simple or structured chat operation. */
+  abort(): void {
+    for (const loop of this.#activeRunLoops) loop.abort();
+  }
+
+  async #getModel(providerId: string, modelId: string): Promise<StreamedModelTurn> {
+    const key = `${providerId}\0${modelId}`;
+    const cached = this.#modelCache.get(key);
+    if (cached) return cached;
+
+    const providerDef = getProvider(providerId);
+    if (!providerDef?.createStreamedModel) {
       const providerLabel = providerDef?.label || providerId;
       throw new Error(
         `${providerLabel} is configured but could not be initialized. ` +
           `Please check that all required credentials and provider settings are set.`,
       );
     }
+    const { settings, logger, sessionContextService } = this.#deps;
+    const created = Promise.resolve(
+      providerDef.createStreamedModel(modelId, {
+        settingsService: settings,
+        loggingService: logger,
+        sessionContextService,
+      }),
+    );
+    this.#modelCache.set(key, created);
+    created.catch(() => {
+      if (this.#modelCache.get(key) === created) this.#modelCache.delete(key);
+    });
+    return created;
+  }
 
-    // Use runner if available (custom provider), otherwise use run() directly (OpenAI)
-    if (runner) {
-      return settleProviderRun(runner, agent, input, effectiveOptions);
+  async #runAgentWithProvider(
+    providerId: string,
+    agent: ApplicationAgent,
+    input: any,
+    options: { signal?: AbortSignal; maxTurns?: number },
+  ): Promise<any> {
+    // Resolve the model from inside the loop so cancellation also reaches a
+    // provider factory that performs asynchronous initialization.
+    const loop = new ApplicationRunLoop({ resolveModel: () => this.#getModel(providerId, agent.model) });
+    this.#activeRunLoops.add(loop);
+    try {
+      const stream = loop.startStream(agent, input, options);
+      await stream.completed;
+      return stream;
+    } finally {
+      this.#activeRunLoops.delete(loop);
     }
-    throw new Error('Legacy agent execution is unavailable; use the application run loop');
   }
 
   #extractResponse(result: any): string {
@@ -68,15 +95,15 @@ export class AgentChatService {
     }
 
     // Fallback: extract from messages if finalOutput is missing
-    if (result.messages && Array.isArray(result.messages)) {
-      const lastMessage = result.messages[result.messages.length - 1];
-      if (lastMessage && lastMessage.content) {
-        if (typeof lastMessage.content === 'string') {
-          return lastMessage.content;
-        }
-        if (Array.isArray(lastMessage.content)) {
-          return lastMessage.content.map((part: any) => part.text || part.value || '').join('');
-        }
+    const messages = Array.isArray(result.messages)
+      ? result.messages
+      : selectAgentStreamItems(result).filter((item: any) => item?.role === 'assistant' || item?.type === 'message');
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      const content = lastMessage?.content;
+      if (typeof content === 'string') return content;
+      if (Array.isArray(content)) {
+        return content.map((part: any) => part?.text || part?.value || '').join('');
       }
     }
 
@@ -92,7 +119,7 @@ export class AgentChatService {
       instructions?: string;
     } = {},
   ): Promise<string> {
-    const { agentConfig, runnerManager, settings, logger } = this.#deps;
+    const { agentConfig, settings, logger } = this.#deps;
 
     const tempProvider = options.provider || agentConfig.getProvider();
     logger.debug('Agent chat request', {
@@ -113,8 +140,13 @@ export class AgentChatService {
 
     try {
       // Create a temporary agent for this specific chat request if params differ
-      let agentForChat = agentConfig.getAgent();
       const tempModel = options.model || agentConfig.getModel();
+      let agentForChat = agentConfig.getAgent() ?? {
+        name: 'Chat',
+        model: tempModel,
+        instructions: options.instructions || 'You are a helpful assistant.',
+        tools: [],
+      };
       const tempEffort = options.reasoningEffort || agentConfig.reasoningEffort;
 
       if (options.model || options.reasoningEffort || options.instructions || options.provider) {
@@ -147,12 +179,7 @@ export class AgentChatService {
         };
       }
 
-      // If provider is different from main provider, we need a separate runner
-      const runnerForChat = runnerManager.getOrCreateRunner(tempProvider);
-
-      // We use a simplified run flow for chat
-      const result = await this.#runAgentWithProvider(tempProvider, runnerForChat, agentForChat, message, {
-        stream: false,
+      const result = await this.#runAgentWithProvider(tempProvider, agentForChat, message, {
         maxTurns: 1, // Chat is usually single turn
       });
 
@@ -176,7 +203,7 @@ export class AgentChatService {
       outputType: JsonSchemaDefinition;
     },
   ): Promise<unknown> {
-    const { agentConfig, runnerManager, settings, logger } = this.#deps;
+    const { agentConfig, settings, logger } = this.#deps;
 
     const tempProvider = options.provider || agentConfig.getProvider();
     logger.debug('Agent structured chat request', {
@@ -226,10 +253,7 @@ export class AgentChatService {
         outputType: options.outputType,
       };
 
-      const runnerForChat = runnerManager.getOrCreateRunner(tempProvider);
-
-      const result = await this.#runAgentWithProvider(tempProvider, runnerForChat, agentForChat, message, {
-        stream: false,
+      const result = await this.#runAgentWithProvider(tempProvider, agentForChat, message, {
         maxTurns: 1,
       });
 

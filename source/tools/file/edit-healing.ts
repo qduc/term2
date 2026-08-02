@@ -1,9 +1,8 @@
-import type { ApplicationAgent } from '../../services/agent-runtime/application-run-loop.js';
-import type { LegacyRunner } from '../../contracts/model.js';
-import { settleProviderRun } from '../../providers/registry.js';
+import { ApplicationRunLoop, type ApplicationAgent } from '../../services/agent-runtime/application-run-loop.js';
 import type { SearchReplaceFullOperation } from './search-replace.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import { getProvider } from '../../providers/index.js';
+import { selectAgentStreamItems } from '../../services/agent-stream.js';
 
 export interface HealingResult {
   params: SearchReplaceFullOperation;
@@ -87,15 +86,15 @@ function stripCodeFences(text: string): string {
 }
 
 function extractModelText(result: any): string {
-  if (typeof result?.finalOutput === 'string') return result.finalOutput;
-  const messages = result?.messages;
-  if (!Array.isArray(messages) || messages.length === 0) return '';
+  if (typeof result?.finalOutput === 'string' && result.finalOutput) return result.finalOutput;
+  const messages = Array.isArray(result?.messages)
+    ? result.messages
+    : selectAgentStreamItems(result).filter((item: any) => item?.role === 'assistant' || item?.type === 'message');
+  if (messages.length === 0) return '';
   const last = messages[messages.length - 1];
   const content = last?.content;
   if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content.map((part: any) => part?.text || part?.value || '').join('');
-  }
+  if (Array.isArray(content)) return content.map((part: any) => part?.text || part?.value || '').join('');
   return '';
 }
 
@@ -160,18 +159,8 @@ async function runHealingPrompt(
   deps: Required<Pick<HealingDeps, 'settingsService' | 'loggingService' | 'providerId' | 'timeoutMs'>>,
 ): Promise<string> {
   const { settingsService, loggingService, providerId, timeoutMs } = deps;
-  // Every registered provider now exposes an application-owned runner
-  // synthesized from createStreamedModel; a missing runner is a configuration
-  // error, not a silent fallback to a run() that only throws.
   const providerDef = getProvider(providerId);
-  const runner: LegacyRunner | null = providerDef?.createRunner
-    ? providerDef.createRunner({
-        settingsService,
-        loggingService,
-      })
-    : null;
-
-  if (!runner) {
+  if (!providerDef?.createStreamedModel) {
     const label = providerDef?.label || providerId;
     throw new Error(`${label} is configured but could not be initialized. Check credentials.`);
   }
@@ -188,13 +177,7 @@ async function runHealingPrompt(
     tools: [],
   };
 
-  const options: any = {
-    stream: false,
-    maxTurns: 1,
-  };
-  if (providerId !== 'openai') {
-    options.tracingDisabled = true;
-  }
+  const abortController = new AbortController();
 
   let previousApiKey: string | undefined;
   if (providerId === 'openai' && apiKey && !process.env.OPENAI_API_KEY) {
@@ -203,19 +186,44 @@ async function runHealingPrompt(
   }
 
   let timeoutHandle: NodeJS.Timeout | null = null;
+  let timedOut = false;
+  // Keep model creation inside the run loop. This makes the same deadline and
+  // abort signal cover asynchronous provider initialization as well as model
+  // streaming (some providers lazily construct clients here).
+  const loop = new ApplicationRunLoop({
+    resolveModel: async () => {
+      const streamedModel = await providerDef.createStreamedModel!(model, {
+        settingsService,
+        loggingService,
+      });
+      if (!streamedModel)
+        throw new Error(`${providerDef.label || providerId} is configured but could not be initialized.`);
+      return streamedModel;
+    },
+  });
   try {
-    // settleProviderRun returns a finished run, so extractModelText reads
-    // finalOutput from a completed run instead of an un-run stream.
-    const runPromise = settleProviderRun(runner, agent, prompt, options);
-
-    const result = await Promise.race([
-      runPromise,
-      new Promise<never>((_, reject) => {
-        timeoutHandle = setTimeout(() => reject(new Error('Edit healing timed out')), timeoutMs);
-      }),
-    ]);
-
-    return extractModelText(result);
+    // Start the deadline before starting the loop: startStream immediately
+    // begins asynchronous model factory work.
+    const deadline = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        abortController.abort();
+        loop.abort();
+        reject(new Error('Edit healing timed out'));
+      }, timeoutMs);
+    });
+    const stream = loop.startStream(agent, prompt, { maxTurns: 1, signal: abortController.signal });
+    // A provider may ignore cancellation and leave the completion promise
+    // pending forever. Race it against a deadline, while observing the
+    // background promise so a late factory or completion rejection cannot
+    // become unhandled.
+    const completion = Promise.resolve(stream.completed);
+    completion.catch(() => undefined);
+    await Promise.race([completion, deadline]);
+    return extractModelText(stream);
+  } catch (error) {
+    if (timedOut) throw new Error('Edit healing timed out');
+    throw error;
   } finally {
     if (timeoutHandle) {
       clearTimeout(timeoutHandle);

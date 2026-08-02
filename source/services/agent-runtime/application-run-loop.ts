@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ProviderInput, ProviderInputItem } from '../../contracts/provider-input.js';
+import type { JsonSchemaDefinition } from '../../contracts/model-types.js';
 import type { ApplicationRunEvent } from '../../contracts/application-stream.js';
 import {
   createContinuationHandle,
@@ -45,7 +46,7 @@ export interface ApplicationAgent {
   readonly model: string;
   modelSettings?: AgentModelSettings;
   defaultRunOptions?: any;
-  outputType?: any;
+  outputType?: JsonSchemaDefinition | 'text';
   readonly tools: ToolRegistry;
 }
 
@@ -348,6 +349,7 @@ export class ApplicationRunLoop {
         ...(state.agent.modelSettings?.maxTokens !== undefined
           ? { maxTokens: state.agent.modelSettings.maxTokens }
           : {}),
+        ...(state.agent.outputType !== undefined ? { outputType: state.agent.outputType } : {}),
         ...(state.agent.modelSettings?.codex ? { codex: state.agent.modelSettings.codex } : {}),
         ...(state.agent.modelSettings?.providerData ? { providerOptions: state.agent.modelSettings.providerData } : {}),
         ...(options.signal ? { signal: options.signal } : {}),

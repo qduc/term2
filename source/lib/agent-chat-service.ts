@@ -1,5 +1,5 @@
 import type { ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
-import { getProvider } from '../providers/index.js';
+import { getProvider, settleProviderRun } from '../providers/index.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { JsonSchemaDefinition } from '../contracts/model-types.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
@@ -57,7 +57,7 @@ export class AgentChatService {
 
     // Use runner if available (custom provider), otherwise use run() directly (OpenAI)
     if (runner) {
-      return runner.run(agent, input, effectiveOptions);
+      return settleProviderRun(runner, agent, input, effectiveOptions);
     }
     throw new Error('Legacy agent execution is unavailable; use the application run loop');
   }
@@ -233,7 +233,12 @@ export class AgentChatService {
         maxTurns: 1,
       });
 
-      return result.finalOutput ?? this.#extractResponse(result);
+      // Some OpenAI-compatible providers (including OpenRouter) can complete a
+      // structured response with an empty finalOutput while still placing the
+      // JSON content in the final message. Treat an empty string like a missing
+      // output so the evaluator does not mistake a valid response for an
+      // invalid one and issue an unnecessary repair request.
+      return result.finalOutput || this.#extractResponse(result);
     } catch (error) {
       logger.error('Agent structured chat failed', {
         error: error instanceof Error ? error.message : String(error),

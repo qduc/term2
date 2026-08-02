@@ -225,11 +225,17 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input']): any
       continue;
     }
     if (item.type === 'tool_call') {
-      messages.push({
-        role: 'assistant',
-        ...(pendingReasoningContent ? { content: null, reasoning_content: pendingReasoningContent } : {}),
-        tool_calls: [{ id: item.id, type: 'function', function: { name: item.name, arguments: item.arguments } }],
-      });
+      const toolCall = { id: item.id, type: 'function', function: { name: item.name, arguments: item.arguments } };
+      const previous = messages[messages.length - 1];
+      if (previous?.role === 'assistant' && Array.isArray(previous.tool_calls)) {
+        previous.tool_calls.push(toolCall);
+      } else {
+        messages.push({
+          role: 'assistant',
+          ...(pendingReasoningContent ? { content: null, reasoning_content: pendingReasoningContent } : {}),
+          tool_calls: [toolCall],
+        });
+      }
       pendingReasoningContent = '';
       continue;
     }
@@ -247,7 +253,41 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input']): any
   // its native continuation payload if a caller does provide one.
   if (pendingReasoningContent)
     messages.push({ role: 'assistant', content: null, reasoning_content: pendingReasoningContent });
-  return messages;
+  return coalesceReasoningToolCallBatches(messages);
+}
+
+function coalesceReasoningToolCallBatches(messages: any[]): any[] {
+  const result: any[] = [];
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (message?.role !== 'assistant' || !message.reasoning_content || !Array.isArray(message.tool_calls)) {
+      result.push(message);
+      continue;
+    }
+
+    const toolResults: any[] = [];
+    while (index + 1 < messages.length) {
+      const next = messages[index + 1];
+      if (next?.role === 'tool') {
+        toolResults.push(next);
+        index += 1;
+        continue;
+      }
+      if (
+        next?.role === 'assistant' &&
+        Array.isArray(next.tool_calls) &&
+        next.reasoning_content == null &&
+        next.content == null
+      ) {
+        message.tool_calls.push(...next.tool_calls);
+        index += 1;
+        continue;
+      }
+      break;
+    }
+    result.push(message, ...toolResults);
+  }
+  return result;
 }
 
 function legacyMessages(input: any[]): any[] {

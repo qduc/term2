@@ -44,10 +44,10 @@ export async function collectTerminalResult(
     }
   };
 
-  // Token usage is sourced from a single authoritative value: the Agents SDK
+  // Token usage is sourced from a single authoritative value: the application
   // run-state accumulator, which is already cumulative for the entire run
   // (every model turn, including turns resumed after an approval - the
-  // continuation reuses the same live RunState so its accumulator already
+  // continuation reuses the same live run state so its accumulator already
   // includes the pre-approval turns). It arrives on `final` /
   // `approval_required` events. We therefore do NOT re-sum per-turn
   // `usage_update` snapshots here; doing so double-counted on long,
@@ -115,7 +115,7 @@ export async function collectTerminalResult(
         if (event.usage) {
           // Each `final` carries the run-cumulative usage as of that point.
           // A later `final` (e.g. after an auto-approved continuation)
-          // supersedes an earlier one because the SDK accumulator keeps
+          // supersedes an earlier one because the run-state accumulator keeps
           // growing on the same run state.
           runUsage = event.usage;
         }

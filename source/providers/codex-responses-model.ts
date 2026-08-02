@@ -466,16 +466,13 @@ const summarizeReconstructedItems = (items: unknown[]): Record<string, unknown> 
 // Codex's `/backend-api/codex/responses` endpoint can ship terminal response
 // frames with either an empty `output` array or no `output` field at all, even
 // when the assistant message was already delivered via
-// `response.output_item.done`. The agents-SDK runner trusts terminal
-// `response.output` as the final output; when it is empty or missing it either
-// sees no items and re-runs the same request until maxTurns or crashes while
-// converting the terminal payload.
+// `response.output_item.done`. The application transport must treat the
+// terminal frame as authoritative; when it is empty or missing, retaining the
+// completed output items prevents a false empty completion.
 //
-// This wrapper subclasses `OpenAIResponsesModel`, overrides the streaming
-// fetch path, and patches the terminal frame in flight: it accumulates raw
-// items from `response.output_item.done` and, only when terminal
-// `response.output` is empty or missing, swaps in the accumulated items so the
-// parent's existing conversion logic (`convertToOutputItem`) produces a normal
+// The Codex transport accumulates raw items from `response.output_item.done`
+// and, only when terminal `response.output` is empty or missing, uses those
+// accumulated items for its application-owned completion event.
 const CODEX_SERVER_HISTORY_TOOL_RESULT_TYPES = new Set([
   'function_call_output',
   'function_call_result',
@@ -1406,8 +1403,9 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     const builtRequest = this.buildResponsesCreateRequest(updatedRequest, true);
     const requestData = (asRecord(builtRequest?.requestData) ?? {}) as Record<string, unknown>;
     const wireStateToken = this.requestTokens.get(updatedRequest);
-    // This is the last application-owned point before the SDK's private fetch
-    // path. Capture it without changing the prepared request or wire state.
+    // This is the last application-owned point before the inherited
+    // transport's private fetch path. Capture it without changing the
+    // prepared request or wire state.
     captureProviderRequest(this.requestCapture, { provider: 'codex', transport: 'websocket', requestData });
     this.#logTrafficStarted(requestId, requestData, extraHeaders);
 
@@ -1543,8 +1541,9 @@ export async function* wrapCodexStream(source: AsyncIterable<any>, logger?: Diag
       const item = event.item;
       const itemRecord = asRecord(item);
       // If the accumulated function_call item is missing call_id, backfill it
-      // from the itemCallIds map so the SDK's convertToOutputItem picks up the
-      // correct identifier and the continuation request sends the right call_id.
+      // from the itemCallIds map so the inherited transport's
+      // convertToOutputItem picks up the correct identifier and the continuation
+      // request sends the right call_id.
       if (
         itemRecord?.type === 'function_call' &&
         !stringValue(itemRecord?.call_id) &&

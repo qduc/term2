@@ -51,7 +51,7 @@ class Lifecycle {
   }
 }
 
-// `bridgeBackToTurn` (agents-model-bridge.ts) passes StreamedModelTurnInput items
+// `adaptOpenAIStreamedModel` (openai-streamed-model-adapter.ts) passes StreamedModelTurnInput items
 // straight through except renaming `tool_result` -> `function_call_result`. Those
 // items use the app-internal generic shapes (`{type:'text'}` content parts,
 // `{type:'tool_call', id, name, arguments}`), not the Responses API's own item

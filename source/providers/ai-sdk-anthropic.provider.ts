@@ -1,8 +1,6 @@
 import { createAnthropic, type AnthropicProviderSettings } from '@ai-sdk/anthropic';
 import { wrapLanguageModel, type LanguageModelMiddleware } from 'ai';
 import type { LanguageModelV3 } from '@ai-sdk/provider';
-import type { LegacyModel, LegacyModelProvider } from '../contracts/model.js';
-import { adaptStreamedModelTurnForAgents } from './agents-model-bridge.js';
 import { forwardExplicitProviderSettings, withForwardedProviderSettings } from './ai-sdk-provider-settings.js';
 import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
 import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
@@ -149,7 +147,7 @@ export type AiSdkAnthropicConfig = Pick<
 
 export type AiSdkAnthropicProviderFactory = (options: AiSdkAnthropicConfig) => (modelId: string) => any;
 
-export class AiSdkAnthropicProvider implements LegacyModelProvider {
+export class AiSdkAnthropicProvider {
   #defaultModel: string;
   #resolveConfig: () => AiSdkAnthropicConfig;
   #createProvider: AiSdkAnthropicProviderFactory;
@@ -167,11 +165,6 @@ export class AiSdkAnthropicProvider implements LegacyModelProvider {
     this.#shouldApplyPromptCaching = deps.shouldApplyPromptCaching ?? defaultAnthropicPromptCachingPredicate;
   }
 
-  getModel(modelName?: string): LegacyModel {
-    return adaptStreamedModelTurnForAgents(this.getStreamedModel(modelName));
-  }
-
-  /** Application-owned model path; the Agents bridge remains compatibility-only. */
   getStreamedModel(modelName?: string): StreamedModelTurn {
     const config = this.#resolveConfig();
     const provider = this.#createProvider(config);

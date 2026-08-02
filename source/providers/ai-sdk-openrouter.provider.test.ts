@@ -38,7 +38,7 @@ it('AiSdkOpenRouterProvider creates an AI SDK model with OpenRouter settings', (
     },
   });
 
-  const model = provider.getModel('anthropic/claude-sonnet-4.5');
+  const model = provider.getStreamedModel('anthropic/claude-sonnet-4.5');
 
   expect(calls.length).toBe(1);
   expect(calls[0]).toMatchObject({
@@ -53,8 +53,8 @@ it('AiSdkOpenRouterProvider creates an AI SDK model with OpenRouter settings', (
     compatibility: 'strict',
   });
   expect(requestedModel).toBe('anthropic/claude-sonnet-4.5');
-  expect(typeof (model as any).getResponse).toBe('function');
-  expect(typeof (model as any).getStreamedResponse).toBe('function');
+  expect(typeof model.getResponse).toBe('function');
+  expect(typeof model.stream).toBe('function');
 });
 
 it('AiSdkOpenRouterProvider uses the default model when none is requested', () => {
@@ -75,7 +75,7 @@ it('AiSdkOpenRouterProvider uses the default model when none is requested', () =
     },
   });
 
-  provider.getModel();
+  provider.getStreamedModel();
 
   expect(requestedModel).toBe('openrouter/auto');
 });
@@ -102,7 +102,7 @@ it('AiSdkOpenRouterProvider passes configured fetch to OpenRouter provider', () 
     },
   });
 
-  provider.getModel('selected-model');
+  provider.getStreamedModel('selected-model');
 
   expect(calls[0].fetch).toBe(fetchImpl);
 });
@@ -150,25 +150,21 @@ it('AiSdkOpenRouterProvider routes public Agent streams through the application 
     },
   });
 
-  const model = await provider.getModel('openai/gpt-oss-120b');
+  const model = provider.getStreamedModel('openai/gpt-oss-120b');
   const events = await collect(
-    model.getStreamedResponse({
-      systemInstructions: 'Be concise.',
-      input: 'List files.',
-      tools: [{ type: 'function', name: 'shell', parameters: { type: 'object' } }],
-      handoffs: [],
-      outputType: 'text',
-      modelSettings: {
-        toolChoice: 'shell',
-        temperature: 0,
-        topP: 0,
-        frequencyPenalty: 0,
-        presencePenalty: 0,
-        maxTokens: 0,
-        reasoning: { effort: 'none', summary: 'auto' },
-        providerData: { service_tier: 'flex', providerOptions: { openrouter: { transforms: ['middle-out'] } } },
-      },
-    } as any),
+    model.stream({
+      instructions: 'Be concise.',
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'List files.' }] }],
+      tools: [{ name: 'shell', parameters: { type: 'object' } }],
+      toolChoice: { name: 'shell' },
+      temperature: 0,
+      topP: 0,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+      maxTokens: 0,
+      reasoning: { effort: 'none', summary: 'auto' },
+      providerOptions: { service_tier: 'flex', providerOptions: { openrouter: { transforms: ['middle-out'] } } },
+    }),
   );
 
   expect(seenOptions).toMatchObject({
@@ -191,44 +187,22 @@ it('AiSdkOpenRouterProvider routes public Agent streams through the application 
       },
     },
   });
-  expect(events.map((event: any) => event.type)).toEqual([
-    'response_started',
-    'model',
-    'output_text_delta',
-    'model',
-    'response_done',
-  ]);
-  const response = (events.at(-1) as any).response;
-  expect(response).toMatchObject({
-    id: 'response-1',
+  expect(events.map((event: any) => event.type)).toEqual(['reasoning_delta', 'text_delta', 'tool_call', 'completion']);
+  expect(events.at(-1)).toMatchObject({
+    type: 'completion',
+    responseId: 'response-1',
     output: [
-      {
-        type: 'reasoning',
-        id: 'thought-1',
-        content: [{ type: 'input_text', text: 'Think.' }],
-        rawContent: [{ type: 'reasoning_text', text: 'Think.' }],
-        providerData: {
-          openrouter: { id: 'r2' },
-        },
-      },
-      {
-        type: 'message',
-        role: 'assistant',
-        content: [{ type: 'output_text', text: 'Done.' }],
-        status: 'completed',
-      },
-      { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{"command":"pwd"}', status: 'completed' },
+      { type: 'reasoning', id: 'thought-1', text: 'Think.', providerMetadata: { openrouter: { id: 'r2' } } },
+      { type: 'message', content: [{ type: 'text', text: 'Done.' }] },
+      { type: 'tool_call', id: 'call-1', name: 'shell', arguments: '{"command":"pwd"}' },
     ],
-    providerData: {
+    providerMetadata: {
       openrouter: { request: 'metadata' },
       model: 'openrouter.chat:openai/gpt-oss-120b',
       responseId: 'response-1',
     },
+    usage: { inputTokens: 3, outputTokens: 5, cachedInputTokens: 1 },
   });
-  expect(response.usage.inputTokens).toBe(3);
-  expect(response.usage.outputTokens).toBe(5);
-  expect(response.usage.totalTokens).toBe(8);
-  expect(response.usage.inputTokensDetails).toEqual([{ cached_tokens: 1 }]);
 });
 
 it('AiSdkOpenRouterProvider preserves the stream signal and provider errors', async () => {
@@ -259,15 +233,12 @@ it('AiSdkOpenRouterProvider preserves the stream signal and provider errors', as
       } as any),
   });
 
-  const model = await provider.getModel();
+  const model = provider.getStreamedModel();
   await expect(
     collect(
-      model.getStreamedResponse({
-        input: 'hi',
+      model.stream({
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }],
         tools: [],
-        handoffs: [],
-        outputType: 'text',
-        modelSettings: {},
         signal: controller.signal,
       } as any),
     ),

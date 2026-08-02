@@ -86,8 +86,8 @@ it('creates a streamed model via provider registry and executes stream()', async
     'gpt-4o',
   );
 
-  const { bridgeBackToTurn } = await import('./agents-model-bridge.js');
-  const adaptedTurn = bridgeBackToTurn(modelInstance);
+  const { adaptOpenAIStreamedModel } = await import('./openai-streamed-model-adapter.js');
+  const adaptedTurn = adaptOpenAIStreamedModel(modelInstance);
 
   const events: any[] = [];
   for await (const event of adaptedTurn.stream({

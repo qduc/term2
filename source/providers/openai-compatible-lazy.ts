@@ -62,7 +62,10 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
               settingsService: deps.settingsService,
             },
           );
-          return 'getModel' in provider ? (provider as any).getModel(model) : provider;
+          if (!('getStreamedModel' in provider) || typeof provider.getStreamedModel !== 'function') {
+            throw new Error(`Custom provider '${providerId}' has no application-owned streamed model`);
+          }
+          return provider.getStreamedModel(model);
         })(),
       ),
     fetchModels: async (deps: ProviderDeps, fetchImpl: ProviderFetch = fetch as any) => {

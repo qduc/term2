@@ -60,6 +60,9 @@ function buildProvider(
         if (response instanceof Response) {
           return response;
         }
+        if (typeof response === 'function') {
+          return response();
+        }
         return new Response(JSON.stringify(response), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -90,6 +93,25 @@ const baseRequest = {
   outputType: 'text' as const,
   tracing: false as const,
 };
+
+function streamedSuccessResponse(): Response {
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(
+        new TextEncoder().encode(
+          [
+            `data: ${JSON.stringify({ id: successResponse.id, choices: [{ delta: { content: 'ok' } }] })}`,
+            `data: ${JSON.stringify({ id: successResponse.id, choices: [{ delta: {}, finish_reason: 'stop' }] })}`,
+            'data: [DONE]',
+            '',
+          ].join('\n\n'),
+        ),
+      );
+      controller.close();
+    },
+  });
+  return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+}
 
 it('runtime openai-compatible createRunner returns a runner', () => {
   const provider = createOpenAICompatibleProviderDefinition({
@@ -736,22 +758,18 @@ it('opencode provider type uses default base URL and falls back to OPENCODE_API_
             body: rawBody ? JSON.parse(rawBody) : null,
             headers,
           });
-          return new Response(JSON.stringify(successResponse), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
+          return streamedSuccessResponse();
         }) as typeof fetch,
       },
     );
 
-    const model = await provider.getModel('provider-model');
+    const model = provider.getStreamedModel('provider-model');
 
     await runUnderTrace(() =>
       model.getResponse({
-        ...baseRequest,
-        input: [{ role: 'user', content: 'hello' }] as any,
-        modelSettings: {},
-      } as any),
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        tools: [],
+      }),
     );
 
     expect(captured.length).toBe(1);
@@ -811,14 +829,14 @@ it('opencode qwen models use Anthropic messages transport with session header', 
       },
     );
 
-    const model = await provider.getModel('qwen3-coder');
+    const model = provider.getStreamedModel('qwen3-coder');
 
     await runUnderTrace(() =>
       model.getResponse({
-        ...baseRequest,
-        input: [{ role: 'user', content: 'hello' }] as any,
-        modelSettings: { reasoning: { effort: 'high' } },
-      } as any),
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        tools: [],
+        reasoning: { effort: 'high' },
+      }),
     );
 
     expect(captured.length).toBe(1);
@@ -864,22 +882,18 @@ it('opencode provider type keeps the fallback session ID stable across turns', a
             body: rawBody ? JSON.parse(rawBody) : null,
             headers,
           });
-          return new Response(JSON.stringify(successResponse), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
+          return streamedSuccessResponse();
         }) as typeof fetch,
       },
     );
 
     const runTurn = async () => {
-      const model = await provider.getModel('provider-model');
+      const model = provider.getStreamedModel('provider-model');
       return runUnderTrace(() =>
         model.getResponse({
-          ...baseRequest,
-          input: [{ role: 'user', content: 'hello' }] as any,
-          modelSettings: {},
-        } as any),
+          input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+          tools: [],
+        }),
       );
     };
 
@@ -909,19 +923,18 @@ it('recreated opencode provider instances reuse the active conversation session 
   const runTurn = async () => {
     const provider = buildProvider(
       captured,
-      successResponse,
+      () => streamedSuccessResponse(),
       'opencode',
       'https://opencode.ai/v1',
       undefined,
       sessionContextService,
     );
-    const model = await provider.getModel('provider-model');
+    const model = provider.getStreamedModel('provider-model');
     await runUnderTrace(() =>
       model.getResponse({
-        ...baseRequest,
-        input: [{ role: 'user', content: 'hello' }] as any,
-        modelSettings: {},
-      } as any),
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        tools: [],
+      }),
     );
   };
 
@@ -934,7 +947,7 @@ it('recreated opencode provider instances reuse the active conversation session 
   expect(captured[2]?.headers['x-opencode-session']).not.toBe(captured[0]?.headers['x-opencode-session']);
 });
 
-it('lazy opencode provider reuses the same model provider instance across getModel calls (regression: was recreated per turn, resetting session ID)', async () => {
+it('lazy opencode provider returns an application-owned streamed model', async () => {
   const deps: ProviderDeps = {
     settingsService: {
       get: (key: string) => {
@@ -963,17 +976,8 @@ it('lazy opencode provider reuses the same model provider instance across getMod
   const modelProvider = (runner as any).config?.modelProvider;
   expect(modelProvider).toBeTruthy();
 
-  // Wrap getModel to track how many distinct underlying provider instances are created.
-  // The lazy provider wraps a cached inner provider; the model instances it returns are
-  // cached by the inner OpencodeAnthropicFormatProvider.  If the inner provider is
-  // recreated on each call, different model instances will be returned for the same name.
-  const model1 = await modelProvider.getModel('provider-model');
-  const model2 = await modelProvider.getModel('provider-model');
-
-  expect(
-    model1,
-    'same model instance must be returned on repeated getModel calls — a new instance means a new session ID',
-  ).toBe(model2);
+  const model = await modelProvider.getModel('provider-model');
+  expect(model).toHaveProperty('stream');
 });
 
 it('lazy provider definition preserves configured label', () => {
@@ -986,7 +990,7 @@ it('lazy provider definition preserves configured label', () => {
   expect(definition.label).toBe('Lazy Provider Label');
 });
 
-it('opencode provider type caches model instances across getModel calls', async () => {
+it('opencode provider type returns a fresh application-owned streamed model', async () => {
   const provider = createCustomProviderModelProvider(
     {
       name: 'opencode-test',
@@ -1015,7 +1019,6 @@ it('opencode provider type caches model instances across getModel calls', async 
     },
   );
 
-  const model1 = await provider.getModel('provider-model');
-  const model2 = await provider.getModel('provider-model');
-  expect(model1, 'getModel should return the same model instance for the same model name').toBe(model2);
+  const model = provider.getStreamedModel('provider-model');
+  expect(model).toHaveProperty('stream');
 });

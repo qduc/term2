@@ -1,7 +1,5 @@
 import { createOpenRouter, type OpenRouterProviderSettings } from '@openrouter/ai-sdk-provider';
 import type { JSONValue, LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider';
-import type { LegacyModel, LegacyModelProvider } from '../contracts/model.js';
-import { adaptStreamedModelTurnForAgents } from './agents-model-bridge.js';
 import { withForwardedProviderSettings } from './ai-sdk-provider-settings.js';
 import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
 import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
@@ -15,7 +13,7 @@ export type AiSdkOpenRouterProviderFactory = (
   options: AiSdkOpenRouterConfig & { compatibility?: 'strict' | 'compatible' },
 ) => (modelId: string) => LanguageModelV3;
 
-export class AiSdkOpenRouterProvider implements LegacyModelProvider {
+export class AiSdkOpenRouterProvider {
   #defaultModel: string;
   #resolveConfig: () => AiSdkOpenRouterConfig;
   #createProvider: AiSdkOpenRouterProviderFactory;
@@ -30,11 +28,6 @@ export class AiSdkOpenRouterProvider implements LegacyModelProvider {
     this.#createProvider = deps.createProvider ?? (createOpenRouter as AiSdkOpenRouterProviderFactory);
   }
 
-  getModel(modelName?: string): LegacyModel {
-    return adaptStreamedModelTurnForAgents(this.getStreamedModel(modelName));
-  }
-
-  /** Application-owned model path; the Agents bridge remains compatibility-only. */
   getStreamedModel(modelName?: string): StreamedModelTurn {
     const config = this.#resolveConfig();
     const provider = this.#createProvider({

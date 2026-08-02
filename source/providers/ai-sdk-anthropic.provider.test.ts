@@ -178,32 +178,22 @@ it('AiSdkAnthropicProvider caps model output at the catalog maximum without expa
     },
   });
 
-  const model = await provider.getModel('minimax-m3');
+  const model = provider.getStreamedModel('minimax-m3');
   const controller = new AbortController();
   const events = await collect(
-    model.getStreamedResponse({
-      systemInstructions: 'Be concise.',
+    model.stream({
+      instructions: 'Be concise.',
       input: [
-        { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'List files.' }] },
-        {
-          type: 'function_call',
-          callId: 'previous-call',
-          name: 'shell',
-          arguments: '{"command":"ls"}',
-          status: 'completed',
-        },
-        { type: 'function_call_result', callId: 'previous-call', name: 'shell', output: 'ok', status: 'completed' },
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'List files.' }] },
+        { type: 'tool_call', id: 'previous-call', name: 'shell', arguments: '{"command":"ls"}' },
+        { type: 'tool_result', id: 'previous-call', output: 'ok' },
       ],
-      tools: [{ type: 'function', name: 'shell', parameters: { type: 'object' } }],
-      handoffs: [],
-      outputType: 'text',
-      modelSettings: {
-        maxTokens: 1,
-        reasoning: { effort: 'high' },
-        providerData: {
-          topK: 5,
-          providerOptions: { anthropic: { topK: 9 } },
-        },
+      tools: [{ name: 'shell', parameters: { type: 'object' } }],
+      maxTokens: 1,
+      reasoning: { effort: 'high' },
+      providerOptions: {
+        topK: 5,
+        providerOptions: { anthropic: { topK: 9 } },
       },
       signal: controller.signal,
     } as any),
@@ -223,44 +213,29 @@ it('AiSdkAnthropicProvider caps model output at the catalog maximum without expa
     { role: 'assistant' },
     { role: 'tool', providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } } },
   ]);
-  expect(events.map((event: any) => event.type)).toEqual([
-    'response_started',
-    'model',
-    'output_text_delta',
-    'model',
-    'response_done',
-  ]);
+  expect(events.map((event: any) => event.type)).toEqual(['reasoning_delta', 'text_delta', 'tool_call', 'completion']);
   expect(events.at(-1)).toMatchObject({
-    type: 'response_done',
-    response: {
-      id: 'anthropic-response',
-      usage: { inputTokens: 3, outputTokens: 5, totalTokens: 8, inputTokensDetails: [{ cached_tokens: 1 }] },
-      providerData: {
-        anthropic: { request: 'metadata' },
-        model: 'anthropic.messages:minimax-m3',
-        responseId: 'anthropic-response',
-      },
-      output: [
-        {
-          type: 'reasoning',
-          id: 'thought-1',
-          content: [{ type: 'input_text', text: 'Think.' }],
-          providerData: { anthropic: { signature: 'end' } },
-        },
-        { type: 'message', content: [{ type: 'output_text', text: 'Done.' }] },
-        { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{"command":"pwd"}' },
-      ],
+    type: 'completion',
+    responseId: 'anthropic-response',
+    usage: { inputTokens: 3, outputTokens: 5, cachedInputTokens: 1 },
+    providerMetadata: {
+      anthropic: { request: 'metadata' },
+      model: 'anthropic.messages:minimax-m3',
+      responseId: 'anthropic-response',
     },
+    output: [
+      { type: 'reasoning', id: 'thought-1', text: 'Think.', providerMetadata: { anthropic: { signature: 'end' } } },
+      { type: 'message', content: [{ type: 'text', text: 'Done.' }] },
+      { type: 'tool_call', id: 'call-1', name: 'shell', arguments: '{"command":"pwd"}' },
+    ],
   });
 
   await collect(
-    model.getStreamedResponse({
-      input: 'cap this request',
+    model.stream({
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'cap this request' }] }],
       tools: [],
-      handoffs: [],
-      outputType: 'text',
-      modelSettings: { maxTokens: 200000 },
-    } as any),
+      maxTokens: 200000,
+    }),
   );
   expect(seenOptions).toMatchObject({ maxOutputTokens: 131072 });
 });
@@ -292,10 +267,10 @@ it('AiSdkAnthropicProvider uses its default model and propagates provider errors
     },
   });
 
-  const model = await provider.getModel();
+  const model = provider.getStreamedModel();
   await expect(
     collect(
-      model.getStreamedResponse({ input: 'hi', tools: [], handoffs: [], outputType: 'text', modelSettings: {} } as any),
+      model.stream({ input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }], tools: [] }),
     ),
   ).rejects.toBe(providerError);
   expect(requestedModel).toBe('claude-sonnet-4-5');

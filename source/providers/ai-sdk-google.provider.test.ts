@@ -51,27 +51,23 @@ it('AiSdkGoogleProvider routes public Agent streams through the application turn
     },
   });
 
-  const model = await provider.getModel('gemini-2.5-pro');
+  const model = provider.getStreamedModel('gemini-2.5-pro');
   const controller = new AbortController();
   const events = await collect(
-    model.getStreamedResponse({
-      systemInstructions: 'Be concise.',
-      input: 'List files.',
-      tools: [{ type: 'function', name: 'shell', parameters: { type: 'object' } }],
-      handoffs: [],
-      outputType: 'text',
-      modelSettings: {
-        toolChoice: 'shell',
-        temperature: 0,
-        topP: 0,
-        frequencyPenalty: 0,
-        presencePenalty: 0,
-        maxTokens: 0,
-        reasoning: { effort: 'medium', summary: 'auto' },
-        providerData: {
-          safetySettings: [{ category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' }],
-          providerOptions: { google: { responseModalities: ['TEXT'], safetySettings: ['nested wins'] } },
-        },
+    model.stream({
+      instructions: 'Be concise.',
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'List files.' }] }],
+      tools: [{ name: 'shell', parameters: { type: 'object' } }],
+      toolChoice: { name: 'shell' },
+      temperature: 0,
+      topP: 0,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+      maxTokens: 0,
+      reasoning: { effort: 'medium', summary: 'auto' },
+      providerOptions: {
+        safetySettings: [{ category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' }],
+        providerOptions: { google: { responseModalities: ['TEXT'], safetySettings: ['nested wins'] } },
       },
       signal: controller.signal,
     } as any),
@@ -101,40 +97,26 @@ it('AiSdkGoogleProvider routes public Agent streams through the application turn
     },
     abortSignal: controller.signal,
   });
-  expect(events.map((event: any) => event.type)).toEqual([
-    'response_started',
-    'model',
-    'output_text_delta',
-    'model',
-    'response_done',
-  ]);
+  expect(events.map((event: any) => event.type)).toEqual(['reasoning_delta', 'text_delta', 'tool_call', 'completion']);
   expect(events.at(-1)).toMatchObject({
-    type: 'response_done',
-    response: {
-      id: 'FAKE_ID',
-      output: [
-        {
-          type: 'reasoning',
-          id: 'thought-1',
-          content: [{ type: 'input_text', text: 'Think.' }],
-          rawContent: [{ type: 'reasoning_text', text: 'Think.' }],
-          providerData: { google: { id: 'r2' } },
-        },
-        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Done.' }], status: 'completed' },
-        { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{"command":"pwd"}', status: 'completed' },
-      ],
-      providerData: {
-        google: { request: 'metadata' },
-        model: 'google.generative-ai:gemini-2.5-pro',
-        responseId: 'FAKE_ID',
-      },
+    type: 'completion',
+    responseId: 'FAKE_ID',
+    output: [
+      { type: 'reasoning', id: 'thought-1', text: 'Think.', providerMetadata: { google: { id: 'r2' } } },
+      { type: 'message', content: [{ type: 'text', text: 'Done.' }] },
+      { type: 'tool_call', id: 'call-1', name: 'shell', arguments: '{"command":"pwd"}' },
+    ],
+    providerMetadata: {
+      google: { request: 'metadata' },
+      model: 'google.generative-ai:gemini-2.5-pro',
+      responseId: 'FAKE_ID',
     },
+    usage: { inputTokens: 3, outputTokens: 5, cachedInputTokens: 1 },
   });
-  const response = (events.at(-1) as any).response;
-  expect(response.usage.inputTokens).toBe(3);
-  expect(response.usage.outputTokens).toBe(5);
-  expect(response.usage.totalTokens).toBe(8);
-  expect(response.usage.inputTokensDetails).toEqual([{ cached_tokens: 1 }]);
+  const completion = events.at(-1) as any;
+  expect(completion.usage.inputTokens).toBe(3);
+  expect(completion.usage.outputTokens).toBe(5);
+  expect(completion.usage.cachedInputTokens).toBe(1);
 });
 
 it('applies thinkingConfig to a custom-named Google model through the application run loop', async () => {
@@ -224,10 +206,10 @@ it('AiSdkGoogleProvider uses its default model and propagates provider errors', 
     },
   });
 
-  const model = await provider.getModel();
+  const model = provider.getStreamedModel();
   await expect(
     collect(
-      model.getStreamedResponse({ input: 'hi', tools: [], handoffs: [], outputType: 'text', modelSettings: {} } as any),
+      model.stream({ input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }], tools: [] }),
     ),
   ).rejects.toBe(providerError);
   expect(requestedModel).toBe('gemini-2.5-flash');

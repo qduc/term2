@@ -42,7 +42,7 @@ it('normalizes only completed Responses events as successful completions', () =>
   ).toThrow('response.incomplete (incomplete)');
 });
 
-// bridgeBackToTurn (agents-model-bridge.ts) passes StreamedModelTurnInput items
+// adaptOpenAIStreamedModel (openai-streamed-model-adapter.ts) passes StreamedModelTurnInput items
 // straight through using the app-internal generic shapes (`{type:'text'}`
 // content parts, `{type:'tool_call', ...}`), not the Responses API's own item
 // types. Without translation, the real API rejects every request with a 400 —
@@ -121,7 +121,7 @@ it('getResponse (HTTP) translates tool_call and function_call_result items into 
   await model.getResponse({
     input: [
       { type: 'tool_call', id: 'call_1', name: 'shell', arguments: '{"command":"ls"}' },
-      // bridgeBackToTurn renames tool_result -> function_call_result with a
+      // adaptOpenAIStreamedModel renames tool_result -> function_call_result with a
       // camelCase `callId` and an `{ text }`-wrapped output before this layer
       // ever sees it.
       { type: 'function_call_result', callId: 'call_1', output: { text: 'file1\nfile2' } },

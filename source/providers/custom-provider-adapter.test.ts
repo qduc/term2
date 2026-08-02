@@ -245,16 +245,12 @@ it('createCustomProviderModelProvider Google type gets logging fetch wrapper', a
 
   expect(provider instanceof AiSdkGoogleProvider).toBe(true);
 
-  const model = await provider.getModel('gemini-test');
+  const model = provider.getStreamedModel('gemini-test');
   await withTrace('test', () =>
     model.getResponse({
       tools: [],
-      handoffs: [],
-      outputType: 'text' as const,
-      tracing: false as const,
-      input: [{ type: 'message', role: 'user', content: 'hello' }],
-      modelSettings: {},
-    } as any),
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+    }),
   );
 
   // Verify that the request started event was logged by the logging middleware
@@ -278,11 +274,14 @@ it('createCustomProviderModelProvider uses OpencodeAnthropicFormatProvider for o
 
   expect(provider instanceof OpencodeAnthropicFormatProvider).toBe(true);
 
-  // When model name contains minimax (case-insensitive), it should return model not using OpenAIProvider
-  const minimaxModel = await provider.getModel('Minimax-3.5-Turbo');
-  expect(minimaxModel instanceof OpenAIChatCompletionsModel).toBe(false);
+  // When model name contains minimax (case-insensitive), it should use the Anthropic
+  // application-owned streamed model rather than the OpenAI-compatible transport.
+  const minimaxModel = provider.getStreamedModel('Minimax-3.5-Turbo');
+  expect(minimaxModel).toHaveProperty('stream');
+  expect(minimaxModel).not.toHaveProperty('getModel');
 
-  // When model name does NOT contain minimax, it should return OpenAIChatCompletionsModel from OpenAIProvider
-  const otherModel = await provider.getModel('other-model-name');
+  // When model name does NOT contain minimax, it should use the OpenAI-compatible
+  // application-owned streamed model.
+  const otherModel = provider.getStreamedModel('other-model-name');
   expect(otherModel instanceof OpenAIChatCompletionsModel).toBe(true);
 });

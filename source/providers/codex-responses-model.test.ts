@@ -4,76 +4,8 @@ import { OpenAIResponsesModel, OpenAIResponsesWSModel } from './codex-responses-
 import type { IProviderTraffic } from '../services/service-interfaces.js';
 import { SessionContextService } from '../services/session/session-context-service.js';
 import { CodexResponsesModel, CodexResponsesWSModel, wrapCodexStream } from './codex-responses-model.js';
-
-// Existing transport-history fixtures are normalized here while their assertions are migrated to
-// the application-owned turn boundary. Production never accepts this compatibility shape.
-function normalizeFixtureRequest(request: any): any {
-  if (!request || typeof request !== 'object') return request;
-  const settings = request.modelSettings ?? {};
-  const normalizeItem = (item: any): any => {
-    if (item?.type === 'function_call_result' || item?.type === 'function_call_output') {
-      return { type: 'tool_result', id: item.callId ?? item.call_id ?? item.tool_call_id, output: item.output ?? '' };
-    }
-    if (item?.type === 'function_call') {
-      return {
-        type: 'tool_call',
-        id: item.callId ?? item.call_id ?? item.id,
-        name: item.name ?? '',
-        arguments: item.arguments ?? '{}',
-      };
-    }
-    if (item?.type === 'reasoning') return item;
-    if (item?.type === 'message' || item?.role) {
-      const content = Array.isArray(item.content) ? item.content : [item.content ?? ''];
-      return {
-        type: 'message',
-        role: item.role ?? 'user',
-        content: content.map((part: any) => {
-          if (typeof part === 'string') return { type: 'text', text: part };
-          if (part?.type === 'input_text' || part?.type === 'output_text')
-            return { type: 'text', text: part.text ?? '' };
-          return part;
-        }),
-      };
-    }
-    return item;
-  };
-  return {
-    ...request,
-    ...(request.systemInstructions !== undefined ? { instructions: request.systemInstructions } : {}),
-    input: Array.isArray(request.input) ? request.input.map(normalizeItem) : request.input,
-    tools: (request.tools ?? []).map((tool: any) => {
-      const { type: _type, ...rest } = tool;
-      return rest;
-    }),
-    toolChoice: request.toolChoice ?? settings.toolChoice,
-    temperature: request.temperature ?? settings.temperature,
-    topP: request.topP ?? settings.topP,
-    frequencyPenalty: request.frequencyPenalty ?? settings.frequencyPenalty,
-    presencePenalty: request.presencePenalty ?? settings.presencePenalty,
-    maxTokens: request.maxTokens ?? settings.maxTokens,
-    reasoning: request.reasoning ?? settings.reasoning,
-    codex: request.codex ?? {
-      ...(settings.prompt_cache_key ? { promptCacheKey: settings.prompt_cache_key } : {}),
-      ...(settings.include ? { include: settings.include } : {}),
-    },
-    providerOptions: request.providerOptions ?? settings.providerData,
-  };
-}
-
-for (const ModelClass of [OpenAIResponsesModel, OpenAIResponsesWSModel]) {
-  const build = (ModelClass.prototype as any).buildResponsesCreateRequest;
-  (ModelClass.prototype as any).buildResponsesCreateRequest = function (request: any, stream: boolean) {
-    return build.call(this, normalizeFixtureRequest(request), stream);
-  };
-  if (ModelClass === OpenAIResponsesModel) {
-    const stream = (ModelClass.prototype as any).stream;
-    (ModelClass.prototype as any).stream = function (request: any) {
-      return stream.call(this, normalizeFixtureRequest(request));
-    };
-  }
-}
-
+import { RetryingModel } from './retrying-model.js';
+import { AmbiguousModelOutcomeError } from '../services/retry/retry-errors.js';
 // Fixture mirrors the SSE shape that codex's responses endpoint emits: deltas
 // and output_item.done carry the assistant message, but the terminal
 // response.completed frame ships an empty `output` array. The wrapper has to
@@ -337,13 +269,13 @@ it('wrapCodexStream warns with metadata when reconstructed output is suspiciousl
   expect('output' in warnings[0]).toBe(false);
 });
 
-// Integration check: confirm CodexResponsesModel.getStreamedResponse threads
+// Integration check: confirm CodexResponsesModel.stream threads
 // the stream through wrapCodexStream so a Codex-style terminal frame with
 // empty output gets rebuilt into a populated response_done event. We stub the
 // parent's `fetchResponse` on the prototype so our subclass override (which
 // delegates to super) sees a controlled stream without needing a real OpenAI
 // client.
-it.sequential('CodexResponsesModel.getStreamedResponse yields response_done with reconstructed output', async () => {
+it.sequential('CodexResponsesModel.stream yields completion with reconstructed output', async () => {
   const original = (OpenAIResponsesModel.prototype as any).fetchResponse;
   (OpenAIResponsesModel.prototype as any).fetchResponse = async function () {
     return makeStream([
@@ -384,7 +316,7 @@ it.sequential('CodexResponsesModel.getStreamedResponse yields response_done with
   }
 });
 
-it.sequential('CodexResponsesModel.getStreamedResponse tolerates missing terminal response.output', async () => {
+it.sequential('CodexResponsesModel.stream tolerates missing terminal response.output', async () => {
   const original = (OpenAIResponsesModel.prototype as any).fetchResponse;
   (OpenAIResponsesModel.prototype as any).fetchResponse = async function () {
     return makeStream([
@@ -423,37 +355,34 @@ it.sequential('CodexResponsesModel.getStreamedResponse tolerates missing termina
   }
 });
 
-it.sequential(
-  'CodexResponsesModel.buildResponsesCreateRequest merges modelSettings.include into requestData.include',
-  () => {
-    const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
-    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
-      return {
-        requestData: {
-          include: ['file_search_call.results'],
-        },
-        sdkRequestHeaders: {},
-        signal: undefined,
-      };
+it.sequential('CodexResponsesModel.buildResponsesCreateRequest merges Codex include into requestData.include', () => {
+  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
+    return {
+      requestData: {
+        include: ['file_search_call.results'],
+      },
+      sdkRequestHeaders: {},
+      signal: undefined,
     };
+  };
 
-    try {
-      const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-      const built = (model as any).buildResponsesCreateRequest(
-        {
-          input: [],
-          tools: [],
-          codex: { include: ['reasoning.encrypted_content', 'file_search_call.results'] },
-        },
-        true,
-      );
+  try {
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const built = (model as any).buildResponsesCreateRequest(
+      {
+        input: [],
+        tools: [],
+        codex: { include: ['reasoning.encrypted_content', 'file_search_call.results'] },
+      },
+      true,
+    );
 
-      expect(built.requestData.include).toEqual(['file_search_call.results', 'reasoning.encrypted_content']);
-    } finally {
-      (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
-    }
-  },
-);
+    expect(built.requestData.include).toEqual(['file_search_call.results', 'reasoning.encrypted_content']);
+  } finally {
+    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
+  }
+});
 
 it('Codex HTTP writes every supported request setting and the abort signal to the Responses boundary', async () => {
   let capturedBody: any;
@@ -520,7 +449,7 @@ it.sequential('CodexResponsesModel.buildResponsesCreateRequest strips temperatur
 
   try {
     const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-    const built = (model as any).buildResponsesCreateRequest({ modelSettings: { temperature: 0.2 } }, true);
+    const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [], temperature: 0.2 }, true);
 
     expect('temperature' in built.requestData).toBe(false);
   } finally {
@@ -528,7 +457,7 @@ it.sequential('CodexResponsesModel.buildResponsesCreateRequest strips temperatur
   }
 });
 
-it.sequential('CodexResponsesModel.buildResponsesCreateRequest forwards prompt_cache_key from modelSettings', () => {
+it.sequential('CodexResponsesModel.buildResponsesCreateRequest forwards the Codex prompt cache key', () => {
   const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
   (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
     return {
@@ -601,7 +530,7 @@ it.sequential('CodexResponsesModel sends gpt-5.6-luna through the Responses Lite
     return {
       requestData: {
         instructions: 'Follow the repository instructions.',
-        input: [{ role: 'user', type: 'message', content: 'Review this change.' }],
+        input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: 'Review this change.' }] }],
         tools: [{ type: 'function', name: 'shell', parameters: { type: 'object' } }],
         parallel_tool_calls: true,
       },
@@ -612,7 +541,7 @@ it.sequential('CodexResponsesModel sends gpt-5.6-luna through the Responses Lite
 
   try {
     const model = new CodexResponsesModel({} as any, 'gpt-5.6-luna');
-    const built = (model as any).buildResponsesCreateRequest({ modelSettings: {} }, true);
+    const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
     expect(built.requestData.instructions).toBe('');
     expect(built.requestData.tools).toBeUndefined();
@@ -630,7 +559,7 @@ it.sequential('CodexResponsesModel sends gpt-5.6-luna through the Responses Lite
         role: 'developer',
         content: [{ type: 'input_text', text: 'Follow the repository instructions.' }],
       },
-      { role: 'user', type: 'message', content: 'Review this change.' },
+      { role: 'user', type: 'message', content: [{ type: 'text', text: 'Review this change.' }] },
     ]);
   } finally {
     (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
@@ -644,7 +573,7 @@ it.sequential('CodexResponsesModel does not resend Luna developer instructions o
       requestData: {
         previous_response_id: 'resp_previous',
         instructions: 'Follow the repository instructions.',
-        input: [{ role: 'user', type: 'message', content: 'Continue the review.' }],
+        input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: 'Continue the review.' }] }],
         tools: [],
       },
       sdkRequestHeaders: {},
@@ -654,11 +583,11 @@ it.sequential('CodexResponsesModel does not resend Luna developer instructions o
 
   try {
     const model = new CodexResponsesModel({} as any, 'gpt-5.6-luna');
-    const built = (model as any).buildResponsesCreateRequest({ modelSettings: {} }, true);
+    const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
     expect(built.requestData.input).toEqual([
       { type: 'additional_tools', role: 'developer', tools: [] },
-      { role: 'user', type: 'message', content: 'Continue the review.' },
+      { role: 'user', type: 'message', content: [{ type: 'text', text: 'Continue the review.' }] },
     ]);
     expect(built.requestData.instructions).toBe('');
   } finally {
@@ -686,7 +615,7 @@ it.sequential('CodexResponsesModel.buildResponsesCreateRequest strips replay ite
 
   try {
     const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-    const built = (model as any).buildResponsesCreateRequest({ modelSettings: {} }, true);
+    const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
     expect('id' in built.requestData.input[0]).toBe(false);
     expect('id' in built.requestData.input[1]).toBe(false);
@@ -723,7 +652,7 @@ it.sequential(
 
     try {
       const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-      const built = (model as any).buildResponsesCreateRequest({ modelSettings: {} }, true);
+      const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
       expect(built.requestData.input[0]).toEqual({
         type: 'function_call',
@@ -752,7 +681,7 @@ it.sequential(
       return {
         requestData: {
           input: [
-            { role: 'user', type: 'message', content: 'continue' },
+            { role: 'user', type: 'message', content: [{ type: 'text', text: 'continue' }] },
             { id: 'fc_1', type: 'function_call', call_id: 'call-paired', name: 'shell', arguments: '{}' },
             { type: 'function_call_output', call_id: 'call-paired', output: 'ok' },
             { id: 'fc_2', type: 'function_call', call_id: 'call-orphan', name: 'shell', arguments: '{}' },
@@ -765,7 +694,7 @@ it.sequential(
 
     try {
       const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-      const built = (model as any).buildResponsesCreateRequest({ modelSettings: {} }, true);
+      const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
       expect(built.requestData.previous_response_id).toBeUndefined();
       expect(built.requestData.input.map((item: any) => item.call_id).filter(Boolean)).toEqual([
@@ -793,7 +722,7 @@ it.sequential('CodexResponsesModel.buildResponsesCreateRequest keeps function ca
 
   try {
     const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-    const built = (model as any).buildResponsesCreateRequest({ modelSettings: {} }, true);
+    const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
     expect(built.requestData.input).toEqual([
       { type: 'function_call', call_id: 'call-server-held', name: 'shell', arguments: '{}' },
@@ -924,30 +853,26 @@ it.sequential('CodexResponsesWSModel sends only new input after a Responses-Lite
     );
 
     const tool = { type: 'function', name: 'shell', parameters: { type: 'object' } };
-    const firstUserMessage = { role: 'user', type: 'message', content: 'hello' };
+    const firstUserMessage = { role: 'user', type: 'message', content: [{ type: 'text', text: 'hello' }] };
     const secondUserMessage = {
       role: 'user',
       type: 'message',
-      content: [{ type: 'input_text', text: 'how are you?' }],
+      content: [{ type: 'text', text: 'how are you?' }],
     };
 
     await collect(
       model.stream({
         input: [firstUserMessage],
-        systemInstructions: 'Follow the repository instructions.',
-        modelSettings: {},
+        instructions: 'Follow the repository instructions.',
         tools: [tool],
-        handoffs: [],
       } as any),
     );
     await collect(
       model.stream({
         previousResponseId: 'resp_lite_2',
         input: [secondUserMessage],
-        systemInstructions: 'Follow the repository instructions.',
-        modelSettings: {},
+        instructions: 'Follow the repository instructions.',
         tools: [tool],
-        handoffs: [],
       } as any),
     );
 
@@ -1005,17 +930,15 @@ it.sequential('CodexResponsesWSModel correlates Responses-Lite state across sequ
     );
 
     const tool = { type: 'function', name: 'shell', parameters: { type: 'object' } };
-    const msg1 = { role: 'user', type: 'message', content: 'first' };
-    const msg2 = { role: 'user', type: 'message', content: 'second' };
+    const msg1 = { role: 'user', type: 'message', content: [{ type: 'text', text: 'first' }] };
+    const msg2 = { role: 'user', type: 'message', content: [{ type: 'text', text: 'second' }] };
 
     // First turn establishes the stored baseline.
     await collect(
       model.stream({
         input: [msg1],
-        systemInstructions: 'Do it.',
-        modelSettings: {},
+        instructions: 'Do it.',
         tools: [tool],
-        handoffs: [],
       } as any),
     );
 
@@ -1024,10 +947,8 @@ it.sequential('CodexResponsesWSModel correlates Responses-Lite state across sequ
       model.stream({
         previousResponseId: 'resp_token_2',
         input: [msg2],
-        systemInstructions: 'Do it.',
-        modelSettings: {},
+        instructions: 'Do it.',
         tools: [tool],
-        handoffs: [],
       } as any),
     );
 
@@ -1066,10 +987,8 @@ it.sequential('CodexResponsesWSModel does not use wire state for non-Luna models
     // Verify no tokens are stored for non-Luna requests.
     const built = (model as any).buildResponsesCreateRequest(
       {
-        input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }],
-        modelSettings: {},
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
         tools: [],
-        handoffs: [],
       },
       true,
     );
@@ -1320,7 +1239,7 @@ it.sequential(
   },
 );
 
-it.sequential('CodexResponsesModel.getResponse (unary) intercepts and runs as stream under the hood', async () => {
+it.sequential('CodexResponsesModel unary path runs as stream under the hood', async () => {
   const original = (OpenAIResponsesModel.prototype as any).fetchResponse;
   let receivedStreamArg = false;
 
@@ -1367,7 +1286,7 @@ it.sequential('CodexResponsesModel.getResponse (unary) intercepts and runs as st
   }
 });
 
-it.sequential('CodexResponsesWSModel.getResponse (unary) intercepts and runs as stream under the hood', async () => {
+it.sequential('CodexResponsesWSModel unary path runs as stream under the hood', async () => {
   const original = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
   let receivedStreamArg = false;
 
@@ -1514,10 +1433,8 @@ it.sequential(
       );
 
       for await (const _event of model.stream({
-        input: [{ role: 'user', type: 'message', content: [{ type: 'input_text', text: 'inspect' }] }],
-        modelSettings: {},
+        input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] }],
         tools: [],
-        handoffs: [],
       } as any)) {
       }
 
@@ -1531,14 +1448,12 @@ it.sequential(
 
       for await (const _event of model.stream({
         input: [
-          { role: 'user', type: 'message', content: [{ type: 'input_text', text: 'inspect' }] },
-          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'I will inspect it.' }] },
+          { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] },
+          { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'I will inspect it.' }] },
           { type: 'function_call', call_id: 'call-read', name: 'read_file', arguments: '{}' },
           toolOutput,
         ],
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any)) {
       }
 
@@ -1550,13 +1465,11 @@ it.sequential(
       for await (const _event of model.stream({
         previousResponseId: 'resp-explicit',
         input: [
-          { role: 'user', type: 'message', content: [{ type: 'input_text', text: 'inspect' }] },
-          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Done.' }] },
+          { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] },
+          { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'Done.' }] },
           latestUser,
         ],
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any)) {
       }
 
@@ -1613,10 +1526,8 @@ it.sequential(
     const openChain = async (chain: string) => {
       await collect(
         model.stream({
-          input: [{ role: 'user', type: 'message', content: chain }],
-          modelSettings: {},
+          input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: chain }] }],
           tools: [],
-          handoffs: [],
         } as any),
       );
     };
@@ -1634,13 +1545,11 @@ it.sequential(
         collect(
           model.stream({
             input: [
-              { role: 'user', type: 'message', content: 'chain-a' },
+              { role: 'user', type: 'message', content: [{ type: 'text', text: 'chain-a' }] },
               { type: 'function_call', call_id: 'call-a', name: 'read_file', arguments: '{}' },
               toolOutput,
             ],
-            modelSettings: {},
             tools: [],
-            handoffs: [],
           } as any),
         ),
       );
@@ -1717,15 +1626,13 @@ it.sequential(
       for await (const _event of model.stream({
         previousResponseId: 'resp-prev',
         input: [
-          { role: 'user', type: 'message', content: [{ type: 'input_text', text: 'inspect the repo' }] },
-          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'I will inspect it.' }] },
+          { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect the repo' }] },
+          { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'I will inspect it.' }] },
           ...parallelReads.flatMap((pair) => [pair.call, pair.output]),
           shellPair.call,
           shellPair.output,
         ],
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any)) {
       }
 
@@ -1794,27 +1701,21 @@ it.sequential('CodexResponsesWSModel drops tool outputs already consumed by the 
     for await (const _event of model.stream({
       previousResponseId: 'resp-tool-calls-1',
       input: firstBatch,
-      modelSettings: {},
       tools: [],
-      handoffs: [],
     } as any)) {
     }
 
     for await (const _event of model.stream({
       previousResponseId: 'resp-after-first-batch',
       input: [...firstBatch, nextOutput],
-      modelSettings: {},
       tools: [],
-      handoffs: [],
     } as any)) {
     }
 
     for await (const _event of model.stream({
       previousResponseId: 'resp-after-second-batch',
       input: [nextOutput],
-      modelSettings: {},
       tools: [],
-      handoffs: [],
     } as any)) {
     }
 
@@ -1822,9 +1723,43 @@ it.sequential('CodexResponsesWSModel drops tool outputs already consumed by the 
     expect(seenRequests[0].previousResponseId).toBe('resp-tool-calls-1');
     expect(seenRequests[0].input).toEqual(firstBatch);
     expect(seenRequests[1].previousResponseId).toBe('resp-after-first-batch');
-    expect(seenRequests[1].input).toEqual([...firstBatch, nextOutput]);
+    expect(seenRequests[1].input).toEqual([nextOutput]);
     expect(seenRequests[2].previousResponseId).toBe('resp-after-second-batch');
-    expect(seenRequests[2].input).toEqual([nextOutput]);
+    expect(seenRequests[2].input).toEqual([]);
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
+  }
+});
+
+it.sequential('CodexResponsesWSModel marks transport failure after buffered raw frames as ambiguous', async () => {
+  let attempts = 0;
+  const networkError = new Error('Responses websocket connection closed before response completed (code=1006)');
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function () {
+    attempts += 1;
+    return (async function* () {
+      yield { type: 'response.reasoning_summary_text.delta', delta: 'buffered reasoning' };
+      throw networkError;
+    })();
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5-codex',
+      { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    );
+    const retrying = new RetryingModel(model, { retryAttempts: 2, sleep: async () => {} });
+
+    await expect(
+      collect(
+        retrying.stream({
+          input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+          tools: [],
+        }),
+      ),
+    ).rejects.toBeInstanceOf(AmbiguousModelOutcomeError);
+    expect(attempts).toBe(1);
   } finally {
     (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
@@ -1880,9 +1815,7 @@ it.sequential(
       for await (const _event of model.stream({
         previousResponseId: 'resp-prev',
         input: pairs.flatMap((pair) => [pair.call, pair.output]),
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any)) {
       }
 
@@ -1943,9 +1876,7 @@ it.sequential('CodexResponsesWSModel keeps interleaved outputs when function cal
     for await (const _event of model.stream({
       previousResponseId: 'resp-prev',
       input: pairs.flatMap((pair) => [pair.call, pair.output]),
-      modelSettings: {},
       tools: [],
-      handoffs: [],
     } as any)) {
     }
 
@@ -2023,9 +1954,7 @@ it.sequential(
           shellPair.call,
           shellPair.output,
         ],
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any)) {
       }
 
@@ -2039,7 +1968,7 @@ it.sequential(
         shellPair.call,
       ]);
       expect(seenRequests[1].previousResponseId).toBe('resp-warmup');
-      expect(seenRequests[1].input).toEqual([]);
+      expect(seenRequests[1].input).toEqual([...parallelReads.map((pair) => pair.output), shellPair.output]);
     } finally {
       (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
     }
@@ -2081,9 +2010,9 @@ it.sequential('CodexResponsesWSModel leaves warmup connection failures to the ou
     getAccountId: () => 'acc_123',
   };
   const fullInput = [
-    { role: 'user', type: 'message', content: 'first' },
-    { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first response' }] },
-    { role: 'user', type: 'message', content: 'next' },
+    { role: 'user', type: 'message', content: [{ type: 'text', text: 'first' }] },
+    { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'first response' }] },
+    { role: 'user', type: 'message', content: [{ type: 'text', text: 'next' }] },
   ];
 
   try {
@@ -2102,9 +2031,7 @@ it.sequential('CodexResponsesWSModel leaves warmup connection failures to the ou
     await expect(async () => {
       for await (const _event of model.stream({
         input: fullInput,
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any)) {
       }
     }).rejects.toBe(networkError);
@@ -2175,7 +2102,7 @@ it.sequential(
       recordRequestFailed() {},
     };
     const continuationInput = [
-      { role: 'user', type: 'message', content: 'start the worker' },
+      { role: 'user', type: 'message', content: [{ type: 'text', text: 'start the worker' }] },
       {
         type: 'tool_result',
         id: 'call_tool_1',
@@ -2199,10 +2126,8 @@ it.sequential(
       await collect(
         model.stream({
           previousResponseId: 'resp-root',
-          input: [{ role: 'user', type: 'message', content: 'start the worker' }],
-          modelSettings: {},
+          input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: 'start the worker' }] }],
           tools: [],
-          handoffs: [],
         } as any),
       );
 
@@ -2210,9 +2135,7 @@ it.sequential(
         collect(
           model.stream({
             input: continuationInput,
-            modelSettings: {},
             tools: [],
-            handoffs: [],
           } as any),
         ),
       ).rejects.toBe(networkError);
@@ -2226,9 +2149,7 @@ it.sequential(
       await collect(
         model.stream({
           input: continuationInput,
-          modelSettings: {},
           tools: [],
-          handoffs: [],
         } as any),
       );
 
@@ -2307,10 +2228,8 @@ it.sequential('CodexResponsesWSModel invalidates Luna wire state on previous_res
     await collect(
       model.stream({
         input: [userMsg],
-        systemInstructions: 'Do it.',
-        modelSettings: {},
+        instructions: 'Do it.',
         tools: [],
-        handoffs: [],
       } as any),
     );
 
@@ -2320,10 +2239,8 @@ it.sequential('CodexResponsesWSModel invalidates Luna wire state on previous_res
       model.stream({
         previousResponseId: 'resp_luna_ok',
         input: [userMsg, userMsg2],
-        systemInstructions: 'Do it.',
-        modelSettings: {},
+        instructions: 'Do it.',
         tools: [],
-        handoffs: [],
       } as any),
     );
 
@@ -2388,16 +2305,14 @@ it.sequential(
           model.stream({
             previousResponseId: 'resp-stale',
             input: [
-              { role: 'user', type: 'message', content: [{ type: 'input_text', text: 'inspect the repo' }] },
+              { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect the repo' }] },
               {
                 type: 'tool_result',
                 id: 'call-orphaned-output',
                 output: 'tool output from the missing response',
               },
             ],
-            modelSettings: {},
             tools: [],
-            handoffs: [],
           } as any),
         ),
       ).rejects.toMatchObject({ code: 'previous_response_not_found' });
@@ -2430,7 +2345,7 @@ it.sequential('CodexResponsesWSModel drops orphaned tool outputs before creating
       {
         type: 'response.completed',
         response: {
-          id: request.modelSettings?.providerData?.generate === false ? 'resp-warmup' : 'resp-completed',
+          id: request.providerOptions?.generate === false ? 'resp-warmup' : 'resp-completed',
           output: [],
           usage: {},
         },
@@ -2464,7 +2379,7 @@ it.sequential('CodexResponsesWSModel drops orphaned tool outputs before creating
     await collect(
       model.stream({
         input: [
-          { role: 'user', type: 'message', content: [{ type: 'input_text', text: 'inspect the repo' }] },
+          { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect the repo' }] },
           { type: 'reasoning', content: [] },
           {
             type: 'tool_result',
@@ -2472,9 +2387,7 @@ it.sequential('CodexResponsesWSModel drops orphaned tool outputs before creating
             output: 'tool output from a discarded response chain',
           },
         ],
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any),
     );
 
@@ -2492,8 +2405,8 @@ it.sequential(
     const seenRequests: any[] = [];
     const orphanedCallId = 'call-rebuilt-chain-orphan';
     const functionCall = {
-      type: 'function_call',
-      call_id: orphanedCallId,
+      type: 'tool_call',
+      id: orphanedCallId,
       name: 'apply_patch',
       arguments: '{}',
     };
@@ -2554,9 +2467,7 @@ it.sequential(
       await collect(
         model.stream({
           input: [openingUser],
-          modelSettings: {},
           tools: [],
-          handoffs: [],
         } as any),
       );
 
@@ -2565,9 +2476,7 @@ it.sequential(
           model.stream({
             previousResponseId: 'resp-rebuilt-chain',
             input: [openingUser, functionCall, functionCallOutput],
-            modelSettings: {},
             tools: [],
-            handoffs: [],
           } as any),
         ),
       ).rejects.toMatchObject({
@@ -2626,16 +2535,14 @@ it.sequential('CodexResponsesWSModel unary path propagates stale tool continuati
       (model as any).fetchUnaryResponse({
         previousResponseId: 'resp-stale-unary',
         input: [
-          { role: 'user', type: 'message', content: [{ type: 'input_text', text: 'inspect the repo' }] },
+          { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect the repo' }] },
           {
             type: 'tool_result',
             id: 'call-orphaned-output-unary',
             output: 'tool output from the missing response',
           },
         ],
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any),
     ).rejects.toMatchObject({ code: 'previous_response_not_found' });
 
@@ -2682,26 +2589,22 @@ it.sequential('CodexResponsesWSModel unary path records Luna wire state response
       } as any,
     );
 
-    const msg1 = { role: 'user', type: 'message', content: 'unary first' };
-    const msg2 = { role: 'user', type: 'message', content: 'unary second' };
+    const msg1 = { role: 'user', type: 'message', content: [{ type: 'text', text: 'unary first' }] };
+    const msg2 = { role: 'user', type: 'message', content: [{ type: 'text', text: 'unary second' }] };
 
     // First unary call establishes stored state.
     await (model as any).fetchUnaryResponse({
       input: [msg1],
-      systemInstructions: 'Do it.',
-      modelSettings: {},
+      instructions: 'Do it.',
       tools: [],
-      handoffs: [],
     } as any);
 
     // Second unary call chains off first and should produce a delta.
     await (model as any).fetchUnaryResponse({
       previousResponseId: 'resp_unary_luna_2',
       input: [msg2],
-      systemInstructions: 'Do it.',
-      modelSettings: {},
+      instructions: 'Do it.',
       tools: [],
-      handoffs: [],
     } as any);
 
     // The second call's final request body (third traffic entry) should
@@ -2740,10 +2643,8 @@ it.sequential(
 
       await collect(
         model.stream({
-          input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }],
-          modelSettings: {},
+          input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
           tools: [],
-          handoffs: [],
           signal: external.signal,
         } as any),
       );
@@ -2784,10 +2685,8 @@ it.sequential('CodexResponsesWSModel applies configured websocket receive timeou
     );
     const pending = collect(
       model.stream({
-        input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }],
-        modelSettings: {},
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
         tools: [],
-        handoffs: [],
         signal: external.signal,
       } as any),
     );

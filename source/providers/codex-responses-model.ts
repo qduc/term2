@@ -9,7 +9,6 @@ import type {
 import { toCodexResponsesInput } from './codex-turn-converter.js';
 import { sanitizeHeaders } from '../utils/header-sanitizer.js';
 import type { ISessionContextService, IProviderTraffic } from '../services/service-interfaces.js';
-import { dropUnpairedFunctionCalls } from '../services/tool-execution-ledger.js';
 import { OrphanedChainedToolOutputError } from '../lib/chained-input-filter.js';
 import { AmbiguousModelOutcomeError } from '../services/retry/retry-errors.js';
 import { ChainedWireState, type ChainedWireStateKey, type ChainedRequestToken } from './chained-wire-state.js';
@@ -354,7 +353,7 @@ function normalizeCodexRequestData(
     (typeof request?.previousResponseId === 'string' && request.previousResponseId.length > 0);
   const normalizedInput =
     !hasPreviousResponseId && Array.isArray(normalizedRequestData.input)
-      ? dropUnpairedFunctionCalls(normalizedRequestData.input)
+      ? dropUnpairedCodexToolItems(normalizedRequestData.input)
       : normalizedRequestData.input;
   normalizedRequestData.input = stripCodexReplayIds(
     Array.isArray(normalizedInput)
@@ -607,6 +606,26 @@ const collectFunctionCallIds = (input: unknown): string[] => {
     }
   }
   return ids;
+};
+
+const dropUnpairedCodexToolItems = (history: readonly unknown[]): unknown[] => {
+  const callIds = new Set<string>();
+  const resultIds = new Set<string>();
+  for (const item of history) {
+    const normalized = normalizeCodexServerHistoryItem(item);
+    if (!normalized.callId) continue;
+    if (normalized.isFunctionCall) callIds.add(normalized.callId);
+    if (normalized.isToolResult) resultIds.add(normalized.callId);
+  }
+  if (callIds.size === 0 && resultIds.size === 0) return history as unknown[];
+  const filtered = history.filter((item) => {
+    const normalized = normalizeCodexServerHistoryItem(item);
+    if (!normalized.callId) return true;
+    if (normalized.isFunctionCall) return resultIds.has(normalized.callId);
+    if (normalized.isToolResult) return callIds.has(normalized.callId);
+    return true;
+  });
+  return filtered.length === history.length ? (history as unknown[]) : filtered;
 };
 
 const filterServerManagedInput = (input: unknown, consumedToolResultCallIds?: ReadonlySet<string>): unknown => {
@@ -974,7 +993,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       return { request: preparedRequest };
     }
 
-    const input = Array.isArray(request.input) ? dropUnpairedFunctionCalls(request.input) : request.input;
+    const input = Array.isArray(request.input) ? dropUnpairedCodexToolItems(request.input) : request.input;
     const replayRequest = input === request.input ? request : { ...request, input };
     if (!Array.isArray(input) || input.length === 0) {
       return { request: replayRequest };
@@ -1246,7 +1265,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   }
 
   protected override async *rawStream(request: StreamedModelTurnRequest): AsyncIterable<any> {
-    let yieldedAnyEvent = false;
+    let receivedRawFrame = false;
     let attemptedWithServerHistory = false;
     try {
       const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
@@ -1263,33 +1282,48 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
           responseId = eventResponseId;
           this.#rememberCodexResponseId(responseId, getResponseOutputFromStreamEvent(event), effectiveRequest.input);
         }
-        yieldedAnyEvent = true;
+        if (TERMINAL_RESPONSE_EVENT_TYPES.has(event?.type)) {
+          this.#rememberConsumedToolResultCallIds(
+            responseId,
+            effectiveRequest.previousResponseId,
+            effectiveRequest.input,
+          );
+        }
+        receivedRawFrame = true;
         yield event;
       }
       this.#rememberConsumedToolResultCallIds(responseId, effectiveRequest.previousResponseId, effectiveRequest.input);
     } catch (error) {
-      if (isPreviousResponseUnavailableError(error) && attemptedWithServerHistory && !yieldedAnyEvent) {
+      if (isPreviousResponseUnavailableError(error) && attemptedWithServerHistory && !receivedRawFrame) {
         this.#forgetCodexResponseId();
         if (isPreviousResponseUnavailableError(error) && hasToolResultInput(request)) {
           throw error;
         }
         const fallbackRequest = this.#withoutCodexServerHistory(request);
         let responseId: string | undefined;
-        for await (const event of super.rawStream(fallbackRequest)) {
-          const eventResponseId = getResponseIdFromStreamEvent(event);
-          if (eventResponseId) {
-            responseId = eventResponseId;
-            this.#rememberCodexResponseId(responseId, getResponseOutputFromStreamEvent(event), fallbackRequest.input);
+        try {
+          for await (const event of super.rawStream(fallbackRequest)) {
+            receivedRawFrame = true;
+            const eventResponseId = getResponseIdFromStreamEvent(event);
+            if (eventResponseId) {
+              responseId = eventResponseId;
+              this.#rememberCodexResponseId(responseId, getResponseOutputFromStreamEvent(event), fallbackRequest.input);
+            }
+            if (TERMINAL_RESPONSE_EVENT_TYPES.has(event?.type)) {
+              this.#rememberConsumedToolResultCallIds(responseId, undefined, fallbackRequest.input);
+            }
+            yield event;
           }
-          yield event;
+          this.#rememberConsumedToolResultCallIds(responseId, undefined, fallbackRequest.input);
+          return;
+        } catch (fallbackError) {
+          throw asAmbiguousModelOutcome(fallbackError) ?? fallbackError;
         }
-        this.#rememberConsumedToolResultCallIds(responseId, undefined, fallbackRequest.input);
-        return;
       }
       if (this.#shouldForgetCodexServerHistory(error)) {
         this.#forgetCodexResponseId();
       }
-      throw (!yieldedAnyEvent ? asAmbiguousModelOutcome(error) : undefined) ?? error;
+      throw (receivedRawFrame ? asAmbiguousModelOutcome(error) : undefined) ?? error;
     }
   }
 

@@ -203,6 +203,75 @@ it('application tool continuation replays native reasoning_content beside the pr
   });
 });
 
+it('application tool continuation keeps one reasoning-bearing assistant message for parallel tool calls', async () => {
+  const bodies: any[] = [];
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          bodies.push(body);
+          if (bodies.length === 1) {
+            return (async function* () {
+              yield { choices: [{ delta: { reasoning_content: 'Need both fixture tools.' } }] };
+              yield {
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        { index: 0, id: 'call_first', function: { name: 'first', arguments: '{}' } },
+                        { index: 1, id: 'call_second', function: { name: 'second', arguments: '{}' } },
+                      ],
+                    },
+                  },
+                ],
+              };
+              yield { choices: [{ delta: {}, finish_reason: 'tool_calls' }] };
+            })();
+          }
+          return (async function* () {
+            yield { choices: [{ delta: { content: 'done' } }] };
+            yield { choices: [{ delta: {}, finish_reason: 'stop' }] };
+          })();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'console-go-thinking');
+  const loop = new ApplicationRunLoop({ resolveModel: () => model });
+  const stream = loop.startStream(
+    {
+      name: 'parallel-reasoning-continuation',
+      instructions: 'Use tools when needed.',
+      model: 'console-go-thinking',
+      tools: [
+        { name: 'first', parameters: { type: 'object' }, needsApproval: async () => false, execute: async () => 'one' },
+        {
+          name: 'second',
+          parameters: { type: 'object' },
+          needsApproval: async () => false,
+          execute: async () => 'two',
+        },
+      ] as any,
+    },
+    'look up both',
+  );
+
+  await stream.completed;
+
+  const assistantMessages = bodies[1].messages.filter((message: any) => message.role === 'assistant');
+  expect(assistantMessages).toEqual([
+    {
+      role: 'assistant',
+      content: null,
+      reasoning_content: 'Need both fixture tools.',
+      tool_calls: [
+        { id: 'call_first', type: 'function', function: { name: 'first', arguments: '{}' } },
+        { id: 'call_second', type: 'function', function: { name: 'second', arguments: '{}' } },
+      ],
+    },
+  ]);
+});
+
 it('stream() surfaces reasoning_content as reasoning_delta events and in the completion output', async () => {
   const client = {
     chat: { completions: { create: async () => reasoningStream() } },

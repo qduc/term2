@@ -20,20 +20,16 @@ const baseParams: SearchReplaceFullOperation = {
 
 const HEALING_EXCERPT = 'const foo = 1;\n\tconst bar = 2;';
 
-function settledHealingRunner(): any {
+function settledHealingModel(): any {
   return {
-    config: {},
-    run: async () => {
-      throw new Error('unexpected run(): healing must settle through runToCompletion');
+    async *stream() {
+      yield {
+        type: 'completion',
+        responseId: 'healing-response',
+        output: [{ type: 'message', content: [{ type: 'text', text: HEALING_EXCERPT }] }],
+        usage: { inputTokens: 10, outputTokens: 4 },
+      };
     },
-    runToCompletion: async () => ({
-      finalOutput: HEALING_EXCERPT,
-      output: [],
-      history: [],
-      interruptions: [],
-      rawResponses: [],
-      usage: { input_tokens: 10, output_tokens: 4, total_tokens: 14 },
-    }),
   };
 }
 
@@ -47,7 +43,7 @@ function registerHealingProvider(id: string, runner: any | undefined = undefined
   const providerDef: ProviderDefinition = {
     id,
     label: `Fake healing ${id}`,
-    createRunner: () => (runner === undefined ? settledHealingRunner() : runner),
+    createStreamedModel: () => (runner === undefined ? settledHealingModel() : runner),
     fetchModels: async () => [],
   };
   registerProvider(providerDef, { allowOverride: true });
@@ -230,6 +226,123 @@ it('edit healing returns model text on a non-OpenAI provider (F3 regression)', a
   expect(result.failureReason).toBeUndefined();
   expect(result.wasModified).toBe(true);
   expect(result.params.search_content).toBe(HEALING_EXCERPT);
+});
+
+it('edit healing aborts the direct streamed model when its timeout expires', async () => {
+  let observedAbort = false;
+  const providerId = 'timeout-healing-provider';
+  registerProvider(
+    {
+      id: providerId,
+      label: 'Timeout healing provider',
+      createStreamedModel: () => ({
+        async *stream(request: { signal?: AbortSignal }) {
+          await new Promise<void>((resolve) => {
+            if (request.signal?.aborted) {
+              observedAbort = true;
+              resolve();
+              return;
+            }
+            request.signal?.addEventListener(
+              'abort',
+              () => {
+                observedAbort = true;
+                resolve();
+              },
+              { once: true },
+            );
+          });
+          throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+        },
+      }),
+      fetchModels: async () => [],
+    },
+    { allowOverride: true },
+  );
+  try {
+    const result = await healSearchReplaceParams(baseParams, 'const foo = 1;\\n', 'fast-healer', 'fake-key', {
+      providerId,
+      timeoutMs: 1,
+      settingsService: createMockSettings({ 'agent.retryAttempts': 2 }),
+      loggingService: createMockLogger(),
+    });
+    expect(observedAbort).toBe(true);
+    expect(result.wasModified).toBe(false);
+    expect(result.failureReason).toContain('timed out');
+  } finally {
+    unregisterProvider(providerId);
+  }
+});
+
+it('edit healing times out while the model factory never resolves', async () => {
+  const providerId = 'never-resolving-healing-factory';
+  registerProvider(
+    {
+      id: providerId,
+      label: 'Never resolving healing factory',
+      createStreamedModel: () => new Promise<any>(() => {}),
+      fetchModels: async () => [],
+    },
+    { allowOverride: true },
+  );
+  try {
+    const started = Date.now();
+    const result = await healSearchReplaceParams(baseParams, 'const foo = 1;\\n', 'slow-healer', 'fake-key', {
+      providerId,
+      timeoutMs: 5,
+      settingsService: createMockSettings({ 'agent.retryAttempts': 2 }),
+      loggingService: createMockLogger(),
+    });
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(result.wasModified).toBe(false);
+    expect(result.failureReason).toContain('timed out');
+  } finally {
+    unregisterProvider(providerId);
+  }
+});
+
+it('edit healing rejects at its deadline when a streamed model never settles after abort', async () => {
+  let observedAbort = false;
+  const providerId = 'non-settling-healing-provider';
+  registerProvider(
+    {
+      id: providerId,
+      label: 'Non-settling healing provider',
+      createStreamedModel: () => ({
+        async *stream(request: { signal?: AbortSignal }) {
+          await new Promise<void>((resolve) => {
+            request.signal?.addEventListener(
+              'abort',
+              () => {
+                observedAbort = true;
+                // Deliberately do not resolve: this models a provider that
+                // ignores AbortSignal after receiving the cancellation.
+              },
+              { once: true },
+            );
+            void resolve;
+          });
+        },
+      }),
+      fetchModels: async () => [],
+    },
+    { allowOverride: true },
+  );
+  try {
+    const started = Date.now();
+    const result = await healSearchReplaceParams(baseParams, 'const foo = 1;\\n', 'slow-healer', 'fake-key', {
+      providerId,
+      timeoutMs: 5,
+      settingsService: createMockSettings({ 'agent.retryAttempts': 2 }),
+      loggingService: createMockLogger(),
+    });
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(observedAbort).toBe(true);
+    expect(result.wasModified).toBe(false);
+    expect(result.failureReason).toContain('timed out');
+  } finally {
+    unregisterProvider(providerId);
+  }
 });
 
 it('edit healing fails as a configuration error when the provider has no runner', async () => {

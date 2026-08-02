@@ -255,6 +255,17 @@ export class AgentConfiguration implements AgentSource {
       'agent.provider',
       'agent.transport',
       'agent.retryAttempts',
+      // Provider model factories snapshot credentials, endpoints, and other
+      // transport settings. Rebuild and notify consumers when any of these
+      // change so cached application models cannot outlive their settings.
+      'agent.openai.apiKey',
+      'agent.openrouter.apiKey',
+      'agent.openrouter.baseUrl',
+      'agent.openrouter.referrer',
+      'agent.openrouter.title',
+      'agent.codex.websocketFirstFrameTimeoutMs',
+      'agent.codex.websocketInterFrameTimeoutMs',
+      'providers',
       'agent.reasoningEffort',
       'agent.temperature',
       'agent.useFlexServiceTier',

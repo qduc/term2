@@ -37,46 +37,37 @@ const createMockSettings = (providerId: string): ISettingsService =>
     onChange: () => {},
   } as any);
 
-// Mock Runner
-let lastRunOptions: any = null;
-let lastRunAgent: any = null;
-class MockRunner {
-  async run(_agent: any, _input: any, _options: any) {
-    lastRunAgent = _agent;
-    lastRunOptions = _options;
-    return {
-      status: 'completed',
-      messages: [{ role: 'assistant', content: 'Fallback content' }],
-      // finalOutput is missing
-    };
-  }
+let lastRunRequest: any = null;
+function createChatModel(): any {
+  return {
+    async *stream(request: any) {
+      lastRunRequest = request;
+      yield {
+        type: 'completion',
+        responseId: 'chat-response',
+        output: [{ type: 'message', content: [{ type: 'text', text: 'Fallback content' }] }],
+      };
+    },
+  };
 }
 
 beforeAll(() => {
   registerProvider({
     id: 'mock-provider-chat',
     label: 'Mock Provider Chat',
-    createRunner: () => new MockRunner() as any,
+    createStreamedModel: () => createChatModel(),
     fetchModels: async () => [{ id: 'mock-model' }],
-    capabilities: {
-      supportsConversationChaining: false,
-      supportsTracingControl: false,
-    },
   });
   registerProvider({
     id: 'mock-provider-chat-tracing',
     label: 'Mock Provider Chat Tracing',
-    createRunner: () => new MockRunner() as any,
+    createStreamedModel: () => createChatModel(),
     fetchModels: async () => [{ id: 'mock-model' }],
-    capabilities: {
-      supportsConversationChaining: false,
-      supportsTracingControl: true,
-    },
   });
 });
 
 it.sequential('OpenAIAgentClient.chatJson passes outputType into the temporary Agent', async () => {
-  lastRunAgent = null;
+  lastRunRequest = null;
 
   const client = new AgentClient({
     deps: {
@@ -102,8 +93,8 @@ it.sequential('OpenAIAgentClient.chatJson passes outputType into the temporary A
     },
   });
 
-  expect(lastRunAgent).toBeTruthy();
-  expect(lastRunAgent.outputType).toEqual({
+  expect(lastRunRequest).toBeTruthy();
+  expect(lastRunRequest.outputType).toEqual({
     type: 'json_schema',
     name: 'test_output',
     strict: true,
@@ -131,8 +122,8 @@ it.sequential('OpenAIAgentClient.chat falls back to messages if finalOutput is m
   expect(response).toBe('Fallback content');
 });
 
-it.sequential('disables Agents SDK tracing for non-OpenAI providers', async () => {
-  lastRunOptions = null;
+it.sequential('passes direct application requests to non-tracing providers', async () => {
+  lastRunRequest = null;
 
   const client = new AgentClient({
     deps: {
@@ -143,12 +134,12 @@ it.sequential('disables Agents SDK tracing for non-OpenAI providers', async () =
   });
 
   await client.chat('Hello again');
-  expect(lastRunOptions).toBeTruthy();
-  expect(lastRunOptions.tracingDisabled).toBe(true);
+  expect(lastRunRequest).toBeTruthy();
+  expect(lastRunRequest.input).toBeTruthy();
 });
 
-it.sequential('keeps Agents SDK tracing enabled when provider supports it', async () => {
-  lastRunOptions = null;
+it.sequential('passes direct application requests to tracing-capable providers', async () => {
+  lastRunRequest = null;
 
   const client = new AgentClient({
     deps: {
@@ -159,6 +150,6 @@ it.sequential('keeps Agents SDK tracing enabled when provider supports it', asyn
   });
 
   await client.chat('Hello tracing');
-  expect(lastRunOptions).toBeTruthy();
-  expect(!!lastRunOptions.tracingDisabled).toBe(false);
+  expect(lastRunRequest).toBeTruthy();
+  expect(lastRunRequest.input).toBeTruthy();
 });

@@ -223,14 +223,16 @@ it('mentor subagent is NOT affected by prompt profiles', async () => {
 
   const providerId = registerTestProvider({
     label: 'Mock Prompt Test Provider Mentor',
-    createRunner: () =>
-      ({
-        run: async (agent: any) => {
-          mentorAgent = agent;
-          const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
-        },
-      } as any),
+    createStreamedModel: () => ({
+      async *stream(request: any) {
+        mentorAgent = { instructions: request.instructions };
+        yield {
+          type: 'completion',
+          responseId: 'mentor-response',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+        };
+      },
+    }),
     fetchModels: async () => [{ id: 'gpt-5-codex' }],
   });
 

@@ -140,6 +140,8 @@ export class AgentClient {
           if (changedKey === 'agent.transport' || changedKey === 'agent.retryAttempts') {
             this.#runnerManager.invalidateRunner();
           }
+          // Chat models capture provider/settings at creation time.
+          this.#chatService?.clearModelCache();
           // Always clear subagent cache and reset mentor state
           this.#subagentBridge?.clearCache();
           this.#resetMentorState();
@@ -189,9 +191,9 @@ export class AgentClient {
 
     this.#chatService = new AgentChatService({
       agentConfig: this.#agentConfig,
-      runnerManager: this.#runnerManager,
       settings: deps.settings,
       logger: deps.logger,
+      sessionContextService: this.#sessionContextService,
     });
 
     if (subagentBridge) {
@@ -269,6 +271,7 @@ export class AgentClient {
   setProvider(provider: string): void {
     this.#agentConfig.setProvider(provider); // persists to settings
     this.#agentConfig.refreshAgent(); // triggers onConfigChanged + rebuild
+    this.#chatService.clearModelCache();
     this.#runnerManager.invalidateRunner();
   }
 
@@ -315,6 +318,7 @@ export class AgentClient {
   abort(): void {
     this.#applicationRunLoop.abort();
     this.#runOrchestrator.abort();
+    this.#chatService.abort();
     this.#subagentBridge?.abort();
   }
 
@@ -333,6 +337,7 @@ export class AgentClient {
 
     this.abort();
     this.#runnerManager.invalidateRunner();
+    this.#chatService.clearModelCache();
     this.#subagentBridge?.dispose();
     this.#agentConfig.dispose();
   }

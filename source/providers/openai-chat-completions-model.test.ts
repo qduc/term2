@@ -50,6 +50,41 @@ it('stream() sends message content as OpenAI-compatible content parts, not raw s
   expect(capturedBody).not.toHaveProperty('include');
 });
 
+it('stream() maps application structured output to native response_format', async () => {
+  let capturedBody: any;
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          capturedBody = body;
+          return emptyStream();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat');
+  for await (const _event of model.stream({
+    input: [],
+    tools: [],
+    outputType: {
+      type: 'json_schema',
+      name: 'result',
+      strict: true,
+      schema: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    },
+  })) {
+    // drain
+  }
+  expect(capturedBody.response_format).toEqual({
+    type: 'json_schema',
+    json_schema: {
+      name: 'result',
+      strict: true,
+      schema: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    },
+  });
+});
+
 it('stream() carries terminal Chat usage into the completion and application run state', async () => {
   async function* usageStream(): AsyncIterable<any> {
     yield { choices: [{ delta: { content: 'done' } }] };

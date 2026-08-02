@@ -74,6 +74,12 @@ it('translates one application turn to an AI SDK stream and publishes its author
       frequencyPenalty: 0,
       presencePenalty: 0,
       maxTokens: 0,
+      outputType: {
+        type: 'json_schema',
+        name: 'result',
+        strict: true,
+        schema: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      },
       reasoning: { effort: 'high' },
       providerOptions: { openrouter: { transforms: ['middle-out'] } },
       signal,
@@ -81,6 +87,11 @@ it('translates one application turn to an AI SDK stream and publishes its author
   );
 
   expect(seenOptions).toMatchObject({
+    responseFormat: {
+      type: 'json',
+      name: 'result',
+      schema: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    },
     prompt: [
       { role: 'system', content: 'Be concise.' },
       {

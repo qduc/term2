@@ -8,6 +8,7 @@ import type {
   LanguageModelV3ToolChoice,
   LanguageModelV3ToolResultOutput,
   SharedV3ProviderOptions,
+  JSONSchema7,
 } from '@ai-sdk/provider';
 import { withMergedAssistantMessages } from './ai-sdk-message-normalizer.js';
 import type {
@@ -226,6 +227,15 @@ function toCallOptions(request: StreamedModelTurnRequest, provider: string): Cal
     ...(request.frequencyPenalty !== undefined ? { frequencyPenalty: request.frequencyPenalty } : {}),
     ...(request.presencePenalty !== undefined ? { presencePenalty: request.presencePenalty } : {}),
     ...(request.maxTokens !== undefined ? { maxOutputTokens: request.maxTokens } : {}),
+    ...(request.outputType && request.outputType !== 'text'
+      ? {
+          responseFormat: {
+            type: 'json' as const,
+            name: request.outputType.name,
+            schema: request.outputType.schema as JSONSchema7,
+          },
+        }
+      : {}),
     ...(reasoningProviderOptions(request, provider)
       ? { providerOptions: reasoningProviderOptions(request, provider) }
       : {}),

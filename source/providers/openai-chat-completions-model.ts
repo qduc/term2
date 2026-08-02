@@ -100,6 +100,9 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
         : {}),
       ...(settings.reasoning?.effort ? { reasoning_effort: settings.reasoning.effort } : {}),
       ...(settings.providerData ?? {}),
+      ...(request.outputType && request.outputType !== 'text'
+        ? { response_format: toChatResponseFormat(request.outputType) }
+        : {}),
       signal: request.signal,
     };
     return body;
@@ -121,6 +124,9 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       ...(request.toolChoice !== undefined ? { tool_choice: toChatToolChoice(request.toolChoice) } : {}),
       ...(request.reasoning?.effort ? { reasoning_effort: request.reasoning.effort } : {}),
       ...(request.providerOptions ?? {}),
+      ...(request.outputType && request.outputType !== 'text'
+        ? { response_format: toChatResponseFormat(request.outputType) }
+        : {}),
       signal: request.signal,
     });
     // Keyed by the tool call's stream `index`, which every provider sends on
@@ -200,6 +206,17 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       ],
     };
   }
+}
+
+function toChatResponseFormat(outputType: Exclude<NonNullable<StreamedModelTurnRequest['outputType']>, 'text'>): any {
+  return {
+    type: 'json_schema',
+    json_schema: {
+      name: outputType.name,
+      strict: outputType.strict,
+      schema: outputType.schema,
+    },
+  };
 }
 
 function toChatToolChoice(choice: NonNullable<StreamedModelTurnRequest['toolChoice']>): any {

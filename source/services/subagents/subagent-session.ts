@@ -1,4 +1,4 @@
-import type { LegacyRunner } from '../../contracts/model.js';
+import type { StreamedModelTurn } from '../../contracts/streamed-model-turn.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
@@ -19,7 +19,7 @@ export class SubagentSession {
   readonly id: string;
   readonly role: string;
   #provider: string | null = null;
-  #runner: LegacyRunner | null = null;
+  #model: StreamedModelTurn | null = null;
   #agent: unknown = null;
   #store: ConversationStore | null = null;
   #previousResponseId: string | null = null;
@@ -34,8 +34,8 @@ export class SubagentSession {
     return this.#provider;
   }
 
-  get runner(): LegacyRunner | null {
-    return this.#runner;
+  get model(): StreamedModelTurn | null {
+    return this.#model;
   }
 
   get agent(): unknown {
@@ -53,7 +53,7 @@ export class SubagentSession {
     this.#previousResponseId = null;
     this.#toolLedger = [];
     this.#store = null;
-    this.#runner = null;
+    this.#model = null;
     this.#provider = null;
     this.#agent = null;
   }
@@ -91,19 +91,17 @@ export class SubagentSession {
       this.#agent = null;
       this.#store = null;
       this.#previousResponseId = null;
-      this.#runner = null;
+      this.#model = null;
       this.#provider = provider;
     }
   }
 
-  ensureRunner(provider: string, createRunner: (providerId: string) => LegacyRunner | null): LegacyRunner | null {
-    // Every registered provider exposes an application-owned runner now,
-    // including OpenAI; a null runner is a configuration error reported by
-    // the caller, not a silent fallback to a throwing run().
-    if (!this.#runner) {
-      this.#runner = createRunner(provider);
-    }
-    return this.#runner;
+  async ensureModel(
+    provider: string,
+    createModel: (providerId: string) => StreamedModelTurn | Promise<StreamedModelTurn>,
+  ): Promise<StreamedModelTurn> {
+    if (!this.#model) this.#model = await createModel(provider);
+    return this.#model;
   }
 
   ensureAgent(createAgent: () => unknown): unknown {
@@ -132,11 +130,12 @@ export class SubagentSession {
     };
   }
 
-  appendOutput(result: any): void {
-    this.#store!.appendOutput(result.output);
-    if (result.responseId) {
-      this.#previousResponseId = result.responseId;
-    }
+  appendOutput(result: { output?: unknown[]; lastResponseId?: string | null; history?: unknown[] }): void {
+    const items = (result.output ?? result.history ?? []).flatMap((event: any) =>
+      event?.type === 'item' && event.item ? [event.item] : [event],
+    );
+    this.#store!.appendOutput(items as ProviderInputItem[]);
+    if (result.lastResponseId) this.#previousResponseId = result.lastResponseId;
   }
 
   setToolLedger(toolLedger: SavedToolExecution[]): void {

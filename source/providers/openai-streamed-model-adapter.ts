@@ -32,7 +32,7 @@ export function adaptOpenAIStreamedModel(model: OpenAIStreamedModel): StreamedMo
         },
         systemInstructions: request.instructions,
         handoffs: [],
-        outputType: 'text',
+        outputType: request.outputType ?? 'text',
         tracing: false,
         signal: request.signal,
       };

@@ -132,21 +132,23 @@ it('mentor base instructions come from the mentor role markdown', async () => {
 
   const providerId = registerTestProvider({
     label: 'Mock Mentor Manager',
-    createRunner: () =>
-      ({
-        run: async (_agent: any, _input: any, _options: any) => {
-          mentorManagerRunnerCalls.push({ input: _input, options: _options, agent: _agent });
-          mentorManagerResponseCounter++;
-          const result = {
-            status: 'completed',
-            finalOutput: `mentor-response-${mentorManagerResponseCounter}`,
-            responseId: `resp-${mentorManagerResponseCounter}`,
-            history: [],
-            messages: [],
-          };
-          return _options?.stream ? wrapResultAsAgentStream(result) : result;
-        },
-      } as any),
+    createStreamedModel: () => ({
+      async *stream(request: any) {
+        mentorManagerRunnerCalls.push({
+          input: [...request.input],
+          options: request,
+          agent: { instructions: request.instructions },
+        });
+        mentorManagerResponseCounter++;
+        yield {
+          type: 'completion',
+          responseId: `resp-${mentorManagerResponseCounter}`,
+          output: [
+            { type: 'message', content: [{ type: 'text', text: `mentor-response-${mentorManagerResponseCounter}` }] },
+          ],
+        };
+      },
+    }),
     fetchModels: async () => [{ id: 'mock-model' }],
   });
 

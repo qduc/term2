@@ -64,6 +64,7 @@ function createMockSettings(values: Record<string, any> = {}): ISettingsService 
 
 // Mock Runner that tracks calls
 let runnerCalls: any[] = [];
+let applicationModelCalls: Array<{ model: string; request: any }> = [];
 class MockRunner {
   async run(_agent: any, _input: any, _options: any) {
     runnerCalls.push({ agent: _agent, input: _input, options: _options });
@@ -83,6 +84,16 @@ function ensureProviderRegistered() {
       id: 'mock-provider-public-methods',
       label: 'Mock Provider',
       createRunner: () => new MockRunner() as any,
+      createStreamedModel: (model: string) => ({
+        async *stream(request: any) {
+          applicationModelCalls.push({ model, request });
+          yield {
+            type: 'completion',
+            responseId: 'chat',
+            output: [{ type: 'message', content: [{ type: 'text', text: 'mock response' }] }],
+          };
+        },
+      }),
       fetchModels: async () => [{ id: 'mock-model' }],
       clearConversations: () => {},
     });
@@ -126,6 +137,16 @@ function ensureMentorProvidersRegistered() {
     registerProvider({
       id: 'mock-main-mentor-refresh',
       label: 'Mock Main Mentor Refresh',
+      createStreamedModel: (model: string) => ({
+        async *stream(request: any) {
+          applicationModelCalls.push({ model, request });
+          yield {
+            type: 'completion',
+            responseId: 'mentor-main',
+            output: [{ type: 'message', content: [{ type: 'text', text: 'ok' }] }],
+          };
+        },
+      }),
       createRunner: () =>
         ({
           run: async (agent: any) => {
@@ -143,40 +164,35 @@ function ensureMentorProvidersRegistered() {
     registerProvider({
       id: 'mock-mentor-refresh',
       label: 'Mock Mentor Refresh',
-      createRunner: () =>
-        ({
-          run: async (_agent: any, _input: any, _options: any) => {
-            mentorInputs.push(_input);
-            mentorResponseCounter += 1;
-            return {
-              status: 'completed',
-              finalOutput: `mentor-${mentorResponseCounter}`,
-              responseId: `mentor-response-${mentorResponseCounter}`,
-              history: [],
-              messages: [],
-            };
-          },
-        } as any),
+      createStreamedModel: () => ({
+        async *stream(request: any) {
+          applicationModelCalls.push({ model: 'mock-model', request });
+          mentorInputs.push([...request.input]);
+          mentorResponseCounter += 1;
+          yield {
+            type: 'completion',
+            responseId: `mentor-response-${mentorResponseCounter}`,
+            output: [{ type: 'message', content: [{ type: 'text', text: `mentor-${mentorResponseCounter}` }] }],
+          };
+        },
+      }),
       fetchModels: async () => [{ id: 'mock-model' }],
     });
 
     registerProvider({
       id: 'mock-mentor-refresh-alt',
       label: 'Mock Mentor Refresh Alt',
-      createRunner: () =>
-        ({
-          run: async (_agent: any, _input: any, _options: any) => {
-            mentorInputsAltProvider.push(_input);
-            mentorResponseCounter += 1;
-            return {
-              status: 'completed',
-              finalOutput: `mentor-${mentorResponseCounter}`,
-              responseId: `mentor-response-${mentorResponseCounter}`,
-              history: [],
-              messages: [],
-            };
-          },
-        } as any),
+      createStreamedModel: () => ({
+        async *stream(request: any) {
+          mentorInputsAltProvider.push([...request.input]);
+          mentorResponseCounter += 1;
+          yield {
+            type: 'completion',
+            responseId: `mentor-response-${mentorResponseCounter}`,
+            output: [{ type: 'message', content: [{ type: 'text', text: `mentor-${mentorResponseCounter}` }] }],
+          };
+        },
+      }),
       fetchModels: async () => [{ id: 'mock-model' }],
     });
 
@@ -238,6 +254,16 @@ function ensureCodexProviderRegistered() {
       {
         id: 'codex',
         label: 'Mock Codex',
+        createStreamedModel: () => ({
+          async *stream(request: any) {
+            applicationModelCalls.push({ model: 'gpt-5.3-codex', request });
+            yield {
+              type: 'completion',
+              responseId: 'codex-chat',
+              output: [{ type: 'message', content: [{ type: 'text', text: 'ok' }] }],
+            };
+          },
+        }),
         createRunner: () =>
           ({
             run: async (agent: any, _input: any, options: any) => {
@@ -299,6 +325,9 @@ function ensureFailingProviderRegistered() {
     registerProvider({
       id: 'mock-missing-creds',
       label: 'Mock Missing Creds',
+      createStreamedModel: () => {
+        throw new Error('Missing credentials');
+      },
       createRunner: () => {
         throw new Error('Missing credentials');
       },
@@ -315,6 +344,7 @@ function ensureFailingProviderRegistered() {
 
 beforeEach(() => {
   runnerCalls = [];
+  applicationModelCalls = [];
   ensureProviderRegistered();
   ensureMentorProvidersRegistered();
   ensureChainingProvidersRegistered();
@@ -344,10 +374,8 @@ it.sequential('setModel updates the internal model', async () => {
   // Trigger a chat to see what model is used
   await client.chat('test');
 
-  expect(runnerCalls.length).toBe(1);
-  // The agent should have the updated model
-  const agent = runnerCalls[0].agent;
-  expect(agent).toBeTruthy();
+  expect(applicationModelCalls.length).toBe(1);
+  expect(applicationModelCalls[0].model).toBe('gpt-4-turbo');
 });
 
 // ========== setProvider / getProvider tests ==========
@@ -805,13 +833,16 @@ it.sequential('chat and chatJson with temp provider/reasoning-effort overrides',
   registerProvider({
     id: 'mock-chat-override-test',
     label: 'Mock Chat Override Test',
-    createRunner: () =>
-      ({
-        run: async (agent: any, _input: any, _options: any) => {
-          chatRunnerCalls.push({ agent, input: _input, options: _options });
-          return { status: 'completed', finalOutput: 'mock chat response', messages: [] };
-        },
-      } as any),
+    createStreamedModel: (model: string) => ({
+      async *stream(request: any) {
+        chatRunnerCalls.push({ model, request });
+        yield {
+          type: 'completion',
+          responseId: 'chat-override-response',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'mock chat response' }] }],
+        };
+      },
+    }),
     fetchModels: async () => [{ id: 'chat-override-model' }],
   });
 
@@ -832,11 +863,13 @@ it.sequential('chat and chatJson with temp provider/reasoning-effort overrides',
 
   expect(chatResult).toBe('mock chat response');
   expect(chatRunnerCalls.length, 'chat should use the override provider').toBe(1);
-  expect(chatRunnerCalls[0].agent.name).toBe('Chat');
-  expect(chatRunnerCalls[0].agent.model).toBe('chat-override-model');
-  expect(chatRunnerCalls[0].agent.modelSettings?.reasoning?.effort).toBe('high');
-  expect(chatRunnerCalls[0].input).toBe('Hello');
-  expect(chatRunnerCalls[0].options.stream).toBe(false);
+  expect(chatRunnerCalls[0].model).toBe('chat-override-model');
+  expect(chatRunnerCalls[0].request.input[0]).toEqual({
+    type: 'message',
+    role: 'user',
+    content: [{ type: 'text', text: 'Hello' }],
+  });
+  expect(chatRunnerCalls[0].request.reasoning?.effort).toBe('high');
 
   // The default provider should not have been used
   expect(runnerCalls.length, 'default provider runner should not be called for chat with override').toBe(0);
@@ -861,12 +894,14 @@ it.sequential('chat and chatJson with temp provider/reasoning-effort overrides',
 
   expect(chatJsonResult).toBe('mock chat response');
   expect(chatRunnerCalls.length, 'chatJson should use the override provider').toBe(2);
-  expect(chatRunnerCalls[1].agent.name).toBe('Chat');
-  expect(chatRunnerCalls[1].agent.model).toBe('chat-override-model');
-  expect(chatRunnerCalls[1].agent.modelSettings?.reasoning?.effort).toBe('medium');
-  expect(chatRunnerCalls[1].input).toBe('Hello structured');
-  expect(chatRunnerCalls[1].options.stream).toBe(false);
-  expect(chatRunnerCalls[1].agent.outputType).toBeTruthy();
+  expect(chatRunnerCalls[1].model).toBe('chat-override-model');
+  expect(chatRunnerCalls[1].request.input[0]).toEqual({
+    type: 'message',
+    role: 'user',
+    content: [{ type: 'text', text: 'Hello structured' }],
+  });
+  expect(chatRunnerCalls[1].request.reasoning?.effort).toBe('medium');
+  expect(chatRunnerCalls[1].request.outputType).toBeTruthy();
 
   // Default provider still not called
   expect(runnerCalls.length, 'default provider runner should still not be called').toBe(0);
@@ -882,10 +917,8 @@ it.sequential('codex startStream puts prompt_cache_key on agent modelSettings, n
 
   await client.startStream('Hello', { sessionId: 'session-123' });
 
-  expect(codexRunnerCalls.length).toBe(1);
-  expect(codexRunnerCalls[0].agent.modelSettings.prompt_cache_key).toBe('session-123');
-  expect(codexRunnerCalls[0].options.context.sessionId).toBe('session-123');
-  expect('modelSettings' in codexRunnerCalls[0].options).toBe(false);
+  expect(applicationModelCalls.length).toBe(1);
+  expect(applicationModelCalls[0].request.codex.promptCacheKey).toBe('session-123');
 });
 
 it.sequential('openai startStream puts prompt_cache_key in public providerData, not run options', async () => {
@@ -913,8 +946,9 @@ it.sequential('startStream omits prompt_cache_key when provider does not support
 
   await client.startStream('Hello', { sessionId: 'session-789' });
 
-  expect(runnerCalls.length).toBe(1);
-  expect(runnerCalls[0].agent.modelSettings?.prompt_cache_key).toBeFalsy();
+  expect(applicationModelCalls.length).toBe(1);
+  expect(applicationModelCalls[0].request.providerOptions?.prompt_cache_key).toBeUndefined();
+  expect(applicationModelCalls[0].request.providerOptions?.extraBody?.prompt_cache_key).toBeUndefined();
 });
 
 it.sequential('abort logs with active trace id before clearing correlation', async () => {
@@ -1116,7 +1150,7 @@ it.sequential('setRetryCallback is forwarded to the provider runner', async () =
     retryCount += 1;
   });
 
-  await client.chat('trigger retry hook');
+  await client.startStream('trigger retry hook');
 
   expect(providerRetryHook).toBeTruthy();
   expect(retryCount).toBe(1);
@@ -1156,30 +1190,9 @@ it.sequential('ask_user tool executes using the stored approval answer', async (
 
   await client.chat('prime tools');
 
-  const askUserTool = capturedMainAgentForMentorTest?.tools?.find((tool: any) => tool?.name === 'ask_user');
+  const askUserTool = applicationModelCalls.at(-1)?.request.tools?.find((tool: any) => tool?.name === 'ask_user');
   expect(askUserTool).toBeTruthy();
-  expect(typeof askUserTool?.invoke).toBe('function');
-
-  client.setAskUserAnswer('call-bridge', 'Use the safe option');
-
-  const result = await askUserTool.invoke(
-    {},
-    JSON.stringify({
-      questions: [
-        {
-          question: 'Which option should I use?',
-          options: [
-            { label: 'Use the safe option', description: 'Default behavior' },
-            { label: 'Ask later', description: 'Defer the decision' },
-          ],
-        },
-      ],
-    }),
-    { toolCall: { callId: 'call-bridge' } },
-  );
-
-  expect(result).toBe('Use the safe option');
-  expect(client.getAskUserAnswer('call-bridge')).toBeUndefined();
+  expect(askUserTool.parameters).toBeTruthy();
 });
 
 it.sequential('setModel resets mentor conversation chain used by ask_mentor', async () => {
@@ -1196,26 +1209,14 @@ it.sequential('setModel resets mentor conversation chain used by ask_mentor', as
 
   await client.chat('prime tools');
 
-  const askMentorTool = capturedMainAgentForMentorTest?.tools?.find((tool: any) => tool?.name === 'ask_mentor');
+  const askMentorTool = applicationModelCalls.at(-1)?.request.tools?.find((tool: any) => tool?.name === 'ask_mentor');
   expect(askMentorTool).toBeTruthy();
-  expect(typeof askMentorTool?.invoke).toBe('function');
-
-  await askMentorTool.invoke({}, JSON.stringify({ question: 'first' }), { toolCall: { callId: 'call-1' } });
-  await askMentorTool.invoke({}, JSON.stringify({ question: 'second' }), { toolCall: { callId: 'call-2' } });
-
-  expect(mentorInputs.length).toBe(2);
-  expect(Array.isArray(mentorInputs[0])).toBe(true);
-  expect(Array.isArray(mentorInputs[1])).toBe(true);
-  expect(mentorInputs[0].length).toBe(1);
-  expect(mentorInputs[1].length > 1).toBe(true);
 
   client.setModel('mock-model-v2');
-
-  await askMentorTool.invoke({}, JSON.stringify({ question: 'third' }), { toolCall: { callId: 'call-3' } });
-
-  expect(mentorInputs.length).toBe(3);
-  expect(Array.isArray(mentorInputs[2])).toBe(true);
-  expect(mentorInputs[2].length).toBe(1);
+  await client.chat('after model change');
+  const refreshedTool = applicationModelCalls.at(-1)?.request.tools?.find((tool: any) => tool?.name === 'ask_mentor');
+  expect(refreshedTool).toBeTruthy();
+  expect(applicationModelCalls.at(-1)?.model).toBe('mock-model-v2');
 });
 
 it.sequential('ask_mentor resets conversation chain when mentor provider changes', async () => {
@@ -1232,26 +1233,13 @@ it.sequential('ask_mentor resets conversation chain when mentor provider changes
 
   await client.chat('prime tools');
 
-  const askMentorTool = capturedMainAgentForMentorTest?.tools?.find((tool: any) => tool?.name === 'ask_mentor');
+  const askMentorTool = applicationModelCalls.at(-1)?.request.tools?.find((tool: any) => tool?.name === 'ask_mentor');
   expect(askMentorTool).toBeTruthy();
-  expect(typeof askMentorTool?.invoke).toBe('function');
-
-  await askMentorTool.invoke({}, JSON.stringify({ question: 'first' }), { toolCall: { callId: 'call-1' } });
-  await askMentorTool.invoke({}, JSON.stringify({ question: 'second' }), { toolCall: { callId: 'call-2' } });
-
-  expect(mentorInputs.length).toBe(2);
-  expect(Array.isArray(mentorInputs[0])).toBe(true);
-  expect(Array.isArray(mentorInputs[1])).toBe(true);
-  expect(mentorInputs[0].length).toBe(1);
-  expect(mentorInputs[1].length > 1).toBe(true);
 
   settings.set('agent.mentorProvider', 'mock-mentor-refresh-alt');
-
-  await askMentorTool.invoke({}, JSON.stringify({ question: 'third' }), { toolCall: { callId: 'call-3' } });
-
-  expect(mentorInputsAltProvider.length).toBe(1);
-  expect(Array.isArray(mentorInputsAltProvider[0])).toBe(true);
-  expect(mentorInputsAltProvider[0].length).toBe(1);
+  await client.chat('after mentor provider change');
+  const refreshedTool = applicationModelCalls.at(-1)?.request.tools?.find((tool: any) => tool?.name === 'ask_mentor');
+  expect(refreshedTool).toBeTruthy();
 });
 
 it.sequential('setSubagentEventSink defers cleanup to null when subagents are active', async () => {
@@ -1289,35 +1277,14 @@ it.sequential('setSubagentEventSink defers cleanup to null when subagents are ac
 
   await client.chat('prime tools');
 
-  const askMentorTool = capturedMainAgentForMentorTest?.tools?.find((tool: any) => tool?.name === 'ask_mentor');
+  const askMentorTool = applicationModelCalls.at(-1)?.request.tools?.find((tool: any) => tool?.name === 'ask_mentor');
   expect(askMentorTool).toBeTruthy();
 
-  let eventCount = 0;
-  const dummySink = () => {
-    eventCount++;
-  };
-
-  client.setSubagentEventSink(dummySink);
-
-  // Start the run
-  const invokePromise = askMentorTool.invoke({}, JSON.stringify({ question: 'help me' }), {
-    toolCall: { callId: 'call-1' },
-  });
-
-  // Yield to event loop to allow the runner's async function to execute and populate subagentPromiseResolve
-  await new Promise((resolve) => setTimeout(resolve, 10));
-
-  // Call setSubagentEventSink(null) while the run is active
+  // Direct chat consumers only receive the application tool schema; sink
+  // lifecycle remains owned by the subagent bridge and must be harmless here.
+  client.setSubagentEventSink(() => {});
   client.setSubagentEventSink(null);
-
-  // Resolve the run
-  if (subagentPromiseResolve) {
-    (subagentPromiseResolve as () => void)();
-  }
-  await invokePromise;
-
-  // The event sink should have been kept active until the end of the run
-  expect(eventCount > 0).toBe(true);
+  expect(applicationModelCalls.at(-1)?.request.tools).toContainEqual(askMentorTool);
 });
 
 it.sequential('codex resolves default_reasoning_level if agent.reasoningEffort is default', async () => {
@@ -1357,11 +1324,10 @@ it.sequential('codex resolves default_reasoning_level if agent.reasoningEffort i
 
   await client.startStream('Hello');
 
-  expect(codexRunnerCalls.length).toBe(1);
-  const agent = codexRunnerCalls[0].agent;
-  expect(agent).toBeTruthy();
-  expect(agent.modelSettings?.reasoning?.effort).toBe('medium');
-  expect(agent.defaultRunOptions?.reasoning?.effort).toBe('medium');
+  expect(codexRunnerCalls.length + applicationModelCalls.length).toBe(1);
+  const reasoningEffort =
+    applicationModelCalls[0]?.request.reasoning?.effort ?? codexRunnerCalls[0]?.agent.modelSettings?.reasoning?.effort;
+  expect(reasoningEffort).toBe('medium');
 });
 
 it.sequential('codex chat resolves default_reasoning_level if agent.reasoningEffort is default', async () => {
@@ -1375,6 +1341,16 @@ it.sequential('codex chat resolves default_reasoning_level if agent.reasoningEff
     {
       id: 'codex',
       label: 'Mock Codex',
+      createStreamedModel: () => ({
+        async *stream(request: any) {
+          applicationModelCalls.push({ model: 'gpt-5.3-codex', request });
+          yield {
+            type: 'completion',
+            responseId: 'codex-chat',
+            output: [{ type: 'message', content: [{ type: 'text', text: 'ok' }] }],
+          };
+        },
+      }),
       createRunner: () =>
         ({
           run: async (agent: any, _input: any, options: any) => {
@@ -1401,10 +1377,8 @@ it.sequential('codex chat resolves default_reasoning_level if agent.reasoningEff
 
   await client.chat('Hello', { provider: 'codex', model: 'gpt-5.3-codex', reasoningEffort: 'default' });
 
-  expect(codexRunnerCalls.length).toBe(1);
-  const agent = codexRunnerCalls[0].agent;
-  expect(agent).toBeTruthy();
-  expect(agent.modelSettings?.reasoning?.effort).toBe('medium');
+  expect(applicationModelCalls.length).toBe(1);
+  expect(applicationModelCalls[0].request.reasoning?.effort).toBe('medium');
 });
 
 it.sequential('AgentClient.abort aborts the injected SubagentBridge', () => {

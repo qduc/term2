@@ -52,9 +52,10 @@ function buildProvider(
           }
         }
         const rawBody = typeof init?.body === 'string' ? init.body : '';
+        const requestBody = rawBody ? JSON.parse(rawBody) : null;
         captured.push({
           url: typeof input === 'string' ? input : (input as URL).toString?.() ?? String(input),
-          body: rawBody ? JSON.parse(rawBody) : null,
+          body: requestBody,
           headers,
         });
         if (response instanceof Response) {
@@ -62,6 +63,9 @@ function buildProvider(
         }
         if (typeof response === 'function') {
           return response();
+        }
+        if (requestBody?.stream) {
+          return streamedCompletionResponse(response);
         }
         return new Response(JSON.stringify(response), {
           status: 200,
@@ -93,6 +97,75 @@ const baseRequest = {
   outputType: 'text' as const,
   tracing: false as const,
 };
+
+function toStreamRequest(request: any): any {
+  const settings = request.modelSettings ?? {};
+  const input = (request.input ?? []).map((item: any) => {
+    if (item.type === 'reasoning') {
+      const text = (item.rawContent ?? item.content ?? []).map((part: any) => part.text ?? '').join('');
+      return {
+        type: 'reasoning',
+        text,
+        providerMetadata: {
+          reasoning_content: text,
+          openai_compatible_reasoning_content: true,
+        },
+      };
+    }
+    if (item.type === 'function_call') {
+      return { type: 'tool_call', id: item.callId ?? item.call_id, name: item.name, arguments: item.arguments };
+    }
+    if (item.type === 'function_call_result') {
+      return { type: 'tool_result', id: item.callId ?? item.call_id, output: item.output };
+    }
+    const content = Array.isArray(item.content)
+      ? item.content.map((part: any) =>
+          part.type === 'text' ? part : { type: 'text', text: String(part.text ?? part) },
+        )
+      : [{ type: 'text', text: String(item.content ?? '') }];
+    return { type: 'message', role: item.role ?? 'user', content };
+  });
+  return {
+    input,
+    tools: request.tools ?? [],
+    outputType: request.outputType === 'text' ? undefined : request.outputType,
+    reasoning: settings.reasoning,
+    providerOptions: settings.providerData,
+    signal: request.signal,
+  };
+}
+
+async function collectStreamEvents(model: any, request: any): Promise<any[]> {
+  const events: any[] = [];
+  for await (const event of model.stream(toStreamRequest(request))) events.push(event);
+  return events;
+}
+
+async function collectCompletion(model: any, request: any): Promise<any> {
+  const events = await collectStreamEvents(model, request);
+  return events.find((event) => event.type === 'completion');
+}
+
+function streamedCompletionResponse(completion: any): Response {
+  const choice = completion?.choices?.[0];
+  const message = choice?.message ?? {};
+  const deltas: any[] = [];
+  if (message.reasoning_content) deltas.push({ reasoning_content: message.reasoning_content });
+  if (message.content) deltas.push({ content: message.content });
+  if (message.tool_calls?.length) deltas.push({ tool_calls: message.tool_calls });
+  const frames = deltas.map((delta) => `data: ${JSON.stringify({ id: completion.id, choices: [{ delta }] })}`);
+  frames.push(
+    `data: ${JSON.stringify({ id: completion.id, choices: [{ delta: {}, finish_reason: choice.finish_reason }] })}`,
+  );
+  frames.push('data: [DONE]', '');
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(frames.join('\n\n')));
+      controller.close();
+    },
+  });
+  return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+}
 
 function streamedSuccessResponse(): Response {
   const body = new ReadableStream({
@@ -217,10 +290,10 @@ it('resolves a stored provider config by legacy name alias when the stored id di
 it('providerData fields are forwarded into the chat-completions request body root', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
   await runUnderTrace(() =>
-    model.getResponse({
+    collectCompletion(model, {
       ...baseRequest,
       input: [{ role: 'user', content: 'hello' }] as any,
       modelSettings: {
@@ -241,10 +314,10 @@ it('providerData fields are forwarded into the chat-completions request body roo
 it('modelSettings.reasoning.effort is forwarded as reasoning_effort', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
   await runUnderTrace(() =>
-    model.getResponse({
+    collectCompletion(model, {
       ...baseRequest,
       input: [{ role: 'user', content: 'hello' }] as any,
       modelSettings: { reasoning: { effort: 'high', summary: 'auto' } },
@@ -258,10 +331,10 @@ it('modelSettings.reasoning.effort is forwarded as reasoning_effort', async () =
 it('assistant reasoning_content is passed back with the following tool call', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
-  const model = await provider.getModel('claude-model');
+  const model = await provider.getStreamedModel('claude-model');
 
   await runUnderTrace(() =>
-    model.getResponse({
+    collectCompletion(model, {
       ...baseRequest,
       input: [
         { role: 'user', type: 'message', content: 'what time is it?' },
@@ -305,10 +378,10 @@ it('assistant reasoning_content is passed back with the following tool call', as
     },
     {
       role: 'tool',
-      content: [{ type: 'text', text: 'Tue May 12 18:40:41 +07 2026', cache_control: { type: 'ephemeral' } }],
+      content: 'Tue May 12 18:40:41 +07 2026',
       tool_call_id: 'shell:0',
     },
-    { role: 'user', content: [{ type: 'text', text: 'thanks', cache_control: { type: 'ephemeral' } }] },
+    { role: 'user', content: [{ type: 'text', text: 'thanks' }] },
   ]);
 });
 
@@ -328,10 +401,10 @@ it('assistant reasoning_content from provider response is preserved as reasoning
       },
     ],
   });
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
   const result = await runUnderTrace<any>(() =>
-    model.getResponse({
+    collectCompletion(model, {
       ...baseRequest,
       input: [{ role: 'user', content: 'hello' }] as any,
       modelSettings: {},
@@ -340,8 +413,11 @@ it('assistant reasoning_content from provider response is preserved as reasoning
 
   expect(result.output[0]).toEqual({
     type: 'reasoning',
-    content: [],
-    rawContent: [{ type: 'reasoning_text', text: 'Need to inspect the project first.' }],
+    text: 'Need to inspect the project first.',
+    providerMetadata: {
+      reasoning_content: 'Need to inspect the project first.',
+      openai_compatible_reasoning_content: true,
+    },
   });
 });
 
@@ -371,22 +447,22 @@ it('assistant reasoning_content from provider stream is preserved as reasoning o
       headers: { 'Content-Type': 'text/event-stream' },
     }),
   );
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
-  const events: any[] = [];
-  for await (const event of model.getStreamedResponse({
+  const events = await collectStreamEvents(model, {
     ...baseRequest,
-    input: [{ role: 'user', content: 'hello' }] as any,
+    input: [{ role: 'user', content: 'hello' }],
     modelSettings: {},
-  } as any)) {
-    events.push(event);
-  }
+  });
 
-  const finalEvent = events.find((event: any) => event.type === 'response_done') as any;
-  expect(finalEvent.response.output[0]).toEqual({
+  const finalEvent = events.find((event: any) => event.type === 'completion') as any;
+  expect(finalEvent.output[0]).toEqual({
     type: 'reasoning',
-    content: [],
-    rawContent: [{ type: 'reasoning_text', text: 'Need to stream reasoning.' }],
+    text: 'Need to stream reasoning.',
+    providerMetadata: {
+      reasoning_content: 'Need to stream reasoning.',
+      openai_compatible_reasoning_content: true,
+    },
   });
 });
 
@@ -415,30 +491,28 @@ it('assistant choices with non-zero index in single-choice stream are normalized
       headers: { 'Content-Type': 'text/event-stream' },
     }),
   );
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
-  const events: any[] = [];
-  for await (const event of model.getStreamedResponse({
+  const events = await collectStreamEvents(model, {
     ...baseRequest,
-    input: [{ role: 'user', content: 'hello' }] as any,
+    input: [{ role: 'user', content: 'hello' }],
     modelSettings: {},
-  } as any)) {
-    events.push(event);
-  }
+  });
 
-  const finalEvent = events.find((event: any) => event.type === 'response_done') as any;
-  expect(finalEvent.response.output[0].type).toBe('message');
-  expect(finalEvent.response.output[0].content[0].type).toBe('output_text');
-  expect(finalEvent.response.output[0].content[0].text).toBe('Hello! How can I help you today?');
+  const finalEvent = events.find((event: any) => event.type === 'completion') as any;
+  expect(finalEvent.output[0]).toEqual({
+    type: 'message',
+    content: [{ type: 'text', text: 'Hello! How can I help you today?' }],
+  });
 });
 
 it('reasoning field is stripped and preserved only as reasoning_content in outgoing requests', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
   await runUnderTrace(() =>
-    model.getResponse({
+    collectCompletion(model, {
       ...baseRequest,
       input: [
         { role: 'user', type: 'message', content: 'hello' },
@@ -473,10 +547,10 @@ it('reasoning field is stripped and preserved only as reasoning_content in outgo
 it('stray top-level index from replayed tool-call providerData is stripped from outgoing messages', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
   await runUnderTrace(() =>
-    model.getResponse({
+    collectCompletion(model, {
       ...baseRequest,
       input: [
         { role: 'user', type: 'message', content: 'hello' },
@@ -507,10 +581,10 @@ it('stray top-level index from replayed tool-call providerData is stripped from 
 it('llama.cpp maps high reasoning effort to chat template kwargs', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'llama.cpp');
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
   await runUnderTrace(() =>
-    model.getResponse({
+    collectCompletion(model, {
       ...baseRequest,
       input: [{ role: 'user', content: 'hello' }] as any,
       modelSettings: { reasoning: { effort: 'high', summary: 'auto' } },
@@ -530,10 +604,10 @@ it('llama.cpp maps high reasoning effort to chat template kwargs', async () => {
 it('llama.cpp disables thinking for none reasoning effort', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'llama.cpp');
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
   await runUnderTrace(() =>
-    model.getResponse({
+    collectCompletion(model, {
       ...baseRequest,
       input: [{ role: 'user', content: 'hello' }] as any,
       modelSettings: { reasoning: { effort: 'none', summary: 'auto' } },
@@ -553,10 +627,10 @@ it('llama.cpp disables thinking for none reasoning effort', async () => {
 it('llama.cpp maps xhigh to high template mode with xhigh budget', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'llama.cpp');
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
   await runUnderTrace(() =>
-    model.getResponse({
+    collectCompletion(model, {
       ...baseRequest,
       input: [{ role: 'user', content: 'hello' }] as any,
       modelSettings: { reasoning: { effort: 'xhigh', summary: 'auto' } },
@@ -575,10 +649,10 @@ it('llama.cpp maps xhigh to high template mode with xhigh budget', async () => {
 it('llama.cpp leaves reasoning controls unset when effort is default', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'llama.cpp');
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
   await runUnderTrace(() =>
-    model.getResponse({
+    collectCompletion(model, {
       ...baseRequest,
       input: [{ role: 'user', content: 'hello' }] as any,
       modelSettings: {},
@@ -593,10 +667,10 @@ it('llama.cpp leaves reasoning controls unset when effort is default', async () 
 it('outgoing request hits the configured /chat/completions endpoint with bearer auth', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
   await runUnderTrace(() =>
-    model.getResponse({
+    collectCompletion(model, {
       ...baseRequest,
       input: [{ role: 'user', content: 'hello' }] as any,
       modelSettings: {},
@@ -612,10 +686,10 @@ it('outgoing request hits the configured /chat/completions endpoint with bearer 
 it('opencode.ai baseUrl adds x-opencode-session header', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://opencode.ai/v1');
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
   await runUnderTrace(() =>
-    model.getResponse({
+    collectCompletion(model, {
       ...baseRequest,
       input: [{ role: 'user', content: 'hello' }] as any,
       modelSettings: {},
@@ -631,11 +705,11 @@ it('opencode.ai baseUrl adds x-opencode-session header', async () => {
 it('opencode session ID is stable across requests within a session', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://opencode.ai/v1');
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
   const makeRequest = () =>
     runUnderTrace(() =>
-      model.getResponse({
+      collectCompletion(model, {
         ...baseRequest,
         input: [{ role: 'user', content: 'hello' }] as any,
         modelSettings: {},
@@ -677,10 +751,10 @@ it('opencode session header prefers fallback session ID over traffic context ses
       runWithContext: <T>(_context: any, fn: () => T) => fn(),
     },
   );
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
   await runUnderTrace(() =>
-    model.getResponse({
+    collectCompletion(model, {
       ...baseRequest,
       input: [{ role: 'user', content: 'hello' }] as any,
       modelSettings: {},
@@ -696,10 +770,10 @@ it('opencode session header prefers fallback session ID over traffic context ses
 it('non-opencode.ai baseUrl does not add opencode headers or body fields', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://other-provider.com/v1');
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
   await runUnderTrace(() =>
-    model.getResponse({
+    collectCompletion(model, {
       ...baseRequest,
       input: [{ role: 'user', content: 'hello' }] as any,
       modelSettings: {},
@@ -713,10 +787,10 @@ it('non-opencode.ai baseUrl does not add opencode headers or body fields', async
 it('opencode.ai detection is case-insensitive', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://OPENCODE.AI/v1');
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getStreamedModel('provider-model');
 
   await runUnderTrace(() =>
-    model.getResponse({
+    collectCompletion(model, {
       ...baseRequest,
       input: [{ role: 'user', content: 'hello' }] as any,
       modelSettings: {},
@@ -767,7 +841,7 @@ it('opencode provider type uses default base URL and falls back to OPENCODE_API_
     const model = provider.getStreamedModel('provider-model');
 
     await runUnderTrace(() =>
-      model.getResponse({
+      collectCompletion(model, {
         input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
         tools: [],
       }),
@@ -813,19 +887,49 @@ it('opencode qwen models use Anthropic messages transport with session header', 
             body: rawBody ? JSON.parse(rawBody) : null,
             headers,
           });
-          return new Response(
-            JSON.stringify({
-              id: 'msg_test',
-              type: 'message',
-              role: 'assistant',
-              model: 'qwen3-coder',
-              content: [{ type: 'text', text: 'ok' }],
-              stop_reason: 'end_turn',
-              stop_sequence: null,
-              usage: { input_tokens: 1, output_tokens: 1 },
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          );
+          const body = new ReadableStream({
+            start(controller) {
+              const events = [
+                [
+                  'message_start',
+                  {
+                    type: 'message_start',
+                    message: {
+                      id: 'msg_test',
+                      type: 'message',
+                      role: 'assistant',
+                      usage: { input_tokens: 1 },
+                    },
+                  },
+                ],
+                [
+                  'content_block_start',
+                  { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+                ],
+                [
+                  'content_block_delta',
+                  { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'ok' } },
+                ],
+                ['content_block_stop', { type: 'content_block_stop', index: 0 }],
+                [
+                  'message_delta',
+                  {
+                    type: 'message_delta',
+                    delta: { stop_reason: 'end_turn' },
+                    usage: { input_tokens: 1, output_tokens: 1 },
+                  },
+                ],
+                ['message_stop', { type: 'message_stop' }],
+              ];
+              controller.enqueue(
+                new TextEncoder().encode(
+                  events.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join(''),
+                ),
+              );
+              controller.close();
+            },
+          });
+          return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
         }) as typeof fetch,
       },
     );
@@ -833,7 +937,7 @@ it('opencode qwen models use Anthropic messages transport with session header', 
     const model = provider.getStreamedModel('qwen3-coder');
 
     await runUnderTrace(() =>
-      model.getResponse({
+      collectCompletion(model, {
         input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
         tools: [],
         reasoning: { effort: 'high' },
@@ -891,7 +995,7 @@ it('opencode provider type keeps the fallback session ID stable across turns', a
     const runTurn = async () => {
       const model = provider.getStreamedModel('provider-model');
       return runUnderTrace(() =>
-        model.getResponse({
+        collectCompletion(model, {
           input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
           tools: [],
         }),
@@ -932,7 +1036,7 @@ it('recreated opencode provider instances reuse the active conversation session 
     );
     const model = provider.getStreamedModel('provider-model');
     await runUnderTrace(() =>
-      model.getResponse({
+      collectCompletion(model, {
         input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
         tools: [],
       }),

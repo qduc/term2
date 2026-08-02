@@ -708,10 +708,10 @@ function appendNativeReasoning(
       providerMetadata: { ...event.providerMetadata, reasoning_content: text },
     };
   }
-  // Codex returns encrypted reasoning only on its terminal output. Its
-  // metadata is namespaced, so retain it without turning it into the
-  // Chat-Completions-only reasoning_content convention.
-  if (asRecord(event.providerMetadata?.codex)) {
+  // Responses providers return encrypted reasoning only on their terminal
+  // output. Their metadata is namespaced, so retain it without turning it into
+  // the Chat-Completions-only reasoning_content convention.
+  if (asRecord(event.providerMetadata?.codex) || asRecord(event.providerMetadata?.openai)) {
     return {
       ...(event.id ? { id: event.id } : current?.id ? { id: current.id } : {}),
       text: event.text,

@@ -38,9 +38,9 @@ it('builds an OpenAI Responses request through the public client boundary', asyn
     'gpt-test',
   );
   await model.getResponse({
-    input: 'hello',
+    input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
     tools: [],
-    modelSettings: { providerData: { extraBody: { prompt_cache_key: 's1' } } },
+    providerOptions: { extraBody: { prompt_cache_key: 's1' } },
   });
   expect(request).toMatchObject({ model: 'gpt-test', stream: false, prompt_cache_key: 's1' });
 });
@@ -60,10 +60,13 @@ it('normalizes streamed Responses events into the application stream shape', asy
     'gpt-test',
   );
   const events: any[] = [];
-  for await (const event of model.getStreamedResponse({ input: 'hello', tools: [], modelSettings: {} }))
+  for await (const event of model.stream({
+    input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+    tools: [],
+  }))
     events.push(event);
-  expect(events.map((event) => event.type)).toEqual(['response_started', 'output_text_delta', 'response_done']);
-  expect(events[1].delta).toBe('hello');
+  expect(events.map((event) => event.type)).toEqual(['text_delta', 'completion']);
+  expect(events[0].text).toBe('hello');
 });
 
 it('retains a separate public transport class for WebSocket-configured sessions', () => {
@@ -94,7 +97,7 @@ it('creates a streamed model via provider registry and executes stream()', async
   expect(streamedTurn).toBeDefined();
   expect(typeof streamedTurn.stream).toBe('function');
 
-  // Verify stream() execution through an adapted model instance
+  // Verify stream() execution through the direct application model instance
   const modelInstance = new OpenAIResponsesModelWithPromptCacheKey(
     {
       responses: {
@@ -109,11 +112,8 @@ it('creates a streamed model via provider registry and executes stream()', async
     'gpt-4o',
   );
 
-  const { adaptOpenAIStreamedModel } = await import('./openai-streamed-model-adapter.js');
-  const adaptedTurn = adaptOpenAIStreamedModel(modelInstance);
-
   const events: any[] = [];
-  for await (const event of adaptedTurn.stream({
+  for await (const event of modelInstance.stream({
     input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }],
     tools: [],
   })) {

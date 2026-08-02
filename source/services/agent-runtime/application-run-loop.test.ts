@@ -11,7 +11,6 @@ import {
   prepareOpenAIRequestPrefixBinding,
   runWithOpenAIRequestPrefixBindingScope,
 } from '../../providers/openai-request-prefix-binding.js';
-import { toOpenAILegacyInput } from '../../providers/openai-streamed-model-adapter.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { StreamedModelTurn } from '../../contracts/streamed-model-turn.js';
 import type { ToolDefinition } from '../../tools/types.js';
@@ -44,7 +43,7 @@ function textModel(text: string, responseId: string): StreamedModelTurn {
 
 describe('ApplicationRunLoop', () => {
   it.each(['root', 'continuation'] as const)(
-    'binds the exact %s request after OpenAI tool-result adaptation',
+    'binds the exact %s application request at the OpenAI boundary',
     async (mode) => {
       const history = [
         { type: 'message', role: 'user', content: 'run the tool' },
@@ -54,7 +53,7 @@ describe('ApplicationRunLoop', () => {
       const bindingOutcomes: unknown[] = [];
       const model: StreamedModelTurn = {
         async *stream(request) {
-          bindingOutcomes.push(consumeOpenAIRequestPrefixBindingWithOutcome(toOpenAILegacyInput(request.input)));
+          bindingOutcomes.push(consumeOpenAIRequestPrefixBindingWithOutcome(request.input));
           yield { type: 'completion', responseId: 'resp-bind', output: [] };
         },
       };
@@ -64,7 +63,7 @@ describe('ApplicationRunLoop', () => {
           if (isDeepStrictEqual(canonical, request.input)) {
             prepareOpenAIRequestPrefixBinding(
               { snapshotIdentity: 'history', snapshotRevision: 3, lineage: 0 },
-              toOpenAILegacyInput(request.input),
+              request.input,
             );
           }
         },
@@ -91,7 +90,7 @@ describe('ApplicationRunLoop', () => {
     const model: StreamedModelTurn = {
       async *stream(request) {
         yield { type: 'completion', responseId: 'resp-mismatch', output: [] };
-        expect(consumeOpenAIRequestPrefixBindingWithOutcome(toOpenAILegacyInput(request.input))).toEqual({
+        expect(consumeOpenAIRequestPrefixBindingWithOutcome(request.input)).toEqual({
           outcome: 'not_prepared',
         });
       },
@@ -309,6 +308,7 @@ describe('ApplicationRunLoop', () => {
 
   it.each([
     ['Codex', { codex: { encrypted_content: 'cipher' } }],
+    ['OpenAI', { openai: { encrypted_content: 'cipher' } }],
     ['Chat', { reasoning_content: 'native chat reasoning' }],
   ])('commits no-tool native %s reasoning for stateless replay exactly once', async (_provider, providerMetadata) => {
     const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];

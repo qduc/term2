@@ -82,8 +82,8 @@ export function loadSettingsFromFile(opts: {
 
 export function saveSettingsToFile(opts: {
   settingsDir: string;
-  settings: unknown;
-  stripSensitiveSettings: (settings: unknown) => unknown;
+  settings: SettingsData;
+  stripSensitiveSettings: (settings: SettingsData) => Partial<SettingsData>;
   disableLogging?: boolean;
   loggingService?: LoggerLike;
 }): void {
@@ -129,97 +129,19 @@ export function saveSettingsToFile(opts: {
 }
 
 /**
- * Return whether an object contains a field that the persistence boundary must
- * remove. This is used during startup to force a migration of existing files
- * that predate the env-only credential policy.
- */
-export function hasSensitiveSettings(settings: unknown): boolean {
-  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return false;
-
-  const root = settings as Record<string, unknown>;
-  const hasOwn = (value: unknown, key: string): boolean =>
-    Boolean(
-      value && typeof value === 'object' && !Array.isArray(value) && Object.prototype.hasOwnProperty.call(value, key),
-    );
-
-  const agent = root.agent;
-  const openrouter =
-    agent && typeof agent === 'object' && !Array.isArray(agent)
-      ? (agent as Record<string, unknown>).openrouter
-      : undefined;
-  if (
-    hasOwn(root.app, 'shellPath') ||
-    hasOwn(openrouter, 'apiKey') ||
-    hasOwn(openrouter, 'baseUrl') ||
-    hasOwn(openrouter, 'referrer') ||
-    hasOwn(openrouter, 'title') ||
-    hasOwn(
-      agent && typeof agent === 'object' && !Array.isArray(agent)
-        ? (agent as Record<string, unknown>).openai
-        : undefined,
-      'apiKey',
-    )
-  ) {
-    return true;
-  }
-
-  const webSearch = root.webSearch;
-  if (webSearch && typeof webSearch === 'object' && !Array.isArray(webSearch)) {
-    const webSearchRecord = webSearch as Record<string, unknown>;
-    if (hasOwn(webSearchRecord.tavily, 'apiKey') || hasOwn(webSearchRecord.exa, 'apiKey')) {
-      return true;
-    }
-  }
-
-  return Array.isArray(root.providers) ? root.providers.some((provider) => hasOwn(provider, 'apiKey')) : false;
-}
-
-/**
  * Remove sensitive settings that should never be persisted to disk.
  */
-export function stripSensitiveSettings(settings: SettingsData): Partial<SettingsData>;
-export function stripSensitiveSettings(settings: unknown): Partial<SettingsData>;
-export function stripSensitiveSettings(settings: unknown): Partial<SettingsData> {
-  const cloned: unknown = JSON.parse(JSON.stringify(settings));
-  if (!cloned || typeof cloned !== 'object' || Array.isArray(cloned)) return {};
-
-  const cleaned = cloned as Partial<SettingsData>;
+export function stripSensitiveSettings(settings: SettingsData): Partial<SettingsData> {
+  const cleaned: Partial<SettingsData> = JSON.parse(JSON.stringify(settings));
 
   // Remove sensitive openrouter fields (keep non-secret config)
   if (cleaned.agent?.openrouter) {
-    delete cleaned.agent.openrouter.apiKey;
     delete cleaned.agent.openrouter.baseUrl;
     delete cleaned.agent.openrouter.referrer;
     delete cleaned.agent.openrouter.title;
+    // Only keep model if it's set (it's not sensitive)
     if (Object.keys(cleaned.agent.openrouter).length === 0) {
       delete cleaned.agent.openrouter;
-    }
-  }
-
-  if (cleaned.agent?.openai) {
-    delete cleaned.agent.openai.apiKey;
-    if (Object.keys(cleaned.agent.openai).length === 0) {
-      delete cleaned.agent.openai;
-    }
-  }
-
-  if (cleaned.webSearch?.tavily) {
-    delete cleaned.webSearch.tavily.apiKey;
-    if (Object.keys(cleaned.webSearch.tavily).length === 0) {
-      delete cleaned.webSearch.tavily;
-    }
-  }
-
-  if (cleaned.webSearch?.exa) {
-    delete cleaned.webSearch.exa.apiKey;
-    if (Object.keys(cleaned.webSearch.exa).length === 0) {
-      delete cleaned.webSearch.exa;
-    }
-  }
-
-  if (Array.isArray(cleaned.providers)) {
-    for (const provider of cleaned.providers) {
-      delete provider.apiKey;
     }
   }
 

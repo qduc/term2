@@ -24,7 +24,6 @@ import { buildSettingsWithSources } from './settings-sources.js';
 import { migrateLegacyAncillarySettings } from './ancillary-settings-migration.js';
 import {
   hasMissingKeys,
-  hasSensitiveSettings,
   loadSettingsFromFile,
   saveSettingsToFile,
   stripSensitiveSettings,
@@ -170,7 +169,6 @@ export class SettingsService {
     // Use raw file config (pre-Zod) to detect missing keys since Zod adds defaults
     const shouldUpdateFile = configFileExisted && this.hasMissingKeys(rawFileConfig, DEFAULT_SETTINGS);
     const shouldMigrateLegacyProviderFormat = configFileExisted && this.hasLegacyProviderFormat(rawFileConfig);
-    const shouldScrubSensitiveSettings = configFileExisted && hasSensitiveSettings(rawFileConfig);
 
     // If there was no config file on disk, persist the current merged settings so
     // users get a settings.json created at startup (rather than waiting for a
@@ -186,23 +184,17 @@ export class SettingsService {
         }
       }
     } else if (
-      (shouldUpdateFile ||
-        shouldMigrateLegacyProviderFormat ||
-        migratedLegacyAncillarySettings ||
-        shouldScrubSensitiveSettings) &&
-      (!fileHadErrors || shouldScrubSensitiveSettings)
+      (shouldUpdateFile || shouldMigrateLegacyProviderFormat || migratedLegacyAncillarySettings) &&
+      !fileHadErrors
     ) {
       if (!this.disableFilePersistence) {
-        // If validation found unrelated errors, scrub the raw object instead of
-        // replacing it with the partially validated/default-merged settings.
-        this.saveToFile(fileHadErrors && shouldScrubSensitiveSettings ? rawFileConfig : this.settings);
+        this.saveToFile();
         if (!this.disableLogging) {
           this.loggingService.debug('Updated settings file with defaults and/or migrations', {
             settingsFile: settingsFilePath,
             updatedMissingDefaults: shouldUpdateFile,
             migratedLegacyProviders: shouldMigrateLegacyProviderFormat,
             migratedLegacyAncillarySettings,
-            scrubbedSensitiveSettings: shouldScrubSensitiveSettings,
           });
         }
       }
@@ -611,13 +603,13 @@ export class SettingsService {
   /**
    * Save settings to file, excluding sensitive values
    */
-  private saveToFile(settings: unknown = this.settings): void {
+  private saveToFile(): void {
     if (this.disableFilePersistence) {
       return;
     }
     saveSettingsToFile({
       settingsDir: this.settingsDir,
-      settings,
+      settings: this.settings,
       stripSensitiveSettings,
       disableLogging: this.disableLogging,
       loggingService: this.loggingService,

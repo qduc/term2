@@ -76,6 +76,27 @@ it('synthesizeHistoryFromAssistantTurn reconstructs reasoning before a tool_call
   expect(serializedToolCall.includes("I'll run uname -a.")).toBe(false);
 });
 
+it('retains the OpenAI-compatible reasoning continuation marker while removing duplicate reasoning_content', () => {
+  const turn = {
+    items: buildPersistedAssistantTurnItems([
+      {
+        type: 'reasoning',
+        content: [{ type: 'reasoning_text', text: 'Need the native thinking trace.' }],
+        providerData: {
+          reasoning_content: 'Need the native thinking trace.',
+          openai_compatible_reasoning_content: true,
+        },
+      },
+      { type: 'function_call', callId: 'call_1', name: 'lookup', arguments: '{}' },
+    ]),
+  };
+
+  const history = synthesizeHistoryFromAssistantTurn([], turn) as Array<Record<string, any>>;
+  const reasoning = history.find((item) => item.type === 'reasoning');
+  expect(reasoning?.providerData).toEqual({ openai_compatible_reasoning_content: true });
+  expect(reasoning?.providerData).not.toHaveProperty('reasoning_content');
+});
+
 it('synthesizeHistoryFromAssistantTurn serializes persisted object tool-call arguments for provider replay', () => {
   const turn = {
     items: [

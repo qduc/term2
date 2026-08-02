@@ -332,6 +332,7 @@ export class ApplicationRunLoop {
       const model = await this.#deps.resolveModel(state.agent.model);
       let sawToolCall = false;
       let completion: Extract<StreamedModelTurnEvent, { type: 'completion' }> | undefined;
+      let pendingNativeReasoning: PendingNativeReasoning | undefined;
 
       for await (const event of model.stream({
         instructions: state.agent.instructions,
@@ -354,10 +355,12 @@ export class ApplicationRunLoop {
           continue;
         }
         if (event.type === 'reasoning_delta') {
+          pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, event);
           outputPush(stream, queue, { type: 'model', event: { type: 'reasoning-delta', delta: event.text } });
           continue;
         }
         if (event.type === 'tool_call') {
+          pendingNativeReasoning = commitPendingNativeReasoning(state, pendingNativeReasoning);
           sawToolCall = true;
           await this.#handleToolCall(state, stream, queue, event, toolContext);
         }
@@ -391,10 +394,15 @@ export class ApplicationRunLoop {
       stream.lastResponseId = completion.responseId;
       stream.rawResponses?.push(completion);
       // Some provider adapters report function calls only in the terminal
-      // completion rather than as separate stream events.
+      // completion rather than as separate stream events. Their reasoning may
+      // likewise be terminal-only, so associate it before replaying calls.
       if (!sawToolCall) {
         for (const item of completion.output) {
+          if (item.type === 'reasoning') pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, item);
+        }
+        for (const item of completion.output) {
           if (item.type !== 'tool_call') continue;
+          pendingNativeReasoning = commitPendingNativeReasoning(state, pendingNativeReasoning);
           sawToolCall = true;
           await this.#handleToolCall(state, stream, queue, item, toolContext);
         }
@@ -542,6 +550,54 @@ function finish(stream: AgentStream, state: RunState, queue: EventQueue): unknow
   stream.lastResponseId = state.responseId ?? null;
   queue.close();
   return { usage: state.usage, output: stream.output };
+}
+
+type PendingNativeReasoning = {
+  text: string;
+  providerMetadata: StreamedModelProviderOptions;
+};
+
+/**
+ * Only replay native reasoning when the provider explicitly supplies the
+ * Chat-Completions continuation field. Generic reasoning remains display-only
+ * so providers with different native formats are not given a foreign field.
+ */
+function appendNativeReasoning(
+  current: PendingNativeReasoning | undefined,
+  event: {
+    readonly text: string;
+    readonly providerMetadata?: StreamedModelProviderOptions;
+  },
+): PendingNativeReasoning | undefined {
+  const nativeReasoning = event.providerMetadata?.reasoning_content;
+  if (typeof nativeReasoning !== 'string') return current;
+  const text =
+    current?.text === nativeReasoning
+      ? current.text
+      : current?.text && nativeReasoning.startsWith(current.text)
+      ? nativeReasoning
+      : `${current?.text ?? ''}${nativeReasoning}`;
+  return {
+    text,
+    providerMetadata: { ...event.providerMetadata, reasoning_content: text },
+  };
+}
+
+function commitPendingNativeReasoning(state: RunState, pending: PendingNativeReasoning | undefined): undefined {
+  if (!pending) return undefined;
+  const reasoningInput: StreamedModelTurnInput = {
+    type: 'reasoning',
+    text: pending.text,
+    providerMetadata: pending.providerMetadata,
+  };
+  const reasoningHistory: ProviderInputItem = {
+    type: 'reasoning',
+    content: [{ type: 'reasoning_text', text: pending.text }],
+    providerData: pending.providerMetadata,
+  };
+  state.input.push(reasoningInput);
+  state.history.push(reasoningHistory);
+  return undefined;
 }
 
 function normalizeModelUsage(usage: unknown) {

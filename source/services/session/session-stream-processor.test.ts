@@ -1055,6 +1055,43 @@ it('SessionStreamProcessor.finalize() detects wrapped messages and retains the o
   expect(conversationStore.getHistory()).toEqual([wrappedAssistant]);
 });
 
+it('SessionStreamProcessor.finalize() preserves authoritative history over reordered canonical events', () => {
+  const conversationStore = new ConversationStore();
+  const generationGuard = new GenerationGuard();
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker: new SessionToolTracker(conversationStore),
+    conversationStore,
+    conversationLogger: {} as ConversationLogger,
+    providerContinuity: new ProviderContinuity(),
+    generationGuard,
+    journal: makeJournal(),
+  });
+  const assistantItem = {
+    role: 'assistant',
+    type: 'message',
+    content: [{ type: 'output_text', text: 'Canonical answer' }],
+  };
+  const toolCallItem = { type: 'function_call', callId: 'call-1', name: 'lookup', arguments: '{}' };
+  const toolResultItem = { type: 'function_call_output', callId: 'call-1', output: 'tool result' };
+  const stream = makeStream([], { interruptions: [] });
+  // The application loop's event order may publish terminal tool items before
+  // the assistant message, but its history is the authoritative provider order.
+  (stream as any).newItems = [
+    { type: 'item', item: toolCallItem },
+    { type: 'item', item: toolResultItem },
+    { type: 'item', item: assistantItem },
+  ];
+  (stream as any).output = (stream as any).newItems;
+  (stream as any).history = [assistantItem, toolCallItem, toolResultItem];
+
+  expect(processor.finalize(stream, generationGuard.capture(), 'full_history', 'startStream')).toEqual({
+    kind: 'committed',
+  });
+  expect(conversationStore.getHistory()).toEqual([assistantItem, toolCallItem, toolResultItem]);
+});
+
 it('SessionStreamProcessor.finalize() appends tool-result-only output when full-history replay snapshot has no messages', () => {
   const conversationStore = new ConversationStore();
   conversationStore.addUserMessage('Initial request');

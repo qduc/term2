@@ -128,6 +128,12 @@ it('preserves provider reasoning and completed tool-call progress through Applic
     events.push(event);
   }
 
+  expect(stream.output).toEqual(
+    expect.arrayContaining([
+      { type: 'reasoning_delta', text: 'thinking about the command' },
+      expect.objectContaining({ type: 'item', item: expect.objectContaining({ type: 'function_call' }) }),
+    ]),
+  );
   expect(events.filter((event) => event.type === 'reasoning_delta')).toEqual([
     { type: 'reasoning_delta', delta: 'thinking about the command', fullText: 'thinking about the command' },
   ]);

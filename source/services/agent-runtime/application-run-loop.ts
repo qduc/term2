@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ProviderInput, ProviderInputItem } from '../../contracts/provider-input.js';
+import type { ApplicationRunEvent } from '../../contracts/application-stream.js';
 import {
   createContinuationHandle,
   unwrapContinuationHandle,
@@ -121,15 +122,15 @@ type RunState = {
 };
 
 class EventQueue {
-  #items: unknown[] = [];
+  #items: ApplicationRunEvent[] = [];
   #waiters: Array<{
-    resolve: (result: IteratorResult<unknown>) => void;
+    resolve: (result: IteratorResult<ApplicationRunEvent>) => void;
     reject: (error: unknown) => void;
   }> = [];
   #closed = false;
   #failure: unknown;
 
-  push(item: unknown): void {
+  push(item: ApplicationRunEvent): void {
     const waiter = this.#waiters.shift();
     if (waiter) waiter.resolve({ done: false, value: item });
     else this.#items.push(item);
@@ -144,7 +145,7 @@ class EventQueue {
     }
   }
 
-  next(): Promise<IteratorResult<unknown>> {
+  next(): Promise<IteratorResult<ApplicationRunEvent>> {
     const item = this.#items.shift();
     if (item !== undefined) return Promise.resolve({ done: false, value: item });
     if (this.#closed) {
@@ -243,7 +244,7 @@ export class ApplicationRunLoop {
         return { count: state.turnCount, max: state.maxTurns };
       },
     };
-    const output: unknown[] = [];
+    const output: ApplicationRunEvent[] = [];
     const stream: AgentStream & { finalOutput?: string } = {
       [Symbol.asyncIterator]: () => ({ next: () => queue.next() }),
       completed: Promise.resolve(undefined),
@@ -315,7 +316,7 @@ export class ApplicationRunLoop {
         };
         state.history.push(resultItem);
         state.input.push({ type: 'tool_result', id: pending.callId, output: result });
-        outputPush(stream, queue, { type: 'run_item_stream_event', item: resultItem });
+        outputPush(stream, queue, { type: 'item', item: resultItem });
         state.pendingApprovals.splice(pendingIndex, 1);
         state.pendingApproval = state.pendingApprovals[0];
         state.approvalDecision = undefined;
@@ -360,15 +361,12 @@ export class ApplicationRunLoop {
           continue;
         }
         if (event.type === 'codex_rate_limits') {
-          outputPush(stream, queue, {
-            type: 'model',
-            event: { type: 'codex.rate_limits', rate_limits: event.rateLimits },
-          });
+          outputPush(stream, queue, { type: 'codex_rate_limits', rateLimits: event.rateLimits });
           continue;
         }
         if (event.type === 'reasoning_delta') {
           pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, event);
-          outputPush(stream, queue, { type: 'model', event: { type: 'reasoning-delta', delta: event.text } });
+          outputPush(stream, queue, { type: 'reasoning_delta', text: event.text });
           continue;
         }
         if (event.type === 'tool_call') {
@@ -442,7 +440,7 @@ export class ApplicationRunLoop {
           content: [{ type: 'output_text', text: assistantText }],
         };
         state.history.push(item);
-        outputPush(stream, queue, { type: 'run_item_stream_event', item });
+        outputPush(stream, queue, { type: 'item', item });
         state.input.push({ type: 'message', role: 'assistant', content: [{ type: 'text', text: assistantText }] });
       }
 
@@ -471,7 +469,7 @@ export class ApplicationRunLoop {
     };
     state.history.push(callItem);
     state.input.push({ type: 'tool_call', id: event.id, name: event.name, arguments: event.arguments });
-    outputPush(stream, queue, { type: 'run_item_stream_event', item: callItem });
+    outputPush(stream, queue, { type: 'item', item: callItem });
     if (!definition) {
       const output = `Unknown tool: ${event.name}`;
       const resultItem: ProviderInputItem = {
@@ -482,7 +480,7 @@ export class ApplicationRunLoop {
       };
       state.history.push(resultItem);
       state.input.push({ type: 'tool_result', id: event.id, output });
-      outputPush(stream, queue, { type: 'run_item_stream_event', item: resultItem });
+      outputPush(stream, queue, { type: 'item', item: resultItem });
       return;
     }
 
@@ -506,7 +504,7 @@ export class ApplicationRunLoop {
       };
       state.history.push(resultItem);
       state.input.push({ type: 'tool_result', id: event.id, output: message });
-      outputPush(stream, queue, { type: 'run_item_stream_event', item: resultItem });
+      outputPush(stream, queue, { type: 'item', item: resultItem });
       return;
     }
 
@@ -521,7 +519,7 @@ export class ApplicationRunLoop {
       };
       state.history.push(resultItem);
       state.input.push({ type: 'tool_result', id: event.id, output });
-      outputPush(stream, queue, { type: 'run_item_stream_event', item: resultItem });
+      outputPush(stream, queue, { type: 'item', item: resultItem });
       return;
     }
 
@@ -557,7 +555,7 @@ export class ApplicationRunLoop {
     };
     state.history.push(resultItem);
     state.input.push({ type: 'tool_result', id: event.id, output });
-    outputPush(stream, queue, { type: 'run_item_stream_event', item: resultItem });
+    outputPush(stream, queue, { type: 'item', item: resultItem });
   }
 
   async #invokeTool(
@@ -570,20 +568,10 @@ export class ApplicationRunLoop {
   }
 }
 
-function outputPush(stream: AgentStream, queue: EventQueue, item: unknown): void {
-  // Terminal snapshots retain the event envelope. Full-history finalization
-  // recognizes these as non-provider events and falls back to stream.history;
-  // flattening only run-item events mixes display deltas with provider items.
+function outputPush(stream: AgentStream, queue: EventQueue, item: ApplicationRunEvent): void {
   stream.output.push(item);
   if (stream.newItems !== stream.output) stream.newItems.push(item);
   queue.push(item);
-}
-
-/** Stores a canonical item for persistence while preserving the streamed UI event shape. */
-function canonicalOutputPush(stream: AgentStream, queue: EventQueue, item: ProviderInputItem): void {
-  stream.output.push(item);
-  if (stream.newItems !== stream.output) stream.newItems.push(item);
-  queue.push({ type: 'run_item_stream_event', item });
 }
 
 function finish(stream: AgentStream, state: RunState, queue: EventQueue): unknown {
@@ -660,7 +648,7 @@ function commitPendingNativeReasoning(
   };
   state.input.push(reasoningInput);
   state.history.push(reasoningHistory);
-  canonicalOutputPush(stream, queue, reasoningHistory);
+  outputPush(stream, queue, { type: 'item', item: reasoningHistory });
   return undefined;
 }
 

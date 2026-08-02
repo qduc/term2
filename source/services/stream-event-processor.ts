@@ -1,44 +1,12 @@
-import type {
-  ConversationEvent,
-  CodexRateLimitInfo,
-  CodexRateLimitWindow,
-} from './conversation/conversation-events.js';
+import type { ConversationEvent } from './conversation/conversation-events.js';
 import type { ILoggingService } from './service-interfaces.js';
 import { extractUsage, mergeUsage, normalizeAgentRunUsage, type NormalizedUsage } from '../utils/ai/token-usage.js';
-import { extractReasoningDelta, extractTextDelta } from './stream-event-parsing.js';
 import { captureToolCallArguments, emitCommandMessagesFromItems } from './command-message-streaming.js';
 import { normalizeRunItem } from './conversation/run-item-normalizer.js';
 import { createInvalidToolCallDiagnostic } from './logging/logging-contract.js';
-import { asRecord, getString } from './interruption-info.js';
 import { parseToolCallArguments } from './tool-call-arguments.js';
-import type { AgentStream } from './agent-stream.js';
+import { adaptAgentStream, type AgentStream } from './agent-stream.js';
 import type { ToolCallStreamingDeltaEvent } from './conversation/conversation-events.js';
-
-function normalizeCodexRateLimitWindow(obj: unknown): CodexRateLimitWindow | undefined {
-  if (!obj || typeof obj !== 'object') {
-    return undefined;
-  }
-  const rec = obj as Record<string, unknown>;
-  const used_percent = typeof rec.used_percent === 'number' ? rec.used_percent : undefined;
-  const window_minutes = typeof rec.window_minutes === 'number' ? rec.window_minutes : undefined;
-  const reset_after_seconds = typeof rec.reset_after_seconds === 'number' ? rec.reset_after_seconds : undefined;
-  const reset_at = typeof rec.reset_at === 'number' ? rec.reset_at : undefined;
-
-  if (
-    used_percent !== undefined &&
-    window_minutes !== undefined &&
-    reset_after_seconds !== undefined &&
-    reset_at !== undefined
-  ) {
-    return {
-      used_percent,
-      window_minutes,
-      reset_after_seconds,
-      reset_at,
-    };
-  }
-  return undefined;
-}
 
 export interface StreamAccumulator {
   finalOutput: string;
@@ -59,22 +27,11 @@ export const createStreamAccumulator = (): StreamAccumulator => ({
 });
 
 export interface StreamProcessorOptions {
-  /** Per-turn map of tool-call arguments by callId. Mutated as the stream is consumed. */
   toolCallArgumentsById: Map<string, unknown>;
-  /** Session-scoped set used to dedupe invalid-JSON diagnostics across turns. */
   emittedInvalidToolCallPackets: Set<string>;
-  /** When false, args map is cleared at start (initial run); when true, preserved (continue/abort). */
   preserveExistingToolArgs: boolean;
-  /** Optional durable recovery hook for provider function_call items. */
   onFunctionCallItem?: (item: unknown) => void;
-  /** Optional durable recovery hook for provider function_call_result/output items. */
   onFunctionResultItem?: (item: unknown) => void;
-  /**
-   * Optional generic recovery hook invoked for every raw run item
-   * (`run_item_stream_event.item`). Used by the journal to capture
-   * provider-backed transcript items even when no matching
-   * function_call/result hook fires (e.g. assistant messages, reasoning).
-   */
   onRunItem?: (item: unknown) => void;
 }
 
@@ -83,415 +40,136 @@ export interface StreamProcessorDeps {
   sessionId: string;
 }
 
+/** Consume only the closed ApplicationRunEvent protocol. */
 export async function* processStreamEvents(
   stream: AgentStream,
   acc: StreamAccumulator,
   opts: StreamProcessorOptions,
   deps: StreamProcessorDeps,
 ): AsyncGenerator<ConversationEvent, void, void> {
-  const { toolCallArgumentsById, emittedInvalidToolCallPackets, preserveExistingToolArgs } = opts;
-  const { logger, sessionId } = deps;
-
-  if (!preserveExistingToolArgs) {
-    toolCallArgumentsById.clear();
-  }
-
+  const applicationStream = adaptAgentStream(stream);
+  if (!opts.preserveExistingToolArgs) opts.toolCallArgumentsById.clear();
   acc.textDeltaCount = 0;
   acc.reasoningDeltaCount = 0;
 
-  /** Tracks tool names from response.output_item.added events (Responses API) and AI SDK tool-input-start. */
-  const streamingToolNamesByIndex = new Map<number | string, string>();
-  /** Accumulated argument character count for each streaming tool call by index/id. */
-  const streamingToolArgCharCounts = new Map<number | string, number>();
-
-  const emitText = (delta: string) => {
-    if (!delta) return null;
-    acc.finalOutput += delta;
+  const emitCommandMessages = (items: unknown[]) =>
+    emitCommandMessagesFromItems(items, {
+      toolCallArgumentsById: opts.toolCallArgumentsById,
+      emittedCommandIds: acc.emittedCommandIds,
+    });
+  const emitText = (text: string): ConversationEvent | null => {
+    if (!text) return null;
+    acc.finalOutput += text;
     acc.textDeltaCount++;
-    return { type: 'text_delta' as const, delta, fullText: acc.finalOutput };
+    return { type: 'text_delta', delta: text, fullText: acc.finalOutput };
   };
-
-  const emitReasoning = (delta: string) => {
-    if (!delta) return null;
-    acc.reasoningOutput += delta;
+  const emitReasoning = (text: string): ConversationEvent | null => {
+    if (!text) return null;
+    acc.reasoningOutput += text;
     acc.reasoningDeltaCount++;
-    return { type: 'reasoning_delta' as const, delta, fullText: acc.reasoningOutput };
+    return { type: 'reasoning_delta', delta: text, fullText: acc.reasoningOutput };
   };
 
-  for await (const rawEvent of stream) {
-    const event = asRecord(rawEvent);
-    const eventData = asRecord(event?.data);
-    const modelEvent = asRecord(eventData?.event) ?? asRecord(event?.event);
-    const eventType = getString(event, 'type');
-
-    // Extract usage if present in any of the common locations.
-    // raw_model_stream_event may nest provider payloads under .data or .data.event.
-    const usage = extractUsage(rawEvent) ?? extractUsage(eventData) ?? extractUsage(modelEvent);
-    if (usage) {
-      const mergedUsage = mergeUsage(usage, acc.latestUsage) ?? usage;
-      acc.latestUsage = mergedUsage;
-      logger.debug('Usage extracted from stream event', {
-        sessionId,
-        source: 'stream_event',
-        eventType: eventType ?? getString(eventData, 'type') ?? 'unknown',
-        usage: mergedUsage,
-      });
-      yield { type: 'usage_update', usage: mergedUsage };
+  for await (const event of applicationStream) {
+    if (event.type === 'usage_update') {
+      acc.latestUsage = mergeUsage(event.usage, acc.latestUsage) ?? event.usage;
+      yield { type: 'usage_update', usage: acc.latestUsage };
+      continue;
+    }
+    if (event.type === 'codex_rate_limits') {
+      yield event;
+      continue;
+    }
+    if (event.type === 'text_delta') {
+      const emitted = emitText(event.text);
+      if (emitted) yield emitted;
+      continue;
+    }
+    if (event.type === 'reasoning_delta') {
+      const emitted = emitReasoning(event.text);
+      if (emitted) yield emitted;
+      continue;
+    }
+    if (event.type === 'tool_call_streaming_delta') {
+      yield { ...event } satisfies ToolCallStreamingDeltaEvent;
+      continue;
     }
 
-    // Intercept Codex rate-limits frames (e.g. codex.rate_limits) from the
-    // upstream provider stream so the UI can display them in the status bar.
-    const rawRateLimit =
-      getString(event, 'type') === 'codex.rate_limits'
-        ? event
-        : getString(eventData, 'type') === 'codex.rate_limits'
-        ? eventData
-        : getString(modelEvent, 'type') === 'codex.rate_limits'
-        ? modelEvent
-        : undefined;
-
-    if (rawRateLimit) {
-      const rl = asRecord(rawRateLimit);
-      const rlData = asRecord(rl?.rate_limits) ?? rl;
-      const primary = normalizeCodexRateLimitWindow(rlData?.primary);
-      const secondary = normalizeCodexRateLimitWindow(rlData?.secondary);
-
-      if (primary !== undefined || secondary !== undefined) {
-        const rateLimits: CodexRateLimitInfo = {
-          allowed: Boolean(rlData?.allowed),
-          limit_reached: Boolean(rlData?.limit_reached),
-          ...(primary !== undefined ? { primary } : {}),
-          ...(secondary !== undefined ? { secondary } : {}),
-        };
-        logger.debug('Codex rate limits extracted from stream event', {
-          sessionId,
-          source: 'codex_rate_limits',
-          rateLimits,
+    const item = event.item;
+    captureToolCallArguments(item, opts.toolCallArgumentsById);
+    opts.onRunItem?.(item);
+    const normalizedItems = normalizeRunItem(item);
+    const toolCall = normalizedItems.find((candidate) => candidate.type === 'tool_call');
+    if (toolCall?.type === 'tool_call') {
+      opts.onFunctionCallItem?.(item);
+      if (toolCall.callId !== 'unknown-call') {
+        const parsed = parseToolCallArguments(toolCall.arguments, {
+          callId: toolCall.callId,
+          toolName: toolCall.toolName,
+          sessionId: deps.sessionId,
+          traceId: deps.logger.getCorrelationId() ?? 'trace-unknown',
         });
-        yield { type: 'codex_rate_limits' as const, rateLimits };
-      }
-    }
-
-    const delta1 = extractTextDelta(rawEvent);
-    if (delta1) {
-      const e = emitText(delta1);
-      if (e) yield e;
-    }
-    if (eventData) {
-      const delta2 = extractTextDelta(eventData);
-      if (delta2) {
-        const e = emitText(delta2);
-        if (e) yield e;
-      }
-    }
-    if (modelEvent && modelEvent !== eventData) {
-      const delta3 = extractTextDelta(modelEvent);
-      if (delta3) {
-        const e = emitText(delta3);
-        if (e) yield e;
-      }
-    }
-
-    const reasoningDelta = extractReasoningDelta(rawEvent);
-    if (reasoningDelta) {
-      const e = emitReasoning(reasoningDelta);
-      if (e) yield e;
-    }
-
-    // --- Detect tool call argument streaming (before tool_started fires) ---
-    //
-    // Responses API: response.output_item.added fires when the model starts a
-    // function_call; response.output_item.delta carries argument fragments.
-    // Chat Completions API: choices[].delta.tool_calls carries fragments.
-    {
-      const meType = getString(modelEvent, 'type');
-      const edType = getString(eventData, 'type');
-
-      // Capture tool name from the initial item-added event (Responses API).
-      if (meType === 'response.output_item.added' || edType === 'response.output_item.added') {
-        const addedSrc = meType === 'response.output_item.added' ? modelEvent : eventData;
-        const addedItem = asRecord(addedSrc?.output_item) ?? asRecord(addedSrc?.item);
-        if (getString(addedItem, 'type') === 'function_call') {
-          const idx =
-            typeof (addedSrc as Record<string, unknown>)?.output_index === 'number'
-              ? ((addedSrc as Record<string, unknown>).output_index as number)
-              : -1;
-          const name = getString(addedItem, 'name');
-          if (idx >= 0 && name) {
-            streamingToolNamesByIndex.set(idx, name);
-            streamingToolArgCharCounts.set(idx, 0);
-          }
-        }
-      }
-
-      // AI SDK Tool Input Start
-      if (meType === 'tool-input-start' || edType === 'tool-input-start') {
-        const startSrc = meType === 'tool-input-start' ? modelEvent : eventData;
-        const toolCallId = getString(startSrc, 'id');
-        const toolName = getString(startSrc, 'toolName');
-        if (toolCallId && toolName) {
-          streamingToolNamesByIndex.set(toolCallId, toolName);
-          streamingToolArgCharCounts.set(toolCallId, 0);
-        }
-      }
-
-      // AI SDK Tool Input Delta
-      if (meType === 'tool-input-delta' || edType === 'tool-input-delta') {
-        const deltaSrc = meType === 'tool-input-delta' ? modelEvent : eventData;
-        const toolCallId = getString(deltaSrc, 'id');
-        const delta = getString(deltaSrc, 'delta');
-        if (toolCallId && delta) {
-          const prev = streamingToolArgCharCounts.get(toolCallId) ?? 0;
-          const next = prev + delta.length;
-          streamingToolArgCharCounts.set(toolCallId, next);
-          const toolName = streamingToolNamesByIndex.get(toolCallId);
-          yield {
-            type: 'tool_call_streaming_delta',
-            toolName,
-            argumentCharCount: next,
-          } satisfies ToolCallStreamingDeltaEvent;
-        }
-      }
-
-      // Detect argument delta from Responses API.
-      const isResponsesApiDelta =
-        meType === 'response.function_call_arguments.delta' ||
-        edType === 'response.function_call_arguments.delta' ||
-        meType === 'response.custom_tool_call_input.delta' ||
-        edType === 'response.custom_tool_call_input.delta' ||
-        meType === 'response.mcp_call_arguments.delta' ||
-        edType === 'response.mcp_call_arguments.delta';
-
-      if (isResponsesApiDelta) {
-        const deltaSrc =
-          meType === 'response.function_call_arguments.delta' ||
-          meType === 'response.custom_tool_call_input.delta' ||
-          meType === 'response.mcp_call_arguments.delta'
-            ? modelEvent
-            : eventData;
-        const delta = deltaSrc?.delta;
-        if (typeof delta === 'string' && delta) {
-          const idx =
-            typeof (deltaSrc as Record<string, unknown>)?.output_index === 'number'
-              ? ((deltaSrc as Record<string, unknown>).output_index as number)
-              : -1;
-          if (idx >= 0) {
-            const prev = streamingToolArgCharCounts.get(idx) ?? 0;
-            const next = prev + delta.length;
-            streamingToolArgCharCounts.set(idx, next);
-            const toolName = streamingToolNamesByIndex.get(idx);
-            yield {
-              type: 'tool_call_streaming_delta',
-              toolName,
-              argumentCharCount: next,
-            } satisfies ToolCallStreamingDeltaEvent;
-          }
-        }
-      }
-
-      // Legacy fallback for response.output_item.delta where delta is an object with arguments.
-      if (meType === 'response.output_item.delta' || edType === 'response.output_item.delta') {
-        const deltaSrc = meType === 'response.output_item.delta' ? modelEvent : eventData;
-        const delta = asRecord(deltaSrc?.delta);
-        if (delta && typeof delta.arguments === 'string' && delta.arguments) {
-          const idx =
-            typeof (deltaSrc as Record<string, unknown>)?.output_index === 'number'
-              ? ((deltaSrc as Record<string, unknown>).output_index as number)
-              : -1;
-          if (idx >= 0) {
-            const prev = streamingToolArgCharCounts.get(idx) ?? 0;
-            const next = prev + (delta.arguments as string).length;
-            streamingToolArgCharCounts.set(idx, next);
-            const toolName = streamingToolNamesByIndex.get(idx);
-            yield {
-              type: 'tool_call_streaming_delta',
-              toolName,
-              argumentCharCount: next,
-            } satisfies ToolCallStreamingDeltaEvent;
-          }
-        }
-      }
-
-      // Detect argument delta from Chat Completions API.
-      // modelEvent is the ChatCompletionChunk; tool_calls live under choices[].delta.tool_calls.
-      {
-        const choices = modelEvent?.choices ?? eventData?.choices;
-        if (Array.isArray(choices)) {
-          for (const choice of choices) {
-            const delta = asRecord(choice?.delta);
-            const toolCalls = delta?.tool_calls;
-            if (Array.isArray(toolCalls)) {
-              for (const tc of toolCalls) {
-                const fn = asRecord(tc?.function);
-                if (fn) {
-                  // Track tool name from any chunk (first chunk has it).
-                  const name = getString(fn, 'name');
-                  if (name) {
-                    streamingToolNamesByIndex.set(tc?.index ?? 0, name);
-                    streamingToolArgCharCounts.set(tc?.index ?? 0, 0);
-                  }
-                  if (typeof fn.arguments === 'string' && fn.arguments) {
-                    const tcIndex = tc?.index ?? 0;
-                    const prev = streamingToolArgCharCounts.get(tcIndex) ?? 0;
-                    const next = prev + (fn.arguments as string).length;
-                    streamingToolArgCharCounts.set(tcIndex, next);
-                    yield {
-                      type: 'tool_call_streaming_delta',
-                      toolName: streamingToolNamesByIndex.get(tcIndex),
-                      argumentCharCount: next,
-                    } satisfies ToolCallStreamingDeltaEvent;
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    const maybeEmitCommandMessagesFromItems = (items: unknown[]) =>
-      emitCommandMessagesFromItems(items, {
-        toolCallArgumentsById,
-        emittedCommandIds: acc.emittedCommandIds,
-      });
-
-    if (eventType === 'run_item_stream_event') {
-      const eventItem = event?.item;
-      captureToolCallArguments(eventItem, toolCallArgumentsById);
-
-      // Generic journal hook: every raw run item (function call, tool result,
-      // assistant message, reasoning, ...) is fed into the durable journal so
-      // it can be replayed on resume after a crash.
-      opts.onRunItem?.(eventItem);
-
-      const normalizedItems = normalizeRunItem(eventItem);
-      const toolCall = normalizedItems.find((item) => item.type === 'tool_call');
-      if (toolCall?.type === 'tool_call') {
-        opts.onFunctionCallItem?.(eventItem);
-        const { callId, toolName, arguments: args } = toolCall;
-        if (callId !== 'unknown-call') {
-          const parseResult = parseToolCallArguments(args, {
-            callId,
-            toolName,
-            sessionId,
-            traceId: logger.getCorrelationId() ?? 'trace-unknown',
-          });
-
-          if (parseResult.invalidJsonDiagnostic && !emittedInvalidToolCallPackets.has(callId)) {
-            emittedInvalidToolCallPackets.add(callId);
-            const diagnostic = createInvalidToolCallDiagnostic(parseResult.invalidJsonDiagnostic);
-            logger.error('Invalid tool call argument payload', {
-              ...diagnostic,
-              sessionId,
-              messageId: callId,
-            });
-          }
-
-          yield {
-            type: 'tool_started' as const,
-            toolCallId: callId,
-            toolName,
-            arguments: parseResult.arguments,
-          };
-
-          logger.debug('Tool execution started', {
-            eventType: 'tool_call.execution_started',
-            category: 'tool',
-            phase: 'execution',
-            sessionId,
-            traceId: logger.getCorrelationId(),
-            toolName,
-            toolCallId: callId,
-            messageId: callId,
+        if (parsed.invalidJsonDiagnostic && !opts.emittedInvalidToolCallPackets.has(toolCall.callId)) {
+          opts.emittedInvalidToolCallPackets.add(toolCall.callId);
+          deps.logger.error('Invalid tool call argument payload', {
+            ...createInvalidToolCallDiagnostic(parsed.invalidJsonDiagnostic),
+            sessionId: deps.sessionId,
+            messageId: toolCall.callId,
           });
         }
-      }
-
-      if (normalizedItems.some((item) => item.type === 'tool_result')) {
-        opts.onFunctionResultItem?.(eventItem);
-      }
-
-      for (const e of maybeEmitCommandMessagesFromItems([eventItem])) {
-        yield e;
-      }
-    } else if (
-      eventType === 'tool_call_output_item' ||
-      getString(asRecord(event?.rawItem), 'type') === 'function_call_output'
-    ) {
-      captureToolCallArguments(rawEvent, toolCallArgumentsById);
-      opts.onFunctionResultItem?.(rawEvent);
-      for (const e of maybeEmitCommandMessagesFromItems([rawEvent])) {
-        yield e;
+        yield {
+          type: 'tool_started',
+          toolCallId: toolCall.callId,
+          toolName: toolCall.toolName,
+          arguments: parsed.arguments,
+        };
+        deps.logger.debug('Tool execution started', {
+          eventType: 'tool_call.execution_started',
+          category: 'tool',
+          phase: 'execution',
+          sessionId: deps.sessionId,
+          traceId: deps.logger.getCorrelationId(),
+          toolName: toolCall.toolName,
+          toolCallId: toolCall.callId,
+          messageId: toolCall.callId,
+        });
       }
     }
+    if (normalizedItems.some((candidate) => candidate.type === 'tool_result')) opts.onFunctionResultItem?.(item);
+    for (const commandMessage of emitCommandMessages([item])) yield commandMessage;
   }
 
-  const completedResult = (await stream.completed) as unknown;
-  if (stream.cancelled) {
+  const completedResult = await applicationStream.completed;
+  if (applicationStream.cancelled) {
     const abortError = new Error('The user aborted a request.');
     abortError.name = 'AbortError';
     throw abortError;
   }
-  const rawResponses = Array.isArray(stream?.rawResponses) ? stream.rawResponses : [];
   let usageFromRawResponses: NormalizedUsage | undefined;
-  for (let i = rawResponses.length - 1; i >= 0; i--) {
-    const candidate = extractUsage(rawResponses[i]);
+  for (const response of [...(applicationStream.rawResponses ?? [])].reverse()) {
+    const candidate = extractUsage(response);
     if (candidate) {
       usageFromRawResponses = candidate;
       break;
     }
   }
-
-  // The Agents SDK keeps an authoritative, already-cumulative usage accumulator on
-  // the run state (RunContext.usage), spanning every model turn in the run -
-  // including turns resumed after an approval, since continuations reuse the same
-  // live RunState. Trust it as the run total instead of re-summing per-turn
-  // streamed snapshots (which double-counts on long, multi-turn tasks). Fall back
-  // to per-response extraction for providers/runners that don't populate it.
-  const runStateUsage = normalizeAgentRunUsage(stream.runUsage);
-
-  const finalUsage = runStateUsage || extractUsage(completedResult) || extractUsage(stream) || usageFromRawResponses;
+  const runStateUsage = normalizeAgentRunUsage(applicationStream.runUsage);
+  const finalUsage =
+    runStateUsage || extractUsage(completedResult) || extractUsage(applicationStream) || usageFromRawResponses;
   if (finalUsage) {
-    // The run-state accumulator is the whole-run total, so it must replace (not
-    // merge with) the latest per-turn snapshot to avoid inflating the count.
     acc.latestUsage = runStateUsage ? finalUsage : mergeUsage(finalUsage, acc.latestUsage) ?? finalUsage;
-    const usageSource = runStateUsage
-      ? 'run_state_usage'
-      : extractUsage(completedResult)
-      ? 'completed_result'
-      : extractUsage(stream)
-      ? 'stream_object'
-      : 'stream_raw_responses';
-    logger.debug('Usage extracted from stream completion', {
-      sessionId,
+    deps.logger.debug('Usage extracted from stream completion', {
+      sessionId: deps.sessionId,
       source: 'stream_completed',
-      usageSource,
       usage: acc.latestUsage,
     });
   } else {
-    const completedResultRecord =
-      completedResult && typeof completedResult === 'object' && !Array.isArray(completedResult)
-        ? (completedResult as Record<string, unknown>)
-        : undefined;
-
-    const streamRecord =
-      stream && typeof stream === 'object' && !Array.isArray(stream)
-        ? (stream as unknown as Record<string, unknown>)
-        : undefined;
-
-    logger.debug('No usage found in stream completion', {
-      sessionId,
+    const completedRecord = completedResult && typeof completedResult === 'object' ? completedResult : undefined;
+    deps.logger.debug('No usage found in stream completion', {
+      sessionId: deps.sessionId,
       source: 'stream_completed',
-      completedResultType:
-        completedResult === null ? 'null' : Array.isArray(completedResult) ? 'array' : typeof completedResult,
-      completedResultKeys: completedResultRecord ? Object.keys(completedResultRecord) : [],
-      streamKeys: streamRecord ? Object.keys(streamRecord) : [],
-      completedResultHasUsagePath: {
-        usage: Boolean(completedResultRecord?.usage),
-        usageMetadata: Boolean(completedResultRecord?.usageMetadata),
-        usage_metadata: Boolean(completedResultRecord?.usage_metadata),
-        responseUsage: Boolean(asRecord(completedResultRecord?.response)?.usage),
-      },
+      completedResultKeys: completedRecord ? Object.keys(completedRecord) : [],
+      streamKeys: Object.keys(applicationStream as unknown as Record<string, unknown>),
     });
   }
 }

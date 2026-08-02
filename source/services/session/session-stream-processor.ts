@@ -27,28 +27,31 @@ export type StreamFinalizationResult =
 const hasConversationMessageItems = (items: unknown[]): boolean => items.some(projectConversationMessage);
 
 /**
- * ApplicationRunLoop terminal arrays serve both the UI and persistence. UI
- * events are deliberately retained there so a completed stream can still be
- * rendered, while provider history must contain only provider items. Unwrap
- * run-item events at this boundary and drop the display-only events emitted by
- * the loop; leave provider objects otherwise untouched to preserve native
- * continuation metadata.
+ * ApplicationRunLoop output is the canonical application event stream. Provider
+ * history is kept separately in `stream.history`; only `item` events are
+ * projected when a current-run snapshot is used for persistence.
  */
+const isCanonicalApplicationItemEvent = (item: unknown): boolean => {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+  const event = item as Record<string, unknown>;
+  return event.type === 'item' && !!event.item && typeof event.item === 'object';
+};
+
 const canonicalProviderHistoryItems = (items: readonly unknown[]): unknown[] =>
   items.flatMap((item) => {
-    const event = item && typeof item === 'object' && !Array.isArray(item) ? (item as Record<string, unknown>) : null;
-    const candidate = event?.type === 'run_item_stream_event' ? event.item : item;
-    const record =
-      candidate && typeof candidate === 'object' && !Array.isArray(candidate)
-        ? (candidate as Record<string, unknown>)
-        : null;
-
-    if (!record) return [];
-    const isDisplayOnly =
-      (record.type === 'text_delta' && typeof record.text === 'string') ||
-      (record.type === 'model' && record.event !== undefined);
-    if (isDisplayOnly) return [];
-    return [candidate];
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+    const event = item as Record<string, unknown>;
+    if (event.type === 'item' && event.item && typeof event.item === 'object') return [event.item];
+    if (
+      event.type === 'text_delta' ||
+      event.type === 'reasoning_delta' ||
+      event.type === 'codex_rate_limits' ||
+      event.type === 'tool_call_streaming_delta' ||
+      event.type === 'usage_update'
+    ) {
+      return [];
+    }
+    return [item];
   });
 
 const hasToolResultItems = (items: unknown[]): boolean =>
@@ -311,6 +314,16 @@ export class SessionStreamProcessor {
 
     const ran = this.deps.generationGuard.runIfCurrent(token, () => {
       const snapshot = extractFinalizationSnapshot(stream);
+      const projectedHistory = canonicalProviderHistoryItems(snapshot.history);
+      const projectedSnapshot = {
+        ...snapshot,
+        history: projectedHistory,
+        newItems: canonicalProviderHistoryItems(snapshot.newItems),
+        output: canonicalProviderHistoryItems(snapshot.output),
+      };
+      const hasCanonicalApplicationItems = [...snapshot.newItems, ...snapshot.output].some((item) =>
+        isCanonicalApplicationItemEvent(item),
+      );
       warnIfStreamHistoryReplayedTools({
         logger: this.deps.logger,
         sessionId: this.deps.sessionId,
@@ -344,7 +357,7 @@ export class SessionStreamProcessor {
       if (terminal) {
         const historyRevisionBeforeCommit = this.deps.conversationStore.getProviderHistorySnapshot().revision;
         if (inputMode === 'delta') {
-          appendWithoutReplayedTools(snapshot.output);
+          appendWithoutReplayedTools(projectedSnapshot.output);
         } else {
           // In full-history mode, prefer canonical current-run newItems, then
           // output, so SDK history reconstruction cannot strip assistant text.
@@ -352,18 +365,18 @@ export class SessionStreamProcessor {
           // authoritative replay history instead of poisoning the canonical store.
           // When even replay history has no messages, append current-run tool
           // results so retry and subsequent turns can see the new tool output.
-          if (hasConversationMessageItems(snapshot.newItems)) {
-            appendWithoutReplayedTools(snapshot.newItems);
-          } else if (hasConversationMessageItems(snapshot.output)) {
-            appendWithoutReplayedTools(snapshot.output);
-          } else if (hasConversationMessageItems(snapshot.history)) {
-            this.deps.conversationStore.replaceHistory(
-              canonicalProviderHistoryItems(snapshot.history) as ProviderInputItem[],
-            );
-          } else if (hasToolResultItems(snapshot.newItems)) {
-            appendWithoutReplayedTools(snapshot.newItems);
-          } else if (hasToolResultItems(snapshot.output)) {
-            appendWithoutReplayedTools(snapshot.output);
+          if (hasCanonicalApplicationItems && hasConversationMessageItems(projectedSnapshot.history)) {
+            this.deps.conversationStore.replaceHistory(projectedSnapshot.history as ProviderInputItem[]);
+          } else if (hasConversationMessageItems(projectedSnapshot.newItems)) {
+            appendWithoutReplayedTools(projectedSnapshot.newItems);
+          } else if (hasConversationMessageItems(projectedSnapshot.output)) {
+            appendWithoutReplayedTools(projectedSnapshot.output);
+          } else if (hasConversationMessageItems(projectedSnapshot.history)) {
+            this.deps.conversationStore.replaceHistory(projectedSnapshot.history as ProviderInputItem[]);
+          } else if (hasToolResultItems(projectedSnapshot.newItems)) {
+            appendWithoutReplayedTools(projectedSnapshot.newItems);
+          } else if (hasToolResultItems(projectedSnapshot.output)) {
+            appendWithoutReplayedTools(projectedSnapshot.output);
           }
         }
         // Candidate checkpoint acceptance is intentionally adjacent to the

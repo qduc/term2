@@ -56,14 +56,11 @@ describe('ApplicationRunLoop', () => {
     await collect(stream);
 
     expect(stream.output).toContainEqual({
-      type: 'model',
-      event: {
-        type: 'codex.rate_limits',
-        rate_limits: expect.objectContaining({
-          primary: expect.objectContaining({ window_minutes: 300 }),
-          secondary: expect.objectContaining({ window_minutes: 10_080 }),
-        }),
-      },
+      type: 'codex_rate_limits',
+      rateLimits: expect.objectContaining({
+        primary: expect.objectContaining({ window_minutes: 300 }),
+        secondary: expect.objectContaining({ window_minutes: 10_080 }),
+      }),
     });
   });
 
@@ -77,7 +74,7 @@ describe('ApplicationRunLoop', () => {
     expect(stream.output).toEqual([
       { type: 'text_delta', text: 'streamed answer' },
       {
-        type: 'run_item_stream_event',
+        type: 'item',
         item: {
           type: 'message',
           role: 'assistant',
@@ -168,7 +165,10 @@ describe('ApplicationRunLoop', () => {
         { type: 'tool_result', id: 'call_codex', output: 'fixture result' },
       ]),
     );
-    const reasoningItems = stream.newItems.filter((item: any) => item?.type === 'reasoning');
+    const reasoningItems = stream.newItems
+      .filter((event: any) => event?.type === 'item')
+      .map((event: any) => event.item)
+      .filter((item: any) => item?.type === 'reasoning');
     expect(reasoningItems).toEqual([
       {
         type: 'reasoning',
@@ -227,7 +227,9 @@ describe('ApplicationRunLoop', () => {
         content: [{ type: 'output_text', text: 'Answer.' }],
       },
     ]);
-    expect(first.output.filter((item: any) => item?.type === 'reasoning')).toHaveLength(1);
+    expect(first.output.filter((item: any) => item?.type === 'item' && item.item?.type === 'reasoning')).toHaveLength(
+      1,
+    );
 
     const replay = loop.startStream(agent, first.history as any);
     await replay.completed;
@@ -497,10 +499,7 @@ describe('ApplicationRunLoop', () => {
     const events = await collect(stream);
     await stream.completed;
 
-    expect(events).toEqual([
-      { type: 'text_delta', text: 'hello' },
-      expect.objectContaining({ type: 'run_item_stream_event' }),
-    ]);
+    expect(events).toEqual([{ type: 'text_delta', text: 'hello' }, expect.objectContaining({ type: 'item' })]);
     expect(stream.finalOutput).toBe('hello');
     expect(stream.lastResponseId).toBe('resp-1');
   });
@@ -571,11 +570,11 @@ describe('ApplicationRunLoop', () => {
       },
     ]);
     const outputResults = stream.output.filter(
-      (item: any) => item?.type === 'run_item_stream_event' && item.item?.type === 'function_call_result',
+      (item: any) => item?.type === 'item' && item.item?.type === 'function_call_result',
     );
     expect(outputResults).toEqual([
       {
-        type: 'run_item_stream_event',
+        type: 'item',
         item: historyForCall[1],
       },
     ]);

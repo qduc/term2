@@ -1,9 +1,9 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Complete. The application-owned stream/continuation contracts, provider-neutral run loop, direct provider factories, local patch/tool/runtime contracts, public Codex WebSocket transport, and production import boundary are implemented and typecheck cleanly. The three Agents packages and their lockfile entries have been removed, and a source/package audit finds zero `@openai/agents*` references. The full suite passes 4,830 tests with one restricted-host sandbox test skipped.
-**Last updated:** 2026-08-01
+**Status:** Runtime package removal complete; semantic compatibility retirement remains active. The `@openai/agents*` packages are gone, reverse AI-SDK adapters are deleted, and session/UI code now consumes one application-owned event protocol. Remaining runner and provider transport compatibility work is recorded below.
+**Last updated:** 2026-08-02
 
-The first run-loop façade, continuation, model-decorator, application-loop, direct-provider, public WebSocket, and dependency-retirement slices are landed. Behavioral parity and the migration audit are complete; the remaining sandbox failure is host capability, not an Agents SDK dependency or application regression.
+The application-owned run loop, continuation contracts, direct AI-SDK providers, and canonical session stream are landed. Legacy SDK-shaped stream envelopes are isolated in one ingress adapter and no longer parsed by session/UI modules. The remaining work is to retire compatibility runners and convert the OpenAI/Codex transports to the application-owned turn protocol directly.
 
 ### Final verification — 2026-08-01
 
@@ -17,6 +17,48 @@ The first run-loop façade, continuation, model-decorator, application-loop, dir
 ---
 
 ## Resume here
+
+### Remaining semantic-retirement work
+
+Landed in the latest retirement slices:
+
+- `agents-model-bridge.ts` and the application-to-legacy reverse adapter were deleted.
+- AI SDK Anthropic, Google, and OpenRouter expose `StreamedModelTurn` directly.
+- Custom/OpenCode compatibility runners resolve streamed models rather than provider wrappers.
+- `ApplicationRunEvent` is the only session/UI stream protocol.
+- SDK-shaped stream parsing is isolated in `services/legacy-agent-stream-adapter.ts`.
+- `stream-event-processor.ts` no longer understands `raw_model_stream_event`, `run_item_stream_event`, or nested `model/data/event` envelopes.
+- Static guards cover the migrated provider and session seams.
+
+Do the remaining work in this order, one reviewed worktree per slice:
+
+1. **Migrate runner consumers.** Move `AgentChatService`, mentor, edit-healing, execution subagents, and transient/override clients to `ApplicationRunLoop` plus `StreamedModelTurn`. Characterize structured `chatJson`, approval continuation, max-turn, retry, and cancellation behavior before changing routing.
+2. **Delete compatibility runner infrastructure.** Once every consumer is migrated, remove `RunnerManager`, `LegacyRunner`, `createRunner`, `createApplicationCompatibilityRunner`, `settleProviderRun`, and tracing flags that only model the old runner behavior. Make `createStreamedModel` the sole provider registry execution factory.
+3. **Convert OpenAI transport directly.** Make the HTTP and WebSocket Responses implementations accept `StreamedModelTurnRequest` and emit `StreamedModelTurnEvent` without `openai-streamed-model-adapter.ts`, `ModelRequest`, `ModelResponse`, `response_started`, or `response_done`. Preserve request projection, prompt cache, reasoning metadata, tool IDs, usage, continuation observation, terminal errors, and HTTP/WS parity.
+4. **Convert Codex transport directly.** Remove `LegacyModelProvider`/`LegacyModel` from Codex and replace `modelSettings`/`response_done` compatibility shapes with the typed turn contract. Preserve ChatGPT plan limits, encrypted reasoning, prompt cache, `store=false`, WebSocket reconnect behavior, and authoritative terminal-event checks.
+5. **Convert OpenAI-compatible chat transport.** Remove request-shape duck typing (`request.modelSettings`) and expose one typed streamed-turn implementation. Preserve Chat Completions tool-fragment assembly, provider options, retries, and runtime-provider behavior.
+6. **Delete legacy model contracts and retry wrappers.** Remove `ModelRequest`, `ModelResponse`, `StreamEvent`, `LegacyModel`, and `LegacyModelProvider` from `contracts/model.ts`; migrate `RetryingModel` and message builders to the application contract or provider-local native types.
+7. **Retire the legacy stream ingress adapter.** After no legacy runner remains, delete `legacy-agent-stream-adapter.ts`. Strengthen the static guard so SDK envelope names are forbidden throughout production source, except persisted-history decoders where explicitly documented.
+8. **Clean stale terminology and comments.** Update Agents-SDK comments in usage collection, conversation storage, tracing, request-prefix binding, and provider traffic only after their referenced compatibility behavior is actually removed. Do not delete unrelated settings or persisted-history migrations merely because they use the word `legacy`.
+
+Acceptance gates for every provider/runtime slice:
+
+- Add a red-proof contract test before changing the implementation.
+- Preserve missing-terminal and incomplete-stream failures; never convert them to empty success.
+- Run focused provider/runtime/session tests and `pnpm typecheck`.
+- Run `pnpm test:provider-black-box` for provider, registry, bridge, run-loop, or non-interactive changes.
+- Run `pnpm build && pnpm test` before merge.
+- Review the final diff independently and triage findings before fixes.
+
+Final completion criteria:
+
+- One provider factory: `createStreamedModel`.
+- One provider turn interface: `StreamedModelTurn`.
+- One application stream interface: `ApplicationRunEvent`.
+- No production `LegacyRunner`, `LegacyModel`, `ModelRequest`, `ModelResponse`, `RunnerManager`, compatibility runner, OpenAI streamed-model adapter, or legacy stream adapter.
+- SDK envelope names absent from production source outside explicitly retained persisted-data decoders.
+- Existing saved conversations still replay successfully.
+- Full tests, provider black-box suite, typecheck, formatting, and source audit pass.
 
 Read this section first, then *Corrections*, then *The risk register*. The risk register is
 the measure of progress — reach-ins retired, **not** lines deleted. The original plan argued

@@ -10,7 +10,7 @@ Application code lives under `source/`. The non-obvious entry points:
 
 - `cli.tsx` assembles the application; `app.tsx` owns the interactive Ink UI; `non-interactive.ts` runs the same conversation system without the UI.
 - `agent.ts` defines the agent and registers its tools.
-- `source/services/conversation/conversation-service.ts` is the public conversation facade — start there for conversation behavior, then `session-composition.ts`, then `turn-coordinator.ts`.
+- `source/services/conversation/conversation-service.ts` is the public conversation facade — start there for conversation behavior, then `source/services/session/session-composition.ts` (composition root), then `source/services/session/turn-coordinator.ts`.
 - `source/prompts/prompt-constructor.ts` assembles system prompts from a base profile plus conditional fragments; `prompt-profiles.ts` maps models to bases.
 
 Everything else is discoverable by reading the tree. For module-design decisions, ownership boundaries, and the full turn lifecycle, use the `architecture` skill. For test scope and standards, use the `testing` skill.
@@ -100,7 +100,7 @@ Several agents share the primary checkout, so concurrent edits pile into one `gi
 Do each bug fix or feature in its own worktree: `git worktree add .worktrees/<slug> -b <slug>`. Commit inside it, merge back with `git merge --no-ff <slug>` from the primary checkout, then `git worktree remove` and `git branch -d`.
 
 - Create worktrees under `.worktrees/`, never as a sibling directory like `../term2-<slug>`. The shell sandbox only grants writes to the workspace root and the temp dir (`allowWrite` in `source/utils/shell/sandbox/sandbox-policy.ts`), so a sibling checkout fails to write — sometimes half-created, with `.git/worktrees/<slug>/` metadata but no checkout.
-- **Worktree dependencies under the sandbox:** the global pnpm store is readable but not writable, and `~/.npmrc` is credential-denied. A plain fresh `pnpm install` in a worktree can therefore fail or leave an incomplete `node_modules`; do not keep retrying it or request unsandboxed access by default. If the worktree has the same `pnpm-lock.yaml` as the primary checkout, use a relative symlink to the primary `node_modules` (`ln -s ../../node_modules .worktrees/<slug>/node_modules`) and do not run pnpm installation through that symlink. If dependencies differ, use a sandbox-writable store under the temp directory and set `NPM_CONFIG_USERCONFIG=/dev/null`, or stop and report that dependency setup needs an explicit decision. Global pnpm-store write access is intentionally pending; do not assume it.
+- **Worktree dependencies:** run `pnpm install` directly in each worktree. pnpm links packages from its global content-addressable store, so installing in a worktree does not duplicate disk space versus the primary checkout. Do not symlink `node_modules` from the primary checkout — that path caused broken `pnpm exec` resolution in the past.
 - Never `git checkout` another branch in the primary checkout — other agents have HEAD-dependent work in flight.
 - Git refuses a merge that would clobber another agent's uncommitted edits. Coordinate; don't stash their files aside.
 - Trivial single-file edits can stay in place.

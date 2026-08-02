@@ -48,4 +48,4 @@ These are not derivable from reading the code:
 - Role frontmatter, prompt selection, environment context, and tool guidance belong in `role-loader.ts`. Capability construction and write/shell safety policy belong in `tool-policy.ts`. Wiring and the nested role-tool cache stay in `runtime.ts`.
 - New providers must be registered through the provider registry.
 - New tools must be registered in `agent.ts`.
-- `session-composition.ts` is the single composition root for the session path.
+- `services/session/session-composition.ts` is the single composition root for the session path (moved out of `services/conversation/` in a refactor).

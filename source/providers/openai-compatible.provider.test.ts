@@ -1,4 +1,5 @@
 import { it, expect } from 'vitest';
+import type { StreamedModelTurnRequest } from '../contracts/streamed-model-turn.js';
 const setTracingDisabled = (_disabled: boolean): void => {};
 const withTrace = async <T>(_name: string, fn: () => Promise<T>): Promise<T> => fn();
 import {
@@ -91,57 +92,13 @@ const successResponse = {
   usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
 };
 
-const baseRequest = {
-  tools: [],
-  handoffs: [],
-  outputType: 'text' as const,
-  tracing: false as const,
-};
-
-function toStreamRequest(request: any): any {
-  const settings = request.modelSettings ?? {};
-  const input = (request.input ?? []).map((item: any) => {
-    if (item.type === 'reasoning') {
-      const text = (item.rawContent ?? item.content ?? []).map((part: any) => part.text ?? '').join('');
-      return {
-        type: 'reasoning',
-        text,
-        providerMetadata: {
-          reasoning_content: text,
-          openai_compatible_reasoning_content: true,
-        },
-      };
-    }
-    if (item.type === 'function_call') {
-      return { type: 'tool_call', id: item.callId ?? item.call_id, name: item.name, arguments: item.arguments };
-    }
-    if (item.type === 'function_call_result') {
-      return { type: 'tool_result', id: item.callId ?? item.call_id, output: item.output };
-    }
-    const content = Array.isArray(item.content)
-      ? item.content.map((part: any) =>
-          part.type === 'text' ? part : { type: 'text', text: String(part.text ?? part) },
-        )
-      : [{ type: 'text', text: String(item.content ?? '') }];
-    return { type: 'message', role: item.role ?? 'user', content };
-  });
-  return {
-    input,
-    tools: request.tools ?? [],
-    outputType: request.outputType === 'text' ? undefined : request.outputType,
-    reasoning: settings.reasoning,
-    providerOptions: settings.providerData,
-    signal: request.signal,
-  };
-}
-
-async function collectStreamEvents(model: any, request: any): Promise<any[]> {
+async function collectStreamEvents(model: any, request: StreamedModelTurnRequest): Promise<any[]> {
   const events: any[] = [];
-  for await (const event of model.stream(toStreamRequest(request))) events.push(event);
+  for await (const event of model.stream(request)) events.push(event);
   return events;
 }
 
-async function collectCompletion(model: any, request: any): Promise<any> {
+async function collectCompletion(model: any, request: StreamedModelTurnRequest): Promise<any> {
   const events = await collectStreamEvents(model, request);
   return events.find((event) => event.type === 'completion');
 }
@@ -294,15 +251,13 @@ it('providerData fields are forwarded into the chat-completions request body roo
 
   await runUnderTrace(() =>
     collectCompletion(model, {
-      ...baseRequest,
-      input: [{ role: 'user', content: 'hello' }] as any,
-      modelSettings: {
-        providerData: {
-          service_tier: 'flex',
-          custom_vendor_flag: 'on',
-        },
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [],
+      providerOptions: {
+        service_tier: 'flex',
+        custom_vendor_flag: 'on',
       },
-    } as any),
+    }),
   );
 
   expect(captured.length).toBe(1);
@@ -311,17 +266,17 @@ it('providerData fields are forwarded into the chat-completions request body roo
   expect(body.custom_vendor_flag).toBe('on');
 });
 
-it('modelSettings.reasoning.effort is forwarded as reasoning_effort', async () => {
+it('reasoning.effort is forwarded as reasoning_effort', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
   const model = await provider.getStreamedModel('provider-model');
 
   await runUnderTrace(() =>
     collectCompletion(model, {
-      ...baseRequest,
-      input: [{ role: 'user', content: 'hello' }] as any,
-      modelSettings: { reasoning: { effort: 'high', summary: 'auto' } },
-    } as any),
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [],
+      reasoning: { effort: 'high', summary: 'auto' },
+    }),
   );
 
   expect(captured.length).toBe(1);
@@ -335,28 +290,22 @@ it('assistant reasoning_content is passed back with the following tool call', as
 
   await runUnderTrace(() =>
     collectCompletion(model, {
-      ...baseRequest,
       input: [
-        { role: 'user', type: 'message', content: 'what time is it?' },
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'what time is it?' }] },
         {
           type: 'reasoning',
-          rawContent: [{ type: 'reasoning_text', text: 'Need to use the shell for the exact time.' }],
+          text: 'Need to use the shell for the exact time.',
+          providerMetadata: {
+            reasoning_content: 'Need to use the shell for the exact time.',
+            openai_compatible_reasoning_content: true,
+          },
         },
-        {
-          type: 'function_call',
-          callId: 'shell:0',
-          name: 'shell',
-          arguments: '{"command":"date"}',
-        },
-        {
-          type: 'function_call_result',
-          callId: 'shell:0',
-          output: 'Tue May 12 18:40:41 +07 2026',
-        },
-        { role: 'user', type: 'message', content: 'thanks' },
-      ] as any,
-      modelSettings: {},
-    } as any),
+        { type: 'tool_call', id: 'shell:0', name: 'shell', arguments: '{"command":"date"}' },
+        { type: 'tool_result', id: 'shell:0', output: 'Tue May 12 18:40:41 +07 2026' },
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'thanks' }] },
+      ],
+      tools: [],
+    }),
   );
 
   expect(captured.length).toBe(1);
@@ -405,10 +354,9 @@ it('assistant reasoning_content from provider response is preserved as reasoning
 
   const result = await runUnderTrace<any>(() =>
     collectCompletion(model, {
-      ...baseRequest,
-      input: [{ role: 'user', content: 'hello' }] as any,
-      modelSettings: {},
-    } as any),
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [],
+    }),
   );
 
   expect(result.output[0]).toEqual({
@@ -450,9 +398,8 @@ it('assistant reasoning_content from provider stream is preserved as reasoning o
   const model = await provider.getStreamedModel('provider-model');
 
   const events = await collectStreamEvents(model, {
-    ...baseRequest,
-    input: [{ role: 'user', content: 'hello' }],
-    modelSettings: {},
+    input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+    tools: [],
   });
 
   const finalEvent = events.find((event: any) => event.type === 'completion') as any;
@@ -494,9 +441,8 @@ it('assistant choices with non-zero index in single-choice stream are normalized
   const model = await provider.getStreamedModel('provider-model');
 
   const events = await collectStreamEvents(model, {
-    ...baseRequest,
-    input: [{ role: 'user', content: 'hello' }],
-    modelSettings: {},
+    input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+    tools: [],
   });
 
   const finalEvent = events.find((event: any) => event.type === 'completion') as any;
@@ -513,28 +459,19 @@ it('reasoning field is stripped and preserved only as reasoning_content in outgo
 
   await runUnderTrace(() =>
     collectCompletion(model, {
-      ...baseRequest,
       input: [
-        { role: 'user', type: 'message', content: 'hello' },
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] },
         {
           type: 'reasoning',
-          rawContent: [{ type: 'reasoning_text', text: 'I should run date.' }],
+          text: 'I should run date.',
+          providerMetadata: { reasoning_content: 'I should run date.', openai_compatible_reasoning_content: true },
         },
-        {
-          type: 'function_call',
-          callId: 'shell:0',
-          name: 'shell',
-          arguments: '{"command":"date"}',
-        },
-        {
-          type: 'function_call_result',
-          callId: 'shell:0',
-          output: 'Mon Jan 01 00:00:00 UTC 2024',
-        },
-        { role: 'user', type: 'message', content: 'thanks' },
-      ] as any,
-      modelSettings: {},
-    } as any),
+        { type: 'tool_call', id: 'shell:0', name: 'shell', arguments: '{"command":"date"}' },
+        { type: 'tool_result', id: 'shell:0', output: 'Mon Jan 01 00:00:00 UTC 2024' },
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'thanks' }] },
+      ],
+      tools: [],
+    }),
   );
 
   expect(captured.length).toBe(1);
@@ -551,25 +488,14 @@ it('stray top-level index from replayed tool-call providerData is stripped from 
 
   await runUnderTrace(() =>
     collectCompletion(model, {
-      ...baseRequest,
       input: [
-        { role: 'user', type: 'message', content: 'hello' },
-        {
-          type: 'function_call',
-          callId: 'shell:0',
-          name: 'shell',
-          arguments: '{"command":"date"}',
-          providerData: { index: 0 },
-        },
-        {
-          type: 'function_call_result',
-          callId: 'shell:0',
-          output: 'Mon Jan 01 00:00:00 UTC 2024',
-        },
-        { role: 'user', type: 'message', content: 'thanks' },
-      ] as any,
-      modelSettings: {},
-    } as any),
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] },
+        { type: 'tool_call', id: 'shell:0', name: 'shell', arguments: '{"command":"date"}' },
+        { type: 'tool_result', id: 'shell:0', output: 'Mon Jan 01 00:00:00 UTC 2024' },
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'thanks' }] },
+      ],
+      tools: [],
+    }),
   );
 
   expect(captured.length).toBe(1);
@@ -585,10 +511,10 @@ it('llama.cpp maps high reasoning effort to chat template kwargs', async () => {
 
   await runUnderTrace(() =>
     collectCompletion(model, {
-      ...baseRequest,
-      input: [{ role: 'user', content: 'hello' }] as any,
-      modelSettings: { reasoning: { effort: 'high', summary: 'auto' } },
-    } as any),
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [],
+      reasoning: { effort: 'high', summary: 'auto' },
+    }),
   );
 
   expect(captured.length).toBe(1);
@@ -608,10 +534,10 @@ it('llama.cpp disables thinking for none reasoning effort', async () => {
 
   await runUnderTrace(() =>
     collectCompletion(model, {
-      ...baseRequest,
-      input: [{ role: 'user', content: 'hello' }] as any,
-      modelSettings: { reasoning: { effort: 'none', summary: 'auto' } },
-    } as any),
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [],
+      reasoning: { effort: 'none', summary: 'auto' },
+    }),
   );
 
   expect(captured.length).toBe(1);
@@ -631,10 +557,10 @@ it('llama.cpp maps xhigh to high template mode with xhigh budget', async () => {
 
   await runUnderTrace(() =>
     collectCompletion(model, {
-      ...baseRequest,
-      input: [{ role: 'user', content: 'hello' }] as any,
-      modelSettings: { reasoning: { effort: 'xhigh', summary: 'auto' } },
-    } as any),
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [],
+      reasoning: { effort: 'xhigh', summary: 'auto' },
+    }),
   );
 
   expect(captured.length).toBe(1);
@@ -653,10 +579,9 @@ it('llama.cpp leaves reasoning controls unset when effort is default', async () 
 
   await runUnderTrace(() =>
     collectCompletion(model, {
-      ...baseRequest,
-      input: [{ role: 'user', content: 'hello' }] as any,
-      modelSettings: {},
-    } as any),
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [],
+    }),
   );
 
   expect(captured.length).toBe(1);
@@ -671,10 +596,9 @@ it('outgoing request hits the configured /chat/completions endpoint with bearer 
 
   await runUnderTrace(() =>
     collectCompletion(model, {
-      ...baseRequest,
-      input: [{ role: 'user', content: 'hello' }] as any,
-      modelSettings: {},
-    } as any),
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [],
+    }),
   );
 
   expect(captured.length).toBe(1);
@@ -690,10 +614,9 @@ it('opencode.ai baseUrl adds x-opencode-session header', async () => {
 
   await runUnderTrace(() =>
     collectCompletion(model, {
-      ...baseRequest,
-      input: [{ role: 'user', content: 'hello' }] as any,
-      modelSettings: {},
-    } as any),
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [],
+    }),
   );
 
   expect(captured.length).toBe(1);
@@ -710,10 +633,9 @@ it('opencode session ID is stable across requests within a session', async () =>
   const makeRequest = () =>
     runUnderTrace(() =>
       collectCompletion(model, {
-        ...baseRequest,
-        input: [{ role: 'user', content: 'hello' }] as any,
-        modelSettings: {},
-      } as any),
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        tools: [],
+      }),
     );
 
   await makeRequest();
@@ -755,10 +677,9 @@ it('opencode session header prefers fallback session ID over traffic context ses
 
   await runUnderTrace(() =>
     collectCompletion(model, {
-      ...baseRequest,
-      input: [{ role: 'user', content: 'hello' }] as any,
-      modelSettings: {},
-    } as any),
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [],
+    }),
   );
 
   expect(captured.length).toBe(1);
@@ -774,10 +695,9 @@ it('non-opencode.ai baseUrl does not add opencode headers or body fields', async
 
   await runUnderTrace(() =>
     collectCompletion(model, {
-      ...baseRequest,
-      input: [{ role: 'user', content: 'hello' }] as any,
-      modelSettings: {},
-    } as any),
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [],
+    }),
   );
 
   expect(captured.length).toBe(1);
@@ -791,10 +711,9 @@ it('opencode.ai detection is case-insensitive', async () => {
 
   await runUnderTrace(() =>
     collectCompletion(model, {
-      ...baseRequest,
-      input: [{ role: 'user', content: 'hello' }] as any,
-      modelSettings: {},
-    } as any),
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [],
+    }),
   );
 
   expect(captured.length).toBe(1);

@@ -2,6 +2,7 @@ import { afterEach, expect, it } from 'vitest';
 import OpenAI from 'openai';
 import { WebSocket as NodeWebSocket } from 'ws';
 import { CodexResponsesWSModel } from '../source/providers/codex-responses-model.js';
+import { CodexProvider } from '../source/providers/codex.provider.js';
 import { RetryingModel } from '../source/providers/retrying-model.js';
 import { startFakeCodexServer, type FakeCodexServer } from './fake-codex-server-lib.js';
 
@@ -48,6 +49,81 @@ function request(): any {
     handoffs: [],
   };
 }
+
+it('writes the streamed-turn request contract to the real fake-Codex WebSocket wire', async () => {
+  server = await startFakeCodexServer({ scenario: 'success' });
+  globalThis.WebSocket = NodeWebSocket as unknown as typeof WebSocket;
+  const client = new OpenAI({ apiKey: 'fake-token', baseURL: server.baseUrl, timeout: 2_000 });
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'fake-token',
+    getAccountId: () => 'fake-account',
+    getInstallationId: () => undefined,
+  };
+  const provider = new CodexProvider(client, tokenManager as any, {}, undefined, 'websocket', 0, {
+    firstFrameMs: 500,
+    interFrameMs: 500,
+  });
+  const controller = new AbortController();
+  const model = provider.getStreamedModel('gpt-5.3-codex');
+
+  for await (const _event of model.stream({
+    instructions: 'PROJECT_CONTEXT_SENTINEL',
+    previousResponseId: 'resp_before',
+    input: [
+      {
+        type: 'message',
+        role: 'user',
+        content: [
+          { type: 'text', text: 'hello' },
+          { type: 'image', image: 'https://example.test/image.png', detail: 'high' },
+        ],
+      },
+      { type: 'tool_call', id: 'call_in', name: 'lookup', arguments: '{}' },
+      { type: 'tool_result', id: 'call_in', output: [{ type: 'text', text: 'result' }] },
+    ],
+    tools: [{ name: 'lookup', parameters: { type: 'object' }, strict: true }],
+    toolChoice: { name: 'lookup' },
+    temperature: 0.2,
+    topP: 0.8,
+    frequencyPenalty: 0.3,
+    presencePenalty: 0.4,
+    maxTokens: 123,
+    reasoning: { effort: 'high', summary: 'concise' },
+    providerOptions: { generate: false, custom_codex_option: true },
+    signal: controller.signal,
+  })) {
+    // Consume the complete turn.
+  }
+
+  expect(server.receivedRequests).toHaveLength(1);
+  expect(server.receivedRequests[0]).toMatchObject({
+    type: 'response.create',
+    instructions: 'PROJECT_CONTEXT_SENTINEL',
+    previous_response_id: 'resp_before',
+    tool_choice: { type: 'function', name: 'lookup' },
+    top_p: 0.8,
+    frequency_penalty: 0.3,
+    presence_penalty: 0.4,
+    max_output_tokens: 123,
+    reasoning: { effort: 'high', summary: 'concise' },
+    generate: false,
+    custom_codex_option: true,
+    tools: [{ type: 'function', name: 'lookup', parameters: { type: 'object' }, strict: true }],
+    input: [
+      {
+        type: 'message',
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'hello' },
+          { type: 'input_image', image_url: 'https://example.test/image.png', detail: 'high' },
+        ],
+      },
+      { type: 'function_call', call_id: 'call_in', name: 'lookup', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'call_in', output: [{ type: 'input_text', text: 'result' }] },
+    ],
+  });
+  expect(server.receivedRequests[0]?.temperature).toBeUndefined();
+});
 
 it('performs history warmup without generating the user turn twice', async () => {
   server = await startFakeCodexServer({ scenario: 'success' });

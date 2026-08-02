@@ -389,6 +389,59 @@ it.sequential(
   },
 );
 
+it('Codex HTTP writes every supported request setting and the abort signal to the Responses boundary', async () => {
+  let capturedBody: any;
+  let capturedOptions: any;
+  const client = {
+    responses: {
+      create: async (body: any, options: any) => {
+        capturedBody = body;
+        capturedOptions = options;
+        return makeStream([{ type: 'response.completed', response: { id: 'resp_settings', output: [], usage: {} } }]);
+      },
+    },
+  };
+  const controller = new AbortController();
+  const model = new CodexResponsesModel(client as any, 'gpt-5.3-codex');
+  await collect(
+    model.getStreamedResponse({
+      systemInstructions: 'PROJECT_CONTEXT_SENTINEL',
+      previousResponseId: 'resp_before',
+      input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }],
+      tools: [{ type: 'function', name: 'lookup', parameters: { type: 'object' } }],
+      signal: controller.signal,
+      modelSettings: {
+        toolChoice: { name: 'lookup' },
+        temperature: 0.2,
+        topP: 0.8,
+        frequencyPenalty: 0.3,
+        presencePenalty: 0.4,
+        maxTokens: 123,
+        reasoning: { effort: 'high', summary: 'concise' },
+        providerData: { generate: false, custom_codex_option: true, extraHeaders: { 'x-test': 'yes' } },
+      },
+    }),
+  );
+
+  expect(capturedBody).toMatchObject({
+    model: 'gpt-5.3-codex',
+    stream: true,
+    instructions: 'PROJECT_CONTEXT_SENTINEL',
+    previous_response_id: 'resp_before',
+    tools: [{ type: 'function', name: 'lookup', parameters: { type: 'object' } }],
+    tool_choice: { type: 'function', name: 'lookup' },
+    top_p: 0.8,
+    frequency_penalty: 0.3,
+    presence_penalty: 0.4,
+    max_output_tokens: 123,
+    reasoning: { effort: 'high', summary: 'concise' },
+    generate: false,
+    custom_codex_option: true,
+  });
+  expect(capturedBody.temperature).toBeUndefined();
+  expect(capturedOptions).toEqual({ signal: controller.signal, headers: { 'x-test': 'yes' } });
+});
+
 it.sequential('CodexResponsesModel._buildResponsesCreateRequest strips temperature from requestData', () => {
   const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
   (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {

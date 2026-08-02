@@ -31,6 +31,27 @@ function textModel(text: string, responseId: string): StreamedModelTurn {
 }
 
 describe('ApplicationRunLoop', () => {
+  it('retains display deltas and provider items in distinct terminal event shapes', async () => {
+    const stream = new ApplicationRunLoop({
+      resolveModel: () => textModel('streamed answer', 'resp-delta'),
+    }).startStream(agent, 'prompt');
+
+    await collect(stream);
+
+    expect(stream.output).toEqual([
+      { type: 'text_delta', text: 'streamed answer' },
+      {
+        type: 'run_item_stream_event',
+        item: {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'streamed answer' }],
+        },
+      },
+    ]);
+    expect(stream.newItems).toEqual(stream.output);
+  });
+
   it('forwards the previous response id to the first turn and chains internal follow-up turns', async () => {
     const requests: Array<{ previousResponseId?: string | null; input: unknown }> = [];
     let calls = 0;

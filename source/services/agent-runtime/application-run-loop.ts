@@ -540,19 +540,19 @@ export class ApplicationRunLoop {
 }
 
 function outputPush(stream: AgentStream, queue: EventQueue, item: unknown): void {
-  const record = item && typeof item === 'object' ? (item as { type?: unknown; item?: unknown }) : undefined;
-  // Queue events deliberately wrap model items for UI consumers, but terminal
-  // snapshots must retain the canonical item so result building/persistence
-  // does not lose provider-native continuation metadata.
-  const canonical = record?.type === 'run_item_stream_event' && record.item !== undefined ? record.item : item;
-  stream.output.push(canonical);
-  if (stream.newItems !== stream.output) stream.newItems.push(canonical);
+  // Terminal snapshots retain the event envelope. Full-history finalization
+  // recognizes these as non-provider events and falls back to stream.history;
+  // flattening only run-item events mixes display deltas with provider items.
+  stream.output.push(item);
+  if (stream.newItems !== stream.output) stream.newItems.push(item);
   queue.push(item);
 }
 
 /** Stores a canonical item for persistence while preserving the streamed UI event shape. */
 function canonicalOutputPush(stream: AgentStream, queue: EventQueue, item: ProviderInputItem): void {
-  outputPush(stream, queue, { type: 'run_item_stream_event', item });
+  stream.output.push(item);
+  if (stream.newItems !== stream.output) stream.newItems.push(item);
+  queue.push({ type: 'run_item_stream_event', item });
 }
 
 function finish(stream: AgentStream, state: RunState, queue: EventQueue): unknown {

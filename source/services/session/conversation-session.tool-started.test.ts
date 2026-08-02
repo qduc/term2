@@ -2,6 +2,7 @@ import { it, expect } from 'vitest';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { LogEvent } from '../logging/conversation-log-events.js';
 import { createConversationSession } from '../../test-helpers/conversation-session-with-adapter.js';
+import { createAgentStream } from '../agent-stream.js';
 
 const createMockLogger = () => {
   const events: Array<{
@@ -55,6 +56,7 @@ class MockStream {
     this.newItems = [];
     this.history = [];
     this.finalOutput = '';
+    createAgentStream(this as never);
   }
 
   async *[Symbol.asyncIterator]() {
@@ -67,7 +69,7 @@ class MockStream {
 it('run() emits tool_started with parsed arguments when function_call arguments are JSON string', async () => {
   const stream = new MockStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',
@@ -109,7 +111,7 @@ it('run() emits tool_started with parsed arguments when function_call arguments 
 it('run() emits one diagnostic packet when tool arguments contain malformed JSON', async () => {
   const stream = new MockStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',
@@ -120,7 +122,7 @@ it('run() emits one diagnostic packet when tool arguments contain malformed JSON
       },
     },
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',
@@ -172,7 +174,7 @@ it('approval continuation does not persist duplicate tool_started when SDK repla
   const interruption = { name: 'shell', callId, arguments: args };
   const initialStream = new MockStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',
@@ -188,7 +190,7 @@ it('approval continuation does not persist duplicate tool_started when SDK repla
 
   const continuationStream = new MockStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',
@@ -236,7 +238,7 @@ it('approval continuation does not persist duplicate tool_started when SDK repla
 it('run() emits one tool_started for duplicate function_call events with the same callId', async () => {
   const stream = new MockStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',
@@ -247,7 +249,7 @@ it('run() emits one tool_started for duplicate function_call events with the sam
       },
     },
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',

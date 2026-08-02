@@ -19,8 +19,8 @@ import type {
 
 it('run() streams ConversationEvents (text_delta → final) in order', async () => {
   const events = [
-    { type: 'response.output_text.delta', delta: 'Hello' },
-    { type: 'response.output_text.delta', delta: ' world' },
+    { type: 'text_delta', text: 'Hello' },
+    { type: 'text_delta', text: ' world' },
   ];
 
   const stream = new MockStream(events);
@@ -117,12 +117,12 @@ it('run() retries streamed recoverable errors without committing failed stream h
     }
 
     async *[Symbol.asyncIterator]() {
-      yield { type: 'response.output_text.delta', delta: 'partial' };
+      yield { type: 'text_delta', text: 'partial' };
       throw new ModelBehaviorError('Tool fake_tool not found in agent Terminal Assistant.');
     }
   }
 
-  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
+  const successStream = new MockStream([{ type: 'text_delta', text: 'Recovered' }]);
   successStream.finalOutput = 'Recovered';
   successStream.history = [
     { role: 'user', type: 'message', content: 'retry me' },
@@ -200,7 +200,7 @@ it('run() exports completed tool pairs from a stream that later fails', async ()
 
     async *[Symbol.asyncIterator]() {
       yield {
-        type: 'run_item_stream_event',
+        type: 'item',
         item: {
           rawItem: {
             type: 'function_call',
@@ -212,7 +212,7 @@ it('run() exports completed tool pairs from a stream that later fails', async ()
         },
       };
       yield {
-        type: 'run_item_stream_event',
+        type: 'item',
         item: {
           rawItem: {
             type: 'function_call_result',
@@ -224,7 +224,7 @@ it('run() exports completed tool pairs from a stream that later fails', async ()
         },
       };
       yield {
-        type: 'run_item_stream_event',
+        type: 'item',
         item: {
           rawItem: {
             type: 'function_call',
@@ -283,7 +283,7 @@ it('run() emits tool_recovery before error when a streamed turn fails after tool
 
     async *[Symbol.asyncIterator]() {
       yield {
-        type: 'run_item_stream_event',
+        type: 'item',
         item: {
           rawItem: {
             type: 'function_call',
@@ -295,7 +295,7 @@ it('run() emits tool_recovery before error when a streamed turn fails after tool
         },
       };
       yield {
-        type: 'run_item_stream_event',
+        type: 'item',
         item: {
           rawItem: {
             type: 'function_call_result',
@@ -307,7 +307,7 @@ it('run() emits tool_recovery before error when a streamed turn fails after tool
         },
       };
       yield {
-        type: 'run_item_stream_event',
+        type: 'item',
         item: {
           rawItem: {
             type: 'function_call',
@@ -421,7 +421,7 @@ it('importState() reconciles completed ledger pairs into canonical history', () 
 });
 
 it('run() allows a follow-up after a long non-chaining run expands full history', async () => {
-  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'first' }]);
+  const firstStream = new MockStream([{ type: 'text_delta', text: 'first' }]);
   firstStream.finalOutput = 'first';
   firstStream.history = Array.from({ length: 212 }, (_, index) => ({
     role: index % 2 === 0 ? 'user' : 'assistant',
@@ -429,7 +429,7 @@ it('run() allows a follow-up after a long non-chaining run expands full history'
     content: `history-${index}`,
     ...(index % 2 === 1 ? { status: 'completed' } : {}),
   }));
-  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'second' }]);
+  const secondStream = new MockStream([{ type: 'text_delta', text: 'second' }]);
   secondStream.finalOutput = 'second';
 
   const calls: unknown[] = [];
@@ -472,7 +472,7 @@ it('run() allows a follow-up after a long non-chaining run expands full history'
 });
 
 it('sendMessage() allows a follow-up after a long non-chaining run expands full history', async () => {
-  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'ok' }]);
+  const firstStream = new MockStream([{ type: 'text_delta', text: 'ok' }]);
   firstStream.finalOutput = 'ok';
   firstStream.history = Array.from({ length: 212 }, (_, index) => ({
     role: index % 2 === 0 ? 'user' : 'assistant',
@@ -480,7 +480,7 @@ it('sendMessage() allows a follow-up after a long non-chaining run expands full 
     content: `history-${index}`,
     ...(index % 2 === 1 ? { status: 'completed' } : {}),
   }));
-  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'next' }]);
+  const secondStream = new MockStream([{ type: 'text_delta', text: 'next' }]);
   secondStream.finalOutput = 'next';
 
   const calls: unknown[] = [];
@@ -537,7 +537,7 @@ it('continue() streams events after approval decision', async () => {
     },
   };
 
-  const continuationStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Approved run' }]);
+  const continuationStream = new MockStream([{ type: 'text_delta', text: 'Approved run' }]);
   continuationStream.finalOutput = 'Approved run';
 
   const mockClient = createMockAgentClient({
@@ -592,7 +592,7 @@ it('run() retries malformed tool-call interruption before surfacing approval', a
 
   malformedStream.state = { approve() {}, reject() {} };
 
-  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
+  const successStream = new MockStream([{ type: 'text_delta', text: 'Recovered' }]);
   successStream.finalOutput = 'Recovered';
   successStream.lastResponseId = 'resp-recovered';
 

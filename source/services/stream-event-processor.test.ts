@@ -6,21 +6,20 @@ import {
   type StreamProcessorOptions,
   type StreamProcessorDeps,
 } from './stream-event-processor.js';
-import { adaptAgentStream, type AgentStream } from './agent-stream.js';
+import { createAgentStream, isAgentStream, type AgentStream } from './agent-stream.js';
 import { ApplicationRunLoop } from './agent-runtime/application-run-loop.js';
 import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 
 const logger = new LoggingService({ disableLogging: true });
 
-const makeStream = (events: unknown[], extras: any = {}): AgentStream => {
-  return {
+const makeStream = (events: unknown[], extras: any = {}): AgentStream =>
+  createAgentStream({
     [Symbol.asyncIterator]: async function* () {
       for (const e of events) yield e;
     },
     completed: Promise.resolve(extras.completed ?? null),
     ...extras,
-  } as any;
-};
+  });
 
 const baseOpts = (): StreamProcessorOptions => ({
   toolCallArgumentsById: new Map(),
@@ -30,10 +29,23 @@ const baseOpts = (): StreamProcessorOptions => ({
 
 const baseDeps = (): StreamProcessorDeps => ({ logger, sessionId: 'test-session' });
 
+it('rejects an unbranded compatible stream at the application boundary', async () => {
+  const stream = {
+    [Symbol.asyncIterator]: async function* () {
+      yield { type: 'text_delta', text: 'untrusted' };
+    },
+    completed: Promise.resolve(null),
+  } as unknown as AgentStream;
+
+  await expect(processStreamEvents(stream, createStreamAccumulator(), baseOpts(), baseDeps()).next()).rejects.toThrow(
+    'Expected a branded AgentStream',
+  );
+});
+
 it('emits text_delta events with accumulated fullText', async () => {
   const stream = makeStream([
-    { type: 'raw_model_stream_event', data: { type: 'output_text_delta', delta: 'Hello' } },
-    { type: 'raw_model_stream_event', data: { type: 'output_text_delta', delta: ' world' } },
+    { type: 'text_delta', text: 'Hello' },
+    { type: 'text_delta', text: ' world' },
   ]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
@@ -52,10 +64,10 @@ it('emits text_delta events with accumulated fullText', async () => {
 
 it('preserves newline between code fence language and first code line across text deltas', async () => {
   const stream = makeStream([
-    { type: 'raw_model_stream_event', data: { type: 'output_text_delta', delta: '```typescript' } },
-    { type: 'raw_model_stream_event', data: { type: 'output_text_delta', delta: '\n' } },
-    { type: 'raw_model_stream_event', data: { type: 'output_text_delta', delta: 'if (enabled) {\n' } },
-    { type: 'raw_model_stream_event', data: { type: 'output_text_delta', delta: '  run();\n}\n```' } },
+    { type: 'text_delta', text: '```typescript' },
+    { type: 'text_delta', text: '\n' },
+    { type: 'text_delta', text: 'if (enabled) {\n' },
+    { type: 'text_delta', text: '  run();\n}\n```' },
   ]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
@@ -69,8 +81,8 @@ it('preserves newline between code fence language and first code line across tex
 
 it('extracts text once from nested and direct model envelopes', async () => {
   const stream = makeStream([
-    { type: 'raw_model_stream_event', data: { type: 'model', event: { type: 'output_text_delta', delta: 'nested' } } },
-    { type: 'model', event: { type: 'output_text_delta', delta: ' direct' } },
+    { type: 'text_delta', text: 'nested' },
+    { type: 'text_delta', text: ' direct' },
   ]);
   const events: any[] = [];
   for await (const event of processStreamEvents(stream, createStreamAccumulator(), baseOpts(), baseDeps())) {
@@ -159,8 +171,8 @@ it('preserves provider reasoning and completed tool-call progress through Applic
 
 it('emits reasoning_delta events with accumulated fullText', async () => {
   const stream = makeStream([
-    { data: { type: 'model', event: { choices: [{ delta: { reasoning_content: 'think' } }] } } },
-    { data: { type: 'model', event: { choices: [{ delta: { reasoning_content: 'ing' } }] } } },
+    { type: 'reasoning_delta', text: 'think' },
+    { type: 'reasoning_delta', text: 'ing' },
   ]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
@@ -174,10 +186,10 @@ it('emits reasoning_delta events with accumulated fullText', async () => {
   expect(reasoningEvents[1].fullText).toBe('thinking');
 });
 
-it('emits tool_started for function_call run_item_stream_event', async () => {
+it('emits tool_started for a native function_call item', async () => {
   const stream = makeStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',
@@ -235,7 +247,7 @@ it('interprets wrapped, direct, and canonical tool calls identically while prese
   const events: any[] = [];
 
   for await (const event of processStreamEvents(
-    makeStream(items.map((item) => ({ type: 'run_item_stream_event', item }))),
+    makeStream(items.map((item) => ({ type: 'item', item }))),
     createStreamAccumulator(),
     opts,
     baseDeps(),
@@ -281,7 +293,7 @@ it('dispatches normalized tool results while preserving each original result ite
   };
 
   for await (const _ of processStreamEvents(
-    makeStream(items.map((item) => ({ type: 'run_item_stream_event', item }))),
+    makeStream(items.map((item) => ({ type: 'item', item }))),
     createStreamAccumulator(),
     opts,
     baseDeps(),
@@ -299,7 +311,7 @@ it('does not invent a tool_started identity when a provider function call has no
   const events: any[] = [];
 
   for await (const event of processStreamEvents(
-    makeStream([{ type: 'run_item_stream_event', item }]),
+    makeStream([{ type: 'item', item }]),
     createStreamAccumulator(),
     { ...baseOpts(), onFunctionCallItem: (seen) => seenCalls.push(seen) },
     baseDeps(),
@@ -313,7 +325,7 @@ it('does not invent a tool_started identity when a provider function call has no
 
 it('emits one tool_started for duplicate function_call events with the same callId', async () => {
   const functionCall = {
-    type: 'run_item_stream_event',
+    type: 'item',
     item: {
       rawItem: {
         type: 'function_call',
@@ -341,7 +353,7 @@ it('emits one tool_started for duplicate function_call events with the same call
 it('emits tool_started even when the callId was already emitted by approval handling', async () => {
   const stream = makeStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',
@@ -366,7 +378,7 @@ it('emits tool_started even when the callId was already emitted by approval hand
 it('invalid JSON arguments are deduped via emittedInvalidToolCallPackets', async () => {
   const events1 = [
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',
@@ -430,14 +442,7 @@ it('preserveExistingToolArgs=true keeps the args map intact', async () => {
 
 it('emits usage_update when stream event includes usage', async () => {
   const stream = makeStream([
-    {
-      data: {
-        type: 'response.completed',
-        response: {
-          usage: { input_tokens: 10, output_tokens: 20 },
-        },
-      },
-    },
+    { type: 'usage_update', usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } },
   ]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
@@ -449,13 +454,11 @@ it('emits usage_update when stream event includes usage', async () => {
   expect(acc.latestUsage).toBeTruthy();
 });
 
-it('uses explicit adapted run usage before legacy runtime state usage', async () => {
-  const source = makeStream([], {
+it('uses explicit application run usage before completion usage', async () => {
+  const stream = makeStream([], {
     runUsage: { requests: 2, inputTokens: 31, outputTokens: 9, totalTokens: 40 },
-    state: { usage: { requests: 2, inputTokens: 11, outputTokens: 7, totalTokens: 18 } },
     completed: Promise.resolve({ usage: { input_tokens: 3, output_tokens: 2 } }),
   });
-  const stream = adaptAgentStream(source);
   const acc = createStreamAccumulator();
 
   for await (const _ of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
@@ -508,6 +511,7 @@ it('keeps authoritative application-loop totals, including cache writes, through
     } as any,
     'measure',
   );
+  expect(isAgentStream(stream)).toBe(true);
   const acc = createStreamAccumulator();
   for await (const _ of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
     void _;
@@ -544,17 +548,12 @@ it('end-of-stream usage preserves cache counters from streaming events when comp
   const stream = makeStream(
     [
       {
-        type: 'raw_model_stream_event',
-        data: {
-          type: 'model',
-          event: {
-            usage: {
-              prompt_tokens: 100,
-              completion_tokens: 20,
-              total_tokens: 120,
-              prompt_tokens_details: { cached_tokens: 60 },
-            },
-          },
+        type: 'usage_update',
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 20,
+          total_tokens: 120,
+          cache_read_tokens: 60,
         },
       },
     ],
@@ -592,21 +591,16 @@ it('throws AbortError if stream is cancelled', async () => {
 });
 
 it('extracts codex rate limits from nested or flat structures in raw events', async () => {
-  const nestedEvent = {
-    type: 'codex.rate_limits',
-    plan_type: 'plus',
-    rate_limits: {
-      allowed: true,
-      limit_reached: false,
-      primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 9697, reset_at: 1779703037 },
-      secondary: { used_percent: 14, window_minutes: 10080, reset_after_seconds: 503937, reset_at: 1780197277 },
-    },
+  const rateLimits = {
+    allowed: true,
+    limit_reached: false,
+    primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 9697, reset_at: 1779703037 },
+    secondary: { used_percent: 14, window_minutes: 10080, reset_after_seconds: 503937, reset_at: 1780197277 },
   };
 
   const stream = makeStream([
-    nestedEvent,
-    // ApplicationRunLoop emits provider model events in this direct shape.
-    { type: 'model', event: nestedEvent },
+    { type: 'codex_rate_limits', rateLimits },
+    { type: 'codex_rate_limits', rateLimits },
   ]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
@@ -625,41 +619,8 @@ it('extracts codex rate limits from nested or flat structures in raw events', as
 
 it('emits tool_call_streaming_delta for Responses API argument deltas', async () => {
   const stream = makeStream([
-    // Model starts a function_call
-    {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.output_item.added',
-          output_index: 0,
-          output_item: { type: 'function_call', name: 'shell', id: 'call-1' },
-        },
-      },
-    },
-    // Arguments stream in chunks
-    {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.function_call_arguments.delta',
-          output_index: 0,
-          delta: '{"command',
-        },
-      },
-    },
-    {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.function_call_arguments.delta',
-          output_index: 0,
-          delta: '":"ls"}',
-        },
-      },
-    },
+    { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 9 },
+    { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 16 },
   ]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
@@ -679,39 +640,8 @@ it('emits tool_call_streaming_delta for Responses API argument deltas', async ()
 
 it('emits tool_call_streaming_delta for custom tool input deltas', async () => {
   const stream = makeStream([
-    {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.output_item.added',
-          output_index: 0,
-          output_item: { type: 'function_call', name: 'custom_tool', id: 'call-1' },
-        },
-      },
-    },
-    {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.custom_tool_call_input.delta',
-          output_index: 0,
-          delta: '{"arg',
-        },
-      },
-    },
-    {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.custom_tool_call_input.delta',
-          output_index: 0,
-          delta: '":1}',
-        },
-      },
-    },
+    { type: 'tool_call_streaming_delta', toolName: 'custom_tool', argumentCharCount: 5 },
+    { type: 'tool_call_streaming_delta', toolName: 'custom_tool', argumentCharCount: 9 },
   ]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
@@ -727,30 +657,7 @@ it('emits tool_call_streaming_delta for custom tool input deltas', async () => {
 });
 
 it('emits tool_call_streaming_delta for MCP tool call argument deltas', async () => {
-  const stream = makeStream([
-    {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.output_item.added',
-          output_index: 0,
-          output_item: { type: 'function_call', name: 'mcp_tool', id: 'call-1' },
-        },
-      },
-    },
-    {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.mcp_call_arguments.delta',
-          output_index: 0,
-          delta: '{"param',
-        },
-      },
-    },
-  ]);
+  const stream = makeStream([{ type: 'tool_call_streaming_delta', toolName: 'mcp_tool', argumentCharCount: 7 }]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
   for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
@@ -764,24 +671,7 @@ it('emits tool_call_streaming_delta for MCP tool call argument deltas', async ()
 });
 
 it('emits tool_call_streaming_delta for legacy response.output_item.delta fallback', async () => {
-  const stream = makeStream([
-    {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'response.output_item.added',
-        output_index: 0,
-        output_item: { type: 'function_call', name: 'shell', id: 'call-1' },
-      },
-    },
-    {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'response.output_item.delta',
-        output_index: 0,
-        delta: { arguments: '{"command' },
-      },
-    },
-  ]);
+  const stream = makeStream([{ type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 9 }]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
   for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
@@ -796,50 +686,8 @@ it('emits tool_call_streaming_delta for legacy response.output_item.delta fallba
 
 it('emits tool_call_streaming_delta for Chat Completions API tool_calls deltas', async () => {
   const stream = makeStream([
-    // First chunk: tool call starts with name
-    {
-      data: {
-        type: 'chunk',
-        event: {
-          choices: [
-            {
-              delta: {
-                tool_calls: [{ index: 0, id: 'call-1', function: { name: 'shell', arguments: '' } }],
-              },
-            },
-          ],
-        },
-      },
-    },
-    // Argument chunks
-    {
-      data: {
-        type: 'chunk',
-        event: {
-          choices: [
-            {
-              delta: {
-                tool_calls: [{ index: 0, function: { arguments: '{"cmd' } }],
-              },
-            },
-          ],
-        },
-      },
-    },
-    {
-      data: {
-        type: 'chunk',
-        event: {
-          choices: [
-            {
-              delta: {
-                tool_calls: [{ index: 0, function: { arguments: '":"pwd"}' } }],
-              },
-            },
-          ],
-        },
-      },
-    },
+    { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 5 },
+    { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 13 },
   ]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
@@ -858,36 +706,9 @@ it('emits tool_call_streaming_delta for Chat Completions API tool_calls deltas',
 
 it('tool_call_streaming_delta accumulates argument char count across deltas', async () => {
   const stream = makeStream([
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.function_call_arguments.delta',
-          output_index: 0,
-          delta: 'aaa',
-        },
-      },
-    },
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.function_call_arguments.delta',
-          output_index: 0,
-          delta: 'bbb',
-        },
-      },
-    },
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.function_call_arguments.delta',
-          output_index: 0,
-          delta: 'ccc',
-        },
-      },
-    },
+    { type: 'tool_call_streaming_delta', argumentCharCount: 3 },
+    { type: 'tool_call_streaming_delta', argumentCharCount: 6 },
+    { type: 'tool_call_streaming_delta', argumentCharCount: 9 },
   ]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
@@ -903,28 +724,7 @@ it('tool_call_streaming_delta accumulates argument char count across deltas', as
 });
 
 it('tool_call_streaming_delta includes tool name from output_item.added when available', async () => {
-  const stream = makeStream([
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.output_item.added',
-          output_index: 0,
-          output_item: { type: 'function_call', name: 'glob', id: 'call-1' },
-        },
-      },
-    },
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.function_call_arguments.delta',
-          output_index: 0,
-          delta: '{"pattern',
-        },
-      },
-    },
-  ]);
+  const stream = makeStream([{ type: 'tool_call_streaming_delta', toolName: 'glob', argumentCharCount: 9 }]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
   for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
@@ -938,18 +738,7 @@ it('tool_call_streaming_delta includes tool name from output_item.added when ava
 });
 
 it('tool_call_streaming_delta omits tool name when no output_item.added was seen', async () => {
-  const stream = makeStream([
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.function_call_arguments.delta',
-          output_index: 0,
-          delta: '{"x":1}',
-        },
-      },
-    },
-  ]);
+  const stream = makeStream([{ type: 'tool_call_streaming_delta', argumentCharCount: 7 }]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
   for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
@@ -964,61 +753,9 @@ it('tool_call_streaming_delta omits tool name when no output_item.added was seen
 
 it('tool_call_streaming_delta tracks argument char count independently per tool call index', async () => {
   const stream = makeStream([
-    // Tool call 0 starts
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.output_item.added',
-          output_index: 0,
-          output_item: { type: 'function_call', name: 'shell', id: 'call-1' },
-        },
-      },
-    },
-    // Tool call 1 starts
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.output_item.added',
-          output_index: 1,
-          output_item: { type: 'function_call', name: 'glob', id: 'call-2' },
-        },
-      },
-    },
-    // Arguments for tool call 0
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.function_call_arguments.delta',
-          output_index: 0,
-          delta: '{"cmd":"ls"}',
-        },
-      },
-    },
-    // Arguments for tool call 1
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.function_call_arguments.delta',
-          output_index: 1,
-          delta: '{"pattern":"*.ts"}',
-        },
-      },
-    },
-    // More arguments for tool call 0
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.function_call_arguments.delta',
-          output_index: 0,
-          delta: ',"detailed":true',
-        },
-      },
-    },
+    { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 12 },
+    { type: 'tool_call_streaming_delta', toolName: 'glob', argumentCharCount: 18 },
+    { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 28 },
   ]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
@@ -1038,39 +775,8 @@ it('tool_call_streaming_delta tracks argument char count independently per tool 
 
 it('emits tool_call_streaming_delta for AI SDK tool-input start and delta events', async () => {
   const stream = makeStream([
-    {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'model',
-        event: {
-          type: 'tool-input-start',
-          id: 'call-1',
-          toolName: 'shell',
-        },
-      },
-    },
-    {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'model',
-        event: {
-          type: 'tool-input-delta',
-          id: 'call-1',
-          delta: '{"command',
-        },
-      },
-    },
-    {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'model',
-        event: {
-          type: 'tool-input-delta',
-          id: 'call-1',
-          delta: '":"ls"}',
-        },
-      },
-    },
+    { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 9 },
+    { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 16 },
   ]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
@@ -1088,152 +794,13 @@ it('emits tool_call_streaming_delta for AI SDK tool-input start and delta events
 
 it('tool_call_streaming_delta resets argument char count when a new tool call starts on the same index/id', async () => {
   const stream = makeStream([
-    // Responses API - tool call 0 (shell)
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.output_item.added',
-          output_index: 0,
-          output_item: { type: 'function_call', name: 'shell', id: 'call-1' },
-        },
-      },
-    },
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.function_call_arguments.delta',
-          output_index: 0,
-          delta: '{"cmd":"ls"}',
-        },
-      },
-    },
-    // Responses API - tool call 0 again (grep)
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.output_item.added',
-          output_index: 0,
-          output_item: { type: 'function_call', name: 'grep', id: 'call-2' },
-        },
-      },
-    },
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.function_call_arguments.delta',
-          output_index: 0,
-          delta: '{"pattern":"foo"}',
-        },
-      },
-    },
-
-    // Chat Completions API - tool call 0 (shell)
-    {
-      data: {
-        type: 'chunk',
-        event: {
-          choices: [
-            {
-              delta: {
-                tool_calls: [{ index: 0, id: 'call-3', function: { name: 'shell', arguments: '' } }],
-              },
-            },
-          ],
-        },
-      },
-    },
-    {
-      data: {
-        type: 'chunk',
-        event: {
-          choices: [
-            {
-              delta: {
-                tool_calls: [{ index: 0, function: { arguments: '{"cmd"' } }],
-              },
-            },
-          ],
-        },
-      },
-    },
-    // Chat Completions API - tool call 0 again (grep)
-    {
-      data: {
-        type: 'chunk',
-        event: {
-          choices: [
-            {
-              delta: {
-                tool_calls: [{ index: 0, id: 'call-4', function: { name: 'grep', arguments: '' } }],
-              },
-            },
-          ],
-        },
-      },
-    },
-    {
-      data: {
-        type: 'chunk',
-        event: {
-          choices: [
-            {
-              delta: {
-                tool_calls: [{ index: 0, function: { arguments: '{"pat"' } }],
-              },
-            },
-          ],
-        },
-      },
-    },
-
-    // AI SDK - tool call 1 (shell)
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'tool-input-start',
-          id: 'call-5',
-          toolName: 'shell',
-        },
-      },
-    },
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'tool-input-delta',
-          id: 'call-5',
-          delta: '{"command',
-        },
-      },
-    },
-    // AI SDK - tool call 1 again (grep)
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'tool-input-start',
-          id: 'call-5',
-          toolName: 'grep',
-        },
-      },
-    },
-    {
-      data: {
-        type: 'model',
-        event: {
-          type: 'tool-input-delta',
-          id: 'call-5',
-          delta: '{"pattern',
-        },
-      },
-    },
+    { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 12 },
+    { type: 'tool_call_streaming_delta', toolName: 'grep', argumentCharCount: 17 },
+    { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 6 },
+    { type: 'tool_call_streaming_delta', toolName: 'grep', argumentCharCount: 6 },
+    { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 9 },
+    { type: 'tool_call_streaming_delta', toolName: 'grep', argumentCharCount: 9 },
   ]);
-
   const acc = createStreamAccumulator();
   const events: any[] = [];
   for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {

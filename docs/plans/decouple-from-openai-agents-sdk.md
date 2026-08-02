@@ -1,9 +1,9 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Runtime package removal complete; semantic compatibility retirement remains active. The `@openai/agents*` packages are gone, compatibility runners and the OpenAI streamed-model adapter are deleted, and session/UI code consumes one application-owned event protocol. Remaining provider transport and legacy-contract work is recorded below.
+**Status:** Complete. The `@openai/agents*` packages, compatibility runners/adapters, legacy model contract, and legacy ingress adapter are retired. Providers, the application run loop, and session/UI code use application-owned typed protocols.
 **Last updated:** 2026-08-02
 
-The application-owned run loop, continuation contracts, direct AI-SDK providers, direct OpenAI Responses transports, and canonical session stream are landed. Legacy SDK-shaped stream envelopes are isolated in one ingress adapter and no longer parsed by session/UI modules. The remaining work is Codex and OpenAI-compatible transport conversion, legacy model-contract retirement, ingress-adapter retirement, and terminology cleanup.
+Final integration branch head follows this plan-record update. Codex and OpenAI-compatible transports now use typed streamed turns; native branded `AgentStream` is the sole runtime ingress; legacy terminology and source boundaries were swept.
 
 ### Final verification — 2026-08-01
 
@@ -20,8 +20,9 @@ The application-owned run loop, continuation contracts, direct AI-SDK providers,
 
 ### Current state
 
-Runtime package removal and runner migration are complete. The active work is now only semantic
-compatibility retirement:
+Semantic compatibility retirement completed in the isolated integration worktree. This historical plan remains as the design and verification record; no implementation slice remains active.
+
+At the start of the final execution, the active work was:
 
 - the registry has one execution factory, `createStreamedModel`;
 - providers execute through `ApplicationRunLoop` and `StreamedModelTurn`;

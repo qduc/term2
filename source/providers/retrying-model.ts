@@ -1,4 +1,8 @@
-import type { Model, ModelRequest, ModelResponse, StreamEvent } from '../contracts/model.js';
+import type {
+  StreamedModelTurn,
+  StreamedModelTurnEvent,
+  StreamedModelTurnRequest,
+} from '../contracts/streamed-model-turn.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 import { isNetworkProtocolError } from '../services/retry/retry-error-classification.js';
 import {
@@ -14,11 +18,12 @@ type RetryingModelOptions = {
   onRetry?: () => void;
 };
 
-export class RetryingModel implements Model {
+/** Decorates one application-owned streamed turn with pre-event retries. */
+export class RetryingModel implements StreamedModelTurn {
   readonly #sleep: (delayMs: number) => Promise<void>;
   readonly #random: () => number;
 
-  constructor(private readonly model: Model, private readonly options: RetryingModelOptions) {
+  constructor(private readonly model: StreamedModelTurn, private readonly options: RetryingModelOptions) {
     this.#sleep =
       options.sleep ??
       ((delayMs) =>
@@ -28,7 +33,7 @@ export class RetryingModel implements Model {
     this.#random = options.random ?? Math.random;
   }
 
-  get wrappedModel(): Model {
+  get wrappedModel(): StreamedModelTurn {
     return this.model;
   }
 
@@ -37,15 +42,11 @@ export class RetryingModel implements Model {
     this.options.onRetry = callback;
   }
 
-  async getResponse(request: ModelRequest): Promise<ModelResponse> {
-    return this.#retry(() => this.model.getResponse(request));
-  }
-
-  async *getStreamedResponse(request: ModelRequest): AsyncIterable<StreamEvent> {
+  async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
     for (let attempt = 0; ; attempt++) {
       let committed = false;
       try {
-        for await (const event of this.model.getStreamedResponse(request)) {
+        for await (const event of this.model.stream(request)) {
           committed = true;
           yield event;
         }
@@ -61,21 +62,7 @@ export class RetryingModel implements Model {
   }
 
   async close(): Promise<void> {
-    await (this.model as any).close?.();
-  }
-
-  async #retry<T>(operation: () => Promise<T>): Promise<T> {
-    for (let attempt = 0; ; attempt++) {
-      try {
-        return await operation();
-      } catch (error) {
-        if (!this.#canRetry(error, attempt)) {
-          this.#logExhaustion(error, attempt);
-          throw error;
-        }
-        await this.#backoff(error, attempt + 1);
-      }
-    }
+    await (this.model as { close?: () => Promise<void> }).close?.();
   }
 
   #canRetry(error: unknown, attempt: number): boolean {
@@ -100,9 +87,7 @@ export class RetryingModel implements Model {
   }
 
   #logExhaustion(error: unknown, attempt: number): void {
-    if (!this.#isRetryable(error)) {
-      return;
-    }
+    if (!this.#isRetryable(error)) return;
     this.options.loggingService?.warn('Model transport retries exhausted', {
       eventType: 'retry.model_transport_exhausted',
       category: 'retry',

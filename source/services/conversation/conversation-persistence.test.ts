@@ -9,6 +9,7 @@ import type { LogEvent, StateSnapshot } from '../logging/conversation-log-events
 import { createConversationSession } from '../../test-helpers/conversation-session-with-adapter.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 import type { BotMessage, CommandMessage, ReasoningMessage } from '../../types/message.js';
+import { createAgentStream } from '../agent-stream.js';
 
 const createSessionContextService = () => ({
   runWithContext: <T>(_context: any, fn: () => T) => fn(),
@@ -57,6 +58,7 @@ class MockStream {
 
   constructor(events: unknown[] = []) {
     this.events = events;
+    createAgentStream(this as never);
   }
 
   get runUsage(): unknown {
@@ -947,12 +949,7 @@ it.sequential('session logging persists displayUsage separately from cumulative 
   });
 
   const initialStream = new MockStream([
-    {
-      type: 'response.done',
-      response: {
-        usage: { input_tokens: 100, output_tokens: 10 },
-      },
-    },
+    { type: 'usage_update', usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 } },
   ]);
   initialStream.state = {
     approve: () => {},
@@ -968,12 +965,7 @@ it.sequential('session logging persists displayUsage separately from cumulative 
   ];
 
   const continuationStream = new MockStream([
-    {
-      type: 'response.done',
-      response: {
-        usage: { input_tokens: 175, output_tokens: 18 },
-      },
-    },
+    { type: 'usage_update', usage: { prompt_tokens: 175, completion_tokens: 18, total_tokens: 193 } },
   ]);
   continuationStream.newItems = [
     {

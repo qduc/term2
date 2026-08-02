@@ -174,27 +174,16 @@ it('extractUsage preserves cache usage when merging normalized sources', () => {
   });
 });
 
-it('extractUsage finds usage in raw model stream event payload shape', () => {
+it('extractUsage finds usage in a nested provider payload shape', () => {
   const payload = {
     data: {
-      type: 'model',
-      event: {
-        id: '8d03b4e8-46ab-45f7-aed4-670157c3dd6d',
-        object: 'chat.completion.chunk',
-        created: 1778912418,
-        model: 'deepseek-v4-flash',
-        usage: {
-          prompt_tokens: 8,
-          completion_tokens: 3,
-          total_tokens: 11,
-        },
-      },
-      providerData: {
-        rawModelEventSource: 'openai-chat-completions',
+      usage: {
+        prompt_tokens: 8,
+        completion_tokens: 3,
+        total_tokens: 11,
       },
     },
     source: 'openai-chat-completions',
-    type: 'raw_model_stream_event',
   };
 
   expect(extractUsage(payload)).toEqual({

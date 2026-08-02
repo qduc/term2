@@ -8,7 +8,7 @@ import {
 } from './test-helpers/conversation-session-fixtures.js';
 import type { ClientCall } from './test-helpers/conversation-session-fixtures.js';
 it('undoLastUserTurn() returns { text, imageCount: 0 } after a completed run', async () => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Reply' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'Reply' }]);
   stream.finalOutput = 'Reply';
   stream.history = [
     { role: 'user', type: 'message', content: 'hello' },
@@ -58,7 +58,7 @@ it('undoLastUserTurn() returns null when no genuine user turn exists', async () 
 
 it('generation guard: gated run store write is skipped after undoLastUserTurn', async () => {
   // Turn 1: run to completion so the store has msg1's history.
-  const stream1 = new MockStream([{ type: 'response.output_text.delta', delta: 'Reply1' }]);
+  const stream1 = new MockStream([{ type: 'text_delta', text: 'Reply1' }]);
   stream1.finalOutput = 'Reply1';
   stream1.history = [
     { role: 'user', type: 'message', content: 'msg1' },
@@ -87,14 +87,14 @@ it('generation guard: gated run store write is skipped after undoLastUserTurn', 
     }
 
     async *[Symbol.asyncIterator]() {
-      yield { type: 'response.output_text.delta', delta: 'Reply2' };
+      yield { type: 'text_delta', text: 'Reply2' };
       await gate;
     }
   }
 
   // Turn 3: capture the input so we can assert the history array.
   let msg3Input: unknown;
-  const stream3 = new MockStream([{ type: 'response.output_text.delta', delta: 'Reply3' }]);
+  const stream3 = new MockStream([{ type: 'text_delta', text: 'Reply3' }]);
   stream3.finalOutput = 'Reply3';
   stream3.history = [
     { role: 'user', type: 'message', content: 'msg1' },
@@ -185,7 +185,7 @@ it('run() throws AbortError when the stream is cancelled/aborted', async () => {
 
 it('run() sends full history after undo on a chaining provider (Responses API)', async () => {
   // Simulate a chaining provider (OpenAI) with a two-turn conversation, then undo.
-  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'First reply' }]);
+  const firstStream = new MockStream([{ type: 'text_delta', text: 'First reply' }]);
   firstStream.finalOutput = 'First reply';
   firstStream.lastResponseId = 'resp-turn1';
   firstStream.history = [
@@ -198,7 +198,7 @@ it('run() sends full history after undo on a chaining provider (Responses API)',
     },
   ];
 
-  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Second reply' }]);
+  const secondStream = new MockStream([{ type: 'text_delta', text: 'Second reply' }]);
   secondStream.finalOutput = 'Second reply';
   secondStream.lastResponseId = 'resp-turn2';
   secondStream.history = [
@@ -218,7 +218,7 @@ it('run() sends full history after undo on a chaining provider (Responses API)',
     },
   ];
 
-  const afterUndoStream = new MockStream([{ type: 'response.output_text.delta', delta: 'After undo reply' }]);
+  const afterUndoStream = new MockStream([{ type: 'text_delta', text: 'After undo reply' }]);
   afterUndoStream.finalOutput = 'After undo reply';
   afterUndoStream.lastResponseId = 'resp-after-undo';
   afterUndoStream.history = [

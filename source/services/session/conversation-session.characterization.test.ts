@@ -112,7 +112,7 @@ it('sendMessage installs setSubagentEventSink with a function then clears it to 
 it('sendMessage dispatches events through conversationLogger before onEvent callback', async () => {
   const eventLog: any[] = [];
 
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Hello' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'Hello' }]);
   stream.finalOutput = 'Hello';
   stream.lastResponseId = 'resp-log-dispatch';
 
@@ -1038,7 +1038,7 @@ it('approval then rejection emits no tool_started event for the rejected tool', 
   initialStream.interruptions = [interruption];
   initialStream.state = approvalState;
 
-  const rejectedStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Rejected.' }]);
+  const rejectedStream = new MockStream([{ type: 'text_delta', text: 'Rejected.' }]);
   rejectedStream.finalOutput = 'Rejected.';
 
   const mockClient = createMockAgentClient({
@@ -1097,7 +1097,7 @@ it('multiple sequential interruptions preserve approval and tool-start ordering'
     stream.state = createApprovalState();
     return stream;
   });
-  const finalStream = new MockStream([{ type: 'response.output_text.delta', delta: 'All done.' }]);
+  const finalStream = new MockStream([{ type: 'text_delta', text: 'All done.' }]);
   finalStream.finalOutput = 'All done.';
   let continuationIndex = 0;
 
@@ -1155,7 +1155,7 @@ it('aborted approval is abandoned so the next user input starts a fresh turn', a
   initialStream.interruptions = [interruption];
   initialStream.state = createApprovalState();
 
-  const followUpStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Changed course.' }]);
+  const followUpStream = new MockStream([{ type: 'text_delta', text: 'Changed course.' }]);
   followUpStream.finalOutput = 'Changed course.';
 
   const startCalls: unknown[] = [];
@@ -1426,14 +1426,14 @@ it('characterization - reject then approve sequence through handleApprovalDecisi
   firstStream.interruptions = [firstTool];
   firstStream.state = approvalState;
 
-  const rejectionResponse = new MockStream([{ type: 'response.output_text.delta', delta: 'Rejected.' }]);
+  const rejectionResponse = new MockStream([{ type: 'text_delta', text: 'Rejected.' }]);
   rejectionResponse.finalOutput = 'Rejected.';
 
   const secondStream = new MockStream([]);
   secondStream.interruptions = [secondTool];
   secondStream.state = createApprovalState();
 
-  const approvalResponse = new MockStream([{ type: 'response.output_text.delta', delta: 'Approved.' }]);
+  const approvalResponse = new MockStream([{ type: 'text_delta', text: 'Approved.' }]);
   approvalResponse.finalOutput = 'Approved.';
 
   let startCallCount = 0;

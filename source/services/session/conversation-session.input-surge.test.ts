@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import { type ConversationTerminal } from '../../contracts/conversation.js';
 import { createConversationSession } from '../../test-helpers/conversation-session-with-adapter.js';
+import { createAgentStream } from '../agent-stream.js';
 
 type ApprovalRequiredResult = Extract<ConversationTerminal, { type: 'approval_required' }>;
 type ResponseResult = Extract<ConversationTerminal, { type: 'response' }>;
@@ -85,6 +86,7 @@ class MockStream {
     this.finalOutput = finalOutput;
     this.output = output;
     this.error = error;
+    createAgentStream(this as never);
   }
 
   async *[Symbol.asyncIterator](): AsyncIterable<unknown> {

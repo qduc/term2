@@ -855,7 +855,7 @@ const stringValue = (value: unknown): string | undefined => (typeof value === 's
 export function summarizeWebsocketResponse(response: unknown): ReceivedTrafficSummary {
   const record = asRecord(response) ?? {};
 
-  // Some callers pass a normalized ModelResponse that wraps provider-specific
+  // Some callers pass a normalized provider response that wraps provider-specific
   // data. Unwrap providerData while keeping the output items for extraction.
   const providerDataRecord = asRecord(record.providerData);
   const effectiveRecord = providerDataRecord ? { ...record, ...providerDataRecord } : record;

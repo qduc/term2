@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toCodexModelSettings, toCodexResponsesInput, toCodexToolResultOutput } from './codex-turn-converter.js';
+import { toCodexResponsesInput, toCodexToolResultOutput } from './codex-turn-converter.js';
 
 describe('Codex streamed-turn conversion', () => {
   it('converts each supported input item and rich tool result without string coercion', () => {
@@ -60,37 +60,6 @@ describe('Codex streamed-turn conversion', () => {
         ],
       },
     ]);
-  });
-
-  it('maps every request option into the Codex model-settings envelope', () => {
-    const signal = new AbortController().signal;
-    expect(
-      toCodexModelSettings({
-        input: [],
-        tools: [],
-        toolChoice: { name: 'lookup' },
-        temperature: 0.2,
-        topP: 0.8,
-        frequencyPenalty: 0.3,
-        presencePenalty: 0.4,
-        maxTokens: 123,
-        reasoning: { effort: 'high', summary: 'concise' },
-        codex: { promptCacheKey: 'session-123', include: ['reasoning.encrypted_content'] },
-        providerOptions: { generate: false, custom_codex_option: true },
-        signal,
-      }),
-    ).toEqual({
-      toolChoice: { name: 'lookup' },
-      temperature: 0.2,
-      topP: 0.8,
-      frequencyPenalty: 0.3,
-      presencePenalty: 0.4,
-      maxTokens: 123,
-      reasoning: { effort: 'high', summary: 'concise' },
-      prompt_cache_key: 'session-123',
-      include: ['reasoning.encrypted_content'],
-      providerData: { generate: false, custom_codex_option: true },
-    });
   });
 
   it('rejects foreign provider reasoning metadata instead of leaking it onto the Codex wire', () => {

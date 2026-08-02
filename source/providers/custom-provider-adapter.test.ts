@@ -17,6 +17,14 @@ const baseConfig = {
   apiKey: 'test-key',
 } satisfies CustomProviderConfig;
 
+async function collectCompletion(model: any, request: any): Promise<any> {
+  let completion: any;
+  for await (const event of model.stream(request)) {
+    if (event.type === 'completion') completion = event;
+  }
+  return completion;
+}
+
 function makeMockProviderTraffic(loggingService: any, sessionContextService?: any): any {
   return {
     recordRequestStart(input: any) {
@@ -110,7 +118,7 @@ it('createCustomProviderModelProvider uses native chat-completions OpenAIProvide
     fetch: async () => new Response('{}'),
   });
 
-  const model = await provider.getModel('model-a');
+  const model = await provider.getStreamedModel('model-a');
   expect(model instanceof OpenAIChatCompletionsModel).toBe(true);
 });
 
@@ -126,7 +134,7 @@ it('createCustomProviderModelProvider uses native responses OpenAIProvider for o
     },
   );
 
-  const model = await provider.getModel('model-a');
+  const model = await provider.getStreamedModel('model-a');
   expect(model instanceof OpenAIChatCompletionsModel).toBe(true);
 });
 
@@ -222,23 +230,27 @@ it('createCustomProviderModelProvider Google type gets logging fetch wrapper', a
       loggingService: dummyLoggingService as any,
       sessionContextService: dummySessionContextService as any,
       fetch: (async (_input: RequestInfo | URL, _init?: RequestInit) => {
-        return new Response(
-          JSON.stringify({
-            candidates: [
-              {
-                content: {
-                  parts: [{ text: 'Hello from mock Gemini!' }],
-                  role: 'model',
-                },
-                finishReason: 'STOP',
-              },
-            ],
-          }),
-          {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
+        const body = new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                `data: ${JSON.stringify({
+                  candidates: [
+                    {
+                      content: {
+                        parts: [{ text: 'Hello from mock Gemini!' }],
+                        role: 'model',
+                      },
+                      finishReason: 'STOP',
+                    },
+                  ],
+                })}\n\n`,
+              ),
+            );
+            controller.close();
           },
-        );
+        });
+        return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
       }) as typeof fetch,
     },
   );
@@ -247,7 +259,7 @@ it('createCustomProviderModelProvider Google type gets logging fetch wrapper', a
 
   const model = provider.getStreamedModel('gemini-test');
   await withTrace('test', () =>
-    model.getResponse({
+    collectCompletion(model, {
       tools: [],
       input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
     }),

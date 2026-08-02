@@ -1,61 +1,5 @@
 import { it, expect } from 'vitest';
-import { buildMessagesFromRequest, addCacheControlToLastTwoMessages } from './openai-compatible-messages.js';
-
-it('buildMessagesFromRequest() preserves user text and image content', () => {
-  const messages = buildMessagesFromRequest({
-    input: [
-      {
-        role: 'user',
-        type: 'message',
-        content: [
-          { type: 'input_text', text: 'Describe this' },
-          { type: 'input_image', image: 'data:image/png;base64,abc123', detail: 'auto' },
-        ],
-      },
-    ],
-  } as any);
-
-  expect(messages).toEqual([
-    {
-      role: 'user',
-      content: [
-        { type: 'text', text: 'Describe this' },
-        { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
-      ],
-    },
-  ]);
-});
-
-it('buildMessagesFromRequest() extracts text from assistant content blocks with type=text (Responses API shape)', () => {
-  const messages = buildMessagesFromRequest({
-    input: [
-      {
-        role: 'assistant',
-        type: 'message',
-        content: [{ type: 'text', text: 'Hi! How can I help?', annotations: [] }],
-      },
-    ],
-  } as any);
-
-  expect(messages).toEqual([{ role: 'assistant', content: 'Hi! How can I help?' }]);
-});
-
-it('buildMessagesFromRequest() concatenates mixed output_text and text content blocks', () => {
-  const messages = buildMessagesFromRequest({
-    input: [
-      {
-        role: 'assistant',
-        type: 'message',
-        content: [
-          { type: 'output_text', text: 'Part one.' },
-          { type: 'text', text: ' Part two.', annotations: [] },
-        ],
-      },
-    ],
-  } as any);
-
-  expect(messages).toEqual([{ role: 'assistant', content: 'Part one. Part two.' }]);
-});
+import { addCacheControlToLastTwoMessages } from './openai-compatible-messages.js';
 
 it('addCacheControlToLastTwoMessages() adds cache control to system, last user, and last tool messages', () => {
   const messages = [
@@ -138,26 +82,6 @@ it('addCacheControlToLastTwoMessages() skips messages with no text content block
   expect(messages[1].content).toEqual([{ type: 'text', text: 'hi', cache_control: { type: 'ephemeral' } }]);
 });
 
-it('buildMessagesFromRequest() omits provider-invalid assistant messages that only carry reasoning metadata', () => {
-  const messages = buildMessagesFromRequest({
-    input: [
-      { role: 'user', type: 'message', content: 'read package json' },
-      {
-        role: 'assistant',
-        type: 'message',
-        content: [],
-        reasoning_content: 'I should inspect the file.',
-      },
-      { role: 'user', type: 'message', content: 'retry after failed hallucinated tool call' },
-    ],
-  } as any);
-
-  expect(messages).toEqual([
-    { role: 'user', content: 'read package json' },
-    { role: 'user', content: 'retry after failed hallucinated tool call' },
-  ]);
-});
-
 it('addCacheControlToLastTwoMessages() filters by modelId correctly', () => {
   const testCases = [
     { modelId: 'anthropic/claude-3-5-sonnet', shouldCache: true },
@@ -182,23 +106,4 @@ it('addCacheControlToLastTwoMessages() filters by modelId correctly', () => {
       expect(messages[1].content).toEqual('world');
     }
   }
-});
-
-it('buildMessagesFromRequest() adds cache control for Qwen models', () => {
-  const messages = buildMessagesFromRequest(
-    {
-      input: [
-        { role: 'user', type: 'message', content: 'hello' },
-        {
-          role: 'assistant',
-          type: 'message',
-          content: [{ type: 'text', text: 'hi' }],
-        },
-      ],
-    } as any,
-    'qwen/qwen-2.5-coder',
-  );
-
-  expect(messages[0].content).toEqual([{ type: 'text', text: 'hello', cache_control: { type: 'ephemeral' } }]);
-  expect(messages[1].content).toBe('hi');
 });

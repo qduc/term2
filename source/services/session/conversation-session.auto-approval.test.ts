@@ -3,6 +3,7 @@ import { type ConversationEvent } from '../conversation/conversation-events.js';
 import { type ConversationTerminal } from '../../contracts/conversation.js';
 import { createConversationSession } from '../../test-helpers/conversation-session-with-adapter.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
+import { createAgentStream } from '../agent-stream.js';
 
 type ApprovalRequiredResult = Extract<ConversationTerminal, { type: 'approval_required' }>;
 type ResponseResult = Extract<ConversationTerminal, { type: 'response' }>;
@@ -42,6 +43,7 @@ class MockStream {
     this.newItems = [];
     this.history = [];
     this.finalOutput = '';
+    createAgentStream(this as never);
   }
 
   get runUsage(): unknown {
@@ -655,7 +657,7 @@ it('auto mode: approved continuation emits tool_started before streamed output a
   const initialStream = createInterruptedStream([
     createShellInterruption({ callId: 'call-auto-sequence', command: 'ls source' }),
   ]);
-  const finalStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Files listed.' }]);
+  const finalStream = new MockStream([{ type: 'text_delta', text: 'Files listed.' }]);
   finalStream.finalOutput = 'Files listed.';
 
   const { bundle } = createSessionHarness({

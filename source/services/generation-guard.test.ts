@@ -123,9 +123,9 @@ it('integration - undo during active stream work prevents mutation and aborts tu
 
   class GatedStream extends MockStream {
     async *[Symbol.asyncIterator]() {
-      yield { type: 'response.output_text.delta', delta: 'part 1' };
+      yield { type: 'text_delta', text: 'part 1' };
       await gate;
-      yield { type: 'response.output_text.delta', delta: 'part 2' };
+      yield { type: 'text_delta', text: 'part 2' };
     }
   }
 
@@ -207,9 +207,9 @@ it('integration - model change during active stream work prevents mutation and a
 
   class GatedStream extends MockStream {
     async *[Symbol.asyncIterator]() {
-      yield { type: 'response.output_text.delta', delta: 'part 1' };
+      yield { type: 'text_delta', text: 'part 1' };
       await gate;
-      yield { type: 'response.output_text.delta', delta: 'part 2' };
+      yield { type: 'text_delta', text: 'part 2' };
     }
   }
 
@@ -256,9 +256,9 @@ it('integration - import during active stream work prevents mutation and aborts 
 
   class GatedStream extends MockStream {
     async *[Symbol.asyncIterator]() {
-      yield { type: 'response.output_text.delta', delta: 'part 1' };
+      yield { type: 'text_delta', text: 'part 1' };
       await gate;
-      yield { type: 'response.output_text.delta', delta: 'part 2' };
+      yield { type: 'text_delta', text: 'part 2' };
     }
   }
 
@@ -308,9 +308,9 @@ it('integration - session clear/reset during active stream work prevents mutatio
 
   class GatedStream extends MockStream {
     async *[Symbol.asyncIterator]() {
-      yield { type: 'response.output_text.delta', delta: 'part 1' };
+      yield { type: 'text_delta', text: 'part 1' };
       await gate;
-      yield { type: 'response.output_text.delta', delta: 'part 2' };
+      yield { type: 'text_delta', text: 'part 2' };
     }
   }
 
@@ -357,9 +357,9 @@ it('integration - disposal during active stream work prevents mutation and abort
 
   class GatedStream extends MockStream {
     async *[Symbol.asyncIterator]() {
-      yield { type: 'response.output_text.delta', delta: 'part 1' };
+      yield { type: 'text_delta', text: 'part 1' };
       await gate;
-      yield { type: 'response.output_text.delta', delta: 'part 2' };
+      yield { type: 'text_delta', text: 'part 2' };
     }
   }
 
@@ -403,7 +403,7 @@ it('integration - aborted-approval input with current token starts a fresh follo
   interruptedStream.interruptions = [createShellInterruption({ callId: 'c1', command: 'echo hello' })];
   interruptedStream.state = createApprovalState();
 
-  const followupStream = new MockStream([{ type: 'response.output_text.delta', delta: 'follow-up reply' }]);
+  const followupStream = new MockStream([{ type: 'text_delta', text: 'follow-up reply' }]);
   followupStream.finalOutput = 'follow-up reply';
 
   const startCalls: unknown[] = [];

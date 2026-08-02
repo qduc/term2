@@ -1,3 +1,5 @@
+import { createAgentStream, type AgentStream } from '../agent-stream.js';
+
 export class MockStream<TEvent = unknown> implements AsyncIterable<TEvent> {
   events: TEvent[];
   completed: Promise<unknown>;
@@ -19,6 +21,7 @@ export class MockStream<TEvent = unknown> implements AsyncIterable<TEvent> {
     this.history = [];
     this.finalOutput = '';
     this.output = [];
+    createAgentStream(this as never);
   }
 
   get runUsage(): unknown {
@@ -30,4 +33,8 @@ export class MockStream<TEvent = unknown> implements AsyncIterable<TEvent> {
       yield event;
     }
   }
+}
+
+export function createMockStream<TEvent = unknown>(events: TEvent[]): AgentStream & MockStream<TEvent> {
+  return createAgentStream(new MockStream(events) as never) as AgentStream & MockStream<TEvent>;
 }

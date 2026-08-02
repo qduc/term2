@@ -29,6 +29,8 @@ export type SendMessageOptions = {
   preferredMessageId?: string;
   /** The turn is model input only and must not be projected as a user message in the UI. */
   suppressUserMessageDisplay?: boolean;
+  /** A busy-input steer supersedes the active foreground turn. */
+  busyMode?: 'steer' | 'follow_up';
 };
 
 export type HandleApprovalDecisionOptions = {
@@ -42,6 +44,7 @@ export type HandleApprovalDecisionOptions = {
 export type TurnFlow = Pick<SessionRuntime['turns'], 'start' | 'continueAfterApproval'> & {
   continueAfterPostExecuteApproval?: SessionRuntime['turns']['continueAfterPostExecuteApproval'];
   abort?: () => void;
+  stopAfterCurrentTool?: () => void;
 };
 
 type QueuedMessage = {
@@ -166,7 +169,27 @@ export class ConversationAdapter {
     if (deps.queueForeground) {
       const driver: QueueTurnDriver<QueuedMessageSnapshot> = {
         start: (execution) => this.#startQueuedTurn(execution),
-        cancel: async () => {
+        cancel: async (_execution, reason = 'cancel') => {
+          if (reason === 'steer') {
+            // The queue has placed the replacement at its head. Stop the
+            // active model/tool sequence before admitting that replacement.
+            this.#cancellingRequestId = this.#activeRequestId;
+            this.#turnFlow.stopAfterCurrentTool?.();
+            // A steer must never start concurrently with a tool that is still
+            // settling. If the safe boundary cannot be reached promptly, let
+            // the queue reject the steer and keep representing the active turn.
+            const stopped = await Promise.race([
+              this.#activeTurn.then(
+                () => true,
+                () => true,
+              ),
+              delay(this.#activeCancelTimeoutMs).then(() => false),
+            ]);
+            if (!stopped && this.#cancellingRequestId === this.#activeRequestId) {
+              this.#cancellingRequestId = null;
+            }
+            return stopped;
+          }
           // Prefer natural abort settlement, but never block queue cancel forever
           // if the underlying turn ignores abort.
           await Promise.race([
@@ -176,6 +199,7 @@ export class ConversationAdapter {
             ),
             delay(this.#activeCancelTimeoutMs),
           ]);
+          return true;
         },
       };
       this.#queue = new QueueController({
@@ -277,6 +301,7 @@ export class ConversationAdapter {
       replayFromHistory,
       preferredMessageId,
       suppressUserMessageDisplay,
+      busyMode,
     }: SendMessageOptions = {},
   ): Promise<ConversationTerminal> {
     const queue = this.#queue;
@@ -308,6 +333,7 @@ export class ConversationAdapter {
           bypassInputSurgeGuard,
           replayFromHistory,
           suppressUserMessageDisplay,
+          busyMode,
         },
         resolve,
         reject,
@@ -316,7 +342,7 @@ export class ConversationAdapter {
       const displayText = normalizeUserTurn(input).text;
       const controllerText = displayText.trim() ? displayText : QUEUED_NON_TEXT_PLACEHOLDER;
       void queue
-        .command({ kind: 'submit', id: requestId, text: controllerText })
+        .command({ kind: busyMode === 'steer' ? 'steer' : 'submit', id: requestId, text: controllerText })
         .then((result) => {
           if (result.kind !== 'accepted') {
             const reason = result.kind === 'rejected' ? result.reason : result.kind;

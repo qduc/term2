@@ -311,6 +311,10 @@ export class AgentClient {
     this.#subagentBridge?.abort();
   }
 
+  stopAfterCurrentTool(): void {
+    this.#applicationRunLoop.stopAfterCurrentTool();
+  }
+
   /**
    * Cancel conversation-bound background (async) subagent runs. Reserved for an
    * explicit user interrupt, conversation disposal, or shutdown.

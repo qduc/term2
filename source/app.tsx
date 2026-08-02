@@ -466,7 +466,7 @@ const App: FC<AppProps> = ({
     onSkillActivationCancelled: () => addSystemMessage('Skill activation cancelled.'),
   });
 
-  const handleSubmit = async (turn: UserTurn): Promise<void> => {
+  const handleSubmit = async (turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }): Promise<void> => {
     if (await submitConversationTurn(turn)) {
       return;
     }
@@ -524,11 +524,19 @@ const App: FC<AppProps> = ({
       }
 
       case 'message':
-        await pendingGuards.sendGuardedTurn(attachPendingSkill(turn));
+        if (options) {
+          await pendingGuards.sendGuardedTurn(attachPendingSkill(turn), options);
+        } else {
+          await pendingGuards.sendGuardedTurn(attachPendingSkill(turn));
+        }
         return;
     }
 
-    await pendingGuards.sendGuardedTurn(attachPendingSkill(turn));
+    if (options) {
+      await pendingGuards.sendGuardedTurn(attachPendingSkill(turn), options);
+    } else {
+      await pendingGuards.sendGuardedTurn(attachPendingSkill(turn));
+    }
   };
 
   const handleSettingChange = useCallback(

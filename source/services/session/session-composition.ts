@@ -221,6 +221,7 @@ export type SessionRuntime = {
     continueAfterApproval: (options: { answer: string; rejectionReason?: string }) => AsyncIterable<ConversationEvent>;
     continueAfterPostExecuteApproval: () => AsyncIterable<ConversationEvent>;
     abort: () => void;
+    stopAfterCurrentTool: () => void;
   };
   /** Facade for state/persistence/undo/snapshot operations. */
   state: SessionManager;
@@ -642,6 +643,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
       continueAfterApproval: turnCoordinator.continueAfterApproval.bind(turnCoordinator),
       continueAfterPostExecuteApproval: turnCoordinator.continueAfterPostExecuteApproval.bind(turnCoordinator),
       abort: turnCoordinator.abort.bind(turnCoordinator),
+      stopAfterCurrentTool: turnCoordinator.stopAfterCurrentTool.bind(turnCoordinator),
     },
     state: stateFacade,
     settings: runtimeController,

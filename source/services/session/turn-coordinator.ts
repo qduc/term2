@@ -104,6 +104,14 @@ export class TurnCoordinator {
     this.deps.providerContinuity.clear();
   }
 
+  stopAfterCurrentTool(): void {
+    if (this.deps.statusMachine.is('awaiting_approval')) {
+      this.abort();
+      return;
+    }
+    this.deps.turnWorkflow.stopAfterCurrentTool();
+  }
+
   // ── Private helpers ──────────────────────────────────────────
 
   async *#forwardOwned(

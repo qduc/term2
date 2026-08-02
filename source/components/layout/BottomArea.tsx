@@ -38,7 +38,7 @@ export type BottomAreaProps = {
   isShellMode?: boolean;
   lastUsage?: NormalizedUsage | null;
   lastCodexRateLimit?: CodexRateLimitInfo | null;
-  onSubmit: (value: UserTurn) => Promise<void>;
+  onSubmit: (value: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => Promise<void>;
   slashCommands: SlashCommand[];
   settingsService: SettingsService;
   loggingService: LoggingService;

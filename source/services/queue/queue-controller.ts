@@ -97,6 +97,7 @@ export type QueueState<Snapshot> =
 
 export type QueueCommand =
   | { readonly kind: 'submit'; readonly text: string; readonly id?: string }
+  | { readonly kind: 'steer'; readonly text: string; readonly id?: string }
   | { readonly kind: 'cancel' }
   | {
       readonly kind: 'answer_preflight';
@@ -147,7 +148,7 @@ export type QueueCommandResult =
 
 export interface QueueTurnDriver<Snapshot> {
   start(execution: ActiveExecution<Snapshot>): void | Promise<void>;
-  cancel(execution: ActiveExecution<Snapshot>): void | Promise<void>;
+  cancel(execution: ActiveExecution<Snapshot>, reason?: 'cancel' | 'steer'): void | boolean | Promise<void | boolean>;
 }
 
 export interface QueueControllerOptions<Snapshot, Terminal = unknown> {
@@ -295,6 +296,8 @@ export class QueueController<Snapshot, Terminal = unknown> {
   #pendingAction: { actionId: ActionId; kind: ActiveActionKind } | undefined;
   #pauseReason: QueuePauseReason | undefined;
   #recovery: QueueRecovery | undefined;
+  #steerAdmission = Promise.resolve();
+  #persistenceWrites = Promise.resolve();
 
   constructor(options: QueueControllerOptions<Snapshot, Terminal>) {
     this.#driver = options.driver;
@@ -340,25 +343,10 @@ export class QueueController<Snapshot, Terminal = unknown> {
 
   async command(cmd: QueueCommand): Promise<QueueCommandResult> {
     switch (cmd.kind) {
-      case 'submit': {
-        if (!cmd.text.trim()) return { kind: 'rejected', reason: 'invalid' };
-        if (this.#queue.length >= this.#capacity) return { kind: 'rejected', reason: 'capacity' };
-        const id = cmd.id ?? this.#itemId();
-        if (!isNonEmptyString(id) || this.#queue.some((item) => item.id === id) || this.#active?.item.id === id) {
-          return { kind: 'rejected', reason: 'invalid' };
-        }
-        this.#queue.push(
-          freeze({
-            id: id as ItemId,
-            text: cmd.text,
-            sequence: this.#nextSequence++,
-            submittedAt: this.#now(),
-          }),
-        );
-        await this.#persist();
-        await this.#dispatch();
-        return { kind: 'accepted' };
-      }
+      case 'submit':
+        return this.#submit(cmd);
+      case 'steer':
+        return this.#serializeSteer(() => this.#submit(cmd));
       case 'cancel':
         return this.#cancel();
       case 'answer_preflight': {
@@ -437,6 +425,44 @@ export class QueueController<Snapshot, Terminal = unknown> {
       case 'change_cosmetic_settings':
         await this.#persist();
         return { kind: 'accepted' };
+    }
+  }
+
+  async #submit(cmd: Extract<QueueCommand, { kind: 'submit' | 'steer' }>): Promise<QueueCommandResult> {
+    if (!cmd.text.trim()) return { kind: 'rejected', reason: 'invalid' };
+    if (this.#queue.length >= this.#capacity) return { kind: 'rejected', reason: 'capacity' };
+    const id = cmd.id ?? this.#itemId();
+    if (!isNonEmptyString(id) || this.#queue.some((item) => item.id === id) || this.#active?.item.id === id) {
+      return { kind: 'rejected', reason: 'invalid' };
+    }
+    const item = freeze({
+      id: id as ItemId,
+      text: cmd.text,
+      sequence: this.#nextSequence++,
+      submittedAt: this.#now(),
+    });
+    if (cmd.kind === 'steer' && this.#active) {
+      this.#queue = [item, ...this.#queue].map((queued) => freeze({ ...queued, sequence: this.#nextSequence++ }));
+      await this.#persist();
+      return (await this.#steer(item.id)) ? { kind: 'accepted' } : { kind: 'rejected', reason: 'inapplicable' };
+    }
+    this.#queue.push(item);
+    await this.#persist();
+    await this.#dispatch();
+    return { kind: 'accepted' };
+  }
+
+  async #serializeSteer<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.#steerAdmission;
+    let release!: () => void;
+    this.#steerAdmission = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
     }
   }
 
@@ -530,7 +556,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
     this.#pendingAction = undefined;
     await this.#persist();
     try {
-      await this.#driver.cancel(active);
+      await this.#driver.cancel(active, 'cancel');
     } finally {
       if (this.#active?.executionId === active.executionId) {
         this.#active = undefined;
@@ -553,6 +579,35 @@ export class QueueController<Snapshot, Terminal = unknown> {
       }
     }
     return { kind: 'accepted' };
+  }
+
+  /** Cancel active work and immediately dispatch the priority steer head. */
+  async #steer(steerItemId: ItemId): Promise<boolean> {
+    if (!this.#active || (this.#phase !== 'running' && this.#phase !== 'awaiting_active_action')) {
+      await this.#dispatch();
+      return true;
+    }
+    const active = this.#active;
+    const previousPhase = this.#phase;
+    const previousPendingAction = this.#pendingAction;
+    this.#phase = 'cancelling';
+    this.#pendingAction = undefined;
+    await this.#persist();
+    const cancelled = await this.#driver.cancel(active, 'steer');
+    if (cancelled === false && this.#active?.executionId === active.executionId) {
+      this.#queue = this.#queue.filter((item) => item.id !== steerItemId);
+      this.#phase = previousPhase;
+      this.#pendingAction = previousPendingAction;
+      await this.#persist();
+      return false;
+    }
+    if (this.#active?.executionId !== active.executionId) return true;
+    this.#active = undefined;
+    this.#phase = 'idle';
+    this.#pauseReason = undefined;
+    await this.#persist();
+    await this.#dispatch();
+    return true;
   }
 
   async #dispatch(): Promise<void> {
@@ -665,8 +720,13 @@ export class QueueController<Snapshot, Terminal = unknown> {
       ...(this.#phase === 'paused' ? { pause: { reason: this.#pauseReason! } } : {}),
       ...(active ? { active } : {}),
     };
+    const write = this.#persistenceWrites.then(() => this.#persistence!.replace(record));
+    this.#persistenceWrites = write.then(
+      () => undefined,
+      () => undefined,
+    );
     try {
-      await this.#persistence.replace(record);
+      await write;
     } catch (error) {
       this.#recovery = { kind: 'persistence_failed', detail: error instanceof Error ? error.message : String(error) };
     }

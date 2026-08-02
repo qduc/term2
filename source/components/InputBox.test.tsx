@@ -19,6 +19,7 @@ import { clearModelCache } from '../services/model-service.js';
 import { useModelSelection } from '../hooks/use-model-selection.js';
 import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
 import { renderInAct, toVisibleText } from '../test-helpers/ink-testing.js';
+import type { UserTurn } from '../types/user-turn.js';
 
 vi.mock('../services/file-service.js', () => ({
   getWorkspaceEntries: vi.fn(async () => [{ path: 'mock/path', type: 'file' }]),
@@ -40,7 +41,7 @@ const mockSlashCommands: SlashCommand[] = [
 
 // Types for test props — mock services only need to satisfy the subset used by InputBox
 type TestProps = {
-  onSubmit: (v: any) => void;
+  onSubmit: (v: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => void;
   slashCommands: SlashCommand[];
   isShellMode?: boolean;
   settingsService: SettingsService;
@@ -241,6 +242,41 @@ it.sequential('InputBox onSubmit is called on empty input when allowEmptySubmit 
 
   expect(submitted).toBe(true);
   expect(submittedTurn).toEqual({ text: '' });
+});
+
+it.sequential('InputBox routes Enter to steer and Alt+Enter to a queued follow-up', async () => {
+  const submissions: Array<{ turn: UserTurn; options?: { busyMode?: 'steer' | 'follow_up' } }> = [];
+  const { stdin } = await renderAndFlush(
+    <TestInputBox
+      {...defaultProps}
+      onSubmit={(turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => submissions.push({ turn, options })}
+    />,
+  );
+
+  await writeInput(stdin, 'steer');
+  await writeInput(stdin, '\r');
+  await writeInput(stdin, 'follow-up');
+  await writeInput(stdin, '\x1b\r');
+
+  expect(submissions).toEqual([
+    { turn: { text: 'steer' }, options: { busyMode: 'steer' } },
+    { turn: { text: 'follow-up' }, options: { busyMode: 'follow_up' } },
+  ]);
+});
+
+it.sequential('InputBox recognizes Alt+Enter when terminal input arrives in split chunks', async () => {
+  const submissions: Array<{ turn: UserTurn; options?: { busyMode?: 'steer' | 'follow_up' } }> = [];
+  const { stdin } = await renderAndFlush(
+    <TestInputBox
+      {...defaultProps}
+      onSubmit={(turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => submissions.push({ turn, options })}
+    />,
+  );
+
+  await writeInput(stdin, 'follow-up\x1b');
+  await writeInput(stdin, '\r');
+
+  expect(submissions).toEqual([{ turn: { text: 'follow-up' }, options: { busyMode: 'follow_up' } }]);
 });
 
 it.sequential('preserves a burst of characters while the slash-command popup owns input', async () => {

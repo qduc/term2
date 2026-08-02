@@ -375,7 +375,10 @@ export class ConversationOrchestrator {
     }
   }
 
-  async sendUserMessage(input: string | UserTurn, options?: { bypassInputSurgeGuard?: boolean }): Promise<void> {
+  async sendUserMessage(
+    input: string | UserTurn,
+    options?: { bypassInputSurgeGuard?: boolean; busyMode?: 'steer' | 'follow_up' },
+  ): Promise<void> {
     const turn = normalizeUserTurn(input);
     if (!hasUserTurnContent(turn)) {
       return;
@@ -435,6 +438,7 @@ export class ConversationOrchestrator {
       const result = await this.config.conversationService.sendMessage(turnToSend, {
         onEvent: this.createOnEventHandler(applyConversationEvent),
         bypassInputSurgeGuard: options?.bypassInputSurgeGuard,
+        busyMode: options?.busyMode,
         preferredMessageId: userMessage.id,
       });
 

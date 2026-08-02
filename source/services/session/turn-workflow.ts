@@ -117,6 +117,10 @@ export class TurnWorkflow {
       });
   }
 
+  stopAfterCurrentTool(): void {
+    this.deps.agentClient.stopAfterCurrentTool?.();
+  }
+
   async *executeInitial(
     attemptOrInput: TurnAttempt | string | UserTurn,
     options: InitialTurnRunOptions = {},

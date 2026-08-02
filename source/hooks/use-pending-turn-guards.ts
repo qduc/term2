@@ -9,7 +9,10 @@ import type { ImageRef } from 'ink-prompt';
 
 export type PendingTurnGuardResult = { status: 'ready'; turn: UserTurn } | { status: 'blocked' };
 
-type SendUserMessage = (turn: UserTurn, options?: { bypassInputSurgeGuard?: boolean }) => Promise<void>;
+type SendUserMessage = (
+  turn: UserTurn,
+  options?: { bypassInputSurgeGuard?: boolean; busyMode?: 'steer' | 'follow_up' },
+) => Promise<void>;
 type ImageSetter = (images: ImageRef[]) => void;
 
 export type UsePendingTurnGuardsOptions = {
@@ -31,7 +34,7 @@ export type UsePendingTurnGuardsReturn = {
   pendingSurgeTurn: UserTurn | null;
   pendingSurgeReason: string;
   guardTurn: (turn: UserTurn) => PendingTurnGuardResult;
-  sendGuardedTurn: (turn: UserTurn) => Promise<boolean>;
+  sendGuardedTurn: (turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => Promise<boolean>;
   handleLargeUncachedApprove: () => Promise<void>;
   handleLargeUncachedDecline: () => void;
   handleSurgeApprove: () => Promise<void>;
@@ -71,7 +74,7 @@ export const usePendingTurnGuards = ({
   }, [conversationService, input, mode]);
 
   const sendReadyTurn = useCallback(
-    async (turn: UserTurn, options?: { bypassInputSurgeGuard?: boolean }) => {
+    async (turn: UserTurn, options?: { bypassInputSurgeGuard?: boolean; busyMode?: 'steer' | 'follow_up' }) => {
       historyService.addMessage(turn);
       replaceInput('');
       if (options) {
@@ -126,13 +129,13 @@ export const usePendingTurnGuards = ({
   );
 
   const sendGuardedTurn = useCallback(
-    async (turn: UserTurn): Promise<boolean> => {
+    async (turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }): Promise<boolean> => {
       const guarded = guardTurn(turn);
       if (guarded.status === 'blocked') {
         return false;
       }
 
-      await sendReadyTurn(guarded.turn);
+      await sendReadyTurn(guarded.turn, options);
       return true;
     },
     [guardTurn, sendReadyTurn],

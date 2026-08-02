@@ -95,6 +95,138 @@ it('holds completion admission while submissions enqueue, then dispatches the ne
   expect(starts).toEqual(['execution-1', 'execution-2']);
 });
 
+it('runs a steer before retained follow-ups while preserving their FIFO order', async () => {
+  const starts: string[] = [];
+  const cancels: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ item }) => {
+        starts.push(item.text);
+      },
+      cancel: async (_execution, reason) => {
+        cancels.push(reason ?? 'cancel');
+      },
+    },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let n = 0;
+        return () => `item-${++n}`;
+      })(),
+      execution: (() => {
+        let n = 0;
+        return () => `execution-${++n}`;
+      })(),
+    },
+  });
+
+  await controller.command({ kind: 'submit', text: 'active' });
+  await controller.command({ kind: 'submit', text: 'follow-up-1' });
+  await controller.command({ kind: 'submit', text: 'follow-up-2' });
+  await controller.command({ kind: 'steer', text: 'steer' });
+
+  expect(cancels).toEqual(['steer']);
+  expect(starts).toEqual(['active', 'steer']);
+  expect(controller.state()).toMatchObject({
+    kind: 'running',
+    queue: [{ text: 'follow-up-1' }, { text: 'follow-up-2' }],
+  });
+
+  await controller.event({ kind: 'completed', executionId: 'execution-2' as ExecutionId, terminal: {} });
+  expect(starts).toEqual(['active', 'steer', 'follow-up-1']);
+});
+
+it('rejects a steer and restores the active execution when safe cancellation times out', async () => {
+  const controller = new QueueController({
+    driver: {
+      start: () => {},
+      cancel: async (_execution, reason) => (reason === 'steer' ? false : undefined),
+    },
+    snapshotFactory: () => ({}),
+  });
+
+  await controller.command({ kind: 'submit', text: 'active' });
+
+  await expect(controller.command({ kind: 'steer', text: 'steer' })).resolves.toEqual({
+    kind: 'rejected',
+    reason: 'inapplicable',
+  });
+  expect(controller.state()).toMatchObject({
+    kind: 'running',
+    active: { item: { text: 'active' } },
+    queue: [],
+  });
+});
+
+it('serializes rapid steers so only one active cancellation mutates the queue at a time', async () => {
+  let releaseFirstCancel!: () => void;
+  const firstCancel = new Promise<void>((resolve) => {
+    releaseFirstCancel = resolve;
+  });
+  let cancelCount = 0;
+  let concurrentCancels = 0;
+  let maxConcurrentCancels = 0;
+  const starts: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ item }) => {
+        starts.push(item.text);
+      },
+      cancel: async () => {
+        cancelCount += 1;
+        concurrentCancels += 1;
+        maxConcurrentCancels = Math.max(maxConcurrentCancels, concurrentCancels);
+        if (cancelCount === 1) await firstCancel;
+        concurrentCancels -= 1;
+        return true;
+      },
+    },
+    snapshotFactory: () => ({}),
+  });
+
+  await controller.command({ kind: 'submit', text: 'active' });
+  const steerA = controller.command({ kind: 'steer', text: 'steer-a' });
+  const steerB = controller.command({ kind: 'steer', text: 'steer-b' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  expect(cancelCount).toBe(1);
+  releaseFirstCancel();
+  await expect(Promise.all([steerA, steerB])).resolves.toEqual([{ kind: 'accepted' }, { kind: 'accepted' }]);
+  expect(maxConcurrentCancels).toBe(1);
+  expect(starts).toEqual(['active', 'steer-a', 'steer-b']);
+});
+
+it('persists concurrent submissions in mutation order', async () => {
+  let releaseFirstWrite!: () => void;
+  const firstWrite = new Promise<void>((resolve) => {
+    releaseFirstWrite = resolve;
+  });
+  const records: PersistedQueueV1<unknown>[] = [];
+  let writes = 0;
+  const controller = new QueueController({
+    driver: { start: () => {}, cancel: () => {} },
+    snapshotFactory: () => ({}),
+    persistence: {
+      load: () => null,
+      replace: async (record) => {
+        writes += 1;
+        if (writes === 1) await firstWrite;
+        records.push(structuredClone(record));
+      },
+    },
+  });
+
+  const first = controller.command({ kind: 'submit', text: 'first' });
+  const second = controller.command({ kind: 'submit', text: 'second' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  expect(writes).toBe(1);
+  releaseFirstWrite();
+  await Promise.all([first, second]);
+  expect(records.at(-1)?.queue.map((item) => item.text)).toEqual(['second']);
+  expect(records.at(-1)?.active?.item.text).toBe('first');
+});
+
 it('awaits cancellation cleanup, ignores late terminal events, and retains queued items paused manually', async () => {
   let releaseCleanup!: () => void;
   const cleanup = new Promise<void>((resolve) => {

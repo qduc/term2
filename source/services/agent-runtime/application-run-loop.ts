@@ -186,6 +186,8 @@ class EventQueue {
 export class ApplicationRunLoop {
   readonly #deps: ApplicationRunLoopDeps;
   #activeAbortController: AbortController | null = null;
+  #executingTool = false;
+  #stopAfterCurrentTool = false;
 
   constructor(deps: ApplicationRunLoopDeps) {
     this.#deps = deps;
@@ -194,6 +196,18 @@ export class ApplicationRunLoop {
   abort(): void {
     this.#activeAbortController?.abort();
     this.#activeAbortController = null;
+  }
+
+  /**
+   * Stop at the next safe boundary. A running tool is allowed to settle, while
+   * model streaming (or the next model/tool cycle) is interrupted immediately.
+   */
+  stopAfterCurrentTool(): void {
+    if (this.#executingTool) {
+      this.#stopAfterCurrentTool = true;
+      return;
+    }
+    this.abort();
   }
 
   startStream(agent: ApplicationAgent, input: ProviderInput, options: ApplicationRunLoopOptions = {}): AgentStream {
@@ -288,6 +302,7 @@ export class ApplicationRunLoop {
     this.abort();
     const controller = new AbortController();
     this.#activeAbortController = controller;
+    this.#stopAfterCurrentTool = false;
     if (options.signal) {
       if (options.signal.aborted) controller.abort();
       else options.signal.addEventListener('abort', () => controller.abort(), { once: true });
@@ -366,6 +381,7 @@ export class ApplicationRunLoop {
         const rawResult = approved
           ? await this.#invokeTool(pending.definition, pending.params, toolContext, pending.callId)
           : state.approvalMessage ?? 'rejected';
+        if (this.#stopAfterCurrentTool) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
         const result = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult);
         const resultItem: ProviderInputItem = {
           type: 'function_call_result',
@@ -649,7 +665,17 @@ export class ApplicationRunLoop {
     toolContext: ToolInvocationContext,
     callId: string,
   ): Promise<unknown> {
-    return definition.execute(params, toolContext, { toolCall: { callId } });
+    this.#executingTool = true;
+    let result: unknown;
+    try {
+      result = await definition.execute(params, toolContext, { toolCall: { callId } });
+    } finally {
+      this.#executingTool = false;
+    }
+    if (this.#stopAfterCurrentTool) {
+      throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
+    }
+    return result;
   }
 }
 

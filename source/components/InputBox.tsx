@@ -1,5 +1,5 @@
 import React, { FC, useEffect, useState, useRef, useCallback } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, useStdin } from 'ink';
 import { useEscapeKey, type CompletionDismissal } from '../hooks/use-escape-key.js';
 import { useTriggerDetection } from '../hooks/use-trigger-detection.js';
 import { MultilineInput } from 'ink-prompt';
@@ -60,7 +60,7 @@ const areImagesEqual = (a: ImageRef[], b: ImageRef[]): boolean => {
 };
 
 type Props = {
-  onSubmit: (v: UserTurn) => void | Promise<void>;
+  onSubmit: (v: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => void | Promise<void>;
   slashCommands: SlashCommand[];
   waitingForRejectionReason?: boolean;
   isShellMode?: boolean;
@@ -149,6 +149,9 @@ const InputBox: FC<Props> = ({
     cursorOverride,
     setCursorOverride,
   } = useInputContext();
+  const { stdin } = useStdin();
+  const stdinBufferRef = useRef('');
+  const consumedAltEnterRef = useRef(false);
 
   const dismissedCompletionRef = useRef<CompletionDismissal>(null);
   const inputRevisionRef = useRef(0);
@@ -817,15 +820,35 @@ const InputBox: FC<Props> = ({
   );
 
   const handleWrapperSubmit = useCallback(
-    (submittedValue: string, submittedImages?: ImageRef[]) => {
+    (submittedValue: string, submittedImages?: ImageRef[], busyMode: 'steer' | 'follow_up' = 'steer') => {
       if (mode !== 'text' && modeHandlers[mode].onSubmit?.(submittedValue) === 'handled') return;
       const turnImages = submittedImages ?? images;
       if (!allowEmptySubmit && !submittedValue.trim() && turnImages.length === 0) return;
       setImages([]);
-      void onSubmit({ text: submittedValue, ...(turnImages.length ? { images: turnImages } : {}) });
+      void onSubmit({ text: submittedValue, ...(turnImages.length ? { images: turnImages } : {}) }, { busyMode });
     },
     [mode, modeHandlers, onSubmit, images, allowEmptySubmit, setImages],
   );
+
+  useEffect(() => {
+    if (!stdin || mode !== 'text') return;
+    const onData = (chunk: Buffer | string) => {
+      const value = String(chunk);
+      if (value === '\x1b\r' || (stdinBufferRef.current === '\x1b' && value === '\r')) {
+        consumedAltEnterRef.current = true;
+        handleWrapperSubmit(inputValueRef.current, images, 'follow_up');
+      }
+      // Keep only a possible leading byte of a split escape sequence. All
+      // ordinary input has already been handed to MultilineInput; this buffer
+      // exists solely to recognize Alt+Enter when terminal chunks coalesce or
+      // split the sequence.
+      stdinBufferRef.current = value.endsWith('\x1b') ? '\x1b' : '';
+    };
+    stdin.prependListener('data', onData);
+    return () => {
+      stdin.off('data', onData);
+    };
+  }, [stdin, mode, images, handleWrapperSubmit]);
 
   const handlePasteError = useCallback(
     (reason: PasteErrorReason) => {
@@ -881,7 +904,13 @@ const InputBox: FC<Props> = ({
           onImagesChange={handleImagesChange}
           onPasteError={handlePasteError}
           pasteThreshold={settingsService.get('ui.pasteThreshold')}
-          ignoreInput={isFocusReportingSequence}
+          ignoreInput={(input, key) => {
+            if (consumedAltEnterRef.current && (input.includes('\x1b\r') || key.return)) {
+              consumedAltEnterRef.current = false;
+              return true;
+            }
+            return isFocusReportingSequence(input) || (key.meta && key.return);
+          }}
         />
       </Box>
       {escHintVisible && <Text color="#64748b">Press ESC again to clear input</Text>}

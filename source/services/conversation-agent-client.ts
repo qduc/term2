@@ -54,6 +54,8 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   startStream(userInput: ProviderInput, options?: AgentClientRunOptions): Promise<AgentStream>;
   continueRunStream(state: ContinuationHandle, options?: AgentClientRunOptions): Promise<AgentStream>;
   abort(): void;
+  /** Interrupt at a model/tool boundary without cancelling an executing tool. */
+  stopAfterCurrentTool?(): void;
   setModel(model: string): void;
   addToolInterceptor(interceptor: ToolInterceptor): () => void;
 

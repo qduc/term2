@@ -6,6 +6,7 @@ import type {
 } from '../contracts/streamed-model-turn.js';
 import OpenAI from 'openai';
 import { CodexResponsesModel, CodexResponsesWSModel } from './codex-responses-model.js';
+import { toCodexModelSettings, toCodexResponsesInput } from './codex-turn-converter.js';
 import { RetryingModel } from './retrying-model.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -582,86 +583,159 @@ async function* codexStream(
   modelName: string,
   request: StreamedModelTurnRequest,
 ): AsyncIterable<StreamedModelTurnEvent> {
-  const input = request.input.map((item: any) =>
-    item.type === 'message'
-      ? {
-          type: 'message',
-          role: item.role,
-          content: item.content.map((part: any) => ({
-            type: item.role === 'assistant' ? 'output_text' : 'input_text',
-            text: part.text ?? String(part),
-          })),
-        }
-      : item.type === 'tool_call'
-      ? { type: 'function_call', callId: item.id, name: item.name, arguments: item.arguments }
-      : {
-          type: 'function_call_output',
-          callId: item.id,
-          output: typeof item.output === 'string' ? item.output : JSON.stringify(item.output),
-        },
-  );
+  const input = toCodexResponsesInput(request.input);
   const output: any[] = [];
+  // Codex may reveal encrypted reasoning only in response.completed. Delay
+  // tool delivery until that authoritative frame so continuation history keeps
+  // the reasoning immediately before the calls it explains.
+  const pendingToolCalls: Extract<StreamedModelTurnEvent, { type: 'tool_call' }>[] = [];
+  const terminalReasoning: Array<Extract<StreamedModelTurnEvent, { type: 'completion' }>['output'][number]> = [];
+  const pendingReasoningDeltas: Array<Extract<StreamedModelTurnEvent, { type: 'reasoning_delta' }>> = [];
   let responseId = '';
+  let finishReason: string | undefined;
   let usage: Extract<StreamedModelTurnEvent, { type: 'completion' }>['usage'];
   let sawCompletedResponse = false;
-  const tools = request.tools?.map(toCodexTool);
+  const tools = (request.tools ?? []).map(toCodexTool);
   for await (const rawEvent of model.getStreamedResponse({
     model: modelName,
     ...(request.previousResponseId ? { previousResponseId: request.previousResponseId } : {}),
-    systemInstructions: request.instructions,
+    ...(request.instructions !== undefined ? { systemInstructions: request.instructions } : {}),
     input,
     tools,
-    modelSettings: { reasoning: request.reasoning, providerData: request.providerOptions },
-    signal: request.signal,
+    modelSettings: toCodexModelSettings(request),
+    ...(request.signal ? { signal: request.signal } : {}),
   })) {
     const event = normalizeCodexStreamEvent(rawEvent);
     if (event?.type === 'response.output_text.delta') {
-      yield { type: 'text_delta', text: event.delta ?? '' };
+      yield { type: 'text_delta', text: String(event.delta ?? '') };
     } else if (event?.type === 'response.reasoning_summary_text.delta') {
-      yield { type: 'reasoning_delta', text: event.delta ?? '' };
+      pendingReasoningDeltas.push({
+        type: 'reasoning_delta',
+        ...(typeof event.item_id === 'string' ? { id: event.item_id } : {}),
+        text: String(event.delta ?? ''),
+      });
     } else if (event?.type === 'response.output_item.done' && event.item?.type === 'function_call') {
-      const call = {
-        type: 'tool_call' as const,
-        id: event.item.call_id ?? event.item.id,
-        name: event.item.name,
-        arguments: event.item.arguments ?? '{}',
-      };
+      const call = toCodexToolCallOutput(event.item);
       output.push(call);
-      yield call;
+      pendingToolCalls.push(call);
     } else if (event?.type === 'response.completed') {
       sawCompletedResponse = true;
-      responseId = event.response?.id ?? responseId;
-      const rawUsage = event.response?.usage;
-      if (
-        rawUsage &&
-        (rawUsage.input_tokens !== undefined ||
-          rawUsage.inputTokens !== undefined ||
-          rawUsage.output_tokens !== undefined ||
-          rawUsage.outputTokens !== undefined)
-      ) {
-        usage = {
-          inputTokens: rawUsage.input_tokens ?? rawUsage.inputTokens ?? 0,
-          outputTokens: rawUsage.output_tokens ?? rawUsage.outputTokens ?? 0,
-          ...(rawUsage.input_tokens_details?.cached_tokens !== undefined
-            ? { cachedInputTokens: rawUsage.input_tokens_details.cached_tokens }
-            : {}),
+      responseId = codexString(event.response?.id) ?? responseId;
+      finishReason = codexString(event.response?.status) ?? codexString(event.response?.incomplete_details?.reason);
+      usage = toCodexUsage(event.response?.usage);
+      for (const item of event.response?.output ?? []) {
+        const converted = toCodexOutputItem(item);
+        // Function calls are authoritatively emitted by output_item.done so
+        // their streamed arguments and call IDs reach the run loop once.
+        if (converted.type !== 'tool_call') {
+          output.push(converted);
+          if (converted.type === 'reasoning') terminalReasoning.push(converted);
+        }
+      }
+      const authoritativeReasoning = terminalReasoning.length > 0 ? terminalReasoning : pendingReasoningDeltas;
+      for (const reasoning of authoritativeReasoning) {
+        if (reasoning.type !== 'reasoning' && reasoning.type !== 'reasoning_delta') continue;
+        yield {
+          type: 'reasoning_delta',
+          ...(reasoning.id ? { id: reasoning.id } : {}),
+          text: reasoning.text,
+          ...(reasoning.providerMetadata ? { providerMetadata: reasoning.providerMetadata } : {}),
         };
       }
-      for (const item of event.response?.output ?? []) {
-        if (item.type === 'message')
-          output.push({
-            type: 'message',
-            content: [{ type: 'text', text: item.content?.map((part: any) => part.text ?? '').join('') ?? '' }],
-          });
-      }
-    } else if (event?.type === 'response.incomplete' || event?.type === 'response.failed') {
+      for (const call of pendingToolCalls) yield call;
+      // The Responses protocol has one authoritative terminal event. Do not
+      // allow a malformed source to emit application events after it.
+      break;
+    } else if (
+      event?.type === 'response.incomplete' ||
+      event?.type === 'response.failed' ||
+      event?.type === 'response.error'
+    ) {
       const status = event.type.slice('response.'.length);
-      const message = event.response?.error?.message ?? `Codex response ${status}`;
+      const message = event.response?.error?.message ?? event.error?.message ?? `Codex response ${status}`;
       throw new Error(`Codex provider response ${status}: ${message}`);
     }
   }
   if (!sawCompletedResponse) throw new Error('Codex streamed response ended without a completed response event.');
-  yield { type: 'completion', responseId, output, ...(usage ? { usage } : {}) };
+  if (!responseId) throw new Error('Codex completed response did not include an id.');
+  yield {
+    type: 'completion',
+    responseId,
+    output,
+    ...(finishReason ? { finishReason } : {}),
+    ...(usage ? { usage } : {}),
+  };
+}
+
+function toCodexToolCallOutput(item: any): Extract<StreamedModelTurnEvent, { type: 'tool_call' }> {
+  const id = codexString(item?.call_id) ?? codexString(item?.id);
+  const name = codexString(item?.name);
+  if (!id || !name) throw new Error('Codex function call output is missing its call id or name.');
+  return { type: 'tool_call', id, name, arguments: typeof item.arguments === 'string' ? item.arguments : '{}' };
+}
+
+function toCodexOutputItem(item: any): any {
+  if (!item || typeof item !== 'object') throw new Error('Unsupported Codex response output item.');
+  if (item.type === 'function_call') return toCodexToolCallOutput(item);
+  if (item.type === 'message') {
+    const content = Array.isArray(item.content) ? item.content : [];
+    const text = content.map((part: any) => {
+      if (part?.type && !['output_text', 'input_text', 'text'].includes(part.type)) {
+        throw new Error(`Unsupported Codex response message content: ${String(part.type)}.`);
+      }
+      if (typeof part?.text !== 'string') throw new Error('Unsupported Codex response message content without text.');
+      return part.text;
+    });
+    return { type: 'message', content: text.map((value: string) => ({ type: 'text', text: value })) };
+  }
+  if (item.type === 'reasoning') {
+    const text = codexReasoningText(item.summary ?? item.content ?? '');
+    return {
+      type: 'reasoning',
+      ...(codexString(item.id) ? { id: item.id } : {}),
+      text,
+      providerMetadata: { codex: codexReasoningMetadata(item) },
+    };
+  }
+  throw new Error(`Unsupported Codex response output item type: ${String(item.type)}.`);
+}
+
+function codexReasoningText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return '';
+  return value
+    .map((part: any) => {
+      if (!part || typeof part !== 'object' || typeof part.text !== 'string') {
+        throw new Error('Unsupported Codex reasoning content without text.');
+      }
+      return part.text;
+    })
+    .join('');
+}
+
+function codexReasoningMetadata(item: Record<string, unknown>): Record<string, unknown> {
+  const { type: _type, id: _id, summary: _summary, content: _content, ...metadata } = item;
+  return metadata;
+}
+
+function toCodexUsage(rawUsage: any): Extract<StreamedModelTurnEvent, { type: 'completion' }>['usage'] {
+  if (!rawUsage || typeof rawUsage !== 'object') return undefined;
+  const inputTokens = rawUsage.input_tokens ?? rawUsage.inputTokens;
+  const outputTokens = rawUsage.output_tokens ?? rawUsage.outputTokens;
+  if (inputTokens === undefined && outputTokens === undefined) return undefined;
+  const cachedInputTokens = rawUsage.input_tokens_details?.cached_tokens ?? rawUsage.inputTokensDetails?.cachedTokens;
+  const cacheWriteTokens =
+    rawUsage.input_tokens_details?.cache_write_tokens ?? rawUsage.inputTokensDetails?.cacheWriteTokens;
+  return {
+    ...(inputTokens !== undefined ? { inputTokens } : {}),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
+    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
+    ...(cacheWriteTokens !== undefined ? { cacheWriteTokens } : {}),
+  };
+}
+
+function codexString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 // ── Middlewares ──────────────────────────────────────────────────────────

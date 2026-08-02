@@ -165,6 +165,43 @@ it('response outcome when stream has no interruptions', async () => {
   }
 });
 
+it('persists a canonical native reasoning item emitted before a tool call', async () => {
+  const reasoning = {
+    type: 'reasoning',
+    id: 'rs_codex',
+    content: [{ type: 'reasoning_text', text: 'Use the lookup tool.' }],
+    providerData: { codex: { encrypted_content: 'cipher' } },
+  };
+  const call = { type: 'function_call', callId: 'call_codex', name: 'lookup', arguments: '{}' };
+  const result = { type: 'function_call_result', callId: 'call_codex', name: 'lookup', output: 'fixture result' };
+  const stream = makeStream({
+    finalOutput: 'Done.',
+    newItems: [reasoning, call, result],
+    output: [reasoning, call, result],
+    history: [reasoning, call, result],
+  });
+
+  const outcome = await buildConversationResult(
+    { result: stream, toolCallArgumentsById: new Map(), emittedCommandIds: new Set() },
+    makeDeps(),
+  );
+
+  expect(outcome.kind).toBe('response');
+  if (outcome.kind === 'response') {
+    expect(outcome.result.turnItems).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'reasoning',
+          text: 'Use the lookup tool.',
+          providerMetadata: { codex: { encrypted_content: 'cipher' } },
+          providerItemId: 'rs_codex',
+        },
+        expect.objectContaining({ type: 'tool_call', callId: 'call_codex' }),
+      ]),
+    );
+  }
+});
+
 it('response outcome uses completed final output when it extends streamed output', async () => {
   const stream = makeStream({
     finalOutput: 'Intro\n\n## Missing Header\n\nBody',
@@ -730,10 +767,7 @@ it('prefers current-run output over cumulative history when newItems is empty', 
   };
   const stream = makeStream({ newItems: [], output: [current], history: [prior, current] });
 
-  const outcome = await buildConversationResult(
-    { result: stream, toolCallArgumentsById: new Map() },
-    makeDeps(),
-  );
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, makeDeps());
 
   expect(outcome.kind).toBe('response');
   if (outcome.kind === 'response') {
@@ -746,15 +780,10 @@ it('prefers current-run output over cumulative history when newItems is empty', 
 it('uses populated history when newItems is empty and current-run output is unavailable', async () => {
   const stream = makeStream({
     newItems: [],
-    history: [
-      { type: 'function_call_output', call_id: 'a', output: '{"text":"x","metadata":{"messageId":"m-a"}}' },
-    ],
+    history: [{ type: 'function_call_output', call_id: 'a', output: '{"text":"x","metadata":{"messageId":"m-a"}}' }],
   });
 
-  const outcome = await buildConversationResult(
-    { result: stream, toolCallArgumentsById: new Map() },
-    makeDeps(),
-  );
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, makeDeps());
 
   expect(outcome.kind).toBe('response');
   if (outcome.kind === 'response') {

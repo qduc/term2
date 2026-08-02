@@ -104,35 +104,7 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
   }
 
   async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
-    const messages = request.input.map((item: any) => {
-      if (item.type === 'message') {
-        const content =
-          typeof item.content === 'string'
-            ? item.content
-            : item.content.map((part: any) => {
-                if (typeof part === 'string') return { type: 'text', text: part };
-                if (part?.type === 'image') {
-                  const image = part.image;
-                  const url = typeof image === 'string' ? image : image?.id;
-                  return { type: 'image_url', image_url: { url } };
-                }
-                return { type: 'text', text: part?.text ?? '' };
-              });
-        return { role: item.role, content };
-      }
-      if (item.type === 'tool_call')
-        return {
-          role: 'assistant',
-          tool_calls: [{ id: item.id, type: 'function', function: { name: item.name, arguments: item.arguments } }],
-        };
-      if (item.type === 'tool_result')
-        return {
-          role: 'tool',
-          tool_call_id: item.id,
-          content: typeof item.output === 'string' ? item.output : JSON.stringify(item.output),
-        };
-      return { role: 'assistant', content: item.text };
-    });
+    const messages = openAICompatibleMessages(request.input);
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages,
@@ -159,7 +131,14 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       if (choice?.finish_reason != null) sawFinishReason = true;
       if (delta?.reasoning_content) {
         reasoning += delta.reasoning_content;
-        yield { type: 'reasoning_delta', text: delta.reasoning_content };
+        yield {
+          type: 'reasoning_delta',
+          text: delta.reasoning_content,
+          providerMetadata: {
+            reasoning_content: delta.reasoning_content,
+            openai_compatible_reasoning_content: true,
+          },
+        };
       }
       if (delta?.content) {
         text += delta.content;
@@ -184,7 +163,15 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       type: 'completion',
       responseId: `chatcmpl-${Date.now()}`,
       output: [
-        ...(reasoning ? [{ type: 'reasoning' as const, text: reasoning }] : []),
+        ...(reasoning
+          ? [
+              {
+                type: 'reasoning' as const,
+                text: reasoning,
+                providerMetadata: { reasoning_content: reasoning, openai_compatible_reasoning_content: true },
+              },
+            ]
+          : []),
         ...(calls.size
           ? [...calls].map(([index, call]) => ({
               type: 'tool_call' as const,
@@ -196,6 +183,71 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       ],
     };
   }
+}
+
+function openAICompatibleMessages(input: StreamedModelTurnRequest['input']): any[] {
+  const messages: any[] = [];
+  let pendingReasoningContent = '';
+
+  for (const item of input) {
+    if (item.type === 'reasoning') {
+      const directNativeReasoning = item.providerMetadata?.reasoning_content;
+      // Persistence intentionally removes the duplicate text field from a
+      // standalone reasoning item. Keep this marker so restored native
+      // OpenAI-compatible reasoning is still distinguished from generic
+      // provider reasoning without sending a foreign field to other models.
+      const nativeReasoning =
+        typeof directNativeReasoning === 'string'
+          ? directNativeReasoning
+          : item.providerMetadata?.openai_compatible_reasoning_content === true
+          ? item.text
+          : undefined;
+      if (typeof nativeReasoning === 'string') {
+        pendingReasoningContent += nativeReasoning;
+      } else {
+        // Generic reasoning has no Chat Completions wire representation.
+        // Retain the historical assistant-text fallback without inventing a
+        // provider-native `reasoning_content` field for unrelated providers.
+        messages.push({ role: 'assistant', content: item.text });
+      }
+      continue;
+    }
+    if (item.type === 'message') {
+      const content = item.content.map((part: any) => {
+        if (part.type === 'image') {
+          const image = part.image;
+          const url = typeof image === 'string' ? image : image?.id;
+          return { type: 'image_url', image_url: { url } };
+        }
+        return { type: 'text', text: part.text };
+      });
+      messages.push({ role: item.role, content });
+      continue;
+    }
+    if (item.type === 'tool_call') {
+      messages.push({
+        role: 'assistant',
+        ...(pendingReasoningContent ? { content: null, reasoning_content: pendingReasoningContent } : {}),
+        tool_calls: [{ id: item.id, type: 'function', function: { name: item.name, arguments: item.arguments } }],
+      });
+      pendingReasoningContent = '';
+      continue;
+    }
+    if (item.type === 'tool_result') {
+      messages.push({
+        role: 'tool',
+        tool_call_id: item.id,
+        content: typeof item.output === 'string' ? item.output : JSON.stringify(item.output),
+      });
+    }
+  }
+
+  // A completed reasoning-only response is not normally replayed into a
+  // subsequent Chat Completions request, but retain it rather than dropping
+  // its native continuation payload if a caller does provide one.
+  if (pendingReasoningContent)
+    messages.push({ role: 'assistant', content: null, reasoning_content: pendingReasoningContent });
+  return messages;
 }
 
 function legacyMessages(input: any[]): any[] {

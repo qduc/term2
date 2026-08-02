@@ -1,6 +1,6 @@
 # Codex adapter contract audit
 
-**Status: plan.** Not yet implemented; waiting to be scheduled as dedicated provider work.
+**Status: implemented; verification recorded in the implementation commit.** The dependency-symlinked worktree cannot run the package-manager wrapper used by the complete black-box suite; direct focused, fake-Codex, typecheck, and equivalent built-suite runs are recorded with the change.
 **Last updated:** 2026-08-02
 
 ## Why this exists

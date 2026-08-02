@@ -2,16 +2,25 @@ import { afterEach, expect, it } from 'vitest';
 import OpenAI from 'openai';
 import { WebSocket as NodeWebSocket } from 'ws';
 import { CodexResponsesWSModel } from '../source/providers/codex-responses-model.js';
+import { CodexProvider } from '../source/providers/codex.provider.js';
 import { RetryingModel } from '../source/providers/retrying-model.js';
-import { startFakeCodexServer, type FakeCodexServer } from './fake-codex-server-lib.js';
+import {
+  startFakeCodexHttpServer,
+  startFakeCodexServer,
+  type FakeCodexHttpServer,
+  type FakeCodexServer,
+} from './fake-codex-server-lib.js';
 
 let server: FakeCodexServer | undefined;
+let httpServer: FakeCodexHttpServer | undefined;
 const originalWebSocket = globalThis.WebSocket;
 
 afterEach(async () => {
   globalThis.WebSocket = originalWebSocket;
   await server?.close();
+  await httpServer?.close();
   server = undefined;
+  httpServer = undefined;
 });
 
 function createModel(baseUrl: string, receiveTimeoutMs = 500, withSessionContext = false): CodexResponsesWSModel {
@@ -48,6 +57,159 @@ function request(): any {
     handoffs: [],
   };
 }
+
+it('writes rich chained input through the real fake-Codex HTTP Responses transport', async () => {
+  httpServer = await startFakeCodexHttpServer({ scenario: 'success' });
+  const client = new OpenAI({ apiKey: 'fake-token', baseURL: httpServer.baseUrl, timeout: 2_000 });
+  const provider = new CodexProvider(
+    client,
+    { getOrRefreshAccessToken: async () => 'fake-token', getAccountId: () => 'fake-account' } as any,
+    {},
+    undefined,
+    'http',
+    0,
+    { firstFrameMs: 500, interFrameMs: 500 },
+  );
+  const events: any[] = [];
+  for await (const event of provider.getStreamedModel('gpt-5.3-codex').stream({
+    instructions: 'HTTP_CONTEXT_SENTINEL',
+    previousResponseId: 'resp_before',
+    input: [
+      {
+        type: 'reasoning',
+        id: 'rs_http',
+        text: 'continue with encrypted context',
+        providerMetadata: { codex: { encrypted_content: 'http-cipher' } },
+      },
+      { type: 'tool_call', id: 'call_http', name: 'lookup', arguments: '{}' },
+      { type: 'tool_result', id: 'call_http', output: [{ type: 'text', text: 'result' }] },
+    ],
+    tools: [{ name: 'lookup', parameters: { type: 'object' } }],
+    toolChoice: { name: 'lookup' },
+    maxTokens: 12,
+  })) {
+    events.push(event);
+  }
+
+  expect(httpServer.receivedRequests).toHaveLength(1);
+  expect(httpServer.receivedRequests[0]).toMatchObject({
+    instructions: 'HTTP_CONTEXT_SENTINEL',
+    previous_response_id: 'resp_before',
+    tool_choice: { type: 'function', name: 'lookup' },
+    max_output_tokens: 12,
+    input: [
+      {
+        type: 'reasoning',
+        encrypted_content: 'http-cipher',
+        content: [{ type: 'reasoning_text', text: 'continue with encrypted context' }],
+      },
+      { type: 'function_call', call_id: 'call_http', name: 'lookup', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'call_http', output: [{ type: 'input_text', text: 'result' }] },
+    ],
+  });
+  expect(events).toMatchObject([
+    { type: 'text_delta', text: 'Hello from fake HTTP Codex' },
+    { type: 'completion', responseId: 'resp_http_1' },
+  ]);
+});
+
+it('rejects a missing terminal event over the real fake-Codex HTTP Responses transport', async () => {
+  httpServer = await startFakeCodexHttpServer({ scenario: 'missing-terminal' });
+  const provider = new CodexProvider(
+    new OpenAI({ apiKey: 'fake-token', baseURL: httpServer.baseUrl, timeout: 2_000 }),
+    { getOrRefreshAccessToken: async () => 'fake-token', getAccountId: () => 'fake-account' } as any,
+    {},
+    undefined,
+    'http',
+    0,
+    { firstFrameMs: 500, interFrameMs: 500 },
+  );
+  await expect(
+    (async () => {
+      for await (const _event of provider.getStreamedModel('gpt-5.3-codex').stream({
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        tools: [],
+      })) {
+        // drain
+      }
+    })(),
+  ).rejects.toThrow('without a completed response');
+});
+
+it('writes the streamed-turn request contract to the real fake-Codex WebSocket wire', async () => {
+  server = await startFakeCodexServer({ scenario: 'success' });
+  globalThis.WebSocket = NodeWebSocket as unknown as typeof WebSocket;
+  const client = new OpenAI({ apiKey: 'fake-token', baseURL: server.baseUrl, timeout: 2_000 });
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'fake-token',
+    getAccountId: () => 'fake-account',
+    getInstallationId: () => undefined,
+  };
+  const provider = new CodexProvider(client, tokenManager as any, {}, undefined, 'websocket', 0, {
+    firstFrameMs: 500,
+    interFrameMs: 500,
+  });
+  const controller = new AbortController();
+  const model = provider.getStreamedModel('gpt-5.3-codex');
+
+  for await (const _event of model.stream({
+    instructions: 'PROJECT_CONTEXT_SENTINEL',
+    previousResponseId: 'resp_before',
+    input: [
+      {
+        type: 'message',
+        role: 'user',
+        content: [
+          { type: 'text', text: 'hello' },
+          { type: 'image', image: 'https://example.test/image.png', detail: 'high' },
+        ],
+      },
+      { type: 'tool_call', id: 'call_in', name: 'lookup', arguments: '{}' },
+      { type: 'tool_result', id: 'call_in', output: [{ type: 'text', text: 'result' }] },
+    ],
+    tools: [{ name: 'lookup', parameters: { type: 'object' }, strict: true }],
+    toolChoice: { name: 'lookup' },
+    temperature: 0.2,
+    topP: 0.8,
+    frequencyPenalty: 0.3,
+    presencePenalty: 0.4,
+    maxTokens: 123,
+    reasoning: { effort: 'high', summary: 'concise' },
+    providerOptions: { generate: false, custom_codex_option: true },
+    signal: controller.signal,
+  })) {
+    // Consume the complete turn.
+  }
+
+  expect(server.receivedRequests).toHaveLength(1);
+  expect(server.receivedRequests[0]).toMatchObject({
+    type: 'response.create',
+    instructions: 'PROJECT_CONTEXT_SENTINEL',
+    previous_response_id: 'resp_before',
+    tool_choice: { type: 'function', name: 'lookup' },
+    top_p: 0.8,
+    frequency_penalty: 0.3,
+    presence_penalty: 0.4,
+    max_output_tokens: 123,
+    reasoning: { effort: 'high', summary: 'concise' },
+    generate: false,
+    custom_codex_option: true,
+    tools: [{ type: 'function', name: 'lookup', parameters: { type: 'object' }, strict: true }],
+    input: [
+      {
+        type: 'message',
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'hello' },
+          { type: 'input_image', image_url: 'https://example.test/image.png', detail: 'high' },
+        ],
+      },
+      { type: 'function_call', call_id: 'call_in', name: 'lookup', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'call_in', output: [{ type: 'input_text', text: 'result' }] },
+    ],
+  });
+  expect(server.receivedRequests[0]?.temperature).toBeUndefined();
+});
 
 it('performs history warmup without generating the user turn twice', async () => {
   server = await startFakeCodexServer({ scenario: 'success' });

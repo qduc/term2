@@ -1,5 +1,10 @@
 import { it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { CodexResponsesWSModel, OpenAIResponsesModel, OpenAIResponsesWSModel } from './codex-responses-model.js';
+import {
+  CodexResponsesModel,
+  CodexResponsesWSModel,
+  OpenAIResponsesModel,
+  OpenAIResponsesWSModel,
+} from './codex-responses-model.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -860,6 +865,206 @@ it.sequential('Codex HTTP stream forwards application instructions to Luna as de
     type: 'completion',
     usage: { inputTokens: 7, outputTokens: 3, cachedInputTokens: 2 },
   });
+});
+
+it.sequential('Codex registry boundary preserves the full streamed-turn request and response contract', async () => {
+  const provider = getProvider('codex');
+  expect(provider?.createStreamedModel).toBeTruthy();
+  if (!provider?.createStreamedModel) return;
+
+  const original = (CodexResponsesWSModel.prototype as any).getStreamedResponse;
+  let captured: any;
+  (CodexResponsesWSModel.prototype as any).getStreamedResponse = async function* (request: any) {
+    captured = request;
+    yield { type: 'response.output_text.delta', delta: 'answer' };
+    yield { type: 'response.reasoning_summary_text.delta', item_id: 'rs_out', delta: 'thought' };
+    yield {
+      type: 'response.output_item.done',
+      item: { type: 'function_call', call_id: 'call_out', name: 'lookup', arguments: '{"q":1}' },
+    };
+    yield {
+      type: 'response.completed',
+      response: {
+        id: 'resp_contract',
+        status: 'completed',
+        usage: {
+          input_tokens: 10,
+          output_tokens: 4,
+          input_tokens_details: { cached_tokens: 3, cache_write_tokens: 2 },
+        },
+        output: [
+          {
+            type: 'reasoning',
+            id: 'rs_out',
+            summary: [{ type: 'summary_text', text: 'thought' }],
+            encrypted_content: 'cipher',
+          },
+          { type: 'message', content: [{ type: 'output_text', text: 'answer' }] },
+          { type: 'function_call', call_id: 'call_out', name: 'lookup', arguments: '{"q":1}' },
+        ],
+      },
+    };
+    yield { type: 'response.output_text.delta', delta: 'must not escape terminal' };
+  };
+
+  try {
+    const controller = new AbortController();
+    const model = await provider.createStreamedModel('gpt-5.3-codex', {
+      settingsService: {
+        get: (key: string) =>
+          key === 'agent.transport' ? 'websocket' : key === 'agent.retryAttempts' ? 0 : 'gpt-5.3-codex',
+      },
+      loggingService: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+    } as any);
+    const events: any[] = [];
+    for await (const event of model.stream({
+      instructions: 'PROJECT_CONTEXT_SENTINEL',
+      previousResponseId: 'resp_before',
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'image', image: 'https://example.test/image.png' }] },
+        {
+          type: 'reasoning',
+          id: 'rs_in',
+          text: 'old thought',
+          providerMetadata: { codex: { encrypted_content: 'old-cipher' } },
+        },
+        { type: 'tool_call', id: 'call_in', name: 'lookup', arguments: '{}' },
+        {
+          type: 'tool_result',
+          id: 'call_in',
+          output: [{ type: 'file', file: { id: 'file_1', filename: 'result.txt' } }],
+        },
+      ],
+      tools: [{ name: 'lookup', parameters: { type: 'object' }, strict: true }],
+      toolChoice: { name: 'lookup' },
+      temperature: 0.2,
+      topP: 0.8,
+      frequencyPenalty: 0.3,
+      presencePenalty: 0.4,
+      maxTokens: 321,
+      reasoning: { effort: 'high', summary: 'detailed' },
+      providerOptions: { generate: false, custom_codex_option: true },
+      signal: controller.signal,
+    })) {
+      events.push(event);
+    }
+
+    expect(captured).toMatchObject({
+      previousResponseId: 'resp_before',
+      systemInstructions: 'PROJECT_CONTEXT_SENTINEL',
+      modelSettings: {
+        toolChoice: { name: 'lookup' },
+        temperature: 0.2,
+        topP: 0.8,
+        frequencyPenalty: 0.3,
+        presencePenalty: 0.4,
+        maxTokens: 321,
+        reasoning: { effort: 'high', summary: 'detailed' },
+        providerData: { generate: false, custom_codex_option: true },
+      },
+      signal: controller.signal,
+    });
+    expect(captured.input).toEqual([
+      {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_image', image_url: 'https://example.test/image.png' }],
+      },
+      {
+        type: 'reasoning',
+        id: 'rs_in',
+        encrypted_content: 'old-cipher',
+        content: [{ type: 'reasoning_text', text: 'old thought' }],
+      },
+      { type: 'function_call', call_id: 'call_in', name: 'lookup', arguments: '{}' },
+      {
+        type: 'function_call_output',
+        call_id: 'call_in',
+        output: [{ type: 'input_file', file_id: 'file_1', filename: 'result.txt' }],
+      },
+    ]);
+    expect(events).toEqual([
+      { type: 'text_delta', text: 'answer' },
+      {
+        type: 'reasoning_delta',
+        id: 'rs_out',
+        text: 'thought',
+        providerMetadata: { codex: { encrypted_content: 'cipher' } },
+      },
+      { type: 'tool_call', id: 'call_out', name: 'lookup', arguments: '{"q":1}' },
+      {
+        type: 'completion',
+        responseId: 'resp_contract',
+        finishReason: 'completed',
+        usage: { inputTokens: 10, outputTokens: 4, cachedInputTokens: 3, cacheWriteTokens: 2 },
+        output: [
+          { type: 'tool_call', id: 'call_out', name: 'lookup', arguments: '{"q":1}' },
+          {
+            type: 'reasoning',
+            id: 'rs_out',
+            text: 'thought',
+            providerMetadata: { codex: { encrypted_content: 'cipher' } },
+          },
+          { type: 'message', content: [{ type: 'text', text: 'answer' }] },
+        ],
+      },
+    ]);
+  } finally {
+    (CodexResponsesWSModel.prototype as any).getStreamedResponse = original;
+  }
+});
+
+it.sequential('Codex HTTP and WebSocket adapters expose equivalent application-turn semantics', async () => {
+  const originalHttp = (CodexResponsesModel.prototype as any).getStreamedResponse;
+  const originalWs = (CodexResponsesWSModel.prototype as any).getStreamedResponse;
+  const captured: any[] = [];
+  const stream = async function* (request: any) {
+    captured.push(request);
+    yield { type: 'response.output_text.delta', delta: 'parity' };
+    yield {
+      type: 'response.completed',
+      response: {
+        id: 'resp_parity',
+        status: 'completed',
+        output: [{ type: 'message', content: [{ type: 'output_text', text: 'parity' }] }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      },
+    };
+  };
+  (CodexResponsesModel.prototype as any).getStreamedResponse = stream;
+  (CodexResponsesWSModel.prototype as any).getStreamedResponse = stream;
+  const request = {
+    instructions: 'PARITY_SENTINEL',
+    previousResponseId: 'resp_before',
+    input: [{ type: 'message' as const, role: 'user' as const, content: [{ type: 'text' as const, text: 'hello' }] }],
+    tools: [],
+    toolChoice: 'none' as const,
+    topP: 0.5,
+    maxTokens: 10,
+    reasoning: { effort: 'low' },
+    providerOptions: { generate: false },
+  };
+  try {
+    const http = new CodexProvider({} as any, {} as any, {}, undefined, 'http', 0, {
+      firstFrameMs: 1_000,
+      interFrameMs: 1_000,
+    }).getStreamedModel('gpt-5.3-codex');
+    const websocket = new CodexProvider({} as any, {} as any, {}, undefined, 'websocket', 0, {
+      firstFrameMs: 1_000,
+      interFrameMs: 1_000,
+    }).getStreamedModel('gpt-5.3-codex');
+    const collect = async (model: any) => {
+      const events: any[] = [];
+      for await (const event of model.stream(request)) events.push(event);
+      return events;
+    };
+    expect(await collect(http)).toEqual(await collect(websocket));
+    expect(captured).toHaveLength(2);
+    expect(captured[0]).toEqual(captured[1]);
+  } finally {
+    (CodexResponsesModel.prototype as any).getStreamedResponse = originalHttp;
+    (CodexResponsesWSModel.prototype as any).getStreamedResponse = originalWs;
+  }
 });
 
 it.sequential('Codex HTTP stream rejects EOF before a completed response event', async () => {

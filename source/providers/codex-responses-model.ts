@@ -22,6 +22,14 @@ const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
   recordRequestFailed() {},
 };
 
+function toCodexToolChoice(choice: unknown): unknown {
+  if (choice === 'auto' || choice === 'required' || choice === 'none') return choice;
+  if (choice && typeof choice === 'object' && typeof (choice as { name?: unknown }).name === 'string') {
+    return { type: 'function', name: (choice as { name: string }).name };
+  }
+  throw new Error('Unsupported Codex tool choice.');
+}
+
 /** Minimal public OpenAI Responses transport boundary used by Codex. */
 export class OpenAIResponsesModel {
   protected readonly _client: any;
@@ -32,16 +40,26 @@ export class OpenAIResponsesModel {
   }
   protected _buildResponsesCreateRequest(request: any, stream: boolean): any {
     const settings = request?.modelSettings ?? {};
+    // Provider data is the application-owned escape hatch for documented
+    // Codex Responses fields. `extraHeaders` configures the transport rather
+    // than the JSON body; all other provider data remains semantic wire data.
+    const { extraBody, extraHeaders: _extraHeaders, ...nativeProviderData } = settings.providerData ?? {};
     return {
       requestData: {
         model: this._model,
         input: typeof request?.input === 'string' ? [{ role: 'user', content: request.input }] : request?.input ?? [],
         stream,
-        ...(request?.systemInstructions ? { instructions: request.systemInstructions } : {}),
+        ...(request?.systemInstructions !== undefined ? { instructions: request.systemInstructions } : {}),
         ...(request?.tools ? { tools: request.tools } : {}),
-        ...(settings.reasoning ? { reasoning: settings.reasoning } : {}),
-        ...(settings.providerData?.generate !== undefined ? { generate: settings.providerData.generate } : {}),
-        ...(settings.providerData?.extraBody ?? {}),
+        ...(settings.toolChoice !== undefined ? { tool_choice: toCodexToolChoice(settings.toolChoice) } : {}),
+        ...(settings.temperature !== undefined ? { temperature: settings.temperature } : {}),
+        ...(settings.topP !== undefined ? { top_p: settings.topP } : {}),
+        ...(settings.frequencyPenalty !== undefined ? { frequency_penalty: settings.frequencyPenalty } : {}),
+        ...(settings.presencePenalty !== undefined ? { presence_penalty: settings.presencePenalty } : {}),
+        ...(settings.maxTokens !== undefined ? { max_output_tokens: settings.maxTokens } : {}),
+        ...(settings.reasoning !== undefined ? { reasoning: settings.reasoning } : {}),
+        ...nativeProviderData,
+        ...(extraBody ?? {}),
         ...(request?.previousResponseId ? { previous_response_id: request.previousResponseId } : {}),
       },
     };
@@ -84,7 +102,13 @@ export class OpenAIResponsesModel {
         }
       })();
     }
-    return this._client.responses.create(built.requestData);
+    const requestOptions = {
+      ...(request?.signal ? { signal: request.signal } : {}),
+      ...(request?.modelSettings?.providerData?.extraHeaders
+        ? { headers: request.modelSettings.providerData.extraHeaders }
+        : {}),
+    };
+    return this._client.responses.create(built.requestData, requestOptions);
   }
   async getResponse(request: any): Promise<any> {
     const response = await this._fetchResponse(request, false);
@@ -222,7 +246,13 @@ function normalizeCodexRequestData(
               ...rest,
               type: 'function_call_output',
               call_id: item.call_id ?? item.callId ?? item.tool_call_id,
-              output: typeof item.output === 'string' ? item.output : JSON.stringify(item.output ?? ''),
+              // Responses supports rich function output content (input text,
+              // images, and files). Preserve the already-normalized array;
+              // only legacy object output needs JSON serialization.
+              output:
+                typeof item.output === 'string' || Array.isArray(item.output)
+                  ? item.output
+                  : JSON.stringify(item.output ?? ''),
             };
           }
           if (item?.type === 'function_call' && item.callId && !item.call_id) {

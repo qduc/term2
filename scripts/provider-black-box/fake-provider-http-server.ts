@@ -180,6 +180,11 @@ export function framesFor(protocol: FakeProviderProtocol, scenario: FakeProvider
             },
           ]),
     ];
+  if (scenario === 'reasoning')
+    return [
+      { id: 'chatcmpl_fake', choices: [{ index: 0, delta: { reasoning_content: 'Need native reasoning.' } }] },
+      { id: 'chatcmpl_fake', choices: [{ index: 0, delta: { content: 'hello' }, finish_reason: 'stop' }] },
+    ];
   if (scenario === 'tool-fragments')
     return [
       {

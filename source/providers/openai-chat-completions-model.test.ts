@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest';
 import { OpenAIChatCompletionsModel } from './openai-chat-completions-model.js';
+import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
 
 async function* emptyStream(): AsyncIterable<any> {
   yield { choices: [{ delta: {}, finish_reason: 'stop' }] };
@@ -142,6 +143,66 @@ async function* reasoningStream(): AsyncIterable<any> {
   yield { choices: [{ delta: {}, finish_reason: 'stop' }] };
 }
 
+it('application tool continuation replays native reasoning_content beside the prior assistant tool call', async () => {
+  const bodies: any[] = [];
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          bodies.push(body);
+          if (bodies.length === 1) {
+            return (async function* () {
+              yield { choices: [{ delta: { reasoning_content: 'Need the fixture tool.' } }] };
+              yield {
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [{ index: 0, id: 'call_fixture', function: { name: 'lookup', arguments: '{}' } }],
+                    },
+                  },
+                ],
+              };
+              yield { choices: [{ delta: {}, finish_reason: 'tool_calls' }] };
+            })();
+          }
+          return (async function* () {
+            yield { choices: [{ delta: { content: 'done' } }] };
+            yield { choices: [{ delta: {}, finish_reason: 'stop' }] };
+          })();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'console-go-thinking');
+  const loop = new ApplicationRunLoop({ resolveModel: () => model });
+  const stream = loop.startStream(
+    {
+      name: 'reasoning-continuation',
+      instructions: 'Use tools when needed.',
+      model: 'console-go-thinking',
+      tools: [
+        {
+          name: 'lookup',
+          parameters: { type: 'object' },
+          needsApproval: async () => false,
+          execute: async () => 'fixture result',
+        },
+      ] as any,
+    },
+    'look this up',
+  );
+
+  await stream.completed;
+
+  expect(bodies).toHaveLength(2);
+  expect(bodies[1].messages).toContainEqual({
+    role: 'assistant',
+    content: null,
+    reasoning_content: 'Need the fixture tool.',
+    tool_calls: [{ id: 'call_fixture', type: 'function', function: { name: 'lookup', arguments: '{}' } }],
+  });
+});
+
 it('stream() surfaces reasoning_content as reasoning_delta events and in the completion output', async () => {
   const client = {
     chat: { completions: { create: async () => reasoningStream() } },
@@ -158,7 +219,14 @@ it('stream() surfaces reasoning_content as reasoning_delta events and in the com
 
   const completion = events.find((event) => event.type === 'completion');
   expect(completion.output).toEqual([
-    { type: 'reasoning', text: 'Thinking it through.' },
+    {
+      type: 'reasoning',
+      text: 'Thinking it through.',
+      providerMetadata: {
+        reasoning_content: 'Thinking it through.',
+        openai_compatible_reasoning_content: true,
+      },
+    },
     { type: 'message', content: [{ type: 'text', text: 'Final answer.' }] },
   ]);
 });

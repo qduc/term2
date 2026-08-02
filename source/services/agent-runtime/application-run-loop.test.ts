@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { ApplicationRunLoop, MaxTurnsExceededError, type ApplicationAgent } from './application-run-loop.js';
+import {
+  ApplicationRunLoop,
+  MaxTurnsExceededError,
+  normalizeApplicationInput,
+  type ApplicationAgent,
+} from './application-run-loop.js';
+import {
+  consumeOpenAIRequestPrefixBindingWithOutcome,
+  prepareOpenAIRequestPrefixBinding,
+  runWithOpenAIRequestPrefixBindingScope,
+} from '../../providers/openai-request-prefix-binding.js';
+import { toOpenAILegacyInput } from '../../providers/openai-streamed-model-adapter.js';
+import { isDeepStrictEqual } from 'node:util';
 import type { StreamedModelTurn } from '../../contracts/streamed-model-turn.js';
 import type { ToolDefinition } from '../../tools/types.js';
 
@@ -31,6 +43,68 @@ function textModel(text: string, responseId: string): StreamedModelTurn {
 }
 
 describe('ApplicationRunLoop', () => {
+  it.each(['root', 'continuation'] as const)(
+    'binds the exact %s request after OpenAI tool-result adaptation',
+    async (mode) => {
+      const history = [
+        { type: 'message', role: 'user', content: 'run the tool' },
+        { type: 'function_call', callId: 'call-1', name: 'lookup', arguments: '{}' },
+        { type: 'function_call_result', callId: 'call-1', name: 'lookup', output: 'done' },
+      ] as any;
+      const bindingOutcomes: unknown[] = [];
+      const model: StreamedModelTurn = {
+        async *stream(request) {
+          bindingOutcomes.push(consumeOpenAIRequestPrefixBindingWithOutcome(toOpenAILegacyInput(request.input)));
+          yield { type: 'completion', responseId: 'resp-bind', output: [] };
+        },
+      };
+      const canonical = normalizeApplicationInput(history);
+      const preparation = {
+        prepare: (request: any) => {
+          if (isDeepStrictEqual(canonical, request.input)) {
+            prepareOpenAIRequestPrefixBinding(
+              { snapshotIdentity: 'history', snapshotRevision: 3, lineage: 0 },
+              toOpenAILegacyInput(request.input),
+            );
+          }
+        },
+        run: <T>(operation: () => Promise<T>) => runWithOpenAIRequestPrefixBindingScope(operation),
+      };
+      const loop = new ApplicationRunLoop({ resolveModel: () => model });
+      const first = loop.startStream(agent, history, { requestPreparation: preparation });
+      await first.completed;
+      if (mode === 'continuation') {
+        const continued = loop.continueRunStream(first.state!, { requestPreparation: preparation });
+        await continued.completed;
+      }
+
+      expect(bindingOutcomes).toEqual([
+        { binding: { snapshotIdentity: 'history', snapshotRevision: 3, lineage: 0 } },
+        ...(mode === 'continuation'
+          ? [{ binding: { snapshotIdentity: 'history', snapshotRevision: 3, lineage: 0 } }]
+          : []),
+      ]);
+    },
+  );
+
+  it('fails closed when the canonical request differs from the supplied snapshot', async () => {
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        yield { type: 'completion', responseId: 'resp-mismatch', output: [] };
+        expect(consumeOpenAIRequestPrefixBindingWithOutcome(toOpenAILegacyInput(request.input))).toEqual({
+          outcome: 'not_prepared',
+        });
+      },
+    };
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const preparation = {
+      prepare: () => {},
+      run: <T>(operation: () => Promise<T>) => runWithOpenAIRequestPrefixBindingScope(operation),
+    };
+    const stream = loop.startStream(agent, 'different request', { requestPreparation: preparation });
+    await stream.completed;
+  });
+
   it('forwards Codex ChatGPT-plan rate limits as provider model events', async () => {
     const model: StreamedModelTurn = {
       async *stream() {
@@ -102,13 +176,67 @@ describe('ApplicationRunLoop', () => {
     };
 
     const loop = new ApplicationRunLoop({ resolveModel: () => model });
-    const stream = loop.startStream(agent, 'follow up', { previousResponseId: 'resp-before' });
+    const stream = loop.startStream(agent, 'follow up', {
+      previousResponseId: 'resp-before',
+      providerId: 'openai',
+      supportsConversationChaining: true,
+    });
     await stream.completed;
 
     expect(requests).toEqual([
       expect.objectContaining({ previousResponseId: 'resp-before' }),
       expect.objectContaining({ previousResponseId: 'resp-1' }),
     ]);
+  });
+
+  it.each([
+    ['openai', 'codex'],
+    ['codex', 'openai'],
+  ] as const)('does not forward a response ID across %s to %s continuation', async (origin, current) => {
+    const requests: Array<{ previousResponseId?: string | null }> = [];
+    let calls = 0;
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push({ previousResponseId: request.previousResponseId });
+        calls += 1;
+        yield { type: 'completion', responseId: calls === 1 ? `resp-${origin}` : `resp-${current}`, output: [] };
+      },
+    };
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const first = loop.startStream(agent, 'prompt', {
+      providerId: origin,
+      supportsConversationChaining: true,
+    });
+    await first.completed;
+    const continued = loop.continueRunStream(first.state!, {
+      providerId: current,
+      supportsConversationChaining: true,
+    });
+    await continued.completed;
+
+    expect(requests).toEqual([{}, {}]);
+    expect(continued.lastResponseId).toBe(`resp-${current}`);
+  });
+
+  it('fails closed for a legacy continuation without response provenance', async () => {
+    const requests: Array<{ previousResponseId?: string | null }> = [];
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push({ previousResponseId: request.previousResponseId });
+        yield { type: 'completion', responseId: 'resp-legacy', output: [] };
+      },
+    };
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const first = loop.startStream(agent, 'prompt', { supportsConversationChaining: true });
+    await first.completed;
+    const continued = loop.continueRunStream(first.state!, {
+      previousResponseId: 'resp-untrusted',
+      providerId: 'openai',
+      supportsConversationChaining: true,
+    });
+    await continued.completed;
+
+    expect(requests).toEqual([{}, {}]);
   });
 
   it('commits native reasoning as one canonical item before a streamed tool continuation', async () => {
@@ -494,7 +622,10 @@ describe('ApplicationRunLoop', () => {
 
   it('owns a text turn without an SDK runner', async () => {
     const loop = new ApplicationRunLoop({ resolveModel: () => textModel('hello', 'resp-1') });
-    const stream = loop.startStream(agent, 'say hello');
+    const stream = loop.startStream(agent, 'say hello', {
+      providerId: 'openai',
+      supportsConversationChaining: true,
+    });
 
     const events = await collect(stream);
     await stream.completed;
@@ -693,13 +824,19 @@ describe('ApplicationRunLoop', () => {
     };
 
     const loop = new ApplicationRunLoop({ resolveModel: () => model });
-    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do it');
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do it', {
+      providerId: 'openai',
+      supportsConversationChaining: true,
+    });
     await stream.completed;
 
     expect(stream.interruptions).toHaveLength(1);
     const handle = stream.state!;
     handle.approve?.(stream.interruptions![0]);
-    const resumed = loop.continueRunStream(handle);
+    const resumed = loop.continueRunStream(handle, {
+      providerId: 'openai',
+      supportsConversationChaining: true,
+    });
     await resumed.completed;
 
     expect(requests[0].previousResponseId).toBeUndefined();
@@ -744,13 +881,19 @@ describe('ApplicationRunLoop', () => {
     };
 
     const loop = new ApplicationRunLoop({ resolveModel: () => model });
-    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do it');
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do it', {
+      providerId: 'openai',
+      supportsConversationChaining: true,
+    });
     await stream.completed;
 
     expect(stream.interruptions).toHaveLength(1);
     const handle = stream.state!;
     handle.reject?.(stream.interruptions![0], { message: 'declined by user' });
-    const resumed = loop.continueRunStream(handle);
+    const resumed = loop.continueRunStream(handle, {
+      providerId: 'openai',
+      supportsConversationChaining: true,
+    });
     await resumed.completed;
 
     expect(requests[0].previousResponseId).toBeUndefined();
@@ -797,7 +940,10 @@ describe('ApplicationRunLoop', () => {
     };
 
     const loop = new ApplicationRunLoop({ resolveModel: () => model });
-    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do both');
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do both', {
+      providerId: 'openai',
+      supportsConversationChaining: true,
+    });
     await stream.completed;
 
     expect(stream.interruptions?.map((item) => (item as { callId?: string }).callId)).toEqual([
@@ -807,7 +953,10 @@ describe('ApplicationRunLoop', () => {
 
     const firstHandle = stream.state!;
     firstHandle.approve?.(stream.interruptions![0]);
-    const afterFirst = loop.continueRunStream(firstHandle);
+    const afterFirst = loop.continueRunStream(firstHandle, {
+      providerId: 'openai',
+      supportsConversationChaining: true,
+    });
     await afterFirst.completed;
 
     expect(modelCalls).toBe(1);
@@ -815,7 +964,10 @@ describe('ApplicationRunLoop', () => {
 
     const secondHandle = afterFirst.state!;
     secondHandle.approve?.(afterFirst.interruptions![0]);
-    const resumed = loop.continueRunStream(secondHandle);
+    const resumed = loop.continueRunStream(secondHandle, {
+      providerId: 'openai',
+      supportsConversationChaining: true,
+    });
     await resumed.completed;
 
     expect(modelCalls).toBe(2);

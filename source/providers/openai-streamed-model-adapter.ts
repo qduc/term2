@@ -9,16 +9,25 @@ type OpenAIStreamedModel = {
 };
 
 /** Adapt an OpenAI Responses model's SDK stream to the application turn protocol. */
+/**
+ * The minimal application-to-legacy projection consumed by the OpenAI model
+ * lifecycle. Keep this shared with prefix preparation: tool results are the
+ * one application item whose legacy shape differs observably.
+ */
+export function toOpenAILegacyInput(input: ReadonlyArray<StreamedModelTurnRequest['input'][number]>): any[] {
+  return input.map((item: any) =>
+    item.type === 'tool_result'
+      ? { type: 'function_call_result', callId: item.id, output: { text: item.output } }
+      : item,
+  );
+}
+
 export function adaptOpenAIStreamedModel(model: OpenAIStreamedModel): StreamedModelTurn {
   return {
     async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
       const legacyRequest = {
         ...(request.previousResponseId ? { previousResponseId: request.previousResponseId } : {}),
-        input: request.input.map((item: any) =>
-          item.type === 'tool_result'
-            ? { type: 'function_call_result', callId: item.id, output: { text: item.output } }
-            : item,
-        ),
+        input: toOpenAILegacyInput(request.input),
         tools: request.tools.map((tool) => ({ type: 'function', ...tool })),
         modelSettings: {
           ...(request.toolChoice !== undefined ? { toolChoice: toLegacyToolChoice(request.toolChoice) } : {}),

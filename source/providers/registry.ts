@@ -8,7 +8,11 @@ export interface ProviderDeps {
   settingsService: ISettingsService;
   loggingService: ILoggingService;
   sessionContextService?: ISessionContextService;
+  /** Abort signal for provider discovery or model preparation. */
+  signal?: AbortSignal;
   onRetry?: () => void;
+  /** Per-client retry budget for direct streamed models. */
+  retryAttempts?: number;
   /** Root-session-only observational seam. Omitted for all other clients. */
   requestCapture?: ProviderRequestCapture;
 }

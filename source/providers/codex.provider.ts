@@ -412,7 +412,7 @@ export function addCodexResponsesLiteHeader(url: unknown, init?: RequestInit): R
 }
 
 async function fetchCodexModels(
-  _deps: ProviderDeps,
+  deps: ProviderDeps,
   fetchImpl: ProviderFetch = fetch as any,
 ): Promise<Array<{ id: string; name?: string; default_reasoning_level?: string }>> {
   const tokenManager = new CodexTokenManager({ fetchImpl: fetchImpl as any });
@@ -431,6 +431,7 @@ async function fetchCodexModels(
   const clientVersion = await resolveCodexClientVersion({ fetchImpl });
   const response = await fetchImpl(`https://chatgpt.com/backend-api/codex/models?client_version=${clientVersion}`, {
     headers,
+    ...(deps.signal ? { signal: deps.signal } : {}),
   });
   if (!response.ok) {
     throw new Error(`Codex models request failed (${response.status})`);
@@ -474,8 +475,13 @@ export class CodexProvider implements LegacyModelProvider {
     private readonly transport: 'websocket' | 'http',
     private readonly retryAttempts: number,
     private readonly websocketReceiveTimeouts: { firstFrameMs: number; interFrameMs: number },
-    private readonly onRetry?: () => void,
+    private onRetry?: () => void,
   ) {}
+
+  setRetryCallback(callback?: () => void): void {
+    this.onRetry = callback;
+    for (const model of this.models.values()) model.setRetryCallback(callback);
+  }
 
   async getModel(modelName?: string): Promise<LegacyModel> {
     const resolvedModel = modelName || DEFAULT_CODEX_MODEL;
@@ -812,10 +818,10 @@ function codexHeadersMiddleware(sessionContextService?: ISessionContextService):
 // tool execution and continuation turns.
 const streamedProviders = new WeakMap<object, { fingerprint: string; provider: CodexProvider }>();
 
-function codexProviderFingerprint(settingsService: { get(key: string): unknown }): string {
+function codexProviderFingerprint(settingsService: { get(key: string): unknown }, retryAttempts?: number): string {
   return JSON.stringify([
     settingsService.get('agent.transport') ?? 'websocket',
-    settingsService.get('agent.retryAttempts') ?? 2,
+    retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2,
     settingsService.get('agent.codex.websocketFirstFrameTimeoutMs') ?? 90_000,
     settingsService.get('agent.codex.websocketInterFrameTimeoutMs') ?? 600_000,
   ]);
@@ -825,13 +831,13 @@ function codexProviderFingerprint(settingsService: { get(key: string): unknown }
 registerProvider({
   id: 'codex',
   label: 'Codex',
-  createStreamedModel: (model, { settingsService, loggingService, sessionContextService }) => {
+  createStreamedModel: (model, { settingsService, loggingService, sessionContextService, onRetry, retryAttempts }) => {
     const defaultModel = settingsService.get('agent.model') || 'gpt-5.3-codex';
     // A session context is the ownership boundary for continuation state. Do
     // not fall back to the settings service: it can be shared by independent
     // sessions, which would leak server-managed response history.
     const cacheKey = sessionContextService as object | undefined;
-    const fingerprint = codexProviderFingerprint(settingsService);
+    const fingerprint = codexProviderFingerprint(settingsService, retryAttempts);
     const cached = cacheKey ? streamedProviders.get(cacheKey) : undefined;
     if (cached) {
       if (cached.fingerprint !== fingerprint) {
@@ -839,6 +845,8 @@ registerProvider({
           'Codex transport or retry settings changed while this session was active. Start a new session before continuing so server-managed tool-call state is not lost.',
         );
       }
+      // The cache is session-scoped, but retry observers are client-scoped.
+      cached.provider.setRetryCallback(onRetry);
       return cached.provider.getStreamedModel(model || defaultModel);
     }
 
@@ -847,7 +855,7 @@ registerProvider({
     const openAIClient = new OpenAI({
       apiKey: 'placeholder',
       baseURL: process.env.CODEX_BASE_URL || 'https://chatgpt.com/backend-api/codex',
-      maxRetries: settingsService.get('agent.retryAttempts') ?? 2,
+      maxRetries: retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2,
       fetch: createProviderFetch({
         providerId: 'codex',
         defaultModel,
@@ -869,12 +877,12 @@ registerProvider({
       loggingService,
       sessionContextService,
       settingsService.get('agent.transport') ?? 'websocket',
-      settingsService.get('agent.retryAttempts') ?? 2,
+      retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2,
       {
         firstFrameMs: settingsService.get('agent.codex.websocketFirstFrameTimeoutMs') ?? 90_000,
         interFrameMs: settingsService.get('agent.codex.websocketInterFrameTimeoutMs') ?? 600_000,
       },
-      undefined,
+      onRetry,
     );
     if (cacheKey) streamedProviders.set(cacheKey, { fingerprint, provider });
     return provider.getStreamedModel(model || defaultModel);

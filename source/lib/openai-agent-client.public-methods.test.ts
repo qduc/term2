@@ -205,17 +205,12 @@ function ensureChainingProvidersRegistered() {
     registerProvider({
       id: 'mock-chaining-false',
       label: 'Mock Chaining False',
-      createRunner: () =>
-        ({
-          run: async (_agent: any, _input: any, options: any) => {
-            chainingRunnerCalls.push({ input: _input, options, providerId: 'mock-chaining-false' });
-            return {
-              status: 'completed',
-              finalOutput: 'ok',
-              messages: [],
-            };
-          },
-        } as any),
+      createStreamedModel: () => ({
+        async *stream(request: any) {
+          chainingRunnerCalls.push({ input: request.input, options: request, providerId: 'mock-chaining-false' });
+          yield { type: 'completion', responseId: 'chaining-false', output: [] };
+        },
+      }),
       fetchModels: async () => [{ id: 'mock-model' }],
       capabilities: {
         supportsConversationChaining: false,
@@ -226,17 +221,12 @@ function ensureChainingProvidersRegistered() {
     registerProvider({
       id: 'mock-chaining-true',
       label: 'Mock Chaining True',
-      createRunner: () =>
-        ({
-          run: async (_agent: any, _input: any, options: any) => {
-            chainingRunnerCalls.push({ input: _input, options, providerId: 'mock-chaining-true' });
-            return {
-              status: 'completed',
-              finalOutput: 'ok',
-              messages: [],
-            };
-          },
-        } as any),
+      createStreamedModel: () => ({
+        async *stream(request: any) {
+          chainingRunnerCalls.push({ input: request.input, options: request, providerId: 'mock-chaining-true' });
+          yield { type: 'completion', responseId: 'chaining-true', output: [] };
+        },
+      }),
       fetchModels: async () => [{ id: 'mock-model' }],
       capabilities: {
         supportsConversationChaining: true,
@@ -264,17 +254,6 @@ function ensureCodexProviderRegistered() {
             };
           },
         }),
-        createRunner: () =>
-          ({
-            run: async (agent: any, _input: any, options: any) => {
-              codexRunnerCalls.push({ agent, options });
-              return {
-                status: 'completed',
-                finalOutput: 'ok',
-                messages: [],
-              };
-            },
-          } as any),
         fetchModels: async () => [{ id: 'mock-model' }],
         capabilities: {
           supportsConversationChaining: true,
@@ -295,17 +274,12 @@ function ensureOpenAIProviderRegistered() {
       {
         id: 'openai',
         label: 'Mock OpenAI',
-        createRunner: () =>
-          ({
-            run: async (agent: any, _input: any, options: any) => {
-              openaiRunnerCalls.push({ agent, options });
-              return {
-                status: 'completed',
-                finalOutput: 'ok',
-                messages: [],
-              };
-            },
-          } as any),
+        createStreamedModel: () => ({
+          async *stream(request: any) {
+            openaiRunnerCalls.push({ request, options: request });
+            yield { type: 'completion', responseId: 'openai-direct', output: [] };
+          },
+        }),
         fetchModels: async () => [{ id: 'mock-model' }],
         capabilities: {
           supportsConversationChaining: true,
@@ -448,278 +422,59 @@ it.sequential('startStream only passes previousResponseId when provider supports
   expect(chainingRunnerCalls[1].options.previousResponseId).toBe('prev-2');
 });
 
-it.sequential(
-  'continueRunStream filters replayed history to delta input when chaining from previousResponseId',
-  async () => {
-    const settings = createMockSettings({
-      'agent.provider': 'mock-chaining-true',
-    });
-    const client = new AgentClient({
-      deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
-    });
-
-    const state = {
-      _context: { context: { turnCount: 0 } },
-      _generatedItems: [
-        { rawItem: { type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' } },
-        { rawItem: { type: 'function_call_output', callId: 'call-read', output: 'done' } },
-      ],
-    };
-
-    await client.continueRunStream(state as any, { previousResponseId: 'resp-prev' });
-
-    expect(chainingRunnerCalls.length).toBe(1);
-    const call = chainingRunnerCalls[0];
-    expect(call.input).toBe(state);
-    expect(call.options.previousResponseId).toBe('resp-prev');
-
-    const filtered = call.options.callModelInputFilter({
-      context: { turnCount: 0 },
-      modelData: {
-        input: [
-          { role: 'user', type: 'message', content: 'inspect file' },
-          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'I will inspect it.' }] },
-          { type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' },
-          { type: 'function_call_output', callId: 'call-read', output: 'done' },
-        ],
-        instructions: 'system',
-      },
-    });
-
-    expect(filtered.input).toEqual([{ type: 'function_call_output', callId: 'call-read', output: 'done' }]);
-    expect(filtered.instructions).toBe('system');
-  },
-);
-
-it.sequential(
-  'continueRunStream filters replayed history to delta input with function_call_output_result and tool_call_output_item',
-  async () => {
-    const settings = createMockSettings({
-      'agent.provider': 'mock-chaining-true',
-    });
-    const client = new AgentClient({
-      deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
-    });
-
-    await client.continueRunStream({ _context: { context: { turnCount: 0 } } } as any, {
-      previousResponseId: 'resp-prev',
-    });
-
-    const filtered = chainingRunnerCalls[0].options.callModelInputFilter({
-      context: { turnCount: 0 },
-      modelData: {
-        input: [
-          { role: 'user', type: 'message', content: 'inspect file' },
-          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'I will inspect it.' }] },
-          { type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' },
-          { type: 'function_call_output_result', callId: 'call-read', output: 'done' },
-          { type: 'tool_call_output_item', callId: 'call-read', output: 'done' },
-        ],
-        instructions: 'system',
-      },
-    });
-
-    expect(filtered.input).toEqual([
-      { type: 'function_call_output_result', callId: 'call-read', output: 'done' },
-      { type: 'tool_call_output_item', callId: 'call-read', output: 'done' },
-    ]);
-  },
-);
-
-it.sequential(
-  'continueRunStream keeps the latest user item when chained model input replays full history',
-  async () => {
-    const settings = createMockSettings({
-      'agent.provider': 'mock-chaining-true',
-    });
-    const client = new AgentClient({
-      deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
-    });
-
-    await client.continueRunStream({ _context: { context: { turnCount: 0 } } } as any, {
-      previousResponseId: 'resp-prev',
-    });
-
-    const filtered = chainingRunnerCalls[0].options.callModelInputFilter({
-      context: { turnCount: 0 },
-      modelData: {
-        input: [
-          { role: 'user', type: 'message', content: 'first' },
-          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first response' }] },
-          { role: 'user', type: 'message', content: 'second' },
-        ],
-        instructions: 'system',
-      },
-    });
-
-    expect(filtered.input).toEqual([{ role: 'user', type: 'message', content: 'second' }]);
-  },
-);
-
-it.sequential('startStream filters replayed history to delta input when chaining from previousResponseId', async () => {
-  const settings = createMockSettings({
-    'agent.provider': 'mock-chaining-true',
-  });
+it.sequential('continueRunStream preserves canonical history when chaining', async () => {
+  const settings = createMockSettings({ 'agent.provider': 'mock-chaining-true' });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
-
-  await client.startStream('inspect file', { previousResponseId: 'resp-prev' });
-
-  expect(chainingRunnerCalls.length).toBe(1);
-  const call = chainingRunnerCalls[0];
-  expect(call.options.previousResponseId).toBe('resp-prev');
-
-  const filtered = call.options.callModelInputFilter({
-    context: { turnCount: 0 },
-    modelData: {
-      input: [
-        { role: 'user', type: 'message', content: 'inspect file' },
-        { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'I will inspect it.' }] },
-        { type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' },
-        { type: 'function_call_output', callId: 'call-read', output: 'done' },
-      ],
-      instructions: 'system',
-    },
-  });
-
-  expect(filtered.input).toEqual([{ type: 'function_call_output', callId: 'call-read', output: 'done' }]);
-  expect(filtered.instructions).toBe('system');
+  const initial = await client.startStream('inspect file');
+  await initial.completed;
+  const resumed = await client.continueRunStream(initial.state!, { previousResponseId: 'resp-prev' });
+  await resumed.completed;
+  expect(chainingRunnerCalls).toHaveLength(2);
+  expect(chainingRunnerCalls[1].options.previousResponseId).toBe('resp-prev');
+  expect(chainingRunnerCalls[1].options.input).toEqual([expect.objectContaining({ type: 'message', role: 'user' })]);
 });
 
-it.sequential('continueRunStream keeps only expected approved tool outputs when chaining', async () => {
-  const settings = createMockSettings({
-    'agent.provider': 'mock-chaining-true',
-  });
+it.sequential('direct chained models receive canonical accumulated input', async () => {
+  const settings = createMockSettings({ 'agent.provider': 'mock-chaining-true' });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
-
-  await client.continueRunStream({ _context: { context: { turnCount: 0 } } } as any, {
-    previousResponseId: 'resp-prev',
-    toolResultCallIds: ['call-current'],
-  });
-
-  const filtered = chainingRunnerCalls[0].options.callModelInputFilter({
-    context: { turnCount: 0 },
-    modelData: {
-      input: [
-        { type: 'function_call_output', callId: 'call-old-1', output: 'old one' },
-        { type: 'function_call_output', call_id: 'call-old-2', output: 'old two' },
-        { type: 'function_call_output', callId: 'call-current', output: 'current' },
-      ],
-      instructions: 'system',
-    },
-  });
-
-  expect(filtered.input).toEqual([{ type: 'function_call_output', callId: 'call-current', output: 'current' }]);
-});
-
-it.sequential('continueRunStream warns when chained delta input item count spikes', async () => {
-  const warnings: any[] = [];
-  const logger = {
-    ...createMockLogger(),
-    warn: (message: string, meta: any) => warnings.push({ message, meta }),
-  };
-  const settings = createMockSettings({
-    'agent.provider': 'mock-chaining-true',
-  });
-  const client = new AgentClient({
-    deps: { logger, settings, sessionContextService: createSessionContextService() as any },
-  });
-
-  await client.continueRunStream({ _context: { context: { turnCount: 0 } } } as any, {
-    previousResponseId: 'resp-prev',
-  });
-  const filter = chainingRunnerCalls[0].options.callModelInputFilter;
-  filter({
-    context: { turnCount: 0 },
-    modelData: {
-      input: [
-        { type: 'function_call_output', callId: 'call-1', output: 'one' },
-        { type: 'function_call_output', callId: 'call-2', output: 'two' },
-        { type: 'function_call_output', callId: 'call-3', output: 'three' },
-      ],
-    },
-  });
-  filter({
-    context: { turnCount: 1 },
-    modelData: {
-      input: Array.from({ length: 23 }, (_, index) => ({
-        type: 'function_call_output',
-        callId: `call-${index}`,
-        output: `output-${index}`,
-      })),
-    },
-  });
-
-  const warning = warnings.find((entry) => entry.meta?.eventType === 'provider.chained_delta_input_spike');
-  expect(warning).toBeTruthy();
-  expect(warning.meta.previousInputItems).toBe(3);
-  expect(warning.meta.inputItems).toBe(23);
-});
-
-it.sequential('continueRunStream filters and keeps user message even with custom type', async () => {
-  const settings = createMockSettings({
-    'agent.provider': 'mock-chaining-true',
-  });
-  const client = new AgentClient({
-    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
-  });
-
-  await client.continueRunStream({ _context: { context: { turnCount: 0 } } } as any, {
-    previousResponseId: 'resp-prev',
-  });
-
-  const filtered = chainingRunnerCalls[0].options.callModelInputFilter({
-    context: { turnCount: 0 },
-    modelData: {
-      input: [
-        { role: 'user', type: 'message', content: 'first' },
-        { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first response' }] },
-        { role: 'user', type: 'custom_input_type', content: 'second' },
-      ],
-      instructions: 'system',
-    },
-  });
-
-  expect(filtered.input).toEqual([{ role: 'user', type: 'custom_input_type', content: 'second' }]);
+  const initial = await client.startStream('first');
+  await initial.completed;
+  const resumed = await client.continueRunStream(initial.state!, { previousResponseId: 'resp-prev' });
+  await resumed.completed;
+  const request = chainingRunnerCalls.at(-1).options;
+  expect(request.previousResponseId).toBe('resp-prev');
+  expect(request.input).toEqual([expect.objectContaining({ type: 'message', role: 'user' })]);
 });
 
 // ========== Characterization tests for stream lifecycle ==========
 
-it.sequential('startStream with chaining and input filtering', async () => {
-  const settings = createMockSettings({
-    'agent.provider': 'mock-chaining-true',
-  });
+it.sequential('startStream with direct chaining model', async () => {
+  const settings = createMockSettings({ 'agent.provider': 'mock-chaining-true' });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
-
-  await client.startStream('Hello', { previousResponseId: 'prev-1' });
-
-  expect(chainingRunnerCalls.length).toBe(1);
+  const stream = await client.startStream('Hello', { previousResponseId: 'prev-1' });
+  await stream.completed;
+  expect(chainingRunnerCalls).toHaveLength(1);
   expect(chainingRunnerCalls[0].options.previousResponseId).toBe('prev-1');
-  expect(typeof chainingRunnerCalls[0].options.callModelInputFilter).toBe('function');
+  expect(chainingRunnerCalls[0].options.input).toEqual([expect.objectContaining({ role: 'user' })]);
 });
 
-it.sequential('continueRunStream resuming from a RunState with chaining', async () => {
-  const settings = createMockSettings({
-    'agent.provider': 'mock-chaining-true',
-  });
+it.sequential('continueRunStream resumes a direct model continuation', async () => {
+  const settings = createMockSettings({ 'agent.provider': 'mock-chaining-true' });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
-
-  const state = { _context: { context: { turnCount: 0 } }, _generatedItems: [] };
-
-  await client.continueRunStream(state as any, { previousResponseId: 'resp-prev' });
-
-  expect(chainingRunnerCalls.length).toBe(1);
-  expect(chainingRunnerCalls[0].input).toBe(state);
-  expect(chainingRunnerCalls[0].options.previousResponseId).toBe('resp-prev');
-  expect(chainingRunnerCalls[0].options.stream).toBe(true);
-  expect(typeof chainingRunnerCalls[0].options.callModelInputFilter).toBe('function');
+  const initial = await client.startStream('Hello');
+  await initial.completed;
+  const resumed = await client.continueRunStream(initial.state!, { previousResponseId: 'resp-prev' });
+  await resumed.completed;
+  expect(chainingRunnerCalls).toHaveLength(2);
+  expect(chainingRunnerCalls[1].options.previousResponseId).toBe('resp-prev');
 });
 
 it.sequential('abort during an active startStream', async () => {
@@ -729,17 +484,13 @@ it.sequential('abort during an active startStream', async () => {
   registerProvider({
     id: testProviderId,
     label: 'Mock Abort Active Stream',
-    createRunner: () =>
-      ({
-        run: async (_agent: any, _input: any, options: any) => {
-          capturedSignal = options.signal;
-          // Wait until aborted before resolving
-          await new Promise<void>((resolve) => {
-            options.signal.addEventListener('abort', () => resolve());
-          });
-          return { status: 'completed', finalOutput: 'done', messages: [] };
-        },
-      } as any),
+    createStreamedModel: () => ({
+      async *stream(request: any) {
+        capturedSignal = request.signal;
+        await new Promise<void>((resolve) => request.signal.addEventListener('abort', () => resolve(), { once: true }));
+        throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+      },
+    }),
     fetchModels: async () => [{ id: 'mock-model' }],
   });
 
@@ -768,64 +519,72 @@ it.sequential('abort during an active startStream', async () => {
     deps: { logger, settings, sessionContextService: createSessionContextService() as any },
   });
 
-  // Start stream - runner will wait until aborted
   const streamPromise = client.startStream('Hello');
+  await new Promise<void>((resolve) => setImmediate(resolve));
 
-  // capturedSignal is set synchronously before startStream awaits the runner
   expect(correlationId).toBeTruthy();
   expect(capturedSignal).toBeTruthy();
   expect(capturedSignal!.aborted).toBe(false);
 
-  // Abort
   client.abort();
 
-  await streamPromise;
-
+  const stream = await streamPromise;
+  await expect(stream.completed).rejects.toMatchObject({ name: 'AbortError' });
   expect(capturedSignal!.aborted).toBe(true);
   expect(correlationId).toBeFalsy();
 });
 
-it.sequential('clearConversations resets chained delta state', async () => {
-  const warnings: any[] = [];
-  const logger = {
-    ...createMockLogger(),
-    warn: (message: string, meta: any) => warnings.push({ message, meta }),
-  };
-  const settings = createMockSettings({
-    'agent.provider': 'mock-chaining-true',
-    'agent.model': 'mock-model',
-  });
-  const client = new AgentClient({
-    deps: { logger, settings, sessionContextService: createSessionContextService() as any },
-  });
-
-  // First stream with chaining - establishes #lastChainedDeltaInputItems
-  await client.startStream('Hello', { previousResponseId: 'prev-1' });
-  chainingRunnerCalls[0].options.callModelInputFilter({
-    context: { turnCount: 0 },
-    modelData: { input: [{ type: 'function_call_output', callId: 'call-1', output: 'one' }] },
-  });
-
-  // Clear conversations - should reset #lastChainedDeltaInputItems to null
-  client.clearConversations();
-
-  // Start another stream with chaining after clear
-  await client.startStream('World', { previousResponseId: 'prev-2' });
-  chainingRunnerCalls[1].options.callModelInputFilter({
-    context: { turnCount: 0 },
-    modelData: {
-      input: Array.from({ length: 23 }, (_, i) => ({
-        type: 'function_call_output',
-        callId: `call-${i}`,
-        output: `output-${i}`,
-      })),
+it.sequential('abort before Codex start preparation prevents model dispatch', async () => {
+  let releaseDiscovery!: () => void;
+  let modelCalls = 0;
+  registerProvider(
+    {
+      id: 'codex',
+      label: 'Delayed Codex',
+      fetchModels: async () => {
+        await new Promise<void>((resolve) => {
+          releaseDiscovery = resolve;
+        });
+        return [{ id: 'gpt-5.3-codex', default_reasoning_level: 'medium' }];
+      },
+      createStreamedModel: () => ({
+        async *stream(request: any) {
+          modelCalls += 1;
+          applicationModelCalls.push({ model: 'gpt-5.3-codex', request });
+          yield { type: 'completion', responseId: 'unexpected', output: [] };
+        },
+      }),
+      capabilities: {
+        supportsConversationChaining: true,
+        supportsTracingControl: false,
+        supportsPromptCacheKey: true,
+      },
     },
+    { allowOverride: true },
+  );
+  const settings = createMockSettings({ 'agent.provider': 'codex', 'agent.reasoningEffort': 'default' });
+  const client = new AgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
+  const start = client.startStream('Hello');
+  client.abort();
+  releaseDiscovery();
+  await expect(start).rejects.toMatchObject({ name: 'AbortError' });
+  expect(modelCalls).toBe(0);
+});
 
-  // After clearConversations, #lastChainedDeltaInputItems is null,
-  // so a large jump should NOT trigger the spike warning
-  const spikeWarnings = warnings.filter((w) => w.meta?.eventType === 'provider.chained_delta_input_spike');
-  expect(spikeWarnings.length, 'should not warn about spike after clearConversations resets state').toBe(0);
+it.sequential('clearConversations aborts active direct runs and resets provider state', async () => {
+  const settings = createMockSettings({ 'agent.provider': 'mock-chaining-true', 'agent.model': 'mock-model' });
+  const client = new AgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+  const first = await client.startStream('Hello', { previousResponseId: 'prev-1' });
+  await first.completed;
+  client.clearConversations();
+  const second = await client.startStream('World', { previousResponseId: 'prev-2' });
+  await second.completed;
+  expect(chainingRunnerCalls).toHaveLength(2);
+  expect(chainingRunnerCalls[1].options.previousResponseId).toBe('prev-2');
 });
 
 it.sequential('chat and chatJson with temp provider/reasoning-effort overrides', async () => {
@@ -915,7 +674,8 @@ it.sequential('codex startStream puts prompt_cache_key on agent modelSettings, n
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
-  await client.startStream('Hello', { sessionId: 'session-123' });
+  const stream = await client.startStream('Hello', { sessionId: 'session-123' });
+  await stream.completed;
 
   expect(applicationModelCalls.length).toBe(1);
   expect(applicationModelCalls[0].request.codex.promptCacheKey).toBe('session-123');
@@ -932,7 +692,7 @@ it.sequential('openai startStream puts prompt_cache_key in public providerData, 
   await client.startStream('Hello', { sessionId: 'session-456' });
 
   expect(openaiRunnerCalls.length).toBe(1);
-  expect(openaiRunnerCalls[0].agent.modelSettings.providerData.extraBody.prompt_cache_key).toBe('session-456');
+  expect(openaiRunnerCalls[0].request.providerOptions.extraBody.prompt_cache_key).toBe('session-456');
   expect('modelSettings' in openaiRunnerCalls[0].options).toBe(false);
 });
 
@@ -1122,16 +882,12 @@ it.sequential('setRetryCallback is forwarded to the provider runner', async () =
   registerProvider({
     id: providerId,
     label: 'Mock Retry Callback Provider',
-    createRunner: (deps) => {
+    createStreamedModel: (_model, deps) => {
       providerRetryHook = deps.onRetry;
       return {
-        run: async () => {
+        async *stream() {
           deps.onRetry?.();
-          return {
-            status: 'completed',
-            finalOutput: 'mock response',
-            messages: [],
-          };
+          yield { type: 'completion', responseId: 'retry', output: [] };
         },
       } as any;
     },
@@ -1298,17 +1054,12 @@ it.sequential('codex resolves default_reasoning_level if agent.reasoningEffort i
     {
       id: 'codex',
       label: 'Mock Codex',
-      createRunner: () =>
-        ({
-          run: async (agent: any, _input: any, options: any) => {
-            codexRunnerCalls.push({ agent, options });
-            return {
-              status: 'completed',
-              finalOutput: 'ok',
-              messages: [],
-            };
-          },
-        } as any),
+      createStreamedModel: () => ({
+        async *stream(request: any) {
+          applicationModelCalls.push({ model: 'gpt-5.3-codex', request });
+          yield { type: 'completion', responseId: 'codex-direct', output: [] };
+        },
+      }),
       fetchModels: async () => [{ id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', default_reasoning_level: 'medium' }],
       capabilities: {
         supportsConversationChaining: true,
@@ -1490,64 +1241,32 @@ it.sequential('AgentClient.startStream resets the SubagentBridge abort controlle
   expect(resetSpy).toHaveBeenCalledTimes(1);
 });
 
-it.sequential('main agent client injects warning into tool output when turns left <= 5', async () => {
-  let executeOutput: string | null = null;
-
+it.sequential('main agent client executes tools through the direct model loop', async () => {
+  let executeCount = 0;
   registerProvider({
-    id: 'mock-provider-maxturns',
-    label: 'Mock Provider MaxTurns',
-    createRunner: () =>
-      ({
-        run: async (agent: any, _input: any, options: any) => {
-          if (options.callModelInputFilter) {
-            // Simulate 96 turns
-            for (let i = 0; i < 96; i++) {
-              await options.callModelInputFilter({
-                modelData: { input: [] },
-                agent,
-                context: options.context,
-              });
-            }
-          }
-
-          // Execute a tool to see if the warning is injected
-          const readFileTool = agent.tools.find((tool: any) => tool.name === 'read_file');
-          if (readFileTool) {
-            const mockRunContext = {
-              context: options.context,
-            };
-            executeOutput = await readFileTool.invoke(
-              mockRunContext as any,
-              JSON.stringify({ path: 'package.json' }),
-              {},
-            );
-          }
-
-          return {
-            status: 'completed',
-            finalOutput: 'done',
-            history: [],
-            messages: [],
+    id: 'mock-provider-direct-tool',
+    label: 'Mock Provider Direct Tool',
+    createStreamedModel: () => ({
+      async *stream(request: any) {
+        if (!request.input.some((item: any) => item.type === 'tool_result')) {
+          yield {
+            type: 'completion',
+            responseId: 'tool-call',
+            output: [{ type: 'tool_call', id: 'unknown-1', name: 'unknown_direct_tool', arguments: '{}' }],
           };
-        },
-      } as any),
+        } else {
+          executeCount += 1;
+          yield { type: 'completion', responseId: 'done', output: [] };
+        }
+      },
+    }),
     fetchModels: async () => [{ id: 'mock-model' }],
   });
-
-  const settings = createMockSettings({
-    'agent.provider': 'mock-provider-maxturns',
-    'agent.model': 'mock-model',
-  });
-
+  const settings = createMockSettings({ 'agent.provider': 'mock-provider-direct-tool', 'agent.model': 'mock-model' });
   const client = new AgentClient({
-    maxTurns: 100,
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
-
-  // Trigger startStream to initiate the provider run with correct context
-  await client.startStream('Hello');
-
-  expect(executeOutput).toBeTruthy();
-  expect(executeOutput!.includes('approaching the maximum turn limit')).toBe(true);
-  expect(executeOutput!.includes('4 turns left')).toBe(true);
+  const stream = await client.startStream('Hello');
+  await stream.completed;
+  expect(executeCount).toBe(1);
 });

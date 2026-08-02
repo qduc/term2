@@ -19,6 +19,33 @@ export {
 
 const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
 
+/**
+ * Observe retries at the SDK transport boundary. OpenAI's fetch hook sees the
+ * response before the SDK decides whether to retry, so response status alone
+ * cannot distinguish a retryable final response from one followed by another
+ * attempt. The SDK does expose its attempt number in this request header;
+ * callback at the start of attempt N>0, where the next retry is actually
+ * being dispatched. This also covers transport failures and emits nothing for
+ * exhausted attempt N=0.
+ */
+export function createRetryAwareFetch(
+  baseFetch: typeof fetch,
+  onRetry: (() => void) | undefined,
+  retryAttempts: number,
+): typeof fetch {
+  if (!onRetry || retryAttempts <= 0) return baseFetch;
+  return (async (url: any, init?: any) => {
+    const headers = init?.headers;
+    const rawRetryCount =
+      typeof headers?.get === 'function'
+        ? headers.get('x-stainless-retry-count')
+        : headers?.['x-stainless-retry-count'] ?? headers?.['X-Stainless-Retry-Count'];
+    const retryCount = Number(rawRetryCount);
+    if (Number.isInteger(retryCount) && retryCount > 0) onRetry();
+    return baseFetch(url, init);
+  }) as typeof fetch;
+}
+
 async function fetchOpenAIModels(
   deps: ProviderDeps,
   fetchImpl: ProviderFetch = fetch as any,
@@ -31,7 +58,7 @@ async function fetchOpenAIModels(
     headers.Authorization = `Bearer ${apiKey}`;
   }
 
-  const response = await fetchImpl(OPENAI_MODELS_URL, { headers });
+  const response = await fetchImpl(OPENAI_MODELS_URL, { headers, ...(deps.signal ? { signal: deps.signal } : {}) });
   if (!response.ok) {
     throw new Error(`OpenAI models request failed (${response.status})`);
   }
@@ -96,23 +123,31 @@ class _OpenAIProvider implements LegacyModelProvider {
 registerProvider({
   id: 'openai',
   label: 'OpenAI',
-  createStreamedModel: (model, { settingsService, loggingService, sessionContextService }) => {
+  createStreamedModel: (
+    model,
+    { settingsService, loggingService, sessionContextService, onRetry, retryAttempts, requestCapture },
+  ) => {
     const defaultModel = settingsService.get('agent.model') || 'gpt-4o';
     const apiKey = settingsService.get('agent.openai.apiKey') || process.env.OPENAI_API_KEY;
+    const configuredRetries = retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2;
     const openAIClient = new OpenAI({
       apiKey: apiKey || 'placeholder',
-      maxRetries: settingsService.get('agent.retryAttempts') ?? 2,
-      fetch: createProviderFetch({
-        providerId: 'openai',
-        defaultModel,
-        deps: { loggingService, sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE },
-      }) as any,
+      maxRetries: configuredRetries,
+      fetch: createRetryAwareFetch(
+        createProviderFetch({
+          providerId: 'openai',
+          defaultModel,
+          deps: { loggingService, sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE },
+        }) as any,
+        onRetry,
+        configuredRetries,
+      ),
     });
 
     const selectedModel =
       settingsService.get('agent.transport') === 'http'
-        ? new OpenAIResponsesModelWithPromptCacheKey(openAIClient, model || defaultModel)
-        : new OpenAIResponsesWSModelWithPromptCacheKey(openAIClient, model || defaultModel);
+        ? new OpenAIResponsesModelWithPromptCacheKey(openAIClient, model || defaultModel, requestCapture)
+        : new OpenAIResponsesWSModelWithPromptCacheKey(openAIClient, model || defaultModel, requestCapture);
     return adaptOpenAIStreamedModel(selectedModel);
   },
   fetchModels: fetchOpenAIModels,

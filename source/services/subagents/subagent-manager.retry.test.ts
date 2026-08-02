@@ -185,28 +185,18 @@ it('run() aborted subagent returns cancelled status without model-error retry', 
   expect(retryEvents.length, 'abort errors should not trigger model-error retries').toBe(0);
 });
 
-it('run() does not restart read-only subagent from the beginning after a recoverable model error', async () => {
+it('run() retries a direct streamed read-only subagent after a recoverable model error', async () => {
   let runCount = 0;
   const events: any[] = [];
 
   const providerId = registerTestProvider({
     label: 'Mock Explorer Read Then Crash Provider',
-    createRunner: () =>
-      ({
-        run: async (agent: any) => {
-          runCount++;
-          if (runCount === 1) {
-            // Call a read tool then throw a recoverable error
-            const grep = agent.tools.find((tool: any) => tool.name === 'grep');
-            if (grep) {
-              await grep.execute(JSON.stringify({ pattern: 'foo', path: '.' }), {}, {}).catch(() => {});
-            }
-            throw new ModelBehaviorError('Tool bash not found in agent Explorer.');
-          }
-          const result = { status: 'completed', finalOutput: 'found it', history: [], messages: [] };
-          return wrapResultAsAgentStream(result);
-        },
-      } as any),
+    createStreamedModel: () => ({
+      async *stream() {
+        runCount++;
+        throw new ModelBehaviorError('Tool bash not found in agent Explorer.');
+      },
+    }),
     fetchModels: async () => [{ id: 'mock-model' }],
   });
 
@@ -225,8 +215,8 @@ it('run() does not restart read-only subagent from the beginning after a recover
 
   expect(result.status).toBe('failed');
   expect(result.error?.includes('bash')).toBe(true);
-  expect(runCount, 'subagent must not restart from the beginning when no resumable stream exists').toBe(1);
-  expect(events.filter((event) => event.type === 'retry').length).toBe(0);
+  expect(runCount).toBe(1 + MAX_SUBAGENT_MODEL_RETRIES);
+  expect(events.filter((event) => event.type === 'retry').length).toBe(MAX_SUBAGENT_MODEL_RETRIES);
 });
 
 describe('run() aborted subagent', () => {

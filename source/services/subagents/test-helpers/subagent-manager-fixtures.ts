@@ -31,19 +31,62 @@ afterEach(() => {
 
 export type MockRunner = (agent: any, input: any, options: any) => any;
 
+/**
+ * Legacy-shaped fixtures are kept only as test data while providers are
+ * exercised through the application-owned streamed-model factory. This
+ * adapter is intentionally confined to the test helper; production providers
+ * have no runner fallback.
+ */
+function streamedModelFromFixtureRunner(
+  createRunner: NonNullable<ProviderDefinition['createRunner']>,
+  deps: any,
+  model: string,
+): any {
+  return {
+    async *stream(request: any) {
+      const runner = createRunner(deps);
+      const result = await runner?.run(
+        {
+          name: 'fixture-agent',
+          model,
+          instructions: request.instructions,
+          tools: request.applicationTools ?? request.tools,
+        },
+        request.input,
+        { signal: request.signal, previousResponseId: request.previousResponseId, stream: true },
+      );
+      const settled = result?.completed ? await result.completed : result;
+      const finalText = settled?.finalOutput ?? result?.finalOutput;
+      yield {
+        type: 'completion',
+        responseId: settled?.responseId ?? result?.responseId ?? 'fixture-response',
+        output:
+          typeof finalText === 'string' && finalText
+            ? [{ type: 'message', content: [{ type: 'text', text: finalText }] }]
+            : [],
+        usage: settled?.usage ?? result?.usage,
+      };
+    },
+  };
+}
+
 export function registerTestProvider(
   partial: Partial<Omit<ProviderDefinition, 'id'>> & {
     id?: string;
   },
 ): string {
   const id = partial.id ?? `test-provider-${randomUUID()}`;
+  const createStreamedModel =
+    partial.createStreamedModel ??
+    (partial.createRunner
+      ? (model: string, deps: any) => streamedModelFromFixtureRunner(partial.createRunner!, deps, model)
+      : undefined);
   registerProvider({
     id,
     label: partial.label ?? id,
     fetchModels: partial.fetchModels ?? (async () => []),
     capabilities: partial.capabilities,
-    createRunner: partial.createRunner,
-    createStreamedModel: partial.createStreamedModel,
+    createStreamedModel,
   });
   registeredProviderIds.add(id);
   return id;

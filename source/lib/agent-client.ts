@@ -1,6 +1,9 @@
-import type { ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
+import {
+  normalizeApplicationInput,
+  type ApplicationAgent,
+  type ApplicationRequestPreparation,
+} from '../services/agent-runtime/application-run-loop.js';
 import type { ContinuationHandle } from '../contracts/continuation-handle.js';
-import { unwrapContinuationHandle } from '../contracts/continuation-handle.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { JsonSchemaDefinition } from '../contracts/model-types.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
@@ -12,19 +15,25 @@ import { SkillsService } from '../services/skills/skills-service.js';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 import { SubagentBridge } from './subagent-bridge.js';
 import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
-import { RunnerManager } from './runner-manager.js';
-import { AgentRunOrchestrator, type AgentRunOrchestratorDeps } from './agent-run-orchestrator.js';
 import { AgentChatService } from './agent-chat-service.js';
-import type { ContinuationProjectionMode } from './continuation-projection-mode.js';
 import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 import type { PostExecutePauseCapability } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
 import type { AgentClientRunOptions } from '../services/conversation-agent-client.js';
-import { adaptAgentStream, type AgentStream } from '../services/agent-stream.js';
+import type { ContinuationProjectionMode } from './continuation-projection-mode.js';
+import type { AgentStream } from '../services/agent-stream.js';
 import type { ProviderInput } from '../contracts/provider-input.js';
 import type { ProviderRequestCapture } from '../providers/provider-request-capture.js';
 import { getProvider } from '../providers/index.js';
 import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
+import { randomUUID } from 'node:crypto';
+import { fetchModels } from '../services/model-service.js';
+import {
+  prepareOpenAIRequestPrefixBinding,
+  runWithOpenAIRequestPrefixBindingScope,
+} from '../providers/openai-request-prefix-binding.js';
+import { isDeepStrictEqual } from 'node:util';
+import { toOpenAILegacyInput } from '../providers/openai-streamed-model-adapter.js';
 
 type ChainedRunOptions = AgentClientRunOptions;
 
@@ -33,11 +42,13 @@ type ChainedRunOptions = AgentClientRunOptions;
  */
 export class AgentClient {
   #agentConfig: AgentConfiguration;
-  #runnerManager: RunnerManager;
   #toolInterceptorRegistry: ToolInterceptorRegistry;
-  #runOrchestrator: AgentRunOrchestrator;
   #applicationRunLoop: ApplicationRunLoop;
-  #useApplicationRunLoop: boolean;
+  #maxTurns: number;
+  #retryAttempts: number;
+  #retryCallback: (() => void) | null = null;
+  #currentCorrelationId: string | null = null;
+  #activeStartController: AbortController | null = null;
   #chatService: AgentChatService;
   #logger: ILoggingService;
   #settings: ISettingsService;
@@ -85,7 +96,9 @@ export class AgentClient {
     toolOwnership,
     postExecutePauseCapability,
     sessionAccess,
-    continuationProjectionMode = 'legacy',
+    // Retained for session-factory compatibility; direct execution no longer
+    // projects chained input through the legacy mode.
+    continuationProjectionMode: _continuationProjectionMode = 'legacy',
   }: {
     model?: string;
     reasoningEffort?: ReasoningEffortSetting | null;
@@ -101,8 +114,6 @@ export class AgentClient {
       skillsService?: SkillsService;
       /** Supplied only by an owned root session client. */
       requestCapture?: ProviderRequestCapture;
-      /** Test seam for inspecting the immutable run-orchestrator dependencies. */
-      createRunOrchestrator?: (orchestratorDeps: AgentRunOrchestratorDeps) => AgentRunOrchestrator;
     };
     /** Test seam: inject a pre-built SubagentBridge instead of creating one. */
     subagentBridge?: SubagentBridge;
@@ -112,7 +123,6 @@ export class AgentClient {
     postExecutePauseCapability?: PostExecutePauseCapability;
     /** Handle-owned state for root read and Docker capabilities. */
     sessionAccess?: SessionAccessState;
-    /** Compatibility selection fixed by the owning session handle. */
     continuationProjectionMode?: ContinuationProjectionMode;
   }) {
     this.#logger = deps.logger;
@@ -135,12 +145,9 @@ export class AgentClient {
         skillsService: deps.skillsService,
         postExecutePauseCapability,
         sessionAccess,
-        onConfigChanged: (changedKey?: string) => {
-          // Runner invalidation for specific keys
-          if (changedKey === 'agent.transport' || changedKey === 'agent.retryAttempts') {
-            this.#runnerManager.invalidateRunner();
-          }
-          // Chat models capture provider/settings at creation time.
+        onConfigChanged: (_changedKey?: string) => {
+          // Direct streamed models capture provider/settings at creation time.
+          // Chat models are separately cached below.
           this.#chatService?.clearModelCache();
           // Always clear subagent cache and reset mentor state
           this.#subagentBridge?.clearCache();
@@ -148,47 +155,27 @@ export class AgentClient {
         },
       },
     );
-    this.#useApplicationRunLoop =
-      !agentOverride && Boolean(getProvider(this.#agentConfig.getProvider())?.createStreamedModel);
+    this.#maxTurns = maxTurns ?? (agentOverride ? 1 : 20);
+    this.#retryAttempts = retryAttempts ?? 2;
     this.#applicationRunLoop = new ApplicationRunLoop({
       resolveModel: (selectedModel) => {
-        const provider = getProvider(this.#agentConfig.getProvider());
+        const providerId = this.#agentConfig.getProvider();
+        const provider = getProvider(providerId);
         if (!provider?.createStreamedModel) {
-          throw new Error(`Provider '${this.#agentConfig.getProvider()}' has no application model`);
+          throw new Error(
+            `Provider '${providerId}' is configured for legacy runner execution and has no application streamed model.`,
+          );
         }
         return provider.createStreamedModel(selectedModel, {
           settingsService: deps.settings,
           loggingService: deps.logger,
           sessionContextService: deps.sessionContextService,
+          onRetry: () => this.#retryCallback?.(),
+          retryAttempts: this.#retryAttempts,
           requestCapture: deps.requestCapture,
         });
       },
     });
-
-    this.#runnerManager = new RunnerManager(
-      {
-        maxTurns: maxTurns ?? (agentOverride ? 1 : 20),
-        retryAttempts: retryAttempts ?? 2,
-      },
-      {
-        settings: deps.settings,
-        logger: deps.logger,
-        sessionContextService: deps.sessionContextService ?? this.#sessionContextService,
-        getProvider: () => this.#agentConfig.getProvider(),
-        requestCapture: deps.requestCapture,
-      },
-    );
-
-    const runOrchestratorDeps: AgentRunOrchestratorDeps = {
-      agentConfig: this.#agentConfig,
-      runnerManager: this.#runnerManager,
-      settings: deps.settings,
-      logger: deps.logger,
-      continuationProjectionMode,
-    };
-    this.#runOrchestrator =
-      deps.createRunOrchestrator?.(runOrchestratorDeps) ?? new AgentRunOrchestrator(runOrchestratorDeps);
-
     this.#chatService = new AgentChatService({
       agentConfig: this.#agentConfig,
       settings: deps.settings,
@@ -247,8 +234,8 @@ export class AgentClient {
         model: model || this.#settings.get('agent.model'),
         reasoningEffort: reasoningEffort ?? 'default',
         temperature: this.#agentConfig.temperature,
-        maxTurns: this.#runnerManager.maxTurns,
-        retryAttempts: this.#runnerManager.retryAttempts,
+        maxTurns: this.#maxTurns,
+        retryAttempts: this.#retryAttempts,
       });
     }
   }
@@ -272,7 +259,6 @@ export class AgentClient {
     this.#agentConfig.setProvider(provider); // persists to settings
     this.#agentConfig.refreshAgent(); // triggers onConfigChanged + rebuild
     this.#chatService.clearModelCache();
-    this.#runnerManager.invalidateRunner();
   }
 
   getProvider(): string {
@@ -280,10 +266,7 @@ export class AgentClient {
   }
 
   supportsConversationChaining(): boolean {
-    if (this.#useApplicationRunLoop) {
-      return getProvider(this.#agentConfig.getProvider())?.capabilities?.supportsConversationChaining ?? false;
-    }
-    return this.#runOrchestrator.supportsConversationChaining();
+    return getProvider(this.#agentConfig.getProvider())?.capabilities?.supportsConversationChaining ?? false;
   }
 
   setAskUserAnswer(callId: string, answer: string): void {
@@ -307,7 +290,7 @@ export class AgentClient {
   }
 
   setRetryCallback(callback: () => void): void {
-    this.#runnerManager.setRetryCallback(callback);
+    this.#retryCallback = callback;
   }
 
   /**
@@ -316,8 +299,17 @@ export class AgentClient {
    * subagent runs are unaffected — see {@link cancelBackgroundRuns}.
    */
   abort(): void {
+    const traceId = this.#currentCorrelationId ?? this.#logger.getCorrelationId?.();
+    this.#activeStartController?.abort();
+    this.#activeStartController = null;
     this.#applicationRunLoop.abort();
-    this.#runOrchestrator.abort();
+    this.#clearCorrelationId();
+    this.#logger.debug('Agent operation aborted', {
+      eventType: 'stream.aborted',
+      category: 'stream',
+      phase: 'abort',
+      traceId,
+    });
     this.#chatService.abort();
     this.#subagentBridge?.abort();
   }
@@ -336,7 +328,6 @@ export class AgentClient {
     this.#isDisposed = true;
 
     this.abort();
-    this.#runnerManager.invalidateRunner();
     this.#chatService.clearModelCache();
     this.#subagentBridge?.dispose();
     this.#agentConfig.dispose();
@@ -344,34 +335,172 @@ export class AgentClient {
 
   clearConversations(): void {
     this.#applicationRunLoop.abort();
-    this.#runOrchestrator.clearConversations();
+    getProvider(this.#agentConfig.getProvider())?.clearConversations?.();
+    this.#agentConfig.refreshAgent();
+    this.#logger.debug('Conversation and agent refreshed');
+  }
+
+  #clearCorrelationId(): void {
+    if (this.#currentCorrelationId) {
+      this.#logger.clearCorrelationId();
+      this.#currentCorrelationId = null;
+    }
+  }
+
+  async #prepareStart(userInput: ProviderInput, options: ChainedRunOptions, signal: AbortSignal): Promise<void> {
+    let agentRefreshed = false;
+    if (this.#agentConfig.getProvider() === 'codex' && this.#settings.get('agent.reasoningEffort') === 'default') {
+      try {
+        await fetchModels({ settingsService: this.#settings, loggingService: this.#logger, signal }, 'codex');
+        if (signal.aborted) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
+        this.#agentConfig.refreshAgent();
+        agentRefreshed = true;
+      } catch {
+        // Model discovery is best effort; the provider can still resolve its default.
+      }
+    }
+    if (signal.aborted) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
+    const isFirstMessage =
+      !options.previousResponseId && (!Array.isArray(userInput) || (userInput.length > 0 && userInput.length <= 1));
+    if (isFirstMessage && !agentRefreshed) this.#agentConfig.refreshAgent();
+
+    this.#currentCorrelationId = randomUUID();
+    this.#logger.setCorrelationId(this.#currentCorrelationId);
+    this.#logger.debug('Agent stream started', {
+      eventType: 'provider.request.started',
+      category: 'provider',
+      phase: 'request_start',
+      traceId: this.#currentCorrelationId,
+      provider: this.#agentConfig.getProvider(),
+      model: this.#agentConfig.getModel(),
+      inputType: Array.isArray(userInput) ? 'array' : typeof userInput,
+      inputLength: typeof userInput === 'string' ? userInput.length : undefined,
+      inputItems: Array.isArray(userInput) ? userInput.length : undefined,
+      messages: Array.isArray(userInput) ? userInput : undefined,
+      hasPreviousResponseId: !!options.previousResponseId,
+    });
+  }
+
+  #observeCompletion(stream: AgentStream, input: unknown, provider: string, model: string): void {
+    const correlationId = this.#currentCorrelationId;
+    const cleanup = () => {
+      if (this.#agentConfig.serviceTierOverrideForNextRequest === 'standard') {
+        this.#agentConfig.serviceTierOverrideForNextRequest = null;
+        this.#agentConfig.refreshAgent();
+      }
+      if (this.#currentCorrelationId === correlationId) this.#clearCorrelationId();
+    };
+    void stream.completed.then(
+      () => cleanup(),
+      (error) => {
+        this.#logger.error('Agent stream failed', {
+          eventType: 'provider.response.failed',
+          category: 'provider',
+          phase: 'provider_response',
+          traceId: correlationId,
+          provider,
+          model,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+          inputType: Array.isArray(input) ? 'array' : typeof input,
+          inputLength: typeof input === 'string' ? input.length : undefined,
+          inputItems: Array.isArray(input) ? input.length : undefined,
+        });
+        cleanup();
+      },
+    );
+  }
+
+  #openAIRequestPreparation(options: ChainedRunOptions): ApplicationRequestPreparation | undefined {
+    const provider = this.#agentConfig.getProvider();
+    const snapshot = options.providerHistorySnapshot;
+    if (
+      provider !== 'openai' ||
+      this.#agentConfig.isTransientClient ||
+      !snapshot ||
+      options.providerContinuityLineage === undefined
+    ) {
+      return undefined;
+    }
+    const binding = {
+      snapshotIdentity: snapshot.identity,
+      snapshotRevision: snapshot.revision,
+      lineage: options.providerContinuityLineage,
+    };
+    let canonicalSnapshot: ReturnType<typeof normalizeApplicationInput>;
+    try {
+      canonicalSnapshot = normalizeApplicationInput(snapshot.history);
+    } catch {
+      // A malformed/restored snapshot must never establish provider-private
+      // ownership. The application request itself still proceeds normally.
+      return undefined;
+    }
+    return {
+      prepare: (request) => {
+        // Bind only the actual request selected by the application run loop,
+        // not a guessed continuation-state prefix. The lifecycle consumes the
+        // adapter's legacy input, so compare and capture that same projection.
+        if (!isDeepStrictEqual(canonicalSnapshot, request.input)) return;
+        prepareOpenAIRequestPrefixBinding(binding, toOpenAILegacyInput(request.input));
+      },
+      // Keep the handoff alive through the complete async model invocation.
+      run: (operation) => runWithOpenAIRequestPrefixBindingScope(operation),
+    };
   }
 
   async startStream(userInput: ProviderInput, options: ChainedRunOptions = {}): Promise<AgentStream> {
     this.#subagentBridge?.resetAbortController();
-    if (this.#useApplicationRunLoop) {
-      return this.#applicationRunLoop.startStream(this.#agentConfig.getApplicationAgent(options.sessionId), userInput, {
-        ...(options.previousResponseId ? { previousResponseId: options.previousResponseId } : {}),
-        sessionId: options.sessionId,
-        // The turn budget the SDK runner used to enforce. Without it the loop
-        // runs unbounded, and subagents silently ignore their maxTurns.
-        maxTurns: this.#runnerManager.maxTurns,
-      });
+    // Allocate this before the first await: Codex model discovery can suspend
+    // startStream, and abort() must still cancel that not-yet-started run.
+    this.abort();
+    const startController = new AbortController();
+    this.#activeStartController = startController;
+    try {
+      await this.#prepareStart(userInput, options, startController.signal);
+      if (startController.signal.aborted) {
+        throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
+      }
+      const provider = this.#agentConfig.getProvider();
+      const supportsChaining = getProvider(provider)?.capabilities?.supportsConversationChaining === true;
+      const agent = this.#agentConfig.getApplicationAgent(options.sessionId);
+      const requestPreparation = this.#openAIRequestPreparation(options);
+      const run = () => {
+        return this.#applicationRunLoop.startStream(agent, userInput, {
+          ...(requestPreparation ? { requestPreparation } : {}),
+          ...(supportsChaining && options.previousResponseId ? { previousResponseId: options.previousResponseId } : {}),
+          providerId: provider,
+          supportsConversationChaining: supportsChaining,
+          sessionId: options.sessionId,
+          ...(options.sessionId ? { context: { sessionId: options.sessionId } } : {}),
+          maxTurns: this.#maxTurns,
+        });
+      };
+      const stream = run();
+      this.#activeStartController = null;
+      this.#observeCompletion(stream, userInput, provider, this.#agentConfig.getModel());
+      return stream;
+    } catch (error) {
+      if (this.#activeStartController === startController) this.#activeStartController = null;
+      throw error;
     }
-    return adaptAgentStream(await this.#runOrchestrator.startStream(userInput as any, options));
   }
 
   async continueRunStream(state: ContinuationHandle, options: ChainedRunOptions = {}): Promise<AgentStream> {
     this.#subagentBridge?.resetAbortController();
-    if (this.#useApplicationRunLoop) {
-      return this.#applicationRunLoop.continueRunStream(state, {
-        ...(options.previousResponseId ? { previousResponseId: options.previousResponseId } : {}),
-        sessionId: options.sessionId,
-        maxTurns: this.#runnerManager.maxTurns,
-      });
-    }
-    const rawState = state?.kind === 'continuation' ? unwrapContinuationHandle(state) : state;
-    return adaptAgentStream(await this.#runOrchestrator.continueRunStream(rawState as any, options));
+    this.abort();
+    const provider = this.#agentConfig.getProvider();
+    const supportsChaining = getProvider(provider)?.capabilities?.supportsConversationChaining === true;
+    const requestPreparation = this.#openAIRequestPreparation(options);
+    const stream = this.#applicationRunLoop.continueRunStream(state, {
+      ...(requestPreparation ? { requestPreparation } : {}),
+      ...(supportsChaining && options.previousResponseId ? { previousResponseId: options.previousResponseId } : {}),
+      providerId: provider,
+      supportsConversationChaining: supportsChaining,
+      sessionId: options.sessionId,
+      maxTurns: this.#maxTurns,
+    });
+    this.#observeCompletion(stream, state, provider, this.#agentConfig.getModel());
+    return stream;
   }
 
   async chat(

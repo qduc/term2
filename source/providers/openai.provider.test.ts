@@ -1,5 +1,28 @@
 import { expect, it } from 'vitest';
-import { OpenAIResponsesModelWithPromptCacheKey, OpenAIResponsesWSModelWithPromptCacheKey } from './openai.provider.js';
+import {
+  createRetryAwareFetch,
+  OpenAIResponsesModelWithPromptCacheKey,
+  OpenAIResponsesWSModelWithPromptCacheKey,
+} from './openai.provider.js';
+
+it.each([
+  ['zero retries', 0, ['0']],
+  ['one scheduled retry', 1, ['0', '1']],
+  ['exhaustion', 1, ['0']],
+])('notifies only when the SDK starts a %s', async (_label, retryAttempts, retryCounts) => {
+  const notifications: number[] = [];
+  const fetchImpl = createRetryAwareFetch(
+    async (_url, init) => new Response('', { status: 503, headers: init?.headers }),
+    () => notifications.push(1),
+    retryAttempts,
+  );
+  for (const retryCount of retryCounts) {
+    await fetchImpl('https://example.test', {
+      headers: { 'X-Stainless-Retry-Count': retryCount },
+    });
+  }
+  expect(notifications).toHaveLength(retryCounts.filter((count) => Number(count) > 0).length);
+});
 
 it('builds an OpenAI Responses request through the public client boundary', async () => {
   let request: any;

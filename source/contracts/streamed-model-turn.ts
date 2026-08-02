@@ -68,6 +68,8 @@ export interface StreamedModelTurnRequest {
   readonly previousResponseId?: string | null;
   readonly input: readonly StreamedModelTurnInput[];
   readonly tools: readonly StreamedModelTool[];
+  /** Test/runtime-local tool objects; provider adapters must not serialize this field. */
+  readonly applicationTools?: readonly unknown[];
   readonly toolChoice?: 'auto' | 'required' | 'none' | { readonly name: string };
   readonly temperature?: number;
   readonly topP?: number;

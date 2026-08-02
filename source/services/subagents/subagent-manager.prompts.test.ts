@@ -21,64 +21,28 @@ import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 
-it('subagent run injects warning into tool output when turns left <= 5', async () => {
-  let executeOutput: string | null = null;
-
+it('subagent direct streamed model preserves the final response contract', async () => {
   const providerId = registerTestProvider({
-    label: 'Mock Subagent MaxTurns Provider',
-    createRunner: () =>
-      ({
-        run: async (agent: any, _input: any, options: any) => {
-          if (options.callModelInputFilter) {
-            // Simulate 96 turns
-            for (let i = 0; i < 96; i++) {
-              await options.callModelInputFilter({
-                modelData: { input: [] },
-                agent,
-                context: options.context,
-              });
-            }
-          }
-
-          // Execute a tool to see if the warning is injected
-          const readFileTool = agent.tools.find((tool: any) => tool.name === 'read_file');
-          if (readFileTool) {
-            const mockRunContext = {
-              context: options.context,
-            };
-            executeOutput = await readFileTool.execute(
-              JSON.stringify({ path: 'package.json' }),
-              mockRunContext as any,
-              {},
-            );
-          }
-
-          const result = {
-            status: 'completed',
-            finalOutput: 'done',
-            history: [],
-            messages: [],
-          };
-          return options?.stream ? wrapResultAsAgentStream(result) : result;
-        },
-      } as any),
+    label: 'Mock Subagent Direct Provider',
+    createStreamedModel: () => ({
+      async *stream() {
+        yield {
+          type: 'completion',
+          responseId: 'subagent-direct',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+        };
+      },
+    }),
     fetchModels: async () => [{ id: 'mock-model' }],
   });
-
   const manager = new TestSubagentManager({
     logger: createMockLogger(),
-    settings: createMockSettings({
-      'agent.model': 'mock-model',
-      'agent.provider': providerId,
-    }),
+    settings: createMockSettings({ 'agent.model': 'mock-model', 'agent.provider': providerId }),
     sessionContextService: createSessionContextService() as any,
   });
-
-  await manager.run({ role: 'explorer', task: 'mock task' });
-
-  expect(executeOutput).toBeTruthy();
-  expect(executeOutput!.includes('approaching the maximum turn limit')).toBe(true);
-  expect(executeOutput!.includes('4 turns left')).toBe(true);
+  const result = await manager.run({ role: 'explorer', task: 'mock task' });
+  expect(result.status).toBe('completed');
+  expect(result.finalText).toBe('done');
 });
 
 it('execution subagents select subagent-safe model-family prompts and append role instructions', async () => {

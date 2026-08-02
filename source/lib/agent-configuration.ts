@@ -6,7 +6,6 @@ import type { AskUserAnswerStore } from './ask-user-answer-store.js';
 import type { SubagentBridge } from './subagent-bridge.js';
 import type { AgentFactoryDeps } from './agent-factory.js';
 import { buildAgent } from './agent-factory.js';
-import { getAgentDefinition } from '../agent.js';
 import { createEditorImpl } from './editor-impl.js';
 import { getProvider } from '../providers/index.js';
 import { SkillsService } from '../services/skills/skills-service.js';
@@ -153,35 +152,15 @@ export class AgentConfiguration implements AgentSource {
    * every provider has moved to the application-owned model boundary.
    */
   getApplicationAgent(sessionId?: string): ApplicationAgent {
-    const deps = this.#buildFactoryDeps();
-    const definition = getAgentDefinition(
-      {
-        settingsService: deps.settings,
-        loggingService: deps.logger,
-        executionContext: deps.executionContext,
-        askMentor: deps.createMentor,
-        runSubagent: deps.runSubagent,
-        runSubagentAsync: deps.runSubagentAsync,
-        getSubagentResult: deps.getSubagentResult,
-        getSubagentStatus: deps.getSubagentStatus,
-        sendSubagentMessage: deps.sendSubagentMessage,
-        cancelSubagentRun: deps.cancelSubagentRun,
-        getAskUserAnswer: deps.getAskUserAnswer,
-        skillsService: deps.skillsService,
-        postExecuteDeniedRead: Boolean(deps.postExecutePauseCapability),
-        sessionAccess: deps.sessionAccess,
-      },
-      this.#model,
-    );
-    const configuredSettings = this.getAgent(sessionId).modelSettings;
-    const modelSettings =
-      this.#provider === 'codex' ? toApplicationCodexSettings(configuredSettings) : configuredSettings;
+    // The agent held by this configuration is already the factory-wrapped
+    // application definition. Rebuilding from getAgentDefinition here loses
+    // wrapped tool behavior (interceptors, approvals, and post-execute
+    // gates), and used to discard transient/override agents altogether.
+    const agent = this.getAgent(sessionId);
+    if (this.#provider !== 'codex' || !agent.modelSettings) return agent;
     return {
-      name: definition.name,
-      instructions: definition.instructions,
-      model: definition.model,
-      modelSettings,
-      tools: definition.tools,
+      ...agent,
+      modelSettings: toApplicationCodexSettings(agent.modelSettings),
     };
   }
 

@@ -10,6 +10,14 @@ async function* incompleteTextStream(): AsyncIterable<any> {
   yield { choices: [{ delta: { role: 'assistant', content: 'partial' } }] };
 }
 
+it('Chat model exposes only the application-owned streamed-turn contract', () => {
+  const model = new OpenAIChatCompletionsModel({} as any, 'fixture-chat');
+
+  expect(model).not.toHaveProperty('getResponse');
+  expect(model).not.toHaveProperty('getStreamedResponse');
+  expect(model).not.toHaveProperty('getModel');
+});
+
 it('stream() sends message content as OpenAI-compatible content parts, not raw strings', async () => {
   let capturedBody: any;
   const client = {
@@ -244,23 +252,6 @@ it('stream() reassembles a tool call whose arguments span multiple id-less SSE c
   ]);
 });
 
-it('getStreamedResponse() (legacy path) reassembles a tool call whose arguments span multiple id-less SSE chunks', async () => {
-  const client = {
-    chat: { completions: { create: async () => chunkedToolCallStream() } },
-  };
-
-  const model = new OpenAIChatCompletionsModel(client, 'deepseek-v4-flash');
-  const events: any[] = [];
-  for await (const event of model.getStreamedResponse({ input: [], modelSettings: {} } as any)) {
-    events.push(event);
-  }
-
-  const done = events.find((event) => event.type === 'response_done');
-  expect(done.response.output).toEqual([
-    { type: 'function_call', callId: 'call_abc', name: 'shell', arguments: '{"command":"ls -la"}' },
-  ]);
-});
-
 // createCustomProviderModelProvider() (openai-compatible.provider.ts) returns this
 // class directly for the 'openai'/'openai-compatible'/'llama.cpp' provider types, and
 // every caller (openai-compatible.provider.ts and openai-compatible-lazy.ts) requires
@@ -274,10 +265,7 @@ it('exposes getStreamedModel() so custom-provider wiring does not reject this cl
 });
 
 // Real servers (e.g. deepseek-reasoner) stream reasoning content as a separate
-// `delta.reasoning_content` field alongside `delta.content`. The modern stream()
-// path (used whenever request.modelSettings is absent, which is how
-// application-run-loop.ts calls it) only read `delta.content`, silently dropping
-// all reasoning content — no reasoning_delta event, no reasoning in the final output.
+// `delta.reasoning_content` field alongside `delta.content`.
 async function* reasoningStream(): AsyncIterable<any> {
   yield { choices: [{ delta: { reasoning_content: 'Thinking' } }] };
   yield { choices: [{ delta: { reasoning_content: ' it through.' } }] };

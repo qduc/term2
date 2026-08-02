@@ -10,102 +10,12 @@ import type {
 export class OpenAIChatCompletionsModel implements StreamedModelTurn {
   constructor(private readonly client: any, private readonly model: string) {}
 
-  getModel(): this {
-    return this;
-  }
-
   // createCustomProviderModelProvider() (openai-compatible.provider.ts) returns
   // this class for the 'openai'/'openai-compatible'/'llama.cpp' provider types,
   // and every caller requires a `getStreamedModel()` method — the class already
   // implements StreamedModelTurn directly via `stream()`, so it just returns itself.
   getStreamedModel(): this {
     return this;
-  }
-
-  async getResponse(request: any): Promise<any> {
-    if (request.modelSettings) return this.#legacyResponse(request);
-    const events: any[] = [];
-    for await (const event of this.stream(request as StreamedModelTurnRequest)) events.push(event);
-    const completion = events.find((event) => event.type === 'completion');
-    return { responseId: completion?.responseId, output: completion?.output ?? [], usage: completion?.usage };
-  }
-
-  getStreamedResponse(request: any): AsyncIterable<any> {
-    if (request.modelSettings) return this.#legacyStream(request);
-    return this.stream(request as StreamedModelTurnRequest);
-  }
-
-  async #legacyResponse(request: any): Promise<any> {
-    const response = await this.client.chat.completions.create(this.#legacyBody(request, false));
-    return {
-      responseId: response?.id,
-      output: legacyOutput(response?.choices?.[0]?.message),
-      usage: response?.usage,
-    };
-  }
-
-  async *#legacyStream(request: any): AsyncIterable<any> {
-    const response = await this.client.chat.completions.create(this.#legacyBody(request, true));
-    let text = '';
-    let reasoning = '';
-    let sawFinishReason = false;
-    // Keyed by the tool call's stream `index`, which every provider sends on
-    // every chunk. `id` (and often `name`) only arrives on the first chunk for
-    // that index; later chunks carry just `{ index, function: { arguments } }`
-    // with no `id`. Keying by `id ?? index` used to split one tool call into
-    // two accumulator entries once the id-less chunks fell back to the index key.
-    const calls = new Map<number, { id?: string; name: string; arguments: string }>();
-    for await (const chunk of response) {
-      const delta = chunk?.choices?.[0]?.delta;
-      if (chunk?.choices?.[0]?.finish_reason != null) sawFinishReason = true;
-      if (delta?.reasoning_content) reasoning += delta.reasoning_content;
-      if (delta?.content) {
-        text += delta.content;
-        yield { type: 'output_text_delta', delta: delta.content };
-      }
-      for (const call of delta?.tool_calls ?? []) {
-        const index = call.index ?? 0;
-        const current = calls.get(index) ?? { name: '', arguments: '' };
-        if (call.id) current.id = call.id;
-        current.name += call.function?.name ?? '';
-        current.arguments += call.function?.arguments ?? '';
-        calls.set(index, current);
-      }
-    }
-    if (!sawFinishReason) throw new Error('OpenAI-compatible streamed response ended without a finish reason');
-    const output = reasoning
-      ? [
-          { type: 'reasoning', content: [], rawContent: [{ type: 'reasoning_text', text: reasoning }] },
-          ...(text ? [{ type: 'message', content: [{ type: 'output_text', text }] }] : []),
-        ]
-      : calls.size
-      ? [...calls].map(([index, call]) => ({
-          type: 'function_call',
-          callId: call.id ?? `call_${index}`,
-          name: call.name,
-          arguments: call.arguments,
-        }))
-      : [{ type: 'message', content: [{ type: 'output_text', text }] }];
-    yield { type: 'response_done', response: { id: `chatcmpl-${Date.now()}`, output } };
-  }
-
-  #legacyBody(request: any, stream: boolean): any {
-    const settings = request.modelSettings ?? {};
-    const body = {
-      model: this.model,
-      messages: legacyMessages(request.input ?? []),
-      stream,
-      ...(request.tools?.length
-        ? { tools: request.tools.map((tool: any) => ({ type: 'function', function: tool })) }
-        : {}),
-      ...(settings.reasoning?.effort ? { reasoning_effort: settings.reasoning.effort } : {}),
-      ...(settings.providerData ?? {}),
-      ...(request.outputType && request.outputType !== 'text'
-        ? { response_format: toChatResponseFormat(request.outputType) }
-        : {}),
-      signal: request.signal,
-    };
-    return body;
   }
 
   async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
@@ -352,66 +262,4 @@ function coalesceReasoningToolCallBatches(messages: any[]): any[] {
     result.push(message, ...toolResults);
   }
   return result;
-}
-
-function legacyMessages(input: any[]): any[] {
-  const result: any[] = [];
-  let pendingReasoning: string | undefined;
-  for (const item of input) {
-    if (!item) continue;
-    if (item.type === 'reasoning') {
-      pendingReasoning = (item.rawContent ?? item.content ?? []).map((part: any) => part.text ?? '').join('');
-      continue;
-    }
-    if (item.type === 'function_call') {
-      result.push({
-        role: 'assistant',
-        content: null,
-        ...(pendingReasoning ? { reasoning_content: pendingReasoning } : {}),
-        tool_calls: [
-          {
-            id: item.callId ?? item.call_id,
-            type: 'function',
-            function: { name: item.name, arguments: item.arguments },
-          },
-        ],
-      });
-      pendingReasoning = undefined;
-      continue;
-    }
-    if (item.type === 'function_call_result') {
-      result.push({
-        role: 'tool',
-        content: [{ type: 'text', text: String(item.output ?? ''), cache_control: { type: 'ephemeral' } }],
-        tool_call_id: item.callId ?? item.call_id,
-      });
-      continue;
-    }
-    const content =
-      typeof item.content === 'string'
-        ? [{ type: 'text', text: item.content, cache_control: { type: 'ephemeral' } }]
-        : item.content;
-    result.push({ role: item.role ?? 'user', content });
-  }
-  return result;
-}
-
-function legacyOutput(message: any): any[] {
-  if (!message) return [];
-  const output: any[] = [];
-  if (message.reasoning_content)
-    output.push({
-      type: 'reasoning',
-      content: [],
-      rawContent: [{ type: 'reasoning_text', text: message.reasoning_content }],
-    });
-  if (message.content) output.push({ type: 'message', content: [{ type: 'output_text', text: message.content }] });
-  for (const call of message.tool_calls ?? [])
-    output.push({
-      type: 'function_call',
-      callId: call.id,
-      name: call.function?.name,
-      arguments: call.function?.arguments ?? '{}',
-    });
-  return output;
 }

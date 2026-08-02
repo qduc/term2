@@ -2,10 +2,11 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { isDeepStrictEqual } from 'node:util';
 
 /**
- * The Agents SDK input filter sees AgentInputItems, while the private Responses
- * builder records the provider-shaped request input. For the one representation
- * change this scope can establish without guessing, normalize an SDK message
- * wrapper to its equivalent Responses message. Everything else is left exact.
+ * Request preparation sees canonical application input, while the private
+ * Responses builder records the provider-shaped request input. For the one
+ * representation change this scope can establish without guessing, normalize
+ * an input message wrapper to its equivalent Responses message. Everything
+ * else is left exact.
  */
 /**
  * Provider-private, observational handoff between the Agents input filter and

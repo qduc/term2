@@ -46,10 +46,10 @@ const FILE_MUTATING_TOOLS = new Set([TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REP
 /**
  * ConversationStore maintains the live provider-facing transcript projection.
  *
- * The Agents SDK can accept either a string (single new user input) or an
- * AgentInputItem[] (full conversation history). For providers without
- * server-managed conversation chaining (e.g. OpenRouter), we must provide the
- * full history on each turn.
+ * The application turn boundary accepts either a string (single new user
+ * input) or a full conversation history. For providers without server-managed
+ * conversation chaining (e.g. OpenRouter), we must provide the full history
+ * on each turn.
  *
  * This store does not own the complete durable conversation state. Tool
  * lifecycle recovery, assistant journal replay, and cross-stream precedence

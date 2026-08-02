@@ -61,7 +61,7 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
     usage.prompt_token_count,
     usage.promptTokenCount,
     usage.inputTokenCount,
-    usage.inputTokens, // Agents SDK
+    usage.inputTokens,
     usage.prompt_n !== undefined && usage.prompt_n != null
       ? (toNumber(usage.cache_n) || 0) + toNumber(usage.prompt_n)!
       : undefined,
@@ -74,7 +74,7 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
     usage.completion_token_count,
     usage.candidatesTokenCount,
     usage.outputTokenCount,
-    usage.outputTokens, // Agents SDK
+    usage.outputTokens,
     usage.predicted_n,
   );
 
@@ -105,12 +105,8 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
   );
 
   const totalTokens =
-    coalesceNumber(
-      usage.total_tokens,
-      usage.total_token_count,
-      usage.totalTokenCount,
-      usage.totalTokens, // Agents SDK
-    ) ?? sumNumbers(promptTokens, completionTokens, cacheCreationTokens);
+    coalesceNumber(usage.total_tokens, usage.total_token_count, usage.totalTokenCount, usage.totalTokens) ??
+    sumNumbers(promptTokens, completionTokens, cacheCreationTokens);
 
   const reasoningTokens = coalesceNumber(
     usage.reasoning_tokens,
@@ -224,11 +220,11 @@ function sumDetailField(details: unknown, keys: string[]): number | undefined {
 }
 
 /**
- * Normalize the Agents SDK run-level Usage accumulator (`runState.usage`) into
- * NormalizedUsage. This is the authoritative, already-cumulative usage for an
- * entire run (all model turns, including resumed approval continuations, since
- * the SDK keeps accumulating onto the same RunContext.usage). Cache and
- * reasoning details are exposed as per-request arrays, so they are summed here.
+ * Normalize the application run-level usage accumulator (`runState.usage`)
+ * into NormalizedUsage. This is the authoritative, already-cumulative usage
+ * for an entire run (all model turns, including resumed approval
+ * continuations). Cache and reasoning details are exposed as per-request
+ * arrays, so they are summed here.
  */
 export function normalizeAgentRunUsage(stateUsage: any): NormalizedUsage | undefined {
   const usage = asUsageContainer(stateUsage);

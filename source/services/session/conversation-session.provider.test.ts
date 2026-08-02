@@ -9,7 +9,7 @@ import {
 import type { ClientCall } from './test-helpers/conversation-session-fixtures.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 it('run() sends text for OpenAI provider (server-side state)', async () => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Response' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'Response' }]);
   stream.finalOutput = 'Response';
 
   let receivedInput: unknown;
@@ -39,7 +39,7 @@ it('run() sends text for OpenAI provider (server-side state)', async () => {
 });
 
 it('run() sends full history for non-OpenAI providers (client-side state)', async () => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Response' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'Response' }]);
   stream.finalOutput = 'Response';
   stream.history = [
     { role: 'user', type: 'message', content: 'Hello' },
@@ -82,7 +82,7 @@ it('run() sends full history for non-OpenAI providers (client-side state)', asyn
 });
 
 it('run() preserves assistant text prefix when SDK full-history reconstruction strips it', async () => {
-  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'I will inspect the files.' }]);
+  const firstStream = new MockStream([{ type: 'text_delta', text: 'I will inspect the files.' }]);
   firstStream.finalOutput = 'I will inspect the files.';
   firstStream.output = [];
   firstStream.newItems = [
@@ -109,7 +109,7 @@ it('run() preserves assistant text prefix when SDK full-history reconstruction s
     },
   ];
 
-  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Continuing.' }]);
+  const secondStream = new MockStream([{ type: 'text_delta', text: 'Continuing.' }]);
   secondStream.finalOutput = 'Continuing.';
   secondStream.output = [
     {
@@ -159,7 +159,7 @@ it('run() preserves assistant text prefix when SDK full-history reconstruction s
 });
 
 it('run() sends full history for openai-compatible providers', async () => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Response' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'Response' }]);
   stream.finalOutput = 'Response';
   stream.history = [
     { role: 'user', type: 'message', content: 'First message' },
@@ -218,7 +218,7 @@ it('run() sends full history for openai-compatible providers', async () => {
 });
 
 it('run() chains follow-up turns for Codex provider over websocket', async () => {
-  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'First response' }]);
+  const firstStream = new MockStream([{ type: 'text_delta', text: 'First response' }]);
   firstStream.finalOutput = 'First response';
   firstStream.lastResponseId = 'resp-codex-1';
   firstStream.history = [
@@ -230,7 +230,7 @@ it('run() chains follow-up turns for Codex provider over websocket', async () =>
     },
   ];
 
-  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Second response' }]);
+  const secondStream = new MockStream([{ type: 'text_delta', text: 'Second response' }]);
   secondStream.finalOutput = 'Second response';
   secondStream.lastResponseId = 'resp-codex-2';
   secondStream.history = [

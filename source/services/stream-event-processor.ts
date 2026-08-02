@@ -5,7 +5,7 @@ import { captureToolCallArguments, emitCommandMessagesFromItems } from './comman
 import { normalizeRunItem } from './conversation/run-item-normalizer.js';
 import { createInvalidToolCallDiagnostic } from './logging/logging-contract.js';
 import { parseToolCallArguments } from './tool-call-arguments.js';
-import { adaptAgentStream, type AgentStream } from './agent-stream.js';
+import { assertAgentStream, type AgentStream } from './agent-stream.js';
 import type { ToolCallStreamingDeltaEvent } from './conversation/conversation-events.js';
 
 export interface StreamAccumulator {
@@ -47,7 +47,7 @@ export async function* processStreamEvents(
   opts: StreamProcessorOptions,
   deps: StreamProcessorDeps,
 ): AsyncGenerator<ConversationEvent, void, void> {
-  const applicationStream = adaptAgentStream(stream);
+  assertAgentStream(stream);
   if (!opts.preserveExistingToolArgs) opts.toolCallArgumentsById.clear();
   acc.textDeltaCount = 0;
   acc.reasoningDeltaCount = 0;
@@ -70,7 +70,7 @@ export async function* processStreamEvents(
     return { type: 'reasoning_delta', delta: text, fullText: acc.reasoningOutput };
   };
 
-  for await (const event of applicationStream) {
+  for await (const event of stream) {
     if (event.type === 'usage_update') {
       acc.latestUsage = mergeUsage(event.usage, acc.latestUsage) ?? event.usage;
       yield { type: 'usage_update', usage: acc.latestUsage };
@@ -139,23 +139,22 @@ export async function* processStreamEvents(
     for (const commandMessage of emitCommandMessages([item])) yield commandMessage;
   }
 
-  const completedResult = await applicationStream.completed;
-  if (applicationStream.cancelled) {
+  const completedResult = await stream.completed;
+  if (stream.cancelled) {
     const abortError = new Error('The user aborted a request.');
     abortError.name = 'AbortError';
     throw abortError;
   }
   let usageFromRawResponses: NormalizedUsage | undefined;
-  for (const response of [...(applicationStream.rawResponses ?? [])].reverse()) {
+  for (const response of [...(stream.rawResponses ?? [])].reverse()) {
     const candidate = extractUsage(response);
     if (candidate) {
       usageFromRawResponses = candidate;
       break;
     }
   }
-  const runStateUsage = normalizeAgentRunUsage(applicationStream.runUsage);
-  const finalUsage =
-    runStateUsage || extractUsage(completedResult) || extractUsage(applicationStream) || usageFromRawResponses;
+  const runStateUsage = normalizeAgentRunUsage(stream.runUsage);
+  const finalUsage = runStateUsage || extractUsage(completedResult) || extractUsage(stream) || usageFromRawResponses;
   if (finalUsage) {
     acc.latestUsage = runStateUsage ? finalUsage : mergeUsage(finalUsage, acc.latestUsage) ?? finalUsage;
     deps.logger.debug('Usage extracted from stream completion', {
@@ -169,7 +168,7 @@ export async function* processStreamEvents(
       sessionId: deps.sessionId,
       source: 'stream_completed',
       completedResultKeys: completedRecord ? Object.keys(completedRecord) : [],
-      streamKeys: Object.keys(applicationStream as unknown as Record<string, unknown>),
+      streamKeys: Object.keys(stream as unknown as Record<string, unknown>),
     });
   }
 }

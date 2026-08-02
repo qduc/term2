@@ -7,7 +7,7 @@ import {
   unwrapContinuationHandle,
   type ContinuationHandle,
 } from '../../contracts/continuation-handle.js';
-import type { AgentStream } from '../agent-stream.js';
+import { createAgentStream, type AgentStream } from '../agent-stream.js';
 import type {
   StreamedModelMessagePart,
   StreamedModelProviderOptions,
@@ -304,7 +304,7 @@ export class ApplicationRunLoop {
       },
     };
     const output: ApplicationRunEvent[] = [];
-    const stream: AgentStream & { finalOutput?: string } = {
+    const stream = createAgentStream({
       [Symbol.asyncIterator]: () => ({ next: () => queue.next() }),
       completed: Promise.resolve(undefined),
       history: state.history,
@@ -318,7 +318,7 @@ export class ApplicationRunLoop {
       get runUsage() {
         return state.usage;
       },
-    };
+    });
 
     stream.completed = this.#execute(state, stream, queue, effectiveOptions, toolContext)
       .catch((error) => {

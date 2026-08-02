@@ -3,8 +3,7 @@ import { TurnAttempt } from './turn-attempt.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
 import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-events.js';
 import type { UserTurn } from '../../types/user-turn.js';
-import type { AgentStream } from '../agent-stream.js';
-import { MockStream } from '../test-helpers/mock-stream.js';
+import { createMockStream } from '../test-helpers/mock-stream.js';
 
 const mockTurn: UserTurn = { text: 'test turn' };
 const mockJournalSnapshot: AssistantJournalItemLogEvent[] = [
@@ -100,7 +99,7 @@ it('attachStream updates the current stream reference', () => {
     maxTransientRetries: 3,
   });
 
-  const stream = new MockStream([]) as unknown as AgentStream;
+  const stream = createMockStream([]);
   attempt.attachStream(stream);
   expect(attempt.stream).toBe(stream);
 

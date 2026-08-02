@@ -8,7 +8,7 @@ import {
 } from './test-helpers/conversation-session-fixtures.js';
 import type { ConversationEvent, UsageUpdateEvent } from '../conversation/conversation-events.js';
 it('sendMessage() returns usage from final event', async () => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Response' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'Response' }]);
   stream.finalOutput = 'Response';
   stream.completed = Promise.resolve({
     usage: { inputTokens: 11, outputTokens: 7, totalTokens: 18 },
@@ -52,7 +52,7 @@ it('handleApprovalDecision() returns usage from final event', async () => {
     reject() {},
   };
 
-  const continuationStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Approved run' }]);
+  const continuationStream = new MockStream([{ type: 'text_delta', text: 'Approved run' }]);
   continuationStream.finalOutput = 'Approved run';
   continuationStream.completed = Promise.resolve({
     usage: { inputTokens: 21, outputTokens: 9, totalTokens: 30 },
@@ -87,7 +87,7 @@ it('handleApprovalDecision() returns usage from final event', async () => {
 });
 
 it('sendMessage() logs usage handoff at DEBUG level', async () => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Response' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'Response' }]);
   stream.finalOutput = 'Response';
   stream.completed = Promise.resolve({
     usage: { inputTokens: 4, outputTokens: 6, totalTokens: 10 },
@@ -125,7 +125,7 @@ it('sendMessage() logs usage handoff at DEBUG level', async () => {
 });
 
 it('logs diagnostics when usage is missing in stream completion', async () => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Response' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'Response' }]);
   stream.finalOutput = 'Response';
   stream.completed = Promise.resolve({ foo: 'bar' });
 
@@ -160,7 +160,7 @@ it('logs diagnostics when usage is missing in stream completion', async () => {
 });
 
 it('sendMessage() extracts usage from stream.rawResponses when completed is void', async () => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Response' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'Response' }]);
   stream.finalOutput = 'Response';
   stream.completed = Promise.resolve(undefined);
   (stream as unknown as Record<string, unknown>).rawResponses = [
@@ -192,17 +192,12 @@ it('sendMessage() extracts usage from stream.rawResponses when completed is void
 it('sendMessage() preserves cache usage from streaming events when final usage omits it', async () => {
   const events = [
     {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'model',
-        event: {
-          usage: {
-            prompt_tokens: 100,
-            completion_tokens: 20,
-            total_tokens: 120,
-            prompt_tokens_details: { cached_tokens: 60 },
-          },
-        },
+      type: 'usage_update',
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 20,
+        total_tokens: 120,
+        cache_read_tokens: 60,
       },
     },
   ];
@@ -235,20 +230,10 @@ it('sendMessage() preserves cache usage from streaming events when final usage o
   });
 });
 
-it('run() emits usage_update when usage is nested in event.data (raw_model_stream_event)', async () => {
-  // Simulates a raw_model_stream_event with type 'response.completed' where
-  // usage lives at event.data.response.usage
+it('run() emits usage_update from a native usage event', async () => {
   const events = [
-    { type: 'response.output_text.delta', delta: 'Hello' },
-    {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'response.completed',
-        response: {
-          usage: { input_tokens: 50, output_tokens: 25 },
-        },
-      },
-    },
+    { type: 'text_delta', text: 'Hello' },
+    { type: 'usage_update', usage: { prompt_tokens: 50, completion_tokens: 25, total_tokens: 75 } },
   ];
 
   const stream = new MockStream(events);
@@ -279,25 +264,10 @@ it('run() emits usage_update when usage is nested in event.data (raw_model_strea
   expect((usageEvents[0] as UsageUpdateEvent).usage.total_tokens).toBe(75);
 });
 
-it('run() emits usage_update when raw model stream usage is nested in event.data.event', async () => {
+it('run() emits usage_update from a native usage event with provider metadata', async () => {
   const events = [
-    { type: 'response.output_text.delta', delta: 'Hello' },
-    {
-      type: 'raw_model_stream_event',
-      data: {
-        type: 'model',
-        event: {
-          id: '8d03b4e8-46ab-45f7-aed4-670157c3dd6d',
-          object: 'chat.completion.chunk',
-          created: 1778912418,
-          model: 'deepseek-v4-flash',
-          usage: { prompt_tokens: 8, completion_tokens: 3, total_tokens: 11 },
-        },
-        providerData: {
-          rawModelEventSource: 'openai-chat-completions',
-        },
-      },
-    },
+    { type: 'text_delta', text: 'Hello' },
+    { type: 'usage_update', usage: { prompt_tokens: 8, completion_tokens: 3, total_tokens: 11 } },
   ];
 
   const stream = new MockStream(events);
@@ -329,15 +299,9 @@ it('run() emits usage_update when raw model stream usage is nested in event.data
 });
 
 it('run() emits usage_update when usage is at top level of event', async () => {
-  // Simulates events that have usage directly on the event (e.g. response.done)
   const events = [
-    { type: 'response.output_text.delta', delta: 'Hello' },
-    {
-      type: 'response.done',
-      response: {
-        usage: { input_tokens: 100, output_tokens: 50 },
-      },
-    },
+    { type: 'text_delta', text: 'Hello' },
+    { type: 'usage_update', usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 } },
   ];
 
   const stream = new MockStream(events);

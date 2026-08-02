@@ -5,7 +5,7 @@ import { ApprovalState } from '../approval/approval-state.js';
 import { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
 import { ConversationStore } from './conversation-store.js';
 import { LoggingService } from '../logging/logging-service.js';
-import type { AgentStream } from '../agent-stream.js';
+import { createAgentStream, type AgentStream } from '../agent-stream.js';
 import { clearToolFormatters, registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { formatShellCommandMessage } from '../../tools/system/shell.js';
 import { clearApprovalRejectionMarkers } from '../../utils/streaming/extract-command-messages.js';
@@ -58,11 +58,11 @@ const logger = new LoggingService({ disableLogging: true });
 const makeNestedCompatibility = () =>
   new NestedToolCompatibilityState(createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }));
 const makeStream = (extras: any = {}): AgentStream =>
-  ({
+  createAgentStream({
     [Symbol.asyncIterator]: async function* () {},
     completed: Promise.resolve(null),
     ...extras,
-  } as any);
+  });
 
 const makeDeps = (
   mode: 'off' | 'advisory' | 'auto' = 'off',

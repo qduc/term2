@@ -118,11 +118,11 @@ it('sessions do not share pending approval context', async () => {
     },
   } as any;
 
-  const streamB = new MockStream([{ type: 'response.output_text.delta', delta: 'Hello' }]);
+  const streamB = new MockStream([{ type: 'text_delta', text: 'Hello' }]);
   streamB.finalOutput = 'Hello';
   streamB.lastResponseId = 'resp-B1';
 
-  const continuationA = new MockStream([{ type: 'response.output_text.delta', delta: 'Approved' }]);
+  const continuationA = new MockStream([{ type: 'text_delta', text: 'Approved' }]);
   continuationA.finalOutput = 'Approved';
 
   const mockClient = {
@@ -296,7 +296,7 @@ it('abandoned approval follow-up does not replay cached tool arguments as comman
   const callId = 'call-abort-restore';
   const initialStream = new MockStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',
@@ -320,7 +320,7 @@ it('abandoned approval follow-up does not replay cached tool arguments as comman
     reject: () => undefined,
   };
 
-  const followupStream = new MockStream([{ type: 'response.output_text.delta', delta: 'follow-up' }]);
+  const followupStream = new MockStream([{ type: 'text_delta', text: 'follow-up' }]);
   followupStream.finalOutput = 'follow-up';
   followupStream.lastResponseId = 'resp-abort-follow-up';
 

@@ -57,7 +57,7 @@ const defaultRetryCounts: RetryCounts = {
 };
 
 it('executes initial turn successfully', async () => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello response' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'hello response' }]);
   stream.finalOutput = 'hello response';
   let receivedProviderHistorySnapshot: unknown;
   let receivedLineage: unknown;
@@ -110,7 +110,7 @@ it('executes initial turn successfully', async () => {
 });
 
 it('observes eligible owned-root OpenAI parity while preserving the legacy outgoing response ID', async () => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'hello' }]);
   stream.finalOutput = 'hello';
   const observations: any[] = [];
   const diagnostics: any[] = [];
@@ -165,7 +165,7 @@ it('observes eligible owned-root OpenAI parity while preserving the legacy outgo
 });
 
 it('keeps the legacy response ID when an eligible checkpoint does not match it', async () => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'hello' }]);
   stream.finalOutput = 'hello';
   let outgoingOptions: any;
   const { workflow, composition } = setupWorkflow(
@@ -206,7 +206,7 @@ it.each([
     },
   ],
 ])('keeps the legacy response ID for a %s', async (_name, observe) => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'hello' }]);
   stream.finalOutput = 'hello';
   let outgoingOptions: any;
   const { workflow, composition } = setupWorkflow(
@@ -229,7 +229,7 @@ it.each([
 });
 
 it('keeps the established outgoing response ID when parity observation throws', async () => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'hello' }]);
   stream.finalOutput = 'hello';
   let outgoingOptions: any;
   const mockClient = {
@@ -264,7 +264,7 @@ it.each([
 ])('does not observe %s initial paths', async (_name, clientShape, runOptions) => {
   const observations: any[] = [];
   const diagnostics: any[] = [];
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'hello' }]);
   stream.finalOutput = 'hello';
   const mockClient = { ...clientShape, startStream: async () => stream };
   let recordEvidence: ((value: unknown) => void) | undefined;
@@ -287,7 +287,7 @@ it.each([
 });
 
 it('passes a fresh authoritative store snapshot when resuming an initial stream', async () => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'resumed response' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'resumed response' }]);
   stream.finalOutput = 'resumed response';
   let receivedProviderHistorySnapshot: any;
   let receivedLineage: unknown;
@@ -349,7 +349,7 @@ it('executes continuation turn successfully', async () => {
     ) {
       receivedLineage = options.providerContinuityLineage;
       receivedPreviousResponseId = options.previousResponseId;
-      const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'continuation response' }]);
+      const stream = new MockStream([{ type: 'text_delta', text: 'continuation response' }]);
       stream.finalOutput = 'continuation response';
       const prior = {
         type: 'function_call_output',
@@ -440,7 +440,7 @@ it('resumes one post-execute-gated stream without consuming it twice', async () 
     describe: () => ({ toolName: 'shell', argumentsText: '{"command":"pwd"}' }),
   });
   let consumed = 0;
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'resumed' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'resumed' }]);
   stream.finalOutput = 'resumed';
   (stream as any)[Symbol.asyncIterator] = async function* () {
     consumed++;
@@ -450,7 +450,7 @@ it('resumes one post-execute-gated stream without consuming it twice', async () 
       details: { toolCall: { callId: 'call-a' } },
       executeAgain: async () => 'retried',
     });
-    yield { type: 'response.output_text.delta', delta: 'resumed' };
+    yield { type: 'text_delta', text: 'resumed' };
   };
   mockClient.startStream = async () => stream;
 
@@ -488,7 +488,7 @@ it('establishes the active live-run id before a synchronously starting client ca
     postExecutePause: { describe: () => ({ toolName: 'shell', argumentsText: '{}' }) },
   };
   let gate!: Promise<unknown>;
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'done' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'done' }]);
   stream.finalOutput = 'done';
   const mockClient: any = {
     getProvider: () => 'openai',
@@ -540,7 +540,7 @@ it('returns each later post-execute pause from the same live stream', async () =
     describe: () => ({ toolName: 'shell', argumentsText: '{}' }),
   });
   let consumed = 0;
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'done' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'done' }]);
   stream.finalOutput = 'done';
   (stream as any)[Symbol.asyncIterator] = async function* () {
     consumed++;
@@ -552,7 +552,7 @@ it('returns each later post-execute pause from the same live stream', async () =
         executeAgain: async () => 'retried',
       });
     }
-    yield { type: 'response.output_text.delta', delta: 'done' };
+    yield { type: 'text_delta', text: 'done' };
   };
   const token = composition.generationGuard.capture();
   const attempt = new TurnAttempt({

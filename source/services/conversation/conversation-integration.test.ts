@@ -2,6 +2,7 @@ import { it, expect } from 'vitest';
 import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import { ConversationService as ProductionConversationService } from './conversation-service.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { createAgentStream } from '../agent-stream.js';
 
 class ConversationService extends ProductionConversationService {
   constructor(options: Omit<ConstructorParameters<typeof ProductionConversationService>[0], 'toolOwnership'>) {
@@ -46,6 +47,7 @@ class MockStream {
     this.history = [];
     this.finalOutput = '';
     this.output = [];
+    createAgentStream(this as never);
   }
 
   async *[Symbol.asyncIterator](): AsyncGenerator<any, void, unknown> {
@@ -57,8 +59,8 @@ class MockStream {
 
 it('integration: streamed response emits deltas and final output', async () => {
   const stream = new MockStream([
-    { type: 'response.output_text.delta', delta: 'Hello' },
-    { type: 'response.output_text.delta', delta: ' world' },
+    { type: 'text_delta', text: 'Hello' },
+    { type: 'text_delta', text: ' world' },
   ]);
   stream.finalOutput = 'Hello world';
 
@@ -117,7 +119,7 @@ it('integration: approval round-trip (approval_required -> continue -> final)', 
   initialStream.state = approvalState;
   initialStream.lastResponseId = 'resp-before-approval';
 
-  const continuationStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Approved run' }]);
+  const continuationStream = new MockStream([{ type: 'text_delta', text: 'Approved run' }]);
   continuationStream.finalOutput = 'Approved run';
   continuationStream.lastResponseId = 'resp-after-approval';
 
@@ -156,7 +158,7 @@ it('integration: approval round-trip (approval_required -> continue -> final)', 
 
 it('integration: hallucination retry retries once and succeeds', async () => {
   let startCalls = 0;
-  const successfulStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Retried successfully' }]);
+  const successfulStream = new MockStream([{ type: 'text_delta', text: 'Retried successfully' }]);
   successfulStream.finalOutput = 'Retried successfully';
 
   const emittedEvents: string[] = [];
@@ -239,8 +241,8 @@ it('integration: terminal-write gate prevents store write on interrupted stream;
     },
   ];
   const continuationStream = new MockStream([
-    { type: 'response.output_text.delta', delta: 'Here are your files: ' },
-    { type: 'response.output_text.delta', delta: 'file1.txt, file2.txt' },
+    { type: 'text_delta', text: 'Here are your files: ' },
+    { type: 'text_delta', text: 'file1.txt, file2.txt' },
   ]);
   continuationStream.finalOutput = 'Here are your files: file1.txt, file2.txt';
   continuationStream.lastResponseId = 'resp-after-gate';

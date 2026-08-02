@@ -1,9 +1,9 @@
 import { it, expect, beforeAll, beforeEach } from 'vitest';
 import { ConversationService as ProductionConversationService } from './conversation-service.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
-import type { AgentStream } from '../agent-stream.js';
+import { createAgentStream } from '../agent-stream.js';
 import type { ConversationTerminal, FinalTerminal, ApprovalRequiredTerminal } from '../../contracts/conversation.js';
-import { MockStream } from '../test-helpers/mock-stream.js';
+import { MockStream, createMockStream } from '../test-helpers/mock-stream.js';
 import {
   clearApprovalRejectionMarkers,
   markToolCallAsApprovalRejection,
@@ -48,8 +48,8 @@ function partialClient(methods: Record<string, unknown> = {}): ConversationAgent
     abort: () => {},
     setModel: () => {},
     addToolInterceptor: () => () => {},
-    startStream: async () => new MockStream([]) as unknown as AgentStream,
-    continueRunStream: async () => new MockStream([]) as unknown as AgentStream,
+    startStream: async () => createMockStream([]),
+    continueRunStream: async () => createMockStream([]),
     ...methods,
   } as ConversationAgentClient;
 }
@@ -85,15 +85,17 @@ class GatedStream {
   history: unknown[] = [];
   finalOutput: string;
   readonly #gate: Promise<void>;
+  completed = Promise.resolve();
 
   constructor(finalOutput: string, gate: Promise<void>) {
     this.finalOutput = finalOutput;
     this.#gate = gate;
+    createAgentStream(this as never);
   }
 
   async *[Symbol.asyncIterator](): AsyncGenerator<unknown> {
     await this.#gate;
-    yield;
+    return;
   }
 }
 
@@ -106,8 +108,8 @@ it('queues foreground messages FIFO, returns each item terminal, and executes ea
   const mockClient = partialClient({
     async startStream(input: unknown) {
       inputs.push(input);
-      if (inputs.length === 1) return new GatedStream('first terminal', firstGate) as unknown as AgentStream;
-      const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'second terminal' }]);
+      if (inputs.length === 1) return new GatedStream('first terminal', firstGate);
+      const stream = new MockStream([{ type: 'text_delta', text: 'second terminal' }]);
       stream.finalOutput = 'second terminal';
       return stream;
     },
@@ -187,7 +189,7 @@ it('pauses queued foreground messages after a failed execution until resumeQueue
     async startStream(input: unknown) {
       inputs.push(input);
       if (inputs.length === 1) throw new Error('first failed');
-      const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'second terminal' }]);
+      const stream = new MockStream([{ type: 'text_delta', text: 'second terminal' }]);
       stream.finalOutput = 'second terminal';
       return stream;
     },
@@ -220,8 +222,8 @@ it('rejects an aborted terminal-less active stream and retains queued work pause
     },
     async startStream(input: unknown) {
       inputs.push(input);
-      if (inputs.length === 1) return new GatedStream('', firstGate) as unknown as AgentStream;
-      const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'second terminal' }]);
+      if (inputs.length === 1) return new GatedStream('', firstGate);
+      const stream = new MockStream([{ type: 'text_delta', text: 'second terminal' }]);
       stream.finalOutput = 'second terminal';
       return stream;
     },
@@ -255,8 +257,8 @@ it('emits live text chunks for response.output_text.delta events', async () => {
   expect.assertions(3);
 
   const events = [
-    { type: 'response.output_text.delta', delta: 'Hello' },
-    { type: 'response.output_text.delta', delta: ' world' },
+    { type: 'text_delta', text: 'Hello' },
+    { type: 'text_delta', text: ' world' },
   ];
 
   const mockClient = partialClient({
@@ -286,8 +288,8 @@ it('emits live text chunks for response.output_text.delta events', async () => {
 
 it('emits ConversationEvents (text_delta → final) in order', async () => {
   const events = [
-    { type: 'response.output_text.delta', delta: 'Hello' },
-    { type: 'response.output_text.delta', delta: ' world' },
+    { type: 'text_delta', text: 'Hello' },
+    { type: 'text_delta', text: ' world' },
   ];
 
   const mockClient = partialClient({
@@ -404,7 +406,7 @@ it('starts a fresh request for the next message after aborting approval', async 
     },
   };
 
-  const followupStream = new MockStream([{ type: 'response.output_text.delta', delta: 'After abort' }]);
+  const followupStream = new MockStream([{ type: 'text_delta', text: 'After abort' }]);
   followupStream.finalOutput = 'After abort';
 
   let interceptorCount = 0;
@@ -512,7 +514,7 @@ it('reject with reason preserves tool history while abort starts clean follow-up
     };
     initialStream.history = baseHistory;
 
-    const continuationStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Rejected' }]);
+    const continuationStream = new MockStream([{ type: 'text_delta', text: 'Rejected' }]);
     continuationStream.finalOutput = 'Rejected';
     continuationStream.history = rejectionHistory;
 
@@ -634,7 +636,7 @@ it('passes previous response ids into subsequent runs', async () => {
 });
 
 it('retryLastToolOutput trims trailing assistant text and replays full history', async () => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Retried answer' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'Retried answer' }]);
   stream.finalOutput = 'Retried answer';
 
   const startCalls: Array<{ input: unknown; options: unknown }> = [];
@@ -698,7 +700,7 @@ it('emits approval interruptions and resumes after approval', async () => {
     },
   };
 
-  const continuationStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Approved run' }]);
+  const continuationStream = new MockStream([{ type: 'text_delta', text: 'Approved run' }]);
   continuationStream.finalOutput = 'Approved run';
 
   const mockClient = partialClient({
@@ -759,7 +761,7 @@ it('forwards streamed events to a persistent event sink across approval continua
     },
   };
 
-  const continuationStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Approved run' }]);
+  const continuationStream = new MockStream([{ type: 'text_delta', text: 'Approved run' }]);
   continuationStream.finalOutput = 'Approved run';
 
   const mockClient = partialClient({
@@ -802,7 +804,7 @@ it('dedupes command messages emitted live from run events', async () => {
     output: commandPayload,
     rawItem,
   };
-  const events = [{ type: 'run_item_stream_event', item: commandItem }];
+  const events = [{ type: 'item', item: commandItem }];
   const stream = new MockStream(events);
   stream.newItems = [commandItem];
 
@@ -863,8 +865,8 @@ it('attaches cached shell args when output uses call_id', async () => {
   };
 
   const events = [
-    { type: 'run_item_stream_event', item: functionCallItem },
-    { type: 'run_item_stream_event', item: outputItem },
+    { type: 'item', item: functionCallItem },
+    { type: 'item', item: outputItem },
   ];
   const stream = new MockStream(events);
   stream.newItems = [functionCallItem, outputItem];
@@ -928,7 +930,7 @@ it('preserves approval rejection command messages', async () => {
     output: rejectionPayload,
     rawItem,
   };
-  const events = [{ type: 'run_item_stream_event', item: commandItem }];
+  const events = [{ type: 'item', item: commandItem }];
   const stream = new MockStream(events);
   stream.newItems = [commandItem];
 
@@ -998,7 +1000,7 @@ it('dedupes commands from initial stream when continuation history contains them
   };
 
   // Initial stream: emits 'ls' command, then hits approval for 'sed'
-  const initialEvents = [{ type: 'run_item_stream_event', item: lsCommandItem }];
+  const initialEvents = [{ type: 'item', item: lsCommandItem }];
   const initialStream = new MockStream(initialEvents);
   initialStream.interruptions = [interruption];
   initialStream.state = {
@@ -1010,7 +1012,7 @@ it('dedupes commands from initial stream when continuation history contains them
   };
 
   // Continuation stream: emits 'sed' command, history contains BOTH 'ls' and 'sed'
-  const continuationEvents = [{ type: 'run_item_stream_event', item: sedCommandItem }];
+  const continuationEvents = [{ type: 'item', item: sedCommandItem }];
   const continuationStream = new MockStream(continuationEvents);
   continuationStream.finalOutput = 'Done';
   // Simulate that the continuation stream's history contains both commands
@@ -1093,7 +1095,7 @@ it('continuation replays the just-emitted tool in newItems without re-emitting i
     reject() {},
   };
 
-  const continuationEvents = [{ type: 'run_item_stream_event', item: commandItem }];
+  const continuationEvents = [{ type: 'item', item: commandItem }];
   const continuationStream = new MockStream(continuationEvents);
   continuationStream.finalOutput = 'Done';
   continuationStream.newItems = [commandItem];
@@ -1445,7 +1447,7 @@ it('handleApprovalDecision() rejects interruption when answer is n', async () =>
     },
   };
 
-  const continuationStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Rejected run' }]);
+  const continuationStream = new MockStream([{ type: 'text_delta', text: 'Rejected run' }]);
   continuationStream.finalOutput = 'Rejected run';
 
   const mockClient = partialClient({
@@ -1495,28 +1497,9 @@ it('handleApprovalDecision() returns null when no pending approval', async () =>
 it('emits live reasoning chunks', async () => {
   expect.assertions(3);
 
-  // Reasoning is now streamed via model events carrying reasoning_summary_text deltas
   const events = [
-    {
-      type: 'response.output_text.delta',
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.reasoning_summary_text.delta',
-          delta: 'Thinking...',
-        },
-      },
-    },
-    {
-      type: 'response.output_text.delta',
-      data: {
-        type: 'model',
-        event: {
-          type: 'response.reasoning_summary_text.delta',
-          delta: ' Still thinking.',
-        },
-      },
-    },
+    { type: 'reasoning_delta', text: 'Thinking...' },
+    { type: 'reasoning_delta', text: ' Still thinking.' },
   ];
 
   const mockClient = partialClient({

@@ -37,6 +37,22 @@ export type StreamedModelToolResultPart =
         | { readonly id: string; readonly filename?: string };
     };
 
+/** Codex plan usage limit window surfaced by the provider stream. */
+export interface CodexRateLimitWindow {
+  readonly used_percent: number;
+  readonly window_minutes: number;
+  readonly reset_after_seconds: number;
+  readonly reset_at: number;
+}
+
+/** Codex ChatGPT plan usage limits (typically 5H primary and 7D secondary). */
+export interface CodexRateLimitInfo {
+  readonly allowed: boolean;
+  readonly limit_reached: boolean;
+  readonly primary?: CodexRateLimitWindow;
+  readonly secondary?: CodexRateLimitWindow;
+}
+
 /** One application-owned streamed model invocation. */
 export interface StreamedModelTurn {
   stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent>;
@@ -101,6 +117,7 @@ export interface StreamedModelTool {
 
 export type StreamedModelTurnEvent =
   | { readonly type: 'text_delta'; readonly text: string }
+  | { readonly type: 'codex_rate_limits'; readonly rateLimits: CodexRateLimitInfo }
   | {
       readonly type: 'reasoning_delta';
       readonly id?: string;

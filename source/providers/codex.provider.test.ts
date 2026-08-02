@@ -883,6 +883,15 @@ it.sequential('Codex registry boundary preserves the full streamed-turn request 
       item: { type: 'function_call', call_id: 'call_out', name: 'lookup', arguments: '{"q":1}' },
     };
     yield {
+      type: 'codex.rate_limits',
+      rate_limits: {
+        allowed: true,
+        limit_reached: false,
+        primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 9697, reset_at: 1779703037 },
+        secondary: { used_percent: 14, window_minutes: 10080, reset_after_seconds: 503937, reset_at: 1780197277 },
+      },
+    };
+    yield {
       type: 'response.completed',
       response: {
         id: 'resp_contract',
@@ -985,6 +994,15 @@ it.sequential('Codex registry boundary preserves the full streamed-turn request 
     ]);
     expect(events).toEqual([
       { type: 'text_delta', text: 'answer' },
+      {
+        type: 'codex_rate_limits',
+        rateLimits: {
+          allowed: true,
+          limit_reached: false,
+          primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 9697, reset_at: 1779703037 },
+          secondary: { used_percent: 14, window_minutes: 10080, reset_after_seconds: 503937, reset_at: 1780197277 },
+        },
+      },
       {
         type: 'reasoning_delta',
         id: 'rs_out',
@@ -1294,6 +1312,15 @@ it.sequential(
     // shape or it silently drops all text and treats the turn as empty.
     const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
     (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function* () {
+      yield {
+        type: 'codex.rate_limits',
+        rate_limits: {
+          allowed: true,
+          limit_reached: false,
+          primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 60, reset_at: 1_700_000_000 },
+          secondary: { used_percent: 14, window_minutes: 10_080, reset_after_seconds: 120, reset_at: 1_700_000_100 },
+        },
+      };
       yield { type: 'response.output_text.delta', delta: 'Hi! How can I help you today?' };
       yield {
         type: 'response.completed',
@@ -1327,6 +1354,15 @@ it.sequential(
       }
 
       expect(events).toEqual([
+        {
+          type: 'codex_rate_limits',
+          rateLimits: {
+            allowed: true,
+            limit_reached: false,
+            primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 60, reset_at: 1_700_000_000 },
+            secondary: { used_percent: 14, window_minutes: 10_080, reset_after_seconds: 120, reset_at: 1_700_000_100 },
+          },
+        },
         { type: 'text_delta', text: 'Hi! How can I help you today?' },
         {
           type: 'completion',

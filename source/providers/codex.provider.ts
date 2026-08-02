@@ -606,7 +606,10 @@ async function* codexStream(
     ...(request.signal ? { signal: request.signal } : {}),
   })) {
     const event = normalizeCodexStreamEvent(rawEvent);
-    if (event?.type === 'response.output_text.delta') {
+    if (event?.type === 'codex.rate_limits') {
+      const rateLimits = event.rate_limits ?? event;
+      if (rateLimits && typeof rateLimits === 'object') yield { type: 'codex_rate_limits', rateLimits };
+    } else if (event?.type === 'response.output_text.delta') {
       yield { type: 'text_delta', text: String(event.delta ?? '') };
     } else if (event?.type === 'response.reasoning_summary_text.delta') {
       pendingReasoningDeltas.push({

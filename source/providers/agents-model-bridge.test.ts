@@ -456,6 +456,68 @@ it('bridgeBackToTurn throws instead of yielding a fake empty completion when the
   await expect(collect(turn.stream({ input: [], tools: [] } as any))).rejects.toThrow('ended without a completion');
 });
 
+it('adaptStreamedModelTurnForAgents forwards Codex rate limits as an SDK model event', async () => {
+  const model = adaptStreamedModelTurnForAgents({
+    async *stream() {
+      yield {
+        type: 'codex_rate_limits',
+        rateLimits: {
+          allowed: true,
+          limit_reached: false,
+          primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 9697, reset_at: 1779703037 },
+          secondary: { used_percent: 14, window_minutes: 10080, reset_after_seconds: 503937, reset_at: 1780197277 },
+        },
+      } as any;
+      yield { type: 'completion', responseId: 'resp-rate-limit', output: [] };
+    },
+  });
+
+  const events = await collect(model.getStreamedResponse(request({})));
+  expect(events).toContainEqual({
+    type: 'model',
+    event: {
+      type: 'codex.rate_limits',
+      rate_limits: {
+        allowed: true,
+        limit_reached: false,
+        primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 9697, reset_at: 1779703037 },
+        secondary: { used_percent: 14, window_minutes: 10080, reset_after_seconds: 503937, reset_at: 1780197277 },
+      },
+    },
+  });
+});
+
+it('bridgeBackToTurn forwards Codex rate limits from SDK model events', async () => {
+  const turn = realBridgeBackToTurn({
+    async *getStreamedResponse() {
+      yield {
+        type: 'model',
+        event: {
+          type: 'codex.rate_limits',
+          rate_limits: {
+            allowed: true,
+            limit_reached: false,
+            primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 9697, reset_at: 1779703037 },
+            secondary: { used_percent: 14, window_minutes: 10080, reset_after_seconds: 503937, reset_at: 1780197277 },
+          },
+        },
+      };
+      yield { type: 'response_done', response: { id: 'resp-rate-limit', output: [] } };
+    },
+  });
+
+  const events = await collect(turn.stream({ input: [], tools: [] } as any));
+  expect(events).toContainEqual({
+    type: 'codex_rate_limits',
+    rateLimits: {
+      allowed: true,
+      limit_reached: false,
+      primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 9697, reset_at: 1779703037 },
+      secondary: { used_percent: 14, window_minutes: 10080, reset_after_seconds: 503937, reset_at: 1780197277 },
+    },
+  });
+});
+
 it('bridgeBackToTurn yields a normal completion when response_done arrives', async () => {
   const turn = realBridgeBackToTurn({
     async *getStreamedResponse() {

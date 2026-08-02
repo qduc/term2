@@ -359,6 +359,13 @@ export class ApplicationRunLoop {
           outputPush(stream, queue, { type: 'text_delta', text: event.text });
           continue;
         }
+        if (event.type === 'codex_rate_limits') {
+          outputPush(stream, queue, {
+            type: 'model',
+            event: { type: 'codex.rate_limits', rate_limits: event.rateLimits },
+          });
+          continue;
+        }
         if (event.type === 'reasoning_delta') {
           pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, event);
           outputPush(stream, queue, { type: 'model', event: { type: 'reasoning-delta', delta: event.text } });

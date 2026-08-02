@@ -31,6 +31,42 @@ function textModel(text: string, responseId: string): StreamedModelTurn {
 }
 
 describe('ApplicationRunLoop', () => {
+  it('forwards Codex ChatGPT-plan rate limits as provider model events', async () => {
+    const model: StreamedModelTurn = {
+      async *stream() {
+        yield {
+          type: 'codex_rate_limits' as const,
+          rateLimits: {
+            allowed: true,
+            limit_reached: false,
+            primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 60, reset_at: 1_700_000_000 },
+            secondary: {
+              used_percent: 14,
+              window_minutes: 10_080,
+              reset_after_seconds: 120,
+              reset_at: 1_700_000_100,
+            },
+          },
+        };
+        yield { type: 'completion' as const, responseId: 'resp-limits', output: [] };
+      },
+    };
+
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt');
+    await collect(stream);
+
+    expect(stream.output).toContainEqual({
+      type: 'model',
+      event: {
+        type: 'codex.rate_limits',
+        rate_limits: expect.objectContaining({
+          primary: expect.objectContaining({ window_minutes: 300 }),
+          secondary: expect.objectContaining({ window_minutes: 10_080 }),
+        }),
+      },
+    });
+  });
+
   it('retains display deltas and provider items in distinct terminal event shapes', async () => {
     const stream = new ApplicationRunLoop({
       resolveModel: () => textModel('streamed answer', 'resp-delta'),

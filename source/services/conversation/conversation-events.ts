@@ -3,6 +3,8 @@ import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { ApprovalDescriptor, LLMAdvisory } from '../../contracts/conversation.js';
 import type { SubagentResult } from '../subagents/types.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
+import type { CodexRateLimitInfo } from '../../contracts/streamed-model-turn.js';
+export type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../contracts/streamed-model-turn.js';
 
 export type ConversationEvent =
   | TextDeltaEvent
@@ -203,24 +205,7 @@ export interface SubagentQuestionEvent {
   question: string;
 }
 
-/**
- * Rate limit information from the Codex provider.
- * Emitted as a raw `codex.rate_limits` frame from the Codex backend.
- */
-export interface CodexRateLimitWindow {
-  used_percent: number;
-  window_minutes: number;
-  reset_after_seconds: number;
-  reset_at: number;
-}
-
-export interface CodexRateLimitInfo {
-  allowed: boolean;
-  limit_reached: boolean;
-  primary?: CodexRateLimitWindow;
-  secondary?: CodexRateLimitWindow;
-}
-
+/** Emitted when Codex reports ChatGPT plan usage limits. */
 export interface CodexRateLimitEvent {
   type: 'codex_rate_limits';
   rateLimits: CodexRateLimitInfo;

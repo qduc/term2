@@ -512,7 +512,11 @@ it('extracts codex rate limits from nested or flat structures in raw events', as
     },
   };
 
-  const stream = makeStream([nestedEvent]);
+  const stream = makeStream([
+    nestedEvent,
+    // ApplicationRunLoop emits provider model events in this direct shape.
+    { type: 'model', event: nestedEvent },
+  ]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
   for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
@@ -520,7 +524,7 @@ it('extracts codex rate limits from nested or flat structures in raw events', as
   }
 
   const rateLimitEvents = events.filter((e) => e.type === 'codex_rate_limits');
-  expect(rateLimitEvents.length).toBe(1);
+  expect(rateLimitEvents.length).toBe(2);
   const info = rateLimitEvents[0].rateLimits;
   expect(info.allowed).toBe(true);
   expect(info.limit_reached).toBe(false);

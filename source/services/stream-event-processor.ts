@@ -121,7 +121,7 @@ export async function* processStreamEvents(
   for await (const rawEvent of stream) {
     const event = asRecord(rawEvent);
     const eventData = asRecord(event?.data);
-    const modelEvent = asRecord(eventData?.event);
+    const modelEvent = asRecord(eventData?.event) ?? asRecord(event?.event);
     const eventType = getString(event, 'type');
 
     // Extract usage if present in any of the common locations.

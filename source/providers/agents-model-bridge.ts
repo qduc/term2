@@ -47,7 +47,10 @@ export function bridgeBackToTurn(model: { getStreamedResponse(request: any): Asy
       let completion: any;
       for await (const event of model.getStreamedResponse(legacyRequest)) {
         if (event?.type === 'output_text_delta') yield { type: 'text_delta', text: event.delta ?? '' };
-        else if (event?.type === 'response_done') completion = event.response;
+        else if (event?.type === 'model' && event.event?.type === 'codex.rate_limits') {
+          const rateLimits = event.event.rate_limits ?? event.event;
+          if (rateLimits && typeof rateLimits === 'object') yield { type: 'codex_rate_limits', rateLimits };
+        } else if (event?.type === 'response_done') completion = event.response;
         else if (event?.type === 'response.completed') completion = event.response;
       }
       // Without this guard, a stream that ends without ever producing a
@@ -103,6 +106,8 @@ export function adaptStreamedModelTurnForAgents(applicationModel: StreamedModelT
         }
         if (event.type === 'text_delta') {
           yield { type: 'output_text_delta', delta: event.text };
+        } else if (event.type === 'codex_rate_limits') {
+          yield { type: 'model', event: { type: 'codex.rate_limits', rate_limits: event.rateLimits } };
         } else if (event.type === 'reasoning_delta') {
           yield { type: 'model', event: toReasoningModelEvent(event) };
         } else if (event.type === 'tool_call') {

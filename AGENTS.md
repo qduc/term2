@@ -92,6 +92,19 @@ Currently active:
 
 For multi-step work with independently divisible parts, act as the coordinator: delegate bounded subtasks to subagents, remain the user's sole point of contact, integrate their results, and provide one verified final answer. Avoid parallel edits that could conflict, and do not delegate trivial tasks.
 
+# Bug-Fix Standard
+
+A regression test is the floor, not the finish line. After any non-trivial bug fix:
+
+1. Ask why the bug was possible and whether design, types, or APIs can make the defect class unrepresentable.
+2. Search sibling implementations and similar boundaries for the same failure pattern.
+3. Identify why tests, review, or observability did not catch it earlier. Treat a shipped defect as both a code defect and a detection-gap defect.
+4. Prefer an automated class-wide guard—such as a contract test, lint rule, exhaustive type check, or CI validation—when proportional.
+
+Prioritize behavioral contracts at risky boundaries, error paths, and edge conditions over coverage percentages. High line coverage with weak assertions is not evidence of correctness. If meaningful testing requires mocking half the system, treat that as an architecture signal rather than merely a testing inconvenience.
+
+Keep analysis blameless: ask what allowed the defect, not who introduced it. Use proportional judgment—a typo-grade issue does not require a full retrospective, but surprising, severe, or long-lived bugs require the broader audit. Fix the bug factory, not only the observed instance.
+
 # Parallel Work Isolation
 
 Several agents share the primary checkout, so concurrent edits pile into one `git status` with no way to tell whose work is whose.

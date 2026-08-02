@@ -816,6 +816,52 @@ it.sequential('Codex provider uses CODEX_BASE_URL for local server simulation', 
   }
 });
 
+it.sequential('Codex HTTP stream forwards application instructions to Luna as developer context', async () => {
+  let capturedRequest: any;
+  const client = {
+    responses: {
+      create: async (request: any) => {
+        capturedRequest = request;
+        return (async function* () {
+          yield {
+            type: 'response.completed',
+            response: {
+              id: 'resp-context',
+              output: [],
+              usage: { input_tokens: 7, output_tokens: 3, input_tokens_details: { cached_tokens: 2 } },
+            },
+          };
+        })();
+      },
+    },
+  };
+  const provider = new CodexProvider(client as any, {} as any, {}, undefined, 'http', 0, {
+    firstFrameMs: 1_000,
+    interFrameMs: 1_000,
+  });
+  const model = provider.getStreamedModel('gpt-5.6-luna');
+
+  const events = [];
+  for await (const event of model.stream({
+    instructions: 'PROJECT_CONTEXT_SENTINEL',
+    input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+    tools: [],
+  })) {
+    events.push(event);
+  }
+
+  expect(capturedRequest.instructions).toBe('');
+  expect(capturedRequest.input).toContainEqual({
+    type: 'message',
+    role: 'developer',
+    content: [{ type: 'input_text', text: 'PROJECT_CONTEXT_SENTINEL' }],
+  });
+  expect(events.at(-1)).toMatchObject({
+    type: 'completion',
+    usage: { inputTokens: 7, outputTokens: 3, cachedInputTokens: 2 },
+  });
+});
+
 it.sequential('Codex HTTP stream rejects EOF before a completed response event', async () => {
   const client = {
     responses: {

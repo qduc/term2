@@ -80,6 +80,7 @@ const getReasoningText = (item: unknown): string => {
   return (
     extractReasoningParts(raw.rawContent) ||
     extractReasoningParts(asRecord(item)?.rawContent) ||
+    extractReasoningParts(raw.content) ||
     extractTextParts(raw.content)
   );
 };

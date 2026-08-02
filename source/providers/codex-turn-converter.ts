@@ -147,11 +147,29 @@ function toCodexFileReference(file: unknown): Record<string, unknown> {
   throw new Error('Unsupported Codex tool result file: expected file id, URL, or inline data.');
 }
 
-/** Provider metadata is namespaced when emitted by this adapter, but accepts legacy direct metadata too. */
+const LEGACY_CODEX_REASONING_METADATA = new Set(['encrypted_content']);
+
+/**
+ * Codex-native metadata must be explicitly namespaced. Older persisted Codex
+ * reasoning stored encrypted_content directly, so retain only that narrowly
+ * characterized compatibility spelling. Foreign provider markers must fail
+ * before they can become invalid Codex wire fields.
+ */
 function codexNativeMetadata(metadata: StreamedModelProviderOptions | undefined): Record<string, unknown> {
   if (!metadata) return {};
-  const nested = metadata.codex;
-  if (isRecord(nested)) return { ...nested };
+  if ('codex' in metadata) {
+    const nested = metadata.codex;
+    if (!isRecord(nested)) throw new Error('Unsupported Codex reasoning metadata: codex must be an object.');
+    const foreignKeys = Object.keys(metadata).filter((key) => key !== 'codex');
+    if (foreignKeys.length > 0) {
+      throw new Error(`Unsupported foreign reasoning metadata for Codex: ${foreignKeys.join(', ')}.`);
+    }
+    return { ...nested };
+  }
+  const foreignKeys = Object.keys(metadata).filter((key) => !LEGACY_CODEX_REASONING_METADATA.has(key));
+  if (foreignKeys.length > 0) {
+    throw new Error(`Unsupported foreign reasoning metadata for Codex: ${foreignKeys.join(', ')}.`);
+  }
   return { ...metadata };
 }
 

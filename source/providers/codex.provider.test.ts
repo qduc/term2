@@ -985,7 +985,12 @@ it.sequential('Codex registry boundary preserves the full streamed-turn request 
     ]);
     expect(events).toEqual([
       { type: 'text_delta', text: 'answer' },
-      { type: 'reasoning_delta', id: 'rs_out', text: 'thought' },
+      {
+        type: 'reasoning_delta',
+        id: 'rs_out',
+        text: 'thought',
+        providerMetadata: { codex: { encrypted_content: 'cipher' } },
+      },
       { type: 'tool_call', id: 'call_out', name: 'lookup', arguments: '{"q":1}' },
       {
         type: 'completion',

@@ -585,6 +585,12 @@ async function* codexStream(
 ): AsyncIterable<StreamedModelTurnEvent> {
   const input = toCodexResponsesInput(request.input);
   const output: any[] = [];
+  // Codex may reveal encrypted reasoning only in response.completed. Delay
+  // tool delivery until that authoritative frame so continuation history keeps
+  // the reasoning immediately before the calls it explains.
+  const pendingToolCalls: Extract<StreamedModelTurnEvent, { type: 'tool_call' }>[] = [];
+  const terminalReasoning: Array<Extract<StreamedModelTurnEvent, { type: 'completion' }>['output'][number]> = [];
+  const pendingReasoningDeltas: Array<Extract<StreamedModelTurnEvent, { type: 'reasoning_delta' }>> = [];
   let responseId = '';
   let finishReason: string | undefined;
   let usage: Extract<StreamedModelTurnEvent, { type: 'completion' }>['usage'];
@@ -603,15 +609,15 @@ async function* codexStream(
     if (event?.type === 'response.output_text.delta') {
       yield { type: 'text_delta', text: String(event.delta ?? '') };
     } else if (event?.type === 'response.reasoning_summary_text.delta') {
-      yield {
+      pendingReasoningDeltas.push({
         type: 'reasoning_delta',
         ...(typeof event.item_id === 'string' ? { id: event.item_id } : {}),
         text: String(event.delta ?? ''),
-      };
+      });
     } else if (event?.type === 'response.output_item.done' && event.item?.type === 'function_call') {
       const call = toCodexToolCallOutput(event.item);
       output.push(call);
-      yield call;
+      pendingToolCalls.push(call);
     } else if (event?.type === 'response.completed') {
       sawCompletedResponse = true;
       responseId = codexString(event.response?.id) ?? responseId;
@@ -621,8 +627,22 @@ async function* codexStream(
         const converted = toCodexOutputItem(item);
         // Function calls are authoritatively emitted by output_item.done so
         // their streamed arguments and call IDs reach the run loop once.
-        if (converted.type !== 'tool_call') output.push(converted);
+        if (converted.type !== 'tool_call') {
+          output.push(converted);
+          if (converted.type === 'reasoning') terminalReasoning.push(converted);
+        }
       }
+      const authoritativeReasoning = terminalReasoning.length > 0 ? terminalReasoning : pendingReasoningDeltas;
+      for (const reasoning of authoritativeReasoning) {
+        if (reasoning.type !== 'reasoning' && reasoning.type !== 'reasoning_delta') continue;
+        yield {
+          type: 'reasoning_delta',
+          ...(reasoning.id ? { id: reasoning.id } : {}),
+          text: reasoning.text,
+          ...(reasoning.providerMetadata ? { providerMetadata: reasoning.providerMetadata } : {}),
+        };
+      }
+      for (const call of pendingToolCalls) yield call;
       // The Responses protocol has one authoritative terminal event. Do not
       // allow a malformed source to emit application events after it.
       break;

@@ -97,6 +97,31 @@ it('retains the OpenAI-compatible reasoning continuation marker while removing d
   expect(reasoning?.providerData).not.toHaveProperty('reasoning_content');
 });
 
+it('resumes persisted Codex encrypted reasoning immediately before its tool call', () => {
+  const history = synthesizeHistoryFromAssistantTurn([], {
+    items: [
+      {
+        type: 'reasoning',
+        text: 'Use the lookup tool.',
+        providerItemId: 'rs_codex',
+        providerMetadata: { codex: { encrypted_content: 'cipher' } },
+      },
+      { type: 'tool_call', callId: 'call_codex', toolName: 'lookup', arguments: '{}', providerItem: {} },
+    ],
+  }) as Array<Record<string, any>>;
+
+  expect(history).toEqual([
+    {
+      type: 'reasoning',
+      id: 'rs_codex',
+      content: [{ type: 'reasoning_text', text: 'Use the lookup tool.' }],
+      rawContent: [{ type: 'reasoning_text', text: 'Use the lookup tool.' }],
+      providerData: { codex: { encrypted_content: 'cipher' } },
+    },
+    expect.objectContaining({ type: 'function_call', callId: 'call_codex', name: 'lookup' }),
+  ]);
+});
+
 it('synthesizeHistoryFromAssistantTurn serializes persisted object tool-call arguments for provider replay', () => {
   const turn = {
     items: [

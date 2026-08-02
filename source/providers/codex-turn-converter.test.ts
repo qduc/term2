@@ -90,6 +90,18 @@ describe('Codex streamed-turn conversion', () => {
     });
   });
 
+  it('rejects foreign provider reasoning metadata instead of leaking it onto the Codex wire', () => {
+    expect(() =>
+      toCodexResponsesInput([
+        {
+          type: 'reasoning',
+          text: 'foreign reasoning',
+          providerMetadata: { openai_compatible_reasoning_content: true },
+        },
+      ]),
+    ).toThrow('Unsupported foreign reasoning metadata for Codex: openai_compatible_reasoning_content');
+  });
+
   it('rejects unsupported rich shapes before producing malformed Responses input', () => {
     expect(() =>
       toCodexResponsesInput([

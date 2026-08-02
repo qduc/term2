@@ -57,6 +57,71 @@ describe('ApplicationRunLoop', () => {
     ]);
   });
 
+  it('commits native reasoning as one canonical item before a streamed tool continuation', async () => {
+    const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    let calls = 0;
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        calls++;
+        if (calls === 1) {
+          yield {
+            type: 'reasoning_delta',
+            id: 'rs_codex',
+            text: 'Use the lookup tool.',
+            providerMetadata: { codex: { encrypted_content: 'cipher' } },
+          };
+          yield { type: 'tool_call', id: 'call_codex', name: 'lookup', arguments: '{}' };
+          yield {
+            type: 'completion',
+            responseId: 'resp_codex_tool',
+            output: [{ type: 'tool_call', id: 'call_codex', name: 'lookup', arguments: '{}' }],
+          };
+          return;
+        }
+        yield { type: 'completion', responseId: 'resp_codex_done', output: [] };
+      },
+    };
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const stream = loop.startStream(
+      {
+        ...agent,
+        tools: [
+          {
+            name: 'lookup',
+            parameters: { type: 'object' },
+            needsApproval: async () => false,
+            execute: async () => 'fixture result',
+          },
+        ] as any,
+      },
+      'look this up',
+    );
+    await stream.completed;
+
+    expect(requests[1]?.input).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'reasoning',
+          id: 'rs_codex',
+          text: 'Use the lookup tool.',
+          providerMetadata: { codex: { encrypted_content: 'cipher' } },
+        },
+        { type: 'tool_call', id: 'call_codex', name: 'lookup', arguments: '{}' },
+        { type: 'tool_result', id: 'call_codex', output: 'fixture result' },
+      ]),
+    );
+    const reasoningItems = stream.newItems.filter((item: any) => item?.type === 'reasoning');
+    expect(reasoningItems).toEqual([
+      {
+        type: 'reasoning',
+        id: 'rs_codex',
+        content: [{ type: 'reasoning_text', text: 'Use the lookup tool.' }],
+        providerData: { codex: { encrypted_content: 'cipher' } },
+      },
+    ]);
+  });
+
   it('forwards providerData as providerOptions and omits it when absent', async () => {
     const requests: unknown[] = [];
     const model: StreamedModelTurn = {

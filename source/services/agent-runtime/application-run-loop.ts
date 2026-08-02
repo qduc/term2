@@ -360,7 +360,7 @@ export class ApplicationRunLoop {
           continue;
         }
         if (event.type === 'tool_call') {
-          pendingNativeReasoning = commitPendingNativeReasoning(state, pendingNativeReasoning);
+          pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
           sawToolCall = true;
           await this.#handleToolCall(state, stream, queue, event, toolContext);
         }
@@ -402,7 +402,7 @@ export class ApplicationRunLoop {
         }
         for (const item of completion.output) {
           if (item.type !== 'tool_call') continue;
-          pendingNativeReasoning = commitPendingNativeReasoning(state, pendingNativeReasoning);
+          pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
           sawToolCall = true;
           await this.#handleToolCall(state, stream, queue, item, toolContext);
         }
@@ -540,9 +540,19 @@ export class ApplicationRunLoop {
 }
 
 function outputPush(stream: AgentStream, queue: EventQueue, item: unknown): void {
-  stream.output.push(item);
-  stream.newItems.push(item);
+  const record = item && typeof item === 'object' ? (item as { type?: unknown; item?: unknown }) : undefined;
+  // Queue events deliberately wrap model items for UI consumers, but terminal
+  // snapshots must retain the canonical item so result building/persistence
+  // does not lose provider-native continuation metadata.
+  const canonical = record?.type === 'run_item_stream_event' && record.item !== undefined ? record.item : item;
+  stream.output.push(canonical);
+  if (stream.newItems !== stream.output) stream.newItems.push(canonical);
   queue.push(item);
+}
+
+/** Stores a canonical item for persistence while preserving the streamed UI event shape. */
+function canonicalOutputPush(stream: AgentStream, queue: EventQueue, item: ProviderInputItem): void {
+  outputPush(stream, queue, { type: 'run_item_stream_event', item });
 }
 
 function finish(stream: AgentStream, state: RunState, queue: EventQueue): unknown {
@@ -553,6 +563,7 @@ function finish(stream: AgentStream, state: RunState, queue: EventQueue): unknow
 }
 
 type PendingNativeReasoning = {
+  id?: string;
   text: string;
   providerMetadata: StreamedModelProviderOptions;
 };
@@ -565,38 +576,60 @@ type PendingNativeReasoning = {
 function appendNativeReasoning(
   current: PendingNativeReasoning | undefined,
   event: {
+    readonly id?: string;
     readonly text: string;
     readonly providerMetadata?: StreamedModelProviderOptions;
   },
 ): PendingNativeReasoning | undefined {
   const nativeReasoning = event.providerMetadata?.reasoning_content;
-  if (typeof nativeReasoning !== 'string') return current;
-  const text =
-    current?.text === nativeReasoning
-      ? current.text
-      : current?.text && nativeReasoning.startsWith(current.text)
-      ? nativeReasoning
-      : `${current?.text ?? ''}${nativeReasoning}`;
-  return {
-    text,
-    providerMetadata: { ...event.providerMetadata, reasoning_content: text },
-  };
+  if (typeof nativeReasoning === 'string') {
+    const text =
+      current?.text === nativeReasoning
+        ? current.text
+        : current?.text && nativeReasoning.startsWith(current.text)
+        ? nativeReasoning
+        : `${current?.text ?? ''}${nativeReasoning}`;
+    return {
+      ...(event.id ? { id: event.id } : current?.id ? { id: current.id } : {}),
+      text,
+      providerMetadata: { ...event.providerMetadata, reasoning_content: text },
+    };
+  }
+  // Codex returns encrypted reasoning only on its terminal output. Its
+  // metadata is namespaced, so retain it without turning it into the
+  // Chat-Completions-only reasoning_content convention.
+  if (asRecord(event.providerMetadata?.codex)) {
+    return {
+      ...(event.id ? { id: event.id } : current?.id ? { id: current.id } : {}),
+      text: event.text,
+      providerMetadata: event.providerMetadata!,
+    };
+  }
+  return current;
 }
 
-function commitPendingNativeReasoning(state: RunState, pending: PendingNativeReasoning | undefined): undefined {
+function commitPendingNativeReasoning(
+  state: RunState,
+  stream: AgentStream,
+  queue: EventQueue,
+  pending: PendingNativeReasoning | undefined,
+): undefined {
   if (!pending) return undefined;
   const reasoningInput: StreamedModelTurnInput = {
     type: 'reasoning',
+    ...(pending.id ? { id: pending.id } : {}),
     text: pending.text,
     providerMetadata: pending.providerMetadata,
   };
   const reasoningHistory: ProviderInputItem = {
     type: 'reasoning',
+    ...(pending.id ? { id: pending.id } : {}),
     content: [{ type: 'reasoning_text', text: pending.text }],
     providerData: pending.providerMetadata,
   };
   state.input.push(reasoningInput);
   state.history.push(reasoningHistory);
+  canonicalOutputPush(stream, queue, reasoningHistory);
   return undefined;
 }
 

@@ -152,7 +152,7 @@ export class AgentConfiguration implements AgentSource {
    * The legacy SDK Agent remains available to the compatibility path until
    * every provider has moved to the application-owned model boundary.
    */
-  getApplicationAgent(): ApplicationAgent {
+  getApplicationAgent(sessionId?: string): ApplicationAgent {
     const deps = this.#buildFactoryDeps();
     const definition = getAgentDefinition(
       {
@@ -173,11 +173,14 @@ export class AgentConfiguration implements AgentSource {
       },
       this.#model,
     );
+    const configuredSettings = this.getAgent(sessionId).modelSettings;
+    const modelSettings =
+      this.#provider === 'codex' ? toApplicationCodexSettings(configuredSettings) : configuredSettings;
     return {
       name: definition.name,
       instructions: definition.instructions,
       model: definition.model,
-      modelSettings: (this.#agent as any).modelSettings,
+      modelSettings,
       tools: definition.tools,
     };
   }
@@ -362,4 +365,32 @@ export class AgentConfiguration implements AgentSource {
   get maxTurns(): number {
     return this.#settings.get('agent.maxTurns') ?? 20;
   }
+}
+
+/** Converts legacy Codex model settings into the typed application turn representation. */
+function toApplicationCodexSettings(settings: ApplicationAgent['modelSettings']): ApplicationAgent['modelSettings'] {
+  if (!settings) return settings;
+  const { prompt_cache_key, include, codex, ...rest } = settings;
+  const promptCacheKey =
+    typeof codex?.promptCacheKey === 'string'
+      ? codex.promptCacheKey
+      : typeof prompt_cache_key === 'string'
+      ? prompt_cache_key
+      : undefined;
+  const codexInclude = Array.isArray(codex?.include)
+    ? codex.include
+    : Array.isArray(include)
+    ? include.filter((value): value is string => typeof value === 'string')
+    : undefined;
+  return {
+    ...rest,
+    ...(promptCacheKey !== undefined || codexInclude !== undefined
+      ? {
+          codex: {
+            ...(promptCacheKey !== undefined ? { promptCacheKey } : {}),
+            ...(codexInclude !== undefined ? { include: codexInclude } : {}),
+          },
+        }
+      : {}),
+  };
 }

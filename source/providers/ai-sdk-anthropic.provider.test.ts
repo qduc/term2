@@ -129,7 +129,7 @@ it('AiSdkAnthropicProvider can be instantiated for Anthropic models', () => {
   expect(provider).toBeTruthy();
 });
 
-it('AiSdkAnthropicProvider routes its cached model through the application streamed turn', async () => {
+it('AiSdkAnthropicProvider caps model output at the catalog maximum without expanding an explicit lower request', async () => {
   const fetchImpl = async () => new Response('{}');
   const configs: any[] = [];
   let requestedModel: string | undefined;
@@ -212,7 +212,7 @@ it('AiSdkAnthropicProvider routes its cached model through the application strea
   expect(configs).toEqual([{ apiKey: 'anthropic-key', baseURL: 'https://anthropic.test', fetch: fetchImpl }]);
   expect(requestedModel).toBe('minimax-m3');
   expect(seenOptions).toMatchObject({
-    maxOutputTokens: 131072,
+    maxOutputTokens: 1,
     topK: 5,
     providerOptions: { anthropic: { topK: 9, thinking: { type: 'enabled', budgetTokens: 8192 } } },
     abortSignal: controller.signal,
@@ -252,6 +252,17 @@ it('AiSdkAnthropicProvider routes its cached model through the application strea
       ],
     },
   });
+
+  await collect(
+    model.getStreamedResponse({
+      input: 'cap this request',
+      tools: [],
+      handoffs: [],
+      outputType: 'text',
+      modelSettings: { maxTokens: 200000 },
+    } as any),
+  );
+  expect(seenOptions).toMatchObject({ maxOutputTokens: 131072 });
 });
 
 it('AiSdkAnthropicProvider uses its default model and propagates provider errors', async () => {

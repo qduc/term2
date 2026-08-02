@@ -44,6 +44,8 @@ function buildNestedRunner(
     needsApproval?: boolean;
     /** Override the role's turn budget. */
     maxTurns?: number;
+    /** Override the role's provider output-token cap. */
+    maxTokens?: number;
     /** Script a model that never stops calling tools, so only a budget ends it. */
     alwaysCallsTool?: boolean;
     onEvent?: (event: ConversationEvent) => void;
@@ -51,10 +53,12 @@ function buildNestedRunner(
 ) {
   let first = true;
   let call = 0;
+  const requests: any[] = [];
   const providerId = registerTestProvider({
     label: 'Nested scripted provider',
     createStreamedModel: () => ({
       async *stream(request: any) {
+        requests.push(request);
         if (options.alwaysCallsTool) {
           call++;
           yield { type: 'tool_call', id: `nested-call-${call}`, name: 'fake_tool', arguments: '{"path":"notes.md"}' };
@@ -103,12 +107,13 @@ function buildNestedRunner(
     resolveRole: () => ({
       ...workerDefinition(providerId),
       ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
+      ...(options.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
     }),
     toolOwnership: new ToolOwnershipRegistry(),
     ...(options.onEvent ? { onEvent: options.onEvent } : {}),
   });
 
-  return { runner, providerId };
+  return { runner, providerId, requests };
 }
 
 function parentToolContext(): ToolInvocationContext<SubagentRunContext> {
@@ -223,6 +228,17 @@ describe('NestedSubagentRunner end to end', () => {
     // The nested run's identity came from the parent tool call, so the result
     // is attributable to the subagent the UI has seen.
     expect(result.agentId).toBe('parent-call-1');
+  });
+
+  it('projects a nested role maxTokens setting into every provider request', async () => {
+    const { runner, requests } = buildNestedRunner({ maxTokens: 321 });
+
+    await runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'parent-call-1' },
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(requests.map((request) => request.maxTokens)).toEqual([321, 321]);
   });
 
   it('honors a parent-approved tool inside the nested run (F5 through the runner)', async () => {

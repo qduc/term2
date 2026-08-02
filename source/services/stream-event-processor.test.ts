@@ -7,6 +7,7 @@ import {
   type StreamProcessorDeps,
 } from './stream-event-processor.js';
 import { adaptAgentStream, type AgentStream } from './agent-stream.js';
+import { ApplicationRunLoop } from './agent-runtime/application-run-loop.js';
 
 const logger = new LoggingService({ disableLogging: true });
 
@@ -371,6 +372,70 @@ it('uses explicit adapted run usage before legacy runtime state usage', async ()
   }
 
   expect(acc.latestUsage).toMatchObject({ prompt_tokens: 31, completion_tokens: 9, total_tokens: 40 });
+});
+
+it('keeps authoritative application-loop totals, including cache writes, through event processing', async () => {
+  let turn = 0;
+  const loop = new ApplicationRunLoop({
+    resolveModel: () => ({
+      async *stream() {
+        turn++;
+        if (turn === 1) {
+          yield { type: 'tool_call', id: 'usage-tool', name: 'usage_tool', arguments: '{}' };
+          yield {
+            type: 'completion',
+            responseId: 'usage-1',
+            output: [],
+            usage: { inputTokens: 10, outputTokens: 2, cacheWriteTokens: 1 },
+          };
+          return;
+        }
+        yield {
+          type: 'completion',
+          responseId: 'usage-2',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+          usage: { inputTokens: 20, outputTokens: 3, cacheWriteTokens: 2, cachedInputTokens: 5 },
+        };
+      },
+    }),
+  });
+  const stream = loop.startStream(
+    {
+      name: 'usage',
+      instructions: '',
+      model: 'fixture',
+      tools: [
+        {
+          name: 'usage_tool',
+          description: 'fixture',
+          parameters: { parse: () => ({}) },
+          needsApproval: () => false,
+          execute: () => 'ok',
+          formatCommandMessage: () => [],
+        },
+      ],
+    } as any,
+    'measure',
+  );
+  const acc = createStreamAccumulator();
+  for await (const _ of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    void _;
+  }
+
+  expect(stream.runUsage).toEqual({
+    inputTokens: 30,
+    outputTokens: 5,
+    totalTokens: 38,
+    cachedInputTokens: 5,
+    cacheWriteTokens: 3,
+  });
+  expect(acc.latestUsage).toMatchObject({
+    prompt_tokens: 30,
+    completion_tokens: 5,
+    total_tokens: 38,
+    cache_read_tokens: 5,
+    cache_creation_tokens: 3,
+  });
 });
 
 it('end-of-stream usage harvest from completed promise', async () => {

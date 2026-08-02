@@ -83,11 +83,10 @@ Active multi-session work is tracked in `docs/plans/`. Each such plan opens with
 
 Currently active:
 
-- No provider-related plan is active. `docs/plans/provider-bug-sweep.md` is
-  complete: ten real bugs were found, fixed, and verified. The deterministic
-  integration-test plans are also complete; scheduled live canaries remain a
-  separate deferred follow-up requiring CI, secret/billing, and OAuth-storage
-  decisions.
+- No provider-related plan is active. `docs/plans/post-refactor-provider-boundary-audit.md`
+  and `docs/plans/provider-bug-sweep.md` are complete. Scheduled live canaries
+  remain a separate deferred follow-up requiring CI, secret/billing, and
+  OAuth-storage decisions.
 
 # Delegation
 

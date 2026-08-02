@@ -1,6 +1,12 @@
 /** Provider-owned options and metadata retained at characterized protocol boundaries. */
 export type StreamedModelProviderOptions = Readonly<Record<string, unknown>>;
 
+/** Codex-only request options. They are intentionally separate from opaque provider options. */
+export interface StreamedModelCodexOptions {
+  readonly promptCacheKey?: string;
+  readonly include?: readonly string[];
+}
+
 export type StreamedModelImageReference = string | { readonly id: string };
 export type StreamedModelFileReference = string | { readonly id: string } | { readonly url: string };
 
@@ -51,6 +57,8 @@ export interface StreamedModelTurnRequest {
   readonly presencePenalty?: number;
   readonly maxTokens?: number;
   readonly reasoning?: { readonly effort?: string | null; readonly summary?: 'auto' | 'concise' | 'detailed' | null };
+  /** Codex-only settings that must never be sent through another provider's escape hatch. */
+  readonly codex?: StreamedModelCodexOptions;
   readonly providerOptions?: StreamedModelProviderOptions;
   readonly signal?: AbortSignal;
 }

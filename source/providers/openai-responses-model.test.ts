@@ -4,9 +4,12 @@ import { it, expect, vi } from 'vitest';
 // module so the websocket-transport tests below can drive `.stream()` without
 // touching the network; each test overrides `fakeResponsesWSStream` first.
 let fakeResponsesWSStream: () => AsyncIterable<any> = async function* () {};
+let capturedWSRequest: any;
 vi.mock('openai/resources/responses/ws', () => ({
   ResponsesWS: class {
-    send() {}
+    send(body: any) {
+      capturedWSRequest = body;
+    }
     close() {}
     stream() {
       return fakeResponsesWSStream();
@@ -44,6 +47,40 @@ it('normalizes only completed Responses events as successful completions', () =>
 // content parts, `{type:'tool_call', ...}`), not the Responses API's own item
 // types. Without translation, the real API rejects every request with a 400 —
 // this is what actually made the openai provider fail on every turn.
+it('getResponse (HTTP) preserves typed settings, including zero values, in the native body', async () => {
+  let capturedBody: any;
+  const client = {
+    responses: {
+      create: async (body: any) => {
+        capturedBody = body;
+        return { id: 'resp_settings', output: [], usage: {} };
+      },
+    },
+  };
+
+  const model = new OpenAIResponsesModelWithPromptCacheKey(client, 'gpt-5.4-nano');
+  await model.getResponse({
+    input: [],
+    modelSettings: {
+      toolChoice: { type: 'function', name: 'shell' },
+      topP: 0,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+      maxTokens: 0,
+    },
+  });
+
+  expect(capturedBody).toMatchObject({
+    tool_choice: { type: 'function', name: 'shell' },
+    top_p: 0,
+    frequency_penalty: 0,
+    presence_penalty: 0,
+    max_output_tokens: 0,
+  });
+  expect(capturedBody).not.toHaveProperty('include');
+  expect(capturedBody).not.toHaveProperty('prompt_cache_key');
+});
+
 it('getResponse (HTTP) translates generic message content into input_text/output_text by role', async () => {
   let capturedBody: any;
   const client = {
@@ -95,6 +132,37 @@ it('getResponse (HTTP) translates tool_call and function_call_result items into 
     { type: 'function_call', call_id: 'call_1', name: 'shell', arguments: '{"command":"ls"}' },
     { type: 'function_call_output', call_id: 'call_1', output: 'file1\nfile2' },
   ]);
+});
+
+it('getStreamedResponse (websocket) preserves typed settings, including zero values, in response.create', async () => {
+  fakeResponsesWSStream = async function* () {
+    yield { type: 'message', message: { type: 'response.completed', response: { id: 'resp_ws_settings' } } };
+  };
+  const model = new OpenAIResponsesWSModelWithPromptCacheKey(
+    { responses: { create: async () => ({}) } },
+    'gpt-5.4-nano',
+  );
+  await collect(
+    model.getStreamedResponse({
+      input: [],
+      modelSettings: {
+        toolChoice: { name: 'shell' },
+        topP: 0,
+        frequencyPenalty: 0,
+        presencePenalty: 0,
+        maxTokens: 0,
+      },
+    }),
+  );
+
+  expect(capturedWSRequest).toMatchObject({
+    type: 'response.create',
+    tool_choice: { type: 'function', name: 'shell' },
+    top_p: 0,
+    frequency_penalty: 0,
+    presence_penalty: 0,
+    max_output_tokens: 0,
+  });
 });
 
 it('getStreamedResponse (websocket) throws on an error frame instead of silently ending the stream', async () => {

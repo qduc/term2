@@ -5,6 +5,15 @@ import type { CapabilityExecution } from './provider-capability-matrix.js';
  * ledgers, while accounting tests can consume them without registering their
  * Vitest suites or starting fixture servers.
  */
+/**
+ * Boundary-audit semantic assertions attached to lifecycle executions below.
+ * Keeping these in the same manifest prevents a disconnected provider harness.
+ */
+export const BOUNDARY_AUDIT_CAPABILITY_EVIDENCE = [
+  { rowId: 'codex-http', scenarioId: 'codex-http.two-user-turn', fields: ['prompt_cache_key', 'include'] },
+  { rowId: 'codex-websocket', scenarioId: 'codex-websocket.two-user-turn', fields: ['prompt_cache_key', 'include'] },
+] as const;
+
 export const RESPONSES_CAPABILITY_EXECUTIONS = [
   { rowId: 'openai-http', scenarioId: 'openai-http.two-user-turn' },
   { rowId: 'openai-websocket', scenarioId: 'openai-websocket.two-user-turn' },

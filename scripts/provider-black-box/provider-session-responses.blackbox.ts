@@ -120,6 +120,19 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
         .map((item) => item.responseId),
     ).toEqual([FIRST_RESPONSE_ID, SECOND_RESPONSE_ID]);
     expect(requests.every((request) => request.body.model === MODEL)).toBe(true);
+    if (providerCase.provider === 'codex') {
+      // This is the production CLI → configuration → application-loop →
+      // registry seam. Both Codex transports must retain the session-scoped
+      // request options, while OpenAI cases above prove they are not generic
+      // Responses fields.
+      for (const request of requests) {
+        expect(request.body.prompt_cache_key).toEqual(expect.any(String));
+        expect(request.body.prompt_cache_key).not.toBe('');
+        expect(request.body.include).toEqual(expect.arrayContaining(['reasoning.encrypted_content']));
+      }
+    } else {
+      expect(requests.every((request) => request.body.include === undefined)).toBe(true);
+    }
   });
 
   it.each(providerTransportCases)(

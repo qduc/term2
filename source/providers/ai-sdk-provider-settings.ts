@@ -7,8 +7,8 @@ export function withForwardedProviderSettings<T extends LanguageModelV3>(
 ): T {
   return new Proxy(model, {
     get(target, property, receiver) {
-      if (property === 'doStream')
-        return (options: LanguageModelV3CallOptions) => target.doStream(forwardSettings(options));
+      if (property === 'doStream' || property === 'doGenerate')
+        return (options: LanguageModelV3CallOptions) => target[property](forwardSettings(options));
       const value = Reflect.get(target, property, receiver);
       return typeof value === 'function' ? value.bind(target) : value;
     },

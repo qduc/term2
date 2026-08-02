@@ -119,12 +119,25 @@ function requestBody(request: any, model: string, stream: boolean): any {
     stream,
     ...(request?.systemInstructions ? { instructions: request.systemInstructions } : {}),
     ...(Array.isArray(request?.tools) ? { tools: request.tools } : {}),
+    ...(settings.toolChoice !== undefined ? { tool_choice: toResponsesToolChoice(settings.toolChoice) } : {}),
     ...(settings.temperature !== undefined ? { temperature: settings.temperature } : {}),
+    ...(settings.topP !== undefined ? { top_p: settings.topP } : {}),
+    ...(settings.frequencyPenalty !== undefined ? { frequency_penalty: settings.frequencyPenalty } : {}),
+    ...(settings.presencePenalty !== undefined ? { presence_penalty: settings.presencePenalty } : {}),
+    ...(settings.maxTokens !== undefined ? { max_output_tokens: settings.maxTokens } : {}),
     ...(settings.reasoning ? { reasoning: settings.reasoning } : {}),
     ...(request?.previousResponseId ? { previous_response_id: request.previousResponseId } : {}),
     ...(providerData.extraBody ?? {}),
   };
   return body;
+}
+
+function toResponsesToolChoice(choice: unknown): unknown {
+  if (choice === 'auto' || choice === 'required' || choice === 'none') return choice;
+  if (choice && typeof choice === 'object' && typeof (choice as { name?: unknown }).name === 'string') {
+    return { type: 'function', name: (choice as { name: string }).name };
+  }
+  throw new Error('Unsupported OpenAI Responses tool choice.');
 }
 
 function responseShape(response: any): any {

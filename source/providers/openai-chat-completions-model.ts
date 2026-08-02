@@ -2,6 +2,7 @@ import type {
   StreamedModelTurn,
   StreamedModelTurnEvent,
   StreamedModelTurnRequest,
+  StreamedModelUsage,
 } from '../contracts/streamed-model-turn.js';
 
 /** Application-owned adapter for OpenAI-compatible chat-completions endpoints. */
@@ -111,7 +112,11 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       stream: true,
       ...(request.tools.length ? { tools: request.tools.map((tool) => ({ type: 'function', function: tool })) } : {}),
       ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+      ...(request.topP !== undefined ? { top_p: request.topP } : {}),
+      ...(request.frequencyPenalty !== undefined ? { frequency_penalty: request.frequencyPenalty } : {}),
+      ...(request.presencePenalty !== undefined ? { presence_penalty: request.presencePenalty } : {}),
       ...(request.maxTokens !== undefined ? { max_tokens: request.maxTokens } : {}),
+      ...(request.toolChoice !== undefined ? { tool_choice: toChatToolChoice(request.toolChoice) } : {}),
       ...(request.reasoning?.effort ? { reasoning_effort: request.reasoning.effort } : {}),
       ...(request.providerOptions ?? {}),
       signal: request.signal,
@@ -125,10 +130,15 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
     let text = '';
     let reasoning = '';
     let sawFinishReason = false;
+    let finishReason: string | undefined;
+    let usage: StreamedModelUsage | undefined;
     for await (const chunk of response) {
       const choice = chunk.choices?.[0];
       const delta = choice?.delta;
-      if (choice?.finish_reason != null) sawFinishReason = true;
+      if (choice?.finish_reason != null) {
+        sawFinishReason = true;
+        finishReason = choice.finish_reason;
+      }
       if (delta?.reasoning_content) {
         reasoning += delta.reasoning_content;
         yield {
@@ -153,7 +163,10 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
         calls.set(index, current);
       }
       if (chunk.usage) {
-        // Usage is emitted on completion below; providers may omit it in-stream.
+        // Chat providers place usage on the terminal chunk rather than a
+        // delta. Retain the latest frame for the application completion;
+        // providers may omit it entirely.
+        usage = normalizeChatUsage(chunk.usage) as typeof usage;
       }
     }
     if (!sawFinishReason) throw new Error('OpenAI-compatible streamed response ended without a finish reason');
@@ -162,6 +175,8 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
     yield {
       type: 'completion',
       responseId: `chatcmpl-${Date.now()}`,
+      ...(finishReason !== undefined ? { finishReason } : {}),
+      usage,
       output: [
         ...(reasoning
           ? [
@@ -183,6 +198,32 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       ],
     };
   }
+}
+
+function toChatToolChoice(choice: NonNullable<StreamedModelTurnRequest['toolChoice']>): any {
+  if (typeof choice === 'object') return { type: 'function', function: { name: choice.name } };
+  return choice;
+}
+
+function normalizeChatUsage(usage: any): StreamedModelUsage {
+  const inputTokens = usage?.prompt_tokens ?? usage?.input_tokens ?? usage?.inputTokens;
+  const outputTokens = usage?.completion_tokens ?? usage?.output_tokens ?? usage?.outputTokens;
+  const details = usage?.prompt_tokens_details ?? usage?.input_tokens_details ?? usage?.inputTokensDetails;
+  const cachedInputTokens =
+    usage?.cached_tokens ?? usage?.cachedTokens ?? details?.cached_tokens ?? details?.cachedTokens;
+  const cacheWriteTokens =
+    usage?.cache_write_tokens ??
+    usage?.cacheWriteTokens ??
+    usage?.cache_creation_input_tokens ??
+    usage?.cache_creation_tokens ??
+    details?.cache_write_tokens ??
+    details?.cacheWriteTokens;
+  return {
+    ...(inputTokens !== undefined ? { inputTokens } : {}),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
+    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
+    ...(cacheWriteTokens !== undefined ? { cacheWriteTokens } : {}),
+  };
 }
 
 function openAICompatibleMessages(input: StreamedModelTurnRequest['input']): any[] {

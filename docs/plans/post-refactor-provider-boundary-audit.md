@@ -1,8 +1,27 @@
 # Post-refactor provider boundary audit
 
-**Status: plan.** Awaiting implementation. This audit follows the application-owned run-loop/provider refactor after multiple field-loss regressions were found at translation boundaries.
+**Status: complete.** Cartography, triage, PB-01 through PB-13 fixes, deterministic completion evidence, independent review, and all verification gates are complete; live-only policy questions remain documented deferrals.
 
 **Last updated:** 2026-08-02
+
+## Resume here
+
+Completed artifacts:
+
+- `docs/plans/post-refactor-provider-boundary-audit-baseline.md` — baseline evidence, pre-refactor comparison point, focused tests/typecheck, and compact Codex cache aggregate.
+- `docs/plans/post-refactor-provider-boundary-audit-matrix.md` — shared routing map, typed field inventory, authority rules, compatibility paths, and initialized two-axis matrix.
+- `docs/plans/post-refactor-provider-boundary-audit-findings.md` — independently triaged Phase B/C finding register, provider matrix, rejected claims, and implementation waves.
+
+The audit retained PB-01 through PB-13. Phase C narrowed PB-02 to proven direct-counter producers, PB-05 to application-sourced `maxTokens`, and PB-10 to recognized Chat/Codex native reasoning. It rejected speculative foreign-provider leakage, strictness/parallel-policy loss, generic message-file loss, and the claim that runtime custom `openai` must use Responses. Do not reintroduce those claims without new native evidence.
+
+Implementation waves PB-01 through PB-13 are applied. The authoritative total-token convention is now `input + output + cache creation` unless a provider supplies `total_tokens`; `ApplicationRunLoop` preserves that cumulative total. Deterministic evidence includes the loop → event processor cache-write test, JSONL replay coverage for native reasoning/tool results, and shipped-CLI Codex HTTP/WS request assertions for `prompt_cache_key`/`include` in the provider black-box suite. The remaining live-only/provider-policy deferrals are explicitly marked **D** in the matrix and must not be claimed fixed.
+
+### Verification record
+
+- Focused usage, loop, event-processor, persistence, and Responses black-box tests pass after the completion fixes.
+- Provider black-box and typecheck pass. The initial full-suite attempt exposed a worktree-path-only Unix-socket length limit in `docker-host-control.runtime.test.ts`; moving the same worktree from `.worktrees/post-refactor-provider-boundary-audit` to `.worktrees/pba` resolved the environmental constraint without changing sandbox behavior. Final `pnpm test`: 406 files passed, 1 skipped; 5,052 tests passed, 1 skipped.
+- Targeted lint/format and `git diff --check` pass. Repository-wide lint still reports pre-existing formatting issues outside this audit diff.
+- The original Handoff section below is historical context superseded by this Resume section where it says the audit has not started.
 
 ## Handoff / start here
 

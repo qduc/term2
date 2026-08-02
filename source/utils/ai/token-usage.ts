@@ -83,6 +83,9 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
     usage.cacheCreationInputTokens,
     usage.cache_creation_tokens,
     usage.cacheCreationTokens,
+    usage.cache_write_tokens,
+    usage.cacheWriteTokens,
+    sumDetailField(usage.inputTokensDetails ?? usage.input_tokens_details, ['cache_write_tokens', 'cacheWriteTokens']),
     usage.cacheWrite5mTokens,
     usage.cacheWrite1hTokens,
   );
@@ -233,24 +236,35 @@ export function normalizeAgentRunUsage(stateUsage: any): NormalizedUsage | undef
 
   const promptTokens = coalesceNumber(usage.inputTokens, usage.input_tokens);
   const completionTokens = coalesceNumber(usage.outputTokens, usage.output_tokens);
-  const totalTokens =
-    coalesceNumber(usage.totalTokens, usage.total_tokens) ?? sumNumbers(promptTokens, completionTokens);
-
-  const cacheReadTokens = sumDetailField(usage.inputTokensDetails ?? usage.input_tokens_details, [
-    'cached_tokens',
-    'cachedTokens',
-    'cache_read_tokens',
-    'cacheReadTokens',
-  ]);
-  const cacheCreationTokens = sumDetailField(usage.inputTokensDetails ?? usage.input_tokens_details, [
-    'cache_creation_tokens',
-    'cacheCreationTokens',
-    'cache_creation_input_tokens',
-  ]);
+  // Application-owned run state stores these as cumulative scalar totals. Prefer
+  // them when present; detail arrays are the legacy SDK fallback and must not be
+  // added a second time when both representations coexist.
+  const cacheReadTokens =
+    coalesceNumber(usage.cachedInputTokens, usage.cached_input_tokens, usage.cacheReadTokens) ??
+    sumDetailField(usage.inputTokensDetails ?? usage.input_tokens_details, [
+      'cached_tokens',
+      'cachedTokens',
+      'cache_read_tokens',
+      'cacheReadTokens',
+    ]);
+  const cacheCreationTokens =
+    coalesceNumber(usage.cacheWriteTokens, usage.cache_write_tokens, usage.cacheCreationTokens) ??
+    sumDetailField(usage.inputTokensDetails ?? usage.input_tokens_details, [
+      'cache_creation_tokens',
+      'cacheCreationTokens',
+      'cache_creation_input_tokens',
+      'cache_write_tokens',
+      'cacheWriteTokens',
+    ]);
   const reasoningTokens = sumDetailField(usage.outputTokensDetails ?? usage.output_tokens_details, [
     'reasoning_tokens',
     'reasoningTokens',
   ]);
+  // Match normalizeUsage(): cache creation represents billable input and is
+  // included in the total whenever a provider did not supply a native total.
+  const totalTokens =
+    coalesceNumber(usage.totalTokens, usage.total_tokens) ??
+    sumNumbers(promptTokens, completionTokens, cacheCreationTokens);
 
   const mapped: NormalizedUsage = {};
   if (promptTokens != null) mapped.prompt_tokens = promptTokens;

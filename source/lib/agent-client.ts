@@ -345,7 +345,7 @@ export class AgentClient {
   async startStream(userInput: ProviderInput, options: ChainedRunOptions = {}): Promise<AgentStream> {
     this.#subagentBridge?.resetAbortController();
     if (this.#useApplicationRunLoop) {
-      return this.#applicationRunLoop.startStream(this.#agentConfig.getApplicationAgent(), userInput, {
+      return this.#applicationRunLoop.startStream(this.#agentConfig.getApplicationAgent(options.sessionId), userInput, {
         ...(options.previousResponseId ? { previousResponseId: options.previousResponseId } : {}),
         sessionId: options.sessionId,
         // The turn budget the SDK runner used to enforce. Without it the loop

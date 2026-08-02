@@ -313,23 +313,26 @@ it.sequential('forkConversation: immediately persists the fork identity, provena
   expect(restored!.messages).toMatchObject([{ text: 'hello' }, { text: 'A' }]);
 });
 
-it.sequential('forkConversation: rewrites every session_init so later initialization cannot restore source identity', () => {
-  const srcId = persistenceModule.generateId();
-  const dstId = persistenceModule.generateId();
-  const writer = createConversationLogWriter({ sessionId: srcId, dir: testDir, logger: stubLogger });
-  writer.init({ id: srcId, createdAt: '2026-05-26T00:00:00.000Z' });
-  writer.append(assistantTurn('before re-init'));
-  writer.append({ type: 'session_init', id: srcId, createdAt: '2026-05-26T00:01:00.000Z' });
-  writer.append(assistantTurn('after re-init', 'r2'));
-  void writer.close();
+it.sequential(
+  'forkConversation: rewrites every session_init so later initialization cannot restore source identity',
+  () => {
+    const srcId = persistenceModule.generateId();
+    const dstId = persistenceModule.generateId();
+    const writer = createConversationLogWriter({ sessionId: srcId, dir: testDir, logger: stubLogger });
+    writer.init({ id: srcId, createdAt: '2026-05-26T00:00:00.000Z' });
+    writer.append(assistantTurn('before re-init'));
+    writer.append({ type: 'session_init', id: srcId, createdAt: '2026-05-26T00:01:00.000Z' });
+    writer.append(assistantTurn('after re-init', 'r2'));
+    void writer.close();
 
-  expect(persistenceModule.forkConversation(srcId, dstId)).toBe(true);
-  expect(persistenceModule.loadConversation(dstId)).toMatchObject({
-    id: dstId,
-    forkedFrom: srcId,
-    previousResponseId: 'r2',
-  });
-});
+    expect(persistenceModule.forkConversation(srcId, dstId)).toBe(true);
+    expect(persistenceModule.loadConversation(dstId)).toMatchObject({
+      id: dstId,
+      forkedFrom: srcId,
+      previousResponseId: 'r2',
+    });
+  },
+);
 
 it.sequential('forkConversation: terminates a partial trailing record before subsequent writer appends', async () => {
   const srcId = persistenceModule.generateId();
@@ -782,9 +785,17 @@ it.sequential('writer + loadConversation: round-trips a v2 conversation with ass
     type: 'assistant_turn',
     turn: {
       items: [
-        { type: 'reasoning', text: 'thinking about ls' },
+        {
+          type: 'reasoning',
+          text: 'thinking about ls',
+          // A recognized native-reasoning envelope must survive JSONL replay,
+          // not merely the in-memory session projection.
+          providerMetadata: { codex: { encrypted_content: 'fixture-encrypted-reasoning' } },
+        },
         { type: 'tool_call', callId: 'call-v2', toolName: 'shell', arguments: 'ls' },
-        { type: 'tool_result', callId: 'call-v2', toolName: 'shell', status: 'completed', output: 'file.txt' },
+        // The durable result shape is the same for a model-requested unknown
+        // tool rejection as for a completed local tool.
+        { type: 'tool_result', callId: 'call-v2', toolName: 'shell', status: 'failed', output: 'unknown tool' },
         { type: 'assistant_text', text: 'here is the file' },
       ],
     },
@@ -826,6 +837,7 @@ it.sequential('writer + loadConversation: round-trips a v2 conversation with ass
     type: 'reasoning',
     content: [{ type: 'reasoning_text', text: 'thinking about ls' }],
     rawContent: [{ type: 'reasoning_text', text: 'thinking about ls' }],
+    providerData: { codex: { encrypted_content: 'fixture-encrypted-reasoning' } },
   });
   expect(restored!.history[2]).toEqual({
     type: 'function_call',
@@ -837,7 +849,7 @@ it.sequential('writer + loadConversation: round-trips a v2 conversation with ass
     type: 'function_call_result',
     callId: 'call-v2',
     name: 'shell',
-    output: 'file.txt',
+    output: 'unknown tool',
   });
   expect(restored!.history[4]).toEqual({
     role: 'assistant',
@@ -854,7 +866,7 @@ it.sequential('writer + loadConversation: round-trips a v2 conversation with ass
   expect(restored!.messages[1].sender).toBe('reasoning');
   expect((restored!.messages[1] as ReasoningMessage).text).toBe('thinking about ls');
   expect(restored!.messages[2].sender).toBe('command');
-  expect((restored!.messages[2] as CommandMessage).status).toBe('completed');
+  expect((restored!.messages[2] as CommandMessage).status).toBe('failed');
   expect(restored!.messages[3].sender).toBe('bot');
   expect((restored!.messages[3] as BotMessage).text).toBe('here is the file');
 });

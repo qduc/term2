@@ -31,7 +31,7 @@ it('runToCompletion returns a settled run carrying finalOutput and usage', async
   const result = await runner.runToCompletion(AGENT, 'heal this');
 
   expect(result.finalOutput).toBe('healed');
-  expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 4 });
+  expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 4, totalTokens: 7 });
 });
 
 it('run returns an unsettled stream, so finalOutput is not readable yet', async () => {

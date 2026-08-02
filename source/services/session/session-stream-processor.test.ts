@@ -94,11 +94,11 @@ it.each(['delta', 'full_history'] as const)(
                 text: 'Use the lookup tool.',
                 providerMetadata: { codex: { encrypted_content: 'fixture-ciphertext' } },
               };
-              yield { type: 'tool_call', id: 'call_fixture', name: 'lookup', arguments: '{}' };
+              yield { type: 'tool_call', id: 'call_fixture', name: 'unknown_lookup', arguments: '{}' };
               yield {
                 type: 'completion',
                 responseId: 'resp-tool',
-                output: [{ type: 'tool_call', id: 'call_fixture', name: 'lookup', arguments: '{}' }],
+                output: [{ type: 'tool_call', id: 'call_fixture', name: 'unknown_lookup', arguments: '{}' }],
               };
             },
           };
@@ -156,8 +156,13 @@ it.each(['delta', 'full_history'] as const)(
           content: [{ type: 'reasoning_text', text: 'Use the lookup tool.' }],
           providerData: { codex: { encrypted_content: 'fixture-ciphertext' } },
         },
-        expect.objectContaining({ type: 'function_call', callId: 'call_fixture' }),
-        expect.objectContaining({ type: 'function_call_result', callId: 'call_fixture', output: 'fixture result' }),
+        expect.objectContaining({ type: 'function_call', callId: 'call_fixture', name: 'unknown_lookup' }),
+        expect.objectContaining({
+          type: 'function_call_result',
+          callId: 'call_fixture',
+          name: 'unknown_lookup',
+          output: 'Unknown tool: unknown_lookup',
+        }),
         expect.objectContaining({ type: 'message', role: 'assistant' }),
       ]),
     );
@@ -173,12 +178,94 @@ it.each(['delta', 'full_history'] as const)(
           text: 'Use the lookup tool.',
           providerMetadata: { codex: { encrypted_content: 'fixture-ciphertext' } },
         },
-        expect.objectContaining({ type: 'tool_call', id: 'call_fixture' }),
-        expect.objectContaining({ type: 'tool_result', id: 'call_fixture', output: 'fixture result' }),
+        expect.objectContaining({ type: 'tool_call', id: 'call_fixture', name: 'unknown_lookup' }),
+        expect.objectContaining({ type: 'tool_result', id: 'call_fixture', output: 'Unknown tool: unknown_lookup' }),
       ]),
     ]);
   },
 );
+
+it('SessionStreamProcessor.finalize() persists no-tool native reasoning for restored replay', async () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.addUserMessage('Explain the fixture');
+  const generationGuard = new GenerationGuard();
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'native-reasoning-session',
+    toolTracker: new SessionToolTracker(conversationStore),
+    conversationStore,
+    conversationLogger: { hasSink: () => false } as ConversationLogger,
+    providerContinuity: new ProviderContinuity(),
+    generationGuard,
+    journal: makeJournal(),
+  });
+  const replayInputs: unknown[] = [];
+  let calls = 0;
+  const loop = new ApplicationRunLoop({
+    resolveModel: (): StreamedModelTurn => {
+      calls++;
+      if (calls === 1) {
+        return {
+          async *stream() {
+            yield {
+              type: 'completion',
+              responseId: 'resp-native-answer',
+              output: [
+                {
+                  type: 'reasoning',
+                  id: 'rs-native-answer',
+                  text: 'Native reasoning for replay.',
+                  providerMetadata: { codex: { encrypted_content: 'fixture-ciphertext' } },
+                },
+                { type: 'message', content: [{ type: 'text', text: 'The fixture is explained.' }] },
+              ],
+            };
+          },
+        };
+      }
+      return {
+        async *stream(request) {
+          replayInputs.push(request.input);
+          yield { type: 'completion', responseId: 'resp-native-replay', output: [] };
+        },
+      };
+    },
+  });
+  const agent: ApplicationAgent = { name: 'test-agent', instructions: '', model: 'test-model', tools: [] };
+  const stream = loop.startStream(agent, 'Explain the fixture');
+  for await (const _ of processor.process(stream, {
+    gen: generationGuard.capture(),
+    source: 'startStream',
+    preserveExistingToolArgs: false,
+  })) {
+    // Drain the production processing path before finalization.
+  }
+  expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
+
+  const persisted = conversationStore.getHistory();
+  expect(persisted.filter((item: any) => item.type === 'reasoning')).toEqual([
+    {
+      type: 'reasoning',
+      id: 'rs-native-answer',
+      content: [{ type: 'reasoning_text', text: 'Native reasoning for replay.' }],
+      providerData: { codex: { encrypted_content: 'fixture-ciphertext' } },
+    },
+  ]);
+
+  const replay = loop.startStream(agent, persisted);
+  await replay.completed;
+  expect(replayInputs).toEqual([
+    expect.arrayContaining([
+      {
+        type: 'reasoning',
+        id: 'rs-native-answer',
+        text: 'Native reasoning for replay.',
+        providerMetadata: { codex: { encrypted_content: 'fixture-ciphertext' } },
+      },
+      { type: 'message', role: 'assistant', content: [{ type: 'text', text: 'The fixture is explained.' }] },
+    ]),
+  ]);
+});
 
 it('SessionStreamProcessor.process() streams events and updates toolTracker', async () => {
   const conversationStore = new ConversationStore();

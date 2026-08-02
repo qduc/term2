@@ -259,12 +259,12 @@ it('addBillableSessionTokenUsage subtracts cached input before accumulating prom
   });
 });
 
-it('createUsageAccumulator adds billable input and resets session usage', () => {
+it('createUsageAccumulator adds provider-reported input and resets session usage', () => {
   const accumulator = createUsageAccumulator({ prompt_tokens: 10, completion_tokens: 2 });
   accumulator.add({ prompt_tokens: 5, completion_tokens: 3, cache_read_tokens: 4 });
 
   expect(accumulator.get()).toEqual({
-    prompt_tokens: 11,
+    prompt_tokens: 15,
     completion_tokens: 5,
     cache_read_tokens: 4,
   });
@@ -273,22 +273,14 @@ it('createUsageAccumulator adds billable input and resets session usage', () => 
   expect(accumulator.get()).toEqual({});
 });
 
-it('createUsageAccumulator subtracts cached input on every model turn', () => {
+it('createUsageAccumulator preserves total input while tracking cached input separately', () => {
   const accumulator = createUsageAccumulator();
 
   accumulator.add({ prompt_tokens: 1000, completion_tokens: 100, cache_read_tokens: 800 });
-  expect(accumulator.get()).toEqual({
-    prompt_tokens: 200,
-    completion_tokens: 100,
-    cache_read_tokens: 800,
-  });
+  expect(formatSessionTokenUsage(accumulator.get())).toBe('Token usage: 1,000 input (800 cached), 100 output');
 
   accumulator.add({ prompt_tokens: 1000, completion_tokens: 100, cache_read_tokens: 800 });
-  expect(accumulator.get()).toEqual({
-    prompt_tokens: 400,
-    completion_tokens: 200,
-    cache_read_tokens: 1600,
-  });
+  expect(formatSessionTokenUsage(accumulator.get())).toBe('Token usage: 2,000 input (1,600 cached), 200 output');
 });
 
 it('createUsageAccumulator accumulates already billable input without subtracting cached tokens again', () => {

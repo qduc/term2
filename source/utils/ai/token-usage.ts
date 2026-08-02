@@ -363,15 +363,13 @@ export function addBillableSessionTokenUsage(
 }
 
 export function createUsageAccumulator(initialUsage?: NormalizedUsage | null): UsageAccumulator {
-  let accumulated = addBillableSessionTokenUsage(undefined, initialUsage);
+  let accumulated = addTokenUsage(undefined, initialUsage);
 
   return {
-    add(usage, options) {
-      if (options?.alreadyBillable) {
-        accumulated = addTokenUsage(accumulated, usage);
-      } else {
-        accumulated = addBillableSessionTokenUsage(accumulated, usage);
-      }
+    add(usage, _options) {
+      // Keep provider-reported input intact. Cached input is a subset of input,
+      // not a replacement for it, and is accumulated as a separate dimension.
+      accumulated = addTokenUsage(accumulated, usage);
     },
     reset() {
       accumulated = {};

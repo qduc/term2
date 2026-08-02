@@ -4,7 +4,8 @@ import { OpenAIResponsesModel, OpenAIResponsesWSModel } from './codex-responses-
 import type { IProviderTraffic } from '../services/service-interfaces.js';
 import { SessionContextService } from '../services/session/session-context-service.js';
 import { CodexResponsesModel, CodexResponsesWSModel, wrapCodexStream } from './codex-responses-model.js';
-
+import { RetryingModel } from './retrying-model.js';
+import { AmbiguousModelOutcomeError } from '../services/retry/retry-errors.js';
 // Fixture mirrors the SSE shape that codex's responses endpoint emits: deltas
 // and output_item.done carry the assistant message, but the terminal
 // response.completed frame ships an empty `output` array. The wrapper has to
@@ -268,15 +269,15 @@ it('wrapCodexStream warns with metadata when reconstructed output is suspiciousl
   expect('output' in warnings[0]).toBe(false);
 });
 
-// Integration check: confirm CodexResponsesModel.getStreamedResponse threads
+// Integration check: confirm CodexResponsesModel.stream threads
 // the stream through wrapCodexStream so a Codex-style terminal frame with
 // empty output gets rebuilt into a populated response_done event. We stub the
-// parent's `_fetchResponse` on the prototype so our subclass override (which
+// parent's `fetchResponse` on the prototype so our subclass override (which
 // delegates to super) sees a controlled stream without needing a real OpenAI
 // client.
-it.sequential('CodexResponsesModel.getStreamedResponse yields response_done with reconstructed output', async () => {
-  const original = (OpenAIResponsesModel.prototype as any)._fetchResponse;
-  (OpenAIResponsesModel.prototype as any)._fetchResponse = async function () {
+it.sequential('CodexResponsesModel.stream yields completion with reconstructed output', async () => {
+  const original = (OpenAIResponsesModel.prototype as any).fetchResponse;
+  (OpenAIResponsesModel.prototype as any).fetchResponse = async function () {
     return makeStream([
       { type: 'response.created', response: { id: 'resp_1' } },
       {
@@ -303,23 +304,21 @@ it.sequential('CodexResponsesModel.getStreamedResponse yields response_done with
 
   try {
     const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-    const request: any = { input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] };
-    const events = await collect(model.getStreamedResponse(request));
+    const request: any = { input: [], tools: [] };
+    const events = await collect(model.stream(request));
 
-    const done = events.find((e: any) => e.type === 'response_done') as any;
+    const done = events.find((e: any) => e.type === 'completion') as any;
     expect(done).toBeTruthy();
-    expect(done.response.output.length).toBe(1);
-    expect(done.response.output[0].type).toBe('message');
-    expect(done.response.output[0].id).toBe('msg_1');
-    expect(done.response.output[0].role).toBe('assistant');
+    expect(done.output.length).toBe(1);
+    expect(done.output[0].type).toBe('message');
   } finally {
-    (OpenAIResponsesModel.prototype as any)._fetchResponse = original;
+    (OpenAIResponsesModel.prototype as any).fetchResponse = original;
   }
 });
 
-it.sequential('CodexResponsesModel.getStreamedResponse tolerates missing terminal response.output', async () => {
-  const original = (OpenAIResponsesModel.prototype as any)._fetchResponse;
-  (OpenAIResponsesModel.prototype as any)._fetchResponse = async function () {
+it.sequential('CodexResponsesModel.stream tolerates missing terminal response.output', async () => {
+  const original = (OpenAIResponsesModel.prototype as any).fetchResponse;
+  (OpenAIResponsesModel.prototype as any).fetchResponse = async function () {
     return makeStream([
       { type: 'response.created', response: { id: 'resp_missing_output' } },
       {
@@ -345,49 +344,45 @@ it.sequential('CodexResponsesModel.getStreamedResponse tolerates missing termina
 
   try {
     const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-    const request: any = { input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] };
-    const events = await collect(model.getStreamedResponse(request));
+    const request: any = { input: [], tools: [] };
+    const events = await collect(model.stream(request));
 
-    const done = events.find((e: any) => e.type === 'response_done') as any;
+    const done = events.find((e: any) => e.type === 'completion') as any;
     expect(done).toBeTruthy();
-    expect(done.response.output.length).toBe(1);
-    expect(done.response.output[0].id).toBe('msg_missing_output');
+    expect(done.output.length).toBe(1);
   } finally {
-    (OpenAIResponsesModel.prototype as any)._fetchResponse = original;
+    (OpenAIResponsesModel.prototype as any).fetchResponse = original;
   }
 });
 
-it.sequential(
-  'CodexResponsesModel._buildResponsesCreateRequest merges modelSettings.include into requestData.include',
-  () => {
-    const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
-    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
-      return {
-        requestData: {
-          include: ['file_search_call.results'],
-        },
-        sdkRequestHeaders: {},
-        signal: undefined,
-      };
+it.sequential('CodexResponsesModel.buildResponsesCreateRequest merges Codex include into requestData.include', () => {
+  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
+    return {
+      requestData: {
+        include: ['file_search_call.results'],
+      },
+      sdkRequestHeaders: {},
+      signal: undefined,
     };
+  };
 
-    try {
-      const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-      const built = (model as any)._buildResponsesCreateRequest(
-        {
-          modelSettings: {
-            include: ['reasoning.encrypted_content', 'file_search_call.results'],
-          },
-        },
-        true,
-      );
+  try {
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const built = (model as any).buildResponsesCreateRequest(
+      {
+        input: [],
+        tools: [],
+        codex: { include: ['reasoning.encrypted_content', 'file_search_call.results'] },
+      },
+      true,
+    );
 
-      expect(built.requestData.include).toEqual(['file_search_call.results', 'reasoning.encrypted_content']);
-    } finally {
-      (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
-    }
-  },
-);
+    expect(built.requestData.include).toEqual(['file_search_call.results', 'reasoning.encrypted_content']);
+  } finally {
+    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
+  }
+});
 
 it('Codex HTTP writes every supported request setting and the abort signal to the Responses boundary', async () => {
   let capturedBody: any;
@@ -404,22 +399,20 @@ it('Codex HTTP writes every supported request setting and the abort signal to th
   const controller = new AbortController();
   const model = new CodexResponsesModel(client as any, 'gpt-5.3-codex');
   await collect(
-    model.getStreamedResponse({
-      systemInstructions: 'PROJECT_CONTEXT_SENTINEL',
+    model.stream({
+      instructions: 'PROJECT_CONTEXT_SENTINEL',
       previousResponseId: 'resp_before',
-      input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }],
-      tools: [{ type: 'function', name: 'lookup', parameters: { type: 'object' } }],
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [{ name: 'lookup', parameters: { type: 'object' } }],
       signal: controller.signal,
-      modelSettings: {
-        toolChoice: { name: 'lookup' },
-        temperature: 0.2,
-        topP: 0.8,
-        frequencyPenalty: 0.3,
-        presencePenalty: 0.4,
-        maxTokens: 123,
-        reasoning: { effort: 'high', summary: 'concise' },
-        providerData: { generate: false, custom_codex_option: true, extraHeaders: { 'x-test': 'yes' } },
-      },
+      toolChoice: { name: 'lookup' },
+      temperature: 0.2,
+      topP: 0.8,
+      frequencyPenalty: 0.3,
+      presencePenalty: 0.4,
+      maxTokens: 123,
+      reasoning: { effort: 'high', summary: 'concise' },
+      providerOptions: { generate: false, custom_codex_option: true, extraHeaders: { 'x-test': 'yes' } },
     }),
   );
 
@@ -442,9 +435,9 @@ it('Codex HTTP writes every supported request setting and the abort signal to th
   expect(capturedOptions).toEqual({ signal: controller.signal, headers: { 'x-test': 'yes' } });
 });
 
-it.sequential('CodexResponsesModel._buildResponsesCreateRequest strips temperature from requestData', () => {
-  const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+it.sequential('CodexResponsesModel.buildResponsesCreateRequest strips temperature from requestData', () => {
+  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
     return {
       requestData: {
         temperature: 0.2,
@@ -456,17 +449,17 @@ it.sequential('CodexResponsesModel._buildResponsesCreateRequest strips temperatu
 
   try {
     const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-    const built = (model as any)._buildResponsesCreateRequest({ modelSettings: { temperature: 0.2 } }, true);
+    const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [], temperature: 0.2 }, true);
 
     expect('temperature' in built.requestData).toBe(false);
   } finally {
-    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
   }
 });
 
-it.sequential('CodexResponsesModel._buildResponsesCreateRequest forwards prompt_cache_key from modelSettings', () => {
-  const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+it.sequential('CodexResponsesModel.buildResponsesCreateRequest forwards the Codex prompt cache key', () => {
+  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
     return {
       requestData: {
         include: [],
@@ -479,26 +472,22 @@ it.sequential('CodexResponsesModel._buildResponsesCreateRequest forwards prompt_
 
   try {
     const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-    const built = (model as any)._buildResponsesCreateRequest(
-      {
-        modelSettings: {
-          prompt_cache_key: 'conv_123',
-        },
-      },
+    const built = (model as any).buildResponsesCreateRequest(
+      { input: [], tools: [], codex: { promptCacheKey: 'conv_123' } },
       true,
     );
 
     expect(built.requestData.prompt_cache_key).toBe('conv_123');
     expect('temperature' in built.requestData).toBe(false);
   } finally {
-    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
   }
 });
 
 it.sequential('Codex request capture records the exact normalized suffix projection without changing it', () => {
   const captures: any[] = [];
-  const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
     return {
       requestData: {
         model: 'gpt-5-codex',
@@ -512,8 +501,8 @@ it.sequential('Codex request capture records the exact normalized suffix project
     const model = new CodexResponsesModel({} as any, 'gpt-5-codex', undefined, {
       record: (projection) => captures.push(projection),
     });
-    const built = (model as any)._buildResponsesCreateRequest(
-      { modelSettings: { prompt_cache_key: 'cache-key' } },
+    const built = (model as any).buildResponsesCreateRequest(
+      { input: [], tools: [], codex: { promptCacheKey: 'cache-key' } },
       true,
     );
 
@@ -531,17 +520,17 @@ it.sequential('Codex request capture records the exact normalized suffix project
     ]);
     expect(built.requestData).toEqual(captures[0].requestData);
   } finally {
-    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
   }
 });
 
 it.sequential('CodexResponsesModel sends gpt-5.6-luna through the Responses Lite protocol', () => {
-  const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
     return {
       requestData: {
         instructions: 'Follow the repository instructions.',
-        input: [{ role: 'user', type: 'message', content: 'Review this change.' }],
+        input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: 'Review this change.' }] }],
         tools: [{ type: 'function', name: 'shell', parameters: { type: 'object' } }],
         parallel_tool_calls: true,
       },
@@ -552,7 +541,7 @@ it.sequential('CodexResponsesModel sends gpt-5.6-luna through the Responses Lite
 
   try {
     const model = new CodexResponsesModel({} as any, 'gpt-5.6-luna');
-    const built = (model as any)._buildResponsesCreateRequest({ modelSettings: {} }, true);
+    const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
     expect(built.requestData.instructions).toBe('');
     expect(built.requestData.tools).toBeUndefined();
@@ -570,21 +559,21 @@ it.sequential('CodexResponsesModel sends gpt-5.6-luna through the Responses Lite
         role: 'developer',
         content: [{ type: 'input_text', text: 'Follow the repository instructions.' }],
       },
-      { role: 'user', type: 'message', content: 'Review this change.' },
+      { role: 'user', type: 'message', content: [{ type: 'text', text: 'Review this change.' }] },
     ]);
   } finally {
-    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
   }
 });
 
 it.sequential('CodexResponsesModel does not resend Luna developer instructions on chained requests', () => {
-  const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
     return {
       requestData: {
         previous_response_id: 'resp_previous',
         instructions: 'Follow the repository instructions.',
-        input: [{ role: 'user', type: 'message', content: 'Continue the review.' }],
+        input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: 'Continue the review.' }] }],
         tools: [],
       },
       sdkRequestHeaders: {},
@@ -594,21 +583,21 @@ it.sequential('CodexResponsesModel does not resend Luna developer instructions o
 
   try {
     const model = new CodexResponsesModel({} as any, 'gpt-5.6-luna');
-    const built = (model as any)._buildResponsesCreateRequest({ modelSettings: {} }, true);
+    const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
     expect(built.requestData.input).toEqual([
       { type: 'additional_tools', role: 'developer', tools: [] },
-      { role: 'user', type: 'message', content: 'Continue the review.' },
+      { role: 'user', type: 'message', content: [{ type: 'text', text: 'Continue the review.' }] },
     ]);
     expect(built.requestData.instructions).toBe('');
   } finally {
-    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
   }
 });
 
-it.sequential('CodexResponsesModel._buildResponsesCreateRequest strips replay item ids from input', () => {
-  const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+it.sequential('CodexResponsesModel.buildResponsesCreateRequest strips replay item ids from input', () => {
+  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
     return {
       requestData: {
         input: [
@@ -626,7 +615,7 @@ it.sequential('CodexResponsesModel._buildResponsesCreateRequest strips replay it
 
   try {
     const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-    const built = (model as any)._buildResponsesCreateRequest({ modelSettings: {} }, true);
+    const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
     expect('id' in built.requestData.input[0]).toBe(false);
     expect('id' in built.requestData.input[1]).toBe(false);
@@ -635,20 +624,20 @@ it.sequential('CodexResponsesModel._buildResponsesCreateRequest strips replay it
     expect('id' in built.requestData.input[3]).toBe(false);
     expect(built.requestData.input[4].id).toBe('ig_1');
   } finally {
-    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
   }
 });
 
 it.sequential(
-  'CodexResponsesModel._buildResponsesCreateRequest drops the camelCase callId key after adding call_id',
+  'CodexResponsesModel.buildResponsesCreateRequest drops the camelCase callId key after adding call_id',
   () => {
     // codex.provider.ts's codexStream() builds tool_call/tool_result items as
-    // `{ type: 'function_call', callId: ... }` / `{ type: 'function_call_output', callId: ... }`
+    // `{ type: 'function_call', id: ... }` / `{ type: 'function_call_output', id: ... }`
     // (camelCase, no call_id) — the real shape a tool-call continuation sends.
     // The Responses API rejects unknown parameters, so leaving `callId` on the
     // object alongside the added `call_id` breaks every tool-call continuation.
-    const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
-    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+    const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
+    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
       return {
         requestData: {
           input: [
@@ -663,7 +652,7 @@ it.sequential(
 
     try {
       const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-      const built = (model as any)._buildResponsesCreateRequest({ modelSettings: {} }, true);
+      const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
       expect(built.requestData.input[0]).toEqual({
         type: 'function_call',
@@ -679,20 +668,20 @@ it.sequential(
       expect('callId' in built.requestData.input[0]).toBe(false);
       expect('callId' in built.requestData.input[1]).toBe(false);
     } finally {
-      (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+      (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
     }
   },
 );
 
 it.sequential(
-  'CodexResponsesModel._buildResponsesCreateRequest drops unpaired function calls for stateless fallback',
+  'CodexResponsesModel.buildResponsesCreateRequest drops unpaired function calls for stateless fallback',
   () => {
-    const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
-    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+    const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
+    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
       return {
         requestData: {
           input: [
-            { role: 'user', type: 'message', content: 'continue' },
+            { role: 'user', type: 'message', content: [{ type: 'text', text: 'continue' }] },
             { id: 'fc_1', type: 'function_call', call_id: 'call-paired', name: 'shell', arguments: '{}' },
             { type: 'function_call_output', call_id: 'call-paired', output: 'ok' },
             { id: 'fc_2', type: 'function_call', call_id: 'call-orphan', name: 'shell', arguments: '{}' },
@@ -705,7 +694,7 @@ it.sequential(
 
     try {
       const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-      const built = (model as any)._buildResponsesCreateRequest({ modelSettings: {} }, true);
+      const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
       expect(built.requestData.previous_response_id).toBeUndefined();
       expect(built.requestData.input.map((item: any) => item.call_id).filter(Boolean)).toEqual([
@@ -713,14 +702,14 @@ it.sequential(
         'call-paired',
       ]);
     } finally {
-      (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+      (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
     }
   },
 );
 
-it.sequential('CodexResponsesModel._buildResponsesCreateRequest keeps function calls for chained requests', () => {
-  const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
-  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+it.sequential('CodexResponsesModel.buildResponsesCreateRequest keeps function calls for chained requests', () => {
+  const original = (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = function () {
     return {
       requestData: {
         previous_response_id: 'resp_123',
@@ -733,18 +722,18 @@ it.sequential('CodexResponsesModel._buildResponsesCreateRequest keeps function c
 
   try {
     const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-    const built = (model as any)._buildResponsesCreateRequest({ modelSettings: {} }, true);
+    const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [] }, true);
 
     expect(built.requestData.input).toEqual([
       { type: 'function_call', call_id: 'call-server-held', name: 'shell', arguments: '{}' },
     ]);
   } finally {
-    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+    (OpenAIResponsesModel.prototype as any).buildResponsesCreateRequest = original;
   }
 });
 
 it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed responses', async () => {
-  const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  const original = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
   const trafficCalls: Array<{ method: string; args: any }> = [];
 
   const mockProviderTraffic: IProviderTraffic = {
@@ -759,7 +748,7 @@ it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed r
     },
   };
 
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function () {
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function () {
     return makeStream([
       { type: 'response.created', response: { id: 'resp_ws_traffic' } },
       {
@@ -807,11 +796,11 @@ it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed r
       mockProviderTraffic as any,
       sessionContextService as any,
     );
-    const request: any = { input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] };
+    const request: any = { input: [], tools: [] };
 
-    const events = await collect(model.getStreamedResponse(request));
+    const events = await collect(model.stream(request));
 
-    expect((events[events.length - 1] as any).event?.type).toBe('response.completed');
+    expect((events[events.length - 1] as any).type).toBe('completion');
     expect(trafficCalls.length).toBe(2);
     expect(trafficCalls[0].method).toBe('recordRequestStart');
     expect(trafficCalls[1].method).toBe('recordResponseReceived');
@@ -820,12 +809,12 @@ it.sequential('CodexResponsesWSModel emits traffic logs for websocket streamed r
     expect(trafficCalls[0].args.headers.authorization).toBe('[REDACTED]');
     expect(trafficCalls[1].args.transport).toBe('websocket');
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = original;
   }
 });
 
 it.sequential('CodexResponsesWSModel sends only new input after a Responses-Lite prefix is established', async () => {
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
   const trafficBodies: any[] = [];
   const captures: any[] = [];
   let responseCount = 0;
@@ -838,7 +827,7 @@ it.sequential('CodexResponsesWSModel sends only new input after a Responses-Lite
     recordRequestFailed() {},
   };
 
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function () {
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function () {
     responseCount += 1;
     return makeStream([
       {
@@ -864,44 +853,48 @@ it.sequential('CodexResponsesWSModel sends only new input after a Responses-Lite
     );
 
     const tool = { type: 'function', name: 'shell', parameters: { type: 'object' } };
-    const firstUserMessage = { role: 'user', type: 'message', content: 'hello' };
-    const secondUserMessage = { role: 'user', type: 'message', content: 'how are you?' };
+    const firstUserMessage = { role: 'user', type: 'message', content: [{ type: 'text', text: 'hello' }] };
+    const secondUserMessage = {
+      role: 'user',
+      type: 'message',
+      content: [{ type: 'text', text: 'how are you?' }],
+    };
 
     await collect(
-      model.getStreamedResponse({
+      model.stream({
         input: [firstUserMessage],
-        systemInstructions: 'Follow the repository instructions.',
-        modelSettings: {},
+        instructions: 'Follow the repository instructions.',
         tools: [tool],
-        handoffs: [],
       } as any),
     );
     await collect(
-      model.getStreamedResponse({
+      model.stream({
         previousResponseId: 'resp_lite_2',
         input: [secondUserMessage],
-        systemInstructions: 'Follow the repository instructions.',
-        modelSettings: {},
+        instructions: 'Follow the repository instructions.',
         tools: [tool],
-        handoffs: [],
       } as any),
     );
 
     expect(trafficBodies).toHaveLength(3);
     expect(trafficBodies[0].input[0]).toMatchObject({ type: 'additional_tools', role: 'developer', tools: [tool] });
     expect(trafficBodies[1].previous_response_id).toBe('resp_lite_1');
-    expect(trafficBodies[1].input).toEqual([expect.objectContaining({ role: 'user', content: 'hello' })]);
+    expect(trafficBodies[1].input).toEqual([
+      expect.objectContaining({ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }),
+    ]);
     expect(trafficBodies[2].previous_response_id).toBe('resp_lite_2');
-    expect(trafficBodies[2].input).toEqual([expect.objectContaining({ role: 'user', content: 'how are you?' })]);
+    expect(trafficBodies[2].input).toEqual([
+      expect.objectContaining({ role: 'user', content: [{ type: 'input_text', text: 'how are you?' }] }),
+    ]);
     expect(captures.map((capture) => capture.requestData)).toEqual(trafficBodies);
     expect(captures.map((capture) => capture.transport)).toEqual(['websocket', 'websocket', 'websocket']);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
 it.sequential('CodexResponsesWSModel correlates Responses-Lite state across sequential streamed requests', async () => {
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
   const trafficBodies: any[] = [];
   let responseCount = 0;
 
@@ -913,7 +906,7 @@ it.sequential('CodexResponsesWSModel correlates Responses-Lite state across sequ
     recordRequestFailed() {},
   };
 
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function () {
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function () {
     responseCount += 1;
     return makeStream([
       {
@@ -937,29 +930,25 @@ it.sequential('CodexResponsesWSModel correlates Responses-Lite state across sequ
     );
 
     const tool = { type: 'function', name: 'shell', parameters: { type: 'object' } };
-    const msg1 = { role: 'user', type: 'message', content: 'first' };
-    const msg2 = { role: 'user', type: 'message', content: 'second' };
+    const msg1 = { role: 'user', type: 'message', content: [{ type: 'text', text: 'first' }] };
+    const msg2 = { role: 'user', type: 'message', content: [{ type: 'text', text: 'second' }] };
 
     // First turn establishes the stored baseline.
     await collect(
-      model.getStreamedResponse({
+      model.stream({
         input: [msg1],
-        systemInstructions: 'Do it.',
-        modelSettings: {},
+        instructions: 'Do it.',
         tools: [tool],
-        handoffs: [],
       } as any),
     );
 
     // Second turn chains off the first.
     await collect(
-      model.getStreamedResponse({
+      model.stream({
         previousResponseId: 'resp_token_2',
         input: [msg2],
-        systemInstructions: 'Do it.',
-        modelSettings: {},
+        instructions: 'Do it.',
         tools: [tool],
-        handoffs: [],
       } as any),
     );
 
@@ -968,15 +957,17 @@ it.sequential('CodexResponsesWSModel correlates Responses-Lite state across sequ
     // The third body (second turn's final request) should carry just the
     // new user message as a delta.
     expect(trafficBodies[2].previous_response_id).toBe('resp_token_2');
-    expect(trafficBodies[2].input).toEqual([expect.objectContaining({ role: 'user', content: 'second' })]);
+    expect(trafficBodies[2].input).toEqual([
+      expect.objectContaining({ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'second' }] }),
+    ]);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
 it.sequential('CodexResponsesWSModel does not use wire state for non-Luna models', async () => {
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function () {
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function () {
     return makeStream([{ type: 'response.completed', response: { id: 'resp_nonluna', output: [], usage: {} } }]);
   };
 
@@ -994,23 +985,28 @@ it.sequential('CodexResponsesWSModel does not use wire state for non-Luna models
     );
 
     // Verify no tokens are stored for non-Luna requests.
-    const built = (model as any)._buildResponsesCreateRequest(
-      { input: [{ role: 'user', content: 'hello' }], modelSettings: {}, tools: [], handoffs: [] },
+    const built = (model as any).buildResponsesCreateRequest(
+      {
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        tools: [],
+      },
       true,
     );
 
     // requestTokens WeakMap should not have an entry for the request.
     // The built requestData should not have been modified by wire state prep.
-    expect(built.requestData.input).toEqual([{ role: 'user', content: 'hello' }]);
+    expect(built.requestData.input).toEqual([
+      { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
+    ]);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
 it.sequential('CodexResponsesWSModel marks Luna websocket requests as Responses Lite', async () => {
-  const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  const original = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
   let seenRequest: any;
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
     seenRequest = request;
     return makeStream([{ type: 'response.completed', response: { id: 'resp_luna', output: [], usage: {} } }]);
   };
@@ -1022,21 +1018,21 @@ it.sequential('CodexResponsesWSModel marks Luna websocket requests as Responses 
       { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
     );
 
-    await collect(model.getStreamedResponse({ input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] }));
+    await collect(model.stream({ input: [], tools: [] }));
 
-    expect(seenRequest.modelSettings.providerData.extraHeaders['x-openai-internal-codex-responses-lite']).toBe('true');
-    expect(seenRequest.modelSettings.providerData.client_metadata).toEqual({
+    expect(seenRequest.providerOptions.extraHeaders['x-openai-internal-codex-responses-lite']).toBe('true');
+    expect(seenRequest.providerOptions.client_metadata).toEqual({
       ws_request_header_x_openai_internal_codex_responses_lite: 'true',
     });
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = original;
   }
 });
 
 it.sequential('CodexResponsesWSModel sends Codex turn identity metadata for Luna', async () => {
-  const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  const original = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
   let seenRequest: any;
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
     seenRequest = request;
     return makeStream([{ type: 'response.completed', response: { id: 'resp_luna_identity', output: [], usage: {} } }]);
   };
@@ -1061,9 +1057,9 @@ it.sequential('CodexResponsesWSModel sends Codex turn identity metadata for Luna
       } as any,
     );
 
-    await collect(model.getStreamedResponse({ input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] }));
+    await collect(model.stream({ input: [], tools: [] }));
 
-    const providerData = seenRequest.modelSettings.providerData;
+    const providerData = seenRequest.providerOptions;
     expect(providerData.extraHeaders).toMatchObject({
       originator: 'codex_exec',
       'x-client-request-id': 'session-123',
@@ -1089,14 +1085,14 @@ it.sequential('CodexResponsesWSModel sends Codex turn identity metadata for Luna
     });
     expect(typeof turnMetadata.turn_id).toBe('string');
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = original;
   }
 });
 
 it.sequential('CodexResponsesWSModel keeps turn identity stable across response continuations', async () => {
-  const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  const original = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
   const seenRequests: any[] = [];
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
     seenRequests.push(request);
     return makeStream([
       { type: 'response.completed', response: { id: 'resp_stable_identity', output: [], usage: {} } },
@@ -1124,29 +1120,26 @@ it.sequential('CodexResponsesWSModel keeps turn identity stable across response 
       } as any,
     );
 
-    await collect(model.getStreamedResponse({ input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] }));
+    await collect(model.stream({ input: [], tools: [] }));
     await collect(
-      model.getStreamedResponse({
+      model.stream({
         input: [],
         previousResponseId: 'resp_stable_identity',
-        tracing: false,
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       }),
     );
 
     expect(seenRequests).toHaveLength(2);
-    const firstMetadata = seenRequests[0].modelSettings.providerData.client_metadata;
-    const secondMetadata = seenRequests[1].modelSettings.providerData.client_metadata;
+    const firstMetadata = seenRequests[0].providerOptions.client_metadata;
+    const secondMetadata = seenRequests[1].providerOptions.client_metadata;
     expect(JSON.parse(firstMetadata['x-codex-turn-metadata']).turn_id).toBe(
       JSON.parse(secondMetadata['x-codex-turn-metadata']).turn_id,
     );
-    expect(seenRequests[0].modelSettings.providerData.extraHeaders['x-codex-turn-metadata']).toBe(
-      seenRequests[1].modelSettings.providerData.extraHeaders['x-codex-turn-metadata'],
+    expect(seenRequests[0].providerOptions.extraHeaders['x-codex-turn-metadata']).toBe(
+      seenRequests[1].providerOptions.extraHeaders['x-codex-turn-metadata'],
     );
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = original;
   }
 });
 
@@ -1154,7 +1147,7 @@ it.sequential(
   'CodexResponsesWSModel logs reasoning and tool calls in choice payload matching HTTP/SSE logs',
   async () => {
     const trafficCalls: Array<{ method: string; args: any }> = [];
-    const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+    const original = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
 
     const mockProviderTraffic: IProviderTraffic = {
       recordRequestStart(input) {
@@ -1168,7 +1161,7 @@ it.sequential(
       },
     };
 
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function () {
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function () {
       return makeStream([
         { type: 'response.created', response: { id: 'resp_ws_reasoning_tool' } },
         {
@@ -1226,9 +1219,9 @@ it.sequential(
         mockProviderTraffic as any,
         sessionContextService as any,
       );
-      const request: any = { input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] };
+      const request: any = { input: [], tools: [] };
 
-      await collect(model.getStreamedResponse(request));
+      await collect(model.stream(request));
 
       expect(trafficCalls.length).toBe(2);
       expect(trafficCalls[0].method).toBe('recordRequestStart');
@@ -1241,16 +1234,16 @@ it.sequential(
       expect(receivedInput.response.usage).toEqual({ input_tokens: 5, output_tokens: 6, total_tokens: 11 });
       expect(Array.isArray(receivedInput.response.output)).toBe(true);
     } finally {
-      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
+      (OpenAIResponsesWSModel.prototype as any).fetchResponse = original;
     }
   },
 );
 
-it.sequential('CodexResponsesModel.getResponse (unary) intercepts and runs as stream under the hood', async () => {
-  const original = (OpenAIResponsesModel.prototype as any)._fetchResponse;
+it.sequential('CodexResponsesModel unary path runs as stream under the hood', async () => {
+  const original = (OpenAIResponsesModel.prototype as any).fetchResponse;
   let receivedStreamArg = false;
 
-  (OpenAIResponsesModel.prototype as any)._fetchResponse = async function (_request: any, stream: boolean) {
+  (OpenAIResponsesModel.prototype as any).fetchResponse = async function (_request: any, stream: boolean) {
     receivedStreamArg = stream;
     return makeStream([
       { type: 'response.created', response: { id: 'resp_unary' } },
@@ -1278,26 +1271,26 @@ it.sequential('CodexResponsesModel.getResponse (unary) intercepts and runs as st
 
   try {
     const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
-    const request: any = { input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] };
+    const request: any = { input: [], tools: [] };
 
     // Call getResponse which defaults to stream: false
-    const response = await withTrace('test', () => model.getResponse(request));
+    const response: any = await withTrace('test', () => (model as any).fetchUnaryResponse(request));
 
     expect(receivedStreamArg).toBe(true);
-    expect(response.responseId).toBe('resp_unary');
+    expect(response.id).toBe('resp_unary');
     expect(response.output.length).toBe(1);
     expect(response.output[0].id).toBe('msg_unary');
-    expect(response.usage.totalTokens).toBe(5);
+    expect(response.usage.total_tokens).toBe(5);
   } finally {
-    (OpenAIResponsesModel.prototype as any)._fetchResponse = original;
+    (OpenAIResponsesModel.prototype as any).fetchResponse = original;
   }
 });
 
-it.sequential('CodexResponsesWSModel.getResponse (unary) intercepts and runs as stream under the hood', async () => {
-  const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+it.sequential('CodexResponsesWSModel unary path runs as stream under the hood', async () => {
+  const original = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
   let receivedStreamArg = false;
 
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (_request: any, stream: boolean) {
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (_request: any, stream: boolean) {
     receivedStreamArg = stream;
     return makeStream([
       { type: 'response.created', response: { id: 'resp_ws_unary' } },
@@ -1335,18 +1328,18 @@ it.sequential('CodexResponsesWSModel.getResponse (unary) intercepts and runs as 
 
   try {
     const model = new CodexResponsesWSModel(mockClient as any, 'gpt-5-codex', tokenManager as any);
-    const request: any = { input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] };
+    const request: any = { input: [], tools: [] };
 
     // Call getResponse which defaults to stream: false
-    const response = await model.getResponse(request);
+    const response = await (model as any).fetchUnaryResponse(request);
 
     expect(receivedStreamArg).toBe(true);
-    expect(response.responseId).toBe('resp_ws_unary');
+    expect(response.id).toBe('resp_ws_unary');
     expect(response.output.length).toBe(1);
     expect(response.output[0].id).toBe('msg_ws_unary');
-    expect(response.usage.totalTokens).toBe(7);
+    expect(response.usage.total_tokens).toBe(7);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = original;
   }
 });
 
@@ -1396,13 +1389,13 @@ it.sequential(
   async () => {
     const seenRequests: any[] = [];
     const toolOutput = {
-      type: 'function_call_result',
-      callId: 'call-read',
+      type: 'tool_result',
+      id: 'call-read',
       output: 'done',
     };
 
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
       seenRequests.push(request);
       return makeStream([
         {
@@ -1439,30 +1432,28 @@ it.sequential(
         },
       );
 
-      for await (const _event of model.getStreamedResponse({
-        input: [{ role: 'user', type: 'message', content: 'inspect' }],
-        modelSettings: {},
+      for await (const _event of model.stream({
+        input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] }],
         tools: [],
-        handoffs: [],
       } as any)) {
       }
 
       expect(seenRequests.length).toBe(2);
-      expect(seenRequests[0].modelSettings.providerData?.generate).toBe(false);
+      expect(seenRequests[0].providerOptions?.generate).toBe(false);
       expect(seenRequests[0].input).toEqual([]);
       expect(seenRequests[1].previousResponseId).toBe('resp-1');
-      expect(seenRequests[1].input).toEqual([{ role: 'user', type: 'message', content: 'inspect' }]);
+      expect(seenRequests[1].input).toEqual([
+        { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] },
+      ]);
 
-      for await (const _event of model.getStreamedResponse({
+      for await (const _event of model.stream({
         input: [
-          { role: 'user', type: 'message', content: 'inspect' },
-          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'I will inspect it.' }] },
+          { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] },
+          { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'I will inspect it.' }] },
           { type: 'function_call', call_id: 'call-read', name: 'read_file', arguments: '{}' },
           toolOutput,
         ],
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any)) {
       }
 
@@ -1470,17 +1461,15 @@ it.sequential(
       expect(seenRequests[2].previousResponseId).toBe('resp-2');
       expect(seenRequests[2].input).toEqual([toolOutput]);
 
-      const latestUser = { role: 'user', type: 'message', content: 'summarize' };
-      for await (const _event of model.getStreamedResponse({
+      const latestUser = { type: 'message', role: 'user', content: [{ type: 'text', text: 'summarize' }] };
+      for await (const _event of model.stream({
         previousResponseId: 'resp-explicit',
         input: [
-          { role: 'user', type: 'message', content: 'inspect' },
-          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Done.' }] },
+          { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] },
+          { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'Done.' }] },
           latestUser,
         ],
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any)) {
       }
 
@@ -1488,7 +1477,7 @@ it.sequential(
       expect(seenRequests[3].previousResponseId).toBe('resp-explicit');
       expect(seenRequests[3].input).toEqual([latestUser]);
     } finally {
-      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
     }
   },
 );
@@ -1499,14 +1488,15 @@ it.sequential(
     const seenRequests: any[] = [];
     const sessionContextService = new SessionContextService();
 
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
       seenRequests.push(request);
       const userMessage = request.input?.find((item: any) => item?.role === 'user');
+      const userText = Array.isArray(userMessage?.content) ? userMessage.content[0]?.text : userMessage?.content;
       const responseId =
-        userMessage?.content === 'chain-a'
+        userText === 'chain-a'
           ? 'resp-chain-a'
-          : userMessage?.content === 'chain-b'
+          : userText === 'chain-b'
           ? 'resp-chain-b'
           : `resp-${seenRequests.length}`;
       return makeStream([
@@ -1535,11 +1525,9 @@ it.sequential(
     });
     const openChain = async (chain: string) => {
       await collect(
-        model.getStreamedResponse({
-          input: [{ role: 'user', type: 'message', content: chain }],
-          modelSettings: {},
+        model.stream({
+          input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: chain }] }],
           tools: [],
-          handoffs: [],
         } as any),
       );
     };
@@ -1549,21 +1537,19 @@ it.sequential(
       await sessionContextService.runWithContext(contextFor('nested-run-b'), () => openChain('chain-b'));
 
       const toolOutput = {
-        type: 'function_call_result',
-        callId: 'call-a',
+        type: 'tool_result',
+        id: 'call-a',
         output: 'result-a',
       };
       await sessionContextService.runWithContext(contextFor('nested-run-a'), () =>
         collect(
-          model.getStreamedResponse({
+          model.stream({
             input: [
-              { role: 'user', type: 'message', content: 'chain-a' },
+              { role: 'user', type: 'message', content: [{ type: 'text', text: 'chain-a' }] },
               { type: 'function_call', call_id: 'call-a', name: 'read_file', arguments: '{}' },
               toolOutput,
             ],
-            modelSettings: {},
             tools: [],
-            handoffs: [],
           } as any),
         ),
       );
@@ -1572,7 +1558,7 @@ it.sequential(
       expect(continuation.previousResponseId).toBe('resp-chain-a');
       expect(continuation.input).toEqual([toolOutput]);
     } finally {
-      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
     }
   },
 );
@@ -1582,8 +1568,8 @@ it.sequential(
   async () => {
     const seenRequests: any[] = [];
 
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
       seenRequests.push(request);
       return makeStream([
         {
@@ -1617,11 +1603,11 @@ it.sequential(
     // output whose call was produced by the previous response.
     const parallelReads = [1, 2, 3, 4].map((n) => ({
       call: { type: 'function_call', call_id: `call-read-${n}`, name: 'read_code_outline', arguments: '{}' },
-      output: { type: 'function_call_result', callId: `call-read-${n}`, output: `outline-${n}` },
+      output: { type: 'tool_result', id: `call-read-${n}`, output: `outline-${n}` },
     }));
     const shellPair = {
-      call: { type: 'function_call', call_id: 'call-shell', name: 'shell', arguments: '{}' },
-      output: { type: 'function_call_result', callId: 'call-shell', output: 'grep result' },
+      call: { type: 'tool_call', id: 'call-shell', name: 'shell', arguments: '{}' },
+      output: { type: 'tool_result', id: 'call-shell', output: 'grep result' },
     };
 
     try {
@@ -1637,18 +1623,16 @@ it.sequential(
         },
       );
 
-      for await (const _event of model.getStreamedResponse({
+      for await (const _event of model.stream({
         previousResponseId: 'resp-prev',
         input: [
-          { role: 'user', type: 'message', content: 'inspect the repo' },
-          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'I will inspect it.' }] },
+          { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect the repo' }] },
+          { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'I will inspect it.' }] },
           ...parallelReads.flatMap((pair) => [pair.call, pair.output]),
           shellPair.call,
           shellPair.output,
         ],
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any)) {
       }
 
@@ -1656,7 +1640,7 @@ it.sequential(
       expect(seenRequests[0].previousResponseId).toBe('resp-prev');
       expect(seenRequests[0].input).toEqual([...parallelReads.map((pair) => pair.output), shellPair.output]);
     } finally {
-      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
     }
   },
 );
@@ -1664,8 +1648,8 @@ it.sequential(
 it.sequential('CodexResponsesWSModel drops tool outputs already consumed by the previous response', async () => {
   const seenRequests: any[] = [];
 
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
     seenRequests.push(request);
     const responseIds = ['resp-after-first-batch', 'resp-after-second-batch', 'resp-after-third-batch'];
     return makeStream([
@@ -1691,13 +1675,13 @@ it.sequential('CodexResponsesWSModel drops tool outputs already consumed by the 
   };
 
   const firstBatch = [1, 2].map((n) => ({
-    type: 'function_call_result',
-    callId: `call-already-sent-${n}`,
+    type: 'tool_result',
+    id: `call-already-sent-${n}`,
     output: `old-${n}`,
   }));
   const nextOutput = {
-    type: 'function_call_result',
-    callId: 'call-current',
+    type: 'tool_result',
+    id: 'call-current',
     output: 'current',
   };
 
@@ -1714,30 +1698,24 @@ it.sequential('CodexResponsesWSModel drops tool outputs already consumed by the 
       },
     );
 
-    for await (const _event of model.getStreamedResponse({
+    for await (const _event of model.stream({
       previousResponseId: 'resp-tool-calls-1',
       input: firstBatch,
-      modelSettings: {},
       tools: [],
-      handoffs: [],
     } as any)) {
     }
 
-    for await (const _event of model.getStreamedResponse({
+    for await (const _event of model.stream({
       previousResponseId: 'resp-after-first-batch',
       input: [...firstBatch, nextOutput],
-      modelSettings: {},
       tools: [],
-      handoffs: [],
     } as any)) {
     }
 
-    for await (const _event of model.getStreamedResponse({
+    for await (const _event of model.stream({
       previousResponseId: 'resp-after-second-batch',
       input: [nextOutput],
-      modelSettings: {},
       tools: [],
-      handoffs: [],
     } as any)) {
     }
 
@@ -1749,7 +1727,41 @@ it.sequential('CodexResponsesWSModel drops tool outputs already consumed by the 
     expect(seenRequests[2].previousResponseId).toBe('resp-after-second-batch');
     expect(seenRequests[2].input).toEqual([]);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
+  }
+});
+
+it.sequential('CodexResponsesWSModel marks transport failure after buffered raw frames as ambiguous', async () => {
+  let attempts = 0;
+  const networkError = new Error('Responses websocket connection closed before response completed (code=1006)');
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function () {
+    attempts += 1;
+    return (async function* () {
+      yield { type: 'response.reasoning_summary_text.delta', delta: 'buffered reasoning' };
+      throw networkError;
+    })();
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5-codex',
+      { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    );
+    const retrying = new RetryingModel(model, { retryAttempts: 2, sleep: async () => {} });
+
+    await expect(
+      collect(
+        retrying.stream({
+          input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+          tools: [],
+        }),
+      ),
+    ).rejects.toBeInstanceOf(AmbiguousModelOutcomeError);
+    expect(attempts).toBe(1);
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
@@ -1758,8 +1770,8 @@ it.sequential(
   async () => {
     const seenRequests: any[] = [];
 
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
       seenRequests.push(request);
       return makeStream([
         {
@@ -1784,7 +1796,7 @@ it.sequential(
     };
     const pairs = [1, 2].map((n) => ({
       call: { type: 'function_call', call_id: `call-${n}`, name: 'read_code_outline', arguments: '{}' },
-      output: { type: 'function_call_result', callId: `call-${n}`, output: `outline-${n}` },
+      output: { type: 'tool_result', id: `call-${n}`, output: `outline-${n}` },
     }));
 
     try {
@@ -1800,12 +1812,10 @@ it.sequential(
         },
       );
 
-      for await (const _event of model.getStreamedResponse({
+      for await (const _event of model.stream({
         previousResponseId: 'resp-prev',
         input: pairs.flatMap((pair) => [pair.call, pair.output]),
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any)) {
       }
 
@@ -1813,7 +1823,7 @@ it.sequential(
       expect(seenRequests[0].previousResponseId).toBe('resp-prev');
       expect(seenRequests[0].input).toEqual(pairs.map((pair) => pair.output));
     } finally {
-      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
     }
   },
 );
@@ -1821,8 +1831,8 @@ it.sequential(
 it.sequential('CodexResponsesWSModel keeps interleaved outputs when function calls only carry item ids', async () => {
   const seenRequests: any[] = [];
 
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
     seenRequests.push(request);
     return makeStream([
       {
@@ -1847,7 +1857,7 @@ it.sequential('CodexResponsesWSModel keeps interleaved outputs when function cal
   };
   const pairs = [1, 2, 3].map((n) => ({
     call: { type: 'function_call', id: `fc-${n}`, name: 'shell', arguments: '{}' },
-    output: { type: 'function_call_result', callId: `call-${n}`, output: `result-${n}` },
+    output: { type: 'tool_result', id: `call-${n}`, output: `result-${n}` },
   }));
 
   try {
@@ -1863,12 +1873,10 @@ it.sequential('CodexResponsesWSModel keeps interleaved outputs when function cal
       },
     );
 
-    for await (const _event of model.getStreamedResponse({
+    for await (const _event of model.stream({
       previousResponseId: 'resp-prev',
       input: pairs.flatMap((pair) => [pair.call, pair.output]),
-      modelSettings: {},
       tools: [],
-      handoffs: [],
     } as any)) {
     }
 
@@ -1876,7 +1884,7 @@ it.sequential('CodexResponsesWSModel keeps interleaved outputs when function cal
     expect(seenRequests[0].previousResponseId).toBe('resp-prev');
     expect(seenRequests[0].input).toEqual(pairs.map((pair) => pair.output));
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
@@ -1885,8 +1893,8 @@ it.sequential(
   async () => {
     const seenRequests: any[] = [];
 
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
       seenRequests.push(request);
       return makeStream([
         {
@@ -1910,19 +1918,19 @@ it.sequential(
       getAccountId: () => 'acc_123',
     };
 
-    const openingUser = { role: 'user', type: 'message', content: 'inspect the repo' };
+    const openingUser = { type: 'message', role: 'user', content: [{ type: 'text', text: 'inspect the repo' }] };
     const openingAssistant = {
-      role: 'assistant',
       type: 'message',
-      content: [{ type: 'output_text', text: 'I will inspect it.' }],
+      role: 'assistant',
+      content: [{ type: 'text', text: 'I will inspect it.' }],
     };
     const parallelReads = [1, 2].map((n) => ({
-      call: { type: 'function_call', call_id: `call-read-${n}`, name: 'read_code_outline', arguments: '{}' },
-      output: { type: 'function_call_result', callId: `call-read-${n}`, output: `outline-${n}` },
+      call: { type: 'tool_call', id: `call-read-${n}`, name: 'read_code_outline', arguments: '{}' },
+      output: { type: 'tool_result', id: `call-read-${n}`, output: `outline-${n}` },
     }));
     const shellPair = {
-      call: { type: 'function_call', call_id: 'call-shell', name: 'shell', arguments: '{}' },
-      output: { type: 'function_call_result', callId: 'call-shell', output: 'grep result' },
+      call: { type: 'tool_call', id: 'call-shell', name: 'shell', arguments: '{}' },
+      output: { type: 'tool_result', id: 'call-shell', output: 'grep result' },
     };
 
     try {
@@ -1938,7 +1946,7 @@ it.sequential(
         },
       );
 
-      for await (const _event of model.getStreamedResponse({
+      for await (const _event of model.stream({
         input: [
           openingUser,
           openingAssistant,
@@ -1946,14 +1954,12 @@ it.sequential(
           shellPair.call,
           shellPair.output,
         ],
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any)) {
       }
 
       expect(seenRequests.length).toBe(2);
-      expect(seenRequests[0].modelSettings.providerData?.generate).toBe(false);
+      expect(seenRequests[0].providerOptions?.generate).toBe(false);
       expect(seenRequests[0].previousResponseId).toBe(undefined);
       expect(seenRequests[0].input).toEqual([
         openingUser,
@@ -1964,7 +1970,7 @@ it.sequential(
       expect(seenRequests[1].previousResponseId).toBe('resp-warmup');
       expect(seenRequests[1].input).toEqual([...parallelReads.map((pair) => pair.output), shellPair.output]);
     } finally {
-      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
     }
   },
 );
@@ -1975,8 +1981,8 @@ it.sequential('CodexResponsesWSModel leaves warmup connection failures to the ou
     code: 'connection_closed_before_opening',
   });
 
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
     seenRequests.push(request);
     if (seenRequests.length === 1) {
       throw networkError;
@@ -2004,9 +2010,9 @@ it.sequential('CodexResponsesWSModel leaves warmup connection failures to the ou
     getAccountId: () => 'acc_123',
   };
   const fullInput = [
-    { role: 'user', type: 'message', content: 'first' },
-    { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first response' }] },
-    { role: 'user', type: 'message', content: 'next' },
+    { role: 'user', type: 'message', content: [{ type: 'text', text: 'first' }] },
+    { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'first response' }] },
+    { role: 'user', type: 'message', content: [{ type: 'text', text: 'next' }] },
   ];
 
   try {
@@ -2023,19 +2029,17 @@ it.sequential('CodexResponsesWSModel leaves warmup connection failures to the ou
     );
 
     await expect(async () => {
-      for await (const _event of model.getStreamedResponse({
+      for await (const _event of model.stream({
         input: fullInput,
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any)) {
       }
     }).rejects.toBe(networkError);
 
     expect(seenRequests.length).toBe(1);
-    expect(seenRequests[0].modelSettings.providerData?.generate).toBe(false);
+    expect(seenRequests[0].providerOptions?.generate).toBe(false);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
@@ -2058,8 +2062,8 @@ it.sequential(
       arguments: '{}',
     };
 
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
       seenRequests.push(request);
       if (seenRequests.length === 1) {
         return makeStream([
@@ -2098,10 +2102,10 @@ it.sequential(
       recordRequestFailed() {},
     };
     const continuationInput = [
-      { role: 'user', type: 'message', content: 'start the worker' },
+      { role: 'user', type: 'message', content: [{ type: 'text', text: 'start the worker' }] },
       {
-        type: 'function_call_result',
-        callId: 'call_tool_1',
+        type: 'tool_result',
+        id: 'call_tool_1',
         output: 'worker is running',
       },
     ];
@@ -2120,22 +2124,18 @@ it.sequential(
       );
 
       await collect(
-        model.getStreamedResponse({
+        model.stream({
           previousResponseId: 'resp-root',
-          input: [{ role: 'user', type: 'message', content: 'start the worker' }],
-          modelSettings: {},
+          input: [{ role: 'user', type: 'message', content: [{ type: 'text', text: 'start the worker' }] }],
           tools: [],
-          handoffs: [],
         } as any),
       );
 
       await expect(
         collect(
-          model.getStreamedResponse({
+          model.stream({
             input: continuationInput,
-            modelSettings: {},
             tools: [],
-            handoffs: [],
           } as any),
         ),
       ).rejects.toBe(networkError);
@@ -2147,11 +2147,9 @@ it.sequential(
       ]);
 
       await collect(
-        model.getStreamedResponse({
+        model.stream({
           input: continuationInput,
-          modelSettings: {},
           tools: [],
-          handoffs: [],
         } as any),
       );
 
@@ -2168,7 +2166,7 @@ it.sequential(
       expect(trafficBodies[2].input).not.toContainEqual(expect.objectContaining({ type: 'function_call' }));
       expect(trafficBodies[2].generate).not.toBe(false);
     } finally {
-      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
     }
   },
 );
@@ -2180,12 +2178,13 @@ it.sequential('CodexResponsesWSModel invalidates Luna wire state on previous_res
     code: 'previous_response_not_found',
   });
 
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
     seenRequests.push(request);
 
     const isChainedContinuation =
-      request.previousResponseId === 'resp_luna_ok' && request.input?.some((item: any) => item?.content === 'continue');
+      request.previousResponseId === 'resp_luna_ok' &&
+      request.input?.some((item: any) => item?.content?.[0]?.text === 'continue');
     if (isChainedContinuation && !rejectedChainedContinuation) {
       rejectedChainedContinuation = true;
       throw prevNotFoundError;
@@ -2222,30 +2221,26 @@ it.sequential('CodexResponsesWSModel invalidates Luna wire state on previous_res
       },
     );
 
-    const userMsg = { role: 'user', type: 'message', content: 'hello' };
-    const userMsg2 = { role: 'user', type: 'message', content: 'continue' };
+    const userMsg = { type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] };
+    const userMsg2 = { type: 'message', role: 'user', content: [{ type: 'text', text: 'continue' }] };
 
     // First request: succeeds, establishes stored state.
     await collect(
-      model.getStreamedResponse({
+      model.stream({
         input: [userMsg],
-        systemInstructions: 'Do it.',
-        modelSettings: {},
+        instructions: 'Do it.',
         tools: [],
-        handoffs: [],
       } as any),
     );
 
     // Second request: chains off the first, but fails with prev-not-found.
     // The error triggers invalidation, then the fallback sends full input.
     await collect(
-      model.getStreamedResponse({
+      model.stream({
         previousResponseId: 'resp_luna_ok',
         input: [userMsg, userMsg2],
-        systemInstructions: 'Do it.',
-        modelSettings: {},
+        instructions: 'Do it.',
         tools: [],
-        handoffs: [],
       } as any),
     );
 
@@ -2255,7 +2250,7 @@ it.sequential('CodexResponsesWSModel invalidates Luna wire state on previous_res
     const failedRequestIndex = seenRequests.findIndex(
       (candidate) =>
         candidate.previousResponseId === 'resp_luna_ok' &&
-        candidate.input?.some((item: any) => item?.content === 'continue'),
+        candidate.input?.some((item: any) => item?.content?.[0]?.text === 'continue'),
     );
     const fallbackRequests = seenRequests.slice(failedRequestIndex + 1);
     expect(fallbackRequests).not.toHaveLength(0);
@@ -2264,7 +2259,7 @@ it.sequential('CodexResponsesWSModel invalidates Luna wire state on previous_res
       expect.arrayContaining([userMsg, userMsg2]),
     );
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
@@ -2276,8 +2271,8 @@ it.sequential(
       code: 'previous_response_not_found',
     });
 
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
       seenRequests.push(request);
       throw previousResponseNotFound;
     };
@@ -2307,19 +2302,17 @@ it.sequential(
 
       await expect(
         collect(
-          model.getStreamedResponse({
+          model.stream({
             previousResponseId: 'resp-stale',
             input: [
-              { role: 'user', type: 'message', content: 'inspect the repo' },
+              { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect the repo' }] },
               {
-                type: 'function_call_result',
-                callId: 'call-orphaned-output',
+                type: 'tool_result',
+                id: 'call-orphaned-output',
                 output: 'tool output from the missing response',
               },
             ],
-            modelSettings: {},
             tools: [],
-            handoffs: [],
           } as any),
         ),
       ).rejects.toMatchObject({ code: 'previous_response_not_found' });
@@ -2327,7 +2320,7 @@ it.sequential(
       expect(seenRequests).toHaveLength(1);
       expect(seenRequests[0].previousResponseId).toBe('resp-stale');
     } finally {
-      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
     }
   },
 );
@@ -2336,8 +2329,8 @@ it.sequential('CodexResponsesWSModel drops orphaned tool outputs before creating
   const seenRequests: any[] = [];
   const serverCallIds = new Set<string>();
 
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
     seenRequests.push(request);
     for (const item of request.input ?? []) {
       if (item?.type === 'function_call' && typeof item.callId === 'string') {
@@ -2352,7 +2345,7 @@ it.sequential('CodexResponsesWSModel drops orphaned tool outputs before creating
       {
         type: 'response.completed',
         response: {
-          id: request.modelSettings?.providerData?.generate === false ? 'resp-warmup' : 'resp-completed',
+          id: request.providerOptions?.generate === false ? 'resp-warmup' : 'resp-completed',
           output: [],
           usage: {},
         },
@@ -2384,27 +2377,25 @@ it.sequential('CodexResponsesWSModel drops orphaned tool outputs before creating
     );
 
     await collect(
-      model.getStreamedResponse({
+      model.stream({
         input: [
-          { role: 'user', type: 'message', content: 'inspect the repo' },
+          { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect the repo' }] },
           { type: 'reasoning', content: [] },
           {
-            type: 'function_call_result',
-            callId: 'call-orphaned-output',
+            type: 'tool_result',
+            id: 'call-orphaned-output',
             output: 'tool output from a discarded response chain',
           },
         ],
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any),
     );
 
     expect(seenRequests.flatMap((request) => request.input ?? [])).not.toContainEqual(
-      expect.objectContaining({ callId: 'call-orphaned-output' }),
+      expect.objectContaining({ id: 'call-orphaned-output' }),
     );
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
@@ -2414,14 +2405,14 @@ it.sequential(
     const seenRequests: any[] = [];
     const orphanedCallId = 'call-rebuilt-chain-orphan';
     const functionCall = {
-      type: 'function_call',
-      call_id: orphanedCallId,
+      type: 'tool_call',
+      id: orphanedCallId,
       name: 'apply_patch',
       arguments: '{}',
     };
     const functionCallOutput = {
-      type: 'function_call_result',
-      callId: orphanedCallId,
+      type: 'tool_result',
+      id: orphanedCallId,
       output: 'Updated source/providers/openai.provider.ts',
       status: 'completed',
     };
@@ -2429,8 +2420,8 @@ it.sequential(
       `No tool call found for function call output with call_id ${orphanedCallId}.`,
     );
 
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
       seenRequests.push(request);
       if (request.input?.some((item: any) => (item?.call_id ?? item?.callId) === orphanedCallId)) {
         throw noToolCallForOutput;
@@ -2456,7 +2447,7 @@ it.sequential(
       getOrRefreshAccessToken: async () => 'token',
       getAccountId: () => 'acc_123',
     };
-    const openingUser = { role: 'user', type: 'message', content: 'inspect the repo' };
+    const openingUser = { type: 'message', role: 'user', content: [{ type: 'text', text: 'inspect the repo' }] };
 
     try {
       const model = new CodexResponsesWSModel(
@@ -2474,22 +2465,18 @@ it.sequential(
 
       // The rebuilt chain is established without the in-flight function call.
       await collect(
-        model.getStreamedResponse({
+        model.stream({
           input: [openingUser],
-          modelSettings: {},
           tools: [],
-          handoffs: [],
         } as any),
       );
 
       await expect(
         collect(
-          model.getStreamedResponse({
+          model.stream({
             previousResponseId: 'resp-rebuilt-chain',
             input: [openingUser, functionCall, functionCallOutput],
-            modelSettings: {},
             tools: [],
-            handoffs: [],
           } as any),
         ),
       ).rejects.toMatchObject({
@@ -2500,11 +2487,11 @@ it.sequential(
       expect(seenRequests).toHaveLength(2);
       expect(seenRequests).not.toContainEqual(
         expect.objectContaining({
-          input: expect.arrayContaining([expect.objectContaining({ callId: orphanedCallId })]),
+          input: expect.arrayContaining([expect.objectContaining({ id: orphanedCallId })]),
         }),
       );
     } finally {
-      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
     }
   },
 );
@@ -2515,8 +2502,8 @@ it.sequential('CodexResponsesWSModel unary path propagates stale tool continuati
     code: 'previous_response_not_found',
   });
 
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
     seenRequests.push(request);
     throw previousResponseNotFound;
   };
@@ -2545,31 +2532,29 @@ it.sequential('CodexResponsesWSModel unary path propagates stale tool continuati
     );
 
     await expect(
-      model.getResponse({
+      (model as any).fetchUnaryResponse({
         previousResponseId: 'resp-stale-unary',
         input: [
-          { role: 'user', type: 'message', content: 'inspect the repo' },
+          { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect the repo' }] },
           {
-            type: 'function_call_result',
-            callId: 'call-orphaned-output-unary',
+            type: 'tool_result',
+            id: 'call-orphaned-output-unary',
             output: 'tool output from the missing response',
           },
         ],
-        modelSettings: {},
         tools: [],
-        handoffs: [],
       } as any),
     ).rejects.toMatchObject({ code: 'previous_response_not_found' });
 
     expect(seenRequests).toHaveLength(1);
     expect(seenRequests[0].previousResponseId).toBe('resp-stale-unary');
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
 it.sequential('CodexResponsesWSModel unary path records Luna wire state response with correct token', async () => {
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
   const trafficBodies: any[] = [];
   let responseCount = 0;
 
@@ -2581,7 +2566,7 @@ it.sequential('CodexResponsesWSModel unary path records Luna wire state response
     recordRequestFailed() {},
   };
 
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function () {
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function () {
     responseCount += 1;
     return makeStream([
       {
@@ -2604,45 +2589,47 @@ it.sequential('CodexResponsesWSModel unary path records Luna wire state response
       } as any,
     );
 
-    const msg1 = { role: 'user', type: 'message', content: 'unary first' };
-    const msg2 = { role: 'user', type: 'message', content: 'unary second' };
+    const msg1 = { role: 'user', type: 'message', content: [{ type: 'text', text: 'unary first' }] };
+    const msg2 = { role: 'user', type: 'message', content: [{ type: 'text', text: 'unary second' }] };
 
     // First unary call establishes stored state.
-    await model.getResponse({
+    await (model as any).fetchUnaryResponse({
       input: [msg1],
-      systemInstructions: 'Do it.',
-      modelSettings: {},
+      instructions: 'Do it.',
       tools: [],
-      handoffs: [],
     } as any);
 
     // Second unary call chains off first and should produce a delta.
-    await model.getResponse({
+    await (model as any).fetchUnaryResponse({
       previousResponseId: 'resp_unary_luna_2',
       input: [msg2],
-      systemInstructions: 'Do it.',
-      modelSettings: {},
+      instructions: 'Do it.',
       tools: [],
-      handoffs: [],
     } as any);
 
     // The second call's final request body (third traffic entry) should
     // carry only the new user message as a delta.
     expect(trafficBodies).toHaveLength(3);
     expect(trafficBodies[2].previous_response_id).toBe('resp_unary_luna_2');
-    expect(trafficBodies[2].input).toEqual([expect.objectContaining({ role: 'user', content: 'unary second' })]);
+    expect(trafficBodies[2].input).toEqual([
+      expect.objectContaining({
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: 'unary second' }],
+      }),
+    ]);
   } finally {
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
   }
 });
 
 it.sequential(
   'CodexResponsesWSModel gives the SDK a composed request signal before receiving websocket events',
   async () => {
-    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
     const external = new AbortController();
     let sdkSignal: AbortSignal | undefined;
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
       sdkSignal = request.signal;
       return makeStream([{ type: 'response.completed', response: { id: 'resp_1', output: [], usage: {} } }]);
     };
@@ -2655,11 +2642,9 @@ it.sequential(
       );
 
       await collect(
-        model.getStreamedResponse({
-          input: [{ role: 'user', content: 'hello' }],
-          modelSettings: {},
+        model.stream({
+          input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
           tools: [],
-          handoffs: [],
           signal: external.signal,
         } as any),
       );
@@ -2668,17 +2653,17 @@ it.sequential(
       expect(sdkSignal).not.toBe(external.signal);
       expect(sdkSignal?.aborted).toBe(false);
     } finally {
-      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+      (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
     }
   },
 );
 
 it.sequential('CodexResponsesWSModel applies configured websocket receive timeouts', async () => {
   vi.useFakeTimers();
-  const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  const originalFetch = (OpenAIResponsesWSModel.prototype as any).fetchResponse;
   const external = new AbortController();
   let sdkSignal: AbortSignal | undefined;
-  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+  (OpenAIResponsesWSModel.prototype as any).fetchResponse = async function (request: any) {
     sdkSignal = request.signal;
     return {
       [Symbol.asyncIterator]: () => ({
@@ -2699,11 +2684,9 @@ it.sequential('CodexResponsesWSModel applies configured websocket receive timeou
       { firstFrameMs: 25, interFrameMs: 50 },
     );
     const pending = collect(
-      model.getStreamedResponse({
-        input: [{ role: 'user', content: 'hello' }],
-        modelSettings: {},
+      model.stream({
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
         tools: [],
-        handoffs: [],
         signal: external.signal,
       } as any),
     );
@@ -2715,7 +2698,7 @@ it.sequential('CodexResponsesWSModel applies configured websocket receive timeou
     expect((sdkSignal?.reason as Error).message).toBe('WebSocket first frame timeout');
   } finally {
     external.abort();
-    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    (OpenAIResponsesWSModel.prototype as any).fetchResponse = originalFetch;
     vi.useRealTimers();
   }
 });

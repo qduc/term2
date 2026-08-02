@@ -51,10 +51,8 @@ function createModel(baseUrl: string, receiveTimeoutMs = 500, withSessionContext
 
 function request(): any {
   return {
-    input: [{ role: 'user', content: 'hello' }],
-    modelSettings: {},
+    input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
     tools: [],
-    handoffs: [],
   };
 }
 
@@ -216,7 +214,7 @@ it('performs history warmup without generating the user turn twice', async () =>
   globalThis.WebSocket = NodeWebSocket as unknown as typeof WebSocket;
   const model = createModel(server.baseUrl, 500, true);
 
-  for await (const _event of model.getStreamedResponse(request())) {
+  for await (const _event of model.stream(request())) {
     // Consume the complete turn.
   }
 
@@ -230,12 +228,12 @@ it('streams a completed Codex response over a real local websocket', async () =>
   const model = createModel(server.baseUrl);
 
   const events: any[] = [];
-  for await (const event of model.getStreamedResponse(request())) {
+  for await (const event of model.stream(request())) {
     events.push(event);
   }
 
-  expect(events.at(-1)?.event?.type).toBe('response.completed');
-  expect(events.at(-1)?.event?.response.output[0].content[0].text).toBe('Hello from fake Codex');
+  expect(events.at(-1)?.type).toBe('completion');
+  expect(events.at(-1)?.output[0].content[0].text).toBe('Hello from fake Codex');
   expect(server.receivedRequests).toHaveLength(1);
   expect(server.receivedRequests[0]?.type).toBe('response.create');
 });
@@ -246,7 +244,7 @@ it('times out when the server stalls before the first response frame', async () 
   const model = createModel(server.baseUrl, 25);
 
   const consume = async () => {
-    for await (const _event of model.getStreamedResponse(request())) {
+    for await (const _event of model.stream(request())) {
       // The fake server intentionally never responds.
     }
   };
@@ -262,11 +260,11 @@ it('times out after partial output when the server stalls mid-stream', async () 
   const events: any[] = [];
 
   const consume = async () => {
-    for await (const event of model.getStreamedResponse(request())) events.push(event);
+    for await (const event of model.stream(request())) events.push(event);
   };
 
   await expect(consume()).rejects.toThrow('WebSocket idle timeout');
-  expect(events.some((event) => event.event?.type === 'response.output_text.delta')).toBe(true);
+  expect(events.some((event) => event.type === 'text_delta')).toBe(true);
   expect(server.receivedRequests).toHaveLength(1);
 });
 
@@ -277,11 +275,11 @@ it('surfaces an abnormal close after partial output without replaying the turn',
   const events: any[] = [];
 
   const consume = async () => {
-    for await (const event of model.getStreamedResponse(request())) events.push(event);
+    for await (const event of model.stream(request())) events.push(event);
   };
 
   await expect(consume()).rejects.toThrow('before a terminal response event');
-  expect(events.some((event) => event.event?.type === 'response.output_text.delta')).toBe(true);
+  expect(events.some((event) => event.type === 'text_delta')).toBe(true);
   expect(server.receivedRequests).toHaveLength(1);
 });
 
@@ -291,7 +289,7 @@ it('surfaces a provider error frame', async () => {
   const model = createModel(server.baseUrl);
 
   const consume = async () => {
-    for await (const _event of model.getStreamedResponse(request())) {
+    for await (const _event of model.stream(request())) {
       // The error frame terminates the stream.
     }
   };
@@ -315,7 +313,7 @@ it('retries when the websocket connection fails before the turn can be sent', as
   });
 
   const consume = async () => {
-    for await (const _event of model.getStreamedResponse(request())) {
+    for await (const _event of model.stream(request())) {
       // No event can arrive because the connection is refused.
     }
   };
@@ -334,12 +332,12 @@ it('does not replay an accepted but unacknowledged turn through the production r
   });
 
   const consume = async () => {
-    for await (const _event of model.getStreamedResponse(request())) {
+    for await (const _event of model.stream(request())) {
       // The accepted turn has an ambiguous outcome and must not be replayed.
     }
   };
 
-  await expect(consume()).rejects.toThrow('before any response events were received');
+  await expect(consume()).rejects.toThrow('before a terminal response event');
   expect(server.receivedRequests).toHaveLength(1);
 });
 
@@ -349,7 +347,7 @@ it('replays full history only after the server explicitly rejects the previous r
   const model = createModel(server.baseUrl);
   const chainedRequest = { ...request(), previousResponseId: 'resp_stale' };
 
-  for await (const _event of model.getStreamedResponse(chainedRequest)) {
+  for await (const _event of model.stream(chainedRequest)) {
     // The explicit rejection is recovered by sending full history.
   }
 
@@ -365,12 +363,12 @@ it('does not replay an accepted chained turn as full history', async () => {
   const chainedRequest = { ...request(), previousResponseId: 'resp_previous' };
 
   const consume = async () => {
-    for await (const _event of model.getStreamedResponse(chainedRequest)) {
+    for await (const _event of model.stream(chainedRequest)) {
       // The server accepts the chained turn and closes before acknowledging it.
     }
   };
 
-  await expect(consume()).rejects.toThrow('before any response events were received');
+  await expect(consume()).rejects.toThrow('before a terminal response event');
   expect(server.receivedRequests).toHaveLength(1);
 });
 
@@ -380,11 +378,11 @@ it('surfaces an abnormal close before the first response frame', async () => {
   const model = createModel(server.baseUrl);
 
   const consume = async () => {
-    for await (const _event of model.getStreamedResponse(request())) {
+    for await (const _event of model.stream(request())) {
       // The fake server closes before yielding an event.
     }
   };
 
-  await expect(consume()).rejects.toThrow('before any response events were received');
+  await expect(consume()).rejects.toThrow('before a terminal response event');
   expect(server.receivedRequests).toHaveLength(1);
 });

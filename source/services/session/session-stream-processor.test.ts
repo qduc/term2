@@ -145,7 +145,7 @@ it.each(['delta', 'full_history'] as const)(
       expect.arrayContaining([
         expect.objectContaining({ type: 'text_delta' }),
         expect.objectContaining({ type: 'model' }),
-        expect.objectContaining({ type: 'run_item_stream_event' }),
+        expect.objectContaining({ type: 'item' }),
       ]),
     );
     expect(persisted).toEqual(
@@ -294,7 +294,7 @@ it('SessionStreamProcessor.process() streams events and updates toolTracker', as
 
   const stream = makeStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',
@@ -305,7 +305,7 @@ it('SessionStreamProcessor.process() streams events and updates toolTracker', as
       },
     },
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call_result',
@@ -362,8 +362,8 @@ it('SessionStreamProcessor.process() aborts a stream that enters a repeating tex
   });
   const stream = makeStream([
     {
-      type: 'raw_model_stream_event',
-      data: { type: 'output_text_delta', delta: 'abc '.repeat(60) },
+      type: 'text_delta',
+      text: 'abc '.repeat(60),
     },
   ]);
 
@@ -408,29 +408,25 @@ it('SessionStreamProcessor.process() preserves reasoning before recovered tool c
 
   const stream = makeStream([
     {
-      type: 'raw_model_stream_event',
-      data: { type: 'model', event: { choices: [{ delta: { reasoning_content: 'I should inspect.' } }] } },
+      type: 'reasoning_delta',
+      text: 'I should inspect.',
     },
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
-        rawItem: {
-          type: 'function_call',
-          callId: 'call-1',
-          name: 'read_file',
-          arguments: JSON.stringify({ path: 'package.json' }),
-        },
+        type: 'function_call',
+        callId: 'call-1',
+        name: 'read_file',
+        arguments: JSON.stringify({ path: 'package.json' }),
       },
     },
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
-        rawItem: {
-          type: 'function_call_result',
-          callId: 'call-1',
-          name: 'read_file',
-          output: 'contents',
-        },
+        type: 'function_call_result',
+        callId: 'call-1',
+        name: 'read_file',
+        output: 'contents',
       },
     },
   ]);
@@ -482,7 +478,7 @@ it('SessionStreamProcessor.process() does not log tool results for startStream s
 
   const stream = makeStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call_result',
@@ -535,7 +531,7 @@ it('SessionStreamProcessor.process() stops pulling stale stream work after gener
   const token = generationGuard.capture();
   const stream = makeStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',
@@ -546,7 +542,7 @@ it('SessionStreamProcessor.process() stops pulling stale stream work after gener
       },
     },
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call_result',
@@ -608,7 +604,7 @@ it('SessionStreamProcessor.process() ignores a stale tool result that arrives wh
   const stream = {
     [Symbol.asyncIterator]: async function* () {
       yield {
-        type: 'run_item_stream_event',
+        type: 'item',
         item: {
           rawItem: {
             type: 'function_call',
@@ -622,7 +618,7 @@ it('SessionStreamProcessor.process() ignores a stale tool result that arrives wh
       secondPullStarted = true;
       await releaseSecond.promise;
       yield {
-        type: 'run_item_stream_event',
+        type: 'item',
         item: {
           rawItem: {
             type: 'function_call_result',
@@ -1405,13 +1401,13 @@ it('SessionStreamProcessor.process() feeds every raw run item into the journal',
 
   const stream = makeStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{}' },
       },
     },
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: { type: 'function_call_result', callId: 'call-1', name: 'shell', output: 'ok' },
       },
@@ -1450,19 +1446,19 @@ it('SessionStreamProcessor.process() records completed outputs in the live ledge
   });
   const stream = makeStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: { rawItem: { type: 'function_call', callId: 'call-a', name: 'shell', arguments: '{}' } },
     },
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: { rawItem: { type: 'function_call_result', callId: 'call-a', output: 'a' } },
     },
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: { rawItem: { type: 'function_call', callId: 'call-b', name: 'shell', arguments: '{}' } },
     },
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: { rawItem: { type: 'function_call_result', callId: 'call-b', output: 'b' } },
     },
   ]);
@@ -1538,13 +1534,13 @@ it('SessionStreamProcessor.process() drops journal writes after generation inval
   const token = generationGuard.capture();
   const stream = makeStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{}' },
       },
     },
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: { type: 'function_call_result', callId: 'call-1', name: 'shell', output: 'ok' },
       },
@@ -1561,7 +1557,7 @@ it('SessionStreamProcessor.process() drops journal writes after generation inval
   await generator.next();
   // Invalidate the generation so subsequent journal writes are dropped.
   generationGuard.invalidate();
-  // Drain the rest. The second run_item_stream_event is processed after
+  // Drain the rest. The second item event is processed after
   // invalidation and must not be fed to the journal.
   while (true) {
     const r = await generator.next();

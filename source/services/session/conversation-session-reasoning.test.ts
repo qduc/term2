@@ -13,41 +13,9 @@ it('ConversationSession extracts reasoning_content from stream', async () => {
   const mockAgentClient: any = {
     startStream: async () => ({
       [Symbol.asyncIterator]: async function* () {
-        yield {
-          data: {
-            type: 'model',
-            event: {
-              choices: [
-                {
-                  delta: {
-                    reasoning_content: 'think',
-                  },
-                },
-              ],
-            },
-          },
-        };
-        yield {
-          data: {
-            type: 'model',
-            event: {
-              choices: [
-                {
-                  delta: {
-                    reasoning_content: 'ing',
-                  },
-                },
-              ],
-            },
-          },
-        };
-        yield {
-          type: 'text_delta',
-          delta: 'Hi',
-        };
-        yield {
-          type: 'final',
-        };
+        yield { type: 'reasoning_delta', text: 'think' };
+        yield { type: 'reasoning_delta', text: 'ing' };
+        yield { type: 'text_delta', text: 'Hi' };
       },
       lastResponseId: 'resp-1',
     }),

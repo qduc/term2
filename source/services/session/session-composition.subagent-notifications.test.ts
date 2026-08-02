@@ -82,7 +82,7 @@ const makeClient = (sinks: Sinks, overrides: Record<string, unknown> = {}) =>
                 done = true;
                 return Promise.resolve({
                   done: false,
-                  value: { type: 'response.output_text.delta', delta: 'ok' },
+                  value: { type: 'text_delta', text: 'ok' },
                 });
               }
               return Promise.resolve({ done: true, value: undefined });

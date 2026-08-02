@@ -88,7 +88,7 @@ it('projects background lifecycle without making the foreground message history 
         lastResponseId: null,
         async *[Symbol.asyncIterator]() {
           yield {
-            type: 'run_item_stream_event',
+            type: 'item',
             item: {
               rawItem: {
                 type: 'function_call',
@@ -99,7 +99,7 @@ it('projects background lifecycle without making the foreground message history 
             },
           };
           yield {
-            type: 'run_item_stream_event',
+            type: 'item',
             item: {
               rawItem: {
                 type: 'function_call_result',
@@ -114,7 +114,7 @@ it('projects background lifecycle without making the foreground message history 
               },
             },
           };
-          yield { type: 'response.output_text.delta', delta: 'Background explorer created.' };
+          yield { type: 'text_delta', text: 'Background explorer created.' };
         },
       };
     },

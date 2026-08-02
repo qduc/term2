@@ -68,7 +68,7 @@ const runResponseContinuation = async ({
       receivedKnownCallIds = options.knownToolCallIds;
       receivedPreviousResponseId = options.previousResponseId;
       receivedProviderHistorySnapshot = options.providerHistorySnapshot;
-      const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'done' }]);
+      const stream = new MockStream([{ type: 'text_delta', text: 'done' }]);
       stream.finalOutput = 'done';
       return stream;
     },
@@ -213,7 +213,7 @@ it('keeps rejected and approved sibling ids during abort resolution', async () =
     getProvider: () => 'openai',
     async continueRunStream(_state: unknown, options: { toolResultCallIds?: string[] }) {
       receivedCallIds = options.toolResultCallIds;
-      const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'resolved' }]);
+      const stream = new MockStream([{ type: 'text_delta', text: 'resolved' }]);
       stream.finalOutput = 'resolved';
       return stream;
     },

@@ -7,9 +7,8 @@
  * available for replay/finalization.  Keeping continuation state opaque here
  * prevents the session layer from depending on a provider runner's type.
  */
-import { createContinuationHandle, type ContinuationHandle } from '../contracts/continuation-handle.js';
+import type { ContinuationHandle } from '../contracts/continuation-handle.js';
 import type { ApplicationRunEvent } from '../contracts/application-stream.js';
-import { normalizeLegacyAgentEvent, normalizeLegacySnapshotItems } from './legacy-agent-stream-adapter.js';
 
 const APPLICATION_STREAM = Symbol('application-stream');
 
@@ -58,55 +57,11 @@ function projectProviderItems(items: readonly unknown[]): unknown[] {
   });
 }
 
-/** Adapt a provider/runtime stream to the app-owned stream contract. */
-export function adaptAgentStream(source: unknown): AgentStream {
-  const stream = source as Record<string | symbol, any>;
-  if (stream[APPLICATION_STREAM] === true) return source as AgentStream;
-  // Read legacy raw state only at the runtime boundary. Once wrapped, callers
-  // consume the explicit app-owned usage field and never reopen opaque state.
-  const legacyRunUsage = stream.state?.usage;
-  const state = stream.state === undefined ? undefined : createContinuationHandle(stream.state);
-  return {
-    [APPLICATION_STREAM]: true,
-    async *[Symbol.asyncIterator](): AsyncIterator<ApplicationRunEvent> {
-      const state = {
-        toolNames: new Map<number | string, string>(),
-        toolArgumentChars: new Map<number | string, number>(),
-      };
-      for await (const rawEvent of stream as any) {
-        for (const event of normalizeLegacyAgentEvent(rawEvent, state)) yield event;
-      }
-    },
-    get completed() {
-      return stream.completed;
-    },
-    get history() {
-      return normalizeLegacySnapshotItems(Array.isArray(stream.history) ? stream.history : []);
-    },
-    get newItems() {
-      return normalizeLegacySnapshotItems(Array.isArray(stream.newItems) ? stream.newItems : []);
-    },
-    get output() {
-      return normalizeLegacySnapshotItems(Array.isArray(stream.output) ? stream.output : []);
-    },
-    get finalOutput() {
-      return stream.finalOutput;
-    },
-    get lastResponseId() {
-      return stream.lastResponseId;
-    },
-    get interruptions() {
-      return stream.interruptions;
-    },
-    get cancelled() {
-      return stream.cancelled;
-    },
-    get rawResponses() {
-      return stream.rawResponses;
-    },
-    get runUsage() {
-      return stream.runUsage ?? legacyRunUsage;
-    },
-    state,
-  };
+/** Construct the only branded application stream representation. */
+export function createAgentStream(stream: Omit<AgentStream, typeof APPLICATION_STREAM>): AgentStream {
+  return Object.defineProperty(stream, APPLICATION_STREAM, {
+    value: true,
+    enumerable: false,
+    writable: false,
+  }) as AgentStream;
 }

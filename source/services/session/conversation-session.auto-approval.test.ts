@@ -655,7 +655,7 @@ it('auto mode: approved continuation emits tool_started before streamed output a
   const initialStream = createInterruptedStream([
     createShellInterruption({ callId: 'call-auto-sequence', command: 'ls source' }),
   ]);
-  const finalStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Files listed.' }]);
+  const finalStream = new MockStream([{ type: 'text_delta', text: 'Files listed.' }]);
   finalStream.finalOutput = 'Files listed.';
 
   const { bundle } = createSessionHarness({

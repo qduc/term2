@@ -11,7 +11,7 @@ import {
 import type { ClientCall } from './test-helpers/conversation-session-fixtures.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 it('run() resyncs full history after resume before returning to chaining provider', async () => {
-  const firstResumedStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Resynced reply' }]);
+  const firstResumedStream = new MockStream([{ type: 'text_delta', text: 'Resynced reply' }]);
   firstResumedStream.finalOutput = 'Resynced reply';
   firstResumedStream.lastResponseId = 'resp-resynced';
   firstResumedStream.history = [
@@ -31,7 +31,7 @@ it('run() resyncs full history after resume before returning to chaining provide
     },
   ];
 
-  const chainedStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Chained reply' }]);
+  const chainedStream = new MockStream([{ type: 'text_delta', text: 'Chained reply' }]);
   chainedStream.finalOutput = 'Chained reply';
   chainedStream.lastResponseId = 'resp-chained';
   chainedStream.output = [
@@ -130,12 +130,12 @@ it('run() ignores a stale completion after importState() bumps generation', asyn
     }
 
     async *[Symbol.asyncIterator]() {
-      yield { type: 'response.output_text.delta', delta: 'stale reply' };
+      yield { type: 'text_delta', text: 'stale reply' };
       await gate;
     }
   }
 
-  const freshStream = new MockStream([{ type: 'response.output_text.delta', delta: 'fresh reply' }]);
+  const freshStream = new MockStream([{ type: 'text_delta', text: 'fresh reply' }]);
   freshStream.finalOutput = 'fresh reply';
   freshStream.lastResponseId = 'resp-fresh';
 
@@ -188,7 +188,7 @@ it('run() ignores a stale completion after importState() bumps generation', asyn
 });
 
 it('run() with image attachment does not throw when supportsChaining is true', async () => {
-  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Reply' }]);
+  const stream = new MockStream([{ type: 'text_delta', text: 'Reply' }]);
   stream.finalOutput = 'Reply';
 
   let receivedInput: unknown;
@@ -293,7 +293,7 @@ it('previewLargeUncachedInput() estimates from outgoing input instead of accepti
 });
 
 it('sendMessage() records successful large guard state after provider request completion', async () => {
-  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'ok' }]);
+  const firstStream = new MockStream([{ type: 'text_delta', text: 'ok' }]);
   firstStream.finalOutput = 'ok';
   firstStream.history = [
     { role: 'user', type: 'message', content: 'first' },
@@ -407,7 +407,7 @@ it('run() keeps follow-up input as a user turn after abandoning an aborted appro
   // Plant an aborted approval context directly via approvalState so the
   // session's consumeAborted() picks it up. The downstream fake-execution
   // path will throw (no real interruption), but we only care about event order.
-  const followupStream = new MockStream([{ type: 'response.output_text.delta', delta: 'followed up' }]);
+  const followupStream = new MockStream([{ type: 'text_delta', text: 'followed up' }]);
   followupStream.finalOutput = 'followed up';
 
   const mockClient = createMockAgentClient({
@@ -444,11 +444,11 @@ it('run() keeps follow-up input as a user turn after abandoning an aborted appro
 });
 
 it('switchProvider() clears provider continuity but preserves transcript history', async () => {
-  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'First reply' }]);
+  const firstStream = new MockStream([{ type: 'text_delta', text: 'First reply' }]);
   firstStream.finalOutput = 'First reply';
   firstStream.lastResponseId = 'resp-openai-1';
 
-  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Second reply' }]);
+  const secondStream = new MockStream([{ type: 'text_delta', text: 'Second reply' }]);
   secondStream.finalOutput = 'Second reply';
   secondStream.lastResponseId = 'resp-openrouter-1';
 
@@ -513,11 +513,11 @@ it('switchProvider() clears provider continuity but preserves transcript history
 });
 
 it('setModel() clears provider continuity and forces full-history replay on the next turn', async () => {
-  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'First reply' }]);
+  const firstStream = new MockStream([{ type: 'text_delta', text: 'First reply' }]);
   firstStream.finalOutput = 'First reply';
   firstStream.lastResponseId = 'resp-model-1';
 
-  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Second reply' }]);
+  const secondStream = new MockStream([{ type: 'text_delta', text: 'Second reply' }]);
   secondStream.finalOutput = 'Second reply';
   secondStream.lastResponseId = 'resp-model-2';
 
@@ -563,7 +563,7 @@ it('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injecte
   const toolCallId = 'call_abc123';
   const turn1Events = [
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',
@@ -574,7 +574,7 @@ it('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injecte
       },
     },
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call_output',
@@ -583,7 +583,7 @@ it('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injecte
         },
       },
     },
-    { type: 'response.output_text.delta', delta: 'Done' },
+    { type: 'text_delta', text: 'Done' },
   ];
 
   const stream1 = new MockStream(turn1Events);
@@ -610,7 +610,7 @@ it('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injecte
 
   // Turn 2 (after undo + retry): capture what input the model receives.
   let retryInput: unknown;
-  const stream2 = new MockStream([{ type: 'response.output_text.delta', delta: 'Retried' }]);
+  const stream2 = new MockStream([{ type: 'text_delta', text: 'Retried' }]);
   stream2.finalOutput = 'Retried';
   stream2.history = [
     { role: 'user', type: 'message', content: 'run echo hello' },
@@ -673,7 +673,7 @@ it('undoLastUserTurn() preserves earlier tool ledger entries that still belong t
 
   const stream1 = new MockStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',
@@ -684,7 +684,7 @@ it('undoLastUserTurn() preserves earlier tool ledger entries that still belong t
       },
     },
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call_output',
@@ -693,7 +693,7 @@ it('undoLastUserTurn() preserves earlier tool ledger entries that still belong t
         },
       },
     },
-    { type: 'response.output_text.delta', delta: 'First done' },
+    { type: 'text_delta', text: 'First done' },
   ]);
   stream1.finalOutput = 'First done';
   stream1.lastResponseId = 'resp-first';
@@ -708,7 +708,7 @@ it('undoLastUserTurn() preserves earlier tool ledger entries that still belong t
 
   const stream2 = new MockStream([
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call',
@@ -719,7 +719,7 @@ it('undoLastUserTurn() preserves earlier tool ledger entries that still belong t
       },
     },
     {
-      type: 'run_item_stream_event',
+      type: 'item',
       item: {
         rawItem: {
           type: 'function_call_output',
@@ -728,7 +728,7 @@ it('undoLastUserTurn() preserves earlier tool ledger entries that still belong t
         },
       },
     },
-    { type: 'response.output_text.delta', delta: 'Second done' },
+    { type: 'text_delta', text: 'Second done' },
   ]);
   stream2.finalOutput = 'Second done';
   stream2.lastResponseId = 'resp-second';
@@ -742,7 +742,7 @@ it('undoLastUserTurn() preserves earlier tool ledger entries that still belong t
   ];
 
   let retryInput: unknown;
-  const retryStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Retry done' }]);
+  const retryStream = new MockStream([{ type: 'text_delta', text: 'Retry done' }]);
   retryStream.finalOutput = 'Retry done';
   retryStream.lastResponseId = 'resp-retry';
   retryStream.history = [
@@ -812,15 +812,15 @@ it('undoLastUserTurn() preserves earlier tool ledger entries that still belong t
 });
 
 it('aborting a streaming turn clears provider continuity and forces full history replay on the next turn', async () => {
-  const stream1 = new MockStream([{ type: 'response.output_text.delta', delta: 'First reply' }]);
+  const stream1 = new MockStream([{ type: 'text_delta', text: 'First reply' }]);
   stream1.finalOutput = 'First reply';
   stream1.lastResponseId = 'resp-1';
 
   // For the second turn, we yield one delta then get aborted
-  const stream2 = new MockStream([{ type: 'response.output_text.delta', delta: 'Thinking...' }]);
+  const stream2 = new MockStream([{ type: 'text_delta', text: 'Thinking...' }]);
   stream2.lastResponseId = 'resp-2';
 
-  const stream3 = new MockStream([{ type: 'response.output_text.delta', delta: 'Third reply' }]);
+  const stream3 = new MockStream([{ type: 'text_delta', text: 'Third reply' }]);
   stream3.finalOutput = 'Third reply';
   stream3.lastResponseId = 'resp-3';
 

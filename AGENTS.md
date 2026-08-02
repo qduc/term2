@@ -1,6 +1,6 @@
 # What Is This
 
-A terminal-based AI assistant built with React (Ink), OpenAI Agents SDK, TypeScript, and Node.js. It lets users chat with an AI agent in real time; the agent can execute shell commands and modify files, with interactive approval prompts for safety.
+A terminal-based AI assistant built with React (Ink), an application-owned agent runtime, TypeScript, and Node.js. (The `@openai/agents` SDK was removed; `services/agent-runtime/application-run-loop.ts` is our own run loop.) It lets users chat with an AI agent in real time; the agent can execute shell commands and modify files, with interactive approval prompts for safety.
 
 # Orientation
 

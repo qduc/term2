@@ -19,6 +19,6 @@ layer. File paths below reflect the current locations.
 11. `services/retry/` classifies errors and handles recovery. `fresh_start_required` lets `TurnWorkflow` re-drive initial execution from history.
 12. `ConversationAdapter` collects the terminal result, `ConversationOrchestrator` applies it, and it renders in the message list.
 
-`source/services/agent-runtime/` provides a parallel runtime path for agent workflows, with resolution, budgeting, and structured output.
+`source/services/agent-runtime/` is not a parallel path — it is the shared engine. `ApplicationRunLoop` (`application-run-loop.ts`) does the actual model streaming and tool dispatch for *every* caller: step 7 above reaches it via `AgentClient`, and the mentor/nested subagent runners construct it directly. The directory also owns agent/model/tool/skill resolution, execution budgeting, and structured output.
 
 `non-interactive.ts` runs this same conversation system without the Ink UI.

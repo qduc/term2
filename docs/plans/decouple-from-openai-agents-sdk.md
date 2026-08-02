@@ -1,9 +1,9 @@
 # Decoupling from `@openai/agents`
 
-**Status:** Runtime package removal complete; semantic compatibility retirement remains active. The `@openai/agents*` packages are gone, reverse AI-SDK adapters are deleted, and session/UI code now consumes one application-owned event protocol. Remaining runner and provider transport compatibility work is recorded below.
+**Status:** Runtime package removal complete; semantic compatibility retirement remains active. The `@openai/agents*` packages are gone, compatibility runners and the OpenAI streamed-model adapter are deleted, and session/UI code consumes one application-owned event protocol. Remaining provider transport and legacy-contract work is recorded below.
 **Last updated:** 2026-08-02
 
-The application-owned run loop, continuation contracts, direct AI-SDK providers, and canonical session stream are landed. Legacy SDK-shaped stream envelopes are isolated in one ingress adapter and no longer parsed by session/UI modules. The remaining work is to retire compatibility runners and convert the OpenAI/Codex transports to the application-owned turn protocol directly.
+The application-owned run loop, continuation contracts, direct AI-SDK providers, direct OpenAI Responses transports, and canonical session stream are landed. Legacy SDK-shaped stream envelopes are isolated in one ingress adapter and no longer parsed by session/UI modules. The remaining work is Codex and OpenAI-compatible transport conversion, legacy model-contract retirement, ingress-adapter retirement, and terminology cleanup.
 
 ### Final verification — 2026-08-01
 
@@ -18,51 +18,362 @@ The application-owned run loop, continuation contracts, direct AI-SDK providers,
 
 ## Resume here
 
-### Remaining semantic-retirement work
+### Current state
 
-Landed in the latest retirement slices:
+Runtime package removal and runner migration are complete. The active work is now only semantic
+compatibility retirement:
 
-- `agents-model-bridge.ts` and the application-to-legacy reverse adapter were deleted.
-- AI SDK Anthropic, Google, and OpenRouter expose `StreamedModelTurn` directly.
-- Custom/OpenCode compatibility runners resolve streamed models rather than provider wrappers.
-- `ApplicationRunEvent` is the only session/UI stream protocol.
-- SDK-shaped stream parsing is isolated in `services/legacy-agent-stream-adapter.ts`.
-- `stream-event-processor.ts` no longer understands `raw_model_stream_event`, `run_item_stream_event`, or nested `model/data/event` envelopes.
-- Static guards cover the migrated provider and session seams.
+- the registry has one execution factory, `createStreamedModel`;
+- providers execute through `ApplicationRunLoop` and `StreamedModelTurn`;
+- OpenAI Responses HTTP and WebSocket transports already use the typed turn contract directly;
+- Codex still adapts a typed turn to `ModelRequest`/`modelSettings`, consumes legacy stream
+  envelopes, and is the only production `LegacyModelProvider`;
+- OpenAI-compatible Chat already has a typed `stream()` path, but still exposes dead legacy
+  `getResponse()` / `getStreamedResponse()` behavior selected by `request.modelSettings`;
+- `RetryingModel` and two apparently unreferenced OpenAI-compatible message builders keep
+  `contracts/model.ts` alive;
+- `AgentStream` still routes unmarked `ApplicationRunLoop` streams through
+  `legacy-agent-stream-adapter.ts`. Native stream marking is therefore a prerequisite to deleting
+  that adapter, not optional cleanup.
 
-Do the remaining work in this order, one reviewed worktree per slice:
+Historical test totals and baseline failures below are not current acceptance evidence. Each slice
+must record only commands actually run from its own final commit.
 
-1. **Migrate runner consumers.** Move `AgentChatService`, mentor, edit-healing, execution subagents, and transient/override clients to `ApplicationRunLoop` plus `StreamedModelTurn`. Characterize structured `chatJson`, approval continuation, max-turn, retry, and cancellation behavior before changing routing.
-2. **Delete compatibility runner infrastructure.** Once every consumer is migrated, remove `RunnerManager`, `LegacyRunner`, `createRunner`, `createApplicationCompatibilityRunner`, `settleProviderRun`, and tracing flags that only model the old runner behavior. Make `createStreamedModel` the sole provider registry execution factory.
-3. **Convert OpenAI transport directly.** Make the HTTP and WebSocket Responses implementations accept `StreamedModelTurnRequest` and emit `StreamedModelTurnEvent` without `openai-streamed-model-adapter.ts`, `ModelRequest`, `ModelResponse`, `response_started`, or `response_done`. Preserve request projection, prompt cache, reasoning metadata, tool IDs, usage, continuation observation, terminal errors, and HTTP/WS parity.
-4. **Convert Codex transport directly.** Remove `LegacyModelProvider`/`LegacyModel` from Codex and replace `modelSettings`/`response_done` compatibility shapes with the typed turn contract. Preserve ChatGPT plan limits, encrypted reasoning, prompt cache, `store=false`, WebSocket reconnect behavior, and authoritative terminal-event checks.
-5. **Convert OpenAI-compatible chat transport.** Remove request-shape duck typing (`request.modelSettings`) and expose one typed streamed-turn implementation. Preserve Chat Completions tool-fragment assembly, provider options, retries, and runtime-provider behavior.
-6. **Delete legacy model contracts and retry wrappers.** Remove `ModelRequest`, `ModelResponse`, `StreamEvent`, `LegacyModel`, and `LegacyModelProvider` from `contracts/model.ts`; migrate `RetryingModel` and message builders to the application contract or provider-local native types.
-7. **Retire the legacy stream ingress adapter.** After no legacy runner remains, delete `legacy-agent-stream-adapter.ts`. Strengthen the static guard so SDK envelope names are forbidden throughout production source, except persisted-history decoders where explicitly documented.
-8. **Clean stale terminology and comments.** Update Agents-SDK comments in usage collection, conversation storage, tracing, request-prefix binding, and provider traffic only after their referenced compatibility behavior is actually removed. Do not delete unrelated settings or persisted-history migrations merely because they use the word `legacy`.
+### Fastest safe dependency graph
 
-Acceptance gates for every provider/runtime slice:
+```text
+baseline inventory / red-test ownership
+            |
+            +----------------------------+
+            |                            |
+            v                            v
+  S1 Chat legacy cleanup       S2 Codex direct transport
+       (small, local)            (large, transport-local)
+            |                            |
+            +------------+---------------+
+                         v
+              S3 delete legacy model
+                 contract and dead builders
+                         |
+                         v
+              S4 mark native streams +
+                 delete ingress adapter
+                         |
+                         v
+              S5 terminology/source sweep
+                         |
+                         v
+              S6 independent final review
+                 and full verification
+```
 
-- Add a red-proof contract test before changing the implementation.
-- Preserve missing-terminal and incomplete-stream failures; never convert them to empty success.
-- Run focused provider/runtime/session tests and `pnpm typecheck`.
-- Run `pnpm test:provider-black-box` for provider, registry, bridge, run-loop, or non-interactive changes.
-- Run `pnpm build && pnpm test` before merge.
-- Review the final diff independently and triage findings before fixes.
+S1 and S2 are the only implementation slices that should run concurrently. While they run,
+read-only agents may prepare S3 symbol inventory and S4 fixture inventory, but must not edit shared
+files. S3, S4, S5, and final integration are sequential.
 
-Final completion criteria:
+### Coordination rules
 
-- One provider factory: `createStreamedModel`.
-- One provider turn interface: `StreamedModelTurn`.
-- One application stream interface: `ApplicationRunEvent`.
-- No production `LegacyRunner`, `LegacyModel`, `ModelRequest`, `ModelResponse`, `RunnerManager`, compatibility runner, OpenAI streamed-model adapter, or legacy stream adapter.
-- SDK envelope names absent from production source outside explicitly retained persisted-data decoders.
-- Existing saved conversations still replay successfully.
-- Full tests, provider black-box suite, typecheck, formatting, and source audit pass.
+1. Re-check `git status` before creating or merging worktrees. The primary checkout currently has
+   unrelated edits; never stash, discard, or absorb them.
+2. Record the baseline commit and create a clean integration worktree at `.worktrees/int`. Create
+   short slice worktrees under `.worktrees/`—`chat`, `cdx`, `model`, `stream`, `close`—to avoid the
+   known Unix-socket path-length failure. Run `pnpm install` in each worktree. Merge reviewed slices
+   into `int`, never into the dirty primary checkout.
+3. Use one writer per slice. S2 exclusively owns `retrying-model.ts` while S1 runs. Neither S1 nor
+   S2 may edit `contracts/model.ts`, the registry, common message builders, or shared black-box
+   fixtures.
+4. Every behavior change starts with a red-proof test applied to the pre-change parent. Record the
+   failing command and failure reason in the commit/hand-off; do not rely on a test that was only
+   observed green after implementation.
+5. Provider changes must run `pnpm test:provider-black-box` during development. Missing terminal,
+   incomplete response, failed response, transport close, and ambiguous retry paths must remain
+   failures—never empty success.
+6. After each writer finishes, use a fresh-context read-only reviewer. Send findings to review
+   triage before fixing them. Merge only the reviewed final commit with `git merge --no-ff`.
+7. Do not mix telemetry or broader continuation-policy work into these slices. Existing live-only
+   policy deferrals in `post-refactor-provider-boundary-audit.md` remain deferrals.
 
-Read this section first, then *Corrections*, then *The risk register*. The risk register is
-the measure of progress — reach-ins retired, **not** lines deleted. The original plan argued
-from LOC and from a capability claim that turned out to be false; don't re-derive either.
+### S0 — Baseline and ownership lock (coordinator, no production edits)
+
+**Outcome:** a reproducible starting point and non-overlapping worker briefs.
+
+1. Record the current commit, dirty paths, and these production references:
+
+   ```bash
+   rg -n --glob 'source/**' --glob '!**/*.test.*' \
+     'LegacyModelProvider|LegacyModel|ModelRequest|ModelResponse|StreamEvent|response_done|raw_model_stream_event|run_item_stream_event|legacy-agent-stream-adapter'
+   ```
+
+2. Assign S1 and S2 from the same commit. Reserve `retrying-model.ts` for S2; reserve
+   `contracts/model.ts` and shared message builders for S3.
+3. Start two read-only scouts in parallel:
+   - S3 scout: enumerate every import and test fixture using `contracts/model.ts`,
+     `RetryingModel`, `buildMessagesFromRequest`, and `extractFunctionToolsFromRequest`;
+   - S4 scout: enumerate every legacy stream envelope fixture and distinguish runtime input from
+     persisted-history decoding.
+4. Create `.worktrees/int` from this recorded baseline; create S1 and S2 branches from the same
+   commit. Do not run the full suite at baseline unless a focused red proof needs a known
+   comparison; the final gates are expensive and belong after implementation.
+
+### S1 — Remove OpenAI-compatible Chat legacy behavior
+
+**Worktree:** `.worktrees/chat`
+**Ownership:** `openai-chat-completions-model.ts` and its direct tests only. Do not edit shared
+contracts, retry code, registry code, or black-box fixtures unless the coordinator first removes
+that ownership restriction.
+
+**Red proof**
+
+- Add a source/contract assertion that fails while the class accepts `request.modelSettings`, emits
+  `response_done`, or exposes the legacy unary/stream compatibility path.
+- Port any behavior assertions that only exercise `getResponse()` / `getStreamedResponse()` to the
+  typed `stream()` API before deleting them.
+
+**Implementation**
+
+- Keep one `StreamedModelTurn.stream(request)` implementation.
+- Delete legacy request-shape dispatch, `#legacyResponse`, `#legacyStream`, `#legacyBody`,
+  `legacyMessages`, and `legacyOutput`.
+- Keep `getStreamedModel()` only if a live provider factory still needs the self-returning helper.
+  Remove `getModel()` if the source audit proves it is test-only.
+- Preserve indexed/id-less tool-fragment assembly, native reasoning placement, provider options,
+  structured output, usage, signal propagation, and missing-finish rejection.
+
+**Focused gates**
+
+```bash
+pnpm vitest run --reporter=minimal \
+  source/providers/openai-chat-completions-model.test.ts \
+  source/providers/openai-compatible.provider.test.ts \
+  source/providers/custom-provider-adapter.test.ts
+pnpm typecheck
+pnpm test:provider-black-box
+pnpm build && pnpm test
+```
+
+**Done when:** no production Chat code branches on legacy request shape or emits a legacy event;
+typed runtime routing and failure-path tests pass; independent review is triaged.
+
+### S2 — Convert Codex HTTP and WebSocket transports directly
+
+**Worktree:** `.worktrees/cdx`
+**Ownership:** `codex.provider.ts`, `codex-responses-model.ts`, `codex-turn-converter.ts`,
+`retrying-model.ts`, `scripts/fake-codex-server.e2e.test.ts`, and their direct tests. Do not edit
+`contracts/model.ts`, registry code, common message builders, or shared black-box fixtures in this
+slice.
+
+**Red proof**
+
+Add direct typed-turn characterization for both HTTP and WebSocket before changing the lower
+transport boundary. The proof must cover:
+
+- exact request projection: instructions/input/tools, prompt cache key, include, provider headers,
+  `store=false`, previous response ID, and encrypted reasoning;
+- text, reasoning, tool calls, usage, rate limits, and exactly one authoritative completion;
+- incomplete/failed terminal frames, missing terminal frame, early close, and cancellation;
+- WebSocket lifetime/reconnect behavior after acknowledged tool output;
+- HTTP/WS parity only where the transports are intended to match.
+
+**Implementation order inside the worktree**
+
+1. Introduce a provider-local native Codex request/event boundary. Do not expose SDK-shaped
+   `modelSettings`, `{ event }`, or `response_done` outside the transport.
+2. Make Codex HTTP and WebSocket consume `StreamedModelTurnRequest` and emit
+   `StreamedModelTurnEvent` directly. Move conversion currently performed by `codexStream()` to the
+   transport boundary with one authoritative terminal check.
+3. Remove `LegacyModelProvider`, `LegacyModel`, `getModel()`, `normalizeCodexStreamEvent()`, and the
+   typed-turn-to-legacy reverse conversion from `codex.provider.ts`.
+4. Migrate `RetryingModel` to a `StreamedModelTurn` decorator in this slice so Codex can retain
+   retry callback rebinding, close propagation, retry-before-first-event behavior, and no retry
+   after any yielded event without preserving the legacy contract. Update the fake-Codex E2E
+   fixture that imports the decorator.
+5. Preserve session-scoped model caching, OAuth/plan-limit behavior, Responses-Lite state,
+   remembered response IDs, consumed tool-result tracking, and close/disposal.
+6. Replace `_buildResponsesCreateRequest` / `_fetchResponse` subclass reach-ins with owned
+   transport helpers. Keep test injection public and provider-local; do not replace private
+   inheritance with a different hidden monkey patch.
+
+**Focused gates**
+
+```bash
+pnpm vitest run --reporter=minimal \
+  source/providers/codex.provider.test.ts \
+  source/providers/codex-responses-model.test.ts \
+  source/providers/codex-turn-converter.test.ts \
+  source/providers/retrying-model.test.ts
+pnpm test:codex-network
+pnpm typecheck
+pnpm test:provider-black-box
+pnpm build && pnpm test
+```
+
+**Done when:** Codex production code consumes/emits the typed turn protocol directly; no private
+OpenAI Responses builder/fetch override or legacy event envelope remains; all authoritative
+terminal and reconnect cases pass; independent review is triaged.
+
+### S3 — Delete the legacy model contract and dead builders
+
+**Depends on:** reviewed S1 and S2 merged into `.worktrees/int`.
+**Worktree:** `.worktrees/model`
+**Ownership:** shared model contract, orphan message builders, reverse test fixtures, and their
+tests. The typed retry decorator is already migrated in S2; change it here only if deletion exposes
+a contract reference missed by the S0 inventory.
+
+**Red proof**
+
+- Add a production-source guard for `ModelRequest`, `ModelResponse`, `StreamEvent`, `LegacyModel`,
+  and `LegacyModelProvider`. For generic `Model`, forbid only imports/exports/references to the
+  contract from `contracts/model.ts`; do not ban the common word or unrelated symbols.
+- Confirm S2's typed retry tests prove: same immutable turn request is retried before the first
+  event; no retry occurs after any event is yielded; retry exhaustion logs accurately; callback
+  rebinding and close propagation survive; explicitly ambiguous outcomes are never retried.
+
+**Implementation**
+
+1. Verify the S2 retry decorator has no legacy import or unary behavior; rename remaining stale
+   identifiers only if the typed ownership is otherwise unclear.
+2. Delete unreferenced `buildMessagesFromRequest()` and `extractFunctionToolsFromRequest()` while
+   retaining the live cache-control helper in `openai-compatible-messages.ts`.
+3. Replace any test-only reverse bridge or `getModel()` fixture with a typed streamed-turn fake.
+4. Delete `contracts/model.ts` and all retired imports/identifiers.
+5. Update retry comments such as `rate-limit-middleware.ts` only where the renamed owner makes the
+   old terminology false.
+
+**Focused gates**
+
+```bash
+pnpm vitest run --reporter=minimal \
+  source/providers/retrying-model.test.ts \
+  source/providers/common/openai-compatible-messages.test.ts \
+  source/lib/agent-factory.test.ts \
+  source/providers/codex.provider.test.ts
+pnpm typecheck
+pnpm test:provider-black-box
+pnpm build && pnpm test
+```
+
+**Done when:** `contracts/model.ts` is deleted, the source guard passes, retries operate on
+`StreamedModelTurn`, and no reverse compatibility fixture remains.
+
+### S4 — Mark native application streams and retire legacy ingress
+
+**Depends on:** S3 merged into `.worktrees/int` and a source scan showing no legacy producer.
+**Worktree:** `.worktrees/stream`
+**Ownership:** `agent-stream.ts`, `application-run-loop.ts`, `stream-event-processor.ts`,
+`legacy-agent-stream-adapter.ts`, and every runtime fixture identified by the S0 envelope inventory,
+including affected conversation-service, conversation-session, background-subagent routing, and
+usage tests.
+
+**Red proof**
+
+- First prove an `ApplicationRunLoop` stream reaches `processStreamEvents()` without legacy
+  normalization while preserving text, reasoning, tool lifecycle/progress, usage, terminal output,
+  snapshots, cancellation, and continuation state.
+- Add a static production-source guard for `raw_model_stream_event`, `run_item_stream_event`,
+  nested SDK `model/data/event` envelopes, and `legacy-agent-stream-adapter`.
+- Characterize saved-conversation replay before changing any decoder. A persisted-data exception is
+  allowed only if the decoder owns it explicitly and has a fixture proving an existing save loads.
+
+**Implementation**
+
+1. Export a native `AgentStream` construction/branding mechanism from `agent-stream.ts`; do not
+   duplicate its private symbol in the run loop.
+2. Have `ApplicationRunLoop` construct a branded native stream.
+3. Narrow or remove `adaptAgentStream()` once every caller already receives `AgentStream`.
+4. Migrate runtime test fixtures to `ApplicationRunEvent`; do not retain SDK envelopes merely to
+   keep tests unchanged.
+5. Delete `legacy-agent-stream-adapter.ts` and its adapter-only tests. Strengthen the static guard to
+   cover all production source, with any persisted decoder exception named explicitly.
+
+**Focused gates**
+
+```bash
+pnpm vitest run --reporter=minimal \
+  source/services/application-stream-boundary.test.ts \
+  source/services/stream-event-processor.test.ts \
+  source/services/session/session-stream-processor.test.ts \
+  source/services/session/conversation-session.isolation.test.ts \
+  source/services/session/conversation-session.lifecycle.test.ts \
+  source/services/session/conversation-session.stream.test.ts \
+  source/services/session/conversation-session.tool-started.test.ts \
+  source/services/session/conversation-session.usage.test.ts \
+  source/services/session/background-subagent-ui-routing.integration.test.ts \
+  source/services/conversation/conversation-service.test.ts \
+  source/services/conversation/conversation-replay.test.ts \
+  source/services/conversation/conversation-persistence.test.ts \
+  source/utils/ai/token-usage.test.ts
+pnpm typecheck
+pnpm test:provider-black-box
+pnpm build && pnpm test
+```
+
+**Done when:** all runtime streams are native, the adapter is deleted, production envelope names
+are absent except a tested/documented persisted decoder if one is truly required, and saved
+conversations still replay.
+
+### S5 — Terminology and source-boundary sweep
+
+**Depends on:** S4 merged into `.worktrees/int`.
+**Worktree:** `.worktrees/close`
+
+Use a semantic allowlist, not `rg legacy` followed by bulk deletion. Update only comments/names made
+false by this migration, especially in terminal usage collection, conversation storage,
+request-prefix binding, provider traffic, Codex transport, and tracing. Do not remove persisted
+history migrations, unrelated compatibility settings, or domain uses of “legacy.”
+
+Run and classify every remaining hit:
+
+```bash
+rg -n --glob 'source/**' --glob '!**/*.test.*' \
+  '@openai/agents|LegacyRunner|LegacyModel|ModelRequest|ModelResponse|RunnerManager|response_done|raw_model_stream_event|run_item_stream_event|legacy-agent-stream-adapter|_buildResponsesCreateRequest|_fetchResponse'
+```
+
+The expected result is zero unless a persisted-data decoder exception is documented beside its
+source guard and replay test.
+
+### S6 — Final review, verification, and closeout
+
+Merge reviewed S5 into the clean `.worktrees/int` integration branch. Use a fresh-context reviewer
+who did not implement S1–S5. Give it the complete integrated diff from the recorded baseline, this
+active plan, `AGENTS.md`, and the provider-testing instructions. Triage every finding before fixing
+it; an empty actionable set is valid.
+
+Run from the final integrated commit in `.worktrees/int`, never from the dirty primary checkout:
+
+```bash
+pnpm typecheck
+pnpm test:provider-black-box
+pnpm test:codex-network
+pnpm build
+pnpm test
+pnpm lint
+git diff --check <baseline>...HEAD
+```
+
+Hand the reviewed integration commit to the primary-checkout owner only after checking that its
+changed paths do not overlap the primary checkout's uncommitted files. If repository-wide lint
+reports a pre-existing failure outside the diff, record the exact path and
+also run ESLint/Prettier on every changed file; do not claim the full lint gate passed.
+
+### Final completion criteria
+
+- one provider factory: `createStreamedModel`;
+- one provider turn interface: `StreamedModelTurn`;
+- one application stream interface: `ApplicationRunEvent` through native `AgentStream`;
+- no production or test `LegacyModel`, `ModelRequest`, `ModelResponse`, `StreamEvent`, legacy retry
+  wrapper, reverse model bridge, private OpenAI Responses transport reach-in, or legacy ingress
+  adapter;
+- no runtime SDK envelope names; any persisted-data exception is explicit and replay-tested;
+- Codex HTTP/WS terminal, reconnect, prompt-cache, encrypted-reasoning, tool-result, usage, and
+  plan-limit behavior remains covered;
+- OpenAI-compatible fragmented tool calls, reasoning, options, usage, and terminal failure behavior
+  remains covered;
+- saved conversations replay successfully;
+- focused tests, provider black-box, fake Codex, typecheck, build, full tests, changed-file format,
+  source audit, and independent review all pass or have precisely recorded external blockers.
+
+Read this section first, then *Corrections* and *The risk register* only when historical rationale is
+needed. Do not re-derive work already marked landed below.
 
 ### Landed on `main`
 

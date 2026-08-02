@@ -379,6 +379,56 @@ it('application tool continuation keeps one reasoning-bearing assistant message 
   ]);
 });
 
+it('second-turn replay coalesces native reasoning with its assistant text instead of sending an invalid reasoning-only message', async () => {
+  let capturedRequest: any;
+  async function* response(): AsyncIterable<any> {
+    yield { choices: [{ delta: { content: 'next' }, finish_reason: 'stop' }] };
+  }
+  const client = {
+    chat: {
+      completions: {
+        create: async (request: any) => {
+          capturedRequest = request;
+          return response();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'deepseek-v4-flash');
+
+  for await (const _event of model.stream({
+    input: [
+      {
+        type: 'reasoning',
+        text: 'Prior reasoning.',
+        providerMetadata: {
+          reasoning_content: 'Prior reasoning.',
+          openai_compatible_reasoning_content: true,
+        },
+      },
+      { type: 'message', role: 'assistant', content: [{ type: 'text', text: 'Prior answer.' }] },
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'Follow-up.' }] },
+    ],
+    tools: [],
+  } as any)) {
+    // Consume the stream so the request conversion and completion path both run.
+  }
+
+  expect(capturedRequest.messages).toEqual([
+    {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Prior answer.' }],
+      reasoning_content: 'Prior reasoning.',
+    },
+    { role: 'user', content: [{ type: 'text', text: 'Follow-up.' }] },
+  ]);
+  expect(
+    capturedRequest.messages.some(
+      (message: any) => message.role === 'assistant' && message.content == null && !message.tool_calls,
+    ),
+  ).toBe(false);
+});
+
 it('stream() surfaces reasoning_content as reasoning_delta events and in the completion output', async () => {
   const client = {
     chat: { completions: { create: async () => reasoningStream() } },

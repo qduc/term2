@@ -151,6 +151,44 @@ it.sequential('chatJson passes outputType to temp agent', async () => {
   });
 });
 
+it.sequential('chatJson falls back to message content when finalOutput is empty', async () => {
+  const service = new AgentChatService({
+    agentConfig: new MockAgentConfig('openrouter', 'google/gemma-4-26b-a4b-it') as any,
+    runnerManager: {
+      getOrCreateRunner: () => ({
+        run: async () => {
+          throw new Error('chatJson must settle result-shaped provider runs');
+        },
+        runToCompletion: async () => ({
+          status: 'completed',
+          finalOutput: '',
+          messages: [
+            { role: 'assistant', content: '{"results":[{"reasoning":"Read-only command.","approved":true}]}' },
+          ],
+        }),
+      }),
+    } as any,
+    settings: createMockSettings('openrouter'),
+    logger: mockLogger,
+  });
+
+  const result = await service.chatJson('Evaluate command', {
+    outputType: {
+      type: 'json_schema',
+      name: 'shell_auto_approval_evaluation',
+      strict: true,
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { results: { type: 'array' } },
+        required: ['results'],
+      },
+    },
+  });
+
+  expect(result).toBe('{"results":[{"reasoning":"Read-only command.","approved":true}]}');
+});
+
 it.sequential('chatJson returns finalOutput when available', async () => {
   lastRunAgent = null;
 

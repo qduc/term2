@@ -15,6 +15,23 @@ pnpm test:provider-black-box
 
 This command builds `dist/` first, then runs the dedicated configuration in `vitest.provider-black-box.config.ts`. It is intentionally separate from ordinary `pnpm test` because it launches the built CLI in isolated child processes.
 
+A healthy run is roughly 20 seconds. It runs with `--bail=1` because the tests
+drive the built CLI through a PTY and wait on its output: when the CLI cannot
+start, every PTY test burns its full timeout instead of failing fast, and
+`provider-session-resilience.blackbox.ts` alone holds 34 sequential tests. Bail
+bounds that to one timeout. When you want the full failure list rather than the
+first one, run vitest directly:
+
+```bash
+pnpm exec vitest run --config vitest.provider-black-box.config.ts
+```
+
+It also runs `--reporter=verbose`, because both the `default` and `minimal`
+reporters print nothing until the summary when stdout is not a TTY — which is
+how CI and agents run it, and why a slow run used to be indistinguishable from a
+hung one. If a run seems to hang, look at the last streamed line: the next
+scenario is the one whose CLI never reached the state it waits for.
+
 ## Suite ownership
 
 - `scripts/provider-black-box/provider-contract.test.ts` obtains models through

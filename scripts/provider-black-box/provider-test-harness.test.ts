@@ -1,5 +1,6 @@
 import { access, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import {
   createIsolatedWorkspaceLease,
@@ -9,6 +10,8 @@ import {
 } from './provider-test-harness.js';
 
 const CHILD = join(process.cwd(), 'scripts/provider-black-box/provider-harness-child.mjs');
+const OWNER = join(process.cwd(), 'scripts/provider-black-box/provider-reaper-owner.ts');
+const TSX = join(process.cwd(), 'node_modules/tsx/dist/cli.mjs');
 
 describe('provider black-box harness', () => {
   it('passes bounded retry settings to isolated root removal', async () => {
@@ -98,6 +101,32 @@ describe('provider black-box harness', () => {
       await workspace.cleanup();
     }
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'reaps a live PTY child when the owning process is signalled without cleanup',
+    async () => {
+      const workspace = await createIsolatedWorkspaceLease();
+      try {
+        const pidPath = join(workspace.root, 'pty-child.pid');
+        const owner = spawn(process.execPath, [TSX, OWNER, CHILD, pidPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+        try {
+          await waitForOwnerReady(owner);
+          const ptyChildPid = Number((await readFile(pidPath, 'utf8')).trim());
+          expect(Number.isInteger(ptyChildPid)).toBe(true);
+          expect(isProcessAlive(ptyChildPid)).toBe(true);
+
+          owner.kill('SIGTERM');
+
+          await waitForProcessToExit(ptyChildPid, 10_000);
+        } finally {
+          owner.kill('SIGKILL');
+        }
+      } finally {
+        await workspace.cleanup();
+      }
+    },
+    20_000,
+  );
 
   it('retries concurrent workspace cleanup after a transient owned failure', async () => {
     let removeAttempts = 0;
@@ -250,6 +279,34 @@ type RootRemovalOptionsForTest = {
   maxRetries?: number;
   retryDelay?: number;
 };
+
+function waitForOwnerReady(owner: ChildProcess, timeoutMs = 15_000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let stderr = '';
+    const timer = setTimeout(
+      () => finish(new Error(`Reaper owner was not ready after ${timeoutMs}ms. ${stderr}`)),
+      timeoutMs,
+    );
+    const finish = (error?: Error) => {
+      clearTimeout(timer);
+      owner.stdout?.off('data', onStdout);
+      owner.stderr?.off('data', onStderr);
+      owner.off('exit', onExit);
+      if (error) reject(error);
+      else resolve();
+    };
+    const onStdout = (chunk: Buffer) => {
+      if (chunk.toString('utf8').includes('owner ready')) finish();
+    };
+    const onStderr = (chunk: Buffer) => {
+      stderr += chunk.toString('utf8');
+    };
+    const onExit = (code: number | null) => finish(new Error(`Reaper owner exited early with ${code}. ${stderr}`));
+    owner.stdout?.on('data', onStdout);
+    owner.stderr?.on('data', onStderr);
+    owner.on('exit', onExit);
+  });
+}
 
 async function waitForProcessToExit(pid: number, timeoutMs = 2_000): Promise<void> {
   const startedAt = Date.now();

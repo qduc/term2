@@ -25,6 +25,7 @@ import type { StaticCommitBlocker } from '../message/MessageList.js';
 import type { QueuePauseReason } from '../../services/queue/queue-controller.js';
 import type { BackgroundSubagentTask } from '../../services/subagents/subagent-notification-store.js';
 import BackgroundTasksPanel from './BackgroundTasksPanel.js';
+import { deriveInputOwner } from '../../lib/input-owner.js';
 
 export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;
@@ -180,27 +181,32 @@ const BottomArea: FC<BottomAreaProps> = ({
     return () => clearInterval(interval);
   }, [thinkingStartedAt]);
 
-  const showHandoffConfirm = handoffState?.stage === 'confirm_model';
-  const showStandardModeConfirm = handoffState?.stage === 'confirm_standard_mode';
-  const showSurgePrompt = Boolean(pendingSurgeTurn);
-  const showLargeUncachedPrompt = Boolean(pendingLargeUncachedTurn);
-  const showApprovalPrompt =
-    !showHandoffConfirm &&
-    !showStandardModeConfirm &&
-    !showLargeUncachedPrompt &&
-    !showSurgePrompt &&
-    waitingForApproval &&
-    !isProcessing &&
-    !waitingForRejectionReason &&
-    pendingApproval;
-  const showQueuePausedPrompt = queuePaused && !showHandoffConfirm && !showStandardModeConfirm;
+  // `inputOwner` is the single source of truth for which surface owns keyboard
+  // input, derived from the same state that drives rendering. It mirrors the
+  // mutual-exclusivity chain below so "what is rendered" and "who owns input"
+  // stay in sync. See source/lib/input-owner.ts.
+  const inputOwner = deriveInputOwner({
+    handoffStage: handoffState?.stage ?? null,
+    pendingSurgeTurn,
+    pendingLargeUncachedTurn,
+    waitingForApproval,
+    waitingForRejectionReason,
+    waitingForAskUserAnswer,
+    pendingApproval,
+    queuePaused,
+    isProcessing,
+  });
+  const showHandoffConfirm = inputOwner.kind === 'handoff-confirm';
+  const showStandardModeConfirm = inputOwner.kind === 'standard-mode-confirm';
+  const showSurgePrompt = inputOwner.kind === 'input-surge';
+  const showLargeUncachedPrompt = inputOwner.kind === 'large-uncached';
+  const showApprovalPrompt = inputOwner.kind === 'approval';
+  const showQueuePausedPrompt = inputOwner.kind === 'queue-paused';
+  // InputBox owns input only when no modal prompt owns it and either no approval
+  // is pending or the user is entering a rejection reason / ask-user answer.
   const showInput =
-    !showHandoffConfirm &&
-    !showStandardModeConfirm &&
-    !showLargeUncachedPrompt &&
-    !showSurgePrompt &&
-    !queuePaused &&
-    (!waitingForApproval || waitingForRejectionReason || waitingForAskUserAnswer);
+    inputOwner.kind === 'input' &&
+    (!queuePaused && (!waitingForApproval || waitingForRejectionReason || waitingForAskUserAnswer));
 
   return (
     <Box flexDirection="column" width="100%">
@@ -246,7 +252,7 @@ const BottomArea: FC<BottomAreaProps> = ({
           />
         ) : (
           <Box flexDirection="column">
-            {showApprovalPrompt && (
+            {showApprovalPrompt && pendingApproval && (
               <ApprovalPrompt
                 approval={pendingApproval}
                 onApprove={onApprove}

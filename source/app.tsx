@@ -34,6 +34,7 @@ import { buildRewindItems } from './utils/conversation/rewind-items.js';
 import { resolveSlashCommand } from './slash-commands.js';
 import type { SkillsService, SkillInfo } from './services/skills/skills-service.js';
 import { buildTerminalTitleLabel, setTerminalTitle } from './utils/output/terminal-title.js';
+import { deriveInputOwner } from './lib/input-owner.js';
 import {
   registerSandboxNetworkApprovalHandler,
   type NetworkApprovalAnswer,
@@ -430,6 +431,22 @@ const App: FC<AppProps> = ({
   const effectiveWaitingForAskUserAnswer = sandboxPromptRequest ? false : waitingForAskUserAnswer;
   const effectiveIsProcessing = sandboxPromptRequest ? false : isProcessing;
 
+  // Single source of truth for "which surface owns keyboard input right now."
+  // Computed from the same effective state passed to BottomArea so the app
+  // keyboard-shortcuts hook stays suppressed whenever a modal confirmation
+  // prompt is rendered (Closing the Ink fan-out coupling — see input-owner.ts).
+  const inputOwner = deriveInputOwner({
+    handoffStage: handoff.handoffState?.stage ?? null,
+    pendingSurgeTurn: pendingGuards.pendingSurgeTurn,
+    pendingLargeUncachedTurn: pendingGuards.pendingLargeUncachedTurn,
+    waitingForApproval: effectiveWaitingForApproval,
+    waitingForRejectionReason: effectiveWaitingForRejectionReason,
+    waitingForAskUserAnswer: effectiveWaitingForAskUserAnswer,
+    pendingApproval: effectivePendingApproval,
+    queuePaused,
+    isProcessing: effectiveIsProcessing,
+  });
+
   useEffect(() => {
     setTerminalTitle(buildTerminalTitleLabel(terminalTitleBase, effectiveIsProcessing));
   }, [effectiveIsProcessing, terminalTitleBase]);
@@ -464,6 +481,7 @@ const App: FC<AppProps> = ({
     cycleAppModes,
     replaceInput,
     onSkillActivationCancelled: () => addSystemMessage('Skill activation cancelled.'),
+    inputOwner,
   });
 
   const handleSubmit = async (turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }): Promise<void> => {

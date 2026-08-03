@@ -457,9 +457,14 @@ export class ConversationOrchestrator {
         return;
       }
 
-      // Errors for work that never left the pending queue should not paint a bot
-      // error into the transcript; the submission simply did not run.
+      // A submission that never left the pending queue produced no turn to
+      // report on, but it also produced no answer: the pending indicator has
+      // just been cleared, so saying nothing would make the user's text vanish
+      // without explanation. Report the rejection and hand the text back.
       if (queueOwnsSubmission && !turnActivated) {
+        this.appendBotError(
+          `${enhanceApiKeyError(describeError(error))}\n\nThis message was not sent: ${userMessage.text}`,
+        );
         return;
       }
 

@@ -502,6 +502,24 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.messages.appendMessages).not.toHaveBeenCalled();
   });
 
+  it('reports a rejected queue submission instead of letting the pending message vanish', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    vi.mocked(cfg.conversationService.sendMessage).mockRejectedValue(
+      new Error('Foreground queue rejected message: capacity'),
+    );
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    await orchestrator.sendUserMessage('dropped-by-queue');
+
+    expect(cfg.ui.onQueuedMessageRemoved).toHaveBeenCalledTimes(1);
+    const appended = vi.mocked(cfg.messages.appendMessages).mock.calls[0]?.[0]?.[0] as any;
+    expect(appended.sender).toBe('bot');
+    expect(appended.text).toContain('capacity');
+    // The text the user typed is never silently lost.
+    expect(appended.text).toContain('dropped-by-queue');
+  });
+
   it('appends a queued message into the list when the queue fires its start observer', async () => {
     const cfg = makeConfig();
     const orchestrator = new ConversationOrchestrator(cfg);

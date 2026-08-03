@@ -619,11 +619,12 @@ it('steers ahead of queued follow-ups and then drains those follow-ups FIFO', as
   expect(started).toEqual(['active', 'steer', 'follow-up-1', 'follow-up-2']);
 });
 
-it('rejects a steer instead of deadlocking when the active turn does not reach a safe boundary', async () => {
+it('keeps a steer queued instead of dropping it when the active turn does not reach a safe boundary', async () => {
   let releaseActive!: () => void;
   const activeReleased = new Promise<void>((resolve) => {
     releaseActive = resolve;
   });
+  const started: string[] = [];
   const adapter = new ConversationAdapter({
     sessionId: 'session-1',
     startedAt: new Date().toISOString(),
@@ -634,8 +635,10 @@ it('rejects a steer instead of deadlocking when the active turn does not reach a
     approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
     turnFlow: {
       async *start(input) {
-        if ((typeof input === 'string' ? input : input.text) === 'active') await activeReleased;
-        yield { type: 'final' as const, finalText: 'done' };
+        const text = typeof input === 'string' ? input : input.text;
+        started.push(text);
+        if (text === 'active') await activeReleased;
+        yield { type: 'final' as const, finalText: text };
       },
       async *continueAfterApproval() {
         yield { type: 'final' as const, finalText: 'done' };
@@ -649,12 +652,61 @@ it('rejects a steer instead of deadlocking when the active turn does not reach a
   const active = adapter.sendMessage('active');
   await new Promise((resolve) => setImmediate(resolve));
 
-  await expect(adapter.sendMessage('steer', { busyMode: 'steer' })).rejects.toThrow(
-    'Foreground queue rejected message: inapplicable',
-  );
+  const steer = adapter.sendMessage('steer', { busyMode: 'steer' });
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  expect(started).toEqual(['active']);
 
   releaseActive();
   await expect(active).resolves.toMatchObject({ type: 'response' });
+  await expect(steer).resolves.toMatchObject({ type: 'response', finalText: 'steer' });
+  expect(started).toEqual(['active', 'steer']);
+});
+
+it('runs a deferred steer when the active turn stops after the steer stopped waiting', async () => {
+  let stopActive!: () => void;
+  const activeStopped = new Promise<void>((_resolve, reject) => {
+    stopActive = () => reject(Object.assign(new Error('Operation aborted'), { name: 'AbortError' }));
+  });
+  const started: string[] = [];
+  let stopRequests = 0;
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start(input) {
+        const text = typeof input === 'string' ? input : input.text;
+        started.push(text);
+        if (text === 'active') await activeStopped;
+        yield { type: 'final' as const, finalText: text };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      // A stop that only lands later, well after the steer gave up waiting.
+      stopAfterCurrentTool: () => {
+        stopRequests += 1;
+      },
+    },
+    queueForeground: true,
+    activeCancelTimeoutMs: 5,
+  });
+
+  const active = adapter.sendMessage('active');
+  await new Promise((resolve) => setImmediate(resolve));
+  const steer = adapter.sendMessage('steer', { busyMode: 'steer' });
+  await new Promise((resolve) => setTimeout(resolve, 25));
+
+  expect(stopRequests).toBe(1);
+  stopActive();
+
+  await expect(active).rejects.toMatchObject({ name: 'AbortError' });
+  await expect(steer).resolves.toMatchObject({ type: 'response', finalText: 'steer' });
+  expect(started).toEqual(['active', 'steer']);
 });
 
 it('settles discarded paused requests without settling retained work on cancellation', async () => {

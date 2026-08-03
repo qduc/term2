@@ -483,6 +483,19 @@ export class QueueController<Snapshot, Terminal = unknown> {
     const activeFromPhase = this.#phase === 'running' || this.#phase === 'awaiting_active_action';
     if (!activeFromPhase) return;
 
+    if (event.kind === 'cancelled') {
+      // The active turn stopped at the driver's request (a steer whose stop
+      // landed late). Retained work is not a failure to review: retire the
+      // execution and let the next item — the steer itself — run.
+      this.#active = undefined;
+      this.#pendingAction = undefined;
+      this.#phase = 'idle';
+      this.#pauseReason = undefined;
+      await this.#persist();
+      await this.#dispatch();
+      return;
+    }
+
     if (event.kind === 'failed') {
       this.#active = undefined;
       this.#pendingAction = undefined;
@@ -582,7 +595,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
   }
 
   /** Cancel active work and immediately dispatch the priority steer head. */
-  async #steer(steerItemId: ItemId): Promise<boolean> {
+  async #steer(_steerItemId: ItemId): Promise<boolean> {
     if (!this.#active || (this.#phase !== 'running' && this.#phase !== 'awaiting_active_action')) {
       await this.#dispatch();
       return true;
@@ -595,11 +608,14 @@ export class QueueController<Snapshot, Terminal = unknown> {
     await this.#persist();
     const cancelled = await this.#driver.cancel(active, 'steer');
     if (cancelled === false && this.#active?.executionId === active.executionId) {
-      this.#queue = this.#queue.filter((item) => item.id !== steerItemId);
+      // The active turn could not reach a safe boundary, so it keeps running.
+      // A steer that cannot supersede must still be delivered: leave it at the
+      // head of the queue so it runs the moment the active turn settles.
+      // Discarding it here would drop text the user already submitted.
       this.#phase = previousPhase;
       this.#pendingAction = previousPendingAction;
       await this.#persist();
-      return false;
+      return true;
     }
     if (this.#active?.executionId !== active.executionId) return true;
     this.#active = undefined;

@@ -136,26 +136,76 @@ it('runs a steer before retained follow-ups while preserving their FIFO order', 
   expect(starts).toEqual(['active', 'steer', 'follow-up-1']);
 });
 
-it('rejects a steer and restores the active execution when safe cancellation times out', async () => {
+it('retains a steer at the queue head when safe cancellation times out', async () => {
+  const starts: string[] = [];
   const controller = new QueueController({
     driver: {
-      start: () => {},
+      start: ({ item }) => {
+        starts.push(item.text);
+      },
       cancel: async (_execution, reason) => (reason === 'steer' ? false : undefined),
     },
     snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let number = 0;
+        return () => `item-${++number}`;
+      })(),
+      execution: (() => {
+        let number = 0;
+        return () => `execution-${++number}`;
+      })(),
+    },
   });
 
   await controller.command({ kind: 'submit', text: 'active' });
 
-  await expect(controller.command({ kind: 'steer', text: 'steer' })).resolves.toEqual({
-    kind: 'rejected',
-    reason: 'inapplicable',
-  });
+  // The active turn could not stop, so the steer does not supersede it — but it
+  // must not be discarded either.
+  await expect(controller.command({ kind: 'steer', text: 'steer' })).resolves.toEqual({ kind: 'accepted' });
   expect(controller.state()).toMatchObject({
     kind: 'running',
     active: { item: { text: 'active' } },
-    queue: [],
+    queue: [{ text: 'steer' }],
   });
+  expect(starts).toEqual(['active']);
+
+  await controller.event({ kind: 'completed', executionId: 'execution-1' as ExecutionId, terminal: {} });
+
+  expect(starts).toEqual(['active', 'steer']);
+});
+
+it('runs the retained steer when its stop lands after the steer stopped waiting', async () => {
+  const starts: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ item }) => {
+        starts.push(item.text);
+      },
+      cancel: async (_execution, reason) => (reason === 'steer' ? false : undefined),
+    },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let number = 0;
+        return () => `item-${++number}`;
+      })(),
+      execution: (() => {
+        let number = 0;
+        return () => `execution-${++number}`;
+      })(),
+    },
+  });
+
+  await controller.command({ kind: 'submit', text: 'active' });
+  await controller.command({ kind: 'steer', text: 'steer' });
+
+  // The armed stop lands later and ends the active turn. A cancellation is not
+  // a failure: the retained steer runs instead of the queue pausing.
+  await controller.event({ kind: 'cancelled', executionId: 'execution-1' as ExecutionId });
+
+  expect(starts).toEqual(['active', 'steer']);
+  expect(controller.state()).toMatchObject({ kind: 'running', active: { item: { text: 'steer' } } });
 });
 
 it('serializes rapid steers so only one active cancellation mutates the queue at a time', async () => {

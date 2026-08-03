@@ -69,6 +69,32 @@ it('non-shell tools return undefined advisory', async () => {
   expect(advisory).toBe(undefined);
 });
 
+it('forwards recorded manual decisions into the auto-approval evaluation', async () => {
+  const prompts: string[] = [];
+  const resolver = new ShellAutoApprovalResolver({
+    conversationStore: new ConversationStore(),
+    agentClient: {
+      chat: async (prompt: string) => {
+        prompts.push(prompt);
+        return JSON.stringify({ results: [{ reasoning: 'ok', approved: true }] });
+      },
+    } as any,
+    logger,
+    settingsService: makeMockSettings('advisory') as any,
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  resolver.recordManualDecision('rm -rf ./dist', 'approved');
+
+  await resolver.resolveAdvisoryForInterruption({
+    interruption: { name: 'shell', callId: 'call-1', arguments: JSON.stringify({ command: 'rm -rf ./build' }) },
+    siblings: [{ name: 'shell', callId: 'call-1', arguments: JSON.stringify({ command: 'rm -rf ./build' }) }],
+  });
+
+  expect(prompts.length).toBe(1);
+  expect(prompts[0]).toContain('[approved] rm -rf ./dist');
+});
+
 it('getAutoApproveMode reads setting', () => {
   const resolver = makeResolver(makeMockSettings('advisory') as any);
   expect(resolver.getAutoApproveMode()).toBe('advisory');

@@ -1,11 +1,16 @@
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ConversationStore } from '../conversation/conversation-store.js';
 import type { LLMAdvisory } from '../../contracts/conversation.js';
-import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
+import {
+  evaluateShellAutoApprovalAdvisories,
+  type ShellAutoApprovalManualDecision,
+} from './shell-auto-approval-evaluator.js';
 import { getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
 import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
 
 export type AutoApproveMode = 'off' | 'advisory' | 'auto';
+
+const MAX_TRACKED_MANUAL_DECISIONS = 20;
 
 const parseUnsandboxedFlag = (rawArguments: unknown): boolean => {
   if (typeof rawArguments === 'string') {
@@ -30,8 +35,17 @@ export interface ShellAutoApprovalResolverDeps {
 
 export class ShellAutoApprovalResolver {
   private advisoriesByCallId = new Map<string, LLMAdvisory>();
+  private manualDecisions: ShellAutoApprovalManualDecision[] = [];
 
   constructor(private readonly deps: ShellAutoApprovalResolverDeps) {}
+
+  /** Records a human approve/reject decision on a shell command, offered as precedent for later evaluations. */
+  recordManualDecision(command: string, decision: 'approved' | 'rejected'): void {
+    this.manualDecisions.push({ command, decision });
+    if (this.manualDecisions.length > MAX_TRACKED_MANUAL_DECISIONS) {
+      this.manualDecisions.shift();
+    }
+  }
 
   getAutoApproveMode(): AutoApproveMode | undefined {
     return this.deps.settingsService?.get('shell.autoApproveMode');
@@ -91,6 +105,7 @@ export class ShellAutoApprovalResolver {
           ...(unsandboxed ? { unsandboxed: true } : {}),
         })),
         history: this.deps.conversationStore.getHistory(),
+        manualDecisions: this.manualDecisions,
         settingsService: this.deps.settingsService,
         agentClient: this.deps.agentClient,
         logger: this.deps.logger,
@@ -115,6 +130,7 @@ export class ShellAutoApprovalResolver {
         },
       ],
       history: this.deps.conversationStore.getHistory(),
+      manualDecisions: this.manualDecisions,
       settingsService: this.deps.settingsService,
       agentClient: this.deps.agentClient,
       logger: this.deps.logger,
@@ -158,6 +174,14 @@ export class DelegatingShellAutoApprovalResolver extends ShellAutoApprovalResolv
     return this.delegate
       ? this.delegate.resolveAdvisoryForInterruption(input)
       : super.resolveAdvisoryForInterruption(input);
+  }
+
+  override recordManualDecision(command: string, decision: 'approved' | 'rejected'): void {
+    if (this.delegate) {
+      this.delegate.recordManualDecision(command, decision);
+    } else {
+      super.recordManualDecision(command, decision);
+    }
   }
 
   override clearCache(): void {

@@ -407,6 +407,23 @@ export class ConversationOrchestrator {
       // processing it; the message list will be updated when the queue pops
       // this turn.
       this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text);
+
+      // A steer belongs to the turn already running: hand it to that turn so
+      // the model reads it at its next request, rather than making the user
+      // wait for the whole turn to end. The message joins the transcript at the
+      // moment the turn takes it, which is when the model actually sees it.
+      if (options?.busyMode === 'steer' && this.config.conversationService.steerActiveTurn) {
+        const steered = await this.config.conversationService.steerActiveTurn(turn).catch((error) => {
+          this.logError('Error steering the active turn', error);
+          return false;
+        });
+        if (steered) {
+          this.config.ui.onQueuedMessageStarted?.(userMessage.id);
+          this.config.messages.appendMessages([userMessage]);
+          this.config.logWriter?.append({ type: 'user_message', message: { ...userMessage } });
+          return;
+        }
+      }
     } else {
       // No turn is in flight — append directly. The queue observer will also
       // fire when the turn starts, but the dedup guard in

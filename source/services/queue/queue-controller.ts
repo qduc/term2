@@ -38,6 +38,8 @@ export interface PersistedQueueItem {
   readonly text: string;
   readonly sequence: number;
   readonly submittedAt: string;
+  /** Submitted as a steer, so it runs ahead of follow-ups queued before it. */
+  readonly steer?: boolean;
   readonly preflight?: { readonly actionId: string; readonly kind: PreflightKind };
 }
 
@@ -46,6 +48,8 @@ export interface QueueItem {
   readonly text: string;
   readonly sequence: number;
   readonly submittedAt: string;
+  /** Submitted as a steer, so it runs ahead of follow-ups queued before it. */
+  readonly steer?: boolean;
   readonly preflight?: { readonly actionId: ActionId; readonly kind: PreflightKind };
 }
 
@@ -127,7 +131,6 @@ export type QueueCommand =
 export type TurnEvent<Terminal = unknown> =
   | { readonly kind: 'completed'; readonly executionId: ExecutionId; readonly terminal: Terminal }
   | { readonly kind: 'failed'; readonly executionId: ExecutionId; readonly failure: unknown }
-  | { readonly kind: 'cancelled'; readonly executionId: ExecutionId }
   | {
       readonly kind: 'tool_approval_requested';
       readonly executionId: ExecutionId;
@@ -148,7 +151,7 @@ export type QueueCommandResult =
 
 export interface QueueTurnDriver<Snapshot> {
   start(execution: ActiveExecution<Snapshot>): void | Promise<void>;
-  cancel(execution: ActiveExecution<Snapshot>, reason?: 'cancel' | 'steer'): void | boolean | Promise<void | boolean>;
+  cancel(execution: ActiveExecution<Snapshot>): void | boolean | Promise<void | boolean>;
 }
 
 export interface QueueControllerOptions<Snapshot, Terminal = unknown> {
@@ -190,7 +193,8 @@ const isPersistedQueueItem = (value: unknown): value is PersistedQueueItem => {
     !Number.isSafeInteger(item.sequence) ||
     (item.sequence as number) <= 0 ||
     !isNonEmptyString(item.submittedAt) ||
-    Number.isNaN(Date.parse(item.submittedAt as string))
+    Number.isNaN(Date.parse(item.submittedAt as string)) ||
+    (item.steer !== undefined && typeof item.steer !== 'boolean')
   ) {
     return false;
   }
@@ -266,6 +270,7 @@ const queueItemToPersisted = (item: QueueItem): PersistedQueueItem => ({
   text: item.text,
   sequence: item.sequence,
   submittedAt: item.submittedAt,
+  ...(item.steer ? { steer: true } : {}),
   preflight: item.preflight ? { actionId: item.preflight.actionId, kind: item.preflight.kind } : undefined,
 });
 
@@ -296,7 +301,6 @@ export class QueueController<Snapshot, Terminal = unknown> {
   #pendingAction: { actionId: ActionId; kind: ActiveActionKind } | undefined;
   #pauseReason: QueuePauseReason | undefined;
   #recovery: QueueRecovery | undefined;
-  #steerAdmission = Promise.resolve();
   #persistenceWrites = Promise.resolve();
 
   constructor(options: QueueControllerOptions<Snapshot, Terminal>) {
@@ -346,7 +350,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
       case 'submit':
         return this.#submit(cmd);
       case 'steer':
-        return this.#serializeSteer(() => this.#submit(cmd));
+        return this.#submit(cmd);
       case 'cancel':
         return this.#cancel();
       case 'answer_preflight': {
@@ -440,30 +444,26 @@ export class QueueController<Snapshot, Terminal = unknown> {
       text: cmd.text,
       sequence: this.#nextSequence++,
       submittedAt: this.#now(),
+      ...(cmd.kind === 'steer' ? { steer: true as const } : {}),
     });
-    if (cmd.kind === 'steer' && this.#active) {
-      this.#queue = [item, ...this.#queue].map((queued) => freeze({ ...queued, sequence: this.#nextSequence++ }));
+    if (cmd.kind === 'steer') {
+      // A steer that reaches the queue could not be delivered into the running
+      // turn, so it runs as its own turn — ahead of the follow-ups queued
+      // before it, which is the priority the user expressed by steering, and
+      // behind steers they sent earlier, which is the order they said it in.
+      const firstFollowUp = this.#queue.findIndex((queued) => !queued.steer);
+      const insertAt = firstFollowUp < 0 ? this.#queue.length : firstFollowUp;
+      this.#queue = [...this.#queue.slice(0, insertAt), item, ...this.#queue.slice(insertAt)].map((queued) =>
+        freeze({ ...queued, sequence: this.#nextSequence++ }),
+      );
       await this.#persist();
-      return (await this.#steer(item.id)) ? { kind: 'accepted' } : { kind: 'rejected', reason: 'inapplicable' };
+      await this.#dispatch();
+      return { kind: 'accepted' };
     }
     this.#queue.push(item);
     await this.#persist();
     await this.#dispatch();
     return { kind: 'accepted' };
-  }
-
-  async #serializeSteer<T>(operation: () => Promise<T>): Promise<T> {
-    const previous = this.#steerAdmission;
-    let release!: () => void;
-    this.#steerAdmission = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    await previous;
-    try {
-      return await operation();
-    } finally {
-      release();
-    }
   }
 
   async event(event: TurnEvent<Terminal>): Promise<void> {
@@ -482,19 +482,6 @@ export class QueueController<Snapshot, Terminal = unknown> {
 
     const activeFromPhase = this.#phase === 'running' || this.#phase === 'awaiting_active_action';
     if (!activeFromPhase) return;
-
-    if (event.kind === 'cancelled') {
-      // The active turn stopped at the driver's request (a steer whose stop
-      // landed late). Retained work is not a failure to review: retire the
-      // execution and let the next item — the steer itself — run.
-      this.#active = undefined;
-      this.#pendingAction = undefined;
-      this.#phase = 'idle';
-      this.#pauseReason = undefined;
-      await this.#persist();
-      await this.#dispatch();
-      return;
-    }
 
     if (event.kind === 'failed') {
       this.#active = undefined;
@@ -569,7 +556,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
     this.#pendingAction = undefined;
     await this.#persist();
     try {
-      await this.#driver.cancel(active, 'cancel');
+      await this.#driver.cancel(active);
     } finally {
       if (this.#active?.executionId === active.executionId) {
         this.#active = undefined;
@@ -592,38 +579,6 @@ export class QueueController<Snapshot, Terminal = unknown> {
       }
     }
     return { kind: 'accepted' };
-  }
-
-  /** Cancel active work and immediately dispatch the priority steer head. */
-  async #steer(_steerItemId: ItemId): Promise<boolean> {
-    if (!this.#active || (this.#phase !== 'running' && this.#phase !== 'awaiting_active_action')) {
-      await this.#dispatch();
-      return true;
-    }
-    const active = this.#active;
-    const previousPhase = this.#phase;
-    const previousPendingAction = this.#pendingAction;
-    this.#phase = 'cancelling';
-    this.#pendingAction = undefined;
-    await this.#persist();
-    const cancelled = await this.#driver.cancel(active, 'steer');
-    if (cancelled === false && this.#active?.executionId === active.executionId) {
-      // The active turn could not reach a safe boundary, so it keeps running.
-      // A steer that cannot supersede must still be delivered: leave it at the
-      // head of the queue so it runs the moment the active turn settles.
-      // Discarding it here would drop text the user already submitted.
-      this.#phase = previousPhase;
-      this.#pendingAction = previousPendingAction;
-      await this.#persist();
-      return true;
-    }
-    if (this.#active?.executionId !== active.executionId) return true;
-    this.#active = undefined;
-    this.#phase = 'idle';
-    this.#pauseReason = undefined;
-    await this.#persist();
-    await this.#dispatch();
-    return true;
   }
 
   async #dispatch(): Promise<void> {

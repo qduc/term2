@@ -1,4 +1,5 @@
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../service-interfaces.js';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
 import { ApprovalState, type PendingApprovalContext } from '../approval/approval-state.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
@@ -221,7 +222,7 @@ export type SessionRuntime = {
     continueAfterApproval: (options: { answer: string; rejectionReason?: string }) => AsyncIterable<ConversationEvent>;
     continueAfterPostExecuteApproval: () => AsyncIterable<ConversationEvent>;
     abort: () => void;
-    stopAfterCurrentTool: () => void;
+    steer: (items: readonly ProviderInputItem[]) => Promise<boolean>;
   };
   /** Facade for state/persistence/undo/snapshot operations. */
   state: SessionManager;
@@ -644,7 +645,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
       continueAfterApproval: turnCoordinator.continueAfterApproval.bind(turnCoordinator),
       continueAfterPostExecuteApproval: turnCoordinator.continueAfterPostExecuteApproval.bind(turnCoordinator),
       abort: turnCoordinator.abort.bind(turnCoordinator),
-      stopAfterCurrentTool: turnCoordinator.stopAfterCurrentTool.bind(turnCoordinator),
+      steer: turnCoordinator.steer.bind(turnCoordinator),
     },
     state: stateFacade,
     settings: runtimeController,

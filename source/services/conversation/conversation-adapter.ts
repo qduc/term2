@@ -6,6 +6,7 @@ import { collectTerminalResult } from '../session/terminal-result-collector.js';
 import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
+import { userTurnToProviderItem } from './user-turn-item.js';
 import type { SessionRuntime, SessionLogs, SessionApprovalQuery } from '../session/session-composition.js';
 import type { SessionManager } from '../session/session-manager.js';
 import type { AskUserAnswerSink, SubagentEventSinkHost } from '../conversation-agent-client.js';
@@ -44,7 +45,7 @@ export type HandleApprovalDecisionOptions = {
 export type TurnFlow = Pick<SessionRuntime['turns'], 'start' | 'continueAfterApproval'> & {
   continueAfterPostExecuteApproval?: SessionRuntime['turns']['continueAfterPostExecuteApproval'];
   abort?: () => void;
-  stopAfterCurrentTool?: () => void;
+  steer?: SessionRuntime['turns']['steer'];
 };
 
 type QueuedMessage = {
@@ -128,12 +129,6 @@ export class ConversationAdapter {
   #activeTurn: Promise<void> = Promise.resolve();
   #activeRequestId: string | null = null;
   #cancellingRequestId: string | null = null;
-  /**
-   * The active request a steer asked to stop at a safe boundary. The stop stays
-   * armed after the steer gives up waiting, so the turn it names may end long
-   * afterwards — and when it does, that end is a cancellation, not a failure.
-   */
-  #steerStopRequestId: string | null = null;
   #cancellation: Promise<void> = Promise.resolve();
   #approvalExecutionId: ExecutionId | null = null;
   #approvalActionId: ActionId | null = null;
@@ -175,36 +170,7 @@ export class ConversationAdapter {
     if (deps.queueForeground) {
       const driver: QueueTurnDriver<QueuedMessageSnapshot> = {
         start: (execution) => this.#startQueuedTurn(execution),
-        cancel: async (_execution, reason = 'cancel') => {
-          if (reason === 'steer') {
-            // The queue has placed the replacement at its head. Stop the
-            // active model/tool sequence before admitting that replacement.
-            this.#cancellingRequestId = this.#activeRequestId;
-            this.#steerStopRequestId = this.#activeRequestId;
-            this.#turnFlow.stopAfterCurrentTool?.();
-            // A steer must never start concurrently with a tool that is still
-            // settling. When the safe boundary is not reached promptly the
-            // active turn keeps running and the queue retains the steer, which
-            // then runs at whichever boundary the turn does reach. The stop
-            // request stays armed, so `#cancellingRequestId` stays set: a late
-            // abort of this turn is a cancellation, not a failure.
-            const stopped = await Promise.race([
-              this.#activeTurn.then(
-                () => true,
-                () => true,
-              ),
-              delay(this.#activeCancelTimeoutMs).then(() => false),
-            ]);
-            if (!stopped) {
-              this.#logger.debug('Steer did not reach a safe boundary; keeping it queued', {
-                eventType: 'queue.steer_deferred',
-                category: 'conversation',
-                sessionId: this.#sessionId,
-                timeoutMs: this.#activeCancelTimeoutMs,
-              });
-            }
-            return stopped;
-          }
+        cancel: async () => {
           // Prefer natural abort settlement, but never block queue cancel forever
           // if the underlying turn ignores abort.
           await Promise.race([
@@ -302,6 +268,21 @@ export class ConversationAdapter {
       },
       fn,
     );
+  }
+
+  /**
+   * Deliver a user message into the turn already running, as a user message the
+   * model reads after the tool results of the round in flight.
+   *
+   * Resolves true once the running turn has taken it. Resolves false when that
+   * turn offers no further request boundary — it is finishing, or parked on an
+   * approval — leaving the caller to send the message as its own turn.
+   */
+  async steerActiveTurn(input: string | UserTurn): Promise<boolean> {
+    if (!this.#turnFlow.steer || !this.isQueueActive()) return false;
+    const turn = normalizeUserTurn(input);
+    if (!turn.text.trim() && !turn.images?.length) return false;
+    return this.#turnFlow.steer([userTurnToProviderItem(turn, { steering: true })]);
   }
 
   async sendMessage(
@@ -473,9 +454,6 @@ export class ConversationAdapter {
       if (this.#activeRequestId === execution.snapshot.requestId) {
         this.#activeRequestId = null;
       }
-      if (this.#steerStopRequestId === execution.snapshot.requestId) {
-        this.#steerStopRequestId = null;
-      }
     });
   }
 
@@ -515,20 +493,12 @@ export class ConversationAdapter {
       this.#notifyQueueState();
       this.#settleSuccess(execution.snapshot.requestId, result);
     } catch (error) {
-      const cancelled = this.#steerStopRequestId === execution.snapshot.requestId;
       const failure =
-        cancelled ||
-        (this.#cancellingRequestId === execution.snapshot.requestId && error instanceof AmbiguousModelOutcomeError)
+        this.#cancellingRequestId === execution.snapshot.requestId && error instanceof AmbiguousModelOutcomeError
           ? queueCancellationError('Active turn was cancelled')
           : error;
-      // A turn that ended because a steer asked it to stop is not a failure to
-      // review: retiring it lets retained work (the steer that requested the
-      // stop) run. Anything else pauses the queue with its retained items.
-      await this.#queue!.event(
-        cancelled
-          ? { kind: 'cancelled', executionId: execution.executionId }
-          : { kind: 'failed', executionId: execution.executionId, failure },
-      );
+      // Controller pauses with retained queue on failure when work remains.
+      await this.#queue!.event({ kind: 'failed', executionId: execution.executionId, failure });
       this.#notifyQueueState();
       this.#settleFailure(execution.snapshot.requestId, failure);
     }

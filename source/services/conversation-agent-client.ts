@@ -1,4 +1,4 @@
-import type { ProviderInput } from '../contracts/provider-input.js';
+import type { ProviderInput, ProviderInputItem } from '../contracts/provider-input.js';
 import type { JsonSchemaDefinition } from '../contracts/model-types.js';
 import type { ContinuationHandle } from '../contracts/continuation-handle.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
@@ -54,8 +54,8 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   startStream(userInput: ProviderInput, options?: AgentClientRunOptions): Promise<AgentStream>;
   continueRunStream(state: ContinuationHandle, options?: AgentClientRunOptions): Promise<AgentStream>;
   abort(): void;
-  /** Interrupt at a model/tool boundary without cancelling an executing tool. */
-  stopAfterCurrentTool?(): void;
+  /** Admit a user message into the running turn at its next request boundary. */
+  steer?(items: readonly ProviderInputItem[]): Promise<boolean>;
   setModel(model: string): void;
   addToolInterceptor(interceptor: ToolInterceptor): () => void;
 

@@ -502,6 +502,44 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.messages.appendMessages).not.toHaveBeenCalled();
   });
 
+  it('delivers a steer into the running turn and shows it at the moment the turn takes it', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    const steerActiveTurn = vi.fn(async () => true);
+    (cfg.conversationService as any).steerActiveTurn = steerActiveTurn;
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    await orchestrator.sendUserMessage('change direction', { busyMode: 'steer' });
+
+    expect(steerActiveTurn).toHaveBeenCalledWith(expect.objectContaining({ text: 'change direction' }));
+    // No second turn is submitted: the message belongs to the turn in flight.
+    expect(cfg.conversationService.sendMessage).not.toHaveBeenCalled();
+    const appended = vi.mocked(cfg.messages.appendMessages).mock.calls[0]?.[0]?.[0] as any;
+    expect(appended.sender).toBe('user');
+    expect(appended.text).toBe('change direction');
+    expect(cfg.ui.onQueuedMessageStarted).toHaveBeenCalledWith(appended.id);
+  });
+
+  it('falls back to queueing a steer the running turn cannot take', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    (cfg.conversationService as any).steerActiveTurn = vi.fn(async () => false);
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    await orchestrator.sendUserMessage('too late to steer', { busyMode: 'steer' });
+
+    expect(cfg.conversationService.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ text: 'too late to steer' }),
+      expect.objectContaining({ busyMode: 'steer' }),
+    );
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledTimes(1);
+  });
+
   it('reports a rejected queue submission instead of letting the pending message vanish', async () => {
     const cfg = makeConfig();
     vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);

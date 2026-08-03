@@ -689,6 +689,101 @@ describe('ApplicationRunLoop', () => {
     expect(stream.finalOutput).toBe('done');
   });
 
+  it('admits a steer as a user message after the tool result, before the next request', async () => {
+    const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    let toolStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      toolStarted = resolve;
+    });
+    const parameters = z.object({});
+    const tool: ToolDefinition<typeof parameters> = {
+      name: 'work',
+      description: 'Does work',
+      parameters,
+      needsApproval: () => false,
+      execute: () => {
+        toolStarted();
+        return 'tool output';
+      },
+      formatCommandMessage: () => [],
+    };
+    let calls = 0;
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => {
+        calls++;
+        return calls === 1
+          ? {
+              async *stream(request) {
+                requests.push(request);
+                yield { type: 'tool_call', id: 'call-1', name: 'work', arguments: '{}' };
+                yield { type: 'completion', responseId: 'resp-1', output: [] };
+              },
+            }
+          : {
+              async *stream(request) {
+                requests.push(request);
+                yield { type: 'completion', responseId: 'resp-2', output: [] };
+              },
+            };
+      },
+    });
+
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do the work');
+    await started;
+    await expect(loop.steer([{ type: 'message', role: 'user', content: 'actually, do it differently' }])).resolves.toBe(
+      true,
+    );
+    await collect(stream);
+
+    // The steer reaches the model on the request that follows the tool result,
+    // as a user message in its own right — never folded into the result.
+    const secondRequest = requests[1]!.input as any[];
+    const toolResultIndex = secondRequest.findIndex((item) => item.type === 'tool_result');
+    const steerIndex = secondRequest.findIndex(
+      (item) => item.type === 'message' && item.role === 'user' && JSON.stringify(item).includes('differently'),
+    );
+    expect(toolResultIndex).toBeGreaterThanOrEqual(0);
+    expect(steerIndex).toBeGreaterThan(toolResultIndex);
+    expect(secondRequest[toolResultIndex].output).toBe('tool output');
+
+    // It is canonical history, so persistence and retries carry it too.
+    expect(stream.history).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'message', role: 'user', content: 'actually, do it differently' }),
+      ]),
+    );
+  });
+
+  it('reports a steer as unadmitted when the turn has no request boundary left', async () => {
+    const loop = new ApplicationRunLoop({ resolveModel: () => textModel('done', 'resp-1') });
+    const stream = loop.startStream(agent, 'answer me');
+    await collect(stream);
+
+    await expect(loop.steer([{ type: 'message', role: 'user', content: 'too late' }])).resolves.toBe(false);
+  });
+
+  it('settles a steer the run never reached rather than leaving the caller waiting', async () => {
+    let releaseModel!: () => void;
+    const modelReleased = new Promise<void>((resolve) => {
+      releaseModel = resolve;
+    });
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => ({
+        async *stream() {
+          await modelReleased;
+          yield { type: 'completion', responseId: 'resp-1', output: [] };
+        },
+      }),
+    });
+    const stream = loop.startStream(agent, 'answer me');
+    const steered = loop.steer([{ type: 'message', role: 'user', content: 'never admitted' }]);
+    releaseModel();
+    await collect(stream);
+
+    // The turn ended without another request, so the caller must send it itself.
+    await expect(steered).resolves.toBe(false);
+  });
+
   it('records an unknown-tool rejection once in canonical history, output, and continuation input', async () => {
     const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
     let calls = 0;

@@ -95,16 +95,16 @@ it('holds completion admission while submissions enqueue, then dispatches the ne
   expect(starts).toEqual(['execution-1', 'execution-2']);
 });
 
-it('runs a steer before retained follow-ups while preserving their FIFO order', async () => {
+it('queues a steer ahead of retained follow-ups without disturbing the running turn', async () => {
   const starts: string[] = [];
-  const cancels: string[] = [];
+  const cancels: number[] = [];
   const controller = new QueueController({
     driver: {
       start: ({ item }) => {
         starts.push(item.text);
       },
-      cancel: async (_execution, reason) => {
-        cancels.push(reason ?? 'cancel');
+      cancel: async () => {
+        cancels.push(1);
       },
     },
     snapshotFactory: () => ({}),
@@ -125,125 +125,60 @@ it('runs a steer before retained follow-ups while preserving their FIFO order', 
   await controller.command({ kind: 'submit', text: 'follow-up-2' });
   await controller.command({ kind: 'steer', text: 'steer' });
 
-  expect(cancels).toEqual(['steer']);
-  expect(starts).toEqual(['active', 'steer']);
-  expect(controller.state()).toMatchObject({
-    kind: 'running',
-    queue: [{ text: 'follow-up-1' }, { text: 'follow-up-2' }],
-  });
-
-  await controller.event({ kind: 'completed', executionId: 'execution-2' as ExecutionId, terminal: {} });
-  expect(starts).toEqual(['active', 'steer', 'follow-up-1']);
-});
-
-it('retains a steer at the queue head when safe cancellation times out', async () => {
-  const starts: string[] = [];
-  const controller = new QueueController({
-    driver: {
-      start: ({ item }) => {
-        starts.push(item.text);
-      },
-      cancel: async (_execution, reason) => (reason === 'steer' ? false : undefined),
-    },
-    snapshotFactory: () => ({}),
-    ids: {
-      item: (() => {
-        let number = 0;
-        return () => `item-${++number}`;
-      })(),
-      execution: (() => {
-        let number = 0;
-        return () => `execution-${++number}`;
-      })(),
-    },
-  });
-
-  await controller.command({ kind: 'submit', text: 'active' });
-
-  // The active turn could not stop, so the steer does not supersede it — but it
-  // must not be discarded either.
-  await expect(controller.command({ kind: 'steer', text: 'steer' })).resolves.toEqual({ kind: 'accepted' });
+  // A steer that reaches the queue was not deliverable into the running turn.
+  // It waits its turn like any other work — nothing is cancelled — but it goes
+  // ahead of the follow-ups queued before it.
+  expect(cancels).toEqual([]);
+  expect(starts).toEqual(['active']);
   expect(controller.state()).toMatchObject({
     kind: 'running',
     active: { item: { text: 'active' } },
-    queue: [{ text: 'steer' }],
+    queue: [{ text: 'steer' }, { text: 'follow-up-1' }, { text: 'follow-up-2' }],
   });
-  expect(starts).toEqual(['active']);
 
   await controller.event({ kind: 'completed', executionId: 'execution-1' as ExecutionId, terminal: {} });
-
   expect(starts).toEqual(['active', 'steer']);
 });
 
-it('runs the retained steer when its stop lands after the steer stopped waiting', async () => {
+it('starts a steer immediately when nothing is running', async () => {
   const starts: string[] = [];
   const controller = new QueueController({
     driver: {
       start: ({ item }) => {
         starts.push(item.text);
       },
-      cancel: async (_execution, reason) => (reason === 'steer' ? false : undefined),
+      cancel: async () => undefined,
     },
     snapshotFactory: () => ({}),
-    ids: {
-      item: (() => {
-        let number = 0;
-        return () => `item-${++number}`;
-      })(),
-      execution: (() => {
-        let number = 0;
-        return () => `execution-${++number}`;
-      })(),
-    },
   });
 
-  await controller.command({ kind: 'submit', text: 'active' });
   await controller.command({ kind: 'steer', text: 'steer' });
 
-  // The armed stop lands later and ends the active turn. A cancellation is not
-  // a failure: the retained steer runs instead of the queue pausing.
-  await controller.event({ kind: 'cancelled', executionId: 'execution-1' as ExecutionId });
-
-  expect(starts).toEqual(['active', 'steer']);
-  expect(controller.state()).toMatchObject({ kind: 'running', active: { item: { text: 'steer' } } });
+  expect(starts).toEqual(['steer']);
 });
 
-it('serializes rapid steers so only one active cancellation mutates the queue at a time', async () => {
-  let releaseFirstCancel!: () => void;
-  const firstCancel = new Promise<void>((resolve) => {
-    releaseFirstCancel = resolve;
-  });
-  let cancelCount = 0;
-  let concurrentCancels = 0;
-  let maxConcurrentCancels = 0;
+it('keeps rapid steers in submission order ahead of older follow-ups', async () => {
   const starts: string[] = [];
   const controller = new QueueController({
     driver: {
       start: ({ item }) => {
         starts.push(item.text);
       },
-      cancel: async () => {
-        cancelCount += 1;
-        concurrentCancels += 1;
-        maxConcurrentCancels = Math.max(maxConcurrentCancels, concurrentCancels);
-        if (cancelCount === 1) await firstCancel;
-        concurrentCancels -= 1;
-        return true;
-      },
+      cancel: async () => true,
     },
     snapshotFactory: () => ({}),
   });
 
   await controller.command({ kind: 'submit', text: 'active' });
+  await controller.command({ kind: 'submit', text: 'follow-up' });
   const steerA = controller.command({ kind: 'steer', text: 'steer-a' });
   const steerB = controller.command({ kind: 'steer', text: 'steer-b' });
-  await new Promise((resolve) => setImmediate(resolve));
 
-  expect(cancelCount).toBe(1);
-  releaseFirstCancel();
   await expect(Promise.all([steerA, steerB])).resolves.toEqual([{ kind: 'accepted' }, { kind: 'accepted' }]);
-  expect(maxConcurrentCancels).toBe(1);
-  expect(starts).toEqual(['active', 'steer-a', 'steer-b']);
+  expect(controller.state()).toMatchObject({
+    kind: 'running',
+    queue: [{ text: 'steer-a' }, { text: 'steer-b' }, { text: 'follow-up' }],
+  });
 });
 
 it('persists concurrent submissions in mutation order', async () => {

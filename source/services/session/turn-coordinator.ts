@@ -1,4 +1,5 @@
 import type { ConversationEvent } from '../conversation/conversation-events.js';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { toTerminalEvent } from '../conversation/conversation-result-builder.js';
 import { type UserTurn } from '../../types/user-turn.js';
 import { TurnStatusMachine, type TurnCommand, type TurnLease, type TurnOutcome } from './turn-status-machine.js';
@@ -108,12 +109,14 @@ export class TurnCoordinator {
     this.deps.providerContinuity.clear();
   }
 
-  stopAfterCurrentTool(): void {
-    if (this.deps.statusMachine.is('awaiting_approval')) {
-      this.abort();
-      return;
-    }
-    this.deps.turnWorkflow.stopAfterCurrentTool();
+  /**
+   * Admit a user message into the running turn. A turn parked on an approval
+   * has no request boundary ahead of it until the user answers, so the caller
+   * is told to send the message as its own turn instead.
+   */
+  steer(items: readonly ProviderInputItem[]): Promise<boolean> {
+    if (this.deps.statusMachine.is('awaiting_approval')) return Promise.resolve(false);
+    return this.deps.turnWorkflow.steer(items);
   }
 
   // ── Private helpers ──────────────────────────────────────────

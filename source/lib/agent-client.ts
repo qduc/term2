@@ -22,7 +22,7 @@ import type { SessionAccessState } from '../services/session/session-access-stat
 import type { AgentClientRunOptions } from '../services/conversation-agent-client.js';
 import type { ContinuationProjectionMode } from './continuation-projection-mode.js';
 import type { AgentStream } from '../services/agent-stream.js';
-import type { ProviderInput } from '../contracts/provider-input.js';
+import type { ProviderInput, ProviderInputItem } from '../contracts/provider-input.js';
 import type { ProviderRequestCapture } from '../providers/provider-request-capture.js';
 import { getProvider } from '../providers/index.js';
 import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
@@ -311,8 +311,13 @@ export class AgentClient {
     this.#subagentBridge?.abort();
   }
 
-  stopAfterCurrentTool(): void {
-    this.#applicationRunLoop.stopAfterCurrentTool();
+  /**
+   * Hand the running turn a user message for its next model request. Resolves
+   * false when the turn offers no further request boundary, leaving the caller
+   * to send the message as its own turn.
+   */
+  steer(items: readonly ProviderInputItem[]): Promise<boolean> {
+    return this.#applicationRunLoop.steer(items);
   }
 
   /**

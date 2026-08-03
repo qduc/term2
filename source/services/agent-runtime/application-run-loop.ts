@@ -104,6 +104,12 @@ export interface ApplicationRunLoopDeps {
   readonly resolveModel: (model: string) => StreamedModelTurn | Promise<StreamedModelTurn>;
 }
 
+/** A user message waiting for the running turn's next request boundary. */
+type PendingSteer = {
+  readonly items: readonly ProviderInputItem[];
+  readonly resolve: (admitted: boolean) => void;
+};
+
 type PendingApproval = {
   callId: string;
   toolName: string;
@@ -186,8 +192,8 @@ class EventQueue {
 export class ApplicationRunLoop {
   readonly #deps: ApplicationRunLoopDeps;
   #activeAbortController: AbortController | null = null;
-  #executingTool = false;
-  #stopAfterCurrentTool = false;
+  #runInFlight = false;
+  #pendingSteers: PendingSteer[] = [];
 
   constructor(deps: ApplicationRunLoopDeps) {
     this.#deps = deps;
@@ -199,15 +205,50 @@ export class ApplicationRunLoop {
   }
 
   /**
-   * Stop at the next safe boundary. A running tool is allowed to settle, while
-   * model streaming (or the next model/tool cycle) is interrupted immediately.
+   * Hand the running turn a user message to send with its next model request.
+   *
+   * The loop admits it at a request boundary — after the tool results of the
+   * current round are in history and before the next request is built — so the
+   * model reads it in sequence without the turn being interrupted. Nothing is
+   * cancelled, and a tool already running is untouched.
+   *
+   * Resolves `true` once the message has been admitted, and `false` when this
+   * run ends first (or none is in flight): the turn offered no further request
+   * boundary, so the caller must send the message as its own turn instead.
    */
-  stopAfterCurrentTool(): void {
-    if (this.#executingTool) {
-      this.#stopAfterCurrentTool = true;
-      return;
+  steer(items: readonly ProviderInputItem[]): Promise<boolean> {
+    if (!this.#runInFlight || items.length === 0) return Promise.resolve(false);
+    return new Promise<boolean>((resolve) => {
+      this.#pendingSteers.push({ items, resolve });
+    });
+  }
+
+  /** Settle every steer this run did not admit so callers stop waiting on it. */
+  #releasePendingSteers(): void {
+    const pending = this.#pendingSteers;
+    this.#pendingSteers = [];
+    for (const steer of pending) steer.resolve(false);
+  }
+
+  /**
+   * Append waiting steers to the turn as ordinary user messages.
+   *
+   * They enter history and model input exactly as a user turn does — never
+   * folded into a tool result — so the provider sees the user speaking after
+   * the tool results of the round that was in flight when they typed.
+   */
+  #admitPendingSteers(state: RunState, stream: AgentStream, queue: EventQueue): void {
+    if (this.#pendingSteers.length === 0) return;
+    const admitted = this.#pendingSteers;
+    this.#pendingSteers = [];
+    for (const steer of admitted) {
+      for (const item of steer.items) {
+        state.history.push(item);
+        state.input.push(...normalizeApplicationInput([item]));
+        outputPush(stream, queue, { type: 'item', item });
+      }
+      steer.resolve(true);
     }
-    this.abort();
   }
 
   startStream(agent: ApplicationAgent, input: ProviderInput, options: ApplicationRunLoopOptions = {}): AgentStream {
@@ -302,7 +343,7 @@ export class ApplicationRunLoop {
     this.abort();
     const controller = new AbortController();
     this.#activeAbortController = controller;
-    this.#stopAfterCurrentTool = false;
+    this.#runInFlight = true;
     if (options.signal) {
       if (options.signal.aborted) controller.abort();
       else options.signal.addEventListener('abort', () => controller.abort(), { once: true });
@@ -343,6 +384,10 @@ export class ApplicationRunLoop {
       })
       .finally(() => {
         if (this.#activeAbortController === controller) this.#activeAbortController = null;
+        // This run offered no further request boundary. Anything still waiting
+        // has to be sent as its own turn instead.
+        this.#runInFlight = false;
+        this.#releasePendingSteers();
       });
     return stream;
   }
@@ -381,7 +426,6 @@ export class ApplicationRunLoop {
         const rawResult = approved
           ? await this.#invokeTool(pending.definition, pending.params, toolContext, pending.callId)
           : state.approvalMessage ?? 'rejected';
-        if (this.#stopAfterCurrentTool) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
         const result = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult);
         const resultItem: ProviderInputItem = {
           type: 'function_call_result',
@@ -400,6 +444,11 @@ export class ApplicationRunLoop {
         stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
         if (state.pendingApprovals.length > 0) return finish(stream, state, queue);
       }
+
+      // The request boundary: every tool result of the previous round is in
+      // history, and the next request has not been built. A user message
+      // admitted here reaches the model in sequence, mid-turn.
+      this.#admitPendingSteers(state, stream, queue);
 
       state.turnCount += 1;
       if (state.maxTurns !== undefined && state.turnCount > state.maxTurns) {
@@ -669,17 +718,7 @@ export class ApplicationRunLoop {
     toolContext: ToolInvocationContext,
     callId: string,
   ): Promise<unknown> {
-    this.#executingTool = true;
-    let result: unknown;
-    try {
-      result = await definition.execute(params, toolContext, { toolCall: { callId } });
-    } finally {
-      this.#executingTool = false;
-    }
-    if (this.#stopAfterCurrentTool) {
-      throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
-    }
-    return result;
+    return definition.execute(params, toolContext, { toolCall: { callId } });
   }
 }
 

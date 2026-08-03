@@ -297,6 +297,19 @@ export class ConversationService {
   }
 
   /**
+   * Deliver a user message into the turn already running, so the model reads it
+   * mid-turn — after the tool results of the round in flight — instead of after
+   * the whole turn ends. Nothing is cancelled.
+   *
+   * Resolves false when the running turn offers no further request boundary
+   * (it is finishing, or parked on an approval); the caller then sends the
+   * message as its own turn.
+   */
+  steerActiveTurn(input: string | UserTurn): Promise<boolean> {
+    return this.#adapter.steerActiveTurn(input);
+  }
+
+  /**
    * Returns true if a foreground turn is currently active (running,
    * completing, awaiting an approval, etc.). The orchestrator uses this to
    * decide whether to immediately append a user message to the message list

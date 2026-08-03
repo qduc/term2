@@ -1,4 +1,5 @@
 import type { ContinuationHandle } from '../../contracts/continuation-handle.js';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
@@ -117,8 +118,8 @@ export class TurnWorkflow {
       });
   }
 
-  stopAfterCurrentTool(): void {
-    this.deps.agentClient.stopAfterCurrentTool?.();
+  steer(items: readonly ProviderInputItem[]): Promise<boolean> {
+    return this.deps.agentClient.steer?.(items) ?? Promise.resolve(false);
   }
 
   async *executeInitial(

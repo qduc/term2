@@ -1,3 +1,5 @@
+import { stripSteeringNotice } from '../../prompts/steering-notice.js';
+
 export const SHELL_CONTEXT_PREFIX = '[Previous Shell Session]';
 export const LEGACY_MODE_NOTICE_PREFIX = '[Mode Notice] ';
 
@@ -45,9 +47,11 @@ export function projectConversationMessage(item: unknown): ConversationMessagePr
 
   const content = message.content;
   if (typeof content === 'string') {
+    // A steering message is a genuine user turn wearing a model-facing notice.
+    // Everything the app shows or rewinds to must be the user's own words.
     return {
       role: message.role,
-      text: content,
+      text: message.role === 'user' ? stripSteeringNotice(content) : content,
       allText: content,
       images: [],
       imageCount: 0,
@@ -60,10 +64,11 @@ export function projectConversationMessage(item: unknown): ConversationMessagePr
   const parts = Array.isArray(content)
     ? content.map(asRecord).filter((part): part is Record<string, unknown> => !!part)
     : [];
-  const text = parts
+  const joinedText = parts
     .filter((part) => (part.type === 'input_text' || part.type === 'output_text') && typeof part.text === 'string')
     .map((part) => part.text as string)
     .join('');
+  const text = message.role === 'user' ? stripSteeringNotice(joinedText) : joinedText;
   const allText = parts
     .filter((part) => typeof part.text === 'string')
     .map((part) => part.text as string)

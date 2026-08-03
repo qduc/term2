@@ -72,7 +72,34 @@ const truncate = (text: string, maxChars: number): string => {
 const asRecord = (value: unknown): Record<string, any> | undefined =>
   value && typeof value === 'object' ? (value as Record<string, any>) : undefined;
 
+const TOOL_CALL_TYPES = new Set(['function_call', 'tool_call', 'apply_patch_call']);
+
+const getItemRecord = (item: ProviderInputItem): Record<string, unknown> => {
+  const rawItem = item.rawItem;
+  return rawItem && typeof rawItem === 'object' && !Array.isArray(rawItem)
+    ? (rawItem as Record<string, unknown>)
+    : item;
+};
+
+const formatToolCallArgument = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (value === undefined) return '(no arguments)';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '(unserializable arguments)';
+  }
+};
+
 const getCompactHistoryLine = (item: ProviderInputItem): string | undefined => {
+  const record = getItemRecord(item);
+  if (typeof record.type === 'string' && TOOL_CALL_TYPES.has(record.type)) {
+    const name =
+      typeof record.name === 'string' ? record.name : typeof record.toolName === 'string' ? record.toolName : 'unknown';
+    const args = record.arguments ?? record.args;
+    return `[tool call] ${name} ${truncate(formatToolCallArgument(args), MAX_MESSAGE_CHARS)}`;
+  }
+
   const message = projectConversationMessage(item);
   if (!message || (message.role !== 'user' && message.role !== 'assistant')) return undefined;
 

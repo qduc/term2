@@ -1,4 +1,4 @@
-export const SHELL_AUTO_APPROVAL_PROMPT_VERSION = 'auto-approval-prompt-v7';
+export const SHELL_AUTO_APPROVAL_PROMPT_VERSION = 'auto-approval-prompt-v8';
 
 export const SHELL_AUTO_APPROVAL_INSTRUCTIONS = `You decide whether shell commands may run without a human approval prompt.
 

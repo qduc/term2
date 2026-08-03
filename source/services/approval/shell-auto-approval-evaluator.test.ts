@@ -438,7 +438,7 @@ it('instructions distinguish auto-approval from user-requested destructive inten
   expect(chatCalls[0].prompt.includes('Think step-by-step')).toBe(false);
 });
 
-it('prompt contains only user and assistant text from bounded history context', async () => {
+it('prompt contains recent user, assistant, and tool-call context from bounded history', async () => {
   const largeToolOutput = 'SECRET_OUTPUT '.repeat(2_000);
   const largeAssistantText = 'assistant detail '.repeat(600);
   const largeUserText = 'please inspect the repository '.repeat(300);
@@ -474,10 +474,10 @@ it('prompt contains only user and assistant text from bounded history context', 
   expect(chatCalls.length).toBe(1);
   expect(chatCalls[0].prompt.includes('[user]')).toBe(true);
   expect(chatCalls[0].prompt.includes('[assistant]')).toBe(true);
-  expect(chatCalls[0].prompt.includes('[tool call]')).toBe(false);
+  expect(chatCalls[0].prompt.includes('[tool call] shell')).toBe(true);
   expect(chatCalls[0].prompt.includes('[tool result]')).toBe(false);
   expect(chatCalls[0].prompt.includes('SECRET_OUTPUT')).toBe(false);
-  expect(chatCalls[0].prompt.includes('pwd')).toBe(false);
+  expect(chatCalls[0].prompt.includes('{"command":"pwd"}')).toBe(true);
   expect(chatCalls[0].prompt.includes('expensive hidden reasoning')).toBe(false);
   expect(chatCalls[0].prompt.includes('reasoning_details')).toBe(false);
   expect(chatCalls[0].prompt.length < 6_000).toBe(true);

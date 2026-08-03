@@ -130,6 +130,8 @@ export type StreamedModelTurnEvent =
       readonly text: string;
       readonly providerMetadata?: StreamedModelProviderOptions;
     }
+  /** Cumulative progress while a provider is assembling a tool call's arguments. */
+  | { readonly type: 'tool_call_streaming_delta'; readonly toolName?: string; readonly argumentCharCount: number }
   | { readonly type: 'tool_call'; readonly id: string; readonly name: string; readonly arguments: string }
   | {
       readonly type: 'completion';

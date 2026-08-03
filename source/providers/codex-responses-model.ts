@@ -159,7 +159,9 @@ async function* convertCodexRawStream(source: AsyncIterable<any>): AsyncIterable
   const output: any[] = [];
   const pendingToolCalls: Extract<StreamedModelTurnEvent, { type: 'tool_call' }>[] = [];
   const terminalReasoning: any[] = [];
-  const pendingReasoningDeltas: Extract<StreamedModelTurnEvent, { type: 'reasoning_delta' }>[] = [];
+  const toolNamesByIndex = new Map<number | string, string>();
+  const toolArgumentLengthsByIndex = new Map<number | string, number>();
+  let sawReasoningDelta = false;
   let responseId = '';
   let finishReason: string | undefined;
   let usage: Extract<StreamedModelTurnEvent, { type: 'completion' }>['usage'];
@@ -171,11 +173,31 @@ async function* convertCodexRawStream(source: AsyncIterable<any>): AsyncIterable
     } else if (event?.type === 'response.output_text.delta') {
       yield { type: 'text_delta', text: String(event.delta ?? '') };
     } else if (event?.type === 'response.reasoning_summary_text.delta') {
-      pendingReasoningDeltas.push({
-        type: 'reasoning_delta',
-        ...(typeof event.item_id === 'string' ? { id: event.item_id } : {}),
-        text: String(event.delta ?? ''),
-      });
+      const text = String(event.delta ?? '');
+      if (text) {
+        sawReasoningDelta = true;
+        yield {
+          type: 'reasoning_delta',
+          ...(typeof event.item_id === 'string' ? { id: event.item_id } : {}),
+          text,
+        };
+      }
+    } else if (event?.type === 'response.output_item.added' && event.output_item?.type === 'function_call') {
+      const index = typeof event.output_index === 'number' ? event.output_index : event.output_item.id ?? 0;
+      if (typeof event.output_item.name === 'string') toolNamesByIndex.set(index, event.output_item.name);
+      toolArgumentLengthsByIndex.set(index, 0);
+    } else if (
+      (event?.type === 'response.function_call_arguments.delta' ||
+        event?.type === 'response.custom_tool_call_input.delta' ||
+        event?.type === 'response.mcp_call_arguments.delta') &&
+      typeof event.delta === 'string' &&
+      event.delta
+    ) {
+      const index = typeof event.output_index === 'number' ? event.output_index : event.item_id ?? 0;
+      const argumentCharCount = (toolArgumentLengthsByIndex.get(index) ?? 0) + event.delta.length;
+      toolArgumentLengthsByIndex.set(index, argumentCharCount);
+      const toolName = toolNamesByIndex.get(index);
+      yield { type: 'tool_call_streaming_delta', ...(toolName ? { toolName } : {}), argumentCharCount };
     } else if (event?.type === 'response.output_item.done' && event.item?.type === 'function_call') {
       const call = toCodexToolCallOutput(event.item);
       output.push(call);
@@ -192,7 +214,7 @@ async function* convertCodexRawStream(source: AsyncIterable<any>): AsyncIterable
           if (converted.type === 'reasoning') terminalReasoning.push(converted);
         }
       }
-      const authoritativeReasoning = terminalReasoning.length > 0 ? terminalReasoning : pendingReasoningDeltas;
+      const authoritativeReasoning = sawReasoningDelta ? [] : terminalReasoning;
       for (const reasoning of authoritativeReasoning) {
         yield {
           type: 'reasoning_delta',

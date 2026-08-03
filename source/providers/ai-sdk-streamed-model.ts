@@ -67,6 +67,7 @@ export function createAiSdkStreamedModel(
       let completionMetadata: Record<string, unknown> | undefined;
       const output: StreamedModelTurnOutput[] = [];
       const reasoning = new Map<string, { text: string; providerMetadata?: Record<string, unknown> }>();
+      const toolCalls = new Map<string, { name: string; argumentCharCount: number }>();
 
       for await (const part of result.stream) {
         if (part.type === 'response-metadata') {
@@ -120,9 +121,22 @@ export function createAiSdkStreamedModel(
           }
           continue;
         }
+        if (part.type === 'tool-input-start') {
+          toolCalls.set(part.id, { name: part.toolName, argumentCharCount: 0 });
+          continue;
+        }
+        if (part.type === 'tool-input-delta') {
+          const current = toolCalls.get(part.id) ?? { name: '', argumentCharCount: 0 };
+          current.argumentCharCount += part.delta.length;
+          toolCalls.set(part.id, current);
+          yield {
+            type: 'tool_call_streaming_delta',
+            ...(current.name ? { toolName: current.name } : {}),
+            argumentCharCount: current.argumentCharCount,
+          };
+          continue;
+        }
         if (
-          part.type === 'tool-input-start' ||
-          part.type === 'tool-input-delta' ||
           part.type === 'tool-input-end' ||
           part.type === 'text-start' ||
           part.type === 'text-end' ||

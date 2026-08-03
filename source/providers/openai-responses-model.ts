@@ -253,12 +253,57 @@ function completedEvent(response: any): Extract<StreamedModelTurnEvent, { type: 
   };
 }
 
+/** State needed to turn provider tool-argument fragments into UI progress events. */
+export interface ResponseEventNormalizationState {
+  toolNamesByIndex: Map<number | string, string>;
+  toolArgumentLengthsByIndex: Map<number | string, number>;
+}
+
+export function createResponseEventNormalizationState(): ResponseEventNormalizationState {
+  return { toolNamesByIndex: new Map(), toolArgumentLengthsByIndex: new Map() };
+}
+
 /** Convert one native OpenAI Responses event to the application turn protocol. */
-export function normalizeResponseEvent(event: any): StreamedModelTurnEvent | null {
+export function normalizeResponseEvent(
+  event: any,
+  state: ResponseEventNormalizationState = createResponseEventNormalizationState(),
+): StreamedModelTurnEvent | null {
   if (!event || typeof event.type !== 'string') return null;
   if (event.type === 'response.output_text.delta') return { type: 'text_delta', text: event.delta ?? '' };
   if (event.type === 'response.reasoning_summary_text.delta') {
     return { type: 'reasoning_delta', id: event.item_id, text: event.delta ?? '' };
+  }
+  if (event.type === 'response.output_item.added') {
+    const item = event.output_item ?? event.item;
+    if (item?.type === 'function_call' && typeof item.name === 'string') {
+      const index = typeof event.output_index === 'number' ? event.output_index : item.id ?? 0;
+      state.toolNamesByIndex.set(index, item.name);
+      state.toolArgumentLengthsByIndex.set(index, 0);
+    }
+    return null;
+  }
+  if (
+    event.type === 'response.function_call_arguments.delta' ||
+    event.type === 'response.custom_tool_call_input.delta' ||
+    event.type === 'response.mcp_call_arguments.delta'
+  ) {
+    const index = typeof event.output_index === 'number' ? event.output_index : event.item_id ?? 0;
+    const delta = typeof event.delta === 'string' ? event.delta : '';
+    if (!delta) return null;
+    const argumentCharCount = (state.toolArgumentLengthsByIndex.get(index) ?? 0) + delta.length;
+    state.toolArgumentLengthsByIndex.set(index, argumentCharCount);
+    const toolName = state.toolNamesByIndex.get(index);
+    return { type: 'tool_call_streaming_delta', ...(toolName ? { toolName } : {}), argumentCharCount };
+  }
+  if (event.type === 'response.output_item.delta') {
+    const delta = event.delta;
+    const argumentsText = typeof delta?.arguments === 'string' ? delta.arguments : '';
+    if (!argumentsText) return null;
+    const index = typeof event.output_index === 'number' ? event.output_index : 0;
+    const argumentCharCount = (state.toolArgumentLengthsByIndex.get(index) ?? 0) + argumentsText.length;
+    state.toolArgumentLengthsByIndex.set(index, argumentCharCount);
+    const toolName = state.toolNamesByIndex.get(index);
+    return { type: 'tool_call_streaming_delta', ...(toolName ? { toolName } : {}), argumentCharCount };
   }
   if (event.type === 'response.failed' || event.type === 'response.incomplete') {
     const response = event.response ?? event;
@@ -315,8 +360,9 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
           ? { headers: (request.providerOptions as any).extraHeaders }
           : {}),
       });
+      const normalizationState = createResponseEventNormalizationState();
       for await (const event of source) {
-        const normalized = normalizeResponseEvent(event);
+        const normalized = normalizeResponseEvent(event, normalizationState);
         if (normalized?.type === 'completion') {
           terminal = true;
           this.lifecycle.finish(request, 'terminal', this.capture, normalized.responseId);
@@ -342,11 +388,12 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
     let terminal = false;
     try {
       socket.send({ type: 'response.create', ...requestBody(request, this._model, true) } as any);
+      const normalizationState = createResponseEventNormalizationState();
       for await (const message of socket.stream()) {
         if (message.type === 'error') throw (message as any).error ?? new Error('OpenAI WebSocket provider error');
         if (message.type === 'close') throw new Error('OpenAI WebSocket closed before a terminal response event.');
         if (message.type !== 'message') continue;
-        const normalized = normalizeResponseEvent(message.message);
+        const normalized = normalizeResponseEvent(message.message, normalizationState);
         if (normalized?.type === 'completion') {
           terminal = true;
           this.lifecycle.finish(request, 'terminal', this.capture, normalized.responseId);

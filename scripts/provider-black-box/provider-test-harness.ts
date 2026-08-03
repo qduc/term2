@@ -26,6 +26,40 @@ type RootRemoval = (root: string, options: typeof ROOT_REMOVAL_OPTIONS) => Promi
 
 const removeRootWithFsRm: RootRemoval = (root, options) => rm(root, options);
 
+/**
+ * PTY children are spawned detached so the harness can signal their whole
+ * process group. That also means they outlive an interrupted run: a Ctrl-C or
+ * a killed vitest worker skips `afterEach`, and the child is reparented to init
+ * and idles forever holding a PTY. Orphans accumulated across runs this way.
+ *
+ * Every live child is tracked here and reaped on process teardown, which is the
+ * one path an interrupted run still takes.
+ */
+const liveTerminals = new Set<ChildProcess>();
+const REAPED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+
+/** Synchronous by necessity — `exit` listeners cannot await. */
+function reapLiveTerminals(): void {
+  for (const terminal of liveTerminals) signalChild(terminal, 'SIGKILL', true);
+  liveTerminals.clear();
+}
+
+function onReapedSignal(signal: (typeof REAPED_SIGNALS)[number]): void {
+  reapLiveTerminals();
+  // Re-raise so vitest's own teardown, or the default action, still runs.
+  process.off(signal, onReapedSignal);
+  process.kill(process.pid, signal);
+}
+
+let reaperInstalled = false;
+
+function installTerminalReaper(): void {
+  if (reaperInstalled) return;
+  reaperInstalled = true;
+  process.on('exit', reapLiveTerminals);
+  for (const signal of REAPED_SIGNALS) process.on(signal, onReapedSignal);
+}
+
 export interface BlackBoxRun {
   exitCode: number | null;
   signal: NodeJS.Signals | null;
@@ -372,6 +406,9 @@ function createPtyChild(options: {
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
+  installTerminalReaper();
+  liveTerminals.add(terminal);
+
   let output = '';
   let exitState: ChildExit | null = null;
   let spawnError: Error | null = null;
@@ -391,6 +428,7 @@ function createPtyChild(options: {
     spawnError = error instanceof Error ? error : new Error(String(error));
   });
   terminal.on('close', (code, signal) => {
+    liveTerminals.delete(terminal);
     exitState = { exitCode: code, signal: signal as NodeJS.Signals | null };
     resolveExit?.(exitState);
     resolveExit = undefined;

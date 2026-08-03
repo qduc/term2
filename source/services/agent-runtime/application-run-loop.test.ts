@@ -104,6 +104,23 @@ describe('ApplicationRunLoop', () => {
     await stream.completed;
   });
 
+  it('forwards live reasoning and tool-argument progress as application events', async () => {
+    const model: StreamedModelTurn = {
+      async *stream() {
+        yield { type: 'reasoning_delta' as const, text: 'Thinking' };
+        yield { type: 'tool_call_streaming_delta' as const, toolName: 'shell', argumentCharCount: 12 };
+        yield { type: 'completion' as const, responseId: 'resp-live', output: [] };
+      },
+    };
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const stream = loop.startStream(agent, 'hello');
+
+    await expect(collect(stream)).resolves.toEqual([
+      { type: 'reasoning_delta', text: 'Thinking' },
+      { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 12 },
+    ]);
+  });
+
   it('forwards Codex ChatGPT-plan rate limits as provider model events', async () => {
     const model: StreamedModelTurn = {
       async *stream() {

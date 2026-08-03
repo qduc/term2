@@ -28,6 +28,9 @@ it('translates one application turn to an AI SDK stream and publishes its author
           yield { type: 'reasoning-delta', id: 'thought-1', delta: 'Think.' };
           yield { type: 'reasoning-end', id: 'thought-1', providerMetadata: { anthropic: { signature: 'final' } } };
           yield { type: 'text-delta', id: 'text-1', delta: 'Done.' };
+          yield { type: 'tool-input-start', id: 'call-1', toolName: 'shell' };
+          yield { type: 'tool-input-delta', id: 'call-1', delta: '{"command":' };
+          yield { type: 'tool-input-delta', id: 'call-1', delta: '"pwd"}' };
           yield { type: 'tool-call', toolCallId: 'call-1', toolName: 'shell', input: '{"command":"pwd"}' };
           yield {
             type: 'finish',
@@ -142,6 +145,8 @@ it('translates one application turn to an AI SDK stream and publishes its author
   expect(events).toEqual([
     { type: 'reasoning_delta', id: 'thought-1', text: 'Think.', providerMetadata: { anthropic: { signature: 'sig' } } },
     { type: 'text_delta', text: 'Done.' },
+    { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 11 },
+    { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 17 },
     { type: 'tool_call', id: 'call-1', name: 'shell', arguments: '{"command":"pwd"}' },
     {
       type: 'completion',

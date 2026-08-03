@@ -77,8 +77,16 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
         const current = calls.get(index) ?? { name: '', arguments: '' };
         if (call.id) current.id = call.id;
         current.name += call.function?.name ?? '';
-        current.arguments += call.function?.arguments ?? '';
+        const argumentDelta = call.function?.arguments ?? '';
+        current.arguments += argumentDelta;
         calls.set(index, current);
+        if (argumentDelta) {
+          yield {
+            type: 'tool_call_streaming_delta',
+            ...(current.name ? { toolName: current.name } : {}),
+            argumentCharCount: current.arguments.length,
+          };
+        }
       }
       if (chunk.usage) {
         // Chat providers place usage on the terminal chunk rather than a

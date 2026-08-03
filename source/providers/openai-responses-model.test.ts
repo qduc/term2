@@ -30,6 +30,29 @@ async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   return out;
 }
 
+it('normalizes streamed Responses tool argument progress for the UI', () => {
+  const state = { toolNamesByIndex: new Map(), toolArgumentLengthsByIndex: new Map() };
+  expect(
+    normalizeResponseEvent(
+      {
+        type: 'response.output_item.added',
+        output_index: 0,
+        output_item: { type: 'function_call', name: 'shell', id: 'call-1' },
+      },
+      state,
+    ),
+  ).toBeNull();
+  expect(
+    normalizeResponseEvent(
+      { type: 'response.function_call_arguments.delta', output_index: 0, delta: '{"command":' },
+      state,
+    ),
+  ).toEqual({ type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 11 });
+  expect(
+    normalizeResponseEvent({ type: 'response.function_call_arguments.delta', output_index: 0, delta: '"pwd"}' }, state),
+  ).toEqual({ type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 17 });
+});
+
 it('normalizes only completed Responses events as successful completions', () => {
   expect(normalizeResponseEvent({ type: 'response.completed', response: { id: 'done', output: [] } })).toEqual({
     type: 'completion',

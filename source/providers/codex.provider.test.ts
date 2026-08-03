@@ -1031,6 +1031,7 @@ it.sequential('Codex registry boundary preserves the full streamed-turn request 
     ]);
     expect(events).toEqual([
       { type: 'text_delta', text: 'answer' },
+      { type: 'reasoning_delta', id: 'rs_out', text: 'thought' },
       {
         type: 'codex_rate_limits',
         rateLimits: {
@@ -1039,12 +1040,6 @@ it.sequential('Codex registry boundary preserves the full streamed-turn request 
           primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 9697, reset_at: 1779703037 },
           secondary: { used_percent: 14, window_minutes: 10080, reset_after_seconds: 503937, reset_at: 1780197277 },
         },
-      },
-      {
-        type: 'reasoning_delta',
-        id: 'rs_out',
-        text: 'thought',
-        providerMetadata: { codex: { encrypted_content: 'cipher' } },
       },
       { type: 'tool_call', id: 'call_out', name: 'lookup', arguments: '{"q":1}' },
       {

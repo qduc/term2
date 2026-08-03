@@ -453,6 +453,10 @@ export class ApplicationRunLoop {
             outputPush(stream, queue, { type: 'reasoning_delta', text: event.text });
             continue;
           }
+          if (event.type === 'tool_call_streaming_delta') {
+            outputPush(stream, queue, event);
+            continue;
+          }
           if (event.type === 'tool_call') {
             pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
             sawToolCall = true;

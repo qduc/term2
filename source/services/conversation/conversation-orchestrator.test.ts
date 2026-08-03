@@ -152,6 +152,24 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.ui.onTurnEnd).toHaveBeenCalled();
   });
 
+  it('forwards live reasoning and tool-call indicators to the UI port', async () => {
+    const cfg = makeConfig();
+    (cfg.conversationService as any).isQueueActive = undefined;
+    (cfg.conversationService as any).setQueuedTurnStartObserver = undefined;
+    const terminal: ConversationTerminal = { type: 'response', finalText: 'ok', commandMessages: [] };
+
+    vi.mocked(cfg.conversationService.sendMessage).mockImplementation(async (_input: any, options: any) => {
+      options.onEvent({ type: 'reasoning_delta', delta: 'Thinking' });
+      options.onEvent({ type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 12 });
+      return terminal;
+    });
+
+    await new ConversationOrchestrator(cfg).sendUserMessage('hello');
+
+    expect(cfg.ui.onStreamingThinkingStarted).toHaveBeenCalled();
+    expect(cfg.ui.onStreamingToolInfo).toHaveBeenCalledWith({ toolName: 'shell', argumentCharCount: 12 });
+  });
+
   it('requests approval for approval_required terminals', async () => {
     const cfg = makeConfig();
     const orchestrator = new ConversationOrchestrator(cfg);

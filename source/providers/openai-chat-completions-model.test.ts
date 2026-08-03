@@ -238,6 +238,11 @@ it('stream() reassembles a tool call whose arguments span multiple id-less SSE c
     events.push(event);
   }
 
+  expect(events.filter((event) => event.type === 'tool_call_streaming_delta')).toEqual([
+    { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 11 },
+    { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 20 },
+  ]);
+
   const toolCallEvent = events.find((event) => event.type === 'tool_call');
   expect(toolCallEvent).toEqual({
     type: 'tool_call',

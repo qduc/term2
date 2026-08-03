@@ -128,6 +128,16 @@ export default tseslint.config(
       'no-empty': 'off',
     },
   },
+  // Standalone .mjs scripts that tests spawn as real child processes. They run
+  // in Node, not in the app bundle, so they need Node globals.
+  {
+    files: ['source/**/test-fixtures/*.mjs'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
   // WS11 ratchet: only cleaned production modules are currently protected.
   // Keep this list file-scoped so untouched production code and tests remain
   // permissive until their explicit-any cleanup is complete.

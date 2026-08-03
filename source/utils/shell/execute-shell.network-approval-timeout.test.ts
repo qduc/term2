@@ -167,20 +167,31 @@ function createPausedChild() {
   child.stdout = new PassThrough();
   child.stderr = new PassThrough();
   child.signals = [];
+
+  // Model the real child lifecycle: an exiting process closes its pipes and
+  // emits 'exit' before 'close'. Emitting only 'close' would let a fake pass
+  // where a real process whose pipes are held open by a descendant would not.
+  const settle = (code: number | null, signal: NodeJS.Signals | null) => {
+    child.stdout.end();
+    child.stderr.end();
+    child.emit('exit', code, signal);
+    child.emit('close', code, signal);
+  };
+
   child.kill = (signal) => {
     child.signals.push(String(signal));
     if (signal === 'SIGSTOP') paused = true;
     if (signal === 'SIGTERM') {
       terminationPending = true;
-      if (!paused) child.emit('close', null, 'SIGTERM');
+      if (!paused) settle(null, 'SIGTERM');
     }
     if (signal === 'SIGCONT') {
       paused = false;
-      if (terminationPending) child.emit('close', null, 'SIGTERM');
+      if (terminationPending) settle(null, 'SIGTERM');
     }
     return true;
   };
-  child.complete = () => child.emit('close', 0, null);
+  child.complete = () => settle(0, null);
 
   return child;
 }

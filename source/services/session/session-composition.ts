@@ -537,6 +537,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     turnWorkflow,
     approvalFlow,
     providerContinuity,
+    shellAutoApproval,
   });
 
   const stateFacade = new SessionManager({

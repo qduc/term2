@@ -3,6 +3,8 @@ import { toTerminalEvent } from '../conversation/conversation-result-builder.js'
 import { type UserTurn } from '../../types/user-turn.js';
 import { TurnStatusMachine, type TurnCommand, type TurnLease, type TurnOutcome } from './turn-status-machine.js';
 import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
+import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
+import { getToolInfoFromInterruption } from '../interruption-info.js';
 import type { TurnWorkflow } from './turn-workflow.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { InitialTurnRunOptions } from './turn-attempt-factory.js';
@@ -24,6 +26,7 @@ export interface TurnCoordinatorDeps {
   turnWorkflow: TurnWorkflow;
   approvalFlow: ApprovalFlowCoordinator;
   providerContinuity: ProviderContinuity;
+  shellAutoApproval: ShellAutoApprovalResolver;
 }
 
 export class TurnCoordinator {
@@ -63,6 +66,7 @@ export class TurnCoordinator {
     if (!this.deps.statusMachine.is('awaiting_approval')) {
       throw new Error('No pending approval to continue.');
     }
+    this.#recordManualShellDecision(answer);
     const lease = this.deps.statusMachine.beginContinuation();
     let processed = false;
     try {
@@ -113,6 +117,15 @@ export class TurnCoordinator {
   }
 
   // ── Private helpers ──────────────────────────────────────────
+
+  /** Records the human's shell/bash approval so later auto-approval evaluations can weigh it as precedent. */
+  #recordManualShellDecision(answer: string): void {
+    const pending = this.deps.approvalFlow.getPending();
+    if (!pending) return;
+    const { toolName, argumentsText } = getToolInfoFromInterruption(pending.interruption);
+    if (toolName !== 'shell' && toolName !== 'bash') return;
+    this.deps.shellAutoApproval.recordManualDecision(argumentsText, answer === 'n' ? 'rejected' : 'approved');
+  }
 
   async *#forwardOwned(
     events: AsyncGenerator<ConversationEvent, TurnOutcome, void>,

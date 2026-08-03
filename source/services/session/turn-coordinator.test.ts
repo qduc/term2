@@ -70,11 +70,19 @@ const makeHarness = () => {
     },
   } as any;
 
+  const manualDecisions: Array<{ command: string; decision: string }> = [];
+  const shellAutoApproval = {
+    recordManualDecision: (command: string, decision: 'approved' | 'rejected') => {
+      manualDecisions.push({ command, decision });
+    },
+  } as any;
+
   const coordinator = new TurnCoordinator({
     statusMachine,
     turnWorkflow,
     approvalFlow,
     providerContinuity,
+    shellAutoApproval,
   });
 
   return {
@@ -84,6 +92,7 @@ const makeHarness = () => {
     initialCalls,
     continuationCalls,
     approvalFlow,
+    manualDecisions,
     getAbortCalled: () => abortCalled,
     getLiveRunAborted: () => liveRunAborted,
     getProviderContinuityCleared: () => providerContinuityCleared,
@@ -135,6 +144,48 @@ it('streaming -> awaiting_approval', async () => {
   expect(statusMachine.current).toBe('awaiting_approval');
   expect(events.length).toBe(1);
   expect(events[0].type).toBe('approval_required');
+});
+
+it('records the human decision for a shell approval before continuing', async () => {
+  const { coordinator, statusMachine, approvalFlow, manualDecisions } = makeHarness();
+  const lease = statusMachine.beginTurn();
+  statusMachine.requestApproval(lease);
+  approvalFlow.setPending({
+    interruption: { name: 'shell', arguments: JSON.stringify({ command: 'rm -rf ./dist' }) },
+  });
+
+  for await (const _ of coordinator.continueAfterApproval({ answer: 'y' })) {
+  }
+
+  expect(manualDecisions).toEqual([{ command: 'rm -rf ./dist', decision: 'approved' }]);
+});
+
+it('records a rejection for a shell approval', async () => {
+  const { coordinator, statusMachine, approvalFlow, manualDecisions } = makeHarness();
+  const lease = statusMachine.beginTurn();
+  statusMachine.requestApproval(lease);
+  approvalFlow.setPending({
+    interruption: { name: 'shell', arguments: JSON.stringify({ command: 'git push --force' }) },
+  });
+
+  for await (const _ of coordinator.continueAfterApproval({ answer: 'n' })) {
+  }
+
+  expect(manualDecisions).toEqual([{ command: 'git push --force', decision: 'rejected' }]);
+});
+
+it('does not record a decision for a non-shell tool approval', async () => {
+  const { coordinator, statusMachine, approvalFlow, manualDecisions } = makeHarness();
+  const lease = statusMachine.beginTurn();
+  statusMachine.requestApproval(lease);
+  approvalFlow.setPending({
+    interruption: { name: 'write_file', arguments: JSON.stringify({ path: 'a.ts' }) },
+  });
+
+  for await (const _ of coordinator.continueAfterApproval({ answer: 'y' })) {
+  }
+
+  expect(manualDecisions).toEqual([]);
 });
 
 it('awaiting_approval -> continuing -> awaiting_approval', async () => {

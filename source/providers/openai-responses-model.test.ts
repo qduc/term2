@@ -21,8 +21,12 @@ vi.mock('openai/resources/responses/ws', () => ({
   },
 }));
 
-const { OpenAIResponsesModelWithPromptCacheKey, OpenAIResponsesWSModelWithPromptCacheKey, normalizeResponseEvent } =
-  await import('./openai-responses-model.js');
+const {
+  OpenAIResponsesModelWithPromptCacheKey,
+  OpenAIResponsesWSModelWithPromptCacheKey,
+  normalizeResponseEvent,
+  createResponseEventNormalizationState,
+} = await import('./openai-responses-model.js');
 
 async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   const out: T[] = [];
@@ -31,7 +35,7 @@ async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
 }
 
 it('normalizes streamed Responses tool argument progress for the UI', () => {
-  const state = { toolNamesByIndex: new Map(), toolArgumentLengthsByIndex: new Map() };
+  const state = createResponseEventNormalizationState();
   expect(
     normalizeResponseEvent(
       {
@@ -51,6 +55,125 @@ it('normalizes streamed Responses tool argument progress for the UI', () => {
   expect(
     normalizeResponseEvent({ type: 'response.function_call_arguments.delta', output_index: 0, delta: '"pwd"}' }, state),
   ).toEqual({ type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 17 });
+});
+
+it('normalizes response.reasoning_text.delta as a live reasoning delta (opencode variant)', () => {
+  const state = createResponseEventNormalizationState();
+  expect(
+    normalizeResponseEvent({ type: 'response.reasoning_text.delta', item_id: 'rs_1', delta: 'Thinking' }, state),
+  ).toEqual({ type: 'reasoning_delta', id: 'rs_1', text: 'Thinking' });
+  expect(
+    normalizeResponseEvent({ type: 'response.reasoning_text.delta', item_id: 'rs_1', delta: ' harder.' }, state),
+  ).toEqual({ type: 'reasoning_delta', id: 'rs_1', text: ' harder.' });
+});
+
+it('surfaces reasoning_summary_part text without double-counting a later summary', () => {
+  const state = createResponseEventNormalizationState();
+  // Empty part marker carries no text and emits nothing.
+  expect(
+    normalizeResponseEvent(
+      {
+        type: 'response.reasoning_summary_part.added',
+        item_id: 'rs_1',
+        part: { type: 'summary_text', text: '' },
+      },
+      state,
+    ),
+  ).toBeNull();
+  // Non-empty part text is emitted exactly once per reasoning item.
+  expect(
+    normalizeResponseEvent(
+      {
+        type: 'response.reasoning_summary_part.added',
+        item_id: 'rs_1',
+        part: { type: 'summary_text', text: 'brief thought' },
+      },
+      state,
+    ),
+  ).toEqual({ type: 'reasoning_delta', id: 'rs_1', text: 'brief thought' });
+  // The terminal summary part must not re-emit text already shown.
+  expect(
+    normalizeResponseEvent(
+      {
+        type: 'response.reasoning_summary_part.done',
+        item_id: 'rs_1',
+        part: { type: 'summary_text', text: 'brief thought' },
+      },
+      state,
+    ),
+  ).toBeNull();
+});
+
+it('emits each reasoning summary-part delta while suppressing the repeated done text', () => {
+  const state = createResponseEventNormalizationState();
+  expect(
+    normalizeResponseEvent(
+      { type: 'response.reasoning_summary_part.delta', item_id: 'rs_1', part: { text: 'first ' } },
+      state,
+    ),
+  ).toEqual({ type: 'reasoning_delta', id: 'rs_1', text: 'first ' });
+  expect(
+    normalizeResponseEvent(
+      { type: 'response.reasoning_summary_part.delta', item_id: 'rs_1', part: { text: 'second' } },
+      state,
+    ),
+  ).toEqual({ type: 'reasoning_delta', id: 'rs_1', text: 'second' });
+  expect(
+    normalizeResponseEvent(
+      { type: 'response.reasoning_summary_part.done', item_id: 'rs_1', part: { text: 'first second' } },
+      state,
+    ),
+  ).toBeNull();
+});
+
+it('surfaces a completed function_call item as a streaming delta when args arrive wholesale (opencode variant)', () => {
+  const state = createResponseEventNormalizationState();
+  expect(
+    normalizeResponseEvent(
+      {
+        type: 'response.output_item.added',
+        output_index: 0,
+        output_item: { type: 'function_call', name: 'shell', id: 'call-1' },
+      },
+      state,
+    ),
+  ).toBeNull();
+  // Opencode may deliver the full arguments only on the done frame.
+  expect(
+    normalizeResponseEvent(
+      {
+        type: 'response.function_call_arguments.done',
+        output_index: 0,
+        item_id: 'call-1',
+        arguments: '{"command":"pwd"}',
+      },
+      state,
+    ),
+  ).toEqual({ type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 17 });
+  expect(
+    normalizeResponseEvent(
+      {
+        type: 'response.output_item.done',
+        output_index: 0,
+        item: { type: 'function_call', id: 'call-1', call_id: 'call-1', name: 'shell', arguments: '{"command":"pwd"}' },
+      },
+      state,
+    ),
+  ).toBeNull();
+});
+
+it('does not emit streaming deltas for non-function output items', () => {
+  const state = createResponseEventNormalizationState();
+  expect(
+    normalizeResponseEvent(
+      {
+        type: 'response.output_item.done',
+        output_index: 0,
+        item: { type: 'message', id: 'm-1', content: [{ type: 'output_text', text: 'hello' }] },
+      },
+      state,
+    ),
+  ).toBeNull();
 });
 
 it('normalizes only completed Responses events as successful completions', () => {

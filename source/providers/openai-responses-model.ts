@@ -257,10 +257,16 @@ function completedEvent(response: any): Extract<StreamedModelTurnEvent, { type: 
 export interface ResponseEventNormalizationState {
   toolNamesByIndex: Map<number | string, string>;
   toolArgumentLengthsByIndex: Map<number | string, number>;
+  /** Reasoning items already surfaced so a full-text summary part is not re-emitted. */
+  reasoningEmittedItemIds: Set<string>;
 }
 
 export function createResponseEventNormalizationState(): ResponseEventNormalizationState {
-  return { toolNamesByIndex: new Map(), toolArgumentLengthsByIndex: new Map() };
+  return {
+    toolNamesByIndex: new Map(),
+    toolArgumentLengthsByIndex: new Map(),
+    reasoningEmittedItemIds: new Set(),
+  };
 }
 
 /** Convert one native OpenAI Responses event to the application turn protocol. */
@@ -270,8 +276,33 @@ export function normalizeResponseEvent(
 ): StreamedModelTurnEvent | null {
   if (!event || typeof event.type !== 'string') return null;
   if (event.type === 'response.output_text.delta') return { type: 'text_delta', text: event.delta ?? '' };
-  if (event.type === 'response.reasoning_summary_text.delta') {
-    return { type: 'reasoning_delta', id: event.item_id, text: event.delta ?? '' };
+  const reasoningDelta = (id: string | undefined, text: string): StreamedModelTurnEvent | null => {
+    if (!text) return null;
+    if (id !== undefined) state.reasoningEmittedItemIds.add(id);
+    return { type: 'reasoning_delta', ...(id !== undefined ? { id } : {}), text };
+  };
+  // OpenAI-compatible servers emit reasoning under a few different delta names.
+  // opencode's /v1/responses shim streams response.reasoning_text.delta while
+  // OpenAI's own Responses API uses response.reasoning_summary_text.delta.
+  if (event.type === 'response.reasoning_summary_text.delta' || event.type === 'response.reasoning_text.delta') {
+    return reasoningDelta(event.item_id, String(event.delta ?? ''));
+  }
+  // Summary parts carry the reasoning text in part.text. Added/delta events are
+  // incremental; done can repeat the complete text, so only emit it when no
+  // earlier part for the item was observed.
+  if (
+    event.type === 'response.reasoning_summary_part.added' ||
+    event.type === 'response.reasoning_summary_part.delta'
+  ) {
+    const text = typeof event.part?.text === 'string' ? event.part.text : '';
+    const id = typeof event.item_id === 'string' ? event.item_id : undefined;
+    return reasoningDelta(id, text);
+  }
+  if (event.type === 'response.reasoning_summary_part.done') {
+    const text = typeof event.part?.text === 'string' ? event.part.text : '';
+    const id = typeof event.item_id === 'string' ? event.item_id : undefined;
+    if (!text || (id !== undefined && state.reasoningEmittedItemIds.has(id))) return null;
+    return reasoningDelta(id, text);
   }
   if (event.type === 'response.output_item.added') {
     const item = event.output_item ?? event.item;
@@ -279,6 +310,10 @@ export function normalizeResponseEvent(
       const index = typeof event.output_index === 'number' ? event.output_index : item.id ?? 0;
       state.toolNamesByIndex.set(index, item.name);
       state.toolArgumentLengthsByIndex.set(index, 0);
+      if (typeof item.id === 'string') {
+        state.toolNamesByIndex.set(item.id, item.name);
+        state.toolArgumentLengthsByIndex.set(item.id, 0);
+      }
     }
     return null;
   }
@@ -295,6 +330,23 @@ export function normalizeResponseEvent(
     const toolName = state.toolNamesByIndex.get(index);
     return { type: 'tool_call_streaming_delta', ...(toolName ? { toolName } : {}), argumentCharCount };
   }
+  // opencode may deliver the assembled arguments only on the done frames rather
+  // than as incremental deltas. Surface the full count so the UI still shows the
+  // "Calling <tool> (N chars)" indicator before tool_started replaces it.
+  if (
+    event.type === 'response.function_call_arguments.done' ||
+    event.type === 'response.custom_tool_call_input.done' ||
+    event.type === 'response.mcp_call_arguments.done'
+  ) {
+    const index = typeof event.output_index === 'number' ? event.output_index : event.item_id ?? 0;
+    const fullArguments = typeof event.arguments === 'string' ? event.arguments : '';
+    const previousLength = state.toolArgumentLengthsByIndex.get(index) ?? 0;
+    const argumentCharCount = fullArguments.length || previousLength;
+    if (argumentCharCount <= previousLength) return null;
+    state.toolArgumentLengthsByIndex.set(index, argumentCharCount);
+    const toolName = state.toolNamesByIndex.get(index);
+    return { type: 'tool_call_streaming_delta', ...(toolName ? { toolName } : {}), argumentCharCount };
+  }
   if (event.type === 'response.output_item.delta') {
     const delta = event.delta;
     const argumentsText = typeof delta?.arguments === 'string' ? delta.arguments : '';
@@ -304,6 +356,27 @@ export function normalizeResponseEvent(
     state.toolArgumentLengthsByIndex.set(index, argumentCharCount);
     const toolName = state.toolNamesByIndex.get(index);
     return { type: 'tool_call_streaming_delta', ...(toolName ? { toolName } : {}), argumentCharCount };
+  }
+  if (event.type === 'response.output_item.done') {
+    const item = event.item;
+    if (item?.type === 'function_call') {
+      const index = typeof event.output_index === 'number' ? event.output_index : item.id ?? item.call_id ?? 0;
+      if (typeof item.name === 'string') state.toolNamesByIndex.set(index, item.name);
+      const fullArguments = typeof item.arguments === 'string' ? item.arguments : '';
+      const previousLength = Math.max(
+        state.toolArgumentLengthsByIndex.get(index) ?? 0,
+        typeof item.id === 'string' ? state.toolArgumentLengthsByIndex.get(item.id) ?? 0 : 0,
+        typeof item.call_id === 'string' ? state.toolArgumentLengthsByIndex.get(item.call_id) ?? 0 : 0,
+      );
+      if (fullArguments.length <= previousLength) return null;
+      state.toolArgumentLengthsByIndex.set(index, fullArguments.length);
+      return {
+        type: 'tool_call_streaming_delta',
+        ...(typeof item.name === 'string' ? { toolName: item.name } : {}),
+        argumentCharCount: fullArguments.length,
+      };
+    }
+    return null;
   }
   if (event.type === 'response.failed' || event.type === 'response.incomplete') {
     const response = event.response ?? event;

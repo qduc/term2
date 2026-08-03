@@ -146,6 +146,33 @@ it.sequential('execute: regex mode supports parsed escaped dot patterns', async 
   });
 });
 
+it.sequential('execute: enables rg multiline mode for newline regex escapes', async () => {
+  const commands: string[] = [];
+  const sshService = {
+    connect: async () => {},
+    disconnect: async () => {},
+    isConnected: () => true,
+    executeCommand: async (commandString: string) => {
+      commands.push(commandString);
+      if (commandString === 'rg --version') {
+        return { stdout: 'ripgrep 14.0.0\\n', stderr: '', exitCode: 0, timedOut: false };
+      }
+      return { stdout: 'notes.txt:1:waitingForApproval: true,\\n', stderr: '', exitCode: 0, timedOut: false };
+    },
+    readFile: async () => '',
+    writeFile: async () => {},
+    mkdir: async () => {},
+  };
+  const executionContext = new ExecutionContext(sshService);
+
+  await createGrepToolDefinition({ executionContext }).execute({
+    pattern: String.raw`waitingForApproval: true,\n.*pendingApproval:`,
+    path: '.',
+  });
+
+  expect(commands.at(-1)).toContain('--multiline');
+});
+
 it.sequential('invoke: grep uses strict JSON parsing before regex execution', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'testabc\ntest123\ntest456\n');
@@ -232,7 +259,7 @@ it.sequential('execute: passes rg-style include globs through before searching',
     include: '*.ts',
   });
 
-  expect(commands[1]).toContain("-g '*.ts'");
+  expect(commands.at(-1)).toContain("-g '*.ts'");
 });
 
 it('formatGrepCommandMessage sets toolName to "grep" so the match counter uses the structured parser', () => {

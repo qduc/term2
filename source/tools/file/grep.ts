@@ -79,6 +79,22 @@ function expandBraces(pattern: string): string[] {
   return results;
 }
 
+// ripgrep rejects patterns that can match a line terminator unless multiline
+// mode is enabled. Models commonly express a cross-line regex as `\\n`, which
+// reaches this function as the two characters backslash+n (and is interpreted
+// by ripgrep as a line terminator). Enable multiline mode for those patterns so
+// a valid search does not become a tool error.
+function patternMayMatchLineTerminator(pattern: string): boolean {
+  return (
+    pattern.includes('\n') ||
+    pattern.includes('\r') ||
+    pattern.includes('\\n') ||
+    pattern.includes('\\r') ||
+    /\\x(?:0a|0d|\{0*[ad]\})/i.test(pattern) ||
+    /\\u(?:000a|000d)/i.test(pattern)
+  );
+}
+
 async function checkRgAvailability(executionContext?: ExecutionContext): Promise<boolean> {
   const isRemote = executionContext?.isRemote() ?? false;
 
@@ -180,6 +196,9 @@ export const createGrepToolDefinition = (
         const args = ['rg', '--line-number', '--no-heading', '--color=never'];
         if (ignore_case) args.push('--ignore-case');
         if (fixed_strings) args.push('--fixed-strings');
+        if (!fixed_strings && patternMayMatchLineTerminator(pattern)) {
+          args.push('--multiline');
+        }
         if (no_ignore) args.push('--no-ignore');
         if (include) {
           const patterns = expandBraces(include);

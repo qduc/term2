@@ -19,6 +19,7 @@ type Props = {
   approval: ApprovalDescriptor;
   onApprove: (answer?: string) => void;
   onReject: () => void;
+  onCancel?: () => void;
   onTypeAnswer?: () => void;
   onNavigateQuestion?: (direction: 'prev' | 'next') => void;
   currentQuestionIndex?: number;
@@ -239,6 +240,7 @@ const ApprovalPrompt: FC<Props> = ({
   approval,
   onApprove,
   onReject,
+  onCancel,
   onTypeAnswer,
   onNavigateQuestion,
   currentQuestionIndex = 0,
@@ -381,6 +383,11 @@ const ApprovalPrompt: FC<Props> = ({
   }, [currentQuestionIndex, approval.argumentsText, approval.toolName]);
 
   useInput((input, key) => {
+    if (isAskUser && key.escape) {
+      onCancel?.();
+      return;
+    }
+
     if (waitingForAskUserAnswer) {
       return;
     }

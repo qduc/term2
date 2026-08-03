@@ -190,6 +190,7 @@ const App: FC<AppProps> = ({
     onTypeAnswer,
     clearConversation,
     stopProcessing,
+    cancelAskUser,
     rewindToTurn,
     countRewindableTurns,
     retryLastToolOutput,
@@ -415,6 +416,11 @@ const App: FC<AppProps> = ({
     setWaitingForRejectionReason(true);
   }, [sandboxPromptRequest, resolveSandboxPrompt, setWaitingForRejectionReason]);
 
+  const handleCancelAskUser = useCallback(() => {
+    if (sandboxPromptRequest || pendingApproval?.toolName !== 'ask_user') return;
+    cancelAskUser();
+  }, [cancelAskUser, pendingApproval, sandboxPromptRequest]);
+
   const effectivePendingApproval =
     sandboxPromptRequest === null
       ? pendingApproval
@@ -620,6 +626,7 @@ const App: FC<AppProps> = ({
             historyService={historyService}
             onApprove={handleApprove}
             onReject={handleReject}
+            onCancel={handleCancelAskUser}
             onTypeAnswer={onTypeAnswer}
             onNavigateQuestion={handleNavigateQuestion}
             sshInfo={sshInfo}

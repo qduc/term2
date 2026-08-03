@@ -53,6 +53,32 @@ it.sequential('ApprovalPrompt renders ask_user question and options', async () =
   expect(output.includes('Approve')).toBe(false);
 });
 
+it.sequential('ApprovalPrompt Escape cancels ask_user without submitting an answer', async () => {
+  let cancelled = false;
+  let approved = false;
+  let rejected = false;
+  const { stdin } = await renderInAct(
+    <ApprovalPrompt
+      approval={baseApproval}
+      onApprove={() => {
+        approved = true;
+      }}
+      onReject={() => {
+        rejected = true;
+      }}
+      onCancel={() => {
+        cancelled = true;
+      }}
+    />,
+  );
+
+  await writeInput(stdin, '\u001B');
+
+  expect(cancelled).toBe(true);
+  expect(approved).toBe(false);
+  expect(rejected).toBe(false);
+});
+
 it.sequential('ApprovalPrompt shows unsandboxed shell approvals in the header', async () => {
   const approval: ApprovalDescriptor = {
     agentName: 'Agent',

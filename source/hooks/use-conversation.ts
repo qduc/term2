@@ -235,6 +235,10 @@ export const useConversation = ({
     addSystemMessage('Stopped');
   }, [stopProcessing, addSystemMessage]);
 
+  const cancelAskUser = useCallback(() => {
+    stopProcessing();
+  }, [stopProcessing]);
+
   const rewindToTurn = useCallback<(turnNumber: number) => { text: string; images?: UserTurn['images'] } | null>(
     (turnNumber: number) => orchestrator.rewindToTurn(turnNumber),
     [orchestrator],
@@ -340,6 +344,7 @@ export const useConversation = ({
     onTypeAnswer,
     clearConversation,
     stopProcessing: stopProcessingWithNotice,
+    cancelAskUser,
     rewindToTurn,
     countRewindableTurns,
     retryLastToolOutput,

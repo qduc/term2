@@ -46,6 +46,7 @@ export type BottomAreaProps = {
   historyService: HistoryService;
   onApprove: (answer?: string) => void;
   onReject: () => void;
+  onCancel?: () => void;
   onTypeAnswer?: () => void;
   onNavigateQuestion?: (direction: 'prev' | 'next') => void;
   sshInfo?: SSHInfo;
@@ -108,6 +109,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   historyService,
   onApprove,
   onReject,
+  onCancel,
   onTypeAnswer,
   onNavigateQuestion,
   sshInfo,
@@ -206,7 +208,8 @@ const BottomArea: FC<BottomAreaProps> = ({
   // is pending or the user is entering a rejection reason / ask-user answer.
   const showInput =
     inputOwner.kind === 'input' &&
-    (!queuePaused && (!waitingForApproval || waitingForRejectionReason || waitingForAskUserAnswer));
+    !queuePaused &&
+    (!waitingForApproval || waitingForRejectionReason || waitingForAskUserAnswer);
 
   return (
     <Box flexDirection="column" width="100%">
@@ -257,6 +260,7 @@ const BottomArea: FC<BottomAreaProps> = ({
                 approval={pendingApproval}
                 onApprove={onApprove}
                 onReject={onReject}
+                onCancel={onCancel}
                 onTypeAnswer={onTypeAnswer}
                 onNavigateQuestion={onNavigateQuestion}
                 currentQuestionIndex={currentAskUserQuestionIndex}

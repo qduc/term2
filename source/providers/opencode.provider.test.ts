@@ -228,8 +228,13 @@ it('selectOpencodeModelTransport routes minimax and qwen models through Anthropi
   expect(selectOpencodeModelTransport('qwen3-coder')).toBe('anthropic-messages');
 });
 
+it('selectOpencodeModelTransport routes GPT models through OpenAI Responses', () => {
+  expect(selectOpencodeModelTransport('gpt-5.4')).toBe('openai-responses');
+  expect(selectOpencodeModelTransport('openai/gpt-oss-120b')).toBe('openai-responses');
+});
+
 it('selectOpencodeModelTransport routes other models through OpenAI chat completions', () => {
-  expect(selectOpencodeModelTransport('gpt-oss-120b')).toBe('openai-chat-completions');
+  expect(selectOpencodeModelTransport('llama-3.3')).toBe('openai-chat-completions');
 });
 
 it('shouldApplyOpencodeAnthropicPromptCaching applies only to Anthropic Claude and qwen model IDs', () => {

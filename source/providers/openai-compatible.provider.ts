@@ -20,6 +20,7 @@ import {
 import { applyClientResponseNormalization } from './openai-compatible-response-normalizer.js';
 import { getModelListItems, mapModelListItem } from './openai-compatible-models.js';
 import { OpenAIChatCompletionsModel } from './openai-chat-completions-model.js';
+import { OpenAIResponsesModelWithPromptCacheKey } from './openai-responses-model.js';
 import {
   decodeStoredCustomProviderConfigs,
   normalizeProviderIdentifier,
@@ -147,6 +148,24 @@ export class OpencodeAnthropicFormatProvider {
     return anthropicProvider.getStreamedModel(resolvedModel);
   }
 
+  private buildOpenAIResponsesModel(
+    resolvedModel: string,
+    runtimeConfig: { baseUrl: string; apiKey: string | undefined },
+  ): StreamedModelTurn {
+    const openAIClient = new OpenAI({
+      baseURL: normalizeBaseUrl(runtimeConfig.baseUrl),
+      apiKey: runtimeConfig.apiKey || 'no-key',
+      maxRetries: this.deps.settingsService?.get('agent.retryAttempts') ?? 2,
+      fetch: buildProviderFetch(this.config, this.deps, [
+        createOpenAIResponsesMiddleware(this.config.type || 'opencode', runtimeConfig.baseUrl, {
+          sessionContextService: this.deps.sessionContextService,
+          fallbackSessionIdOverride: this.fallbackSessionId,
+        }),
+      ]) as any,
+    });
+    return new OpenAIResponsesModelWithPromptCacheKey(openAIClient, resolvedModel);
+  }
+
   private buildOpenAICompatibleModel(
     resolvedModel: string,
     runtimeConfig: { baseUrl: string; apiKey: string | undefined },
@@ -169,9 +188,14 @@ export class OpencodeAnthropicFormatProvider {
   getStreamedModel(modelName?: string): StreamedModelTurn {
     const resolvedModel = modelName || this.deps.defaultModel || '';
     const runtimeConfig = this.resolveRuntimeConfig();
-    return selectOpencodeModelTransport(resolvedModel) === 'anthropic-messages'
-      ? this.buildAnthropicStreamedModel(resolvedModel, runtimeConfig)
-      : this.buildOpenAICompatibleModel(resolvedModel, runtimeConfig);
+    switch (selectOpencodeModelTransport(resolvedModel)) {
+      case 'anthropic-messages':
+        return this.buildAnthropicStreamedModel(resolvedModel, runtimeConfig);
+      case 'openai-responses':
+        return this.buildOpenAIResponsesModel(resolvedModel, runtimeConfig);
+      case 'openai-chat-completions':
+        return this.buildOpenAICompatibleModel(resolvedModel, runtimeConfig);
+    }
   }
 }
 

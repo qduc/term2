@@ -146,12 +146,26 @@ export function createCacheControlMiddleware(): FetchMiddleware {
   };
 }
 
-export function createOpenAIResponsesMiddleware(): FetchMiddleware {
+export function createOpenAIResponsesMiddleware(
+  providerType?: string,
+  baseUrl?: string,
+  options?: {
+    sessionContextService?: ISessionContextService;
+    fallbackSessionIdOverride?: string;
+  },
+): FetchMiddleware {
+  const injectSession = createOpencodeSessionInjector({ type: providerType, baseUrl }, options);
+
   return async (ctx, next) => {
     if (typeof ctx.init?.body === 'string') {
       try {
         const body = sanitizeResponsesApiBody(JSON.parse(ctx.init.body));
-        return next({ url: ctx.url, init: { ...ctx.init, body: JSON.stringify(body) } });
+        let newInit: RequestInit = { ...ctx.init, body: JSON.stringify(body) };
+        if (injectSession) {
+          const sessionInit = injectSession(newInit);
+          if (sessionInit) newInit = sessionInit;
+        }
+        return next({ url: ctx.url, init: newInit });
       } catch {
         return next(ctx);
       }

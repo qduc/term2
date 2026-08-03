@@ -143,6 +143,32 @@ function streamedSuccessResponse(): Response {
   return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
 }
 
+function responsesSuccessResponse(): Response {
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(
+        new TextEncoder().encode(
+          [
+            `data: ${JSON.stringify({ type: 'response.output_text.delta', delta: 'ok' })}`,
+            `data: ${JSON.stringify({
+              type: 'response.completed',
+              response: {
+                id: 'resp-opencode-test',
+                status: 'completed',
+                output: [{ type: 'message', content: [{ type: 'output_text', text: 'ok' }] }],
+              },
+            })}`,
+            'data: [DONE]',
+            '',
+          ].join('\n\n'),
+        ),
+      );
+      controller.close();
+    },
+  });
+  return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+}
+
 it('runtime openai-compatible createStreamedModel returns a streamed model', () => {
   const provider = createOpenAICompatibleProviderDefinition({
     name: 'local-test',
@@ -773,6 +799,29 @@ it('opencode provider type uses default base URL and falls back to OPENCODE_API_
   } finally {
     delete process.env.OPENCODE_API_KEY;
   }
+});
+
+it('opencode GPT models use the OpenAI Responses transport with session header', async () => {
+  const captured: CapturedRequest[] = [];
+  const provider = buildProvider(captured, () => responsesSuccessResponse(), 'opencode', 'https://opencode.ai/v1');
+  const model = provider.getStreamedModel('gpt-5.4');
+
+  await runUnderTrace(() =>
+    collectCompletion(model, {
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [],
+    }),
+  );
+
+  expect(captured.length).toBe(1);
+  expect(captured[0].url).toMatch(/^https:\/\/opencode\.ai\/v1\/responses(\?|$)/);
+  expect(captured[0].headers.authorization).toBe('Bearer provider-key');
+  expect(captured[0].headers['x-opencode-session']).toMatch(/^ses_/);
+  expect(captured[0].body.model).toBe('gpt-5.4');
+  expect(captured[0].body.input).toEqual([
+    { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
+  ]);
+  expect(captured[0].body).not.toHaveProperty('messages');
 });
 
 it('opencode qwen models use Anthropic messages transport with session header', async () => {

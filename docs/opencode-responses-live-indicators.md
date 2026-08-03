@@ -1,6 +1,6 @@
 # Opencode gpt models: live thinking / tool-call indicators missing
 
-**Status**: Diagnosed, not fixed.
+**Status**: Fixed in `opencode/responses-live-indicators`.
 
 ## Symptom
 
@@ -60,14 +60,18 @@ Direct check of `normalizeResponseEvent`:
 "response.reasoning_summary_text.delta"  => {"type":"reasoning_delta", ...}
 ```
 
-## Fix directions (not implemented)
+## Fix
 
-- Handle the `response.reasoning_summary_part.*` family (read text from
-  `part.text`) and `response.reasoning_text.delta` in `normalizeResponseEvent`,
-  mapping them to `reasoning_delta`.
-- Surface function calls that arrive only on `response.output_item.done` so a
-  `tool_started` / streaming indicator is still emitted.
-- Consider not dropping provider-neutral reasoning in `appendNativeReasoning`.
+- `normalizeResponseEvent` now handles the `response.reasoning_summary_part.*`
+  family (reading text from `part.text`) and `response.reasoning_text.delta`,
+  mapping them to `reasoning_delta`. Incremental summary-part deltas are
+  forwarded while a repeated terminal summary is suppressed.
+- Function arguments delivered only on a `.done` event now produce a final
+  `tool_call_streaming_delta`, including calls represented by
+  `response.output_item.done`. Repeated counts are suppressed.
+- Provider-neutral reasoning remains display-only in
+  `appendNativeReasoning`: it is safe to show live, but cannot be replayed as
+  native reasoning without provider-specific metadata.
 
-Any change here is a provider change and must run
+These are provider changes and must run
 `pnpm test:provider-black-box` (see the `provider-testing` skill).

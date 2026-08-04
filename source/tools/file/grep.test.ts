@@ -5,6 +5,7 @@ import * as os from 'os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createGrepToolDefinition, formatGrepCommandMessage } from './grep.js';
+import { SessionAccessState } from '../../services/session/session-access-state.js';
 import { wrapToolInvoke } from '../../lib/tool-invoke.js';
 import type { ToolDefinition } from '../../tools/types.js';
 import { ExecutionContext } from '../../services/execution-context.js';
@@ -359,6 +360,24 @@ it('grep requires approval for a path outside the workspace', async () => {
   expect(inside).toBe(false);
   expect(outside).toBe(true);
   expect(traversal).toBe(true);
+});
+
+it('grep does not require approval for a folder allowed for the session', async () => {
+  const sessionAccess = new SessionAccessState({ get: () => undefined, set: () => {} } as any);
+  // Granted from any read tool's prompt (read_file/grep/glob share one grant).
+  sessionAccess.allowReadFolder('/outside/docs');
+  const definition = createGrepToolDefinition({
+    executionContext: { getCwd: () => '/tmp/some-workspace' } as any,
+    sessionAccess,
+  });
+
+  try {
+    expect(await definition.needsApproval!({ pattern: 'x', path: '/outside/docs' } as any, {} as any)).toBe(false);
+    expect(await definition.needsApproval!({ pattern: 'x', path: '/outside/docs/sub' } as any, {} as any)).toBe(false);
+    expect(await definition.needsApproval!({ pattern: 'x', path: '/outside/other' } as any, {} as any)).toBe(true);
+  } finally {
+    sessionAccess.dispose();
+  }
 });
 
 it('grep skips the workspace boundary check in lite mode (allowOutsideWorkspace)', async () => {

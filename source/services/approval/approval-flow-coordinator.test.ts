@@ -489,6 +489,108 @@ it('prepareContinuation allow-folder-session allows the read file parent recursi
   expect(nestedCompatibility.allowsRead('s1', path.join(tmpDir, 'sibling', 'other.md'))).toBe(false);
 });
 
+it('prepareContinuation allow-folder-session grants the searched directory itself for grep', () => {
+  let approved = false;
+  const state: any = { approve: () => (approved = true) };
+  const approvalState = new ApprovalState();
+  const searchDir = path.join(tmpDir, 'docs');
+  fs.mkdirSync(searchDir, { recursive: true });
+  approvalState.setPending({
+    state,
+    interruption: {
+      name: 'grep',
+      callId: 'grep-1',
+      arguments: JSON.stringify({ pattern: 'needle', path: searchDir }),
+    },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+
+  const { client } = makeMockAgentClient();
+  const nestedCompatibility = makeNestedCompatibility();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+    nestedCompatibility,
+  });
+
+  coord.prepareContinuation('allow-folder-session', undefined);
+
+  expect(approved).toBe(true);
+  // The directory the user approved, not its parent.
+  expect(nestedCompatibility.allowsRead('s1', path.join(searchDir, 'nested', 'other.md'))).toBe(true);
+  expect(nestedCompatibility.allowsRead('s1', path.join(tmpDir, 'sibling', 'other.md'))).toBe(false);
+});
+
+it('prepareContinuation allow-folder-session grants the directory of an absolute glob pattern', () => {
+  let approved = false;
+  const state: any = { approve: () => (approved = true) };
+  const approvalState = new ApprovalState();
+  const searchDir = path.join(tmpDir, 'models');
+  fs.mkdirSync(searchDir, { recursive: true });
+  approvalState.setPending({
+    state,
+    interruption: {
+      name: 'glob',
+      callId: 'glob-1',
+      arguments: JSON.stringify({ pattern: path.join(searchDir, 'run_*.sh') }),
+    },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+
+  const { client } = makeMockAgentClient();
+  const nestedCompatibility = makeNestedCompatibility();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+    nestedCompatibility,
+  });
+
+  coord.prepareContinuation('allow-folder-session', undefined);
+
+  expect(approved).toBe(true);
+  expect(nestedCompatibility.allowsRead('s1', path.join(searchDir, 'run_a.sh'))).toBe(true);
+});
+
+it('prepareContinuation allow-folder-session from a read_file prompt also covers grep and glob', () => {
+  const state: any = { approve: () => undefined };
+  const approvalState = new ApprovalState();
+  const filePath = path.join(tmpDir, 'docs', 'guide.md');
+  approvalState.setPending({
+    state,
+    interruption: { name: 'read_file', callId: 'read-2', arguments: JSON.stringify({ path: filePath }) },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+
+  const { client } = makeMockAgentClient();
+  const sessionAccess = new SessionAccessState(createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }));
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+    sessionAccess,
+  });
+
+  coord.prepareContinuation('allow-folder-session', undefined);
+
+  // The grant is one session-scoped folder set, consulted by every read-only tool.
+  expect(sessionAccess.allowsRead(path.join(tmpDir, 'docs'))).toBe(true);
+  expect(sessionAccess.allowsRead(path.join(tmpDir, 'docs', 'sub', 'deep.ts'))).toBe(true);
+});
+
 it('prepareContinuation answer=y normalizes JSON string tool_started arguments', () => {
   const state: any = { approve: () => undefined };
   const approvalState = new ApprovalState();

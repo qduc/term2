@@ -813,12 +813,19 @@ export class SubagentToolFactory {
       if (!searchViaShell) {
         tools.push(
           this.#toolPolicy.wrapReadToolWithScope(
-            createGrepToolDefinition({ executionContext: this.#executionContext, globAvailable }),
+            createGrepToolDefinition({
+              executionContext: this.#executionContext,
+              globAvailable,
+              nestedCompatibility: this.#nestedCompatibility,
+            }),
             fsReadScope,
             (params) => params.path,
           ),
           this.#toolPolicy.wrapReadToolWithScope(
-            createFindFilesToolDefinition({ executionContext: this.#executionContext }),
+            createFindFilesToolDefinition({
+              executionContext: this.#executionContext,
+              nestedCompatibility: this.#nestedCompatibility,
+            }),
             fsReadScope,
             (params) =>
               // When path is omitted, the tool defaults to searching from the

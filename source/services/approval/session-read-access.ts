@@ -1,4 +1,6 @@
 import path from 'node:path';
+import type { SessionAccessState } from '../session/session-access-state.js';
+import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 
 /** Session-scoped allowlist for read-only access outside the workspace. */
 export class SessionReadAccess {
@@ -27,6 +29,27 @@ export class SessionReadAccess {
 }
 
 export const sessionReadAccess = new SessionReadAccess();
+
+/**
+ * Shared read-approval bypass for the read-only file tools. Root clients own a
+ * SessionAccessState; nested tools fall back to the session-keyed legacy state.
+ */
+export function isSessionReadGranted(
+  resolvedPath: string,
+  cwd: string,
+  context: unknown,
+  deps: {
+    sessionAccess?: SessionAccessState;
+    nestedCompatibility?: NestedToolCompatibilityState;
+  },
+): boolean {
+  const { sessionAccess, nestedCompatibility } = deps;
+  if (sessionAccess) {
+    return sessionAccess.allowsRead(resolvedPath, cwd);
+  }
+  const sessionId = getSessionIdFromToolContext(context);
+  return !!sessionId && !!nestedCompatibility?.allowsRead(sessionId, resolvedPath, cwd);
+}
 
 export function getSessionIdFromToolContext(context: unknown): string | null {
   if (!context || typeof context !== 'object') return null;

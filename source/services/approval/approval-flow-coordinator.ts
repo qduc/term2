@@ -15,9 +15,10 @@ import {
   isDeniedReadApproveAnswer,
   isDockerHostControlApproveAnswer,
   isReadFileSessionApproveAnswer,
+  supportsFolderSessionRead,
 } from '../../contracts/conversation.js';
-import path from 'node:path';
 import { isDockerHostControlShellApproval } from './shell-sandbox-approval.js';
+import { resolveSessionReadFolder } from './session-read-grant-target.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 
@@ -165,19 +166,15 @@ export class ApprovalFlowCoordinator {
       this.deps.sessionAccess,
       this.deps.nestedCompatibility,
     );
-    let allowReadFolderForSession = false;
-    if (isReadFileSessionApproveAnswer(answer) && decisionToolName === 'read_file') {
-      const parsedReadArgs = parseToolCallArguments(decisionRawArguments, {
-        callId: decisionCallId ?? String(Date.now()),
-        toolName: decisionToolName,
-        sessionId: this.deps.sessionId,
-        traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
-      });
-      const requestedPath = (parsedReadArgs.arguments as { path?: unknown } | null)?.path;
-      if (typeof requestedPath === 'string' && requestedPath.length > 0) {
-        if (this.deps.sessionAccess) this.deps.sessionAccess.allowReadFolder(path.dirname(requestedPath));
-        else this.deps.nestedCompatibility?.readAccess.allowFolder(this.deps.sessionId, path.dirname(requestedPath));
-        allowReadFolderForSession = true;
+    // One session-scoped folder grant, shared by read_file/grep/glob: approving a
+    // folder from any of their prompts silences it for all of them.
+    const allowReadFolderForSession =
+      isReadFileSessionApproveAnswer(answer) && supportsFolderSessionRead(decisionToolName);
+    if (allowReadFolderForSession) {
+      const folder = resolveSessionReadFolder(decisionToolName, parsedDecisionArgs);
+      if (folder) {
+        if (this.deps.sessionAccess) this.deps.sessionAccess.allowReadFolder(folder);
+        else this.deps.nestedCompatibility?.readAccess.allowFolder(this.deps.sessionId, folder);
       }
     }
     // Docker host control is a distinct capability: ordinary approval answers

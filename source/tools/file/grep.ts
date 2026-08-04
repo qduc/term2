@@ -10,6 +10,9 @@ import {
   type OutputTrimConfig,
 } from '../../utils/output/output-trim.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import { isSessionReadGranted } from '../../services/approval/session-read-access.js';
+import type { SessionAccessState } from '../../services/session/session-access-state.js';
+import type { NestedToolCompatibilityState } from '../../services/session/nested-tool-compatibility-state.js';
 import { resolveWorkspacePath } from '../utils.js';
 import {
   getOutputText,
@@ -165,9 +168,20 @@ export const createGrepToolDefinition = (
     orchestratorMode?: boolean;
     globAvailable?: boolean;
     allowOutsideWorkspace?: boolean;
+    /** Root clients receive this handle-owned capability. */
+    sessionAccess?: SessionAccessState;
+    /** Isolated legacy protocol for nested tools only. */
+    nestedCompatibility?: NestedToolCompatibilityState;
   } = {},
 ): ToolDefinition<typeof searchParametersSchema> => {
-  const { executionContext, orchestratorMode = false, globAvailable = true, allowOutsideWorkspace = false } = deps;
+  const {
+    executionContext,
+    orchestratorMode = false,
+    globAvailable = true,
+    allowOutsideWorkspace = false,
+    sessionAccess,
+    nestedCompatibility,
+  } = deps;
   return {
     name: 'grep',
     description: buildGrepDescription(globAvailable, orchestratorMode),
@@ -176,14 +190,20 @@ export const createGrepToolDefinition = (
     // Read-only, but not necessarily in-bounds: `path` is passed through to a
     // shell `rg`/`grep -r` invocation, so an out-of-workspace path is an
     // unapproved filesystem read. Mirrors the glob tool's boundary check.
-    needsApproval: async (params) => {
+    needsApproval: async (params, context) => {
       if (allowOutsideWorkspace) {
         return false;
       }
 
+      const searchPath = params.path?.trim() || '.';
       try {
         const cwd = executionContext?.getCwd() || process.cwd();
-        resolveWorkspacePath(params.path?.trim() || '.', cwd);
+        const resolvedPath = resolveWorkspacePath(searchPath, cwd, { allowOutsideWorkspace: true });
+        if (isSessionReadGranted(resolvedPath, cwd, context, { sessionAccess, nestedCompatibility })) {
+          return false;
+        }
+
+        resolveWorkspacePath(searchPath, cwd);
         return false;
       } catch {
         return true;

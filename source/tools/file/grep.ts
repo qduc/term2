@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { exec } from 'child_process';
+import { homedir } from 'node:os';
 import util from 'util';
 import {
   trimOutput,
@@ -57,6 +58,25 @@ let hasRgRemote: boolean | null = null;
 
 function shellQuoteArg(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+// Local commands must not rely on the child shell's HOME: sandboxed or
+// containerized shells can resolve `~` to a different user (for example
+// /root). Remote commands intentionally leave it for the remote shell, whose
+// home directory is not available to the local process.
+function shellQuoteSearchPath(value: string, isRemote: boolean): string {
+  if (!isRemote) {
+    const expandedPath = value.startsWith('~') ? value.replace(/^~/, homedir()) : value;
+    return shellQuoteArg(expandedPath);
+  }
+
+  if (value === '~') {
+    return value;
+  }
+  if (value.startsWith('~/')) {
+    return `~/${shellQuoteArg(value.slice(2))}`;
+  }
+  return shellQuoteArg(value);
 }
 
 function expandBraces(pattern: string): string[] {
@@ -216,7 +236,7 @@ export const createGrepToolDefinition = (
         // Shell-quote the pattern; do not regex-escape it.
         args.push('--', shellQuoteArg(pattern));
 
-        args.push(shellQuoteArg(searchPath));
+        args.push(shellQuoteSearchPath(searchPath, executionContext?.isRemote() ?? false));
         command = args.join(' ');
       } else {
         // Fallback to grep
@@ -239,7 +259,7 @@ export const createGrepToolDefinition = (
         // Shell-quote the pattern; do not regex-escape it.
         args.push('--', shellQuoteArg(pattern));
 
-        args.push(shellQuoteArg(searchPath));
+        args.push(shellQuoteSearchPath(searchPath, executionContext?.isRemote() ?? false));
         command = args.join(' ');
       }
 

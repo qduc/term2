@@ -1,6 +1,12 @@
 import type { JsonSchemaDefinition } from '../../contracts/model-types.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
-import type { LLMAdvisory } from '../../contracts/conversation.js';
+import type {
+  LLMAdvisory,
+  LLMAdvisoryAuthorization,
+  LLMAdvisoryConfidence,
+  LLMAdvisoryRiskLevel,
+  ReasoningEffortSetting,
+} from '../../contracts/conversation.js';
 import { classifyCommandDetailed, SafetyStatus } from '../../utils/shell/command-safety/index.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import {
@@ -54,9 +60,11 @@ const SHELL_AUTO_APPROVAL_OUTPUT_SCHEMA: JsonSchemaDefinition = {
           additionalProperties: false,
           properties: {
             reasoning: { type: 'string' },
-            approved: { type: 'boolean' },
+            riskLevel: { type: 'string', enum: ['low', 'medium', 'high'] },
+            authorization: { type: 'string', enum: ['explicit', 'implied', 'weak', 'unknown'] },
+            confidence: { type: 'string', enum: ['high', 'low'] },
           },
-          required: ['reasoning', 'approved'],
+          required: ['reasoning', 'riskLevel', 'authorization', 'confidence'],
         },
       },
     },
@@ -73,6 +81,14 @@ const asRecord = (value: unknown): Record<string, any> | undefined =>
   value && typeof value === 'object' ? (value as Record<string, any>) : undefined;
 
 const TOOL_CALL_TYPES = new Set(['function_call', 'tool_call', 'apply_patch_call']);
+
+const TOOL_RESULT_TYPES = new Set([
+  'function_call_result',
+  'tool_result',
+  'function_call_output',
+  'function_call_output_result',
+  'tool_call_output_item',
+]);
 
 const getItemRecord = (item: ProviderInputItem): Record<string, unknown> => {
   const rawItem = item.rawItem;
@@ -91,6 +107,16 @@ const formatToolCallArgument = (value: unknown): string => {
   }
 };
 
+const formatToolResultOutput = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (value === undefined) return '(no output)';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '(unserializable output)';
+  }
+};
+
 const getCompactHistoryLine = (item: ProviderInputItem): string | undefined => {
   const record = getItemRecord(item);
   if (typeof record.type === 'string' && TOOL_CALL_TYPES.has(record.type)) {
@@ -98,6 +124,12 @@ const getCompactHistoryLine = (item: ProviderInputItem): string | undefined => {
       typeof record.name === 'string' ? record.name : typeof record.toolName === 'string' ? record.toolName : 'unknown';
     const args = record.arguments ?? record.args;
     return `[tool call] ${name} ${truncate(formatToolCallArgument(args), MAX_MESSAGE_CHARS)}`;
+  }
+
+  if (typeof record.type === 'string' && TOOL_RESULT_TYPES.has(record.type)) {
+    const name =
+      typeof record.name === 'string' ? record.name : typeof record.toolName === 'string' ? record.toolName : 'unknown';
+    return `[tool result] ${name} ${truncate(formatToolResultOutput(record.output), MAX_MESSAGE_CHARS)}`;
   }
 
   const message = projectConversationMessage(item);
@@ -126,7 +158,12 @@ const buildManualDecisionsContext = (manualDecisions: ShellAutoApprovalManualDec
   if (!manualDecisions || manualDecisions.length === 0) return '(none this session)';
   return manualDecisions
     .slice(-MAX_MANUAL_DECISIONS)
-    .map((d) => `- [${d.decision}] ${truncate(d.command, MAX_MANUAL_DECISION_COMMAND_CHARS)}`)
+    .map((d) => {
+      const command = truncate(d.command, MAX_MANUAL_DECISION_COMMAND_CHARS);
+      return d.decision === 'rejected'
+        ? `- [rejected] ${command} (strong evidence against auto-approval; re-evaluate carefully)`
+        : `- [approved] ${command} (weak context only; never overrides policy)`;
+    })
     .join('\n');
 };
 
@@ -154,7 +191,7 @@ ${historyText}
 </task_context>
 
 <prior_human_decisions>
-These are evidence about user intent, not permission to approve a new command. Re-evaluate every request independently; a prior approval never overrides the safety policy.
+These are evidence about user intent, not permission to approve a new command. Re-evaluate every request independently; a prior approval is weak context and never overrides the safety policy. A prior rejection is strong evidence for caution and should raise the bar for a similar command.
 ${manualDecisionsText}
 </prior_human_decisions>
 
@@ -214,8 +251,14 @@ const isUnsupportedStructuredOutputError = (error: unknown): boolean => {
 
 type EvaluationResult = {
   reasoning: string;
-  approved: boolean;
+  approved?: boolean;
+  riskLevel?: LLMAdvisoryRiskLevel;
+  authorization?: LLMAdvisoryAuthorization;
+  confidence?: LLMAdvisoryConfidence;
 };
+
+const deriveApproval = ({ riskLevel, authorization }: Pick<EvaluationResult, 'riskLevel' | 'authorization'>): boolean =>
+  riskLevel !== 'high' && (authorization === 'explicit' || authorization === 'implied');
 
 const parsePromptJson = (response: string): unknown => {
   const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -242,12 +285,38 @@ const validateEvaluationBatch = (value: unknown, expectedLength: number): Evalua
     if (typeof resultRecord.reasoning !== 'string') {
       throw new Error(`result ${index + 1} reasoning must be a string`);
     }
-    if (typeof resultRecord.approved !== 'boolean') {
-      throw new Error(`result ${index + 1} approved must be a boolean`);
+    const hasRiskMetadata =
+      resultRecord.riskLevel !== undefined ||
+      resultRecord.authorization !== undefined ||
+      resultRecord.confidence !== undefined;
+    if (!hasRiskMetadata && typeof resultRecord.approved === 'boolean') {
+      // Older prompt-mode models may still return the pre-upgrade contract. Keep
+      // parsing that response for compatibility, but leave it without metadata
+      // so the resolver's new gate cannot auto-approve it.
+      return {
+        reasoning: truncate(resultRecord.reasoning, MAX_REASONING_CHARS),
+        approved: resultRecord.approved,
+      };
+    }
+    if (resultRecord.riskLevel !== 'low' && resultRecord.riskLevel !== 'medium' && resultRecord.riskLevel !== 'high') {
+      throw new Error(`result ${index + 1} riskLevel must be low, medium, or high`);
+    }
+    if (
+      resultRecord.authorization !== 'explicit' &&
+      resultRecord.authorization !== 'implied' &&
+      resultRecord.authorization !== 'weak' &&
+      resultRecord.authorization !== 'unknown'
+    ) {
+      throw new Error(`result ${index + 1} authorization must be explicit, implied, weak, or unknown`);
+    }
+    if (resultRecord.confidence !== 'high' && resultRecord.confidence !== 'low') {
+      throw new Error(`result ${index + 1} confidence must be high or low`);
     }
     return {
       reasoning: truncate(resultRecord.reasoning, MAX_REASONING_CHARS),
-      approved: resultRecord.approved,
+      riskLevel: resultRecord.riskLevel,
+      authorization: resultRecord.authorization,
+      confidence: resultRecord.confidence,
     };
   });
 };
@@ -280,7 +349,13 @@ const buildAdvisoriesFromResults = ({
     out.set(command.id, {
       model,
       reasoning: result.reasoning,
-      approved: result.approved,
+      approved:
+        result.riskLevel && result.authorization
+          ? deriveApproval({ riskLevel: result.riskLevel, authorization: result.authorization })
+          : result.approved === true,
+      ...(result.riskLevel ? { riskLevel: result.riskLevel } : {}),
+      ...(result.authorization ? { authorization: result.authorization } : {}),
+      ...(result.confidence ? { confidence: result.confidence } : {}),
       source: 'llm',
     });
   }
@@ -366,6 +441,7 @@ export async function evaluateShellAutoApprovalAdvisories({
 
   const toEvaluateByLLM: ShellAutoApprovalCommand[] = [];
   const redSafetyDetails = new Map<string, string>();
+  let needsElevatedReasoning = false;
   for (const { id, command, unsandboxed } of commands) {
     try {
       const { status: safetyStatus, reasons } = classifyCommandDetailed(command, logger);
@@ -373,8 +449,10 @@ export async function evaluateShellAutoApprovalAdvisories({
         const detail = reasons.length > 0 ? reasons.join('; ') : 'matched a dangerous pattern';
         redSafetyDetails.set(id, detail);
       }
+      if (safetyStatus === SafetyStatus.YELLOW || unsandboxed) needsElevatedReasoning = true;
     } catch {
       // Ignore parsing errors for LLM check fallback
+      if (unsandboxed) needsElevatedReasoning = true;
     }
     toEvaluateByLLM.push({ id, command, ...(unsandboxed ? { unsandboxed: true } : {}) });
   }
@@ -383,6 +461,9 @@ export async function evaluateShellAutoApprovalAdvisories({
 
   const instructions = SHELL_AUTO_APPROVAL_INSTRUCTIONS;
   const prompt = buildPrompt(toEvaluateByLLM, history, manualDecisions);
+  const configuredReasoningEffort = settingsService.get('agent.autoApproveReasoningEffort');
+  const elevatedReasoningEffort: ReasoningEffortSetting = configuredReasoningEffort ?? 'low';
+  const reasoningEffort: ReasoningEffortSetting = needsElevatedReasoning ? elevatedReasoningEffort : 'none';
 
   try {
     const currentContext = sessionContextService.getContext();
@@ -392,7 +473,7 @@ export async function evaluateShellAutoApprovalAdvisories({
       agentClient.chat(message, {
         model: autoApproveModel,
         provider: autoApproveProvider,
-        reasoningEffort: 'none',
+        reasoningEffort,
         instructions,
       });
 
@@ -403,7 +484,7 @@ export async function evaluateShellAutoApprovalAdvisories({
       return agentClient.chatJson(message, {
         model: autoApproveModel,
         provider: autoApproveProvider,
-        reasoningEffort: 'none',
+        reasoningEffort,
         instructions,
         outputType: SHELL_AUTO_APPROVAL_OUTPUT_SCHEMA,
       });
@@ -444,7 +525,7 @@ export async function evaluateShellAutoApprovalAdvisories({
             agentClient.chat(repairPrompt, {
               model: autoApproveModel,
               provider: autoApproveProvider,
-              reasoningEffort: 'none',
+              reasoningEffort,
               instructions,
             }),
           ),

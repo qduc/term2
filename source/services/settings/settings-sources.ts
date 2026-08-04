@@ -36,6 +36,7 @@ const SETTINGS_SOURCE_KEYS = {
     useFlexServiceTier: 'agent.useFlexServiceTier',
     autoApproveModel: 'agent.autoApproveModel',
     autoApproveProvider: 'agent.autoApproveProvider',
+    autoApproveReasoningEffort: 'agent.autoApproveReasoningEffort',
   },
   shell: {
     timeout: 'shell.timeout',

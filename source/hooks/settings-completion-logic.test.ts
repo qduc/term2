@@ -12,6 +12,7 @@ it('getSettingCategory maps known keys to expected categories', () => {
   expect(getSettingCategory('agent.balancedModel').id).toBe('models');
   expect(getSettingCategory('agent.cheapModel').id).toBe('models');
   expect(getSettingCategory('agent.choreModel').id).toBe('models');
+  expect(getSettingCategory('agent.autoApproveReasoningEffort').id).toBe('safety');
   expect(getSettingCategory('shell.timeout').id).toBe('tools');
   expect(getSettingCategory('agent.subagentWorkerModel').id).toBe('models');
   expect(getSettingCategory('memory.enabled').id).toBe('memory');

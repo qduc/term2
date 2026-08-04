@@ -65,7 +65,14 @@ export class ShellAutoApprovalResolver {
   }
 
   shouldAutoApprove(advisory: LLMAdvisory | undefined): boolean {
-    return this.getAutoApproveMode() === 'auto' && advisory?.approved === true && advisory.source === 'llm';
+    return (
+      this.getAutoApproveMode() === 'auto' &&
+      advisory?.approved === true &&
+      advisory.source === 'llm' &&
+      (advisory.riskLevel === 'low' || advisory.riskLevel === 'medium') &&
+      (advisory.authorization === 'explicit' || advisory.authorization === 'implied') &&
+      advisory.confidence === 'high'
+    );
   }
 
   async resolveAdvisoryForInterruption(input: {

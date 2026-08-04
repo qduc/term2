@@ -83,6 +83,13 @@ it('SettingsSchema includes sandbox settings, which default to compatibility-fir
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.SANDBOX_ALLOW_NETWORKING)).toBe(true);
 });
 
+it('auto-approval reasoning effort defaults to low and is runtime modifiable', () => {
+  expect(AgentSettingsSchema.parse({}).autoApproveReasoningEffort).toBe('low');
+  expect(DEFAULT_SETTINGS.agent.autoApproveReasoningEffort).toBe('low');
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT)).toBe(true);
+  expect(() => AgentSettingsSchema.parse({ autoApproveReasoningEffort: 'default' })).toThrow();
+});
+
 it('agent transport defaults to websocket and is runtime modifiable', () => {
   expect(DEFAULT_SETTINGS.agent.transport).toBe('websocket');
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_TRANSPORT)).toBe(true);

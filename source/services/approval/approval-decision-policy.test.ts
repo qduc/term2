@@ -85,7 +85,15 @@ it('ShellAutoApprovalDecisionPolicy returns approve for auto-approvable shell co
     toolName: 'shell',
     argumentsText: 'ls',
     callId: 'c1',
-    llmAdvisory: { reasoning: 'safe', approved: true, model: 'test', source: 'llm' },
+    llmAdvisory: {
+      reasoning: 'safe',
+      approved: true,
+      model: 'test',
+      source: 'llm',
+      riskLevel: 'low',
+      authorization: 'implied',
+      confidence: 'high',
+    },
   });
   expect(result).toBe('approve');
 });

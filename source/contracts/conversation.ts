@@ -4,10 +4,18 @@ import type { Item } from './conversation-items.js';
 
 export type ReasoningEffortSetting = 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
+export type LLMAdvisoryRiskLevel = 'low' | 'medium' | 'high';
+export type LLMAdvisoryAuthorization = 'explicit' | 'implied' | 'weak' | 'unknown';
+export type LLMAdvisoryConfidence = 'high' | 'low';
+
 export interface LLMAdvisory {
   reasoning: string;
   approved: boolean;
   model: string;
+  /** Structured reviewer metadata used by the fail-closed auto-approve gate. */
+  riskLevel?: LLMAdvisoryRiskLevel;
+  authorization?: LLMAdvisoryAuthorization;
+  confidence?: LLMAdvisoryConfidence;
   source?: 'llm' | 'system';
   /** Set when the LLM call failed; the approved/reasoning values are placeholders. */
   isError?: boolean;

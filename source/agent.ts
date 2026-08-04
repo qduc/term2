@@ -68,9 +68,16 @@ export function getEnvInfo(
 
   const now = new Date().toISOString().slice(0, 10);
 
+  // State the home directory explicitly. Without it a model asked about a path
+  // outside cwd has to guess what `~` resolves to, and weaker models guess the
+  // container default (/root), producing paths that cannot exist on this host.
+  // Remote sessions run against another machine's home, which this process
+  // cannot know, so only claim it for local ones.
+  const home = executionContext?.isRemote() ? '' : `; home (\`~\`): ${os.homedir()}`;
+
   if (lite) {
     // Minimal env info for lite mode
-    return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd (you're already here, don't \`cd\` to it): ${cwd}; date: ${now}`;
+    return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd (you're already here, don't \`cd\` to it): ${cwd}${home}; date: ${now}`;
   }
 
   // For remote sessions, we might not be able to list top-level entries efficiently or at all easily here synchronously
@@ -82,7 +89,7 @@ export function getEnvInfo(
     topLevel = `${getProjectTreeForPrompt(cwd)}`;
   }
 
-  return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd (you're already here, don't \`cd\` to it): ${cwd}; date: ${now}\n${topLevel}\n\n`;
+  return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd (you're already here, don't \`cd\` to it): ${cwd}${home}; date: ${now}\n${topLevel}\n\n`;
 }
 
 export function getAgentsInstructions(cwd: string): string {

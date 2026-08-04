@@ -1,6 +1,7 @@
 import { it, expect, vi } from 'vitest';
-import { getAgentDefinition, getAgentsInstructions } from './agent.js';
+import { getAgentDefinition, getAgentsInstructions, getEnvInfo } from './agent.js';
 import { createMockSettingsService } from './services/settings/settings-service.mock.js';
+import { ExecutionContext } from './services/execution-context.js';
 import type { SubagentResult, SubagentRunHandle } from './services/subagents/types.js';
 import os from 'os';
 
@@ -1013,4 +1014,41 @@ it('getAgentDefinition omits activate_skill tool and catalog when skills do not 
   const toolNames = definition.tools.map((tool) => tool.name);
   expect(toolNames.includes('activate_skill')).toBe(false);
   expect(definition.instructions.includes('<available_skills>')).toBe(false);
+});
+
+it('getEnvInfo states the local home directory in both standard and lite mode', () => {
+  const spy = vi.spyOn(os, 'homedir').mockReturnValue('/Users/testuser');
+  try {
+    const settingsService = createMockSettingsService({ 'app.shellPath': '/bin/zsh' });
+
+    const standard = getEnvInfo(settingsService);
+    expect(standard).toContain('home (`~`): /Users/testuser');
+
+    const lite = getEnvInfo(settingsService, undefined, true);
+    expect(lite).toContain('home (`~`): /Users/testuser');
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it('getEnvInfo omits the home directory for remote sessions, whose home this process cannot know', () => {
+  const spy = vi.spyOn(os, 'homedir').mockReturnValue('/Users/testuser');
+  try {
+    const sshService = {
+      connect: async () => {},
+      disconnect: async () => {},
+      isConnected: () => true,
+      executeCommand: async () => ({ stdout: '', stderr: '', exitCode: 0, timedOut: false }),
+      readFile: async () => '',
+      writeFile: async () => {},
+      mkdir: async () => {},
+    } as any;
+    const remote = new ExecutionContext(sshService, '/srv/app');
+
+    const info = getEnvInfo(createMockSettingsService({ 'app.shellPath': '/bin/zsh' }), remote);
+    expect(info).not.toContain('/Users/testuser');
+    expect(info).not.toContain('home (`~`)');
+  } finally {
+    spy.mockRestore();
+  }
 });

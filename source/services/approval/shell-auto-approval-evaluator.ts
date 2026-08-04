@@ -74,6 +74,14 @@ const asRecord = (value: unknown): Record<string, any> | undefined =>
 
 const TOOL_CALL_TYPES = new Set(['function_call', 'tool_call', 'apply_patch_call']);
 
+const TOOL_RESULT_TYPES = new Set([
+  'function_call_result',
+  'tool_result',
+  'function_call_output',
+  'function_call_output_result',
+  'tool_call_output_item',
+]);
+
 const getItemRecord = (item: ProviderInputItem): Record<string, unknown> => {
   const rawItem = item.rawItem;
   return rawItem && typeof rawItem === 'object' && !Array.isArray(rawItem)
@@ -91,6 +99,16 @@ const formatToolCallArgument = (value: unknown): string => {
   }
 };
 
+const formatToolResultOutput = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (value === undefined) return '(no output)';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '(unserializable output)';
+  }
+};
+
 const getCompactHistoryLine = (item: ProviderInputItem): string | undefined => {
   const record = getItemRecord(item);
   if (typeof record.type === 'string' && TOOL_CALL_TYPES.has(record.type)) {
@@ -98,6 +116,12 @@ const getCompactHistoryLine = (item: ProviderInputItem): string | undefined => {
       typeof record.name === 'string' ? record.name : typeof record.toolName === 'string' ? record.toolName : 'unknown';
     const args = record.arguments ?? record.args;
     return `[tool call] ${name} ${truncate(formatToolCallArgument(args), MAX_MESSAGE_CHARS)}`;
+  }
+
+  if (typeof record.type === 'string' && TOOL_RESULT_TYPES.has(record.type)) {
+    const name =
+      typeof record.name === 'string' ? record.name : typeof record.toolName === 'string' ? record.toolName : 'unknown';
+    return `[tool result] ${name} ${truncate(formatToolResultOutput(record.output), MAX_MESSAGE_CHARS)}`;
   }
 
   const message = projectConversationMessage(item);

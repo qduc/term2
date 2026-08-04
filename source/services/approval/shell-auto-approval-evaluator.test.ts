@@ -455,7 +455,7 @@ it('prompt contains recent user, assistant, and tool-call context from bounded h
         reasoning_details: [{ text: 'expensive hidden reasoning' }],
       },
       { type: 'function_call', name: 'shell', callId: 'call-old', arguments: JSON.stringify({ command: 'pwd' }) },
-      { type: 'function_call_result', callId: 'call-old', output: largeToolOutput },
+      { type: 'function_call_result', name: 'shell', callId: 'call-old', output: largeToolOutput },
       { role: 'user', type: 'message', content: largeUserText },
     ] as any,
     settingsService: createMockSettings('advisory') as any,
@@ -475,12 +475,46 @@ it('prompt contains recent user, assistant, and tool-call context from bounded h
   expect(chatCalls[0].prompt.includes('[user]')).toBe(true);
   expect(chatCalls[0].prompt.includes('[assistant]')).toBe(true);
   expect(chatCalls[0].prompt.includes('[tool call] shell')).toBe(true);
-  expect(chatCalls[0].prompt.includes('[tool result]')).toBe(false);
-  expect(chatCalls[0].prompt.includes('SECRET_OUTPUT')).toBe(false);
+  expect(chatCalls[0].prompt.includes('[tool result] shell')).toBe(true);
+  expect(chatCalls[0].prompt.includes('SECRET_OUTPUT')).toBe(true);
   expect(chatCalls[0].prompt.includes('{"command":"pwd"}')).toBe(true);
+  expect(chatCalls[0].prompt.includes('[truncated ')).toBe(true);
   expect(chatCalls[0].prompt.includes('expensive hidden reasoning')).toBe(false);
   expect(chatCalls[0].prompt.includes('reasoning_details')).toBe(false);
   expect(chatCalls[0].prompt.length < 6_000).toBe(true);
+});
+
+it('includes tool results adjacent to their calls with output content', async () => {
+  const prompts: string[] = [];
+
+  await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-safe', command: 'ls source' }],
+    history: [
+      { role: 'user', type: 'message', content: 'inspect the source tree' },
+      { type: 'function_call', name: 'shell', callId: 'call-old', arguments: JSON.stringify({ command: 'pwd' }) },
+      { type: 'function_call_result', name: 'shell', callId: 'call-old', output: 'PRINTED_RESULT_42' },
+      { type: 'function_call', name: 'shell', callId: 'call-old-2', arguments: JSON.stringify({ command: 'ls' }) },
+      { type: 'function_call_result', name: 'shell', callId: 'call-old-2', output: { listing: ['a.ts', 'b.ts'] } },
+    ] as any,
+    settingsService: createMockSettings('advisory') as any,
+    agentClient: {
+      chat: async (prompt: string) => {
+        prompts.push(prompt);
+        return JSON.stringify({ results: [{ reasoning: 'Safe.', approved: true }] });
+      },
+    } as any,
+    logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  expect(prompts.length).toBe(1);
+  const prompt = prompts[0];
+  const callIndex = prompt.indexOf('[tool call] shell');
+  const resultIndex = prompt.indexOf('[tool result] shell');
+  expect(callIndex).toBeGreaterThan(-1);
+  expect(resultIndex).toBeGreaterThan(callIndex);
+  expect(prompt).toContain('PRINTED_RESULT_42');
+  expect(prompt).toContain('{"listing":["a.ts","b.ts"]}');
 });
 
 it('marks transcript and prior decisions as untrusted evidence for the reviewer', async () => {

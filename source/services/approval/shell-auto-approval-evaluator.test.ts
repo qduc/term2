@@ -517,6 +517,31 @@ it('includes tool results adjacent to their calls with output content', async ()
   expect(prompt).toContain('{"listing":["a.ts","b.ts"]}');
 });
 
+it('instructs the reviewer to treat truncated context as uncertainty and unverifiable state as reject-by-default', async () => {
+  const instructions: string[] = [];
+
+  await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-safe', command: 'pwd' }],
+    history: [{ role: 'user', type: 'message', content: 'inspect location' }],
+    settingsService: createMockSettings('advisory') as any,
+    agentClient: {
+      chat: async (_prompt: string, options: Record<string, unknown>) => {
+        instructions.push(String(options.instructions));
+        return JSON.stringify({ results: [{ reasoning: 'Safe.', approved: true }] });
+      },
+    } as any,
+    logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  expect(instructions.length).toBe(1);
+  expect(instructions[0]).toMatch(/truncated/i);
+  expect(instructions[0]).toMatch(/uncertainty|uncertain/i);
+  expect(instructions[0]).toMatch(/not as evidence of safety|not.*benign|gaps.*uncertainty/i);
+  expect(instructions[0]).toMatch(/unverifiable/i);
+  expect(instructions[0]).toMatch(/default to reject|default to (a )?deny|lean conservative/i);
+});
+
 it('marks transcript and prior decisions as untrusted evidence for the reviewer', async () => {
   const prompts: string[] = [];
 

@@ -5,6 +5,12 @@ import path from 'path';
 import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
+import { isSessionReadGranted } from '../../services/approval/session-read-access.js';
+import type { SessionAccessState } from '../../services/session/session-access-state.js';
+import type { NestedToolCompatibilityState } from '../../services/session/nested-tool-compatibility-state.js';
+import { resolveGlobSearchTarget } from './glob-target.js';
+
+export { resolveGlobSearchTarget };
 
 const execPromise = util.promisify(exec);
 
@@ -110,22 +116,38 @@ export const createFindFilesToolDefinition = (
     executionContext?: ExecutionContext;
     allowOutsideWorkspace?: boolean;
     forceFindFallback?: boolean;
+    /** Root clients receive this handle-owned capability. */
+    sessionAccess?: SessionAccessState;
+    /** Isolated legacy protocol for nested tools only. */
+    nestedCompatibility?: NestedToolCompatibilityState;
   } = {},
 ): ToolDefinition<typeof findFilesParametersSchema> => {
-  const { executionContext, allowOutsideWorkspace = false, forceFindFallback = false } = deps;
+  const {
+    executionContext,
+    allowOutsideWorkspace = false,
+    forceFindFallback = false,
+    sessionAccess,
+    nestedCompatibility,
+  } = deps;
   return {
     name: 'glob',
     description: allowOutsideWorkspace ? GLOB_DESCRIPTION_OUTSIDE : GLOB_DESCRIPTION,
     parameters: findFilesParametersSchema,
     argumentParsing: 'strict',
-    needsApproval: async (params) => {
+    needsApproval: async (params, context) => {
       if (allowOutsideWorkspace) {
         return false;
       }
 
+      const { targetPath } = resolveGlobSearchTarget(params.pattern, params.path);
       try {
         const cwd = executionContext?.getCwd() || process.cwd();
-        resolveWorkspacePath(params.path?.trim() || '.', cwd);
+        const resolvedPath = resolveWorkspacePath(targetPath, cwd, { allowOutsideWorkspace: true });
+        if (isSessionReadGranted(resolvedPath, cwd, context, { sessionAccess, nestedCompatibility })) {
+          return false;
+        }
+
+        resolveWorkspacePath(targetPath, cwd);
         return false;
       } catch {
         return true;
@@ -143,20 +165,7 @@ export const createFindFilesToolDefinition = (
 
       // When the pattern itself is an absolute path (e.g. "/data/llamacpp/models/run_*.sh"),
       // extract the directory as the search root and use only the basename as the glob pattern.
-      let pattern = rawPattern.trim();
-      let targetPath = searchPath?.trim() || '.';
-
-      const normalizedPattern = pattern.replace(/\\/g, '/');
-      if (path.isAbsolute(normalizedPattern)) {
-        // Absolute pattern: split into directory + basename
-        const dir = path.dirname(normalizedPattern);
-        const base = path.basename(normalizedPattern);
-        // Only use the directory as search root if no explicit path was given
-        if (!searchPath?.trim()) {
-          targetPath = dir;
-        }
-        pattern = base;
-      }
+      const { pattern, targetPath } = resolveGlobSearchTarget(rawPattern, searchPath);
 
       // The workspace boundary is enforced by needsApproval in the default mode.
       const absolutePath = resolveWorkspacePath(targetPath, cwd, { allowOutsideWorkspace: true });

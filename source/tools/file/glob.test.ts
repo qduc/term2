@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { createFindFilesToolDefinition } from './glob.js';
+import { SessionAccessState } from '../../services/session/session-access-state.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import { wrapToolInvoke } from '../../lib/tool-invoke.js';
 import type { ToolDefinition } from '../../tools/types.js';
@@ -238,6 +239,38 @@ it.sequential('needsApproval: prompts for path outside workspace', async () => {
     });
 
     expect(result).toBe(true);
+  });
+});
+
+it.sequential('needsApproval: prompts for an absolute pattern that escapes the workspace', async () => {
+  await withTempDir(async () => {
+    // The pattern carries its own search root, so `path` alone does not describe
+    // what gets read.
+    const result = await findFilesToolDefinition.needsApproval({
+      pattern: '/etc/outside/*.conf',
+    });
+
+    expect(result).toBe(true);
+  });
+});
+
+it.sequential('needsApproval: does not prompt for a folder allowed for the session', async () => {
+  await withTempDir(async (workspaceDir) => {
+    const allowedFolder = path.join(workspaceDir, '..', 'shared-docs');
+    const sessionAccess = new SessionAccessState({ get: () => undefined, set: () => {} } as any);
+    // Granted from any read tool's prompt; glob inherits it.
+    sessionAccess.allowReadFolder(allowedFolder);
+    const tool = createFindFilesToolDefinition({ sessionAccess });
+
+    try {
+      expect(await tool.needsApproval!({ pattern: '*.md', path: allowedFolder } as any, {} as any)).toBe(false);
+      expect(await tool.needsApproval!({ pattern: path.join(allowedFolder, 'sub', '*.md') } as any, {} as any)).toBe(
+        false,
+      );
+      expect(await tool.needsApproval!({ pattern: '*.md', path: '/etc/other' } as any, {} as any)).toBe(true);
+    } finally {
+      sessionAccess.dispose();
+    }
   });
 });
 

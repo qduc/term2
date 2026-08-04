@@ -420,8 +420,8 @@ export const getAgentDefinition = (
     } else {
       if (!searchViaShell) {
         tools.push(
-          createGrepToolDefinition({ executionContext, globAvailable }),
-          createFindFilesToolDefinition({ executionContext }),
+          createGrepToolDefinition({ executionContext, globAvailable, sessionAccess }),
+          createFindFilesToolDefinition({ executionContext, sessionAccess }),
         );
       }
       tools.push(

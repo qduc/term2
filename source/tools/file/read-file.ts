@@ -3,7 +3,7 @@ import * as fs from 'fs/promises';
 import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
 import { trimOutput } from '../../utils/output/output-trim.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
-import { getSessionIdFromToolContext } from '../../services/approval/session-read-access.js';
+import { isSessionReadGranted } from '../../services/approval/session-read-access.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../../services/session/nested-tool-compatibility-state.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
@@ -108,11 +108,7 @@ export const createReadFileToolDefinition = (
       try {
         const cwd = executionContext?.getCwd() || process.cwd();
         const resolvedPath = resolveWorkspacePath(params.path, cwd, { allowOutsideWorkspace: true });
-        const sessionId = getSessionIdFromToolContext(context);
-        if (sessionAccess?.allowsRead(resolvedPath, cwd)) {
-          return false;
-        }
-        if (!sessionAccess && sessionId && nestedCompatibility?.allowsRead(sessionId, resolvedPath, cwd)) {
+        if (isSessionReadGranted(resolvedPath, cwd, context, { sessionAccess, nestedCompatibility })) {
           return false;
         }
 

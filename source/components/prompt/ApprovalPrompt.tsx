@@ -1,7 +1,12 @@
 import React, { FC } from 'react';
 import os from 'node:os';
 import { Box, Text, useInput } from 'ink';
-import { READ_FILE_SESSION_APPROVE_ANSWER, type ApprovalDescriptor } from '../../contracts/conversation.js';
+import {
+  READ_FILE_SESSION_APPROVE_ANSWER,
+  supportsFolderSessionRead,
+  type ApprovalDescriptor,
+} from '../../contracts/conversation.js';
+import { resolveSessionReadFolder } from '../../services/approval/session-read-grant-target.js';
 import { generateDiff } from '../../utils/output/diff.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_ASK_USER, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
 import {
@@ -326,7 +331,19 @@ const ApprovalPrompt: FC<Props> = ({
   const isSandboxNetworkApproval = approval.toolName === 'sandbox_network_access';
   const deniedRead = approval.deniedRead;
   const isDeniedReadShell = !!deniedRead;
-  const isReadFileApproval = approval.toolName === 'read_file';
+  // read_file/grep/glob share one session-scoped folder grant, so all three offer it.
+  const isFolderReadApproval = supportsFolderSessionRead(approval.toolName);
+
+  // The exact folder the session grant would cover, shown so the scope is not a guess.
+  const folderReadGrantPath = React.useMemo(() => {
+    if (!isFolderReadApproval) return null;
+    try {
+      const folder = resolveSessionReadFolder(approval.toolName, JSON.parse(approval.argumentsText));
+      return folder ? folder.replace(os.homedir(), '~') : null;
+    } catch {
+      return null;
+    }
+  }, [approval.argumentsText, approval.toolName, isFolderReadApproval]);
 
   const deniedReadMenuItems = React.useMemo(() => {
     if (!deniedRead) return [];
@@ -346,7 +363,9 @@ const ApprovalPrompt: FC<Props> = ({
       return ['Allow once', 'Deny', 'Allow host for this session', 'Always allow host for this project'];
     }
     if (!isAskUser && !isDeniedReadShell) {
-      return isReadFileApproval ? ['Approve', 'Allow this folder for this session', 'Reject'] : ['Approve', 'Reject'];
+      return isFolderReadApproval
+        ? ['Allow once', 'Allow this folder for this session', 'Reject']
+        : ['Approve', 'Reject'];
     }
     if (isDeniedReadShell) {
       return deniedReadMenuItems;
@@ -370,7 +389,7 @@ const ApprovalPrompt: FC<Props> = ({
     hasMultipleQuestions,
     deniedReadMenuItems,
     isDeniedReadShell,
-    isReadFileApproval,
+    isFolderReadApproval,
     isDockerHostControlApproval,
     isSandboxNetworkApproval,
   ]);
@@ -480,7 +499,7 @@ const ApprovalPrompt: FC<Props> = ({
         }
       } else if (selectedIndex === 0) {
         onApprove();
-      } else if (isReadFileApproval && selectedIndex === 1) {
+      } else if (isFolderReadApproval && selectedIndex === 1) {
         onApprove(READ_FILE_SESSION_APPROVE_ANSWER);
       } else {
         onReject();
@@ -762,7 +781,11 @@ const ApprovalPrompt: FC<Props> = ({
         ) : (
           <>
             {approval.agentName}
-            {isUnsandboxedShellApproval ? ' wants to run in unsandboxed mode: ' : ' wants to run: '}
+            {isFolderReadApproval
+              ? ' wants to read outside the workspace with '
+              : isUnsandboxedShellApproval
+              ? ' wants to run in unsandboxed mode: '
+              : ' wants to run: '}
             <Text bold>{approval.toolName}</Text>
           </>
         )}
@@ -777,7 +800,13 @@ const ApprovalPrompt: FC<Props> = ({
       {approval.llmAdvisory && <LLMAdvisory advisory={approval.llmAdvisory} />}
       {!isAskUser && !isDeniedReadShell && (
         <Box flexDirection="column" marginTop={1}>
-          <Text>{isDockerHostControlApproval ? 'Allow Docker host access?' : 'Allow this action?'}</Text>
+          <Text>
+            {isDockerHostControlApproval
+              ? 'Allow Docker host access?'
+              : isFolderReadApproval
+              ? 'Allow this read outside the workspace?'
+              : 'Allow this action?'}
+          </Text>
           <Box flexDirection="column" marginLeft={1}>
             {askUserMenuItems.map((item, index) => (
               <Text
@@ -789,6 +818,14 @@ const ApprovalPrompt: FC<Props> = ({
               </Text>
             ))}
           </Box>
+          {isFolderReadApproval && folderReadGrantPath && (
+            <Box marginTop={1}>
+              <Text color="#64748b">
+                "Allow this folder" lets read_file, grep and glob read {folderReadGrantPath} for the rest of this
+                session.
+              </Text>
+            </Box>
+          )}
         </Box>
       )}
     </Box>

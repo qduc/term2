@@ -28,6 +28,17 @@ export function isDockerHostControlApproveAnswer(answer: string | undefined): an
 }
 export const READ_FILE_SESSION_APPROVE_ANSWER = 'allow-folder-session';
 
+/**
+ * Read-only tools whose approval prompt offers "allow this folder for this
+ * session". The grant is session-scoped and shared, so approving a folder from
+ * one of these prompts also covers the others.
+ */
+const FOLDER_SESSION_READ_TOOLS: ReadonlySet<string> = new Set(['read_file', 'grep', 'glob']);
+
+export function supportsFolderSessionRead(toolName: string | undefined): boolean {
+  return typeof toolName === 'string' && FOLDER_SESSION_READ_TOOLS.has(toolName);
+}
+
 export function isReadFileSessionApproveAnswer(
   answer: string | undefined,
 ): answer is typeof READ_FILE_SESSION_APPROVE_ANSWER {

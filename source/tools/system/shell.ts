@@ -25,6 +25,7 @@ import {
 import { ExecutionContext } from '../../services/execution-context.js';
 import { ensureRtkInstalled, isRtkSupportedCommand, wrapWithRtk } from '../../services/rtk-service.js';
 import { shouldPreferPatchEditingModel } from '../../lib/tool-selection-policy.js';
+import { HarnessInvariantError } from '../../lib/harness-invariant-error.js';
 import { createSandboxEnvironment } from '../../utils/shell/sandbox/sandbox-env.js';
 import {
   SANDBOX_ESCAPE_INSTRUCTION,
@@ -577,7 +578,7 @@ export function createShellToolDefinition(deps: {
 
         if (sandboxFailure?.type === 'denied_read') {
           if (postExecuteDeniedRead && typeof toolCallId !== 'string') {
-            throw new Error('Root shell denied-read handling requires an SDK tool call ID');
+            throw new HarnessInvariantError('Root shell denied-read handling requires an SDK tool call ID');
           }
           // Keyed by the command the model passed, not `optimizedCommand`: the
           // retry and both approval lookups (needsApproval here, and the

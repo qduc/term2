@@ -21,6 +21,7 @@ import type {
 import type { AnyToolDefinition, ToolRegistry } from '../../tools/types.js';
 import { isZodToolParameterSchema } from '../../tools/types.js';
 import { normalizeToolParameters } from '../../lib/tool-invoke.js';
+import { isCancellationError, isHarnessInvariantError } from '../../lib/harness-invariant-error.js';
 import { ApprovalLedger, type ToolInvocationContext } from './tool-invocation-context.js';
 import { addTokenUsage, normalizeUsage } from '../../utils/ai/token-usage.js';
 
@@ -138,6 +139,12 @@ type RunState = {
   turnCount: number;
   /** Turn budget for the run; undefined means unbounded. */
   maxTurns?: number;
+  /**
+   * Identical failing tool calls seen so far, keyed by tool + arguments +
+   * error. Preserved across continuation so an approval round-trip does not
+   * reset the retry budget.
+   */
+  toolFailureCounts?: Map<string, number>;
   /** Keep provider response IDs out of requests for providers that do not support them. */
   supportsConversationChaining: boolean;
   /** Provider currently executing this continuation. */
@@ -424,7 +431,7 @@ export class ApplicationRunLoop {
           );
         }
         const rawResult = approved
-          ? await this.#invokeTool(pending.definition, pending.params, toolContext, pending.callId)
+          ? await this.#invokeTool(pending.definition, pending.params, toolContext, pending.callId, state)
           : state.approvalMessage ?? 'rejected';
         const result = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult);
         const resultItem: ProviderInputItem = {
@@ -663,7 +670,7 @@ export class ApplicationRunLoop {
     }
 
     if (alreadyDecided === true) {
-      const result = await this.#invokeTool(definition, params, toolContext, event.id);
+      const result = await this.#invokeTool(definition, params, toolContext, event.id, state);
       const output = typeof result === 'string' ? result : JSON.stringify(result);
       const resultItem: ProviderInputItem = {
         type: 'function_call_result',
@@ -699,7 +706,7 @@ export class ApplicationRunLoop {
       return;
     }
 
-    const result = await this.#invokeTool(definition, params, toolContext, event.id);
+    const result = await this.#invokeTool(definition, params, toolContext, event.id, state);
     const output = typeof result === 'string' ? result : JSON.stringify(result);
     const resultItem: ProviderInputItem = {
       type: 'function_call_result',
@@ -712,14 +719,69 @@ export class ApplicationRunLoop {
     outputPush(stream, queue, { type: 'item', item: resultItem });
   }
 
+  /**
+   * A tool that throws must not take the run down with it.
+   *
+   * Most tools already report failure by returning `Error: ...` as their
+   * output, which the model reads and acts on. The handful that throw got the
+   * opposite treatment for no principled reason: the exception escaped to
+   * `#execute`, closed the event queue, and ended the turn — so the model never
+   * saw a recoverable problem like a path that does not exist, and the caller
+   * lost the whole turn. Worse, `#handleToolCall` pushes the `function_call`
+   * into history before executing, so an escape leaves a call with no matching
+   * result.
+   *
+   * Errors are therefore normalized into tool output, with two exceptions that
+   * must still propagate: cancellation (the run is ending on purpose) and
+   * `HarnessInvariantError` (a bug here, which the model cannot act on).
+   */
   async #invokeTool(
     definition: AnyToolDefinition,
     params: unknown,
     toolContext: ToolInvocationContext,
     callId: string,
+    state?: RunState,
   ): Promise<unknown> {
-    return definition.execute(params, toolContext, { toolCall: { callId } });
+    try {
+      return await definition.execute(params, toolContext, { toolCall: { callId } });
+    } catch (error) {
+      if (isCancellationError(error) || isHarnessInvariantError(error) || error instanceof MaxTurnsExceededError) {
+        throw error;
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      // Feeding the same failure back forever is its own failure mode: some
+      // errors no argument can fix. Repeat the identical result once, then say
+      // so plainly rather than inviting a third identical attempt.
+      const repeated = state ? countRepeatedFailure(state, definition.name, params, message) : 1;
+      if (repeated > MAX_IDENTICAL_TOOL_FAILURES) {
+        return `Error: ${message}\n\nThis exact call has now failed ${repeated} times with the same error. Do not call ${definition.name} with these arguments again — either change your approach or report the problem to the user.`;
+      }
+      return `Error: ${message}`;
+    }
   }
+}
+
+/**
+ * How many times an identical failing call is fed back before the loop stops
+ * inviting retries. One repeat is worth allowing: a transient failure resolves,
+ * and a model given the error often corrects on its second attempt.
+ */
+const MAX_IDENTICAL_TOOL_FAILURES = 2;
+
+function countRepeatedFailure(state: RunState, toolName: string, params: unknown, message: string): number {
+  let key: string;
+  try {
+    key = JSON.stringify([toolName, params, message]);
+  } catch {
+    // Unserializable params cannot be compared for identity; treat every such
+    // failure as distinct rather than collapsing unrelated calls together.
+    return 1;
+  }
+  state.toolFailureCounts ??= new Map<string, number>();
+  const count = (state.toolFailureCounts.get(key) ?? 0) + 1;
+  state.toolFailureCounts.set(key, count);
+  return count;
 }
 
 function outputPush(stream: AgentStream, queue: EventQueue, item: ApplicationRunEvent): void {

@@ -14,6 +14,7 @@ import {
 import { isDeepStrictEqual } from 'node:util';
 import type { StreamedModelTurn } from '../../contracts/streamed-model-turn.js';
 import type { ToolDefinition } from '../../tools/types.js';
+import { HarnessInvariantError } from '../../lib/harness-invariant-error.js';
 
 const agent: ApplicationAgent = {
   name: 'test-agent',
@@ -1238,5 +1239,150 @@ describe('ApplicationRunLoop turn budget', () => {
       { count: 1, max: 10 },
       { count: 2, max: 10 },
     ]);
+  });
+  it('reports a throwing tool as tool output and lets the run continue', async () => {
+    let calls = 0;
+    const parameters = z.object({});
+    const tool: ToolDefinition<typeof parameters> = {
+      name: 'grep',
+      description: 'Search',
+      parameters,
+      needsApproval: () => false,
+      execute: () => {
+        throw new Error('Search failed: rg: /root/src: No such file or directory');
+      },
+      formatCommandMessage: () => [],
+    };
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => {
+        calls++;
+        return calls === 1
+          ? {
+              async *stream() {
+                yield { type: 'tool_call', id: 'call-1', name: 'grep', arguments: '{}' };
+                yield { type: 'completion', responseId: 'resp-tool', output: [] };
+              },
+            }
+          : textModel('recovered', 'resp-done');
+      },
+    });
+
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'search');
+    await collect(stream);
+    await stream.completed;
+
+    // The model gets a second turn, and the transcript keeps a result for the
+    // call it already recorded.
+    expect(calls).toBe(2);
+    expect(stream.history).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'function_call', callId: 'call-1' }),
+        expect.objectContaining({
+          type: 'function_call_result',
+          callId: 'call-1',
+          output: 'Error: Search failed: rg: /root/src: No such file or directory',
+        }),
+      ]),
+    );
+    expect(stream.finalOutput).toBe('recovered');
+  });
+
+  it('stops inviting retries once an identical call fails repeatedly', async () => {
+    let calls = 0;
+    const parameters = z.object({ path: z.string() });
+    const tool: ToolDefinition<typeof parameters> = {
+      name: 'grep',
+      description: 'Search',
+      parameters,
+      needsApproval: () => false,
+      execute: () => {
+        throw new Error('Search failed: no such file');
+      },
+      formatCommandMessage: () => [],
+    };
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => {
+        calls++;
+        return calls <= 3
+          ? {
+              async *stream() {
+                yield {
+                  type: 'tool_call',
+                  id: `call-${calls}`,
+                  name: 'grep',
+                  arguments: '{"path":"/root/src"}',
+                };
+                yield { type: 'completion', responseId: `resp-${calls}`, output: [] };
+              },
+            }
+          : textModel('gave up', 'resp-done');
+      },
+    });
+
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'search');
+    await collect(stream);
+    await stream.completed;
+
+    const outputs = (stream.history as any[])
+      .filter((item) => item.type === 'function_call_result')
+      .map((item) => item.output as string);
+
+    expect(outputs).toHaveLength(3);
+    expect(outputs[0]).toBe('Error: Search failed: no such file');
+    expect(outputs[1]).toBe('Error: Search failed: no such file');
+    expect(outputs[2]).toContain('failed 3 times with the same error');
+    expect(outputs[2]).toContain('Do not call grep with these arguments again');
+  });
+
+  it('still fails the run when a tool reports a harness invariant violation', async () => {
+    const parameters = z.object({});
+    const tool: ToolDefinition<typeof parameters> = {
+      name: 'shell',
+      description: 'Run a command',
+      parameters,
+      needsApproval: () => false,
+      execute: () => {
+        throw new HarnessInvariantError('Root shell denied-read handling requires an SDK tool call ID');
+      },
+      formatCommandMessage: () => [],
+    };
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => ({
+        async *stream() {
+          yield { type: 'tool_call', id: 'call-1', name: 'shell', arguments: '{}' };
+          yield { type: 'completion', responseId: 'resp-tool', output: [] };
+        },
+      }),
+    });
+
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'run it');
+    await expect(stream.completed).rejects.toThrow(HarnessInvariantError);
+  });
+
+  it('still fails the run when a tool is cancelled', async () => {
+    const parameters = z.object({});
+    const tool: ToolDefinition<typeof parameters> = {
+      name: 'shell',
+      description: 'Run a command',
+      parameters,
+      needsApproval: () => false,
+      execute: () => {
+        const error = new Error('The operation was aborted');
+        error.name = 'AbortError';
+        throw error;
+      },
+      formatCommandMessage: () => [],
+    };
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => ({
+        async *stream() {
+          yield { type: 'tool_call', id: 'call-1', name: 'shell', arguments: '{}' };
+          yield { type: 'completion', responseId: 'resp-tool', output: [] };
+        },
+      }),
+    });
+
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'run it');
+    await expect(stream.completed).rejects.toThrow('The operation was aborted');
   });
 });

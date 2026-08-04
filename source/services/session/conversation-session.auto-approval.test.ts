@@ -642,7 +642,15 @@ it('auto mode: LLM-approved safe command skips approval_required and returns fin
     continuationStreams: [finalStream],
     chatImpl: async () =>
       JSON.stringify({
-        results: [{ id: 'call-auto-1', reasoning: 'Listing files is read-only and safe.', approved: true }],
+        results: [
+          {
+            id: 'call-auto-1',
+            reasoning: 'Listing files is read-only and safe.',
+            riskLevel: 'low',
+            authorization: 'implied',
+            confidence: 'high',
+          },
+        ],
       }),
   });
 
@@ -666,7 +674,15 @@ it('auto mode: approved continuation emits tool_started before streamed output a
     continuationStreams: [finalStream],
     chatImpl: async () =>
       JSON.stringify({
-        results: [{ id: 'call-auto-sequence', reasoning: 'Listing files is safe.', approved: true }],
+        results: [
+          {
+            id: 'call-auto-sequence',
+            reasoning: 'Listing files is safe.',
+            riskLevel: 'low',
+            authorization: 'implied',
+            confidence: 'high',
+          },
+        ],
       }),
   });
 
@@ -754,7 +770,15 @@ it('advisory mode: LLM-approved command still prompts the user (Phase 1 behavior
     startStreams: [initialStream],
     chatImpl: async () =>
       JSON.stringify({
-        results: [{ id: 'call-advisory', reasoning: 'Listing files is safe.', approved: true }],
+        results: [
+          {
+            id: 'call-advisory',
+            reasoning: 'Listing files is safe.',
+            riskLevel: 'low',
+            authorization: 'implied',
+            confidence: 'high',
+          },
+        ],
       }),
   });
 
@@ -781,7 +805,13 @@ it('auto mode: batch of two commands — first auto-approved, second triggers pr
     chatImpl: async () =>
       JSON.stringify({
         results: [
-          { id: 'call-batch-auto-1', reasoning: 'Listing files is safe.', approved: true },
+          {
+            id: 'call-batch-auto-1',
+            reasoning: 'Listing files is safe.',
+            riskLevel: 'low',
+            authorization: 'implied',
+            confidence: 'high',
+          },
           {
             id: 'call-batch-auto-2',
             reasoning: 'Dumping all commit hashes is not aligned with the current task.',
@@ -817,7 +847,15 @@ it('auto mode: response usage includes the auto-approved first turn, not just th
     continuationStreams: [finalStream],
     chatImpl: async () =>
       JSON.stringify({
-        results: [{ id: 'call-usage-1', reasoning: 'Listing files is read-only and safe.', approved: true }],
+        results: [
+          {
+            id: 'call-usage-1',
+            reasoning: 'Listing files is read-only and safe.',
+            riskLevel: 'low',
+            authorization: 'implied',
+            confidence: 'high',
+          },
+        ],
       }),
   });
 
@@ -849,7 +887,13 @@ it('auto mode: approval_required usage includes the auto-approved first turn', a
     chatImpl: async () =>
       JSON.stringify({
         results: [
-          { id: 'call-usage-batch-1', reasoning: 'Listing files is safe.', approved: true },
+          {
+            id: 'call-usage-batch-1',
+            reasoning: 'Listing files is safe.',
+            riskLevel: 'low',
+            authorization: 'implied',
+            confidence: 'high',
+          },
           {
             id: 'call-usage-batch-2',
             reasoning: 'Dumping all commit hashes is not aligned with the current task.',

@@ -64,6 +64,8 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.SHELL_AUTO_APPROVE_MODE]: 'Shell command auto-approval mode (off|advisory|auto)',
   [SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL]: 'Model to use for auto-approval evaluation (fast/cheap)',
   [SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER]: 'Provider for the auto-approval model (optional)',
+  [SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT]:
+    'Reasoning effort for risky shell auto-approval reviews (none|minimal|low|medium|high|xhigh)',
   [SETTING_KEYS.APP_PLAN_MODE]: 'Plan mode: read-only research and implementation planning (true|false)',
   [SETTING_KEYS.APP_ORCHESTRATOR_MODE]: 'Delegate tool-backed work through subagents (true|false)',
   [SETTING_KEYS.APP_NOTIFICATIONS]: 'Enable desktop notifications when the terminal is unfocused (true|false)',
@@ -181,6 +183,7 @@ export const CATEGORY_KEYS = {
   safety: new Set<string>([
     SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
     SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
+    SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT,
     SETTING_KEYS.SANDBOX_ENABLED,
     SETTING_KEYS.SANDBOX_READ_POLICY,
     SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA,

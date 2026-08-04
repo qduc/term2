@@ -94,6 +94,58 @@ it('evaluates RED commands via chat but keeps system rejection advisory', async 
   expect(chatCalls).toBe(1);
 });
 
+it('derives approval from risk, authorization, and confidence fields', async () => {
+  const advisories = await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-safe', command: 'ls source' }],
+    history: [{ role: 'user', type: 'message', content: 'inspect the source tree' }],
+    settingsService: createMockSettings('advisory') as any,
+    agentClient: {
+      chat: async () =>
+        JSON.stringify({
+          results: [
+            {
+              reasoning: 'Read-only listing is low risk and implied by the task.',
+              riskLevel: 'low',
+              authorization: 'implied',
+              confidence: 'high',
+            },
+          ],
+        }),
+    } as any,
+    logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  expect(advisories.get('call-safe')).toEqual({
+    model: 'test-auto-model',
+    reasoning: 'Read-only listing is low risk and implied by the task.',
+    approved: true,
+    riskLevel: 'low',
+    authorization: 'implied',
+    confidence: 'high',
+    source: 'llm',
+  });
+});
+
+it('rejects evaluations missing risk metadata', async () => {
+  const advisories = await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-safe', command: 'ls source' }],
+    history: [],
+    settingsService: createMockSettings('advisory', 'missing-risk-metadata-provider') as any,
+    agentClient: {
+      chatJson: async () => ({ results: [{ reasoning: 'Safe.' }] }),
+      chat: async () => {
+        throw new Error('prompt fallback should not run for malformed structured output');
+      },
+    } as any,
+    logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  expect(advisories.get('call-safe')).toMatchObject({ approved: false, source: 'llm' });
+  expect(advisories.get('call-safe')?.reasoning).toContain('LLM did not provide a valid ordered evaluation');
+});
+
 it('evaluates non-RED commands via chat and parses valid JSON results', async () => {
   const chatCalls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
   const advisories = await evaluateShellAutoApprovalAdvisories({
@@ -194,6 +246,40 @@ it('uses the chore tier model and provider ahead of legacy auto-approval setting
   });
 
   expect(calls).toEqual([expect.objectContaining({ model: 'chore-model', provider: 'chore-provider' })]);
+});
+
+it('spends extra reasoning effort on YELLOW and unsandboxed reviews only', async () => {
+  const efforts: string[] = [];
+  const baseSettings = createMockSettings('advisory', 'reasoning-effort-provider');
+  const settingsService = {
+    ...baseSettings,
+    get: (key: string) => (key === 'agent.autoApproveReasoningEffort' ? 'medium' : baseSettings.get(key)),
+    getDynamic: (key: string) => (key === 'agent.autoApproveReasoningEffort' ? 'medium' : baseSettings.getDynamic(key)),
+  } as any;
+
+  for (const command of [
+    { id: 'green', command: 'pwd' },
+    { id: 'yellow', command: 'git reset --hard HEAD' },
+    { id: 'unsandboxed', command: 'pwd', unsandboxed: true },
+  ]) {
+    await evaluateShellAutoApprovalAdvisories({
+      commands: [command],
+      history: [],
+      settingsService,
+      agentClient: {
+        chat: async (_prompt: string, options: Record<string, unknown>) => {
+          efforts.push(String(options.reasoningEffort));
+          return JSON.stringify({
+            results: [{ reasoning: 'Reviewed.', riskLevel: 'low', authorization: 'implied', confidence: 'high' }],
+          });
+        },
+      } as any,
+      logger: createMockLogger() as any,
+      sessionContextService: createSessionContextService() as any,
+    });
+  }
+
+  expect(efforts).toEqual(['none', 'medium', 'medium']);
 });
 
 it('uses structured chatJson when structured support is unknown', async () => {
@@ -687,7 +773,9 @@ it('includes recent manual decisions in the prompt as precedent', async () => {
 
   expect(chatCalls.length).toBe(1);
   expect(chatCalls[0].prompt).toContain('[approved] rm -rf ./dist');
+  expect(chatCalls[0].prompt).toContain('weak context only');
   expect(chatCalls[0].prompt).toContain('[rejected] git push --force origin main');
+  expect(chatCalls[0].prompt).toContain('strong evidence against auto-approval');
 });
 
 it('reports no manual decisions when none were provided', async () => {

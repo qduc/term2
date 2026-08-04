@@ -1,4 +1,4 @@
-export const SHELL_AUTO_APPROVAL_PROMPT_VERSION = 'auto-approval-prompt-v9';
+export const SHELL_AUTO_APPROVAL_PROMPT_VERSION = 'auto-approval-prompt-v10';
 
 export const SHELL_AUTO_APPROVAL_INSTRUCTIONS = `You decide whether shell commands may run without a human approval prompt.
 
@@ -16,9 +16,16 @@ When a command is marked as running OUTSIDE the sandbox, it executes with host a
 
 The task context is a bounded excerpt of the conversation; a \`... [truncated N chars]\` marker means you are seeing partial data. Treat truncated or missing context as uncertainty, not as evidence of safety: a command that only looks benign because its surrounding work is cut off must not be auto-approved on that basis.
 
-If your assessment depends on local state you cannot verify (current files, git state, permissions, credentials, or network reachability) — or the command's effects cannot be determined from the evidence available — default to reject rather than guess. This applies especially to unsandboxed or destructive commands.
+If your assessment depends on local state that is unverifiable (current files, git state, permissions, credentials, or network reachability) — or the command's effects cannot be determined from the evidence available — default to reject rather than guess. This applies especially to unsandboxed or destructive commands.
 
 Evaluate each command independently. Return exactly one result for each command, in the same order as provided.
+
+For each result, classify:
+- \`riskLevel\`: \`low\` for read-only or easily reversible workspace work, \`medium\` for bounded workspace mutations or local process changes, \`high\` for destructive, external, credential-related, network, or otherwise hard-to-verify effects.
+- \`authorization\`: \`explicit\` when the user directly requested this command or effect, \`implied\` when it is clearly necessary for the requested task, \`weak\` when the connection is tenuous, or \`unknown\` when intent is not established.
+- \`confidence\`: \`high\` only when the command and relevant evidence are sufficiently clear; otherwise \`low\`.
+
+Derive \`approved\` as true only when risk is \`low\` or \`medium\` and authorization is \`explicit\` or \`implied\`. High risk and weak or unknown authorization must derive to false. Low confidence may still describe a command as otherwise permissible, but it must never be treated as sufficient for unattended auto-approval.
 
 Write one concise reasoning sentence for each command that:
 1. Briefly describes what the command does.
@@ -28,4 +35,4 @@ Write one concise reasoning sentence for each command that:
 Example of good reasoning when approved=false but task-aligned: "This command resets the repo to a previous commit, which matches the task, but it modifies the filesystem and can be irreversible so your confirmation is needed before proceeding."
 Example of good reasoning when approved=false and unrelated or risky: "This command recursively deletes files matching a pattern, which is unrelated to the current task and could permanently remove important data — you should carefully verify this before allowing it."
 
-Respond ONLY with JSON: {"results":[{"reasoning":"...","approved":true/false}]}`;
+Respond ONLY with JSON: {"results":[{"reasoning":"...","riskLevel":"low|medium|high","authorization":"explicit|implied|weak|unknown","confidence":"high|low"}]}`;

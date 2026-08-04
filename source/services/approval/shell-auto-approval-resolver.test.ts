@@ -43,6 +43,9 @@ const makeAdvisory = (overrides: Partial<LLMAdvisory> = {}): LLMAdvisory => ({
   source: 'llm',
   reasoning: 'safe',
   model: 'test',
+  riskLevel: 'low',
+  authorization: 'implied',
+  confidence: 'high',
   ...overrides,
 });
 
@@ -116,7 +119,7 @@ it('isUnsandboxedApprovalEligible treats missing sandbox.enabled as enabled', ()
   expect(makeResolver(makeMockSettings('auto') as any).isUnsandboxedApprovalEligible()).toBe(true);
 });
 
-it('shouldAutoApprove requires auto mode + approved + llm source', () => {
+it('shouldAutoApprove fails closed on risk, authorization, confidence, and source', () => {
   const resolver = new ShellAutoApprovalResolver({
     conversationStore: new ConversationStore(),
     agentClient: makeMockAgentClient({}),
@@ -124,9 +127,15 @@ it('shouldAutoApprove requires auto mode + approved + llm source', () => {
     settingsService: makeMockSettings('auto') as any,
     sessionContextService: createSessionContextService() as any,
   });
-  expect(resolver.shouldAutoApprove(makeAdvisory({ approved: true, source: 'llm' }))).toBe(true);
-  expect(resolver.shouldAutoApprove(makeAdvisory({ approved: false, source: 'llm' }))).toBe(false);
-  expect(resolver.shouldAutoApprove(makeAdvisory({ approved: true, source: 'system' }))).toBe(false);
+
+  expect(resolver.shouldAutoApprove(makeAdvisory())).toBe(true);
+  expect(resolver.shouldAutoApprove(makeAdvisory({ riskLevel: 'high' }))).toBe(false);
+  expect(resolver.shouldAutoApprove(makeAdvisory({ authorization: 'weak' }))).toBe(false);
+  expect(resolver.shouldAutoApprove(makeAdvisory({ authorization: 'unknown' }))).toBe(false);
+  expect(resolver.shouldAutoApprove(makeAdvisory({ confidence: 'low' }))).toBe(false);
+  expect(resolver.shouldAutoApprove(makeAdvisory({ approved: false }))).toBe(false);
+  expect(resolver.shouldAutoApprove(makeAdvisory({ source: 'system' }))).toBe(false);
+  expect(resolver.shouldAutoApprove(makeAdvisory({ riskLevel: undefined }))).toBe(false);
   expect(resolver.shouldAutoApprove(undefined)).toBe(false);
 });
 

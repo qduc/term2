@@ -695,7 +695,15 @@ it('auto-approve: cumulative usage from continuation supersedes first-turn usage
     },
     async chat() {
       return JSON.stringify({
-        results: [{ id: 'call-usage-1', reasoning: 'Listing files is read-only and safe.', approved: true }],
+        results: [
+          {
+            id: 'call-usage-1',
+            reasoning: 'Listing files is read-only and safe.',
+            riskLevel: 'low',
+            authorization: 'implied',
+            confidence: 'high',
+          },
+        ],
       });
     },
   });
@@ -746,7 +754,15 @@ it('auto-approve: finalText comes from auto-approved continuation', async () => 
     },
     async chat() {
       return JSON.stringify({
-        results: [{ id: 'call-text-1', reasoning: 'Safe command.', approved: true }],
+        results: [
+          {
+            id: 'call-text-1',
+            reasoning: 'Safe command.',
+            riskLevel: 'low',
+            authorization: 'implied',
+            confidence: 'high',
+          },
+        ],
       });
     },
   });
@@ -794,7 +810,15 @@ it('auto-approve: command messages from continuation are preserved in final resu
     },
     async chat() {
       return JSON.stringify({
-        results: [{ id: 'call-cmd-1', reasoning: 'Safe.', approved: true }],
+        results: [
+          {
+            id: 'call-cmd-1',
+            reasoning: 'Safe.',
+            riskLevel: 'low',
+            authorization: 'implied',
+            confidence: 'high',
+          },
+        ],
       });
     },
   });
@@ -844,7 +868,13 @@ it('auto-approve: two auto-approved commands continue until approval_required or
     async chat() {
       return JSON.stringify({
         results: [
-          { id: 'call-batch-a', reasoning: 'Listing is safe.', approved: true },
+          {
+            id: 'call-batch-a',
+            reasoning: 'Listing is safe.',
+            riskLevel: 'low',
+            authorization: 'implied',
+            confidence: 'high',
+          },
           { id: 'call-batch-b', reasoning: 'PWD is safe but needs user approval.', approved: false },
         ],
       });

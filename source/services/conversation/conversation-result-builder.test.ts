@@ -491,7 +491,8 @@ it('auto_approve outcome when LLM advises approval and mode=auto', async () => {
   });
   const conversationStore = new ConversationStore();
   const agentClient: any = {
-    chat: async () => '{"results":[{"id":"c1","reasoning":"safe","approved":true}]}',
+    chat: async () =>
+      '{"results":[{"id":"c1","reasoning":"safe","riskLevel":"low","authorization":"implied","confidence":"high"}]}',
   };
   const settingsService: any = {
     get: <T>(key: string): T | undefined => (key === 'shell.autoApproveMode' ? ('auto' as unknown as T) : undefined),
@@ -545,7 +546,8 @@ it('unsandboxed shell auto-approves via LLM when sandbox enabled and mode auto',
     'auto',
     undefined,
     true,
-    async () => '{"results":[{"id":"c-unsandboxed","reasoning":"safe","approved":true}]}',
+    async () =>
+      '{"results":[{"id":"c-unsandboxed","reasoning":"safe","riskLevel":"low","authorization":"implied","confidence":"high"}]}',
   );
 
   const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
@@ -573,7 +575,8 @@ it('unsandboxed shell with RED command is never auto-approved even in auto mode'
     'auto',
     undefined,
     true,
-    async () => '{"results":[{"id":"c-red","reasoning":"safe","approved":true}]}',
+    async () =>
+      '{"results":[{"id":"c-red","reasoning":"safe","riskLevel":"high","authorization":"implied","confidence":"high"}]}',
   );
 
   const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
@@ -601,7 +604,8 @@ it('unsandboxed shell with sandbox enabled and mode advisory prompts with the LL
     'advisory',
     undefined,
     true,
-    async () => '{"results":[{"id":"c-unsandboxed-advisory","reasoning":"safe","approved":true}]}',
+    async () =>
+      '{"results":[{"id":"c-unsandboxed-advisory","reasoning":"safe","riskLevel":"low","authorization":"implied","confidence":"high"}]}',
   );
 
   const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
@@ -629,7 +633,8 @@ it('unsandboxed shell with sandbox enabled and mode off prompts without an advis
     'off',
     undefined,
     true,
-    async () => '{"results":[{"id":"c-unsandboxed-off","reasoning":"safe","approved":true}]}',
+    async () =>
+      '{"results":[{"id":"c-unsandboxed-off","reasoning":"safe","riskLevel":"low","authorization":"implied","confidence":"high"}]}',
   );
 
   const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
@@ -655,7 +660,8 @@ it('unsandboxed shell with sandbox disabled and mode auto still prompts without 
     'auto',
     undefined,
     false,
-    async () => '{"results":[{"id":"c-unsandboxed-sandbox-off","reasoning":"safe","approved":true}]}',
+    async () =>
+      '{"results":[{"id":"c-unsandboxed-sandbox-off","reasoning":"safe","riskLevel":"low","authorization":"implied","confidence":"high"}]}',
   );
 
   const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
@@ -710,7 +716,7 @@ it('explicit Docker host control is not auto-approved by LLM advisory mode', asy
   const agentClient: any = {
     chat: async () => {
       advisoryCalls++;
-      return '{"results":[{"id":"c-docker-host-control","reasoning":"safe","approved":true}]}';
+      return '{"results":[{"id":"c-docker-host-control","reasoning":"safe","riskLevel":"low","authorization":"implied","confidence":"high"}]}';
     },
   };
   const shellAutoApproval = new ShellAutoApprovalResolver({

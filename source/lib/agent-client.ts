@@ -337,10 +337,21 @@ export class AgentClient {
    * subagent runs are unaffected — see {@link cancelBackgroundRuns}.
    */
   abort(): void {
+    this.#abortActiveWork(() => this.#applicationRunLoop.abort());
+  }
+
+  /**
+   * Stop whatever is streaming, deciding only whether the turn dies with it.
+   *
+   * Resuming a paused turn passes through here too, and must not take the
+   * turn's injections down: they are waiting for the very segment about to
+   * start. Only a caller that means to end the turn discards them.
+   */
+  #abortActiveWork(abortRunLoop: () => void): void {
     const traceId = this.#currentCorrelationId ?? this.#logger.getCorrelationId?.();
     this.#activeStartController?.abort();
     this.#activeStartController = null;
-    this.#applicationRunLoop.abort();
+    abortRunLoop();
     this.#clearCorrelationId();
     this.#logger.debug('Agent operation aborted', {
       eventType: 'stream.aborted',
@@ -536,7 +547,8 @@ export class AgentClient {
 
   async continueRunStream(state: ContinuationHandle, options: ChainedRunOptions = {}): Promise<AgentStream> {
     this.#subagentBridge?.resetAbortController();
-    this.abort();
+    // The turn is resuming, not ending: keep anything waiting for this segment.
+    this.#abortActiveWork(() => this.#applicationRunLoop.abortSegment());
     const provider = this.#agentConfig.getProvider();
     const supportsChaining = getProvider(provider)?.capabilities?.supportsConversationChaining === true;
     const requestPreparation = this.#openAIRequestPreparation(options);

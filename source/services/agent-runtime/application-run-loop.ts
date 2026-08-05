@@ -234,7 +234,7 @@ export class ApplicationRunLoop {
   }
 
   abort(): void {
-    this.#abortActiveSegment();
+    this.abortSegment();
     // An aborted turn will not resume, so nothing may keep waiting on it.
     this.#turnPaused = false;
     this.#releasePendingSteers({ reason: 'aborted' });
@@ -242,10 +242,11 @@ export class ApplicationRunLoop {
 
   /**
    * Stop the segment currently streaming without judging the turn's fate.
-   * Starting the next segment of a paused turn goes through here, so waiting
-   * injections survive; only a caller-initiated `abort` discards them.
+   *
+   * Resuming a paused turn goes through here, so waiting injections survive;
+   * only `abort`, which means the turn itself is over, discards them.
    */
-  #abortActiveSegment(): void {
+  abortSegment(): void {
     this.#activeAbortController?.abort();
     this.#activeAbortController = null;
   }
@@ -409,7 +410,7 @@ export class ApplicationRunLoop {
 
   #run(state: RunState, options: ApplicationRunLoopOptions): AgentStream {
     const queue = new EventQueue();
-    this.#abortActiveSegment();
+    this.abortSegment();
     const controller = new AbortController();
     this.#activeAbortController = controller;
     this.#runInFlight = true;

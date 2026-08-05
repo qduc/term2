@@ -108,6 +108,63 @@ describe('AgentClient application-run-loop execution', () => {
     defaultInstance.dispose();
   });
 
+  it('keeps a steer waiting across the approval pause it resumes through', async () => {
+    // Resuming a paused turn goes through AgentClient, which stops whatever is
+    // streaming first. Doing that with the turn-ending abort discarded the very
+    // injections waiting for the segment about to start — invisible to a test
+    // that drives ApplicationRunLoop.continueRunStream directly.
+    const provider = `steer-across-pause-${Date.now()}`;
+    providers.add(provider);
+    let turn = 0;
+    registerProvider({
+      id: provider,
+      label: 'Steer across pause test provider',
+      createStreamedModel: () => ({
+        async *stream() {
+          turn += 1;
+          if (turn === 1) {
+            yield {
+              type: 'completion',
+              responseId: 'one',
+              output: [{ type: 'tool_call', id: 'call-1', name: 'risky', arguments: '{}' }],
+            };
+          } else {
+            yield {
+              type: 'completion',
+              responseId: 'two',
+              output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+            };
+          }
+        },
+      }),
+      fetchModels: async () => [],
+    });
+    const tool = {
+      name: 'risky',
+      description: 'needs approval',
+      parameters: {},
+      needsApproval: async () => true,
+      execute: async () => 'ok',
+    } as any;
+    const overrideAgent = { name: 'override', model: 'test-model', instructions: 'test', tools: [tool] } as any;
+    const instance = client(provider, { agentOverride: overrideAgent, maxTurns: 4 });
+
+    const stream = await instance.startStream('run');
+    await stream.completed;
+    expect(stream.interruptions).toHaveLength(1);
+
+    const steered = instance.steer([{ type: 'message', role: 'user', content: 'one more thing' }]);
+    (stream.state as any).approve?.({});
+    const resumed = await instance.continueRunStream(stream.state!);
+    await expect(steered).resolves.toBe(true);
+    await resumed.completed;
+
+    expect(resumed.history).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'message', role: 'user', content: 'one more thing' })]),
+    );
+    instance.dispose();
+  });
+
   it('fails clearly when a provider has no streamed-model factory', async () => {
     const provider = `runner-only-${Date.now()}`;
     providers.add(provider);

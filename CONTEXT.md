@@ -15,15 +15,23 @@ The application-owned loop that drives an agent: send input to a provider, consu
 _Avoid_: SDK loop, executor loop
 
 **Turn**:
-A single execution lifecycle starting with a user's input, containing one or more model loops, and ending with a final response.
+A single execution lifecycle starting with a user's input, spanning one or more Segments, and ending with a final response.
 _Avoid_: Request, step, loop
 
+**Segment**:
+One unbroken span of Run Loop execution inside a Turn. A Turn pauses at each approval and resumes as a new Segment, so a Turn the user sees as continuous is many Segments.
+_Avoid_: Run, pass, iteration
+
 **Turn Attempt**:
-One try at producing a Turn. A Turn may span several attempts when a retry or recovery restarts the model stream.
+One try at producing a Turn, restarted by retry or recovery. Distinct from a Segment, which is a planned pause and resume rather than a restart.
 _Avoid_: Retry, run
 
+**Request Boundary**:
+The point inside a Segment after the current round's tool results are recorded and before the next model request is built. The only place a message may enter a Turn already in flight.
+_Avoid_: Checkpoint, safe point, gap
+
 **Continuation**:
-An opaque capability for resuming a model run that paused mid-turn, typically to await an approval decision.
+An opaque capability for resuming a Turn that paused at the end of a Segment, typically to await an approval decision.
 _Avoid_: Resume token, run state
 
 **Session**:
@@ -34,12 +42,16 @@ _Avoid_: Chat, connection
 The ordered, provider-facing record of a conversation that is replayed to the model on each turn.
 _Avoid_: History, log, messages
 
+**Injection**:
+Delivering a message into a Turn already in flight, admitted at a Request Boundary so the model reads it in sequence. Nothing is cancelled and no running Tool is disturbed. Its lifetime is the Turn: it survives the Segment boundaries the Turn pauses at.
+_Avoid_: Interrupt, mid-turn send, push
+
 **Steering**:
-Additional user input accepted while a turn is already in flight, folded into the running agent rather than starting a new turn.
+Injection of user input — the user speaking to a Turn that is already running rather than opening a new one.
 _Avoid_: Interrupt, follow-up
 
 **Queue**:
-The ordered set of user inputs awaiting execution, with its own pause and resume state, persisted so an interrupted run can be recovered.
+The ordered set of user inputs awaiting execution, with its own pause and resume state, persisted so an interrupted Turn can be recovered.
 _Avoid_: Backlog, buffer
 
 ### Delegation
@@ -51,6 +63,10 @@ _Avoid_: Child agent, helper
 **Role**:
 The named capability profile a subagent is spawned under (explorer, researcher, worker, mentor, librarian), fixing its tools and whether it may write.
 _Avoid_: Persona, type, agent kind
+
+**Background Notification**:
+The report of a settled asynchronous subagent run, returned to the agent that launched it. Reaching the launching agent is an Injection like any other.
+_Avoid_: Callback, completion event, result message
 
 **Workflow**:
 A sandboxed script that orchestrates one or more agent runs programmatically, without a human in the loop.

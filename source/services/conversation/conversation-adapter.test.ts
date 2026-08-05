@@ -620,6 +620,79 @@ it('delivers a steer into the running turn instead of queueing it', async () => 
   await expect(active).resolves.toMatchObject({ type: 'response' });
 });
 
+it('injects pre-built items into the running turn without a steering preamble', async () => {
+  let releaseActive!: () => void;
+  const activeReleased = new Promise<void>((resolve) => {
+    releaseActive = resolve;
+  });
+  const steered: unknown[][] = [];
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start(input) {
+        const text = typeof input === 'string' ? input : input.text;
+        if (text === 'active') await activeReleased;
+        yield { type: 'final' as const, finalText: text };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      steer: async (items) => {
+        steered.push([...items]);
+        return true;
+      },
+    },
+    queueForeground: true,
+  });
+
+  const active = adapter.sendMessage('active');
+  await new Promise((resolve) => setImmediate(resolve));
+
+  await expect(
+    adapter.injectIntoActiveTurn([{ type: 'message', role: 'user', content: 'shell session output' }]),
+  ).resolves.toBe(true);
+
+  // A system-spoken injection carries its own words only: the steering notice
+  // would misattribute it to the user.
+  const item = steered[0]![0] as { content: string };
+  expect(item.content).toBe('shell session output');
+
+  releaseActive();
+  await expect(active).resolves.toMatchObject({ type: 'response' });
+});
+
+it('reports an injection as undeliverable when no turn is running', async () => {
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      steer: async () => true,
+    },
+    queueForeground: true,
+  });
+
+  await expect(
+    adapter.injectIntoActiveTurn([{ type: 'message', role: 'user', content: 'shell session output' }]),
+  ).resolves.toBe(false);
+});
+
 it('reports a steer as undeliverable when no turn is running', async () => {
   const adapter = new ConversationAdapter({
     sessionId: 'session-1',

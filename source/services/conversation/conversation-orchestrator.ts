@@ -27,7 +27,10 @@ import {
   normalizeUserTurn,
   type UserTurn,
 } from '../../types/user-turn.js';
-import type { BackgroundSubagentNotification } from '../subagents/subagent-notification-store.js';
+import type {
+  BackgroundSubagentNotification,
+  BackgroundSubagentNotificationPort,
+} from '../subagents/subagent-notification-store.js';
 
 const REASONING_RESPONSE_THROTTLE_MS = 200;
 
@@ -691,41 +694,83 @@ export class ConversationOrchestrator {
   }
 
   /**
-   * Hand every settled background subagent run to the main agent as one
-   * system-initiated turn. Does nothing unless the conversation is idle: a
-   * running turn or a pending approval owns the agent, and the store keeps the
-   * notifications until the next terminal state re-attempts delivery.
+   * Announce settled runs in the transcript, once each.
+   *
+   * Display is deliberately not tied to the agent receiving them: the user
+   * should see a run land the moment it does, whether the report reaches the
+   * agent at the next request boundary or waits for a turn of its own.
+   */
+  #announceBackgroundSubagentNotifications(notifications: readonly BackgroundSubagentNotification[]): void {
+    const newlyDisplayed = notifications.filter(
+      (notification) => !this.#displayedBackgroundNotificationMessageIds.has(notification.messageId),
+    );
+    if (newlyDisplayed.length === 0) return;
+    for (const notification of newlyDisplayed) {
+      this.#displayedBackgroundNotificationMessageIds.add(notification.messageId);
+    }
+    this.config.messages.appendMessages([
+      {
+        id: this.createMessageId(),
+        sender: 'command',
+        status: 'completed',
+        command: 'background_subagent_notification',
+        output: formatBackgroundSubagentNotificationDisplay(newlyDisplayed),
+        success: true,
+        toolName: 'background_subagent_notification',
+        toolArgs: { count: newlyDisplayed.length },
+      },
+    ]);
+  }
+
+  /**
+   * Offer settled runs to the turn already in flight.
+   *
+   * Taken as one report at that turn's next request boundary. If the turn will
+   * not take them they go back to the store unchanged, so the idle path still
+   * delivers them and the agent never sees the same run twice.
+   */
+  async #injectBackgroundSubagentNotifications(pending: BackgroundSubagentNotificationPort): Promise<void> {
+    if (!this.config.conversationService.injectIntoActiveTurn) return;
+    const notifications = pending.drain();
+    if (notifications.length === 0) return;
+
+    this.#announceBackgroundSubagentNotifications(notifications);
+
+    const injected = await this.config.conversationService
+      .injectIntoActiveTurn([
+        { type: 'message', role: 'user', content: formatBackgroundSubagentNotifications(notifications) },
+      ])
+      .catch((error) => {
+        this.logError('Error delivering background subagent notifications', error);
+        return false;
+      });
+
+    if (!injected) pending.retain(notifications);
+  }
+
+  /**
+   * Hand every settled background subagent run to the main agent.
+   *
+   * The agent that launched these runs is usually still working when they
+   * settle, so delivery goes into that turn at its next request boundary. Only
+   * when no turn will take them does this open one of its own.
    */
   async #deliverBackgroundSubagentNotifications(): Promise<void> {
     const pending = this.config.conversationService.backgroundSubagentNotifications;
     if (!pending || pending.pendingCount === 0) return;
     if (this.#stoppingByUser) return;
-    if (this.#activeTurns > 0 || this.pendingApproval) return;
-    if (this.config.conversationService.isQueueActive?.()) return;
+
+    const turnIsRunning = this.#activeTurns > 0 || this.config.conversationService.isQueueActive?.() === true;
+    if (turnIsRunning) {
+      await this.#injectBackgroundSubagentNotifications(pending);
+      return;
+    }
+    if (this.pendingApproval) return;
 
     const notifications = pending.drain();
     if (notifications.length === 0) return;
 
-    const newlyDisplayed = notifications.filter(
-      (notification) => !this.#displayedBackgroundNotificationMessageIds.has(notification.messageId),
-    );
-    if (newlyDisplayed.length > 0) {
-      for (const notification of newlyDisplayed) {
-        this.#displayedBackgroundNotificationMessageIds.add(notification.messageId);
-      }
-      this.config.messages.appendMessages([
-        {
-          id: this.createMessageId(),
-          sender: 'command',
-          status: 'completed',
-          command: 'background_subagent_notification',
-          output: formatBackgroundSubagentNotificationDisplay(newlyDisplayed),
-          success: true,
-          toolName: 'background_subagent_notification',
-          toolArgs: { count: newlyDisplayed.length },
-        },
-      ]);
-    }
+    this.#announceBackgroundSubagentNotifications(notifications);
 
     const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = this.#beginTurn(
       'backgroundSubagentNotification',

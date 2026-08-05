@@ -32,7 +32,8 @@ Active multi-session work is tracked in `docs/plans/`. Each such plan opens with
 
 **Note:** Keep this section current — remove stale entries and update ongoing ones.
 
-- No plan is currently active. Scheduled live provider canaries remain a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions.
+- `docs/plans/mid-turn-injection.md` — steering and background-subagent notifications reaching a turn already in flight. Two fixes landed; **awaiting live confirmation from the user**. Read it before touching the run loop, `AgentClient`, the turn coordinator, or notification delivery.
+- Scheduled live provider canaries remain a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions.
 
 # Parallel Work Isolation
 

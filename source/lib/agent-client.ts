@@ -184,6 +184,7 @@ export class AgentClient {
     this.#retryAttempts = retryAttempts ?? 2;
     this.#applicationRunLoop = new ApplicationRunLoop({
       toolLifecycle: this.#toolLifecycle,
+      logDiagnostic: (message, meta) => deps.logger.info(message, meta),
       resolveModel: (selectedModel) => {
         const providerId = this.#agentConfig.getProvider();
         const provider = getProvider(providerId);

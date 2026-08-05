@@ -114,6 +114,12 @@ export class MaxTurnsExceededError extends Error {
 export interface ApplicationRunLoopDeps {
   readonly resolveModel: (model: string) => StreamedModelTurn | Promise<StreamedModelTurn>;
   readonly toolLifecycle?: ToolExecutionLifecyclePort;
+  /**
+   * Diagnostics sink. Optional so no construction site or test has to supply
+   * one. Used to report the fate of steers, which is otherwise invisible: a
+   * turn spans several runs, and a steer only survives the run it was handed to.
+   */
+  readonly logDiagnostic?: (message: string, meta: Record<string, unknown>) => void;
 }
 
 /** A user message waiting for the running turn's next request boundary. */
@@ -215,6 +221,12 @@ export class ApplicationRunLoop {
   readonly #deps: ApplicationRunLoopDeps;
   #activeAbortController: AbortController | null = null;
   #runInFlight = false;
+  /**
+   * Set when a segment ends holding approvals, meaning the turn is pausing
+   * rather than finishing. Injections offered during the pause wait here for
+   * the continuation segment instead of being refused for want of a run.
+   */
+  #turnPaused = false;
   #pendingSteers: PendingSteer[] = [];
 
   constructor(deps: ApplicationRunLoopDeps) {
@@ -222,6 +234,18 @@ export class ApplicationRunLoop {
   }
 
   abort(): void {
+    this.#abortActiveSegment();
+    // An aborted turn will not resume, so nothing may keep waiting on it.
+    this.#turnPaused = false;
+    this.#releasePendingSteers({ reason: 'aborted' });
+  }
+
+  /**
+   * Stop the segment currently streaming without judging the turn's fate.
+   * Starting the next segment of a paused turn goes through here, so waiting
+   * injections survive; only a caller-initiated `abort` discards them.
+   */
+  #abortActiveSegment(): void {
     this.#activeAbortController?.abort();
     this.#activeAbortController = null;
   }
@@ -234,21 +258,29 @@ export class ApplicationRunLoop {
    * model reads it in sequence without the turn being interrupted. Nothing is
    * cancelled, and a tool already running is untouched.
    *
-   * Resolves `true` once the message has been admitted, and `false` when this
-   * run ends first (or none is in flight): the turn offered no further request
+   * The wait spans the whole turn, not just the segment it was offered to: a
+   * turn that pauses for an approval resumes as a new segment, and the message
+   * is admitted at that segment's first boundary.
+   *
+   * Resolves `true` once the message has been admitted, and `false` when the
+   * turn ends first (or none is running): it offered no further request
    * boundary, so the caller must send the message as its own turn instead.
    */
   steer(items: readonly ProviderInputItem[]): Promise<boolean> {
-    if (!this.#runInFlight || items.length === 0) return Promise.resolve(false);
+    if (items.length === 0) return Promise.resolve(false);
+    if (!this.#runInFlight && !this.#turnPaused) return Promise.resolve(false);
     return new Promise<boolean>((resolve) => {
       this.#pendingSteers.push({ items, resolve });
     });
   }
 
   /** Settle every steer this run did not admit so callers stop waiting on it. */
-  #releasePendingSteers(): void {
+  #releasePendingSteers(reason: Record<string, unknown> = {}): void {
     const pending = this.#pendingSteers;
     this.#pendingSteers = [];
+    if (pending.length > 0) {
+      this.#deps.logDiagnostic?.('Steer released at run end', { released: pending.length, ...reason });
+    }
     for (const steer of pending) steer.resolve(false);
   }
 
@@ -263,6 +295,10 @@ export class ApplicationRunLoop {
     if (this.#pendingSteers.length === 0) return;
     const admitted = this.#pendingSteers;
     this.#pendingSteers = [];
+    this.#deps.logDiagnostic?.('Steer admitted at request boundary', {
+      admitted: admitted.length,
+      turnCount: state.turnCount,
+    });
     for (const steer of admitted) {
       for (const item of steer.items) {
         state.history.push(item);
@@ -274,6 +310,11 @@ export class ApplicationRunLoop {
   }
 
   startStream(agent: ApplicationAgent, input: ProviderInput, options: ApplicationRunLoopOptions = {}): AgentStream {
+    // A new turn starts here. Anything still waiting belonged to the previous
+    // turn and can never be admitted now, so settle it rather than letting it
+    // leak into work the user did not aim it at.
+    this.#turnPaused = false;
+    this.#releasePendingSteers({ reason: 'superseded_by_new_turn' });
     const state: RunState = {
       agent,
       input: normalizeInput(input),
@@ -368,10 +409,12 @@ export class ApplicationRunLoop {
 
   #run(state: RunState, options: ApplicationRunLoopOptions): AgentStream {
     const queue = new EventQueue();
-    this.abort();
+    this.#abortActiveSegment();
     const controller = new AbortController();
     this.#activeAbortController = controller;
     this.#runInFlight = true;
+    // This segment is running, so the turn is no longer paused between them.
+    this.#turnPaused = false;
     if (options.signal) {
       if (options.signal.aborted) controller.abort();
       else options.signal.addEventListener('abort', () => controller.abort(), { once: true });
@@ -404,18 +447,32 @@ export class ApplicationRunLoop {
       },
     });
 
+    let exitError: unknown;
     stream.completed = this.#execute(state, stream, queue, effectiveOptions, toolContext)
       .catch((error) => {
+        exitError = error;
         stream.cancelled = error instanceof Error && error.name === 'AbortError';
         queue.close(error);
         throw error;
       })
       .finally(() => {
         if (this.#activeAbortController === controller) this.#activeAbortController = null;
-        // This run offered no further request boundary. Anything still waiting
-        // has to be sent as its own turn instead.
         this.#runInFlight = false;
-        this.#releasePendingSteers();
+        // A segment that ends holding approvals has paused the turn, not ended
+        // it: the caller resumes through continueRunStream, which offers
+        // another request boundary. Injections wait for it. Only a segment
+        // that ends with nothing outstanding has truly finished the turn, and
+        // then anything still waiting has to be sent as its own turn instead.
+        const pendingApprovals = state.pendingApprovals?.length ?? 0;
+        const cancelled = stream.cancelled === true;
+        this.#turnPaused = pendingApprovals > 0 && !cancelled && exitError === undefined;
+        if (this.#turnPaused) return;
+        this.#releasePendingSteers({
+          pendingApprovals,
+          cancelled,
+          error: exitError instanceof Error ? exitError.name : exitError ? String(exitError) : undefined,
+          turnCount: state.turnCount,
+        });
       });
     return stream;
   }

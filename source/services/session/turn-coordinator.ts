@@ -154,12 +154,14 @@ export class TurnCoordinator {
   }
 
   /**
-   * Admit a user message into the running turn. A turn parked on an approval
-   * has no request boundary ahead of it until the user answers, so the caller
-   * is told to send the message as its own turn instead.
+   * Admit a user message into the running turn.
+   *
+   * A turn parked on an approval is paused, not over: answering it resumes the
+   * turn with another request boundary ahead. The message waits for that
+   * boundary rather than being refused, which is the state the user is most
+   * likely to be typing in — the approval pause is the visible gap in a turn.
    */
   steer(items: readonly ProviderInputItem[]): Promise<boolean> {
-    if (this.deps.statusMachine.is('awaiting_approval')) return Promise.resolve(false);
     return this.deps.turnWorkflow.steer(items);
   }
 

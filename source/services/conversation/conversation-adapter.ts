@@ -7,6 +7,7 @@ import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
 import { userTurnToProviderItem } from './user-turn-item.js';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { SessionRuntime, SessionLogs, SessionApprovalQuery } from '../session/session-composition.js';
 import type { SessionManager } from '../session/session-manager.js';
 import type { AskUserAnswerSink, SubagentEventSinkHost } from '../conversation-agent-client.js';
@@ -291,10 +292,24 @@ export class ConversationAdapter {
    * approval — leaving the caller to send the message as its own turn.
    */
   async steerActiveTurn(input: string | UserTurn): Promise<boolean> {
-    if (!this.#turnFlow.steer || !this.isQueueActive()) return false;
     const turn = normalizeUserTurn(input);
     if (!turn.text.trim() && !turn.images?.length) return false;
-    return this.#turnFlow.steer([userTurnToProviderItem(turn, { steering: true })]);
+    return this.injectIntoActiveTurn([userTurnToProviderItem(turn, { steering: true })]);
+  }
+
+  /**
+   * Hand pre-built items to the turn already running, admitted at its next
+   * request boundary.
+   *
+   * Steering is the user's case of this; a settled background subagent run and
+   * shell-session context are the same act by a different speaker, so they
+   * share the delivery and differ only in the text they carry. Resolves false
+   * when no turn will take them, leaving the caller to deliver them itself.
+   */
+  async injectIntoActiveTurn(items: readonly ProviderInputItem[]): Promise<boolean> {
+    if (!this.#turnFlow.steer || items.length === 0) return false;
+    if (!this.isQueueActive()) return false;
+    return this.#turnFlow.steer(items);
   }
 
   async sendMessage(

@@ -755,6 +755,130 @@ describe('ApplicationRunLoop', () => {
     );
   });
 
+  it('holds a steer offered during an approval pause and admits it when the turn resumes', async () => {
+    // The turn pauses at every approval and resumes as a new segment. A user
+    // typing into that visible gap was previously refused outright, because
+    // the steer's lifetime was the segment rather than the turn.
+    const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    const tool: ToolDefinition = {
+      name: 'danger',
+      description: 'Requires approval',
+      parameters: z.object({}),
+      needsApproval: () => true,
+      execute: () => 'approved result',
+      formatCommandMessage: () => [],
+    };
+    let calls = 0;
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => {
+        calls++;
+        return calls === 1
+          ? {
+              async *stream(request) {
+                requests.push(request);
+                yield { type: 'tool_call', id: 'call-approval', name: 'danger', arguments: '{}' };
+                yield { type: 'completion', responseId: 'resp-pending', output: [] };
+              },
+            }
+          : {
+              async *stream(request) {
+                requests.push(request);
+                yield { type: 'completion', responseId: 'resp-resumed', output: [] };
+              },
+            };
+      },
+    });
+
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do it');
+    await collect(stream);
+    expect(stream.interruptions).toHaveLength(1);
+
+    // The segment has ended, but the turn has not: the steer must wait, not
+    // resolve false, so the caller does not fall back to a separate turn.
+    const steered = loop.steer([{ type: 'message', role: 'user', content: 'wait, check the config first' }]);
+    let settledEarly = false;
+    void steered.then(() => {
+      settledEarly = true;
+    });
+    await Promise.resolve();
+    expect(settledEarly).toBe(false);
+
+    const handle = stream.state! as any;
+    handle.approve?.({});
+    const resumed = loop.continueRunStream(stream.state!);
+    await expect(steered).resolves.toBe(true);
+    await collect(resumed);
+
+    // It lands after the approved tool's result, on the resumed segment's request.
+    const resumedRequest = requests[1]!.input as any[];
+    const toolResultIndex = resumedRequest.findIndex((item) => item.type === 'tool_result');
+    const steerIndex = resumedRequest.findIndex(
+      (item) => item.type === 'message' && item.role === 'user' && JSON.stringify(item).includes('check the config'),
+    );
+    expect(toolResultIndex).toBeGreaterThanOrEqual(0);
+    expect(steerIndex).toBeGreaterThan(toolResultIndex);
+  });
+
+  it('settles a steer waiting on a paused turn when the turn is aborted instead of resumed', async () => {
+    const tool: ToolDefinition = {
+      name: 'danger',
+      description: 'Requires approval',
+      parameters: z.object({}),
+      needsApproval: () => true,
+      execute: () => 'approved result',
+      formatCommandMessage: () => [],
+    };
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => ({
+        async *stream() {
+          yield { type: 'tool_call', id: 'call-approval', name: 'danger', arguments: '{}' };
+          yield { type: 'completion', responseId: 'resp-pending', output: [] };
+        },
+      }),
+    });
+
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do it');
+    await collect(stream);
+
+    const steered = loop.steer([{ type: 'message', role: 'user', content: 'never admitted' }]);
+    // An abandoned turn never resumes, so the caller must not wait forever.
+    loop.abort();
+    await expect(steered).resolves.toBe(false);
+  });
+
+  it('settles a steer waiting on a paused turn when a new turn starts instead', async () => {
+    const tool: ToolDefinition = {
+      name: 'danger',
+      description: 'Requires approval',
+      parameters: z.object({}),
+      needsApproval: () => true,
+      execute: () => 'approved result',
+      formatCommandMessage: () => [],
+    };
+    let calls = 0;
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => {
+        calls++;
+        return calls === 1
+          ? {
+              async *stream() {
+                yield { type: 'tool_call', id: 'call-approval', name: 'danger', arguments: '{}' };
+                yield { type: 'completion', responseId: 'resp-pending', output: [] };
+              },
+            }
+          : textModel('fresh', 'resp-fresh');
+      },
+    });
+
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do it');
+    await collect(stream);
+
+    const steered = loop.steer([{ type: 'message', role: 'user', content: 'aimed at the old turn' }]);
+    // The steer belonged to the abandoned turn and must not leak into this one.
+    await collect(loop.startStream(agent, 'something else entirely'));
+    await expect(steered).resolves.toBe(false);
+  });
+
   it('reports a steer as unadmitted when the turn has no request boundary left', async () => {
     const loop = new ApplicationRunLoop({ resolveModel: () => textModel('done', 'resp-1') });
     const stream = loop.startStream(agent, 'answer me');

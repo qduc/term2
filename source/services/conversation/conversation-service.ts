@@ -26,6 +26,7 @@ import type {
   BackgroundSubagentTaskPort,
 } from '../subagents/subagent-notification-store.js';
 import type { QueueStateKind, QueueStateObserver } from './conversation-adapter.js';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { createConversationRuntime } from './conversation-runtime-factory.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
@@ -251,8 +252,22 @@ export class ConversationService {
     this.#runtime.settings.setRetryCallback(callback);
   }
 
+  /**
+   * Record what the user did in shell mode so the agent can see it.
+   *
+   * While a turn is running the store is the wrong destination: the turn holds
+   * its own transcript and overwrites the store when it commits, which drops
+   * anything appended underneath it. Hand it to the turn instead, and fall
+   * back to the store only when no turn will take it.
+   */
   addShellContext(historyText: string): void {
-    this.#runtime.state.addShellContext(historyText);
+    if (!historyText.trim()) return;
+    void this.#adapter
+      .injectIntoActiveTurn([{ type: 'message', role: 'user', content: historyText }])
+      .catch(() => false)
+      .then((injected) => {
+        if (!injected) this.#runtime.state.addShellContext(historyText);
+      });
   }
 
   queueModeNotice(text: string): void {
@@ -321,6 +336,11 @@ export class ConversationService {
    */
   steerActiveTurn(input: string | UserTurn): Promise<boolean> {
     return this.#adapter.steerActiveTurn(input);
+  }
+
+  /** Deliver pre-built items into the running turn. See the adapter for terms. */
+  injectIntoActiveTurn(items: readonly ProviderInputItem[]): Promise<boolean> {
+    return this.#adapter.injectIntoActiveTurn(items);
   }
 
   /**

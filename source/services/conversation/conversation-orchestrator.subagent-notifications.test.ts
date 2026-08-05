@@ -97,7 +97,7 @@ function makeUIPort(): UIPort {
   };
 }
 
-function makeHarness() {
+function makeHarness(options: { queueActive?: boolean; injects?: boolean } = {}) {
   const store = new SubagentNotificationStore({ now: () => 1_000 });
   let observer: (() => void) | null = null;
   let queuedTurnStartObserver:
@@ -110,7 +110,8 @@ function makeHarness() {
     handleApprovalDecision: vi.fn(async () => response()),
     abort: vi.fn(),
     interruptFromUser: vi.fn(),
-    isQueueActive: vi.fn(() => false),
+    isQueueActive: vi.fn(() => options.queueActive === true),
+    injectIntoActiveTurn: vi.fn(async (_items: readonly unknown[]) => options.injects !== false),
     setQueueStateObserver: vi.fn(),
     setQueuedTurnStartObserver: vi.fn(
       (next: (execution: { requestId: string; input: string; suppressUserMessageDisplay?: boolean }) => void) => {
@@ -147,11 +148,74 @@ function makeHarness() {
     sentTexts(): string[] {
       return service.sendMessage.mock.calls.map((call) => String((call as unknown[])[0]));
     },
+    injectedTexts(): string[] {
+      return service.injectIntoActiveTurn.mock.calls.map((call) =>
+        String(((call as unknown[])[0] as Array<{ content?: unknown }>)[0]?.content ?? ''),
+      );
+    },
     startQueuedTurn(input: string, suppressUserMessageDisplay?: boolean) {
       queuedTurnStartObserver?.({ requestId: 'queued-background-notification', input, suppressUserMessageDisplay });
     },
   };
 }
+
+describe('ConversationOrchestrator background subagent notifications mid-turn', () => {
+  it('hands a settled run to the running turn instead of waiting for it to end', async () => {
+    const h = makeHarness({ queueActive: true });
+
+    h.emit(completion());
+    await settle();
+
+    // The agent that launched the run is still working; it hears at its next
+    // request boundary rather than after the whole turn.
+    expect(h.service.injectIntoActiveTurn).toHaveBeenCalledTimes(1);
+    expect(h.injectedTexts()[0]).toContain('found the bug');
+    expect(h.service.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('announces a run in the transcript as soon as it settles, without waiting for delivery', async () => {
+    const h = makeHarness({ queueActive: true });
+
+    h.emit(completion());
+    await settle();
+
+    const announced = h.config.messages
+      .getMessages()
+      .filter(
+        (message) => message.sender === 'command' && (message as any).command === 'background_subagent_notification',
+      );
+    expect(announced).toHaveLength(1);
+  });
+
+  it('keeps a run for the idle path when the turn will not take it, and never reports it twice', async () => {
+    const h = makeHarness({ queueActive: true, injects: false });
+
+    h.emit(completion());
+    await settle();
+
+    expect(h.service.injectIntoActiveTurn).toHaveBeenCalledTimes(1);
+    expect(h.service.sendMessage).not.toHaveBeenCalled();
+    // Retained, not dropped: the idle path still owes the agent this report.
+    expect(h.store.pendingCount).toBe(1);
+
+    h.service.isQueueActive.mockReturnValue(false);
+    h.emit(completion({ agentId: 'run-2', finalText: 'second finding' }));
+    await settle();
+
+    const sent = h.sentTexts().join('\n');
+    expect(sent).toContain('found the bug');
+    expect(sent).toContain('second finding');
+    // Announced once each, despite passing through both paths.
+    const announced = h.config.messages
+      .getMessages()
+      .filter(
+        (message) => message.sender === 'command' && (message as any).command === 'background_subagent_notification',
+      );
+    expect(announced.flatMap((message) => String((message as any).output).match(/found the bug/g) ?? [])).toHaveLength(
+      1,
+    );
+  });
+});
 
 describe('ConversationOrchestrator background subagent notifications', () => {
   it('delivers a question as an idle-gated system turn with reply routing and no user message', async () => {
@@ -254,8 +318,34 @@ describe('ConversationOrchestrator background subagent notifications', () => {
     );
   });
 
-  it('holds a question behind an in-flight parent turn, then delivers it once when idle', async () => {
+  it('hands a question to the in-flight parent turn rather than holding it for idle', async () => {
     const h = makeHarness();
+    let releaseUserTurn: (terminal: ConversationTerminal) => void = () => {};
+    h.service.sendMessage.mockImplementationOnce(
+      () => new Promise<ConversationTerminal>((resolve) => (releaseUserTurn = resolve)),
+    );
+
+    const userTurn = h.orchestrator.sendUserMessage('hello');
+    await settle(1);
+
+    h.emit(question());
+    await settle();
+
+    // The parent turn is the one blocking on this answer, so it hears now.
+    expect(h.service.injectIntoActiveTurn).toHaveBeenCalledTimes(1);
+    expect(h.injectedTexts()[0]).toContain('question-1');
+    expect(h.store.pendingCount).toBe(0);
+
+    releaseUserTurn(response());
+    await userTurn;
+    await settle();
+
+    // Already delivered, so the turn boundary does not repeat it.
+    expect(h.service.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds a question for idle when the in-flight turn will not take it', async () => {
+    const h = makeHarness({ injects: false });
     let releaseUserTurn: (terminal: ConversationTerminal) => void = () => {};
     h.service.sendMessage.mockImplementationOnce(
       () => new Promise<ConversationTerminal>((resolve) => (releaseUserTurn = resolve)),
@@ -316,8 +406,8 @@ describe('ConversationOrchestrator background subagent notifications', () => {
     expect(occurrences).toBe(1);
   });
 
-  it('drains several completions that arrived during a turn into a single turn', async () => {
-    const h = makeHarness();
+  it('drains several completions that arrived during a turn the turn would not take', async () => {
+    const h = makeHarness({ injects: false });
     let releaseUserTurn: (terminal: ConversationTerminal) => void = () => {};
     h.service.sendMessage.mockImplementationOnce(
       () => new Promise<ConversationTerminal>((resolve) => (releaseUserTurn = resolve)),

@@ -418,6 +418,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     agentClient,
   });
 
+  // eslint-disable-next-line prefer-const
   let terminateActiveTurn: (() => void) | undefined;
   const state = new SessionLifecycle({
     inputPlanner,

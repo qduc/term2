@@ -1,6 +1,46 @@
-Status: plan. Waiting on implementation; no hook loading or public lifecycle contract exists yet.
+Status: In progress (near finish). Core implementation complete; validation hardening and test fixes remaining.
+Last updated: 2026-08-05
 
 # Public hooks system implementation plan
+
+## Resume here
+
+### Current state
+
+The core public hooks system implementation and validation hardening are structurally in place:
+- **Versioned hook contracts**: All 11 lifecycle events (`session.start`, `session.end`, `status.change`, `turn.start`, `turn.end`, `turn.error`, `tool.before`, `tool.after`, `tool.error`, `approval.requested`, `approval.resolved`).
+- **Discovery**: Deterministic user (`~/.term2/hooks`) and project (`.term2/hooks`) discovery with `.js`, `.mjs`, `.ts` filtering, lexical ordering, symlink rejection, project-root trust filtering, and enable switches (`hooks.user.enabled`, `hooks.project.enabled`).
+- **Registration & Cleanup**: Transactional registration and cleanup per file module.
+- **Async Callback Dispatch**: Ordered delivery, at-most-once event IDs, failure isolation, configurable callback timeouts, and diagnostics.
+- **Production TS Loader**: TypeScript execution backed by `jiti`.
+- **Public API Export & Editor Shims**: Package subpath export at `@qduc/term2/hooks` and auto-generated `term2-hooks.d.ts` + `tsconfig.json` path mappings via `ensureHookEditorShim()`.
+- **Settings & Controls**: Persisted settings for enablement, trusted project roots, privacy defaults, and callback timeouts.
+- **Write Protection**: Path-policy protection for hook directories across file tools and native patch handling.
+- **Lifecycle & Scope Wiring**: Session, status, turn, tool, and approval instrumentation with root vs subagent scope metadata (`scope.subagent`) and logical correlation IDs (`turnId`, `toolCallId`).
+- **Integration Test Coverage**: Hardened integration tests covering startup, project trust filtering, approval events, and session shutdown (`hook-system.integration.test.ts`).
+- **Awaited Shutdown**: Async runtime shutdown path for non-interactive execution draining hooks.
+- **Docs & Examples**: Herdr status synchronization example and public hook documentation.
+
+### Validation status
+
+- **Passed**:
+  - `pnpm typecheck` (0 errors)
+  - `pnpm build` (clean output)
+  - `pnpm lint` (0 errors, prettier clean)
+  - Focused hook unit/integration tests (25 passed across 6 test files)
+  - Core session/approval/run-loop/file-tool unit tests (1,141 passed across 79 test files)
+  - Settings tests: 91 passed
+  - `git diff --check` (clean)
+- **Not fully clean**:
+  - `pnpm test`: Pre-existing Ink UI test failure (`TypeError: act is not a function` due to dirty `ink-prompt` `0.3.2` -> `0.4.1` upgrade).
+  - `pnpm test:provider-black-box`: Passed 130 scenarios, 1 PTY timeout in Responses lifecycle suite.
+
+### Remaining work to finish
+
+1. **Resolve or isolate `ink-prompt` / Ink test breakage**: Fix the `TypeError: act is not a function` issue caused by the dirty `ink-prompt` `0.3.2` -> `0.4.1` upgrade.
+2. **Stabilize provider black-box test**: Re-run and eliminate the PTY timeout in the Responses lifecycle suite.
+
+---
 
 ## Goal
 

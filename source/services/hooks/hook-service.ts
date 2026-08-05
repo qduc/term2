@@ -12,6 +12,7 @@ import {
   type HookRegistryOptions,
 } from './hook-registry.js';
 import { JitiHookModuleLoader, type HookModuleLoader } from './hook-module-loader.js';
+import { ensureHookEditorShim } from './hook-editor-shim.js';
 
 export interface HookServiceOptions {
   readonly discovery?: HookDiscoveryPort;
@@ -93,6 +94,13 @@ export class HookService implements HookLifecyclePort {
       discovered = result.files;
       diagnostics.push(...result.diagnostics);
       for (const diagnostic of result.diagnostics) this.#log(diagnostic);
+
+      if (result.userRoot) {
+        await ensureHookEditorShim(result.userRoot);
+      }
+      if (result.projectRoot && result.files.some((f) => f.scope === 'project')) {
+        await ensureHookEditorShim(result.projectRoot);
+      }
     } catch (error) {
       const diagnostic: HookDiagnostic = {
         code: 'discovery_failed',

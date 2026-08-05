@@ -25,7 +25,7 @@ import type {
   BackgroundSubagentNotificationPort,
   BackgroundSubagentTaskPort,
 } from '../subagents/subagent-notification-store.js';
-import type { QueueStateObserver } from './conversation-adapter.js';
+import type { QueueStateKind, QueueStateObserver } from './conversation-adapter.js';
 import { createConversationRuntime } from './conversation-runtime-factory.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
@@ -336,6 +336,11 @@ export class ConversationService {
   /** True while a foreground queue owns the display lifecycle of new submits. */
   isQueueOwningSubmissions(): boolean {
     return this.#adapter.isQueueOwningSubmissions();
+  }
+
+  /** The queue's current state kind. Diagnostics only — do not branch on it. */
+  queueStateKind(): QueueStateKind | 'none' {
+    return this.#adapter.queueStateKind();
   }
 
   /** Set an observer for queue state changes. The observer fires immediately with current state. */

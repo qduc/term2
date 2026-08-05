@@ -29,10 +29,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('ink', () => ({
   Text: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  useInput: (
-    handler: (input: string, key: Record<string, boolean>) => void,
-    options?: { isActive?: boolean },
-  ) => {
+  useInput: (handler: (input: string, key: Record<string, boolean>) => void, options?: { isActive?: boolean }) => {
     mocks.useInputHandlers.push({
       handler,
       isActive: options?.isActive !== false,
@@ -48,8 +45,6 @@ const fireInput = async (input: string, key: Record<string, boolean>) => {
     await Promise.resolve();
   });
 };
-
-
 
 const Harness = (props: Parameters<typeof useAppKeyboardShortcuts>[0]) => {
   // Each render registers two `useInput` handlers. Clear at the top so only the

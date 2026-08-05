@@ -233,6 +233,18 @@ export class ConversationAdapter {
     return state.kind !== 'idle' || state.queue.length > 0;
   }
 
+  /**
+   * The queue's current state kind, for diagnostics only.
+   *
+   * `isQueueOwningSubmissions` and `isQueueActive` disagree on several states —
+   * a submission can be owned by the queue (so the UI shows it as queued) while
+   * the queue is not active (so a steer is refused before it is ever offered to
+   * the turn). This names the state so that gap is visible in the logs.
+   */
+  queueStateKind(): QueueStateKind | 'none' {
+    return this.#queue ? this.#queue.state().kind : 'none';
+  }
+
   #notifyQueueState(): void {
     if (!this.#queue || !this.#queueStateObserver) return;
     const state = this.#queue.state();

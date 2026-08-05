@@ -413,9 +413,31 @@ export class ConversationOrchestrator {
       // wait for the whole turn to end. The message joins the transcript at the
       // moment the turn takes it, which is when the model actually sees it.
       if (options?.busyMode === 'steer' && this.config.conversationService.steerActiveTurn) {
+        // Diagnostics for "my steer just queued". The three fields below
+        // separate the ways delivery can fail, which otherwise look identical
+        // in the UI because the queued label is drawn before this even runs:
+        //   queueActive=false            → refused by the adapter's predicate;
+        //     the queue owns the submission but is not in a state that offers
+        //     steering (awaiting_preflight, paused, idle with retained work).
+        //   queueActive=true, waited≈0ms → refused synchronously downstream:
+        //     awaiting an approval, or no run in flight at the run loop.
+        //   queueActive=true, waited>0ms → held as pending and released when
+        //     the run ended: the turn never reached another request boundary.
+        //   steered=true                 → admitted; waitedMs is how long the
+        //     user waited for the turn to reach that boundary.
+        const queueActive = this.config.conversationService.isQueueActive?.() ?? false;
+        const queueStateKind = this.config.conversationService.queueStateKind?.() ?? 'unknown';
+        const steerStartedAt = Date.now();
         const steered = await this.config.conversationService.steerActiveTurn(turn).catch((error) => {
           this.logError('Error steering the active turn', error);
           return false;
+        });
+        this.config.loggingService.info('Steer attempt resolved', {
+          steered,
+          queueActive,
+          queueStateKind,
+          waitedMs: Date.now() - steerStartedAt,
+          messageId: userMessage.id,
         });
         if (steered) {
           this.config.ui.onQueuedMessageStarted?.(userMessage.id);

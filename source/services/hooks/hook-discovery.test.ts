@@ -5,12 +5,15 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { HookDiscovery } from './hook-discovery.js';
 
+import { realpath } from 'node:fs/promises';
+
 const temporaryDirectories: string[] = [];
 
 async function makeDirectory(prefix: string): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), prefix));
-  temporaryDirectories.push(directory);
-  return directory;
+  const canonical = await realpath(directory);
+  temporaryDirectories.push(canonical);
+  return canonical;
 }
 
 afterEach(async () => {

@@ -19,6 +19,8 @@ import { classifyCommandDetailed } from './utils/shell/command-safety/index.js';
 import { SafetyStatus } from './utils/shell/command-safety/constants.js';
 import { evaluateShellAutoApprovalAdvisories } from './services/approval/shell-auto-approval-evaluator.js';
 import { ToolOwnershipRegistry } from './services/approval/tool-ownership-registry.js';
+import type { HookLifecyclePort } from './services/hooks/hook-service.js';
+import type { HookEventFactory } from './services/hooks/hook-event-factory.js';
 
 export interface NonInteractiveConfig {
   prompt: string;
@@ -34,6 +36,8 @@ export interface NonInteractiveConfig {
   sessionClientFactory?: SessionClientFactory;
   logger?: ILoggingService;
   sessionContextService?: ISessionContextService;
+  hookLifecycle?: HookLifecyclePort;
+  hookEvents?: HookEventFactory;
 }
 
 export const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --auto-approve to allow tool execution';
@@ -267,12 +271,36 @@ export async function runNonInteractive(
       settingsService: config.settingsService,
       sessionContextService,
     },
+    hookLifecycle: config.hookLifecycle ?? clientHandle.hookLifecycle,
+    hookEvents: config.hookEvents ?? clientHandle.hookEvents,
   });
 
+  let fatal = false;
   try {
+    if (config.hookLifecycle && clientHandle.hookEvents) {
+      await config.hookLifecycle.emit(
+        clientHandle.hookEvents.create('session.start', {
+          cwd: process.cwd(),
+          mode: 'non-interactive',
+          providerName: clientHandle.agentClient.getProvider?.() ?? config.settingsService.get('agent.provider'),
+          modelName: config.settingsService.get('agent.model'),
+        }),
+      );
+    }
     return await runWithSession(adapter, { ...config, agentClient: clientHandle.agentClient, sessionContextService });
+  } catch (error) {
+    fatal = true;
+    throw error;
   } finally {
-    runtime.dispose();
+    if (config.hookLifecycle && clientHandle.hookEvents) {
+      await config.hookLifecycle.emit(
+        clientHandle.hookEvents.create('session.end', {
+          reason: fatal ? 'fatal_error' : 'normal',
+          sessionDuration: Math.max(0, Date.now() - Date.parse(runtime.sessionStartedAt)),
+        }),
+      );
+    }
+    await runtime.shutdown();
     clientHandle.dispose();
   }
 }

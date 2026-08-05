@@ -37,6 +37,7 @@ export class SessionLifecycle {
   #generationGuard: GenerationGuard;
   #continuityReset: SessionContinuityReset;
   #sessionAccess: SessionAccessState | undefined;
+  #terminateActiveTurn: (() => void) | undefined;
 
   constructor(deps: {
     inputPlanner: SessionInputPlanner;
@@ -50,6 +51,8 @@ export class SessionLifecycle {
     continuityReset: SessionContinuityReset;
     /** Handle-owned root capability; absent only for compatibility callers. */
     sessionAccess?: SessionAccessState;
+    /** Notify the coordinator before a generation reset invalidates a turn. */
+    terminateActiveTurn?: () => void;
   }) {
     this.#inputPlanner = deps.inputPlanner;
     this.#toolTracker = deps.toolTracker;
@@ -61,6 +64,7 @@ export class SessionLifecycle {
     this.#generationGuard = deps.generationGuard;
     this.#continuityReset = deps.continuityReset;
     this.#sessionAccess = deps.sessionAccess;
+    this.#terminateActiveTurn = deps.terminateActiveTurn;
   }
 
   // ── Public lifecycle methods ─────────────────────────────────────
@@ -70,6 +74,7 @@ export class SessionLifecycle {
    * and all continuity state.
    */
   resetSession(options?: { clearConversations?: boolean }): void {
+    this.#terminateActiveTurn?.();
     this.#generationGuard.invalidate();
     this.#clearAccessState();
     this.#continuityReset.reset(options);
@@ -84,6 +89,7 @@ export class SessionLifecycle {
    * Keeps the conversation store intact but severs the response chain.
    */
   afterProviderChanged(): void {
+    this.#terminateActiveTurn?.();
     this.#generationGuard.invalidate();
     this.#continuityReset.reset();
     this.#appState.statusMachine.abort();
@@ -95,6 +101,7 @@ export class SessionLifecycle {
    * Call this *after* the user turn has been removed from the conversation store.
    */
   afterUndo(): void {
+    this.#terminateActiveTurn?.();
     this.#generationGuard.invalidate();
     this.#pruneToolLedgerToCurrentHistory();
     this.#continuityReset.reset();
@@ -106,6 +113,7 @@ export class SessionLifecycle {
    * Reset state after rewinding to the last tool output.
    */
   afterToolRetry(): void {
+    this.#terminateActiveTurn?.();
     this.#generationGuard.invalidate();
     this.#pruneToolLedgerToCurrentHistory();
     this.#continuityReset.reset();

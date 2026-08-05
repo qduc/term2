@@ -1,6 +1,32 @@
 import type { z, ZodTypeAny } from 'zod';
 import type { ApprovalPresentationCapability } from './tool-capabilities.js';
 import type { DeniedReadMetadata, PostExecuteDecision } from '../contracts/conversation.js';
+import type { Term2HookScope } from '../services/hooks/hook-contracts.js';
+
+/**
+ * The one physical tool-execution seam.  It is observational: callbacks do
+ * not return a decision and failures must never change tool behavior.
+ */
+export interface ToolExecutionLifecycleContext {
+  readonly sessionId?: string;
+  readonly turnId?: string;
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly normalizedArguments: unknown;
+  readonly attempt: number;
+  readonly scope: Term2HookScope;
+}
+
+export interface ToolExecutionLifecyclePort {
+  before(context: ToolExecutionLifecycleContext): void | Promise<void>;
+  after(context: ToolExecutionLifecycleContext, result: unknown, duration: number): void | Promise<void>;
+  error(
+    context: ToolExecutionLifecycleContext,
+    error: unknown,
+    duration: number,
+    convertedToModelResult: boolean,
+  ): void | Promise<void>;
+}
 
 export interface CommandMessage {
   id: string;
@@ -121,6 +147,8 @@ export interface AnyToolDefinition {
   approvalPresentation?: ApprovalPresentationCapability;
   needsApproval(params: unknown, context?: unknown): Promise<boolean> | boolean;
   execute(params: unknown, context?: unknown, details?: unknown): Promise<unknown> | unknown;
+  /** Internal marker used at the run-loop boundary for synthetic interceptor results. */
+  isInterceptorResult?(result: unknown): boolean;
   postExecute?(context: PostExecutePolicyContext<unknown>): Promise<unknown> | unknown;
   postExecutePause?: PostExecutePauseDescriptor<unknown>;
   formatCommandMessage: FormatCommandMessage;

@@ -9,6 +9,9 @@ import { getToolInfoFromInterruption } from '../interruption-info.js';
 import type { TurnWorkflow } from './turn-workflow.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { InitialTurnRunOptions } from './turn-attempt-factory.js';
+import { randomUUID } from 'node:crypto';
+import type { HookLifecyclePort } from '../hooks/hook-service.js';
+import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 
 export type TurnStartOptions = Pick<
   InitialTurnRunOptions,
@@ -20,7 +23,7 @@ export type TurnStartOptions = Pick<
   | 'resumeState'
   | 'resumePreviousResponseId'
   | 'bypassInputSurgeGuard'
->;
+> & { origin?: 'user' | 'queued' };
 
 export interface TurnCoordinatorDeps {
   statusMachine: TurnStatusMachine;
@@ -28,9 +31,15 @@ export interface TurnCoordinatorDeps {
   approvalFlow: ApprovalFlowCoordinator;
   providerContinuity: ProviderContinuity;
   shellAutoApproval: ShellAutoApprovalResolver;
+  sessionId?: string;
+  hookLifecycle?: HookLifecyclePort;
+  hookEvents?: HookEventFactory;
 }
 
 export class TurnCoordinator {
+  #activeTurnId: string | undefined;
+  #activeTurnStartedAt = 0;
+
   constructor(private readonly deps: TurnCoordinatorDeps) {}
 
   async *start(input: string | UserTurn, options: TurnStartOptions = {}): AsyncIterable<ConversationEvent> {
@@ -43,12 +52,25 @@ export class TurnCoordinator {
     this.deps.approvalFlow.getAbortedStatus();
 
     const lease = this.deps.statusMachine.beginTurn();
+    const turnId = this.deps.hookLifecycle && this.deps.hookEvents ? randomUUID() : undefined;
+    this.#activeTurnId = turnId;
+    this.#activeTurnStartedAt = turnId ? Date.now() : 0;
+    this.deps.turnWorkflow.setHookTurnId?.(turnId);
+    if (turnId) await this.#emitTurnStart(input, options.origin ?? 'user', turnId);
     let processed = false;
     try {
       const turnOutcome = yield* this.#forwardOwned(this.deps.turnWorkflow.executeInitial(input, options), lease);
       processed = true;
 
+      await this.#emitTurnEnd(turnOutcome);
+
       yield* this.#executeTerminalCommand(this.deps.statusMachine.completeOutcome(turnOutcome, lease));
+    } catch (error) {
+      if (!processed) {
+        await this.#emitTurnError(error);
+        await this.#emitTurnEnd({ kind: 'failed' });
+      }
+      throw error;
     } finally {
       if (!processed) {
         // Error during initial run — reset status to idle
@@ -69,6 +91,7 @@ export class TurnCoordinator {
     }
     this.#recordManualShellDecision(answer);
     const lease = this.deps.statusMachine.beginContinuation();
+    this.deps.turnWorkflow.setHookTurnId?.(this.#activeTurnId);
     let processed = false;
     try {
       const turnOutcome = yield* this.#forwardOwned(
@@ -78,7 +101,14 @@ export class TurnCoordinator {
         lease,
       );
       processed = true;
+      await this.#emitTurnEnd(turnOutcome);
       yield* this.#executeTerminalCommand(this.deps.statusMachine.completeContinuationOutcome(turnOutcome, lease));
+    } catch (error) {
+      if (!processed) {
+        await this.#emitTurnError(error);
+        await this.#emitTurnEnd({ kind: 'failed' });
+      }
+      throw error;
     } finally {
       if (!processed) {
         // Error during continuation drive — reset status to idle
@@ -92,11 +122,19 @@ export class TurnCoordinator {
       throw new Error('No pending approval to continue.');
     }
     const lease = this.deps.statusMachine.beginContinuation();
+    this.deps.turnWorkflow.setHookTurnId?.(this.#activeTurnId);
     let processed = false;
     try {
       const turnOutcome = yield* this.#forwardOwned(this.deps.turnWorkflow.continuePostExecute(), lease);
       processed = true;
+      await this.#emitTurnEnd(turnOutcome);
       yield* this.#executeTerminalCommand(this.deps.statusMachine.completeContinuationOutcome(turnOutcome, lease));
+    } catch (error) {
+      if (!processed) {
+        await this.#emitTurnError(error);
+        await this.#emitTurnEnd({ kind: 'failed' });
+      }
+      throw error;
     } finally {
       if (!processed) this.deps.statusMachine.complete(lease);
     }
@@ -107,6 +145,12 @@ export class TurnCoordinator {
     this.deps.approvalFlow.abort();
     this.deps.statusMachine.abort();
     this.deps.providerContinuity.clear();
+    void this.#emitTurnEnd({ kind: 'failed' });
+  }
+
+  /** Close a live turn before a lifecycle reset invalidates its lease. */
+  terminate(): void {
+    void this.#emitTurnEnd({ kind: 'failed' });
   }
 
   /**
@@ -148,6 +192,72 @@ export class TurnCoordinator {
   async *#executeTerminalCommand(command: TurnCommand): AsyncGenerator<ConversationEvent, void, void> {
     if (command.kind === 'emit_terminal') {
       yield toTerminalEvent(command.terminal);
+    }
+  }
+
+  async #emitTurnStart(input: string | UserTurn, origin: 'user' | 'queued', turnId: string): Promise<void> {
+    if (!this.deps.hookLifecycle || !this.deps.hookEvents) return;
+    const text = typeof input === 'string' ? input : input.text;
+    await this.#emit(
+      this.deps.hookEvents.create(
+        'turn.start',
+        {
+          origin,
+          ...(this.deps.hookEvents.includeUserText ? { userText: text } : {}),
+        },
+        { turnId },
+      ),
+    );
+  }
+
+  async #emitTurnError(error: unknown): Promise<void> {
+    if (!this.#activeTurnId || !this.deps.hookLifecycle || !this.deps.hookEvents) return;
+    const message = error instanceof Error ? error.message : String(error);
+    await this.#emit(
+      this.deps.hookEvents.create(
+        'turn.error',
+        {
+          errorCategory: 'unknown',
+          safeMessage: message.slice(0, 500),
+          recoverable: false,
+        },
+        { turnId: this.#activeTurnId },
+      ),
+    );
+  }
+
+  async #emitTurnEnd(outcome: TurnOutcome): Promise<void> {
+    const turnId = this.#activeTurnId;
+    if (!turnId) return;
+    const terminalKind = outcome.kind;
+    const shouldClear = terminalKind !== 'approval_required';
+    if (this.deps.hookLifecycle && this.deps.hookEvents) {
+      const event = this.deps.hookEvents.create(
+        'turn.end',
+        {
+          terminalKind,
+          duration: Math.max(0, Date.now() - this.#activeTurnStartedAt),
+        },
+        { turnId },
+      );
+      if (shouldClear) {
+        this.#activeTurnId = undefined;
+        this.#activeTurnStartedAt = 0;
+        this.deps.turnWorkflow.setHookTurnId?.(undefined);
+      }
+      await this.#emit(event);
+    } else if (shouldClear) {
+      this.#activeTurnId = undefined;
+      this.#activeTurnStartedAt = 0;
+      this.deps.turnWorkflow.setHookTurnId?.(undefined);
+    }
+  }
+
+  async #emit(event: Parameters<HookLifecyclePort['emit']>[0]): Promise<void> {
+    try {
+      await this.deps.hookLifecycle?.emit(event as never);
+    } catch {
+      // Public hooks are passive and fail open.
     }
   }
 }

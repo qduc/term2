@@ -25,6 +25,22 @@ it('begins turn from idle and returns its ownership lease', () => {
   expect(machine.owns(lease)).toBe(true);
 });
 
+it('notifies observers only when the internal status actually changes', () => {
+  const transitions: Array<{ previous: string; current: string }> = [];
+  const machine = new TurnStatusMachine((transition) => transitions.push(transition));
+  const lease = machine.beginTurn();
+  machine.requestApproval(lease);
+  machine.beginContinuation();
+  machine.complete(lease);
+  machine.abort();
+  expect(transitions).toEqual([
+    { previous: 'idle', current: 'streaming' },
+    { previous: 'streaming', current: 'awaiting_approval' },
+    { previous: 'awaiting_approval', current: 'continuing' },
+    { previous: 'continuing', current: 'idle' },
+  ]);
+});
+
 it('beginTurn from non-idle throws', () => {
   const machine = new TurnStatusMachine();
   machine.beginTurn();

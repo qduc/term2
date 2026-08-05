@@ -3,7 +3,7 @@ import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
 import { ApprovalState, type PendingApprovalContext } from '../approval/approval-state.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
-import { getMethod } from '../interruption-info.js';
+import { getMethod, getToolInfoFromInterruption } from '../interruption-info.js';
 import {
   ShellAutoApprovalResolver,
   DelegatingShellAutoApprovalResolver,
@@ -56,6 +56,8 @@ import {
 } from './post-execute-pending-registry.js';
 import type { PostExecutePauseCapability } from './post-execute-pause-capability.js';
 import type { SessionAccessState } from './session-access-state.js';
+import type { HookLifecyclePort } from '../hooks/hook-service.js';
+import { HookEventFactory } from '../hooks/hook-event-factory.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
   value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
@@ -101,6 +103,7 @@ export type SessionRuntimeInternals = {
    * generation, unsubscribes downgrade listeners, clears per-turn state.
    */
   dispose: () => void;
+  shutdown: () => Promise<void>;
   generationGuard: GenerationGuard;
   providerContinuity: ProviderContinuity;
   breakChaining: () => void;
@@ -152,6 +155,9 @@ export type CreateSessionRuntimeInternalsOptions = {
   };
   retryOptions?: ConversationSessionRetryOptions;
   turnAccumulator?: TurnItemAccumulator;
+  /** Installed only on the root runtime; nested runtimes omit this port. */
+  hookLifecycle?: HookLifecyclePort;
+  hookEvents?: HookEventFactory;
 };
 
 export type CreateConversationSessionOptions = Omit<CreateSessionRuntimeInternalsOptions, 'turnAccumulator'>;
@@ -240,6 +246,7 @@ export type SessionRuntime = {
    * generation, unsubscribes downgrade listeners, clears per-turn state.
    */
   dispose: () => void;
+  shutdown: () => Promise<void>;
 };
 
 // ── Composition factory ───────────────────────────────────────────
@@ -261,6 +268,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     deps,
     retryOptions,
     turnAccumulator,
+    hookLifecycle,
+    hookEvents: suppliedHookEvents,
   } = options;
   const { logger, settingsService, sessionContextService } = deps;
   const startedAt = sessionStartedAt ?? new Date().toISOString();
@@ -309,6 +318,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   });
 
   const appState = { statusMachine: new TurnStatusMachine() };
+  const hookEvents = suppliedHookEvents ?? (hookLifecycle ? new HookEventFactory({ sessionId: id }) : undefined);
   const providerContinuity = suppliedProviderContinuity ?? new ProviderContinuity();
 
   const inputPlanner = new SessionInputPlanner({
@@ -394,6 +404,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     generationGuard,
     toolOwnership,
     sessionAccess,
+    hookLifecycle,
+    hookEvents,
   });
 
   const continuityReset = new SessionContinuityReset({
@@ -406,6 +418,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     agentClient,
   });
 
+  let terminateActiveTurn: (() => void) | undefined;
   const state = new SessionLifecycle({
     inputPlanner,
     toolTracker,
@@ -417,6 +430,39 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     generationGuard,
     continuityReset,
     sessionAccess,
+    terminateActiveTurn: () => terminateActiveTurn?.(),
+  });
+
+  let publicStatus: import('../hooks/hook-contracts.js').Term2Status = 'idle';
+  appState.statusMachine.setObserver(({ current }) => {
+    if (!hookLifecycle || !hookEvents) return;
+    const pending = approvalFlow.getPending();
+    const pendingTool = pending ? getToolInfoFromInterruption(pending.interruption).toolName : undefined;
+    const next: import('../hooks/hook-contracts.js').Term2Status =
+      current === 'idle'
+        ? 'idle'
+        : current === 'awaiting_approval'
+        ? pendingTool === 'ask_user'
+          ? 'waiting_for_user'
+          : 'waiting_for_approval'
+        : 'working';
+    if (next === publicStatus) return;
+    const previous = publicStatus;
+    publicStatus = next;
+    void hookLifecycle.emit(
+      hookEvents.create('status.change', {
+        previous,
+        current: next,
+        reason:
+          next === 'waiting_for_user'
+            ? 'ask_user'
+            : next === 'waiting_for_approval'
+            ? 'approval_requested'
+            : next === 'idle'
+            ? 'turn_finished'
+            : 'turn_started',
+      }),
+    );
   });
 
   const streamProcessor = new SessionStreamProcessor({
@@ -531,6 +577,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     sessionAccess,
     postExecutePending,
     setActivePostExecuteRunId: postExecutePauseCapability?.setActiveRunId.bind(postExecutePauseCapability),
+    hookLifecycle,
+    hookEvents,
   });
 
   const turnCoordinator = new TurnCoordinator({
@@ -539,7 +587,11 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     approvalFlow,
     providerContinuity,
     shellAutoApproval,
+    sessionId: id,
+    hookLifecycle,
+    hookEvents,
   });
+  terminateActiveTurn = () => turnCoordinator.terminate();
 
   const stateFacade = new SessionManager({
     conversationStore,
@@ -577,6 +629,15 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     providerContinuity.clear();
   };
 
+  let shutdownPromise: Promise<void> | undefined;
+  const shutdown = (): Promise<void> => {
+    shutdownPromise ??= (async () => {
+      dispose();
+      await hookLifecycle?.shutdown();
+    })();
+    return shutdownPromise;
+  };
+
   return {
     sessionId: id,
     sessionStartedAt: startedAt,
@@ -595,6 +656,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     stateFacade,
     runtimeController,
     dispose,
+    shutdown,
     generationGuard,
     providerContinuity,
     breakChaining,
@@ -684,6 +746,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     backgroundSubagentNotifications,
     backgroundSubagentTasks,
     dispose,
+    shutdown: internals.shutdown,
   };
 }
 

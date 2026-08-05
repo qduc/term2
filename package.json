@@ -25,6 +25,15 @@
   "bin": {
     "term2": "dist/cli.js"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
+    },
+    "./hooks": {
+      "types": "./dist/services/hooks/index.d.ts"
+    }
+  },
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -77,7 +86,8 @@
     "fast-deep-equal": "^3.1.3",
     "ignore": "^5.3.2",
     "ink": "^7.0.1",
-    "ink-prompt": "^0.3.2",
+    "ink-prompt": "^0.4.1",
+    "jiti": "^2.7.0",
     "marked": "^17.0.1",
     "meow": "^11.0.0",
     "openai": "^6.9.1",

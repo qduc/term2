@@ -17,7 +17,8 @@ import { SubagentBridge } from './subagent-bridge.js';
 import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
 import { AgentChatService } from './agent-chat-service.js';
 import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
-import type { PostExecutePauseCapability } from '../tools/types.js';
+import type { PostExecutePauseCapability, ToolExecutionLifecyclePort } from '../tools/types.js';
+import type { Term2HookScope } from '../services/hooks/hook-contracts.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
 import type { AgentClientRunOptions } from '../services/conversation-agent-client.js';
 import type { ContinuationProjectionMode } from './continuation-projection-mode.js';
@@ -35,6 +36,22 @@ import {
 import { isDeepStrictEqual } from 'node:util';
 
 type ChainedRunOptions = AgentClientRunOptions;
+
+function createScopedToolLifecycle(
+  lifecycle: ToolExecutionLifecyclePort,
+  scope: { agentId: string; role: string },
+): ToolExecutionLifecyclePort {
+  const withScope = (context: Parameters<ToolExecutionLifecyclePort['before']>[0]) => ({
+    ...context,
+    scope: { subagent: scope },
+  });
+  return {
+    before: (context) => lifecycle.before(withScope(context)),
+    after: (context, result, duration) => lifecycle.after(withScope(context), result, duration),
+    error: (context, error, duration, convertedToModelResult) =>
+      lifecycle.error(withScope(context), error, duration, convertedToModelResult),
+  };
+}
 
 /**
  * Conversation client over the application-owned provider/run-loop boundary.
@@ -55,6 +72,8 @@ export class AgentClient {
   #subagentBridge: SubagentBridge | null = null;
   #askUserAnswerStore: AskUserAnswerStore;
   #isDisposed = false;
+  #toolLifecycle?: ToolExecutionLifecyclePort;
+  #hookScope: Term2HookScope = 'root';
 
   /**
    * Forward real-time subagent activity events to the active conversation
@@ -95,6 +114,8 @@ export class AgentClient {
     toolOwnership,
     postExecutePauseCapability,
     sessionAccess,
+    toolLifecycle,
+    hookScope,
     // Retained for session-factory compatibility; direct execution no longer
     // projects chained input through the legacy mode.
     continuationProjectionMode: _continuationProjectionMode = 'legacy',
@@ -122,12 +143,17 @@ export class AgentClient {
     postExecutePauseCapability?: PostExecutePauseCapability;
     /** Handle-owned state for root read and Docker capabilities. */
     sessionAccess?: SessionAccessState;
+    /** Root-only observational lifecycle port; omitted for nested clients. */
+    toolLifecycle?: ToolExecutionLifecyclePort;
+    hookScope?: Term2HookScope;
     continuationProjectionMode?: ContinuationProjectionMode;
   }) {
     this.#logger = deps.logger;
     this.#toolInterceptorRegistry = new ToolInterceptorRegistry({ logger: this.#logger });
     this.#settings = deps.settings;
     this.#sessionContextService = deps.sessionContextService;
+    this.#toolLifecycle = toolLifecycle;
+    this.#hookScope = hookScope ?? 'root';
     this.#askUserAnswerStore = new AskUserAnswerStore();
 
     // Create AgentConfiguration (handles editor, model, provider, reasoning, etc.)
@@ -157,6 +183,7 @@ export class AgentClient {
     this.#maxTurns = maxTurns ?? (agentOverride ? 1 : 20);
     this.#retryAttempts = retryAttempts ?? 2;
     this.#applicationRunLoop = new ApplicationRunLoop({
+      toolLifecycle: this.#toolLifecycle,
       resolveModel: (selectedModel) => {
         const providerId = this.#agentConfig.getProvider();
         const provider = getProvider(providerId);
@@ -197,11 +224,15 @@ export class AgentClient {
           provider,
           maxTurns,
           retryAttempts,
+          agentId,
+          role,
         }: {
           agent: any;
           provider: string;
           maxTurns: number;
           retryAttempts?: number;
+          agentId?: string;
+          role?: string;
         }) =>
           new AgentClient({
             model: agent.model,
@@ -217,6 +248,15 @@ export class AgentClient {
             agentOverride: agent,
             providerOverride: provider,
             toolOwnership,
+            ...(this.#toolLifecycle && agentId
+              ? {
+                  toolLifecycle: createScopedToolLifecycle(this.#toolLifecycle, {
+                    agentId,
+                    role: role ?? agent.name,
+                  }),
+                  hookScope: { subagent: { agentId, role: role ?? agent.name } },
+                }
+              : {}),
           }),
         skillsService: deps.skillsService,
         toolOwnership,
@@ -477,6 +517,8 @@ export class AgentClient {
           providerId: provider,
           supportsConversationChaining: supportsChaining,
           sessionId: options.sessionId,
+          turnId: options.hookTurnId,
+          hookScope: this.#hookScope,
           ...(options.sessionId ? { context: { sessionId: options.sessionId } } : {}),
           maxTurns: this.#maxTurns,
         });
@@ -503,6 +545,8 @@ export class AgentClient {
       providerId: provider,
       supportsConversationChaining: supportsChaining,
       sessionId: options.sessionId,
+      turnId: options.hookTurnId,
+      hookScope: this.#hookScope,
       maxTurns: this.#maxTurns,
     });
     this.#observeCompletion(stream, state, provider, this.#agentConfig.getModel());

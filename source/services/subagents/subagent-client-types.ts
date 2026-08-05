@@ -17,5 +17,7 @@ export interface ISubagentClientFactory {
     provider: string;
     maxTurns: number;
     retryAttempts?: number;
+    agentId?: string;
+    role?: string;
   }): ConversationAgentClient;
 }

@@ -17,6 +17,15 @@ export function parseSettingValue(raw: string): any {
     return asNumber;
   }
 
+  if ((value.startsWith('[') && value.endsWith(']')) || (value.startsWith('{') && value.endsWith('}'))) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      // Preserve the original text so the settings schema can report a useful
+      // validation error to the caller.
+    }
+  }
+
   return value;
 }
 
@@ -244,6 +253,19 @@ export function createSettingsCommand({
           );
           return true;
         }
+      }
+
+      // Trust roots are persisted startup configuration rather than a
+      // runtime behavior toggle. Keep the write behind the settings service's
+      // schema validation so roots cannot be stored as arbitrary values.
+      if (key === SETTING_KEYS.HOOKS_TRUSTED_PROJECT_ROOTS) {
+        if (!Array.isArray(parsedValue) || parsedValue.some((root) => typeof root !== 'string')) {
+          addSystemMessage(`Error: ${key} must be a JSON array of paths`);
+          return true;
+        }
+        settingsService.setPersistentDynamic(key, parsedValue);
+        addSystemMessage(`Set ${key} to ${JSON.stringify(parsedValue)}`);
+        return true;
       }
 
       if (!settingsService.isRuntimeModifiable(key)) {

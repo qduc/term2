@@ -16,6 +16,10 @@ import {
   type OpenAIRootCheckpointLifecycleObserver,
 } from '../openai-root-checkpoint-lifecycle-observer.js';
 import { OpenAIRootProviderIdentity } from '../openai-root-provider-identity.js';
+import type { HookLifecyclePort } from '../hooks/hook-service.js';
+import { HookEventFactory } from '../hooks/hook-event-factory.js';
+import { createToolExecutionLifecyclePort } from '../hooks/hook-tool-lifecycle.js';
+import type { ToolExecutionLifecyclePort } from '../../tools/types.js';
 
 /** A client whose lifetime is owned by the session that requested it. */
 export type SessionClientHandle = {
@@ -32,6 +36,9 @@ export type SessionClientHandle = {
   readonly access?: SessionAccessState;
   readonly postExecutePending?: PostExecutePendingRegistry;
   readonly postExecutePauseCapability?: PostExecutePauseCapability;
+  readonly hookLifecycle?: HookLifecyclePort;
+  readonly hookEvents?: HookEventFactory;
+  readonly toolLifecycle?: ToolExecutionLifecyclePort;
   /** Idempotently release resources captured by this session's client. */
   dispose(): void;
 };
@@ -58,7 +65,9 @@ export function createOwnedSessionClientFactory(
     continuationProjectionMode: ContinuationProjectionMode,
     providerContinuity: ProviderContinuity,
     requestCapture: OpenAICandidateObserver,
+    toolLifecycle?: ToolExecutionLifecyclePort,
   ) => DisposableConversationAgentClient,
+  hookLifecycle?: HookLifecyclePort,
 ): SessionClientFactory {
   return {
     create(sessionId) {
@@ -79,6 +88,16 @@ export function createOwnedSessionClientFactory(
         openAIRootCheckpointLifecycleObserver,
         openAIRootProviderIdentity,
       );
+      const hookEvents = hookLifecycle
+        ? new HookEventFactory({
+            sessionId,
+            includeUserText: settings.getDynamic('hooks.includeUserText') === true,
+            includeToolArguments: settings.getDynamic('hooks.includeToolArguments') === true,
+            includeToolResults: settings.getDynamic('hooks.includeToolResults') === true,
+          })
+        : undefined;
+      const toolLifecycle =
+        hookLifecycle && hookEvents ? createToolExecutionLifecyclePort(hookLifecycle, hookEvents) : undefined;
       const openAIRootFreshTurnSelectorParityObserver =
         continuationProjectionMode === 'openai-provider'
           ? new ProviderContinuityOpenAIRootSelectorParityObserver(
@@ -96,6 +115,7 @@ export function createOwnedSessionClientFactory(
         continuationProjectionMode,
         providerContinuity,
         requestCapture,
+        toolLifecycle,
       );
       let disposed = false;
       return {
@@ -108,6 +128,9 @@ export function createOwnedSessionClientFactory(
         access,
         postExecutePending,
         postExecutePauseCapability,
+        hookLifecycle,
+        hookEvents,
+        toolLifecycle,
         dispose() {
           if (disposed) return;
           disposed = true;

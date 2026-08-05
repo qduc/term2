@@ -142,6 +142,23 @@ export async function isWorkspacePathPhysicallyInside(targetPath: string, worksp
 }
 
 /**
+ * Hook files are executable, trusted in-process code.  A model write to one
+ * must therefore remain explicitly approved even when the hook directory is
+ * physically inside the active workspace.  Keep this check independent of
+ * hook loading/trust: trusting a project permits execution, never silent model
+ * mutation.
+ */
+export function isProtectedHookPath(targetPath: string, workspaceRoot: string = process.cwd()): boolean {
+  const normalizedTarget = path.resolve(targetPath);
+  const roots = [path.join(homedir(), '.term2', 'hooks'), path.join(path.resolve(workspaceRoot), '.term2', 'hooks')];
+  return roots.some((root) => {
+    const normalizedRoot = path.resolve(root);
+    const prefix = normalizedRoot.endsWith(path.sep) ? normalizedRoot : `${normalizedRoot}${path.sep}`;
+    return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(prefix);
+  });
+}
+
+/**
  * A Zod schema that allows either a number or a string that can be parsed as a number.
  * Useful for tool parameters that might be passed as strings from the LLM.
  * Use with .int(), .positive(), etc. to add further constraints.

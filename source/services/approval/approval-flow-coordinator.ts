@@ -21,6 +21,8 @@ import { isDockerHostControlShellApproval } from './shell-sandbox-approval.js';
 import { resolveSessionReadFolder } from './session-read-grant-target.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
+import type { HookLifecyclePort } from '../hooks/hook-service.js';
+import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 
 export interface ApprovalFlowCoordinatorDeps {
   agentClient: ConversationAgentClient;
@@ -35,6 +37,8 @@ export interface ApprovalFlowCoordinatorDeps {
   sessionAccess?: SessionAccessState;
   /** Explicit nested/test-only legacy approval state. */
   nestedCompatibility?: NestedToolCompatibilityState;
+  hookLifecycle?: HookLifecyclePort;
+  hookEvents?: HookEventFactory;
 }
 
 export interface AbortResolutionPlan {
@@ -136,7 +140,11 @@ export class ApprovalFlowCoordinator {
    * Prepare for a continuation after the user makes an approval decision.
    * Returns null if there is no pending approval.
    */
-  prepareContinuation(answer: string, rejectionReason: string | undefined): ContinuationPlan | null {
+  prepareContinuation(
+    answer: string,
+    rejectionReason: string | undefined,
+    source: 'user' | 'policy' | 'system' = 'user',
+  ): ContinuationPlan | null {
     const pendingApprovalContext = this.deps.approvalState.getPending();
     if (!pendingApprovalContext) {
       return null;
@@ -311,6 +319,24 @@ export class ApprovalFlowCoordinator {
         sessionId: this.deps.sessionId,
         traceId: this.deps.logger.getCorrelationId(),
       });
+    }
+
+    const resolvedCallId = decisionCallId;
+    if (this.deps.hookLifecycle && this.deps.hookEvents) {
+      void this.deps.hookLifecycle.emit(
+        this.deps.hookEvents.create(
+          'approval.resolved',
+          {
+            // The public resolution payload intentionally stays small; the
+            // request event carries the normalized arguments when a prompt
+            // was shown.
+            resolution: isApproved ? (source === 'policy' ? 'auto_approved' : 'approved') : 'rejected',
+            source,
+            executionFollowed: isApproved,
+          },
+          { toolCallId: resolvedCallId },
+        ),
+      );
     }
 
     return { pendingApprovalContext, toolStartedEvent };

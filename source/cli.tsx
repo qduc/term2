@@ -51,6 +51,7 @@ import {
   HOME_DIRECTORY_START_WARNING,
   shouldWarnOnHomeDirectoryStart,
 } from './utils/home-directory-start-guard.js';
+import { HookService } from './services/hooks/hook-service.js';
 
 const sessionUsageAccumulator = createUsageAccumulator();
 const subagentUsageAccumulator = createUsageAccumulator();
@@ -541,6 +542,29 @@ const skillsService = new SkillsService(logger, executionContext.getCwd());
 skillsService.discoverSkills();
 const terminalTitleBase = buildProjectFolderTitle(executionContext.getCwd());
 
+// Hooks are trusted in-process code, not sandboxed tools. Discovery is done
+// once at startup; untrusted project roots are skipped rather than prompting
+// unexpectedly (including in non-interactive/CI mode).
+const hookService = new HookService({
+  discoveryOptions: {
+    cwd: executionContext.getCwd(),
+    userEnabled: settings.getDynamic('hooks.user.enabled') !== false,
+    projectEnabled: settings.getDynamic('hooks.project.enabled') !== false,
+    trustedProjectRoots: (settings.getDynamic('hooks.trustedProjectRoots') as string[] | undefined) ?? [],
+  },
+  registryOptions: {
+    callbackTimeoutMs: Number(settings.getDynamic('hooks.timeoutMs') ?? 5_000),
+  },
+  logger: (diagnostic) => {
+    logger.warn('Public hook diagnostic', {
+      eventType: `hooks.${diagnostic.code}`,
+      category: 'application',
+      ...diagnostic,
+    });
+  },
+});
+await hookService.initialize();
+
 const sessionClientFactory = createOwnedSessionClientFactory(
   settings,
   (
@@ -551,6 +575,7 @@ const sessionClientFactory = createOwnedSessionClientFactory(
     continuationProjectionMode,
     _continuity,
     requestCapture,
+    toolLifecycle,
   ) => {
     const agentClient = new AgentClient({
       model: settings.get('agent.model'),
@@ -569,10 +594,12 @@ const sessionClientFactory = createOwnedSessionClientFactory(
       postExecutePauseCapability,
       sessionAccess: access,
       continuationProjectionMode,
+      toolLifecycle,
     });
     installPlanModeInterceptor(agentClient, { settingsService: settings });
     return agentClient;
   },
+  hookService,
 );
 
 if (hasPositionalPrompt) {
@@ -584,6 +611,7 @@ if (hasPositionalPrompt) {
     logger,
     settingsService: settings,
     sessionContextService,
+    hookLifecycle: hookService,
   });
   process.exit(exitCode);
 }
@@ -644,6 +672,17 @@ const conversationService = new ConversationService({
     skillsService,
   },
 });
+
+if (conversationService.hookEvents) {
+  await hookService.emit(
+    conversationService.hookEvents.create('session.start', {
+      cwd: executionContext.getCwd(),
+      mode: 'interactive',
+      providerName: settings.get('agent.provider'),
+      modelName: settings.get('agent.model'),
+    }),
+  );
+}
 
 if (resumedConversation) {
   const savedProviderMatches =
@@ -759,6 +798,15 @@ const { waitUntilExit } = render(
 );
 
 await waitUntilExit();
+if (conversationService.hookEvents) {
+  await hookService.emit(
+    conversationService.hookEvents.create('session.end', {
+      reason: 'normal',
+      sessionDuration: Math.max(0, Date.now() - Date.parse(effectiveCreatedAt)),
+    }),
+  );
+}
+await conversationService.shutdown();
 await logWriter.close();
 activeLogWriter = null;
 const resumeCmd = getResumeCommand(effectiveSessionId, sshFlag, sshInfo?.remoteDir, cli.flags.sshPort);

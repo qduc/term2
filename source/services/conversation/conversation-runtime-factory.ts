@@ -13,6 +13,8 @@ import type { SessionAccessState } from '../session/session-access-state.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-selector-parity-observer.js';
 import type { OpenAIRootCheckpointLifecycleObserver } from '../openai-root-checkpoint-lifecycle-observer.js';
+import type { HookLifecyclePort } from '../hooks/hook-service.js';
+import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 
 export type ConversationRuntimeBundle = {
   /** The clean session runtime (no adapter). */
@@ -37,6 +39,8 @@ export type CreateConversationRuntimeOptions = {
   sessionAccess?: SessionAccessState;
   askUserAnswerSink?: AskUserAnswerSink | null;
   subagentEventSinkHost?: SubagentEventSinkHost | null;
+  hookLifecycle?: HookLifecyclePort;
+  hookEvents?: HookEventFactory;
   deps: {
     logger: ILoggingService;
     settingsService?: ISettingsService;

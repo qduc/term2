@@ -17,6 +17,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
   { id: 'tools', label: 'Tools' },
   { id: 'ui', label: 'UI' },
   { id: 'memory', label: 'Memory' },
+  { id: 'hooks', label: 'Hooks' },
   { id: 'misc', label: 'Misc' },
 ];
 
@@ -87,6 +88,13 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.MEMORY_CONTEXT_BUDGET_CHARS]: 'Character budget for memory summaries in initial context (number)',
   [SETTING_KEYS.MEMORY_SEARCH_DEFAULT_LIMIT]: 'Default number of search results to return (number)',
   [SETTING_KEYS.MEMORY_SEARCH_MAX_LIMIT]: 'Maximum number of search results to return (number)',
+  [SETTING_KEYS.HOOKS_USER_ENABLED]: 'Load trusted user hooks from ~/.term2/hooks (true|false)',
+  [SETTING_KEYS.HOOKS_PROJECT_ENABLED]: 'Discover project hooks when the project root is trusted (true|false)',
+  [SETTING_KEYS.HOOKS_TRUSTED_PROJECT_ROOTS]: 'Canonical project roots trusted to load hooks (JSON array)',
+  [SETTING_KEYS.HOOKS_INCLUDE_USER_TEXT]: 'Include user turn text in hook payloads (true|false)',
+  [SETTING_KEYS.HOOKS_INCLUDE_TOOL_ARGUMENTS]: 'Include full tool arguments in hook payloads (true|false)',
+  [SETTING_KEYS.HOOKS_INCLUDE_TOOL_RESULTS]: 'Include full tool results in hook payloads (true|false)',
+  [SETTING_KEYS.HOOKS_TIMEOUT_MS]: 'Maximum time to await one hook callback in milliseconds',
   [SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_MODEL]:
     'Model override for the librarian subagent (falls back to agent.model)',
   [SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_PROVIDER]:
@@ -222,6 +230,15 @@ export const CATEGORY_KEYS = {
     SETTING_KEYS.MEMORY_SEARCH_DEFAULT_LIMIT,
     SETTING_KEYS.MEMORY_SEARCH_MAX_LIMIT,
   ]),
+  hooks: new Set<string>([
+    SETTING_KEYS.HOOKS_USER_ENABLED,
+    SETTING_KEYS.HOOKS_PROJECT_ENABLED,
+    SETTING_KEYS.HOOKS_TRUSTED_PROJECT_ROOTS,
+    SETTING_KEYS.HOOKS_INCLUDE_USER_TEXT,
+    SETTING_KEYS.HOOKS_INCLUDE_TOOL_ARGUMENTS,
+    SETTING_KEYS.HOOKS_INCLUDE_TOOL_RESULTS,
+    SETTING_KEYS.HOOKS_TIMEOUT_MS,
+  ]),
 } as const;
 
-export const CATEGORY_ORDER: Array<keyof typeof CATEGORY_KEYS> = ['models', 'safety', 'tools', 'ui', 'memory'];
+export const CATEGORY_ORDER: Array<keyof typeof CATEGORY_KEYS> = ['models', 'safety', 'tools', 'ui', 'memory', 'hooks'];

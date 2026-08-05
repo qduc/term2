@@ -28,6 +28,7 @@ import type {
 import type { QueueStateObserver } from './conversation-adapter.js';
 import { createConversationRuntime } from './conversation-runtime-factory.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../../contracts/conversation.js';
 export type { CommandMessage } from '../../tools/types.js';
@@ -91,6 +92,8 @@ export class ConversationService {
       postExecutePending: this.#clientHandle.postExecutePending,
       postExecutePauseCapability: this.#clientHandle.postExecutePauseCapability,
       ...(this.#clientHandle.access ? { sessionAccess: this.#clientHandle.access } : {}),
+      ...(this.#clientHandle.hookLifecycle ? { hookLifecycle: this.#clientHandle.hookLifecycle } : {}),
+      ...(this.#clientHandle.hookEvents ? { hookEvents: this.#clientHandle.hookEvents } : {}),
       deps,
       queueForeground: true,
       sessionId: sessionId ?? 'default',
@@ -137,6 +140,15 @@ export class ConversationService {
     return this.#runtime.sessionId;
   }
 
+  get hookEvents(): HookEventFactory | undefined {
+    return this.#clientHandle.hookEvents;
+  }
+
+  async shutdown(): Promise<void> {
+    await this.#runtime.shutdown();
+    this.#clientHandle.dispose();
+  }
+
   resetWithNewId(newId: string): void {
     const previousLogSink = this.#logSink;
     const previousEventSink = this.#eventSink;
@@ -154,6 +166,8 @@ export class ConversationService {
       postExecutePending: this.#clientHandle.postExecutePending,
       postExecutePauseCapability: this.#clientHandle.postExecutePauseCapability,
       ...(this.#clientHandle.access ? { sessionAccess: this.#clientHandle.access } : {}),
+      ...(this.#clientHandle.hookLifecycle ? { hookLifecycle: this.#clientHandle.hookLifecycle } : {}),
+      ...(this.#clientHandle.hookEvents ? { hookEvents: this.#clientHandle.hookEvents } : {}),
       deps: this.#deps,
       queueForeground: true,
       sessionId: newId,

@@ -68,6 +68,8 @@ import { LiveRun } from './live-run.js';
 import type { PostExecutePendingRegistry, PostExecutePendingEntry } from './post-execute-pending-registry.js';
 import type { SessionAccessState } from './session-access-state.js';
 import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-selector-parity-observer.js';
+import type { HookLifecyclePort } from '../hooks/hook-service.js';
+import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 
 export interface TurnWorkflowDeps {
   agentClient: ConversationAgentClient;
@@ -96,6 +98,8 @@ export interface TurnWorkflowDeps {
   batchCoordinator?: ToolApprovalBatchCoordinator;
   postExecutePending: PostExecutePendingRegistry;
   setActivePostExecuteRunId?: (runId: string | null) => void;
+  hookLifecycle?: HookLifecyclePort;
+  hookEvents?: HookEventFactory;
 }
 
 export class TurnWorkflow {
@@ -103,6 +107,7 @@ export class TurnWorkflow {
   readonly #liveAttemptOwners = new WeakSet<TurnAttempt>();
   #liveRun: LiveRun<ConversationEvent, { kind: 'completed'; outcome: any } | { kind: 'stale' }> | null = null;
   #nextLiveRunId = 0;
+  #hookTurnId: string | undefined;
 
   constructor(private readonly deps: TurnWorkflowDeps) {
     this.#batchCoordinator =
@@ -115,11 +120,18 @@ export class TurnWorkflow {
         sessionId: deps.sessionId,
         sessionAccess: deps.sessionAccess,
         isCurrent: (token) => deps.generationGuard.isCurrent(token),
+        hookLifecycle: deps.hookLifecycle,
+        hookEvents: deps.hookEvents,
       });
   }
 
   steer(items: readonly ProviderInputItem[]): Promise<boolean> {
     return this.deps.agentClient.steer?.(items) ?? Promise.resolve(false);
+  }
+
+  /** Internal composition seam for correlating physical tool calls to a turn. */
+  setHookTurnId(turnId: string | undefined): void {
+    this.#hookTurnId = turnId;
   }
 
   async *executeInitial(
@@ -360,6 +372,7 @@ export class TurnWorkflow {
               arguments: outcome.result.approval.argumentsText,
             });
           }
+          await this.#emitApprovalRequested(outcome.result.approval);
           this.deps.logger.debug('Tool approval required', {
             eventType: 'approval.required',
             category: 'approval',
@@ -595,6 +608,7 @@ export class TurnWorkflow {
         previousResponseId: options.resumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
         sessionId: this.deps.sessionId,
         providerHistorySnapshot: this.deps.conversationStore.getProviderHistorySnapshot(),
+        hookTurnId: this.#hookTurnId,
       };
       Object.defineProperty(resumeOptions, 'providerContinuityLineage', {
         value: this.deps.providerContinuity.lineage,
@@ -637,6 +651,7 @@ export class TurnWorkflow {
       previousResponseId: selectedPreviousResponseId,
       sessionId: this.deps.sessionId,
       providerHistorySnapshot: attempt.providerHistorySnapshot,
+      hookTurnId: this.#hookTurnId,
     };
     Object.defineProperty(startOptions, 'providerContinuityLineage', {
       value: this.deps.providerContinuity.lineage,
@@ -857,7 +872,7 @@ export class TurnWorkflow {
         reasoning: outcome.advisory?.reasoning,
       });
 
-      const nextPlan = this.deps.approvalFlow.prepareContinuation('y', undefined);
+      const nextPlan = this.deps.approvalFlow.prepareContinuation('y', undefined, 'policy');
       if (!nextPlan) {
         const approvalFallback = this.#createApprovalRequiredFromAutoApprove(outcome, nextCumulativeUsage);
         return { action: 'return', result: { kind: 'approval_required', terminal: approvalFallback } };
@@ -908,7 +923,11 @@ export class TurnWorkflow {
     }
 
     const answer = decision === 'approve' ? 'y' : 'n';
-    const nextPlan = this.deps.approvalFlow.prepareContinuation(answer, undefined);
+    const nextPlan = this.deps.approvalFlow.prepareContinuation(
+      answer,
+      undefined,
+      decision === 'approve' || decision === 'reject' ? 'policy' : 'user',
+    );
     if (!nextPlan) {
       return { action: 'return', result: { kind: 'approval_required', terminal: outcome.result } };
     }
@@ -938,6 +957,7 @@ export class TurnWorkflow {
         this.deps.toolTracker.activeCallIdsForCurrentTurn(),
       ),
       providerHistorySnapshot: this.deps.conversationStore.getProviderHistorySnapshot(),
+      hookTurnId: this.#hookTurnId,
     };
     Object.defineProperty(continuationOptions, 'providerContinuityLineage', {
       value: this.deps.providerContinuity.lineage,
@@ -1093,5 +1113,31 @@ export class TurnWorkflow {
       llmAdvisory: outcome.advisory,
       usage,
     });
+  }
+
+  async #emitApprovalRequested(approval: { toolName: string; argumentsText: string; callId?: string }): Promise<void> {
+    if (!this.deps.hookLifecycle || !this.deps.hookEvents) return;
+    let normalizedArguments: unknown = approval.argumentsText;
+    try {
+      normalizedArguments = JSON.parse(approval.argumentsText);
+    } catch {
+      // Preserve a bounded opaque representation for malformed model input.
+    }
+    await this.deps.hookLifecycle.emit(
+      this.deps.hookEvents.create(
+        'approval.requested',
+        {
+          toolName: approval.toolName,
+          normalizedArguments: this.deps.hookEvents.includeToolArguments
+            ? normalizedArguments
+            : typeof normalizedArguments === 'string'
+            ? normalizedArguments.slice(0, 500)
+            : JSON.stringify(normalizedArguments).slice(0, 500),
+          approvalKind: approval.toolName === 'ask_user' ? 'ask_user' : 'tool',
+          proposedDecision: 'approve',
+        },
+        { toolCallId: approval.callId },
+      ),
+    );
   }
 }

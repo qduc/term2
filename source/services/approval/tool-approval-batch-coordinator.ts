@@ -23,6 +23,8 @@ import {
 } from './shell-sandbox-approval.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
+import type { HookLifecyclePort } from '../hooks/hook-service.js';
+import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 
 export type BatchStageResult =
   | { kind: 'ready' }
@@ -40,6 +42,8 @@ export interface ToolApprovalBatchCoordinatorDeps {
   nestedCompatibility?: NestedToolCompatibilityState;
   policyRegistry?: ToolApprovalPolicyRegistry;
   isCurrent?: (token: number) => boolean;
+  hookLifecycle?: HookLifecyclePort;
+  hookEvents?: HookEventFactory;
 }
 
 export interface ToolApprovalBatchStageInput {
@@ -160,6 +164,22 @@ export class ToolApprovalBatchCoordinator {
       }
 
       if (decision === 'prompt') {
+        if (this.deps.hookLifecycle && this.deps.hookEvents) {
+          void this.deps.hookLifecycle.emit(
+            this.deps.hookEvents.create(
+              'approval.requested',
+              {
+                toolName,
+                normalizedArguments: this.deps.hookEvents.includeToolArguments
+                  ? parseResult.arguments
+                  : JSON.stringify(parseResult.arguments).slice(0, 500),
+                approvalKind: toolName === 'ask_user' ? 'ask_user' : 'tool',
+                proposedDecision: 'approve',
+              },
+              { toolCallId: callId },
+            ),
+          );
+        }
         this.deps.planApplier.recordPendingApproval({ toolName, argumentsText, callId, llmAdvisory });
         const agent = asRecord(asRecord(interruption)?.agent);
         return {
@@ -177,7 +197,11 @@ export class ToolApprovalBatchCoordinator {
         };
       }
 
-      const nextPlan = this.deps.approvalFlow.prepareContinuation(decision === 'approve' ? 'y' : 'n', undefined);
+      const nextPlan = this.deps.approvalFlow.prepareContinuation(
+        decision === 'approve' ? 'y' : 'n',
+        undefined,
+        'policy',
+      );
       if (!nextPlan) {
         throw new Error('Parallel approval batch lost its pending approval context');
       }

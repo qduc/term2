@@ -1,7 +1,7 @@
 import { it, expect } from 'vitest';
 import * as path from 'path';
 import { homedir } from 'os';
-import { resolveWorkspacePath } from './utils.js';
+import { isProtectedHookPath, resolveWorkspacePath } from './utils.js';
 import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
 
 it('resolveWorkspacePath: expands ~ to home directory', () => {
@@ -15,6 +15,13 @@ it('resolveWorkspacePath: expands ~ to home directory', () => {
   // Test ~ expansion
   const resolvedHome = resolveWorkspacePath('~', workspace, { allowOutsideWorkspace: true });
   expect(resolvedHome).toBe(home);
+});
+
+it('protects both user and project hook directories from silent writes', () => {
+  const workspace = '/tmp/term2-project';
+  expect(isProtectedHookPath(path.join(homedir(), '.term2', 'hooks', 'status.ts'), workspace)).toBe(true);
+  expect(isProtectedHookPath(path.join(workspace, '.term2', 'hooks', 'status.ts'), workspace)).toBe(true);
+  expect(isProtectedHookPath(path.join(workspace, 'src', 'status.ts'), workspace)).toBe(false);
 });
 
 it('resolveWorkspacePath: throws if ~ expanded path is outside workspace and not allowed', () => {

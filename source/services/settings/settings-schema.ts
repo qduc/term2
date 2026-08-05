@@ -349,6 +349,24 @@ export const MemorySettingsSchema = z
     path: ['searchDefaultLimit'],
   });
 
+export const HooksSettingsSchema = z.object({
+  user: z
+    .object({
+      enabled: z.boolean().default(true),
+    })
+    .default({ enabled: true }),
+  project: z
+    .object({
+      enabled: z.boolean().default(false),
+    })
+    .default({ enabled: false }),
+  trustedProjectRoots: z.array(z.string()).default([]),
+  includeUserText: z.boolean().default(false),
+  includeToolArguments: z.boolean().default(false),
+  includeToolResults: z.boolean().default(false),
+  timeoutMs: z.number().int().positive().default(5_000),
+});
+
 export const KNOWN_CUSTOM_PROVIDER_TYPES = [
   'openai',
   'openai-compatible',
@@ -443,6 +461,7 @@ export const SettingsSchema = z.object({
   ssh: SSHSettingsSchema.optional(),
   webSearch: WebSearchSettingsSchema.optional(),
   memory: MemorySettingsSchema.optional().default(MemorySettingsSchema.parse({})),
+  hooks: HooksSettingsSchema.optional().default(HooksSettingsSchema.parse({})),
 });
 
 // Type definitions
@@ -464,6 +483,7 @@ export interface SettingsData {
   ssh: z.infer<typeof SSHSettingsSchema>;
   webSearch: z.infer<typeof WebSearchSettingsSchema>;
   memory: z.infer<typeof MemorySettingsSchema>;
+  hooks: z.infer<typeof HooksSettingsSchema>;
 }
 
 export type SettingSource = 'cli' | 'env' | 'config' | 'default';
@@ -590,6 +610,15 @@ export interface SettingsWithSources {
     searchDefaultLimit: SettingWithSource<number>;
     searchMaxLimit: SettingWithSource<number>;
   };
+  hooks: {
+    user: SettingWithSource<{ enabled: boolean }>;
+    project: SettingWithSource<{ enabled: boolean }>;
+    trustedProjectRoots: SettingWithSource<string[]>;
+    includeUserText: SettingWithSource<boolean>;
+    includeToolArguments: SettingWithSource<boolean>;
+    includeToolResults: SettingWithSource<boolean>;
+    timeoutMs: SettingWithSource<number>;
+  };
 }
 
 /**
@@ -692,6 +721,13 @@ export const SETTING_KEYS = {
   MEMORY_CONTEXT_BUDGET_CHARS: 'memory.contextBudgetChars',
   MEMORY_SEARCH_DEFAULT_LIMIT: 'memory.searchDefaultLimit',
   MEMORY_SEARCH_MAX_LIMIT: 'memory.searchMaxLimit',
+  HOOKS_USER_ENABLED: 'hooks.user.enabled',
+  HOOKS_PROJECT_ENABLED: 'hooks.project.enabled',
+  HOOKS_TRUSTED_PROJECT_ROOTS: 'hooks.trustedProjectRoots',
+  HOOKS_INCLUDE_USER_TEXT: 'hooks.includeUserText',
+  HOOKS_INCLUDE_TOOL_ARGUMENTS: 'hooks.includeToolArguments',
+  HOOKS_INCLUDE_TOOL_RESULTS: 'hooks.includeToolResults',
+  HOOKS_TIMEOUT_MS: 'hooks.timeoutMs',
   PROVIDER_ORDER: 'providerOrder',
 } as const;
 
@@ -772,6 +808,12 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.MEMORY_CONTEXT_BUDGET_CHARS,
   SETTING_KEYS.MEMORY_SEARCH_DEFAULT_LIMIT,
   SETTING_KEYS.MEMORY_SEARCH_MAX_LIMIT,
+  SETTING_KEYS.HOOKS_USER_ENABLED,
+  SETTING_KEYS.HOOKS_PROJECT_ENABLED,
+  SETTING_KEYS.HOOKS_INCLUDE_USER_TEXT,
+  SETTING_KEYS.HOOKS_INCLUDE_TOOL_ARGUMENTS,
+  SETTING_KEYS.HOOKS_INCLUDE_TOOL_RESULTS,
+  SETTING_KEYS.HOOKS_TIMEOUT_MS,
 ]);
 
 export interface AppModes {
@@ -940,6 +982,15 @@ export const DEFAULT_SETTINGS: SettingsData = {
     contextBudgetChars: 3000,
     searchDefaultLimit: 10,
     searchMaxLimit: 50,
+  },
+  hooks: {
+    user: { enabled: true },
+    project: { enabled: false },
+    trustedProjectRoots: [],
+    includeUserText: false,
+    includeToolArguments: false,
+    includeToolResults: false,
+    timeoutMs: 5_000,
   },
 };
 

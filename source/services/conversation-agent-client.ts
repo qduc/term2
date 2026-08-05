@@ -15,6 +15,8 @@ export type AgentClientRunOptions = {
   providerHistorySnapshot?: ProviderHistorySnapshot;
   /** Provider continuity epoch frozen while this request is planned. */
   providerContinuityLineage?: number;
+  /** Internal public-hook correlation for the logical foreground turn. */
+  hookTurnId?: string;
 };
 
 export type AgentClientChatOptions = {

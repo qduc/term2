@@ -10,6 +10,8 @@ export type TurnOutcome =
 
 export type TurnCommand = { kind: 'emit_terminal'; terminal: ConversationTerminal } | { kind: 'none' };
 
+export type TurnStatusObserver = (transition: { previous: SessionStatus; current: SessionStatus }) => void;
+
 /** Opaque admission lease for the currently active foreground turn. */
 export type TurnLease = { readonly generation: number; readonly __turnLease: unique symbol };
 
@@ -23,6 +25,15 @@ export class TurnStatusMachine {
   private status: SessionStatus = 'idle';
   private nextGeneration = 0;
   private activeLease: TurnLease | undefined;
+  private observer: TurnStatusObserver | undefined;
+
+  constructor(observer?: TurnStatusObserver) {
+    this.observer = observer;
+  }
+
+  setObserver(observer: TurnStatusObserver | undefined): void {
+    this.observer = observer;
+  }
 
   get current(): SessionStatus {
     return this.status;
@@ -34,7 +45,7 @@ export class TurnStatusMachine {
 
   beginTurn(): TurnLease {
     this.#assertTransition('idle', 'streaming');
-    this.status = 'streaming';
+    this.#setStatus('streaming');
     this.activeLease = { generation: ++this.nextGeneration } as TurnLease;
     return this.activeLease;
   }
@@ -44,12 +55,12 @@ export class TurnStatusMachine {
     if (this.status !== 'streaming' && this.status !== 'continuing') {
       throw new Error(`Cannot request approval from ${this.status}`);
     }
-    this.status = 'awaiting_approval';
+    this.#setStatus('awaiting_approval');
   }
 
   beginContinuation(): TurnLease {
     this.#assertTransition('awaiting_approval', 'continuing');
-    this.status = 'continuing';
+    this.#setStatus('continuing');
     return this.activeLease!;
   }
 
@@ -62,13 +73,13 @@ export class TurnStatusMachine {
   complete(lease: TurnLease): void {
     if (!this.owns(lease)) return;
     if (this.status === 'streaming' || this.status === 'continuing') {
-      this.status = 'idle';
+      this.#setStatus('idle');
       this.activeLease = undefined;
     }
   }
 
   abort(): void {
-    this.status = 'idle';
+    this.#setStatus('idle');
     this.activeLease = undefined;
   }
 
@@ -112,6 +123,17 @@ export class TurnStatusMachine {
   #assertTransition(from: SessionStatus, to: SessionStatus): void {
     if (this.status !== from) {
       throw new Error(`Invalid transition: ${this.status} -> ${to}`);
+    }
+  }
+
+  #setStatus(next: SessionStatus): void {
+    if (this.status === next) return;
+    const previous = this.status;
+    this.status = next;
+    try {
+      this.observer?.({ previous, current: next });
+    } catch {
+      // Observers are diagnostic/lifecycle projections, never status owners.
     }
   }
 }

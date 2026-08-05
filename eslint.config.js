@@ -24,6 +24,7 @@ export default tseslint.config(
       'dist/**',
       'coverage/**',
       'generated/**',
+      'docs/**/*.ts',
       'tools/log_viewer/**',
       '.junie/**',
       'eval/**',

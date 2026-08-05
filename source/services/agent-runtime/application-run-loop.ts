@@ -18,8 +18,14 @@ import type {
   StreamedModelTurnRequest,
   StreamedModelTool,
 } from '../../contracts/streamed-model-turn.js';
-import type { AnyToolDefinition, ToolRegistry } from '../../tools/types.js';
+import type {
+  AnyToolDefinition,
+  ToolExecutionLifecycleContext,
+  ToolExecutionLifecyclePort,
+  ToolRegistry,
+} from '../../tools/types.js';
 import { isZodToolParameterSchema } from '../../tools/types.js';
+import type { Term2HookScope } from '../hooks/hook-contracts.js';
 import { normalizeToolParameters } from '../../lib/tool-invoke.js';
 import { isCancellationError, isHarnessInvariantError } from '../../lib/harness-invariant-error.js';
 import { ApprovalLedger, type ToolInvocationContext } from './tool-invocation-context.js';
@@ -68,6 +74,10 @@ export interface ApplicationRunLoopOptions {
   /** Whether this provider accepts response IDs for continuation requests. */
   readonly supportsConversationChaining?: boolean;
   readonly sessionId?: string;
+  /** Public hook correlation for the logical session turn. */
+  readonly turnId?: string;
+  /** Root/subagent ownership for observational tool events. */
+  readonly hookScope?: Term2HookScope;
   /** Per-run user context delivered to tools as `ToolInvocationContext.context`. */
   readonly context?: unknown;
   /**
@@ -103,6 +113,7 @@ export class MaxTurnsExceededError extends Error {
 
 export interface ApplicationRunLoopDeps {
   readonly resolveModel: (model: string) => StreamedModelTurn | Promise<StreamedModelTurn>;
+  readonly toolLifecycle?: ToolExecutionLifecyclePort;
 }
 
 /** A user message waiting for the running turn's next request boundary. */
@@ -153,6 +164,10 @@ type RunState = {
   responseProviderId?: string;
   /** Root-only provider request preparation, retained by continuations. */
   requestPreparation?: ApplicationRequestPreparation;
+  sessionId?: string;
+  turnId?: string;
+  hookScope?: Term2HookScope;
+  toolAttempts?: Map<string, number>;
   approve?: (_interruption?: unknown) => void;
   reject?: (_interruption?: unknown, options?: { message?: string }) => void;
 };
@@ -277,6 +292,9 @@ export class ApplicationRunLoop {
           ? options.providerId
           : undefined,
       requestPreparation: options.requestPreparation,
+      sessionId: options.sessionId,
+      turnId: options.turnId,
+      hookScope: options.hookScope,
       context: options.context,
       approvals: options.approvals ?? new ApprovalLedger(),
       turnCount: 0,
@@ -342,6 +360,9 @@ export class ApplicationRunLoop {
     // refresh the preparation closure when supplied, while preserving the
     // root closure for callers that do not provide one again.
     if (options.requestPreparation) state.requestPreparation = options.requestPreparation;
+    if (options.sessionId !== undefined) state.sessionId = options.sessionId;
+    if (options.turnId !== undefined) state.turnId = options.turnId;
+    if (options.hookScope !== undefined) state.hookScope = options.hookScope;
     return this.#run(state, options);
   }
 
@@ -742,10 +763,32 @@ export class ApplicationRunLoop {
     callId: string,
     state?: RunState,
   ): Promise<unknown> {
+    const startedAt = Date.now();
+    const attempt = state
+      ? ((state.toolAttempts ??= new Map()).set(callId, (state.toolAttempts.get(callId) ?? 0) + 1),
+        state.toolAttempts.get(callId)!)
+      : 1;
+    const lifecycleContext: ToolExecutionLifecycleContext = {
+      ...(state?.sessionId ? { sessionId: state.sessionId } : {}),
+      ...(state?.turnId ? { turnId: state.turnId } : {}),
+      toolCallId: callId,
+      toolName: definition.name,
+      normalizedArguments: params,
+      attempt,
+      scope: state?.hookScope ?? 'root',
+    };
+    await this.#notifyToolLifecycle(() => this.#deps.toolLifecycle?.before(lifecycleContext));
     try {
-      return await definition.execute(params, toolContext, { toolCall: { callId } });
+      const result = await definition.execute(params, toolContext, { toolCall: { callId } });
+      await this.#notifyToolLifecycle(() =>
+        this.#deps.toolLifecycle?.after(lifecycleContext, result, Date.now() - startedAt),
+      );
+      return result;
     } catch (error) {
       if (isCancellationError(error) || isHarnessInvariantError(error) || error instanceof MaxTurnsExceededError) {
+        await this.#notifyToolLifecycle(() =>
+          this.#deps.toolLifecycle?.error(lifecycleContext, error, Date.now() - startedAt, false),
+        );
         throw error;
       }
 
@@ -755,9 +798,27 @@ export class ApplicationRunLoop {
       // so plainly rather than inviting a third identical attempt.
       const repeated = state ? countRepeatedFailure(state, definition.name, params, message) : 1;
       if (repeated > MAX_IDENTICAL_TOOL_FAILURES) {
-        return `Error: ${message}\n\nThis exact call has now failed ${repeated} times with the same error. Do not call ${definition.name} with these arguments again — either change your approach or report the problem to the user.`;
+        const result = `Error: ${message}\n\nThis exact call has now failed ${repeated} times with the same error. Do not call ${definition.name} with these arguments again — either change your approach or report the problem to the user.`;
+        await this.#notifyToolLifecycle(() =>
+          this.#deps.toolLifecycle?.error(lifecycleContext, error, Date.now() - startedAt, true),
+        );
+        return result;
       }
-      return `Error: ${message}`;
+      const result = `Error: ${message}`;
+      await this.#notifyToolLifecycle(() =>
+        this.#deps.toolLifecycle?.error(lifecycleContext, error, Date.now() - startedAt, true),
+      );
+      return result;
+    }
+  }
+
+  async #notifyToolLifecycle(operation: (() => void | Promise<void>) | undefined): Promise<void> {
+    if (!operation) return;
+    try {
+      await operation();
+    } catch {
+      // Lifecycle observers are passive. A broken observer must not alter tool
+      // execution or turn recovery semantics.
     }
   }
 }

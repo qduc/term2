@@ -25,10 +25,10 @@ export function toCodexResponsesItem(item: StreamedModelTurnInput): unknown {
     case 'reasoning': {
       const metadata = codexNativeMetadata(item.providerMetadata);
       return {
+        ...metadata,
         type: 'reasoning',
         ...(item.id ? { id: item.id } : {}),
-        ...metadata,
-        ...(item.text ? { content: [{ type: 'reasoning_text', text: item.text }] } : {}),
+        summary: item.text ? [{ type: 'summary_text', text: item.text }] : [],
       };
     }
     case 'tool_call':

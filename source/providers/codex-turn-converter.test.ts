@@ -21,6 +21,12 @@ describe('Codex streamed-turn conversion', () => {
           text: 'considered',
           providerMetadata: { codex: { encrypted_content: 'ciphertext' } },
         },
+        {
+          type: 'reasoning',
+          id: 'rs_2',
+          text: '',
+          providerMetadata: { codex: { encrypted_content: 'ciphertext' } },
+        },
         { type: 'tool_call', id: 'call_1', name: 'lookup', arguments: '{"q":"term2"}' },
         {
           type: 'tool_result',
@@ -46,8 +52,14 @@ describe('Codex streamed-turn conversion', () => {
       {
         type: 'reasoning',
         id: 'rs_1',
+        summary: [{ type: 'summary_text', text: 'considered' }],
         encrypted_content: 'ciphertext',
-        content: [{ type: 'reasoning_text', text: 'considered' }],
+      },
+      {
+        type: 'reasoning',
+        id: 'rs_2',
+        summary: [],
+        encrypted_content: 'ciphertext',
       },
       { type: 'function_call', call_id: 'call_1', name: 'lookup', arguments: '{"q":"term2"}' },
       {
@@ -72,6 +84,26 @@ describe('Codex streamed-turn conversion', () => {
         },
       ]),
     ).toThrow('Unsupported foreign reasoning metadata for Codex: openai_compatible_reasoning_content');
+  });
+
+  it('ensures explicit wire fields take precedence over providerMetadata keys', () => {
+    expect(
+      toCodexResponsesInput([
+        {
+          type: 'reasoning',
+          id: 'rs_canonical',
+          text: 'valid text',
+          providerMetadata: { codex: { type: 'override', summary: 'invalid', encrypted_content: 'cipher' } as any },
+        },
+      ]),
+    ).toEqual([
+      {
+        type: 'reasoning',
+        id: 'rs_canonical',
+        summary: [{ type: 'summary_text', text: 'valid text' }],
+        encrypted_content: 'cipher',
+      },
+    ]);
   });
 
   it('rejects unsupported rich shapes before producing malformed Responses input', () => {

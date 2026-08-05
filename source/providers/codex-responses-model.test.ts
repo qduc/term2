@@ -407,6 +407,45 @@ it('CodexResponsesModel.buildResponsesCreateRequest merges Codex include into re
   }
 });
 
+it('CodexResponsesTransport formats reasoning input items with required summary array for Responses API', () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5.6-sol', false);
+  const built = transport.buildResponsesCreateRequest(
+    {
+      input: [
+        {
+          type: 'reasoning',
+          id: 'rs_1',
+          text: 'thinking process',
+          providerMetadata: { codex: { encrypted_content: 'cipher_a' } },
+        },
+        {
+          type: 'reasoning',
+          id: 'rs_2',
+          text: '',
+          providerMetadata: { codex: { encrypted_content: 'cipher_b' } },
+        },
+      ],
+      tools: [],
+    },
+    true,
+  );
+
+  expect(built.requestData.input).toEqual([
+    {
+      type: 'reasoning',
+      id: 'rs_1',
+      summary: [{ type: 'summary_text', text: 'thinking process' }],
+      encrypted_content: 'cipher_a',
+    },
+    {
+      type: 'reasoning',
+      id: 'rs_2',
+      summary: [],
+      encrypted_content: 'cipher_b',
+    },
+  ]);
+});
+
 it('Codex HTTP writes every supported request setting and the abort signal to the Responses boundary', async () => {
   let capturedBody: any;
   let capturedOptions: any;

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { it, expect } from 'vitest';
 
 const workerPrompt = fs.readFileSync(path.join(import.meta.dirname, 'worker.md'), 'utf-8');
-const researcherPrompt = fs.readFileSync(path.join(import.meta.dirname, 'researcher.md'), 'utf-8');
+const explorerPrompt = fs.readFileSync(path.join(import.meta.dirname, 'explorer.md'), 'utf-8');
 
 it('worker prompt still requires running a validation command', () => {
   const lower = workerPrompt.toLowerCase();
@@ -24,7 +24,7 @@ it('worker prompt mentions that shell-driven edits may not appear in diff stat',
 });
 
 it('execution role prompts reserve ask_orchestrator for genuine blockers and never direct user contact', () => {
-  for (const prompt of [workerPrompt, researcherPrompt]) {
+  for (const prompt of [workerPrompt, explorerPrompt]) {
     const lower = prompt.toLowerCase();
     expect(lower).toContain('ask_orchestrator');
     expect(lower).toContain('genuine blocker');

@@ -25,12 +25,12 @@ ${
 Use these when you want to start a background investigation, return control while it runs, and continue from the inlined result after the completion notification.`;
 
   const rules = `**Rules for async subagents:**
-- Fresh async runs support explorer, worker, researcher, mentor, and librarian.
+- Fresh async runs support explorer, worker, mentor, and librarian.
 - Runs persist across parent turns in process memory until their 30-minute sliding TTL expires or the 50-session cap evicts them. Ordinary turn completion does not cancel them.
 - A returned handle with \`status: "running"\` means delegation succeeded.
 - Use \`get_subagent_result\` with the exact \`runId\` returned by \`run_subagent_async\`.
 - Do NOT call \`get_subagent_result\` immediately after \`run_subagent_async\` returns — it blocks until completion and freezes you out of doing other work or receiving the next user instruction. End your turn instead and let the harness notify you when the run finishes. The notification inlines the full result, so retrieval is unnecessary in normal use.
-- Mentor and librarian fresh calls reuse their default session. Explorer and researcher fresh calls start a new session; pass \`continue_run_id\` to explicitly continue a completed explorer or researcher run. Worker runs are always fresh and cannot be continued.
+- Mentor and librarian fresh calls reuse their default session. Explorer fresh calls start a new session; pass \`continue_run_id\` to explicitly continue a completed explorer run. Worker runs are always fresh and cannot be continued.
 - Only completed runs can be continued. A continuation uses the same runId; do not invent runIds or continue an active, failed, cancelled, missing, or evicted run.
 - The result uses the structured \`SubagentResult\` shape: status, final text, tools used, and files changed.`;
 

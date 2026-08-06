@@ -93,7 +93,7 @@ export class SubagentManager {
   /**
    * Resolve a role to a legacy SubagentDefinition through the shared
    * ResolvedAgentDefinition adaptation path. This ensures all role
-   * definitions (explorer/worker/researcher/mentor) pass through the
+   * definitions (explorer/worker/mentor) pass through the
    * same resolution before execution.
    */
   #resolveRoleDefinition(role: string): SubagentDefinition {

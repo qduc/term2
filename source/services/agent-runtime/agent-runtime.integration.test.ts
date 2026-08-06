@@ -47,7 +47,7 @@ describe('AgentRuntime integration: legacy roles resolve through boundary', () =
     expect(legacyDef.role).toBe('explorer');
     expect(legacyDef.canRead).toBe(true);
     expect(legacyDef.canWrite).toBe(false);
-    expect(legacyDef.canSearchWeb).toBe(false);
+    expect(legacyDef.canSearchWeb).toBe(true); // researcher role was folded in
     // explorer has shell (read-only wrapped by tool policy)
     expect(legacyDef.canRunShell).toBe(true);
   });
@@ -61,16 +61,6 @@ describe('AgentRuntime integration: legacy roles resolve through boundary', () =
     expect(legacyDef.canWrite).toBe(true);
     expect(legacyDef.canRunShell).toBe(true);
     expect(legacyDef.canSearchWeb).toBe(false);
-  });
-
-  it('researcher role adapts with web search, no shell/write', () => {
-    const resolved = adaptLegacyRole('researcher', settings());
-    const legacyDef = adaptLegacyDefinition(resolved);
-
-    expect(legacyDef.canRead).toBe(true);
-    expect(legacyDef.canWrite).toBe(false);
-    expect(legacyDef.canRunShell).toBe(false);
-    expect(legacyDef.canSearchWeb).toBe(true);
   });
 
   it('mentor role adapts with no authority', () => {

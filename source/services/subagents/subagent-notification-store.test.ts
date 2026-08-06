@@ -384,7 +384,7 @@ it('carries the cancellation status and error text of a cancelled run', () => {
 it('drains every pending run in one call in completion order', () => {
   const store = makeStore();
   store.enqueue(completed({ agentId: 'run-a' }));
-  store.enqueue(completed({ agentId: 'run-b', role: 'researcher' }));
+  store.enqueue(completed({ agentId: 'run-b', role: 'explorer' }));
 
   expect(store.pendingCount).toBe(2);
   const drained = store.drain();

@@ -14,7 +14,6 @@ import {
   ROLE_MENTOR,
   ROLE_EXPLORER,
   ROLE_WORKER,
-  ROLE_RESEARCHER,
 } from './test-helpers/subagent-manager-fixtures.js';
 import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
 import { ModelBehaviorError } from '../../contracts/model-errors.js';

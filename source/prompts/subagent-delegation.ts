@@ -16,8 +16,7 @@ export function getSubagentDelegationAddendum({
 You have a \`${delegationTool}\` tool. A subagent runs in its own context and returns only a summary — use it to keep your own context focused on high-level reasoning.`;
 
   const triggers = `**Delegate when it provides meaningful leverage:**
-- Need focused codebase investigation or context compression → \`explorer\`.
-- Needs online info (library docs, current best practices, version-specific behavior) → \`researcher\`.
+- Need focused codebase investigation, context compression, or current external information (library docs, best practices, version-specific behavior) → \`explorer\`.
 - About to commit to a non-trivial plan or tricky debugging direction and want it pressure-tested → \`mentor\`.
 ${
   memoryEnabled ? '- Need relevant persistent-memory context or memory maintenance → `librarian`.\n' : ''

@@ -145,7 +145,7 @@ export class SubagentAsyncRegistry {
   startRun(request: SubagentRequest, _legacyParentSignal?: AbortSignal): SubagentRunHandle {
     if (this.#disposed) throw new Error('Subagent async registry is disposed');
     const role = request.role;
-    if (!['explorer', 'worker', 'researcher', 'mentor', 'librarian'].includes(role)) {
+    if (!['explorer', 'worker', 'mentor', 'librarian'].includes(role)) {
       throw new SubagentRegistryError('not_continuable', `Unknown subagent role: ${role}`);
     }
     const name = request.name;
@@ -174,7 +174,7 @@ export class SubagentAsyncRegistry {
         throw new SubagentRegistryError('already_active', `Async subagent run ${continuation} is already active`);
       if (role === 'worker')
         throw new SubagentRegistryError('worker_blocked', 'Worker runs cannot be continued asynchronously');
-      if (role !== 'mentor' && role !== 'librarian' && role !== 'explorer' && role !== 'researcher') {
+      if (role !== 'mentor' && role !== 'librarian' && role !== 'explorer') {
         throw new SubagentRegistryError('not_continuable', `Role ${role} cannot be continued`);
       }
       session = previous.session;

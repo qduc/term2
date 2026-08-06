@@ -178,16 +178,22 @@ export const AgentSettingsSchema = z.object({
     .string()
     .min(1)
     .optional()
-    .describe('Model override for the researcher subagent. Falls back to agent.model when unset.'),
+    .describe(
+      'Deprecated: the researcher subagent role was folded into explorer. Retained so persisted configs still parse; use agent.subagentExplorerModel instead.',
+    ),
   subagentResearcherProvider: z
     .string()
     .min(1)
     .optional()
-    .describe('Provider override for the researcher subagent. Falls back to agent.provider when unset.'),
+    .describe(
+      'Deprecated: the researcher subagent role was folded into explorer. Retained so persisted configs still parse; use agent.subagentExplorerProvider instead.',
+    ),
   subagentResearcherReasoningEffort: z
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
-    .describe('Reasoning effort override for the researcher subagent. Falls back to agent.reasoningEffort when unset.'),
+    .describe(
+      'Deprecated: the researcher subagent role was folded into explorer. Retained so persisted configs still parse; use agent.subagentExplorerReasoningEffort instead.',
+    ),
   subagentLibrarianModel: z
     .string()
     .min(1)

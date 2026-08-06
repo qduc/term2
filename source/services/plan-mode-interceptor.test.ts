@@ -48,7 +48,7 @@ it('installPlanModeInterceptor rejects mutating tools when planMode is true', as
 
   // Read-only subagent roles are allowed in plan mode
   expect(await capturedInterceptor('run_subagent', { role: 'explorer' })).toBe(null);
-  expect(await capturedInterceptor('run_subagent', { role: 'researcher' })).toBe(null);
+  expect(await capturedInterceptor('run_subagent', { role: 'librarian' })).toBe(null);
   expect(await capturedInterceptor('run_subagent', { role: 'mentor' })).toBe(null);
   // Role passed as a JSON string (provider may stringify args)
   expect(await capturedInterceptor('run_subagent', JSON.stringify({ role: 'explorer' }))).toBe(null);

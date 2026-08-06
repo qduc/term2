@@ -11,10 +11,10 @@ import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from '../..
 import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../../services/subagents/subagent-async-registry.js';
 import { isAbortLike, truncatePreview, formatSubagentResult } from '../../services/subagents/utils.js';
 
-const ASYNC_ROLES = ['explorer', 'worker', 'researcher', 'mentor', 'librarian'] as const;
+const ASYNC_ROLES = ['explorer', 'worker', 'mentor', 'librarian'] as const;
 
 const runSubagentAsyncSchema = z.object({
-  role: z.enum(ASYNC_ROLES).describe('The subagent role to use: explorer, worker, researcher, mentor, or librarian.'),
+  role: z.enum(ASYNC_ROLES).describe('The subagent role to use: explorer, worker, mentor, or librarian.'),
   task: z.string().describe('The full task description.'),
   name: z
     .string()
@@ -169,7 +169,7 @@ export function createRunSubagentAsyncToolDefinition(
       'Instead, end your turn and wait for the harness completion notification, which inlines the full result so you can continue without a second tool call. ' +
       'A returned handle with status: "running" means the launch succeeded; do not duplicate the delegated task. ' +
       'Only call get_subagent_result inline if, after honest assessment, you truly cannot take any other useful action or reply to the user without the result at all. ' +
-      'Fresh runs support explorer, worker, researcher, mentor, and librarian. ' +
+      'Fresh runs support explorer, worker, mentor, and librarian. ' +
       'Only completed non-worker runs can be continued across turns; worker continuation is blocked.',
     parameters: runSubagentAsyncSchema,
     needsApproval: () => false,

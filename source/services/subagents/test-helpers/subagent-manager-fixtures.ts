@@ -14,7 +14,6 @@ import { SubagentManager as RealSubagentManager } from '../subagent-manager.js';
 const ROLE_MENTOR = 'mentor';
 const ROLE_EXPLORER = 'explorer';
 const ROLE_WORKER = 'worker';
-const ROLE_RESEARCHER = 'researcher';
 
 const registeredProviderIds = new Set<string>();
 
@@ -213,4 +212,4 @@ export class TestSubagentManager extends RealSubagentManager {
   }
 }
 
-export { ROLE_MENTOR, ROLE_EXPLORER, ROLE_WORKER, ROLE_RESEARCHER };
+export { ROLE_MENTOR, ROLE_EXPLORER, ROLE_WORKER };

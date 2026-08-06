@@ -24,8 +24,8 @@ const RUN_SUBAGENT_DESCRIPTION =
 
 const runSubagentSchema = z.object({
   role: z
-    .enum(['explorer', 'worker', 'researcher', 'librarian'])
-    .describe('The subagent role to use: "explorer", "worker", "researcher", or "librarian".'),
+    .enum(['explorer', 'worker', 'librarian'])
+    .describe('The subagent role to use: "explorer", "worker", or "librarian".'),
   task: z.string().describe('The full task description.'),
 });
 
@@ -121,8 +121,7 @@ export function getSubagentsRolesSection({ includeLibrarian = true }: { includeL
   if (!fs.existsSync(promptsDir)) {
     return (
       '## Roles\n' +
-      '- `explorer`: read-only workspace access. Use for locating files and answering codebase questions.\n' +
-      '- `researcher`: web search + read-only workspace. Use for looking up external docs or current information.\n' +
+      '- `explorer`: read-only workspace access + web search + safe shell commands. Use for locating files, answering codebase questions, and looking up external docs or current information.\n' +
       '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' +
       (includeLibrarian
         ? '- `librarian`: memory reasoning. Use for retrieving context from persistent memory and recommending memory maintenance.\n'
@@ -178,8 +177,7 @@ export function getSubagentsRolesSection({ includeLibrarian = true }: { includeL
 
   return (
     '## Roles\n' +
-    '- `explorer`: read-only workspace access. Use for locating files and answering codebase questions.\n' +
-    '- `researcher`: web search + read-only workspace. Use for looking up external docs or current information.\n' +
+    '- `explorer`: read-only workspace access + web search + safe shell commands. Use for locating files, answering codebase questions, and looking up external docs or current information.\n' +
     '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' +
     (includeLibrarian
       ? '- `librarian`: memory reasoning. Use for retrieving context from persistent memory and recommending memory maintenance.\n'

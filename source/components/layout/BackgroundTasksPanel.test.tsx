@@ -28,7 +28,7 @@ it.sequential('shows active count, short task label, role badge, status, and ela
         runningTask({ role: 'worker', task: 'implement the narrow background lifecycle panel' }),
         runningTask({
           runId: 'run-2',
-          role: 'researcher',
+          role: 'explorer',
           task: 'verify the event contract',
           startedAt: 61_000,
         }),
@@ -40,7 +40,7 @@ it.sequential('shows active count, short task label, role badge, status, and ela
   const output = renderer.lastFrame() ?? '';
   expect(output).toContain('Background tasks · 2 active');
   expect(output).toContain('Worker');
-  expect(output).toContain('Researcher');
+  expect(output).toContain('Explorer');
   expect(output).toContain('implement the narrow background lifecycle panel');
   expect(output).toContain('Running · 1m 05s');
   expect(output).toContain('Running · 5s');

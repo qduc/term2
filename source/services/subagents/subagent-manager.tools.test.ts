@@ -14,7 +14,6 @@ import {
   ROLE_MENTOR,
   ROLE_EXPLORER,
   ROLE_WORKER,
-  ROLE_RESEARCHER,
 } from './test-helpers/subagent-manager-fixtures.js';
 import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
 import { ModelBehaviorError } from '../../contracts/model-errors.js';
@@ -126,9 +125,8 @@ it('subagent tool definitions conditional registration for search tools', async 
   expect(workerAgentShellTrue.instructions.includes('use `shell` with commands like `rg`')).toBe(false);
 });
 
-it('explorer uses shell search when available and researcher keeps dedicated search tools', async () => {
+it('explorer uses shell search when available and keeps web tools', async () => {
   let explorerAgent: any = null;
-  let researcherAgent: any = null;
 
   const providerIdExplorer = registerTestProvider({
     label: 'Mock Tool Test Provider Explorer Shell',
@@ -136,19 +134,6 @@ it('explorer uses shell search when available and researcher keeps dedicated sea
       ({
         stream: async function* (agent: any) {
           explorerAgent = agent;
-          const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          yield* wrapResultAsAgentStream(result);
-        },
-      } as any),
-    fetchModels: async () => [{ id: 'gpt-5' }],
-  });
-
-  const providerIdResearcher = registerTestProvider({
-    label: 'Mock Tool Test Provider Researcher Dedicated',
-    createStreamedModel: () =>
-      ({
-        stream: async function* (agent: any) {
-          researcherAgent = agent;
           const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
           yield* wrapResultAsAgentStream(result);
         },
@@ -164,33 +149,17 @@ it('explorer uses shell search when available and researcher keeps dedicated sea
       'app.searchViaShell': 'auto',
     }),
     sessionContextService: createSessionContextService() as any,
-  }).run({ role: 'explorer', task: 'find files' });
-
-  await new TestSubagentManager({
-    logger: createMockLogger(),
-    settings: createMockSettings({
-      'agent.model': 'gpt-5',
-      'agent.provider': providerIdResearcher,
-      'app.searchViaShell': 'auto',
-    }),
-    sessionContextService: createSessionContextService() as any,
-  }).run({ role: 'researcher', task: 'research files' });
+  }).run({ role: 'explorer', task: 'find files and research docs' });
 
   expect(explorerAgent).toBeTruthy();
-  let toolNames: string[] = explorerAgent.tools.map((tool: any) => tool.name);
+  const toolNames: string[] = explorerAgent.tools.map((tool: any) => tool.name);
   expect(toolNames.includes('shell')).toBe(true);
+  expect(toolNames.includes('web_search')).toBe(true);
+  expect(toolNames.includes('web_fetch')).toBe(true);
   expect(toolNames.includes('grep')).toBe(false);
   expect(toolNames.includes('glob')).toBe(false);
   expect(explorerAgent.instructions.includes('For workspace search, use `shell` with commands like `rg`')).toBe(true);
   expect(explorerAgent.instructions.includes('For workspace search, use the dedicated search tools')).toBe(false);
-
-  expect(researcherAgent).toBeTruthy();
-  toolNames = researcherAgent.tools.map((tool: any) => tool.name);
-  expect(toolNames.includes('shell')).toBe(false);
-  expect(toolNames.includes('grep')).toBe(true);
-  expect(toolNames.includes('glob')).toBe(true);
-  expect(researcherAgent.instructions.includes('For workspace search, use the dedicated search tools')).toBe(true);
-  expect(researcherAgent.instructions.includes('use `shell` with commands like `rg`')).toBe(false);
 });
 
 it('remote execution disables code-context tools and guidance', async () => {

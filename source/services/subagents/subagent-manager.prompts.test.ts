@@ -14,7 +14,6 @@ import {
   ROLE_MENTOR,
   ROLE_EXPLORER,
   ROLE_WORKER,
-  ROLE_RESEARCHER,
 } from './test-helpers/subagent-manager-fixtures.js';
 import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
 import { ModelBehaviorError } from '../../contracts/model-errors.js';
@@ -48,7 +47,7 @@ it('subagent direct streamed model preserves the final response contract', async
 it('execution subagents select subagent-safe model-family prompts and append role instructions', async () => {
   let constructedAgentExplorer: any = null;
   let constructedAgentWorker: any = null;
-  let constructedAgentResearcher: any = null;
+  let constructedAgentGpt5: any = null;
 
   const providerIdCodex = registerTestProvider({
     label: 'Mock Prompt Test Provider GPT-5 Codex',
@@ -81,7 +80,7 @@ it('execution subagents select subagent-safe model-family prompts and append rol
     createStreamedModel: () =>
       ({
         stream: async function* (agent: any) {
-          constructedAgentResearcher = agent;
+          constructedAgentGpt5 = agent;
           const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
           yield* wrapResultAsAgentStream(result);
         },
@@ -131,7 +130,8 @@ it('execution subagents select subagent-safe model-family prompts and append rol
   const workerIdx = constructedAgentWorker.instructions.indexOf('You are a worker subagent');
   expect(sonnetIdx < workerIdx).toBe(true);
 
-  const managerResearcher = new TestSubagentManager({
+  // 3. Run explorer subagent with gpt-5
+  const managerGpt5Explorer = new TestSubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
       'agent.model': 'gpt-5',
@@ -140,11 +140,11 @@ it('execution subagents select subagent-safe model-family prompts and append rol
     sessionContextService: createSessionContextService() as any,
   });
 
-  await managerResearcher.run({ role: 'researcher', task: 'research task' });
+  await managerGpt5Explorer.run({ role: 'explorer', task: 'research task' });
 
-  expect(constructedAgentResearcher).toBeTruthy();
-  expect(constructedAgentResearcher.instructions.includes('nested GPT-5-family subagent')).toBe(true);
-  expect(constructedAgentResearcher.instructions.includes('You are a researcher subagent.')).toBe(true);
+  expect(constructedAgentGpt5).toBeTruthy();
+  expect(constructedAgentGpt5.instructions.includes('nested GPT-5-family subagent')).toBe(true);
+  expect(constructedAgentGpt5.instructions.includes('You are an explorer subagent.')).toBe(true);
 });
 
 it('execution subagent prompts exclude top-level-only prompt content', async () => {

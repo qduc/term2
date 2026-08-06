@@ -584,17 +584,17 @@ const isToolContinuationItem = (item: unknown): boolean => {
 };
 
 const findServerManagedDeltaStart = (input: unknown[]): number => {
-  let trailingToolResultStart = input.length;
-  // Walk backward through tool-continuation items (tool results and
-  // their interleaved function calls) so parallel outputs from the same
-  // model response stay together in the delta instead of leaking into
-  // the warmup. Items without a call id (user messages, assistant
-  // messages, reasoning) naturally stop the walk.
-  while (trailingToolResultStart > 0 && isToolContinuationItem(input[trailingToolResultStart - 1])) {
-    trailingToolResultStart--;
+  let endUserIndex = input.length;
+  while (endUserIndex > 0 && isUserInputMessage(input[endUserIndex - 1])) {
+    endUserIndex--;
   }
-  if (trailingToolResultStart < input.length) {
-    return trailingToolResultStart;
+
+  if (endUserIndex > 0 && isToolContinuationItem(input[endUserIndex - 1])) {
+    let toolStart = endUserIndex;
+    while (toolStart > 0 && isToolContinuationItem(input[toolStart - 1])) {
+      toolStart--;
+    }
+    return toolStart;
   }
 
   for (let index = input.length - 1; index >= 0; index--) {
@@ -683,27 +683,25 @@ const filterServerManagedInput = (input: unknown, consumedToolResultCallIds?: Re
   // produced since then.
 
   // Tool continuation: the input ends with a tool-call output answering the
-  // previous response's function call(s). A previous response may issue
-  // several parallel calls, and the reconstructed history pairs each call
-  // with its result (fc₁,fco₁,fc₂,fco₂,…) instead of grouping every output
-  // in one trailing block. Collect EVERY trailing tool-result item — walking
-  // back across tool results and their interleaved function calls (everything
-  // carrying a call id) — so the outputs for the earlier parallel calls are
-  // not dropped. Stopping at the first interleaved function call would send
-  // only the trailing output and the server rejects the request with a 400
-  // ("No tool output found for function call …"). The interleaved
-  // function-call items are then dropped because the server already holds
-  // them via previous_response_id.
-  if (isToolResultItem(input[input.length - 1])) {
-    let start = input.length - 1;
+  // previous response's function call(s) — or tool-call output(s) followed by
+  // user steer message(s) admitted mid-turn.
+  let endUserIndex = input.length;
+  while (endUserIndex > 0 && isUserInputMessage(input[endUserIndex - 1])) {
+    endUserIndex--;
+  }
+
+  if (endUserIndex > 0 && isToolResultItem(input[endUserIndex - 1])) {
+    let start = endUserIndex - 1;
     while (start > 0 && isToolContinuationItem(input[start - 1])) {
       start--;
     }
-    const trailing = input.slice(start);
+    const trailing = input.slice(start, endUserIndex);
     // A clean run of tool results (grouped layout) needs no filtering; for
     // the paired layout, drop the interleaved function-call items.
     const toolResults = trailing.every(isToolResultItem) ? trailing : trailing.filter(isToolResultItem);
-    return filterConsumedToolResults(toolResults, consumedToolResultCallIds);
+    const filteredToolResults = filterConsumedToolResults(toolResults, consumedToolResultCallIds);
+    const trailingUserMessages = input.slice(endUserIndex);
+    return [...(filteredToolResults as unknown[]), ...trailingUserMessages];
   }
 
   // Fresh user turn with no trailing tool output: the delta is the latest
@@ -1039,12 +1037,20 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       return undefined;
     }
 
+    const hasToolResultBeforeTrailingUserMessages = (items: readonly unknown[]): boolean => {
+      let endUserIndex = items.length;
+      while (endUserIndex > 0 && isUserInputMessage(items[endUserIndex - 1])) {
+        endUserIndex--;
+      }
+      return endUserIndex > 0 && isToolResultItem(items[endUserIndex - 1]);
+    };
+
     const input = request.input;
     const isInternalToolContinuation =
       Array.isArray(input) &&
       input.length > 1 &&
       input.some(isUserInputMessage) &&
-      isToolResultItem(input[input.length - 1]);
+      hasToolResultBeforeTrailingUserMessages(input);
     return isInternalToolContinuation ? this.codexPreviousResponseIds.get(key) : undefined;
   }
 

@@ -152,6 +152,16 @@ it('findChainedDeltaStart returns 0 for empty input', () => {
   expect(findChainedDeltaStart([])).toBe(0);
 });
 
+it('findChainedDeltaStart returns index of first tool result before trailing user steer message', () => {
+  const input = [
+    { role: 'user', content: 'hi' },
+    { type: 'function_call', callId: 'c1', name: 'shell', arguments: '{}' },
+    { type: 'function_call_output', callId: 'c1', output: 'r1' },
+    { role: 'user', content: 'steered message' },
+  ];
+  expect(findChainedDeltaStart(input)).toBe(2);
+});
+
 // --- filterChainedModelInput ---
 
 it('filterChainedModelInput returns modelData unchanged when input is not an array', () => {
@@ -209,6 +219,22 @@ it('filterChainedModelInput falls back to delta start when no matching callIds f
   // No matching callIds → falls back to findChainedDeltaStart → trailing tool result start at index 2
   const result = filterChainedModelInput(modelData, { toolResultCallIds: ['nonexistent'] });
   expect(result.input).toEqual([{ type: 'function_call_output', callId: 'c1', output: 'r1' }]);
+});
+
+it('filterChainedModelInput preserves tool results when user steer message follows them', () => {
+  const modelData = {
+    input: [
+      { role: 'user', content: 'hi' },
+      { type: 'function_call', callId: 'c1', name: 'shell', arguments: '{}' },
+      { type: 'function_call_output', callId: 'c1', output: 'r1' },
+      { role: 'user', content: 'steered message' },
+    ],
+  };
+  const result = filterChainedModelInput(modelData);
+  expect(result.input).toEqual([
+    { type: 'function_call_output', callId: 'c1', output: 'r1' },
+    { role: 'user', content: 'steered message' },
+  ]);
 });
 
 it('filterChainedModelInput preserves non-input properties on modelData', () => {

@@ -2188,6 +2188,116 @@ it('CodexResponsesWSModel preserves a tool-call chain when the websocket connect
   }
 });
 
+it('CodexResponsesWSModel preserves tool output when a user steer message follows tool results mid-turn', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5.6-luna', false);
+  const trafficBodies: any[] = [];
+  let requestCount = 0;
+  transport.fetchResponse = async function (request: any, stream: boolean, requestData: any) {
+    requestCount++;
+    if (requestCount === 1) {
+      return makeStream([
+        {
+          type: 'response.output_item.done',
+          item: {
+            type: 'function_call',
+            id: 'call_dUY49XDM2PcYLUlN0vQzCeKO',
+            call_id: 'call_dUY49XDM2PcYLUlN0vQzCeKO',
+            name: 'shell',
+            arguments: '{"command":"ls"}',
+          },
+        },
+        {
+          type: 'response.completed',
+          response: {
+            id: 'resp-tool-call',
+            output: [
+              {
+                type: 'function_call',
+                id: 'call_dUY49XDM2PcYLUlN0vQzCeKO',
+                call_id: 'call_dUY49XDM2PcYLUlN0vQzCeKO',
+                name: 'shell',
+                arguments: '{"command":"ls"}',
+              },
+            ],
+          },
+        },
+      ]);
+    }
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: 'resp-steered-turn',
+          output: [{ type: 'message', role: 'assistant', content: [{ type: 'text', text: 'Steer processed' }] }],
+        },
+      },
+    ]);
+  };
+
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficBodies.push(input.sentBody);
+    },
+    async recordResponseReceived() {},
+    recordRequestFailed() {},
+  };
+
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5.6-luna',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    undefined,
+    mockProviderTraffic,
+    {
+      getContext: () => ({ sessionId: 'session-steer-test', traceId: 'trace-steer-test' } as any),
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    },
+    transport,
+  );
+
+  // Turn 1: initial user message
+  await collect(
+    model.stream({
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'initial question' }] }],
+      tools: [],
+    } as any),
+  );
+
+  // Turn 2: tool result + steer message injected mid-turn
+  const steeredInput = [
+    { type: 'message', role: 'user', content: [{ type: 'text', text: 'initial question' }] },
+    { type: 'tool_call', id: 'call_dUY49XDM2PcYLUlN0vQzCeKO', name: 'shell', arguments: '{"command":"ls"}' },
+    { type: 'tool_result', id: 'call_dUY49XDM2PcYLUlN0vQzCeKO', output: 'file1.txt\nfile2.txt' },
+    { type: 'message', role: 'user', content: [{ type: 'text', text: 'steering message injected mid-turn' }] },
+  ];
+
+  await collect(
+    model.stream({
+      input: steeredInput,
+      previousResponseId: 'resp-tool-call',
+      tools: [],
+    } as any),
+  );
+
+  expect(trafficBodies).toHaveLength(3);
+  expect(trafficBodies[2].previous_response_id).toBe('resp-tool-call');
+  expect(trafficBodies[2].input).toEqual([
+    expect.objectContaining({
+      type: 'additional_tools',
+    }),
+    expect.objectContaining({
+      type: 'function_call_output',
+      call_id: 'call_dUY49XDM2PcYLUlN0vQzCeKO',
+      output: 'file1.txt\nfile2.txt',
+    }),
+    expect.objectContaining({
+      type: 'message',
+      role: 'user',
+      content: [{ type: 'input_text', text: 'steering message injected mid-turn' }],
+    }),
+  ]);
+});
+
 it('CodexResponsesWSModel invalidates Luna wire state on previous_response_not_found error', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const seenRequests: any[] = [];

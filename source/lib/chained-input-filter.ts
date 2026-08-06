@@ -110,12 +110,17 @@ export const isOrphanedChainedToolOutputError = (error: unknown): error is Orpha
  * inputs or new tool results.
  */
 export const findChainedDeltaStart = (input: unknown[]): number => {
-  let trailingToolResultStart = input.length;
-  while (trailingToolResultStart > 0 && isToolResultItem(input[trailingToolResultStart - 1])) {
-    trailingToolResultStart--;
+  let endUserIndex = input.length;
+  while (endUserIndex > 0 && isUserInputMessage(input[endUserIndex - 1])) {
+    endUserIndex--;
   }
-  if (trailingToolResultStart < input.length) {
-    return trailingToolResultStart;
+
+  if (endUserIndex > 0 && isToolResultItem(input[endUserIndex - 1])) {
+    let toolStart = endUserIndex;
+    while (toolStart > 0 && isToolResultItem(input[toolStart - 1])) {
+      toolStart--;
+    }
+    return toolStart;
   }
 
   for (let index = input.length - 1; index >= 0; index--) {

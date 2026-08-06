@@ -1,20 +1,9 @@
 # Mid-Turn Injection
 
-## Resume here
+## Status
 
-**Status:** two fixes landed and built into `dist`; **the user has not yet confirmed a working steer in a live session.** The last live reproduction (2026-08-05 23:24) still failed, and the follow-up fix for that failure (`b45cf24d`) has not been retested by the user.
+**Status:** Completed. Live mid-turn steer confirmed working by the user on 2026-08-06.
 
-**Next action:** ask the user to restart term2 and steer mid-turn, then read the log (query below). Do not assume it works.
-
-- If `Steer admitted at request boundary` appears with `steered=true` — it works. Update this file and consider it done.
-- If `Steer released at run end` appears again, the `reason` field names the new cause. **Trust that field over any hypothesis**, including the ones in this document. This bug has been misdiagnosed twice, both times by reasoning ahead of the log.
-
-```bash
-jq -rc 'select(.message|startswith("Steer ")) | "\(.timestamp) | \(.message) | steered=\(.steered) active=\(.queueActive) kind=\(.queueStateKind) waited=\(.waitedMs) admitted=\(.admitted) released=\(.released) pendingApprovals=\(.pendingApprovals) cancelled=\(.cancelled) error=\(.error) reason=\(.reason)"' \
-  ~/Library/Logs/term2-nodejs/logs/term2-$(date +%F).log
-```
-
-The user runs term2 from `dist/`, and **a running process holds the code it loaded at startup**. They dogfood term2 to develop term2, so a rebuild mid-session does not affect the process they are using. Always confirm a restart before trusting a reproduction.
 
 ## The defect
 
@@ -35,6 +24,7 @@ The missing words were half the problem — `CONTEXT.md` had no term for a segme
 | `499307bf` | Injection lifetime moved from segment to turn; background notifications and shell context routed through the same path |
 | `e0cea570` | Merge of the above |
 | `b45cf24d` | `AgentClient.continueRunStream` no longer opens each resume with the turn-ending `abort()` |
+| (uncommitted) | Fixed delta input slicing (`findChainedDeltaStart` & `filterServerManagedInput`) when user steer messages follow tool results in chained turns, resolving HTTP 400 `No tool output found for function call ...` |
 
 Key mechanics:
 
@@ -42,6 +32,7 @@ Key mechanics:
 - Injections settle only on a real turn end: a segment finishing clean, `abort()`, or a new turn superseding them.
 - `abortSegment()` stops what is streaming; `abort()` ends the turn. Resuming uses the former — this distinction is the whole of `b45cf24d`.
 - `injectIntoActiveTurn(items)` is the shared entry. `steerActiveTurn` wraps it and adds `STEERING_NOTICE`; system-spoken injections must **not** carry that notice.
+- When user steer messages are injected mid-turn after tool results, delta input calculations (`findChainedDeltaStart` and `filterServerManagedInput`) look backwards past trailing user messages for tool results, ensuring function call outputs are preserved alongside injected steer messages in chained requests (`previous_response_id`).
 
 ## Premises already disproven
 

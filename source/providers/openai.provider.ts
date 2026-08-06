@@ -14,6 +14,13 @@ export {
 } from './openai-responses-model.js';
 
 const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
+const OPENAI_CAPABILITIES = {
+  supportsConversationChaining: true,
+  supportsContextCompaction: true,
+  supportsPromptCacheKey: true,
+  usesStrictToolSchema: true,
+  nativePatchModelPrefixes: ['gpt-5.1'],
+};
 
 /**
  * Observe retries at the SDK transport boundary. OpenAI's fetch hook sees the
@@ -101,17 +108,22 @@ registerProvider({
 
     const selectedModel =
       settingsService.get('agent.transport') === 'http'
-        ? new OpenAIResponsesModelWithPromptCacheKey(openAIClient, model || defaultModel, requestCapture)
-        : new OpenAIResponsesWSModelWithPromptCacheKey(openAIClient, model || defaultModel, requestCapture);
+        ? new OpenAIResponsesModelWithPromptCacheKey(
+            openAIClient,
+            model || defaultModel,
+            requestCapture,
+            OPENAI_CAPABILITIES.supportsContextCompaction,
+          )
+        : new OpenAIResponsesWSModelWithPromptCacheKey(
+            openAIClient,
+            model || defaultModel,
+            requestCapture,
+            OPENAI_CAPABILITIES.supportsContextCompaction,
+          );
     return selectedModel;
   },
   fetchModels: fetchOpenAIModels,
   clearConversations: undefined, // No conversation state to clear
   sensitiveSettingKeys: [],
-  capabilities: {
-    supportsConversationChaining: true,
-    supportsPromptCacheKey: true,
-    usesStrictToolSchema: true,
-    nativePatchModelPrefixes: ['gpt-5.1'],
-  },
+  capabilities: OPENAI_CAPABILITIES,
 });

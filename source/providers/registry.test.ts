@@ -77,6 +77,7 @@ it('openai provider exposes capabilities without requiring credentials', () => {
   const provider = getProvider('openai');
   expect(provider?.capabilities).toEqual({
     supportsConversationChaining: true,
+    supportsContextCompaction: true,
     usesStrictToolSchema: true,
     supportsPromptCacheKey: true,
     nativePatchModelPrefixes: ['gpt-5.1'],

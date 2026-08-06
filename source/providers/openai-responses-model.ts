@@ -108,6 +108,14 @@ function toResponsesApiInput(input: readonly StreamedModelTurnInput[]): unknown[
         ...(encryptedContent !== undefined ? { encrypted_content: encryptedContent } : {}),
       };
     }
+    if (item?.type === 'provider_opaque') {
+      if (item.provider !== 'openai') {
+        throw new Error(
+          `Refusing to splice provider_opaque from '${item.provider}' into an OpenAI request: opaque items are only valid on the provider that produced them`,
+        );
+      }
+      return item.item;
+    }
     return item;
   });
 }
@@ -224,7 +232,14 @@ function toTurnOutput(item: any): StreamedModelTurnOutput {
       ...(providerMetadata ? { providerMetadata } : {}),
     };
   }
-  throw new Error(`Unsupported OpenAI Responses output item: ${String(item?.type ?? 'unknown')}`);
+  // Anything else is provider-native and opaque: carry it through untouched
+  // rather than failing the turn. Compaction items are the first such type;
+  // future Responses item kinds flow the same way.
+  return {
+    type: 'provider_opaque',
+    provider: 'openai',
+    item,
+  };
 }
 
 function responseStatusError(status: 'failed' | 'incomplete', response: any): Error {

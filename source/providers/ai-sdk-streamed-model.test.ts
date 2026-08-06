@@ -347,3 +347,29 @@ it('preserves missing token totals without turning them into zero', async () => 
     },
   ]);
 });
+
+it('refuses to serialize a provider_opaque item through the AI SDK', async () => {
+  const model = createAiSdkStreamedModel({
+    provider: 'example',
+    modelId: 'model',
+    specificationVersion: 'v3',
+    supportedUrls: {},
+    async doGenerate() {
+      return {} as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
+    },
+    async doStream() {
+      throw new Error('should not be reached');
+    },
+  } as unknown as LanguageModelV3);
+
+  await expect(
+    collect(
+      model.stream({
+        input: [
+          { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', encrypted_content: 'blob' } },
+        ],
+        tools: [],
+      }),
+    ),
+  ).rejects.toThrow(/provider_opaque/);
+});

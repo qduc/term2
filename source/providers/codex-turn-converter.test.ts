@@ -117,3 +117,13 @@ describe('Codex streamed-turn conversion', () => {
     ).toThrow('inline data requires a filename');
   });
 });
+
+describe('provider_opaque rejection', () => {
+  it('refuses to serialize a provider_opaque item into a Codex request', () => {
+    expect(() =>
+      toCodexResponsesInput([
+        { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', encrypted_content: 'blob' } },
+      ]),
+    ).toThrow(/provider_opaque/);
+  });
+});

@@ -19,6 +19,13 @@ export interface ProviderInputItem {
   output?: unknown;
   content?: unknown;
   providerData?: Record<string, unknown>;
+  /**
+   * Marks an item as provider-native and opaque. Set only by the adapter that
+   * produced the item; the run loop carries the item through untouched and no
+   * other provider may re-serialize it. Absent for all application-modeled
+   * items.
+   */
+  providerOpaque?: { provider: string };
   [key: string]: unknown;
 }
 

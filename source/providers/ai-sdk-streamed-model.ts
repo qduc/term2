@@ -278,6 +278,10 @@ function toPromptMessage(item: StreamedModelTurnInput, toolNames: Map<string, st
       role: 'assistant',
       content: [{ type: 'tool-call', toolCallId: item.id, toolName: item.name, input: parseJson(item.arguments) }],
     };
+  if (item.type === 'provider_opaque')
+    throw new Error(
+      `Refusing to serialize provider_opaque from '${item.provider}' through the AI SDK: opaque items are only valid on the provider that produced them`,
+    );
   const toolName = toolNames.get(item.id);
   if (!toolName) throw new Error(`AI SDK tool result has no matching tool call: ${item.id}`);
   return {

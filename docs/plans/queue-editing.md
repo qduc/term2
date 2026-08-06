@@ -2,10 +2,9 @@
 
 ## Resume here
 
-**Steps 1–2 (`## Build order`) are done and merged to `main`** (`ccc02324`,
-feature branch `queue-editing-substrate`, commit `b5f31095`). Step 3 is being
-re-derived on the isolated `queue-editing-step3-rederive` branch; Step 4 is
-still design-only. Read `## The three stages` before
+**Steps 1–3 (`## Build order`) are done and merged to `main`**: Steps 1–2 are
+`ccc02324` / `b5f31095`, and the re-derived Step 3 is merge commit `f1eebcc5`
+(implementation `19a3f22d`). Step 4 is still design-only. Read `## The three stages` before
 touching `ConversationOrchestrator`, `ConversationService`, or the
 `pendingQueuedMessages` reducer slice — the substrate below only closes the gap
 between the run loop and the adapter; the UI still addresses queued work by

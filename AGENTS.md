@@ -35,17 +35,25 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 ## Active or deferred
 
 - `docs/plans/openai-context-compaction.md` — OpenAI context compaction (server-side
-  `context_management`). Step 1 (opaque provider-item lane) is merged; resume at Step 2
-  (persistence/replay/redaction). Read it before touching the OpenAI adapter, the run loop,
-  `ConversationStore`/`conversation-turn-items`, or conversation persistence: it records the
-  closed-union/throw-site findings and the `provider_opaque` marker contract.
+  `context_management`). Step 1 (opaque provider-item lane) is merged. **Step 2 was in flight on
+  branch `compaction-persistence` when the session ended, implemented but sent back for one
+  correction — check that branch before starting.** Then resume at Step 3. Read the plan before
+  touching the OpenAI adapter, the run loop, `ConversationStore`/`conversation-turn-items`, or
+  conversation persistence: it records the closed-union/throw-site findings, the
+  `provider_opaque` marker contract, and Round 3's live measurements, which settle Step 4's
+  retained-prefix decision and add a `compact_threshold >= 1000` floor plus a second (typed 400)
+  failure class distinct from the opaque 500.
 
 - `docs/plans/queue-editing.md` — editing and deleting a prompt submitted while a turn is in
-  flight. Design only, nothing implemented; start at Step 1. Read it before touching
+  flight. **Steps 1–2 merged (`ccc02324`); Step 3 was in flight on branch `queue-editing-wiring`
+  when the session ended — check whether that branch exists and is merged before starting
+  anything.** Resume at Step 3 or 4 accordingly. Read it before touching
   `ApplicationRunLoop.steer`, `ConversationAdapter`'s queue path, `QueueController`, or the
   `pendingQueuedMessages` reducer slice: it records that one submission lives in two places
-  under one id, why `edit_queued` alone silently sends the old text, and two live up-arrow
-  defects that are symptoms of addressing queued work by position.
+  under one id, why `edit_queued` alone silently sends the old text, two live up-arrow
+  defects that are symptoms of addressing queued work by position, and two defects found in
+  merge review of Steps 1–2 that Step 3 must fix (a non-rolled-back `editSubmission` that can
+  double-send, and an unwired `retractSteer` that misreports as "already sent").
 
 - Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
 

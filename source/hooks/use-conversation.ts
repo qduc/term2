@@ -194,7 +194,7 @@ export const useConversation = ({
           dispatch({ type: 'queue/message_pending', id, text, queuedAt: Date.now() }),
         onQueuedMessageStarted: (id) => dispatch({ type: 'queue/message_started', id }),
         onQueuedMessageRemoved: (id) => dispatch({ type: 'queue/message_removed', id }),
-        onRemoveLastPendingMessage: () => dispatch({ type: 'queue/remove_last_pending' }),
+        onQueuedMessageEdited: (id, text) => dispatch({ type: 'queue/message_edited', id, text }),
       },
       approvedContext: approvedContextRef,
       usageAccumulator,
@@ -253,6 +253,16 @@ export const useConversation = ({
 
   const removeLastQueuedPendingMessage = useCallback(
     () => orchestrator.removeLastQueuedPendingMessage(),
+    [orchestrator],
+  );
+
+  const retractPendingSubmission = useCallback(
+    (id: string) => orchestrator.retractPendingSubmission(id),
+    [orchestrator],
+  );
+
+  const editPendingSubmission = useCallback(
+    (id: string, turn: UserTurn) => orchestrator.editPendingSubmission(id, turn),
     [orchestrator],
   );
 
@@ -366,5 +376,7 @@ export const useConversation = ({
     resumeQueue: () => conversationService.resumeQueue(),
     discardQueue: () => conversationService.discardQueue(),
     removeLastQueuedPendingMessage,
+    retractPendingSubmission,
+    editPendingSubmission,
   };
 };

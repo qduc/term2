@@ -17,6 +17,7 @@ import type {
   ConversationAdapter,
   ConversationEventSink,
   QueuedTurnStartObserver,
+  SubmissionMutation,
 } from './conversation-adapter.js';
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 import type { InputSurgeDecision } from '../input-surge-guard.js';
@@ -325,6 +326,14 @@ export class ConversationService {
     return this.#adapter.removeLastQueuedItem();
   }
 
+  retractSubmission(id: string): Promise<SubmissionMutation> {
+    return this.#adapter.retractSubmission(id);
+  }
+
+  editSubmission(id: string, turn: UserTurn): Promise<SubmissionMutation> {
+    return this.#adapter.editSubmission(id, turn);
+  }
+
   /**
    * Deliver a user message into the turn already running, so the model reads it
    * mid-turn — after the tool results of the round in flight — instead of after
@@ -334,8 +343,8 @@ export class ConversationService {
    * (it is finishing, or parked on an approval); the caller then sends the
    * message as its own turn.
    */
-  steerActiveTurn(input: string | UserTurn): Promise<boolean> {
-    return this.#adapter.steerActiveTurn(input);
+  steerActiveTurn(input: string | UserTurn, options?: { id?: string }): Promise<boolean> {
+    return this.#adapter.steerActiveTurn(input, options);
   }
 
   /** Deliver pre-built items into the running turn. See the adapter for terms. */

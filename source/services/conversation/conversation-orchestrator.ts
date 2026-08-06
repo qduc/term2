@@ -3,6 +3,7 @@ import { ASK_USER_DECLINE_RESULT } from '../../tools/agent/ask-user-constants.js
 import { createMessageIdFactory } from '../../utils/message-id-factory.js';
 import type { ConversationOrchestratorConfig, AskUserAnswer } from './conversation-orchestrator.types.js';
 import type { ConversationEvent } from './conversation-events.js';
+import type { SubmissionMutation } from './conversation-adapter.js';
 import type { BotMessage, CommandMessage, UserMessage } from '../../types/message.js';
 import { isUserMessage } from '../../types/message.js';
 import type { ConversationTerminal, PendingApproval } from '../../contracts/conversation.js';
@@ -134,6 +135,14 @@ export class ConversationOrchestrator {
    */
   readonly #deferredTurnActivators = new Map<string, () => void>();
   /**
+   * A pending steer retracted through the id-addressed mutation path. The
+   * adapter intentionally keeps the shared steer API boolean, so this marker
+   * distinguishes a deliberate retraction from an ordinary failed steer.
+   */
+  readonly #retractedSteerIds = new Set<string>();
+  /** Latest user turn for a pending steer edited before admission. */
+  readonly #editedSteerTurns = new Map<string, UserTurn>();
+  /**
    * Turns this orchestrator currently owns. Count only executions that have
    * actually started (direct submit or queue-start activation), never merely
    * queued awaits.
@@ -225,6 +234,8 @@ export class ConversationOrchestrator {
     this.config.subagentUsageAccumulator?.reset();
     this.#directlyAppendedMessageIds.clear();
     this.#displayedBackgroundNotificationMessageIds.clear();
+    this.#retractedSteerIds.clear();
+    this.#editedSteerTurns.clear();
   }
 
   stopProcessing(): void {
@@ -251,6 +262,8 @@ export class ConversationOrchestrator {
       this.config.ui.onResetTransient();
       this.#directlyAppendedMessageIds.clear();
       this.#displayedBackgroundNotificationMessageIds.clear();
+      this.#retractedSteerIds.clear();
+      this.#editedSteerTurns.clear();
       this.config.conversationService.backgroundSubagentNotifications?.drain();
     } finally {
       this.#stoppingByUser = false;
@@ -320,13 +333,38 @@ export class ConversationOrchestrator {
     // The pending indicator above the input box is managed by the UI. The
     // adapter already removed the matching internal entry, but the UI state
     // is still showing it until we tell it to drop the last entry.
-    if (this.config.ui.onQueuedMessageRemoved) {
-      this.config.ui.onQueuedMessageRemoved(result.id);
-    } else {
-      this.config.ui.onRemoveLastPendingMessage?.();
-    }
+    this.config.ui.onQueuedMessageRemoved?.(result.id);
 
     return result.text;
+  }
+
+  async retractPendingSubmission(id: string): Promise<SubmissionMutation> {
+    const service = this.config.conversationService;
+    if (typeof service.retractSubmission !== 'function') return { kind: 'unknown_id' };
+
+    const result = await service.retractSubmission(id);
+    if (result.kind === 'applied') {
+      if (result.stage === 'pending_steer') {
+        this.#retractedSteerIds.add(id);
+        this.#editedSteerTurns.delete(id);
+      }
+      this.config.ui.onQueuedMessageRemoved?.(id);
+    }
+    return result;
+  }
+
+  async editPendingSubmission(id: string, turn: UserTurn): Promise<SubmissionMutation> {
+    const service = this.config.conversationService;
+    if (typeof service.editSubmission !== 'function') return { kind: 'unknown_id' };
+
+    const result = await service.editSubmission(id, turn);
+    if (result.kind === 'applied') {
+      if (result.stage === 'pending_steer') {
+        this.#editedSteerTurns.set(id, structuredClone(normalizeUserTurn(turn)));
+      }
+      this.config.ui.onQueuedMessageEdited?.(id, formatUserTurnForDisplay(normalizeUserTurn(turn)));
+    }
+    return result;
   }
 
   async retryLastToolOutput(): Promise<boolean> {
@@ -431,10 +469,12 @@ export class ConversationOrchestrator {
         const queueActive = this.config.conversationService.isQueueActive?.() ?? false;
         const queueStateKind = this.config.conversationService.queueStateKind?.() ?? 'unknown';
         const steerStartedAt = Date.now();
-        const steered = await this.config.conversationService.steerActiveTurn(turn).catch((error) => {
-          this.logError('Error steering the active turn', error);
-          return false;
-        });
+        const steered = await this.config.conversationService
+          .steerActiveTurn(turn, { id: userMessage.id })
+          .catch((error) => {
+            this.logError('Error steering the active turn', error);
+            return false;
+          });
         this.config.loggingService.info('Steer attempt resolved', {
           steered,
           queueActive,
@@ -443,11 +483,24 @@ export class ConversationOrchestrator {
           messageId: userMessage.id,
         });
         if (steered) {
+          const admittedTurn = this.#editedSteerTurns.get(userMessage.id) ?? turn;
+          this.#editedSteerTurns.delete(userMessage.id);
+          const { skill: _originalSkill, ...messageWithoutSkill } = userMessage;
+          const admittedMessage: UserMessage = {
+            ...messageWithoutSkill,
+            text: formatUserTurnForDisplay(admittedTurn),
+            ...(admittedTurn.skill ? { skill: admittedTurn.skill } : {}),
+          };
           this.config.ui.onQueuedMessageStarted?.(userMessage.id);
-          this.config.messages.appendMessages([userMessage]);
-          this.config.logWriter?.append({ type: 'user_message', message: { ...userMessage } });
+          this.config.messages.appendMessages([admittedMessage]);
+          this.config.logWriter?.append({ type: 'user_message', message: { ...admittedMessage } });
           return;
         }
+        if (this.#retractedSteerIds.delete(userMessage.id)) {
+          this.#editedSteerTurns.delete(userMessage.id);
+          return;
+        }
+        this.#editedSteerTurns.delete(userMessage.id);
       }
     } else {
       // No turn is in flight — append directly. The queue observer will also

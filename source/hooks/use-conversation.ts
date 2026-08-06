@@ -251,11 +251,6 @@ export const useConversation = ({
     [orchestrator],
   );
 
-  const removeLastQueuedPendingMessage = useCallback(
-    () => orchestrator.removeLastQueuedPendingMessage(),
-    [orchestrator],
-  );
-
   const retractPendingSubmission = useCallback(
     (id: string) => orchestrator.retractPendingSubmission(id),
     [orchestrator],
@@ -375,7 +370,6 @@ export const useConversation = ({
     pendingQueuedMessages,
     resumeQueue: () => conversationService.resumeQueue(),
     discardQueue: () => conversationService.discardQueue(),
-    removeLastQueuedPendingMessage,
     retractPendingSubmission,
     editPendingSubmission,
   };

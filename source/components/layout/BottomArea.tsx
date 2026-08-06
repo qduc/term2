@@ -26,6 +26,7 @@ import type { QueuePauseReason } from '../../services/queue/queue-controller.js'
 import type { BackgroundSubagentTask } from '../../services/subagents/subagent-notification-store.js';
 import BackgroundTasksPanel from './BackgroundTasksPanel.js';
 import { deriveInputOwner } from '../../lib/input-owner.js';
+import type { SubmissionMutation } from '../../services/conversation/conversation-adapter.js';
 
 export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;
@@ -82,14 +83,10 @@ export type BottomAreaProps = {
   onResumeQueue?: () => void;
   onDiscardQueue?: () => void;
   pendingQueuedMessages?: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
+  onRetractQueuedMessage?: (id: string) => Promise<SubmissionMutation>;
+  onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
   backgroundSubagentTasks?: readonly BackgroundSubagentTask[];
   backgroundSubagentTasksNow?: number;
-  /**
-   * Cancel the most recently queued message and resolve with its text so it
-   * can be restored to the input box. The InputBox invokes this when the user
-   * presses up-arrow on an empty input.
-   */
-  onCancelQueuedMessage?: () => Promise<string | null>;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -144,9 +141,10 @@ const BottomArea: FC<BottomAreaProps> = ({
   onResumeQueue,
   onDiscardQueue,
   pendingQueuedMessages = [],
+  onRetractQueuedMessage,
+  onEditQueuedMessage,
   backgroundSubagentTasks = [],
   backgroundSubagentTasksNow = Date.now(),
-  onCancelQueuedMessage,
 }) => {
   const [dotCount, setDotCount] = useState(1);
   const [thinkingElapsedSeconds, setThinkingElapsedSeconds] = useState(() =>
@@ -213,21 +211,6 @@ const BottomArea: FC<BottomAreaProps> = ({
 
   return (
     <Box flexDirection="column" width="100%">
-      {pendingQueuedMessages.length > 0 && (
-        <Box flexDirection="column" marginTop={1} marginBottom={1}>
-          {pendingQueuedMessages.map((msg) => {
-            const preview = msg.text.length > 80 ? `${msg.text.slice(0, 80)}…` : msg.text;
-            return (
-              <Box key={msg.id} flexDirection="row">
-                <Text color="#94a3b8">⏳ Queued: </Text>
-                <Text color="#cbd5e1" dimColor>
-                  {preview}
-                </Text>
-              </Box>
-            );
-          })}
-        </Box>
-      )}
       <Box flexDirection="column" marginTop={1}>
         {showHandoffConfirm ? (
           <HandoffConfirmationPrompt
@@ -305,7 +288,8 @@ const BottomArea: FC<BottomAreaProps> = ({
                 onSlashTabComplete={onSlashTabComplete}
                 skillsService={skillsService}
                 pendingQueuedMessages={pendingQueuedMessages}
-                onCancelQueuedMessage={onCancelQueuedMessage}
+                onRetractQueuedMessage={onRetractQueuedMessage}
+                onEditQueuedMessage={onEditQueuedMessage}
                 promptLabel={
                   waitingForAskUserAnswer
                     ? 'Answer: '

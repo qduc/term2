@@ -315,29 +315,6 @@ export class ConversationOrchestrator {
     return listUndoableUserMessageIndices(this.config.messages.getMessages()).length;
   }
 
-  /**
-   * Cancel the most recently queued message and return its text so the UI
-   * can move it back into the input box. Returns null when there are no
-   * pending queued messages, the service cannot cancel the tail item, or the
-   * service does not implement cancellation.
-   */
-  async removeLastQueuedPendingMessage(): Promise<string | null> {
-    const service = this.config.conversationService;
-    if (typeof service.removeLastQueuedItem !== 'function') {
-      return null;
-    }
-
-    const result = await service.removeLastQueuedItem();
-    if (!result) return null;
-
-    // The pending indicator above the input box is managed by the UI. The
-    // adapter already removed the matching internal entry, but the UI state
-    // is still showing it until we tell it to drop the last entry.
-    this.config.ui.onQueuedMessageRemoved?.(result.id);
-
-    return result.text;
-  }
-
   async retractPendingSubmission(id: string): Promise<SubmissionMutation> {
     const service = this.config.conversationService;
     if (typeof service.retractSubmission !== 'function') return { kind: 'unknown_id' };

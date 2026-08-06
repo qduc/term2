@@ -59,7 +59,6 @@ function mockConversationService(): ConversationService {
     isQueueOwningSubmissions: vi.fn(() => false),
     setQueueStateObserver: vi.fn(),
     setQueuedTurnStartObserver: vi.fn(),
-    removeLastQueuedItem: vi.fn(async () => null),
     retractSubmission: vi.fn(async () => ({ kind: 'unknown_id' })),
     editSubmission: vi.fn(async () => ({ kind: 'unknown_id' })),
   } as unknown as ConversationService;
@@ -615,21 +614,6 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.ui.onTurnStart).toHaveBeenCalledOnce();
   });
 
-  it('cancels the last queued message and returns its text', async () => {
-    const cfg = makeConfig();
-    const orchestrator = new ConversationOrchestrator(cfg);
-    vi.mocked(cfg.conversationService.removeLastQueuedItem).mockResolvedValue({
-      id: 'queued-1',
-      text: 'restored message',
-    });
-
-    const restored = await orchestrator.removeLastQueuedPendingMessage();
-
-    expect(restored).toBe('restored message');
-    expect(cfg.conversationService.removeLastQueuedItem).toHaveBeenCalledTimes(1);
-    expect(cfg.ui.onQueuedMessageRemoved).toHaveBeenCalledWith('queued-1');
-  });
-
   it('retractPendingSubmission removes the UI row only when the mutation applies', async () => {
     const cfg = makeConfig();
     const orchestrator = new ConversationOrchestrator(cfg);
@@ -835,25 +819,5 @@ describe('ConversationOrchestrator', () => {
     const beforeCalls = vi.mocked(cfg.messages.appendMessages).mock.calls.length;
     observer({ requestId: directlyAppendedId, input: 'first' });
     expect(vi.mocked(cfg.messages.appendMessages).mock.calls.length).toBe(beforeCalls + 1);
-  });
-
-  it('returns null and skips the UI hook when no queued message can be cancelled', async () => {
-    const cfg = makeConfig();
-    const orchestrator = new ConversationOrchestrator(cfg);
-    vi.mocked(cfg.conversationService.removeLastQueuedItem).mockResolvedValue(null);
-
-    const restored = await orchestrator.removeLastQueuedPendingMessage();
-
-    expect(restored).toBeNull();
-  });
-
-  it('returns null and skips the adapter when the service cannot cancel queued items', async () => {
-    const cfg = makeConfig();
-    (cfg.conversationService as any).removeLastQueuedItem = undefined;
-    const orchestrator = new ConversationOrchestrator(cfg);
-
-    const restored = await orchestrator.removeLastQueuedPendingMessage();
-
-    expect(restored).toBeNull();
   });
 });

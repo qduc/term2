@@ -45,7 +45,6 @@ const baseProps: BottomAreaProps = {
   queuePauseReason: undefined,
   onResumeQueue: () => {},
   onDiscardQueue: () => {},
-  onCancelQueuedMessage: () => Promise.resolve(null),
 };
 
 const renderBottomArea = async (props: typeof baseProps) => {
@@ -431,7 +430,7 @@ it.sequential('BottomArea renders the queued message above the input box', async
     pendingQueuedMessages: [{ id: 'q-1', text: 'Follow-up question about the previous answer', queuedAt: 1000 }],
   });
   const output = lastFrame() ?? '';
-  expect(output.includes('⏳ Queued:')).toBe(true);
+  expect(output.includes('⏳ Queued 1.')).toBe(true);
   expect(output.includes('Follow-up question about the previous answer')).toBe(true);
   act(() => {
     unmount();
@@ -445,7 +444,7 @@ it.sequential('BottomArea truncates queued previews longer than 80 characters', 
     pendingQueuedMessages: [{ id: 'q-1', text: longText, queuedAt: 1000 }],
   });
   const output = lastFrame() ?? '';
-  expect(output.includes('⏳ Queued:')).toBe(true);
+  expect(output.includes('⏳ Queued 1.')).toBe(true);
   expect(output.includes('a'.repeat(80) + '…')).toBe(true);
   expect(output.includes('a'.repeat(81))).toBe(false);
   act(() => {

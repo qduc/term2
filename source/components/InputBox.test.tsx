@@ -20,6 +20,7 @@ import { useModelSelection } from '../hooks/use-model-selection.js';
 import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
 import { renderInAct, toVisibleText } from '../test-helpers/ink-testing.js';
 import type { UserTurn } from '../types/user-turn.js';
+import type { SubmissionMutation } from '../services/conversation/conversation-adapter.js';
 
 vi.mock('../services/file-service.js', () => ({
   getWorkspaceEntries: vi.fn(async () => [{ path: 'mock/path', type: 'file' }]),
@@ -52,6 +53,9 @@ type TestProps = {
   promptLabel?: string;
   onSystemMessage?: (text: string) => void;
   providersMenuRef?: React.MutableRefObject<{ open: () => void } | null>;
+  pendingQueuedMessages?: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
+  onRetractQueuedMessage?: (id: string) => Promise<SubmissionMutation>;
+  onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
 };
 
 const createMockLoggingService = (): LoggingService =>
@@ -188,6 +192,59 @@ it.sequential('InputBox shows the input prompt', async () => {
   const output = lastFrame();
   // Should show the prompt character
   expect(output!.includes('❯')).toBe(true);
+});
+
+it.sequential('up enters the queued selector at the bottom item and edit submits by id', async () => {
+  const edits: Array<{ id: string; turn: UserTurn }> = [];
+  const { lastFrame, stdin } = await renderAndFlush(
+    <TestInputBox
+      {...defaultProps}
+      pendingQueuedMessages={[
+        { id: 'q-1', text: 'first queued', queuedAt: 1 },
+        { id: 'q-2', text: 'second queued', queuedAt: 2 },
+      ]}
+      onEditQueuedMessage={async (id, turn) => {
+        edits.push({ id, turn });
+        return { kind: 'applied', stage: 'queued' };
+      }}
+    />,
+  );
+
+  await writeInput(stdin, '\u001B[A');
+  expect(lastFrame()).toContain('> ⏳ Queued 2. second queued');
+
+  await writeInput(stdin, 'e');
+  expect(lastFrame()).toContain('edit 2 ▸');
+  await writeInput(stdin, ' updated');
+  await writeInput(stdin, '\r');
+
+  await waitForCondition(
+    () => edits.length,
+    (count) => count === 1,
+  );
+  expect(edits).toEqual([{ id: 'q-2', turn: { text: 'second queued updated' } }]);
+});
+
+it.sequential('up past the top queued item reaches input history', async () => {
+  const historyService = {
+    getMessages: () => [],
+    getTurns: () => [{ text: 'sent earlier' }],
+    addMessage: () => {},
+    clear: () => {},
+  } as unknown as HistoryService;
+  const { lastFrame, stdin } = await renderAndFlush(
+    <TestInputBox
+      {...defaultProps}
+      historyService={historyService}
+      pendingQueuedMessages={[{ id: 'q-1', text: 'waiting steer', queuedAt: 1 }]}
+    />,
+  );
+
+  await writeInput(stdin, '\u001B[A');
+  expect(lastFrame()).toContain('> ⏳ Queued 1. waiting steer');
+  await writeInput(stdin, '\u001B[A');
+  expect(lastFrame()).toMatch(/s\s*e\s*n\s*t\s*e\s*a\s*r\s*l\s*i\s*e\s*r/);
+  expect(lastFrame()).not.toContain('> ⏳ Queued');
 });
 
 it.sequential('InputBox shows the shell prompt when in shell mode', async () => {

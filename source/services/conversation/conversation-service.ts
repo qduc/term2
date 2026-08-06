@@ -313,19 +313,6 @@ export class ConversationService {
     return this.#adapter.discardQueue();
   }
 
-  /**
-   * Remove the most recently queued message from the queue and return its
-   * text so the caller can move it back to the input box. Returns null when
-   * the queue is empty, the adapter has no queue, or the controller rejects
-   * the removal.
-   */
-  removeLastQueuedItem(): Promise<{ id: string; text: string } | null> {
-    if (typeof this.#adapter.removeLastQueuedItem !== 'function') {
-      return Promise.resolve(null);
-    }
-    return this.#adapter.removeLastQueuedItem();
-  }
-
   retractSubmission(id: string): Promise<SubmissionMutation> {
     return this.#adapter.retractSubmission(id);
   }

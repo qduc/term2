@@ -535,36 +535,6 @@ export class ConversationAdapter {
     this.#notifyQueueState();
   }
 
-  /**
-   * Remove the last (most recently queued) item from the queue and return its
-   * text so the caller can move it back to the input box. Returns null when
-   * the queue is empty, the adapter has no queue (pass-through mode), or the
-   * underlying controller rejects the removal.
-   *
-   * The item is correlated by its controller id, never its queue position.
-   */
-  async removeLastQueuedItem(): Promise<{ id: string; text: string } | null> {
-    const queue = this.#queue;
-    if (!queue) return null;
-
-    const state = queue.state();
-    if (state.queue.length === 0) return null;
-
-    // The queue is FIFO. The "last" queued item is the one at the tail.
-    const lastItem = state.queue[state.queue.length - 1]!;
-    // Prefer the in-memory turn text: controller text may be a non-text placeholder.
-    const pending = this.#messagesById.get(lastItem.id);
-    const restoredText = pending
-      ? normalizeUserTurn(pending.input).text
-      : lastItem.text === QUEUED_NON_TEXT_PLACEHOLDER || lastItem.text === LEGACY_QUEUED_MESSAGE_PLACEHOLDER
-      ? ''
-      : lastItem.text;
-
-    const result = await this.retractSubmission(lastItem.id);
-    if (result.kind !== 'applied') return null;
-    return { id: lastItem.id, text: restoredText };
-  }
-
   abort(): void {
     if (!this.#queue) {
       this.#turnFlow.abort?.();

@@ -7,6 +7,13 @@ import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
 
 const isEmptyUsage = (usage: NormalizedUsage | undefined): boolean => !usage || Object.keys(usage).length === 0;
 
+/**
+ * The collector observed a stream end before the run loop emitted a terminal
+ * event. It is still unsafe to replay, but its provenance lets cancellation
+ * handling distinguish this local exhaustion from a provider-origin ambiguity.
+ */
+export class TerminalResultCollectorExhaustionError extends AmbiguousModelOutcomeError {}
+
 export async function collectTerminalResult(
   events: AsyncIterable<ConversationEvent>,
   {
@@ -158,7 +165,9 @@ export async function collectTerminalResult(
   }
 
   if (!hasFinalEvent) {
-    throw new AmbiguousModelOutcomeError('Conversation event stream ended without an authoritative terminal event');
+    throw new TerminalResultCollectorExhaustionError(
+      'Conversation event stream ended without an authoritative terminal event',
+    );
   }
 
   const usage = resolvedUsage();

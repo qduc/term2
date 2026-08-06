@@ -2,8 +2,7 @@ import type { ILoggingService, ISessionContextService, ISettingsService } from '
 import type { ConversationEvent } from './conversation-events.js';
 import type { CommandMessage } from '../../tools/types.js';
 import type { ConversationTerminal, PostExecuteApprovalToken } from '../../contracts/conversation.js';
-import { collectTerminalResult } from '../session/terminal-result-collector.js';
-import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
+import { collectTerminalResult, TerminalResultCollectorExhaustionError } from '../session/terminal-result-collector.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
 import { userTurnToProviderItem } from './user-turn-item.js';
@@ -630,7 +629,8 @@ export class ConversationAdapter {
       this.#settleSuccess(execution.snapshot.requestId, result);
     } catch (error) {
       const failure =
-        this.#cancellingRequestId === execution.snapshot.requestId && error instanceof AmbiguousModelOutcomeError
+        this.#cancellingRequestId === execution.snapshot.requestId &&
+        error instanceof TerminalResultCollectorExhaustionError
           ? queueCancellationError('Active turn was cancelled')
           : error;
       // Controller pauses with retained queue on failure when work remains.
@@ -664,7 +664,7 @@ export class ConversationAdapter {
       return await collectTerminalResult(events, options);
     } catch (error) {
       const wasCancelled =
-        error instanceof AmbiguousModelOutcomeError &&
+        error instanceof TerminalResultCollectorExhaustionError &&
         (cancellationEpoch < this.#cancellationEpoch ||
           (Boolean(requestId) && this.#cancellingRequestId === requestId));
       if (wasCancelled) {
@@ -785,6 +785,9 @@ export class ConversationAdapter {
       answer: answer === 'y' ? 'y' : 'n',
       ...(rejectionReason ? { rejectionReason } : {}),
     });
+    // Capture before resolving the queue action: persistence may await while
+    // an abort invalidates this approval and makes the coordinator idle.
+    const cancellationEpoch = this.#cancellationEpoch;
     try {
       // If queue tracks this approval, resolve the typed action before continuing.
       if (this.#queue && this.#approvalExecutionId && this.#approvalActionId) {
@@ -803,6 +806,10 @@ export class ConversationAdapter {
         }
       }
 
+      if (cancellationEpoch < this.#cancellationEpoch) {
+        throw queueCancellationError('Approval decision was cancelled');
+      }
+
       // Queue resolution may await persistence while abort/new-turn work replaces
       // the pending approval. A decision captured for the old approval must not
       // adopt whichever approval happens to be current when continuation starts.
@@ -815,7 +822,6 @@ export class ConversationAdapter {
         if (!sameApproval) return null;
       }
 
-      const cancellationEpoch = this.#cancellationEpoch;
       const result = await this.#withTrafficContext(undefined, async () => {
         const wrappedOnEvent = (event: ConversationEvent) => {
           this.#logs.dispatchEventToLog(event);

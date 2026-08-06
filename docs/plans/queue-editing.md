@@ -2,16 +2,94 @@
 
 ## Resume here
 
-Design only — nothing implemented yet. Read `## The three stages` before touching
-`ApplicationRunLoop.steer`, `ConversationAdapter`, `QueueController`, or the
-`pendingQueuedMessages` reducer slice: the whole design turns on the fact that a
-submission the UI draws as one "⏳ Queued" line actually lives in one of two
-different places, and the current code addresses them by two different keys
-(position vs. id). Two existing defects (`## Defects this dissolves`) are
-symptoms of that split, not independent bugs.
+**Steps 1–2 (`## Build order`) are done, on branch `queue-editing-substrate`
+(`.worktrees/queue-editing-substrate`, not yet merged to `main`).** Steps 3–4
+are still design-only; start at Step 3. Read `## The three stages` before
+touching `ConversationOrchestrator`, `ConversationService`, or the
+`pendingQueuedMessages` reducer slice — the substrate below only closes the gap
+between the run loop and the adapter; the UI still addresses queued work by
+position until Step 3 wires it through.
 
 Interaction surface was chosen by the user: **inline selectable list above the
 input box**, entered by ↑ on an empty input. Not a modal. See `## Rejected`.
+
+### What shipped in Steps 1–2
+
+- `ApplicationRunLoop` (`application-run-loop.ts`): exports `SteerOutcome =
+  'admitted' | 'released' | 'retracted'`; `steer` takes `options?: { id?:
+  string }` and returns `Promise<SteerOutcome>`; `PendingSteer` carries an
+  optional `id`; `retractSteer(id)` and `editSteer(id, items)` are new,
+  synchronous, and documented as racing `#admitPendingSteers` only in theory —
+  both are synchronous single-pass operations against `#pendingSteers`, so one
+  always completes before the other can observe a stale array.
+- **The four-caller list in `## Design` §1 was incomplete for §2 to work.**
+  `retractSteer`/`editSteer` also had to be threaded through `AgentClient`,
+  `ConversationAgentClient`, `TurnWorkflow`, `TurnCoordinator`,
+  `SessionRuntime['turns']` (`session-composition.ts`), and `TurnFlow`
+  (`conversation-adapter.ts`) — not just `steer`. Without that, the adapter's
+  `#pendingSteerIds` routing target (`this.#turnFlow.retractSteer?.(id)`)
+  would always be `undefined` in production. This is now wired end-to-end:
+  `session-composition.ts`'s `turns` object binds
+  `turnCoordinator.retractSteer`/`editSteer` alongside the existing `steer`
+  binding.
+- `ConversationAdapter` (`conversation-adapter.ts`): added `SubmissionStage`
+  and `SubmissionMutation` exactly as specced in `## Design` §2;
+  `retractSubmission(id)` and `editSubmission(id, turn)`, routed by a new
+  `#pendingSteerIds: Set<string>` populated by `injectIntoActiveTurn` around
+  its `turnFlow.steer` call and cleared in a `finally`. `steerActiveTurn` and
+  `injectIntoActiveTurn` both gained an optional `{ id }` parameter but kept
+  their boolean return type — the `SteerOutcome` union is collapsed to
+  `'admitted' → true`, everything else `→ false`, exactly as the plan
+  specified for the shared background-notification caller.
+- **The trap fix is in and has a regression test that asserts on delivery, not
+  state.** `editSubmission` on a queued item writes the new `UserTurn` into
+  `#messagesById` (what `#runQueuedTurn` actually executes) before issuing
+  `edit_queued` with the display text (`QUEUED_NON_TEXT_PLACEHOLDER`
+  substitution preserved). The adapter test
+  `'editSubmission on a queued item sends the edited text — the #messagesById
+  write edit_queued alone misses'` drives the queued turn to completion and
+  asserts on what `turnFlow.start` actually received.
+- `removeLastQueuedItem` is untouched, per scope — still the only mutation
+  `InputBox` calls today.
+
+### What Step 3 must still account for
+
+- **`retractSubmission`/`editSubmission` can only reach `'pending_steer'` once
+  a real id flows into `steerActiveTurn`.** Today `ConversationOrchestrator
+  .sendUserMessage` (`conversation-orchestrator.ts:434`) calls
+  `steerActiveTurn(turn)` with no id — `#pendingSteerIds` stays empty in
+  production until Step 3 passes `userMessage.id` there (same id already
+  passed as `preferredMessageId` a few lines later). Until then only the
+  `'queued'` stage is reachable end-to-end; `'pending_steer'` routing is
+  covered by adapter unit tests with an explicit `{ id }`, not yet by any real
+  caller.
+  - Same expected-signature note: `retractSteer`/`editSteer` were added to
+  `TurnFlow` as truly optional (`?`), so a `turnFlow` that only implements
+  `steer` still type-checks — Step 3's orchestrator wiring does not need a
+  companion change here to compile, only to actually retract/edit anything.
+- **A retracted pending steer resolves `steerActiveTurn` to `false` — the same
+  value as "the turn had no boundary left."** `ConversationOrchestrator`
+  currently treats any `false` from `steerActiveTurn` as "fall through and
+  queue it as a new submission" (`conversation-orchestrator.ts:445-451`). Step
+  3 must not let a deliberate retraction fall into that path — it would
+  silently resubmit what the user just cancelled. This is exactly the failure
+  mode the plan's "Drop the `onRemoveLastPendingMessage` fallback branch" note
+  anticipates; `retractPendingSubmission`/`editPendingSubmission` on the
+  orchestrator need to own that distinction (e.g. by calling
+  `retractSubmission`/`editSubmission` directly rather than relying on the
+  boolean `steerActiveTurn` return to imply intent).
+- No change was needed to `QueueController` beyond what already existed:
+  `edit_queued` and `remove_queued` were already implemented; Steps 1–2 gave
+  them their first real callers (via `editSubmission`/`retractSubmission`) and
+  added persistence round-trip coverage for `edit_queued`.
+
+### Testing run for Steps 1–2
+
+`pnpm test:provider-black-box` (18 files / 152 tests) and `pnpm test` (419
+files / 5230 passed, 1 pre-existing unrelated flaky `InputBox` timing test that
+passes in isolation) both pass, along with `pnpm run typecheck` and `pnpm run
+lint` (0 errors; pre-existing `require-yield` warnings only, none in touched
+files). See the handoff report for the exact commands.
 
 ---
 

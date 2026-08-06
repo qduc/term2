@@ -1,5 +1,6 @@
 import type { ContinuationHandle } from '../../contracts/continuation-handle.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
+import type { SteerOutcome } from '../agent-runtime/application-run-loop.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
@@ -125,8 +126,18 @@ export class TurnWorkflow {
       });
   }
 
-  steer(items: readonly ProviderInputItem[]): Promise<boolean> {
-    return this.deps.agentClient.steer?.(items) ?? Promise.resolve(false);
+  steer(items: readonly ProviderInputItem[], options?: { id?: string }): Promise<SteerOutcome> {
+    return this.deps.agentClient.steer?.(items, options) ?? Promise.resolve('released');
+  }
+
+  /** Drop a still-waiting steer. False when it was already admitted. */
+  retractSteer(id: string): boolean {
+    return this.deps.agentClient.retractSteer?.(id) ?? false;
+  }
+
+  /** Replace a waiting steer's items in place, keeping its position. */
+  editSteer(id: string, items: readonly ProviderInputItem[]): boolean {
+    return this.deps.agentClient.editSteer?.(id, items) ?? false;
   }
 
   /** Internal composition seam for correlating physical tool calls to a turn. */

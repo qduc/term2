@@ -156,7 +156,7 @@ describe('AgentClient application-run-loop execution', () => {
     const steered = instance.steer([{ type: 'message', role: 'user', content: 'one more thing' }]);
     (stream.state as any).approve?.({});
     const resumed = await instance.continueRunStream(stream.state!);
-    await expect(steered).resolves.toBe(true);
+    await expect(steered).resolves.toBe('admitted');
     await resumed.completed;
 
     expect(resumed.history).toEqual(

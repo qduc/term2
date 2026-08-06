@@ -1219,6 +1219,55 @@ it('persists awaiting_preflight state and restores it', async () => {
   expect(lastRecord.queue[0]?.preflight).toEqual({ actionId: 'pf-1', kind: 'input_surge' });
 });
 
+it('persists an edit_queued mutation and restores the edited text after reload', async () => {
+  // edit_queued gains its first real caller in ConversationAdapter.editSubmission;
+  // it must survive a persist/restore round trip like every other queue mutation.
+  const records: unknown[] = [];
+  const persistence: QueuePersistence = {
+    load: () => records.at(-1) ?? null,
+    replace: (record) => {
+      records.push(record);
+    },
+  };
+
+  const controller = new QueueController({
+    driver: { start: () => undefined, cancel: async () => undefined },
+    snapshotFactory: () => ({}),
+    persistence,
+    ids: {
+      item: (() => {
+        let n = 0;
+        return () => `item-${++n}`;
+      })(),
+      execution: () => 'execution-1',
+    },
+  });
+
+  await controller.command({ kind: 'submit', text: 'active' });
+  await controller.command({ kind: 'submit', text: 'original' });
+
+  const queuedId = controller.state().queue[0]!.id;
+  expect(await controller.command({ kind: 'edit_queued', itemId: queuedId, text: 'edited' })).toEqual({
+    kind: 'accepted',
+  });
+
+  const restored = new QueueController({
+    driver: { start: () => undefined, cancel: async () => undefined },
+    snapshotFactory: () => ({}),
+    persistence,
+    ids: { item: () => 'unused', execution: () => 'execution-2' },
+  });
+
+  // The prior active execution's outcome is unknown after a restart, so
+  // recovery is conservative (paused/recovered_interrupted) — but the queued
+  // item's edit must have survived the round trip regardless.
+  expect(restored.state()).toMatchObject({
+    kind: 'paused',
+    reason: 'recovered_interrupted',
+    queue: [{ id: queuedId, text: 'edited' }],
+  });
+});
+
 it('persists awaiting_active_action with pendingAction and restores as recovered_interrupted', async () => {
   const records: unknown[] = [];
   const persistence: QueuePersistence = {

@@ -122,10 +122,21 @@ export interface ApplicationRunLoopDeps {
   readonly logDiagnostic?: (message: string, meta: Record<string, unknown>) => void;
 }
 
+/**
+ * The fate of a message handed to `steer`/`retractSteer`/`editSteer`.
+ *
+ * `'admitted'` — the running turn took it at a request boundary.
+ * `'released'` — no further boundary is coming (turn ending, or none
+ * running); the caller must send it as its own turn instead.
+ * `'retracted'` — `retractSteer` pulled it out before either of the above.
+ */
+export type SteerOutcome = 'admitted' | 'released' | 'retracted';
+
 /** A user message waiting for the running turn's next request boundary. */
 type PendingSteer = {
+  readonly id?: string;
   readonly items: readonly ProviderInputItem[];
-  readonly resolve: (admitted: boolean) => void;
+  readonly resolve: (outcome: SteerOutcome) => void;
 };
 
 type PendingApproval = {
@@ -263,16 +274,53 @@ export class ApplicationRunLoop {
    * turn that pauses for an approval resumes as a new segment, and the message
    * is admitted at that segment's first boundary.
    *
-   * Resolves `true` once the message has been admitted, and `false` when the
-   * turn ends first (or none is running): it offered no further request
-   * boundary, so the caller must send the message as its own turn instead.
+   * Resolves `'admitted'` once the message has been admitted, `'released'`
+   * when the turn ends first (or none is running) — it offered no further
+   * request boundary, so the caller must send the message as its own turn
+   * instead — and `'retracted'` when `retractSteer` pulled it out first.
+   *
+   * `options.id` correlates this steer with `retractSteer`/`editSteer`. A
+   * steer offered without an id can never be retracted or edited in place —
+   * only released or admitted.
    */
-  steer(items: readonly ProviderInputItem[]): Promise<boolean> {
-    if (items.length === 0) return Promise.resolve(false);
-    if (!this.#runInFlight && !this.#turnPaused) return Promise.resolve(false);
-    return new Promise<boolean>((resolve) => {
-      this.#pendingSteers.push({ items, resolve });
+  steer(items: readonly ProviderInputItem[], options?: { id?: string }): Promise<SteerOutcome> {
+    if (items.length === 0) return Promise.resolve('released');
+    if (!this.#runInFlight && !this.#turnPaused) return Promise.resolve('released');
+    return new Promise<SteerOutcome>((resolve) => {
+      this.#pendingSteers.push({ id: options?.id, items, resolve });
     });
+  }
+
+  /**
+   * Drop a still-waiting steer before it reaches a request boundary. Returns
+   * `false` when the id is unknown, including when it was already admitted.
+   *
+   * Invariant: this and `#admitPendingSteers` are both synchronous, and the
+   * latter drains `#pendingSteers` in a single pass — so the two can never
+   * interleave. A retraction is decided in the same tick against whatever is
+   * currently in `#pendingSteers`; once an item has been admitted it is no
+   * longer in that array for this method to find. No locking is needed to
+   * close the race between "the user retracts" and "the turn admits".
+   */
+  retractSteer(id: string): boolean {
+    const index = this.#pendingSteers.findIndex((steer) => steer.id === id);
+    if (index < 0) return false;
+    const [steer] = this.#pendingSteers.splice(index, 1);
+    steer!.resolve('retracted');
+    return true;
+  }
+
+  /**
+   * Replace a waiting steer's items in place, keeping its position (and thus
+   * its priority relative to other pending steers) and its id. Returns
+   * `false` when the id is unknown, including when it was already admitted —
+   * same synchronicity invariant as `retractSteer`.
+   */
+  editSteer(id: string, items: readonly ProviderInputItem[]): boolean {
+    const index = this.#pendingSteers.findIndex((steer) => steer.id === id);
+    if (index < 0) return false;
+    this.#pendingSteers[index] = { ...this.#pendingSteers[index]!, items };
+    return true;
   }
 
   /** Settle every steer this run did not admit so callers stop waiting on it. */
@@ -282,7 +330,7 @@ export class ApplicationRunLoop {
     if (pending.length > 0) {
       this.#deps.logDiagnostic?.('Steer released at run end', { released: pending.length, ...reason });
     }
-    for (const steer of pending) steer.resolve(false);
+    for (const steer of pending) steer.resolve('released');
   }
 
   /**
@@ -306,7 +354,7 @@ export class ApplicationRunLoop {
         state.input.push(...normalizeApplicationInput([item]));
         outputPush(stream, queue, { type: 'item', item });
       }
-      steer.resolve(true);
+      steer.resolve('admitted');
     }
   }
 

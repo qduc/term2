@@ -598,7 +598,7 @@ it('delivers a steer into the running turn instead of queueing it', async () => 
       },
       steer: async (items) => {
         steered.push([...items]);
-        return true;
+        return 'admitted' as const;
       },
     },
     queueForeground: true,
@@ -645,7 +645,7 @@ it('injects pre-built items into the running turn without a steering preamble', 
       },
       steer: async (items) => {
         steered.push([...items]);
-        return true;
+        return 'admitted' as const;
       },
     },
     queueForeground: true,
@@ -683,7 +683,7 @@ it('reports an injection as undeliverable when no turn is running', async () => 
       async *continueAfterApproval() {
         yield { type: 'final' as const, finalText: 'done' };
       },
-      steer: async () => true,
+      steer: async () => 'admitted' as const,
     },
     queueForeground: true,
   });
@@ -709,7 +709,7 @@ it('reports a steer as undeliverable when no turn is running', async () => {
       async *continueAfterApproval() {
         yield { type: 'final' as const, finalText: 'done' };
       },
-      steer: async () => true,
+      steer: async () => 'admitted' as const,
     },
     queueForeground: true,
   });
@@ -742,7 +742,7 @@ it('runs an undeliverable steer as its own turn, ahead of earlier follow-ups', a
         yield { type: 'final' as const, finalText: 'done' };
       },
       // The running turn cannot take it: it has no request boundary left.
-      steer: async () => false,
+      steer: async () => 'released' as const,
     },
     queueForeground: true,
   });
@@ -1105,4 +1105,309 @@ it('ConversationAdapter cancels live async subagent runs when the turn ends', as
 
   expect(sinkCalls).toEqual(['function', 'object']);
   expect(cancelCalls.length).toBe(1);
+});
+
+// ── retractSubmission / editSubmission ──────────────────────────────────
+
+it('editSubmission on a queued item sends the edited text — the #messagesById write edit_queued alone misses', async () => {
+  let releaseActive!: () => void;
+  const activeReleased = new Promise<void>((resolve) => {
+    releaseActive = resolve;
+  });
+  const started: Array<string | UserTurn> = [];
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start(input: string | UserTurn) {
+        started.push(input);
+        if (started.length === 1) await activeReleased;
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+    },
+    queueForeground: true,
+  });
+
+  const active = adapter.sendMessage('active', { preferredMessageId: 'active' });
+  await new Promise((resolve) => setImmediate(resolve));
+  const queued = adapter.sendMessage('original text', { preferredMessageId: 'queued-1' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const mutation = await adapter.editSubmission('queued-1', { text: 'edited text' });
+  expect(mutation).toEqual({ kind: 'applied', stage: 'queued' });
+
+  // Asserting only queue.state() would still pass against an implementation
+  // that redraws the edit in the controller's display text but leaves the
+  // #messagesById entry — and therefore the turn that actually runs — on the
+  // original input. Assert on what the turn that eventually runs receives.
+  releaseActive();
+  await expect(active).resolves.toMatchObject({ type: 'response' });
+  await expect(queued).resolves.toMatchObject({ type: 'response' });
+
+  expect(started).toHaveLength(2);
+  expect(started[0]).toBe('active');
+  expect(started[1]).toMatchObject({ text: 'edited text' });
+});
+
+it('retractSubmission removes a queued item by id and settles its sendMessage promise', async () => {
+  let releaseActive!: () => void;
+  const activeReleased = new Promise<void>((resolve) => {
+    releaseActive = resolve;
+  });
+  const started: string[] = [];
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start(input: string | UserTurn) {
+        const text = typeof input === 'string' ? input : input.text;
+        started.push(text);
+        if (started.length === 1) await activeReleased;
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+    },
+    queueForeground: true,
+  });
+
+  const active = adapter.sendMessage('active', { preferredMessageId: 'active' });
+  await new Promise((resolve) => setImmediate(resolve));
+  const queued = adapter.sendMessage('to be retracted', { preferredMessageId: 'queued-1' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const mutation = await adapter.retractSubmission('queued-1');
+  expect(mutation).toEqual({ kind: 'applied', stage: 'queued' });
+  await expect(queued).rejects.toMatchObject({ name: 'AbortError' });
+
+  releaseActive();
+  await expect(active).resolves.toMatchObject({ type: 'response' });
+  expect(started).toEqual(['active']);
+});
+
+it('retractSubmission and editSubmission report unknown_id for an id the adapter has never seen', async () => {
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+    },
+    queueForeground: true,
+  });
+
+  await expect(adapter.retractSubmission('never-existed')).resolves.toEqual({ kind: 'unknown_id' });
+  await expect(adapter.editSubmission('never-existed', { text: 'x' })).resolves.toEqual({ kind: 'unknown_id' });
+});
+
+it('retractSubmission and editSubmission report too_late for the item currently executing', async () => {
+  let releaseActive!: () => void;
+  const activeReleased = new Promise<void>((resolve) => {
+    releaseActive = resolve;
+  });
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start() {
+        await activeReleased;
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+    },
+    queueForeground: true,
+  });
+
+  const active = adapter.sendMessage('active', { preferredMessageId: 'active' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  await expect(adapter.retractSubmission('active')).resolves.toEqual({ kind: 'too_late', stage: 'started' });
+  await expect(adapter.editSubmission('active', { text: 'too late' })).resolves.toEqual({
+    kind: 'too_late',
+    stage: 'started',
+  });
+
+  releaseActive();
+  await expect(active).resolves.toMatchObject({ type: 'response' });
+});
+
+it('routes retractSubmission to a still-pending steer via retractSteer', async () => {
+  let resolveSteer!: (outcome: 'admitted' | 'released' | 'retracted') => void;
+  const steerPromise = new Promise<'admitted' | 'released' | 'retracted'>((resolve) => {
+    resolveSteer = resolve;
+  });
+  const retractedIds: string[] = [];
+  let releaseActive!: () => void;
+  const activeReleased = new Promise<void>((resolve) => {
+    releaseActive = resolve;
+  });
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start() {
+        await activeReleased;
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      steer: async () => steerPromise,
+      retractSteer: (id: string) => {
+        retractedIds.push(id);
+        resolveSteer('retracted');
+        return true;
+      },
+    },
+    queueForeground: true,
+  });
+
+  const active = adapter.sendMessage('active', { preferredMessageId: 'active' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const steered = adapter.steerActiveTurn('change direction', { id: 'steer-1' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const mutation = await adapter.retractSubmission('steer-1');
+  expect(mutation).toEqual({ kind: 'applied', stage: 'pending_steer' });
+  expect(retractedIds).toEqual(['steer-1']);
+  // The run loop's own resolution is what unwinds the caller waiting on the
+  // original steerActiveTurn call.
+  await expect(steered).resolves.toBe(false);
+
+  releaseActive();
+  await expect(active).resolves.toMatchObject({ type: 'response' });
+});
+
+it('routes editSubmission to a still-pending steer via editSteer', async () => {
+  let resolveSteer!: (outcome: 'admitted' | 'released' | 'retracted') => void;
+  const steerPromise = new Promise<'admitted' | 'released' | 'retracted'>((resolve) => {
+    resolveSteer = resolve;
+  });
+  const editCalls: Array<{ id: string; content: unknown }> = [];
+  let releaseActive!: () => void;
+  const activeReleased = new Promise<void>((resolve) => {
+    releaseActive = resolve;
+  });
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start() {
+        await activeReleased;
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      steer: async () => steerPromise,
+      editSteer: (id, items) => {
+        editCalls.push({ id, content: (items[0] as { content?: unknown } | undefined)?.content });
+        return true;
+      },
+    },
+    queueForeground: true,
+  });
+
+  const active = adapter.sendMessage('active', { preferredMessageId: 'active' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const steered = adapter.steerActiveTurn('original', { id: 'steer-1' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const mutation = await adapter.editSubmission('steer-1', { text: 'edited' });
+  expect(mutation).toEqual({ kind: 'applied', stage: 'pending_steer' });
+  expect(editCalls).toHaveLength(1);
+  expect(editCalls[0]!.id).toBe('steer-1');
+  expect(String(editCalls[0]!.content)).toContain('edited');
+
+  resolveSteer('admitted');
+  await expect(steered).resolves.toBe(true);
+
+  releaseActive();
+  await expect(active).resolves.toMatchObject({ type: 'response' });
+});
+
+it('retractSubmission reports too_late for a pending steer the run loop already admitted', async () => {
+  // The steer promise never settles in this test: it stands in for the run
+  // loop having already admitted the item — retractSteer reports it the same
+  // way — while the adapter's own #pendingSteerIds bookkeeping has not yet
+  // observed that settlement (`## Losing the race`).
+  const steerPromise = new Promise<'admitted' | 'released' | 'retracted'>(() => {});
+  let releaseActive!: () => void;
+  const activeReleased = new Promise<void>((resolve) => {
+    releaseActive = resolve;
+  });
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start() {
+        await activeReleased;
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      steer: async () => steerPromise,
+      retractSteer: () => false,
+    },
+    queueForeground: true,
+  });
+
+  const active = adapter.sendMessage('active', { preferredMessageId: 'active' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  void adapter.steerActiveTurn('change direction', { id: 'steer-1' }).catch(noop);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  await expect(adapter.retractSubmission('steer-1')).resolves.toEqual({ kind: 'too_late', stage: 'started' });
+
+  releaseActive();
+  await expect(active).resolves.toMatchObject({ type: 'response' });
 });

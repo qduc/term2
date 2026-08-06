@@ -11,11 +11,11 @@ import { createAgentStream, type AgentStream } from '../agent-stream.js';
 import type {
   StreamedModelMessagePart,
   StreamedModelProviderOptions,
-  type ContextCompactionSessionState,
   StreamedModelToolResultPart,
   StreamedModelTurn,
   StreamedModelTurnEvent,
   StreamedModelTurnInput,
+  ContextCompactionSessionState,
   StreamedModelTurnRequest,
   StreamedModelTool,
 } from '../../contracts/streamed-model-turn.js';
@@ -622,7 +622,9 @@ export class ApplicationRunLoop {
           ? {
               providerOptions: this.#contextCompactionSessionState.disabled
                 ? Object.fromEntries(
-                    Object.entries(state.agent.modelSettings.providerData).filter(([key]) => key !== 'contextCompaction'),
+                    Object.entries(state.agent.modelSettings.providerData).filter(
+                      ([key]) => key !== 'contextCompaction',
+                    ),
                   )
                 : state.agent.modelSettings.providerData,
             }

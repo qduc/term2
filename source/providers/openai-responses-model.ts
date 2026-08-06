@@ -152,7 +152,8 @@ function contextCompaction(
   providerSupportsContextCompaction: boolean,
   sessionState?: ContextCompactionSessionState,
 ): { threshold: number } | undefined {
-  if (sessionState?.disabled || !providerSupportsContextCompaction || !supportsContextCompactionModel(model)) return undefined;
+  if (sessionState?.disabled || !providerSupportsContextCompaction || !supportsContextCompactionModel(model))
+    return undefined;
   const option = (providerOptions as any).contextCompaction;
   if (option?.enabled !== true || typeof option.threshold !== 'number' || !Number.isFinite(option.threshold)) {
     return undefined;
@@ -282,7 +283,8 @@ export function contextCompactionFailureCategory(error: unknown): ContextCompact
   const status = Number(record.status ?? record.statusCode ?? (record.error as any)?.status);
   const text = JSON.stringify(error);
   if (status === 500 && /context[_ ]management|server_error/i.test(text)) return 'request';
-  if (status === 400 && /integer_below_min_value|compact_threshold|context[_ ]management/i.test(text)) return 'validation';
+  if (status === 400 && /integer_below_min_value|compact_threshold|context[_ ]management/i.test(text))
+    return 'validation';
   return undefined;
 }
 

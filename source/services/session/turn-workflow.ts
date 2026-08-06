@@ -153,11 +153,17 @@ export class TurnWorkflow {
     options: InitialTurnRunOptions = {},
   ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
     try {
-      yield* this.#executeInitialBody(attemptOrInput, options);
+      return yield* this.#executeInitialBody(attemptOrInput, options);
     } catch (error) {
       const failure = contextCompactionFailureCategory(error);
       if (failure) {
-        yield { type: 'context_compaction_failed', provider: 'openai', sessionId: this.deps.sessionId, errorCategory: failure, durationMs: 0 };
+        yield {
+          type: 'context_compaction_failed',
+          provider: 'openai',
+          sessionId: this.deps.sessionId,
+          errorCategory: failure,
+          durationMs: 0,
+        };
       }
       throw error;
     }
@@ -221,11 +227,17 @@ export class TurnWorkflow {
     policy?: ApprovalDecisionPolicy,
   ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
     try {
-      yield* this.#executeContinuationBody(init, policy);
+      return yield* this.#executeContinuationBody(init, policy);
     } catch (error) {
       const failure = contextCompactionFailureCategory(error);
       if (failure) {
-        yield { type: 'context_compaction_failed', provider: 'openai', sessionId: this.deps.sessionId, errorCategory: failure, durationMs: 0 };
+        yield {
+          type: 'context_compaction_failed',
+          provider: 'openai',
+          sessionId: this.deps.sessionId,
+          errorCategory: failure,
+          durationMs: 0,
+        };
       }
       throw error;
     }
@@ -1062,8 +1074,20 @@ export class TurnWorkflow {
 
     const compaction = lastOpenAICompaction(extractFinalizationSnapshot(stream).output);
     if (compaction) {
-      yield { type: 'context_compaction_started', provider: compaction.provider, sessionId: this.deps.sessionId, inputTokensBefore: acc.latestUsage?.prompt_tokens };
-      yield { type: 'context_compaction_completed', provider: compaction.provider, sessionId: this.deps.sessionId, inputTokensBefore: acc.latestUsage?.prompt_tokens, inputTokensAfter: undefined, durationMs: 0 };
+      yield {
+        type: 'context_compaction_started',
+        provider: compaction.provider,
+        sessionId: this.deps.sessionId,
+        inputTokensBefore: acc.latestUsage?.prompt_tokens,
+      };
+      yield {
+        type: 'context_compaction_completed',
+        provider: compaction.provider,
+        sessionId: this.deps.sessionId,
+        inputTokensBefore: acc.latestUsage?.prompt_tokens,
+        inputTokensAfter: undefined,
+        durationMs: 0,
+      };
     }
 
     const mergedEmittedIds = new Set([...allEmittedIds, ...acc.emittedCommandIds]);

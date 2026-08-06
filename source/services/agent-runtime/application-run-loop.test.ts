@@ -687,6 +687,48 @@ describe('ApplicationRunLoop', () => {
     expect(stream.lastResponseId).toBe('resp-1');
   });
 
+  it('retains provider-opaque completion items in the live provider history', async () => {
+    const model: StreamedModelTurn = {
+      async *stream() {
+        yield {
+          type: 'completion',
+          responseId: 'resp-compacted',
+          output: [
+            { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', id: 'cmp-1' } },
+            { type: 'message', content: [{ type: 'text', text: 'Done.' }] },
+            { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', id: 'cmp-2' } },
+          ],
+        };
+      },
+    };
+
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'Compact this', {
+      providerId: 'openai',
+      supportsConversationChaining: true,
+    });
+
+    await collect(stream);
+
+    expect(stream.output).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'item',
+          item: { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', id: 'cmp-1' } },
+        }),
+        expect.objectContaining({
+          type: 'item',
+          item: { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', id: 'cmp-2' } },
+        }),
+      ]),
+    );
+    expect(stream.history).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'compaction', id: 'cmp-1', providerOpaque: { provider: 'openai' } }),
+        expect.objectContaining({ type: 'compaction', id: 'cmp-2', providerOpaque: { provider: 'openai' } }),
+      ]),
+    );
+  });
+
   it('executes a tool and feeds its result into the next model turn', async () => {
     let calls = 0;
     const parameters = z.object({ value: z.string() });

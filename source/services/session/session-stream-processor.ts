@@ -13,7 +13,9 @@ import { collectDuplicateToolCallResultPairs } from '../input-surge-guard.js';
 import { callIdOf, toolNameOf, outputOf } from '../tool-execution-ledger.js';
 import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
 import { normalizeRunItem } from '../conversation/run-item-normalizer.js';
+import { projectPersistedAssistantItemToProviderHistory } from '../conversation/conversation-turn-items.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
+import type { ProviderOpaqueItem } from '../../contracts/conversation-items.js';
 import { GenerationGuard, type GenerationToken } from '../generation-guard.js';
 import { RepetitionDetector, RepetitiveModelOutputError } from './repetition-detector.js';
 
@@ -56,6 +58,35 @@ const canonicalProviderHistoryItems = (items: readonly unknown[]): unknown[] =>
 
 const hasToolResultItems = (items: unknown[]): boolean =>
   items.some((item) => normalizeRunItem(item).some((normalized) => normalized.type === 'tool_result'));
+
+const lastOpenAICompaction = (items: readonly unknown[]): ProviderOpaqueItem | undefined => {
+  let last: ProviderOpaqueItem | undefined;
+  for (const item of items) {
+    for (const normalized of normalizeRunItem(item)) {
+      if (
+        normalized.type === 'provider_opaque' &&
+        normalized.provider === 'openai' &&
+        normalized.item.type === 'compaction'
+      ) {
+        last = normalized;
+      }
+    }
+  }
+  return last;
+};
+
+const compactedProviderHistory = (
+  existingHistory: readonly ProviderInputItem[],
+  output: readonly unknown[],
+): ProviderInputItem[] | undefined => {
+  const compaction = lastOpenAICompaction(output);
+  if (!compaction) return undefined;
+  const userTurns = existingHistory.filter((item) => {
+    const message = projectConversationMessage(item);
+    return message?.role === 'user' && !message.isSynthetic;
+  });
+  return [...userTurns, projectPersistedAssistantItemToProviderHistory(compaction)];
+};
 
 const toolItemSignature = (item: unknown): string | null => {
   for (const normalized of normalizeRunItem(item)) {
@@ -356,7 +387,13 @@ export class SessionStreamProcessor {
       const terminal = !stream.interruptions || stream.interruptions.length === 0;
       if (terminal) {
         const historyRevisionBeforeCommit = this.deps.conversationStore.getProviderHistorySnapshot().revision;
-        if (inputMode === 'delta') {
+        const replacementHistory = compactedProviderHistory(
+          this.deps.conversationStore.getHistory(),
+          projectedSnapshot.output,
+        );
+        if (replacementHistory) {
+          this.deps.conversationStore.replaceHistory(replacementHistory);
+        } else if (inputMode === 'delta') {
           appendWithoutReplayedTools(projectedSnapshot.output);
         } else {
           // In full-history mode, prefer canonical current-run newItems, then

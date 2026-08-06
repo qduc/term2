@@ -51,6 +51,113 @@ const createDeferred = <T>() => {
   return { promise, resolve };
 };
 
+const openAICompaction = (id: string) => ({
+  type: 'provider_opaque',
+  provider: 'openai',
+  item: { type: 'compaction', id, encrypted_content: `ciphertext-${id}` },
+});
+
+const createProcessorForHistory = (conversationStore: ConversationStore) => {
+  const generationGuard = new GenerationGuard();
+  return {
+    generationGuard,
+    processor: new SessionStreamProcessor({
+      logger,
+      sessionId: 'compaction-history-session',
+      toolTracker: new SessionToolTracker(conversationStore),
+      conversationStore,
+      conversationLogger: {} as ConversationLogger,
+      providerContinuity: new ProviderContinuity(),
+      generationGuard,
+      journal: makeJournal(),
+    }),
+  };
+};
+
+it('SessionStreamProcessor.finalize() replaces history with user turns and the last OpenAI compaction item', () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.addUserMessage('First request');
+  conversationStore.appendOutput([
+    { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Old answer' }] } as any,
+  ]);
+  conversationStore.addUserMessage('Second request');
+  const { processor, generationGuard } = createProcessorForHistory(conversationStore);
+  const stream = makeStream([], { interruptions: [] });
+  (stream as any).output = [
+    openAICompaction('cmp-1'),
+    { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Compacted answer' }] },
+    openAICompaction('cmp-2'),
+  ];
+
+  expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
+  expect(conversationStore.getHistory()).toEqual([
+    { role: 'user', type: 'message', content: 'First request' },
+    { role: 'user', type: 'message', content: 'Second request' },
+    {
+      type: 'compaction',
+      id: 'cmp-2',
+      encrypted_content: 'ciphertext-cmp-2',
+      providerOpaque: { provider: 'openai' },
+    },
+  ]);
+});
+
+it('SessionStreamProcessor.finalize() drops synthetic shell context from a compacted history prefix', () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.addShellContext('[Previous Shell Session]\n\n$ pwd\n/repo');
+  conversationStore.addUserMessage('Genuine request');
+  const { processor, generationGuard } = createProcessorForHistory(conversationStore);
+  const stream = makeStream([], { interruptions: [], output: [openAICompaction('cmp-1')] });
+
+  expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
+  expect(conversationStore.getHistory()).toEqual([
+    { role: 'user', type: 'message', content: 'Genuine request' },
+    {
+      type: 'compaction',
+      id: 'cmp-1',
+      encrypted_content: 'ciphertext-cmp-1',
+      providerOpaque: { provider: 'openai' },
+    },
+  ]);
+});
+
+it('SessionStreamProcessor.finalize() appends ordinary terminal output when no compaction item is present', () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.addUserMessage('Keep this history');
+  const { processor, generationGuard } = createProcessorForHistory(conversationStore);
+  const answer = { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Ordinary answer' }] };
+  const stream = makeStream([], { interruptions: [], output: [answer] });
+
+  expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
+  expect(conversationStore.getHistory()).toEqual([
+    { role: 'user', type: 'message', content: 'Keep this history' },
+    answer,
+  ]);
+});
+
+it('SessionStreamProcessor.finalize() replaces a prior compaction instead of accumulating stale compaction items', () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.addUserMessage('First request');
+  const { processor, generationGuard } = createProcessorForHistory(conversationStore);
+  const first = makeStream([], { interruptions: [], output: [openAICompaction('cmp-1')] });
+
+  expect(processor.finalize(first, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
+  conversationStore.addUserMessage('Second request');
+  const second = makeStream([], { interruptions: [], output: [openAICompaction('cmp-2')] });
+
+  expect(processor.finalize(second, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
+  expect(conversationStore.getHistory()).toEqual([
+    { role: 'user', type: 'message', content: 'First request' },
+    { role: 'user', type: 'message', content: 'Second request' },
+    {
+      type: 'compaction',
+      id: 'cmp-2',
+      encrypted_content: 'ciphertext-cmp-2',
+      providerOpaque: { provider: 'openai' },
+    },
+  ]);
+});
+
 it.each(['delta', 'full_history'] as const)(
   'SessionStreamProcessor.finalize() persists only canonical ApplicationRunLoop items in %s mode',
   async (inputMode) => {

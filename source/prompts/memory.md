@@ -2,7 +2,7 @@
 
 You have access to persistent memory. Only a concise index is loaded initially.
 
-Memory has global and project scopes. Use global for cross-project preferences and reusable knowledge; use project for repository-specific decisions and conventions. memory_list lists both scopes when scope is omitted; other tools default to global when scope is omitted.
+Memory has global and project scopes. Use global for cross-project preferences and reusable knowledge; use project for repository-specific decisions and conventions. memory_list returns both scopes together; other tools default to global when scope is omitted.
 
 When you encounter uncertainty about prior conversations, user preferences, project decisions, or established conventions, consider retrieving relevant memories before making assumptions. Retrieve memory when it could materially improve correctness or avoid repeating work — not mechanically.
 

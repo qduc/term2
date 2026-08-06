@@ -92,15 +92,12 @@ export function createMemoryToolDefinitions(input: MemoryStore | MemoryStores): 
   return [
     definition(
       'memory_list',
-      'List persistent-memory summaries. When scope is omitted, lists both global and project scopes.',
-      z.object({ scope, limit: z.number().int().positive().optional() }),
-      async ({ scope: requestedScope, ...options }) => {
-        if (requestedScope === undefined) {
-          const [global, project] = await Promise.all([stores.global.list(options), stores.project.list(options)]);
-          return { scope: 'all', global, project };
-        }
-        const { scope, store } = select(requestedScope);
-        return { scope, memories: await store.list(options) };
+      'List persistent-memory summaries from both the global and project scopes.',
+      z.object({ limit: z.number().int().positive().optional() }).strict(),
+      async ({ limit }) => {
+        const options = { limit };
+        const [global, project] = await Promise.all([stores.global.list(options), stores.project.list(options)]);
+        return { scope: 'all', global, project };
       },
     ),
     definition(

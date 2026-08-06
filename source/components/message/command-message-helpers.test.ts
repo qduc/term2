@@ -287,8 +287,8 @@ it('formatToolArgs parses stringified JSON args', () => {
 });
 
 it('formatToolArgs includes memory scope so global and project calls are distinguishable', () => {
-  expect(formatToolArgs('memory_list', { scope: 'global' })).toBe('(global)');
-  expect(formatToolArgs('memory_list', {})).toBe('(all)');
+  expect(formatToolArgs('memory_list', {})).toBe('(global + project)');
+  expect(formatToolArgs('memory_list', { limit: 5 })).toBe('(global + project) (limit: 5)');
   expect(formatToolArgs('memory_search', { scope: 'project', query: 'resume-path-teardown' })).toBe(
     'for "resume-path-teardown" (project)',
   );

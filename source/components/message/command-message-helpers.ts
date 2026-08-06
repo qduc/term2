@@ -699,9 +699,8 @@ export const formatToolArgs = (
       }
 
       case 'memory_list': {
-        const scope = normalizedArgs.scope ?? 'all';
         const limit = normalizedArgs.limit ? ` (limit: ${normalizedArgs.limit})` : '';
-        return `(${scope})${limit}`;
+        return `(global + project)${limit}`;
       }
       case 'memory_get':
         return `"${normalizedArgs.id ?? ''}" (${normalizedArgs.scope ?? 'global'})`;

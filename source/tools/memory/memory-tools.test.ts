@@ -26,7 +26,7 @@ const stores: Record<MemoryScope, MemoryStore> = {
   project: { ...store, list: async () => [{ ...memory, id: 'project-only' }] },
 };
 
-it('memory_list omitting scope lists both global and project stores', async () => {
+it('memory_list lists both global and project stores', async () => {
   const tools = createMemoryToolDefinitions(stores);
 
   expect(JSON.parse((await tools[0].execute({})) as string)).toEqual({
@@ -34,16 +34,9 @@ it('memory_list omitting scope lists both global and project stores', async () =
     global: [memory],
     project: [{ ...memory, id: 'project-only' }],
   });
-  expect(JSON.parse((await tools[0].execute({ scope: 'global' })) as string)).toEqual({
-    scope: 'global',
-    memories: [memory],
-  });
-  expect(JSON.parse((await tools[0].execute({ scope: 'project' })) as string)).toEqual({
-    scope: 'project',
-    memories: [{ ...memory, id: 'project-only' }],
-  });
-  expect(tools[0].parameters.safeParse({ scope: 'project' }).success).toBe(true);
-  expect(tools[0].parameters.safeParse({ scope: 'invalid' }).success).toBe(false);
+  expect(tools[0].parameters.safeParse({}).success).toBe(true);
+  expect(tools[0].parameters.safeParse({ limit: 5 }).success).toBe(true);
+  expect(tools[0].parameters.safeParse({ scope: 'global' }).success).toBe(false);
 });
 
 it('exposes memory operations with structured responses', async () => {

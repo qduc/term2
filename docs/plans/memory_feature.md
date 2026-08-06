@@ -534,29 +534,17 @@ Follow Term2’s existing naming conventions if they differ.
 
 Purpose:
 
-Inspect the available memory index.
+Inspect the available memory index. Always lists both the global and project stores together.
 
 Input:
 
 ```ts
 {
-  scope?: MemoryScope;
   limit?: number;
 }
 ```
 
-When `scope` is omitted, lists both the global and project stores together.
-
-Output (single scope):
-
-```ts
-{
-  scope: MemoryScope;
-  memories: MemoryMetadata[];
-}
-```
-
-Output (both scopes, `scope` omitted):
+Output:
 
 ```ts
 {

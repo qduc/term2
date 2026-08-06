@@ -28,13 +28,17 @@ Everything else is discoverable by reading the tree. Skills carry the depth:
 
 # Work In Progress
 
-Active multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Resume here** section: read it before touching the areas it covers, because it records decisions already taken and premises already disproven. Re-deriving them wastes a session and tends to reintroduce the framing the plan corrected.
+Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Resume here** section: read it before touching the areas it covers, because it records decisions already taken and premises already disproven. Re-deriving them wastes a session and tends to reintroduce the framing the plan corrected.
 
-**Note:** Keep this section current — remove stale entries and update ongoing ones.
+**Note:** Keep both lists current — move a plan down when it completes, and drop it entirely once its design record stops earning its place.
 
-- `docs/plans/mid-turn-injection.md` — steering and background-subagent notifications reaching a turn already in flight (Completed; live steer confirmed working). Read it before touching the run loop, `AgentClient`, the turn coordinator, or notification delivery.
+## Active or deferred
 
-- Scheduled live provider canaries remain a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions.
+- Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
+
+## Completed — still read before touching these areas
+
+- `docs/plans/mid-turn-injection.md` — steering and background-subagent notifications reaching a turn already in flight. Read it before touching the run loop, `AgentClient`, the turn coordinator, or notification delivery: it defines the vocabulary those areas are described in (**Segment**, **Request Boundary**, **Injection**, **Background Notification**, now in `CONTEXT.md`), and the bug it fixed was invisible for want of those words.
 
 # Parallel Work Isolation
 
@@ -49,6 +53,7 @@ Do each bug fix or feature in its own worktree: `git worktree add .worktrees/<sl
 
 # Shell Safety For Agents
 
-- Never run ad-hoc shell probes containing executable payloads such as `rm`, `find -exec`, `sed -i`, redirections, command substitution, backticks, or shell metacharacters. Shell quoting mistakes can turn test fixtures into real commands.
+- Never put a destructive payload in an ad-hoc shell probe: `rm`, `find -exec`, `sed -i`, `git checkout` / `reset --hard`, or a redirection that writes over an existing file. Shell quoting mistakes can turn test fixtures into real commands.
+- Ordinary composition is fine. Pipes, `&&`, `2>/dev/null`, and command substitution are how you run tests and read their output — the hazard is the payload, not the syntax.
 - When testing command parsing or safety classification, put cases in a test file or another quoted fixture file and run the test harness. Do not pass dangerous command examples through `node -e`, `tsx -e`, `sh -c`, command substitution, or inline shell one-liners. Keep dangerous strings as data, never as shell syntax.
 - Before running anything that could modify or delete files outside the intended edit set, stop and use a read-only inspection path or ask for explicit approval.

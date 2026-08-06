@@ -73,6 +73,9 @@ it.sequential('ApprovalPrompt Escape cancels ask_user without submitting an answ
   );
 
   await writeInput(stdin, '\u001B');
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  });
 
   expect(cancelled).toBe(true);
   expect(approved).toBe(false);

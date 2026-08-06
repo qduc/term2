@@ -99,7 +99,7 @@ it('writes rich chained input through the real fake-Codex HTTP Responses transpo
       {
         type: 'reasoning',
         encrypted_content: 'http-cipher',
-        content: [{ type: 'reasoning_text', text: 'continue with encrypted context' }],
+        summary: [{ type: 'summary_text', text: 'continue with encrypted context' }],
       },
       { type: 'function_call', call_id: 'call_http', name: 'lookup', arguments: '{}' },
       { type: 'function_call_output', call_id: 'call_http', output: [{ type: 'input_text', text: 'result' }] },

@@ -3,7 +3,15 @@ import { SETTINGS_CATEGORIES } from './settings-completion-config.js';
 import { clampIndex, filterSettingsByCategory, getSettingCategory } from './settings-completion-logic.js';
 
 it('settings completion config exposes stable category ids', () => {
-  expect(SETTINGS_CATEGORIES.map((item) => item.id)).toEqual(['models', 'safety', 'tools', 'ui', 'memory', 'misc']);
+  expect(SETTINGS_CATEGORIES.map((item) => item.id)).toEqual([
+    'models',
+    'safety',
+    'tools',
+    'ui',
+    'memory',
+    'hooks',
+    'misc',
+  ]);
 });
 
 it('getSettingCategory maps known keys to expected categories', () => {

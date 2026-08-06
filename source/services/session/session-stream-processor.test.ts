@@ -102,6 +102,25 @@ it('SessionStreamProcessor.finalize() replaces history with user turns and the l
   ]);
 });
 
+it('SessionStreamProcessor.finalize() drops synthetic shell context from a compacted history prefix', () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.addShellContext('[Previous Shell Session]\n\n$ pwd\n/repo');
+  conversationStore.addUserMessage('Genuine request');
+  const { processor, generationGuard } = createProcessorForHistory(conversationStore);
+  const stream = makeStream([], { interruptions: [], output: [openAICompaction('cmp-1')] });
+
+  expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
+  expect(conversationStore.getHistory()).toEqual([
+    { role: 'user', type: 'message', content: 'Genuine request' },
+    {
+      type: 'compaction',
+      id: 'cmp-1',
+      encrypted_content: 'ciphertext-cmp-1',
+      providerOpaque: { provider: 'openai' },
+    },
+  ]);
+});
+
 it('SessionStreamProcessor.finalize() appends ordinary terminal output when no compaction item is present', () => {
   const conversationStore = new ConversationStore();
   conversationStore.addUserMessage('Keep this history');

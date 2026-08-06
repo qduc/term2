@@ -81,7 +81,10 @@ const compactedProviderHistory = (
 ): ProviderInputItem[] | undefined => {
   const compaction = lastOpenAICompaction(output);
   if (!compaction) return undefined;
-  const userTurns = existingHistory.filter((item) => projectConversationMessage(item)?.role === 'user');
+  const userTurns = existingHistory.filter((item) => {
+    const message = projectConversationMessage(item);
+    return message?.role === 'user' && !message.isSynthetic;
+  });
   return [...userTurns, projectPersistedAssistantItemToProviderHistory(compaction)];
 };
 

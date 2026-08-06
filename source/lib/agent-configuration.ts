@@ -248,6 +248,8 @@ export class AgentConfiguration implements AgentSource {
       'agent.reasoningEffort',
       'agent.temperature',
       'agent.useFlexServiceTier',
+      'agent.contextCompaction.enabled',
+      'agent.contextCompaction.compactThreshold',
       'agent.smartModel',
       'agent.smartProvider',
       'agent.balancedModel',

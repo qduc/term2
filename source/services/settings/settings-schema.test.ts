@@ -37,6 +37,28 @@ it('Codex websocket receive timeouts default to transport-safe values and reject
   }
 });
 
+it('context compaction defaults to disabled with a conservative threshold and rejects unsafe thresholds', () => {
+  expect(AgentSettingsSchema.parse({}).contextCompaction).toEqual({
+    enabled: false,
+    compactThreshold: 100_000,
+  });
+  expect(DEFAULT_SETTINGS.agent.contextCompaction).toEqual({
+    enabled: false,
+    compactThreshold: 100_000,
+  });
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED)).toBe(true);
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD)).toBe(true);
+
+  expect(
+    SettingsSchema.parse({ agent: { contextCompaction: { enabled: true, compactThreshold: 12_000 } } }).agent
+      ?.contextCompaction,
+  ).toEqual({ enabled: true, compactThreshold: 12_000 });
+
+  for (const compactThreshold of [999, 1000.5, Infinity, Number.NaN]) {
+    expect(() => SettingsSchema.parse({ agent: { contextCompaction: { compactThreshold } } })).toThrow();
+  }
+});
+
 it('memory settings default to enabled local storage with bounded retrieval and context budgets', () => {
   const parsed = SettingsSchema.parse({});
   expect(parsed.memory).toMatchObject({

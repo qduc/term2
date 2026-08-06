@@ -34,6 +34,10 @@ const SETTINGS_SOURCE_KEYS = {
     mentorProvider: 'agent.mentorProvider',
     mentorReasoningEffort: 'agent.mentorReasoningEffort',
     useFlexServiceTier: 'agent.useFlexServiceTier',
+    contextCompaction: {
+      enabled: 'agent.contextCompaction.enabled',
+      compactThreshold: 'agent.contextCompaction.compactThreshold',
+    },
     autoApproveModel: 'agent.autoApproveModel',
     autoApproveProvider: 'agent.autoApproveProvider',
     autoApproveReasoningEffort: 'agent.autoApproveReasoningEffort',

@@ -125,6 +125,13 @@ export const AgentSettingsSchema = z.object({
     .optional()
     .default(false)
     .describe('Use OpenAI Flex Service Tier to reduce costs (OpenAI only)'),
+  contextCompaction: z
+    .object({
+      enabled: z.boolean().default(false),
+      compactThreshold: z.number().int().finite().min(1000).default(100_000),
+    })
+    .default({ enabled: false, compactThreshold: 100_000 })
+    .describe('OpenAI server-side context compaction settings'),
   autoApproveModel: z
     .string()
     .optional()
@@ -523,6 +530,10 @@ export interface SettingsWithSources {
     mentorProvider: SettingWithSource<string | undefined>;
     mentorReasoningEffort: SettingWithSource<string>;
     useFlexServiceTier: SettingWithSource<boolean>;
+    contextCompaction: {
+      enabled: SettingWithSource<boolean>;
+      compactThreshold: SettingWithSource<number>;
+    };
     autoApproveModel: SettingWithSource<string>;
     autoApproveProvider: SettingWithSource<string | undefined>;
     autoApproveReasoningEffort: SettingWithSource<string>;
@@ -659,6 +670,8 @@ export const SETTING_KEYS = {
   AGENT_MENTOR_PROVIDER: 'agent.mentorProvider',
   AGENT_MENTOR_REASONING_EFFORT: 'agent.mentorReasoningEffort',
   AGENT_USE_FLEX_SERVICE_TIER: 'agent.useFlexServiceTier',
+  AGENT_CONTEXT_COMPACTION_ENABLED: 'agent.contextCompaction.enabled',
+  AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD: 'agent.contextCompaction.compactThreshold',
   SHELL_TIMEOUT: 'shell.timeout',
   SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
   SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
@@ -760,6 +773,8 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_MENTOR_PROVIDER,
   SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
   SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER,
+  SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED,
+  SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD,
   SETTING_KEYS.SHELL_TIMEOUT,
   SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
   SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
@@ -891,6 +906,10 @@ export const DEFAULT_SETTINGS: SettingsData = {
     mentorProvider: undefined,
     mentorReasoningEffort: 'default',
     useFlexServiceTier: false,
+    contextCompaction: {
+      enabled: false,
+      compactThreshold: 100_000,
+    },
     autoApproveModel: 'gpt-4o-mini',
     autoApproveProvider: undefined,
     autoApproveReasoningEffort: 'low',

@@ -77,6 +77,16 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       value: settings.agent.useFlexServiceTier.value,
       source: settings.agent.useFlexServiceTier.source,
     },
+    {
+      key: SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED,
+      value: settings.agent.contextCompaction.enabled.value,
+      source: settings.agent.contextCompaction.enabled.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD,
+      value: settings.agent.contextCompaction.compactThreshold.value,
+      source: settings.agent.contextCompaction.compactThreshold.source,
+    },
     // agent.provider is hidden - it can only be changed in a new conversation via model menu
     {
       key: SETTING_KEYS.AGENT_MAX_TURNS,
@@ -250,6 +260,15 @@ export function createSettingsCommand({
         if (typeof parsedValue !== 'number' || !Number.isInteger(parsedValue) || parsedValue < 1) {
           addSystemMessage(
             `Error: ${SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS} must be a whole number greater than or equal to 1`,
+          );
+          return true;
+        }
+      }
+
+      if (key === SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD) {
+        if (typeof parsedValue !== 'number' || !Number.isInteger(parsedValue) || parsedValue < 1000) {
+          addSystemMessage(
+            `Error: ${SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD} must be a whole number greater than or equal to 1000`,
           );
           return true;
         }

@@ -15,6 +15,10 @@ const baseSettings = {
     mentorProvider: { value: undefined, source: 'default' },
     mentorReasoningEffort: { value: 'default', source: 'default' },
     useFlexServiceTier: { value: false, source: 'default' },
+    contextCompaction: {
+      enabled: { value: false, source: 'default' },
+      compactThreshold: { value: 100_000, source: 'default' },
+    },
     provider: { value: 'openai', source: 'default' },
     maxTurns: { value: 20, source: 'default' },
     retryAttempts: { value: 2, source: 'default' },
@@ -93,6 +97,8 @@ it('formatSettingsSummary renders values with sources', () => {
   expect(summary.includes('shell.timeout: 120000 (default)')).toBe(true);
   expect(summary.includes('logging.logLevel: info (default)')).toBe(true);
   expect(summary.includes('agent.maxParallelToolCalls: 3 (default)')).toBe(true);
+  expect(summary.includes('agent.contextCompaction.enabled: false (default)')).toBe(true);
+  expect(summary.includes('agent.contextCompaction.compactThreshold: 100000 (default)')).toBe(true);
   expect(summary.includes('memory.enabled: true (default)')).toBe(true);
 });
 

@@ -45,6 +45,8 @@ const createMockSettings = (values: Record<string, any> = {}): ISettingsService 
     'agent.reasoningEffort': 'default',
     'agent.provider': 'openai',
     'agent.useFlexServiceTier': false,
+    'agent.contextCompaction.enabled': false,
+    'agent.contextCompaction.compactThreshold': 100_000,
     'shell.maxOutputChars': undefined,
     ...values,
   };
@@ -423,6 +425,36 @@ it.sequential('buildAgent sets flex service tier when enabled', () => {
   const result = buildAgent({ model: 'gpt-4o' }, deps);
 
   expect(result.agent.modelSettings?.providerData?.service_tier).toBe('flex');
+});
+
+it.sequential('buildAgent passes enabled context compaction to the OpenAI adapter', () => {
+  const { deps } = createDeps({
+    providerId: 'openai',
+    settingsValues: {
+      'agent.contextCompaction.enabled': true,
+      'agent.contextCompaction.compactThreshold': 12_000,
+    },
+  });
+
+  const result = buildAgent({ model: 'gpt-4o' }, deps);
+
+  expect(result.agent.modelSettings?.providerData?.contextCompaction).toEqual({
+    enabled: true,
+    threshold: 12_000,
+  });
+});
+
+it.sequential('buildAgent keeps context compaction out of non-OpenAI provider options', () => {
+  const { deps } = createDeps({
+    providerId: 'openrouter',
+    settingsValues: {
+      'agent.contextCompaction.enabled': true,
+    },
+  });
+
+  const result = buildAgent({ model: 'gpt-4o' }, deps);
+
+  expect(result.agent.modelSettings?.providerData?.contextCompaction).toBeUndefined();
 });
 
 it.sequential('buildAgent leaves parallel tool calls enabled by provider policy for Codex', () => {

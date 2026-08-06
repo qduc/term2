@@ -253,6 +253,7 @@ it.each(['gpt-5.4-mini', 'gpt-5.6-luna'])(
 
 it.each([
   ['unsupported model', 'gpt-5.3', true],
+  ['unmeasured future model', 'gpt-5.10', true],
   ['non-OpenAI provider capability', 'gpt-5.4-mini', false],
 ])('does not send context management for an enabled %s', async (_label, modelName, supportsContextCompaction) => {
   let capturedBody: any;
@@ -270,6 +271,30 @@ it.each([
     input: [],
     tools: [],
     providerOptions: { contextCompaction: { enabled: true, threshold: 2000 } },
+  });
+
+  expect(capturedBody).not.toHaveProperty('context_management');
+});
+
+it('does not let extraBody bypass the HTTP context-compaction gate', async () => {
+  let capturedBody: any;
+  const client = {
+    responses: {
+      create: async (body: any) => {
+        capturedBody = body;
+        return { id: 'resp_no_compaction', output: [], usage: {} };
+      },
+    },
+  };
+
+  const model = new OpenAIResponsesModelWithPromptCacheKey(client, 'gpt-5.6-luna', undefined, false);
+  await model.getResponse({
+    input: [],
+    tools: [],
+    providerOptions: {
+      contextCompaction: { enabled: true, threshold: 2000 },
+      extraBody: { context_management: [{ type: 'compaction', compact_threshold: 1000 }] },
+    },
   });
 
   expect(capturedBody).not.toHaveProperty('context_management');
@@ -376,6 +401,30 @@ it('stream (websocket) sends context management only for an enabled supported Op
   );
 
   expect(capturedWSRequest.context_management).toEqual([{ type: 'compaction', compact_threshold: 2000 }]);
+});
+
+it('does not let extraBody bypass the WebSocket context-compaction gate', async () => {
+  fakeResponsesWSStream = async function* () {
+    yield { type: 'message', message: { type: 'response.completed', response: { id: 'resp_ws_no_compaction' } } };
+  };
+  const model = new OpenAIResponsesWSModelWithPromptCacheKey(
+    { responses: { create: async () => ({}) } },
+    'gpt-5.6-luna',
+    undefined,
+    false,
+  );
+  await collect(
+    model.stream({
+      input: [],
+      tools: [],
+      providerOptions: {
+        contextCompaction: { enabled: true, threshold: 2000 },
+        extraBody: { context_management: [{ type: 'compaction', compact_threshold: 1000 }] },
+      },
+    }),
+  );
+
+  expect(capturedWSRequest).not.toHaveProperty('context_management');
 });
 
 it('emits direct typed completion output and usage without compatibility envelopes', async () => {

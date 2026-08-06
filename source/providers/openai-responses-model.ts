@@ -140,8 +140,9 @@ function toResponsesOutputFormat(
 
 function supportsContextCompactionModel(model: string): boolean {
   // This allowlist is empirical: context_management returned opaque 500s on
-  // gpt-5.1/gpt-5.2 and worked on gpt-5.4+. Re-measure before adding models.
-  return /^gpt-5\.(?:[4-9]|[1-9]\d+)(?:$|[-_])/.test(model);
+  // gpt-5.1/gpt-5.2, while the gpt-5.4 family and gpt-5.6-luna worked.
+  // Re-measure before adding any model family.
+  return /^(?:gpt-5\.4(?:$|[-_])|gpt-5\.6-luna(?:$|[-_]))/.test(model);
 }
 
 function contextCompaction(
@@ -164,7 +165,9 @@ function requestBody(
   providerSupportsContextCompaction = false,
 ): any {
   const providerOptions = request.providerOptions ?? {};
-  const extraBody = (providerOptions as any).extraBody;
+  // context_management is capability-gated below. Do not let the generic
+  // extra-body escape hatch bypass that gate on unsupported endpoints/models.
+  const { context_management: _reservedContextManagement, ...extraBody } = (providerOptions as any).extraBody ?? {};
   const compaction = contextCompaction(providerOptions, model, providerSupportsContextCompaction);
   const projectedInput = toResponsesApiInput(request.input);
   const body = {
@@ -186,8 +189,8 @@ function requestBody(
       ? { text: toResponsesOutputFormat(request.outputType) }
       : {}),
     ...(request.previousResponseId ? { previous_response_id: request.previousResponseId } : {}),
+    ...extraBody,
     ...(compaction ? { context_management: [{ type: 'compaction', compact_threshold: compaction.threshold }] } : {}),
-    ...(extraBody ?? {}),
   } as any;
 
   // Encrypted reasoning is only returned when explicitly requested by the

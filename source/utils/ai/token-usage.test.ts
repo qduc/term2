@@ -4,6 +4,7 @@ import {
   addTokenUsage,
   createUsageAccumulator,
   extractUsage,
+  formatContextUsage,
   formatFooterUsage,
   formatSessionTokenUsage,
   formatSessionUsageBreakdown,
@@ -232,6 +233,16 @@ it('formatFooterUsage returns formatted string', () => {
   expect(formatFooterUsage({ cache_read_tokens: 42 })).toBe('');
   expect(formatFooterUsage({ total_tokens: 100 })).toBe('');
   expect(formatFooterUsage(null)).toBe('');
+});
+
+it('formatContextUsage renders used/window in compact k/M units', () => {
+  expect(formatContextUsage(100_000, 1_000_000)).toBe('100k/1.0M');
+  expect(formatContextUsage(272_000, 272_000)).toBe('272k/272k');
+  expect(formatContextUsage(0, 128_000)).toBe('0k/128k');
+  expect(formatContextUsage(123_456, 200_000)).toBe('123k/200k');
+  expect(formatContextUsage(1_500_000, 2_600_000)).toBe('1.5M/2.6M');
+  expect(formatContextUsage(1_049_000, 1_000_000)).toBe('1.0M/1.0M');
+  expect(formatContextUsage(999, 200_000)).toBe('1k/200k');
 });
 
 it('addTokenUsage accumulates usage counters', () => {

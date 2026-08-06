@@ -317,6 +317,18 @@ export function formatFooterUsage(
   return `Tok: ${parts.join(' / ')}`;
 }
 
+function formatCompactTokens(tokens: number): string {
+  return tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)}M` : `${Math.round(tokens / 1_000)}k`;
+}
+
+/**
+ * Compact context gauge, e.g. "100k/1.0M": tokens used in the current context
+ * (the last request's prompt tokens) over the model's context window.
+ */
+export function formatContextUsage(usedTokens: number, contextWindow: number): string {
+  return `${formatCompactTokens(usedTokens)}/${formatCompactTokens(contextWindow)}`;
+}
+
 export function addTokenUsage(
   current: NormalizedUsage | null | undefined,
   next: NormalizedUsage | null | undefined,

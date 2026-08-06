@@ -3,9 +3,10 @@ import { Box, Text } from 'ink';
 import { useSetting } from '../../hooks/use-setting.js';
 import { hasDockerHostControlProject } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 import { getProvider } from '../../providers/index.js';
+import { getModelContextWindow } from '../../providers/model-catalog/catalog.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { SSHInfo } from '../../hooks/use-shell-mode.js';
-import { formatFooterUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
+import { formatContextUsage, formatFooterUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../services/conversation/conversation-events.js';
 import type { StaticCommitBlocker } from '../message/MessageList.js';
 
@@ -56,6 +57,13 @@ const StatusBar: FC<StatusBarProps> = ({
 
   const providerDef = getProvider(providerKey);
   const providerLabel = providerDef?.label || providerKey;
+
+  // Context gauge: last request's prompt tokens (the current conversation
+  // context) over the vendored catalog's context window for the active model.
+  const contextWindow = model ? getModelContextWindow(providerKey, model) : undefined;
+  const contextTokens = lastUsage?.prompt_tokens;
+  const contextUsageText =
+    contextWindow != null && contextTokens != null ? formatContextUsage(contextTokens, contextWindow) : '';
 
   const slate = '#64748b';
   const glow = '#fbbf24';
@@ -264,21 +272,22 @@ const StatusBar: FC<StatusBarProps> = ({
           </Box>
         </Box>
 
-        {usageText ? (
+        {usageText || warningText || contextUsageText ? (
           <Box>
-            <Text color={usageColor} bold={Boolean(largeUncachedWarning)}>
-              {usageText}
-            </Text>
-          </Box>
-        ) : (
-          warningText && (
-            <Box>
-              <Text color={hasPendingConfirmation ? warnRed : glow} bold>
-                {warningText}
+            {usageText ? (
+              <Text color={usageColor} bold={Boolean(largeUncachedWarning)}>
+                {usageText}
               </Text>
-            </Box>
-          )
-        )}
+            ) : (
+              warningText && (
+                <Text color={hasPendingConfirmation ? warnRed : glow} bold>
+                  {warningText}
+                </Text>
+              )
+            )}
+            {contextUsageText && <Text color={slate}> {contextUsageText}</Text>}
+          </Box>
+        ) : null}
       </Box>
     </Box>
   );

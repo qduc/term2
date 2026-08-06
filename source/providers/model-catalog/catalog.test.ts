@@ -69,8 +69,21 @@ describe('getModelContextWindow over the vendored catalog', () => {
     expect(getModelContextWindow('openai', 'model-that-does-not-exist')).toBeUndefined();
   });
 
-  it('returns undefined for an unknown provider id', () => {
-    expect(getModelContextWindow('custom-local-llm', 'gpt-4o')).toBeUndefined();
+  it('resolves a known model id through an unknown provider via cross-provider fallback', () => {
+    // term2 users may run a catalog model under a custom or unregistered
+    // provider (settings falls back to the default provider, which never
+    // scopes to the catalog entry). The model id alone must still resolve.
+    expect(getModelContextWindow('custom-local-llm', 'claude-sonnet-4-6')).toBe(1000000);
+    expect(getModelContextWindow('anthropic', 'gpt-5.6-sol')).toBe(272000);
+  });
+
+  it('returns undefined when neither the provider nor the model id is known', () => {
+    expect(getModelContextWindow('custom-local-llm', 'model-that-does-not-exist')).toBeUndefined();
+  });
+
+  it('prefers the provider-scoped entry over a cross-provider fallback', () => {
+    // gpt-5.6-sol exists under both openai and codex; the openai scope must win.
+    expect(getCatalogModel('openai', 'gpt-5.6-sol')).toMatchObject({ contextWindow: 272000 });
   });
 
   it('exposes maxTokens alongside contextWindow', () => {

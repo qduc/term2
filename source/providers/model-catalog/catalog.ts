@@ -51,9 +51,27 @@ export function lookupModel(
   return best;
 }
 
+/**
+ * Exact-id lookup across every provider in the catalog. Used as a fallback
+ * when the provider-scoped lookup misses, because a model id is a more
+ * reliable key than the provider id: term2 users may run a catalog model
+ * through a custom or unregistered provider (e.g. Claude via a proxy, where
+ * the settings layer falls back to the default provider). Cross-provider
+ * duplicates in the vendored catalog agree on contextWindow, so any hit is
+ * authoritative.
+ */
+function lookupModelAnyProvider(catalog: ModelCatalogData, modelId: string): CatalogModelInfo | undefined {
+  const wanted = normalizeId(modelId);
+  for (const models of Object.values(catalog)) {
+    const exact = models[wanted];
+    if (exact) return exact;
+  }
+  return undefined;
+}
+
 /** Look up vendored metadata for a provider/model pair. */
 export function getCatalogModel(providerId: string, modelId: string): CatalogModelInfo | undefined {
-  return lookupModel(MODEL_CATALOG, providerId, modelId);
+  return lookupModel(MODEL_CATALOG, providerId, modelId) ?? lookupModelAnyProvider(MODEL_CATALOG, modelId);
 }
 
 /** Context window in tokens for a provider/model pair, when the catalog knows it. */

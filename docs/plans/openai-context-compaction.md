@@ -1,9 +1,10 @@
 # OpenAI Context Compaction
 
-Status: plan. Blocking decision **resolved** on 2026-08-05 by live experiment — use **server-side
-automatic compaction** (`context_management`), not the manual `/v1/responses/compact` endpoint.
-This depends on dropping support for `gpt-5.3` and earlier, which is a decision already taken. See
-[Experiment results](#experiment-results-2026-08-05). Ready to start at Step 1.
+Status: **Step 1 merged to `main` on 2026-08-06 (`dc949022`)**. The opaque provider-item lane is
+implemented and tested; resume at [Step 2](#step-2-opaque-items-survive-persistence-and-replay).
+The blocking decision (server-side automatic compaction via `context_management`, not the manual
+`/v1/responses/compact` endpoint) remains as resolved on 2026-08-05 — see
+[Experiment results](#experiment-results-2026-08-05).
 
 > Renamed from "OpenAI Manual Context Compaction". The manual endpoint was the plan of record until
 > the second round of experiments; it is now the documented fallback, not the design.
@@ -20,6 +21,33 @@ Phases 1 and 2 of the originating brief ("map the flow", "verify item fidelity")
 done** — the findings are recorded below under [Current flow](#current-flow-phase-1-finding) and
 [Item fidelity](#item-fidelity-the-actual-blocker-phase-2-finding). Do not re-map them; that was a
 full session of reading.
+
+**Step 1 (opaque provider item lane) is DONE** — merged 2026-08-06 as `dc949022` (feature branch
+`opaque-lane`, commit `5155e499`). Start at [Step 2](#step-2-opaque-items-survive-persistence-and-replay).
+What Step 1 shipped, so a resumer does not re-derive it:
+
+- `StreamedModelTurnInput`/`StreamedModelTurnOutput` (`source/contracts/streamed-model-turn.ts`)
+  both gained a `provider_opaque` variant: `{ type: 'provider_opaque', provider, item }`.
+- `ProviderInputItem` (`source/contracts/provider-input.ts`) gained a `providerOpaque?: { provider: string }`
+  marker field. Nothing in the tree sets it yet — Step 2's replayed opaque item is the first producer.
+- `normalizeInputItem` (`source/services/agent-runtime/application-run-loop.ts`, ~line 1183) checks the
+  marker before the `unsupportedInput` throw (which stays as the default) and **strips the internal
+  marker from the carried wire item**. The throw message is `Unsupported restored input item type: …`.
+- `toResponsesApiInput` (`source/providers/openai-responses-model.ts:82`) splices an `openai`
+  `provider_opaque` item verbatim and throws on any other provider's item; `toTurnOutput` (:200)
+  returns `provider_opaque` for unknown output types instead of throwing at what was :227.
+- `codex-turn-converter.ts` (explicit `case 'provider_opaque'` throw) and
+  `ai-sdk-streamed-model.ts` `toPromptMessage` (explicit throw; note the error surfaces as a rejected
+  async iteration, not a synchronous throw, because `stream()` is an async generator).
+- **No persistence yet.** `normalizeRunItem` (`source/services/conversation/run-item-normalizer.ts:205`)
+  still silently drops unknown output kinds, and the run loop's `completion.output` handling is
+  filter-based (`if (item.type === 'reasoning')`, `if (item.type !== 'tool_call') continue`) — a
+  `provider_opaque` output passes through harmlessly and is not persisted. That seam is Step 2.
+
+Gates run and green for Step 1: `pnpm test` (5217 passed; only the pre-existing flaky
+`InputBox` timing test, which passes on isolated rerun), `pnpm test:provider-black-box` (152 passed),
+typecheck, prettier, eslint. Unit tests live beside each changed file; the load-bearing negative
+test is an opaque item routed to a non-OpenAI provider throwing rather than silently serializing.
 
 Five premises worth not re-deriving:
 
@@ -45,8 +73,6 @@ Five premises worth not re-deriving:
    client that re-sends full uncompacted history gets **no saving at all** (3910 tokens vs 3870),
    and Term2 re-sends full history whenever chaining breaks. Without the opaque-item lane, this
    feature silently does nothing on exactly the sessions that need it.
-
-Start at [Step 1](#step-1-opaque-provider-item-passthrough).
 
 ## Goal
 
@@ -380,7 +406,19 @@ Each step is independently landable and independently testable. Work each in its
 
 ### Step 1: opaque provider item passthrough
 
-The one architecturally significant change. Everything else is contained.
+**Status: DONE — merged 2026-08-06 (`dc949022`).** This was the one architecturally significant
+change; everything else is contained. Implemented exactly as specced below, with three notes for
+the record: the internal `providerOpaque` marker is stripped from the wire item in
+`normalizeInputItem` (so `item.item` is clean when it reaches `toResponsesApiInput`); the ai-sdk
+rejection surfaces as a rejected async iteration, not a synchronous throw; and the negative
+test (an OpenAI opaque item routed to a non-OpenAI provider throws) is the one that pins the
+contract. Gates passed: `pnpm test` + `pnpm test:provider-black-box` (152).
+
+> The line numbers in the original spec below have drifted since 2026-08-05; current anchors:
+> `normalizeInputItem` is at `application-run-loop.ts:1183`, `toResponsesApiInput` at
+> `openai-responses-model.ts:82`, `toTurnOutput` at `openai-responses-model.ts:200`. The
+> `unsupportedInput` message is `Unsupported restored input item type: …`.
+
 
 Add a passthrough variant to the application's input union so provider-native items Term2 does not
 model can cross the run loop untouched:
@@ -416,6 +454,14 @@ Gate: `pnpm test` and `pnpm test:provider-black-box` (run-loop change — non-ne
 `AGENTS.md`).
 
 ### Step 2: opaque items survive persistence and replay
+
+> Path drift since 2026-08-05: `conversation-state-schema.ts` lives at
+> `source/services/conversation/conversation-state-schema.ts` (not `source/contracts/`), with
+> `history: z.array(z.unknown())` at line 22; `conversation-log-writer.ts` lives at
+> `source/services/logging/conversation-log-writer.ts`. Persisted item kinds are in
+> `source/services/conversation/conversation-persistence-types.ts`; `conversation-turn-items.ts`
+> (same dir) is where replayed items are projected back to `ProviderInputItem` — the seam that must
+> emit the `providerOpaque` marker from Step 1 so the run loop re-carries opaque items.
 
 - `run-item-normalizer.ts` / `conversation-turn-items.ts:44` — add a fifth persisted item kind that
   stores the provider item verbatim as opaque JSON. Do **not** define a typed schema per OpenAI item

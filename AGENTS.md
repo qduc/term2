@@ -34,6 +34,12 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Active or deferred
 
+- `docs/plans/openai-context-compaction.md` — OpenAI context compaction (server-side
+  `context_management`). Step 1 (opaque provider-item lane) is merged; resume at Step 2
+  (persistence/replay/redaction). Read it before touching the OpenAI adapter, the run loop,
+  `ConversationStore`/`conversation-turn-items`, or conversation persistence: it records the
+  closed-union/throw-site findings and the `provider_opaque` marker contract.
+
 - Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
 
 ## Completed — still read before touching these areas

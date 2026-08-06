@@ -71,10 +71,11 @@ by default. Opt into each content class separately with
 
 ## Herdr status example
 
-`docs/herdr-status-hook.ts` shows the intended first-party consumer
-shape. It translates the public `status.change` event to a local Herdr command;
-no Herdr-specific behavior is built into Term2. Adjust the final command to
-the Herdr installation and pane-selection mechanism used on the host.
+`docs/herdr-status-hook.ts` shows the first-party consumer shape. The installed
+user hook at `~/.term2/hooks/herdr-status.ts` registers the session on
+`session.start`, translates `status.change` to Herdr's `pane report-agent`
+command, and releases the agent on `session.end`. It is a no-op when
+`HERDR_PANE_ID` is absent. No Herdr-specific behavior is built into Term2.
 
 Hook events describe the local Term2 process and local session cwd. They are
 not discovered or executed on an SSH target even when tools execute remotely.

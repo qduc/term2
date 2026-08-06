@@ -30,6 +30,7 @@ describe('HookDiscovery', () => {
     await mkdir(projectHooks, { recursive: true });
     await writeFile(join(userHooks, 'z-last.ts'), 'export default () => {}');
     await writeFile(join(userHooks, 'a-first.js'), 'export default () => {}');
+    await writeFile(join(userHooks, 'term2-hooks.d.ts'), 'declare module "@qduc/term2/hooks" {}');
     await writeFile(join(userHooks, 'ignored.json'), '{}');
     await writeFile(join(projectHooks, 'b-project.mjs'), 'export default () => {}');
     await writeFile(join(projectHooks, 'a-project.ts'), 'export default () => {}');

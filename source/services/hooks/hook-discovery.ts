@@ -49,6 +49,10 @@ export interface HookDiscoveryOptions {
 
 const HOOK_EXTENSIONS = new Set(['.js', '.mjs', '.ts']);
 
+function isHookFileName(name: string): boolean {
+  return !name.endsWith('.d.ts') && HOOK_EXTENSIONS.has(extname(name));
+}
+
 function errorCode(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null) return undefined;
   const code = (error as { code?: unknown }).code;
@@ -255,7 +259,7 @@ export class HookDiscovery {
         });
         continue;
       }
-      if (!entry.isFile() || !HOOK_EXTENSIONS.has(extname(entry.name))) continue;
+      if (!entry.isFile() || !isHookFileName(entry.name)) continue;
 
       try {
         // Re-check with lstat after readdir to avoid following a replacement

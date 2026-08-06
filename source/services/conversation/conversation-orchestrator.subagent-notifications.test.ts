@@ -93,7 +93,6 @@ function makeUIPort(): UIPort {
     onQueueStateChange: vi.fn(),
     onQueuedMessagePending: vi.fn(),
     onQueuedMessageStarted: vi.fn(),
-    onRemoveLastPendingMessage: vi.fn(),
   };
 }
 

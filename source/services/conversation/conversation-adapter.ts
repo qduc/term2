@@ -378,7 +378,12 @@ export class ConversationAdapter {
    */
   async retractSubmission(id: string): Promise<SubmissionMutation> {
     if (this.#pendingSteerIds.has(id)) {
-      const retracted = this.#turnFlow.retractSteer?.(id) ?? false;
+      if (!this.#turnFlow.retractSteer) {
+        throw new Error(
+          `ConversationAdapter.retractSubmission: pending steer '${id}' has no turnFlow.retractSteer to route to`,
+        );
+      }
+      const retracted = this.#turnFlow.retractSteer(id);
       if (!retracted) return { kind: 'too_late', stage: 'started' };
       this.#pendingSteerIds.delete(id);
       return { kind: 'applied', stage: 'pending_steer' };
@@ -411,8 +416,13 @@ export class ConversationAdapter {
    */
   async editSubmission(id: string, turn: UserTurn): Promise<SubmissionMutation> {
     if (this.#pendingSteerIds.has(id)) {
+      if (!this.#turnFlow.editSteer) {
+        throw new Error(
+          `ConversationAdapter.editSubmission: pending steer '${id}' has no turnFlow.editSteer to route to`,
+        );
+      }
       const item = userTurnToProviderItem(normalizeUserTurn(turn), { steering: true });
-      const edited = this.#turnFlow.editSteer?.(id, [item]) ?? false;
+      const edited = this.#turnFlow.editSteer(id, [item]);
       return edited ? { kind: 'applied', stage: 'pending_steer' } : { kind: 'too_late', stage: 'started' };
     }
     if (this.#queue) {
@@ -424,7 +434,12 @@ export class ConversationAdapter {
         const displayText = normalizeUserTurn(turn).text;
         const controllerText = displayText.trim() ? displayText : QUEUED_NON_TEXT_PLACEHOLDER;
         const result = await this.#queue.command({ kind: 'edit_queued', itemId: id as ItemId, text: controllerText });
-        if (result.kind !== 'accepted') return { kind: 'too_late', stage: 'started' };
+        if (result.kind !== 'accepted') {
+          if (this.#messagesById.has(id)) {
+            this.#messagesById.set(id, message);
+          }
+          return { kind: 'too_late', stage: 'started' };
+        }
         this.#notifyQueueState();
         return { kind: 'applied', stage: 'queued' };
       }
@@ -545,11 +560,8 @@ export class ConversationAdapter {
       ? ''
       : lastItem.text;
 
-    const result = await queue.command({ kind: 'remove_queued', itemId: lastItem.id });
-    if (result.kind !== 'accepted') return null;
-    this.#settleFailure(lastItem.id, queueCancellationError('Queued message was removed'));
-
-    this.#notifyQueueState();
+    const result = await this.retractSubmission(lastItem.id);
+    if (result.kind !== 'applied') return null;
     return { id: lastItem.id, text: restoredText };
   }
 

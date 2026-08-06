@@ -3,8 +3,9 @@
 ## Resume here
 
 **Steps 1–2 (`## Build order`) are done and merged to `main`** (`ccc02324`,
-feature branch `queue-editing-substrate`, commit `b5f31095`). Steps 3–4 are
-still design-only; start at Step 3. Read `## The three stages` before
+feature branch `queue-editing-substrate`, commit `b5f31095`). Step 3 is being
+re-derived on the isolated `queue-editing-step3-rederive` branch; Step 4 is
+still design-only. Read `## The three stages` before
 touching `ConversationOrchestrator`, `ConversationService`, or the
 `pendingQueuedMessages` reducer slice — the substrate below only closes the gap
 between the run loop and the adapter; the UI still addresses queued work by
@@ -52,60 +53,34 @@ input box**, entered by ↑ on an empty input. Not a modal. See `## Rejected`.
 - `removeLastQueuedItem` is untouched, per scope — still the only mutation
   `InputBox` calls today.
 
-### What Step 3 must still account for
+### Step 3 decisions recorded
 
-- **`retractSubmission`/`editSubmission` can only reach `'pending_steer'` once
-  a real id flows into `steerActiveTurn`.** Today `ConversationOrchestrator
-  .sendUserMessage` (`conversation-orchestrator.ts:434`) calls
-  `steerActiveTurn(turn)` with no id — `#pendingSteerIds` stays empty in
-  production until Step 3 passes `userMessage.id` there (same id already
-  passed as `preferredMessageId` a few lines later). Until then only the
-  `'queued'` stage is reachable end-to-end; `'pending_steer'` routing is
-  covered by adapter unit tests with an explicit `{ id }`, not yet by any real
-  caller.
+- **The pending-steer address is now wired through the real caller.**
+  `ConversationOrchestrator.sendUserMessage` passes `userMessage.id` to
+  `steerActiveTurn`, so `#pendingSteerIds` can route production edits and
+  retractions to the run loop. A pending-steer edit also records the latest
+  `UserTurn` so the eventual transcript and log match the provider input.
   - Same expected-signature note: `retractSteer`/`editSteer` were added to
   `TurnFlow` as truly optional (`?`), so a `turnFlow` that only implements
   `steer` still type-checks — Step 3's orchestrator wiring does not need a
   companion change here to compile, only to actually retract/edit anything.
 - **A retracted pending steer resolves `steerActiveTurn` to `false` — the same
-  value as "the turn had no boundary left."** `ConversationOrchestrator`
-  currently treats any `false` from `steerActiveTurn` as "fall through and
-  queue it as a new submission" (`conversation-orchestrator.ts:445-451`). Step
-  3 must not let a deliberate retraction fall into that path — it would
-  silently resubmit what the user just cancelled. This is exactly the failure
-  mode the plan's "Drop the `onRemoveLastPendingMessage` fallback branch" note
-  anticipates; `retractPendingSubmission`/`editPendingSubmission` on the
-  orchestrator need to own that distinction (e.g. by calling
-  `retractSubmission`/`editSubmission` directly rather than relying on the
-  boolean `steerActiveTurn` return to imply intent).
+  value as "the turn had no boundary left."** Step 3 routes mutations directly
+  through `retractSubmission`/`editSubmission` and marks a successful pending
+  retraction before the original steer path considers its boolean result, so a
+  deliberate retraction cannot fall through to a fresh submission.
 - No change was needed to `QueueController` beyond what already existed:
   `edit_queued` and `remove_queued` were already implemented; Steps 1–2 gave
   them their first real callers (via `editSubmission`/`retractSubmission`) and
   added persistence round-trip coverage for `edit_queued`.
-- **`editSubmission` mutates `#messagesById` before it knows the edit will be
-  accepted, and does not roll back** (found in merge review, not by the
-  implementing agent — no test covers it). It writes the new `UserTurn`, then
-  `await`s `edit_queued`; if the controller rejects because the item started
-  during that await, it returns `too_late` with the map already rewritten.
-  `#runQueuedTurn` reads `#messagesById` once at its start
-  (`conversation-adapter.ts:617`), so the common case is harmless — the running
-  turn already captured the old object. The narrow window is: item starts
-  *inside* the await, `#runQueuedTurn` reads the **new** input, the caller is
-  told `too_late`, and per `## Losing the race` submits the edited text as a
-  fresh message — sending it **twice**.
-  Reversing the order does not fix it, it only swaps which way the window
-  fails (the controller accepts, the item starts, and the turn sends the
-  **stale** text — the original trap). Step 3 should settle this deliberately
-  rather than reorder and call it done: the honest fix is for `too_late` on an
-  edit to restore the previous `#messagesById` entry, so the stage transition
-  is all-or-nothing.
-- **An unwired `retractSteer` is indistinguishable from "too late."**
-  `retractSubmission` does `this.#turnFlow.retractSteer?.(id) ?? false` and maps
-  `false` to `{ kind: 'too_late', stage: 'started' }`. If the method is ever
-  absent (it is optional on `TurnFlow`), the UI will report "already sent — the
-  model has it" for a submission that was never even reachable. Harmless today
-  because `session-composition.ts` binds it, but it makes a future unwiring
-  silent. Worth a distinct outcome or an assertion in Step 3.
+- **`editSubmission` is all-or-nothing at the queue boundary.** It writes the
+  new `UserTurn`, then awaits `edit_queued`; when the controller rejects, Step 3
+  restores the prior `#messagesById` entry before returning `too_late`. The
+  regression test asserts on the turn eventually delivered to `turnFlow.start`,
+  not only on queue display state.
+- **Missing pending-steer mutation wiring fails explicitly.** If a pending id
+  reaches the adapter without `retractSteer` or `editSteer`, the adapter throws
+  a wiring error instead of misreporting the submission as already started.
 
 ### Testing run for Steps 1–2
 
@@ -360,9 +335,10 @@ risk.
    `editSteer`. Widen the four callers.
 2. Adapter: `#pendingSteerIds`, `retractSubmission` / `editSubmission`, the
    `#messagesById` write that `edit_queued` alone misses.
-3. Service + orchestrator + reducer wiring; delete the position-addressed
-   `removeLastQueuedItem` / `onRemoveLastPendingMessage` /
-   `queue/remove_last_pending` path.
+3. Service + orchestrator + reducer wiring; delete the obsolete
+   `onRemoveLastPendingMessage` / `queue/remove_last_pending` path. Keep
+   `removeLastQueuedItem` only as a temporary compatibility seam until Step 4
+   rewires `InputBox` to the id-addressed `PendingQueueList`; then delete it.
 4. `PendingQueueList` + `InputBox` selection mode and edit-in-place label.
 
 ## Testing

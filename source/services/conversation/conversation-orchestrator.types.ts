@@ -54,13 +54,8 @@ export interface UIPort {
   onQueuedMessageStarted?(id: string): void;
   /** A queued submission was removed or rejected before it started. */
   onQueuedMessageRemoved?(id: string): void;
-  /**
-   * A user-cancelled pending message was just removed from the queue (e.g.
-   * by pressing up-arrow on an empty input box). The UI should drop the
-   * last entry from its pending-queued indicator so it stops being shown
-   * above the input box.
-   */
-  onRemoveLastPendingMessage?(): void;
+  /** A pending submission was edited in place without changing stage or order. */
+  onQueuedMessageEdited?(id: string, text: string): void;
 }
 
 export interface ConversationOrchestratorConfig {

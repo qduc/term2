@@ -3,7 +3,7 @@ import { ConversationOrchestrator } from './conversation-orchestrator.js';
 import type { ConversationOrchestratorConfig, MessagePort, UIPort } from './conversation-orchestrator.types.js';
 import type { ConversationService } from './conversation-service.js';
 import type { ILoggingService } from '../service-interfaces.js';
-import type { Message } from '../../types/message.js';
+import type { Message, UserMessage } from '../../types/message.js';
 import type { ApprovedToolContext } from '../approval/approval-presentation-policy.js';
 import type { NormalizedUsage, UsageAccumulator } from '../../utils/ai/token-usage.js';
 import type { ConversationTerminal } from '../../contracts/conversation.js';
@@ -60,6 +60,8 @@ function mockConversationService(): ConversationService {
     setQueueStateObserver: vi.fn(),
     setQueuedTurnStartObserver: vi.fn(),
     removeLastQueuedItem: vi.fn(async () => null),
+    retractSubmission: vi.fn(async () => ({ kind: 'unknown_id' })),
+    editSubmission: vi.fn(async () => ({ kind: 'unknown_id' })),
   } as unknown as ConversationService;
 }
 
@@ -98,7 +100,7 @@ function makeUIPort(): UIPort {
     onQueuedMessagePending: vi.fn(),
     onQueuedMessageStarted: vi.fn(),
     onQueuedMessageRemoved: vi.fn(),
-    onRemoveLastPendingMessage: vi.fn(),
+    onQueuedMessageEdited: vi.fn(),
   };
 }
 
@@ -511,7 +513,10 @@ describe('ConversationOrchestrator', () => {
 
     await orchestrator.sendUserMessage('change direction', { busyMode: 'steer' });
 
-    expect(steerActiveTurn).toHaveBeenCalledWith(expect.objectContaining({ text: 'change direction' }));
+    expect(steerActiveTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ text: 'change direction' }),
+      expect.objectContaining({ id: expect.any(String) }),
+    );
     // No second turn is submitted: the message belongs to the turn in flight.
     expect(cfg.conversationService.sendMessage).not.toHaveBeenCalled();
     const appended = vi.mocked(cfg.messages.appendMessages).mock.calls[0]?.[0]?.[0] as any;
@@ -625,6 +630,111 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.ui.onQueuedMessageRemoved).toHaveBeenCalledWith('queued-1');
   });
 
+  it('retractPendingSubmission removes the UI row only when the mutation applies', async () => {
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    vi.mocked(cfg.conversationService.retractSubmission).mockResolvedValueOnce({
+      kind: 'applied',
+      stage: 'queued',
+    });
+
+    await expect(orchestrator.retractPendingSubmission('queued-1')).resolves.toEqual({
+      kind: 'applied',
+      stage: 'queued',
+    });
+    expect(cfg.ui.onQueuedMessageRemoved).toHaveBeenCalledWith('queued-1');
+
+    vi.mocked(cfg.ui.onQueuedMessageRemoved!).mockClear();
+    vi.mocked(cfg.conversationService.retractSubmission).mockResolvedValueOnce({
+      kind: 'too_late',
+      stage: 'started',
+    });
+
+    await expect(orchestrator.retractPendingSubmission('queued-2')).resolves.toEqual({
+      kind: 'too_late',
+      stage: 'started',
+    });
+    expect(cfg.ui.onQueuedMessageRemoved).not.toHaveBeenCalled();
+  });
+
+  it('editPendingSubmission updates the UI row only when the mutation applies', async () => {
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    vi.mocked(cfg.conversationService.editSubmission).mockResolvedValueOnce({
+      kind: 'applied',
+      stage: 'pending_steer',
+    });
+
+    await expect(orchestrator.editPendingSubmission('steer-1', { text: 'edited text' })).resolves.toEqual({
+      kind: 'applied',
+      stage: 'pending_steer',
+    });
+    expect(cfg.ui.onQueuedMessageEdited).toHaveBeenCalledWith('steer-1', 'edited text');
+
+    vi.mocked(cfg.ui.onQueuedMessageEdited!).mockClear();
+    vi.mocked(cfg.conversationService.editSubmission).mockResolvedValueOnce({
+      kind: 'unknown_id',
+    });
+
+    await expect(orchestrator.editPendingSubmission('unknown', { text: 'ignored' })).resolves.toEqual({
+      kind: 'unknown_id',
+    });
+    expect(cfg.ui.onQueuedMessageEdited).not.toHaveBeenCalled();
+  });
+
+  it('uses the edited pending-steer turn when the steer is later admitted', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    let resolveSteer!: (value: boolean) => void;
+    const steerActiveTurn = vi.fn(() => new Promise<boolean>((resolve) => (resolveSteer = resolve)));
+    (cfg.conversationService as any).steerActiveTurn = steerActiveTurn;
+    vi.mocked(cfg.conversationService.editSubmission).mockResolvedValue({
+      kind: 'applied',
+      stage: 'pending_steer',
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    const sendPromise = orchestrator.sendUserMessage('original', { busyMode: 'steer' });
+    await Promise.resolve();
+    await Promise.resolve();
+    const id = vi.mocked(cfg.ui.onQueuedMessagePending!).mock.calls[0]?.[0];
+    expect(id).toBeDefined();
+
+    await orchestrator.editPendingSubmission(id!, { text: 'edited' });
+    resolveSteer(true);
+    await sendPromise;
+
+    const appended = vi.mocked(cfg.messages.appendMessages).mock.calls[0]?.[0]?.[0] as UserMessage;
+    expect(appended.text).toBe('edited');
+    expect(cfg.ui.onQueuedMessageStarted).toHaveBeenCalledWith(id);
+  });
+
+  it('does not resubmit a steer that was retracted while it was pending', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    let resolveSteer!: (value: boolean) => void;
+    const steerActiveTurn = vi.fn(() => new Promise<boolean>((resolve) => (resolveSteer = resolve)));
+    (cfg.conversationService as any).steerActiveTurn = steerActiveTurn;
+    vi.mocked(cfg.conversationService.retractSubmission).mockResolvedValue({
+      kind: 'applied',
+      stage: 'pending_steer',
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    const sendPromise = orchestrator.sendUserMessage('cancel me', { busyMode: 'steer' });
+    await Promise.resolve();
+    await Promise.resolve();
+    const id = vi.mocked(cfg.ui.onQueuedMessagePending!).mock.calls[0]?.[0];
+    expect(id).toBeDefined();
+
+    await orchestrator.retractPendingSubmission(id!);
+    resolveSteer(false);
+    await sendPromise;
+
+    expect(cfg.conversationService.sendMessage).not.toHaveBeenCalled();
+    expect(cfg.ui.onQueuedMessageRemoved).toHaveBeenCalledTimes(1);
+  });
+
   it('does not retain directly-appended id across clearConversation', async () => {
     const cfg = makeConfig();
     vi.mocked(cfg.conversationService.isQueueActive).mockReturnValue(false);
@@ -735,7 +845,6 @@ describe('ConversationOrchestrator', () => {
     const restored = await orchestrator.removeLastQueuedPendingMessage();
 
     expect(restored).toBeNull();
-    expect(cfg.ui.onRemoveLastPendingMessage).not.toHaveBeenCalled();
   });
 
   it('returns null and skips the adapter when the service cannot cancel queued items', async () => {
@@ -746,6 +855,5 @@ describe('ConversationOrchestrator', () => {
     const restored = await orchestrator.removeLastQueuedPendingMessage();
 
     expect(restored).toBeNull();
-    expect(cfg.ui.onRemoveLastPendingMessage).not.toHaveBeenCalled();
   });
 });

@@ -766,7 +766,7 @@ describe('ApplicationRunLoop', () => {
     const stream = loop.startStream({ ...agent, tools: [tool] }, 'do the work');
     await started;
     await expect(loop.steer([{ type: 'message', role: 'user', content: 'actually, do it differently' }])).resolves.toBe(
-      true,
+      'admitted',
     );
     await collect(stream);
 
@@ -840,7 +840,7 @@ describe('ApplicationRunLoop', () => {
     const handle = stream.state! as any;
     handle.approve?.({});
     const resumed = loop.continueRunStream(stream.state!);
-    await expect(steered).resolves.toBe(true);
+    await expect(steered).resolves.toBe('admitted');
     await collect(resumed);
 
     // It lands after the approved tool's result, on the resumed segment's request.
@@ -877,7 +877,7 @@ describe('ApplicationRunLoop', () => {
     const steered = loop.steer([{ type: 'message', role: 'user', content: 'never admitted' }]);
     // An abandoned turn never resumes, so the caller must not wait forever.
     loop.abort();
-    await expect(steered).resolves.toBe(false);
+    await expect(steered).resolves.toBe('released');
   });
 
   it('settles a steer waiting on a paused turn when a new turn starts instead', async () => {
@@ -910,7 +910,7 @@ describe('ApplicationRunLoop', () => {
     const steered = loop.steer([{ type: 'message', role: 'user', content: 'aimed at the old turn' }]);
     // The steer belonged to the abandoned turn and must not leak into this one.
     await collect(loop.startStream(agent, 'something else entirely'));
-    await expect(steered).resolves.toBe(false);
+    await expect(steered).resolves.toBe('released');
   });
 
   it('reports a steer as unadmitted when the turn has no request boundary left', async () => {
@@ -918,7 +918,7 @@ describe('ApplicationRunLoop', () => {
     const stream = loop.startStream(agent, 'answer me');
     await collect(stream);
 
-    await expect(loop.steer([{ type: 'message', role: 'user', content: 'too late' }])).resolves.toBe(false);
+    await expect(loop.steer([{ type: 'message', role: 'user', content: 'too late' }])).resolves.toBe('released');
   });
 
   it('settles a steer the run never reached rather than leaving the caller waiting', async () => {
@@ -940,7 +940,169 @@ describe('ApplicationRunLoop', () => {
     await collect(stream);
 
     // The turn ended without another request, so the caller must send it itself.
-    await expect(steered).resolves.toBe(false);
+    await expect(steered).resolves.toBe('released');
+  });
+
+  it('retracts a steer before it reaches a request boundary, so the item never reaches history', async () => {
+    const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    const tool: ToolDefinition = {
+      name: 'danger',
+      description: 'Requires approval',
+      parameters: z.object({}),
+      needsApproval: () => true,
+      execute: () => 'approved result',
+      formatCommandMessage: () => [],
+    };
+    let calls = 0;
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => {
+        calls++;
+        return calls === 1
+          ? {
+              async *stream(request) {
+                requests.push(request);
+                yield { type: 'tool_call', id: 'call-approval', name: 'danger', arguments: '{}' };
+                yield { type: 'completion', responseId: 'resp-pending', output: [] };
+              },
+            }
+          : {
+              async *stream(request) {
+                requests.push(request);
+                yield { type: 'completion', responseId: 'resp-resumed', output: [] };
+              },
+            };
+      },
+    });
+
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do it');
+    await collect(stream);
+
+    const steered = loop.steer([{ type: 'message', role: 'user', content: 'never admitted' }], { id: 'steer-1' });
+    // Decided synchronously against #pendingSteers, before any boundary runs.
+    expect(loop.retractSteer('steer-1')).toBe(true);
+    await expect(steered).resolves.toBe('retracted');
+
+    const handle = stream.state! as any;
+    handle.approve?.({});
+    const resumed = loop.continueRunStream(stream.state!);
+    await collect(resumed);
+
+    // The retracted item must not have been admitted onto the resumed request
+    // or into canonical history.
+    const resumedRequest = requests[1]!.input as any[];
+    expect(JSON.stringify(resumedRequest)).not.toContain('never admitted');
+    expect(JSON.stringify(resumed.history)).not.toContain('never admitted');
+  });
+
+  it('returns false when retracting a steer that was already admitted', async () => {
+    let toolStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      toolStarted = resolve;
+    });
+    const parameters = z.object({});
+    const tool: ToolDefinition<typeof parameters> = {
+      name: 'work',
+      description: 'Does work',
+      parameters,
+      needsApproval: () => false,
+      execute: () => {
+        toolStarted();
+        return 'tool output';
+      },
+      formatCommandMessage: () => [],
+    };
+    let calls = 0;
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => {
+        calls++;
+        return calls === 1
+          ? {
+              async *stream() {
+                yield { type: 'tool_call', id: 'call-1', name: 'work', arguments: '{}' };
+                yield { type: 'completion', responseId: 'resp-1', output: [] };
+              },
+            }
+          : {
+              async *stream() {
+                yield { type: 'completion', responseId: 'resp-2', output: [] };
+              },
+            };
+      },
+    });
+
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do the work');
+    await started;
+    const steered = loop.steer([{ type: 'message', role: 'user', content: 'already admitted' }], { id: 'steer-1' });
+    await collect(stream);
+
+    // The boundary admitted it before the retraction could reach it.
+    await expect(steered).resolves.toBe('admitted');
+    expect(loop.retractSteer('steer-1')).toBe(false);
+  });
+
+  it('edits a pending steer in place, preserving its position among other pending steers', async () => {
+    const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    const tool: ToolDefinition = {
+      name: 'danger',
+      description: 'Requires approval',
+      parameters: z.object({}),
+      needsApproval: () => true,
+      execute: () => 'approved result',
+      formatCommandMessage: () => [],
+    };
+    let calls = 0;
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => {
+        calls++;
+        return calls === 1
+          ? {
+              async *stream(request) {
+                requests.push(request);
+                yield { type: 'tool_call', id: 'call-approval', name: 'danger', arguments: '{}' };
+                yield { type: 'completion', responseId: 'resp-pending', output: [] };
+              },
+            }
+          : {
+              async *stream(request) {
+                requests.push(request);
+                yield { type: 'completion', responseId: 'resp-resumed', output: [] };
+              },
+            };
+      },
+    });
+
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'do it');
+    await collect(stream);
+
+    const first = loop.steer([{ type: 'message', role: 'user', content: 'first' }], { id: 'a' });
+    const second = loop.steer([{ type: 'message', role: 'user', content: 'second-original' }], { id: 'b' });
+    const third = loop.steer([{ type: 'message', role: 'user', content: 'third' }], { id: 'c' });
+
+    expect(loop.editSteer('b', [{ type: 'message', role: 'user', content: 'second-edited' }])).toBe(true);
+
+    const handle = stream.state! as any;
+    handle.approve?.({});
+    const resumed = loop.continueRunStream(stream.state!);
+    await collect(resumed);
+
+    await expect(first).resolves.toBe('admitted');
+    await expect(second).resolves.toBe('admitted');
+    await expect(third).resolves.toBe('admitted');
+
+    const resumedRequest = requests[1]!.input as any[];
+    const userTexts = resumedRequest
+      .filter((item) => item.type === 'message' && item.role === 'user')
+      .map((item) => JSON.stringify(item));
+
+    // The edit replaced the item in place: the original text never went out,
+    // the edited text did, and it still lands between 'first' and 'third'.
+    expect(userTexts.some((text) => text.includes('second-original'))).toBe(false);
+    const firstIndex = userTexts.findIndex((text) => text.includes('"first"'));
+    const editedIndex = userTexts.findIndex((text) => text.includes('second-edited'));
+    const thirdIndex = userTexts.findIndex((text) => text.includes('"third"'));
+    expect(firstIndex).toBeGreaterThanOrEqual(0);
+    expect(editedIndex).toBeGreaterThan(firstIndex);
+    expect(thirdIndex).toBeGreaterThan(editedIndex);
   });
 
   it('records an unknown-tool rejection once in canonical history, output, and continuation input', async () => {

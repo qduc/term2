@@ -1,5 +1,6 @@
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../service-interfaces.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
+import type { SteerOutcome } from '../agent-runtime/application-run-loop.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
 import { ApprovalState, type PendingApprovalContext } from '../approval/approval-state.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
@@ -228,7 +229,11 @@ export type SessionRuntime = {
     continueAfterApproval: (options: { answer: string; rejectionReason?: string }) => AsyncIterable<ConversationEvent>;
     continueAfterPostExecuteApproval: () => AsyncIterable<ConversationEvent>;
     abort: () => void;
-    steer: (items: readonly ProviderInputItem[]) => Promise<boolean>;
+    steer: (items: readonly ProviderInputItem[], options?: { id?: string }) => Promise<SteerOutcome>;
+    /** Drop a still-waiting steer. False when it was already admitted. */
+    retractSteer: (id: string) => boolean;
+    /** Replace a waiting steer's items in place, keeping its position. */
+    editSteer: (id: string, items: readonly ProviderInputItem[]) => boolean;
   };
   /** Facade for state/persistence/undo/snapshot operations. */
   state: SessionManager;
@@ -709,6 +714,8 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
       continueAfterPostExecuteApproval: turnCoordinator.continueAfterPostExecuteApproval.bind(turnCoordinator),
       abort: turnCoordinator.abort.bind(turnCoordinator),
       steer: turnCoordinator.steer.bind(turnCoordinator),
+      retractSteer: turnCoordinator.retractSteer.bind(turnCoordinator),
+      editSteer: turnCoordinator.editSteer.bind(turnCoordinator),
     },
     state: stateFacade,
     settings: runtimeController,

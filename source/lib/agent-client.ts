@@ -2,6 +2,7 @@ import {
   normalizeApplicationInput,
   type ApplicationAgent,
   type ApplicationRequestPreparation,
+  type SteerOutcome,
 } from '../services/agent-runtime/application-run-loop.js';
 import type { ContinuationHandle } from '../contracts/continuation-handle.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
@@ -365,11 +366,21 @@ export class AgentClient {
 
   /**
    * Hand the running turn a user message for its next model request. Resolves
-   * false when the turn offers no further request boundary, leaving the caller
-   * to send the message as its own turn.
+   * `'released'` when the turn offers no further request boundary, leaving the
+   * caller to send the message as its own turn.
    */
-  steer(items: readonly ProviderInputItem[]): Promise<boolean> {
-    return this.#applicationRunLoop.steer(items);
+  steer(items: readonly ProviderInputItem[], options?: { id?: string }): Promise<SteerOutcome> {
+    return this.#applicationRunLoop.steer(items, options);
+  }
+
+  /** Drop a still-waiting steer. False when it was already admitted. */
+  retractSteer(id: string): boolean {
+    return this.#applicationRunLoop.retractSteer(id);
+  }
+
+  /** Replace a waiting steer's items in place, keeping its position. */
+  editSteer(id: string, items: readonly ProviderInputItem[]): boolean {
+    return this.#applicationRunLoop.editSteer(id, items);
   }
 
   /**

@@ -16,6 +16,7 @@ import {
   type ActionId,
   type ActiveExecution,
   type ExecutionId,
+  type ItemId,
   type QueuePersistence,
   type QueueTurnDriver,
 } from '../queue/queue-controller.js';
@@ -47,7 +48,27 @@ export type TurnFlow = Pick<SessionRuntime['turns'], 'start' | 'continueAfterApp
   continueAfterPostExecuteApproval?: SessionRuntime['turns']['continueAfterPostExecuteApproval'];
   abort?: () => void;
   steer?: SessionRuntime['turns']['steer'];
+  retractSteer?: SessionRuntime['turns']['retractSteer'];
+  editSteer?: SessionRuntime['turns']['editSteer'];
 };
+
+/**
+ * Which of the three stages (`## The three stages` in the design doc) a
+ * submission currently lives in. `'started'` covers both the active
+ * execution and a steer that was already admitted — from the caller's
+ * perspective both are equally too late to mutate.
+ */
+export type SubmissionStage = 'pending_steer' | 'queued' | 'started';
+
+/**
+ * Outcome of `retractSubmission`/`editSubmission`. A typed result rather than
+ * a bare boolean because "it was already running" and "I have never heard of
+ * this id" are different things the UI reports differently.
+ */
+export type SubmissionMutation =
+  | { readonly kind: 'applied'; readonly stage: 'pending_steer' | 'queued' }
+  | { readonly kind: 'too_late'; readonly stage: 'started' }
+  | { readonly kind: 'unknown_id' };
 
 type QueuedMessage = {
   readonly input: string | UserTurn;
@@ -124,6 +145,14 @@ export class ConversationAdapter {
   #approval: SessionApprovalQuery;
   #turnFlow: TurnFlow;
   readonly #messagesById = new Map<string, QueuedMessage>();
+  /**
+   * Ids currently handed to `turnFlow.steer` and not yet settled. Populated
+   * right before the call and cleared when that steer's promise resolves
+   * (admitted, released, or retracted) — this is what lets
+   * `retractSubmission`/`editSubmission` tell a pending steer apart from a
+   * queued item sharing the same id space, per `## The three stages`.
+   */
+  readonly #pendingSteerIds = new Set<string>();
   readonly #queue: QueueController<QueuedMessageSnapshot, ConversationTerminal> | null;
   #nextQueuedMessageId = 1;
   #nextActionId = 1;
@@ -290,11 +319,17 @@ export class ConversationAdapter {
    * Resolves true once the running turn has taken it. Resolves false when that
    * turn offers no further request boundary — it is finishing, or parked on an
    * approval — leaving the caller to send the message as its own turn.
+   *
+   * `options.id` is the submission's address (see `## The three stages`):
+   * while this call is outstanding, `id` is tracked in `#pendingSteerIds` so
+   * `retractSubmission`/`editSubmission` can route to it. Omitted by the one
+   * caller that has no such id — background subagent notifications, via
+   * `injectIntoActiveTurn` directly — which can never be retracted or edited.
    */
-  async steerActiveTurn(input: string | UserTurn): Promise<boolean> {
+  async steerActiveTurn(input: string | UserTurn, options?: { id?: string }): Promise<boolean> {
     const turn = normalizeUserTurn(input);
     if (!turn.text.trim() && !turn.images?.length) return false;
-    return this.injectIntoActiveTurn([userTurnToProviderItem(turn, { steering: true })]);
+    return this.injectIntoActiveTurn([userTurnToProviderItem(turn, { steering: true })], options);
   }
 
   /**
@@ -305,11 +340,97 @@ export class ConversationAdapter {
    * shell-session context are the same act by a different speaker, so they
    * share the delivery and differ only in the text they carry. Resolves false
    * when no turn will take them, leaving the caller to deliver them itself.
+   *
+   * Keeps its boolean signature regardless of caller: the run loop's
+   * `SteerOutcome` union is collapsed here to `'admitted' → true`, everything
+   * else `→ false`. Only `retractSubmission`/`editSubmission` need the richer
+   * outcome, and they get it by calling `retractSteer`/`editSteer` directly.
    */
-  async injectIntoActiveTurn(items: readonly ProviderInputItem[]): Promise<boolean> {
+  async injectIntoActiveTurn(items: readonly ProviderInputItem[], options?: { id?: string }): Promise<boolean> {
     if (!this.#turnFlow.steer || items.length === 0) return false;
     if (!this.isQueueActive()) return false;
-    return this.#turnFlow.steer(items);
+    const id = options?.id;
+    if (id) this.#pendingSteerIds.add(id);
+    try {
+      const outcome = await this.#turnFlow.steer(items, id ? { id } : undefined);
+      return outcome === 'admitted';
+    } finally {
+      if (id) this.#pendingSteerIds.delete(id);
+    }
+  }
+
+  /**
+   * Retract a submission before it reaches the model, addressed by the id
+   * `sendMessage`/`steerActiveTurn` were given (`preferredMessageId`), which
+   * is the same id the UI already keys `pendingQueuedMessages` on.
+   *
+   * Routes by stage (`## The three stages`): a still-waiting steer goes to
+   * `retractSteer` on the run loop; a queued item goes to the controller's
+   * `remove_queued`.
+   *
+   * A pending steer has no matching `#messagesById` entry to settle — its
+   * caller (`steerActiveTurn`) awaits the `turnFlow.steer` promise directly,
+   * not a queued `sendMessage`. `retractSteer` resolves that promise itself
+   * (with `'retracted'`), which `injectIntoActiveTurn` reports as `false` to
+   * that caller. A queued item, by contrast, *does* have a `sendMessage`
+   * promise parked in `#messagesById`, which this settles with an
+   * `AbortError` — the same shape `removeLastQueuedItem` already used.
+   */
+  async retractSubmission(id: string): Promise<SubmissionMutation> {
+    if (this.#pendingSteerIds.has(id)) {
+      const retracted = this.#turnFlow.retractSteer?.(id) ?? false;
+      if (!retracted) return { kind: 'too_late', stage: 'started' };
+      this.#pendingSteerIds.delete(id);
+      return { kind: 'applied', stage: 'pending_steer' };
+    }
+    if (this.#queue) {
+      const inQueue = this.#queue.state().queue.some((item) => item.id === id);
+      if (inQueue) {
+        const result = await this.#queue.command({ kind: 'remove_queued', itemId: id as ItemId });
+        if (result.kind !== 'accepted') return { kind: 'too_late', stage: 'started' };
+        this.#settleFailure(id, queueCancellationError('Queued message was removed'));
+        this.#notifyQueueState();
+        return { kind: 'applied', stage: 'queued' };
+      }
+    }
+    if (this.#messagesById.has(id)) return { kind: 'too_late', stage: 'started' };
+    return { kind: 'unknown_id' };
+  }
+
+  /**
+   * Replace a submission's content in place, without changing its stage or
+   * position — a pending steer stays a steer at its slot, a queued item keeps
+   * its queue index and steer-ahead-of-follow-ups priority.
+   *
+   * **The trap**: the controller queue stores display `text` only.
+   * `#runQueuedTurn` executes `message.input` from `#messagesById`, so
+   * issuing `edit_queued` alone redraws the new text but sends the old turn.
+   * This replaces the `#messagesById` entry's `input` first, keeping the
+   * `QUEUED_NON_TEXT_PLACEHOLDER` substitution `sendMessage` applies to the
+   * controller's display copy.
+   */
+  async editSubmission(id: string, turn: UserTurn): Promise<SubmissionMutation> {
+    if (this.#pendingSteerIds.has(id)) {
+      const item = userTurnToProviderItem(normalizeUserTurn(turn), { steering: true });
+      const edited = this.#turnFlow.editSteer?.(id, [item]) ?? false;
+      return edited ? { kind: 'applied', stage: 'pending_steer' } : { kind: 'too_late', stage: 'started' };
+    }
+    if (this.#queue) {
+      const inQueue = this.#queue.state().queue.some((item) => item.id === id);
+      if (inQueue) {
+        const message = this.#messagesById.get(id);
+        if (!message) return { kind: 'unknown_id' };
+        this.#messagesById.set(id, { ...message, input: structuredClone(turn) });
+        const displayText = normalizeUserTurn(turn).text;
+        const controllerText = displayText.trim() ? displayText : QUEUED_NON_TEXT_PLACEHOLDER;
+        const result = await this.#queue.command({ kind: 'edit_queued', itemId: id as ItemId, text: controllerText });
+        if (result.kind !== 'accepted') return { kind: 'too_late', stage: 'started' };
+        this.#notifyQueueState();
+        return { kind: 'applied', stage: 'queued' };
+      }
+    }
+    if (this.#messagesById.has(id)) return { kind: 'too_late', stage: 'started' };
+    return { kind: 'unknown_id' };
   }
 
   async sendMessage(

@@ -12,6 +12,7 @@ import type { InitialTurnRunOptions } from './turn-attempt-factory.js';
 import { randomUUID } from 'node:crypto';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
+import type { SteerOutcome } from '../agent-runtime/application-run-loop.js';
 
 export type TurnStartOptions = Pick<
   InitialTurnRunOptions,
@@ -161,8 +162,18 @@ export class TurnCoordinator {
    * boundary rather than being refused, which is the state the user is most
    * likely to be typing in — the approval pause is the visible gap in a turn.
    */
-  steer(items: readonly ProviderInputItem[]): Promise<boolean> {
-    return this.deps.turnWorkflow.steer(items);
+  steer(items: readonly ProviderInputItem[], options?: { id?: string }): Promise<SteerOutcome> {
+    return this.deps.turnWorkflow.steer(items, options);
+  }
+
+  /** Drop a still-waiting steer. False when it was already admitted. */
+  retractSteer(id: string): boolean {
+    return this.deps.turnWorkflow.retractSteer(id);
+  }
+
+  /** Replace a waiting steer's items in place, keeping its position. */
+  editSteer(id: string, items: readonly ProviderInputItem[]): boolean {
+    return this.deps.turnWorkflow.editSteer(id, items);
   }
 
   // ── Private helpers ──────────────────────────────────────────

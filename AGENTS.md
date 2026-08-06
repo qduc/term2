@@ -35,28 +35,18 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 ## Active or deferred
 
 - `docs/plans/openai-context-compaction.md` — OpenAI context compaction (server-side
-  `context_management`). **Steps 1 and 2 are merged (`dc949022`, `96a9874c`); resume at Step 3.**
+  `context_management`). **Steps 1–6 are merged (`dc949022`, `96a9874c`, `cf48b367`, `2876ef0d`, `22a8c9b8`); resume at Step 7.**
   Read the plan before
   touching the OpenAI adapter, the run loop, `ConversationStore`/`conversation-turn-items`, or
-  conversation persistence: it records the closed-union/throw-site findings, the
-  `provider_opaque` marker contract, and Round 3's live measurements, which settle Step 4's
-  retained-prefix decision and add a `compact_threshold >= 1000` floor plus a second (typed 400)
-  failure class distinct from the opaque 500.
-
-- `docs/plans/queue-editing.md` — editing and deleting a prompt submitted while a turn is in
-  flight. **Steps 1–2 merged (`ccc02324`); Step 3 was in flight on branch `queue-editing-wiring`
-  when the session ended — check whether that branch exists and is merged before starting
-  anything.** Resume at Step 3 or 4 accordingly. Read it before touching
-  `ApplicationRunLoop.steer`, `ConversationAdapter`'s queue path, `QueueController`, or the
-  `pendingQueuedMessages` reducer slice: it records that one submission lives in two places
-  under one id, why `edit_queued` alone silently sends the old text, two live up-arrow
-  defects that are symptoms of addressing queued work by position, and two defects found in
-  merge review of Steps 1–2 that Step 3 must fix (a non-rolled-back `editSubmission` that can
-  double-send, and an unwired `retractSteer` that misreports as "already sent").
+  settings schema: it records the closed-union/throw-site findings, the
+  `provider_opaque` marker contract, and Round 3's live measurements.
 
 - Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
 
 ## Completed — still read before touching these areas
+
+- `docs/plans/queue-editing.md` — editing and deleting a prompt submitted while a turn is in
+  flight. **Steps 1–4 are fully merged (`a7a0d677`).** Read it before touching `ApplicationRunLoop.steer`, `ConversationAdapter`'s queue path, `QueueController`, `PendingQueueList`, or `InputBox`.
 
 - `docs/plans/mid-turn-injection.md` — steering and background-subagent notifications reaching a turn already in flight. Read it before touching the run loop, `AgentClient`, the turn coordinator, or notification delivery: it defines the vocabulary those areas are described in (**Segment**, **Request Boundary**, **Injection**, **Background Notification**, now in `CONTEXT.md`), and the bug it fixed was invisible for want of those words.
 

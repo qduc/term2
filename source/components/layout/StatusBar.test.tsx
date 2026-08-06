@@ -32,8 +32,38 @@ it.sequential('StatusBar renders reasoning effort on the first row with the mode
   const output = lastFrame() ?? '';
 
   expect(output.includes('gpt-4o')).toBe(true);
-  expect(output.includes('(low)')).toBe(true);
-  expect(output.split('\n').some((line) => line.includes('gpt-4o') && line.includes('(low)'))).toBe(true);
+  expect(output.includes('· low')).toBe(true);
+  expect(output.split('\n').some((line) => line.includes('gpt-4o') && line.includes('· low'))).toBe(true);
+});
+
+it.sequential('StatusBar renders the compact two-row configuration and usage layout', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-5.6-luna',
+    'agent.provider': 'codex',
+    'agent.reasoningEffort': 'high',
+    'shell.autoApproveMode': 'auto',
+    'sandbox.enabled': false,
+  });
+
+  const resetAt = Math.floor(Date.now() / 1000) + 3 * 24 * 60 * 60;
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      lastUsage={{ prompt_tokens: 11_778, completion_tokens: 13, cache_read_tokens: 0 }}
+      lastCodexRateLimit={{
+        allowed: true,
+        limit_reached: false,
+        secondary: { used_percent: 78, window_minutes: 10080, reset_after_seconds: 259200, reset_at: resetAt },
+      }}
+    />,
+  );
+
+  const lines = (lastFrame() ?? '').split('\n');
+  expect(lines.some((line) => line.includes('Standard │ Codex/gpt-5.6-luna · high │ Auto'))).toBe(true);
+  expect(lines.some((line) => line.includes('7D 78% · reset '))).toBe(true);
+  expect(lines.some((line) => line.includes('Tok 11,778 in / 13 out │ Ctx 12k / 272k'))).toBe(true);
+  expect(lines.some((line) => line.includes('Cache 0'))).toBe(false);
+  expect(lines.some((line) => line.includes('(0 cached)'))).toBe(false);
 });
 
 it.sequential('StatusBar renders cache usage in the footer', async () => {
@@ -52,7 +82,8 @@ it.sequential('StatusBar renders cache usage in the footer', async () => {
 
   const output = lastFrame() ?? '';
 
-  expect(output.includes('Tok: 1,200 in (900 cached) / 350 out')).toBe(true);
+  expect(output.includes('Tok 1,200 in (900 cached) / 350 out')).toBe(true);
+  expect(output.includes('│ Cache')).toBe(false);
 });
 
 it.sequential('StatusBar renders context usage as used/window in the footer', async () => {
@@ -67,7 +98,7 @@ it.sequential('StatusBar renders context usage as used/window in the footer', as
   );
 
   const output = lastFrame() ?? '';
-  expect(output.includes('100k/1.0M')).toBe(true);
+  expect(output.includes('Ctx 100k / 1.0M')).toBe(true);
 });
 
 it.sequential('StatusBar renders context usage for an OpenAI model with a k-scale window', async () => {
@@ -82,7 +113,7 @@ it.sequential('StatusBar renders context usage for an OpenAI model with a k-scal
   );
 
   const output = lastFrame() ?? '';
-  expect(output.includes('100k/272k')).toBe(true);
+  expect(output.includes('Ctx 100k / 272k')).toBe(true);
 });
 
 it.sequential('StatusBar hides context usage when the model is not in the catalog', async () => {
@@ -127,7 +158,7 @@ it.sequential('StatusBar resolves the context window by model id for providers n
   );
 
   const output = lastFrame() ?? '';
-  expect(output.includes('100k/1.0M')).toBe(true);
+  expect(output.includes('Ctx 100k / 1.0M')).toBe(true);
 });
 
 it.sequential('StatusBar renders Plan mode badge', async () => {
@@ -180,8 +211,8 @@ it.sequential('StatusBar renders Codex rate limits when valid, but hides them wh
     />,
   );
   const outputValid = lastFrameValid() ?? '';
-  expect(outputValid.includes('5H: 11%')).toBe(true);
-  expect(outputValid.includes('7D: 14%')).toBe(true);
+  expect(outputValid.includes('5H 11% · reset ')).toBe(true);
+  expect(outputValid.includes('7D 14% · reset ')).toBe(true);
   expect(outputValid.includes('undefined')).toBe(false);
   expect(outputValid.includes('NaN')).toBe(false);
 
@@ -227,7 +258,7 @@ it.sequential('StatusBar labels a Codex window by its length, not by which slot 
   );
 
   const output = lastFrame() ?? '';
-  expect(output.includes('7D: 58%')).toBe(true);
+  expect(output.includes('7D 58% · reset ')).toBe(true);
   expect(output.includes('168H')).toBe(false);
 });
 
@@ -251,7 +282,7 @@ it.sequential('StatusBar shows a date for a Codex reset more than a day away', a
     />,
   );
 
-  expect(lastFrame() ?? '').toMatch(/7D: 58% \(\d{1,2}[./-]\d{1,2}\)/);
+  expect(lastFrame() ?? '').toMatch(/7D 58% · reset \d{1,2}[./-]\d{1,2}/);
 });
 
 it.sequential('StatusBar shows a clock time for a Codex reset within 24 hours', async () => {
@@ -275,9 +306,9 @@ it.sequential('StatusBar shows a clock time for a Codex reset within 24 hours', 
   );
 
   const output = lastFrame() ?? '';
-  expect(output).toMatch(/5H: 11% \(\d{1,2}:\d{2}/);
+  expect(output).toMatch(/5H 11% · reset \d{1,2}:\d{2}/);
   // A sub-day window resetting today needs no date to disambiguate.
-  expect(output).not.toMatch(/5H: 11% \(\d{1,2}[./-]\d{1,2}/);
+  expect(output).not.toMatch(/5H 11% · reset \d{1,2}[./-]\d{1,2}/);
 });
 
 it.sequential('StatusBar dates a day-scale Codex window that resets within 24 hours', async () => {
@@ -300,7 +331,7 @@ it.sequential('StatusBar dates a day-scale Codex window that resets within 24 ho
     />,
   );
 
-  expect(lastFrame() ?? '').toMatch(/7D: 58% \(\d{1,2}[./-]\d{1,2}\D{1,2}\d{1,2}:\d{2}/);
+  expect(lastFrame() ?? '').toMatch(/7D 58% · reset \d{1,2}[./-]\d{1,2}\D{1,2}\d{1,2}:\d{2}/);
 });
 
 it.sequential('StatusBar renders large uncached prompt warning and confirmation warning', async () => {
@@ -325,7 +356,7 @@ it.sequential('StatusBar renders large uncached prompt warning and confirmation 
     />,
   );
   const outputWarning = lastFrameWarning() ?? '';
-  expect(outputWarning.includes('Tok: 63,561 in (⚠️ 62,000 uncached) / 856 out')).toBe(true);
+  expect(outputWarning.includes('Tok 63,561 in (⚠️ 62,000 uncached) / 856 out')).toBe(true);
   expect(outputWarning.includes('Cache Miss Risk')).toBe(false);
   expect(outputWarning.includes('Confirm Cache Miss')).toBe(false);
 
@@ -339,7 +370,7 @@ it.sequential('StatusBar renders large uncached prompt warning and confirmation 
     />,
   );
   const outputConfirm = lastFrameConfirm() ?? '';
-  expect(outputConfirm.includes('Tok: 63,561 in (⚠️ 62,000 uncached) / 856 out')).toBe(true);
+  expect(outputConfirm.includes('Tok 63,561 in (⚠️ 62,000 uncached) / 856 out')).toBe(true);
   expect(outputConfirm.includes('Confirm Cache Miss')).toBe(false);
 });
 
@@ -375,23 +406,25 @@ it.sequential('StatusBar shows Sandbox: ON when sandbox.enabled is true, replaci
   const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
   const output = lastFrame() ?? '';
 
-  expect(output.includes('Sandbox:')).toBe(true);
+  expect(output.includes('Sandbox ON')).toBe(true);
   expect(output.includes('Approve:')).toBe(false);
 });
 
-it.sequential('StatusBar shows Approve: ... when sandbox.enabled is false', async () => {
+it.sequential('StatusBar shows compact auto approval without the model name', async () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
     'shell.autoApproveMode': 'auto',
+    'agent.choreModel': 'very-long-auto-approval-model-name',
     'sandbox.enabled': false,
   });
 
   const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
   const output = lastFrame() ?? '';
 
-  expect(output.includes('Approve:')).toBe(true);
-  expect(output.includes('Sandbox:')).toBe(false);
+  expect(output.includes('Auto')).toBe(true);
+  expect(output.includes('very-long-auto-approval-model-name')).toBe(false);
+  expect(output.includes('Sandbox ON')).toBe(false);
 });
 
 it.sequential('StatusBar renders a static commit blocker warning', async () => {

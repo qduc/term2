@@ -279,6 +279,30 @@ it.sequential('InputBox recognizes Alt+Enter when terminal input arrives in spli
   expect(submissions).toEqual([{ turn: { text: 'follow-up' }, options: { busyMode: 'follow_up' } }]);
 });
 
+it.sequential(
+  'clears stale trailing Escape in stdin buffer after delay so separate Enter is not misclassified as Alt+Enter',
+  async () => {
+    const submissions: Array<{ turn: UserTurn; options?: { busyMode?: 'steer' | 'follow_up' } }> = [];
+    const { stdin } = await renderAndFlush(
+      <TestInputBox
+        {...defaultProps}
+        allowEmptySubmit={true}
+        onSubmit={(turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) =>
+          submissions.push({ turn, options })
+        }
+      />,
+    );
+
+    await writeInput(stdin, '\x1b');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    });
+    await writeInput(stdin, '\r');
+
+    expect(submissions).toEqual([{ turn: { text: '' }, options: { busyMode: 'steer' } }]);
+  },
+);
+
 it.sequential('preserves a burst of characters while the slash-command popup owns input', async () => {
   let submitted = false;
   const { lastFrame, stdin } = await renderAndFlush(

@@ -40,6 +40,13 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   `ConversationStore`/`conversation-turn-items`, or conversation persistence: it records the
   closed-union/throw-site findings and the `provider_opaque` marker contract.
 
+- `docs/plans/queue-editing.md` — editing and deleting a prompt submitted while a turn is in
+  flight. Design only, nothing implemented; start at Step 1. Read it before touching
+  `ApplicationRunLoop.steer`, `ConversationAdapter`'s queue path, `QueueController`, or the
+  `pendingQueuedMessages` reducer slice: it records that one submission lives in two places
+  under one id, why `edit_queued` alone silently sends the old text, and two live up-arrow
+  defects that are symptoms of addressing queued work by position.
+
 - Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
 
 ## Completed — still read before touching these areas

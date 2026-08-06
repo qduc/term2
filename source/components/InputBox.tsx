@@ -151,6 +151,7 @@ const InputBox: FC<Props> = ({
   } = useInputContext();
   const { stdin } = useStdin();
   const stdinBufferRef = useRef('');
+  const stdinBufferTimestampRef = useRef(0);
   const consumedAltEnterRef = useRef(false);
 
   const dismissedCompletionRef = useRef<CompletionDismissal>(null);
@@ -832,17 +833,20 @@ const InputBox: FC<Props> = ({
 
   useEffect(() => {
     if (!stdin || mode !== 'text') return;
+
     const onData = (chunk: Buffer | string) => {
       const value = String(chunk);
-      if (value === '\x1b\r' || (stdinBufferRef.current === '\x1b' && value === '\r')) {
+      const isRecentEscape = Date.now() - stdinBufferTimestampRef.current < 100;
+      if (value === '\x1b\r' || (stdinBufferRef.current === '\x1b' && value === '\r' && isRecentEscape)) {
         consumedAltEnterRef.current = true;
         handleWrapperSubmit(inputValueRef.current, images, 'follow_up');
       }
-      // Keep only a possible leading byte of a split escape sequence. All
-      // ordinary input has already been handed to MultilineInput; this buffer
-      // exists solely to recognize Alt+Enter when terminal chunks coalesce or
-      // split the sequence.
-      stdinBufferRef.current = value.endsWith('\x1b') ? '\x1b' : '';
+      if (value.endsWith('\x1b')) {
+        stdinBufferRef.current = '\x1b';
+        stdinBufferTimestampRef.current = Date.now();
+      } else {
+        stdinBufferRef.current = '';
+      }
     };
     stdin.prependListener('data', onData);
     return () => {

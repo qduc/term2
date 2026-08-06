@@ -6,7 +6,7 @@ import { getProvider } from '../../providers/index.js';
 import { getModelContextWindow } from '../../providers/model-catalog/catalog.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { SSHInfo } from '../../hooks/use-shell-mode.js';
-import { formatContextUsage, formatFooterUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
+import { formatContextUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../services/conversation/conversation-events.js';
 import type { StaticCommitBlocker } from '../message/MessageList.js';
 
@@ -46,9 +46,6 @@ const StatusBar: FC<StatusBarProps> = ({
   const providerKey = useSetting(settingsService, 'agent.provider') ?? 'openai';
   const reasoningEffort = useSetting(settingsService, 'agent.reasoningEffort') ?? 'default';
   const autoApproveMode = useSetting(settingsService, 'shell.autoApproveMode') ?? 'off';
-  const choreModel = useSetting(settingsService, 'agent.choreModel');
-  const legacyAutoApproveModel = useSetting(settingsService, 'agent.autoApproveModel');
-  const autoApproveModel = choreModel ?? legacyAutoApproveModel;
   const sandboxEnabled = useSetting(settingsService, 'sandbox.enabled') ?? false;
   const sandboxReadPolicy = useSetting(settingsService, 'sandbox.readPolicy') ?? 'standard';
   // Session-scoped grants are intentionally not process-global, so only the
@@ -70,10 +67,23 @@ const StatusBar: FC<StatusBarProps> = ({
   const accent = '#0ed7b5';
   const warnRed = '#ef4444';
 
-  const usageHasCacheRead = lastUsage?.cache_read_tokens != null;
+  const cacheReadTokens = lastUsage?.cache_read_tokens;
+  const usageHasCacheRead = cacheReadTokens != null && cacheReadTokens > 0;
   const usageHasIntegratedWarning = Boolean(largeUncachedWarning && usageHasCacheRead);
-  const usageText = formatFooterUsage(lastUsage, { cacheWarning: usageHasIntegratedWarning });
   const usageColor = largeUncachedWarning ? (hasPendingConfirmation ? warnRed : glow) : slate;
+
+  const tokenParts: string[] = [];
+  if (lastUsage?.prompt_tokens != null) {
+    const cacheText = usageHasCacheRead
+      ? usageHasIntegratedWarning
+        ? `⚠️ ${cacheReadTokens.toLocaleString()} uncached`
+        : `${cacheReadTokens.toLocaleString()} cached`
+      : '';
+    tokenParts.push(`${lastUsage.prompt_tokens.toLocaleString()} in${cacheText ? ` (${cacheText})` : ''}`);
+  }
+  if (lastUsage?.completion_tokens != null) tokenParts.push(`${lastUsage.completion_tokens.toLocaleString()} out`);
+  const tokensText = tokenParts.length > 0 ? `Tok ${tokenParts.join(' / ')}` : '';
+  const contextText = contextUsageText ? `Ctx ${contextUsageText.replace('/', ' / ')}` : '';
 
   const warningText = (() => {
     if (!largeUncachedWarning || usageHasIntegratedWarning) {
@@ -99,6 +109,12 @@ const StatusBar: FC<StatusBarProps> = ({
       return `${Math.round(minutes)}M`;
     };
 
+    const formatDate = (date: Date): string =>
+      `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+
+    const formatTime = (date: Date): string =>
+      date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
     // A reset further out than a day only needs a date. A reset landing within
     // 24h needs the clock time, plus the date when the window itself spans days
     // so it stays clear the reset can be tomorrow rather than later today.
@@ -107,11 +123,9 @@ const StatusBar: FC<StatusBarProps> = ({
       const diffMs = resetDate.getTime() - Date.now();
       const within24Hours = diffMs >= 0 && diffMs < 24 * 60 * 60 * 1000;
       if (!within24Hours) {
-        return resetDate.toLocaleDateString([], { month: '2-digit', day: '2-digit' });
+        return formatDate(resetDate);
       }
-      return windowMinutes >= 24 * 60
-        ? resetDate.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-        : resetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return windowMinutes >= 24 * 60 ? `${formatDate(resetDate)} ${formatTime(resetDate)}` : formatTime(resetDate);
     };
 
     const formatWindowUsage = (window: CodexRateLimitWindow | undefined): string | undefined => {
@@ -119,7 +133,7 @@ const StatusBar: FC<StatusBarProps> = ({
         return undefined;
       }
       const reset = formatReset(window.reset_at, window.window_minutes);
-      return `${formatWindow(window.window_minutes)}: ${window.used_percent}% (${reset})`;
+      return `${formatWindow(window.window_minutes)} ${window.used_percent}% · reset ${reset}`;
     };
 
     return [lastCodexRateLimit.primary, lastCodexRateLimit.secondary]
@@ -139,9 +153,23 @@ const StatusBar: FC<StatusBarProps> = ({
     return `Static blocked: ${sender}/${status} (${staticCommitBlocker.dynamicMessageCount} msgs, ${chars}k chars)`;
   })();
 
+  const modeLabels = [
+    ...(liteMode ? [`Lite · ${isShellMode ? 'Shell' : 'Ask'}`] : []),
+    ...(mentorMode ? ['Mentor'] : []),
+    ...(planMode ? ['Plan'] : []),
+    ...(orchestratorMode ? ['Orchestrator'] : []),
+  ];
+  const modeLabel = modeLabels.length > 0 ? modeLabels.join(' · ') : 'Standard';
+  const safetyLabel = sandboxEnabled
+    ? `Sandbox ON · ${sandboxReadPolicy}`
+    : autoApproveMode !== 'off'
+    ? autoApproveMode === 'auto'
+      ? 'Auto'
+      : autoApproveMode
+    : '';
+
   return (
     <Box marginTop={1} flexDirection="column" width="100%">
-      {/* Row 1: Primary Configuration */}
       <Box justifyContent="space-between" width="100%">
         <Box>
           {sshInfo && (
@@ -158,40 +186,14 @@ const StatusBar: FC<StatusBarProps> = ({
               <Text color={slate}>│</Text>
             </>
           )}
-          <Box marginRight={1} marginLeft={sshInfo ? 1 : 0} gap={1}>
-            {liteMode && (
-              <>
-                <Text color="#10b981" bold>
-                  Lite
-                </Text>
-                <Text color={isShellMode ? '#ca8a04' : '#3b82f6'} bold>
-                  {isShellMode ? 'Shell' : 'Ask'}
-                </Text>
-              </>
-            )}
-            {mentorMode && (
-              <Text color="#a78bfa" bold>
-                Mentor
-              </Text>
-            )}
-            {planMode && (
-              <Text color="#22d3ee" bold>
-                Plan
-              </Text>
-            )}
-            {orchestratorMode && (
-              <Text color="#f59e0b" bold>
-                Orchestrator
-              </Text>
-            )}
-            {!mentorMode && !liteMode && !planMode && !orchestratorMode && <Text color={slate}>Standard</Text>}
-
+          <Box marginX={1}>
+            <Text color={modeLabel === 'Standard' ? slate : accent} bold={modeLabel !== 'Standard'}>
+              {modeLabel}
+            </Text>
             {queueLength != null && queueLength > 0 && (
               <>
-                <Text color={slate}>│</Text>
-                <Box marginX={1}>
-                  <Text color={accent}>[Q:{queueLength}]</Text>
-                </Box>
+                <Text color={slate}> │ </Text>
+                <Text color={accent}>[Q:{queueLength}]</Text>
               </>
             )}
           </Box>
@@ -200,14 +202,21 @@ const StatusBar: FC<StatusBarProps> = ({
             <>
               <Text color={slate}>│</Text>
               <Box marginX={1}>
-                <Text color={accent}>{model}</Text>
-                <Text color={slate}> ({providerLabel})</Text>
-                {reasoningEffort && reasoningEffort !== 'default' && (
-                  <Text color={slate}>
-                    {' '}
-                    <Text color={glow}>({reasoningEffort})</Text>
-                  </Text>
-                )}
+                <Text color={accent}>
+                  {providerLabel}/{model}
+                </Text>
+                {reasoningEffort && reasoningEffort !== 'default' && <Text color={glow}> · {reasoningEffort}</Text>}
+              </Box>
+            </>
+          )}
+
+          {safetyLabel && (
+            <>
+              <Text color={slate}>│</Text>
+              <Box marginX={1}>
+                <Text color={sandboxEnabled || autoApproveMode === 'auto' ? '#10b981' : '#f97316'} bold>
+                  {safetyLabel}
+                </Text>
               </Box>
             </>
           )}
@@ -216,14 +225,13 @@ const StatusBar: FC<StatusBarProps> = ({
             <>
               <Text color={slate}>│</Text>
               <Box marginX={1}>
-                <Text color={slate}>Mentor: </Text>
+                <Text color={slate}>Mentor · </Text>
                 <Text color="#a78bfa">{mentorModel}</Text>
               </Box>
             </>
           )}
         </Box>
 
-        {/* Far-right: Codex rate limit display */}
         {codexRateLimitText && (
           <Box>
             <Text color={slate}>{codexRateLimitText}</Text>
@@ -231,63 +239,41 @@ const StatusBar: FC<StatusBarProps> = ({
         )}
       </Box>
 
-      {/* Row 2: Status & Metrics */}
       <Box width="100%">
         <Box flexGrow={1}>
-          <Box>
-            {sandboxEnabled ? (
-              <Box marginRight={1}>
-                <Text color={slate}>Sandbox: </Text>
-                <Text color="#10b981" bold>
-                  ON
-                </Text>
-                <Text color={slate}> ({sandboxReadPolicy})</Text>
-              </Box>
-            ) : (
-              autoApproveMode !== 'off' && (
-                <Box marginRight={1}>
-                  <Text color={slate}>Approve: </Text>
-                  <Text color={autoApproveMode === 'auto' ? '#10b981' : '#f97316'} bold>
-                    {autoApproveMode}
-                  </Text>
-                  {autoApproveModel && <Text color={slate}> ({autoApproveModel})</Text>}
-                </Box>
-              )
-            )}
-            {dockerHostAccess && (
-              <Box marginRight={1}>
-                <Text color={slate}>Docker host access: </Text>
-                <Text color={glow} bold>
-                  {dockerHostAccess}
-                </Text>
-              </Box>
-            )}
-            {staticCommitBlockerText && (
-              <Box marginRight={1}>
-                <Text color={warnRed} bold>
-                  {staticCommitBlockerText}
-                </Text>
-              </Box>
-            )}
-          </Box>
+          {warningText && (
+            <Text color={hasPendingConfirmation ? warnRed : glow} bold>
+              {warningText}
+            </Text>
+          )}
+          {dockerHostAccess && (
+            <Box marginRight={1}>
+              <Text color={slate}>Docker host access: </Text>
+              <Text color={glow} bold>
+                {dockerHostAccess}
+              </Text>
+            </Box>
+          )}
+          {staticCommitBlockerText && (
+            <Box marginRight={1}>
+              <Text color={warnRed} bold>
+                {staticCommitBlockerText}
+              </Text>
+            </Box>
+          )}
         </Box>
 
-        {usageText || warningText || contextUsageText ? (
+        {(tokensText || contextText) && (
           <Box>
-            {usageText ? (
+            {tokensText && (
               <Text color={usageColor} bold={Boolean(largeUncachedWarning)}>
-                {usageText}
+                {tokensText}
               </Text>
-            ) : (
-              warningText && (
-                <Text color={hasPendingConfirmation ? warnRed : glow} bold>
-                  {warningText}
-                </Text>
-              )
             )}
-            {contextUsageText && <Text color={slate}> {contextUsageText}</Text>}
+            {tokensText && contextText && <Text color={slate}> │ </Text>}
+            {contextText && <Text color={slate}>{contextText}</Text>}
           </Box>
-        ) : null}
+        )}
       </Box>
     </Box>
   );

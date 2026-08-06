@@ -34,16 +34,15 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Active or deferred
 
-- `docs/plans/openai-context-compaction.md` — OpenAI context compaction (server-side
-  `context_management`). **Steps 1–6 are merged (`dc949022`, `96a9874c`, `cf48b367`, `2876ef0d`, `22a8c9b8`); resume at Step 7.**
-  Read the plan before
-  touching the OpenAI adapter, the run loop, `ConversationStore`/`conversation-turn-items`, or
-  settings schema: it records the closed-union/throw-site findings, the
-  `provider_opaque` marker contract, and Round 3's live measurements.
-
 - Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
 
 ## Completed — still read before touching these areas
+
+- `docs/plans/openai-context-compaction.md` — OpenAI context compaction (server-side
+  `context_management`). **All steps are fully merged (`baf07fe0`).** Read the plan before
+  touching the OpenAI adapter, the run loop, `ConversationStore`/`conversation-turn-items`, or
+  settings schema: it records the closed-union/throw-site findings, the
+  `provider_opaque` marker contract, and Round 3's live measurements.
 
 - `docs/plans/queue-editing.md` — editing and deleting a prompt submitted while a turn is in
   flight. **Steps 1–4 are fully merged (`a7a0d677`).** Read it before touching `ApplicationRunLoop.steer`, `ConversationAdapter`'s queue path, `QueueController`, `PendingQueueList`, or `InputBox`.

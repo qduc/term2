@@ -59,7 +59,7 @@ const canonicalProviderHistoryItems = (items: readonly unknown[]): unknown[] =>
 const hasToolResultItems = (items: unknown[]): boolean =>
   items.some((item) => normalizeRunItem(item).some((normalized) => normalized.type === 'tool_result'));
 
-const lastOpenAICompaction = (items: readonly unknown[]): ProviderOpaqueItem | undefined => {
+export const lastOpenAICompaction = (items: readonly unknown[]): ProviderOpaqueItem | undefined => {
   let last: ProviderOpaqueItem | undefined;
   for (const item of items) {
     for (const normalized of normalizeRunItem(item)) {

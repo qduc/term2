@@ -14,6 +14,7 @@ import { AgentConfiguration } from './agent-configuration.js';
 import { SkillsService } from '../services/skills/skills-service.js';
 
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
+import type { ContextCompactionSessionState } from '../contracts/streamed-model-turn.js';
 import { SubagentBridge } from './subagent-bridge.js';
 import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
 import { AgentChatService } from './agent-chat-service.js';
@@ -61,6 +62,7 @@ export class AgentClient {
   #agentConfig: AgentConfiguration;
   #toolInterceptorRegistry: ToolInterceptorRegistry;
   #applicationRunLoop: ApplicationRunLoop;
+  #contextCompactionSessionState: ContextCompactionSessionState = { disabled: false };
   #maxTurns: number;
   #retryAttempts: number;
   #retryCallback: (() => void) | null = null;
@@ -185,6 +187,7 @@ export class AgentClient {
     this.#retryAttempts = retryAttempts ?? 2;
     this.#applicationRunLoop = new ApplicationRunLoop({
       toolLifecycle: this.#toolLifecycle,
+      contextCompactionSessionState: this.#contextCompactionSessionState,
       logDiagnostic: (message, meta) => deps.logger.info(message, meta),
       resolveModel: (selectedModel) => {
         const providerId = this.#agentConfig.getProvider();

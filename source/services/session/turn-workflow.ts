@@ -68,6 +68,9 @@ import {
 import { LiveRun } from './live-run.js';
 import type { PostExecutePendingRegistry, PostExecutePendingEntry } from './post-execute-pending-registry.js';
 import type { SessionAccessState } from './session-access-state.js';
+import { extractFinalizationSnapshot } from '../stream-snapshot.js';
+import { lastOpenAICompaction } from './session-stream-processor.js';
+import { contextCompactionFailureCategory } from '../../providers/openai-responses-model.js';
 import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-selector-parity-observer.js';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
@@ -149,6 +152,21 @@ export class TurnWorkflow {
     attemptOrInput: TurnAttempt | string | UserTurn,
     options: InitialTurnRunOptions = {},
   ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
+    try {
+      yield* this.#executeInitialBody(attemptOrInput, options);
+    } catch (error) {
+      const failure = contextCompactionFailureCategory(error);
+      if (failure) {
+        yield { type: 'context_compaction_failed', provider: 'openai', sessionId: this.deps.sessionId, errorCategory: failure, durationMs: 0 };
+      }
+      throw error;
+    }
+  }
+
+  async *#executeInitialBody(
+    attemptOrInput: TurnAttempt | string | UserTurn,
+    options: InitialTurnRunOptions = {},
+  ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
     let currentInput: TurnAttempt | string | UserTurn = attemptOrInput;
     let currentOptions = options;
 
@@ -199,6 +217,21 @@ export class TurnWorkflow {
   }
 
   async *executeContinuation(
+    init: ContinuationInit,
+    policy?: ApprovalDecisionPolicy,
+  ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
+    try {
+      yield* this.#executeContinuationBody(init, policy);
+    } catch (error) {
+      const failure = contextCompactionFailureCategory(error);
+      if (failure) {
+        yield { type: 'context_compaction_failed', provider: 'openai', sessionId: this.deps.sessionId, errorCategory: failure, durationMs: 0 };
+      }
+      throw error;
+    }
+  }
+
+  async *#executeContinuationBody(
     init: ContinuationInit,
     policy?: ApprovalDecisionPolicy,
   ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
@@ -535,6 +568,13 @@ export class TurnWorkflow {
       return { kind: 'stale' };
     }
 
+    this.#emitContextCompactionLifecycle({
+      stream,
+      inputTokensBefore: accumulated.latestUsage?.prompt_tokens,
+      startedAt: Date.now(),
+      emit,
+    });
+
     const outcome = await buildConversationResult(
       {
         result: stream,
@@ -564,6 +604,30 @@ export class TurnWorkflow {
     );
 
     return { kind: 'completed', outcome };
+  }
+
+  #emitContextCompactionLifecycle(args: {
+    stream: AgentStream;
+    inputTokensBefore?: number;
+    startedAt: number;
+    emit: (event: ConversationEvent) => void;
+  }): void {
+    const compaction = lastOpenAICompaction(extractFinalizationSnapshot(args.stream).output);
+    if (!compaction) return;
+    args.emit({
+      type: 'context_compaction_started',
+      provider: compaction.provider,
+      sessionId: this.deps.sessionId,
+      ...(args.inputTokensBefore !== undefined ? { inputTokensBefore: args.inputTokensBefore } : {}),
+    });
+    args.emit({
+      type: 'context_compaction_completed',
+      provider: compaction.provider,
+      sessionId: this.deps.sessionId,
+      ...(args.inputTokensBefore !== undefined ? { inputTokensBefore: args.inputTokensBefore } : {}),
+      inputTokensAfter: undefined,
+      durationMs: Math.max(0, Date.now() - args.startedAt),
+    });
   }
 
   async *#continuePostExecuteRun(): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
@@ -994,6 +1058,12 @@ export class TurnWorkflow {
     const finalizeResult = this.deps.streamProcessor.finalize(stream, state.token, state.inputMode, state.source);
     if (finalizeResult.kind === 'stale') {
       return { kind: 'stale' };
+    }
+
+    const compaction = lastOpenAICompaction(extractFinalizationSnapshot(stream).output);
+    if (compaction) {
+      yield { type: 'context_compaction_started', provider: compaction.provider, sessionId: this.deps.sessionId, inputTokensBefore: acc.latestUsage?.prompt_tokens };
+      yield { type: 'context_compaction_completed', provider: compaction.provider, sessionId: this.deps.sessionId, inputTokensBefore: acc.latestUsage?.prompt_tokens, inputTokensAfter: undefined, durationMs: 0 };
     }
 
     const mergedEmittedIds = new Set([...allEmittedIds, ...acc.emittedCommandIds]);

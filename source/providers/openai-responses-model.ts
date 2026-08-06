@@ -6,6 +6,7 @@ import type {
   StreamedModelTurnRequest,
   StreamedModelUsage,
   StreamedModelProviderOptions,
+  ContextCompactionSessionState,
 } from '../contracts/streamed-model-turn.js';
 import type { ProviderRequestCapture } from './provider-request-capture.js';
 import { consumeOpenAIRequestPrefixBindingWithOutcome } from './openai-request-prefix-binding.js';
@@ -149,8 +150,9 @@ function contextCompaction(
   providerOptions: StreamedModelProviderOptions,
   model: string,
   providerSupportsContextCompaction: boolean,
+  sessionState?: ContextCompactionSessionState,
 ): { threshold: number } | undefined {
-  if (!providerSupportsContextCompaction || !supportsContextCompactionModel(model)) return undefined;
+  if (sessionState?.disabled || !providerSupportsContextCompaction || !supportsContextCompactionModel(model)) return undefined;
   const option = (providerOptions as any).contextCompaction;
   if (option?.enabled !== true || typeof option.threshold !== 'number' || !Number.isFinite(option.threshold)) {
     return undefined;
@@ -163,12 +165,13 @@ function requestBody(
   model: string,
   stream: boolean,
   providerSupportsContextCompaction = false,
+  sessionState?: ContextCompactionSessionState,
 ): any {
   const providerOptions = request.providerOptions ?? {};
   // context_management is capability-gated below. Do not let the generic
   // extra-body escape hatch bypass that gate on unsupported endpoints/models.
   const { context_management: _reservedContextManagement, ...extraBody } = (providerOptions as any).extraBody ?? {};
-  const compaction = contextCompaction(providerOptions, model, providerSupportsContextCompaction);
+  const compaction = contextCompaction(providerOptions, model, providerSupportsContextCompaction, sessionState);
   const projectedInput = toResponsesApiInput(request.input);
   const body = {
     model,
@@ -269,6 +272,32 @@ function toTurnOutput(item: any): StreamedModelTurnOutput {
     provider: 'openai',
     item,
   };
+}
+
+export type ContextCompactionFailureCategory = 'request' | 'validation';
+
+export function contextCompactionFailureCategory(error: unknown): ContextCompactionFailureCategory | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const record = error as Record<string, unknown>;
+  const status = Number(record.status ?? record.statusCode ?? (record.error as any)?.status);
+  const text = JSON.stringify(error);
+  if (status === 500 && /context[_ ]management|server_error/i.test(text)) return 'request';
+  if (status === 400 && /integer_below_min_value|compact_threshold|context[_ ]management/i.test(text)) return 'validation';
+  return undefined;
+}
+
+function markContextCompactionFailure(
+  error: unknown,
+  request: StreamedModelTurnRequest,
+  sessionState?: ContextCompactionSessionState,
+): void {
+  if (!request.providerOptions || !(request.providerOptions as any).contextCompaction) return;
+  const category = contextCompactionFailureCategory(error);
+  if (!category) return;
+  if (category === 'request' && sessionState) sessionState.disabled = true;
+  if (error && typeof error === 'object') {
+    Object.defineProperty(error, 'contextCompactionFailure', { value: category, configurable: true });
+  }
 }
 
 function responseStatusError(status: 'failed' | 'incomplete', response: any): Error {
@@ -441,6 +470,7 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
     protected readonly _model: string,
     protected readonly capture?: ProviderRequestCapture,
     protected readonly supportsContextCompaction = false,
+    protected readonly contextCompactionSessionState?: ContextCompactionSessionState,
   ) {}
 
   async getResponse(request: StreamedModelTurnRequest): Promise<any> {
@@ -448,7 +478,7 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
     this.lifecycle.bind(request, this.capture);
     try {
       const response = await this._client.responses.create(
-        requestBody(request, this._model, false, this.supportsContextCompaction),
+        requestBody(request, this._model, false, this.supportsContextCompaction, this.contextCompactionSessionState),
         {
           ...(request.signal ? { signal: request.signal } : {}),
           ...((request.providerOptions as any)?.extraHeaders
@@ -461,6 +491,7 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
       this.lifecycle.finish(request, 'terminal', this.capture, completion.responseId);
       return completion;
     } catch (error) {
+      markContextCompactionFailure(error, request, this.contextCompactionSessionState);
       this.lifecycle.finish(request, 'failed', this.capture);
       throw error;
     }
@@ -476,7 +507,7 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
     let terminal = false;
     try {
       const source = await this._client.responses.create(
-        requestBody(request, this._model, true, this.supportsContextCompaction),
+        requestBody(request, this._model, true, this.supportsContextCompaction, this.contextCompactionSessionState),
         {
           ...(request.signal ? { signal: request.signal } : {}),
           ...((request.providerOptions as any)?.extraHeaders
@@ -495,6 +526,7 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
       }
       if (!terminal) throw new Error('OpenAI streamed response ended without a completion.');
     } catch (error) {
+      markContextCompactionFailure(error, request, this.contextCompactionSessionState);
       if (!terminal) this.lifecycle.finish(request, 'failed', this.capture);
       throw error;
     } finally {
@@ -513,7 +545,7 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
     try {
       socket.send({
         type: 'response.create',
-        ...requestBody(request, this._model, true, this.supportsContextCompaction),
+        ...requestBody(request, this._model, true, this.supportsContextCompaction, this.contextCompactionSessionState),
       } as any);
       const normalizationState = createResponseEventNormalizationState();
       for await (const message of socket.stream()) {
@@ -530,6 +562,7 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
       }
       if (!terminal) throw new Error('OpenAI WebSocket closed before a terminal response event.');
     } catch (error) {
+      markContextCompactionFailure(error, request, this.contextCompactionSessionState);
       if (!terminal) this.lifecycle.finish(request, 'failed', this.capture);
       throw error;
     } finally {

@@ -11,6 +11,7 @@ import { createAgentStream, type AgentStream } from '../agent-stream.js';
 import type {
   StreamedModelMessagePart,
   StreamedModelProviderOptions,
+  type ContextCompactionSessionState,
   StreamedModelToolResultPart,
   StreamedModelTurn,
   StreamedModelTurnEvent,
@@ -120,6 +121,7 @@ export interface ApplicationRunLoopDeps {
    * turn spans several runs, and a steer only survives the run it was handed to.
    */
   readonly logDiagnostic?: (message: string, meta: Record<string, unknown>) => void;
+  readonly contextCompactionSessionState?: ContextCompactionSessionState;
 }
 
 /**
@@ -230,6 +232,7 @@ class EventQueue {
  */
 export class ApplicationRunLoop {
   readonly #deps: ApplicationRunLoopDeps;
+  readonly #contextCompactionSessionState: ContextCompactionSessionState;
   #activeAbortController: AbortController | null = null;
   #runInFlight = false;
   /**
@@ -242,6 +245,7 @@ export class ApplicationRunLoop {
 
   constructor(deps: ApplicationRunLoopDeps) {
     this.#deps = deps;
+    this.#contextCompactionSessionState = deps.contextCompactionSessionState ?? { disabled: false };
   }
 
   abort(): void {
@@ -614,7 +618,15 @@ export class ApplicationRunLoop {
           : {}),
         ...(state.agent.outputType !== undefined ? { outputType: state.agent.outputType } : {}),
         ...(state.agent.modelSettings?.codex ? { codex: state.agent.modelSettings.codex } : {}),
-        ...(state.agent.modelSettings?.providerData ? { providerOptions: state.agent.modelSettings.providerData } : {}),
+        ...(state.agent.modelSettings?.providerData
+          ? {
+              providerOptions: this.#contextCompactionSessionState.disabled
+                ? Object.fromEntries(
+                    Object.entries(state.agent.modelSettings.providerData).filter(([key]) => key !== 'contextCompaction'),
+                  )
+                : state.agent.modelSettings.providerData,
+            }
+          : {}),
         ...(options.signal ? { signal: options.signal } : {}),
       };
       const consume = async (): Promise<void> => {

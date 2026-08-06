@@ -227,7 +227,7 @@ export class TurnWorkflow {
     policy?: ApprovalDecisionPolicy,
   ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
     try {
-      return yield* this.#executeContinuationBody(init, policy);
+      return yield* this.#executeContinuationBodyImpl(init, policy);
     } catch (error) {
       const failure = contextCompactionFailureCategory(error);
       if (failure) {
@@ -243,7 +243,7 @@ export class TurnWorkflow {
     }
   }
 
-  async *#executeContinuationBody(
+  async *#executeContinuationBodyImpl(
     init: ContinuationInit,
     policy?: ApprovalDecisionPolicy,
   ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
@@ -580,12 +580,13 @@ export class TurnWorkflow {
       return { kind: 'stale' };
     }
 
-    this.#emitContextCompactionLifecycle({
+    for (const event of this.#contextCompactionLifecycleEvents({
       stream,
       inputTokensBefore: accumulated.latestUsage?.prompt_tokens,
       startedAt: Date.now(),
-      emit,
-    });
+    })) {
+      emit(event);
+    }
 
     const outcome = await buildConversationResult(
       {
@@ -618,28 +619,29 @@ export class TurnWorkflow {
     return { kind: 'completed', outcome };
   }
 
-  #emitContextCompactionLifecycle(args: {
+  #contextCompactionLifecycleEvents(args: {
     stream: AgentStream;
     inputTokensBefore?: number;
     startedAt: number;
-    emit: (event: ConversationEvent) => void;
-  }): void {
+  }): ConversationEvent[] {
     const compaction = lastOpenAICompaction(extractFinalizationSnapshot(args.stream).output);
-    if (!compaction) return;
-    args.emit({
-      type: 'context_compaction_started',
-      provider: compaction.provider,
-      sessionId: this.deps.sessionId,
-      ...(args.inputTokensBefore !== undefined ? { inputTokensBefore: args.inputTokensBefore } : {}),
-    });
-    args.emit({
-      type: 'context_compaction_completed',
-      provider: compaction.provider,
-      sessionId: this.deps.sessionId,
-      ...(args.inputTokensBefore !== undefined ? { inputTokensBefore: args.inputTokensBefore } : {}),
-      inputTokensAfter: undefined,
-      durationMs: Math.max(0, Date.now() - args.startedAt),
-    });
+    if (!compaction) return [];
+    return [
+      {
+        type: 'context_compaction_started',
+        provider: compaction.provider,
+        sessionId: this.deps.sessionId,
+        ...(args.inputTokensBefore !== undefined ? { inputTokensBefore: args.inputTokensBefore } : {}),
+      },
+      {
+        type: 'context_compaction_completed',
+        provider: compaction.provider,
+        sessionId: this.deps.sessionId,
+        ...(args.inputTokensBefore !== undefined ? { inputTokensBefore: args.inputTokensBefore } : {}),
+        inputTokensAfter: undefined,
+        durationMs: Math.max(0, Date.now() - args.startedAt),
+      },
+    ];
   }
 
   async *#continuePostExecuteRun(): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
@@ -1072,22 +1074,12 @@ export class TurnWorkflow {
       return { kind: 'stale' };
     }
 
-    const compaction = lastOpenAICompaction(extractFinalizationSnapshot(stream).output);
-    if (compaction) {
-      yield {
-        type: 'context_compaction_started',
-        provider: compaction.provider,
-        sessionId: this.deps.sessionId,
-        inputTokensBefore: acc.latestUsage?.prompt_tokens,
-      };
-      yield {
-        type: 'context_compaction_completed',
-        provider: compaction.provider,
-        sessionId: this.deps.sessionId,
-        inputTokensBefore: acc.latestUsage?.prompt_tokens,
-        inputTokensAfter: undefined,
-        durationMs: 0,
-      };
+    for (const event of this.#contextCompactionLifecycleEvents({
+      stream,
+      inputTokensBefore: acc.latestUsage?.prompt_tokens,
+      startedAt: Date.now(),
+    })) {
+      yield event;
     }
 
     const mergedEmittedIds = new Set([...allEmittedIds, ...acc.emittedCommandIds]);

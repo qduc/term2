@@ -202,6 +202,7 @@ export class AgentClient {
           onRetry: () => this.#retryCallback?.(),
           retryAttempts: this.#retryAttempts,
           requestCapture: deps.requestCapture,
+          contextCompactionSessionState: this.#contextCompactionSessionState,
         });
       },
     });

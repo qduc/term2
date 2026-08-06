@@ -81,41 +81,62 @@ What Step 2 shipped, so a resumer does not re-derive it:
   fixed replay. `mergeAssistantTurnIntoLedger`'s tool-ledger reconstruction loop and
   `journal-to-ledger.ts`'s loops fall through no-op for `provider_opaque` items (they only track
   tool call/result pairs) — verified, not a gap.
-- `conversation-log-writer.ts` gained `redactOpaqueContentForLog` (exported) and a private
-  `#traceOpaqueContent`, wired into `append()`. This adds a **new** debug-level echo to the winston
-  app log (`ILoggingService.debug`) for `assistant_turn`/`assistant_journal_item` events that carry
-  `encrypted_content` or a `provider_opaque` item — the only two event kinds that can carry either —
-  with `encrypted_content` and any `provider_opaque` payload over 512 bytes replaced by a
-  `<redacted N bytes>` marker. **The actual JSONL line appended for session persistence is
-  untouched** — it still carries the full, unredacted value, because replay must recover it
-  byte-identical (verified in `conversation-replay.test.ts`; a redacted persisted line would send a
-  placeholder string as `encrypted_content` on the next OpenAI request and break the call). See
-  [judgment call](#step-2-judgment-call-what-counts-as-the-app-log) below for why this reads "the
-  app log" as the winston log, not the conversation JSONL, and why that's the only reading consistent
-  with round-trip.
+- `conversation-log-writer.ts` gained **no new logging call**. First attempt at this step added a
+  redacted debug-level echo of `assistant_turn`/`assistant_journal_item` events to the winston app
+  log; a coordinator review caught that `main`'s only app-log call in this file was `#logger.error`
+  on write failure — nothing echoed conversation events to the app log before this branch, so that
+  echo was new output, not a redaction of existing output, and it would have fired on nearly every
+  OpenAI turn (`include: ['reasoning.encrypted_content']` is set on every request) while forwarding
+  assistant text and tool arguments to a log that was never meant to hold transcript content. It was
+  removed. The guarantee is pinned by a **negative** test instead
+  (`conversation-log-writer.test.ts`): append an event carrying `encrypted_content` and a
+  `provider_opaque` item, then assert no call to any app-logger method (`error`/`warn`/`info`/
+  `debug`/`security`) contains it — true today because this file makes no such call, not because
+  anything gets redacted in transit. The JSONL line itself keeps the full, unredacted value, which
+  is what replay needs (verified in `conversation-replay.test.ts`).
+- **`provider-traffic.ts` had a real, pre-existing leak — found by following the plan's "confirm
+  provider-traffic logs do not echo it" instruction rather than treating it as a formality.**
+  `sanitizeSentTrafficBody`'s `input`-array sanitization only reshapes items that are message-shaped
+  (`role === 'system'/'developer'` or `type === 'message'`) or `type === 'additional_tools'`; a
+  Responses-API `type: 'reasoning'` or `type: 'compaction'`/`provider_opaque` item — which carries
+  `encrypted_content` directly on the item, not nested under `reasoning_details` the way the
+  Chat-Completions shape the existing redaction test covers — fell through untouched. On the received
+  side, `summarizeReceivedTraffic`'s JSON-transport branch stored `parsed` (the entire response body)
+  verbatim as `summary.payload`, and `ProviderTraffic.recordResponseReceived`'s plain-object-payload
+  branch did the same — both go straight into the on-disk traffic artifact file **and** the winston
+  debug log. Since `include: ['reasoning.encrypted_content']` is unconditional, this was leaking
+  reasoning's `encrypted_content` into both today, on every OpenAI turn — independent of compaction.
+  Confirmed with failing tests before fixing (see `provider-traffic.test.ts`), then fixed with one
+  generic `redactEncryptedContent` helper (redacts the key `encrypted_content` wherever it appears,
+  any depth) applied at all three sites: the end of `sanitizeSentTrafficBody`, the JSON-transport
+  branch of `summarizeReceivedTraffic`, and the plain-object branch of `recordResponseReceived`. The
+  SSE and websocket paths were checked and are safe by construction — they synthesize their payload
+  from a fixed set of extracted fields and never spread a raw item, so `encrypted_content` was never
+  forwarded there.
 
-Gates run and green for Step 2: `pnpm test` (5234 passed, 1 pre-existing skip; the pre-existing
-flaky `InputBox` timing test and the `cli.integration.test.ts` suite both need `dist/` built first —
-`pnpm run build` — otherwise they fail on a missing `dist/cli.js`, unrelated to this change),
+Gates run and green for Step 2: `pnpm test` (5232 passed, 1 pre-existing skip, 1 pre-existing flaky
+`InputBox` timing test that passes on isolated rerun; `cli.integration.test.ts` needs `dist/` built
+first — `pnpm run build` — otherwise it fails on a missing `dist/cli.js`, unrelated to this change),
 `pnpm test:provider-black-box` (152 passed, same count as Step 1 — no regression), typecheck,
 prettier, eslint (18 pre-existing `require-yield` warnings, 0 errors, none in changed files).
 
-### Step 2 judgment call: what counts as "the app log"
+### Step 2 judgment call: what counts as the app log (corrected after coordinator review)
 
-The Step 2 spec (below) says to redact in "the app log" while values "still round-trip in the
-session state." Taken literally about `conversation-log-writer.ts`, these conflict: that file's
-`append()` writes the *only* copy of the conversation JSONL, which is also what
-`conversation-replay.ts` reads back on resume. Redacting there would make `encrypted_content`
-non-recoverable after a restart — directly contradicting "round trips in session state" and
-undermining the entire point of Steps 1–2 (Step 8 lists "compacted session survives save / restart /
-resume" as the highest-value test). Resolved by reading "the app log" as the winston log
-(`LoggingService`, `envPaths('term2').log`, what the `debugging-logs` skill calls "App logs") —
-a distinct file from the conversation JSONL (`envPaths('term2').data/conversations`, "session
-state") — and adding the redacted echo there instead. No existing code echoed conversation events to
-the winston log before Step 2; this is new, narrowly-scoped (only the two event kinds that can carry
-sensitive content, gated by a cheap structural check before doing any redaction work). If a future
-resumer disagrees with this reading, the fix is confined to `#traceOpaqueContent` in
-`conversation-log-writer.ts` — it does not touch the persistence or replay path.
+First pass read "the app log" in the spec below as a place to add a *new*, redacted echo, and picked
+the winston log (`LoggingService`, `envPaths('term2').log`) as that place, reasoning that the
+conversation JSONL (`envPaths('term2').data/conversations`) can't be redacted without breaking
+replay's need for the real value. **The round-trip half of that reasoning still holds — do not
+redact the conversation JSONL, ever, that part was correct** — but adding a new echo to satisfy
+"redact in the app log" was the wrong move: the requirement is "never print," and a codebase that
+prints nothing today already satisfies it. Inventing a new print-and-redact site is a net new leak
+surface, not a fix, and it duplicates transcript content (assistant text, tool arguments) into a log
+never meant to hold it. Corrected: `conversation-log-writer.ts` adds no logging call; the guarantee
+is pinned by the negative test described above. Do not re-add an echo here — if a future need for a
+debug trace comes up, it does not fall out of this plan's requirement.
+
+What "actually check provider-traffic" turned up is the genuine version of the redaction task — see
+the `provider-traffic.ts` bullet above. A resumer touching either file again should read both bullets
+before assuming an app-log echo is the right shape for a new redaction requirement.
 
 Five premises worth not re-deriving:
 
@@ -525,9 +546,12 @@ Gate: `pnpm test` and `pnpm test:provider-black-box` (run-loop change — non-ne
 
 **Status: DONE — branch `compaction-persistence`, not yet merged.** Implemented as specced below,
 with the deviations and clarifications recorded under "What Step 2 shipped" in [Resume
-here](#resume-here) above and the [judgment call](#step-2-judgment-call-what-counts-as-the-app-log)
-about "the app log." Line-number anchors as of this branch: `Item` union is in
-`source/contracts/conversation-items.ts`;
+here](#resume-here) above and the [judgment
+call](#step-2-judgment-call-what-counts-as-the-app-log-corrected-after-coordinator-review) about
+"the app log" (**corrected after coordinator review** — read this before touching
+`conversation-log-writer.ts`'s logging or `provider-traffic.ts`'s sanitization: the real redaction
+gap was in `provider-traffic.ts`, not a new echo in the conversation log writer). Line-number anchors
+as of this branch: `Item` union is in `source/contracts/conversation-items.ts`;
 `projectPersistedAssistantItemToProviderHistory` is still at `conversation-turn-items.ts:44`,
 `synthesizeHistoryFromAssistantTurn` at `:199`; `normalizeRunItem` is at
 `run-item-normalizer.ts:223`. No drift from the note below otherwise.

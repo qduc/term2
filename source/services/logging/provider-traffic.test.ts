@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,8 +6,10 @@ import {
   sanitizeSentTrafficBody,
   summarizeReceivedTraffic,
   ProviderTrafficArtifactStore,
+  ProviderTraffic,
   TRAFFIC_TEXT_LIMIT,
 } from './provider-traffic.js';
+import { NULL_SESSION_CONTEXT_SERVICE } from '../session/session-context-service.js';
 
 const makeTempDir = (): string => fs.mkdtempSync(path.join(os.tmpdir(), 'term2-provider-traffic-'));
 
@@ -192,6 +194,35 @@ it('sanitizeSentTrafficBody removes encrypted reasoning payload data from messag
   expect(messages[0].content).toBe('keep assistant content');
 });
 
+// Step 2 of docs/plans/openai-context-compaction.md: encrypted_content must never
+// reach a log. openai-responses-model.ts sets `include: ['reasoning.encrypted_content']`
+// on every request, so a Responses-API-shaped `type: 'reasoning'` input item carries
+// `encrypted_content` directly (not nested under `reasoning_details`, which is the
+// Chat-Completions shape the test above covers). A `type: 'compaction'`/`provider_opaque`
+// item (Step 1/2's opaque lane) carries it the same way once Step 3/4 send one on the wire.
+it('sanitizeSentTrafficBody redacts encrypted_content on Responses-API input items (reasoning and provider_opaque/compaction)', () => {
+  const body = {
+    input: [
+      { role: 'user', content: 'keep me' },
+      { type: 'reasoning', id: 'r1', encrypted_content: 'reasoning-ciphertext', summary: [] },
+      { type: 'compaction', id: 'c1', encrypted_content: 'compaction-ciphertext', created_by: 'model' },
+    ],
+  };
+
+  const sanitized = sanitizeSentTrafficBody(body);
+  const input = sanitized.input as Array<Record<string, unknown>>;
+
+  expect(input[0]).toEqual({ role: 'user', content: 'keep me' });
+  expect(input[1]).toMatchObject({ type: 'reasoning', id: 'r1', summary: [] });
+  expect(input[1].encrypted_content).not.toBe('reasoning-ciphertext');
+  expect(input[2]).toMatchObject({ type: 'compaction', id: 'c1', created_by: 'model' });
+  expect(input[2].encrypted_content).not.toBe('compaction-ciphertext');
+
+  const serialized = JSON.stringify(sanitized);
+  expect(serialized).not.toContain('reasoning-ciphertext');
+  expect(serialized).not.toContain('compaction-ciphertext');
+});
+
 it('summarizeReceivedTraffic merges OpenAI Responses SSE text reasoning and tool arguments', async () => {
   const sse = [
     ': ping',
@@ -331,6 +362,42 @@ it('summarizeReceivedTraffic handles non-stream JSON and falls back safely for u
 
   expect(fallbackSummary.fallbackBody).toBeTruthy();
   expect((fallbackSummary.fallbackBody as any).strange.nested).toBe(true);
+});
+
+// Step 2 of docs/plans/openai-context-compaction.md: a non-streaming JSON response's
+// `output` array can contain reasoning items (encrypted_content is requested on every
+// OpenAI Responses call, not just compaction turns) and, once Step 3/4 land, compaction
+// items — both carry `encrypted_content` directly. The JSON-transport branch of
+// summarizeReceivedTraffic stores `parsed` as `summary.payload` verbatim; this is what
+// both the winston debug log (ProviderTraffic.recordResponseReceived) and the on-disk
+// provider-traffic artifact file receive, so it must be redacted here.
+it('summarizeReceivedTraffic redacts encrypted_content from reasoning and compaction output items', async () => {
+  const summary = await summarizeReceivedTraffic(
+    new Response(
+      JSON.stringify({
+        id: 'resp_1',
+        output: [
+          { type: 'reasoning', id: 'r1', encrypted_content: 'reasoning-ciphertext', summary: [] },
+          { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Done' }] },
+          { type: 'compaction', id: 'c1', encrypted_content: 'compaction-ciphertext', created_by: 'model' },
+        ],
+        usage: { input_tokens: 3, output_tokens: 2 },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    ),
+  );
+
+  expect(summary.transport).toBe('json');
+  const serialized = JSON.stringify(summary.payload);
+  expect(serialized).not.toContain('reasoning-ciphertext');
+  expect(serialized).not.toContain('compaction-ciphertext');
+  // Everything else about the response is preserved verbatim.
+  expect((summary.payload as any)?.id).toBe('resp_1');
+  expect((summary.payload as any)?.output?.[1]).toEqual({
+    type: 'message',
+    role: 'assistant',
+    content: [{ type: 'output_text', text: 'Done' }],
+  });
 });
 
 it('summarizeReceivedTraffic sniffs SSE body when content-type is missing', async () => {
@@ -733,4 +800,49 @@ it('recordRequestComplete removes completed request path from map so a second co
   const secondRecords = readRequestFile(secondFile);
   expect((secondRecords.sent as Record<string, unknown>) ?? {}).toEqual({});
   expect((secondRecords.received as Record<string, unknown>)?.timestamp).toBe('2026-06-01T10:00:10.000Z');
+});
+
+// Step 2 of docs/plans/openai-context-compaction.md: ProviderTraffic.recordResponseReceived's
+// non-Response, non-websocket branch (a provider adapter that resolves directly to a parsed
+// object rather than a Fetch Response) stores its payload verbatim too — same leak, same fix.
+it('ProviderTraffic.recordResponseReceived redacts encrypted_content from a plain-object response payload', async () => {
+  const rootDir = makeTempDir();
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+  const debug = vi.fn();
+  const error = vi.fn();
+  const loggingService = { debug, error, getCorrelationId: () => undefined };
+  const traffic = new ProviderTraffic(loggingService, NULL_SESSION_CONTEXT_SERVICE, store);
+
+  const requestId = 'plain-object-req';
+  traffic.recordRequestStart({
+    requestId,
+    provider: 'openai',
+    model: 'gpt-5.4',
+    sentBody: { input: [{ role: 'user', content: 'hi' }] },
+  });
+
+  await traffic.recordResponseReceived({
+    requestId,
+    provider: 'openai',
+    model: 'gpt-5.4',
+    status: 200,
+    response: {
+      id: 'resp_1',
+      output: [{ type: 'compaction', id: 'c1', encrypted_content: 'plain-object-ciphertext' }],
+    },
+  });
+
+  // Nothing passed to the winston debug log contains the ciphertext.
+  const loggedText = JSON.stringify(debug.mock.calls);
+  expect(loggedText).not.toContain('plain-object-ciphertext');
+
+  // Nor does the on-disk traffic artifact.
+  const dayDir = fs.readdirSync(rootDir).find((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry));
+  expect(dayDir).toBeTruthy();
+  const sessionDir = fs.readdirSync(path.join(rootDir, dayDir!))[0];
+  const requestFiles = fs.readdirSync(path.join(rootDir, dayDir!, sessionDir)).filter((name) => name.endsWith('.json'));
+  const artifactText = requestFiles
+    .map((name) => fs.readFileSync(path.join(rootDir, dayDir!, sessionDir, name), 'utf8'))
+    .join('\n');
+  expect(artifactText).not.toContain('plain-object-ciphertext');
 });

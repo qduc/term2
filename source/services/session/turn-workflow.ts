@@ -568,7 +568,9 @@ export class TurnWorkflow {
 
   async *#continuePostExecuteRun(): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
     const liveRun = this.#liveRun;
-    if (!liveRun) return { kind: 'failed' };
+    if (!liveRun) {
+      throw new Error('No live post-execute run active to continue.');
+    }
     try {
       const result = yield* this.#drainLiveRun(liveRun);
       if (result.kind === 'stale') return { kind: 'stale' };
@@ -578,7 +580,7 @@ export class TurnWorkflow {
       const { outcome } = result;
       if (outcome.kind === 'response') return { kind: 'response', terminal: outcome.result };
       if (outcome.kind === 'approval_required') return { kind: 'approval_required', terminal: outcome.result };
-      return { kind: 'failed' };
+      throw new Error('Post-execute live run finished without a terminal outcome.');
     } catch (error) {
       this.#liveRun = null;
       this.deps.setActivePostExecuteRunId?.(null);

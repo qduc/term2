@@ -786,3 +786,9 @@ it('executeContinuation redrives initial execution when recovery requests a fres
     terminal: { type: 'response', finalText: 'recovered' },
   });
 });
+
+it('throws explicit error when continuePostExecute is called without a live run', async () => {
+  const { workflow } = setupWorkflow(null);
+  const generator = workflow.continuePostExecute();
+  await expect(generator.next()).rejects.toThrow('No live post-execute run active to continue.');
+});

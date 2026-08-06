@@ -159,6 +159,7 @@ export class ConversationAdapter {
   #activeTurn: Promise<void> = Promise.resolve();
   #activeRequestId: string | null = null;
   #cancellingRequestId: string | null = null;
+  #cancellationEpoch = 0;
   #cancellation: Promise<void> = Promise.resolve();
   #approvalExecutionId: ExecutionId | null = null;
   #approvalActionId: ActionId | null = null;
@@ -536,6 +537,7 @@ export class ConversationAdapter {
   }
 
   abort(): void {
+    this.#cancellationEpoch++;
     if (!this.#queue) {
       this.#turnFlow.abort?.();
       return;
@@ -605,7 +607,11 @@ export class ConversationAdapter {
       if (!message && !recoveredInput) {
         throw new Error('Recovered queued message has no executable text input');
       }
-      const result = await this.#executeMessage(message?.input ?? recoveredInput!, message?.options ?? {});
+      const result = await this.#executeMessage(
+        message?.input ?? recoveredInput!,
+        message?.options ?? {},
+        execution.snapshot.requestId,
+      );
       if (result.type === 'approval_required') {
         this.#approvalExecutionId = execution.executionId;
         this.#approvalActionId = `adapter-action-${this.#nextActionId++}` as ActionId;
@@ -648,6 +654,26 @@ export class ConversationAdapter {
     message.reject(error);
   }
 
+  async #collectTerminalResult(
+    events: AsyncIterable<ConversationEvent>,
+    options: Parameters<typeof collectTerminalResult>[1],
+    cancellationEpoch: number,
+    requestId?: string | null,
+  ): Promise<ConversationTerminal> {
+    try {
+      return await collectTerminalResult(events, options);
+    } catch (error) {
+      const wasCancelled =
+        error instanceof AmbiguousModelOutcomeError &&
+        (cancellationEpoch < this.#cancellationEpoch ||
+          (Boolean(requestId) && this.#cancellingRequestId === requestId));
+      if (wasCancelled) {
+        throw queueCancellationError('Active turn was cancelled');
+      }
+      throw error;
+    }
+  }
+
   async #executeMessage(
     input: string | UserTurn,
     {
@@ -659,8 +685,10 @@ export class ConversationAdapter {
       bypassInputSurgeGuard,
       replayFromHistory,
     }: SendMessageOptions = {},
+    requestId?: string | null,
   ): Promise<ConversationTerminal> {
     const turn = normalizeUserTurn(input);
+    const cancellationEpoch = this.#cancellationEpoch;
     return this.#withTrafficContext(turn.text, async () => {
       const wrappedOnEvent = (event: ConversationEvent) => {
         this.#logs.dispatchEventToLog(event);
@@ -677,20 +705,25 @@ export class ConversationAdapter {
         if (replayFromHistory) {
           startOptions.replayFromHistory = true;
         }
-        result = await collectTerminalResult(this.#turnFlow.start(input, startOptions), {
-          onTextChunk,
-          onReasoningChunk,
-          onCommandMessage,
-          onEvent: wrappedOnEvent,
-          getRawInterruption: () => this.#approval.getPendingInterruption(),
-          onFinalEvent: (event) => {
-            this.#logger.debug('sendMessage received final event', {
-              sessionId: this.#sessionId,
-              hasUsage: Boolean(event.usage),
-              usage: event.usage,
-            });
+        result = await this.#collectTerminalResult(
+          this.#turnFlow.start(input, startOptions),
+          {
+            onTextChunk,
+            onReasoningChunk,
+            onCommandMessage,
+            onEvent: wrappedOnEvent,
+            getRawInterruption: () => this.#approval.getPendingInterruption(),
+            onFinalEvent: (event) => {
+              this.#logger.debug('sendMessage received final event', {
+                sessionId: this.#sessionId,
+                hasUsage: Boolean(event.usage),
+                usage: event.usage,
+              });
+            },
           },
-        });
+          cancellationEpoch,
+          requestId,
+        );
       } finally {
         this.#subagentEventSinkHost?.cancelSubagentRuns?.();
         this.#subagentEventSinkHost?.setSubagentEventSink(null);
@@ -782,6 +815,7 @@ export class ConversationAdapter {
         if (!sameApproval) return null;
       }
 
+      const cancellationEpoch = this.#cancellationEpoch;
       const result = await this.#withTrafficContext(undefined, async () => {
         const wrappedOnEvent = (event: ConversationEvent) => {
           this.#logs.dispatchEventToLog(event);
@@ -791,7 +825,7 @@ export class ConversationAdapter {
         this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
         let result: ConversationTerminal | null;
         try {
-          result = await collectTerminalResult(
+          result = await this.#collectTerminalResult(
             postExecuteApproval
               ? this.#turnFlow.continueAfterPostExecuteApproval!()
               : this.#turnFlow.continueAfterApproval({ answer, rejectionReason }),
@@ -809,6 +843,8 @@ export class ConversationAdapter {
                 });
               },
             },
+            cancellationEpoch,
+            this.#activeRequestId,
           );
         } finally {
           this.#subagentEventSinkHost?.cancelSubagentRuns?.();

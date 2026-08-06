@@ -378,13 +378,6 @@ export class ConversationAdapter {
    */
   async retractSubmission(id: string): Promise<SubmissionMutation> {
     if (this.#pendingSteerIds.has(id)) {
-      // `retractSteer` is optional on `TurnFlow` only so a `turnFlow` that
-      // implements `steer` alone still type-checks; whatever actually called
-      // `injectIntoActiveTurn` with this id required `turnFlow.steer` to
-      // exist, so it must have also wired `retractSteer`. An id landing here
-      // with the method missing is a wiring bug, not a race — reporting it as
-      // `too_late` would tell the user "already sent" about a submission the
-      // run loop never got a chance to admit or refuse (## Resume here,
       if (!this.#turnFlow.retractSteer) {
         throw new Error(
           `ConversationAdapter.retractSubmission: pending steer '${id}' has no turnFlow.retractSteer to route to`,
@@ -423,8 +416,6 @@ export class ConversationAdapter {
    */
   async editSubmission(id: string, turn: UserTurn): Promise<SubmissionMutation> {
     if (this.#pendingSteerIds.has(id)) {
-      // Same invariant as `retractSubmission`: a `turnFlow` that wires `steer`
-      // for a pending id must also wire `editSteer` (## Resume here, hazard 3).
       if (!this.#turnFlow.editSteer) {
         throw new Error(
           `ConversationAdapter.editSubmission: pending steer '${id}' has no turnFlow.editSteer to route to`,
@@ -437,26 +428,15 @@ export class ConversationAdapter {
     if (this.#queue) {
       const inQueue = this.#queue.state().queue.some((item) => item.id === id);
       if (inQueue) {
-        const previous = this.#messagesById.get(id);
-        if (!previous) return { kind: 'unknown_id' };
-        this.#messagesById.set(id, { ...previous, input: structuredClone(turn) });
+        const message = this.#messagesById.get(id);
+        if (!message) return { kind: 'unknown_id' };
+        this.#messagesById.set(id, { ...message, input: structuredClone(turn) });
         const displayText = normalizeUserTurn(turn).text;
         const controllerText = displayText.trim() ? displayText : QUEUED_NON_TEXT_PLACEHOLDER;
         const result = await this.#queue.command({ kind: 'edit_queued', itemId: id as ItemId, text: controllerText });
         if (result.kind !== 'accepted') {
-          // The stage transition must be all-or-nothing (## Resume here,
-          // hazard 2): if the controller refused the edit — most likely
-          // because the item started running during the await above — the
-          // write to `#messagesById` above must not stick, or the turn that
-          // is (or is about to be) reading that entry sends the edited text
-          // while the caller is simultaneously told `too_late` and, per
-          // `## Losing the race`, resubmits the same text as a fresh
-          // message — sending it twice. Restore the pre-edit entry, unless
-          // the item has already settled and removed itself from the map
-          // (nothing left to restore, and doing so would resurrect a
-          // promise that already resolved).
           if (this.#messagesById.has(id)) {
-            this.#messagesById.set(id, previous);
+            this.#messagesById.set(id, message);
           }
           return { kind: 'too_late', stage: 'started' };
         }
@@ -553,42 +533,6 @@ export class ConversationAdapter {
       }
     }
     this.#notifyQueueState();
-  }
-
-  /**
-   * Remove the last (most recently queued) item from the queue and return its
-   * text so the caller can move it back to the input box. Returns null when
-   * the queue is empty, the adapter has no queue (pass-through mode), or the
-   * underlying controller rejects the removal.
-   *
-   * A thin wrapper over {@link retractSubmission} addressed at the controller
-   * queue's tail id — kept only because `InputBox`'s up-arrow gesture is
-   * still its sole caller (Step 4 replaces both with the id-addressed
-   * `PendingQueueList`). It still only looks at the *controller* queue, not a
-   * pending steer, so a steer with no queued follow-up behind it remains
-   * unreachable here exactly as before — that gap is defect #1 in the design
-   * doc, left for Step 4 to close via the unified pending list.
-   */
-  async removeLastQueuedItem(): Promise<{ id: string; text: string } | null> {
-    const queue = this.#queue;
-    if (!queue) return null;
-
-    const state = queue.state();
-    if (state.queue.length === 0) return null;
-
-    // The queue is FIFO. The "last" queued item is the one at the tail.
-    const lastItem = state.queue[state.queue.length - 1]!;
-    // Prefer the in-memory turn text: controller text may be a non-text placeholder.
-    const pending = this.#messagesById.get(lastItem.id);
-    const restoredText = pending
-      ? normalizeUserTurn(pending.input).text
-      : lastItem.text === QUEUED_NON_TEXT_PLACEHOLDER || lastItem.text === LEGACY_QUEUED_MESSAGE_PLACEHOLDER
-      ? ''
-      : lastItem.text;
-
-    const result = await this.retractSubmission(lastItem.id);
-    if (result.kind !== 'applied') return null;
-    return { id: lastItem.id, text: restoredText };
   }
 
   abort(): void {

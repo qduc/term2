@@ -41,6 +41,8 @@ type Options = {
   setCursorOverride: (cursor: number | null) => void;
   dismissedCompletionRef: MutableRefObject<CompletionDismissal>;
   inputRevisionRef: MutableRefObject<number>;
+  /** Return true when an InputBox-local surface consumed Escape. */
+  onEscape?: () => boolean;
 };
 
 export const useEscapeKey = ({
@@ -55,9 +57,12 @@ export const useEscapeKey = ({
   setCursorOverride,
   dismissedCompletionRef,
   inputRevisionRef,
+  onEscape,
 }: Options): { escHintVisible: boolean } => {
   const [escHintVisible, setEscHintVisible] = useState(false);
   const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onEscapeRef = useRef(onEscape);
+  onEscapeRef.current = onEscape;
 
   const stateRef = useRef({ mode, escHintVisible, value, settings, settingsValue, models, providerSelection });
   stateRef.current = { mode, escHintVisible, value, settings, settingsValue, models, providerSelection };
@@ -70,6 +75,7 @@ export const useEscapeKey = ({
 
   useInput((_input, key) => {
     if (!key.escape) return;
+    if (onEscapeRef.current?.()) return;
 
     const {
       mode: currentMode,

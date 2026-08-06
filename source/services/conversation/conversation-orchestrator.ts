@@ -135,19 +135,12 @@ export class ConversationOrchestrator {
    */
   readonly #deferredTurnActivators = new Map<string, () => void>();
   /**
-   * Ids `retractPendingSubmission` has just retracted at the `pending_steer`
-   * stage. `injectIntoActiveTurn` collapses `SteerOutcome` to a boolean, so
-   * the *original* `sendUserMessage` call still waiting on `steerActiveTurn`
-   * sees the same `false` it would see if the turn had simply ended without
-   * ever offering a boundary — a case that legitimately falls through to
-   * resubmission. This set is how `sendUserMessage` tells the two apart
-   * without inferring intent from that boolean (## Resume here, hazard 1).
-   * `retractPendingSubmission`'s own settle path is strictly shorter than the
-   * one `sendUserMessage` unwinds through the run loop to reach its `false`
-   * check, so the entry lands before that check runs.
+   * A pending steer retracted through the id-addressed mutation path. The
+   * adapter intentionally keeps the shared steer API boolean, so this marker
+   * distinguishes a deliberate retraction from an ordinary failed steer.
    */
   readonly #retractedSteerIds = new Set<string>();
-  /** Latest user turn for a pending steer edited before its admission. */
+  /** Latest user turn for a pending steer edited before admission. */
   readonly #editedSteerTurns = new Map<string, UserTurn>();
   /**
    * Turns this orchestrator currently owns. Count only executions that have
@@ -322,54 +315,13 @@ export class ConversationOrchestrator {
     return listUndoableUserMessageIndices(this.config.messages.getMessages()).length;
   }
 
-  /**
-   * Cancel the most recently queued message and return its text so the UI
-   * can move it back into the input box. Returns null when there are no
-   * pending queued messages, the service cannot cancel the tail item, or the
-   * service does not implement cancellation.
-   */
-  async removeLastQueuedPendingMessage(): Promise<string | null> {
-    const service = this.config.conversationService;
-    if (typeof service.removeLastQueuedItem !== 'function') {
-      return null;
-    }
-
-    const result = await service.removeLastQueuedItem();
-    if (!result) return null;
-
-    // The pending indicator is keyed by the same controller id, so remove
-    // the exact row the adapter removed rather than relying on its position.
-    this.config.ui.onQueuedMessageRemoved?.(result.id);
-
-    return result.text;
-  }
-
-  /**
-   * Retract a submission addressed by id — a still-waiting steer or a queued
-   * follow-up, whichever stage it currently lives in (`## The three stages`).
-   *
-   * Routes straight to `ConversationService.retractSubmission`, never through
-   * `steerActiveTurn`/its boolean return: a retracted steer resolves that
-   * call to `false`, the same value as "no boundary is left, send it as a new
-   * turn" — inferring intent from that boolean would silently resubmit
-   * exactly what the caller just cancelled (## Resume here, hazard 1).
-   *
-   * On `applied`, clears the pending indicator. On `too_late` or
-   * `unknown_id`, UI state is left untouched — the caller reports the
-   * outcome to the user.
-   */
   async retractPendingSubmission(id: string): Promise<SubmissionMutation> {
     const service = this.config.conversationService;
-    if (typeof service.retractSubmission !== 'function') {
-      return { kind: 'unknown_id' };
-    }
+    if (typeof service.retractSubmission !== 'function') return { kind: 'unknown_id' };
+
     const result = await service.retractSubmission(id);
     if (result.kind === 'applied') {
       if (result.stage === 'pending_steer') {
-        // Tell the original sendUserMessage call — still awaiting
-        // steerActiveTurn for this same id — not to treat the `false` it is
-        // about to see as "no boundary left, resubmit" (hazard 1, see the
-        // `#retractedSteerIds` field comment).
         this.#retractedSteerIds.add(id);
         this.#editedSteerTurns.delete(id);
       }
@@ -378,22 +330,10 @@ export class ConversationOrchestrator {
     return result;
   }
 
-  /**
-   * Edit a submission addressed by id in place — stage and position are
-   * unchanged, only the content moves (see `ConversationAdapter.editSubmission`
-   * for the stage routing and the all-or-nothing `#messagesById` write).
-   *
-   * On `applied`, updates the pending indicator's displayed text. On
-   * `too_late` or `unknown_id`, UI state is left untouched — the caller
-   * reports the outcome to the user, and per `## Losing the race` a `too_late`
-   * edit is expected to be resubmitted as an ordinary new message rather than
-   * discarded.
-   */
   async editPendingSubmission(id: string, turn: UserTurn): Promise<SubmissionMutation> {
     const service = this.config.conversationService;
-    if (typeof service.editSubmission !== 'function') {
-      return { kind: 'unknown_id' };
-    }
+    if (typeof service.editSubmission !== 'function') return { kind: 'unknown_id' };
+
     const result = await service.editSubmission(id, turn);
     if (result.kind === 'applied') {
       if (result.stage === 'pending_steer') {
@@ -535,11 +475,6 @@ export class ConversationOrchestrator {
         }
         if (this.#retractedSteerIds.delete(userMessage.id)) {
           this.#editedSteerTurns.delete(userMessage.id);
-          // `retractPendingSubmission` won the race against admission and
-          // already told the run loop to drop this steer — `retractSubmission`
-          // reported `applied` and the pending indicator is already cleared.
-          // Falling through to the code below would resubmit exactly what the
-          // user just cancelled (## Resume here, hazard 1).
           return;
         }
         this.#editedSteerTurns.delete(userMessage.id);

@@ -39,6 +39,8 @@ import { toPopupProps } from './input/popup-props.js';
 import type { UserTurn } from '../types/user-turn.js';
 import type { RewindItem } from '../hooks/use-rewind-selection.js';
 import type { RewindDisposition } from '../commands/rewind-command.js';
+import type { SubmissionMutation } from '../services/conversation/conversation-adapter.js';
+import PendingQueueList, { type PendingQueueMessage } from './input/PendingQueueList.js';
 
 export { calculateInputWidth };
 
@@ -78,18 +80,9 @@ type Props = {
   promptLabel?: string;
   allowEmptySubmit?: boolean;
   skillsService?: SkillsService;
-  /**
-   * Pending queued messages shown above the input box. The InputBox uses this
-   * to intercept the up-arrow on an empty input and cancel the most recent
-   * queued message (returning its text to the input box).
-   */
-  pendingQueuedMessages?: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
-  /**
-   * Cancel the most recently queued message and resolve with its text so it
-   * can be restored to the input box. Resolves to null when there is nothing
-   * to cancel.
-   */
-  onCancelQueuedMessage?: () => Promise<string | null>;
+  pendingQueuedMessages?: ReadonlyArray<PendingQueueMessage>;
+  onRetractQueuedMessage?: (id: string) => Promise<SubmissionMutation>;
+  onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
 };
 
 const isFocusReportingSequence = (input: string): boolean => {
@@ -135,7 +128,8 @@ const InputBox: FC<Props> = ({
   allowEmptySubmit = false,
   skillsService,
   pendingQueuedMessages,
-  onCancelQueuedMessage,
+  onRetractQueuedMessage,
+  onEditQueuedMessage,
 }) => {
   const {
     input: value,
@@ -208,8 +202,28 @@ const InputBox: FC<Props> = ({
     skillsService ? { skillsService } : { skillsService: { getAvailableSkills: () => [] } as unknown as SkillsService },
   );
 
+  const [inputKey, setInputKey] = useState(0);
+  const [queueSelectionIndex, setQueueSelectionIndex] = useState<number | null>(null);
+  const [editingQueueItem, setEditingQueueItem] = useState<{ id: string; restoreInput: string } | null>(null);
+  const [queueNotice, setQueueNotice] = useState<string | null>(null);
+  const queueSelectionIndexRef = useRef<number | null>(queueSelectionIndex);
+  const queueSelectionJustOpenedRef = useRef(false);
+  const editingQueueItemRef = useRef<{ id: string; restoreInput: string } | null>(editingQueueItem);
+  const pendingQueuedMessagesRef = useRef<ReadonlyArray<PendingQueueMessage>>(pendingQueuedMessages ?? []);
+  queueSelectionIndexRef.current = queueSelectionIndex;
+  editingQueueItemRef.current = editingQueueItem;
+  pendingQueuedMessagesRef.current = pendingQueuedMessages ?? [];
+  const updateQueueSelection = useCallback((next: number | null) => {
+    queueSelectionIndexRef.current = next;
+    setQueueSelectionIndex(next);
+  }, []);
+
   const providerWizardPromptLabel = getProviderWizardPromptLabel(providers.phase);
-  const activePromptLabel = providerWizardPromptLabel ?? promptLabel;
+  const editingQueueIndex = editingQueueItem
+    ? pendingQueuedMessages?.findIndex((message) => message.id === editingQueueItem.id)
+    : -1;
+  const activePromptLabel =
+    providerWizardPromptLabel ?? (editingQueueItem ? `edit ${(editingQueueIndex ?? -1) + 1} ▸ ` : promptLabel);
   const terminalWidth = useTerminalWidth({ waitingForRejectionReason, isShellMode, promptLabel: activePromptLabel });
 
   // Wire up the rewind menu ref so app.tsx can open the picker
@@ -238,7 +252,6 @@ const InputBox: FC<Props> = ({
 
   const { navigateUp, navigateDown } = useInputHistory(historyService);
 
-  const [inputKey, setInputKey] = useState(0);
   const remountInput = useCallback(() => setInputKey((prev) => prev + 1), []);
   const lockCursor = useCallback(
     (offset: number) => {
@@ -547,6 +560,19 @@ const InputBox: FC<Props> = ({
     };
   });
 
+  const cancelQueueInteraction = useCallback((): boolean => {
+    if (queueSelectionIndexRef.current !== null) {
+      updateQueueSelection(null);
+      return true;
+    }
+    if (editingQueueItemRef.current) {
+      onChange(editingQueueItemRef.current.restoreInput);
+      setEditingQueueItem(null);
+      return true;
+    }
+    return false;
+  }, [onChange, updateQueueSelection]);
+
   const { escHintVisible } = useEscapeKey({
     mode,
     setMode,
@@ -559,6 +585,7 @@ const InputBox: FC<Props> = ({
     setCursorOverride,
     dismissedCompletionRef,
     inputRevisionRef,
+    onEscape: cancelQueueInteraction,
   });
 
   // When a non-text mode is active (popup menu), keep cursorOverride in sync so
@@ -620,6 +647,63 @@ const InputBox: FC<Props> = ({
     } = stateRef.current;
     const currentValue = inputValueRef.current;
     const currentCursor = cursorOffsetRef.current;
+    const selectedQueueIndex = queueSelectionIndexRef.current;
+    const currentQueuedMessages = pendingQueuedMessagesRef.current;
+    if (currentMode === 'text' && selectedQueueIndex !== null) {
+      if (queueSelectionJustOpenedRef.current) {
+        queueSelectionJustOpenedRef.current = false;
+        return;
+      }
+      const selectedMessage = currentQueuedMessages[selectedQueueIndex];
+      if (!selectedMessage) {
+        updateQueueSelection(null);
+        return;
+      }
+      if (key.upArrow) {
+        if (selectedQueueIndex > 0) {
+          updateQueueSelection(selectedQueueIndex - 1);
+          return;
+        }
+        updateQueueSelection(null);
+        const previous = navigateUp({ text: currentValue, images });
+        if (previous !== null) {
+          changeInput(previous.text);
+          suppressImagesCallbackRef.current = true;
+          setImages((previousImages) =>
+            areImagesEqual(previousImages, previous.images ?? []) ? previousImages : previous.images ?? [],
+          );
+          remountCurrentInput();
+        }
+        return;
+      }
+      if (key.downArrow) {
+        if (selectedQueueIndex < currentQueuedMessages.length - 1) {
+          updateQueueSelection(selectedQueueIndex + 1);
+        } else {
+          updateQueueSelection(null);
+        }
+        return;
+      }
+      if (_input === 'e' || key.return) {
+        setQueueNotice(null);
+        setEditingQueueItem({ id: selectedMessage.id, restoreInput: currentValue });
+        updateQueueSelection(null);
+        changeInput(selectedMessage.text);
+        updateCursorOffset(selectedMessage.text.length);
+        overrideCursor(selectedMessage.text.length);
+        return;
+      }
+      if (_input === 'd') {
+        if (!onRetractQueuedMessage) return;
+        void onRetractQueuedMessage(selectedMessage.id).then((result) => {
+          updateQueueSelection(null);
+          if (result.kind === 'too_late') setQueueNotice('already sent — the model has it');
+          else if (result.kind === 'unknown_id') setQueueNotice('queued message is no longer available');
+        });
+        return;
+      }
+      return;
+    }
     if (currentMode === 'text') return;
 
     // Ignore focus-in and focus-out escape sequences (both raw and split variants)
@@ -777,22 +861,12 @@ const InputBox: FC<Props> = ({
         return;
       }
 
-      // In text mode, up-arrow first tries to cancel the most recently queued
-      // message and return its text to the input box. This is only useful when
-      // the input is empty and there is at least one queued message waiting
-      // behind the in-flight turn. Otherwise fall through to input history.
-      if (
-        direction === 'up' &&
-        value === '' &&
-        pendingQueuedMessages &&
-        pendingQueuedMessages.length > 0 &&
-        onCancelQueuedMessage
-      ) {
-        void onCancelQueuedMessage().then((restored) => {
-          if (restored !== null) {
-            onChange(restored);
-          }
-        });
+      // On an empty input, up-arrow enters the inline queue selector at the
+      // bottom item. Further up-arrows walk into ordinary input history.
+      if (direction === 'up' && value === '' && pendingQueuedMessages && pendingQueuedMessages.length > 0) {
+        setQueueNotice(null);
+        queueSelectionJustOpenedRef.current = true;
+        updateQueueSelection(pendingQueuedMessages.length - 1);
         return;
       }
 
@@ -816,7 +890,7 @@ const InputBox: FC<Props> = ({
       remountInput,
       setImages,
       pendingQueuedMessages,
-      onCancelQueuedMessage,
+      updateQueueSelection,
     ],
   );
 
@@ -825,10 +899,27 @@ const InputBox: FC<Props> = ({
       if (mode !== 'text' && modeHandlers[mode].onSubmit?.(submittedValue) === 'handled') return;
       const turnImages = submittedImages ?? images;
       if (!allowEmptySubmit && !submittedValue.trim() && turnImages.length === 0) return;
+      if (editingQueueItem) {
+        if (!onEditQueuedMessage) return;
+        const editedItem = editingQueueItem;
+        void onEditQueuedMessage(editedItem.id, {
+          text: submittedValue,
+          ...(turnImages.length ? { images: turnImages } : {}),
+        }).then((result) => {
+          setEditingQueueItem(null);
+          if (result.kind === 'too_late') {
+            setQueueNotice('already sent — the model has it');
+            void onSubmit({ text: submittedValue, ...(turnImages.length ? { images: turnImages } : {}) }, { busyMode });
+          } else if (result.kind === 'unknown_id') {
+            setQueueNotice('queued message is no longer available');
+          }
+        });
+        return;
+      }
       setImages([]);
       void onSubmit({ text: submittedValue, ...(turnImages.length ? { images: turnImages } : {}) }, { busyMode });
     },
-    [mode, modeHandlers, onSubmit, images, allowEmptySubmit, setImages],
+    [mode, modeHandlers, onSubmit, images, allowEmptySubmit, setImages, editingQueueItem, onEditQueuedMessage],
   );
 
   useEffect(() => {
@@ -874,6 +965,14 @@ const InputBox: FC<Props> = ({
 
   return (
     <Box flexDirection="column">
+      {((pendingQueuedMessages?.length ?? 0) > 0 || queueNotice) && (
+        <PendingQueueList
+          messages={pendingQueuedMessages ?? []}
+          selectedIndex={queueSelectionIndex}
+          editingId={editingQueueItem?.id ?? null}
+          notice={queueNotice}
+        />
+      )}
       <PopupManager
         {...toPopupProps({ slash, path, settings, settingsValue, models, skills, rewind, providers })}
         settingsService={settingsService}
@@ -897,7 +996,7 @@ const InputBox: FC<Props> = ({
           key={inputKey}
           value={value}
           width={terminalWidth}
-          isActive={mode === 'text'}
+          isActive={mode === 'text' && queueSelectionIndex === null}
           onChange={handleMultilineChange}
           onSubmit={handleWrapperSubmit}
           onCursorChange={handleCursorChange}

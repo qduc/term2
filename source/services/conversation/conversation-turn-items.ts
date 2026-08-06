@@ -91,6 +91,19 @@ export function projectPersistedAssistantItemToProviderHistory(item: PersistedAs
     };
   }
 
+  if (item.type === 'provider_opaque') {
+    // Re-emit the provider item verbatim with the Step 1 `providerOpaque`
+    // marker restored, so `normalizeInputItem`
+    // (application-run-loop.ts) recognizes this as opaque and re-carries it
+    // rather than throwing `Unsupported restored input item type: …`. This is
+    // the load-bearing connection back to the Step 1 lane: nothing else in
+    // the tree sets this marker on replay.
+    return {
+      ...clone(item.item),
+      providerOpaque: { provider: item.provider },
+    };
+  }
+
   const providerData = cloneRecord(item.providerMetadata);
   if (providerData) {
     delete providerData.reasoning_content;
@@ -235,6 +248,11 @@ export function synthesizeHistoryFromAssistantTurn(
     }
 
     if (item.type === 'tool_result') {
+      history.push(projectPersistedAssistantItemToProviderHistory(item));
+      continue;
+    }
+
+    if (item.type === 'provider_opaque') {
       history.push(projectPersistedAssistantItemToProviderHistory(item));
       continue;
     }

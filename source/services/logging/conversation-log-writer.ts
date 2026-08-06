@@ -224,6 +224,77 @@ function truncateForLog(event: LogEvent): LogEvent | TruncatedLogEvent {
   };
 }
 
+/**
+ * `provider_opaque` payloads over this size are redacted wholesale in the app
+ * debug log rather than walked field-by-field; there is nothing safe to show
+ * from an encrypted or otherwise opaque provider blob past this point.
+ */
+const OPAQUE_LOG_SIZE_THRESHOLD_BYTES = 512;
+
+function byteLength(value: unknown): number {
+  return Buffer.byteLength(typeof value === 'string' ? value : JSON.stringify(value ?? null), 'utf8');
+}
+
+function redactMarker(value: unknown): string {
+  return `<redacted ${byteLength(value)} bytes>`;
+}
+
+/**
+ * True when `value` contains a field this app must never print to a log:
+ * `encrypted_content` (carried by both reasoning items and provider_opaque
+ * compaction items — see `reasoningMetadata()` and `toTurnOutput()` in
+ * `openai-responses-model.ts`) or a `provider_opaque` item's payload. Used as
+ * a cheap gate so the debug echo below only walks events that actually need
+ * redaction.
+ */
+function hasSensitiveOpaqueContent(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(hasSensitiveOpaqueContent);
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (record.type === 'provider_opaque') return true;
+    for (const [key, v] of Object.entries(record)) {
+      if (key === 'encrypted_content' && typeof v === 'string') return true;
+      if (hasSensitiveOpaqueContent(v)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Produces a copy of a conversation log event safe to echo to the app's
+ * debug log. `encrypted_content` and any `provider_opaque` item payload over
+ * {@link OPAQUE_LOG_SIZE_THRESHOLD_BYTES} are replaced with a `<redacted N
+ * bytes>` marker.
+ *
+ * This is used **only** for the debug echo in `#traceOpaqueContent` below.
+ * The JSONL line written for session persistence — replayed on resume — is
+ * never passed through this function, so opaque items (including
+ * `encrypted_content`) still round-trip in full through the actual
+ * conversation log.
+ */
+export function redactOpaqueContentForLog(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(redactOpaqueContentForLog);
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [key, v] of Object.entries(record)) {
+      if (key === 'encrypted_content' && typeof v === 'string') {
+        out[key] = redactMarker(v);
+        continue;
+      }
+      if (key === 'item' && record.type === 'provider_opaque' && v && typeof v === 'object') {
+        out[key] = byteLength(v) > OPAQUE_LOG_SIZE_THRESHOLD_BYTES ? redactMarker(v) : redactOpaqueContentForLog(v);
+        continue;
+      }
+      out[key] = redactOpaqueContentForLog(v);
+    }
+    return out;
+  }
+  return value;
+}
+
 function acquireLock(dir: string, sessionId: string, fileSystem: WriterFileSystem = fs): void {
   const lp = lockPath(dir, sessionId);
   const payload = JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString(), host: os.hostname() });
@@ -331,6 +402,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
       return;
     }
     const sanitizedEvent = sanitizeSubagentResult(event) as LogEvent;
+    this.#traceOpaqueContent(sanitizedEvent);
     const envelope: LogEnvelope = {
       v: LOG_ENVELOPE_VERSION,
       seq: ++this.#seq,
@@ -422,6 +494,25 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
       this.#recordFailure(cleanupFailure);
       throw cleanupFailure;
     }
+  }
+
+  /**
+   * Echoes a redacted view of an appended event to the app debug log. Only
+   * `assistant_turn` and `assistant_journal_item` events can carry a
+   * provider_opaque item or an `encrypted_content` field, and only those
+   * that actually do incur the walk — see {@link hasSensitiveOpaqueContent}.
+   * The unredacted event is still written to the JSONL line above; this is
+   * a debug-only echo, not part of session persistence.
+   */
+  #traceOpaqueContent(event: LogEvent): void {
+    if (event.type !== 'assistant_turn' && event.type !== 'assistant_journal_item') return;
+    if (!hasSensitiveOpaqueContent(event)) return;
+    this.#logger.debug('Conversation event carries opaque provider content', {
+      eventType: `conversation_log.${event.type}`,
+      category: 'persistence',
+      sessionId: this.#sessionId,
+      event: redactOpaqueContentForLog(event),
+    });
   }
 
   #throwIfFailed(): void {

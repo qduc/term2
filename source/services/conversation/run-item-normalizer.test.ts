@@ -139,6 +139,55 @@ it('prefers wrapper call identity over conflicting provider-item identity', () =
   ).toMatchObject([{ type: 'tool_result', callId: 'outer-call' }]);
 });
 
+it('normalizes a raw provider_opaque output item (StreamedModelTurnOutput shape) verbatim', () => {
+  const rawOpaque = {
+    type: 'provider_opaque',
+    provider: 'openai',
+    item: {
+      id: 'comp_1',
+      type: 'compaction',
+      encrypted_content: 'ciphertext-blob',
+      created_by: 'model',
+      some_unknown_field: { nested: true, order: ['a', 'b'] },
+    },
+  };
+
+  expect(normalizeRunItem(rawOpaque)).toEqual([
+    {
+      type: 'provider_opaque',
+      provider: 'openai',
+      item: {
+        id: 'comp_1',
+        type: 'compaction',
+        encrypted_content: 'ciphertext-blob',
+        created_by: 'model',
+        some_unknown_field: { nested: true, order: ['a', 'b'] },
+      },
+    },
+  ]);
+});
+
+it('clones the provider_opaque payload so mutating the source does not affect the normalized item', () => {
+  const source = { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', encrypted_content: 'x' } };
+  const [normalized] = normalizeRunItem(source) as unknown as [{ item: Record<string, unknown> }];
+  source.item.encrypted_content = 'mutated';
+  expect(normalized.item.encrypted_content).toBe('x');
+});
+
+it('is idempotent when re-normalizing an already-canonical provider_opaque item', () => {
+  const canonical = {
+    type: 'provider_opaque' as const,
+    provider: 'openai',
+    item: { type: 'compaction', encrypted_content: 'x' },
+  };
+  expect(normalizeRunItem(canonical)).toEqual([canonical]);
+});
+
+it('drops a provider_opaque shape missing a provider or item payload', () => {
+  expect(normalizeRunItem({ type: 'provider_opaque', item: { a: 1 } })).toEqual([]);
+  expect(normalizeRunItem({ type: 'provider_opaque', provider: 'openai' })).toEqual([]);
+});
+
 it('returns no items for unknown values and preserves multi-item ordering', () => {
   expect(normalizeRunItem({ type: 'unknown' })).toEqual([]);
   expect(normalizeRunItem(null)).toEqual([]);

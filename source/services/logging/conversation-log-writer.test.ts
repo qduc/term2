@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { decodeLogEnvelope } from '../conversation/conversation-decoder.js';
 import { replayEvents } from '../conversation/conversation-replay.js';
-import { createConversationLogWriter } from './conversation-log-writer.js';
+import { createConversationLogWriter, redactOpaqueContentForLog } from './conversation-log-writer.js';
 
 const dirs: string[] = [];
 const logger = { error: vi.fn() } as never;
@@ -256,5 +256,124 @@ describe('ConversationLogWriter durability failures', () => {
       writeError,
     );
     await expect(writer.close()).rejects.toBe(writeError);
+  });
+});
+
+// Step 2 of docs/plans/openai-context-compaction.md: encrypted_content and
+// oversized provider_opaque payloads must never reach the app debug log,
+// even though the actual JSONL line written for session persistence (and
+// replayed on resume) must keep them in full.
+describe('ConversationLogWriter opaque content redaction', () => {
+  function debugLogger() {
+    return { error: vi.fn(), debug: vi.fn() } as never;
+  }
+
+  it('writes encrypted_content and provider_opaque payloads to the JSONL line in full', async () => {
+    const dir = tempDir();
+    const logger = debugLogger();
+    const writer = createConversationLogWriter({ sessionId: 'opaque-session', dir, logger, saveLast: vi.fn() });
+    writer.init({ id: 'opaque-session', createdAt: '2026-06-01T00:00:00.000Z' });
+
+    const encryptedContent = 'ciphertext-'.repeat(50);
+    writer.append({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          {
+            type: 'provider_opaque',
+            provider: 'openai',
+            item: { type: 'compaction', encrypted_content: encryptedContent },
+          },
+        ],
+      },
+    });
+    await writer.close();
+
+    const line = fs.readFileSync(path.join(dir, 'opaque-session.jsonl'), 'utf-8');
+    expect(line).toContain(encryptedContent);
+  });
+
+  it('redacts encrypted_content and large provider_opaque payloads from the app debug log, without touching the JSONL', async () => {
+    const dir = tempDir();
+    const logger = debugLogger();
+    const writer = createConversationLogWriter({ sessionId: 'opaque-debug', dir, logger, saveLast: vi.fn() });
+    writer.init({ id: 'opaque-debug', createdAt: '2026-06-01T00:00:00.000Z' });
+
+    const encryptedContent = 'ciphertext-'.repeat(200); // well over the redaction threshold
+    writer.append({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'assistant_text', text: 'Continuing.' },
+          {
+            type: 'provider_opaque',
+            provider: 'openai',
+            item: { type: 'compaction', encrypted_content: encryptedContent },
+          },
+        ],
+      },
+    });
+    await writer.close();
+
+    expect((logger as { debug: ReturnType<typeof vi.fn> }).debug).toHaveBeenCalledTimes(1);
+    const [, meta] = (logger as { debug: ReturnType<typeof vi.fn> }).debug.mock.calls[0]!;
+    const loggedLine = JSON.stringify(meta);
+    expect(loggedLine).not.toContain(encryptedContent);
+    expect(loggedLine).not.toContain('ciphertext-');
+    expect(loggedLine).toContain('<redacted');
+
+    // The actual persisted JSONL line is untouched by the debug redaction.
+    const line = fs.readFileSync(path.join(dir, 'opaque-debug.jsonl'), 'utf-8');
+    expect(line).toContain(encryptedContent);
+  });
+
+  it('does not echo to the debug log when an assistant_turn carries no opaque or encrypted content', async () => {
+    const dir = tempDir();
+    const logger = debugLogger();
+    const writer = createConversationLogWriter({ sessionId: 'plain-turn', dir, logger, saveLast: vi.fn() });
+    writer.init({ id: 'plain-turn', createdAt: '2026-06-01T00:00:00.000Z' });
+
+    writer.append({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'All good, nothing sensitive here.' }] },
+    });
+    await writer.close();
+
+    expect((logger as { debug: ReturnType<typeof vi.fn> }).debug).not.toHaveBeenCalled();
+  });
+
+  it('redacts a small provider_opaque payload field-by-field rather than wholesale', () => {
+    const event = {
+      type: 'assistant_turn' as const,
+      turn: {
+        items: [{ type: 'provider_opaque' as const, provider: 'openai', item: { type: 'compaction', id: 'c1' } }],
+      },
+    };
+    const redacted = redactOpaqueContentForLog(event) as typeof event;
+    // Small payload: no encrypted_content, under threshold, so it survives
+    // (redaction only targets what's actually sensitive or oversized).
+    expect(redacted.turn.items[0]).toEqual({
+      type: 'provider_opaque',
+      provider: 'openai',
+      item: { type: 'compaction', id: 'c1' },
+    });
+  });
+
+  it('redactOpaqueContentForLog replaces encrypted_content wherever it appears, including on reasoning items', () => {
+    const event = {
+      type: 'assistant_turn' as const,
+      turn: {
+        items: [
+          {
+            type: 'reasoning' as const,
+            text: 'thinking',
+            providerMetadata: { codex: { encrypted_content: 'reasoning-secret' } },
+          },
+        ],
+      },
+    };
+    const loggedLine = JSON.stringify(redactOpaqueContentForLog(event));
+    expect(loggedLine).not.toContain('reasoning-secret');
+    expect(loggedLine).toContain('<redacted');
   });
 });

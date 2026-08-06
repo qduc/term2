@@ -1,6 +1,7 @@
 import type {
   AssistantTextItem,
   Item,
+  ProviderOpaqueItem,
   ReasoningItem,
   ToolCall,
   ToolResult,
@@ -201,9 +202,28 @@ const isCanonicalItem = (item: unknown): item is Item => {
   );
 };
 
+/**
+ * Recognizes both the raw `StreamedModelTurnOutput` `provider_opaque` shape
+ * (`{ type: 'provider_opaque', provider, item }`, produced by e.g.
+ * `openai-responses-model.ts`'s `toTurnOutput`) and the identically-shaped
+ * already-persisted `ProviderOpaqueItem`, so re-normalizing an already
+ * canonical opaque item is idempotent. The payload is stored and cloned
+ * verbatim — no per-provider-item-variant schema.
+ */
+const asProviderOpaqueItem = (value: unknown): ProviderOpaqueItem | null => {
+  const record = asRecord(value);
+  if (!record || record.type !== 'provider_opaque') return null;
+  const provider = getString(record.provider);
+  const payload = asRecord(record.item);
+  if (!provider || !payload) return null;
+  return { type: 'provider_opaque', provider, item: clone(payload) };
+};
+
 /** Converts raw provider run items to serializable domain items at the conversation boundary. */
 export function normalizeRunItem(item: unknown): Item[] {
   if (isCanonicalItem(item)) return [item];
+  const providerOpaque = asProviderOpaqueItem(item);
+  if (providerOpaque) return [providerOpaque];
   const raw = rawItem(item);
   if (!raw) return [];
   if (isCanonicalItem(raw)) return [raw];

@@ -31,7 +31,21 @@ export interface ToolResult {
   providerItem?: Record<string, unknown>;
 }
 
-export type Item = ReasoningItem | AssistantTextItem | ToolCall | ToolResult;
+/**
+ * A provider-native item Term2 does not model, persisted and replayed
+ * verbatim. Mirrors the `provider_opaque` variant on `StreamedModelTurnOutput`
+ * (`contracts/streamed-model-turn.ts`) and the `providerOpaque` marker on
+ * `ProviderInputItem` (`contracts/provider-input.ts`): this is the persisted
+ * form of the same opaque-item lane. `item` is stored as opaque JSON — never
+ * given a typed schema per provider item variant.
+ */
+export interface ProviderOpaqueItem {
+  type: 'provider_opaque';
+  provider: string;
+  item: Record<string, unknown>;
+}
+
+export type Item = ReasoningItem | AssistantTextItem | ToolCall | ToolResult | ProviderOpaqueItem;
 
 export interface Turn {
   items: Item[];

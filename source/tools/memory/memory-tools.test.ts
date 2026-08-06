@@ -26,10 +26,18 @@ const stores: Record<MemoryScope, MemoryStore> = {
   project: { ...store, list: async () => [{ ...memory, id: 'project-only' }] },
 };
 
-it('selects project memory explicitly and defaults omitted scope to global', async () => {
+it('memory_list omitting scope lists both global and project stores', async () => {
   const tools = createMemoryToolDefinitions(stores);
 
-  expect(JSON.parse((await tools[0].execute({})) as string)).toEqual({ scope: 'global', memories: [memory] });
+  expect(JSON.parse((await tools[0].execute({})) as string)).toEqual({
+    scope: 'all',
+    global: [memory],
+    project: [{ ...memory, id: 'project-only' }],
+  });
+  expect(JSON.parse((await tools[0].execute({ scope: 'global' })) as string)).toEqual({
+    scope: 'global',
+    memories: [memory],
+  });
   expect(JSON.parse((await tools[0].execute({ scope: 'project' })) as string)).toEqual({
     scope: 'project',
     memories: [{ ...memory, id: 'project-only' }],
@@ -49,7 +57,11 @@ it('exposes memory operations with structured responses', async () => {
     'memory_update',
     'memory_delete',
   ]);
-  expect(JSON.parse((await tools[0].execute({})) as string)).toEqual({ scope: 'global', memories: [memory] });
+  expect(JSON.parse((await tools[0].execute({})) as string)).toEqual({
+    scope: 'all',
+    global: [memory],
+    project: [memory],
+  });
   expect(JSON.parse((await tools[1].execute({ id: memory.id })) as string)).toEqual({ scope: 'global', memory });
   expect(JSON.parse((await tools[2].execute({ query: 'rules' })) as string)).toMatchObject({
     scope: 'global',

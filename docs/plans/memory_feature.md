@@ -540,15 +540,29 @@ Input:
 
 ```ts
 {
+  scope?: MemoryScope;
   limit?: number;
 }
 ```
 
-Output:
+When `scope` is omitted, lists both the global and project stores together.
+
+Output (single scope):
 
 ```ts
 {
+  scope: MemoryScope;
   memories: MemoryMetadata[];
+}
+```
+
+Output (both scopes, `scope` omitted):
+
+```ts
+{
+  scope: 'all';
+  global: MemoryMetadata[];
+  project: MemoryMetadata[];
 }
 ```
 

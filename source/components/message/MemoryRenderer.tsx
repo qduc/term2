@@ -34,29 +34,44 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, renderStandardHeader }) =
   }
 
   if (parsed.type === 'list') {
-    const { memories } = parsed;
+    const sections = parsed.scope === 'all' ? { Global: parsed.global || [], Project: parsed.project || [] } : null;
+    const groups = sections ? Object.entries(sections) : ([['All', parsed.memories || []]] as [string, any[]][]);
+    const total = groups.reduce((sum, [, list]) => sum + list.length, 0);
     return (
       <Box flexDirection="column">
         <Box marginBottom={1}>{renderStandardHeader()}</Box>
         <Box flexDirection="column" paddingLeft={2}>
           <Text color={COLOR_MUTED} dimColor>
-            {memories.length} memor{memories.length === 1 ? 'y' : 'ies'} found
+            {total} memor{total === 1 ? 'y' : 'ies'} found
           </Text>
-          {memories.map((m: any, idx: number) => (
-            <Box key={idx} flexDirection="column" marginTop={1}>
+          {groups.map(([label, memories]) => (
+            <Box key={label} flexDirection="column">
               <Text color={COLOR_INFO} bold>
-                {m.title || m.id}
+                {label}
               </Text>
-              {m.summary ? (
+              {memories.length === 0 ? (
                 <Text color={COLOR_MUTED} dimColor>
-                  {truncate(m.summary, 140)}
+                  none
                 </Text>
-              ) : null}
-              {m.tags && m.tags.length > 0 ? (
-                <Text color={COLOR_MUTED} dimColor>
-                  tags: {m.tags.join(', ')}
-                </Text>
-              ) : null}
+              ) : (
+                memories.map((m: any, idx: number) => (
+                  <Box key={idx} flexDirection="column" marginTop={1}>
+                    <Text color={COLOR_INFO} bold>
+                      {m.title || m.id}
+                    </Text>
+                    {m.summary ? (
+                      <Text color={COLOR_MUTED} dimColor>
+                        {truncate(m.summary, 140)}
+                      </Text>
+                    ) : null}
+                    {m.tags && m.tags.length > 0 ? (
+                      <Text color={COLOR_MUTED} dimColor>
+                        tags: {m.tags.join(', ')}
+                      </Text>
+                    ) : null}
+                  </Box>
+                ))
+              )}
             </Box>
           ))}
         </Box>

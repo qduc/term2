@@ -30,7 +30,7 @@ const MAIN_GUIDANCE = `### Persistent memory
 
 You have access to persistent memory. Only a concise index is loaded initially. Read each summary as a retrieval trigger describing the conditions under which its memory applies — load a memory when the current task plausibly matches what its summary describes.
 
-Memory has two scopes: global for cross-project preferences and reusable knowledge, and project for repository-specific decisions and conventions. Tool calls default to global for compatibility, so explicitly use scope: "project" for project memory.
+Memory has two scopes: global for cross-project preferences and reusable knowledge, and project for repository-specific decisions and conventions. memory_list lists both scopes when scope is omitted; other tools default to global, so explicitly use scope: "project" for project memory.
 
 When you encounter uncertainty about prior conversations, user preferences, project decisions, or established conventions, retrieve relevant memories before making assumptions. Prefer memory_retrieve for ordinary retrieval so search and full-content loading happen together; use memory_search and memory_get when you need finer control. Retrieve memory when it could materially improve correctness or avoid repeating work — not mechanically.
 
@@ -46,7 +46,7 @@ const SUBAGENT_GUIDANCE = `### Persistent memory
 
 You can read persistent memory from previous sessions, but cannot change it. Only a concise index is loaded initially.
 
-Memory has global and project scopes. Use global for cross-project preferences and reusable knowledge; use project for repository-specific decisions and conventions. Memory tools default to global when scope is omitted.
+Memory has global and project scopes. Use global for cross-project preferences and reusable knowledge; use project for repository-specific decisions and conventions. memory_list lists both scopes when scope is omitted; other tools default to global when scope is omitted.
 
 When you encounter uncertainty about prior context, user preferences, or project decisions, consider searching memory before making assumptions. Retrieve memory when it could materially improve correctness or avoid repeating work.
 
@@ -58,7 +58,7 @@ const LIBRARIAN_GUIDANCE = `### Memory librarian
 
 You are the memory librarian. You have read and write access to persistent memory through the same public memory API available to all agents. Interpret the task, search memory broadly, read the most promising items, judge their usefulness, and return a concise synthesis.
 
-Memory has global and project scopes. Use global for cross-project preferences and reusable knowledge; use project for repository-specific decisions and conventions. Memory tools default to global when scope is omitted. Preserve scope provenance in recommendations and mutations.
+Memory has global and project scopes. Use global for cross-project preferences and reusable knowledge; use project for repository-specific decisions and conventions. memory_list lists both scopes when scope is omitted; other tools default to global when scope is omitted. Preserve scope provenance in recommendations and mutations.
 
 For **context retrieval** tasks, search memory from multiple angles, read full content of promising items, discard irrelevant material, identify contradictions or stale information, and return a compact context brief with references to the source memory IDs. Do not mutate memory during a retrieval task.
 

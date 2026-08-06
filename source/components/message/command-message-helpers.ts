@@ -424,6 +424,21 @@ export const parseMemoryOutput = (output: string | undefined) => {
   if (parsed.error && typeof parsed.error === 'object') {
     return { type: 'error' as const, code: parsed.error.code, message: parsed.error.message ?? 'Memory error' };
   }
+  if (parsed.scope === 'all' && Array.isArray(parsed.global) && Array.isArray(parsed.project)) {
+    const memoriesOf = (arr: any) =>
+      (Array.isArray(arr) ? arr : []).map((m: any) => ({
+        id: String(m?.id ?? ''),
+        title: m?.title,
+        summary: m?.summary,
+        tags: Array.isArray(m?.tags) ? m.tags : undefined,
+      }));
+    return {
+      type: 'list' as const,
+      scope: 'all' as const,
+      global: memoriesOf(parsed.global),
+      project: memoriesOf(parsed.project),
+    };
+  }
   if (Array.isArray(parsed.memories)) {
     return {
       type: 'list' as const,
@@ -684,22 +699,23 @@ export const formatToolArgs = (
       }
 
       case 'memory_list': {
-        if (normalizedArgs.limit) return `(limit: ${normalizedArgs.limit})`;
-        return '';
+        const scope = normalizedArgs.scope ?? 'all';
+        const limit = normalizedArgs.limit ? ` (limit: ${normalizedArgs.limit})` : '';
+        return `(${scope})${limit}`;
       }
       case 'memory_get':
-        return `"${normalizedArgs.id ?? ''}"`;
+        return `"${normalizedArgs.id ?? ''}" (${normalizedArgs.scope ?? 'global'})`;
       case 'memory_search':
-        return `for "${normalizedArgs.query ?? ''}"`;
+        return `for "${normalizedArgs.query ?? ''}" (${normalizedArgs.scope ?? 'global'})`;
       case 'memory_create': {
         const id = normalizedArgs.id ?? '';
         const title = normalizedArgs.title ?? '';
-        return `"${id}" - "${title}"`;
+        return `"${id}" - "${title}" (${normalizedArgs.scope ?? 'global'})`;
       }
       case 'memory_update':
-        return `"${normalizedArgs.id ?? ''}"`;
+        return `"${normalizedArgs.id ?? ''}" (${normalizedArgs.scope ?? 'global'})`;
       case 'memory_delete':
-        return `"${normalizedArgs.id ?? ''}"`;
+        return `"${normalizedArgs.id ?? ''}" (${normalizedArgs.scope ?? 'global'})`;
 
       default: {
         // Generic fallback for unknown tools

@@ -286,6 +286,17 @@ it('formatToolArgs parses stringified JSON args', () => {
   );
 });
 
+it('formatToolArgs includes memory scope so global and project calls are distinguishable', () => {
+  expect(formatToolArgs('memory_list', { scope: 'global' })).toBe('(global)');
+  expect(formatToolArgs('memory_list', {})).toBe('(all)');
+  expect(formatToolArgs('memory_search', { scope: 'project', query: 'resume-path-teardown' })).toBe(
+    'for "resume-path-teardown" (project)',
+  );
+  expect(formatToolArgs('memory_get', { scope: 'global', id: 'resume-path-teardown' })).toBe(
+    '"resume-path-teardown" (global)',
+  );
+});
+
 it('formatToolArgs summarizes search replacement batches in concise mode', () => {
   expect(
     formatToolArgs(
@@ -342,6 +353,22 @@ it('parseMemoryOutput returns list shape for {memories: []}', () => {
   expect(result).toEqual({
     type: 'list',
     memories: [{ id: 'a', title: 'A', summary: undefined, tags: undefined }],
+  });
+});
+
+it('parseMemoryOutput returns combined list shape for scope "all"', () => {
+  const result = parseMemoryOutput(
+    JSON.stringify({
+      scope: 'all',
+      global: [{ id: 'g', title: 'G' }],
+      project: [{ id: 'p', title: 'P', summary: 'Proj', tags: ['x'] }],
+    }),
+  );
+  expect(result).toEqual({
+    type: 'list',
+    scope: 'all',
+    global: [{ id: 'g', title: 'G', summary: undefined, tags: undefined }],
+    project: [{ id: 'p', title: 'P', summary: 'Proj', tags: ['x'] }],
   });
 });
 

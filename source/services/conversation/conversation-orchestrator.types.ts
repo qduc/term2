@@ -54,7 +54,10 @@ export interface UIPort {
   onQueuedMessageStarted?(id: string): void;
   /** A queued submission was removed or rejected before it started. */
   onQueuedMessageRemoved?(id: string): void;
-  /** A pending submission was edited in place without changing stage or order. */
+  /**
+   * A pending submission (steer or queued) was edited in place. Stage and
+   * position are unchanged — only the displayed text moves.
+   */
   onQueuedMessageEdited?(id: string, text: string): void;
 }
 

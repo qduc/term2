@@ -549,7 +549,7 @@ it('queue/message_removed clears only the matching pending row', () => {
   expect(next.pendingQueuedMessages.map((message) => message.id)).toEqual(['m-1', 'm-3']);
 });
 
-it('queue/message_edited updates only the matching row and preserves its position and queuedAt', () => {
+it('queue/message_edited updates only the matching pending row, preserving position and queuedAt', () => {
   let state = createInitialUIState(null);
   state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-1', text: 'first', queuedAt: 1 });
   state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-2', text: 'second', queuedAt: 2 });
@@ -557,20 +557,20 @@ it('queue/message_edited updates only the matching row and preserves its positio
 
   const next = conversationUIReducer(state, { type: 'queue/message_edited', id: 'm-2', text: 'second, edited' });
 
-  expect(next.pendingQueuedMessages.map(({ id, text }) => [id, text])).toEqual([
+  expect(next.pendingQueuedMessages.map((message) => [message.id, message.text])).toEqual([
     ['m-1', 'first'],
     ['m-2', 'second, edited'],
     ['m-3', 'third'],
   ]);
-  expect(next.pendingQueuedMessages[1]?.queuedAt).toBe(2);
+  // Position and queuedAt are untouched — editing must not change stage or
+  // ordering (## Design §2: "Editing does not change stage or position").
+  expect(next.pendingQueuedMessages[1]!.queuedAt).toBe(2);
 });
 
-it('queue/message_edited is a no-op for an unknown id', () => {
+it('queue/message_edited is a no-op when the id is not pending', () => {
   let state = createInitialUIState(null);
   state = conversationUIReducer(state, { type: 'queue/message_pending', id: 'm-1', text: 'first', queuedAt: 1 });
-
   const next = conversationUIReducer(state, { type: 'queue/message_edited', id: 'unknown', text: 'edited' });
-
   expect(next).toBe(state);
 });
 

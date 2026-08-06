@@ -1158,7 +1158,17 @@ it('editSubmission on a queued item sends the edited text — the #messagesById 
   expect(started[1]).toMatchObject({ text: 'edited text' });
 });
 
-it('editSubmission rolls back #messagesById when the controller rejects the edit', async () => {
+it('editSubmission on a queued item rolls back #messagesById when the controller rejects the edit (hazard 2)', async () => {
+  // editSubmission writes the edited turn into #messagesById before it knows
+  // whether edit_queued will be accepted. If the controller rejects — the
+  // item started running during the await — the pre-edit write must not
+  // stick, or the running turn (which reads #messagesById at its own start)
+  // sends the edited text while the caller is simultaneously told too_late
+  // and, per '## Losing the race', resubmits that same text as a fresh
+  // message: sent twice. Force the rejection deterministically (rather than
+  // depending on winning a real timing race) by making the controller refuse
+  // this one edit_queued call, and assert the turn that actually executes
+  // still received the *original* input.
   const originalCommand = QueueController.prototype.command;
   const commandSpy = vi
     .spyOn(QueueController.prototype, 'command')
@@ -1201,15 +1211,17 @@ it('editSubmission rolls back #messagesById when the controller rejects the edit
     const queued = adapter.sendMessage('original text', { preferredMessageId: 'queued-1' });
     await new Promise((resolve) => setImmediate(resolve));
 
-    await expect(adapter.editSubmission('queued-1', { text: 'edited text' })).resolves.toEqual({
-      kind: 'too_late',
-      stage: 'started',
-    });
+    const mutation = await adapter.editSubmission('queued-1', { text: 'edited text' });
+    expect(mutation).toEqual({ kind: 'too_late', stage: 'started' });
 
     releaseActive();
     await expect(active).resolves.toMatchObject({ type: 'response' });
     await expect(queued).resolves.toMatchObject({ type: 'response' });
-    expect(started).toEqual(['active', 'original text']);
+    expect(started).toHaveLength(2);
+    expect(started[0]).toBe('active');
+    // Without the rollback this would read 'edited text' — the write that
+    // should have been undone when the controller reported too_late.
+    expect(started[1]).toBe('original text');
   } finally {
     commandSpy.mockRestore();
   }
@@ -1470,7 +1482,15 @@ it('retractSubmission reports too_late for a pending steer the run loop already 
   await expect(active).resolves.toMatchObject({ type: 'response' });
 });
 
-it('retractSubmission throws when a pending steer has no retractSteer wiring', async () => {
+it('retractSubmission throws rather than reporting too_late when turnFlow.steer is wired but turnFlow.retractSteer is not (hazard 3)', async () => {
+  // retractSteer/editSteer are optional on TurnFlow only so a turnFlow that
+  // implements steer alone still type-checks. But #pendingSteerIds is only
+  // ever populated by a call that required turnFlow.steer to exist, so
+  // whichever caller wired steer must also wire retractSteer. An id landing
+  // here with the method missing is a wiring bug, not "the run loop already
+  // admitted it" -- collapsing the two into the same too_late outcome would
+  // tell the user "already sent" about a submission the run loop never had
+  // a chance to admit or refuse.
   let releaseActive!: () => void;
   const activeReleased = new Promise<void>((resolve) => {
     releaseActive = resolve;
@@ -1492,13 +1512,14 @@ it('retractSubmission throws when a pending steer has no retractSteer wiring', a
         yield { type: 'final' as const, finalText: 'done' };
       },
       steer: async () => new Promise(() => {}),
+      // retractSteer intentionally left unwired.
     },
     queueForeground: true,
   });
 
   const active = adapter.sendMessage('active', { preferredMessageId: 'active' });
   await new Promise((resolve) => setImmediate(resolve));
-  void adapter.steerActiveTurn('change direction', { id: 'steer-1' });
+  void adapter.steerActiveTurn('change direction', { id: 'steer-1' }).catch(noop);
   await new Promise((resolve) => setImmediate(resolve));
 
   await expect(adapter.retractSubmission('steer-1')).rejects.toThrow(/retractSteer/);
@@ -1507,7 +1528,7 @@ it('retractSubmission throws when a pending steer has no retractSteer wiring', a
   await expect(active).resolves.toMatchObject({ type: 'response' });
 });
 
-it('editSubmission throws when a pending steer has no editSteer wiring', async () => {
+it('editSubmission throws rather than reporting too_late when turnFlow.steer is wired but turnFlow.editSteer is not (hazard 3)', async () => {
   let releaseActive!: () => void;
   const activeReleased = new Promise<void>((resolve) => {
     releaseActive = resolve;
@@ -1529,13 +1550,14 @@ it('editSubmission throws when a pending steer has no editSteer wiring', async (
         yield { type: 'final' as const, finalText: 'done' };
       },
       steer: async () => new Promise(() => {}),
+      // editSteer intentionally left unwired.
     },
     queueForeground: true,
   });
 
   const active = adapter.sendMessage('active', { preferredMessageId: 'active' });
   await new Promise((resolve) => setImmediate(resolve));
-  void adapter.steerActiveTurn('change direction', { id: 'steer-1' });
+  void adapter.steerActiveTurn('change direction', { id: 'steer-1' }).catch(noop);
   await new Promise((resolve) => setImmediate(resolve));
 
   await expect(adapter.editSubmission('steer-1', { text: 'edited' })).rejects.toThrow(/editSteer/);

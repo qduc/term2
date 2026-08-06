@@ -141,7 +141,7 @@ export type ConversationUIAction =
   | { type: 'queue/message_started'; id: string }
   /** A queued message was removed or rejected before execution started. */
   | { type: 'queue/message_removed'; id: string }
-  /** A pending submission was edited in place; its order and timestamp remain unchanged. */
+  /** A pending submission (steer or queued) was edited in place; stage and position are unchanged. */
   | { type: 'queue/message_edited'; id: string; text: string }
 
   // --- Compound resets ---

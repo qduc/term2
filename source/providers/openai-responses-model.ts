@@ -138,9 +138,34 @@ function toResponsesOutputFormat(
   };
 }
 
-function requestBody(request: StreamedModelTurnRequest, model: string, stream: boolean): any {
+function supportsContextCompactionModel(model: string): boolean {
+  // This allowlist is empirical: context_management returned opaque 500s on
+  // gpt-5.1/gpt-5.2 and worked on gpt-5.4+. Re-measure before adding models.
+  return /^gpt-5\.(?:[4-9]|[1-9]\d+)(?:$|[-_])/.test(model);
+}
+
+function contextCompaction(
+  providerOptions: StreamedModelProviderOptions,
+  model: string,
+  providerSupportsContextCompaction: boolean,
+): { threshold: number } | undefined {
+  if (!providerSupportsContextCompaction || !supportsContextCompactionModel(model)) return undefined;
+  const option = (providerOptions as any).contextCompaction;
+  if (option?.enabled !== true || typeof option.threshold !== 'number' || !Number.isFinite(option.threshold)) {
+    return undefined;
+  }
+  return { threshold: option.threshold };
+}
+
+function requestBody(
+  request: StreamedModelTurnRequest,
+  model: string,
+  stream: boolean,
+  providerSupportsContextCompaction = false,
+): any {
   const providerOptions = request.providerOptions ?? {};
   const extraBody = (providerOptions as any).extraBody;
+  const compaction = contextCompaction(providerOptions, model, providerSupportsContextCompaction);
   const projectedInput = toResponsesApiInput(request.input);
   const body = {
     model,
@@ -161,6 +186,7 @@ function requestBody(request: StreamedModelTurnRequest, model: string, stream: b
       ? { text: toResponsesOutputFormat(request.outputType) }
       : {}),
     ...(request.previousResponseId ? { previous_response_id: request.previousResponseId } : {}),
+    ...(compaction ? { context_management: [{ type: 'compaction', compact_threshold: compaction.threshold }] } : {}),
     ...(extraBody ?? {}),
   } as any;
 
@@ -411,18 +437,22 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
     protected readonly _client: any,
     protected readonly _model: string,
     protected readonly capture?: ProviderRequestCapture,
+    protected readonly supportsContextCompaction = false,
   ) {}
 
   async getResponse(request: StreamedModelTurnRequest): Promise<any> {
     this.lifecycle.begin(request, 'http', this._model, this._client);
     this.lifecycle.bind(request, this.capture);
     try {
-      const response = await this._client.responses.create(requestBody(request, this._model, false), {
-        ...(request.signal ? { signal: request.signal } : {}),
-        ...((request.providerOptions as any)?.extraHeaders
-          ? { headers: (request.providerOptions as any).extraHeaders }
-          : {}),
-      });
+      const response = await this._client.responses.create(
+        requestBody(request, this._model, false, this.supportsContextCompaction),
+        {
+          ...(request.signal ? { signal: request.signal } : {}),
+          ...((request.providerOptions as any)?.extraHeaders
+            ? { headers: (request.providerOptions as any).extraHeaders }
+            : {}),
+        },
+      );
       assertUnaryResponseCompleted(response);
       const completion = completedEvent(response);
       this.lifecycle.finish(request, 'terminal', this.capture, completion.responseId);
@@ -442,12 +472,15 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
     this.lifecycle.bind(request, this.capture);
     let terminal = false;
     try {
-      const source = await this._client.responses.create(requestBody(request, this._model, true), {
-        ...(request.signal ? { signal: request.signal } : {}),
-        ...((request.providerOptions as any)?.extraHeaders
-          ? { headers: (request.providerOptions as any).extraHeaders }
-          : {}),
-      });
+      const source = await this._client.responses.create(
+        requestBody(request, this._model, true, this.supportsContextCompaction),
+        {
+          ...(request.signal ? { signal: request.signal } : {}),
+          ...((request.providerOptions as any)?.extraHeaders
+            ? { headers: (request.providerOptions as any).extraHeaders }
+            : {}),
+        },
+      );
       const normalizationState = createResponseEventNormalizationState();
       for await (const event of source) {
         const normalized = normalizeResponseEvent(event, normalizationState);
@@ -475,7 +508,10 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
     const socket = new ResponsesWS(this._client, headers ? { headers } : undefined);
     let terminal = false;
     try {
-      socket.send({ type: 'response.create', ...requestBody(request, this._model, true) } as any);
+      socket.send({
+        type: 'response.create',
+        ...requestBody(request, this._model, true, this.supportsContextCompaction),
+      } as any);
       const normalizationState = createResponseEventNormalizationState();
       for await (const message of socket.stream()) {
         if (message.type === 'error') throw (message as any).error ?? new Error('OpenAI WebSocket provider error');

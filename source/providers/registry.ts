@@ -47,6 +47,8 @@ export interface ProviderDefinition {
   /** Optional provider capabilities */
   capabilities?: {
     supportsConversationChaining: boolean;
+    /** Supports the OpenAI Responses API's server-side context_management parameter. */
+    supportsContextCompaction?: boolean;
     supportsPromptCacheKey?: boolean;
     usesStrictToolSchema?: boolean;
     nativePatchModelPrefixes?: string[];

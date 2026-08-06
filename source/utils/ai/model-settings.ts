@@ -71,12 +71,6 @@ export const MODEL_SETTING_CONFIGS: ModelSettingConfig[] = [
     fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
   },
   {
-    modelKey: SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_MODEL,
-    trigger: '/settings agent.subagentResearcherModel ',
-    providerKey: SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_PROVIDER,
-    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
-  },
-  {
     modelKey: SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_MODEL,
     trigger: '/settings agent.subagentLibrarianModel ',
     providerKey: SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_PROVIDER,

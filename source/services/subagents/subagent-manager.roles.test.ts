@@ -14,7 +14,6 @@ import {
   ROLE_MENTOR,
   ROLE_EXPLORER,
   ROLE_WORKER,
-  ROLE_RESEARCHER,
 } from './test-helpers/subagent-manager-fixtures.js';
 import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
 import { ModelBehaviorError } from '../../contracts/model-errors.js';
@@ -436,27 +435,27 @@ describe('explorer role', () => {
     expect(toolNames.includes('search_replace')).toBe(false);
     expect(toolNames.includes('create_file')).toBe(false);
 
-    // Explorer should NOT have web tools by default
-    expect(toolNames.includes('web_search')).toBe(false);
-    expect(toolNames.includes('web_fetch')).toBe(false);
+    // Explorer should have web tools (the researcher role was folded in)
+    expect(toolNames.includes('web_search')).toBe(true);
+    expect(toolNames.includes('web_fetch')).toBe(true);
     expect(toolNames.includes('shell')).toBe(true);
   });
 });
 
-// ========== Researcher role ==========
+// ========== Explorer read + web + shell tool surface ==========
 
-describe('researcher role', () => {
-  let researcherRunnerCalls: any[];
-  let researcherProviderId: string;
+describe('explorer role includes web tools', () => {
+  let explorerWebRunnerCalls: any[];
+  let explorerWebProviderId: string;
 
   beforeEach(() => {
-    researcherRunnerCalls = [];
-    researcherProviderId = registerTestProvider({
-      label: 'Mock Researcher Provider',
+    explorerWebRunnerCalls = [];
+    explorerWebProviderId = registerTestProvider({
+      label: 'Mock Explorer Web Provider',
       createStreamedModel: () =>
         ({
           stream: async function* (request: any) {
-            researcherRunnerCalls.push({ agent: { tools: request.applicationTools ?? [] } });
+            explorerWebRunnerCalls.push({ agent: { tools: request.applicationTools ?? [] } });
             const result = {
               status: 'completed',
               finalOutput: 'Research findings.',
@@ -470,10 +469,10 @@ describe('researcher role', () => {
     });
   });
 
-  it('run() with researcher role includes web tools', async () => {
+  it('run() with explorer role includes read, web, and shell tools', async () => {
     const settings = createMockSettings({
       'agent.model': 'mock-model',
-      'agent.provider': researcherProviderId,
+      'agent.provider': explorerWebProviderId,
     });
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
@@ -481,16 +480,17 @@ describe('researcher role', () => {
       sessionContextService: createSessionContextService() as any,
     });
 
-    await manager.run({ role: 'researcher', task: 'look up the latest TypeScript release' });
+    await manager.run({ role: 'explorer', task: 'look up the latest TypeScript release' });
 
-    expect(researcherRunnerCalls.length).toBe(1);
-    const agent = researcherRunnerCalls[0].agent;
+    expect(explorerWebRunnerCalls.length).toBe(1);
+    const agent = explorerWebRunnerCalls[0].agent;
     const toolNames: string[] = agent.tools.map((t: any) => t.name);
 
-    // Researcher should have read and web tools
+    // Explorer should have read, web, and shell tools
     expect(toolNames.includes('read_file')).toBe(true);
     expect(toolNames.includes('web_search')).toBe(true);
     expect(toolNames.includes('web_fetch')).toBe(true);
+    expect(toolNames.includes('shell')).toBe(true);
 
     // But not write tools
     expect(toolNames.includes('apply_patch')).toBe(false);

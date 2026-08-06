@@ -1,8 +1,8 @@
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
 
-export const SUBAGENT_ROLES = ['explorer', 'worker', 'researcher', 'mentor', 'librarian'] as const;
-export const PHASE_1_ASYNC_SUBAGENT_ROLES = ['explorer', 'researcher', 'mentor'] as const;
+export const SUBAGENT_ROLES = ['explorer', 'worker', 'mentor', 'librarian'] as const;
+export const PHASE_1_ASYNC_SUBAGENT_ROLES = ['explorer', 'mentor'] as const;
 export type SupportedSubagentRole = (typeof SUBAGENT_ROLES)[number];
 export type Phase1AsyncSubagentRole = (typeof PHASE_1_ASYNC_SUBAGENT_ROLES)[number];
 export type SubagentRole = SupportedSubagentRole | string;

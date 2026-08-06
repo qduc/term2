@@ -26,7 +26,6 @@ describe('MemoryCapabilityBuilder', () => {
     ['orchestrator', { kind: 'main' as const }, 'write', writeTools],
     ['explorer', { kind: 'subagent' as const, role: 'explorer' }, 'read', readTools],
     ['worker', { kind: 'subagent' as const, role: 'worker' }, 'read', readTools],
-    ['researcher', { kind: 'subagent' as const, role: 'researcher' }, 'read', readTools],
     ['mentor', { kind: 'subagent' as const, role: 'mentor' }, 'none', []],
     ['librarian', { kind: 'subagent' as const, role: 'librarian' }, 'write', writeTools],
   ])('grants %s the expected enabled-memory access', (_mode, subject, access, tools) => {
@@ -40,7 +39,7 @@ describe('MemoryCapabilityBuilder', () => {
     if (access === 'none') expect(capability.context).toBe('');
   });
 
-  it.each(['explorer', 'worker', 'researcher'] as const)(
+  it.each(['explorer', 'worker'] as const)(
     'gives %s on-demand read access without injecting memory context',
     (role) => {
       const directory = mkdtempSync(join(tmpdir(), 'term2-memory-capability-'));

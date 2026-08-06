@@ -137,7 +137,7 @@ describe('SubagentToolFactory search tool descriptions', () => {
 });
 
 describe('SubagentToolFactory memory authority', () => {
-  it.each(['explorer', 'worker', 'researcher', 'librarian'] as const)(
+  it.each(['explorer', 'worker', 'librarian'] as const)(
     'provisions ask_orchestrator only for an eligible async %s segment',
     (role) => {
       expect(buildToolNames(createDefinition({ role }), true, async () => 'answer')).toContain('ask_orchestrator');
@@ -151,7 +151,7 @@ describe('SubagentToolFactory memory authority', () => {
     );
   });
 
-  it.each(['explorer', 'worker', 'researcher'] as const)('gives %s read-only memory tools', (role) => {
+  it.each(['explorer', 'worker'] as const)('gives %s read-only memory tools', (role) => {
     const tools = buildToolNames(createDefinition({ role }));
 
     expect(tools.filter((name) => name.startsWith('memory_'))).toEqual([

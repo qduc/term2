@@ -61,7 +61,7 @@ A specialized, secondary agent spawned to perform tasks (like research or coding
 _Avoid_: Child agent, helper
 
 **Role**:
-The named capability profile a subagent is spawned under (explorer, researcher, worker, mentor, librarian), fixing its tools and whether it may write.
+The named capability profile a subagent is spawned under (explorer, worker, mentor, librarian), fixing its tools and whether it may write.
 _Avoid_: Persona, type, agent kind
 
 **Background Notification**:

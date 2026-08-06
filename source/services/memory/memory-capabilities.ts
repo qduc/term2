@@ -124,7 +124,7 @@ export class MemoryCapabilityBuilder {
   #accessFor(subject: MemoryCapabilitySubject): MemoryAccess {
     if (subject.kind === 'main') return 'write';
     if (subject.role === 'librarian') return 'write';
-    return ['explorer', 'worker', 'researcher'].includes(subject.role) ? 'read' : 'none';
+    return ['explorer', 'worker'].includes(subject.role) ? 'read' : 'none';
   }
 
   #guidanceFor(subject: MemoryCapabilitySubject): string {

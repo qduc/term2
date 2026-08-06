@@ -442,7 +442,7 @@ it('runSubagentAsync passes the bridge abort signal to startRunAsync', async () 
   const { manager, trackStartRunAsync } = createMockManager();
   const bridge = makeBridge(manager);
 
-  await bridge.runSubagentAsync({ role: 'researcher', task: 'look up docs' });
+  await bridge.runSubagentAsync({ role: 'explorer', task: 'look up docs' });
 
   expect(trackStartRunAsync.lastArgs.signal).toBeInstanceOf(AbortSignal);
 });

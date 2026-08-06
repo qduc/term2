@@ -26,7 +26,7 @@ describe('adaptLegacyRole', () => {
     expect(def.permissions.canRead).toBe(true);
     expect(def.permissions.canWrite).toBe(false);
     expect(def.permissions.canRunShell).toBe(true); // explorer has shell (read-only wrapped)
-    expect(def.permissions.canSearchWeb).toBe(false);
+    expect(def.permissions.canSearchWeb).toBe(true); // researcher role was folded in
     expect(def.permissions.canUseNestedAgents).toBe(false);
     expect(def.model.provider).toBe('openai');
     expect(def.instructions).toBeTruthy();
@@ -45,7 +45,6 @@ describe('adaptLegacyRole', () => {
 
     expect(adaptLegacyRole('mentor', configured).model.model).toBe('smart-model');
     expect(adaptLegacyRole('worker', configured).model.model).toBe('balanced-model');
-    expect(adaptLegacyRole('researcher', configured).model.model).toBe('balanced-model');
     expect(adaptLegacyRole('explorer', configured).model.model).toBe('cheap-model');
     expect(adaptLegacyRole('librarian', configured).model.model).toBe('cheap-model');
 
@@ -64,15 +63,6 @@ describe('adaptLegacyRole', () => {
     expect(def.permissions.canWrite).toBe(true);
     expect(def.permissions.canRunShell).toBe(true);
     expect(def.permissions.canSearchWeb).toBe(false);
-  });
-
-  it('adapts researcher role to ResolvedAgentDefinition', () => {
-    const def = adaptLegacyRole('researcher', settings());
-    expect(def.name).toBe('Researcher');
-    expect(def.permissions.canRead).toBe(true);
-    expect(def.permissions.canWrite).toBe(false);
-    expect(def.permissions.canRunShell).toBe(false);
-    expect(def.permissions.canSearchWeb).toBe(true);
   });
 
   it('adapts mentor role to ResolvedAgentDefinition', () => {

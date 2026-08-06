@@ -142,7 +142,7 @@ it('buildPromptSpec includes async subagent guidance when async tools are enable
   expect(spec.inlineSections.some((s) => s.includes('run_subagent_async'))).toBe(true);
   expect(spec.inlineSections.some((s) => s.includes('get_subagent_result'))).toBe(true);
   expect(spec.inlineSections.some((s) => s.includes('explorer'))).toBe(true);
-  expect(spec.inlineSections.some((s) => s.includes('researcher'))).toBe(true);
+  expect(spec.inlineSections.some((s) => s.includes('worker'))).toBe(true);
   expect(spec.inlineSections.some((s) => s.includes('mentor'))).toBe(true);
 });
 

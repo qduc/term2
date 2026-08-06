@@ -64,7 +64,7 @@ it('rejects invalid and already active run names with typed registry errors', ()
     expect.objectContaining({ code: 'invalid_name' }),
   );
   registry.startRun({ role: 'explorer', task: 'inspect', name: 'code_scan' });
-  expect(() => registry.startRun({ role: 'researcher', task: 'research', name: 'code_scan' })).toThrowError(
+  expect(() => registry.startRun({ role: 'explorer', task: 'research', name: 'code_scan' })).toThrowError(
     expect.objectContaining({ code: 'name_in_use' }),
   );
   registry.dispose();
@@ -78,7 +78,7 @@ it.each(['completed', 'failed', 'cancelled'] as const)(
     await registry.getResult(first.runId);
     expect(registry.getRunStatus(first.runId)).toMatchObject({ name: 'reusable', status });
 
-    const second = registry.startRun({ role: 'researcher', task: 'second', name: 'reusable' });
+    const second = registry.startRun({ role: 'explorer', task: 'second', name: 'reusable' });
 
     expect(second.name).toBe('reusable');
     registry.dispose();
@@ -105,7 +105,7 @@ it('reserves a cancelling name and settles only after partial runner evidence ar
 
   expect(registry.getRunStatus(first.runId)).toMatchObject({ status: 'cancelling' });
   expect(settled).toBe(false);
-  expect(() => registry.startRun({ role: 'researcher', task: 'second', name: 'reusable' })).toThrowError(
+  expect(() => registry.startRun({ role: 'explorer', task: 'second', name: 'reusable' })).toThrowError(
     expect.objectContaining({ code: 'name_in_use' }),
   );
   expect(events).toEqual(['subagent_started']);
@@ -129,7 +129,7 @@ it('reserves a cancelling name and settles only after partial runner evidence ar
   });
   expect(events).toEqual(['subagent_started', 'subagent_completed']);
 
-  const second = registry.startRun({ role: 'researcher', task: 'second', name: 'reusable' });
+  const second = registry.startRun({ role: 'explorer', task: 'second', name: 'reusable' });
   expect(second.name).toBe('reusable');
   registry.dispose();
 });
@@ -200,7 +200,7 @@ it('cancels a run when its parent signal aborts', async () => {
   const controller = new AbortController();
   let resolve!: (value: SubagentResult) => void;
   const registry = make(() => new Promise<SubagentResult>((r) => (resolve = r)));
-  const run = registry.startRun({ role: 'researcher', task: 'parent', signal: controller.signal });
+  const run = registry.startRun({ role: 'explorer', task: 'parent', signal: controller.signal });
   const resultPromise = registry.getResult(run.runId);
   let settled = false;
   void resultPromise.then(() => {
@@ -213,7 +213,7 @@ it('cancels a run when its parent signal aborts', async () => {
   expect(settled).toBe(false);
 
   resolve({
-    ...result('researcher', 'failed'),
+    ...result('explorer', 'failed'),
     filesChanged: ['partial-research.md'],
     toolsUsed: [{ toolName: 'web_search', count: 2 }],
     diffStat: [{ path: 'partial-research.md', added: 8, deleted: 0 }],
@@ -252,7 +252,7 @@ it('rejects a fresh run targeting an active shared session', () => {
 
 it('returns terminal failures and cancellations instead of rejecting', async () => {
   const failed = make(async ({ request }) => result(request.role, 'failed'));
-  const failedRun = failed.startRun({ role: 'researcher', task: 'fail' });
+  const failedRun = failed.startRun({ role: 'explorer', task: 'fail' });
   await expect(failed.getResult(failedRun.runId)).resolves.toMatchObject({ status: 'failed' });
   const cancelled = make(
     ({ signal, request }) =>
@@ -539,7 +539,7 @@ describe('outbound steering', () => {
       run: () => new Promise<SubagentResult>((resolve) => resolutions.push(resolve)),
     });
     const canonical = registry.startRun({ role: 'explorer', task: 'Canonical.', name: 'canonical' });
-    const alias = registry.startRun({ role: 'researcher', task: 'Alias.', name: 'target' });
+    const alias = registry.startRun({ role: 'explorer', task: 'Alias.', name: 'target' });
 
     expect(registry.cancelRun('target')).toEqual({ ok: true, runId: canonical.runId, status: 'cancelling' });
     expect(registry.getRunStatus(canonical.runId)).toMatchObject({ status: 'cancelling' });
@@ -547,7 +547,7 @@ describe('outbound steering', () => {
     expect(registry.cancelRun('missing')).toEqual({ ok: false, code: 'not_active', target: 'missing' });
 
     resolutions[0](result('explorer', 'cancelled'));
-    resolutions[1](result('researcher'));
+    resolutions[1](result('explorer'));
     await Promise.all([registry.getResult(canonical.runId), registry.getResult(alias.runId)]);
     registry.dispose();
   });
@@ -807,11 +807,11 @@ describe('outbound steering', () => {
         return new Promise<SubagentResult>((resolve) => resolutions.push(resolve));
       },
     });
-    const run = registry.startRun({ role: 'researcher', task: 'Research this.' });
+    const run = registry.startRun({ role: 'explorer', task: 'Research this.' });
 
     for (let segment = 0; segment < 3; segment++) {
       expect(registry.sendMessage(run.runId, `Revision ${segment + 1}`)).toMatchObject({ ok: true });
-      resolutions[segment](result('researcher', 'cancelled'));
+      resolutions[segment](result('explorer', 'cancelled'));
       await vi.waitFor(() => expect(segments).toHaveLength(segment + 2));
     }
 
@@ -822,7 +822,7 @@ describe('outbound steering', () => {
     });
     expect(segments[3].signal.aborted).toBe(false);
 
-    resolutions[3](result('researcher'));
+    resolutions[3](result('explorer'));
     await expect(registry.getResult(run.runId)).resolves.toMatchObject({ status: 'completed' });
     registry.dispose();
   });
@@ -865,7 +865,7 @@ describe('outbound steering', () => {
       },
     });
     const canonical = registry.startRun({ role: 'explorer', task: 'Canonical.', name: 'canonical' });
-    const alias = registry.startRun({ role: 'researcher', task: 'Alias.', name: 'target' });
+    const alias = registry.startRun({ role: 'explorer', task: 'Alias.', name: 'target' });
 
     expect(registry.sendMessage('target', 'Steer the canonical run.')).toMatchObject({
       ok: true,
@@ -1000,7 +1000,7 @@ describe('default run id allocation', () => {
     const first = registry.startRun({ role: 'explorer', task: 'seed' });
     expect(first.runId).toBe('nascent-finch-10');
     // The next allocation must avoid the in-use id.
-    const second = registry.startRun({ role: 'researcher', task: 'next' });
+    const second = registry.startRun({ role: 'explorer', task: 'next' });
     expect(second.runId).toBe('calm-otter-42');
     registry.dispose();
   });

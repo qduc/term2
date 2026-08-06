@@ -20,7 +20,6 @@ const ROLE_MAX_TURNS_DEFAULT = 20;
 const roleModelTiers: Record<string, AncillaryModelTier> = {
   mentor: 'smart',
   worker: 'balanced',
-  researcher: 'balanced',
   explorer: 'cheap',
   librarian: 'cheap',
 };

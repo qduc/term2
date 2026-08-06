@@ -129,7 +129,7 @@ describe('createAgentRuntime composition', () => {
     expect(def.canRead).toBe(true);
     expect(def.canWrite).toBe(false);
     expect(def.canRunShell).toBe(true);
-    expect(def.canSearchWeb).toBe(false);
+    expect(def.canSearchWeb).toBe(true); // researcher role was folded in
     expect(def.instructions).toBeTruthy();
   });
 

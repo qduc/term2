@@ -32,7 +32,6 @@ describe('loadRoleDefinition ancillary tier reasoning', () => {
   it.each([
     ['mentor', 'smart', 'high'],
     ['worker', 'balanced', 'medium'],
-    ['researcher', 'balanced', 'medium'],
     ['explorer', 'cheap', 'low'],
     ['librarian', 'cheap', 'low'],
   ] as const)('%s uses agent.%sReasoningEffort', (role, tier, effort) => {

@@ -42,7 +42,7 @@ it('schema requires role and task', () => {
 it('schema accepts delegatable roles but hides mentor behind ask_mentor', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 
-  for (const role of ['explorer', 'worker', 'researcher', 'librarian']) {
+  for (const role of ['explorer', 'worker', 'librarian']) {
     expect(tool.parameters.safeParse({ role, task: 'do work' }).success).toBe(true);
   }
   expect(tool.parameters.safeParse({ role: 'mentor', task: 'do work' }).success).toBe(false);
@@ -253,11 +253,9 @@ it('getSubagentsRolesSection extracts descriptions from markdown files', () => {
   expect(section.includes('## Roles')).toBe(true);
   expect(section.includes('`explorer`')).toBe(true);
   expect(section.includes('`mentor`')).toBe(true);
-  expect(section.includes('`researcher`')).toBe(true);
   expect(section.includes('`worker`')).toBe(true);
 
   expect(section).toMatch(/-\s+`explorer`:\s+\S+/);
   expect(section).toMatch(/-\s+`mentor`:\s+\S+/);
-  expect(section).toMatch(/-\s+`researcher`:\s+\S+/);
   expect(section).toMatch(/-\s+`worker`:\s+\S+/);
 });

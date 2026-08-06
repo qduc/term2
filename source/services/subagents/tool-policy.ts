@@ -776,7 +776,7 @@ export class SubagentToolFactory {
 
     // This callback is supplied exclusively by the async execution-segment
     // adapter. Sync and nested runners never receive it.
-    if (askOrchestrator && ['explorer', 'worker', 'researcher', 'librarian'].includes(definition.role)) {
+    if (askOrchestrator && ['explorer', 'worker', 'librarian'].includes(definition.role)) {
       tools.push(createAskOrchestratorToolDefinition(askOrchestrator));
     }
 

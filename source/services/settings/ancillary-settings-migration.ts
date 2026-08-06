@@ -11,15 +11,15 @@ const MIGRATIONS: Migration[] = [
   { target: 'agent.smartReasoningEffort', legacy: ['agent.mentorReasoningEffort'] },
   {
     target: 'agent.balancedModel',
-    legacy: ['agent.subagentWorkerModel', 'agent.subagentResearcherModel'],
+    legacy: ['agent.subagentWorkerModel'],
   },
   {
     target: 'agent.balancedProvider',
-    legacy: ['agent.subagentWorkerProvider', 'agent.subagentResearcherProvider'],
+    legacy: ['agent.subagentWorkerProvider'],
   },
   {
     target: 'agent.balancedReasoningEffort',
-    legacy: ['agent.subagentWorkerReasoningEffort', 'agent.subagentResearcherReasoningEffort'],
+    legacy: ['agent.subagentWorkerReasoningEffort'],
   },
   {
     target: 'agent.cheapModel',

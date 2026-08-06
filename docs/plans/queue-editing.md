@@ -2,9 +2,9 @@
 
 ## Resume here
 
-**Steps 1–2 (`## Build order`) are done, on branch `queue-editing-substrate`
-(`.worktrees/queue-editing-substrate`, not yet merged to `main`).** Steps 3–4
-are still design-only; start at Step 3. Read `## The three stages` before
+**Steps 1–2 (`## Build order`) are done and merged to `main`** (`ccc02324`,
+feature branch `queue-editing-substrate`, commit `b5f31095`). Steps 3–4 are
+still design-only; start at Step 3. Read `## The three stages` before
 touching `ConversationOrchestrator`, `ConversationService`, or the
 `pendingQueuedMessages` reducer slice — the substrate below only closes the gap
 between the run loop and the adapter; the UI still addresses queued work by
@@ -82,6 +82,30 @@ input box**, entered by ↑ on an empty input. Not a modal. See `## Rejected`.
   `edit_queued` and `remove_queued` were already implemented; Steps 1–2 gave
   them their first real callers (via `editSubmission`/`retractSubmission`) and
   added persistence round-trip coverage for `edit_queued`.
+- **`editSubmission` mutates `#messagesById` before it knows the edit will be
+  accepted, and does not roll back** (found in merge review, not by the
+  implementing agent — no test covers it). It writes the new `UserTurn`, then
+  `await`s `edit_queued`; if the controller rejects because the item started
+  during that await, it returns `too_late` with the map already rewritten.
+  `#runQueuedTurn` reads `#messagesById` once at its start
+  (`conversation-adapter.ts:617`), so the common case is harmless — the running
+  turn already captured the old object. The narrow window is: item starts
+  *inside* the await, `#runQueuedTurn` reads the **new** input, the caller is
+  told `too_late`, and per `## Losing the race` submits the edited text as a
+  fresh message — sending it **twice**.
+  Reversing the order does not fix it, it only swaps which way the window
+  fails (the controller accepts, the item starts, and the turn sends the
+  **stale** text — the original trap). Step 3 should settle this deliberately
+  rather than reorder and call it done: the honest fix is for `too_late` on an
+  edit to restore the previous `#messagesById` entry, so the stage transition
+  is all-or-nothing.
+- **An unwired `retractSteer` is indistinguishable from "too late."**
+  `retractSubmission` does `this.#turnFlow.retractSteer?.(id) ?? false` and maps
+  `false` to `{ kind: 'too_late', stage: 'started' }`. If the method is ever
+  absent (it is optional on `TurnFlow`), the UI will report "already sent — the
+  model has it" for a submission that was never even reachable. Harmless today
+  because `session-composition.ts` binds it, but it makes a future unwiring
+  silent. Worth a distinct outcome or an assertion in Step 3.
 
 ### Testing run for Steps 1–2
 

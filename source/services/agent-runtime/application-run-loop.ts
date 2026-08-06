@@ -715,6 +715,22 @@ export class ApplicationRunLoop {
       // provider-specific metadata exactly once.
       pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
 
+      // Provider-native completion items (notably OpenAI compaction items)
+      // must stay in the live provider history. The session layer later
+      // applies compaction's replacement rule; keeping the item here also
+      // makes it available to an in-flight tool continuation before that
+      // terminal history commit occurs.
+      for (const item of completion.output) {
+        if (item.type !== 'provider_opaque') continue;
+        const historyItem: ProviderInputItem = {
+          ...item.item,
+          providerOpaque: { provider: item.provider },
+        };
+        state.history.push(historyItem);
+        state.input.push(item);
+        outputPush(stream, queue, { type: 'item', item });
+      }
+
       const assistantText = completion.output
         .filter((item) => item.type === 'message')
         .flatMap((item) => item.content)

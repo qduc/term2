@@ -1162,6 +1162,35 @@ it('replayEvents: assistant_journal_item restores history and ledger on interrup
   expect(commandMsg?.output).toBe('/repo');
 });
 
+it('replayEvents: interrupted journal restores an opaque OpenAI compaction item', () => {
+  const restored = replayEvents([
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'Continue' } }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 1,
+      item: {
+        type: 'provider_opaque',
+        provider: 'openai',
+        item: { type: 'compaction', id: 'cmp-1', encrypted_content: 'ciphertext' },
+      },
+    }),
+  ]);
+
+  expect(restored.history).toContainEqual({
+    type: 'compaction',
+    id: 'cmp-1',
+    encrypted_content: 'ciphertext',
+    providerOpaque: { provider: 'openai' },
+  });
+  expect(normalizeApplicationInput(restored.history as any)).toContainEqual({
+    type: 'provider_opaque',
+    provider: 'openai',
+    item: { type: 'compaction', id: 'cmp-1', encrypted_content: 'ciphertext' },
+  });
+});
+
 it('replayEvents: interrupted journal projects native tool aliases into history and ledger', () => {
   const restored = replayEvents([
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),

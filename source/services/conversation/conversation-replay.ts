@@ -774,7 +774,8 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
 
     const turnId = `journal-${journal.turnId ?? journalKey}-${journal.startedAt}`;
     const newMessages = buildMessagesFromJournal(journal, turnId);
-    if (newMessages.length === 0) {
+    const hasProviderOpaqueItem = journal.items.some((item) => item.type === 'provider_opaque');
+    if (newMessages.length === 0 && !hasProviderOpaqueItem) {
       continue;
     }
 
@@ -829,6 +830,12 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
         const historyItem = makeHistoryItemForReasoning(item);
         state.history.push(historyItem as ProviderInputItem);
         pendingReasoningHistoryItems.push(historyItem);
+        continue;
+      }
+
+      if (item.type === 'provider_opaque') {
+        state.history.push(projectPersistedAssistantItemToProviderHistory(item));
+        pendingReasoningHistoryItems = [];
         continue;
       }
 

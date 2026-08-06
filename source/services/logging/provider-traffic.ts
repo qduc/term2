@@ -187,6 +187,30 @@ const writeTrafficEnvelope = (requestPath: string, envelope: TrafficEnvelope): v
   fs.writeFileSync(requestPath, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
 };
 
+/**
+ * Redacts an `encrypted_content` field wherever it appears, at any depth.
+ * OpenAI Responses reasoning items (requested via `include:
+ * ['reasoning.encrypted_content']` on every request — openai-responses-model.ts)
+ * and `provider_opaque` compaction items (docs/plans/openai-context-compaction.md
+ * Step 1/2) both carry it directly on the item rather than nested under
+ * `reasoning_details` the way the Chat Completions shape does (see
+ * `sanitizeReasoningDetails` above, which stays as the Chat-Completions-specific
+ * case). This is the generic fallback for any other shape that carries the
+ * same field name.
+ */
+const redactEncryptedContent = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(redactEncryptedContent);
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [key, v] of Object.entries(record)) {
+      out[key] = key === 'encrypted_content' && typeof v === 'string' ? '' : redactEncryptedContent(v);
+    }
+    return out;
+  }
+  return value;
+};
+
 export const sanitizeSentTrafficBody = (body: Record<string, unknown>): Record<string, unknown> => {
   const sanitized: Record<string, unknown> = { ...body };
 
@@ -225,7 +249,11 @@ export const sanitizeSentTrafficBody = (body: Record<string, unknown>): Record<s
     sanitized.tools = sanitizeToolDefinitions(sanitized.tools);
   }
 
-  return sanitized;
+  // Catches encrypted_content on any item the branches above didn't already
+  // reshape — in particular Responses-API `type: 'reasoning'` and
+  // `type: 'compaction'`/`provider_opaque` input items, which are not
+  // message-shaped and so fall through the `input` branch above untouched.
+  return redactEncryptedContent(sanitized) as Record<string, unknown>;
 };
 
 const safeTimestampForPath = (timestamp: string): string => timestamp.replace(/:/g, '-');
@@ -355,10 +383,17 @@ export async function summarizeReceivedTraffic(response: Response): Promise<Rece
     const extractedReasoning = extractJsonReasoning(parsed);
     const extractedToolCalls = extractJsonToolCalls(parsed);
     const extractedId = firstDefinedString(parsed.id, asRecord(parsed.response)?.id);
+    // A non-streaming Responses body's `output` array can carry reasoning
+    // items (encrypted_content requested on every request) and, once Step 3/4
+    // of docs/plans/openai-context-compaction.md land, compaction items —
+    // both have it directly on the item. This is stored verbatim in the
+    // on-disk traffic artifact and passed to the winston debug log by
+    // ProviderTraffic.recordResponseReceived, so it must be redacted here.
+    const redactedParsed = redactEncryptedContent(parsed) as Record<string, unknown>;
     if (!extractedText && !extractedReasoning && extractedToolCalls.length === 0 && !extractedId) {
-      summary.fallbackBody = parsed;
+      summary.fallbackBody = redactedParsed;
     } else {
-      summary.payload = parsed;
+      summary.payload = redactedParsed;
     }
     return summary;
   }
@@ -1101,7 +1136,7 @@ export class ProviderTraffic implements IProviderTraffic {
         errorFrames: [],
         malformedFrames: [],
         unknownFrames: [],
-        payload,
+        payload: redactEncryptedContent(payload),
         ...(text ? { text } : {}),
       };
     }

@@ -258,3 +258,54 @@ describe('ConversationLogWriter durability failures', () => {
     await expect(writer.close()).rejects.toBe(writeError);
   });
 });
+
+// Step 2 of docs/plans/openai-context-compaction.md: encrypted_content and
+// provider_opaque payloads must never reach the app log. The conversation
+// JSONL is not the app log — see conversation-persistence.test.ts for that
+// round trip — so the guarantee here is a negative one: appending an event
+// carrying either must produce no call to any app-logger method that
+// contains the value, while the JSONL line itself keeps it in full.
+describe('ConversationLogWriter never echoes opaque content to the app log', () => {
+  function fullLogger() {
+    return {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      security: vi.fn(),
+    } as never;
+  }
+
+  it('passes encrypted_content and a provider_opaque item to no logger method, while the JSONL line keeps them in full', async () => {
+    const dir = tempDir();
+    const logger = fullLogger();
+    const writer = createConversationLogWriter({ sessionId: 'opaque-session', dir, logger, saveLast: vi.fn() });
+    writer.init({ id: 'opaque-session', createdAt: '2026-06-01T00:00:00.000Z' });
+
+    const encryptedContent = 'ciphertext-'.repeat(50);
+    writer.append({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'assistant_text', text: 'Continuing.' },
+          {
+            type: 'provider_opaque',
+            provider: 'openai',
+            item: { type: 'compaction', encrypted_content: encryptedContent },
+          },
+        ],
+      },
+    });
+    await writer.close();
+
+    const calls = Object.values(logger as Record<string, ReturnType<typeof vi.fn>>).flatMap((fn) => fn.mock.calls);
+    const loggedText = JSON.stringify(calls);
+    expect(loggedText).not.toContain(encryptedContent);
+    expect(loggedText).not.toContain('provider_opaque');
+
+    // The actual persisted JSONL line — what replay reads back on resume —
+    // keeps the full, unredacted value.
+    const line = fs.readFileSync(path.join(dir, 'opaque-session.jsonl'), 'utf-8');
+    expect(line).toContain(encryptedContent);
+  });
+});

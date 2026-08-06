@@ -1,10 +1,11 @@
 # OpenAI Context Compaction
 
-Status: **Step 1 merged to `main` on 2026-08-06 (`dc949022`)**. The opaque provider-item lane is
-implemented and tested; resume at [Step 2](#step-2-opaque-items-survive-persistence-and-replay).
-The blocking decision (server-side automatic compaction via `context_management`, not the manual
-`/v1/responses/compact` endpoint) remains as resolved on 2026-08-05 — see
-[Experiment results](#experiment-results-2026-08-05).
+Status: **Steps 1 and 2 done** (Step 1 merged to `main` 2026-08-06 as `dc949022`; Step 2 done on
+branch `compaction-persistence`, not yet merged — see the Step 2 entry below for the commit).
+Opaque provider items now survive persistence and replay; resume at
+[Step 3](#step-3-enable-server-side-compaction). The blocking decision (server-side automatic
+compaction via `context_management`, not the manual `/v1/responses/compact` endpoint) remains as
+resolved on 2026-08-05 — see [Experiment results](#experiment-results-2026-08-05).
 
 > Renamed from "OpenAI Manual Context Compaction". The manual endpoint was the plan of record until
 > the second round of experiments; it is now the documented fallback, not the design.
@@ -23,13 +24,18 @@ done** — the findings are recorded below under [Current flow](#current-flow-ph
 full session of reading.
 
 **Step 1 (opaque provider item lane) is DONE** — merged 2026-08-06 as `dc949022` (feature branch
-`opaque-lane`, commit `5155e499`). Start at [Step 2](#step-2-opaque-items-survive-persistence-and-replay).
+`opaque-lane`, commit `5155e499`).
+
+**Step 2 (persistence and replay) is DONE** — branch `compaction-persistence`, not yet merged to
+`main` (coordinator to merge). Start at [Step 3](#step-3-enable-server-side-compaction).
+
 What Step 1 shipped, so a resumer does not re-derive it:
 
 - `StreamedModelTurnInput`/`StreamedModelTurnOutput` (`source/contracts/streamed-model-turn.ts`)
   both gained a `provider_opaque` variant: `{ type: 'provider_opaque', provider, item }`.
 - `ProviderInputItem` (`source/contracts/provider-input.ts`) gained a `providerOpaque?: { provider: string }`
-  marker field. Nothing in the tree sets it yet — Step 2's replayed opaque item is the first producer.
+  marker field. As of Step 2, `conversation-turn-items.ts`'s replay projection is the one producer of it
+  (see below) — nothing else in the tree sets it yet.
 - `normalizeInputItem` (`source/services/agent-runtime/application-run-loop.ts`, ~line 1183) checks the
   marker before the `unsupportedInput` throw (which stays as the default) and **strips the internal
   marker from the carried wire item**. The throw message is `Unsupported restored input item type: …`.
@@ -39,15 +45,98 @@ What Step 1 shipped, so a resumer does not re-derive it:
 - `codex-turn-converter.ts` (explicit `case 'provider_opaque'` throw) and
   `ai-sdk-streamed-model.ts` `toPromptMessage` (explicit throw; note the error surfaces as a rejected
   async iteration, not a synchronous throw, because `stream()` is an async generator).
-- **No persistence yet.** `normalizeRunItem` (`source/services/conversation/run-item-normalizer.ts:205`)
-  still silently drops unknown output kinds, and the run loop's `completion.output` handling is
+- **No persistence yet (as of Step 1).** `normalizeRunItem` (`source/services/conversation/run-item-normalizer.ts:205`)
+  still silently dropped unknown output kinds, and the run loop's `completion.output` handling is
   filter-based (`if (item.type === 'reasoning')`, `if (item.type !== 'tool_call') continue`) — a
-  `provider_opaque` output passes through harmlessly and is not persisted. That seam is Step 2.
+  `provider_opaque` output passed through harmlessly and was not persisted.
 
 Gates run and green for Step 1: `pnpm test` (5217 passed; only the pre-existing flaky
 `InputBox` timing test, which passes on isolated rerun), `pnpm test:provider-black-box` (152 passed),
 typecheck, prettier, eslint. Unit tests live beside each changed file; the load-bearing negative
 test is an opaque item routed to a non-OpenAI provider throwing rather than silently serializing.
+
+What Step 2 shipped, so a resumer does not re-derive it:
+
+- `Item` (`source/contracts/conversation-items.ts`) gained a fifth variant, `ProviderOpaqueItem`
+  (`{ type: 'provider_opaque', provider, item }`), stored and replayed as opaque JSON — no typed
+  schema per provider item variant, matching `ImportedConversationStateSchema`'s existing
+  `z.unknown()` + `.passthrough()` (`conversation-state-schema.ts:20`, unchanged).
+- `normalizeRunItem` (`run-item-normalizer.ts`) recognizes the raw `{ type: 'provider_opaque',
+  provider, item }` shape — the exact shape `toTurnOutput` (`openai-responses-model.ts:227`)
+  produces — via a new `asProviderOpaqueItem` helper, and clones it into a `ProviderOpaqueItem`.
+  The recognizer is idempotent: re-normalizing an already-persisted `ProviderOpaqueItem` (identical
+  shape) round-trips unchanged, so the same function serves both the live-output path (wired in a
+  later step) and replay.
+- `projectPersistedAssistantItemToProviderHistory` and `synthesizeHistoryFromAssistantTurn`
+  (`conversation-turn-items.ts`) gained a `provider_opaque` branch **ahead of** the existing
+  reasoning-shaped fallback (the fallback reads `.text`/`.providerItemId`, which a
+  `ProviderOpaqueItem` does not have — an easy way to silently corrupt an opaque item if the branch
+  were appended instead of inserted). The branch re-emits the stored item's fields verbatim via
+  `{ ...clone(item.item), providerOpaque: { provider: item.provider } }`: this is the one place in
+  the tree that sets the Step 1 `providerOpaque` marker, so a replayed session's `normalizeInputItem`
+  (`application-run-loop.ts:1191`) recognizes it and re-carries it instead of throwing
+  `Unsupported restored input item type: …`.
+- `conversation-replay.ts` needed **no changes**: `synthesizeHistoryFromAssistantTurn` is called
+  only from its `assistant_turn` handler (`conversation-replay.ts:690`), so fixing the function
+  fixed replay. `mergeAssistantTurnIntoLedger`'s tool-ledger reconstruction loop and
+  `journal-to-ledger.ts`'s loops fall through no-op for `provider_opaque` items (they only track
+  tool call/result pairs) — verified, not a gap.
+- `conversation-log-writer.ts` gained **no new logging call**. First attempt at this step added a
+  redacted debug-level echo of `assistant_turn`/`assistant_journal_item` events to the winston app
+  log; a coordinator review caught that `main`'s only app-log call in this file was `#logger.error`
+  on write failure — nothing echoed conversation events to the app log before this branch, so that
+  echo was new output, not a redaction of existing output, and it would have fired on nearly every
+  OpenAI turn (`include: ['reasoning.encrypted_content']` is set on every request) while forwarding
+  assistant text and tool arguments to a log that was never meant to hold transcript content. It was
+  removed. The guarantee is pinned by a **negative** test instead
+  (`conversation-log-writer.test.ts`): append an event carrying `encrypted_content` and a
+  `provider_opaque` item, then assert no call to any app-logger method (`error`/`warn`/`info`/
+  `debug`/`security`) contains it — true today because this file makes no such call, not because
+  anything gets redacted in transit. The JSONL line itself keeps the full, unredacted value, which
+  is what replay needs (verified in `conversation-replay.test.ts`).
+- **`provider-traffic.ts` had a real, pre-existing leak — found by following the plan's "confirm
+  provider-traffic logs do not echo it" instruction rather than treating it as a formality.**
+  `sanitizeSentTrafficBody`'s `input`-array sanitization only reshapes items that are message-shaped
+  (`role === 'system'/'developer'` or `type === 'message'`) or `type === 'additional_tools'`; a
+  Responses-API `type: 'reasoning'` or `type: 'compaction'`/`provider_opaque` item — which carries
+  `encrypted_content` directly on the item, not nested under `reasoning_details` the way the
+  Chat-Completions shape the existing redaction test covers — fell through untouched. On the received
+  side, `summarizeReceivedTraffic`'s JSON-transport branch stored `parsed` (the entire response body)
+  verbatim as `summary.payload`, and `ProviderTraffic.recordResponseReceived`'s plain-object-payload
+  branch did the same — both go straight into the on-disk traffic artifact file **and** the winston
+  debug log. Since `include: ['reasoning.encrypted_content']` is unconditional, this was leaking
+  reasoning's `encrypted_content` into both today, on every OpenAI turn — independent of compaction.
+  Confirmed with failing tests before fixing (see `provider-traffic.test.ts`), then fixed with one
+  generic `redactEncryptedContent` helper (redacts the key `encrypted_content` wherever it appears,
+  any depth) applied at all three sites: the end of `sanitizeSentTrafficBody`, the JSON-transport
+  branch of `summarizeReceivedTraffic`, and the plain-object branch of `recordResponseReceived`. The
+  SSE and websocket paths were checked and are safe by construction — they synthesize their payload
+  from a fixed set of extracted fields and never spread a raw item, so `encrypted_content` was never
+  forwarded there.
+
+Gates run and green for Step 2: `pnpm test` (5232 passed, 1 pre-existing skip, 1 pre-existing flaky
+`InputBox` timing test that passes on isolated rerun; `cli.integration.test.ts` needs `dist/` built
+first — `pnpm run build` — otherwise it fails on a missing `dist/cli.js`, unrelated to this change),
+`pnpm test:provider-black-box` (152 passed, same count as Step 1 — no regression), typecheck,
+prettier, eslint (18 pre-existing `require-yield` warnings, 0 errors, none in changed files).
+
+### Step 2 judgment call: what counts as the app log (corrected after coordinator review)
+
+First pass read "the app log" in the spec below as a place to add a *new*, redacted echo, and picked
+the winston log (`LoggingService`, `envPaths('term2').log`) as that place, reasoning that the
+conversation JSONL (`envPaths('term2').data/conversations`) can't be redacted without breaking
+replay's need for the real value. **The round-trip half of that reasoning still holds — do not
+redact the conversation JSONL, ever, that part was correct** — but adding a new echo to satisfy
+"redact in the app log" was the wrong move: the requirement is "never print," and a codebase that
+prints nothing today already satisfies it. Inventing a new print-and-redact site is a net new leak
+surface, not a fix, and it duplicates transcript content (assistant text, tool arguments) into a log
+never meant to hold it. Corrected: `conversation-log-writer.ts` adds no logging call; the guarantee
+is pinned by the negative test described above. Do not re-add an echo here — if a future need for a
+debug trace comes up, it does not fall out of this plan's requirement.
+
+What "actually check provider-traffic" turned up is the genuine version of the redaction task — see
+the `provider-traffic.ts` bullet above. A resumer touching either file again should read both bullets
+before assuming an app-log echo is the right shape for a new redaction requirement.
 
 Five premises worth not re-deriving:
 
@@ -517,6 +606,18 @@ Gate: `pnpm test` and `pnpm test:provider-black-box` (run-loop change — non-ne
 
 ### Step 2: opaque items survive persistence and replay
 
+**Status: DONE — branch `compaction-persistence`, not yet merged.** Implemented as specced below,
+with the deviations and clarifications recorded under "What Step 2 shipped" in [Resume
+here](#resume-here) above and the [judgment
+call](#step-2-judgment-call-what-counts-as-the-app-log-corrected-after-coordinator-review) about
+"the app log" (**corrected after coordinator review** — read this before touching
+`conversation-log-writer.ts`'s logging or `provider-traffic.ts`'s sanitization: the real redaction
+gap was in `provider-traffic.ts`, not a new echo in the conversation log writer). Line-number anchors
+as of this branch: `Item` union is in `source/contracts/conversation-items.ts`;
+`projectPersistedAssistantItemToProviderHistory` is still at `conversation-turn-items.ts:44`,
+`synthesizeHistoryFromAssistantTurn` at `:199`; `normalizeRunItem` is at
+`run-item-normalizer.ts:223`. No drift from the note below otherwise.
+
 > Path drift since 2026-08-05: `conversation-state-schema.ts` lives at
 > `source/services/conversation/conversation-state-schema.ts` (not `source/contracts/`), with
 > `history: z.array(z.unknown())` at line 22; `conversation-log-writer.ts` lives at
@@ -540,6 +641,23 @@ Tests: a round-trip test — write a session containing an opaque item with an u
 it, assert byte-identical recovery. Plus a log-redaction assertion.
 
 Gate: `pnpm test`.
+
+**What Step 2 explicitly did not do**, deferred to [Step 4](#step-4-capture-compaction-items-into-history):
+wiring a live-turn `provider_opaque` completion output into `TurnItemAccumulator` /
+`ConversationLogger.dispatchEventToLog` (`services/session/turn-item-accumulator.ts`,
+`services/logging/conversation-logger.ts`) so a real streaming turn's compaction item gets journaled
+in the first place. `normalizeRunItem`'s new `asProviderOpaqueItem` recognizer already accepts the
+exact raw shape `toTurnOutput` produces, so that wiring is additive — call the existing normalizer
+from wherever the accumulator is taught to record an opaque item; no further change to
+`run-item-normalizer.ts`/`conversation-turn-items.ts` should be needed. `application-run-loop.ts`,
+`agent-client.ts`, `turn-workflow.ts`, `turn-coordinator.ts`, and `conversation-adapter.ts` were
+out of scope for Step 2 (another agent's concurrent work); Step 4 will need at least
+`turn-workflow.ts` and `turn-item-accumulator.ts`. Also un-addressed: `applyInterruptedTurnJournals`
+in `conversation-replay.ts` (mid-turn crash recovery from `assistant_journal_item` events) has no
+`provider_opaque` branch — harmless today because nothing produces such journal events yet, but
+Step 4's live-capture wiring should add one alongside the accumulator work, or an opaque item
+present only in the interrupted-turn journal (never reaching a final `assistant_turn`) will be
+silently dropped on crash recovery.
 
 ### Step 3: enable server-side compaction
 

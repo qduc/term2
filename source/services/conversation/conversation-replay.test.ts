@@ -5,6 +5,7 @@ import { LOG_ENVELOPE_VERSION, type LogEnvelope, type LogEvent } from '../loggin
 import { replayEvents } from './conversation-replay.js';
 import { decodeLogEnvelope, decodeSavedMessage } from './conversation-decoder.js';
 import type { BotMessage, CommandMessage, ReasoningMessage } from '../../types/message.js';
+import { normalizeApplicationInput } from '../agent-runtime/application-run-loop.js';
 
 let seq = 0;
 function env(event: LogEvent): LogEnvelope {
@@ -1682,4 +1683,88 @@ it('decodeLogEnvelope and decodeSavedMessage: validate structure while retaining
   });
   expect(savedMsg).not.toBe(null);
   expect(savedMsg?.id).toBe('msg-1');
+});
+
+// Step 2 of docs/plans/openai-context-compaction.md: an opaque provider item
+// (e.g. an OpenAI `compaction` item) persisted via `assistant_turn` must
+// replay back into `ConversationStore` history byte-identical — unknown
+// fields and key order intact — and carrying the `providerOpaque` marker so
+// `normalizeInputItem` (application-run-loop.ts) re-carries it on the next
+// request instead of throwing `Unsupported restored input item type: …`.
+it('replayEvents: a provider_opaque item round-trips byte-identical through persistence and replay', () => {
+  const opaqueItem = {
+    type: 'compaction',
+    id: 'comp_9',
+    created_by: 'model',
+    encrypted_content: 'ciphertext-'.repeat(50),
+    // Field the app does not know about today — must survive untouched, in
+    // place, rather than being dropped or reshaped by a typed schema.
+    a_future_field: { z: 1, a: 2, list: ['x', 'y'] },
+  };
+
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z', model: 'gpt-5.4', provider: 'openai' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'keep going' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'assistant_text', text: 'Continuing.' },
+          { type: 'provider_opaque', provider: 'openai', item: opaqueItem },
+        ],
+      },
+      state: { previousResponseId: 'resp-1', model: 'gpt-5.4', provider: 'openai' },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  const replayedOpaque = restored.history.find(
+    (entry) => entry && typeof entry === 'object' && (entry as Record<string, unknown>).type === 'compaction',
+  ) as Record<string, unknown>;
+
+  expect(replayedOpaque).toBeTruthy();
+
+  // Byte-identical: same fields, same values, same key order (the opaque
+  // item's own keys, in their original order, plus the marker appended).
+  expect(Object.keys(replayedOpaque)).toEqual([...Object.keys(opaqueItem), 'providerOpaque']);
+  expect(JSON.stringify(replayedOpaque)).toBe(
+    JSON.stringify({ ...opaqueItem, providerOpaque: { provider: 'openai' } }),
+  );
+
+  // The providerOpaque marker must be present and recognized by the run
+  // loop's own normalizer rather than hitting the unsupportedInput throw.
+  expect(replayedOpaque.providerOpaque).toEqual({ provider: 'openai' });
+  const normalized = normalizeApplicationInput([replayedOpaque]);
+  expect(normalized).toEqual([{ type: 'provider_opaque', provider: 'openai', item: opaqueItem }]);
+});
+
+it('replayEvents: two provider_opaque items across turns both survive independently', () => {
+  const first = { type: 'compaction', id: 'c1', encrypted_content: 'first-blob' };
+  const second = { type: 'compaction', id: 'c2', encrypted_content: 'second-blob' };
+
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'go' } }),
+    env({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'provider_opaque', provider: 'openai', item: first }] },
+      state: { previousResponseId: 'r1' },
+    }),
+    env({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'again' } }),
+    env({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'provider_opaque', provider: 'openai', item: second }] },
+      state: { previousResponseId: 'r2' },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  const opaqueEntries = restored.history.filter(
+    (entry) => entry && typeof entry === 'object' && (entry as Record<string, unknown>).type === 'compaction',
+  );
+
+  expect(opaqueEntries).toEqual([
+    { ...first, providerOpaque: { provider: 'openai' } },
+    { ...second, providerOpaque: { provider: 'openai' } },
+  ]);
 });

@@ -1,5 +1,10 @@
 import { it, expect } from 'vitest';
-import { buildPersistedAssistantTurnItems, synthesizeHistoryFromAssistantTurn } from './conversation-turn-items.js';
+import {
+  buildPersistedAssistantTurnItems,
+  projectPersistedAssistantItemToProviderHistory,
+  synthesizeHistoryFromAssistantTurn,
+} from './conversation-turn-items.js';
+import type { ProviderOpaqueItem } from '../../contracts/conversation-items.js';
 
 // Some providers (e.g. openai-compatible / deepseek via opencode) emit reasoning
 // items whose text lives in a `rawContent` array of `{ type: 'reasoning_text', text }`
@@ -210,4 +215,74 @@ it('synthesizeHistoryFromAssistantTurn projects provider-native tool spellings w
       output: { stdout: '/repo' },
     },
   ]);
+});
+
+// Step 2 of docs/plans/openai-context-compaction.md: a persisted provider_opaque
+// item must project back to a ProviderInputItem carrying the `providerOpaque`
+// marker from Step 1, so `normalizeInputItem` (application-run-loop.ts) accepts
+// it on replay instead of throwing `Unsupported restored input item type: …`.
+it('projectPersistedAssistantItemToProviderHistory restores the provider_opaque item verbatim with the providerOpaque marker', () => {
+  const item: ProviderOpaqueItem = {
+    type: 'provider_opaque',
+    provider: 'openai',
+    item: {
+      id: 'comp_1',
+      type: 'compaction',
+      encrypted_content: 'ciphertext-blob',
+      created_by: 'model',
+      some_unknown_field: { nested: true },
+    },
+  };
+
+  expect(projectPersistedAssistantItemToProviderHistory(item)).toEqual({
+    id: 'comp_1',
+    type: 'compaction',
+    encrypted_content: 'ciphertext-blob',
+    created_by: 'model',
+    some_unknown_field: { nested: true },
+    providerOpaque: { provider: 'openai' },
+  });
+});
+
+it('synthesizeHistoryFromAssistantTurn carries a provider_opaque item into history unchanged', () => {
+  const turn = {
+    items: [
+      {
+        type: 'provider_opaque' as const,
+        provider: 'openai',
+        item: { id: 'comp_1', type: 'compaction', encrypted_content: 'ciphertext-blob' },
+      },
+    ],
+  };
+
+  const history = synthesizeHistoryFromAssistantTurn([], turn) as Array<Record<string, unknown>>;
+
+  expect(history).toEqual([
+    {
+      id: 'comp_1',
+      type: 'compaction',
+      encrypted_content: 'ciphertext-blob',
+      providerOpaque: { provider: 'openai' },
+    },
+  ]);
+});
+
+it('synthesizeHistoryFromAssistantTurn does not fold a provider_opaque item into the reasoning fallback', () => {
+  // Regression guard: provider_opaque must not fall through to the final
+  // reasoning-shaped branch of projectPersistedAssistantItemToProviderHistory,
+  // which would read .text/.providerItemId (absent on this item) and produce
+  // a malformed `{ type: 'reasoning', ... }` history entry instead.
+  const turn = {
+    items: [
+      {
+        type: 'provider_opaque' as const,
+        provider: 'openai',
+        item: { type: 'compaction', encrypted_content: 'x' },
+      },
+    ],
+  };
+
+  const history = synthesizeHistoryFromAssistantTurn([], turn) as Array<Record<string, unknown>>;
+  expect(history).toHaveLength(1);
+  expect(history[0]?.type).toBe('compaction');
 });

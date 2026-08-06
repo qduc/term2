@@ -26,7 +26,10 @@ export type ConversationEvent =
   | SubagentCompletedEvent
   | SubagentQuestionEvent
   | CodexRateLimitEvent
-  | UserMessageConsumedForAbortEvent;
+  | UserMessageConsumedForAbortEvent
+  | ContextCompactionStartedEvent
+  | ContextCompactionCompletedEvent
+  | ContextCompactionFailedEvent;
 
 export interface RetryEvent {
   type: 'retry';
@@ -209,4 +212,28 @@ export interface SubagentQuestionEvent {
 export interface CodexRateLimitEvent {
   type: 'codex_rate_limits';
   rateLimits: CodexRateLimitInfo;
+}
+
+export interface ContextCompactionStartedEvent {
+  type: 'context_compaction_started';
+  provider: string;
+  sessionId: string;
+  inputTokensBefore?: number;
+}
+
+export interface ContextCompactionCompletedEvent {
+  type: 'context_compaction_completed';
+  provider: string;
+  sessionId: string;
+  inputTokensBefore?: number;
+  inputTokensAfter?: number;
+  durationMs: number;
+}
+
+export interface ContextCompactionFailedEvent {
+  type: 'context_compaction_failed';
+  provider: string;
+  sessionId: string;
+  errorCategory: 'request' | 'validation' | 'persistence';
+  durationMs: number;
 }

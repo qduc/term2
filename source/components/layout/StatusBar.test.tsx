@@ -55,6 +55,81 @@ it.sequential('StatusBar renders cache usage in the footer', async () => {
   expect(output.includes('Tok: 1,200 in (900 cached) / 350 out')).toBe(true);
 });
 
+it.sequential('StatusBar renders context usage as used/window in the footer', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'claude-sonnet-4-6',
+    'agent.provider': 'anthropic',
+    'shell.autoApproveMode': 'off',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar settingsService={settingsService} lastUsage={{ prompt_tokens: 100_000, completion_tokens: 350 }} />,
+  );
+
+  const output = lastFrame() ?? '';
+  expect(output.includes('100k/1.0M')).toBe(true);
+});
+
+it.sequential('StatusBar renders context usage for an OpenAI model with a k-scale window', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-5.6-sol',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar settingsService={settingsService} lastUsage={{ prompt_tokens: 100_000 }} />,
+  );
+
+  const output = lastFrame() ?? '';
+  expect(output.includes('100k/272k')).toBe(true);
+});
+
+it.sequential('StatusBar hides context usage when the model is not in the catalog', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'model-that-does-not-exist',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar settingsService={settingsService} lastUsage={{ prompt_tokens: 100_000, completion_tokens: 350 }} />,
+  );
+
+  const output = lastFrame() ?? '';
+  expect(output.includes('k/')).toBe(false);
+});
+
+it.sequential('StatusBar hides context usage when lastUsage has no prompt tokens', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar settingsService={settingsService} lastUsage={{ completion_tokens: 350 }} />,
+  );
+
+  const output = lastFrame() ?? '';
+  expect(output.includes('k/')).toBe(false);
+});
+
+it.sequential('StatusBar resolves the context window by model id for providers not in the catalog', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'claude-sonnet-4-6',
+    'agent.provider': 'custom-local-llm',
+    'shell.autoApproveMode': 'off',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar settingsService={settingsService} lastUsage={{ prompt_tokens: 100_000 }} />,
+  );
+
+  const output = lastFrame() ?? '';
+  expect(output.includes('100k/1.0M')).toBe(true);
+});
+
 it.sequential('StatusBar renders Plan mode badge', async () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',

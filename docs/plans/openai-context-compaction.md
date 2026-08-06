@@ -392,6 +392,68 @@ threshold set too low can cost more than it saves by firing on every turn. This 
 argument for a conservative default in Step 6, and it is a consideration the manual path did not
 have in this form.
 
+### Round 3 — `gpt-5.6-luna`, and the free-prefix hypothesis under control (2026-08-06)
+
+Run against the live API on `gpt-5.6-luna`, a model added after Rounds 1–2. Fixture ~1.16k input
+tokens (smaller than Rounds 1–2's ~3.5k), same two planted facts. 14 API calls total.
+
+**Compaction is supported.** `context_management` is accepted and fires:
+
+| Variant | Result |
+| --- | --- |
+| long input, no `context_management` (control) | OK — `input_tokens=1163`, `output: [reasoning, message]` |
+| `compact_threshold: 500` | **400 `integer_below_min_value`** — *"Expected a value >= 1000"* |
+| `compact_threshold: 1000` (the minimum) | OK, **fired** — `output: [compaction, reasoning, message]`, `input_tokens=1605` |
+| `compact_threshold: 1000000` | OK, did not fire — `input_tokens=1163` |
+
+Three findings here are new and none of them appear in the `gpt-5.4` data above:
+
+1. **There is a hard server minimum of `compact_threshold >= 1000`**, enforced as a clean typed 400.
+   Step 6's setting needs a validated floor, not merely "positive int".
+2. **The failure surface is not uniform.** Rounds 1–2 saw unsupported models fail as opaque
+   `500 server_error`. An *invalid parameter value* fails as a typed `400`. These need different
+   handling — see Step 3 — and a "500 ⇒ unsupported" check does not see the 400 at all.
+3. **Output shape differs again**: one compaction item, positioned **first**, versus `gpt-5.4`'s two
+   items bookending the message. "Retain the last compaction item" still resolves correctly (last =
+   only). This is the third distinct shape across three models; treat the caveat against assuming a
+   fixed count or position as settled.
+
+**Fact survival: both facts, 3 of 3 runs**, tools withheld — including the tool-derived one that
+existed only inside a `function_call_output` and that `gpt-5.1` lost. `gpt-5.6-luna` tracks the
+`gpt-5.2`/`gpt-5.4` pattern, not `gpt-5.1`'s.
+
+**Free-prefix hypothesis: CONFIRMED, with the control Round 2 lacked.**
+
+Round 2 inferred the prefix was free from flat token counts across prefix sizes. Flat counts alone
+cannot distinguish "the server ignores the prefix" from "the prefix never reached the wire" — a
+harness bug produces identical numbers. Round 3 added the missing control:
+
+| Call | Body bytes | `input_tokens` |
+| --- | --- | --- |
+| `[question]` alone — true baseline | 314 | 68 |
+| `[large_filler, question]`, **no compaction item** | 8,587 | **1,434** |
+
+The filler bills at **+1,366 tokens** when nothing precedes it, so it is genuinely transmitted and
+genuinely large. With a compaction item in front of it:
+
+| Variant | Body bytes | `input_tokens` |
+| --- | --- | --- |
+| empty prefix | 3,977 | 828 |
+| small prefix | 4,081 | 828 |
+| large prefix (1,081 words / 1,366 tokens) | **12,250** | 828 |
+
+Request bodies vary by more than 8 KB while `input_tokens` does not move. The prefix reaches the
+server and is billed as if absent. Reproduced at a different absolute value (774 in the first run,
+828 here) with an independent compaction item; the flatness is what reproduced.
+
+**Consequence for Step 4:** retain `[...userTurnItems, last compaction item]`. `/undo`, `/rewind`
+and `getLastUserMessage` keep working at no measured wire cost.
+
+**Trust boundary.** One model, one fixture, one day. The billing behaviour this rests on is a server
+property that could change without notice, and no unit test can catch a regression in it — it is
+visible only in token accounting. Re-run this control when adding a model or on any unexplained cost
+increase.
+
 ### Reproducing
 
 Probe scripts are in this session's scratchpad, not the repo — they hit the live API and cost money,
@@ -505,6 +567,14 @@ Small, and confined to the OpenAI adapter.
   add bespoke recovery — but do consider disabling compaction for the remainder of the session after
   one such failure, so a model that unexpectedly rejects the parameter does not fail every turn.
 
+- **Distinguish the two failure classes.** [Round 3](#round-3--gpt-56-luna-and-the-free-prefix-hypothesis-under-control-2026-08-06)
+  found the failure surface is not uniform: an *unsupported model* fails as an opaque
+  `500 server_error`, while an *invalid parameter value* fails as a typed
+  `400 integer_below_min_value`. Only the 500 should disable compaction for the session — a 400 is a
+  configuration error that is fixable and will recur identically on every model, so silently
+  disabling the feature on it hides a bug the user could correct. A "500 ⇒ unsupported" check does
+  not see the 400 at all.
+
 Tests: unit tests asserting the parameter is present for a supported model, absent for an
 unsupported one, and absent for a non-`openai` provider.
 
@@ -528,11 +598,16 @@ benefit at all.
       normal append
   ```
 
-  **Settle the retained prefix here.** Either `[]` (simplest, but `/undo` and `/rewind` go blind) or
-  Term2's user-turn items (keeps them working, measured free). Verify the free-prefix hypothesis
-  from [Round 2](#round-2--auto-compaction-on-gpt-54) against two or three history sizes before
-  committing — the failure mode if it is wrong is silently paying for the full transcript every
-  turn, which no test will notice unless it asserts on token counts.
+  **The retained prefix is settled: use Term2's user-turn items.** The free-prefix hypothesis was
+  verified under control in [Round 3](#round-3--gpt-56-luna-and-the-free-prefix-hypothesis-under-control-2026-08-06)
+  — a 1,366-token prefix bills in full with no compaction item in front of it, and bills as zero
+  with one, across request bodies differing by 8 KB. So retain `[...userTurnItems, lastCompaction]`
+  rather than `[compaction]` alone: `/undo`, `/rewind` and `getLastUserMessage` keep working at no
+  measured wire cost.
+
+  This rests on a server billing property, not on anything Term2 controls, and **no unit test can
+  catch it regressing** — it is visible only in token accounting. Do not add a test that pretends
+  to; instead re-run Round 3's control when adding a model or on any unexplained cost increase.
 
   This is `ConversationStore.replaceHistory()` (`conversation-store.ts:145`), which already exists
   for the full-history transport case. Reuse it; do not add a second replacement path.
@@ -570,7 +645,11 @@ Under `agent.` in `settings-schema.ts`:
 | Key | Type | Default |
 | --- | --- | --- |
 | `agent.contextCompaction.enabled` | boolean | `false` |
-| `agent.contextCompaction.compactThreshold` | positive int | conservative — see below |
+| `agent.contextCompaction.compactThreshold` | int `>= 1000` | conservative — see below |
+
+`compactThreshold` has a **hard server-enforced minimum of 1000** — below it the API returns
+`400 integer_below_min_value` ([Round 3](#round-3--gpt-56-luna-and-the-free-prefix-hypothesis-under-control-2026-08-06)).
+Validate it in the schema so the failure surfaces at settings time rather than as a failed turn.
 
 `compactThreshold` maps straight onto the API's `compact_threshold`. Choose the default with the
 cost table from [Round 2](#round-2--auto-compaction-on-gpt-54) in hand: each fire costs ~600 output

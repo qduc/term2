@@ -703,18 +703,17 @@ export const formatToolArgs = (
         return `(global + project)${limit}`;
       }
       case 'memory_get':
-        return `"${normalizedArgs.id ?? ''}" (${normalizedArgs.scope ?? 'global'})`;
       case 'memory_search':
-        return `for "${normalizedArgs.query ?? ''}" (${normalizedArgs.scope ?? 'global'})`;
+        return `for "${normalizedArgs.query ?? normalizedArgs.id ?? ''}"`;
       case 'memory_create': {
         const id = normalizedArgs.id ?? '';
         const title = normalizedArgs.title ?? '';
-        return `"${id}" - "${title}" (${normalizedArgs.scope ?? 'global'})`;
+        return `"${id}" - "${title}" (${normalizedArgs.scope ?? ''})`;
       }
       case 'memory_update':
-        return `"${normalizedArgs.id ?? ''}" (${normalizedArgs.scope ?? 'global'})`;
+        return `"${normalizedArgs.id ?? ''}" (${normalizedArgs.scope ?? ''})`;
       case 'memory_delete':
-        return `"${normalizedArgs.id ?? ''}" (${normalizedArgs.scope ?? 'global'})`;
+        return `"${normalizedArgs.id ?? ''}" (${normalizedArgs.scope ?? ''})`;
 
       default: {
         // Generic fallback for unknown tools

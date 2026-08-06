@@ -558,7 +558,7 @@ Output:
 
 Purpose:
 
-Load one full memory after identifying it as relevant.
+Load one full memory after identifying it as relevant. Checks both scopes in order (global then project) and returns the first match, including its scope.
 
 Input:
 
@@ -572,17 +572,18 @@ Output:
 
 ```ts
 {
+  scope: MemoryScope;
   memory: Memory;
 }
 ```
 
-Return a structured not-found error when absent.
+Return a structured not-found error when absent in both scopes.
 
 ### `memory_search`
 
 Purpose:
 
-Find likely memories using deterministic text search.
+Find likely memories using deterministic text search across both scopes.
 
 Input:
 
@@ -597,7 +598,7 @@ Output:
 
 ```ts
 {
-  results: MemorySearchResult[];
+  results: Array<MemorySearchResult & { scope: MemoryScope }>;
 }
 ```
 
@@ -605,18 +606,19 @@ Output:
 
 Purpose:
 
-Persist new durable knowledge.
+Persist new durable knowledge. Requires a scope specifying which store to write to.
 
 Input:
 
 ```ts
-CreateMemoryInput
+CreateMemoryInput & { scope: MemoryScope }
 ```
 
 Output:
 
 ```ts
 {
+  scope: MemoryScope;
   memory: Memory;
 }
 ```
@@ -625,12 +627,13 @@ Output:
 
 Purpose:
 
-Correct, refine, or extend an existing memory.
+Correct, refine, or extend an existing memory. Requires a scope specifying which store to write to.
 
 Input:
 
 ```ts
 {
+  scope: MemoryScope;
   id: string;
   title?: string;
   summary?: string;
@@ -643,6 +646,7 @@ Output:
 
 ```ts
 {
+  scope: MemoryScope;
   memory: Memory;
 }
 ```
@@ -651,12 +655,13 @@ Output:
 
 Purpose:
 
-Remove incorrect or no-longer-useful memory.
+Remove incorrect or no-longer-useful memory. Requires a scope specifying which store to delete from.
 
 Input:
 
 ```ts
 {
+  scope: MemoryScope;
   id: string;
 }
 ```
@@ -665,6 +670,7 @@ Output:
 
 ```ts
 {
+  scope: MemoryScope;
   deleted: boolean;
 }
 ```

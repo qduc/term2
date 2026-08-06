@@ -6,13 +6,14 @@ import {
   MemoryAlreadyExistsError,
   MemoryNotFoundError,
   MemoryStorageError,
+  type Memory,
   type MemoryStore,
 } from '../../services/memory/memory-store.js';
 
 export type MemoryScope = 'global' | 'project';
 export type MemoryStores = Record<MemoryScope, MemoryStore>;
 
-const scope = z.enum(['global', 'project']).optional().describe('Memory scope. Defaults to global.');
+const scope = z.enum(['global', 'project']).describe('Memory scope to write to.');
 
 function normalizeStores(stores: MemoryStore | MemoryStores): MemoryStores {
   return 'list' in stores ? { global: stores, project: stores } : stores;
@@ -85,10 +86,6 @@ function definition<S extends z.ZodObject<any>>(
 
 export function createMemoryToolDefinitions(input: MemoryStore | MemoryStores): ToolDefinition[] {
   const stores = normalizeStores(input);
-  const select = (requested?: MemoryScope) => {
-    const selectedScope = requested ?? 'global';
-    return { scope: selectedScope, store: stores[selectedScope] };
-  };
   return [
     definition(
       'memory_list',
@@ -102,48 +99,63 @@ export function createMemoryToolDefinitions(input: MemoryStore | MemoryStores): 
     ),
     definition(
       'memory_get',
-      'Load one memory from the selected global or project scope.',
-      z.object({ scope, id }),
-      async ({ scope: requestedScope, id }) => {
-        const { scope, store } = select(requestedScope);
-        const memory = await store.get(id);
-        if (!memory) throw new MemoryNotFoundError(id);
-        return { scope, memory };
+      'Load one memory by ID, checking both the global and project scopes.',
+      z.object({ id }).strict(),
+      async ({ id }) => {
+        for (const scope of ['global', 'project'] as const) {
+          const memory = await stores[scope].get(id);
+          if (memory) return { scope, memory };
+        }
+        throw new MemoryNotFoundError(id);
       },
     ),
     definition(
       'memory_search',
-      'Search the selected global or project memory scope using deterministic local text matching.',
-      z.object({ scope, query: z.string(), limit: z.number().int().positive().optional() }),
-      async ({ scope: requestedScope, query, ...options }) => {
-        const { scope, store } = select(requestedScope);
-        return { scope, results: await store.search(query, options) };
+      'Search both the global and project memory scopes using deterministic local text matching.',
+      z.object({ query: z.string(), limit: z.number().int().positive().optional() }).strict(),
+      async ({ query, ...options }) => {
+        const [global, project] = await Promise.all([
+          stores.global.search(query, options),
+          stores.project.search(query, options),
+        ]);
+        return {
+          results: [
+            ...global.map((result) => ({ scope: 'global' as const, ...result })),
+            ...project.map((result) => ({ scope: 'project' as const, ...result })),
+          ],
+        };
       },
     ),
     definition(
       'memory_retrieve',
-      'Search and load relevant memories from the selected global or project scope.',
-      z.object({ scope, query: z.string(), limit: z.number().int().positive().optional() }),
-      async ({ scope: requestedScope, query, ...options }) => {
-        const { scope, store } = select(requestedScope);
-        const results = await store.search(query, options);
-        const memories = [];
-        const unavailableIds: string[] = [];
-        for (const result of results) {
-          if (!result.available) {
-            unavailableIds.push(result.memory.id);
-            continue;
+      'Search and load relevant memories across both the global and project scopes.',
+      z.object({ query: z.string(), limit: z.number().int().positive().optional() }).strict(),
+      async ({ query, ...options }) => {
+        const searchAcross = async (scope: MemoryScope) => {
+          const results = await stores[scope].search(query, options);
+          const memories: Array<{ scope: MemoryScope; memory: Memory }> = [];
+          const unavailableIds: Array<{ scope: MemoryScope; id: string }> = [];
+          for (const result of results) {
+            if (!result.available) {
+              unavailableIds.push({ scope, id: result.memory.id });
+              continue;
+            }
+            try {
+              const memory = await stores[scope].get(result.memory.id);
+              if (memory) memories.push({ scope, memory });
+              else unavailableIds.push({ scope, id: result.memory.id });
+            } catch (error) {
+              if (!(error instanceof MemoryStorageError) && !(error instanceof MemoryNotFoundError)) throw error;
+              unavailableIds.push({ scope, id: result.memory.id });
+            }
           }
-          try {
-            const memory = await store.get(result.memory.id);
-            if (memory) memories.push(memory);
-            else unavailableIds.push(result.memory.id);
-          } catch (error) {
-            if (!(error instanceof MemoryStorageError) && !(error instanceof MemoryNotFoundError)) throw error;
-            unavailableIds.push(result.memory.id);
-          }
-        }
-        return { scope, memories, unavailableIds };
+          return { memories, unavailableIds };
+        };
+        const [global, project] = await Promise.all([searchAcross('global'), searchAcross('project')]);
+        return {
+          memories: [...global.memories, ...project.memories],
+          unavailableIds: [...global.unavailableIds, ...project.unavailableIds],
+        };
       },
     ),
     definition(
@@ -157,9 +169,9 @@ export function createMemoryToolDefinitions(input: MemoryStore | MemoryStores): 
         content: z.string(),
         tags: z.array(z.string()).optional(),
       }),
-      async ({ scope: requestedScope, ...params }) => {
-        const { scope, store } = select(requestedScope);
-        return { scope, memory: await store.create(params) };
+      async ({ scope, ...params }) => {
+        const memory = await stores[scope].create(params);
+        return { scope, memory };
       },
     ),
     definition(
@@ -170,9 +182,9 @@ export function createMemoryToolDefinitions(input: MemoryStore | MemoryStores): 
         .refine(({ id: _, scope: __, ...input }) => Object.values(input).some((value) => value !== undefined), {
           message: 'At least one field must be provided for a memory update.',
         }),
-      async ({ scope: requestedScope, id, ...input }) => {
-        const { scope, store } = select(requestedScope);
-        return { scope, memory: await store.update(id, input) };
+      async ({ scope, id, ...input }) => {
+        const memory = await stores[scope].update(id, input);
+        return { scope, memory };
       },
       true,
     ),
@@ -180,9 +192,9 @@ export function createMemoryToolDefinitions(input: MemoryStore | MemoryStores): 
       'memory_delete',
       'Delete a memory from the selected global or project scope.',
       z.object({ scope, id }),
-      async ({ scope: requestedScope, id }) => {
-        const { scope, store } = select(requestedScope);
-        return { scope, deleted: await store.remove(id) };
+      async ({ scope, id }) => {
+        const deleted = await stores[scope].remove(id);
+        return { scope, deleted };
       },
       true,
     ),

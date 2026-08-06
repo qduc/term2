@@ -289,12 +289,9 @@ it('formatToolArgs parses stringified JSON args', () => {
 it('formatToolArgs includes memory scope so global and project calls are distinguishable', () => {
   expect(formatToolArgs('memory_list', {})).toBe('(global + project)');
   expect(formatToolArgs('memory_list', { limit: 5 })).toBe('(global + project) (limit: 5)');
-  expect(formatToolArgs('memory_search', { scope: 'project', query: 'resume-path-teardown' })).toBe(
-    'for "resume-path-teardown" (project)',
-  );
-  expect(formatToolArgs('memory_get', { scope: 'global', id: 'resume-path-teardown' })).toBe(
-    '"resume-path-teardown" (global)',
-  );
+  expect(formatToolArgs('memory_search', { query: 'resume-path-teardown' })).toBe('for "resume-path-teardown"');
+  expect(formatToolArgs('memory_get', { id: 'resume-path-teardown' })).toBe('for "resume-path-teardown"');
+  expect(formatToolArgs('memory_create', { id: 'x', title: 'T', scope: 'project' })).toBe('"x" - "T" (project)');
 });
 
 it('formatToolArgs summarizes search replacement batches in concise mode', () => {

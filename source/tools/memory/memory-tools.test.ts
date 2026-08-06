@@ -57,27 +57,67 @@ it('exposes memory operations with structured responses', async () => {
   });
   expect(JSON.parse((await tools[1].execute({ id: memory.id })) as string)).toEqual({ scope: 'global', memory });
   expect(JSON.parse((await tools[2].execute({ query: 'rules' })) as string)).toMatchObject({
-    scope: 'global',
-    results: [{ memory }],
+    results: [
+      { scope: 'global', memory },
+      { scope: 'project', memory },
+    ],
   });
   expect(JSON.parse((await tools[3].execute({ query: 'rules' })) as string)).toEqual({
-    scope: 'global',
-    memories: [memory],
+    memories: [
+      { scope: 'global', memory },
+      { scope: 'project', memory },
+    ],
     unavailableIds: [],
   });
-  expect(JSON.parse((await tools[4].execute(memory)) as string)).toEqual({ scope: 'global', memory });
-  expect(JSON.parse((await tools[5].execute({ id: memory.id, title: 'New rules' })) as string)).toEqual({
+  expect(JSON.parse((await tools[4].execute({ ...memory, scope: 'global' })) as string)).toEqual({
     scope: 'global',
     memory,
   });
-  expect(JSON.parse((await tools[6].execute({ id: memory.id })) as string)).toEqual({ scope: 'global', deleted: true });
+  expect(
+    JSON.parse((await tools[5].execute({ id: memory.id, title: 'New rules', scope: 'global' })) as string),
+  ).toEqual({
+    scope: 'global',
+    memory,
+  });
+  expect(JSON.parse((await tools[6].execute({ id: memory.id, scope: 'global' })) as string)).toEqual({
+    scope: 'global',
+    deleted: true,
+  });
   expect(
     tools[4].parameters.safeParse({ id: '../escape', title: 'Title', summary: 'Summary', content: 'Content' }).success,
   ).toBe(false);
   expect(
-    tools[4].parameters.safeParse({ id: 'valid-memory', title: 'Title', summary: 'Summary', content: 'Content' })
-      .success,
+    tools[4].parameters.safeParse({
+      scope: 'global',
+      id: 'valid-memory',
+      title: 'Title',
+      summary: 'Summary',
+      content: 'Content',
+    }).success,
   ).toBe(true);
+});
+
+it('requires scope only on write tools', async () => {
+  const tools = createMemoryToolDefinitions(store);
+  const [list, get, search, retrieve, create, update, remove] = tools;
+
+  expect(list.parameters.safeParse({ scope: 'global' }).success).toBe(false);
+  expect(list.parameters.safeParse({}).success).toBe(true);
+  expect(get.parameters.safeParse({ scope: 'global', id: memory.id }).success).toBe(false);
+  expect(get.parameters.safeParse({ id: memory.id }).success).toBe(true);
+  for (const tool of [search, retrieve]) {
+    expect(tool.parameters.safeParse({ scope: 'global', query: 'x' }).success).toBe(false);
+    expect(tool.parameters.safeParse({ query: 'x' }).success).toBe(true);
+  }
+  // Write tools require a scope and reject calls that omit it.
+  expect(create.parameters.safeParse({ id: memory.id, title: 'T', summary: 'S', content: 'C' }).success).toBe(false);
+  expect(
+    create.parameters.safeParse({ scope: 'global', id: memory.id, title: 'T', summary: 'S', content: 'C' }).success,
+  ).toBe(true);
+  expect(update.parameters.safeParse({ id: memory.id, summary: 'Updated' }).success).toBe(false);
+  expect(update.parameters.safeParse({ scope: 'global', id: memory.id, summary: 'Updated' }).success).toBe(true);
+  expect(remove.parameters.safeParse({ id: memory.id }).success).toBe(false);
+  expect(remove.parameters.safeParse({ scope: 'global', id: memory.id }).success).toBe(true);
 });
 
 it('retrieves other memories when one result becomes unavailable', async () => {
@@ -95,9 +135,14 @@ it('retrieves other memories when one result becomes unavailable', async () => {
   });
 
   expect(JSON.parse((await tools[3].execute({ query: 'rules' })) as string)).toEqual({
-    scope: 'global',
-    memories: [memory],
-    unavailableIds: [unavailable.id],
+    memories: [
+      { scope: 'global', memory },
+      { scope: 'project', memory },
+    ],
+    unavailableIds: [
+      { scope: 'global', id: unavailable.id },
+      { scope: 'project', id: unavailable.id },
+    ],
   });
 });
 
@@ -106,15 +151,15 @@ it('requires approval for destructive memory mutations', async () => {
   const update = tools.find((tool) => tool.name === 'memory_update')!;
   const remove = tools.find((tool) => tool.name === 'memory_delete')!;
 
-  expect(await update.needsApproval({ id: memory.id, summary: 'Updated' })).toBe(true);
-  expect(await remove.needsApproval({ id: memory.id })).toBe(true);
+  expect(await update.needsApproval({ scope: 'global', id: memory.id, summary: 'Updated' })).toBe(true);
+  expect(await remove.needsApproval({ scope: 'global', id: memory.id })).toBe(true);
 });
 
 it('requires memory updates to include a changed field', () => {
   const update = createMemoryToolDefinitions(store).find((tool) => tool.name === 'memory_update')!;
 
   expect(update.parameters.safeParse({ id: memory.id }).success).toBe(false);
-  expect(update.parameters.safeParse({ id: memory.id, summary: 'Updated' }).success).toBe(true);
+  expect(update.parameters.safeParse({ scope: 'global', id: memory.id, summary: 'Updated' }).success).toBe(true);
 });
 
 it('converts domain failures to safe tool errors without paths or stacks', async () => {

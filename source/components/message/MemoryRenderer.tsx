@@ -151,7 +151,7 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, renderStandardHeader }) =
                 {r.memory?.title || r.memory?.id}
               </Text>
               <Text color={COLOR_MUTED} dimColor>
-                matched: {(r.matchedFields || []).join(', ') || 'n/a'}
+                [{r.scope || 'all'}] matched: {(r.matchedFields || []).join(', ') || 'n/a'}
               </Text>
               {r.memory?.summary ? <Text color={COLOR_TOOL_OUTPUT}>{truncate(r.memory.summary, 140)}</Text> : null}
             </Box>

@@ -788,6 +788,72 @@ it('preserves a genuine stream error that races with intentional cancellation', 
   await expect(active).rejects.toBe(providerError);
 });
 
+it('classifies non-queued sendMessage completion without terminal event as cancellation when aborted', async () => {
+  let releaseActive!: () => void;
+  const activeReleased = new Promise<void>((resolve) => {
+    releaseActive = resolve;
+  });
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start() {
+        await activeReleased;
+        // Ends generator without terminal event
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      abort: () => releaseActive(),
+    },
+  });
+
+  const active = adapter.sendMessage('active');
+  adapter.abort();
+
+  await expect(active).rejects.toMatchObject({ name: 'AbortError' });
+});
+
+it('classifies handleApprovalDecision completion without terminal event as cancellation when aborted', async () => {
+  let releaseActive!: () => void;
+  const activeReleased = new Promise<void>((resolve) => {
+    releaseActive = resolve;
+  });
+  const pendingApproval = { token: 'tok-1', interruption: {} };
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: {
+      getPending: () => pendingApproval as any,
+      getPendingInterruption: () => ({}),
+    } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      async *continueAfterApproval() {
+        await activeReleased;
+        // Ends generator without terminal event
+      },
+      abort: () => releaseActive(),
+    },
+  });
+
+  const decision = adapter.handleApprovalDecision('y');
+  adapter.abort();
+
+  await expect(decision).rejects.toMatchObject({ name: 'AbortError' });
+});
+
 it('force-settles the active request when cancel completes even if the turn ignores abort', async () => {
   let queueState: string | undefined;
   const adapter = new ConversationAdapter({

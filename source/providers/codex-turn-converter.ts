@@ -44,6 +44,10 @@ export function toCodexResponsesItem(item: StreamedModelTurnInput): unknown {
         call_id: requireNonEmptyString(item.id, 'tool result id'),
         output: toCodexToolResultOutput(item.output),
       };
+    case 'provider_opaque':
+      throw new Error(
+        `Refusing to serialize provider_opaque from '${item.provider}' into a Codex request: opaque items are only valid on the provider that produced them`,
+      );
     default:
       return assertNever(item, 'StreamedModelTurnInput');
   }

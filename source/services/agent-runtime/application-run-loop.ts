@@ -1180,7 +1180,19 @@ function normalizeReasoningText(value: unknown): string {
     .join('');
 }
 
+/** True when the adapter marked this item as provider-native and opaque. */
+function isProviderOpaque(
+  item: ProviderInputItem,
+): item is ProviderInputItem & { providerOpaque: { provider: string } } {
+  const marker = item.providerOpaque;
+  return typeof marker?.provider === 'string' && marker.provider.length > 0;
+}
+
 function normalizeInputItem(item: ProviderInputItem): StreamedModelTurnInput[] {
+  if (isProviderOpaque(item)) {
+    const { providerOpaque: _marker, ...providerItem } = item;
+    return [{ type: 'provider_opaque', provider: item.providerOpaque.provider, item: providerItem }];
+  }
   if (item.type === 'function_call') {
     return [
       {

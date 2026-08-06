@@ -358,6 +358,84 @@ it('emits direct typed completion output and usage without compatibility envelop
   ]);
 });
 
+it('turns an unknown Responses output item into provider_opaque instead of throwing', async () => {
+  const model = new OpenAIResponsesModelWithPromptCacheKey(
+    {
+      responses: {
+        create: async () =>
+          (async function* () {
+            yield {
+              type: 'response.completed',
+              response: {
+                id: 'resp-compact',
+                output: [
+                  { type: 'compaction', id: 'cmp_1', encrypted_content: 'opaque-blob' },
+                  { type: 'message', content: [{ type: 'output_text', text: 'answer' }] },
+                ],
+                usage: {},
+              },
+            };
+          })(),
+      },
+    },
+    'gpt-5.4',
+  );
+  await expect(collect(model.stream({ input: [], tools: [] }))).resolves.toEqual([
+    {
+      type: 'completion',
+      responseId: 'resp-compact',
+      output: [
+        {
+          type: 'provider_opaque',
+          provider: 'openai',
+          item: { type: 'compaction', id: 'cmp_1', encrypted_content: 'opaque-blob' },
+        },
+        { type: 'message', content: [{ type: 'text', text: 'answer' }] },
+      ],
+      usage: {},
+    },
+  ]);
+});
+
+it('splices an openai provider_opaque input item verbatim into the request', async () => {
+  let capturedBody: any;
+  const client = {
+    responses: {
+      create: async (body: any) => {
+        capturedBody = body;
+        return { id: 'resp_1', output: [], usage: {} };
+      },
+    },
+  };
+
+  const model = new OpenAIResponsesModelWithPromptCacheKey(client, 'gpt-5.4-nano');
+  await model.getResponse({
+    input: [
+      {
+        type: 'provider_opaque',
+        provider: 'openai',
+        item: { type: 'compaction', id: 'cmp_1', encrypted_content: 'opaque-blob' },
+      },
+    ],
+    tools: [],
+  });
+
+  expect(capturedBody.input).toEqual([{ type: 'compaction', id: 'cmp_1', encrypted_content: 'opaque-blob' }]);
+});
+
+it('refuses to splice a non-openai provider_opaque item into an OpenAI request', async () => {
+  const client = {
+    responses: { create: async () => ({ id: 'resp_1', output: [], usage: {} }) },
+  };
+  const model = new OpenAIResponsesModelWithPromptCacheKey(client, 'gpt-5.4-nano');
+  await expect(
+    model.getResponse({
+      input: [{ type: 'provider_opaque', provider: 'codex', item: { type: 'compaction', encrypted_content: 'blob' } }],
+      tools: [],
+    }),
+  ).rejects.toThrow(/provider_opaque from 'codex'/);
+});
+
 it('replays native reasoning with encrypted_content and never emits provider_data', async () => {
   let capturedBody: any;
   const model = new OpenAIResponsesModelWithPromptCacheKey(

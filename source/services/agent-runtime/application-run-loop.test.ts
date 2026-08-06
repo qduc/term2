@@ -23,6 +23,40 @@ const agent: ApplicationAgent = {
   tools: [],
 };
 
+describe('normalizeApplicationInput opaque lane', () => {
+  it('carries a providerOpaque-marked item through untouched as provider_opaque', () => {
+    const history = [
+      {
+        type: 'compaction',
+        id: 'cmp_1',
+        encrypted_content: 'opaque-blob',
+        providerOpaque: { provider: 'openai' },
+      },
+    ] as any;
+    expect(normalizeApplicationInput(history)).toEqual([
+      {
+        type: 'provider_opaque',
+        provider: 'openai',
+        item: { type: 'compaction', id: 'cmp_1', encrypted_content: 'opaque-blob' },
+      },
+    ]);
+  });
+
+  it('strips the internal providerOpaque marker from the carried wire item', () => {
+    const history = [{ type: 'compaction', encrypted_content: 'blob', providerOpaque: { provider: 'openai' } }] as any;
+    const normalized = normalizeApplicationInput(history);
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0]).toMatchObject({ type: 'provider_opaque', provider: 'openai' });
+    expect(JSON.stringify(normalized)).not.toContain('providerOpaque');
+  });
+
+  it('still throws for an unknown item type without the opaque marker', () => {
+    expect(() => normalizeApplicationInput([{ type: 'compaction', id: 'cmp_1' }] as any)).toThrow(
+      'Unsupported restored input item type: compaction',
+    );
+  });
+});
+
 async function collect(stream: AsyncIterable<unknown>): Promise<unknown[]> {
   const events: unknown[] = [];
   for await (const event of stream) events.push(event);

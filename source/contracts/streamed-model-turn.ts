@@ -112,6 +112,16 @@ export type StreamedModelTurnInput =
       readonly type: 'tool_result';
       readonly id: string;
       readonly output: string | readonly StreamedModelToolResultPart[];
+    }
+  | {
+      /**
+       * A provider-native item Term2 does not model, carried untouched across
+       * the run loop. Only the provider named by `provider` may re-serialize
+       * it; every other consumer must reject it explicitly.
+       */
+      readonly type: 'provider_opaque';
+      readonly provider: string;
+      readonly item: Readonly<Record<string, unknown>>;
     };
 
 export interface StreamedModelTool {
@@ -150,7 +160,13 @@ export type StreamedModelTurnOutput =
       readonly text: string;
       readonly providerMetadata?: StreamedModelProviderOptions;
     }
-  | { readonly type: 'tool_call'; readonly id: string; readonly name: string; readonly arguments: string };
+  | { readonly type: 'tool_call'; readonly id: string; readonly name: string; readonly arguments: string }
+  | {
+      /** Provider-native output item, carried untouched; see StreamedModelTurnInput. */
+      readonly type: 'provider_opaque';
+      readonly provider: string;
+      readonly item: Readonly<Record<string, unknown>>;
+    };
 
 export interface StreamedModelUsage {
   readonly inputTokens?: number;

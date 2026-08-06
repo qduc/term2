@@ -451,6 +451,20 @@ it.sequential('settings change triggers rebuild via subscribeToSettings', () => 
   expect(newAgent, 'agent was rebuilt after settings change').not.toBe(originalAgent);
 });
 
+it.sequential('context compaction settings changes trigger an agent rebuild', () => {
+  ensureProviderRegistered();
+
+  const result = createDeps();
+  const settings = result.settings as ReturnType<typeof createMockSettings>;
+  const config = new AgentConfiguration({ model: 'gpt-4o' }, result.deps);
+  const originalAgent = config.getAgent();
+
+  config.subscribeToSettings();
+  settings._triggerChange('agent.contextCompaction.compactThreshold');
+
+  expect(config.getAgent()).not.toBe(originalAgent);
+});
+
 it.sequential('settings change with non-rebuild key does not trigger rebuild', () => {
   ensureProviderRegistered();
 

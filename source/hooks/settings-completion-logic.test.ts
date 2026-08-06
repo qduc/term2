@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import { SETTINGS_CATEGORIES } from './settings-completion-config.js';
 import { clampIndex, filterSettingsByCategory, getSettingCategory } from './settings-completion-logic.js';
+import { SETTING_KEYS } from '../services/settings/settings-service.js';
 
 it('settings completion config exposes stable category ids', () => {
   expect(SETTINGS_CATEGORIES.map((item) => item.id)).toEqual([
@@ -20,6 +21,8 @@ it('getSettingCategory maps known keys to expected categories', () => {
   expect(getSettingCategory('agent.balancedModel').id).toBe('models');
   expect(getSettingCategory('agent.cheapModel').id).toBe('models');
   expect(getSettingCategory('agent.choreModel').id).toBe('models');
+  expect(getSettingCategory(SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED).id).toBe('models');
+  expect(getSettingCategory(SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD).id).toBe('models');
   expect(getSettingCategory('agent.autoApproveReasoningEffort').id).toBe('safety');
   expect(getSettingCategory('shell.timeout').id).toBe('tools');
   expect(getSettingCategory('agent.subagentWorkerModel').id).toBe('models');

@@ -264,6 +264,17 @@ function buildModelSettings({
     };
   }
 
+  const contextCompactionEnabled = deps.settings.get('agent.contextCompaction.enabled');
+  if (contextCompactionEnabled && deps.providerId === 'openai') {
+    modelSettings.providerData = {
+      ...(modelSettings.providerData || {}),
+      contextCompaction: {
+        enabled: true,
+        threshold: deps.settings.get('agent.contextCompaction.compactThreshold'),
+      },
+    };
+  }
+
   if (deps.providerId === 'codex') {
     modelSettings.store = false;
     modelSettings.include = ['reasoning.encrypted_content'];

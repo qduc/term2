@@ -1,5 +1,6 @@
 import { scoreSubsequence } from '../utils/subsequence-filter.js';
 import { getProvider } from '../providers/index.js';
+import { getModelContextWindow } from '../providers/model-catalog/catalog.js';
 import type { ILoggingService, ISettingsService } from './service-interfaces.js';
 
 export type ModelInfo = {
@@ -7,6 +8,8 @@ export type ModelInfo = {
   name?: string;
   provider: string;
   default_reasoning_level?: string;
+  /** Context window in tokens from the vendored model catalog, when known. */
+  contextWindow?: number;
 };
 
 type FetchFn = (url: string, options?: any) => Promise<any>;
@@ -43,6 +46,7 @@ export async function fetchModels(
     const models: ModelInfo[] = rawModels.map((m) => ({
       ...m,
       provider,
+      contextWindow: getModelContextWindow(provider, m.id),
     }));
 
     cache.set(cacheKey, models);

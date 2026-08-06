@@ -102,6 +102,28 @@ it.sequential('fetchModels uses OpenAI models endpoint when provider is openai',
   expect(calls[0].options?.headers?.Authorization).toBeTruthy();
 });
 
+it.sequential('fetchModels attaches contextWindow from the vendored catalog', async () => {
+  const fakeFetch = async () => ({
+    ok: true,
+    json: async () => ({ data: [{ id: 'gpt-5.6-sol' }, { id: 'gpt-4o' }, { id: 'unknown-model-xyz' }] }),
+  });
+
+  const models = await fetchModels(
+    {
+      settingsService: createMockSettingsService(),
+      loggingService: { warn: () => {} } as any,
+    },
+    'openai',
+    fakeFetch as any,
+  );
+
+  const byId = new Map(models.map((m) => [m.id, m]));
+  expect(byId.get('gpt-5.6-sol')?.contextWindow).toBe(272000);
+  expect(byId.get('gpt-4o')?.contextWindow).toBe(128000);
+  // Models the catalog does not know keep contextWindow undefined.
+  expect(byId.get('unknown-model-xyz')?.contextWindow).toBeUndefined();
+});
+
 it.sequential('fetchModels uses /v1/models for custom OpenAI-compatible provider', async () => {
   const providerId = `lmstudio-test-${Date.now()}-${Math.random()}`;
   const settingsService = createMockSettingsService({

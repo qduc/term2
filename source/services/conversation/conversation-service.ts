@@ -17,6 +17,7 @@ import type {
   ConversationAdapter,
   ConversationEventSink,
   QueuedTurnStartObserver,
+  SubmissionMutation,
 } from './conversation-adapter.js';
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 import type { InputSurgeDecision } from '../input-surge-guard.js';
@@ -326,6 +327,27 @@ export class ConversationService {
   }
 
   /**
+   * Retract a submission addressed by id, wherever it currently lives (a
+   * still-waiting steer or a queued follow-up — see `## The three stages` in
+   * `docs/plans/queue-editing.md`). Forwards to the adapter verbatim; see
+   * {@link ConversationAdapter.retractSubmission} for the routing and outcome
+   * contract.
+   */
+  retractSubmission(id: string): Promise<SubmissionMutation> {
+    return this.#adapter.retractSubmission(id);
+  }
+
+  /**
+   * Replace a submission's content in place, without changing its stage or
+   * position. Forwards to the adapter verbatim; see
+   * {@link ConversationAdapter.editSubmission} for the routing and outcome
+   * contract.
+   */
+  editSubmission(id: string, turn: UserTurn): Promise<SubmissionMutation> {
+    return this.#adapter.editSubmission(id, turn);
+  }
+
+  /**
    * Deliver a user message into the turn already running, so the model reads it
    * mid-turn — after the tool results of the round in flight — instead of after
    * the whole turn ends. Nothing is cancelled.
@@ -333,9 +355,13 @@ export class ConversationService {
    * Resolves false when the running turn offers no further request boundary
    * (it is finishing, or parked on an approval); the caller then sends the
    * message as its own turn.
+   *
+   * `options.id` is the submission's address (see `## The three stages`):
+   * passing it is what lets a later `retractSubmission`/`editSubmission` call
+   * reach this steer while it is still waiting for a request boundary.
    */
-  steerActiveTurn(input: string | UserTurn): Promise<boolean> {
-    return this.#adapter.steerActiveTurn(input);
+  steerActiveTurn(input: string | UserTurn, options?: { id?: string }): Promise<boolean> {
+    return this.#adapter.steerActiveTurn(input, options);
   }
 
   /** Deliver pre-built items into the running turn. See the adapter for terms. */

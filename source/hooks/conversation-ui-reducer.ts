@@ -141,8 +141,8 @@ export type ConversationUIAction =
   | { type: 'queue/message_started'; id: string }
   /** A queued message was removed or rejected before execution started. */
   | { type: 'queue/message_removed'; id: string }
-  /** The user cancelled a pending queued message; drop the last entry from the pending list. */
-  | { type: 'queue/remove_last_pending' }
+  /** A pending submission (steer or queued) was edited in place; stage and position are unchanged. */
+  | { type: 'queue/message_edited'; id: string; text: string }
 
   // --- Compound resets ---
   /** Reset transient approval/processing/indicator state (used by stop, rewind, etc.). */
@@ -489,11 +489,15 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
         pendingQueuedMessages: state.pendingQueuedMessages.filter((m) => m.id !== action.id),
       };
 
-    case 'queue/remove_last_pending':
-      if (state.pendingQueuedMessages.length === 0) return state;
+    case 'queue/message_edited':
+      if (!state.pendingQueuedMessages.some((m) => m.id === action.id)) {
+        return state;
+      }
       return {
         ...state,
-        pendingQueuedMessages: state.pendingQueuedMessages.slice(0, -1),
+        pendingQueuedMessages: state.pendingQueuedMessages.map((m) =>
+          m.id === action.id ? { ...m, text: action.text } : m,
+        ),
       };
 
     // --- Compound resets ---

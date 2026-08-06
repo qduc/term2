@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ConversationOrchestrator } from './conversation-orchestrator.js';
+import { ConversationAdapter } from './conversation-adapter.js';
 import type { ConversationOrchestratorConfig, MessagePort, UIPort } from './conversation-orchestrator.types.js';
 import type { ConversationService } from './conversation-service.js';
 import type { ILoggingService } from '../service-interfaces.js';
@@ -60,6 +61,8 @@ function mockConversationService(): ConversationService {
     setQueueStateObserver: vi.fn(),
     setQueuedTurnStartObserver: vi.fn(),
     removeLastQueuedItem: vi.fn(async () => null),
+    retractSubmission: vi.fn(async () => ({ kind: 'unknown_id' })),
+    editSubmission: vi.fn(async () => ({ kind: 'unknown_id' })),
   } as unknown as ConversationService;
 }
 
@@ -98,7 +101,7 @@ function makeUIPort(): UIPort {
     onQueuedMessagePending: vi.fn(),
     onQueuedMessageStarted: vi.fn(),
     onQueuedMessageRemoved: vi.fn(),
-    onRemoveLastPendingMessage: vi.fn(),
+    onQueuedMessageEdited: vi.fn(),
   };
 }
 
@@ -511,7 +514,14 @@ describe('ConversationOrchestrator', () => {
 
     await orchestrator.sendUserMessage('change direction', { busyMode: 'steer' });
 
-    expect(steerActiveTurn).toHaveBeenCalledWith(expect.objectContaining({ text: 'change direction' }));
+    // The id passed here is what makes retractSubmission/editSubmission able
+    // to reach a pending steer at all (## Resume here — "Pass the id into the
+    // steer path"): the adapter only tracks an id in #pendingSteerIds while
+    // this call is outstanding.
+    expect(steerActiveTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ text: 'change direction' }),
+      expect.objectContaining({ id: expect.any(String) }),
+    );
     // No second turn is submitted: the message belongs to the turn in flight.
     expect(cfg.conversationService.sendMessage).not.toHaveBeenCalled();
     const appended = vi.mocked(cfg.messages.appendMessages).mock.calls[0]?.[0]?.[0] as any;
@@ -625,6 +635,246 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.ui.onQueuedMessageRemoved).toHaveBeenCalledWith('queued-1');
   });
 
+  it('retractPendingSubmission clears the pending indicator on applied and leaves it alone on too_late', async () => {
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    vi.mocked(cfg.conversationService.retractSubmission).mockResolvedValueOnce({
+      kind: 'applied',
+      stage: 'pending_steer',
+    });
+
+    const applied = await orchestrator.retractPendingSubmission('steer-1');
+
+    expect(applied).toEqual({ kind: 'applied', stage: 'pending_steer' });
+    expect(cfg.conversationService.retractSubmission).toHaveBeenCalledWith('steer-1');
+    expect(cfg.ui.onQueuedMessageRemoved).toHaveBeenCalledWith('steer-1');
+
+    vi.mocked(cfg.ui.onQueuedMessageRemoved!).mockClear();
+    vi.mocked(cfg.conversationService.retractSubmission).mockResolvedValueOnce({
+      kind: 'too_late',
+      stage: 'started',
+    });
+
+    const tooLate = await orchestrator.retractPendingSubmission('steer-2');
+
+    expect(tooLate).toEqual({ kind: 'too_late', stage: 'started' });
+    // On too_late the caller reports the outcome; UI state is left untouched.
+    expect(cfg.ui.onQueuedMessageRemoved).not.toHaveBeenCalled();
+  });
+
+  it('retractPendingSubmission never falls through to a resubmission — it never touches sendMessage or steerActiveTurn', async () => {
+    // Hazard 1 (## Resume here): a retracted steer resolves steerActiveTurn to
+    // false, identical to "no boundary left, queue it as a new submission".
+    // retractPendingSubmission must route through retractSubmission directly
+    // and must never call sendMessage/steerActiveTurn to service a retraction.
+    const cfg = makeConfig();
+    const steerActiveTurn = vi.fn(async () => false);
+    (cfg.conversationService as any).steerActiveTurn = steerActiveTurn;
+    vi.mocked(cfg.conversationService.retractSubmission).mockResolvedValueOnce({
+      kind: 'applied',
+      stage: 'pending_steer',
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    await orchestrator.retractPendingSubmission('steer-1');
+
+    expect(steerActiveTurn).not.toHaveBeenCalled();
+    expect(cfg.conversationService.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('editPendingSubmission updates the pending indicator text on applied and leaves it alone on too_late', async () => {
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    vi.mocked(cfg.conversationService.editSubmission).mockResolvedValueOnce({
+      kind: 'applied',
+      stage: 'queued',
+    });
+
+    const applied = await orchestrator.editPendingSubmission('queued-1', { text: 'edited text' });
+
+    expect(applied).toEqual({ kind: 'applied', stage: 'queued' });
+    expect(cfg.conversationService.editSubmission).toHaveBeenCalledWith('queued-1', { text: 'edited text' });
+    expect(cfg.ui.onQueuedMessageEdited).toHaveBeenCalledWith('queued-1', 'edited text');
+
+    vi.mocked(cfg.ui.onQueuedMessageEdited!).mockClear();
+    vi.mocked(cfg.conversationService.editSubmission).mockResolvedValueOnce({
+      kind: 'too_late',
+      stage: 'started',
+    });
+
+    const tooLate = await orchestrator.editPendingSubmission('queued-2', { text: 'too late' });
+
+    expect(tooLate).toEqual({ kind: 'too_late', stage: 'started' });
+    expect(cfg.ui.onQueuedMessageEdited).not.toHaveBeenCalled();
+  });
+
+  it('a retracted pending steer does not fall through to a resubmission (hazard 1)', async () => {
+    // The original sendUserMessage call that started the steer is still
+    // awaiting steerActiveTurn when the user retracts it. steerActiveTurn
+    // resolves 'false' for a retraction — the exact same value it resolves
+    // for "the turn ended without ever offering a boundary", which
+    // legitimately falls through to resubmission. Without hazard 1's fix,
+    // a retraction would silently resend the very text the user cancelled.
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    let resolveSteer!: (value: boolean) => void;
+    const steerPromise = new Promise<boolean>((resolve) => {
+      resolveSteer = resolve;
+    });
+    const steerActiveTurn = vi.fn(() => steerPromise);
+    (cfg.conversationService as any).steerActiveTurn = steerActiveTurn;
+    vi.mocked(cfg.conversationService.retractSubmission).mockResolvedValue({
+      kind: 'applied',
+      stage: 'pending_steer',
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    const sendPromise = orchestrator.sendUserMessage('change direction', { busyMode: 'steer' });
+    // Let sendUserMessage draw the pending indicator and call steerActiveTurn.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const pendingCall = vi.mocked(cfg.ui.onQueuedMessagePending!).mock.calls.at(-1);
+    if (!pendingCall) throw new Error('steer did not register a pending indicator');
+    const id = pendingCall[0] as string;
+
+    // Retract while steerActiveTurn is still pending, and let the retraction
+    // fully settle (mirroring retractSubmission's own promise resolving well
+    // before the deep run-loop chain that unblocks the original steer call).
+    await orchestrator.retractPendingSubmission(id);
+
+    // Only now does the original steerActiveTurn call observe the retraction,
+    // exactly as injectIntoActiveTurn collapses a 'retracted' SteerOutcome.
+    resolveSteer(false);
+    await sendPromise;
+
+    expect(cfg.conversationService.sendMessage).not.toHaveBeenCalled();
+    // retractPendingSubmission already cleared the indicator; the original
+    // call falling through silently must not clear or re-add it either.
+    expect(cfg.ui.onQueuedMessageRemoved).toHaveBeenCalledTimes(1);
+  });
+
+  it('an edited pending steer records the edited turn when it is admitted', async () => {
+    // The run loop receives the edit through ConversationAdapter.editSteer,
+    // but the orchestrator owns the transcript and durable user-message log.
+    // They must agree on what the model ultimately read.
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    let resolveSteer!: (value: boolean) => void;
+    const steerPromise = new Promise<boolean>((resolve) => {
+      resolveSteer = resolve;
+    });
+    (cfg.conversationService as any).steerActiveTurn = vi.fn(() => steerPromise);
+    vi.mocked(cfg.conversationService.editSubmission).mockResolvedValue({
+      kind: 'applied',
+      stage: 'pending_steer',
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    const sendPromise = orchestrator.sendUserMessage('original direction', { busyMode: 'steer' });
+    await Promise.resolve();
+    await Promise.resolve();
+    const pendingCall = vi.mocked(cfg.ui.onQueuedMessagePending!).mock.calls.at(-1);
+    if (!pendingCall) throw new Error('steer did not register a pending indicator');
+    const id = pendingCall[0] as string;
+
+    await orchestrator.editPendingSubmission(id, { text: 'edited direction' });
+    resolveSteer(true);
+    await sendPromise;
+
+    expect(cfg.messages.appendMessages).toHaveBeenCalledWith([
+      expect.objectContaining({ id, text: 'edited direction' }),
+    ]);
+  });
+
+  it('a steer submitted with an id is reachable via retractPendingSubmission through the real orchestrator and adapter', async () => {
+    // Steps 1–2 wired retractSteer/editSteer end-to-end, but nothing in
+    // production ever passed an id into steerActiveTurn, so #pendingSteerIds
+    // stayed empty and the 'pending_steer' routing in
+    // ConversationAdapter.retractSubmission had no real caller — only
+    // adapter unit tests reached it by passing { id } directly. This drives
+    // the real ConversationOrchestrator.sendUserMessage (which now threads
+    // userMessage.id through) against a real ConversationAdapter, to prove
+    // the wiring actually reaches turnFlow.retractSteer in production.
+    let resolveSteer!: (outcome: 'admitted' | 'released' | 'retracted') => void;
+    const steerPromise = new Promise<'admitted' | 'released' | 'retracted'>((resolve) => {
+      resolveSteer = resolve;
+    });
+    const retractedIds: string[] = [];
+    let releaseActive!: () => void;
+    const activeReleased = new Promise<void>((resolve) => {
+      releaseActive = resolve;
+    });
+
+    const adapter = new ConversationAdapter({
+      sessionId: 'session-1',
+      startedAt: new Date().toISOString(),
+      logger: mockLoggingService(),
+      sessionContextService: {
+        runWithContext: (_context: unknown, fn: () => unknown) => fn(),
+        getContext: () => null,
+      } as any,
+      userTurns: { listUserTurns: () => [] } as any,
+      logs: { dispatchEventToLog: () => {}, log: () => {}, setLogSink: () => {} } as any,
+      approval: { getPending: () => null, getPendingInterruption: () => ({}) } as any,
+      turnFlow: {
+        async *start() {
+          await activeReleased;
+          yield { type: 'final' as const, finalText: 'done' };
+        },
+        async *continueAfterApproval() {
+          yield { type: 'final' as const, finalText: 'done' };
+        },
+        steer: async () => steerPromise,
+        retractSteer: (id: string) => {
+          retractedIds.push(id);
+          resolveSteer('retracted');
+          return true;
+        },
+      },
+      queueForeground: true,
+    });
+
+    // A thin passthrough to the real adapter — the same shape
+    // ConversationService itself wraps it in.
+    const conversationService = {
+      sendMessage: (input: unknown, options: unknown) => adapter.sendMessage(input as any, options as any),
+      steerActiveTurn: (input: unknown, options: unknown) => adapter.steerActiveTurn(input as any, options as any),
+      retractSubmission: (id: string) => adapter.retractSubmission(id),
+      editSubmission: (id: string, turn: unknown) => adapter.editSubmission(id, turn as any),
+      isQueueActive: () => adapter.isQueueActive(),
+      isQueueOwningSubmissions: () => adapter.isQueueOwningSubmissions(),
+      queueStateKind: () => adapter.queueStateKind(),
+      setQueueStateObserver: (observer: any) => adapter.setQueueStateObserver(observer),
+      setQueuedTurnStartObserver: (observer: any) => adapter.setQueuedTurnStartObserver(observer),
+      removeLastQueuedItem: () => adapter.removeLastQueuedItem(),
+      backgroundSubagentNotifications: undefined,
+    } as unknown as ConversationService;
+
+    const cfg = makeConfig({ conversationService });
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    const activePromise = orchestrator.sendUserMessage('active turn');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const steerPromiseHandled = orchestrator.sendUserMessage('change direction', { busyMode: 'steer' });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const pendingCall = vi.mocked(cfg.ui.onQueuedMessagePending!).mock.calls.at(-1);
+    if (!pendingCall) throw new Error('steer did not register a pending indicator');
+    const steerId = pendingCall[0] as string;
+
+    const mutation = await orchestrator.retractPendingSubmission(steerId);
+
+    expect(mutation).toEqual({ kind: 'applied', stage: 'pending_steer' });
+    expect(retractedIds).toEqual([steerId]);
+    expect(cfg.ui.onQueuedMessageRemoved).toHaveBeenCalledWith(steerId);
+
+    releaseActive();
+    await activePromise;
+    await steerPromiseHandled;
+  });
+
   it('does not retain directly-appended id across clearConversation', async () => {
     const cfg = makeConfig();
     vi.mocked(cfg.conversationService.isQueueActive).mockReturnValue(false);
@@ -735,7 +985,7 @@ describe('ConversationOrchestrator', () => {
     const restored = await orchestrator.removeLastQueuedPendingMessage();
 
     expect(restored).toBeNull();
-    expect(cfg.ui.onRemoveLastPendingMessage).not.toHaveBeenCalled();
+    expect(cfg.ui.onQueuedMessageRemoved).not.toHaveBeenCalled();
   });
 
   it('returns null and skips the adapter when the service cannot cancel queued items', async () => {
@@ -746,6 +996,6 @@ describe('ConversationOrchestrator', () => {
     const restored = await orchestrator.removeLastQueuedPendingMessage();
 
     expect(restored).toBeNull();
-    expect(cfg.ui.onRemoveLastPendingMessage).not.toHaveBeenCalled();
+    expect(cfg.ui.onQueuedMessageRemoved).not.toHaveBeenCalled();
   });
 });

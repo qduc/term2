@@ -357,6 +357,27 @@ it('stream (websocket) preserves typed settings, including zero values, in respo
   });
 });
 
+it('stream (websocket) sends context management only for an enabled supported OpenAI model', async () => {
+  fakeResponsesWSStream = async function* () {
+    yield { type: 'message', message: { type: 'response.completed', response: { id: 'resp_ws_compaction' } } };
+  };
+  const model = new OpenAIResponsesWSModelWithPromptCacheKey(
+    { responses: { create: async () => ({}) } },
+    'gpt-5.6-luna',
+    undefined,
+    true,
+  );
+  await collect(
+    model.stream({
+      input: [],
+      tools: [],
+      providerOptions: { contextCompaction: { enabled: true, threshold: 2000 } },
+    }),
+  );
+
+  expect(capturedWSRequest.context_management).toEqual([{ type: 'compaction', compact_threshold: 2000 }]);
+});
+
 it('emits direct typed completion output and usage without compatibility envelopes', async () => {
   const model = new OpenAIResponsesModelWithPromptCacheKey(
     {

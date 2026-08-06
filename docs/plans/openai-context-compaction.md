@@ -1,7 +1,7 @@
 # OpenAI Context Compaction
 
-Status: **Steps 1 and 2 done** (Step 1 merged to `main` 2026-08-06 as `dc949022`; Step 2 done on
-branch `compaction-persistence`, not yet merged — see the Step 2 entry below for the commit).
+Status: **Steps 1 and 2 done and merged to `main`** (Step 1 as `dc949022`, Step 2 as `96a9874c`
+from branch `compaction-persistence`, commit `0ade9a68`), both on 2026-08-06.
 Opaque provider items now survive persistence and replay; resume at
 [Step 3](#step-3-enable-server-side-compaction). The blocking decision (server-side automatic
 compaction via `context_management`, not the manual `/v1/responses/compact` endpoint) remains as
@@ -26,8 +26,9 @@ full session of reading.
 **Step 1 (opaque provider item lane) is DONE** — merged 2026-08-06 as `dc949022` (feature branch
 `opaque-lane`, commit `5155e499`).
 
-**Step 2 (persistence and replay) is DONE** — branch `compaction-persistence`, not yet merged to
-`main` (coordinator to merge). Start at [Step 3](#step-3-enable-server-side-compaction).
+**Step 2 (persistence and replay) is DONE** — merged to `main` as `96a9874c`. Gates re-run
+independently by the coordinator before merge: typecheck clean, `pnpm test:provider-black-box`
+152/152, `pnpm test` 5233 passed. Start at [Step 3](#step-3-enable-server-side-compaction).
 
 What Step 1 shipped, so a resumer does not re-derive it:
 

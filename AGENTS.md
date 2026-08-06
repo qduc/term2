@@ -35,9 +35,8 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 ## Active or deferred
 
 - `docs/plans/openai-context-compaction.md` — OpenAI context compaction (server-side
-  `context_management`). Step 1 (opaque provider-item lane) is merged. **Step 2 was in flight on
-  branch `compaction-persistence` when the session ended, implemented but sent back for one
-  correction — check that branch before starting.** Then resume at Step 3. Read the plan before
+  `context_management`). **Steps 1 and 2 are merged (`dc949022`, `96a9874c`); resume at Step 3.**
+  Read the plan before
   touching the OpenAI adapter, the run loop, `ConversationStore`/`conversation-turn-items`, or
   conversation persistence: it records the closed-union/throw-site findings, the
   `provider_opaque` marker contract, and Round 3's live measurements, which settle Step 4's

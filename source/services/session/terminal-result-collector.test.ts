@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest';
 import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
-import { collectTerminalResult } from './terminal-result-collector.js';
+import { collectTerminalResult, TerminalResultCollectorExhaustionError } from './terminal-result-collector.js';
 
 const asAsyncIterable = async function* (events: any[]) {
   for (const event of events) {
@@ -9,6 +9,9 @@ const asAsyncIterable = async function* (events: any[]) {
 };
 
 it('collectTerminalResult rejects an empty iterable without an authoritative terminal event', async () => {
+  await expect(collectTerminalResult(asAsyncIterable([]))).rejects.toBeInstanceOf(
+    TerminalResultCollectorExhaustionError,
+  );
   await expect(collectTerminalResult(asAsyncIterable([]))).rejects.toBeInstanceOf(AmbiguousModelOutcomeError);
 });
 

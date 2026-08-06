@@ -2,6 +2,7 @@
 import { it, expect, vi } from 'vitest';
 import { ConversationAdapter } from './conversation-adapter.js';
 import { QueueController } from '../queue/queue-controller.js';
+import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
 import type { SessionLogs, SessionApprovalQuery } from '../session/session-composition.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { SessionManager } from '../session/session-manager.js';
@@ -208,7 +209,7 @@ it('does not continue when a typed post-execute token revision is stale', async 
   expect(decisionCalls).toBe(1);
 });
 
-it('does not apply a delayed approval decision to a replacement pending approval', async () => {
+it('rejects a delayed approval decision with AbortError when cancellation races queue persistence', async () => {
   let pending: any = null;
   let releaseApprovalCommand!: () => void;
   const approvalCommandCanFinish = new Promise<void>((resolve) => {
@@ -274,7 +275,7 @@ it('does not apply a delayed approval decision to a replacement pending approval
   releaseApprovalCommand();
   expect((await replacement).type).toBe('approval_required');
 
-  await expect(delayedDecision).resolves.toBeNull();
+  await expect(delayedDecision).rejects.toMatchObject({ name: 'AbortError' });
   expect(continuedTokens).toEqual([]);
   expect(pending.token).toBe(2);
 });
@@ -786,6 +787,42 @@ it('preserves a genuine stream error that races with intentional cancellation', 
   adapter.abort();
 
   await expect(active).rejects.toBe(providerError);
+});
+
+it('preserves a provider-origin ambiguous outcome that races with intentional cancellation', async () => {
+  let releaseActive!: () => void;
+  const activeReleased = new Promise<void>((resolve) => {
+    releaseActive = resolve;
+  });
+  const providerError = new AmbiguousModelOutcomeError('provider request may have completed');
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start() {
+        await activeReleased;
+        throw providerError;
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      abort: () => releaseActive(),
+    },
+    queueForeground: true,
+  });
+
+  const active = adapter.sendMessage('active');
+  await new Promise((resolve) => setImmediate(resolve));
+  adapter.abort();
+
+  const received = await active.catch((error: unknown) => error);
+  expect(received).toBe(providerError);
+  expect(received).toMatchObject({ name: 'AmbiguousModelOutcomeError', unsafeToReplay: true });
 });
 
 it('classifies non-queued sendMessage completion without terminal event as cancellation when aborted', async () => {

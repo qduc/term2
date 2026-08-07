@@ -137,6 +137,8 @@ export interface ValidationEvidence {
 
 export interface SubagentResult {
   agentId: string;
+  /** Optional user-provided alias retained after an async run settles. */
+  name?: string;
   role: string;
   status: 'completed' | 'failed' | 'cancelled';
   finalText: string;

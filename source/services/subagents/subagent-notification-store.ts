@@ -4,6 +4,7 @@ import type {
   SubagentToolStartedEvent,
 } from '../conversation/conversation-events.js';
 import type { SubagentResult } from './types.js';
+import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import { formatToolCommand, parseToolArguments } from '../../utils/conversation/conversation-utils.js';
 import { formatSubagentResult, truncatePreview } from './utils.js';
 
@@ -13,6 +14,7 @@ export interface BackgroundSubagentCompletionNotification {
   /** Stable per logical run, so replay cannot duplicate a completion. */
   messageId: string;
   runId: string;
+  name?: string;
   role: string;
   status: 'completed' | 'failed' | 'cancelled';
   /** Compact one-line preview for the user-facing display. */
@@ -51,11 +53,15 @@ export interface BackgroundSubagentTaskTool {
 /** Conversation-scoped projection of one background subagent lifecycle. */
 export interface BackgroundSubagentTask {
   runId: string;
+  /** Optional user-provided alias for identifying the run in the UI. */
+  name?: string;
   role: string;
   task: string;
   status: BackgroundSubagentTaskStatus;
   startedAt: number;
   completedAt?: number;
+  /** Aggregate model usage, available after the subagent settles. */
+  usage?: NormalizedUsage;
   /** Absent until the run calls its first tool; dropped once the run settles. */
   lastTool?: BackgroundSubagentTaskTool;
 }
@@ -155,6 +161,7 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
 
       this.#tasks.set(event.agentId, {
         runId: event.agentId,
+        ...(event.name !== undefined ? { name: event.name } : {}),
         role: event.role,
         task: event.task,
         status: 'running',
@@ -174,11 +181,17 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
     const completedAt = this.#now();
     this.#tasks.set(result.agentId, {
       runId: result.agentId,
+      ...(existing?.name !== undefined
+        ? { name: existing.name }
+        : result.name !== undefined
+        ? { name: result.name }
+        : {}),
       role: existing?.role ?? result.role,
       task: existing?.task ?? '',
       status: result.status,
       startedAt: existing?.startedAt ?? completedAt,
       completedAt,
+      ...(result.usage !== undefined ? { usage: result.usage } : {}),
     });
     this.#settledTaskIds.add(result.agentId);
     while (this.#settledTaskIds.size > this.#deliveredIdCap) {
@@ -308,10 +321,12 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
       const result = (event as { result?: SubagentResult }).result;
       const runId = result?.agentId;
       if (!result || !runId) return undefined;
+      const task = this.#tasks.get(runId);
       return {
         kind: 'completion',
         messageId: this.#completionMessageId(runId),
         runId,
+        ...(task?.name !== undefined ? { name: task.name } : result.name !== undefined ? { name: result.name } : {}),
         role: result.role,
         status: result.status,
         preview: truncatePreview(result.finalText || result.error),

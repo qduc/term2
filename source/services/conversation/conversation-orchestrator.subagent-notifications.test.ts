@@ -175,7 +175,7 @@ describe('ConversationOrchestrator background subagent notifications mid-turn', 
   it('announces a run in the transcript as soon as it settles, without waiting for delivery', async () => {
     const h = makeHarness({ queueActive: true });
 
-    h.emit(completion());
+    h.emit(completion({ name: 'code_scan' }));
     await settle();
 
     const announced = h.config.messages
@@ -184,6 +184,9 @@ describe('ConversationOrchestrator background subagent notifications mid-turn', 
         (message) => message.sender === 'command' && (message as any).command === 'background_subagent_notification',
       );
     expect(announced).toHaveLength(1);
+    expect((announced[0] as any).toolArgs).toEqual({
+      runs: [{ name: 'code_scan', role: 'explorer', status: 'completed' }],
+    });
   });
 
   it('keeps a run for the idle path when the turn will not take it, and never reports it twice', async () => {

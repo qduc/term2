@@ -193,8 +193,9 @@ const CommandMessage: FC<Props> = ({
       case 'background_subagent_notification': {
         const runs = Array.isArray(toolArgs?.runs) ? toolArgs.runs : [];
         if (runs.length === 1) {
-          const [{ role, status }] = runs;
-          return renderAction(`Background ${role ?? 'subagent'} ${status ?? 'finished'}`);
+          const [{ name, role, status }] = runs;
+          const identity = name ? `${name} (${role ?? 'subagent'})` : role ?? 'subagent';
+          return renderAction(`Background ${identity} ${status ?? 'finished'}`);
         }
         if (runs.length > 1) {
           const roles = runs

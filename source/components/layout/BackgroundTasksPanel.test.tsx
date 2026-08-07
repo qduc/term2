@@ -25,7 +25,7 @@ it.sequential('shows active count, short task label, role badge, status, and ela
   const renderer = await renderInAct(
     <BackgroundTasksPanel
       tasks={[
-        runningTask({ role: 'worker', task: 'implement the narrow background lifecycle panel' }),
+        runningTask({ name: 'ui_fix', role: 'worker', task: 'implement the narrow background lifecycle panel' }),
         runningTask({
           runId: 'run-2',
           role: 'explorer',
@@ -40,11 +40,32 @@ it.sequential('shows active count, short task label, role badge, status, and ela
   const output = renderer.lastFrame() ?? '';
   expect(output).toContain('Background tasks · 2 active');
   expect(output).toContain('Worker');
+  expect(output).toContain('ui_fix');
   expect(output).toContain('Explorer');
   expect(output).toContain('implement the narrow background lifecycle panel');
   expect(output).toContain('Running · 1m 05s');
   expect(output).toContain('Running · 5s');
   expect(output).not.toContain('model');
+});
+
+it.sequential('shows completed context usage at the right side of a named task', async () => {
+  const renderer = await renderInAct(
+    <BackgroundTasksPanel
+      tasks={[
+        runningTask({
+          name: 'code_scan',
+          status: 'completed',
+          completedAt: 2_000,
+          usage: { prompt_tokens: 12_345 },
+        }),
+      ]}
+      now={2_000}
+    />,
+  );
+
+  const output = renderer.lastFrame() ?? '';
+  expect(output).toContain('code_scan');
+  expect(output).toContain('Ctx 12.3k');
 });
 
 it.sequential('updates elapsed duration when time advances', async () => {

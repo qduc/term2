@@ -610,6 +610,47 @@ export function createConversationEventHandler(
         // This case exists for exhaustiveness and to document the event flow
         return;
 
+      // Server-side context compaction. Start and finish are rendered as two separate
+      // entries so the transcript records that the provider replaced the context, not
+      // just that it finished. No duration is shown: `durationMs` is measured from a
+      // `startedAt` captured at the emit site (turn-workflow.ts:597, 1091), so it is
+      // always ~0 until a live provider frame supplies a real start moment.
+      case 'context_compaction_started': {
+        const systemMessage: SystemMessage = {
+          id: createMessageId(),
+          sender: 'system',
+          text: 'Compacting context...',
+        };
+        setMessages((prev) => [...prev, systemMessage]);
+        return;
+      }
+
+      case 'context_compaction_completed': {
+        // `inputTokensBefore` is the pre-compaction prompt size: the provider reports the
+        // compaction pass's own input tokens, not the compacted result. There is no
+        // "after" number to pair it with, so the line states only what was compacted from.
+        const before = event.inputTokensBefore;
+        const systemMessage: SystemMessage = {
+          id: createMessageId(),
+          sender: 'system',
+          text:
+            before === undefined ? 'Compacted context.' : `Compacted from ${before.toLocaleString('en-US')} tokens.`,
+        };
+        setMessages((prev) => [...prev, systemMessage]);
+        return;
+      }
+
+      case 'context_compaction_failed': {
+        // `durationMs` is hardcoded 0 at both catch sites, so only the category is shown.
+        const systemMessage: SystemMessage = {
+          id: createMessageId(),
+          sender: 'system',
+          text: `Context compaction failed (${event.errorCategory}). The turn continues with the full context.`,
+        };
+        setMessages((prev) => [...prev, systemMessage]);
+        return;
+      }
+
       default:
         // Ignore unknown events (approval_required, error handled elsewhere)
         return;

@@ -8,6 +8,12 @@ const makeSessionContextService = (sessionId?: string) => ({
   getContext: () => (sessionId ? { sessionId, sessionStartedAt: '2026-01-01T00:00:00.000Z' } : null),
 });
 
+const readSessionHeader = (init: RequestInit | null): string => {
+  const headers = init!.headers as Record<string, string>;
+  const key = Object.keys(headers).find((k) => k.toLowerCase() === 'x-opencode-session')!;
+  return headers[key];
+};
+
 // ---------------------------------------------------------------------------
 // createOpencodeSessionInjector
 // ---------------------------------------------------------------------------
@@ -145,6 +151,72 @@ it('createOpencodeSessionInjector fallbackSessionIdOverride takes precedence ove
   const h = result!.headers as Record<string, string>;
   const sessionKey = Object.keys(h).find((k) => k.toLowerCase() === 'x-opencode-session')!;
   expect(h[sessionKey]).toBe('ses_overridden1234567890123456');
+});
+
+it('createOpencodeSessionInjector gives a subagent its own session ID', () => {
+  let providerHistoryKey: string | undefined;
+  const sessionContextService = {
+    runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    getContext: () => ({
+      sessionId: 'conversation-session-abc',
+      sessionStartedAt: '2026-01-01T00:00:00.000Z',
+      ...(providerHistoryKey ? { providerHistoryKey } : {}),
+    }),
+  };
+
+  const injector = createOpencodeSessionInjector(
+    { type: 'opencode' },
+    { sessionContextService, fallbackSessionIdOverride: 'ses_overridden1234567890123456' },
+  )!;
+
+  const parent = readSessionHeader(injector({}));
+
+  providerHistoryKey = 'conversation-session-abc:subagent:call-1';
+  const subagent = readSessionHeader(injector({}));
+
+  providerHistoryKey = 'conversation-session-abc:subagent:call-2';
+  const otherSubagent = readSessionHeader(injector({}));
+
+  expect(subagent, 'a subagent must not reuse the parent conversation session').not.toBe(parent);
+  expect(otherSubagent, 'concurrent subagents must not share a session').not.toBe(subagent);
+  expect(subagent).toMatch(/^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/);
+});
+
+it('createOpencodeSessionInjector keeps one subagent session stable across its requests', () => {
+  const sessionContextService = {
+    runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    getContext: () => ({
+      sessionId: 'conversation-session-abc',
+      sessionStartedAt: '2026-01-01T00:00:00.000Z',
+      providerHistoryKey: 'conversation-session-abc:subagent:call-1',
+    }),
+  };
+
+  const injector = createOpencodeSessionInjector({ type: 'opencode' }, { sessionContextService })!;
+
+  expect(readSessionHeader(injector({}))).toBe(readSessionHeader(injector({})));
+});
+
+it('createOpencodeSessionInjector gives the auto-approval evaluator its own session ID', () => {
+  let evaluator = false;
+  const sessionContextService = {
+    runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    getContext: () => ({
+      sessionId: 'conversation-session-abc',
+      sessionStartedAt: '2026-01-01T00:00:00.000Z',
+      evaluator,
+    }),
+  };
+
+  const injector = createOpencodeSessionInjector(
+    { type: 'opencode' },
+    { sessionContextService, fallbackSessionIdOverride: 'ses_overridden1234567890123456' },
+  )!;
+
+  const parent = readSessionHeader(injector({}));
+  evaluator = true;
+
+  expect(readSessionHeader(injector({}))).not.toBe(parent);
 });
 
 it('createOpencodeSessionInjector preserves existing body and other init fields', () => {

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import type { ISessionContextService } from '../services/service-interfaces.js';
+import type { ISessionContextService, SessionTrafficContext } from '../services/service-interfaces.js';
 import { injectHeaders } from './fetch/logging-middleware.js';
 import { isOpencodeProvider, type OpencodeProviderIdentity } from './opencode.provider.js';
 
@@ -45,18 +45,43 @@ export function generateOpencodeSessionId(effectiveSessionId?: string): string {
   return `ses_${timestamp}${random}`;
 }
 
+/**
+ * Requests made on behalf of a nested run — a subagent, or the shell
+ * auto-approval evaluator — must not land in the parent conversation's OpenCode
+ * session, because the server keys state off `x-opencode-session`. Such a run
+ * is identified by its own `providerHistoryKey`, or by the `evaluator` marker.
+ *
+ * Returns the key to derive a session ID from, or `undefined` when the context
+ * is the conversation itself.
+ */
+function nestedScopeKey(context: SessionTrafficContext | null | undefined): string | undefined {
+  if (!context) return undefined;
+  if (context.providerHistoryKey) return context.providerHistoryKey;
+  if (context.evaluator) return `${context.sessionId}:evaluator`;
+  return undefined;
+}
+
 export function resolveOpencodeSessionId(options: {
   sessionContextService?: ISessionContextService;
   fallbackSessionId?: string;
   fallbackSessionIdOverride?: string;
 }): string | undefined {
+  const context = options.sessionContextService?.getContext();
+
+  // Checked ahead of the override: the override is conversation-scoped by
+  // construction, so honouring it here would put nested runs back in the
+  // parent's session.
+  const nestedKey = nestedScopeKey(context);
+  if (nestedKey) {
+    return generateOpencodeSessionId(nestedKey);
+  }
+
   if (options.fallbackSessionIdOverride) {
     return options.fallbackSessionIdOverride;
   }
 
-  const trafficSessionId = options.sessionContextService?.getContext()?.sessionId;
-  if (trafficSessionId) {
-    return generateOpencodeSessionId(trafficSessionId);
+  if (context?.sessionId) {
+    return generateOpencodeSessionId(context.sessionId);
   }
 
   return options.fallbackSessionId;

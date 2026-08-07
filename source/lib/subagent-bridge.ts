@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { SubagentManager } from '../services/subagents/subagent-manager.js';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
@@ -220,17 +221,30 @@ export class SubagentBridge {
     };
   }
 
-  #withSubagentTrafficContext<T>(toolCallId: string | undefined, fn: () => T): T {
+  /**
+   * Runs `fn` under a traffic context whose provider history key identifies the
+   * subagent run rather than the conversation that launched it. Providers key
+   * server-side state off this — an OpenCode session, a Codex response chain —
+   * so a run that reuses the parent's key writes its turns into the parent's
+   * history.
+   *
+   * `runScope` identifies the run: a tool call ID, or `mentor` for the mentor
+   * session that persists across consultations. It is appended to the current
+   * key so a nested subagent scopes under its parent rather than flattening
+   * back onto the conversation. Without one, a random scope is used: a fresh,
+   * unshared history is a safer default than silently sharing the parent's.
+   */
+  #withSubagentTrafficContext<T>(runScope: string | undefined, fn: () => T): T {
     const currentContext = this.#sessionContextService.getContext();
     if (!currentContext) {
       return fn();
     }
 
+    const parentKey = currentContext.providerHistoryKey ?? currentContext.sessionId;
+    const scope = runScope ?? randomUUID();
+
     return this.#sessionContextService.runWithContext(
-      {
-        ...currentContext,
-        ...(toolCallId ? { providerHistoryKey: `${currentContext.sessionId}:subagent:${toolCallId}` } : {}),
-      },
+      { ...currentContext, providerHistoryKey: `${parentKey}:subagent:${scope}` },
       fn,
     );
   }
@@ -241,7 +255,9 @@ export class SubagentBridge {
     }
     const endRun = this.#beginSubagentRun();
     try {
-      const result = await this.#withSubagentTrafficContext(undefined, () =>
+      // The mentor session outlives a single consultation (see
+      // `resetMentorSession`), so its scope is the role, not the call.
+      const result = await this.#withSubagentTrafficContext('mentor', () =>
         this.#subagentManager!.run({
           role: 'mentor',
           task: question,
@@ -315,7 +331,11 @@ export class SubagentBridge {
       signal: this.backgroundSignal,
     };
 
-    return this.#withSubagentTrafficContext(detailsRecord?.toolCall?.callId, () => {
+    // A continuation keeps the run's own scope so its later turns stay in the
+    // provider-side history the first launch opened.
+    const runScope = params.continue_run_id ?? detailsRecord?.toolCall?.callId;
+
+    return this.#withSubagentTrafficContext(runScope, () => {
       const handle = this.#subagentManager!.startRunAsync(request);
 
       return handle;

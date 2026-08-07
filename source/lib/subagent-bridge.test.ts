@@ -267,6 +267,84 @@ it('runSubagent scopes provider history to the subagent tool call', async () => 
   ]);
 });
 
+it('every subagent run gets a provider history key distinct from the parent conversation', async () => {
+  const sessionContextService = new SessionContextService();
+  const seen: Record<string, string | undefined> = {};
+
+  const capture = (label: string) => {
+    seen[label] = sessionContextService.getContext()?.providerHistoryKey;
+    return { finalText: '', status: 'completed', toolsUsed: [], filesChanged: [] };
+  };
+
+  const manager = {
+    run: async () => capture('mentor'),
+    runAsTool: async () => capture('tool-without-call-id'),
+    startRunAsync: () => {
+      capture('async');
+      return { runId: 'run-1' };
+    },
+    resetMentorSession: () => {},
+    clearCache: () => {},
+  };
+
+  const bridge = new SubagentBridge({
+    logger: noopLogger as any,
+    settings: noopSettings as any,
+    sessionContextService: sessionContextService as any,
+    chat: async () => '',
+    createClient: () => ({}),
+    subagentManager: manager as any,
+  });
+
+  await sessionContextService.runWithContext(makeTrafficContext() as any, async () => {
+    await bridge.createMentor('why');
+    // A tool call without a callId still must not inherit the parent's session.
+    await bridge.runSubagent({ role: 'worker', task: 'do it' }, undefined, {});
+    await bridge.runSubagentAsync({ role: 'explorer', task: 'look' }, undefined, {
+      toolCall: { callId: 'call-async-1' },
+    });
+  });
+
+  expect(seen.mentor).toBe('session-1:subagent:mentor');
+  expect(seen.async).toBe('session-1:subagent:call-async-1');
+  expect(seen['tool-without-call-id']).toBeTruthy();
+  expect(seen['tool-without-call-id']).not.toBe('session-1');
+  expect(new Set(Object.values(seen)).size, 'each run needs its own key').toBe(3);
+});
+
+it('a nested subagent run scopes under its parent subagent, not the conversation', async () => {
+  const sessionContextService = new SessionContextService();
+  let nestedKey: string | undefined;
+
+  const manager = {
+    run: async () => ({ finalText: '', status: 'completed', toolsUsed: [], filesChanged: [] }),
+    runAsTool: async () => {
+      nestedKey = sessionContextService.getContext()?.providerHistoryKey;
+      return { finalText: '', status: 'completed', toolsUsed: [], filesChanged: [] };
+    },
+    resetMentorSession: () => {},
+    clearCache: () => {},
+  };
+
+  const bridge = new SubagentBridge({
+    logger: noopLogger as any,
+    settings: noopSettings as any,
+    sessionContextService: sessionContextService as any,
+    chat: async () => '',
+    createClient: () => ({}),
+    subagentManager: manager as any,
+  });
+
+  const parentSubagentContext = makeTrafficContext({ providerHistoryKey: 'session-1:subagent:call-outer' });
+  await sessionContextService.runWithContext(parentSubagentContext as any, async () => {
+    await bridge.runSubagent({ role: 'worker', task: 'nested' }, undefined, {
+      toolCall: { callId: 'call-inner' },
+    });
+  });
+
+  expect(nestedKey).toBe('session-1:subagent:call-outer:subagent:call-inner');
+});
+
 it('createMentor throws when SubagentManager is null', async () => {
   const bridge = makeBridge(null);
 

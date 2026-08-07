@@ -161,6 +161,7 @@ vi.mock('./hooks/use-conversation.js', () => ({
     addSystemMessage: mocks.addSystemMessage,
     addShellMessage: mocks.addShellMessage,
     getSubagentUsage: mocks.getSubagentUsage,
+    getCostSummary: vi.fn(() => null),
     goToPreviousQuestion: mocks.goToPreviousQuestion,
     goToNextQuestion: mocks.goToNextQuestion,
     queueActive: false,

@@ -39,6 +39,37 @@ function cloneSettingValue<T>(value: T): T {
   return structuredClone(value);
 }
 
+function setSettingValue(target: Record<string, any>, key: string, value: unknown): void {
+  const parts = key.split('.');
+  let current = target;
+  for (const part of parts.slice(0, -1)) {
+    current[part] ??= {};
+    current = current[part];
+  }
+  current[parts[parts.length - 1]] = cloneSettingValue(value);
+}
+
+function changedSettingPaths(before: unknown, after: unknown, prefix = ''): Array<[string, unknown]> {
+  if (Object.is(before, after)) return [];
+  if (
+    before &&
+    after &&
+    typeof before === 'object' &&
+    typeof after === 'object' &&
+    !Array.isArray(before) &&
+    !Array.isArray(after)
+  ) {
+    const beforeRecord = before as Record<string, unknown>;
+    const afterRecord = after as Record<string, unknown>;
+    const paths: Array<[string, unknown]> = [];
+    for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+      paths.push(...changedSettingPaths(beforeRecord[key], afterRecord[key], prefix ? `${prefix}.${key}` : key));
+    }
+    return paths;
+  }
+  return prefix ? [[prefix, after]] : [];
+}
+
 /**
  * Service for managing application settings.
  * Follows singleton pattern and supports:
@@ -56,6 +87,12 @@ export class SettingsService {
   private disableFilePersistence: boolean;
   private listeners: Set<(key?: string) => void> = new Set();
   private loggingService: LoggingService;
+  private startupMigrations: Array<[string, unknown]> = [];
+  private startupEnv: Partial<SettingsData> = {};
+  private startupCli: Partial<SettingsData> = {};
+  private runtimeOverrides = new Map<string, unknown>();
+  private runtimeOverrideSources = new Map<string, SettingSource>();
+  private resetAllAtRuntime = false;
 
   constructor(options?: {
     settingsDir?: string;
@@ -79,6 +116,8 @@ export class SettingsService {
     this.settingsDir = settingsDir;
     this.disableLogging = resolvedDisableLogging;
     this.sources = new Map();
+    this.startupEnv = structuredClone(env);
+    this.startupCli = structuredClone(cli);
 
     // Use injected LoggingService or create a new one if not provided
     this.loggingService =
@@ -119,6 +158,9 @@ export class SettingsService {
       validated,
       rawFileConfig,
     );
+    if (migratedLegacyAncillarySettings) {
+      this.startupMigrations = changedSettingPaths(validated, fileConfig);
+    }
     this.settings = mergeSettings(DEFAULT_SETTINGS, fileConfig, env, cli, {
       disableLogging: this.disableLogging,
       loggingService: this.loggingService,
@@ -175,6 +217,9 @@ export class SettingsService {
     // Use raw file config (pre-Zod) to detect missing keys since Zod adds defaults
     const shouldUpdateFile = configFileExisted && this.hasMissingKeys(rawFileConfig, DEFAULT_SETTINGS);
     const shouldMigrateLegacyProviderFormat = configFileExisted && this.hasLegacyProviderFormat(rawFileConfig);
+    if (shouldMigrateLegacyProviderFormat) {
+      this.startupMigrations.push(['providers', fileConfig.providers]);
+    }
 
     // If there was no config file on disk, persist the current merged settings so
     // users get a settings.json created at startup (rather than waiting for a
@@ -424,6 +469,8 @@ export class SettingsService {
     this.validateAndApplySetting(key, value);
     this.normalizeExclusiveAppModes(key, value);
 
+    this.recordRuntimeOverride(key, value, 'cli');
+
     // Track source as 'cli' for runtime-set values
     this.sources.set(key, 'cli');
 
@@ -474,7 +521,7 @@ export class SettingsService {
     // Persist to file unless the caller explicitly opts out
     const persist = options?.persist !== false;
     if (persist && !this.disableFilePersistence) {
-      this.saveToFile();
+      this.saveToFile((current) => this.applyPersistedSetting(current, key, value));
     }
 
     this.notifyChange(key);
@@ -499,10 +546,12 @@ export class SettingsService {
     this.validateAndApplySetting(key, value);
     this.normalizeExclusiveAppModes(key, value);
 
+    this.recordRuntimeOverride(key, value, 'cli');
+
     this.sources.set(key, 'cli');
 
     if (!this.disableFilePersistence) {
-      this.saveToFile();
+      this.saveToFile((current) => this.applyPersistedSetting(current, key, value));
     }
 
     this.notifyChange(key);
@@ -544,14 +593,21 @@ export class SettingsService {
 
       obj[lastKey] = cloneSettingValue(defaultValue);
       this.sources.set(key, 'default');
+      this.recordRuntimeOverride(key, defaultValue, 'default');
     } else {
       // Reset all settings
       this.settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
       this.sources.clear();
+      this.resetAllAtRuntime = true;
+      this.runtimeOverrides.clear();
+      this.runtimeOverrideSources.clear();
     }
 
     if (!this.disableFilePersistence) {
-      this.saveToFile();
+      this.saveToFile((current) => {
+        if (!key) return structuredClone(DEFAULT_SETTINGS);
+        return this.applyPersistedSetting(current, key, this.defaultValueFor(key));
+      });
     }
 
     this.notifyChange(key);
@@ -610,17 +666,108 @@ export class SettingsService {
   /**
    * Save settings to file, excluding sensitive values
    */
-  private saveToFile(): void {
+  private defaultValueFor(key: string): unknown {
+    let value: unknown = DEFAULT_SETTINGS;
+    for (const part of key.split('.')) {
+      value = (value as Record<string, unknown>)[part];
+    }
+    return cloneSettingValue(value);
+  }
+
+  private applyPersistedSetting(current: SettingsData, key: string, value: unknown): SettingsData {
+    const next = structuredClone(current) as Record<string, any>;
+    setSettingValue(next, key, value);
+
+    if (
+      key === 'app.orchestratorMode' ||
+      key === 'app.liteMode' ||
+      key === 'app.planMode' ||
+      key === 'app.mentorMode'
+    ) {
+      next.app =
+        value === true
+          ? {
+              ...next.app,
+              orchestratorMode: key === 'app.orchestratorMode',
+              liteMode: key === 'app.liteMode',
+              planMode: key === 'app.planMode',
+              mentorMode: key === 'app.mentorMode',
+            }
+          : {
+              ...next.app,
+              ...normalizeAppModes({
+                orchestratorMode: next.app?.orchestratorMode ?? false,
+                liteMode: next.app?.liteMode ?? false,
+                planMode: next.app?.planMode ?? false,
+                mentorMode: next.app?.mentorMode ?? false,
+              }),
+            };
+    }
+
+    return SettingsSchema.parse(next) as SettingsData;
+  }
+
+  private recordRuntimeOverride(key: string, value: unknown, source: SettingSource): void {
+    this.resetAllAtRuntime = false;
+    this.runtimeOverrides.set(key, cloneSettingValue(value));
+    this.runtimeOverrideSources.set(key, source);
+    if (value === true && key.startsWith('app.')) {
+      for (const modeKey of ['app.orchestratorMode', 'app.liteMode', 'app.planMode', 'app.mentorMode']) {
+        if (modeKey !== key) {
+          this.runtimeOverrides.set(modeKey, false);
+          this.runtimeOverrideSources.set(modeKey, 'cli');
+        }
+      }
+    }
+  }
+
+  private reconcileCommittedSettings(committed: SettingsData): void {
+    if (this.resetAllAtRuntime) {
+      this.settings = structuredClone(DEFAULT_SETTINGS);
+      this.sources.clear();
+      return;
+    }
+
+    let next = mergeSettings(DEFAULT_SETTINGS, committed, this.startupEnv, this.startupCli, {
+      disableLogging: this.disableLogging,
+      loggingService: this.loggingService,
+    });
+    for (const [key, value] of this.runtimeOverrides) {
+      next = this.applyPersistedSetting(next, key, value);
+    }
+    this.settings = next;
+    this.sources = trackSettingSources(DEFAULT_SETTINGS, committed, this.startupEnv, this.startupCli);
+    for (const [key, source] of this.runtimeOverrideSources) {
+      this.sources.set(key, source);
+    }
+  }
+
+  private applyStartupChanges(current: SettingsData): SettingsData {
+    const next = structuredClone(current) as Record<string, any>;
+    for (const [key, value] of this.startupMigrations) {
+      setSettingValue(next, key, value);
+    }
+    return next as SettingsData;
+  }
+
+  private saveToFile(mutate?: (current: SettingsData) => SettingsData): void {
     if (this.disableFilePersistence) {
       return;
     }
-    saveSettingsToFile({
+    const committed = saveSettingsToFile({
       settingsDir: this.settingsDir,
-      settings: this.settings,
+      schema: SettingsSchema,
+      defaults: DEFAULT_SETTINGS,
+      mutate: (current) => {
+        return mutate ? mutate(current) : this.applyStartupChanges(current);
+      },
       stripSensitiveSettings,
       disableLogging: this.disableLogging,
       loggingService: this.loggingService,
     });
+    if (committed) {
+      this.reconcileCommittedSettings(committed);
+    }
   }
 
   /**

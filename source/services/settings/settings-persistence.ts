@@ -4,11 +4,77 @@ import deepEqual from 'fast-deep-equal';
 
 import type { ZodTypeAny } from 'zod';
 import type { SettingsData } from './settings-schema.js';
+import { mergeSettings } from './settings-merger.js';
 
 type LoggerLike = {
   warn: (message: string, meta?: Record<string, unknown>) => void;
   error: (message: string, meta?: Record<string, unknown>) => void;
 };
+
+const LOCK_RETRY_MS = 10;
+const LOCK_TIMEOUT_MS = 2_000;
+const STALE_LOCK_MS = 30_000;
+
+type SettingsMutation = (current: SettingsData) => SettingsData;
+
+type LockOptions = {
+  retryMs?: number;
+  timeoutMs?: number;
+  staleMs?: number;
+};
+
+function waitForLockRetry(retryMs: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)), 0, 0, retryMs);
+}
+
+function acquireSettingsLock(settingsDir: string, options: LockOptions = {}): () => void {
+  const lockFile = path.join(settingsDir, 'settings.json.lock');
+  const retryMs = options.retryMs ?? LOCK_RETRY_MS;
+  const staleMs = options.staleMs ?? STALE_LOCK_MS;
+  const deadline = Date.now() + (options.timeoutMs ?? LOCK_TIMEOUT_MS);
+
+  while (true) {
+    try {
+      const fd = fs.openSync(lockFile, 'wx');
+      try {
+        fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, createdAt: Date.now() }), 'utf-8');
+      } finally {
+        fs.closeSync(fd);
+      }
+
+      return () => {
+        try {
+          fs.unlinkSync(lockFile);
+        } catch (error: unknown) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            throw error;
+          }
+        }
+      };
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw error;
+      }
+
+      try {
+        if (Date.now() - fs.statSync(lockFile).mtimeMs > staleMs) {
+          fs.unlinkSync(lockFile);
+          continue;
+        }
+      } catch (lockError: unknown) {
+        if ((lockError as NodeJS.ErrnoException).code === 'ENOENT') {
+          continue;
+        }
+        throw lockError;
+      }
+
+      if (Date.now() >= deadline) {
+        throw new Error(`Timed out waiting for settings lock at ${lockFile}`);
+      }
+      waitForLockRetry(retryMs);
+    }
+  }
+}
 
 /**
  * Try to parse each top-level section of the settings object independently.
@@ -94,11 +160,14 @@ export function loadSettingsFromFile(opts: {
 
 export function saveSettingsToFile(opts: {
   settingsDir: string;
-  settings: SettingsData;
+  schema: ZodTypeAny;
+  defaults: SettingsData;
+  mutate: SettingsMutation;
   stripSensitiveSettings: (settings: SettingsData) => Partial<SettingsData>;
   disableLogging?: boolean;
   loggingService?: LoggerLike;
-}): void {
+  lockOptions?: LockOptions;
+}): SettingsData | undefined {
   try {
     const settingsFile = path.join(opts.settingsDir, 'settings.json');
 
@@ -107,29 +176,75 @@ export function saveSettingsToFile(opts: {
       fs.mkdirSync(opts.settingsDir, { recursive: true });
     }
 
-    // Filter out sensitive settings before saving to disk
-    const settingsToSave = opts.stripSensitiveSettings(opts.settings);
-    const newContent = JSON.stringify(settingsToSave, null, 2);
-
-    // Only write if file doesn't exist or content has changed
-    // Compare parsed objects rather than string content to avoid false positives
-    // from formatting differences
-    if (fs.existsSync(settingsFile)) {
-      try {
-        const existingContent = fs.readFileSync(settingsFile, 'utf-8');
-        const existingParsed: unknown = JSON.parse(existingContent);
-
-        // Deep equality check that ignores formatting and key order
-        if (deepEqual(existingParsed, settingsToSave)) {
-          return; // No changes, don't write
-        }
-      } catch {
-        // If we can't parse the existing file, write the new content anyway
-        // This handles corrupted files gracefully
+    const releaseLock = acquireSettingsLock(opts.settingsDir, opts.lockOptions);
+    try {
+      const loaded = loadSettingsFromFile({
+        settingsDir: opts.settingsDir,
+        schema: opts.schema,
+        disableLogging: opts.disableLogging,
+        loggingService: opts.loggingService,
+      });
+      if (loaded.hadErrors) {
+        throw new Error(
+          `Refusing to overwrite invalid settings file: ${loaded.errorDetails?.join('; ') ?? 'unknown error'}`,
+        );
       }
-    }
 
-    fs.writeFileSync(settingsFile, newContent, 'utf-8');
+      const current = mergeSettings(
+        opts.defaults,
+        loaded.validated,
+        {},
+        {},
+        {
+          disableLogging: opts.disableLogging,
+          loggingService: opts.loggingService,
+        },
+      );
+      const next = opts.mutate(structuredClone(current));
+      const validation = opts.schema.safeParse(next);
+      if (!validation.success) {
+        throw new Error(
+          `Refusing to save invalid settings: ${validation.error.issues
+            .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+            .join('; ')}`,
+        );
+      }
+      const settingsToSave = opts.stripSensitiveSettings(next);
+      const newContent = JSON.stringify(settingsToSave, null, 2);
+
+      // Only write if file doesn't exist or content has changed. Compare parsed
+      // objects rather than text so formatting never causes a rewrite.
+      if (fs.existsSync(settingsFile)) {
+        try {
+          const existingContent = fs.readFileSync(settingsFile, 'utf-8');
+          const existingParsed: unknown = JSON.parse(existingContent);
+
+          if (deepEqual(existingParsed, settingsToSave)) {
+            return next;
+          }
+        } catch {
+          // The load above would have rejected an invalid existing file. This
+          // is only a last-moment external replacement; writing a new atomic
+          // snapshot is still safer than a direct truncating write.
+        }
+      }
+
+      const tempFile = path.join(
+        opts.settingsDir,
+        `settings.json.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`,
+      );
+      const tempFd = fs.openSync(tempFile, 'wx');
+      try {
+        fs.writeFileSync(tempFd, newContent, 'utf-8');
+        fs.fsyncSync(tempFd);
+      } finally {
+        fs.closeSync(tempFd);
+      }
+      fs.renameSync(tempFile, settingsFile);
+      return next;
+    } finally {
+      releaseLock();
+    }
   } catch (error: unknown) {
     if (!opts.disableLogging) {
       opts.loggingService?.error('Failed to save settings file', {
@@ -137,6 +252,7 @@ export function saveSettingsToFile(opts: {
         settingsFile: path.join(opts.settingsDir, 'settings.json'),
       });
     }
+    return undefined;
   }
 }
 

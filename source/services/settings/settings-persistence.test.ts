@@ -142,11 +142,54 @@ it('saveSettingsToFile: writes stripped settings', () => {
 
   saveSettingsToFile({
     settingsDir: dir,
-    settings,
+    schema: SettingsSchema,
+    defaults: DEFAULT_SETTINGS,
+    mutate: () => settings,
     stripSensitiveSettings,
     disableLogging: true,
   });
 
   const written = JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf-8'));
   expect(written.app?.shellPath).toBe(undefined);
+});
+
+it('saveSettingsToFile: recovers a stale lock and leaves a complete JSON document', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
+  const lockFile = path.join(dir, 'settings.json.lock');
+  fs.writeFileSync(lockFile, 'abandoned', 'utf-8');
+  const staleAt = new Date(Date.now() - 60_000);
+  fs.utimesSync(lockFile, staleAt, staleAt);
+
+  saveSettingsToFile({
+    settingsDir: dir,
+    schema: SettingsSchema,
+    defaults: DEFAULT_SETTINGS,
+    mutate: (current) => ({ ...current, agent: { ...current.agent, model: 'gpt-4o' } }),
+    stripSensitiveSettings,
+    disableLogging: true,
+  });
+
+  expect(JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf-8')).agent.model).toBe('gpt-4o');
+  expect(fs.existsSync(lockFile)).toBe(false);
+  expect(fs.readdirSync(dir).filter((entry) => entry.endsWith('.tmp'))).toEqual([]);
+});
+
+it('saveSettingsToFile: gives up on a live lock without overwriting its settings file', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
+  const settingsFile = path.join(dir, 'settings.json');
+  fs.writeFileSync(settingsFile, JSON.stringify({ agent: { model: 'gpt-5.1' } }), 'utf-8');
+  fs.writeFileSync(path.join(dir, 'settings.json.lock'), 'active', 'utf-8');
+
+  const result = saveSettingsToFile({
+    settingsDir: dir,
+    schema: SettingsSchema,
+    defaults: DEFAULT_SETTINGS,
+    mutate: (current) => ({ ...current, agent: { ...current.agent, model: 'gpt-4o' } }),
+    stripSensitiveSettings,
+    disableLogging: true,
+    lockOptions: { timeoutMs: 0 },
+  });
+
+  expect(result).toBe(undefined);
+  expect(JSON.parse(fs.readFileSync(settingsFile, 'utf-8')).agent.model).toBe('gpt-5.1');
 });

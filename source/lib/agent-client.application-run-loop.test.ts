@@ -165,6 +165,111 @@ describe('AgentClient application-run-loop execution', () => {
     instance.dispose();
   });
 
+  it('admits a steer offered before the turn has reached its first request', async () => {
+    // The queue reports a turn as running the moment it dispatches, but no run
+    // is in flight until startStream has finished preparing — for codex that
+    // includes a network model-discovery call. A steer typed in that window was
+    // refused for want of a run and silently demoted to a queued turn.
+    const provider = `steer-before-run-${Date.now()}`;
+    providers.add(provider);
+    registerProvider({
+      id: provider,
+      label: 'Steer before run test provider',
+      createStreamedModel: () => ({
+        async *stream() {
+          yield {
+            type: 'completion',
+            responseId: 'one',
+            output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+          };
+        },
+      }),
+      fetchModels: async () => [],
+    });
+    const overrideAgent = { name: 'override', model: 'test-model', instructions: 'test', tools: [] } as any;
+    const instance = client(provider, { agentOverride: overrideAgent, maxTurns: 4 });
+
+    instance.openTurn();
+    const steered = instance.steer([{ type: 'message', role: 'user', content: 'one more thing' }]);
+    const stream = await instance.startStream('run');
+    await expect(steered).resolves.toBe('admitted');
+    await stream.completed;
+
+    expect(stream.history).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'message', role: 'user', content: 'one more thing' })]),
+    );
+    instance.closeTurn();
+    instance.dispose();
+  });
+
+  it('keeps a steer waiting when the same turn restarts its stream after a retry', async () => {
+    // A transient failure sends TurnWorkflow back through startStream for the
+    // *same* turn. That path opened with the turn-ending abort(), which threw
+    // away a steer the user had already been shown as accepted — the same class
+    // of bug as the approval-pause resume, one path further along.
+    const provider = `steer-across-retry-${Date.now()}`;
+    providers.add(provider);
+    let turn = 0;
+    registerProvider({
+      id: provider,
+      label: 'Steer across retry test provider',
+      createStreamedModel: () => ({
+        async *stream() {
+          turn += 1;
+          if (turn === 1) throw new Error('transient upstream failure');
+          yield {
+            type: 'completion',
+            responseId: 'two',
+            output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+          };
+        },
+      }),
+      fetchModels: async () => [],
+    });
+    const overrideAgent = { name: 'override', model: 'test-model', instructions: 'test', tools: [] } as any;
+    const instance = client(provider, { agentOverride: overrideAgent, maxTurns: 4 });
+
+    instance.openTurn();
+    const failed = await instance.startStream('run');
+    await expect(failed.completed).rejects.toThrow('transient upstream failure');
+
+    const steered = instance.steer([{ type: 'message', role: 'user', content: 'one more thing' }]);
+    const retried = await instance.startStream('run');
+    await expect(steered).resolves.toBe('admitted');
+    await retried.completed;
+
+    expect(retried.history).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'message', role: 'user', content: 'one more thing' })]),
+    );
+    instance.closeTurn();
+    instance.dispose();
+  });
+
+  it('releases a steer still waiting when the turn closes without another request', async () => {
+    // The turn scope must not become a leak: a message nobody admitted has to
+    // be handed back so the caller sends it as its own turn.
+    const provider = `steer-turn-close-${Date.now()}`;
+    providers.add(provider);
+    registerProvider({
+      id: provider,
+      label: 'Steer turn close test provider',
+      createStreamedModel: () => ({
+        async *stream() {
+          yield { type: 'completion', responseId: 'one', output: [] };
+        },
+      }),
+      fetchModels: async () => [],
+    });
+    const overrideAgent = { name: 'override', model: 'test-model', instructions: 'test', tools: [] } as any;
+    const instance = client(provider, { agentOverride: overrideAgent, maxTurns: 4 });
+
+    instance.openTurn();
+    const steered = instance.steer([{ type: 'message', role: 'user', content: 'never admitted' }]);
+    instance.closeTurn();
+    await expect(steered).resolves.toBe('released');
+    instance.dispose();
+  });
+
   it('fails clearly when a provider has no streamed-model factory', async () => {
     const provider = `runner-only-${Date.now()}`;
     providers.add(provider);

@@ -57,6 +57,13 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   startStream(userInput: ProviderInput, options?: AgentClientRunOptions): Promise<AgentStream>;
   continueRunStream(state: ContinuationHandle, options?: AgentClientRunOptions): Promise<AgentStream>;
   abort(): void;
+  /**
+   * Mark where a turn begins and ends. Without them the client sees only
+   * streams, and a turn's first stream is indistinguishable from a retry of its
+   * last — so a steer cannot survive the gaps between them.
+   */
+  openTurn?(): void;
+  closeTurn?(): void;
   /** Admit a user message into the running turn at its next request boundary. */
   steer?(items: readonly ProviderInputItem[], options?: { id?: string }): Promise<SteerOutcome>;
   /** Drop a still-waiting steer. False when it was already admitted. */

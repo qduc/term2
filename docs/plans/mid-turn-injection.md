@@ -3,6 +3,8 @@
 ## Status
 
 **Status:** Completed. Live mid-turn steer confirmed working by the user on 2026-08-06.
+**Round 2 (2026-08-07):** the same defect class found on two further paths and fixed by giving the
+run loop a declared turn scope — see `## Round 2` below.
 
 
 ## The defect
@@ -33,6 +35,62 @@ Key mechanics:
 - `abortSegment()` stops what is streaming; `abort()` ends the turn. Resuming uses the former — this distinction is the whole of `b45cf24d`.
 - `injectIntoActiveTurn(items)` is the shared entry. `steerActiveTurn` wraps it and adds `STEERING_NOTICE`; system-spoken injections must **not** carry that notice.
 - When user steer messages are injected mid-turn after tool results, delta input calculations (`findChainedDeltaStart` and `filterServerManagedInput`) look backwards past trailing user messages for tool results, ensuring function call outputs are preserved alongside injected steer messages in chained requests (`previous_response_id`).
+
+## Round 2 (2026-08-07) — the turn scope
+
+Steers were still being demoted to queued turns after Round 1. Diagnosed from the app log alone; no
+live reproduction was needed.
+
+**Evidence.** Every failed steer was already recorded in `~/Library/Logs/term2-nodejs/logs/`:
+
+| time | steered | queueStateKind | waitedMs |
+| --- | --- | --- | --- |
+| 08-05 22:38:59 | false | running | 4046 |
+| 08-05 22:47:23 | false | running | 0 |
+| 08-05 23:24:57 | false | running | 3281 |
+
+The first two predate `499307bf`. The third is after it and carries a matching run-loop record in the
+same second: `{"message":"Steer released at run end","reason":"aborted","released":1}` — accepted,
+waited 3.3s, then discarded, with no `turn.start` hooks in between, so no new turn had begun.
+
+**Root cause.** Round 1 moved injection lifetime from segment to turn *in effect* but not *in
+representation*: the run loop still inferred "a turn is running" from `#runInFlight || #turnPaused`,
+both segment-level facts, while the adapter and UI inferred it from `isQueueActive()`, a turn-level
+fact. Two gaps live between them.
+
+- **A. `abort()` on a path that is not the end of a turn.** `AgentClient.startStream` opened with
+  `this.abort()`, which releases every pending steer. A turn re-enters `startStream` on every retry
+  (`turn-workflow.ts` `executeInitialAttempt`'s `continue` after `recoveryHandler`) and on every
+  fresh-start replay. Exactly the `b45cf24d` bug, one path further along.
+- **B. The queue reports `running` before any run exists.** `QueueController` sets the phase before
+  `driver.start`, which is fire-and-forget; `#runInFlight` is not set until after hooks, input
+  preparation and `AgentClient.#prepareStart` — which for **codex** makes a network `fetchModels`
+  call. A steer in that window hit `steer()`'s early return and resolved `released` instantly. The
+  same gap reopens during retry backoff sleeps. This is the `waitedMs: 0` row.
+
+Note this is *not* premise 3 below (`isQueueActive` vs `isQueueOwningSubmissions`), which stays
+disproven. The mismatch is between the queue's phase and the run loop's `#runInFlight`.
+
+**The fix.** `ApplicationRunLoop` gains `openTurn()` / `closeTurn()` and a `#turnOpen` flag.
+
+- `steer()` accepts while the turn is open, so the gaps between segments are steerable.
+- `startStream` and the run-end `finally` no longer settle steers while a turn is open — the loop
+  cannot tell its own turn restarting from a new one, so the turn's owner decides.
+- `TurnCoordinator.start` opens the scope right after `statusMachine.beginTurn()` — ahead of hooks,
+  preparation and provider start-up — and closes it only when the status machine is back to `idle`,
+  so an approval pause keeps it open. `abort()` closes it.
+- `AgentClient.startStream` now opens with `abortSegment`, matching `continueRunStream`.
+
+Callers that drive streams directly and never open a turn keep the old stream-scoped behaviour.
+
+**Why nothing caught it.** No test ever *restarted* a turn's stream; `b45cf24d` was found by hand and
+fixed by hand, one path at a time. The regression tests added here go through `AgentClient` (premise
+5) and cover both a retry restart and a steer offered before the first request exists. The structural
+answer is that a turn is now declared once, by the component that owns turn identity, instead of
+being re-inferred by every layer.
+
+**Checks run:** `pnpm test:provider-black-box` (152 ✓), `pnpm test` (5267 ✓ — `InputBox.test.tsx` is
+timing-flaky under full-suite load; passes alone and on re-run), `pnpm typecheck`, `pnpm build`.
 
 ## Premises already disproven
 

@@ -544,6 +544,52 @@ property that could change without notice, and no unit test can catch a regressi
 visible only in token accounting. Re-run this control when adding a model or on any unexplained cost
 increase.
 
+### Round 4 — streaming frame shape for compaction items (2026-08-07)
+
+Measured to answer one question the earlier rounds could not: **does the streaming API surface a
+compaction item as its own `output_item` frame pair, and is there a real interval between them?**
+Rounds 1–3 all observed the non-streaming response shape, so the answer was unknown; the SDK type
+union permits it (`ResponseOutputItemAddedEvent.item` is `ResponseOutputItem`, which includes
+`ResponseCompactionItem`) but a permitted union member is not a sent frame.
+
+Live streamed `responses.create` on `gpt-5.6-luna`, `context_management: [{ type: 'compaction',
+compact_threshold: 1000 }]`, ~8.3k-token input, `store: false`. Two runs:
+
+| frame | run 1 | run 2 |
+| --- | --- | --- |
+| `output_item.added` item=compaction | 2780ms | 2938ms |
+| `output_item.done` item=compaction | 2796ms | 2951ms |
+| `output_item.added` item=message | 3038ms | 3525ms |
+| `output_item.done` item=message | 3181ms | 3772ms |
+| `output_item.added` item=compaction | 3190ms | 3781ms |
+| `output_item.done` item=compaction | 4566ms | 4503ms |
+
+**Findings:**
+
+- **`response.output_item.added` does carry `item.type === 'compaction'`.** Confirmed, both runs.
+  There is a real place to hang a start signal; `openai-responses-model.ts` currently returns `null`
+  for it.
+- **There are two compaction items per response, not one** — the streamed order is
+  `[compaction, message, compaction]`, exactly matching Round 1's non-streaming observation.
+- **The two are not alike.** The *leading* compaction closes in 13–16ms (effectively instant). The
+  *trailing* compaction takes **720–1376ms** — a genuine, displayable interval.
+- **The trailing compaction finishes after the answer text.** Its `.done` lands ~800–1400ms after
+  `output_item.done` for the message, so any "compacting…" indicator driven by it appears *after*
+  the model's reply, not before it.
+- **No compaction-specific stream event exists.** The frame-type census showed only
+  `response.created`, `.in_progress`, `.output_item.added/.done`, `.content_part.added/.done`,
+  `.output_text.delta/.done`, `.completed`. `output_item` frames are the only carrier.
+- **`usage.input_tokens` = 8264 for an ~8.3k-token input**, re-confirming finding (c): it reports the
+  pre-compaction size, so it is the correct source for a "compacted from N tokens" line and there is
+  still no post-compaction count on the wire.
+
+**Consequence for lifecycle events (Step 7).** `#contextCompactionLifecycleEvents`
+(`turn-workflow.ts:635`) synthesizes `started` and `completed` together from the finalization
+snapshot, and its `durationMs` is computed from a `startedAt` captured at the emit site
+(`:597`, `:1091`) immediately before use — so it is structurally always ~0. A truthful duration
+requires driving both events from the live frame pair above, and must distinguish the instant
+leading compaction from the slow trailing one.
+
 ### Reproducing
 
 Probe scripts are in this session's scratchpad, not the repo — they hit the live API and cost money,

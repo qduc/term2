@@ -281,3 +281,19 @@ it.sequential(
     expect(output.includes('read_file')).toBe(false);
   },
 );
+
+it.sequential('SubagentActivityMessage appends failure reason to status suffix when error is present', async () => {
+  const props = {
+    msg: {
+      role: 'explorer',
+      task: 'find x',
+      status: 'failed',
+      error: 'Max turns (100) exceeded',
+    },
+  };
+
+  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
+  const output = toVisibleText(lastFrame() ?? '');
+
+  expect(output.includes('— failed: Max turns (100) exceeded')).toBe(true);
+});

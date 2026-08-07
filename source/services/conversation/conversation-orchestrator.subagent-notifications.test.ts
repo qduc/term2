@@ -444,6 +444,15 @@ describe('ConversationOrchestrator background subagent notifications', () => {
     expect(h.sentTexts()[0]).toContain('boom exploded');
     expect(h.sentTexts()[1]).toContain('cancelled');
     expect(h.sentTexts()[1]).toContain('user cancelled');
+
+    const announced = h.config.messages
+      .getMessages()
+      .filter((message) => message.sender === 'command' && (message as any).command === 'background_subagent_notification');
+    expect((announced[0] as any).toolArgs.runs[0]).toEqual({
+      role: 'explorer',
+      status: 'failed',
+      error: 'boom exploded',
+    });
   });
 
   it('does not announce background runs that the user’s own stop just cancelled', async () => {

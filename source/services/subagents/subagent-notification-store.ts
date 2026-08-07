@@ -64,6 +64,8 @@ export interface BackgroundSubagentTask {
   usage?: NormalizedUsage;
   /** Absent until the run calls its first tool; dropped once the run settles. */
   lastTool?: BackgroundSubagentTaskTool;
+  /** Failure reason if the subagent failed. */
+  error?: string;
 }
 
 /**
@@ -192,6 +194,7 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
       startedAt: existing?.startedAt ?? completedAt,
       completedAt,
       ...(result.usage !== undefined ? { usage: result.usage } : {}),
+      ...(result.error ? { error: result.error } : {}),
     });
     this.#settledTaskIds.add(result.agentId);
     while (this.#settledTaskIds.size > this.#deliveredIdCap) {

@@ -205,11 +205,24 @@ const CommandMessage: FC<Props> = ({
       case 'background_subagent_notification': {
         const runs = Array.isArray(toolArgs?.runs) ? toolArgs.runs : [];
         if (runs.length === 1) {
-          const [{ name, role, status }] = runs;
+          const [{ name, role, status, error }] = runs;
           const identity = name ? `${name} (${role ?? 'subagent'})` : role ?? 'subagent';
+          if (status === 'failed' || error) {
+            const reason = error ? `: ${error}` : '';
+            return renderAction(`Background ${identity} failed${reason}`);
+          }
           return renderAction(`Background ${identity} ${status ?? 'finished'}`);
         }
         if (runs.length > 1) {
+          const failedRuns = runs.filter((run: { status?: string; error?: string }) => run.status === 'failed' || run.error);
+          if (failedRuns.length > 0) {
+            const reasons = failedRuns
+              .map((run: { role?: string; error?: string }) => (run.error ? `${run.role ?? 'subagent'}: ${run.error}` : null))
+              .filter(Boolean);
+            if (reasons.length > 0) {
+              return renderAction(`Background subagents failed: ${reasons.join('; ')}`);
+            }
+          }
           const roles = runs
             .map((run: { role?: string }) => run.role)
             .filter(Boolean)

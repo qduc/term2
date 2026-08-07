@@ -1,10 +1,11 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 import { SettingsSchema, DEFAULT_SETTINGS } from './settings-schema.js';
 import {
+  acquireSettingsLock,
   hasMissingKeys,
   loadSettingsFromFile,
   saveSettingsToFile,
@@ -172,6 +173,44 @@ it('saveSettingsToFile: recovers a stale lock and leaves a complete JSON documen
   expect(JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf-8')).agent.model).toBe('gpt-4o');
   expect(fs.existsSync(lockFile)).toBe(false);
   expect(fs.readdirSync(dir).filter((entry) => entry.endsWith('.tmp'))).toEqual([]);
+});
+
+it('acquireSettingsLock: a stale owner cannot release its successor lock', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
+  const lockFile = path.join(dir, 'settings.json.lock');
+  const releaseStaleOwner = acquireSettingsLock(dir);
+  const staleAt = new Date(Date.now() - 60_000);
+  fs.utimesSync(lockFile, staleAt, staleAt);
+
+  const releaseSuccessor = acquireSettingsLock(dir, { staleMs: 0, timeoutMs: 0 });
+  releaseStaleOwner();
+
+  expect(fs.existsSync(lockFile)).toBe(true);
+  releaseSuccessor();
+  expect(fs.existsSync(lockFile)).toBe(false);
+});
+
+it('saveSettingsToFile: removes its temp file when atomic rename fails', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
+  const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
+    throw new Error('rename failed');
+  });
+
+  try {
+    const result = saveSettingsToFile({
+      settingsDir: dir,
+      schema: SettingsSchema,
+      defaults: DEFAULT_SETTINGS,
+      mutate: (current) => ({ ...current, agent: { ...current.agent, model: 'gpt-4o' } }),
+      stripSensitiveSettings,
+      disableLogging: true,
+    });
+
+    expect(result).toBe(undefined);
+    expect(fs.readdirSync(dir).filter((entry) => entry.endsWith('.tmp'))).toEqual([]);
+  } finally {
+    rename.mockRestore();
+  }
 });
 
 it('saveSettingsToFile: gives up on a live lock without overwriting its settings file', () => {

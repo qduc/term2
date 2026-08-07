@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import deepEqual from 'fast-deep-equal';
 
 import type { ZodTypeAny } from 'zod';
@@ -27,7 +28,7 @@ function waitForLockRetry(retryMs: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)), 0, 0, retryMs);
 }
 
-function acquireSettingsLock(settingsDir: string, options: LockOptions = {}): () => void {
+export function acquireSettingsLock(settingsDir: string, options: LockOptions = {}): () => void {
   const lockFile = path.join(settingsDir, 'settings.json.lock');
   const retryMs = options.retryMs ?? LOCK_RETRY_MS;
   const staleMs = options.staleMs ?? STALE_LOCK_MS;
@@ -36,17 +37,24 @@ function acquireSettingsLock(settingsDir: string, options: LockOptions = {}): ()
   while (true) {
     try {
       const fd = fs.openSync(lockFile, 'wx');
+      const token = randomUUID();
       try {
-        fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, createdAt: Date.now() }), 'utf-8');
+        fs.writeFileSync(fd, JSON.stringify({ token, pid: process.pid, createdAt: Date.now() }), 'utf-8');
       } finally {
         fs.closeSync(fd);
       }
 
       return () => {
         try {
+          const content = fs.readFileSync(lockFile, 'utf-8');
+          const current: unknown = JSON.parse(content);
+          if (!current || typeof current !== 'object' || (current as { token?: unknown }).token !== token) {
+            return;
+          }
           fs.unlinkSync(lockFile);
         } catch (error: unknown) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code !== 'ENOENT' && !(error instanceof SyntaxError)) {
             throw error;
           }
         }
@@ -233,14 +241,27 @@ export function saveSettingsToFile(opts: {
         opts.settingsDir,
         `settings.json.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`,
       );
-      const tempFd = fs.openSync(tempFile, 'wx');
+      let tempFileCreated = false;
       try {
-        fs.writeFileSync(tempFd, newContent, 'utf-8');
-        fs.fsyncSync(tempFd);
+        const tempFd = fs.openSync(tempFile, 'wx');
+        tempFileCreated = true;
+        try {
+          fs.writeFileSync(tempFd, newContent, 'utf-8');
+          fs.fsyncSync(tempFd);
+        } finally {
+          fs.closeSync(tempFd);
+        }
+        fs.renameSync(tempFile, settingsFile);
+        tempFileCreated = false;
       } finally {
-        fs.closeSync(tempFd);
+        if (tempFileCreated) {
+          try {
+            fs.unlinkSync(tempFile);
+          } catch {
+            // Best effort only: preserve the original write/rename failure.
+          }
+        }
       }
-      fs.renameSync(tempFile, settingsFile);
       return next;
     } finally {
       releaseLock();

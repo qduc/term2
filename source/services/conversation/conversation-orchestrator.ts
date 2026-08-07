@@ -419,6 +419,23 @@ export class ConversationOrchestrator {
       this.config.conversationService.isQueueOwningSubmissions?.() ??
       this.config.conversationService.isQueueActive?.() ??
       false;
+
+    // Logged before the branch below, not inside it. "Steer attempt resolved"
+    // only exists on the path that actually tries to steer, so a submission
+    // that never enters that path — because it arrived without busyMode
+    // 'steer', or because the queue did not claim it — is indistinguishable in
+    // the logs from one that was never submitted at all. That gap hid a real
+    // report of a steer silently queueing: the queue file held the message and
+    // the transcript held the user_message, and nothing recorded the decision
+    // in between. These four fields name that decision.
+    this.config.loggingService.info('Submission routing decided', {
+      busyMode: options?.busyMode ?? 'none',
+      queueOwnsSubmission,
+      queueStateKind: this.config.conversationService.queueStateKind?.() ?? 'unknown',
+      canSteer: Boolean(this.config.conversationService.steerActiveTurn),
+      messageId: userMessage.id,
+    });
+
     if (queueOwnsSubmission) {
       // A turn is already in flight or the queue is paused with retained work.
       // Show the message above the input box until the queue actually starts

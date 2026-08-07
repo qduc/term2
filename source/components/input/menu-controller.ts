@@ -229,6 +229,10 @@ export class MenuControllerImpl implements MenuController {
 
     // Check successor relationship if top frame exists and has binding
     if (topFrame && 'binding' in topFrame) {
+      const topRule = this.triggerRegistry
+        .getRules()
+        .find((r) => topFrame.kind === r.id || topFrame.id.startsWith(r.id));
+
       const binding = this.computeBinding(candidate, editor, activationId);
       const newFrame = {
         ...candidate.frame,

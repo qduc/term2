@@ -39,9 +39,21 @@ it('context_compaction_completed: reports the pre-compaction prompt size', () =>
   expect(result[0].text).toBe('Compacted from 128,431 tokens.');
 });
 
-// durationMs is measured from a startedAt captured at the emit site, so it is always ~0.
-// Rendering it would print a fabricated "(0.0s)"; assert it never reaches the transcript.
-it('context_compaction_completed: omits the unmeasurable duration', () => {
+it('context_compaction_completed: reports the measured duration alongside the token count', () => {
+  const result = runOne({
+    type: 'context_compaction_completed',
+    provider: 'openai',
+    sessionId: 's-1',
+    inputTokensBefore: 8264,
+    durationMs: 1376,
+  } as ConversationEvent);
+
+  expect(result[0].text).toBe('Compacted from 8,264 tokens (1.4s).');
+});
+
+// A zero duration means the provider gave no measurable interval (an unpaired frame, or a
+// path with no frames at all). Printing "(0.0s)" would state a measurement that was not made.
+it('context_compaction_completed: omits a zero duration rather than printing 0.0s', () => {
   const result = runOne({
     type: 'context_compaction_completed',
     provider: 'openai',
@@ -50,7 +62,7 @@ it('context_compaction_completed: omits the unmeasurable duration', () => {
     durationMs: 0,
   } as ConversationEvent);
 
-  expect(result[0].text).not.toMatch(/\ds\b|ms|0\.0/);
+  expect(result[0].text).toBe('Compacted from 128,431 tokens.');
 });
 
 it('context_compaction_completed: falls back to a bare notice when no token count is available', () => {
@@ -76,6 +88,53 @@ it('context_compaction_failed: names the error category and omits the hardcoded 
   expect(result[0].sender).toBe('system');
   expect(result[0].text).toContain('validation');
   expect(result[0].text).not.toMatch(/\ds\b|ms|0\.0/);
+});
+
+// A response carries [compaction, message, compaction], so `started` fires twice per turn,
+// but only the last compaction item becomes history. Two notices for one compaction would
+// misreport what happened, so a later start supersedes the earlier one.
+it('a second compaction start supersedes the first instead of stacking', () => {
+  const deps = createMockDeps();
+  const handler = createConversationEventHandler(deps, createStreamingState());
+
+  handler({ type: 'context_compaction_started', provider: 'openai', sessionId: 's-1' } as ConversationEvent);
+  handler({ type: 'context_compaction_started', provider: 'openai', sessionId: 's-1' } as ConversationEvent);
+  handler({
+    type: 'context_compaction_completed',
+    provider: 'openai',
+    sessionId: 's-1',
+    inputTokensBefore: 8264,
+    durationMs: 1376,
+  } as ConversationEvent);
+
+  // Fold the three updaters over a transcript that already holds an unrelated message.
+  const existing: any[] = [{ id: 'other', sender: 'bot', status: 'finalized', text: 'hello' }];
+  const messages = deps.calls.setMessagesCalls.reduce<any[]>((acc, updater) => updater(acc), existing);
+
+  expect(messages.length).toBe(2);
+  expect(messages[0].id).toBe('other');
+  expect(messages[1].text).toBe('Compacted from 8,264 tokens (1.4s).');
+});
+
+it('the completion replaces the start notice in place rather than appending below it', () => {
+  const deps = createMockDeps();
+  const handler = createConversationEventHandler(deps, createStreamingState());
+
+  handler({ type: 'context_compaction_started', provider: 'openai', sessionId: 's-1' } as ConversationEvent);
+  const afterStart = deps.calls.setMessagesCalls[0]!([]);
+  expect(afterStart.length).toBe(1);
+  expect(afterStart[0].text).toBe('Compacting context...');
+
+  handler({
+    type: 'context_compaction_completed',
+    provider: 'openai',
+    sessionId: 's-1',
+    durationMs: 720,
+  } as ConversationEvent);
+  const afterDone = deps.calls.setMessagesCalls[1]!(afterStart);
+
+  expect(afterDone.length).toBe(1);
+  expect(afterDone[0].text).toBe('Compacted context (0.7s).');
 });
 
 // The bug this whole case set fixes: all three events previously fell through to

@@ -47,6 +47,7 @@ it('createStreamingSession wires state and logs final usage', () => {
           flushedReasoningLength: 0,
           textWasFlushed: false,
           currentReasoningMessageId: null,
+          contextCompactionMessageId: null,
           latestUsage: null,
         };
         calls.streamingState = state;

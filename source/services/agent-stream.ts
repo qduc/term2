@@ -53,6 +53,8 @@ function projectProviderItems(items: readonly unknown[]): unknown[] {
       event.type === 'reasoning_delta' ||
       event.type === 'codex_rate_limits' ||
       event.type === 'tool_call_streaming_delta' ||
+      event.type === 'context_compaction_started' ||
+      event.type === 'context_compaction_completed' ||
       event.type === 'usage_update'
     ) {
       return [];

@@ -881,3 +881,50 @@ it('tool_call_streaming_delta resets argument char count when a new tool call st
   expect(deltas[5].toolName).toBe('grep');
   expect(deltas[5].argumentCharCount).toBe(9); // '{"pattern'.length (should be reset, not 18)
 });
+
+// A response carries [compaction, message, compaction]. The two provider events are handled
+// asymmetrically on purpose: `started` is surfaced live so the notice appears while the
+// provider is compacting, while the measured duration is parked on the accumulator and
+// joined with the token count at finalization, because `usage` does not arrive until the
+// response completes. See StreamAccumulator.lastContextCompactionDurationMs.
+it('surfaces compaction starts live and parks the measured duration for finalization', async () => {
+  const stream = makeStream([
+    { type: 'context_compaction_started', provider: 'openai' },
+    { type: 'context_compaction_completed', provider: 'openai', durationMs: 16 },
+    { type: 'text_delta', text: 'answer' },
+    { type: 'context_compaction_started', provider: 'openai' },
+    { type: 'context_compaction_completed', provider: 'openai', durationMs: 1376 },
+  ]);
+  const acc = createStreamAccumulator();
+
+  const emitted: any[] = [];
+  for await (const event of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    emitted.push(event);
+  }
+
+  const starts = emitted.filter((event) => event.type === 'context_compaction_started');
+  expect(starts.length).toBe(2);
+  expect(starts[0]).toEqual({ type: 'context_compaction_started', provider: 'openai', sessionId: 'test-session' });
+
+  // The completion is not yielded here; only its measurement survives.
+  expect(emitted.some((event) => event.type === 'context_compaction_completed')).toBe(false);
+
+  // The trailing compaction is the one that becomes history, so its duration must win.
+  expect(acc.lastContextCompactionDurationMs).toBe(1376);
+});
+
+// The defect this guards end to end: the duration used to be a clock read taken after the
+// stream had finished, so it was structurally always ~0 no matter how long compaction took.
+it('carries a non-zero compaction duration through to the accumulator', async () => {
+  const acc = createStreamAccumulator();
+  const stream = makeStream([
+    { type: 'context_compaction_started', provider: 'openai' },
+    { type: 'context_compaction_completed', provider: 'openai', durationMs: 1376 },
+  ]);
+
+  for await (const _event of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    /* drain */
+  }
+
+  expect(acc.lastContextCompactionDurationMs).toBeGreaterThan(0);
+});

@@ -610,18 +610,22 @@ export function createConversationEventHandler(
         // This case exists for exhaustiveness and to document the event flow
         return;
 
-      // Server-side context compaction. Start and finish are rendered as two separate
-      // entries so the transcript records that the provider replaced the context, not
-      // just that it finished. No duration is shown: `durationMs` is measured from a
-      // `startedAt` captured at the emit site (turn-workflow.ts:597, 1091), so it is
-      // always ~0 until a live provider frame supplies a real start moment.
+      // Server-side context compaction, rendered as a start notice that the completion
+      // replaces in place.
+      //
+      // A response carries more than one compaction item (measured on OpenAI: the streamed
+      // order is `[compaction, message, compaction]`), so `started` fires more than once per
+      // turn. Only the last item becomes history, so a second `started` supersedes the first
+      // rather than stacking — otherwise one compaction would print several notices.
       case 'context_compaction_started': {
+        const previousId = state.contextCompactionMessageId;
         const systemMessage: SystemMessage = {
           id: createMessageId(),
           sender: 'system',
           text: 'Compacting context...',
         };
-        setMessages((prev) => [...prev, systemMessage]);
+        state.contextCompactionMessageId = systemMessage.id;
+        setMessages((prev) => [...prev.filter((message) => message.id !== previousId), systemMessage]);
         return;
       }
 
@@ -629,25 +633,36 @@ export function createConversationEventHandler(
         // `inputTokensBefore` is the pre-compaction prompt size: the provider reports the
         // compaction pass's own input tokens, not the compacted result. There is no
         // "after" number to pair it with, so the line states only what was compacted from.
+        const previousId = state.contextCompactionMessageId;
         const before = event.inputTokensBefore;
-        const systemMessage: SystemMessage = {
-          id: createMessageId(),
-          sender: 'system',
-          text:
-            before === undefined ? 'Compacted context.' : `Compacted from ${before.toLocaleString('en-US')} tokens.`,
-        };
-        setMessages((prev) => [...prev, systemMessage]);
+        const seconds = event.durationMs > 0 ? ` (${(event.durationMs / 1000).toFixed(1)}s)` : '';
+        const text =
+          before === undefined
+            ? `Compacted context${seconds}.`
+            : `Compacted from ${before.toLocaleString('en-US')} tokens${seconds}.`;
+        const systemMessage: SystemMessage = { id: createMessageId(), sender: 'system', text };
+
+        state.contextCompactionMessageId = null;
+        setMessages((prev) => {
+          const index = prev.findIndex((message) => message.id === previousId);
+          if (index === -1) return [...prev, systemMessage];
+          const next = prev.slice();
+          next[index] = systemMessage;
+          return next;
+        });
         return;
       }
 
       case 'context_compaction_failed': {
         // `durationMs` is hardcoded 0 at both catch sites, so only the category is shown.
+        const previousId = state.contextCompactionMessageId;
         const systemMessage: SystemMessage = {
           id: createMessageId(),
           sender: 'system',
           text: `Context compaction failed (${event.errorCategory}). The turn continues with the full context.`,
         };
-        setMessages((prev) => [...prev, systemMessage]);
+        state.contextCompactionMessageId = null;
+        setMessages((prev) => [...prev.filter((message) => message.id !== previousId), systemMessage]);
         return;
       }
 

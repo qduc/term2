@@ -108,7 +108,13 @@ export class SettingsService {
     // Load settings with precedence: CLI > Env > Config > Default
     const settingsFilePath = path.join(this.settingsDir, 'settings.json');
     const configFileExisted = fs.existsSync(settingsFilePath);
-    const { validated, raw: rawFileConfig, hadErrors: fileHadErrors } = this.loadFromFile();
+    const { validated, raw: rawFileConfig, hadErrors: fileHadErrors, errorDetails } = this.loadFromFile();
+
+    if (configFileExisted && fileHadErrors) {
+      const details = errorDetails && errorDetails.length > 0 ? `:\n  - ${errorDetails.join('\n  - ')}` : '';
+      throw new Error(`Failed to parse settings file at ${settingsFilePath}${details}`);
+    }
+
     const { config: fileConfig, migrated: migratedLegacyAncillarySettings } = migrateLegacyAncillarySettings(
       validated,
       rawFileConfig,
@@ -591,6 +597,7 @@ export class SettingsService {
     validated: Partial<SettingsData>;
     raw: any;
     hadErrors: boolean;
+    errorDetails?: string[];
   } {
     return loadSettingsFromFile({
       settingsDir: this.settingsDir,

@@ -4,7 +4,7 @@ const ANTHROPIC_FORMAT_MODEL_FRAGMENTS = ['minimax', 'qwen'];
 
 export function selectOpencodeModelTransport(modelId: string): OpencodeModelTransport {
   const normalizedModelId = modelId.toLowerCase();
-  if (normalizedModelId.includes('gpt')) return 'openai-responses';
+  if (normalizedModelId.includes('gpt') || normalizedModelId.includes('grok')) return 'openai-responses';
   return ANTHROPIC_FORMAT_MODEL_FRAGMENTS.some((fragment) => normalizedModelId.includes(fragment))
     ? 'anthropic-messages'
     : 'openai-chat-completions';

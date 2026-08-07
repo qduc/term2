@@ -267,7 +267,7 @@ it('runSubagent scopes provider history to the subagent tool call', async () => 
   ]);
 });
 
-it('every subagent run gets a provider history key distinct from the parent conversation', async () => {
+it('every foreground subagent run gets a provider history key distinct from the parent conversation', async () => {
   const sessionContextService = new SessionContextService();
   const seen: Record<string, string | undefined> = {};
 
@@ -279,10 +279,6 @@ it('every subagent run gets a provider history key distinct from the parent conv
   const manager = {
     run: async () => capture('mentor'),
     runAsTool: async () => capture('tool-without-call-id'),
-    startRunAsync: () => {
-      capture('async');
-      return { runId: 'run-1' };
-    },
     resetMentorSession: () => {},
     clearCache: () => {},
   };
@@ -300,16 +296,45 @@ it('every subagent run gets a provider history key distinct from the parent conv
     await bridge.createMentor('why');
     // A tool call without a callId still must not inherit the parent's session.
     await bridge.runSubagent({ role: 'worker', task: 'do it' }, undefined, {});
+  });
+
+  expect(seen.mentor).toBe('session-1:subagent:mentor');
+  expect(seen['tool-without-call-id']).toBeTruthy();
+  expect(seen['tool-without-call-id']).not.toBe('session-1');
+  expect(new Set(Object.values(seen)).size, 'each run needs its own key').toBe(2);
+});
+
+it('leaves background run scoping to the registry, which owns the run id', async () => {
+  const sessionContextService = new SessionContextService();
+  let observed: string | undefined | symbol = Symbol('unset');
+
+  const manager = {
+    // A background run outlives its launching tool call and can be continued
+    // from a later one, so only the registry can scope every segment alike.
+    startRunAsync: () => {
+      observed = sessionContextService.getContext()?.providerHistoryKey;
+      return { runId: 'run-1' };
+    },
+    resetMentorSession: () => {},
+    clearCache: () => {},
+  };
+
+  const bridge = new SubagentBridge({
+    logger: noopLogger as any,
+    settings: noopSettings as any,
+    sessionContextService: sessionContextService as any,
+    chat: async () => '',
+    createClient: () => ({}),
+    subagentManager: manager as any,
+  });
+
+  await sessionContextService.runWithContext(makeTrafficContext() as any, async () => {
     await bridge.runSubagentAsync({ role: 'explorer', task: 'look' }, undefined, {
       toolCall: { callId: 'call-async-1' },
     });
   });
 
-  expect(seen.mentor).toBe('session-1:subagent:mentor');
-  expect(seen.async).toBe('session-1:subagent:call-async-1');
-  expect(seen['tool-without-call-id']).toBeTruthy();
-  expect(seen['tool-without-call-id']).not.toBe('session-1');
-  expect(new Set(Object.values(seen)).size, 'each run needs its own key').toBe(3);
+  expect(observed, 'the launch context must reach the registry unscoped').toBeUndefined();
 });
 
 it('a nested subagent run scopes under its parent subagent, not the conversation', async () => {

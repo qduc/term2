@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createCodenameRunId } from './codename-run-id.js';
-import type { ILoggingService } from '../service-interfaces.js';
+import type { ILoggingService, ISessionContextService, SessionTrafficContext } from '../service-interfaces.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { addTokenUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type {
@@ -83,6 +83,13 @@ type StoredRun = {
   turnHistory: TurnSnapshot[];
   pendingToolCounts: Map<string, number>;
   currentText: string;
+  /**
+   * The run's own traffic context, fixed when the run is created and re-applied
+   * to every later segment. Providers key server-side state off it, so a
+   * continuation that rebuilt it from the launching tool call would land the
+   * continued turns in a different provider-side session than the first ones.
+   */
+  trafficContext?: SessionTrafficContext;
 };
 
 export interface SubagentAsyncRegistryDeps {
@@ -97,6 +104,12 @@ export interface SubagentAsyncRegistryDeps {
     control: SubagentSegmentControl;
   }) => Promise<SubagentResult>;
   onEvent?: (event: ConversationEvent) => void;
+  /**
+   * Used to scope each run's provider traffic to the run itself. Optional only
+   * so unit tests that never reach a provider can omit it; production wiring in
+   * `createSubagentRuntime` always supplies it.
+   */
+  sessionContextService?: ISessionContextService;
   now?: () => number;
   ttlMs?: number;
   messageCap?: number;
@@ -119,6 +132,7 @@ export class SubagentAsyncRegistry {
   #ttlMs: number;
   #messageCap: number;
   #createRunId: () => string;
+  #sessionContextService?: ISessionContextService;
   #sessionCap = 50;
   #sessionForRole?: (role: string) => SubagentSession | undefined;
   #timer: ReturnType<typeof setInterval>;
@@ -133,6 +147,7 @@ export class SubagentAsyncRegistry {
     this.#ttlMs = deps.ttlMs ?? 30 * 60 * 1000;
     this.#messageCap = deps.messageCap ?? 50;
     this.#createRunId = deps.createRunId ?? createCodenameRunId;
+    this.#sessionContextService = deps.sessionContextService;
     this.#sessionForRole = deps.sessionForRole;
     this.#clearInterval = deps.clearInterval ?? clearInterval;
     this.#timer = (deps.setInterval ?? setInterval)(
@@ -157,6 +172,7 @@ export class SubagentAsyncRegistry {
     }
     const continuation = request.continueRunId;
     let session: SubagentSession;
+    let trafficContext: SessionTrafficContext | undefined;
     if (continuation) {
       const previous = this.#runs.get(continuation);
       if (!previous) {
@@ -178,6 +194,7 @@ export class SubagentAsyncRegistry {
         throw new SubagentRegistryError('not_continuable', `Role ${role} cannot be continued`);
       }
       session = previous.session;
+      trafficContext = previous.trafficContext;
     } else {
       const reuseDefault = role === 'mentor' || role === 'librarian';
       const key = reuseDefault ? `role:${role}` : randomUUID();
@@ -193,6 +210,7 @@ export class SubagentAsyncRegistry {
     this.#evictToSessionCap();
 
     const runId = continuation ?? this.#allocateRunId();
+    trafficContext ??= this.#deriveTrafficContext(runId);
     const control = new SubagentRunControl();
     let resolve!: (result: SubagentResult) => void;
     const promise = new Promise<SubagentResult>((r) => (resolve = r));
@@ -218,6 +236,7 @@ export class SubagentAsyncRegistry {
       turnHistory: [],
       pendingToolCounts: new Map(),
       currentText: '',
+      ...(trafficContext ? { trafficContext } : {}),
     };
     this.#runs.set(runId, stored);
     if (name !== undefined) this.#activeNameToRunId.set(name, runId);
@@ -469,6 +488,18 @@ export class SubagentAsyncRegistry {
    * vanishingly unlikely codename collision is defended here rather than
    * relying on the factory's entropy alone.
    */
+  /**
+   * Scopes the run's provider traffic to the run, under whichever context
+   * launched it — so a background subagent started by another subagent nests
+   * beneath its parent instead of flattening back onto the conversation.
+   */
+  #deriveTrafficContext(runId: string): SessionTrafficContext | undefined {
+    const launchContext = this.#sessionContextService?.getContext();
+    if (!launchContext) return undefined;
+    const parentKey = launchContext.providerHistoryKey ?? launchContext.sessionId;
+    return { ...launchContext, providerHistoryKey: `${parentKey}:subagent:${runId}` };
+  }
+
   #allocateRunId(): string {
     for (let attempt = 0; attempt < MAX_RUN_ID_ATTEMPTS; attempt++) {
       const candidate = this.#createRunId();
@@ -500,18 +531,25 @@ export class SubagentAsyncRegistry {
   ): Promise<void> {
     let result: SubagentResult;
     try {
-      result = await this.#run({
-        request,
-        runId: run.runId,
-        session: run.session,
-        signal: controller.signal,
-        input,
-        control: {
-          onToolStart: () => run.control.onToolStart(),
-          onToolComplete: () => run.control.onToolComplete(),
-          askOrchestrator: (question) => this.#askOrchestrator(run, question),
-        },
-      });
+      const runSegment = () =>
+        this.#run({
+          request,
+          runId: run.runId,
+          session: run.session,
+          signal: controller.signal,
+          input,
+          control: {
+            onToolStart: () => run.control.onToolStart(),
+            onToolComplete: () => run.control.onToolComplete(),
+            askOrchestrator: (question) => this.#askOrchestrator(run, question),
+          },
+        });
+
+      // Every segment — first launch, `continue_run_id`, steering continuation —
+      // runs under the run's own context, so they share one provider-side session.
+      result = await (run.trafficContext && this.#sessionContextService
+        ? this.#sessionContextService.runWithContext(run.trafficContext, runSegment)
+        : runSegment());
       run.session.trimHistory(this.#messageCap);
       result = { ...result, agentId: run.runId };
     } catch (error: any) {

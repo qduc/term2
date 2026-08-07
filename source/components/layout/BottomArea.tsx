@@ -27,6 +27,7 @@ import type { BackgroundSubagentTask } from '../../services/subagents/subagent-n
 import BackgroundTasksPanel from './BackgroundTasksPanel.js';
 import { deriveInputOwner } from '../../lib/input-owner.js';
 import type { SubmissionMutation } from '../../services/conversation/conversation-adapter.js';
+import type { SessionCostSummary } from '../../services/cost/model-cost.js';
 
 export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;
@@ -79,6 +80,7 @@ export type BottomAreaProps = {
   // Queue state
   queuePaused?: boolean;
   queueLength?: number;
+  costSummary?: SessionCostSummary | null;
   queuePauseReason?: QueuePauseReason;
   onResumeQueue?: () => void;
   onDiscardQueue?: () => void;
@@ -137,6 +139,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   staticCommitBlocker = null,
   queuePaused = false,
   queueLength = 0,
+  costSummary,
   queuePauseReason,
   onResumeQueue,
   onDiscardQueue,
@@ -321,6 +324,7 @@ const BottomArea: FC<BottomAreaProps> = ({
         pendingLargeUncachedTokens={pendingLargeUncachedTokens}
         staticCommitBlocker={staticCommitBlocker}
         queueLength={queueLength}
+        costSummary={costSummary}
       />
     </Box>
   );

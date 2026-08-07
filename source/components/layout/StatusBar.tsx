@@ -9,6 +9,7 @@ import type { SSHInfo } from '../../hooks/use-shell-mode.js';
 import { formatContextUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../services/conversation/conversation-events.js';
 import type { StaticCommitBlocker } from '../message/MessageList.js';
+import { formatUsdMicros, type SessionCostSummary } from '../../services/cost/model-cost.js';
 
 interface StatusBarProps {
   settingsService: SettingsService;
@@ -21,6 +22,7 @@ interface StatusBarProps {
   pendingLargeUncachedTokens?: number;
   staticCommitBlocker?: StaticCommitBlocker | null;
   queueLength?: number;
+  costSummary?: SessionCostSummary | null;
 }
 
 const StatusBar: FC<StatusBarProps> = ({
@@ -34,6 +36,7 @@ const StatusBar: FC<StatusBarProps> = ({
   pendingLargeUncachedTokens,
   staticCommitBlocker = null,
   queueLength,
+  costSummary,
 }) => {
   const mentorMode = useSetting(settingsService, 'app.mentorMode') ?? false;
   const liteMode = useSetting(settingsService, 'app.liteMode') ?? false;
@@ -84,6 +87,13 @@ const StatusBar: FC<StatusBarProps> = ({
   if (lastUsage?.completion_tokens != null) tokenParts.push(`${lastUsage.completion_tokens.toLocaleString()} out`);
   const tokensText = tokenParts.length > 0 ? `Tok ${tokenParts.join(' / ')}` : '';
   const contextText = contextUsageText ? `Ctx ${contextUsageText.replace('/', ' / ')}` : '';
+  const costText =
+    costSummary && costSummary.state !== 'unavailable'
+      ? `${costSummary.state === 'exact' ? 'Cost' : 'Est'} ${formatUsdMicros(costSummary.knownUsdMicros)}${
+          costSummary.state === 'partial' ? '+' : ''
+        }`
+      : '';
+  const costColor = costSummary?.state === 'partial' ? warnRed : slate;
 
   const warningText = (() => {
     if (!largeUncachedWarning || usageHasIntegratedWarning) {
@@ -170,7 +180,7 @@ const StatusBar: FC<StatusBarProps> = ({
 
   return (
     <Box marginTop={1} flexDirection="column" width="100%">
-      <Box justifyContent="space-between" width="100%">
+      <Box justifyContent="space-between" width="100%" flexWrap="wrap">
         <Box>
           {sshInfo && (
             <>
@@ -239,7 +249,7 @@ const StatusBar: FC<StatusBarProps> = ({
         )}
       </Box>
 
-      <Box width="100%">
+      <Box width="100%" flexWrap="wrap">
         <Box flexGrow={1}>
           {warningText && (
             <Text color={hasPendingConfirmation ? warnRed : glow} bold>
@@ -263,7 +273,7 @@ const StatusBar: FC<StatusBarProps> = ({
           )}
         </Box>
 
-        {(tokensText || contextText) && (
+        {(tokensText || contextText || costText) && (
           <Box>
             {tokensText && (
               <Text color={usageColor} bold={Boolean(largeUncachedWarning)}>
@@ -272,6 +282,8 @@ const StatusBar: FC<StatusBarProps> = ({
             )}
             {tokensText && contextText && <Text color={slate}> │ </Text>}
             {contextText && <Text color={slate}>{contextText}</Text>}
+            {(tokensText || contextText) && costText && <Text color={slate}> │ </Text>}
+            {costText && <Text color={costColor}>{costText}</Text>}
           </Box>
         )}
       </Box>

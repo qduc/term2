@@ -9,6 +9,8 @@ import { renderInAct } from '../test-helpers/ink-testing.js';
 
 const loggingService = {
   debug() {},
+  info() {},
+  warn() {},
   error() {},
 } as any;
 

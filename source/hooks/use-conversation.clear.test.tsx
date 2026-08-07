@@ -8,6 +8,8 @@ import { renderInAct } from '../test-helpers/ink-testing.js';
 
 const loggingService = {
   debug() {},
+  info() {},
+  warn() {},
   error() {},
 } as any;
 
@@ -99,6 +101,8 @@ it.sequential('useConversation filters duplicate stack trace from rawEvent when 
   const loggedErrors: any[] = [];
   const loggingServiceMock = {
     debug() {},
+    info() {},
+    warn() {},
     error(_msg: string, meta?: any) {
       loggedErrors.push(meta);
     },

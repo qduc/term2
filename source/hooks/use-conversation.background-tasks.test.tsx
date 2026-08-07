@@ -21,6 +21,8 @@ it.sequential('useConversation observes background task snapshots for the compos
   } as any;
   const loggingService = {
     debug() {},
+    info() {},
+    warn() {},
     error() {},
   } as any;
 

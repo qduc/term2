@@ -6,6 +6,7 @@ import type { SubagentSession } from './subagent-session.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AgentClient } from '../../lib/agent-client.js';
 import { createSubagentRuntime } from './runtime.js';
+import { SessionContextService } from '../session/session-context-service.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import {
   createMockLogger,
@@ -971,6 +972,135 @@ describe('outbound steering', () => {
     expect(JSON.stringify(inputs[1])).toContain('prior segment was interrupted');
     await expect(runtime.asyncRegistry.getResult(run.runId)).resolves.toMatchObject({ status: 'completed' });
     runtime.asyncRegistry.dispose();
+  });
+});
+
+describe('provider traffic scoping', () => {
+  const conversationContext = { sessionId: 'session-1', sessionStartedAt: '2026-06-21T14:20:00.000Z' };
+
+  /** A registry whose runs record the provider history key each segment sees. */
+  const makeScopedRegistry = (
+    run: (params: RunParams) => Promise<SubagentResult> = async ({ request }) => result(request.role),
+  ) => {
+    const sessionContextService = new SessionContextService();
+    const keys: Array<string | undefined> = [];
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      sessionContextService,
+      run: async (params) => {
+        keys.push(sessionContextService.getContext()?.providerHistoryKey);
+        return run(params);
+      },
+    });
+    return { registry, sessionContextService, keys };
+  };
+
+  it('keeps one provider history key across launch and continuation of the same run', async () => {
+    const { registry, sessionContextService, keys } = makeScopedRegistry();
+
+    const handle = sessionContextService.runWithContext(conversationContext, () =>
+      registry.startRun({ role: 'explorer', task: 'inspect' }),
+    );
+    await registry.getResult(handle.runId);
+
+    // The continuation arrives on a later turn, from a different tool call.
+    sessionContextService.runWithContext(conversationContext, () =>
+      registry.startRun({ role: 'explorer', task: 'inspect more', continueRunId: handle.runId }),
+    );
+    await registry.getResult(handle.runId);
+
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toBe(`session-1:subagent:${handle.runId}`);
+    expect(keys[1], 'a continuation must rejoin the run it continues').toBe(keys[0]);
+    registry.dispose();
+  });
+
+  it('keeps the run key across a steering continuation', async () => {
+    let firstSegment = true;
+    const { registry, sessionContextService, keys } = makeScopedRegistry(async ({ request, control, signal }) => {
+      if (!firstSegment) return result(request.role);
+      firstSegment = false;
+      control.onToolStart();
+      control.onToolComplete();
+      await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+      return result(request.role, 'cancelled');
+    });
+
+    const handle = sessionContextService.runWithContext(conversationContext, () =>
+      registry.startRun({ role: 'explorer', task: 'inspect' }),
+    );
+    await vi.waitFor(() => expect(keys).toHaveLength(1));
+    expect(registry.sendMessage(handle.runId, 'also check scripts')).toMatchObject({ ok: true });
+
+    await vi.waitFor(() => expect(keys).toHaveLength(2));
+    expect(keys[0]).toBe(`session-1:subagent:${handle.runId}`);
+    expect(keys[1]).toBe(keys[0]);
+    registry.dispose();
+  });
+
+  it('reaches the provider through the production runtime wiring', async () => {
+    // The scoping only helps if `createSubagentRuntime` hands the registry a
+    // real session context service — this drives the whole path to a provider.
+    const sessionContextService = new SessionContextService();
+    const seen: Array<string | undefined> = [];
+    const providerId = registerTestProvider({
+      label: 'Traffic scoping provider',
+      createStreamedModel: () =>
+        ({
+          stream: async function* () {
+            seen.push(sessionContextService.getContext()?.providerHistoryKey);
+            yield* wrapResultAsAgentStream({ status: 'completed', finalOutput: 'done', history: [], messages: [] });
+          },
+        } as any),
+      fetchModels: async () => [{ id: 'mock-model' }],
+    });
+    const settings = createMockSettings({ 'agent.model': 'mock-model', 'agent.provider': providerId });
+    const logger = createMockLogger();
+    const toolOwnership = new ToolOwnershipRegistry();
+    const runtime = createSubagentRuntime({
+      logger,
+      settings,
+      sessionContextService,
+      toolOwnership,
+      createClient: ({ agent, provider, maxTurns, retryAttempts }) =>
+        new AgentClient({
+          model: agent.model,
+          maxTurns,
+          retryAttempts,
+          deps: { logger, settings, sessionContextService },
+          agentOverride: agent,
+          providerOverride: provider,
+          toolOwnership,
+        }),
+    });
+
+    const handle = sessionContextService.runWithContext(conversationContext, () =>
+      runtime.asyncRegistry.startRun({ role: 'explorer', task: 'inspect' }),
+    );
+    await runtime.asyncRegistry.getResult(handle.runId);
+
+    expect(seen[0]).toBe(`session-1:subagent:${handle.runId}`);
+    runtime.asyncRegistry.dispose();
+  });
+
+  it('gives concurrent runs their own keys and nests under the launching context', async () => {
+    const { registry, sessionContextService, keys } = makeScopedRegistry();
+
+    const first = sessionContextService.runWithContext(conversationContext, () =>
+      registry.startRun({ role: 'explorer', task: 'a' }),
+    );
+    await registry.getResult(first.runId);
+
+    // A background run launched from inside another subagent nests beneath it.
+    const nested = sessionContextService.runWithContext(
+      { ...conversationContext, providerHistoryKey: 'session-1:subagent:call-outer' },
+      () => registry.startRun({ role: 'explorer', task: 'b' }),
+    );
+    await registry.getResult(nested.runId);
+
+    expect(keys[0]).toBe(`session-1:subagent:${first.runId}`);
+    expect(keys[1]).toBe(`session-1:subagent:call-outer:subagent:${nested.runId}`);
+    registry.dispose();
   });
 });
 

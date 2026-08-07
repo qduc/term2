@@ -314,12 +314,11 @@ export class SubagentBridge {
   runSubagentAsync = async (
     params: { role: string; task: string; name?: string; continue_run_id?: string },
     _context?: unknown,
-    details?: unknown,
+    _details?: unknown,
   ): Promise<SubagentRunHandle> => {
     if (!this.#subagentManager) {
       throw new Error('Transient agent clients cannot spawn subagents.');
     }
-    const detailsRecord = details as { toolCall?: { callId?: string } } | undefined;
     const request = {
       role: params.role,
       task: params.task,
@@ -331,15 +330,11 @@ export class SubagentBridge {
       signal: this.backgroundSignal,
     };
 
-    // A continuation keeps the run's own scope so its later turns stay in the
-    // provider-side history the first launch opened.
-    const runScope = params.continue_run_id ?? detailsRecord?.toolCall?.callId;
-
-    return this.#withSubagentTrafficContext(runScope, () => {
-      const handle = this.#subagentManager!.startRunAsync(request);
-
-      return handle;
-    });
+    // Deliberately not scoped here: a background run outlives the tool call that
+    // launched it and can be continued from a later one, so only the registry —
+    // which owns the run ID — can give every segment one stable scope. See
+    // `SubagentAsyncRegistry`'s `trafficContext`.
+    return this.#subagentManager.startRunAsync(request);
   };
 
   getSubagentResult = async (

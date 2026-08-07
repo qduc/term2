@@ -3,6 +3,11 @@ import type { JsonSchemaDefinition } from './model-types.js';
 /** Provider-owned options and metadata retained at characterized protocol boundaries. */
 export type StreamedModelProviderOptions = Readonly<Record<string, unknown>>;
 
+/** Mutable state shared by one session provider request. */
+export interface ContextCompactionSessionState {
+  disabled: boolean;
+}
+
 /** Codex-only request options. They are intentionally separate from opaque provider options. */
 export interface StreamedModelCodexOptions {
   readonly promptCacheKey?: string;

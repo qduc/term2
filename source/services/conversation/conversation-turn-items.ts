@@ -200,7 +200,19 @@ export function synthesizeHistoryFromAssistantTurn(
   baseHistory: readonly ProviderInputItem[],
   turn: PersistedAssistantTurn,
 ): ProviderInputItem[] {
-  const history = clone([...baseHistory]);
+  const compactionIndex = turn.items.findIndex(
+    (item) => item.type === 'provider_opaque' && item.provider === 'openai' && item.item.type === 'compaction',
+  );
+  const history = clone(
+    compactionIndex >= 0
+      ? baseHistory.filter(
+          (item) =>
+            !normalizeRunItems([item]).some(
+              (normalized) => normalized.type === 'tool_call' || normalized.type === 'tool_result',
+            ),
+        )
+      : [...baseHistory],
+  );
   const pendingReasoning: PersistedReasoningItem[] = [];
 
   // Flush buffered reasoning as a standalone history item. The SDK's
@@ -234,7 +246,14 @@ export function synthesizeHistoryFromAssistantTurn(
     });
   };
 
-  for (const item of turn.items) {
+  for (const [index, item] of turn.items.entries()) {
+    // A compaction item replaces the provider context. Tool calls, tool
+    // results, and reasoning emitted in an earlier request boundary remain
+    // useful to the UI journal, but must not be reconstructed into the next
+    // provider request ahead of the compaction marker.
+    if (compactionIndex >= 0 && index < compactionIndex) {
+      continue;
+    }
     if (item.type === 'reasoning') {
       pendingReasoning.push(item);
       continue;

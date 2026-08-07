@@ -87,7 +87,15 @@ registerProvider({
   label: 'OpenAI',
   createStreamedModel: (
     model,
-    { settingsService, loggingService, sessionContextService, onRetry, retryAttempts, requestCapture },
+    {
+      settingsService,
+      loggingService,
+      sessionContextService,
+      onRetry,
+      retryAttempts,
+      requestCapture,
+      contextCompactionSessionState,
+    },
   ) => {
     const defaultModel = settingsService.get('agent.model') || 'gpt-4o';
     const apiKey = settingsService.get('agent.openai.apiKey') || process.env.OPENAI_API_KEY;
@@ -113,12 +121,14 @@ registerProvider({
             model || defaultModel,
             requestCapture,
             OPENAI_CAPABILITIES.supportsContextCompaction,
+            contextCompactionSessionState,
           )
         : new OpenAIResponsesWSModelWithPromptCacheKey(
             openAIClient,
             model || defaultModel,
             requestCapture,
             OPENAI_CAPABILITIES.supportsContextCompaction,
+            contextCompactionSessionState,
           );
     return selectedModel;
   },

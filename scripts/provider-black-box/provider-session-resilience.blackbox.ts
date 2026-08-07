@@ -30,7 +30,9 @@ type HttpScenario =
   | 'incomplete'
   | 'reasoning'
   | 'restart-completed'
-  | 'interrupted-tool';
+  | 'interrupted-tool'
+  | 'compaction-restart'
+  | 'compaction-tool';
 
 type CapturedHttpRequest = {
   method: string;
@@ -71,6 +73,8 @@ type ProviderRoute = {
   type?: 'openai-compatible' | 'anthropic' | 'google';
   baseUrlEnv?: 'OPENAI_BASE_URL' | 'CODEX_BASE_URL' | 'OPENROUTER_BASE_URL';
   baseUrlSuffix?: string;
+  contextCompaction?: boolean;
+  alternateProvider?: string;
 };
 
 const HTTP_ROUTES: readonly { family: HttpWireFamily; route: ProviderRoute }[] = [
@@ -155,12 +159,25 @@ const WS_ROUTES: readonly { family: 'openai-responses' | 'codex-responses'; rout
   },
 ] as const;
 
+const COMPACTION_ROUTE: ProviderRoute = {
+  rowId: 'openai-compaction-http',
+  provider: 'openai',
+  model: 'gpt-5.6-luna',
+  baseUrlEnv: 'OPENAI_BASE_URL',
+  baseUrlSuffix: '/v1',
+  contextCompaction: true,
+  alternateProvider: 'fixture-other-provider',
+};
+
 const DEFAULT_TIMEOUT_MS = 7_500;
 const TERMINAL_KEY_EVENT_YIELD_MS = 50;
 const PROMPT = 'fixture resilience prompt';
 const ANSWER = 'fixture resilience answer';
 const REASONING = 'fixture response-side reasoning';
 const TOOL_CALL_ID = 'call_fixture_restart';
+const COMPACTION_ITEM_ID = 'cmp_fixture_context';
+const COMPACTION_CIPHERTEXT = 'fixture-compaction-encrypted-content';
+const COMPACTION_TOOL_CALL_ID = 'call_fixture_compaction_tool';
 
 let activeHttpServers: ResilienceHttpServer[] = [];
 let activeWsServers: ResilienceWebSocketServer[] = [];
@@ -353,6 +370,152 @@ describe('application-owned provider restart continuity', () => {
   });
 });
 
+describe('application-owned context compaction black-box lifecycle', () => {
+  it('persists a compaction item and sends it after save/resume', async () => {
+    const server = await startResilienceHttpServer({ family: 'openai-responses', scenario: 'compaction-restart' });
+    activeHttpServers.push(server);
+    const workspace = await createWorkspace(COMPACTION_ROUTE, server);
+    activeWorkspaces.push(workspace);
+
+    const first = await startInteractive(workspace, COMPACTION_ROUTE);
+    await first.waitForVisibleOutput('❯ ');
+    const firstIdlePrompt = captureIdlePrompt(first);
+    await submitPrompt(first, 'persist this compacted turn');
+    await first.waitForVisibleOutput('COMPACTION-FIRST');
+    await waitForNextIdlePrompt(first, firstIdlePrompt);
+    const conversationId = await waitForConversationId(workspace);
+    const persisted = await waitForConversationContent(workspace.paths, conversationId, COMPACTION_CIPHERTEXT);
+    expect(persisted).toContain('provider_opaque');
+    expect(persisted).toContain(COMPACTION_CIPHERTEXT);
+    await first.write('\u0003');
+    await first.waitForExit(DEFAULT_TIMEOUT_MS);
+
+    const resumed = await startInteractive(workspace, COMPACTION_ROUTE, ['--resume', conversationId]);
+    await resumed.waitForVisibleOutput(`Resumed conversation: ${conversationId}`);
+    await resumed.waitForVisibleOutput('❯ ');
+    const resumedIdlePrompt = captureIdlePrompt(resumed);
+    await submitPrompt(resumed, 'continue after saved compaction');
+    await resumed.waitForVisibleOutput('COMPACTION-RESUMED');
+    await waitForNextIdlePrompt(resumed, resumedIdlePrompt);
+    await resumed.write('\u0003');
+    await resumed.waitForExit(DEFAULT_TIMEOUT_MS);
+
+    expect(server.requests).toHaveLength(2);
+    expect(server.requests[0]?.body.context_management).toEqual([{ type: 'compaction', compact_threshold: 100_000 }]);
+    const resumedBody = asRecord(server.requests[1]?.body);
+    expect(resumedBody?.previous_response_id).toBeUndefined();
+    const compactions = inputItems(resumedBody?.input).filter((item) => item.type === 'compaction');
+    expect(compactions).toHaveLength(1);
+    expect(compactions[0]).toMatchObject({
+      id: COMPACTION_ITEM_ID,
+      encrypted_content: COMPACTION_CIPHERTEXT,
+    });
+  });
+
+  it('rejects an OpenAI compaction item safely after switching providers', async () => {
+    const server = await startResilienceHttpServer({ family: 'openai-responses', scenario: 'compaction-restart' });
+    activeHttpServers.push(server);
+    const workspace = await createWorkspace(COMPACTION_ROUTE, server);
+    activeWorkspaces.push(workspace);
+
+    const first = await startInteractive(workspace, COMPACTION_ROUTE);
+    await first.waitForVisibleOutput('❯ ');
+    const firstIdlePrompt = captureIdlePrompt(first);
+    await submitPrompt(first, 'create an OpenAI compaction item');
+    await first.waitForVisibleOutput('COMPACTION-FIRST');
+    await waitForNextIdlePrompt(first, firstIdlePrompt);
+    const conversationId = await waitForConversationId(workspace);
+    await waitForConversationContent(workspace.paths, conversationId, COMPACTION_CIPHERTEXT);
+    await first.write('\u0003');
+    await first.waitForExit(DEFAULT_TIMEOUT_MS);
+
+    const switched = await startInteractive(
+      workspace,
+      {
+        ...COMPACTION_ROUTE,
+        provider: COMPACTION_ROUTE.alternateProvider!,
+      },
+      ['--resume', conversationId],
+    );
+    try {
+      await switched.waitForVisibleOutput(`Resumed conversation: ${conversationId}`);
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)} output=${switched.getVisibleOutput()}`,
+      );
+    }
+    await switched.waitForVisibleOutput('❯ ');
+    await submitPrompt(switched, 'try the switched provider');
+    try {
+      await switched.waitForState(
+        (snapshot) => /provider_opaque|opaque item/i.test(snapshot.visibleOutput),
+        DEFAULT_TIMEOUT_MS,
+      );
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)} output=${switched.getVisibleOutput()}`,
+      );
+    }
+
+    expect(server.requests).toHaveLength(1);
+    expect(switched.getVisibleOutput()).not.toContain('COMPACTION-RESUMED');
+    await switched.write('\u0003');
+    await switched.waitForExit(DEFAULT_TIMEOUT_MS);
+  });
+
+  it('does not re-execute a tool after its turn is replaced by compaction', async () => {
+    const server = await startResilienceHttpServer({ family: 'openai-responses', scenario: 'compaction-tool' });
+    activeHttpServers.push(server);
+    const workspace = await createWorkspace(COMPACTION_ROUTE, server);
+    activeWorkspaces.push(workspace);
+
+    const first = await startInteractive(workspace, COMPACTION_ROUTE);
+    await first.waitForVisibleOutput('❯ ');
+    const firstIdlePrompt = captureIdlePrompt(first);
+    await submitPrompt(first, 'run the side effect once');
+    await first.waitForVisibleOutput('Allow this action?');
+    await submitPrompt(first, 'y');
+    await server.waitForRequests(2);
+    await first.waitForVisibleOutput('COMPACTION-TOOL-FINAL');
+    await waitForNextIdlePrompt(first, firstIdlePrompt);
+    const conversationId = await waitForConversationId(workspace);
+    await submitPrompt(first, '/quit');
+    await first.waitForExit(DEFAULT_TIMEOUT_MS);
+
+    const resumed = await startInteractive(workspace, COMPACTION_ROUTE, ['--resume', conversationId]);
+    try {
+      await resumed.waitForVisibleOutput(`Resumed conversation: ${conversationId}`);
+    } catch (error) {
+      throw new Error(`${error instanceof Error ? error.message : String(error)} output=${resumed.getVisibleOutput()}`);
+    }
+    await resumed.waitForVisibleOutput('❯ ');
+    const resumedIdlePrompt = captureIdlePrompt(resumed);
+    await submitPrompt(resumed, 'continue without repeating the tool');
+    await resumed.waitForVisibleOutput('COMPACTION-TOOL-RESUMED');
+    await waitForNextIdlePrompt(resumed, resumedIdlePrompt);
+    await resumed.terminate();
+
+    expect(server.requests).toHaveLength(3);
+    const toolResultRequests = server.requests.filter((request) => {
+      const input = inputItems(asRecord(request.body)?.input);
+      return input.some((item) => item.type === 'function_call_output' || item.type === 'function_call_result');
+    });
+    expect(
+      toolResultRequests,
+      JSON.stringify(
+        server.requests.map((request) => inputItems(asRecord(request.body)?.input).map((item) => item.type)),
+      ),
+    ).toHaveLength(1);
+    const resumedInput = inputItems(asRecord(server.requests[2]?.body)?.input);
+    expect(resumedInput.filter((item) => item.type === 'compaction')).toHaveLength(1);
+    expect(resumedInput.some((item) => item.type === 'function_call')).toBe(false);
+    expect(
+      resumedInput.some((item) => item.type === 'function_call_output' || item.type === 'function_call_result'),
+    ).toBe(false);
+    expect(resumedInput.some((item) => item.type === 'message' && item.role === 'user')).toBe(true);
+  });
+});
+
 async function runOneShot(
   route: ProviderRoute,
   server: ResilienceHttpServer | ResilienceWebSocketServer,
@@ -406,6 +569,7 @@ async function writeSettings(
       maxTurns: 4,
       reasoningEffort: 'medium',
       codex: { websocketFirstFrameTimeoutMs: 1_000, websocketInterFrameTimeoutMs: 1_000 },
+      ...(route.contextCompaction ? { contextCompaction: { enabled: true, compactThreshold: 100_000 } } : {}),
     },
     app: { liteMode: true },
   };
@@ -415,6 +579,18 @@ async function writeSettings(
         id: route.provider,
         name: route.provider,
         type: route.type,
+        baseUrl: serverUrl(server),
+        apiKey: 'fixture-key',
+      },
+    ];
+  }
+  if (route.alternateProvider) {
+    settings.providers = [
+      ...(Array.isArray(settings.providers) ? settings.providers : []),
+      {
+        id: route.alternateProvider,
+        name: route.alternateProvider,
+        type: 'anthropic',
         baseUrl: serverUrl(server),
         apiKey: 'fixture-key',
       },
@@ -508,6 +684,22 @@ async function waitForConversationId(
 
 async function readConversation(paths: IsolatedWorkspacePaths, id: string): Promise<string> {
   return readFile(join(paths.conversationsDir, `${id}.jsonl`), 'utf8');
+}
+
+async function waitForConversationContent(
+  paths: IsolatedWorkspacePaths,
+  id: string,
+  needle: string,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<string> {
+  const startedAt = Date.now();
+  let content = '';
+  while (Date.now() - startedAt < timeoutMs) {
+    content = await readConversation(paths, id).catch(() => '');
+    if (content.includes(needle)) return content;
+    await delay(25);
+  }
+  throw new Error(`Timed out waiting for conversation ${id} to contain ${needle}; content=${content}`);
 }
 
 async function readProviderTraffic(root: string): Promise<unknown[]> {
@@ -648,6 +840,25 @@ function responseFramesFor(family: HttpWireFamily, scenario: HttpScenario, reque
   if (scenario === 'reasoning') return reasoningFrames(family);
   if (scenario === 'interrupted-tool' && requestNumber === 1) return interruptedToolFrames();
   if (scenario === 'interrupted-tool') return [openAiCompletedFrame('resp_repaired', 'restart-repaired-answer')];
+  if (scenario === 'compaction-restart') {
+    const first = requestNumber === 1;
+    return [
+      openAiCompletedFrame(
+        first ? 'resp_compaction_first' : 'resp_compaction_resumed',
+        first ? 'COMPACTION-FIRST' : 'COMPACTION-RESUMED',
+        {
+          compaction: first,
+        },
+      ),
+    ];
+  }
+  if (scenario === 'compaction-tool') {
+    if (requestNumber === 1) return compactionToolCallFrames();
+    if (requestNumber === 2) {
+      return [openAiCompletedFrame('resp_compaction_tool', 'COMPACTION-TOOL-FINAL', { compaction: true })];
+    }
+    return [openAiCompletedFrame('resp_compaction_tool_resumed', 'COMPACTION-TOOL-RESUMED')];
+  }
   if (scenario === 'restart-completed') {
     const responseId = `resp_restart_${requestNumber}`;
     return [openAiCompletedFrame(responseId, `restart-answer-${requestNumber}`)];
@@ -827,14 +1038,18 @@ function interruptedToolFrames(): HttpResponseFrame[] {
   ];
 }
 
-function openAiCompletedFrame(responseId: string, text: string): HttpResponseFrame {
-  return { data: openAiCompletedResponse(responseId, text) };
+function openAiCompletedFrame(
+  responseId: string,
+  text: string,
+  options: { reasoning?: string; toolCall?: boolean; argumentsText?: string; compaction?: boolean } = {},
+): HttpResponseFrame {
+  return { data: openAiCompletedResponse(responseId, text, options) };
 }
 
 function openAiCompletedResponse(
   responseId: string,
   text: string,
-  options: { reasoning?: string; toolCall?: boolean; argumentsText?: string } = {},
+  options: { reasoning?: string; toolCall?: boolean; argumentsText?: string; compaction?: boolean } = {},
 ): unknown {
   const output = options.toolCall
     ? [
@@ -848,6 +1063,7 @@ function openAiCompletedResponse(
         },
       ]
     : [
+        ...(options.compaction ? [compactionOutput()] : []),
         {
           type: 'message',
           role: 'assistant',
@@ -858,6 +1074,55 @@ function openAiCompletedResponse(
           : []),
       ];
   return { type: 'response.completed', response: { id: responseId, status: 'completed', output } };
+}
+
+function compactionOutput(): Record<string, unknown> {
+  return {
+    id: COMPACTION_ITEM_ID,
+    type: 'compaction',
+    encrypted_content: COMPACTION_CIPHERTEXT,
+    created_by: 'fixture',
+  };
+}
+
+function compactionToolCallFrames(): HttpResponseFrame[] {
+  const argumentsText = JSON.stringify({ command: "printf 'fixture-tool-result'", sandbox: 'unsandboxed' });
+  return [
+    { data: { type: 'response.created', response: { id: 'resp_compaction_tool_call', status: 'in_progress' } } },
+    {
+      data: {
+        type: 'response.output_item.added',
+        output_index: 0,
+        item: {
+          id: 'fc_fixture_compaction_tool',
+          type: 'function_call',
+          call_id: COMPACTION_TOOL_CALL_ID,
+          name: 'shell',
+          arguments: '',
+        },
+      },
+    },
+    { data: { type: 'response.function_call_arguments.delta', output_index: 0, delta: argumentsText } },
+    {
+      data: {
+        type: 'response.output_item.done',
+        output_index: 0,
+        item: {
+          id: 'fc_fixture_compaction_tool',
+          type: 'function_call',
+          call_id: COMPACTION_TOOL_CALL_ID,
+          name: 'shell',
+          arguments: argumentsText,
+        },
+      },
+    },
+    {
+      data: openAiCompletedResponse('resp_compaction_tool_call', '', {
+        toolCall: true,
+        argumentsText,
+      }),
+    },
+  ];
 }
 
 function responseFramesForWs(scenario: WsScenario, requestNumber: number): unknown[] {

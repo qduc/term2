@@ -1,7 +1,7 @@
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import type { ISessionContextService } from '../services/service-interfaces.js';
 import type { ProviderRequestCapture } from './provider-request-capture.js';
-import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
+import type { ContextCompactionSessionState, StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 
 export interface ProviderDeps {
   settingsService: ISettingsService;
@@ -14,6 +14,8 @@ export interface ProviderDeps {
   retryAttempts?: number;
   /** Root-session-only observational seam. Omitted for all other clients. */
   requestCapture?: ProviderRequestCapture;
+  /** Session-owned state for disabling unsupported server-side compaction. */
+  contextCompactionSessionState?: ContextCompactionSessionState;
 }
 
 export type ProviderFetch = (url: string, options?: any) => Promise<any>;

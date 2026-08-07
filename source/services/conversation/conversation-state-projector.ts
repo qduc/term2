@@ -32,6 +32,20 @@ const clone = <T>(value: T): T => {
   }
 };
 
+const hasOpenAICompaction = (history: readonly unknown[]): boolean =>
+  history.some((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+    const record = item as Record<string, unknown>;
+    const marker = record.providerOpaque;
+    return (
+      record.type === 'compaction' &&
+      !!marker &&
+      typeof marker === 'object' &&
+      !Array.isArray(marker) &&
+      (marker as Record<string, unknown>).provider === 'openai'
+    );
+  });
+
 const warningsFromReconciliation = (result: {
   addedCompletedPairs: number;
   droppedIncompleteCalls: number;
@@ -70,6 +84,13 @@ export function projectProviderHistory(input: {
   history: readonly unknown[];
   toolLedger?: readonly SavedToolExecution[];
 }): ProviderHistoryProjection {
+  // A provider compaction item is a complete replacement boundary. Replaying
+  // completed tool pairs from the local ledger behind it would send stale
+  // function calls back to the provider and can cause a side effect to run
+  // again on the next stateless request.
+  if (hasOpenAICompaction(input.history)) {
+    return { history: clone([...input.history]) as ProviderInputItem[], warnings: [] };
+  }
   const reconciled = reconcileHistoryWithToolLedger(input.history, input.toolLedger);
   return {
     history: reconciled.history as ProviderInputItem[],

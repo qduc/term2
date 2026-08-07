@@ -49,6 +49,24 @@ it('projectProviderHistory inserts completed ledger pairs once', () => {
   expect(second.warnings).toEqual([]);
 });
 
+it('projectProviderHistory does not reinsert tool pairs behind a compaction marker', () => {
+  const history: AgentInputItem[] = [
+    { role: 'user', type: 'message', content: 'run the tool' },
+    {
+      type: 'compaction',
+      id: 'cmp-1',
+      encrypted_content: 'cipher',
+      providerOpaque: { provider: 'openai' },
+    } as AgentInputItem,
+    { role: 'assistant', type: 'message', content: 'Compacted.' },
+  ];
+
+  const projected = projectProviderHistory({ history, toolLedger: [completedLedgerEntry()] });
+
+  expect(projected.history).toEqual(history);
+  expect(projected.warnings).toEqual([]);
+});
+
 it('projectProviderHistory reports incomplete ledger entries without injecting completed history', () => {
   const history: AgentInputItem[] = [{ role: 'user', type: 'message', content: 'continue' }];
 

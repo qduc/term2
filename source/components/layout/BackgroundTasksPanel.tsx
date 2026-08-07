@@ -51,12 +51,12 @@ export const formatBackgroundTaskElapsed = (elapsedMs: number): string => {
   return minutes > 0 ? `${minutes}m ${String(seconds).padStart(2, '0')}s` : `${seconds}s`;
 };
 
-const formatTerminalStatus = (status: BackgroundSubagentTaskStatus): string => {
-  switch (status) {
+const formatTerminalStatus = (task: BackgroundSubagentTask): string => {
+  switch (task.status) {
     case 'completed':
       return 'Completed recently';
     case 'failed':
-      return 'Failed recently';
+      return task.error ? `Failed recently (${task.error})` : 'Failed recently';
     case 'cancelled':
       return 'Cancelled recently';
     default:
@@ -85,7 +85,7 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now }) => {
                 —{' '}
                 {task.status === 'running'
                   ? `Running · ${formatBackgroundTaskElapsed(now - task.startedAt)}`
-                  : formatTerminalStatus(task.status)}
+                  : formatTerminalStatus(task)}
               </Text>
             </Box>
             {task.usage?.prompt_tokens != null && (

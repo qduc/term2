@@ -130,6 +130,23 @@ it('CommandMessage renders background subagent notifications as tool activity', 
   unmount();
 });
 
+it('CommandMessage renders background subagent failure cause in header when present', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="background_subagent_notification"
+      toolName="background_subagent_notification"
+      status="completed"
+      success={true}
+      toolArgs={{ runs: [{ name: 'code_scan', role: 'explorer', status: 'failed', error: 'Max turns (100) exceeded' }] }}
+      output="runId: run-1 | role: explorer | status: failed\n  error: Max turns (100) exceeded"
+    />,
+  );
+
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('Background code_scan (explorer) failed: Max turns (100) exceeded');
+  unmount();
+});
+
 // The other half of the guard in command-message-helpers.test.ts: a tool missing from this
 // switch renders the raw `[tool_name]` header instead of a verb. Keep both lists in step.
 const TOOLS_NEEDING_A_VERB = [

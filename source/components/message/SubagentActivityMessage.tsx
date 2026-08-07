@@ -15,6 +15,7 @@ type Props = {
     async?: boolean;
     tools?: SubagentToolEntry[];
     finalText?: string;
+    error?: string;
   };
 };
 
@@ -65,7 +66,12 @@ const formatSubagentStringTool = (tool: string, activityStatus?: string): string
 const SubagentActivityMessage: FC<Props> = ({ msg }) => {
   const tools = Array.isArray(msg.tools) ? msg.tools.slice(-3) : [];
   const title = buildTitle(msg.role, msg.task, msg.async);
-  const statusSuffix = msg.status && msg.status !== 'running' ? ` — ${msg.status}` : '';
+  const statusSuffix =
+    msg.status && msg.status !== 'running'
+      ? msg.status === 'failed' && msg.error
+        ? ` — failed: ${msg.error}`
+        : ` — ${msg.status}`
+      : '';
   const color =
     msg.status === 'completed'
       ? 'green'

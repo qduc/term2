@@ -156,3 +156,22 @@ it.sequential('shows a concise recently completed indication without counting it
   // A settled task's tool history is stale; the completion status carries it.
   expect(output).not.toContain('pnpm test');
 });
+
+it.sequential('shows failure reason for recently failed tasks when error is present', async () => {
+  const renderer = await renderInAct(
+    <BackgroundTasksPanel
+      tasks={[
+        runningTask({
+          task: 'inspect',
+          status: 'failed',
+          completedAt: 6_000,
+          error: 'Max turns (100) exceeded',
+        }),
+      ]}
+      now={7_000}
+    />,
+  );
+
+  const output = renderer.lastFrame() ?? '';
+  expect(output).toContain('Failed recently (Max turns (100) exceeded)');
+});

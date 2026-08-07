@@ -48,6 +48,30 @@ it('synthesizeHistoryFromAssistantTurn round-trips rawContent reasoning into his
   expect(serialized.includes('Think about it.')).toBe(true);
 });
 
+it('synthesizeHistoryFromAssistantTurn drops pre-compaction tool history while retaining user turns', () => {
+  const history = synthesizeHistoryFromAssistantTurn(
+    [
+      { role: 'user', type: 'message', content: 'run the tool' },
+      { type: 'function_call', callId: 'call_1', name: 'shell', arguments: '{}' },
+      { type: 'function_call_result', callId: 'call_1', output: 'done' },
+    ],
+    {
+      items: [
+        { type: 'tool_result', callId: 'call_1', toolName: 'shell', status: 'completed', output: 'done' },
+        {
+          type: 'provider_opaque',
+          provider: 'openai',
+          item: { type: 'compaction', id: 'cmp-1', encrypted_content: 'cipher' },
+        },
+        { type: 'assistant_text', text: 'Compacted.' },
+      ],
+    },
+  ) as Array<Record<string, unknown>>;
+
+  expect(history.map((item) => item.type)).toEqual(['message', 'compaction', 'message']);
+  expect(history[0]).toMatchObject({ role: 'user', content: 'run the tool' });
+});
+
 // The SDK's chat-completions converter reads a standalone reasoning item's
 // `content[0].text` and attaches it to the following assistant/tool-call message
 // at message level. Folding reasoning into a function_call's providerData instead

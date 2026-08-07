@@ -127,15 +127,26 @@ it('retains a question ahead of newer completions using its message id', () => {
 it('projects an async start as a running background task with role, task, and start time', () => {
   const store = makeStore({ now: () => 4_242 });
 
-  expect(store.recordLifecycle(started())).toBe(true);
+  expect(store.recordLifecycle(started({ name: 'code_scan' }))).toBe(true);
   expect(store.getTaskSnapshot()).toEqual([
     {
       runId: 'run-1',
+      name: 'code_scan',
       role: 'explorer',
       task: 'inspect the project',
       status: 'running',
       startedAt: 4_242,
     },
+  ]);
+});
+
+it('retains a subagent name and context usage when a task completes', () => {
+  const store = makeStore();
+  store.recordLifecycle(started({ name: 'code_scan' }));
+  store.recordLifecycle(completed({ usage: { prompt_tokens: 12_345 } }));
+
+  expect(store.getTaskSnapshot()).toEqual([
+    expect.objectContaining({ name: 'code_scan', usage: { prompt_tokens: 12_345 }, status: 'completed' }),
   ]);
 });
 

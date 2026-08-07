@@ -26,6 +26,11 @@ const formatTaskLabel = (task: BackgroundSubagentTask): string => {
   return label.length > TASK_LABEL_LIMIT ? `${label.slice(0, TASK_LABEL_LIMIT - 1)}…` : label;
 };
 
+const formatContextTokens = (tokens: number): string => {
+  if (tokens < 1_000) return String(tokens);
+  return `${(tokens / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
+};
+
 // Matches the status vocabulary of SubagentActivityMessage so foreground and
 // background subagent activity read the same way.
 const TOOL_STATE_MARKER: Record<BackgroundSubagentTaskTool['state'], string> = {
@@ -70,16 +75,22 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now }) => {
       {tasks.map((task) => (
         <Box key={task.runId} flexDirection="column">
           <Box flexDirection="row">
-            <Text color="#64748b">• </Text>
-            <Text color="#a5b4fc">[{formatRole(task.role)}]</Text>
-            <Text> {formatTaskLabel(task)}</Text>
-            <Text color="#94a3b8">
-              {' '}
-              —{' '}
-              {task.status === 'running'
-                ? `Running · ${formatBackgroundTaskElapsed(now - task.startedAt)}`
-                : formatTerminalStatus(task.status)}
-            </Text>
+            <Box flexGrow={1}>
+              <Text color="#64748b">• </Text>
+              <Text color="#a5b4fc">[{formatRole(task.role)}]</Text>
+              {task.name && <Text color="#c4b5fd"> {task.name}</Text>}
+              <Text> {formatTaskLabel(task)}</Text>
+              <Text color="#94a3b8">
+                {' '}
+                —{' '}
+                {task.status === 'running'
+                  ? `Running · ${formatBackgroundTaskElapsed(now - task.startedAt)}`
+                  : formatTerminalStatus(task.status)}
+              </Text>
+            </Box>
+            {task.usage?.prompt_tokens != null && (
+              <Text color="#94a3b8">Ctx {formatContextTokens(task.usage.prompt_tokens)}</Text>
+            )}
           </Box>
           {task.status === 'running' && task.lastTool && (
             <Box flexDirection="row">

@@ -250,6 +250,7 @@ export class SubagentAsyncRegistry {
     safeEmit(this.#logger, this.#onEvent, {
       type: 'subagent_started',
       agentId: runId,
+      ...(name !== undefined ? { name } : {}),
       role,
       task: request.task,
       parentTool: request.parentTool ?? 'run_subagent_async',
@@ -624,6 +625,7 @@ export class SubagentAsyncRegistry {
 
     return {
       agentId: run.runId,
+      ...(run.name !== undefined ? { name: run.name } : {}),
       role: run.role,
       status,
       finalText: status === 'completed' ? segment.finalText : '',

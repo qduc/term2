@@ -150,6 +150,8 @@ export interface UserMessageConsumedForAbortEvent {
 export interface SubagentStartedEvent {
   type: 'subagent_started';
   agentId: string;
+  /** Optional user-provided alias for this async run. */
+  name?: string;
   role: string;
   task: string;
   parentTool?: string;

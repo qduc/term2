@@ -760,7 +760,7 @@ export class ConversationOrchestrator {
         (notification): notification is Extract<BackgroundSubagentNotification, { kind: 'completion' }> =>
           notification.kind === 'completion',
       )
-      .map(({ role, status }) => ({ role, status }));
+      .map(({ name, role, status }) => ({ ...(name !== undefined ? { name } : {}), role, status }));
     this.config.messages.appendMessages([
       {
         id: this.createMessageId(),

@@ -119,14 +119,14 @@ it('CommandMessage renders background subagent notifications as tool activity', 
       toolName="background_subagent_notification"
       status="completed"
       success={true}
-      toolArgs={{ count: 1 }}
-      output="runId: run-1 | role: explorer | status: completed"
+      toolArgs={{ runs: [{ role: 'explorer', status: 'completed' }] }}
+      output="runId: run-1 | role: explorer | status: completed\n  preview: found the bug"
     />,
   );
 
   const output = stripAnsi(lastFrame() ?? '');
-  expect(output).toContain('Background subagent run finished (1)');
-  expect(output).toContain('runId: run-1');
+  expect(output).toContain('Background explorer completed');
+  expect(output).toContain('found the bug');
   unmount();
 });
 

@@ -190,10 +190,21 @@ const CommandMessage: FC<Props> = ({
         return renderAction('Delegated async');
       case 'get_subagent_result':
         return renderAction('Got subagent result');
-      case 'background_subagent_notification':
-        return renderAction(
-          `Background subagent ${toolArgs?.count === 1 ? 'run' : 'runs'} finished (${toolArgs?.count ?? 0})`,
-        );
+      case 'background_subagent_notification': {
+        const runs = Array.isArray(toolArgs?.runs) ? toolArgs.runs : [];
+        if (runs.length === 1) {
+          const [{ role, status }] = runs;
+          return renderAction(`Background ${role ?? 'subagent'} ${status ?? 'finished'}`);
+        }
+        if (runs.length > 1) {
+          const roles = runs
+            .map((run: { role?: string }) => run.role)
+            .filter(Boolean)
+            .join(', ');
+          return renderAction(`Background subagents finished: ${roles || runs.length}`);
+        }
+        return renderAction('Background subagent notification');
+      }
       case 'memory_list':
         return renderAction('Listed memories');
       case 'memory_get':
@@ -214,7 +225,7 @@ const CommandMessage: FC<Props> = ({
           </>
         );
     }
-  }, [toolName, command, runtime, formattedArgs, toolArgs?.count]);
+  }, [toolName, command, runtime, formattedArgs, toolArgs?.runs]);
 
   const renderStandardHeader = () => {
     const headerColor = success === false ? COLOR_ERROR : isRunning ? COLOR_WARNING : COLOR_INFO;

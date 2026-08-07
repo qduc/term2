@@ -11,13 +11,20 @@ it('getSubagentDelegationAddendum returns non-empty delegation guidance', () => 
   expect(result.includes('run_subagent')).toBe(true);
 });
 
-it('getSubagentDelegationAddendum gives orchestrators adaptive delegation and direct-work guidance', () => {
+it('getSubagentDelegationAddendum does not encourage orchestrators to keep working directly', () => {
   const result = getSubagentDelegationAddendum({ orchestratorMode: true });
 
   expect(result.includes('Orchestrator mode')).toBe(true);
   expect(result).toContain('Delegate when it provides meaningful leverage');
-  expect(result).toContain('directly inspect, edit, run commands, and test small or clear work');
+  expect(result).not.toContain('directly inspect, edit, run commands, and test small or clear work');
   expect(result).not.toContain('Delegate workspace inspection');
+});
+
+it('async delegation guidance does not tell the parent to find other work before yielding', () => {
+  const result = getAsyncSubagentDelegationAddendum({ orchestratorMode: true });
+
+  expect(result).not.toContain('other useful work to do first');
+  expect(result.toLowerCase()).toContain('end the current turn and wait for the completion notification');
 });
 
 it('getSubagentDelegationAddendum includes self-service fallback when orchestratorMode is false', () => {

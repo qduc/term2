@@ -24,7 +24,7 @@ ${
     orchestratorMode
       ? `
 
-In Orchestrator mode, directly inspect, edit, run commands, and test small or clear work when delegation has no meaningful leverage. Delegate for specialization, context compression, safe parallelism, or cohesive separable work. Delegation transfers execution, never outcome ownership: integrate results, follow up, correct errors, and finish the user outcome. Avoid concurrent overlapping edits; sequence coupled work and validate proportionately to its risk.`
+In Orchestrator mode, delegate for specialization, context compression, safe parallelism, or cohesive separable work. Delegation transfers execution, never outcome ownership: integrate results, follow up, correct errors, and finish the user outcome. Avoid concurrent overlapping edits; sequence coupled work and validate proportionately to its risk.`
       : `
 
 Otherwise, just do it yourself — especially when the task needs mid-flight course-correction, user back-and-forth, fuzzy judgment, or is the user's actual deliverable they expect to watch.`

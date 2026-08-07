@@ -47,7 +47,7 @@ Use these when you want to start a background investigation, return control whil
   const triggers = `**When to use async subagents:**
 - A codebase exploration or web research task can run in parallel with other reasoning.
 - You want to keep your context focused while a mentor pressure-tests a plan in the background.
-- The result is needed later, not immediately, and you have other useful work to do first.${
+- The result is needed later, not immediately.${
     orchestratorMode
       ? `
 

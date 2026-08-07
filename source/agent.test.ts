@@ -424,7 +424,7 @@ it('getAgentDefinition in orchestrator mode retains full memory authority', () =
   ]);
 });
 
-it('getAgentDefinition in orchestrator mode enables direct work while retaining delegation', () => {
+it('getAgentDefinition in orchestrator mode retains delegation without direct-work encouragement', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
     'agent.model': 'gpt-5',
@@ -438,7 +438,8 @@ it('getAgentDefinition in orchestrator mode enables direct work while retaining 
 
   expect(definition.instructions.includes('Orchestrator mode')).toBe(true);
   expect(definition.instructions).toContain('You own the user-requested outcome end to end');
-  expect(definition.instructions).toContain('Directly inspect, edit, run commands, and test small or clear work');
+  expect(definition.instructions).not.toContain('Directly inspect, edit, run commands, and test small or clear work');
+  expect(definition.instructions).not.toContain('Continue through obvious necessary next steps');
   expect(definition.instructions).not.toContain('Delegate workspace inspection');
   expect(definition.tools.map((tool) => tool.name)).toEqual(
     expect.arrayContaining(['read_code_outline', 'code_context_search', 'apply_patch']),

@@ -9,6 +9,11 @@ it('orchestrator prompt keeps the orchestrator as the single point of contact th
   expect(orchestratorPrompt).toContain('Delegation transfers execution, never outcome ownership');
 });
 
+it('orchestrator prompt does not encourage continued or direct work while delegation is available', () => {
+  expect(orchestratorPrompt).not.toContain('Continue through obvious necessary next steps');
+  expect(orchestratorPrompt).not.toContain('Directly inspect, edit, run commands, and test small or clear work');
+});
+
 it('orchestrator prompt gives the orchestrator standing to overrule a subagent recommendation', () => {
   const lower = orchestratorPrompt.toLowerCase();
 

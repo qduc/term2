@@ -58,6 +58,59 @@ it('stream() sends message content as OpenAI-compatible content parts, not raw s
   expect(capturedBody).not.toHaveProperty('include');
 });
 
+it('stream() sends non-empty instructions as the leading system message before input history', async () => {
+  let capturedBody: any;
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          capturedBody = body;
+          return emptyStream();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'deepseek-v4-flash');
+
+  for await (const _event of model.stream({
+    instructions: 'Delegate independent work to workers.',
+    input: [
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'Implement the plan.' }] },
+      { type: 'message', role: 'assistant', content: [{ type: 'text', text: 'I will inspect it.' }] },
+    ],
+    tools: [],
+  } as any)) {
+    // drain
+  }
+
+  expect(capturedBody.messages).toEqual([
+    { role: 'system', content: 'Delegate independent work to workers.' },
+    { role: 'user', content: [{ type: 'text', text: 'Implement the plan.' }] },
+    { role: 'assistant', content: [{ type: 'text', text: 'I will inspect it.' }] },
+  ]);
+});
+
+it('stream() omits the system message when instructions are empty', async () => {
+  let capturedBody: any;
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          capturedBody = body;
+          return emptyStream();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat');
+
+  for await (const _event of model.stream({ instructions: '', input: [], tools: [] } as any)) {
+    // drain
+  }
+
+  expect(capturedBody.messages).toEqual([]);
+});
+
 it('stream() maps application structured output to native response_format', async () => {
   let capturedBody: any;
   const client = {

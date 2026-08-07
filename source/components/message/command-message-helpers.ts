@@ -610,6 +610,41 @@ export const formatToolArgs = (
         return `[${runId}]`;
       }
 
+      case 'get_subagent_status': {
+        // runId is optional; strict OpenAI schemas send an omitted optional as null, so
+        // `||` (not `??`) is what keeps an all-runs peek from rendering as `runId=null`.
+        const runId = normalizedArgs.runId || 'all';
+        return `[${runId}]`;
+      }
+
+      case 'send_message': {
+        const target = normalizedArgs.target || 'unknown';
+        const message = normalizedArgs.message || '';
+        const preview = message.length > 40 ? `${message.slice(0, 40)}...` : message;
+        return `[${target}] "${preview.replace(/\r?\n/g, ' ')}"`;
+      }
+
+      case 'cancel_run': {
+        const target = normalizedArgs.target || 'unknown';
+        return `[${target}]`;
+      }
+
+      case 'ask_orchestrator': {
+        const question = normalizedArgs.question || 'Unknown question';
+        const qPreview = question.length > 40 ? `${question.slice(0, 40)}...` : question;
+        return `"${qPreview.replace(/\r?\n/g, ' ')}"`;
+      }
+
+      case 'activate_skill': {
+        const name = normalizedArgs.name || 'unknown';
+        return `[${name}]`;
+      }
+
+      case 'run_agent_workflow':
+        // The only arg is a whole JavaScript program; no slice of it reads usefully in a
+        // one-line header, so the verb alone carries the entry.
+        return '';
+
       case 'web_search': {
         const query = normalizedArgs.query || '';
         return `for "${query}"`;

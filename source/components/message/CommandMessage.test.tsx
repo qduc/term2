@@ -130,6 +130,48 @@ it('CommandMessage renders background subagent notifications as tool activity', 
   unmount();
 });
 
+// The other half of the guard in command-message-helpers.test.ts: a tool missing from this
+// switch renders the raw `[tool_name]` header instead of a verb. Keep both lists in step.
+const TOOLS_NEEDING_A_VERB = [
+  'get_subagent_status',
+  'send_message',
+  'cancel_run',
+  'ask_orchestrator',
+  'activate_skill',
+  'run_agent_workflow',
+];
+
+it('CommandMessage renders a verb, not a raw [tool_name] header, for every orchestration tool', async () => {
+  for (const toolName of TOOLS_NEEDING_A_VERB) {
+    const { lastFrame, unmount } = await renderInAct(
+      <CommandMessage command={toolName} toolName={toolName} status="completed" success={true} toolArgs={{}} />,
+    );
+    const output = stripAnsi(lastFrame() ?? '');
+    expect(output, `${toolName} has no case in the displayAction switch`).not.toContain(`[${toolName}]`);
+    unmount();
+  }
+});
+
+it('CommandMessage renders an all-runs get_subagent_status peek without leaking a null runId', async () => {
+  // Strict OpenAI tool schemas turn an omitted optional param into an explicit null,
+  // so an all-runs peek arrives as { runId: null } rather than {}.
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="get_subagent_status [all]"
+      toolName="get_subagent_status"
+      status="completed"
+      success={true}
+      toolArgs={{ runId: null }}
+      output="No subagent runs."
+    />,
+  );
+
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('Checked subagent status [all]');
+  expect(output).not.toContain('runId=null');
+  unmount();
+});
+
 it('CommandMessage does not duplicate parameters when they are already in command string', async () => {
   const clock = createFakeTimerClock();
   const props = {

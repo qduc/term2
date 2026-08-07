@@ -286,6 +286,64 @@ it('formatToolArgs parses stringified JSON args', () => {
   );
 });
 
+// Every tool the agent registers needs its own case in formatToolArgs. Without one it falls
+// through to the generic `key=JSON.stringify(value)` dump, which is how an all-runs
+// get_subagent_status peek used to render as `[get_subagent_status] runId=null`.
+// Add an entry here whenever you register a new tool.
+const REGISTERED_TOOL_ARGS: Array<[string, Record<string, unknown>]> = [
+  ['shell', { command: 'ls -la' }],
+  ['read_file', { path: 'source/a.ts' }],
+  ['view_file', { path: 'source/a.ts' }],
+  ['grep', { pattern: 'foo', path: 'source' }],
+  ['glob', { pattern: '**/*.ts' }],
+  [TOOL_NAME_APPLY_PATCH, { type: 'update_file', path: 'source/a.ts' }],
+  [TOOL_NAME_SEARCH_REPLACE, { path: 'source/a.ts', search_content: 'a', replace_content: 'b' }],
+  ['create_file', { path: 'source/a.ts', content: 'x' }],
+  ['ask_mentor', { question: 'why?' }],
+  ['ask_user', { questions: [{ question: 'which?' }] }],
+  ['ask_orchestrator', { question: 'should I continue?' }],
+  ['web_search', { query: 'ink testing' }],
+  ['web_fetch', { url: 'https://example.com' }],
+  ['read_code_outline', { path: 'source/a.ts' }],
+  ['code_context_search', { query: 'run loop' }],
+  ['activate_skill', { name: 'testing' }],
+  ['run_agent_workflow', { code: 'await agent({ instructions: "x" })' }],
+  ['run_subagent', { role: 'explorer', task: 'find it' }],
+  ['run_subagent_async', { role: 'explorer', task: 'find it' }],
+  ['get_subagent_result', { runId: 'run-1' }],
+  ['get_subagent_status', { runId: null }],
+  ['send_message', { target: 'run-1', message: 'focus on the parser', reply_to: null }],
+  ['cancel_run', { target: 'run-1' }],
+  ['memory_list', {}],
+  ['memory_get', { id: 'x' }],
+  ['memory_search', { query: 'x' }],
+  ['memory_create', { id: 'x', title: 'T', scope: 'project' }],
+  ['memory_update', { id: 'x', scope: 'project' }],
+  ['memory_delete', { id: 'x', scope: 'project' }],
+  // background_subagent_notification is deliberately absent: CommandMessage suppresses its
+  // args entirely and renders the run roster from `toolArgs.runs` instead.
+];
+
+it('formatToolArgs has a display case for every registered tool', () => {
+  for (const [toolName, args] of REGISTERED_TOOL_ARGS) {
+    expect(
+      formatToolArgs(toolName, args),
+      `${toolName} fell through to the generic key=value fallback; add a case to formatToolArgs`,
+    ).not.toMatch(/\w+=/);
+  }
+});
+
+it('formatToolArgs still dumps key=value for genuinely unknown tools', () => {
+  expect(formatToolArgs('some_future_tool', { foo: 'bar', count: 2 })).toBe('foo=bar count=2');
+});
+
+it('formatToolArgs renders get_subagent_status runId, treating null and absent alike as all runs', () => {
+  expect(formatToolArgs('get_subagent_status', { runId: 'run-1' })).toBe('[run-1]');
+  // Strict OpenAI schemas send an omitted optional param as an explicit null.
+  expect(formatToolArgs('get_subagent_status', { runId: null })).toBe('[all]');
+  expect(formatToolArgs('get_subagent_status', {})).toBe('[all]');
+});
+
 it('formatToolArgs includes memory scope so global and project calls are distinguishable', () => {
   expect(formatToolArgs('memory_list', {})).toBe('(global + project)');
   expect(formatToolArgs('memory_list', { limit: 5 })).toBe('(global + project) (limit: 5)');

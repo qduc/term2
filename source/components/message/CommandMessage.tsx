@@ -190,6 +190,18 @@ const CommandMessage: FC<Props> = ({
         return renderAction('Delegated async');
       case 'get_subagent_result':
         return renderAction('Got subagent result');
+      case 'get_subagent_status':
+        return renderAction('Checked subagent status');
+      case 'send_message':
+        return renderAction('Messaged subagent');
+      case 'cancel_run':
+        return renderAction('Cancelled subagent run');
+      case 'ask_orchestrator':
+        return renderAction('Asked orchestrator');
+      case 'activate_skill':
+        return renderAction('Activated skill');
+      case 'run_agent_workflow':
+        return renderAction('Ran agent workflow');
       case 'background_subagent_notification': {
         const runs = Array.isArray(toolArgs?.runs) ? toolArgs.runs : [];
         if (runs.length === 1) {
@@ -226,7 +238,9 @@ const CommandMessage: FC<Props> = ({
           </>
         );
     }
-  }, [toolName, command, runtime, formattedArgs, toolArgs?.runs]);
+    // Depend on the whole `toolArgs`, not `toolArgs?.runs`: the React Compiler infers the
+    // former and refuses to preserve the memo when the declared deps are narrower.
+  }, [toolName, command, runtime, formattedArgs, toolArgs]);
 
   const renderStandardHeader = () => {
     const headerColor = success === false ? COLOR_ERROR : isRunning ? COLOR_WARNING : COLOR_INFO;

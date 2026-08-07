@@ -140,6 +140,25 @@ it.sequential('normal operation persists settings.json when not in test environm
   });
 });
 
+it.sequential('startup does not persist CLI or environment overrides', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const service = new SettingsService({
+      settingsDir,
+      disableLogging: true,
+      cli: { agent: { model: 'cli-model' } } as any,
+      env: { shell: { timeout: 60_000 } } as any,
+    });
+
+    expect(service.get('agent.model')).toBe('cli-model');
+    expect(service.get('shell.timeout')).toBe(60_000);
+
+    const persisted = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
+    expect(persisted.agent.model).toBe('gpt-5.1');
+    expect(persisted.shell.timeout).toBe(120_000);
+  });
+});
+
 it('creates settings directory if it does not exist', async () => {
   const settingsDir = getTestSettingsDir();
   new SettingsService({
@@ -867,6 +886,74 @@ it.sequential('persists changes to config file', async () => {
   });
 });
 
+it.sequential(
+  'persists distinct changes from independently constructed services without clobbering either',
+  async () => {
+    await withNonTestEnvironment(async () => {
+      const settingsDir = getTestSettingsDir();
+      const first = new SettingsService({ settingsDir, disableLogging: true });
+      const second = new SettingsService({ settingsDir, disableLogging: true });
+
+      first.set('agent.model', 'gpt-4o');
+      second.set('shell.timeout', 60_000);
+
+      const persisted = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
+      expect(persisted.agent.model).toBe('gpt-4o');
+      expect(persisted.shell.timeout).toBe(60_000);
+      expect(second.get('agent.model')).toBe('gpt-4o');
+      expect(second.get('shell.timeout')).toBe(60_000);
+    });
+  },
+);
+
+it.sequential("reset from a stale service preserves a different service's committed setting", async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const first = new SettingsService({ settingsDir, disableLogging: true });
+    const second = new SettingsService({ settingsDir, disableLogging: true });
+
+    first.set('agent.model', 'gpt-4o');
+    second.reset('shell.timeout');
+
+    const persisted = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
+    expect(persisted.agent.model).toBe('gpt-4o');
+    expect(persisted.shell.timeout).toBe(120_000);
+  });
+});
+
+it.sequential('last committed app-mode change leaves the persisted modes mutually exclusive', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const first = new SettingsService({ settingsDir, disableLogging: true });
+    const second = new SettingsService({ settingsDir, disableLogging: true });
+
+    first.set('app.orchestratorMode', true);
+    second.set('app.planMode', true);
+
+    const persisted = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
+    expect(persisted.app).toMatchObject({
+      orchestratorMode: false,
+      liteMode: false,
+      planMode: true,
+      mentorMode: false,
+    });
+  });
+});
+
+it.sequential('last committed write wins when stale services set the same setting', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const first = new SettingsService({ settingsDir, disableLogging: true });
+    const second = new SettingsService({ settingsDir, disableLogging: true });
+
+    first.set('agent.model', 'gpt-4o');
+    second.set('agent.model', 'gpt-5.1');
+
+    const persisted = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
+    expect(persisted.agent.model).toBe('gpt-5.1');
+  });
+});
+
 it.sequential('persists Docker host-control project grants only in the user settings file', async () => {
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();
@@ -1259,9 +1346,10 @@ it.sequential('sensitive settings are never saved to config file', async () => {
     expect(config.agent?.openrouter?.title).toBeFalsy();
     expect(config.app?.shellPath).toBeFalsy();
 
-    // Verify non-sensitive openrouter values ARE saved
-    expect(config.agent?.openrouter?.model, 'model should be saved').toBe('gpt-4');
-    expect(config.agent?.openrouter?.apiKey, 'apiKey should be saved').toBe('sk-secret-key');
+    // Environment overrides are runtime-only, even for values that are not
+    // otherwise classified as sensitive settings.
+    expect(config.agent?.openrouter?.model).toBeFalsy();
+    expect(config.agent?.openrouter?.apiKey).toBeFalsy();
   });
 });
 
@@ -1300,7 +1388,7 @@ it.sequential('sensitive settings loaded from env are accessible at runtime', as
 
     expect(config.agent?.openrouter?.baseUrl).toBeFalsy();
     expect(config.app?.shellPath).toBeFalsy();
-    expect(config.agent?.openrouter?.apiKey).toBe('sk-secret-key');
+    expect(config.agent?.openrouter?.apiKey).toBeFalsy();
   });
 });
 

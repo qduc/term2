@@ -129,6 +129,19 @@ export class TurnWorkflow {
       });
   }
 
+  /**
+   * Tell the run loop where this turn begins and ends, so a message steered
+   * into it survives the gaps between its streams — the preparation before the
+   * first request, and the backoff before a retry restarts one.
+   */
+  openTurn(): void {
+    this.deps.agentClient.openTurn?.();
+  }
+
+  closeTurn(): void {
+    this.deps.agentClient.closeTurn?.();
+  }
+
   steer(items: readonly ProviderInputItem[], options?: { id?: string }): Promise<SteerOutcome> {
     return this.deps.agentClient.steer?.(items, options) ?? Promise.resolve('released');
   }

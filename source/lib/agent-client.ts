@@ -369,6 +369,21 @@ export class AgentClient {
   }
 
   /**
+   * Mark the boundaries of a turn for the run loop, which otherwise sees only
+   * the individual streams a turn is made of and cannot tell its first stream
+   * from a retry of its last. Called by the component that owns turn identity
+   * (`TurnCoordinator`); a caller that drives streams directly may skip them
+   * and keep the stream-scoped behaviour.
+   */
+  openTurn(): void {
+    this.#applicationRunLoop.openTurn();
+  }
+
+  closeTurn(): void {
+    this.#applicationRunLoop.closeTurn();
+  }
+
+  /**
    * Hand the running turn a user message for its next model request. Resolves
    * `'released'` when the turn offers no further request boundary, leaving the
    * caller to send the message as its own turn.
@@ -523,9 +538,14 @@ export class AgentClient {
 
   async startStream(userInput: ProviderInput, options: ChainedRunOptions = {}): Promise<AgentStream> {
     this.#subagentBridge?.resetAbortController();
-    // Allocate this before the first await: Codex model discovery can suspend
-    // startStream, and abort() must still cancel that not-yet-started run.
-    this.abort();
+    // Stop whatever is streaming without judging the turn's fate: a retry
+    // restarts the stream of the turn already in progress, and the turn-ending
+    // abort() here discarded the injections waiting for the very segment about
+    // to start. Same distinction as continueRunStream. A genuinely new turn is
+    // settled by the run loop instead — see its startStream and openTurn.
+    // Allocate the controller before the first await: Codex model discovery can
+    // suspend startStream, and this must still cancel that not-yet-started run.
+    this.#abortActiveWork(() => this.#applicationRunLoop.abortSegment());
     const startController = new AbortController();
     this.#activeStartController = startController;
     try {

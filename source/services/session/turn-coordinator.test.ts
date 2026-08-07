@@ -9,9 +9,13 @@ const makeHarness = () => {
   const continuationCalls: any[] = [];
   const initialResults: any[] = [];
   const continuationResults: any[] = [];
+  const turnScope: string[] = [];
   let liveRunAborted = false;
   const turnWorkflow = {
+    openTurn: () => turnScope.push('open'),
+    closeTurn: () => turnScope.push('close'),
     executeInitial: async function* (input: any, options: any) {
+      turnScope.push('executeInitial');
       initialCalls.push({ input, options });
       const result = initialResults.shift();
       if (result?.events) {
@@ -22,6 +26,7 @@ const makeHarness = () => {
       return result?.outcome ?? { kind: 'response', terminal: { type: 'response', finalText: 'done' } };
     },
     executeContinuation: async function* (init: any) {
+      turnScope.push('executeContinuation');
       continuationCalls.push(init);
       const result = continuationResults.shift();
       if (result?.events) {
@@ -91,6 +96,7 @@ const makeHarness = () => {
     turnWorkflow,
     initialCalls,
     continuationCalls,
+    turnScope,
     approvalFlow,
     manualDecisions,
     getAbortCalled: () => abortCalled,
@@ -126,6 +132,45 @@ it('start forwards turn start options to the workflow', async () => {
   }
 
   expect(initialCalls).toEqual([{ input: 'hello', options }]);
+});
+
+it('opens the turn scope before the workflow runs and closes it when the turn ends', async () => {
+  // The scope has to be open before executeInitial, not after: the gap it
+  // exists to cover — hooks, input preparation, provider start-up — is all
+  // inside that call, ahead of the first request.
+  const { coordinator, turnScope } = makeHarness();
+
+  for await (const _ of coordinator.start('hello')) {
+  }
+
+  expect(turnScope).toEqual(['open', 'executeInitial', 'close']);
+});
+
+it('holds the turn scope open across an approval pause', async () => {
+  // A turn parked on an approval is paused, not over. Closing the scope here
+  // would release a steer the resumed segment was about to admit.
+  const { coordinator, turnWorkflow, turnScope } = makeHarness();
+  turnWorkflow.setNextInitialResult({
+    kind: 'approval_required',
+    terminal: { type: 'approval_required', approval: { toolName: 'shell', argumentsText: 'ls' } },
+  });
+
+  for await (const _ of coordinator.start('run command')) {
+  }
+  expect(turnScope).toEqual(['open', 'executeInitial']);
+
+  for await (const _ of coordinator.continueAfterApproval({ answer: 'y' })) {
+  }
+  expect(turnScope).toEqual(['open', 'executeInitial', 'executeContinuation', 'close']);
+});
+
+it('closes the turn scope when the turn is aborted', async () => {
+  const { coordinator, turnScope } = makeHarness();
+  turnScope.length = 0;
+
+  coordinator.abort();
+
+  expect(turnScope).toEqual(['close']);
 });
 
 it('streaming -> awaiting_approval', async () => {

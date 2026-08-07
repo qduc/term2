@@ -53,6 +53,10 @@ export class TurnCoordinator {
     this.deps.approvalFlow.getAbortedStatus();
 
     const lease = this.deps.statusMachine.beginTurn();
+    // Before the hooks, the input preparation and the provider's own start-up:
+    // a message steered during any of that belongs to this turn, and only this
+    // method knows the turn exists that early.
+    this.deps.turnWorkflow.openTurn?.();
     const turnId = this.deps.hookLifecycle && this.deps.hookEvents ? randomUUID() : undefined;
     this.#activeTurnId = turnId;
     this.#activeTurnStartedAt = turnId ? Date.now() : 0;
@@ -77,6 +81,7 @@ export class TurnCoordinator {
         // Error during initial run — reset status to idle
         this.deps.statusMachine.complete(lease);
       }
+      this.#closeTurnIfSettled();
     }
   }
 
@@ -115,6 +120,7 @@ export class TurnCoordinator {
         // Error during continuation drive — reset status to idle
         this.deps.statusMachine.complete(lease);
       }
+      this.#closeTurnIfSettled();
     }
   }
 
@@ -138,6 +144,7 @@ export class TurnCoordinator {
       throw error;
     } finally {
       if (!processed) this.deps.statusMachine.complete(lease);
+      this.#closeTurnIfSettled();
     }
   }
 
@@ -146,6 +153,7 @@ export class TurnCoordinator {
     this.deps.approvalFlow.abort();
     this.deps.statusMachine.abort();
     this.deps.providerContinuity.clear();
+    this.deps.turnWorkflow.closeTurn?.();
     void this.#emitTurnEnd({ kind: 'failed' });
   }
 
@@ -177,6 +185,18 @@ export class TurnCoordinator {
   }
 
   // ── Private helpers ──────────────────────────────────────────
+
+  /**
+   * End the turn's steer scope only once the turn itself is over.
+   *
+   * A turn parked on an approval has returned from `start` without finishing:
+   * the status machine still holds it, and `continueAfterApproval` will offer
+   * another request boundary. Idle is the one state that means no boundary is
+   * coming.
+   */
+  #closeTurnIfSettled(): void {
+    if (this.deps.statusMachine.is('idle')) this.deps.turnWorkflow.closeTurn?.();
+  }
 
   /** Records the human's shell/bash approval so later auto-approval evaluations can weigh it as precedent. */
   #recordManualShellDecision(answer: string): void {

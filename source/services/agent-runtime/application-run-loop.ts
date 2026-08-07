@@ -241,6 +241,18 @@ export class ApplicationRunLoop {
    * the continuation segment instead of being refused for want of a run.
    */
   #turnPaused = false;
+  /**
+   * Set while a caller that owns turn boundaries has a turn open, from before
+   * its first request is built until after its last one settles.
+   *
+   * `#runInFlight` and `#turnPaused` only ever describe a *segment*, so between
+   * them they leave every gap in a turn where no run exists yet: the startup
+   * before the first request (provider model discovery, hooks, input
+   * preparation) and the backoff before a retry restarts the stream. A turn is
+   * steerable across those gaps, and only the caller that opened the turn knows
+   * they belong to it.
+   */
+  #turnOpen = false;
   #pendingSteers: PendingSteer[] = [];
 
   constructor(deps: ApplicationRunLoopDeps) {
@@ -248,9 +260,32 @@ export class ApplicationRunLoop {
     this.#contextCompactionSessionState = deps.contextCompactionSessionState ?? { disabled: false };
   }
 
+  /**
+   * Declare a turn open, making it steerable before its first run exists.
+   *
+   * Anything still waiting belongs to a turn that never closed, and can never
+   * be admitted now.
+   */
+  openTurn(): void {
+    this.#releasePendingSteers({ reason: 'superseded_by_new_turn' });
+    this.#turnOpen = true;
+    this.#turnPaused = false;
+  }
+
+  /**
+   * Declare the turn over. Whatever is still waiting had no boundary left, so
+   * it is handed back for the caller to send as its own turn.
+   */
+  closeTurn(): void {
+    this.#turnOpen = false;
+    this.#turnPaused = false;
+    this.#releasePendingSteers({ reason: 'turn_closed' });
+  }
+
   abort(): void {
     this.abortSegment();
     // An aborted turn will not resume, so nothing may keep waiting on it.
+    this.#turnOpen = false;
     this.#turnPaused = false;
     this.#releasePendingSteers({ reason: 'aborted' });
   }
@@ -276,7 +311,10 @@ export class ApplicationRunLoop {
    *
    * The wait spans the whole turn, not just the segment it was offered to: a
    * turn that pauses for an approval resumes as a new segment, and the message
-   * is admitted at that segment's first boundary.
+   * is admitted at that segment's first boundary. A caller that declares its
+   * turn boundaries with `openTurn`/`closeTurn` extends the wait further still,
+   * to the gaps where no segment exists at all — before the first request, and
+   * across a retry that restarts the stream.
    *
    * Resolves `'admitted'` once the message has been admitted, `'released'`
    * when the turn ends first (or none is running) — it offered no further
@@ -289,7 +327,7 @@ export class ApplicationRunLoop {
    */
   steer(items: readonly ProviderInputItem[], options?: { id?: string }): Promise<SteerOutcome> {
     if (items.length === 0) return Promise.resolve('released');
-    if (!this.#runInFlight && !this.#turnPaused) return Promise.resolve('released');
+    if (!this.#turnOpen && !this.#runInFlight && !this.#turnPaused) return Promise.resolve('released');
     return new Promise<SteerOutcome>((resolve) => {
       this.#pendingSteers.push({ id: options?.id, items, resolve });
     });
@@ -363,11 +401,14 @@ export class ApplicationRunLoop {
   }
 
   startStream(agent: ApplicationAgent, input: ProviderInput, options: ApplicationRunLoopOptions = {}): AgentStream {
-    // A new turn starts here. Anything still waiting belonged to the previous
-    // turn and can never be admitted now, so settle it rather than letting it
-    // leak into work the user did not aim it at.
+    // Without a declared turn scope, a fresh stream is the only evidence this
+    // loop gets that a new turn has begun: anything still waiting belonged to
+    // the previous one and must not leak into work the user did not aim it at.
+    // With one, this call may equally be the same turn restarting after a
+    // retry, which the loop cannot tell apart — so `openTurn`/`closeTurn` own
+    // the decision instead.
     this.#turnPaused = false;
-    this.#releasePendingSteers({ reason: 'superseded_by_new_turn' });
+    if (!this.#turnOpen) this.#releasePendingSteers({ reason: 'superseded_by_new_turn' });
     const state: RunState = {
       agent,
       input: normalizeInput(input),
@@ -520,6 +561,10 @@ export class ApplicationRunLoop {
         const cancelled = stream.cancelled === true;
         this.#turnPaused = pendingApprovals > 0 && !cancelled && exitError === undefined;
         if (this.#turnPaused) return;
+        // A declared turn outlives its segments — this one may be about to be
+        // retried, or resumed past a post-execute gate. Its owner says when it
+        // is over.
+        if (this.#turnOpen) return;
         this.#releasePendingSteers({
           pendingApprovals,
           cancelled,

@@ -9,6 +9,7 @@ import { isUserMessage } from '../../types/message.js';
 import type { ConversationTerminal, PendingApproval } from '../../contracts/conversation.js';
 import { isDeniedReadApproveAnswer } from '../../contracts/conversation.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
+import type { SessionCostSummary } from '../cost/model-cost.js';
 import { createStreamingSession } from '../../utils/streaming/streaming-session-factory.js';
 import type { StreamingState } from '../../utils/conversation/conversation-utils.js';
 import { enhanceApiKeyError, isMaxTurnsError } from '../../utils/conversation/conversation-utils.js';
@@ -203,6 +204,10 @@ export class ConversationOrchestrator {
     return this.config.subagentUsageAccumulator?.get() ?? null;
   }
 
+  getCostSummary(): SessionCostSummary | null {
+    return this.config.costAccumulator?.getSummary() ?? null;
+  }
+
   goToPreviousQuestion(): void {
     if (this.currentAskUserQuestionIndex <= 0) {
       return;
@@ -232,6 +237,7 @@ export class ConversationOrchestrator {
     this.config.ui.onResetAll();
     this.config.usageAccumulator?.reset();
     this.config.subagentUsageAccumulator?.reset();
+    this.config.costAccumulator?.reset();
     this.#directlyAppendedMessageIds.clear();
     this.#displayedBackgroundNotificationMessageIds.clear();
     this.#retractedSteerIds.clear();
@@ -910,8 +916,11 @@ export class ConversationOrchestrator {
       }
 
       baseOnEvent(event);
-      if (eventType === 'subagent_completed' && event.result.usage) {
-        this.config.subagentUsageAccumulator?.add(event.result.usage);
+      if (eventType === 'subagent_completed') {
+        if (event.result.usage) {
+          this.config.subagentUsageAccumulator?.add(event.result.usage);
+        }
+        this.config.costAccumulator?.addRecords(event.result.costRecords ?? []);
       }
     };
   }
@@ -960,6 +969,7 @@ export class ConversationOrchestrator {
       this.config.usageAccumulator?.add(result.usage);
       this.config.ui.onUsageUpdate(latestStreamedUsage ?? result.usage);
     }
+    this.config.costAccumulator?.addRecords(result.costRecords ?? []);
   }
 
   /**

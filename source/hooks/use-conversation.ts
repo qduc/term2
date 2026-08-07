@@ -16,6 +16,7 @@ import { isBotMessage } from '../types/message.js';
 import type { UserTurn } from '../types/user-turn.js';
 import { conversationUIReducer, createInitialUIState, getConversationUIFlags } from './conversation-ui-reducer.js';
 import type { BackgroundSubagentTask } from '../services/subagents/subagent-notification-store.js';
+import type { SessionCostAccumulator } from '../services/cost/model-cost.js';
 
 import type { ConversationLogWriter } from '../services/logging/conversation-log-writer.js';
 
@@ -60,6 +61,7 @@ export const useConversation = ({
   loggingService,
   usageAccumulator,
   subagentUsageAccumulator,
+  costAccumulator,
   initialMessages = [],
   sessionId,
   onClear,
@@ -73,6 +75,7 @@ export const useConversation = ({
   loggingService: ILoggingService;
   usageAccumulator?: UsageAccumulator;
   subagentUsageAccumulator?: UsageAccumulator;
+  costAccumulator?: SessionCostAccumulator;
   initialMessages?: Message[];
   sessionId?: string;
   onClear?: () => void | Promise<void>;
@@ -199,6 +202,7 @@ export const useConversation = ({
       approvedContext: approvedContextRef,
       usageAccumulator,
       subagentUsageAccumulator,
+      costAccumulator,
       notifier,
       onRestoreInput,
       onClear,
@@ -262,6 +266,7 @@ export const useConversation = ({
   );
 
   const getSubagentUsage = useCallback(() => orchestrator.getSubagentUsage(), [orchestrator]);
+  const getCostSummary = useCallback(() => orchestrator.getCostSummary(), [orchestrator]);
 
   const goToPreviousQuestion = useCallback(() => orchestrator.goToPreviousQuestion(), [orchestrator]);
 
@@ -360,6 +365,7 @@ export const useConversation = ({
     addSystemMessage,
     addShellMessage,
     getSubagentUsage,
+    getCostSummary,
     goToPreviousQuestion,
     goToNextQuestion,
     // Queue state

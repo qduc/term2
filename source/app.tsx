@@ -28,6 +28,7 @@ import { useAppKeyboardShortcuts } from './hooks/use-app-keyboard-shortcuts.js';
 import { hasUserTurnContent, type UserTurn } from './types/user-turn.js';
 import type { Message } from './types/message.js';
 import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumulator } from './utils/ai/token-usage.js';
+import { createSessionCostAccumulator, type SessionCostAccumulator } from './services/cost/model-cost.js';
 import type { RewindItem } from './hooks/use-rewind-selection.js';
 import type { RewindDisposition } from './commands/rewind-command.js';
 import { buildRewindItems } from './utils/conversation/rewind-items.js';
@@ -58,6 +59,7 @@ interface AppProps {
   sshService?: ISSHService;
   usageAccumulator?: UsageAccumulator;
   subagentUsageAccumulator?: UsageAccumulator;
+  costAccumulator?: SessionCostAccumulator;
   onPrintUsage?: () => void;
   onExitUsage?: () => void;
   sessionId: string;
@@ -81,6 +83,7 @@ const App: FC<AppProps> = ({
   sshService,
   usageAccumulator,
   subagentUsageAccumulator,
+  costAccumulator,
   onPrintUsage,
   onExitUsage,
   sessionId: initialSessionId,
@@ -106,6 +109,7 @@ const App: FC<AppProps> = ({
   const displayMode = useSetting(settingsService, 'ui.displayMode') ?? 'standard';
   const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
   const subagentUsage = useMemo(() => subagentUsageAccumulator ?? createUsageAccumulator(), [subagentUsageAccumulator]);
+  const sessionCost = useMemo(() => costAccumulator ?? createSessionCostAccumulator(), [costAccumulator]);
   const [sessionId, setSessionId] = useState(initialSessionId);
   const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);
   const pendingSkillRef = useRef<SkillInfo | null>(null);
@@ -217,6 +221,7 @@ const App: FC<AppProps> = ({
     loggingService,
     usageAccumulator: sessionUsage,
     subagentUsageAccumulator: subagentUsage,
+    costAccumulator: sessionCost,
     initialMessages,
     sessionId,
     onClear: useCallback(async () => {

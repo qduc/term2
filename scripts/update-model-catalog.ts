@@ -92,7 +92,7 @@ async function main(): Promise<void> {
 
   const source = await formatTypeScript(
     generateCatalogSource(piData, {
-      schemaVersion: 1,
+      schemaVersion: 2,
       generatedAt: generatedAt ?? new Date().toISOString(),
       source: `pi-ai@${piVersion}`,
     }),

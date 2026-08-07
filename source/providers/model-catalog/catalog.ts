@@ -4,6 +4,14 @@ import { MODEL_CATALOG } from './catalog.generated.js';
 export interface CatalogModelInfo {
   contextWindow: number;
   maxTokens?: number;
+  /** Per-million-token USD input price; absent when pi-ai carries no price. */
+  inputPricePerMTok?: number;
+  /** Per-million-token USD output price; absent when pi-ai carries no price. */
+  outputPricePerMTok?: number;
+  /** Per-million-token USD cache-read price; absent when not distinguished. */
+  cacheReadPricePerMTok?: number;
+  /** Per-million-token USD cache-write price; absent when not distinguished. */
+  cacheWritePricePerMTok?: number;
 }
 
 /** provider id -> model id -> model metadata */

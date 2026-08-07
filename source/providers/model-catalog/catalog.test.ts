@@ -117,6 +117,6 @@ describe('vendored catalog data contract', () => {
 
   it('records a parseable generation timestamp', () => {
     expect(Number.isNaN(Date.parse(CATALOG_META.generatedAt))).toBe(false);
-    expect(CATALOG_META.schemaVersion).toBe(1);
+    expect(CATALOG_META.schemaVersion).toBe(2);
   });
 });

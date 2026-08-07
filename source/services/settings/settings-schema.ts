@@ -128,9 +128,9 @@ export const AgentSettingsSchema = z.object({
   contextCompaction: z
     .object({
       enabled: z.boolean().default(false),
-      compactThreshold: z.number().int().finite().min(1000).default(100_000),
+      compactThreshold: z.number().finite().min(0).max(1).default(0.8),
     })
-    .default({ enabled: false, compactThreshold: 100_000 })
+    .default({ enabled: false, compactThreshold: 0.8 })
     .describe('OpenAI server-side context compaction settings'),
   autoApproveModel: z
     .string()
@@ -914,7 +914,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     useFlexServiceTier: false,
     contextCompaction: {
       enabled: false,
-      compactThreshold: 100_000,
+      compactThreshold: 0.8,
     },
     autoApproveModel: 'gpt-4o-mini',
     autoApproveProvider: undefined,

@@ -227,29 +227,29 @@ it('getResponse (HTTP) preserves typed settings, including zero values, in the n
   expect(capturedBody).not.toHaveProperty('prompt_cache_key');
 });
 
-it.each(['gpt-5.4-mini', 'gpt-5.6-luna'])(
-  'sends context management only for an enabled supported OpenAI model (%s)',
-  async (modelName) => {
-    let capturedBody: any;
-    const client = {
-      responses: {
-        create: async (body: any) => {
-          capturedBody = body;
-          return { id: 'resp_compaction', output: [], usage: {} };
-        },
+it.each([
+  ['gpt-5.4-mini', 200_000],
+  ['gpt-5.6-luna', 136_000],
+])('converts the context compaction ratio to model tokens (%s)', async (modelName, expectedThreshold) => {
+  let capturedBody: any;
+  const client = {
+    responses: {
+      create: async (body: any) => {
+        capturedBody = body;
+        return { id: 'resp_compaction', output: [], usage: {} };
       },
-    };
+    },
+  };
 
-    const model = new OpenAIResponsesModelWithPromptCacheKey(client, modelName, undefined, true);
-    await model.getResponse({
-      input: [],
-      tools: [],
-      providerOptions: { contextCompaction: { enabled: true, threshold: 2000 } },
-    });
+  const model = new OpenAIResponsesModelWithPromptCacheKey(client, modelName, undefined, true);
+  await model.getResponse({
+    input: [],
+    tools: [],
+    providerOptions: { contextCompaction: { enabled: true, threshold: 0.5 } },
+  });
 
-    expect(capturedBody.context_management).toEqual([{ type: 'compaction', compact_threshold: 2000 }]);
-  },
-);
+  expect(capturedBody.context_management).toEqual([{ type: 'compaction', compact_threshold: expectedThreshold }]);
+});
 
 it.each([
   ['unsupported model', 'gpt-5.3', true],
@@ -270,7 +270,7 @@ it.each([
   await model.getResponse({
     input: [],
     tools: [],
-    providerOptions: { contextCompaction: { enabled: true, threshold: 2000 } },
+    providerOptions: { contextCompaction: { enabled: true, threshold: 0.5 } },
   });
 
   expect(capturedBody).not.toHaveProperty('context_management');
@@ -292,7 +292,7 @@ it('does not let extraBody bypass the HTTP context-compaction gate', async () =>
     input: [],
     tools: [],
     providerOptions: {
-      contextCompaction: { enabled: true, threshold: 2000 },
+      contextCompaction: { enabled: true, threshold: 0.5 },
       extraBody: { context_management: [{ type: 'compaction', compact_threshold: 1000 }] },
     },
   });
@@ -382,6 +382,27 @@ it('stream (websocket) preserves typed settings, including zero values, in respo
   });
 });
 
+it('clamps a zero context compaction ratio to the API minimum', async () => {
+  let capturedBody: any;
+  const client = {
+    responses: {
+      create: async (body: any) => {
+        capturedBody = body;
+        return { id: 'resp_compaction_minimum', output: [], usage: {} };
+      },
+    },
+  };
+
+  const model = new OpenAIResponsesModelWithPromptCacheKey(client, 'gpt-5.6-luna', undefined, true);
+  await model.getResponse({
+    input: [],
+    tools: [],
+    providerOptions: { contextCompaction: { enabled: true, threshold: 0 } },
+  });
+
+  expect(capturedBody.context_management).toEqual([{ type: 'compaction', compact_threshold: 1000 }]);
+});
+
 it('stream (websocket) sends context management only for an enabled supported OpenAI model', async () => {
   fakeResponsesWSStream = async function* () {
     yield { type: 'message', message: { type: 'response.completed', response: { id: 'resp_ws_compaction' } } };
@@ -396,11 +417,11 @@ it('stream (websocket) sends context management only for an enabled supported Op
     model.stream({
       input: [],
       tools: [],
-      providerOptions: { contextCompaction: { enabled: true, threshold: 2000 } },
+      providerOptions: { contextCompaction: { enabled: true, threshold: 0.5 } },
     }),
   );
 
-  expect(capturedWSRequest.context_management).toEqual([{ type: 'compaction', compact_threshold: 2000 }]);
+  expect(capturedWSRequest.context_management).toEqual([{ type: 'compaction', compact_threshold: 136_000 }]);
 });
 
 it('does not let extraBody bypass the WebSocket context-compaction gate', async () => {
@@ -418,7 +439,7 @@ it('does not let extraBody bypass the WebSocket context-compaction gate', async 
       input: [],
       tools: [],
       providerOptions: {
-        contextCompaction: { enabled: true, threshold: 2000 },
+        contextCompaction: { enabled: true, threshold: 0.5 },
         extraBody: { context_management: [{ type: 'compaction', compact_threshold: 1000 }] },
       },
     }),

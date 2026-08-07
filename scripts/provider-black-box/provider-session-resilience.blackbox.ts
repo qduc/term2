@@ -401,7 +401,7 @@ describe('application-owned context compaction black-box lifecycle', () => {
     await resumed.waitForExit(DEFAULT_TIMEOUT_MS);
 
     expect(server.requests).toHaveLength(2);
-    expect(server.requests[0]?.body.context_management).toEqual([{ type: 'compaction', compact_threshold: 100_000 }]);
+    expect(server.requests[0]?.body.context_management).toEqual([{ type: 'compaction', compact_threshold: 217_600 }]);
     const resumedBody = asRecord(server.requests[1]?.body);
     expect(resumedBody?.previous_response_id).toBeUndefined();
     const compactions = inputItems(resumedBody?.input).filter((item) => item.type === 'compaction');
@@ -569,7 +569,7 @@ async function writeSettings(
       maxTurns: 4,
       reasoningEffort: 'medium',
       codex: { websocketFirstFrameTimeoutMs: 1_000, websocketInterFrameTimeoutMs: 1_000 },
-      ...(route.contextCompaction ? { contextCompaction: { enabled: true, compactThreshold: 100_000 } } : {}),
+      ...(route.contextCompaction ? { contextCompaction: { enabled: true, compactThreshold: 0.8 } } : {}),
     },
     app: { liteMode: true },
   };

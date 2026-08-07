@@ -13,6 +13,7 @@ import { consumeOpenAIRequestPrefixBindingWithOutcome } from './openai-request-p
 import { observeOpenAIRequestLifecycle, type OpenAIRequestLifecycleObservation } from './provider-request-capture.js';
 import { randomUUID } from 'node:crypto';
 import { ResponsesWS } from 'openai/resources/responses/ws';
+import { getModelContextWindow } from './model-catalog/catalog.js';
 
 const endpointOf = (client: any): string => {
   const value = client?.baseURL ?? client?._options?.baseURL;
@@ -155,10 +156,23 @@ function contextCompaction(
   if (sessionState?.disabled || !providerSupportsContextCompaction || !supportsContextCompactionModel(model))
     return undefined;
   const option = (providerOptions as any).contextCompaction;
-  if (option?.enabled !== true || typeof option.threshold !== 'number' || !Number.isFinite(option.threshold)) {
+  if (
+    option?.enabled !== true ||
+    typeof option.threshold !== 'number' ||
+    !Number.isFinite(option.threshold) ||
+    option.threshold < 0 ||
+    option.threshold > 1
+  ) {
     return undefined;
   }
-  return { threshold: option.threshold };
+  const contextWindow = getModelContextWindow('openai', model);
+  if (!contextWindow) return undefined;
+
+  // The setting is a fraction of the selected model's context window. The
+  // Responses API still accepts an integer token count and enforces a 1000
+  // token minimum, so apply that provider-specific conversion at the wire
+  // boundary rather than exposing model-specific token counts in settings.
+  return { threshold: Math.max(1000, Math.round(contextWindow * option.threshold)) };
 }
 
 function requestBody(

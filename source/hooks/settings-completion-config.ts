@@ -43,7 +43,7 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED]:
     'Enable OpenAI server-side context compaction (true|false, OpenAI only)',
   [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD]:
-    'Input-token threshold for OpenAI server-side context compaction (whole number >= 1000)',
+    'Context-window ratio for OpenAI server-side context compaction (0-1, 0%-100%)',
   [SETTING_KEYS.AGENT_MENTOR_MODEL]: 'Mentor model to use (optional, enables ask_mentor tool)',
   [SETTING_KEYS.AGENT_MENTOR_PROVIDER]: 'Provider to use for mentor model (openai, openrouter, etc.)',
   [SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT]:

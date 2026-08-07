@@ -764,14 +764,16 @@ Under `agent.` in `settings-schema.ts`:
 | Key | Type | Default |
 | --- | --- | --- |
 | `agent.contextCompaction.enabled` | boolean | `false` |
-| `agent.contextCompaction.compactThreshold` | int `>= 1000` | conservative — see below |
+| `agent.contextCompaction.compactThreshold` | ratio `0..1` (`0%..100%`) | `0.8` |
 
-`compactThreshold` has a **hard server-enforced minimum of 1000** — below it the API returns
-`400 integer_below_min_value` ([Round 3](#round-3--gpt-56-luna-and-the-free-prefix-hypothesis-under-control-2026-08-06)).
-Validate it in the schema so the failure surfaces at settings time rather than as a failed turn.
+`compactThreshold` is a ratio of the selected model's context window. The provider converts it
+to an integer token threshold at the request boundary and clamps the result to the API's
+**hard server-enforced minimum of 1000** — the API returns `400 integer_below_min_value` below
+that value ([Round 3](#round-3--gpt-56-luna-and-the-free-prefix-hypothesis-under-control-2026-08-06)).
+Validate the ratio in the schema so invalid values surface at settings time rather than as a failed turn.
 
-`compactThreshold` maps straight onto the API's `compact_threshold`. Choose the default with the
-cost table from [Round 2](#round-2--auto-compaction-on-gpt-54) in hand: each fire costs ~600 output
+The converted token threshold maps onto the API's `compact_threshold`. Choose the default with
+the cost table from [Round 2](#round-2--auto-compaction-on-gpt-54) in hand: each fire costs ~600 output
 tokens, which are billed several times higher than input tokens. A threshold near the model's
 context limit fires rarely and saves a lot; a low one can cost more than it saves. Err high.
 

@@ -46,7 +46,7 @@ const createMockSettings = (values: Record<string, any> = {}): ISettingsService 
     'agent.provider': 'openai',
     'agent.useFlexServiceTier': false,
     'agent.contextCompaction.enabled': false,
-    'agent.contextCompaction.compactThreshold': 100_000,
+    'agent.contextCompaction.compactThreshold': 0.8,
     'shell.maxOutputChars': undefined,
     ...values,
   };
@@ -432,7 +432,7 @@ it.sequential('buildAgent passes enabled context compaction to the OpenAI adapte
     providerId: 'openai',
     settingsValues: {
       'agent.contextCompaction.enabled': true,
-      'agent.contextCompaction.compactThreshold': 12_000,
+      'agent.contextCompaction.compactThreshold': 0.5,
     },
   });
 
@@ -440,7 +440,7 @@ it.sequential('buildAgent passes enabled context compaction to the OpenAI adapte
 
   expect(result.agent.modelSettings?.providerData?.contextCompaction).toEqual({
     enabled: true,
-    threshold: 12_000,
+    threshold: 0.5,
   });
 });
 

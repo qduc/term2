@@ -37,26 +37,33 @@ it('Codex websocket receive timeouts default to transport-safe values and reject
   }
 });
 
-it('context compaction defaults to disabled with a conservative threshold and rejects unsafe thresholds', () => {
+it('context compaction defaults to disabled with a conservative ratio and rejects invalid ratios', () => {
   expect(AgentSettingsSchema.parse({}).contextCompaction).toEqual({
     enabled: false,
-    compactThreshold: 100_000,
+    compactThreshold: 0.8,
   });
   expect(DEFAULT_SETTINGS.agent.contextCompaction).toEqual({
     enabled: false,
-    compactThreshold: 100_000,
+    compactThreshold: 0.8,
   });
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED)).toBe(true);
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD)).toBe(true);
 
   expect(
-    SettingsSchema.parse({ agent: { contextCompaction: { enabled: true, compactThreshold: 12_000 } } }).agent
+    SettingsSchema.parse({ agent: { contextCompaction: { enabled: true, compactThreshold: 0.5 } } }).agent
       ?.contextCompaction,
-  ).toEqual({ enabled: true, compactThreshold: 12_000 });
+  ).toEqual({ enabled: true, compactThreshold: 0.5 });
 
-  for (const compactThreshold of [999, 1000.5, Infinity, Number.NaN]) {
+  for (const compactThreshold of [-0.01, 1.01, Infinity, Number.NaN]) {
     expect(() => SettingsSchema.parse({ agent: { contextCompaction: { compactThreshold } } })).toThrow();
   }
+
+  expect(
+    SettingsSchema.parse({ agent: { contextCompaction: { compactThreshold: 0 } } }).agent?.contextCompaction,
+  ).toMatchObject({ compactThreshold: 0 });
+  expect(
+    SettingsSchema.parse({ agent: { contextCompaction: { compactThreshold: 1 } } }).agent?.contextCompaction,
+  ).toMatchObject({ compactThreshold: 1 });
 });
 
 it('memory settings default to enabled local storage with bounded retrieval and context budgets', () => {

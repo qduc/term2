@@ -31,6 +31,8 @@ export interface AgentStream {
   rawResponses?: unknown[];
   /** Authoritative cumulative usage for the run, exposed separately from opaque continuation state. */
   runUsage?: unknown;
+  /** Cumulative model-request cost records for the run, when the runner records them. */
+  runCostRecords?: unknown[];
 }
 
 /** Select provider items from the current run, falling back to full history. */

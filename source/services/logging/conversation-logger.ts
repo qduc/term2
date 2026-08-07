@@ -130,7 +130,13 @@ export class ConversationLogger {
         });
         return;
       case 'subagent_completed':
-        this.log({ type: 'subagent_completed', result: event.result });
+        this.log({
+          type: 'subagent_completed',
+          result: event.result,
+          ...(event.result.costRecords && event.result.costRecords.length > 0
+            ? { costRecords: event.result.costRecords }
+            : {}),
+        });
         return;
       case 'subagent_question':
         this.log({
@@ -201,6 +207,7 @@ export class ConversationLogger {
           turn,
           ...(event.usage ? { usage: event.usage } : {}),
           ...(this.turnAccumulator.getDisplayUsage() ? { displayUsage: this.turnAccumulator.getDisplayUsage() } : {}),
+          ...(event.costRecords && event.costRecords.length > 0 ? { costRecords: event.costRecords } : {}),
           state: turnState,
         });
 

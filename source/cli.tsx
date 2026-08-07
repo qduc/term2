@@ -20,6 +20,7 @@ import { ExecutionContext } from './services/execution-context.js';
 import { ISSHService } from './services/service-interfaces.js';
 import { resolveSSHHost } from './utils/ssh-config-parser.js';
 import { createUsageAccumulator, formatSessionUsageBreakdown } from './utils/ai/token-usage.js';
+import { createSessionCostAccumulator, formatUsdMicros } from './services/cost/model-cost.js';
 import { buildProjectFolderTitle, setTerminalTitle } from './utils/output/terminal-title.js';
 import {
   generateId,
@@ -55,10 +56,22 @@ import { HookService } from './services/hooks/hook-service.js';
 
 const sessionUsageAccumulator = createUsageAccumulator();
 const subagentUsageAccumulator = createUsageAccumulator();
+const sessionCostAccumulator = createSessionCostAccumulator();
 let usagePrinted = false;
 const printUsage = () => {
+  const costSummary = sessionCostAccumulator.getSummary();
+  const costLine =
+    costSummary.state === 'exact'
+      ? `Cost ${formatUsdMicros(costSummary.knownUsdMicros)}`
+      : costSummary.state === 'estimated'
+      ? `Est ${formatUsdMicros(costSummary.knownUsdMicros)}`
+      : costSummary.state === 'partial'
+      ? `Est ${formatUsdMicros(costSummary.knownUsdMicros)}+`
+      : null;
   process.stdout.write(
-    `\n${formatSessionUsageBreakdown(sessionUsageAccumulator.get(), subagentUsageAccumulator.get())}\n`,
+    `\n${formatSessionUsageBreakdown(sessionUsageAccumulator.get(), subagentUsageAccumulator.get())}${
+      costLine ? `\n${costLine}` : ''
+    }\n`,
   );
 };
 const printUsageOnce = () => {
@@ -636,6 +649,9 @@ if (resumedConversation) {
   if (resumedConversation.subagentUsage) {
     subagentUsageAccumulator.add(resumedConversation.subagentUsage, { alreadyBillable: true });
   }
+  if (resumedConversation.costRecords?.length) {
+    sessionCostAccumulator.addRecords(resumedConversation.costRecords);
+  }
 } else if (resumeRequested) {
   const target = resumeTarget ?? 'last';
   console.error(`No conversation found to resume (${target}).`);
@@ -771,6 +787,7 @@ const { waitUntilExit } = render(
         sshService={sshService}
         usageAccumulator={sessionUsageAccumulator}
         subagentUsageAccumulator={subagentUsageAccumulator}
+        costAccumulator={sessionCostAccumulator}
         onPrintUsage={printUsage}
         onExitUsage={printUsageOnce}
         sessionId={effectiveSessionId}

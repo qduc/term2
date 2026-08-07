@@ -116,6 +116,89 @@ it.sequential('StatusBar renders context usage for an OpenAI model with a k-scal
   expect(output.includes('Ctx 100k / 272k')).toBe(true);
 });
 
+it.sequential('StatusBar renders an exact session cost', async () => {
+  const settingsService = createMockSettingsService();
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      costSummary={{ knownUsdMicros: 420_000, pricedRequests: 1, unpricedRequests: 0, state: 'exact' }}
+    />,
+  );
+
+  expect(lastFrame()).toContain('Cost $0.42');
+});
+
+it.sequential('StatusBar renders an estimated session cost', async () => {
+  const settingsService = createMockSettingsService();
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      costSummary={{ knownUsdMicros: 420_000, pricedRequests: 1, unpricedRequests: 0, state: 'estimated' }}
+    />,
+  );
+
+  expect(lastFrame()).toContain('Est $0.42');
+});
+
+it.sequential('StatusBar renders a partial session cost as a lower bound', async () => {
+  const settingsService = createMockSettingsService();
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      costSummary={{ knownUsdMicros: 420_000, pricedRequests: 1, unpricedRequests: 1, state: 'partial' }}
+    />,
+  );
+
+  expect(lastFrame()).toContain('Est $0.42+');
+});
+
+it.sequential('StatusBar omits unavailable and missing session cost', async () => {
+  const settingsService = createMockSettingsService();
+  const { lastFrame: unavailableFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      costSummary={{ knownUsdMicros: 0, pricedRequests: 0, unpricedRequests: 1, state: 'unavailable' }}
+    />,
+  );
+  const { lastFrame: nullFrame } = await renderInAct(
+    <StatusBar settingsService={settingsService} costSummary={null} />,
+  );
+  const { lastFrame: undefinedFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
+
+  expect(unavailableFrame()).not.toContain('$');
+  expect(nullFrame()).not.toContain('$');
+  expect(undefinedFrame()).not.toContain('$');
+});
+
+it.sequential('StatusBar preserves non-zero precision for sub-cent session costs', async () => {
+  const settingsService = createMockSettingsService();
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      costSummary={{ knownUsdMicros: 28, pricedRequests: 1, unpricedRequests: 0, state: 'exact' }}
+    />,
+  );
+
+  expect(lastFrame()).toContain('Cost $0.000028');
+});
+
+it.sequential('StatusBar places session cost beside token and context usage', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-5.6-sol',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      lastUsage={{ prompt_tokens: 1_200, completion_tokens: 350 }}
+      costSummary={{ knownUsdMicros: 420_000, pricedRequests: 1, unpricedRequests: 0, state: 'exact' }}
+    />,
+  );
+
+  expect(lastFrame()).toContain('Tok 1,200 in / 350 out │ Ctx 1k / 272k │ Cost $0.42');
+});
+
 it.sequential('StatusBar hides context usage when the model is not in the catalog', async () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'model-that-does-not-exist',

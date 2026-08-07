@@ -28,6 +28,11 @@ import { useAppKeyboardShortcuts } from './hooks/use-app-keyboard-shortcuts.js';
 import { hasUserTurnContent, type UserTurn } from './types/user-turn.js';
 import type { Message } from './types/message.js';
 import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumulator } from './utils/ai/token-usage.js';
+import {
+  createSessionCostAccumulator,
+  formatUsdMicros,
+  type SessionCostAccumulator,
+} from './services/cost/model-cost.js';
 import type { RewindItem } from './hooks/use-rewind-selection.js';
 import type { RewindDisposition } from './commands/rewind-command.js';
 import { buildRewindItems } from './utils/conversation/rewind-items.js';
@@ -58,6 +63,7 @@ interface AppProps {
   sshService?: ISSHService;
   usageAccumulator?: UsageAccumulator;
   subagentUsageAccumulator?: UsageAccumulator;
+  costAccumulator?: SessionCostAccumulator;
   onPrintUsage?: () => void;
   onExitUsage?: () => void;
   sessionId: string;
@@ -81,6 +87,7 @@ const App: FC<AppProps> = ({
   sshService,
   usageAccumulator,
   subagentUsageAccumulator,
+  costAccumulator,
   onPrintUsage,
   onExitUsage,
   sessionId: initialSessionId,
@@ -106,6 +113,7 @@ const App: FC<AppProps> = ({
   const displayMode = useSetting(settingsService, 'ui.displayMode') ?? 'standard';
   const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
   const subagentUsage = useMemo(() => subagentUsageAccumulator ?? createUsageAccumulator(), [subagentUsageAccumulator]);
+  const sessionCost = useMemo(() => costAccumulator ?? createSessionCostAccumulator(), [costAccumulator]);
   const [sessionId, setSessionId] = useState(initialSessionId);
   const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);
   const pendingSkillRef = useRef<SkillInfo | null>(null);
@@ -212,11 +220,13 @@ const App: FC<AppProps> = ({
     discardQueue,
     retractPendingSubmission,
     editPendingSubmission,
+    getCostSummary,
   } = useConversation({
     conversationService,
     loggingService,
     usageAccumulator: sessionUsage,
     subagentUsageAccumulator: subagentUsage,
+    costAccumulator: sessionCost,
     initialMessages,
     sessionId,
     onClear: useCallback(async () => {
@@ -309,10 +319,21 @@ const App: FC<AppProps> = ({
     setMessageListEpoch((epoch) => epoch + 1);
   }, [stdout]);
 
-  const getSessionUsage = useCallback(
-    () => formatSessionUsageBreakdown(sessionUsage.get(), getSubagentUsage()),
-    [sessionUsage, getSubagentUsage],
-  );
+  const getSessionUsage = useCallback(() => {
+    const tokenUsage = formatSessionUsageBreakdown(sessionUsage.get(), getSubagentUsage());
+    const summary = getCostSummary();
+    if (!summary || summary.state === 'unavailable') {
+      return tokenUsage;
+    }
+
+    const costLabel = summary.state === 'exact' ? 'Cost' : 'Estimated cost';
+    const costAmount = `${formatUsdMicros(summary.knownUsdMicros)}${summary.state === 'partial' ? '+' : ''}`;
+    const lowerBound = summary.state === 'partial' ? ' (lower bound)' : '';
+    const costUsage = `${costLabel}: ${costAmount}${lowerBound} (${summary.pricedRequests} priced, ${summary.unpricedRequests} unpriced requests)`;
+    return `${tokenUsage}\n${costUsage}`;
+  }, [getCostSummary, getSubagentUsage, sessionUsage]);
+
+  const costSummary = useMemo(() => getCostSummary(), [getCostSummary, lastUsage]);
 
   const staticCommitBlocker = useMemo(
     () => detectStaticCommitBlocker(messages, { displayMode }),
@@ -602,6 +623,7 @@ const App: FC<AppProps> = ({
             toolCallStreamingInfo={toolCallStreamingInfo}
             isShellMode={isShellMode}
             lastUsage={lastUsage}
+            costSummary={costSummary}
             queuePaused={queuePaused}
             queueLength={queueLength}
             queuePauseReason={queuePauseReason}

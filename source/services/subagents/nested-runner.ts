@@ -30,6 +30,7 @@ import {
   isAbortLike,
 } from './utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
+import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import { replayApprovals, type ApprovalRecord } from '../approval/approval-replay.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
@@ -352,6 +353,7 @@ export class NestedSubagentRunner {
           filesChanged: [...new Set(runContext.filesChanged)],
           toolsUsed: aggregateContextToolUsage(runContext.toolCounts),
           usage: normalizeAgentRunUsage((settled as { usage?: unknown } | undefined)?.usage) ?? extractUsage(stream),
+          costRecords: stream.runCostRecords as ModelRequestCost[] | undefined,
           ...(interrupted ? { interrupted: true } : {}),
         };
         return JSON.stringify(result);

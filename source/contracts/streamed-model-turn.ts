@@ -155,6 +155,13 @@ export type StreamedModelTurnEvent =
       readonly providerMetadata?: StreamedModelProviderOptions;
       readonly finishReason?: string;
       readonly usage?: StreamedModelUsage;
+      /**
+       * Provider-reported USD charge for this request when the provider
+       * supplies one (e.g. an OpenAI-compatible cost-only trailer). Kept
+       * separate from `usage` so usage normalization never drops or
+       * double-counts money.
+       */
+      readonly costUsd?: number | string;
     };
 
 export type StreamedModelTurnOutput =

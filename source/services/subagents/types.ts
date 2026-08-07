@@ -1,4 +1,5 @@
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
+import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
 
 export const SUBAGENT_ROLES = ['explorer', 'worker', 'mentor', 'librarian'] as const;
@@ -152,6 +153,8 @@ export interface SubagentResult {
     count: number;
   }>;
   usage?: NormalizedUsage;
+  /** Cumulative model-request cost records for the subagent run. */
+  costRecords?: ModelRequestCost[];
   error?: string;
   /** SDK nested run result used to propagate/resume delegated approvals. */
   nestedRunResult?: unknown;

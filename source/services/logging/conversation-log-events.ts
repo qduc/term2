@@ -9,6 +9,7 @@ import type {
   PersistedAssistantTurn,
   PersistedAssistantTurnItem,
 } from '../conversation/conversation-persistence-types.js';
+import type { ModelRequestCost } from '../cost/model-cost.js';
 
 export const LOG_ENVELOPE_VERSION = 3;
 
@@ -184,6 +185,8 @@ export interface SubagentToolStartedLogEvent {
 export interface SubagentCompletedLogEvent {
   type: 'subagent_completed';
   result: SubagentResult;
+  /** Cumulative model-request cost records for the subagent run. */
+  costRecords?: ModelRequestCost[];
 }
 
 export interface SubagentQuestionLogEvent {
@@ -210,6 +213,8 @@ export interface AssistantTurnEvent {
   usage?: NormalizedUsage;
   /** Footer-compatible usage from the last streamed model turn, when available. */
   displayUsage?: NormalizedUsage;
+  /** Cumulative model-request cost records for the completed turn. */
+  costRecords?: ModelRequestCost[];
   state?: AssistantTurnState;
   /** Present in v2 logs. New v3 logs use `state` to avoid cumulative snapshots. */
   snapshot?: StateSnapshot;

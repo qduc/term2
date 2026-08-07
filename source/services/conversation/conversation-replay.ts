@@ -1,6 +1,7 @@
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import { createUsageAccumulator } from '../../utils/ai/token-usage.js';
+import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
 import { repairConversationHistory } from './conversation-history-repair.js';
 import type {
@@ -42,6 +43,7 @@ export interface RestoredState {
   toolLedger: SavedToolExecution[];
   usage?: NormalizedUsage;
   subagentUsage?: NormalizedUsage;
+  costRecords?: ModelRequestCost[];
   replayWarnings: string[];
   forkedFrom?: string;
 }
@@ -1065,6 +1067,8 @@ function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMe
 export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
   const usage = createUsageAccumulator();
   const subagentUsage = createUsageAccumulator();
+  const allCostRecords: ModelRequestCost[] = [];
+  let sawUsageWithoutCostRecords = false;
   const state: ReplayState = {
     id: '',
     createdAt: '',
@@ -1089,9 +1093,21 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
     }
     if (envelope.event.type === 'assistant_turn' && envelope.event.usage) {
       usage.add(envelope.event.usage);
+      if (!envelope.event.costRecords || envelope.event.costRecords.length === 0) {
+        sawUsageWithoutCostRecords = true;
+      }
+    }
+    if (envelope.event.type === 'assistant_turn' && envelope.event.costRecords) {
+      allCostRecords.push(...envelope.event.costRecords);
     }
     if (envelope.event.type === 'subagent_completed' && envelope.event.result?.usage) {
       subagentUsage.add(envelope.event.result.usage);
+      if (!envelope.event.costRecords || envelope.event.costRecords.length === 0) {
+        sawUsageWithoutCostRecords = true;
+      }
+    }
+    if (envelope.event.type === 'subagent_completed' && envelope.event.costRecords) {
+      allCostRecords.push(...envelope.event.costRecords);
     }
     applyEvent(state, envelope.event, envelope.ts);
   }
@@ -1148,6 +1164,24 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
 
   const accumulatedUsage = usage.get();
   const accumulatedSubagentUsage = subagentUsage.get();
+  const hasUsage = Object.keys(accumulatedUsage).length > 0 || Object.keys(accumulatedSubagentUsage).length > 0;
+
+  // Older logs recorded usage but not per-request cost records. Surface a
+  // single synthetic unpriced marker so the session summary is partial rather
+  // than silently unavailable.
+  let costRecords: ModelRequestCost[] | undefined = allCostRecords.length > 0 ? allCostRecords : undefined;
+  if (hasUsage && (!costRecords || costRecords.length === 0) && sawUsageWithoutCostRecords) {
+    costRecords = [
+      {
+        requestId: 'legacy-unpriced',
+        provider: 'unknown',
+        model: 'unknown',
+        serviceTier: 'unknown',
+        outcome: 'completed',
+        unpricedReason: 'unknown_model',
+      },
+    ];
+  }
 
   return {
     id: state.id,
@@ -1164,6 +1198,7 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
     toolLedger: state.toolLedger,
     usage: Object.keys(accumulatedUsage).length > 0 ? accumulatedUsage : undefined,
     subagentUsage: Object.keys(accumulatedSubagentUsage).length > 0 ? accumulatedSubagentUsage : undefined,
+    costRecords,
     replayWarnings: state.warnings,
     forkedFrom: state.forkedFrom,
   };

@@ -31,6 +31,8 @@ import { normalizeToolParameters } from '../../lib/tool-invoke.js';
 import { isCancellationError, isHarnessInvariantError } from '../../lib/harness-invariant-error.js';
 import { ApprovalLedger, type ToolInvocationContext } from './tool-invocation-context.js';
 import { addTokenUsage, normalizeUsage } from '../../utils/ai/token-usage.js';
+import { computeModelCost, type ModelRequestCost, type ServiceTier } from '../../services/cost/model-cost.js';
+import { getCatalogPricingVersion, getModelPricing } from '../../services/cost/pricing.js';
 
 /**
  * Fields of `modelSettings` the run loop and provider adapters actually read.
@@ -169,6 +171,10 @@ type RunState = {
   turnCount: number;
   /** Turn budget for the run; undefined means unbounded. */
   maxTurns?: number;
+  /** Monotonic per-request sequence used to build stable run-local request ids. */
+  costRequestSeq?: number;
+  /** Cumulative model-request cost records for this run, preserved across continuation. */
+  costRecords?: ModelRequestCost[];
   /**
    * Identical failing tool calls seen so far, keyed by tool + arguments +
    * error. Preserved across continuation so an approval round-trip does not
@@ -461,6 +467,8 @@ export class ApplicationRunLoop {
     if (!state.pendingApproval && state.pendingApprovals.length > 0) {
       state.pendingApproval = state.pendingApprovals[0];
     }
+    // Handles created before cost accounting existed have no record list.
+    if (!state.costRecords) state.costRecords = [];
     // Response IDs are provider-owned. A handle from before provenance was
     // recorded, a missing providerId, or a provider switch must never forward
     // its opaque ID. In particular, do not use previousResponseId as a
@@ -538,6 +546,9 @@ export class ApplicationRunLoop {
       rawResponses: [],
       get runUsage() {
         return state.usage;
+      },
+      get runCostRecords() {
+        return state.costRecords ?? [];
       },
     });
 
@@ -642,6 +653,9 @@ export class ApplicationRunLoop {
       let sawToolCall = false;
       let completion: Extract<StreamedModelTurnEvent, { type: 'completion' }> | undefined;
       let pendingNativeReasoning: PendingNativeReasoning | undefined;
+      // Stable run-local request id, allocated immediately before dispatch so a
+      // cost record can be settled exactly once (success or failure).
+      const requestId = this.#nextRequestId(state);
 
       const request: StreamedModelTurnRequest = {
         instructions: state.agent.instructions,
@@ -710,8 +724,23 @@ export class ApplicationRunLoop {
         state.requestPreparation?.prepare(request);
         await consume();
       };
-      if (state.requestPreparation) await state.requestPreparation.run(dispatch);
-      else await dispatch();
+      try {
+        if (state.requestPreparation) await state.requestPreparation.run(dispatch);
+        else await dispatch();
+      } catch (error) {
+        // Dispatch began, but no terminal completion was accepted. Record an
+        // unpriced marker so the summary stays honest (partial) rather than
+        // appearing exact. Observational only: the error still propagates.
+        const cancelled = error instanceof Error && error.name === 'AbortError';
+        this.#appendCostRecord(state, {
+          requestId,
+          provider: state.currentProviderId,
+          model: state.agent.model,
+          tier: resolveServiceTier(request),
+          outcome: cancelled ? 'cancelled' : 'failed',
+        });
+        throw error;
+      }
 
       if (!completion) throw new Error('Application model turn ended without completion');
       // Commit the authoritative terminal state before handling terminal-only
@@ -728,8 +757,9 @@ export class ApplicationRunLoop {
         state.responseId = undefined;
         state.responseProviderId = undefined;
       }
+      let normalizedCompletionUsage: ReturnType<typeof normalizeModelUsage>;
       if (completion.usage !== undefined) {
-        const normalizedCompletionUsage = normalizeModelUsage(completion.usage);
+        normalizedCompletionUsage = normalizeModelUsage(completion.usage);
         if (normalizedCompletionUsage) {
           const accumulated = addTokenUsage(normalizeModelUsage(state.usage), normalizedCompletionUsage);
           state.usage = {
@@ -751,7 +781,19 @@ export class ApplicationRunLoop {
           // pass-through behavior when normalization cannot recognize it.
           state.usage = completion.usage;
         }
+      } else {
+        normalizedCompletionUsage = undefined;
       }
+      // Attribute cost while the dispatched request's identity is still known.
+      this.#appendCostRecord(state, {
+        requestId,
+        provider: state.currentProviderId,
+        model: state.agent.model,
+        tier: resolveServiceTier(request),
+        outcome: 'completed',
+        usage: normalizedCompletionUsage,
+        providerUsd: completion.costUsd,
+      });
       stream.lastResponseId = completion.responseId;
       stream.rawResponses?.push(completion);
       // Some provider adapters report function calls only in the terminal
@@ -993,6 +1035,37 @@ export class ApplicationRunLoop {
     }
   }
 
+  #nextRequestId(state: RunState): string {
+    state.costRequestSeq = (state.costRequestSeq ?? 0) + 1;
+    return `req-${state.turnCount}-${state.costRequestSeq}`;
+  }
+
+  #appendCostRecord(
+    state: RunState,
+    input: {
+      requestId: string;
+      provider: string | undefined;
+      model: string;
+      tier: ServiceTier;
+      outcome: 'completed' | 'failed' | 'cancelled';
+      usage?: ReturnType<typeof normalizeModelUsage>;
+      providerUsd?: number | string;
+    },
+  ): void {
+    const record = computeModelCost({
+      requestId: input.requestId,
+      provider: input.provider ?? 'unknown',
+      model: input.model,
+      serviceTier: input.tier,
+      outcome: input.outcome,
+      usage: input.usage,
+      providerUsd: input.providerUsd,
+      getPrice: (provider, model, tier) => getModelPricing(provider, model, tier),
+      pricingVersion: getCatalogPricingVersion(),
+    });
+    state.costRecords = [...(state.costRecords ?? []), record];
+  }
+
   async #notifyToolLifecycle(operation: (() => void | Promise<void>) | undefined): Promise<void> {
     if (!operation) return;
     try {
@@ -1045,7 +1118,7 @@ function finish(stream: AgentStream, state: RunState, queue: EventQueue): unknow
     stream.lastResponseId = null;
   }
   queue.close();
-  return { usage: state.usage, output: stream.output };
+  return { usage: state.usage, output: stream.output, costRecords: state.costRecords ?? [] };
 }
 
 type PendingNativeReasoning = {
@@ -1117,6 +1190,18 @@ function commitPendingNativeReasoning(
   state.history.push(reasoningHistory);
   outputPush(stream, queue, { type: 'item', item: reasoningHistory });
   return undefined;
+}
+
+/**
+ * Resolve the effective billing service tier from the dispatched request. The
+ * default service tier is standard; only a flex/batch request that was actually
+ * dispatched resolves to its tier, and anything unrecognized fails closed.
+ */
+function resolveServiceTier(request: StreamedModelTurnRequest): ServiceTier {
+  const options = request.providerOptions as Record<string, unknown> | undefined;
+  const raw = options?.service_tier ?? options?.serviceTier;
+  if (raw === 'flex' || raw === 'batch' || raw === 'standard') return raw;
+  return raw === undefined ? 'standard' : 'unknown';
 }
 
 function normalizeModelUsage(usage: unknown) {

@@ -19,7 +19,10 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
   }
 
   async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
-    const messages = openAICompatibleMessages(request.input);
+    const messages = [
+      ...(request.instructions ? [{ role: 'system', content: request.instructions }] : []),
+      ...openAICompatibleMessages(request.input),
+    ];
     assertValidOpenAICompatibleMessages(messages);
     const response = await this.client.chat.completions.create({
       model: this.model,

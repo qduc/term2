@@ -449,9 +449,20 @@ function createPtyChild(options: {
       const current = snapshot();
       if (predicate(current)) return current;
       if (spawnError) throw spawnError;
-      if (current.exit) throw new Error('PTY child exited before the requested state appeared.');
-      if (Date.now() - startedAt >= timeoutMs)
-        throw new Error(`Timed out waiting for PTY child state after ${timeoutMs}ms.`);
+      if (current.exit) {
+        const visible = current.visibleOutput;
+        const tail = visible.length > 2_000 ? visible.slice(-2_000) : visible;
+        throw new Error(
+          `PTY child exited before the requested state appeared (code=${current.exit.exitCode}, signal=${current.exit.signal}).\nchild visible output (tail):\n${tail}`,
+        );
+      }
+      if (Date.now() - startedAt >= timeoutMs) {
+        const visible = current.visibleOutput;
+        const tail = visible.length > 2_000 ? visible.slice(-2_000) : visible;
+        throw new Error(
+          `Timed out waiting for PTY child state after ${timeoutMs}ms.\nchild visible output (tail):\n${tail}`,
+        );
+      }
       await delay(25);
     }
   };

@@ -316,7 +316,10 @@ async function createWorkspace(
 async function startCli(workspace: IsolatedWorkspaceLease): Promise<PtyChildDriver> {
   return workspace.start({
     command: process.execPath,
-    args: [join(process.cwd(), 'dist/cli.js')],
+    // --lite is required: workspace.root is also HOME, and the CLI home-directory
+    // start guard blocks interactive non-lite starts when cwd === homedir.
+    // Settings app.liteMode is loaded later and does not bypass that guard.
+    args: [join(process.cwd(), 'dist/cli.js'), '--lite'],
     cwd: workspace.root,
     cols: 120,
     rows: 40,

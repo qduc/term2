@@ -755,6 +755,12 @@ export class ConversationOrchestrator {
     for (const notification of newlyDisplayed) {
       this.#displayedBackgroundNotificationMessageIds.add(notification.messageId);
     }
+    const runs = newlyDisplayed
+      .filter(
+        (notification): notification is Extract<BackgroundSubagentNotification, { kind: 'completion' }> =>
+          notification.kind === 'completion',
+      )
+      .map(({ role, status }) => ({ role, status }));
     this.config.messages.appendMessages([
       {
         id: this.createMessageId(),
@@ -764,7 +770,7 @@ export class ConversationOrchestrator {
         output: formatBackgroundSubagentNotificationDisplay(newlyDisplayed),
         success: true,
         toolName: 'background_subagent_notification',
-        toolArgs: { count: newlyDisplayed.length },
+        toolArgs: { runs },
       },
     ]);
   }

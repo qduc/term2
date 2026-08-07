@@ -15,6 +15,15 @@ export interface StreamAccumulator {
   latestUsage?: NormalizedUsage;
   textDeltaCount: number;
   reasoningDeltaCount: number;
+  /**
+   * Duration of the last compaction the provider bracketed with real frames.
+   *
+   * The completion notice is emitted at finalization rather than here, because its token
+   * count comes from `usage`, which only arrives on `response.completed` — after the
+   * compaction frames. The duration is the reverse: only the frames know it. So the
+   * measurement is parked here and the two are joined at the emit site.
+   */
+  lastContextCompactionDurationMs?: number;
 }
 
 export const createStreamAccumulator = (): StreamAccumulator => ({
@@ -24,6 +33,7 @@ export const createStreamAccumulator = (): StreamAccumulator => ({
   latestUsage: undefined,
   textDeltaCount: 0,
   reasoningDeltaCount: 0,
+  lastContextCompactionDurationMs: undefined,
 });
 
 export interface StreamProcessorOptions {
@@ -92,6 +102,17 @@ export async function* processStreamEvents(
     }
     if (event.type === 'tool_call_streaming_delta') {
       yield { ...event } satisfies ToolCallStreamingDeltaEvent;
+      continue;
+    }
+    if (event.type === 'context_compaction_started') {
+      // Surfaced live so the notice appears while the provider is actually compacting.
+      // A response can carry several compaction items; the UI supersedes rather than stacks.
+      yield { type: 'context_compaction_started', provider: event.provider, sessionId: deps.sessionId };
+      continue;
+    }
+    if (event.type === 'context_compaction_completed') {
+      // Deliberately not yielded here — see StreamAccumulator.lastContextCompactionDurationMs.
+      acc.lastContextCompactionDurationMs = event.durationMs;
       continue;
     }
 

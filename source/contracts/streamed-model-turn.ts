@@ -147,6 +147,16 @@ export type StreamedModelTurnEvent =
     }
   /** Cumulative progress while a provider is assembling a tool call's arguments. */
   | { readonly type: 'tool_call_streaming_delta'; readonly toolName?: string; readonly argumentCharCount: number }
+  /**
+   * Server-side context compaction, bracketed by the provider's own frames.
+   *
+   * A response can carry more than one compaction item (measured on OpenAI: the streamed
+   * order is `[compaction, message, compaction]`), so these events can fire more than once
+   * per turn. Only the last item becomes history — see `lastOpenAICompaction` — so consumers
+   * must treat a later `started` as superseding an earlier pair, not as a second compaction.
+   */
+  | { readonly type: 'context_compaction_started'; readonly provider: string }
+  | { readonly type: 'context_compaction_completed'; readonly provider: string; readonly durationMs: number }
   | { readonly type: 'tool_call'; readonly id: string; readonly name: string; readonly arguments: string }
   | {
       readonly type: 'completion';

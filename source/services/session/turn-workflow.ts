@@ -593,10 +593,10 @@ export class TurnWorkflow {
       return { kind: 'stale' };
     }
 
-    for (const event of this.#contextCompactionLifecycleEvents({
+    for (const event of this.#contextCompactionCompletedEvent({
       stream,
       inputTokensBefore: accumulated.latestUsage?.prompt_tokens,
-      startedAt: Date.now(),
+      durationMs: accumulated.lastContextCompactionDurationMs,
     })) {
       emit(event);
     }
@@ -632,27 +632,36 @@ export class TurnWorkflow {
     return { kind: 'completed', outcome };
   }
 
-  #contextCompactionLifecycleEvents(args: {
+  /**
+   * The compaction completion notice.
+   *
+   * `started` is *not* emitted here: it is surfaced live by the stream processor from the
+   * provider's own `output_item.added` frame, which is the only moment that corresponds to
+   * compaction actually beginning. This site owns only the completion, because the token
+   * count it reports comes from `usage`, which the provider does not send until the response
+   * completes — after the compaction frames have already gone by.
+   *
+   * `durationMs` likewise comes from the frames (parked on the accumulator), not from a
+   * clock read here: a `Date.now()` captured at this call site is taken after the stream has
+   * finished, so it would always yield ~0.
+   */
+  #contextCompactionCompletedEvent(args: {
     stream: AgentStream;
     inputTokensBefore?: number;
-    startedAt: number;
+    durationMs?: number;
   }): ConversationEvent[] {
     const compaction = lastOpenAICompaction(extractFinalizationSnapshot(args.stream).output);
     if (!compaction) return [];
     return [
       {
-        type: 'context_compaction_started',
-        provider: compaction.provider,
-        sessionId: this.deps.sessionId,
-        ...(args.inputTokensBefore !== undefined ? { inputTokensBefore: args.inputTokensBefore } : {}),
-      },
-      {
         type: 'context_compaction_completed',
         provider: compaction.provider,
         sessionId: this.deps.sessionId,
         ...(args.inputTokensBefore !== undefined ? { inputTokensBefore: args.inputTokensBefore } : {}),
+        // The provider reports no post-compaction size: usage.input_tokens is the
+        // compaction pass's own input, i.e. the pre-compaction total.
         inputTokensAfter: undefined,
-        durationMs: Math.max(0, Date.now() - args.startedAt),
+        durationMs: args.durationMs ?? 0,
       },
     ];
   }
@@ -1087,10 +1096,10 @@ export class TurnWorkflow {
       return { kind: 'stale' };
     }
 
-    for (const event of this.#contextCompactionLifecycleEvents({
+    for (const event of this.#contextCompactionCompletedEvent({
       stream,
       inputTokensBefore: acc.latestUsage?.prompt_tokens,
-      startedAt: Date.now(),
+      durationMs: acc.lastContextCompactionDurationMs,
     })) {
       yield event;
     }

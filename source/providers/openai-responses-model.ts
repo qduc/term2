@@ -348,6 +348,12 @@ export interface ResponseEventNormalizationState {
   toolArgumentLengthsByIndex: Map<number | string, number>;
   /** Reasoning items already surfaced so a full-text summary part is not re-emitted. */
   reasoningEmittedItemIds: Set<string>;
+  /**
+   * Wall-clock start of each in-flight compaction item, keyed by output index.
+   * The elapsed time between the provider's `added` and `done` frames is the only
+   * real measurement of how long compaction took; nothing downstream can recover it.
+   */
+  compactionStartedAtByIndex: Map<number | string, number>;
 }
 
 export function createResponseEventNormalizationState(): ResponseEventNormalizationState {
@@ -355,7 +361,18 @@ export function createResponseEventNormalizationState(): ResponseEventNormalizat
     toolNamesByIndex: new Map(),
     toolArgumentLengthsByIndex: new Map(),
     reasoningEmittedItemIds: new Set(),
+    compactionStartedAtByIndex: new Map(),
   };
+}
+
+/**
+ * Pairing key for a compaction item's `added`/`done` frames. A response carries more than
+ * one compaction item, so the key must distinguish them: `output_index` does, and the item
+ * id is the fallback for shims that omit it.
+ */
+function compactionIndex(event: any, item: any): number | string {
+  if (typeof event.output_index === 'number') return event.output_index;
+  return typeof item?.id === 'string' ? item.id : 0;
 }
 
 /** Convert one native OpenAI Responses event to the application turn protocol. */
@@ -403,6 +420,10 @@ export function normalizeResponseEvent(
         state.toolNamesByIndex.set(item.id, item.name);
         state.toolArgumentLengthsByIndex.set(item.id, 0);
       }
+    }
+    if (item?.type === 'compaction') {
+      state.compactionStartedAtByIndex.set(compactionIndex(event, item), Date.now());
+      return { type: 'context_compaction_started', provider: 'openai' };
     }
     return null;
   }
@@ -463,6 +484,18 @@ export function normalizeResponseEvent(
         type: 'tool_call_streaming_delta',
         ...(typeof item.name === 'string' ? { toolName: item.name } : {}),
         argumentCharCount: fullArguments.length,
+      };
+    }
+    if (item?.type === 'compaction') {
+      const key = compactionIndex(event, item);
+      const startedAt = state.compactionStartedAtByIndex.get(key);
+      state.compactionStartedAtByIndex.delete(key);
+      // A `done` without a matching `added` would mean an unpaired frame; report 0 rather
+      // than inventing an interval from an unrelated clock reading.
+      return {
+        type: 'context_compaction_completed',
+        provider: 'openai',
+        durationMs: startedAt === undefined ? 0 : Math.max(0, Date.now() - startedAt),
       };
     }
     return null;

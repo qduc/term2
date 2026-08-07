@@ -713,6 +713,10 @@ export class ApplicationRunLoop {
             outputPush(stream, queue, event);
             continue;
           }
+          if (event.type === 'context_compaction_started' || event.type === 'context_compaction_completed') {
+            outputPush(stream, queue, event);
+            continue;
+          }
           if (event.type === 'tool_call') {
             pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
             sawToolCall = true;

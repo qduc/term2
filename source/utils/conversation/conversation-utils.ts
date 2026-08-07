@@ -16,6 +16,11 @@ export interface StreamingState {
   flushedReasoningLength: number;
   textWasFlushed: boolean;
   currentReasoningMessageId: string | null;
+  /**
+   * The live "Compacting context..." notice, so the completion can replace it in place and a
+   * second compaction item in the same response supersedes the first instead of stacking.
+   */
+  contextCompactionMessageId: string | null;
   latestUsage: import('../ai/token-usage.js').NormalizedUsage | null;
 }
 
@@ -95,6 +100,7 @@ export function createStreamingState(): StreamingState {
     flushedReasoningLength: 0,
     textWasFlushed: false,
     currentReasoningMessageId: null,
+    contextCompactionMessageId: null,
     latestUsage: null,
   };
 }

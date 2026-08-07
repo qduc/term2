@@ -38,7 +38,12 @@ export function loadSettingsFromFile(opts: {
   schema: ZodTypeAny;
   disableLogging?: boolean;
   loggingService?: LoggerLike;
-}): { validated: Partial<SettingsData>; raw: unknown; hadErrors: boolean } {
+}): {
+  validated: Partial<SettingsData>;
+  raw: unknown;
+  hadErrors: boolean;
+  errorDetails?: string[];
+} {
   try {
     const settingsFile = path.join(opts.settingsDir, 'settings.json');
 
@@ -53,6 +58,7 @@ export function loadSettingsFromFile(opts: {
     const validated = opts.schema.safeParse(parsed);
 
     if (!validated.success) {
+      const errorDetails = validated.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);
       if (!opts.disableLogging) {
         opts.loggingService?.warn('Settings file contains invalid values', {
           errors: validated.error.issues.map((issue) => ({
@@ -64,19 +70,25 @@ export function loadSettingsFromFile(opts: {
 
       // Preserve valid top-level sections; invalid sections fall back to defaults
       // via mergeSettings. The file is left unchanged for the user to fix.
-      return { validated: parsePartialSections(parsed, opts.schema), raw: parsed, hadErrors: true };
+      return {
+        validated: parsePartialSections(parsed, opts.schema),
+        raw: parsed,
+        hadErrors: true,
+        errorDetails,
+      };
     }
 
     return { validated: validated.data as Partial<SettingsData>, raw: parsed, hadErrors: false };
   } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
     if (!opts.disableLogging) {
       opts.loggingService?.error('Failed to load settings file', {
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMsg,
         settingsFile: path.join(opts.settingsDir, 'settings.json'),
       });
     }
 
-    return { validated: {}, raw: {}, hadErrors: false };
+    return { validated: {}, raw: {}, hadErrors: true, errorDetails: [errorMsg] };
   }
 }
 

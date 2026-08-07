@@ -742,7 +742,7 @@ it('SettingsService runtime set updates loggingService', async () => {
   expect(mockLoggingService.getLogLevel()).toBe('debug');
 });
 
-it('gracefully degrades on invalid config file', async () => {
+it('refuses to start on invalid config file (invalid JSON)', async () => {
   const settingsDir = getTestSettingsDir();
 
   // Create an invalid config file
@@ -753,16 +753,16 @@ it('gracefully degrades on invalid config file', async () => {
 
   fs.writeFileSync(configFile, 'invalid json {', 'utf-8');
 
-  const service = new SettingsService({
-    settingsDir,
-    disableLogging: true,
-  });
-
-  // Should load defaults and not throw
-  expect(service.get('agent.model')).toBe('gpt-5.1');
+  expect(
+    () =>
+      new SettingsService({
+        settingsDir,
+        disableLogging: true,
+      }),
+  ).toThrow(/Failed to parse settings file/);
 });
 
-it('gracefully degrades on invalid schema in config file', async () => {
+it('refuses to start on invalid schema in config file', async () => {
   const settingsDir = getTestSettingsDir();
 
   // Create a config file with invalid values
@@ -782,14 +782,13 @@ it('gracefully degrades on invalid schema in config file', async () => {
     'utf-8',
   );
 
-  const service = new SettingsService({
-    settingsDir,
-    disableLogging: true,
-  });
-
-  // Should fall back to defaults for invalid settings
-  expect(service.get('shell.timeout')).toBe(120000);
-  expect(service.get('shell.maxOutputChars')).toBe(40000);
+  expect(
+    () =>
+      new SettingsService({
+        settingsDir,
+        disableLogging: true,
+      }),
+  ).toThrow(/Failed to parse settings file/);
 });
 
 it('loads settings from config file on startup', async () => {
@@ -964,7 +963,7 @@ it('getSource() returns default when setting not overridden', async () => {
   expect(service.getSource('ui.historySize')).toBe('default');
 });
 
-it('validates enum values', async () => {
+it('refuses to start on invalid enum value in config file', async () => {
   const settingsDir = getTestSettingsDir();
 
   // Create a config file with invalid enum value
@@ -983,13 +982,13 @@ it('validates enum values', async () => {
     'utf-8',
   );
 
-  const service = new SettingsService({
-    settingsDir,
-    disableLogging: true,
-  });
-
-  // Should fall back to default for invalid enum
-  expect(service.get('agent.reasoningEffort')).toBe('default');
+  expect(
+    () =>
+      new SettingsService({
+        settingsDir,
+        disableLogging: true,
+      }),
+  ).toThrow(/Failed to parse settings file/);
 });
 
 it.sequential('updates config file when new settings are added', async () => {

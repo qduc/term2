@@ -116,6 +116,22 @@ it('loadSettingsFromFile: hadErrors is false when file is valid', () => {
   expect(out.hadErrors).toBe(false);
 });
 
+it('loadSettingsFromFile: hadErrors is true when file contains invalid JSON syntax', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
+
+  fs.writeFileSync(path.join(dir, 'settings.json'), 'invalid json {', 'utf-8');
+
+  const out = loadSettingsFromFile({
+    settingsDir: dir,
+    schema: SettingsSchema,
+    disableLogging: true,
+  });
+
+  expect(out.hadErrors).toBe(true);
+  expect(out.errorDetails).toBeDefined();
+  expect(out.errorDetails?.length).toBeGreaterThan(0);
+});
+
 it('saveSettingsToFile: writes stripped settings', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
 

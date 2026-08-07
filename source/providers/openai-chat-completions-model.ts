@@ -1,4 +1,5 @@
 import { assertValidOpenAICompatibleMessages } from './common/openai-compatible-message-contract.js';
+import type { CostTrailerCapture } from './openai-compatible-response-normalizer.js';
 import type {
   StreamedModelTurn,
   StreamedModelTurnEvent,
@@ -8,7 +9,11 @@ import type {
 
 /** Application-owned adapter for OpenAI-compatible chat-completions endpoints. */
 export class OpenAIChatCompletionsModel implements StreamedModelTurn {
-  constructor(private readonly client: any, private readonly model: string) {}
+  constructor(
+    private readonly client: any,
+    private readonly model: string,
+    private readonly costCapture?: CostTrailerCapture,
+  ) {}
 
   // createCustomProviderModelProvider() (openai-compatible.provider.ts) returns
   // this class for the 'openai'/'openai-compatible'/'llama.cpp' provider types,
@@ -103,6 +108,9 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       responseId: `chatcmpl-${Date.now()}`,
       ...(finishReason !== undefined ? { finishReason } : {}),
       usage,
+      // The normalized reasoning stream captures the cost-only trailer into the
+      // shared capture object; surface it as the provider-reported charge.
+      ...(this.costCapture?.cost !== undefined ? { costUsd: this.costCapture.cost } : {}),
       output: [
         ...(reasoning
           ? [

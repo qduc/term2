@@ -1,6 +1,7 @@
 import type { CommandMessage } from '../../tools/types.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { ApprovalDescriptor, LLMAdvisory } from '../../contracts/conversation.js';
+import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import type { SubagentResult } from '../subagents/types.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import type { CodexRateLimitInfo } from '../../contracts/streamed-model-turn.js';
@@ -98,6 +99,8 @@ export interface ApprovalRequiredEvent {
   };
   /** Token usage for the model turn that requested approval. */
   usage?: NormalizedUsage;
+  /** Cumulative cost records for the run up to this approval pause. */
+  costRecords?: ModelRequestCost[];
 }
 
 /**
@@ -122,6 +125,8 @@ export interface FinalResponseEvent {
   commandMessages?: CommandMessageEvent['message'][];
   /** Token usage for this turn. */
   usage?: NormalizedUsage;
+  /** Cumulative cost records for the completed run. */
+  costRecords?: ModelRequestCost[];
   turnItems?: PersistedAssistantTurnItem[];
 }
 

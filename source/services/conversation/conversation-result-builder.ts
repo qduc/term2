@@ -3,6 +3,7 @@ import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import type { ApprovalRequiredTerminal, ConversationTerminal, LLMAdvisory } from '../../contracts/conversation.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
+import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import { extractUsage } from '../../utils/ai/token-usage.js';
 import { extractCommandMessages } from '../../utils/streaming/extract-command-messages.js';
 import { attachCachedArguments } from '../command-message-streaming.js';
@@ -74,6 +75,7 @@ export function createApprovalRequiredTerminal(options: {
   dockerHostControl?: boolean;
   postExecute?: PostExecuteApprovalToken;
   usage?: NormalizedUsage;
+  costRecords?: ModelRequestCost[];
 }): ApprovalRequiredTerminal {
   return {
     type: 'approval_required',
@@ -89,6 +91,7 @@ export function createApprovalRequiredTerminal(options: {
       ...(options.postExecute ? { postExecute: options.postExecute } : {}),
     },
     ...(options.usage ? { usage: options.usage } : {}),
+    ...(options.costRecords && options.costRecords.length > 0 ? { costRecords: options.costRecords } : {}),
   };
 }
 
@@ -252,6 +255,7 @@ export async function buildConversationResult(
         llmAdvisory,
         dockerHostControl,
         usage: usage ?? extractUsage(result),
+        costRecords: result.runCostRecords as ModelRequestCost[] | undefined,
         ...(deniedReadInfo
           ? {
               deniedRead: {
@@ -291,6 +295,7 @@ export async function buildConversationResult(
       finalText: resolveFinalText(finalOutputOverride, result.finalOutput),
       reasoningText: reasoningOutputOverride,
       usage: usage ?? extractUsage(result),
+      costRecords: result.runCostRecords as ModelRequestCost[] | undefined,
       turnItems: derivedTurnItems.length > 0 ? derivedTurnItems : input.turnItems,
     },
   };
@@ -310,6 +315,7 @@ export const toTerminalEvent = (result: ConversationTerminal): ConversationEvent
         ...(result.approval.dockerHostControl ? { dockerHostControl: true } : {}),
       },
       ...(result.usage ? { usage: result.usage } : {}),
+      ...(result.costRecords && result.costRecords.length > 0 ? { costRecords: result.costRecords } : {}),
     };
   }
 
@@ -319,6 +325,7 @@ export const toTerminalEvent = (result: ConversationTerminal): ConversationEvent
     ...(result.reasoningText ? { reasoningText: result.reasoningText } : {}),
     ...(result.commandMessages?.length ? { commandMessages: result.commandMessages } : {}),
     ...(result.usage ? { usage: result.usage } : {}),
+    ...(result.costRecords && result.costRecords.length > 0 ? { costRecords: result.costRecords } : {}),
     ...(result.turnItems ? { turnItems: result.turnItems } : {}),
   };
 };

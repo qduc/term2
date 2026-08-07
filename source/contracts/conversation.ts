@@ -1,5 +1,6 @@
 import type { CommandMessage } from '../tools/types.js';
 import type { NormalizedUsage } from '../utils/ai/token-usage.js';
+import type { ModelRequestCost } from '../services/cost/model-cost.js';
 import type { Item } from './conversation-items.js';
 
 export type ReasoningEffortSetting = 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
@@ -119,6 +120,8 @@ export interface ApprovalRequiredTerminal {
   type: 'approval_required';
   approval: ApprovalDescriptor;
   usage?: NormalizedUsage;
+  /** Cumulative model-request cost records for the run up to this pause. */
+  costRecords?: ModelRequestCost[];
 }
 
 export interface FinalTerminal {
@@ -128,6 +131,8 @@ export interface FinalTerminal {
   /** @deprecated derived compatibility only; turnItems is authoritative. */
   reasoningText?: string;
   usage?: NormalizedUsage;
+  /** Cumulative model-request cost records for the completed run. */
+  costRecords?: ModelRequestCost[];
   turnItems?: Item[];
 }
 

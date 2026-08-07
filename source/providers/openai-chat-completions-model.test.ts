@@ -484,3 +484,41 @@ it('stream() surfaces reasoning_content as reasoning_delta events and in the com
     { type: 'message', content: [{ type: 'text', text: 'Final answer.' }] },
   ]);
 });
+
+it('attaches a captured provider cost trailer as costUsd on the completion', async () => {
+  const client = {
+    chat: {
+      completions: {
+        create: async (_body: any) => emptyStream(),
+      },
+    },
+  };
+  const costCapture: { cost?: string } = { cost: '0.00002772' };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat', costCapture as any);
+
+  let completionCostUsd: unknown;
+  for await (const event of model.stream({ input: [], tools: [] } as any)) {
+    if (event.type === 'completion') completionCostUsd = (event as any).costUsd;
+  }
+  expect(completionCostUsd).toBe('0.00002772');
+});
+
+it('omits costUsd when no provider cost trailer was captured', async () => {
+  const client = {
+    chat: {
+      completions: {
+        create: async (_body: any) => emptyStream(),
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat');
+
+  let sawCompletion = false;
+  for await (const event of model.stream({ input: [], tools: [] } as any)) {
+    if (event.type === 'completion') {
+      sawCompletion = true;
+      expect(event).not.toHaveProperty('costUsd');
+    }
+  }
+  expect(sawCompletion).toBe(true);
+});

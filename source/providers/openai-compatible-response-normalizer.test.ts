@@ -136,3 +136,30 @@ it('chunk with empty choices and no cost marker and no usage passes through', as
   expect(chunks).toHaveLength(1);
   expect(chunks[0].choices).toEqual([]);
 });
+
+it('cost trailer is captured as billing metadata and kept out of the stream', async () => {
+  const client = makeMockOpenAI([realUsageChunk, costChunk]);
+  const costCapture: { cost?: string } = {};
+  applyClientResponseNormalization(client, mockLoggingService as any, costCapture as any);
+
+  const chunks = await collectStream(client);
+  // The trailer is still stripped so it never corrupts the SDK usage accumulator.
+  expect(chunks).toHaveLength(1);
+  expect(chunks[0].id).toBe('r1');
+  // ...but the reported USD charge is intercepted as billing metadata.
+  expect(costCapture.cost).toBe('0.00002772');
+});
+
+it('resets the cost capture for each request', async () => {
+  const client = makeMockOpenAI([realUsageChunk, costChunk]);
+  const costCapture: { cost?: string } = {};
+  applyClientResponseNormalization(client, mockLoggingService as any, costCapture as any);
+
+  await collectStream(client);
+  expect(costCapture.cost).toBe('0.00002772');
+  // A second request without a trailer clears the previous capture.
+  const client2 = makeMockOpenAI([realUsageChunk]);
+  applyClientResponseNormalization(client2, mockLoggingService as any, costCapture as any);
+  await collectStream(client2);
+  expect(costCapture.cost).toBeUndefined();
+});

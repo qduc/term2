@@ -17,7 +17,7 @@ import {
   createOpenAIResponsesMiddleware,
   sanitizeResponsesApiBody,
 } from './openai-compatible-middleware.js';
-import { applyClientResponseNormalization } from './openai-compatible-response-normalizer.js';
+import { applyClientResponseNormalization, type CostTrailerCapture } from './openai-compatible-response-normalizer.js';
 import { getModelListItems, mapModelListItem } from './openai-compatible-models.js';
 import { OpenAIChatCompletionsModel } from './openai-chat-completions-model.js';
 import { OpenAIResponsesModelWithPromptCacheKey } from './openai-responses-model.js';
@@ -181,8 +181,9 @@ export class OpencodeAnthropicFormatProvider {
         }),
       ]) as any,
     });
-    applyClientResponseNormalization(openAIClient, this.deps.loggingService);
-    return new OpenAIChatCompletionsModel(openAIClient, resolvedModel);
+    const costCapture: CostTrailerCapture = {};
+    applyClientResponseNormalization(openAIClient, this.deps.loggingService, costCapture);
+    return new OpenAIChatCompletionsModel(openAIClient, resolvedModel, costCapture);
   }
 
   getStreamedModel(modelName?: string): StreamedModelTurn {
@@ -261,8 +262,9 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
           }),
         ]) as any,
       });
-      applyClientResponseNormalization(openAIClient, deps.loggingService);
-      return new OpenAIChatCompletionsModel(openAIClient, deps.defaultModel);
+      const costCapture: CostTrailerCapture = {};
+      applyClientResponseNormalization(openAIClient, deps.loggingService, costCapture);
+      return new OpenAIChatCompletionsModel(openAIClient, deps.defaultModel, costCapture);
     }
   }
 }

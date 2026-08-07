@@ -4,6 +4,7 @@ import type { ApprovedToolContext } from '../approval/approval-presentation-poli
 import type { PendingApproval } from '../../contracts/conversation.js';
 import type { Message } from '../../types/message.js';
 import type { NormalizedUsage, UsageAccumulator } from '../../utils/ai/token-usage.js';
+import type { SessionCostAccumulator } from '../../services/cost/model-cost.js';
 import type { CodexRateLimitInfo } from './conversation-events.js';
 import type { QueueStateSnapshot } from './conversation-adapter.js';
 
@@ -69,6 +70,7 @@ export interface ConversationOrchestratorConfig {
   approvedContext: { current: ApprovedToolContext | null };
   usageAccumulator?: UsageAccumulator;
   subagentUsageAccumulator?: UsageAccumulator;
+  costAccumulator?: SessionCostAccumulator;
   notifier?: ConversationNotifier;
   onRestoreInput?: (text: string) => void;
   onClear?: () => void | Promise<void>;

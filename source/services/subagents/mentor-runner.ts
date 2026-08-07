@@ -11,6 +11,7 @@ import { getProvider } from '../../providers/index.js';
 import { extractFinalText, isAbortLike } from './utils.js';
 import { selectAgentStreamItems } from '../agent-stream.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
+import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
@@ -188,6 +189,7 @@ export class MentorRunner {
       filesChanged: [],
       toolsUsed: [],
       usage: normalizeAgentRunUsage(stream.runUsage) ?? extractUsage(stream),
+      costRecords: stream.runCostRecords as ModelRequestCost[] | undefined,
     };
   }
 }

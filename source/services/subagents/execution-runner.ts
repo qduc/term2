@@ -17,6 +17,7 @@ import { SubagentSession } from './subagent-session.js';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
 import { isAbortLike, aggregateToolUsage, safeEmit } from './utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
+import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import { buildInstructions, resolveSubagentSearchViaShell } from './role-loader.js';
 import type { ISubagentClientFactory } from './subagent-client-types.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
@@ -222,6 +223,7 @@ export class ExecutionSubagentRunner {
     const userTurn = { text: input, images: [] as any[] };
     let finalText = '';
     let usage: any = undefined;
+    let costRecords: ModelRequestCost[] | undefined;
     let error: Error | undefined;
     let subagentStatus: SubagentResult['status'] = 'completed';
     let loopProcessedError = false;
@@ -282,6 +284,7 @@ export class ExecutionSubagentRunner {
             }
             finalText = event.finalText;
             if (event.usage) usage = event.usage;
+            if (event.costRecords && event.costRecords.length > 0) costRecords = event.costRecords;
             break;
           case 'usage_update':
             if (event.usage) usage = event.usage;
@@ -353,6 +356,7 @@ export class ExecutionSubagentRunner {
         toolsUsed: aggregateToolUsage(toolCounts),
         error: error.message,
         ...(usage ? { usage } : {}),
+        ...(costRecords && costRecords.length > 0 ? { costRecords } : {}),
         ...(diffStat.length > 0 ? { diffStat } : {}),
         ...(validation ? { validation } : {}),
       };
@@ -368,6 +372,7 @@ export class ExecutionSubagentRunner {
       filesChanged: [...new Set(filesChanged)],
       toolsUsed: aggregateToolUsage(toolCounts),
       ...(usage ? { usage } : {}),
+      ...(costRecords && costRecords.length > 0 ? { costRecords } : {}),
       ...(diffStat.length > 0 ? { diffStat } : {}),
       ...(validation ? { validation } : {}),
     };

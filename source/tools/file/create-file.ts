@@ -6,6 +6,7 @@ import { isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { TOOL_NAME_CREATE_FILE } from '../tool-names.js';
 import type { ILoggingService, ISettingsService, ISSHService } from '../../services/service-interfaces.js';
+import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage } from '../format-helpers.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 
@@ -64,8 +65,9 @@ export function createCreateFileToolDefinition(deps: {
   loggingService: ILoggingService;
   settingsService: ISettingsService;
   executionContext?: ExecutionContext;
+  sessionAccess?: SessionAccessState;
 }): ToolDefinition<typeof createFileParametersSchema> {
-  const { loggingService, settingsService, executionContext } = deps;
+  const { loggingService, settingsService, executionContext, sessionAccess } = deps;
   const pendingOverwrites = new Map<string, PendingOverwrite>();
   const pendingOverwriteTtlMs = 10 * 60 * 1000;
 
@@ -114,7 +116,7 @@ export function createCreateFileToolDefinition(deps: {
 
         // Auto-approve only when both lexical and physical containment hold.
         // This prevents an in-workspace symlink from redirecting the write.
-        return !physicallyInsideWorkspace;
+        return !physicallyInsideWorkspace && !sessionAccess?.allowsEdit(targetPath, cwd);
       } catch (_error) {
         // Outside workspace or other error => require approval
         return true;

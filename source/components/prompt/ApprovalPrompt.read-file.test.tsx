@@ -39,3 +39,36 @@ it.sequential('outside-workspace read approval offers session folder access', as
 
   expect(answer).toBe('allow-folder-session');
 });
+
+it.sequential(
+  'outside-workspace edit approval names the permission and offers file and folder session scopes',
+  async () => {
+    let answer: string | undefined;
+    const result = await renderInAct(
+      <ApprovalPrompt
+        approval={{
+          agentName: 'Agent',
+          toolName: 'search_replace',
+          argumentsText: JSON.stringify({ path: '/outside/docs/guide.md' }),
+          rawInterruption: { type: 'tool_approval_item' },
+          outsideWorkspaceEdit: { path: '/outside/docs/guide.md', folder: '/outside/docs' },
+        }}
+        onApprove={(value) => {
+          answer = value;
+        }}
+        onReject={() => {}}
+      />,
+    );
+
+    const frame = toVisibleText(result.lastFrame() ?? '');
+    expect(frame).toContain('permission to edit this file outside the workspace');
+    expect(frame).toContain('Allow this file for this session');
+    expect(frame).toContain('Allow this folder for this session');
+
+    await writeInput(result.stdin, '\u001B[B');
+    await writeInput(result.stdin, '\u001B[B');
+    await writeInput(result.stdin, '\r');
+
+    expect(answer).toBe('allow-edit-folder-session');
+  },
+);

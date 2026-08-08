@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { ConversationEvent } from './conversation-events.js';
 import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import type { ApprovalRequiredTerminal, ConversationTerminal, LLMAdvisory } from '../../contracts/conversation.js';
@@ -73,6 +74,7 @@ export function createApprovalRequiredTerminal(options: {
   llmAdvisory?: LLMAdvisory;
   deniedRead?: DeniedReadMetadata;
   dockerHostControl?: boolean;
+  outsideWorkspaceEdit?: { path: string; folder: string };
   postExecute?: PostExecuteApprovalToken;
   usage?: NormalizedUsage;
   costRecords?: ModelRequestCost[];
@@ -88,6 +90,7 @@ export function createApprovalRequiredTerminal(options: {
       ...(options.llmAdvisory ? { llmAdvisory: options.llmAdvisory } : {}),
       ...(options.deniedRead ? { deniedRead: options.deniedRead } : {}),
       ...(options.dockerHostControl ? { dockerHostControl: true } : {}),
+      ...(options.outsideWorkspaceEdit ? { outsideWorkspaceEdit: options.outsideWorkspaceEdit } : {}),
       ...(options.postExecute ? { postExecute: options.postExecute } : {}),
     },
     ...(options.usage ? { usage: options.usage } : {}),
@@ -169,6 +172,7 @@ export async function buildConversationResult(
       sessionAccess,
       nestedCompatibility,
     );
+    const outsideWorkspaceEdit = resolveOutsideWorkspaceEdit(toolName, parseResult.arguments);
 
     approvalFlow.recordPending({
       state: result.state ?? createContinuationHandle(undefined),
@@ -254,6 +258,7 @@ export async function buildConversationResult(
         callId: callId ? String(callId) : undefined,
         llmAdvisory,
         dockerHostControl,
+        outsideWorkspaceEdit,
         usage: usage ?? extractUsage(result),
         costRecords: result.runCostRecords as ModelRequestCost[] | undefined,
         ...(deniedReadInfo
@@ -299,6 +304,21 @@ export async function buildConversationResult(
       turnItems: derivedTurnItems.length > 0 ? derivedTurnItems : input.turnItems,
     },
   };
+}
+
+function resolveOutsideWorkspaceEdit(
+  toolName: string | undefined,
+  args: unknown,
+): { path: string; folder: string } | undefined {
+  if (toolName !== 'apply_patch' && toolName !== 'create_file' && toolName !== 'search_replace') return undefined;
+  const record = args && typeof args === 'object' ? (args as Record<string, unknown>) : undefined;
+  const operation = Array.isArray(record?.operations) ? record.operations[0] : record;
+  const rawPath = operation && typeof operation === 'object' ? (operation as Record<string, unknown>).path : undefined;
+  if (typeof rawPath !== 'string') return undefined;
+  const target = path.resolve(rawPath);
+  const workspace = path.resolve(process.cwd());
+  if (target === workspace || target.startsWith(`${workspace}${path.sep}`)) return undefined;
+  return { path: target, folder: path.dirname(target) };
 }
 
 export const toTerminalEvent = (result: ConversationTerminal): ConversationEvent => {

@@ -357,11 +357,11 @@ export const getAgentDefinition = (
       );
     }
     if (isGpt5) {
-      tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext }));
+      tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }));
     } else {
       tools.push(
-        createCreateFileToolDefinition({ settingsService, loggingService, executionContext }),
-        createSearchReplaceToolDefinition({ settingsService, loggingService, executionContext }),
+        createCreateFileToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
+        createSearchReplaceToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
       );
     }
     tools.push(...memoryCapability.tools);
@@ -447,17 +447,17 @@ export const getAgentDefinition = (
       }),
     );
     if (isGpt5) {
-      tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext }));
+      tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }));
     } else {
       tools.push(
-        createCreateFileToolDefinition({ settingsService, loggingService, executionContext }),
-        createSearchReplaceToolDefinition({ settingsService, loggingService, executionContext }),
+        createCreateFileToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
+        createSearchReplaceToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
       );
     }
   } else {
     // Full mode: all tools based on model
     if (isGpt5) {
-      tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext }));
+      tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }));
     } else {
       if (!searchViaShell) {
         tools.push(
@@ -471,11 +471,13 @@ export const getAgentDefinition = (
           settingsService,
           loggingService,
           executionContext,
+          sessionAccess,
         }),
         createSearchReplaceToolDefinition({
           settingsService,
           loggingService,
           executionContext,
+          sessionAccess,
         }),
       );
     }

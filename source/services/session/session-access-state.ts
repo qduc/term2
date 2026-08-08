@@ -8,6 +8,8 @@ export type DockerHostControlGrant = 'once' | 'session' | 'project';
 /** Session-bound read and Docker state; project Docker grants stay in settings. */
 export class SessionAccessState {
   readonly #readFolders = new Set<string>();
+  readonly #editFiles = new Set<string>();
+  readonly #editFolders = new Set<string>();
   readonly #dockerOnce = new Set<string>();
   readonly #dockerRoots = new Set<string>();
   readonly #dockerDenials = new Set<string>();
@@ -24,6 +26,22 @@ export class SessionAccessState {
       const resolvedFolder = path.resolve(baseDir, folder);
       return target === resolvedFolder || target.startsWith(`${resolvedFolder}${path.sep}`);
     });
+  }
+
+  allowEditFile(file: string, baseDir: string = process.cwd()): void {
+    this.#editFiles.add(path.resolve(baseDir, file));
+  }
+
+  allowEditFolder(folder: string, baseDir: string = process.cwd()): void {
+    this.#editFolders.add(path.resolve(baseDir, folder));
+  }
+
+  allowsEdit(targetPath: string, baseDir: string = process.cwd()): boolean {
+    const target = path.resolve(baseDir, targetPath);
+    return (
+      this.#editFiles.has(target) ||
+      [...this.#editFolders].some((folder) => target === folder || target.startsWith(`${folder}${path.sep}`))
+    );
   }
 
   requiresDockerApproval(command: string): boolean {
@@ -59,6 +77,8 @@ export class SessionAccessState {
   /** Clears state that must not survive a reset or imported conversation. */
   clearTransient(): void {
     this.#readFolders.clear();
+    this.#editFiles.clear();
+    this.#editFolders.clear();
     this.#dockerOnce.clear();
     this.#dockerRoots.clear();
     this.#dockerDenials.clear();

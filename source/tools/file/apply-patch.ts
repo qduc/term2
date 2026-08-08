@@ -5,6 +5,7 @@ import { applyDiff } from '../../utils/apply-diff.js';
 import { isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
+import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import {
   getOutputText,
   safeJsonParse,
@@ -209,8 +210,9 @@ export function createApplyPatchToolDefinition(deps: {
   loggingService: ILoggingService;
   settingsService: ISettingsService;
   executionContext?: ExecutionContext;
+  sessionAccess?: SessionAccessState;
 }): ToolDefinition<typeof applyPatchParametersSchema> {
-  const { loggingService, settingsService, executionContext } = deps;
+  const { loggingService, settingsService, executionContext, sessionAccess } = deps;
 
   return {
     name: 'apply_patch',
@@ -246,13 +248,15 @@ export function createApplyPatchToolDefinition(deps: {
           const physicallyInsideWorkspace =
             !isRemote && insideCwd && (await isWorkspacePathPhysicallyInside(targetPath, workspaceRoot));
           if (!physicallyInsideWorkspace) {
-            loggingService.security('apply_patch needsApproval: physical boundary requires approval', {
-              type,
-              path: filePath,
-              targetPath,
-              insideCwd,
-            });
-            return true;
+            if (!sessionAccess?.allowsEdit(targetPath, workspaceRoot)) {
+              loggingService.security('apply_patch needsApproval: physical boundary requires approval', {
+                type,
+                path: filePath,
+                targetPath,
+                insideCwd,
+              });
+              return true;
+            }
           }
 
           resolvedOperations.push({ ...operation, targetPath, insideCwd });

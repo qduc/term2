@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import { markToolCallAsApprovalRejection } from '../../utils/streaming/extract-command-messages.js';
@@ -83,6 +84,7 @@ export class ApprovalDecisionExecutor {
     );
     const allowReadFolderForSession =
       isReadFileSessionApproveAnswer(answer) && supportsFolderSessionRead(decisionToolName);
+    const editSessionGrant = this.#getEditSessionGrant(answer, decisionToolName, parsedDecisionArgs);
 
     if (allowReadFolderForSession) {
       const folder = resolveSessionReadFolder(decisionToolName, parsedDecisionArgs);
@@ -91,12 +93,18 @@ export class ApprovalDecisionExecutor {
         else this.deps.nestedCompatibility?.readAccess.allowFolder(this.deps.sessionId, folder);
       }
     }
+    if (editSessionGrant) {
+      if (this.deps.sessionAccess) {
+        if (editSessionGrant.kind === 'file') this.deps.sessionAccess.allowEditFile(editSessionGrant.path);
+        else this.deps.sessionAccess.allowEditFolder(editSessionGrant.path);
+      }
+    }
 
     // Docker host control is a distinct capability. Generic resume answers
     // remain rejected even if the tool call otherwise looks approvable.
     const isApproved = isDockerRequest
       ? dockerDecision
-      : answer === 'y' || deniedReadDecision || allowReadFolderForSession;
+      : answer === 'y' || deniedReadDecision || allowReadFolderForSession || editSessionGrant !== null;
     let toolStartedEvent: ConversationEvent | undefined;
 
     if (isApproved) {
@@ -188,6 +196,25 @@ export class ApprovalDecisionExecutor {
     }
 
     return { pendingApprovalContext, isApproved, toolStartedEvent };
+  }
+
+  #getEditSessionGrant(
+    answer: string,
+    toolName: string | undefined,
+    args: unknown,
+  ): { kind: 'file' | 'folder'; path: string } | null {
+    if (toolName !== 'apply_patch' && toolName !== 'create_file' && toolName !== 'search_replace') return null;
+    const record = args && typeof args === 'object' ? (args as { path?: unknown; operations?: unknown }) : null;
+    const operation = Array.isArray(record?.operations) ? record.operations[0] : record;
+    const rawPath =
+      operation && typeof operation === 'object' && typeof (operation as { path?: unknown }).path === 'string'
+        ? (operation as { path: string }).path
+        : undefined;
+    if (!rawPath) return null;
+    const target = path.resolve(rawPath);
+    if (answer === 'allow-edit-file-session') return { kind: 'file', path: target };
+    if (answer === 'allow-edit-folder-session') return { kind: 'folder', path: path.dirname(target) };
+    return null;
   }
 
   #applyDeniedReadDecision(

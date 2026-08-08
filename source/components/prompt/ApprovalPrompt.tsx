@@ -333,6 +333,7 @@ const ApprovalPrompt: FC<Props> = ({
   const isDeniedReadShell = !!deniedRead;
   // read_file/grep/glob share one session-scoped folder grant, so all three offer it.
   const isFolderReadApproval = supportsFolderSessionRead(approval.toolName);
+  const isOutsideWorkspaceEdit = Boolean(approval.outsideWorkspaceEdit);
 
   // The exact folder the session grant would cover, shown so the scope is not a guess.
   const folderReadGrantPath = React.useMemo(() => {
@@ -363,7 +364,9 @@ const ApprovalPrompt: FC<Props> = ({
       return ['Allow once', 'Deny', 'Allow host for this session', 'Always allow host for this project'];
     }
     if (!isAskUser && !isDeniedReadShell) {
-      return isFolderReadApproval
+      return isOutsideWorkspaceEdit
+        ? ['Allow once', 'Allow this file for this session', 'Allow this folder for this session', 'Reject']
+        : isFolderReadApproval
         ? ['Allow once', 'Allow this folder for this session', 'Reject']
         : ['Approve', 'Reject'];
     }
@@ -392,6 +395,7 @@ const ApprovalPrompt: FC<Props> = ({
     isFolderReadApproval,
     isDockerHostControlApproval,
     isSandboxNetworkApproval,
+    isOutsideWorkspaceEdit,
   ]);
 
   // reset selection when question/approval changes; cannot derive user-controlled arrow-key state from props
@@ -501,6 +505,10 @@ const ApprovalPrompt: FC<Props> = ({
         onApprove();
       } else if (isFolderReadApproval && selectedIndex === 1) {
         onApprove(READ_FILE_SESSION_APPROVE_ANSWER);
+      } else if (isOutsideWorkspaceEdit && selectedIndex === 1) {
+        onApprove('allow-edit-file-session');
+      } else if (isOutsideWorkspaceEdit && selectedIndex === 2) {
+        onApprove('allow-edit-folder-session');
       } else {
         onReject();
       }
@@ -781,7 +789,9 @@ const ApprovalPrompt: FC<Props> = ({
         ) : (
           <>
             {approval.agentName}
-            {isFolderReadApproval
+            {isOutsideWorkspaceEdit
+              ? ' is requesting permission to edit a file outside the workspace with '
+              : isFolderReadApproval
               ? ' wants to read outside the workspace with '
               : isUnsandboxedShellApproval
               ? ' wants to run in unsandboxed mode: '
@@ -803,6 +813,8 @@ const ApprovalPrompt: FC<Props> = ({
           <Text>
             {isDockerHostControlApproval
               ? 'Allow Docker host access?'
+              : isOutsideWorkspaceEdit
+              ? 'Allow permission to edit this file outside the workspace?'
               : isFolderReadApproval
               ? 'Allow this read outside the workspace?'
               : 'Allow this action?'}
@@ -823,6 +835,14 @@ const ApprovalPrompt: FC<Props> = ({
               <Text color="#64748b">
                 "Allow this folder" lets read_file, grep and glob read {folderReadGrantPath} for the rest of this
                 session.
+              </Text>
+            </Box>
+          )}
+          {isOutsideWorkspaceEdit && approval.outsideWorkspaceEdit && (
+            <Box marginTop={1}>
+              <Text color="#64748b">
+                File scope permits only {approval.outsideWorkspaceEdit.path}; folder scope permits edits beneath{' '}
+                {approval.outsideWorkspaceEdit.folder} for this session.
               </Text>
             </Box>
           )}

@@ -23,6 +23,7 @@ export interface LLMAdvisory {
 }
 
 export type DeniedReadApproveAnswer = 'allow-once' | 'allow-remember' | 'unsandboxed-once';
+export type EditSessionApproveAnswer = 'allow-edit-file-session' | 'allow-edit-folder-session';
 export type PostExecuteDecision = 'approve' | 'reject' | DeniedReadApproveAnswer;
 export type DockerHostControlApproveAnswer = 'docker-allow-once' | 'docker-allow-session' | 'docker-allow-project';
 export const DOCKER_HOST_CONTROL_APPROVE_ANSWERS: ReadonlySet<DockerHostControlApproveAnswer> = new Set([
@@ -91,6 +92,11 @@ export interface ApprovalDescriptor {
   callId?: string;
   llmAdvisory?: LLMAdvisory;
   deniedRead?: DeniedReadMetadata;
+  /** Present for a file-mutating tool whose target is outside the workspace. */
+  outsideWorkspaceEdit?: {
+    path: string;
+    folder: string;
+  };
   /**
    * This approval is the Docker host-control capability prompt, not an ordinary one.
    *

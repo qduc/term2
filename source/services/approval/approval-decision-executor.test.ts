@@ -222,6 +222,26 @@ describe('ApprovalDecisionExecutor', () => {
   });
 
   it.each([
+    ['allow-edit-file-session', 'file'],
+    ['allow-edit-folder-session', 'folder'],
+  ] as const)('records %s so later matching edits are allowed for the session', (answer, scope) => {
+    const access = makeSessionAccess();
+    const target = path.join(tmpDir, 'outside', 'notes.md');
+    const pending = makePending({
+      name: 'search_replace',
+      callId: `edit-${scope}`,
+      arguments: JSON.stringify({ path: target, replacements: [] }),
+    });
+
+    expect(
+      createExecutor({ sessionAccess: access }).resolve({ pendingApprovalContext: pending, answer }).isApproved,
+    ).toBe(true);
+    expect(access.allowsEdit(target)).toBe(true);
+    expect(access.allowsEdit(path.join(tmpDir, 'outside', 'nested.md'))).toBe(scope === 'folder');
+    expect(access.allowsEdit(path.join(tmpDir, 'outside-other', 'nested.md'))).toBe(false);
+  });
+
+  it.each([
     ['docker-allow-once', 'once'],
     ['docker-allow-session', 'session'],
     ['docker-allow-project', 'project'],

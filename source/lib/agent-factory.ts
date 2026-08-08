@@ -202,6 +202,7 @@ export function buildAgentTools({
         const prefix = workspaceRoot.endsWith(path.sep) ? workspaceRoot : `${workspaceRoot}${path.sep}`;
         const insideWorkspace = resolved !== workspaceRoot && resolved.startsWith(prefix);
         if (!insideWorkspace) {
+          if (deps.sessionAccess?.allowsEdit(resolved, workspaceRoot)) return false;
           return true;
         }
 
@@ -212,7 +213,10 @@ export function buildAgentTools({
         if (deps.executionContext?.isRemote() && deps.executionContext.getSSHService()) {
           return true;
         }
-        return !(await isWorkspacePathPhysicallyInside(resolved, workspaceRoot));
+        return (
+          !(await isWorkspacePathPhysicallyInside(resolved, workspaceRoot)) &&
+          !deps.sessionAccess?.allowsEdit(resolved, workspaceRoot)
+        );
       };
     }
     deps.logger.debug('Using native applyPatchTool from SDK', {

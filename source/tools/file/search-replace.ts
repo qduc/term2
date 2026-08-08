@@ -4,6 +4,7 @@ import path from 'path';
 import { isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
+import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import {
   getOutputText,
   safeJsonParse,
@@ -269,9 +270,16 @@ export function createSearchReplaceToolDefinition(deps: {
   loggingService: ILoggingService;
   settingsService: ISettingsService;
   executionContext?: ExecutionContext;
+  sessionAccess?: SessionAccessState;
   editHealing?: typeof healSearchReplaceParams;
 }): ToolDefinition<typeof searchReplaceParametersSchema> {
-  const { loggingService, settingsService, executionContext, editHealing = healSearchReplaceParams } = deps;
+  const {
+    loggingService,
+    settingsService,
+    executionContext,
+    sessionAccess,
+    editHealing = healSearchReplaceParams,
+  } = deps;
   const editCache = new SearchReplaceEditCache();
 
   return {
@@ -302,7 +310,7 @@ export function createSearchReplaceToolDefinition(deps: {
           const physicallyInsideWorkspace =
             !isRemote && insideCwd && (await isWorkspacePathPhysicallyInside(targetPath, cwd));
           if (!physicallyInsideWorkspace) {
-            return true;
+            if (!sessionAccess?.allowsEdit(targetPath, cwd)) return true;
           }
 
           resolvedOperations.push({ ...operation, targetPath, insideCwd });

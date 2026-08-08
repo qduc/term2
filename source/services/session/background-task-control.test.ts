@@ -194,4 +194,41 @@ describe('BackgroundTaskControl', () => {
     });
     expect(notifications.pendingCount).toBe(0);
   });
+
+  it('adopts a foreground subagent through the session control port and notifies the next planning step', () => {
+    const notifications = new SubagentNotificationStore();
+    const onNotification = vi.fn();
+    const onTaskChange = vi.fn();
+    const move = vi.fn(() => ({ runId: 'child-1', role: 'worker', status: 'running' as const, task: 'inspect tests' }));
+    const control = new BackgroundTaskControl({
+      client: {
+        listForegroundSubagentCandidates: () => [
+          { runId: 'child-1', role: 'worker', task: 'inspect tests', parentTool: 'run_subagent' },
+        ],
+        moveForegroundSubagent: move,
+        getBackgroundSubagentStatus: (runId) => subagentStatus({ runId, role: 'worker', task: 'inspect tests' }),
+      },
+      notifications,
+      onNotification,
+      onTaskChange,
+    });
+
+    expect(control.listForegroundTransferCandidates()).toContainEqual(
+      expect.objectContaining({ kind: 'subagent', runId: 'child-1', role: 'worker', status: 'running' }),
+    );
+    expect(control.moveForegroundToBackground({ kind: 'subagent', runId: 'child-1' })).toEqual({
+      ok: true,
+      details: expect.objectContaining({ kind: 'subagent', id: 'child-1', status: 'running' }),
+    });
+    expect(move).toHaveBeenCalledWith('child-1');
+    expect(onNotification).toHaveBeenCalledOnce();
+    expect(onTaskChange).toHaveBeenCalledOnce();
+    expect(notifications.drain()).toEqual([
+      expect.objectContaining({
+        kind: 'user_control',
+        action: 'background',
+        target: { kind: 'subagent', id: 'child-1' },
+      }),
+    ]);
+  });
 });

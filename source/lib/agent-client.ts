@@ -44,7 +44,11 @@ import {
   type BackgroundShellRegistry,
 } from '../services/shell/background-shell-registry.js';
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
-import type { SubagentCancelAcknowledgement, SubagentRunStatus } from '../services/subagents/types.js';
+import type {
+  SubagentCancelAcknowledgement,
+  SubagentRunHandle,
+  SubagentRunStatus,
+} from '../services/subagents/types.js';
 import type { BackgroundSubagentApprovalPauseSink } from '../services/subagents/foreground-subagent-lease.js';
 import type { ForegroundSubagentCandidate } from '../services/subagents/nested-runner.js';
 import type { NestedToolCompatibilityState } from '../services/session/nested-tool-compatibility-state.js';
@@ -481,6 +485,11 @@ export class AgentClient {
 
   getForegroundSubagentCandidate(runId: string): ForegroundSubagentCandidate | undefined {
     return this.listForegroundSubagentCandidates().find((candidate) => candidate.runId === runId);
+  }
+
+  /** Atomically hands one live nested child to the background registry. */
+  moveForegroundSubagent(runId: string): SubagentRunHandle | undefined {
+    return this.#subagentBridge?.moveForegroundSubagent(runId);
   }
 
   getBackgroundShellJob(jobId: string): BackgroundShellJob<BackgroundShellExecutionResult> | undefined {

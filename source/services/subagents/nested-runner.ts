@@ -172,7 +172,9 @@ export class NestedSubagentRunner {
 
   /** Observational projection; the lease itself remains runner-owned. */
   listForegroundCandidates(): ForegroundSubagentCandidate[] {
-    return [...this.#foregroundLeases.values()].map(({ lease: _lease, ...candidate }) => candidate);
+    return [...this.#foregroundLeases.values()]
+      .filter(({ lease }) => !lease.adopted && !lease.settled)
+      .map(({ lease: _lease, ...candidate }) => candidate);
   }
 
   /** Replaces the session-owned pause publication sink without rebuilding role tools. */

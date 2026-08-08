@@ -194,7 +194,7 @@ export class SubagentManager {
    */
   moveForegroundSubagent(runId: string): SubagentRunHandle | undefined {
     const candidate = this.#runtime.nestedRunner.getForegroundCandidate(runId);
-    if (!candidate) return undefined;
+    if (!candidate || candidate.lease.adopted || candidate.lease.settled) return undefined;
     // A transferred child can request another tool approval at any later
     // segment. Never detach foreground ownership unless the session has
     // already installed the queue/control sink that will own that pause.

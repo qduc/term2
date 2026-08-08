@@ -1,11 +1,12 @@
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { BackgroundShellJob } from '../shell/background-shell-registry.js';
 import type { ForegroundShellLeaseDetails, ForegroundShellTransferResult } from '../shell/background-shell-registry.js';
-import type { SubagentCancelAcknowledgement, SubagentRunStatus } from '../subagents/types.js';
+import type { SubagentCancelAcknowledgement, SubagentRunHandle, SubagentRunStatus } from '../subagents/types.js';
+import type { ForegroundSubagentCandidate } from '../subagents/nested-runner.js';
 import type { BackgroundSubagentNotificationPort } from '../subagents/subagent-notification-store.js';
 
 export type BackgroundTaskControlTarget = { kind: 'subagent'; id: string } | { kind: 'shell'; id: string };
-export type ForegroundTaskControlTarget = { kind: 'shell'; callId: string };
+export type ForegroundTaskControlTarget = { kind: 'shell'; callId: string } | { kind: 'subagent'; runId: string };
 
 export type BackgroundTaskControlDetails =
   | {
@@ -41,7 +42,7 @@ export type BackgroundTaskStopResult =
   | { ok: false; code: 'not_found' | 'not_active' | 'unavailable' };
 
 /** A live root-shell call which has not yet been made visible as background work. */
-export type ForegroundTaskControlDetails = {
+export type ForegroundShellTaskControlDetails = {
   kind: 'shell';
   callId: string;
   jobId: string;
@@ -50,15 +51,24 @@ export type ForegroundTaskControlDetails = {
   startedAt: number;
 };
 
+export type ForegroundSubagentTaskControlDetails = ForegroundSubagentCandidate & {
+  kind: 'subagent';
+  status: 'running';
+};
+/** Legacy singular foreground candidate: the root-shell transfer surface. */
+export type ForegroundTaskControlDetails = ForegroundShellTaskControlDetails;
+export type ForegroundTransferCandidate = ForegroundShellTaskControlDetails | ForegroundSubagentTaskControlDetails;
+
 export type MoveForegroundToBackgroundResult =
-  | { ok: true; details: Extract<BackgroundTaskControlDetails, { kind: 'shell' }> }
+  | { ok: true; details: BackgroundTaskControlDetails }
   | { ok: false; code: 'not_found' | 'not_active' | 'unavailable' | 'capacity' };
 
 export interface BackgroundTaskControlPort {
   listDetails(): readonly BackgroundTaskControlDetails[];
   getDetails(target: BackgroundTaskControlTarget): BackgroundTaskControlDetails | null;
   requestStop(target: BackgroundTaskControlTarget): BackgroundTaskStopResult;
-  getForegroundTransferCandidate(): ForegroundTaskControlDetails | null;
+  getForegroundTransferCandidate(): ForegroundShellTaskControlDetails | null;
+  listForegroundTransferCandidates(): readonly ForegroundTransferCandidate[];
   moveForegroundToBackground(target: ForegroundTaskControlTarget): MoveForegroundToBackgroundResult;
 }
 
@@ -73,6 +83,8 @@ type BackgroundTaskControlClient = Pick<
   | 'requestBackgroundShellStop'
   | 'getForegroundShellTransferCandidate'
   | 'moveForegroundShellToBackground'
+  | 'listForegroundSubagentCandidates'
+  | 'moveForegroundSubagent'
 > & {
   getBackgroundSubagentStatus?: (runId: string) => SubagentRunStatus;
   listBackgroundSubagentStatuses?: () => SubagentRunStatus[];
@@ -82,6 +94,8 @@ type BackgroundTaskControlClient = Pick<
   requestBackgroundShellStop?: (jobId: string) => boolean;
   getForegroundShellTransferCandidate?: () => ForegroundShellLeaseDetails | undefined;
   moveForegroundShellToBackground?: (callId: string) => ForegroundShellTransferResult | undefined;
+  listForegroundSubagentCandidates?: () => ForegroundSubagentCandidate[];
+  moveForegroundSubagent?: (runId: string) => SubagentRunHandle | undefined;
 };
 
 /**
@@ -156,12 +170,22 @@ export class BackgroundTaskControl implements BackgroundTaskControlPort {
     return { ok: true, details };
   }
 
-  getForegroundTransferCandidate(): ForegroundTaskControlDetails | null {
+  getForegroundTransferCandidate(): ForegroundShellTaskControlDetails | null {
     const candidate = this.#client.getForegroundShellTransferCandidate?.();
     return candidate ? this.#foregroundShellDetails(candidate) : null;
   }
 
+  listForegroundTransferCandidates(): readonly ForegroundTransferCandidate[] {
+    const shell = this.getForegroundTransferCandidate();
+    const subagents = this.#client.listForegroundSubagentCandidates?.() ?? [];
+    return [
+      ...(shell ? [shell] : []),
+      ...subagents.map((candidate) => ({ ...candidate, kind: 'subagent' as const, status: 'running' as const })),
+    ];
+  }
+
   moveForegroundToBackground(target: ForegroundTaskControlTarget): MoveForegroundToBackgroundResult {
+    if (target.kind === 'subagent') return this.#moveForegroundSubagent(target.runId);
     const before = this.getForegroundTransferCandidate();
     if (!before || before.callId !== target.callId) {
       return { ok: false, code: this.#client.getForegroundShellTransferCandidate ? 'not_found' : 'unavailable' };
@@ -185,6 +209,33 @@ export class BackgroundTaskControl implements BackgroundTaskControlPort {
       action: 'background',
       target: { kind: 'shell', id: adopted.jobId },
       details: { kind: 'shell', id: adopted.jobId, command: details.command },
+    });
+    if (queued) this.#onNotification?.();
+    this.#onTaskChange?.();
+    return { ok: true, details };
+  }
+
+  #moveForegroundSubagent(runId: string): MoveForegroundToBackgroundResult {
+    const candidate = (this.#client.listForegroundSubagentCandidates?.() ?? []).find((item) => item.runId === runId);
+    if (!candidate) {
+      return { ok: false, code: this.#client.listForegroundSubagentCandidates ? 'not_found' : 'unavailable' };
+    }
+    const move = this.#client.moveForegroundSubagent;
+    if (!move) return { ok: false, code: 'unavailable' };
+    let adopted: SubagentRunHandle | undefined;
+    try {
+      adopted = move(runId);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'SubagentRegistryError') return { ok: false, code: 'capacity' };
+      return { ok: false, code: 'not_active' };
+    }
+    if (!adopted) return { ok: false, code: 'not_active' };
+    const details = this.getDetails({ kind: 'subagent', id: adopted.runId });
+    if (!details) return { ok: false, code: 'not_active' };
+    const queued = this.#notifications.enqueueUserControl({
+      action: 'background',
+      target: { kind: 'subagent', id: adopted.runId },
+      details: { kind: 'subagent', id: adopted.runId, role: adopted.role, task: adopted.task },
     });
     if (queued) this.#onNotification?.();
     this.#onTaskChange?.();
@@ -226,7 +277,7 @@ export class BackgroundTaskControl implements BackgroundTaskControlPort {
     return { kind: 'shell', id, ...details, ...(output === undefined ? {} : { output }) };
   }
 
-  #foregroundShellDetails(candidate: ForegroundShellLeaseDetails): ForegroundTaskControlDetails {
+  #foregroundShellDetails(candidate: ForegroundShellLeaseDetails): ForegroundShellTaskControlDetails {
     return { kind: 'shell', ...candidate };
   }
 }

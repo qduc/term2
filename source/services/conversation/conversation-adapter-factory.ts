@@ -29,6 +29,7 @@ export function createConversationAdapterForRuntime(
     userTurns: runtime.state,
     logs: runtime.logs,
     approval: runtime.approval,
+    pendingInteraction: runtime.pendingInteraction,
     turnFlow: runtime.turns,
     queueForeground,
     queuePersistence:

@@ -1752,3 +1752,61 @@ it('interruptFromUser() works with clients that cannot cancel background runs', 
 
   expect(() => service.interruptFromUser()).not.toThrow();
 });
+
+it('projects an adapter approval through the session-owned pending interaction facade', async () => {
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [
+    {
+      name: 'shell',
+      agent: { name: 'CLI Agent' },
+      arguments: JSON.stringify({ command: 'echo pending' }),
+      callId: 'pending-interaction-call',
+    },
+  ];
+  initialStream.state = { approve() {}, reject() {} };
+  const continuationStream = new MockStream([]);
+  continuationStream.finalOutput = 'continued';
+  const service = new ConversationService({
+    agentClient: partialClient({
+      async startStream() {
+        return initialStream;
+      },
+      async continueRunStream() {
+        return continuationStream;
+      },
+    }),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  await service.sendMessage('run pending command');
+
+  expect(service.getPendingInteractionSnapshot()).toMatchObject({
+    interactionId: 1,
+    approval: { toolName: 'shell', callId: 'pending-interaction-call' },
+  });
+  expect(service.resolvePendingInteraction({ answer: 'y' })).toMatchObject({ kind: 'resolved', answer: 'y' });
+  expect(service.getPendingInteractionSnapshot()).toBeNull();
+  await expect(service.handleApprovalDecision('y')).resolves.toMatchObject({
+    type: 'response',
+    finalText: 'continued',
+  });
+});
+
+it('keeps the pending-interaction observer attached when the session is reset', () => {
+  const service = new ConversationService({
+    agentClient: partialClient(),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  const snapshots: Array<string | null> = [];
+  service.setPendingInteractionObserver((snapshot) => snapshots.push(snapshot?.approval.toolName ?? null));
+
+  service.resetWithNewId('replacement-session');
+  service.presentPendingInteraction({
+    agentName: 'Agent',
+    toolName: 'shell',
+    argumentsText: '{}',
+    rawInterruption: null,
+  });
+
+  expect(snapshots).toEqual([null, null, 'shell']);
+});

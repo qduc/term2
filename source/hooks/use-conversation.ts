@@ -189,9 +189,9 @@ export const useConversation = ({
         onStreamingThinkingStarted: (timestamp) => dispatch({ type: 'streaming/thinking_started', timestamp }),
         onStreamingThinkingCleared: () => dispatch({ type: 'streaming/thinking_cleared' }),
         onStreamingToolInfo: (info) => dispatch({ type: 'streaming/tool_info', info }),
-        onAskUserAnswerSubmitted: (answer) => dispatch({ type: 'ask_user/answer_submitted', answer }),
-        onAskUserAdvanceToNext: (nextIndex) => dispatch({ type: 'ask_user/advance_to_next', nextIndex }),
-        onAskUserGoBack: (_currentIndex, _answers) => dispatch({ type: 'ask_user/go_back' }),
+        onAskUserAnswerSubmitted: () => {},
+        onAskUserAdvanceToNext: () => {},
+        onAskUserGoBack: () => {},
         onQueueStateChange: (snapshot) => dispatch({ type: 'queue/updated', snapshot }),
         onQueuedMessagePending: (id, text) =>
           dispatch({ type: 'queue/message_pending', id, text, queuedAt: Date.now() }),
@@ -216,6 +216,14 @@ export const useConversation = ({
   useEffect(() => {
     orchestrator.updateCallbacks({ onRestoreInput, onClear });
   }, [orchestrator, onRestoreInput, onClear]);
+
+  useEffect(() => {
+    if (typeof conversationService.setPendingInteractionObserver !== 'function') return;
+    conversationService.setPendingInteractionObserver((snapshot) => {
+      dispatch({ type: 'interaction/snapshot', snapshot });
+    });
+    return () => conversationService.setPendingInteractionObserver(null);
+  }, [conversationService]);
 
   // ── Public API — all orchestration delegates to the orchestrator ─────────
   const sendUserMessage = useCallback(
@@ -318,15 +326,15 @@ export const useConversation = ({
 
   // ── Compatibility wrappers (pure UI state, no orchestration) ────────────
   const onTypeAnswer = useCallback(() => {
-    dispatch({ type: 'ask_user/set_waiting' });
+    dispatch({ type: 'interaction/composer_entry', mode: 'ask_user_answer' });
   }, []);
 
   const setWaitingForRejectionReason = useCallback((value: boolean) => {
-    dispatch({ type: value ? 'rejection/set_waiting' : 'rejection/cleared' });
+    dispatch({ type: 'interaction/composer_entry', mode: value ? 'rejection_reason' : 'none' });
   }, []);
 
   const setWaitingForAskUserAnswer = useCallback((value: boolean) => {
-    dispatch({ type: value ? 'ask_user/set_waiting' : 'ask_user/clear_waiting' });
+    dispatch({ type: 'interaction/composer_entry', mode: value ? 'ask_user_answer' : 'none' });
   }, []);
 
   // ── Return object (identical shape to the old monolith) ─────────────────

@@ -128,6 +128,8 @@ it('createSessionRuntime exposes runtime capabilities without conversation adapt
   expect(typeof runtime.logs.log).toBe('function');
   expect(typeof runtime.approval.getPending).toBe('function');
   expect(typeof runtime.approval.getPendingInterruption).toBe('function');
+  expect(typeof runtime.pendingInteraction.getSnapshot).toBe('function');
+  expect(typeof runtime.pendingInteraction.resolve).toBe('function');
   expect(runtime.sinks).toHaveProperty('askUserAnswer');
   expect(runtime.sinks).toHaveProperty('subagentEvents');
   expect('terminalAdapter' in runtime).toBe(false);

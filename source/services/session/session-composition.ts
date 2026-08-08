@@ -59,6 +59,7 @@ import type { PostExecutePauseCapability } from './post-execute-pause-capability
 import type { SessionAccessState } from './session-access-state.js';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import { HookEventFactory } from '../hooks/hook-event-factory.js';
+import { PendingInteractionState } from './pending-interaction-state.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
   value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
@@ -136,6 +137,8 @@ export type SessionRuntimeInternals = {
   backgroundSubagentTasks: BackgroundSubagentTaskChannel;
   /** Session-owned fail-closed gates for post-execute policies. */
   postExecutePending: PostExecutePendingRegistry;
+  /** Authoritative pending approval and ask_user protocol state. */
+  pendingInteraction: PendingInteractionState;
 };
 
 // ── Options for the composition factory ──────────────────────────
@@ -250,6 +253,8 @@ export type SessionRuntime = {
   settings: SessionRuntimeController;
   logs: SessionLogs;
   approval: SessionApprovalQuery;
+  /** Pending approval protocol projected by presentation layers. */
+  pendingInteraction: PendingInteractionState;
   sinks: SessionSinks;
   /** Completions of background subagent runs still owed to the main agent. */
   backgroundSubagentNotifications: BackgroundSubagentNotificationChannel;
@@ -322,6 +327,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   const conversationStore = new ConversationStore();
   const approvalState = new ApprovalState();
+  const pendingInteraction = new PendingInteractionState();
   const toolTracker = new SessionToolTracker(conversationStore);
 
   const shellAutoApproval = new DelegatingShellAutoApprovalResolver({
@@ -654,6 +660,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
         )
       : Promise.resolve().then(() => resolvedBackgroundShellEventSinkHost?.setBackgroundShellEventSink?.(null));
     providerContinuity.clear();
+    pendingInteraction.clear();
   };
 
   let shutdownPromise: Promise<void> | undefined;
@@ -702,6 +709,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     backgroundSubagentNotifications,
     backgroundSubagentTasks,
     postExecutePending,
+    pendingInteraction,
   };
 }
 
@@ -726,6 +734,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     backgroundSubagentNotifications,
     backgroundSubagentTasks,
     postExecutePending,
+    pendingInteraction,
   } = internals;
 
   return {
@@ -770,6 +779,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
       getPostExecutePending: postExecutePending.snapshot.bind(postExecutePending),
       decidePostExecutePending: postExecutePending.decide.bind(postExecutePending),
     },
+    pendingInteraction,
     sinks: {
       askUserAnswer: resolvedAskUserAnswerSink,
       subagentEvents: resolvedSubagentEventSinkHost,

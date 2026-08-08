@@ -9,6 +9,7 @@ import { userTurnToProviderItem } from './user-turn-item.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { SessionRuntime, SessionLogs, SessionApprovalQuery } from '../session/session-composition.js';
 import type { SessionManager } from '../session/session-manager.js';
+import type { PendingInteractionState } from '../session/pending-interaction-state.js';
 import type { AskUserAnswerSink, SubagentEventSinkHost } from '../conversation-agent-client.js';
 import {
   QueueController,
@@ -142,6 +143,7 @@ export class ConversationAdapter {
   #userTurns: Pick<SessionManager, 'listUserTurns'>;
   #logs: SessionLogs;
   #approval: SessionApprovalQuery;
+  #pendingInteraction: Pick<PendingInteractionState, 'present' | 'clear'> | null;
   #turnFlow: TurnFlow;
   readonly #messagesById = new Map<string, QueuedMessage>();
   /**
@@ -178,6 +180,8 @@ export class ConversationAdapter {
     userTurns: Pick<SessionManager, 'listUserTurns'>;
     logs: SessionLogs;
     approval: SessionApprovalQuery;
+    /** Session-owned interaction projection; omitted by low-level legacy tests. */
+    pendingInteraction?: Pick<PendingInteractionState, 'present' | 'clear'>;
     turnFlow: TurnFlow;
     queueForeground?: boolean;
     queueCapacity?: number;
@@ -195,6 +199,7 @@ export class ConversationAdapter {
     this.#userTurns = deps.userTurns;
     this.#logs = deps.logs;
     this.#approval = deps.approval;
+    this.#pendingInteraction = deps.pendingInteraction ?? null;
     this.#turnFlow = deps.turnFlow;
     this.#activeCancelTimeoutMs = deps.activeCancelTimeoutMs ?? ACTIVE_CANCEL_TIMEOUT_MS;
     if (deps.queueForeground) {
@@ -473,6 +478,9 @@ export class ConversationAdapter {
         hallucinationRetryCount,
         bypassInputSurgeGuard,
         replayFromHistory,
+      }).then((result) => {
+        this.#recordPendingInteraction(result);
+        return result;
       });
     }
     return new Promise<ConversationTerminal>((resolve, reject) => {
@@ -537,6 +545,7 @@ export class ConversationAdapter {
 
   abort(): void {
     this.#cancellationEpoch++;
+    this.#pendingInteraction?.clear();
     if (!this.#queue) {
       this.#turnFlow.abort?.();
       return;
@@ -621,11 +630,13 @@ export class ConversationAdapter {
           request: {}, // existing runtime doesn't expose typed tool request details
         });
         this.#notifyQueueState();
+        this.#recordPendingInteraction(result);
         this.#settleSuccess(execution.snapshot.requestId, result);
         return;
       }
       await this.#queue!.event({ kind: 'completed', executionId: execution.executionId, terminal: result });
       this.#notifyQueueState();
+      this.#recordPendingInteraction(result);
       this.#settleSuccess(execution.snapshot.requestId, result);
     } catch (error) {
       const failure =
@@ -780,6 +791,11 @@ export class ConversationAdapter {
       }
     }
 
+    // This facade is also used directly by non-interactive callers. Clear the
+    // session projection here as well as through the interactive semantic
+    // resolver, so the continuation API remains self-contained.
+    this.#pendingInteraction?.clear();
+
     this.#logs.log({
       type: 'approval_resolved',
       answer: answer === 'y' ? 'y' : 'n',
@@ -890,6 +906,7 @@ export class ConversationAdapter {
           this.#notifyQueueState();
         }
       }
+      if (result) this.#recordPendingInteraction(result);
       return result;
     } catch (error) {
       if (this.#queue && this.#approvalExecutionId) {
@@ -900,6 +917,14 @@ export class ConversationAdapter {
         this.#notifyQueueState();
       }
       throw error;
+    }
+  }
+
+  #recordPendingInteraction(result: ConversationTerminal): void {
+    if (result.type === 'approval_required') {
+      this.#pendingInteraction?.present(result.approval);
+    } else {
+      this.#pendingInteraction?.clear();
     }
   }
 }

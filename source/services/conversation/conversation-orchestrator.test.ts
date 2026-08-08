@@ -7,6 +7,7 @@ import type { Message, UserMessage } from '../../types/message.js';
 import type { ApprovedToolContext } from '../approval/approval-presentation-policy.js';
 import type { NormalizedUsage, UsageAccumulator } from '../../utils/ai/token-usage.js';
 import type { ConversationTerminal } from '../../contracts/conversation.js';
+import { PendingInteractionState } from '../session/pending-interaction-state.js';
 
 function createMessage(id: string, sender: Message['sender'], text: string, overrides: Partial<Message> = {}): Message {
   return { id, sender, text, ...overrides } as Message;
@@ -29,6 +30,7 @@ function mockLoggingService(): ILoggingService {
 }
 
 function mockConversationService(): ConversationService {
+  const interaction = new PendingInteractionState();
   return {
     sessionId: 'test-session',
     sendMessage: vi.fn(),
@@ -61,6 +63,12 @@ function mockConversationService(): ConversationService {
     setQueuedTurnStartObserver: vi.fn(),
     retractSubmission: vi.fn(async () => ({ kind: 'unknown_id' })),
     editSubmission: vi.fn(async () => ({ kind: 'unknown_id' })),
+    getPendingInteractionSnapshot: vi.fn(() => interaction.getSnapshot()),
+    clearPendingInteraction: vi.fn(() => interaction.clear()),
+    presentPendingInteraction: vi.fn((approval) => interaction.present(approval)),
+    resolvePendingInteraction: vi.fn((request) => interaction.resolve(request)),
+    goToPreviousPendingInteractionQuestion: vi.fn(() => interaction.goToPreviousQuestion()),
+    goToNextPendingInteractionQuestion: vi.fn(() => interaction.goToNextQuestion()),
   } as unknown as ConversationService;
 }
 
@@ -149,7 +157,6 @@ describe('ConversationOrchestrator', () => {
       expect.objectContaining({ bypassInputSurgeGuard: undefined }),
     );
     expect(cfg.ui.onTurnStart).toHaveBeenCalled();
-    expect(cfg.ui.onApprovalResolved).toHaveBeenCalled();
     expect(cfg.ui.onTurnEnd).toHaveBeenCalled();
   });
 
@@ -188,7 +195,7 @@ describe('ConversationOrchestrator', () => {
 
     await orchestrator.sendUserMessage('run ls');
 
-    expect(cfg.ui.onApprovalRequested).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'bash' }));
+    expect(cfg.messages.trimMessages).toHaveBeenCalled();
   });
 
   it('suppresses abort-like send errors', async () => {
@@ -352,13 +359,18 @@ describe('ConversationOrchestrator', () => {
       },
     };
 
-    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue(approvalTerminal);
+    vi.mocked(cfg.conversationService.sendMessage).mockImplementation(async () => {
+      cfg.conversationService.presentPendingInteraction(approvalTerminal.approval);
+      return approvalTerminal;
+    });
 
     await orchestrator.sendUserMessage('ask');
     await orchestrator.handleApprovalDecision('y', undefined, 'first');
 
-    expect(cfg.ui.onAskUserAnswerSubmitted).toHaveBeenCalledWith('first');
-    expect(cfg.ui.onAskUserAdvanceToNext).toHaveBeenCalledWith(1);
+    expect(cfg.conversationService.getPendingInteractionSnapshot()).toMatchObject({
+      askUserAnswers: ['first'],
+      currentAskUserQuestionIndex: 1,
+    });
     expect(cfg.conversationService.handleApprovalDecision).not.toHaveBeenCalled();
   });
 

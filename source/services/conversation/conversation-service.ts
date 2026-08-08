@@ -1,5 +1,6 @@
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ConversationTerminal, ReasoningEffortSetting } from '../../contracts/conversation.js';
+import type { PendingApproval } from '../../contracts/conversation.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
 import type { RewindTarget } from './conversation-store.js';
 import type { LogEvent, StateSnapshot } from '../logging/conversation-log-events.js';
@@ -31,6 +32,11 @@ import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { createConversationRuntime } from './conversation-runtime-factory.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
+import type {
+  PendingInteractionResolution,
+  PendingInteractionSnapshot,
+  ResolvePendingInteractionRequest,
+} from '../session/pending-interaction-state.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../../contracts/conversation.js';
 export type { CommandMessage } from '../../tools/types.js';
@@ -46,6 +52,7 @@ export class ConversationService {
   #clientHandle: SessionClientHandle;
   readonly #clientFactory: SessionClientFactory;
   #eventSink: ConversationEventSink | null = null;
+  #pendingInteractionObserver: ((snapshot: PendingInteractionSnapshot | null) => void) | null = null;
   readonly #deps: {
     logger: ILoggingService;
     settingsService?: ISettingsService;
@@ -186,6 +193,7 @@ export class ConversationService {
     // observers so the new conversation still wakes and updates its overview.
     this.#runtime.backgroundSubagentNotifications.setObserver(this.#backgroundSubagentNotificationObserver);
     this.#runtime.backgroundSubagentTasks.setObserver(this.#backgroundSubagentTaskObserver);
+    this.#runtime.pendingInteraction.setObserver(this.#pendingInteractionObserver);
   }
 
   #logSink: ((event: LogEvent) => void) | null = null;
@@ -320,6 +328,35 @@ export class ConversationService {
 
   editSubmission(id: string, turn: UserTurn): Promise<SubmissionMutation> {
     return this.#adapter.editSubmission(id, turn);
+  }
+
+  getPendingInteractionSnapshot(): PendingInteractionSnapshot | null {
+    return this.#runtime.pendingInteraction.getSnapshot();
+  }
+
+  setPendingInteractionObserver(observer: ((snapshot: PendingInteractionSnapshot | null) => void) | null): void {
+    this.#pendingInteractionObserver = observer;
+    this.#runtime.pendingInteraction.setObserver(observer);
+  }
+
+  resolvePendingInteraction(request: ResolvePendingInteractionRequest): PendingInteractionResolution {
+    return this.#runtime.pendingInteraction.resolve(request);
+  }
+
+  presentPendingInteraction(approval: PendingApproval): PendingInteractionSnapshot {
+    return this.#runtime.pendingInteraction.present(approval);
+  }
+
+  clearPendingInteraction(): void {
+    this.#runtime.pendingInteraction.clear();
+  }
+
+  goToPreviousPendingInteractionQuestion(): void {
+    this.#runtime.pendingInteraction.goToPreviousQuestion();
+  }
+
+  goToNextPendingInteractionQuestion(): void {
+    this.#runtime.pendingInteraction.goToNextQuestion();
   }
 
   /**

@@ -1,7 +1,6 @@
 import { describeError, isAbortLikeError } from '../../utils/error-helpers.js';
-import { ASK_USER_DECLINE_RESULT } from '../../tools/agent/ask-user-constants.js';
 import { createMessageIdFactory } from '../../utils/message-id-factory.js';
-import type { ConversationOrchestratorConfig, AskUserAnswer } from './conversation-orchestrator.types.js';
+import type { ConversationOrchestratorConfig } from './conversation-orchestrator.types.js';
 import type { ConversationEvent } from './conversation-events.js';
 import type { SubmissionMutation } from './conversation-adapter.js';
 import type { BotMessage, CommandMessage, UserMessage } from '../../types/message.js';
@@ -159,9 +158,6 @@ function formatBackgroundSubagentNotificationDisplay(notifications: readonly Bac
 }
 
 export class ConversationOrchestrator {
-  private pendingApproval: PendingApproval | null = null;
-  private askUserAnswers: AskUserAnswer[] = [];
-  private currentAskUserQuestionIndex = 0;
   private readonly createMessageId: () => string;
   readonly #directlyAppendedMessageIds = new Set<string>();
   readonly #displayedBackgroundNotificationMessageIds = new Set<string>();
@@ -245,18 +241,11 @@ export class ConversationOrchestrator {
   }
 
   goToPreviousQuestion(): void {
-    if (this.currentAskUserQuestionIndex <= 0) {
-      return;
-    }
-
-    this.currentAskUserQuestionIndex -= 1;
-    this.askUserAnswers.pop();
-    this.config.ui.onAskUserGoBack(this.currentAskUserQuestionIndex, this.askUserAnswers.slice());
+    this.config.conversationService.goToPreviousPendingInteractionQuestion?.();
   }
 
   goToNextQuestion(): void {
-    this.currentAskUserQuestionIndex += 1;
-    this.config.ui.onAskUserAdvanceToNext(this.currentAskUserQuestionIndex);
+    this.config.conversationService.goToNextPendingInteractionQuestion?.();
   }
 
   async clearConversation(): Promise<void> {
@@ -268,8 +257,7 @@ export class ConversationOrchestrator {
 
     this.config.messages.setMessages(() => []);
     this.config.approvedContext.current = null;
-    this.pendingApproval = null;
-    this.resetAskUserState();
+    this.config.conversationService.clearPendingInteraction?.();
     this.config.ui.onResetAll();
     this.config.usageAccumulator?.reset();
     this.config.subagentUsageAccumulator?.reset();
@@ -299,8 +287,7 @@ export class ConversationOrchestrator {
         ),
       );
       this.config.approvedContext.current = null;
-      this.pendingApproval = null;
-      this.resetAskUserState();
+      this.config.conversationService.clearPendingInteraction?.();
       this.config.ui.onResetTransient();
       this.#directlyAppendedMessageIds.clear();
       this.#displayedBackgroundNotificationMessageIds.clear();
@@ -340,8 +327,7 @@ export class ConversationOrchestrator {
 
     this.config.messages.setMessages((prev) => prev.slice(0, uiIndex));
     this.config.approvedContext.current = null;
-    this.pendingApproval = null;
-    this.resetAskUserState();
+    this.config.conversationService.clearPendingInteraction?.();
     this.config.ui.onResetTransient();
     this.#directlyAppendedMessageIds.clear();
     this.#displayedBackgroundNotificationMessageIds.clear();
@@ -389,8 +375,7 @@ export class ConversationOrchestrator {
   async retryLastToolOutput(): Promise<boolean> {
     this.config.conversationService.abort();
     this.config.approvedContext.current = null;
-    this.pendingApproval = null;
-    this.resetAskUserState();
+    this.config.conversationService.clearPendingInteraction?.();
     this.config.ui.onResetTransient();
 
     if (!this.config.conversationService.peekLastToolOutput()) {
@@ -425,7 +410,6 @@ export class ConversationOrchestrator {
 
       const errorMessage = enhanceApiKeyError(describeError(error));
       this.appendBotError(errorMessage);
-      this.config.ui.onApprovalResolved();
       return true;
     } finally {
       this.config.loggingService.debug('retryLastToolOutput finally block - resetting state');
@@ -622,11 +606,10 @@ export class ConversationOrchestrator {
           rawInterruption: null,
           isMaxTurnsPrompt: true,
         };
-        this.pendingApproval = pendingApproval;
+        this.config.conversationService.presentPendingInteraction?.(pendingApproval);
         this.config.ui.onApprovalRequested(pendingApproval);
       } else {
         this.appendBotError(errorMessage);
-        this.config.ui.onApprovalResolved();
       }
     } finally {
       this.config.loggingService.debug('sendUserMessage finally block - resetting state');
@@ -640,50 +623,20 @@ export class ConversationOrchestrator {
   }
 
   async handleApprovalDecision(answer: string, rejectionReason?: string, approvalAnswer?: string): Promise<void> {
-    const pendingApproval = this.pendingApproval;
-    if (!pendingApproval) {
+    const resolution = this.config.conversationService.resolvePendingInteraction?.({
+      answer,
+      rejectionReason,
+      approvalAnswer,
+    });
+    if (!resolution || resolution.kind === 'none') {
       return;
     }
+    if (resolution.kind === 'awaiting_next_question') return;
 
+    const pendingApproval = resolution.approval;
     const isMaxTurnsPrompt = pendingApproval.isMaxTurnsPrompt;
-    const isAskUser = pendingApproval.toolName === 'ask_user';
 
-    if (isAskUser && answer === 'y' && approvalAnswer !== ASK_USER_DECLINE_RESULT) {
-      let questions: any[] = [];
-      try {
-        const parsed = JSON.parse(pendingApproval.argumentsText);
-        questions = parsed.questions || [];
-      } catch {
-        // noop
-      }
-
-      let parsedAns: AskUserAnswer = approvalAnswer ?? '';
-      const currentQuestion = questions[this.askUserAnswers.length];
-      if (currentQuestion?.is_multi_select) {
-        try {
-          const maybeArray = JSON.parse(approvalAnswer ?? '');
-          if (Array.isArray(maybeArray)) {
-            parsedAns = maybeArray;
-          }
-        } catch {
-          // keep plain string
-        }
-      }
-
-      const nextAnswers = [...this.askUserAnswers, parsedAns];
-      this.config.ui.onAskUserAnswerSubmitted(parsedAns);
-
-      if (nextAnswers.length < questions.length) {
-        this.askUserAnswers = nextAnswers;
-        this.currentAskUserQuestionIndex = nextAnswers.length;
-        this.config.ui.onAskUserAdvanceToNext(nextAnswers.length);
-        return;
-      }
-
-      this.askUserAnswers = nextAnswers;
-      this.currentAskUserQuestionIndex = nextAnswers.length;
-      approvalAnswer = JSON.stringify(nextAnswers);
-    }
+    this.config.ui.onApprovalResolved();
 
     if (answer === 'y' || isDeniedReadApproveAnswer(answer)) {
       this.config.approvedContext.current = {
@@ -691,10 +644,6 @@ export class ConversationOrchestrator {
         toolName: pendingApproval.toolName,
       };
     }
-
-    this.config.ui.onApprovalResolved();
-    this.pendingApproval = null;
-    this.resetAskUserState();
 
     if (isMaxTurnsPrompt && answer === 'n') {
       this.#endTurn();
@@ -722,7 +671,6 @@ export class ConversationOrchestrator {
 
         const errorMessage = error instanceof Error ? error.message : String(error);
         this.appendBotError(errorMessage);
-        this.config.ui.onApprovalResolved();
       } finally {
         reasoningUpdater.flush();
         botResponseUpdater.cancel();
@@ -738,7 +686,7 @@ export class ConversationOrchestrator {
     try {
       const result = await this.config.conversationService.handleApprovalDecision(answer, rejectionReason, {
         onEvent: this.createOnEventHandler(applyConversationEvent),
-        approvalAnswer,
+        approvalAnswer: resolution.approvalAnswer,
       });
       applyConversationEvent({ type: 'final', finalText: '' });
       botResponseUpdater.flush();
@@ -753,7 +701,6 @@ export class ConversationOrchestrator {
 
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.appendBotError(errorMessage);
-      this.config.ui.onApprovalResolved();
     } finally {
       this.config.loggingService.debug('handleApprovalDecision finally block - resetting state');
       reasoningUpdater.flush();
@@ -897,7 +844,7 @@ export class ConversationOrchestrator {
       await this.#injectBackgroundSubagentNotifications(pending);
       return;
     }
-    if (this.pendingApproval) return;
+    if (this.config.conversationService.getPendingInteractionSnapshot?.()) return;
 
     const notifications = pending.drain();
     if (notifications.length === 0) return;
@@ -933,7 +880,6 @@ export class ConversationOrchestrator {
       }
 
       this.appendBotError(enhanceApiKeyError(describeError(error)));
-      this.config.ui.onApprovalResolved();
     } finally {
       reasoningUpdater.flush();
       botResponseUpdater.cancel();
@@ -1018,7 +964,6 @@ export class ConversationOrchestrator {
         this.config.ui.onUsageUpdate(latestStreamedUsage ?? result.usage);
       }
 
-      this.pendingApproval = result.approval;
       this.config.messages.setMessages((prev) =>
         this.config.messages.trimMessages(filterPendingCommandMessagesForApproval(prev, result.approval)),
       );
@@ -1027,7 +972,6 @@ export class ConversationOrchestrator {
       return;
     }
 
-    this.pendingApproval = null;
     this.config.messages.setMessages(
       (prev) =>
         computeNextMessages({
@@ -1114,11 +1058,6 @@ export class ConversationOrchestrator {
       eventType === 'tool_call_streaming_delta' ||
       eventType === 'final'
     );
-  }
-
-  private resetAskUserState(): void {
-    this.askUserAnswers = [];
-    this.currentAskUserQuestionIndex = 0;
   }
 
   private appendBotError(errorMessage: string): void {

@@ -8,6 +8,7 @@ import type { ConversationTerminal } from '../../contracts/conversation.js';
 import type { ConversationEvent } from './conversation-events.js';
 import type { SubagentResult } from '../subagents/types.js';
 import { SubagentNotificationStore } from '../subagents/subagent-notification-store.js';
+import { PendingInteractionState } from '../session/pending-interaction-state.js';
 
 const response = (text = 'ok'): ConversationTerminal => ({ type: 'response', finalText: text, commandMessages: [] });
 
@@ -110,6 +111,7 @@ function makeUIPort(): UIPort {
 
 function makeHarness(options: { queueActive?: boolean; injects?: boolean } = {}) {
   const store = new SubagentNotificationStore({ now: () => 1_000 });
+  const pendingInteraction = new PendingInteractionState();
   let observer: (() => void) | null = null;
   let queuedTurnStartObserver:
     | ((execution: { requestId: string; input: string; suppressUserMessageDisplay?: boolean }) => void)
@@ -132,6 +134,12 @@ function makeHarness(options: { queueActive?: boolean; injects?: boolean } = {})
     setBackgroundSubagentNotificationObserver: vi.fn((next: (() => void) | null) => {
       observer = next;
     }),
+    getPendingInteractionSnapshot: vi.fn(() => pendingInteraction.getSnapshot()),
+    presentPendingInteraction: vi.fn((approval) => pendingInteraction.present(approval)),
+    clearPendingInteraction: vi.fn(() => pendingInteraction.clear()),
+    resolvePendingInteraction: vi.fn((request) => pendingInteraction.resolve(request)),
+    goToPreviousPendingInteractionQuestion: vi.fn(() => pendingInteraction.goToPreviousQuestion()),
+    goToNextPendingInteractionQuestion: vi.fn(() => pendingInteraction.goToNextQuestion()),
     get backgroundSubagentNotifications() {
       return store;
     },
@@ -404,7 +412,10 @@ describe('ConversationOrchestrator background subagent notifications', () => {
       type: 'approval_required',
       approval: { agentName: 'agent', toolName: 'bash', argumentsText: 'ls', rawInterruption: null },
     };
-    h.service.sendMessage.mockResolvedValueOnce(approval);
+    h.service.sendMessage.mockImplementationOnce(async () => {
+      h.service.presentPendingInteraction(approval.approval);
+      return approval;
+    });
 
     await h.orchestrator.sendUserMessage('run ls');
     h.emit(question());

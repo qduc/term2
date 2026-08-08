@@ -104,7 +104,7 @@ const App: FC<AppProps> = ({
 }) => {
   const { exit } = useApp();
   const { stdout } = useStdout();
-  const { setInput, replaceInput, setMode, setTriggerIndex, setImages, setInputAndCursor } = useInputActions();
+  const { setInput, replaceInput, setMode, setImages } = useInputActions();
   const { input, mode, images, controller } = useInputState();
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
@@ -292,10 +292,7 @@ const App: FC<AppProps> = ({
     addSystemMessage,
     sendUserMessage,
     replaceInput,
-    setInputAndCursor,
-    setMode,
-    setTriggerIndex,
-    mode,
+    controller,
     settingsService,
     applyRuntimeSetting,
     setModel,
@@ -613,6 +610,13 @@ const App: FC<AppProps> = ({
         return;
       }
       if (intentRequest.intent.type === 'submit-prompt') {
+        // A captured handoff intercepts its own model selection here rather
+        // than through `handleSubmit`: the direct `/model ` trigger is
+        // controller-owned, so an accepted selection never routes through a
+        // submitted turn. See `useHandoffFlow`'s `handleModelSubmitPrompt`.
+        if (handoff.handleModelSubmitPrompt(intentRequest.intent.text)) {
+          return;
+        }
         void sendUserMessage({ text: intentRequest.intent.text });
         return;
       }
@@ -632,6 +636,7 @@ const App: FC<AppProps> = ({
     handleSettingChange,
     addSystemMessage,
     applyRuntimeSetting,
+    handoff,
   ]);
 
   return (

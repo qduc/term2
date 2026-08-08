@@ -875,6 +875,78 @@ it.sequential('command-backed model selection still submits after selection', as
   unregisterProvider(mockProviderId);
 });
 
+it.sequential(
+  'direct /model selection submits the model command as a chat message via a submit-prompt intent',
+  async () => {
+    clearModelCache();
+    const mockProviderId = `mock-provider-command-${Date.now()}-${Math.random()}`;
+    registerProvider({
+      id: mockProviderId,
+      label: 'Mock Provider Command',
+      fetchModels: async () => [{ id: 'gpt-test', name: 'GPT Test' }],
+    });
+
+    const settingsService = createMockSettingsService({
+      'agent.provider': mockProviderId,
+    });
+
+    const modelCommand: SlashCommand = {
+      name: '/model',
+      description: 'Select model',
+      action: () => {},
+      completion: { type: 'model', trigger: '/model ' },
+    };
+
+    const modelBeforeAccept = settingsService.get('agent.model');
+
+    const submittedIntents: string[] = [];
+    const controller = new MenuControllerImpl();
+    controller.setIntentHost(({ intentRequest }) => {
+      if (intentRequest.intent.type === 'submit-prompt') {
+        submittedIntents.push(intentRequest.intent.text);
+      }
+      return undefined;
+    });
+
+    const { lastFrame, stdin } = await renderAndFlush(
+      <InputProvider controller={controller}>
+        <StateDisplay />
+        <InputBox
+          {...defaultProps}
+          settingsService={settingsService}
+          slashCommands={[...mockSlashCommands, modelCommand]}
+        />
+      </InputProvider>,
+    );
+
+    await writeInput(stdin, '/model ');
+    await waitFor(lastFrame, (f) => f.includes('gpt-test'), { timeoutMs: 3000 });
+
+    await writeInput(stdin, '\r');
+
+    await waitForCondition(
+      () => submittedIntents.length,
+      (count) => count === 1,
+      { timeoutMs: 3000 },
+    );
+
+    // The accept path never applies settings directly for a `target.type ===
+    // 'command'` frame (that is graph 3's settings-backed model, a distinct
+    // rule) — it closes the menu, clears the buffer, and hands the fully
+    // qualified command text off as a single submit-prompt intent, exactly as
+    // if the user had typed the whole command and pressed Enter without ever
+    // opening the picker.
+    expect(submittedIntents).toEqual([`/model gpt-test --provider=${mockProviderId}`]);
+    expect(settingsService.get('agent.model')).toBe(modelBeforeAccept);
+
+    const frame = await waitFor(lastFrame, (f) => f.includes('Mode:text'), { timeoutMs: 3000 });
+    expect(frame.includes('Input:|'), frame).toBe(true);
+
+    clearModelCache();
+    unregisterProvider(mockProviderId);
+  },
+);
+
 it.sequential('Ctrl+R refreshes the current provider model list when model selection is open', async () => {
   clearModelCache();
   const mockProviderId = `mock-provider-refresh-${Date.now()}-${Math.random()}`;

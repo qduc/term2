@@ -110,6 +110,15 @@ export interface ApplicationRunLoopOptions {
   readonly requestPreparation?: ApplicationRequestPreparation;
   /** Per-request output and deadline guard; model settings provide the normal runtime defaults. */
   readonly generationGuard?: GenerationGuardOptions;
+  /**
+   * End the segment once the pending approval's tool result is in history,
+   * instead of crossing the request boundary into another model call. The
+   * segment then finishes with no interruptions, so it is terminal and its
+   * history — the tool call *and* its result — is committed. Cancelling an
+   * `ask_user` prompt uses this: the user gets the turn back, and the model
+   * still sees that the question was asked and went unanswered.
+   */
+  readonly stopAfterApprovalResolution?: boolean;
 }
 
 /**
@@ -650,6 +659,11 @@ export class ApplicationRunLoop {
         state.approvalMessage = undefined;
         stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
         if (state.pendingApprovals.length > 0) return finish(stream, state, queue);
+        // Nothing is outstanding, so this segment is terminal — see
+        // `stopAfterApprovalResolution`. Stopping here rather than at the
+        // request boundary below is what keeps the just-recorded tool result
+        // in the committed history.
+        if (options.stopAfterApprovalResolution) return finish(stream, state, queue);
       }
 
       // The request boundary: every tool result of the previous round is in

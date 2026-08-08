@@ -15,6 +15,7 @@ import { enhanceApiKeyError, isMaxTurnsError } from '../../utils/conversation/co
 import { clearStreamingBotMessage, computeNextMessages } from '../../utils/conversation/apply-conversation-result.js';
 import { trimTrailingAssistantMessages } from '../../utils/conversation/message-utils.js';
 import type { RewindTargetId } from './conversation-store.js';
+import { ASK_USER_NO_ANSWER_RESULT } from '../../tools/agent/ask-user-constants.js';
 import {
   annotateApprovedCommandMessage,
   filterPendingCommandMessagesForApproval,
@@ -602,6 +603,7 @@ export class ConversationOrchestrator {
     rejectionReason: string | undefined,
     approvalAnswer: string | undefined,
     expectedInteractionId: number,
+    options: { stopAfterApprovalResolution?: boolean } = {},
   ): Promise<void> {
     const resolution = this.config.conversationService.resolvePendingInteraction?.({
       expectedInteractionId,
@@ -668,6 +670,7 @@ export class ConversationOrchestrator {
       const result = await this.config.conversationService.handleApprovalDecision(answer, rejectionReason, {
         onEvent: this.createOnEventHandler(applyConversationEvent),
         approvalAnswer: resolution.approvalAnswer,
+        ...(options.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
       });
       applyConversationEvent({ type: 'final', finalText: '' });
       botResponseUpdater.flush();
@@ -688,6 +691,19 @@ export class ConversationOrchestrator {
       botResponseUpdater.cancel();
       this.#endTurn();
     }
+  }
+
+  /**
+   * Escape on an `ask_user` prompt. The tool still returns
+   * {@link ASK_USER_NO_ANSWER_RESULT}, so the question and the fact that it
+   * went unanswered are committed to history and travel with the user's next
+   * message. The turn then ends instead of handing the model another turn:
+   * cancelling means the user speaks next.
+   */
+  async cancelAskUser(expectedInteractionId: number): Promise<void> {
+    return this.handleApprovalDecision('y', undefined, ASK_USER_NO_ANSWER_RESULT, expectedInteractionId, {
+      stopAfterApprovalResolution: true,
+    });
   }
 
   /** Open a turn this orchestrator owns, and its streaming session. */

@@ -30,6 +30,11 @@ export type ContinuationInit =
       answer: string;
       rejectionReason?: string;
       generation: number;
+      /**
+       * End the segment once this decision's tool result is recorded, instead
+       * of making another model call. Cancelling an `ask_user` prompt sets it.
+       */
+      stopAfterApprovalResolution?: boolean;
     }
   | {
       kind: 'abort_resolution';

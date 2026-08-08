@@ -8,6 +8,7 @@ import type { ApprovedToolContext } from '../approval/approval-presentation-poli
 import type { NormalizedUsage, UsageAccumulator } from '../../utils/ai/token-usage.js';
 import type { ConversationTerminal } from '../../contracts/conversation.js';
 import { PendingInteractionState } from '../session/pending-interaction-state.js';
+import { ASK_USER_NO_ANSWER_RESULT } from '../../tools/agent/ask-user-constants.js';
 
 function createMessage(id: string, sender: Message['sender'], text: string, overrides: Partial<Message> = {}): Message {
   return { id, sender, text, ...overrides } as Message;
@@ -377,6 +378,34 @@ describe('ConversationOrchestrator', () => {
       currentAskUserQuestionIndex: 1,
     });
     expect(cfg.conversationService.handleApprovalDecision).not.toHaveBeenCalled();
+  });
+
+  it('cancelling ask_user records a no-answer result and ends the turn there', async () => {
+    // Escape used to abort, which threw the whole paused segment away — the
+    // question never reached history, so the next user message looked as if
+    // the model had never asked.
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    const approval = {
+      agentName: 'agent',
+      toolName: 'ask_user',
+      argumentsText: JSON.stringify({ questions: [{ question: 'one' }, { question: 'two' }] }),
+      rawInterruption: null,
+      callId: 'ask-1',
+    };
+    const interaction = cfg.conversationService.presentPendingInteraction(approval);
+
+    await orchestrator.cancelAskUser(interaction.interactionId);
+
+    expect(cfg.conversationService.handleApprovalDecision).toHaveBeenCalledWith(
+      'y',
+      undefined,
+      expect.objectContaining({
+        approvalAnswer: ASK_USER_NO_ANSWER_RESULT,
+        stopAfterApprovalResolution: true,
+      }),
+    );
+    expect(cfg.conversationService.getPendingInteractionSnapshot()).toBeNull();
   });
 
   it('ignores a late approval A decision after continuation presents approval B', async () => {

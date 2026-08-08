@@ -29,6 +29,7 @@ revertible milestones.
 - **Shell interaction ownership** — Merged at `d07a1149`; a non-React shell session owns eligibility, execution history, and deferred flush after in-flight commands.
 - **Rewind target ownership** — Merged at `00dd5292`; the conversation store issues opaque snapshot-scoped targets and accepts or rejects rewinds atomically, while Ink retains only post-success projection trimming and visible numbering.
 - **Submission authority** — No new extraction is warranted. The run loop already owns pending steers, `QueueController` owns queued state, `ConversationAdapter` owns ID routing and executable payloads, and the orchestrator/Ink state are projections. Add a read-only snapshot only if a second non-Ink surface later needs in-flight submission display.
+- **Conversation projection** — Do not add a second immutable event or snapshot bus. `ConversationEvent` already serves reusable/non-interactive consumers; `ConversationOrchestrator` is intentionally the Ink projection adapter and should remain so after its remaining policy owners move out.
 
 ## Open
 
@@ -39,7 +40,6 @@ revertible milestones.
 
 ## Fog
 
-- Whether the final conversation projection should publish immutable events, snapshots, or both.
 - Which compatibility wrappers can be deleted only after all current callers migrate.
 - Whether shell interaction and rewind should share the conversation application facade or remain focused sibling services.
 
@@ -59,3 +59,4 @@ revertible milestones.
 - 2026-08-08: Review found the rewind migration had dropped foreground abort and introduced command-to-hook type coupling. Abort now occurs only after the domain accepts a target, and the shared selection DTO lives outside React.
 - 2026-08-08: Review found capped UI history made store-global rewind ordinals disagree with slash-command ranges and picker labels. Both command selection and rendering now use visible 1-based positions while execution keeps the opaque domain target.
 - 2026-08-08: Submission lifecycle research found the planned boundary already exists and `queue-editing.md` had stale completion text. A new tracker would mirror the run loop, queue controller, and adapter rather than deepen their interfaces.
+- 2026-08-08: Projection research found a new shared UI event model would duplicate the existing `ConversationEvent` stream, pending-interaction snapshots, and streaming finalization rules without a second interactive renderer to justify it.

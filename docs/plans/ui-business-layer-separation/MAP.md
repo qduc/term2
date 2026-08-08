@@ -30,6 +30,7 @@ revertible milestones.
 - **Rewind target ownership** — Merged at `00dd5292`; the conversation store issues opaque snapshot-scoped targets and accepts or rejects rewinds atomically, while Ink retains only post-success projection trimming and visible numbering.
 - **Submission authority** — No new extraction is warranted. The run loop already owns pending steers, `QueueController` owns queued state, `ConversationAdapter` owns ID routing and executable payloads, and the orchestrator/Ink state are projections. Add a read-only snapshot only if a second non-Ink surface later needs in-flight submission display.
 - **Conversation projection** — Do not add a second immutable event or snapshot bus. `ConversationEvent` already serves reusable/non-interactive consumers; `ConversationOrchestrator` is intentionally the Ink projection adapter and should remain so after its remaining policy owners move out.
+- **Conversation admission** — Merged at `9a31f23b`; a non-React workflow owns surge/large-input ordering, confirmation identity, history timing, and the only UI-accessible surge bypass, while Ink retains live preview and composer/attachment effects.
 
 ## Open
 
@@ -60,3 +61,5 @@ revertible milestones.
 - 2026-08-08: Review found capped UI history made store-global rewind ordinals disagree with slash-command ranges and picker labels. Both command selection and rendering now use visible 1-based positions while execution keeps the opaque domain target.
 - 2026-08-08: Submission lifecycle research found the planned boundary already exists and `queue-editing.md` had stale completion text. A new tracker would mirror the run loop, queue controller, and adapter rather than deepen their interfaces.
 - 2026-08-08: Projection research found a new shared UI event model would duplicate the existing `ConversationEvent` stream, pending-interaction snapshots, and streaming finalization rules without a second interactive renderer to justify it.
+- 2026-08-08: Admission review caught an accidental surge-to-large double-confirmation, an unreachable decline restoration path, and completion timing that would leave composer state visible for an entire streamed turn. The workflow now returns synchronous semantic admission plus a completion promise, preserving immediate UI effects and caller awaiting.
+- 2026-08-08: Admission review also found the raw surge-bypass option still escaped through `useConversation.sendUserMessage`. The full transport sender is now closure-private and compile-time coverage pins the narrowed public API.
